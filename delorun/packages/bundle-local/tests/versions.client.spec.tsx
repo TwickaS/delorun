@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { DelorunVersionRow, type DelorunVersionRowProps } from '../src/client/DelorunVersionRow.tsx'
-import { en } from '../src/client/locales.ts'
+import { en, zh } from '../src/client/locales.ts'
 import { VersionsRow, type VersionsRowProps } from '../src/client/VersionsRow.tsx'
 import { readVersions, SOURCE_BUILD, VERSIONS_GLOBAL } from '../src/client/versions.ts'
 
@@ -63,5 +63,12 @@ describe('the versions line', () => {
     const props = { versions: { delorun: SOURCE_BUILD, dsh: '0.2.2-rc.1' }, t: makeTranslate(en) } as VersionsRowProps
     render(<VersionsRow {...props} />)
     expect(screen.getByText('Delorun source build')).toBeTruthy()
+  })
+
+  it('reads the source build line from the language dictionary', () => {
+    const props = { versions: { delorun: SOURCE_BUILD, dsh: '0.2.2-rc.1' }, t: makeTranslate(zh) } as VersionsRowProps
+    render(<VersionsRow {...props} />)
+    expect(screen.getByText(zh['versions.sourceBuild'])).toBeTruthy()
+    expect(screen.queryByText(/source build/)).toBeNull()
   })
 })

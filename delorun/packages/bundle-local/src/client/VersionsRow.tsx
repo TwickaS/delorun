@@ -1,7 +1,7 @@
 /** The General row that names Delorun's version alone; the DeepSeek Harness version it runs on is in Settings → About. */
 import type { ReactNode } from 'react'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type { DelorunVersions } from './versions.ts'
+import { SOURCE_BUILD, type DelorunVersions } from './versions.ts'
 import css from './SettingsRow.module.css'
 
 /** Injected face of the row. */
@@ -20,6 +20,6 @@ export type VersionsRowProps = PropsRuntime<'settings.general.item'> & PropsLoca
  */
 export function VersionsRow({ t, versions }: VersionsRowProps): ReactNode {
   return <div className={css.row} data-versions="">
-    <div className={css.title}>{t('versions.line', { delorun: versions.delorun })}</div>
+    <div className={css.title}>{versions.delorun === SOURCE_BUILD ? t('versions.sourceBuild') : t('versions.line', { delorun: versions.delorun })}</div>
   </div>
 }
