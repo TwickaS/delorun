@@ -54,6 +54,25 @@ describe('gates:external-agent-spawns', () => {
     expect(violations('delorun/packages/home/src/a.ts', ['import { spawn } from \'node:child_process\'', 'ctx.subprocess.spawn(spec)'])).toEqual([])
   })
 
+  it('refuses claude and codex as the program a process runs, by name or path, outside the login command', () => {
+    expect(violations('delorun/packages/home/src/a.ts', [
+      'spawn(\'claude\', [\'-p\', prompt])',
+      'execFileSync(\'/usr/local/bin/codex\', [\'exec\'])',
+      'fork(`${bin}/claude.exe`)',
+      'execSync(\'codex login\')',
+      'ctx.subprocess.spawn({ argv: [\'C:\\\\tools\\\\codex.exe\', \'exec\'], cwd })',
+      'spawnSync(\'node\', [\'claude-helper.js\'])',
+      'spawn(\'git\', [\'log\', \'claude\'])',
+    ])).toEqual([
+      '1:7 program claude',
+      '2:14 program /usr/local/bin/codex',
+      '3:6 program /claude.exe',
+      '4:10 program codex',
+      '5:31 program C:\\tools\\codex.exe',
+    ])
+    expect(violations('delorun/apps/cli/src/agents/login.ts', ['spawn(\'claude\', [\'login\'])'])).toEqual([])
+  })
+
   it('allows only presence checks of the two providers', () => {
     expect(violations('delorun/packages/agent-claude-code/src/index.ts', [
       'if (ctx.subagents.getProvider(\'claude-code\') !== undefined) mount()',
