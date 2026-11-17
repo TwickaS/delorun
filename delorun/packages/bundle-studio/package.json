@@ -35,6 +35,11 @@
     "js-yaml": "^4.3.2"
   },
   "delorun": {
-    "state": "shipped"
+    "state": "shipped",
+    "previewFlags": {
+      "delorun-onboarding": [
+        "onboarding.previewSteps"
+      ]
+    }
   }
 }

@@ -5,16 +5,18 @@ import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { LocaleSnapshot } from '@deepseek-ai/dsh-client-locale/client'
 import { vi } from 'vitest'
 import { DEFAULT_SETTINGS, type OnboardingSettings } from '../src/config.ts'
+import type { BrowserSetup, BrowserSetupStore } from '../src/client/browser-setup.ts'
 import type { BundleInstaller, BundleView, RowView } from '../src/client/bundles.ts'
 import { en } from '../src/client/locales.ts'
 import type { DelegationConsentSettings } from '@delorun/plugin-delegation-consent/wire'
+import type { PreviewFlagsStore, PreviewFlagView } from '@delorun/preview-flags/client'
 import type { ThemeSettings } from '@delorun/plugin-theme'
 import { DEFAULT_SETTINGS as THEME_DEFAULTS } from '../../plugin-theme/src/config.ts'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { DirectoryListing } from '@deepseek-ai/dsh-api-remotes/client'
 import type { AgentModelsAnswer, CloneStatus, DeferrableStep, KeyTestAnswer, LocalServer, Readiness, RecommendAnswer } from '../src/wire.ts'
 import type {
-  AddOutcome, AgentRowSettings, AgentsFace, CustomEndpoint, CloneStartOutcome, FolderBrowse, FolderChoice, HostFace, LanguageFace, NoticeFace, ProvidersFace, ReachState, SchemeFace, SchemePreference, StartFace, StartTarget, StepServices,
+  AddOutcome, AgentRowSettings, AgentsFace, BrowserFace, CustomEndpoint, CloneStartOutcome, FolderBrowse, FolderChoice, HostFace, LanguageFace, NoticeFace, ProvidersFace, ReachState, SchemeFace, SchemePreference, StartFace, StartTarget, StepServices,
 } from '../src/client/types.ts'
 import type { DirectoryEntry, KeyProbe } from '../src/client/providers.ts'
 import { DIRECTORY } from './directory.fixture.ts'
@@ -235,6 +237,36 @@ export function agentsFake(options: { readonly rows?: boolean; readonly minutes?
   return { claude, codex, limit, face: { rows: { 'claude-code': claude.form, 'codex': codex.form }, limit: limit.form } satisfies AgentsFace }
 }
 
+/**
+ * Browser's setup over a store: `refresh` answers the queued states in order and then repeats the last.
+ * @param states - where Browser stands at each read; `checking` until the first.
+ * @returns the face, its store's setter and the spies.
+ */
+export function browserFake(...states: readonly BrowserSetup[]) {
+  const store = createSnapshotStore<BrowserSetup>({ kind: 'checking' })
+  const queue = [...states.length === 0 ? [{ kind: 'not-added' } as const] : states]
+  const refresh = vi.fn((): Promise<BrowserSetup> => {
+    const next = (queue.length > 1 ? queue.shift() : queue[0]) as BrowserSetup
+    store.set(next)
+    return Promise.resolve(next)
+  })
+  const openSettings = vi.fn((_section: string) => {})
+  const setup: BrowserSetupStore = { getSnapshot: store.getSnapshot, subscribe: store.subscribe, refresh }
+  const face: BrowserFace = { setup, openSettings }
+  return { face, set: store.set, refresh, openSettings }
+}
+
+/**
+ * The page's preview flags, already read.
+ * @param on - the flag ids that are declared and on.
+ * @returns the store.
+ */
+export function flagsFake(...on: readonly string[]): PreviewFlagsStore {
+  const flags: PreviewFlagView[] = on.map(id => ({ id, kind: 'boolean', owner: '@delorun/plugin-onboarding', title: { en: id, zh: id }, description: { en: id, zh: id }, on: true }))
+  const snapshot = { status: 'ready' as const, flags }
+  return { getSnapshot: () => snapshot, subscribe: () => () => {}, load: () => Promise.resolve(), refresh: () => Promise.resolve() }
+}
+
 /** Step services with every part faked; each can be replaced. */
 export function stepServices(change: Partial<StepServices> = {}): StepServices & { readonly spies: ReturnType<typeof installerFake> } {
   const bundles = installerFake()
@@ -253,6 +285,8 @@ export function stepServices(change: Partial<StepServices> = {}): StepServices &
     renderSection: (id: string) => `section ${id}`,
     resolveText: text => (typeof text === 'string' ? text : text.en),
     pin: { fetch: () => Promise.reject(new Error('no PIN requests in this spec')), openSettings: () => undefined },
+    browser: browserFake().face,
+    previewFlags: flagsFake(),
     spies: bundles,
     ...change,
   }

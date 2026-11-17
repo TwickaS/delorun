@@ -45,6 +45,7 @@
     "@deepseek-ai/dsh-brand": "workspace:*",
     "@deepseek-ai/dsh-llm-deepseek": "workspace:*",
     "@delorun/brand": "workspace:*",
+    "@delorun/bundle-local": "workspace:*",
     "@delorun/contract-reach-providers": "workspace:*",
     "@delorun/contract-setup-answers": "workspace:*",
     "@delorun/home": "workspace:*",

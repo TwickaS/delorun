@@ -1,11 +1,13 @@
 /**
  * Which steps the dialog shows, and in which order: the built-in steps that apply, with the steps other plugins added
- * between Phone access and Workspace.
+ * between Phone access and Workspace. Browser follows Recommended plugins while its pack is offered or added.
  */
 import type { ReactNode } from 'react'
 import type { DeferrableStep, SetupRecord } from '../wire.ts'
+import { BROWSER_BUNDLE } from './browser-setup.ts'
 import type { Guide, PhoneOutcome } from './guide.ts'
 import { AgentsStep } from './steps/Agents.tsx'
+import { BrowserStep } from './steps/Browser.tsx'
 import { LookStep } from './steps/Look.tsx'
 import { ComputerOnlyStep } from './steps/ComputerOnly.tsx'
 import { PinStep } from './steps/Pin.tsx'
@@ -49,6 +51,7 @@ export const STEPS = {
   look: { id: 'look', order: 200 },
   agents: { id: 'agents', order: 300 },
   plugins: { id: 'plugins', order: 400 },
+  browser: { id: 'browser', order: 450 },
   reach: { id: 'reach', order: 500 },
   pin: { id: 'pin', order: 550 },
   workspace: { id: 'workspace', order: 1000 },
@@ -77,6 +80,8 @@ export interface FlowInput {
   readonly keepCurrent: boolean
   /** Whether PIN mode is known to be on; a phone's PIN step is left out then. */
   readonly pinOn?: boolean
+  /** Whether the Browser plugin pack is in the profile and loaded; the Browser step then shows even where the guide does not offer the pack. */
+  readonly browserAdded?: boolean
   /** The deferred steps to show alone, from the Finish setup entry at the computer; absent shows the whole guide. */
   readonly only?: readonly DeferrableStep[]
 }
@@ -86,7 +91,7 @@ export interface FlowInput {
  * @param input - the services and what decides which steps apply.
  * @returns the steps, ascending by order.
  */
-export function buildSteps({ services, guide, record, extra, reach, phone, target, notice, keepCurrent, pinOn = false, only }: FlowInput): FlowStep[] {
+export function buildSteps({ services, guide, record, extra, reach, phone, target, notice, keepCurrent, pinOn = false, browserAdded = false, only }: FlowInput): FlowStep[] {
   const { t, plugins, optionalRows } = services
   if (only !== undefined) return deferredSteps({ services, guide, only })
   const covered = (id: string): boolean => record.sections?.includes(id) === true
@@ -96,6 +101,9 @@ export function buildSteps({ services, guide, record, extra, reach, phone, targe
   if (!covered(STEPS.look.id)) built.push({ ...STEPS.look, title: () => t('step.look'), render: next => <LookStep {...props} next={next} /> })
   if (!covered(STEPS.agents.id)) built.push({ ...STEPS.agents, title: () => t('step.agents'), render: () => <AgentsStep {...props} /> })
   if ((plugins.length > 0 || optionalRows.length > 0) && !covered(STEPS.plugins.id)) built.push({ ...STEPS.plugins, title: () => t('step.plugins'), render: () => <PluginsStep {...props} /> })
+  // Browser has its own step where the plugins step offers its pack, or the pack is already in the profile.
+  const browserOffered = plugins.includes(BROWSER_BUNDLE) && !covered(STEPS.plugins.id)
+  if (browserOffered || browserAdded) built.push({ ...STEPS.browser, title: () => t('step.browser'), render: () => <BrowserStep {...props} /> })
   // A studio opened from a phone is already on one, so it has no Phone access step.
   if (reach === 'off' && !record.reachSetUp) built.push({ ...STEPS.reach, title: () => t('step.reach'), skipLabel: () => t('reach.notNow'), continueLabel: () => { const read = guide.readiness.getSnapshot(); return read.status === 'ready' && read.value.tailscale.state === 'ready' ? t('continue') : t('reach.done') }, onSkip: () => { guide.setPhone('skipped') }, onContinue: () => { void services.host.reach().then((now) => { guide.setPhone(now === 'set-up' ? 'on' : 'done') }) }, render: () => <ReachStep {...props} /> })
   // The PIN step is for the home's own computer with phone access on: reach was already set up, or the Phone access step just found it on.

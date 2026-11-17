@@ -15,6 +15,7 @@ import type { OnboardingSettings } from '../config.ts'
 import type { DeferrableStep, SetupRecord } from '../wire.ts'
 import type { HostFetch } from '@delorun/bundle-local/host-api'
 import { readPinState } from '@delorun/bundle-local/pin-api'
+import { browserAdded } from './browser-setup.ts'
 import { buildSteps, STEPS, withSteps, type FlowStep } from './flow.tsx'
 import { landFocus } from './focus.ts'
 import { createGuide, type Guide } from './guide.ts'
@@ -71,6 +72,8 @@ interface Loaded {
   readonly reach: ReachState
   /** Whether PIN mode is on, read only on a phone, where the PIN step then leaves out. */
   readonly pinOn: boolean
+  /** Whether the Browser plugin pack is in the profile and loaded, which shows its step where the guide does not offer the pack. */
+  readonly browserAdded: boolean
 }
 
 /**
@@ -97,12 +100,12 @@ function Dialog(props: OnboardingStepEntryProps & { readonly settings: Onboardin
   useEffect(() => () => { guide.dispose() }, [guide])
   useEffect(() => {
     let live = true
-    void Promise.all([loadRecord(), services.host.reach()]).then(async ([record, reach]) => {
+    void Promise.all([loadRecord(), services.host.reach(), services.browser.setup.refresh()]).then(async ([record, reach, browser]) => {
       const pinOn = reach === 'remote' && await readPinOn(services.pin.fetch)
-      if (live) setLoaded({ record, reach, pinOn })
+      if (live) setLoaded({ record, reach, pinOn, browserAdded: browserAdded(browser) })
     })
     return () => { live = false }
-  }, [loadRecord, services.host, services.pin])
+  }, [loadRecord, services.host, services.pin, services.browser])
   return loaded === undefined ? null : <Flow {...props} {...loaded} told={told} guide={guide} />
 }
 
@@ -130,7 +133,7 @@ function useInertRoot(): void {
 
 /** The steps, the current one and the buttons. */
 function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: OnboardingSettings; readonly explicit: boolean; readonly told: Told; readonly guide: Guide; readonly later: () => void }): ReactNode {
-  const { t, later, progress, extra, services: fixed, startChat, complete, completeStep, renderSection, settings, explicit, record, reach, pinOn, told, guide, deferredOnly } = props
+  const { t, later, progress, extra, services: fixed, startChat, complete, completeStep, renderSection, settings, explicit, record, reach, pinOn, browserAdded: browserIsAdded, told, guide, deferredOnly } = props
   const { start } = fixed
   useInertRoot()
   const addedSteps = useSyncExternalStore(useCallback(listener => extra.subscribe(listener), [extra]), () => extra.getSnapshot())
@@ -167,8 +170,8 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
   // The Finish setup entry at the computer shows only the steps a phone deferred; they are read once, so finishing one does not remove it from under the person.
   const [only] = useState<readonly DeferrableStep[] | undefined>(() => (deferredOnly.getSnapshot() ? withSteps(record.deferred ?? []) : undefined))
   const steps = useMemo(
-    () => buildSteps({ services, guide, record, extra: addedSteps, reach, phone, target, notice, keepCurrent, pinOn, ...only === undefined ? {} : { only } }),
-    [services, guide, record, addedSteps, reach, phone, target, notice, keepCurrent, pinOn, only],
+    () => buildSteps({ services, guide, record, extra: addedSteps, reach, phone, target, notice, keepCurrent, pinOn, browserAdded: browserIsAdded, ...only === undefined ? {} : { only } }),
+    [services, guide, record, addedSteps, reach, phone, target, notice, keepCurrent, pinOn, browserIsAdded, only],
   )
   const [index, setIndex] = useState(() => (notice === undefined ? Math.max(0, steps.findIndex(each => each.id === settings.step)) : 0))
   const current = Math.min(index, steps.length - 1)

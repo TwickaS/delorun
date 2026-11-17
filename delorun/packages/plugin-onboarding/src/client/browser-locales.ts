@@ -1,0 +1,70 @@
+/**
+ * The Browser step's copy, in English and Chinese, kept apart from the other steps' dictionaries and spread into them,
+ * with the preview chip's own words from `@delorun/preview-flags`.
+ * @module @delorun/plugin-onboarding/client/browser-locales
+ */
+import { en as chipEn, zh as chipZh } from '@delorun/preview-flags/locales'
+
+/** English dictionary. */
+export const browserEn = {
+  ...chipEn,
+  'step.browser': 'Browser',
+  'browser.lead': 'Browser lets the agent open web pages, click and read them in a browser on this computer. It is a plugin you add, and this step says whether it is ready.',
+  'browser.pack.description': 'Lets the agent open pages, click and read in a browser on this computer.',
+  'browser.checking': 'Checking whether Browser is ready…',
+  'browser.ready': 'Browser is ready to use.',
+  'browser.needsSetup': 'Needs setup · {reason}',
+  'browser.fix.command': 'Run this in a terminal on this computer. This step checks again when you come back.',
+  'browser.fix.settings': 'Open Settings',
+  'browser.fix.docs': 'See how to install it',
+  'browser.problem': 'Delorun could not read what Browser needs: {message}',
+  'browser.unread': 'Delorun could not check whether Browser is ready.',
+  'browser.notAdded': 'Add Browser and this step says whether it is ready to use. You can also add it later in Plugins.',
+  'browser.added': 'Browser was added. Delorun checks whether it is ready once it has loaded.',
+  'browser.expect': 'What to expect',
+  'browser.expect.asks.title': 'It asks once',
+  'browser.expect.asks.text': 'The first chat that uses Browser asks you to allow its browser tool, playwright-mcp. Allow it once and Delorun does not ask again.',
+  'browser.expect.own.title': 'Its own browser',
+  'browser.expect.own.text': 'Browser runs apart from the browser you use, so it starts without your sign-ins.',
+  'browser.expect.off.title': 'Off until you add it',
+  'browser.expect.off.text': 'No chat opens a browser unless you add Browser. You can turn it off again in Plugins.',
+  'browser.which': 'Which browser the agent uses',
+  'browser.which.own.title': 'Delorun\'s browser',
+  'browser.which.own.text': 'A separate browser without your sign-ins. This is how Browser works today.',
+  'browser.which.mine.title': 'Use my browser',
+  'browser.which.mine.text': 'Your Chrome with your sign-ins, approved per chat.',
+  'browser.which.mine.preview': 'Planned and not built yet. Choosing it here records nothing and changes nothing.',
+  'browser.which.note': 'Use my browser is a preview of what is planned. Your choice here is not saved.',
+} as const satisfies Record<string, string>
+
+/** Chinese dictionary. */
+export const browserZh: Record<keyof typeof browserEn, string> = {
+  ...chipZh,
+  'step.browser': '浏览器',
+  'browser.lead': '“浏览器”让智能体在这台电脑的浏览器中打开网页、点击并阅读。它是一个需要你添加的插件，这一步会告诉你它是否已就绪。',
+  'browser.pack.description': '让智能体在这台电脑的浏览器中打开页面、点击并阅读。',
+  'browser.checking': '正在检查“浏览器”是否已就绪…',
+  'browser.ready': '“浏览器”已可以使用。',
+  'browser.needsSetup': '需要设置 · {reason}',
+  'browser.fix.command': '请在这台电脑的终端中运行此命令。你回到这里时，这一步会再次检查。',
+  'browser.fix.settings': '打开设置',
+  'browser.fix.docs': '查看如何安装',
+  'browser.problem': 'Delorun 无法读取“浏览器”所需的条件：{message}',
+  'browser.unread': 'Delorun 无法检查“浏览器”是否已就绪。',
+  'browser.notAdded': '添加“浏览器”后，这一步会告诉你它是否可以使用。你也可以稍后在“插件”中添加。',
+  'browser.added': '“浏览器”已添加。加载完成后，Delorun 会检查它是否已就绪。',
+  'browser.expect': '会发生什么',
+  'browser.expect.asks.title': '只询问一次',
+  'browser.expect.asks.text': '第一个使用“浏览器”的对话会请你允许它的浏览器工具 playwright-mcp。允许一次后，Delorun 不会再询问。',
+  'browser.expect.own.title': '独立的浏览器',
+  'browser.expect.own.text': '“浏览器”与你平时使用的浏览器分开运行，因此启动时不带你的登录状态。',
+  'browser.expect.off.title': '添加之前保持关闭',
+  'browser.expect.off.text': '除非你添加了“浏览器”，否则任何对话都不会打开浏览器。你可以在“插件”中再次关闭它。',
+  'browser.which': '智能体使用哪个浏览器',
+  'browser.which.own.title': 'Delorun 的浏览器',
+  'browser.which.own.text': '一个不带你登录状态的独立浏览器。这是“浏览器”目前的工作方式。',
+  'browser.which.mine.title': '使用我的浏览器',
+  'browser.which.mine.text': '带有你登录状态的 Chrome，每个对话单独批准。',
+  'browser.which.mine.preview': '已计划但尚未实现。在这里选择它不会记录任何内容，也不会改变任何设置。',
+  'browser.which.note': '“使用我的浏览器”是计划中功能的预览。你在这里的选择不会被保存。',
+}
