@@ -21,16 +21,17 @@ export function linkedStyles(html: string): string[] {
  * The classes the markup uses that no linked stylesheet has a rule for.
  * @param out - the built directory.
  * @param page - the page's file name in it, such as `index.html`.
+ * @param scopeOnly - class names that only scope rules loaded later and need no rule of their own.
  * @returns the class names, sorted; empty when every class is styled.
  */
-export function unstyledClasses(out: string, page: string): string[] {
+export function unstyledClasses(out: string, page: string, scopeOnly: readonly string[] = []): string[] {
   const html = readFileSync(join(out, page), 'utf8')
   // The rules a page carries inline count as well as the stylesheets it links.
   const inline = [...html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)].map(match => match[1] ?? '')
   const css = [...linkedStyles(html).map(href => readFileSync(join(out, href), 'utf8')), ...inline].join('\n')
   const styled = new Set([...css.matchAll(/\.((?:\\.|[\w-])+)/g)].map(match => (match[1] ?? '').replace(/\\(.)/g, '$1')))
   const used = new Set([...html.matchAll(/\sclass="([^"]*)"/g)].flatMap(match => (match[1] ?? '').split(/\s+/)).filter(name => name !== ''))
-  return [...used].filter(name => !styled.has(name)).sort()
+  return [...used].filter(name => !styled.has(name) && !scopeOnly.includes(name)).sort()
 }
 
 /**

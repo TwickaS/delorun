@@ -7,12 +7,13 @@
  * @module @delorun/website/scripts/check-styles
  */
 import { readdirSync } from 'node:fs'
+import { SCOPE_CLASSES } from '../src/site/config.ts'
 import { unstyledClasses } from './styles.ts'
 
 const out = process.argv[2] ?? 'out'
 let failed = false
 for (const page of readdirSync(out).filter(file => file.endsWith('.html'))) {
-  const missing = unstyledClasses(out, page)
+  const missing = unstyledClasses(out, page, SCOPE_CLASSES)
   if (missing.length > 0) {
     failed = true
     console.error(`styles: ${page} uses classes with no rule in the stylesheets it links: ${missing.join(' ')}`)
