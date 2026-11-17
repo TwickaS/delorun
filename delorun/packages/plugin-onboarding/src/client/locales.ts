@@ -662,7 +662,7 @@ export const zh: Record<OnboardingLocaleKey, string> = {
   'ready.reach': '手机访问',
   'ready.reach.on': '已开启',
   'ready.reach.off': '未开启',
-  'ready.reach.check': '远程访问未开启。请在“设置 → 设备”中确认',
+  'ready.reach.check': '远程访问未开启。请在“设置 → 设备”中查看',
   'ready.workspace': '工作区',
   'ready.workspace.none': '尚未选择',
   'ready.workspace.last': '你上次使用的工作区',
