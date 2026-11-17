@@ -26,6 +26,7 @@ const STUDIO_ROWS = [
   { id: 'delorun-chat-states', name: '@delorun/plugin-chat-states' },
   { id: 'delorun-sidebar', name: '@delorun/plugin-sidebar' },
   { id: 'delorun-onboarding', name: '@delorun/plugin-onboarding' },
+  { id: 'delorun-new-workspace', name: '@delorun/plugin-new-workspace' },
   { id: 'delorun-downloads', name: '@delorun/plugin-downloads' },
   { id: 'delorun-preview-flags', name: '@delorun/preview-flags' },
 ] as const
