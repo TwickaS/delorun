@@ -33,6 +33,7 @@ import type { ProfileContext, ProfileLayer, ProfileManifest } from '@deepseek-ai
 import { bundleManifest, readProfileRegistry, registryArguments, runProfilePnpm, saveManifest, viewProfilePackage, type ProfileBaseline } from './operations.ts'
 import { classifyInstallFailure } from './install-failure.ts'
 import { officialBundleInstallTarget } from './official-install-target.ts'
+import { approvedFromTarget } from './approved-source.ts'
 import { dependencySpec, InvalidInstallSpecError, parseInstallSpec, pinnedGitOrigin, type ParsedInstallSpec } from './install-spec.ts'
 import { attributeFailure, normalizeRegistry, NPMMIRROR_REGISTRY, registryPlan } from './registry.ts'
 import { flatten, writePluginEnabled } from './patch.ts'
@@ -935,8 +936,11 @@ export class PluginManager extends TypertRemoteService {
       // Installation-owned copies remain protected even if a profile also declares their names.
       const owned = installed && !shipped
       const removable = owned || (enabled && !installed && !shipped)
-      const sourceOf = (packageName?: string): { source?: string } =>
-        owned ? { source: dependencySpec(name, recorded[name] as string, this.profile.dir, packageName) } : {}
+      const sourceOf = (packageName?: string): { source?: string } => {
+        if (!owned) return {}
+        const spec = dependencySpec(name, recorded[name] as string, this.profile.dir, packageName)
+        return { source: approvedFromTarget(manifest, name, target.installTarget) ? target.installTarget?.spec ?? spec : spec }
+      }
       const readOnlyReason = this.protectsManager(name) ? 'management-required' as const : undefined
       let availability: BundleInfo['availability'] = 'missing'
       let version: string | undefined
