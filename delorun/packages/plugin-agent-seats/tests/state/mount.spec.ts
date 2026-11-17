@@ -47,7 +47,7 @@ const post = (route: SeatRoute | undefined, body: unknown) => {
 const routeOf = (w: StateWorld, path: string) => w.mount.routes.find(route => route.path === path)
 
 describe('while a turn runs', () => {
-  it('shows "Starting" while the program spawns and "Working" once it answered', async () => {
+  it('shows no "Starting" while the gate decides the start, and "Working" once the program answered', async () => {
     const w = await stateWorld({ info: () => ({ version: '2.1.4', ownSettings: 'accept edits' }) })
     const states: Array<string | undefined> = []
     w.gate.next = () => {
@@ -57,7 +57,8 @@ describe('while a turn runs', () => {
     const task = w.say('task')
     const running = collect(w.adapter.stream(w.request([task])))
     await tick()
-    expect(states).toEqual(['starting'])
+    expect(states).toEqual(['idle'])
+    expect(records(w, SEAT_STATUS_RECORD).map(record => (record as { state: string }).state)).toEqual(['starting', 'working'])
     expect(view(w)).toMatchObject({ agent: 'claude-code', state: 'working', version: '2.1.4', ownSettings: 'accept edits', sandbox: 'off' })
     await finishTurn(w, running)
   })

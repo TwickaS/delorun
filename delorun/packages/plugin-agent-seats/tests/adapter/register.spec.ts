@@ -5,10 +5,12 @@
 import { Context } from '@deepseek-ai/cordis'
 import { LlmRuntime } from '@deepseek-ai/dsh-llm'
 import { SessionId, SessionStore } from '@deepseek-ai/dsh-session'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { snapshotSubagentDescriptor } from '@deepseek-ai/dsh-subagent'
 import { afterEach, describe, expect, it } from 'vitest'
 import { SEAT_ROUTE_REFUSED } from '../../src/adapter/failure.ts'
 import { registerSeatRoutes, type SeatRouteRegistration } from '../../src/adapter/register.ts'
+import { agentSeatProjection, SeatRecords } from '../../src/state/index.ts'
 import { CHILD, collect, finishOf, MemoryModels, MemoryStates, request, ROUTE, ScriptedGate, user } from './support.ts'
 
 const contexts: Context[] = []
@@ -22,6 +24,8 @@ async function mounted(): Promise<{ ctx: Context, gate: ScriptedGate, routes: Se
   contexts.push(ctx)
   await ctx.plugin(LlmRuntime)
   await ctx.plugin(SessionStore)
+  await ctx.plugin(SessionProjectionRegistry)
+  const records = new SeatRecords(ctx.sessions, await ctx.sessionProjections.register(agentSeatProjection()))
   const gate = new ScriptedGate()
   ctx.provide('externalAgents', gate as never)
   const states = new MemoryStates()
@@ -33,7 +37,7 @@ async function mounted(): Promise<{ ctx: Context, gate: ScriptedGate, routes: Se
       routes = registerSeatRoutes(inner, [
         { route: ROUTE, provider: 'claude-code', descriptorProvider: 'claude-code', displayName: 'Claude Code', recordPrefix: 'claude_code.', contextWindow: 200_000 },
       ], {
-        states, models: new MemoryModels(), workspaceOf: () => 'workspace-1', approve: () => Promise.resolve('reject'),
+        states, models: new MemoryModels(), descriptorOf: child => records.providerOf(child), workspaceOf: () => 'workspace-1', approve: () => Promise.resolve('reject'),
       })
     },
   })
@@ -70,13 +74,14 @@ describe('registering the seat routes', () => {
     expect(gate.starts[0]).toMatchObject({ creator: 'root', cwd: '/work', child: CHILD })
   })
 
-  it('refuses a fork that copied the descriptor, since it is a top-level Session with no creator', async () => {
+  it('refuses a real fork of a seat child, which inherited the descriptor but is a top-level Session with no creator', async () => {
     const { ctx, gate } = await mounted()
     seatChild(ctx, CHILD, 'claude-code')
     gate.seats.set(CHILD, { child: CHILD, root: SessionId('root'), provider: 'claude-code' })
-    const fork = SessionId('fork-1')
-    ctx.sessions.create(fork, { meta: { cwd: '/work' } }).append('subagent/descriptor', snapshotSubagentDescriptor({ mode: 'continuable', provider: 'claude-code', label: 'task' }))
-    const chunks = await collect(ctx.llm.stream(request([user('task')], { sessionId: fork })))
+    const fork = ctx.sessions.fork(CHILD, undefined, SessionId('fork-1'))
+    expect(fork.header.parentSession).toBeUndefined()
+    expect(fork.snapshotEvents().some(event => event.type === 'subagent/descriptor')).toBe(true)
+    const chunks = await collect(ctx.llm.stream(request([user('task')], { sessionId: fork.header.id })))
     expect(finishOf(chunks)).toMatchObject({ kind: 'error', failure: { code: SEAT_ROUTE_REFUSED } })
     expect(gate.starts).toEqual([])
   })

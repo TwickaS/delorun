@@ -286,7 +286,6 @@ export class SeatAdapter extends LlmAdapter {
     if (creator === undefined || cwd === undefined) throw new SeatFolderUnknown()
     const workspace = host.workspaceOf(child)
     const model = workspace === undefined ? undefined : models.get(workspace)
-    events?.onStarting?.(child, provider)
     const program = await gate.start({
       purpose: 'seat', provider, creator, child, cwd,
       ...resume === undefined ? {} : { resume },
@@ -295,6 +294,8 @@ export class SeatAdapter extends LlmAdapter {
       onApproval: request => host.approve(child, request, signal),
       signal,
     })
+    // After the gate accepted the start: a refused chat gets no `starting` record.
+    events?.onStarting?.(child, provider)
     events?.onStarted?.(child)
     const run = new SeatRun(program)
     run.cursor = cursor

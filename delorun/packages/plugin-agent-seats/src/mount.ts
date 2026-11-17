@@ -108,6 +108,7 @@ export async function mountSeats(ctx: Context, config: Config, options: SeatMoun
     states: state.store,
     models: state.choices,
     events: state.events,
+    descriptorOf: child => state.store.providerOf(child),
     workspaceOf,
     approve: (child, request, startSignal) => {
       const agent = ctx.get('agents')?.get(child)

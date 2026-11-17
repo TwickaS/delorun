@@ -3,7 +3,6 @@
  * @module @delorun/plugin-agent-seats/adapter/register
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { foldSubagentDescriptor } from '@deepseek-ai/dsh-subagent'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { ExternalAgentName, ProgramApprovalAnswer, ProgramApprovalRequest } from '@delorun/external-agents/contract'
 import { SeatAdapter, type SeatHost } from './adapter.ts'
@@ -33,6 +32,12 @@ export interface SeatRouteDependencies {
   readonly models: SeatModelChoices
   /** What the adapter reports to the rest of the plugin. */
   readonly events?: SeatAdapterEvents
+  /**
+   * The provider of the child's own `subagent/descriptor`, read from the seat projection.
+   * @param child - the seat child.
+   * @returns the provider name, or undefined without a descriptor or a loaded Session.
+   */
+  descriptorOf(child: SessionId): string | undefined
   /**
    * The workspace key a child's model pick is kept under.
    * @param child - the seat child.
@@ -66,10 +71,7 @@ export function registerSeatRoutes(
   dependencies: SeatRouteDependencies,
 ): SeatRouteRegistration {
   const host: SeatHost = {
-    descriptorProvider: (child) => {
-      const session = ctx.sessions.get(child)
-      return session === undefined ? undefined : foldSubagentDescriptor(session.ownEvents())?.provider
-    },
+    descriptorProvider: dependencies.descriptorOf,
     creator: child => ctx.sessions.get(child)?.header.parentSession,
     cwd: child => ctx.sessions.get(child)?.header.cwd,
     workspaceOf: dependencies.workspaceOf,

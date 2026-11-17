@@ -64,14 +64,14 @@ export interface ModelNotOffered {
 /** What the adapter reports to the rest of the plugin; every handler is optional. */
 export interface SeatAdapterEvents {
   /**
-   * The program is being started or resumed, so the chat can show "Starting Claude Code…" (EA23). {@link onStarted}
-   * or {@link onTurnFailure} follows.
+   * The start gate accepted the start of the program, or the resume of its session. It is not reported for a start the
+   * gate refused, so a refused chat logs no `starting` state; {@link onStarted} follows at once.
    * @param child - the seat child.
    * @param provider - the agent starting.
    */
   onStarting?(child: SessionId, provider: ExternalAgentName): void
   /**
-   * The program answered the start, so the "Starting …" state ends.
+   * The program answered the start, so the chat is working.
    * @param child - the seat child.
    */
   onStarted?(child: SessionId): void

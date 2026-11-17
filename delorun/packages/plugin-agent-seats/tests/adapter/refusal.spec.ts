@@ -29,15 +29,7 @@ describe('the seat route refuses anything that is not a seat child\'s own turn',
     expect(w.gate.starts).toEqual([])
   })
 
-  it('refuses a fork of a seat: the fork keeps the descriptor but the gate holds no seat for it', async () => {
-    const w = world()
-    const fork = SessionId('fork-of-child-1')
-    const chunks = await collect(w.adapter.stream(request([user('task')], { sessionId: fork })))
-    expect(chunks).toEqual(refused)
-    expect(w.gate.starts).toEqual([])
-  })
-
-  it('refuses a fork that kept the descriptor, since it has no creator', async () => {
+  it('refuses a child with no creator, though its descriptor names the route\'s provider', async () => {
     const w = world({ host: { descriptorProvider: () => 'claude-code', creator: () => undefined }, seat: false })
     expect(await collect(w.adapter.stream(request([user('task')])))).toEqual(refused)
     expect(w.gate.starts).toEqual([])

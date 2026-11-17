@@ -279,6 +279,25 @@ describe('turns that cannot run or end in failure', () => {
     const w = world()
     w.gate.failure = new GateRefusedError(refusal)
     expect(finishOf(await collect(w.adapter.stream(request([user('task')]))))).toMatchObject({ kind: 'error', failure: { code } })
+    expect(w.reports.starting).toEqual([])
+  })
+
+  it('reports the start only once the gate accepted it, not while the gate decides', async () => {
+    const w = world()
+    const accepted = Promise.withResolvers<void>()
+    const start = w.gate.start.bind(w.gate)
+    w.gate.start = async (startRequest) => {
+      await accepted.promise
+      return start(startRequest)
+    }
+    const running = collect(w.adapter.stream(request([user('task')])))
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(w.reports.starting).toEqual([])
+    accepted.resolve()
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(w.reports.starting).toEqual(['child-1:claude-code'])
+    w.gate.latest.emit({ kind: 'turn-end', outcome: 'completed' })
+    await running
   })
 
   it.each([
