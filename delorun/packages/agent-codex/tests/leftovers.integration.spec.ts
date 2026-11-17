@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { holdRunFolder, mountPoints, parseMountPoints, recordAbsentNames, removeSandboxLeftovers } from '../src/leftovers.ts'
 
-const HAS_BWRAP = process.platform === 'linux' && spawnSync('bwrap', ['--version']).status === 0
+const HAS_BWRAP = process.platform === 'linux' && spawnSync('bwrap', ['--version'], { timeout: 10_000 }).status === 0
 
 const roots: string[] = []
 

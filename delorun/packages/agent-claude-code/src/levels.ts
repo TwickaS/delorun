@@ -26,10 +26,14 @@ export interface ClaudeSeatLevel {
 
 /** The failure of Careful when the command sandbox cannot run; the message is the sentence the person reads. */
 export class SandboxUnavailableError extends Error {
+  /** The tools the sandbox lacks. */
+  readonly missing: readonly string[]
+
   /** @param missing - the tools the sandbox lacks. */
-  constructor(readonly missing: readonly string[]) {
+  constructor(missing: readonly string[]) {
     super(`Careful needs Claude Code's command sandbox, which needs ${missing.join(' and ')}. Install it with: ${CLAUDE_SANDBOX_INSTALL_COMMAND}`)
     this.name = 'SandboxUnavailableError'
+    this.missing = missing
   }
 }
 
