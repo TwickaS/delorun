@@ -5,11 +5,11 @@
  */
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync, chmodSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { delimiter, dirname, join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import yaml from 'js-yaml'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { assertBundlePlatform, composeEntries, initProfile, loadProfileDirectory, UnsupportedBundlePlatformError } from '@deepseek-ai/dsh-app-boot'
+import { composeEntries, initProfile, loadProfileDirectory } from '@deepseek-ai/dsh-app-boot'
 import { DELORUN_PROFILE_BUNDLES, LOCAL_BUNDLE, STUDIO_BUNDLE } from '../src/profile.ts'
 import { createTestHome, INSTALL_ANCHOR, PACKAGE_DIR, STUDIO_PACKAGE_DIR, type TestHome } from './profiles.ts'
 
@@ -43,7 +43,7 @@ const manifest = (dir: string): { name: string; dsh: { bundle: { patch: string; 
   JSON.parse(readFileSync(join(PACKAGES, dir, 'package.json'), 'utf8'))
 const patchRows = (dir: string): Row[] => (yaml.load(readFileSync(join(PACKAGES, dir, 'cordis.patch.yml'), 'utf8'), { schema: patchSchema }) as { insert: Row[] }[])[0]!.insert
 /** A row's `disabled` as the Loader evaluates it for a given platform and environment. */
-const isDisabled = (row: Row, platform = process.platform): boolean => Boolean(interpolate({ process }, row.disabled) ?? false) && platform !== ''
+const isDisabled = (row: Row, platform: string = process.platform): boolean => Boolean(interpolate({ process }, row.disabled) ?? false) && platform !== ''
 
 let home: TestHome
 let scratch: string
