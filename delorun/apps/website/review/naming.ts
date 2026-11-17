@@ -80,9 +80,11 @@ export function parsePictureName(name: string): PictureSpec | undefined {
  * The pass folder for a pass number.
  * @param root - the release folder, such as `~/delorun-rc-release`.
  * @param pass - the pass number, from 1.
+ * @param suffix - letters after the number for an extra run of the same pass, such as `b`.
  * @returns the folder path.
  */
-export function passFolder(root: string, pass: number): string {
+export function passFolder(root: string, pass: number, suffix = ''): string {
   if (!Number.isInteger(pass) || pass < 1) throw new Error(`the pass number must be a whole number from 1, got ${String(pass)}`)
-  return `${root.replace(/\/$/, '')}/site-pass-${String(pass)}`
+  if (!/^[a-z]*$/.test(suffix)) throw new Error(`the pass suffix must be lower-case letters, got ${suffix}`)
+  return `${root.replace(/\/$/, '')}/site-pass-${String(pass)}${suffix}`
 }

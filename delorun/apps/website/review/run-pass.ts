@@ -2,7 +2,10 @@
  * One command for a whole review pass: serves the production build, takes every picture, runs the audit and the worst
  * cases, and writes `index.md`, `audit.md` and `report.json` into `site-pass-<n>/`. Prints the audit's summary.
  *
- * Usage: `node review/run-pass.ts --pass <n> [--build] [--release-dir <dir>] [--port 18680]`
+ * Usage: `node review/run-pass.ts --pass <n> [--build] [--audit-only] [--suffix b] [--release-dir <dir>] [--port 18680]`
+ *
+ * `--audit-only` skips the pictures and the worst cases and writes `audit.md` and `report.json` only; `--suffix b` names the
+ * folder `site-pass-<n>b` for an extra run of the same pass.
  *
  * `--build` runs `vite build` first under `nice -n 19`. Without it the existing `out/` is served. The folder is emptied of
  * its earlier pictures and reports first, so a second run of the same build writes the same file names.
@@ -25,9 +28,9 @@ import { serve } from './serve.ts'
 import { worstCases } from './worst.ts'
 
 const site = fileURLToPath(new URL('..', import.meta.url))
-const { values } = parseArgs({ options: { pass: { type: 'string' }, build: { type: 'boolean' }, 'release-dir': { type: 'string' }, port: { type: 'string', default: '18680' } } })
+const { values } = parseArgs({ options: { pass: { type: 'string' }, build: { type: 'boolean' }, suffix: { type: 'string', default: '' }, 'audit-only': { type: 'boolean' }, 'release-dir': { type: 'string' }, port: { type: 'string', default: '18680' } } })
 const pass = Number(values.pass)
-const folder = passFolder(values['release-dir'] ?? join(homedir(), 'delorun-rc-release'), pass)
+const folder = passFolder(values['release-dir'] ?? join(homedir(), 'delorun-rc-release'), pass, values.suffix)
 const out = resolve(site, 'out')
 
 await waitForResources()
@@ -44,9 +47,10 @@ const server = await serve(out, Number(values.port))
 const base = `http://127.0.0.1:${String(values.port)}`
 const browser = await launch()
 try {
-  const taken = await capture(browser, base, folder)
+  const auditOnly = values['audit-only'] === true
+  const taken = auditOnly ? { pictures: [], missingSections: new Set<string>(), findings: [] } : await capture(browser, base, folder)
   const worst = new Shooter(folder)
-  const worstFindings = await worstCases(browser, base, worst)
+  const worstFindings = auditOnly ? [] : await worstCases(browser, base, worst)
   const result = await audit(browser, base, out)
   const pictures = [...taken.pictures, ...worst.pictures].sort()
   const report: Report = {

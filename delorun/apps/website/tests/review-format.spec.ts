@@ -33,6 +33,11 @@ describe('pass folder', () => {
     expect(passFolder('/r/', 2)).toBe('/r/site-pass-2')
   })
 
+  it('adds a letter suffix for an extra run', () => {
+    expect(passFolder('/r', 3, 'b')).toBe('/r/site-pass-3b')
+    expect(() => passFolder('/r', 3, '../x')).toThrow(/lower-case/)
+  })
+
   it('refuses pass 0', () => {
     expect(() => passFolder('/r', 0)).toThrow(/from 1/)
   })
