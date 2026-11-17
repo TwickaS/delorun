@@ -64,8 +64,8 @@ export interface ModelNotOffered {
 /** What the adapter reports to the rest of the plugin; every handler is optional. */
 export interface SeatAdapterEvents {
   /**
-   * The start gate accepted the start of the program, or the resume of its session. It is not reported for a start the
-   * gate refused, so a refused chat logs no `starting` state; {@link onStarted} follows at once.
+   * The program is being started or resumed, so the chat can show "Starting Claude Code…" (EA23). {@link onStarted}
+   * or {@link onStartFailed} follows.
    * @param child - the seat child.
    * @param provider - the agent starting.
    */
@@ -75,6 +75,12 @@ export interface SeatAdapterEvents {
    * @param child - the seat child.
    */
   onStarted?(child: SessionId): void
+  /**
+   * The start ended without a program, whether the gate refused it or it failed, so the "Starting …" state ends. The
+   * turn's own failure follows through {@link onTurnFailure} when it is one the chat shows.
+   * @param child - the seat child.
+   */
+  onStartFailed?(child: SessionId): void
   /**
    * The turn ended because the model is not offered (EA22).
    * @param payload - the offered list for the picker.

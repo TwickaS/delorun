@@ -1,7 +1,7 @@
 /**
  * The seat adapter over the real start gate (`ExternalAgentsService`) and a consent that refuses: a child the gate has
  * not registered yet, whose descriptor names the route's provider and which has a creator, reaches the gate on its
- * first turn. The gate refuses it before any program opens, and the chat logs no `starting` state.
+ * first turn. The gate refuses it before any program opens, and the chat's starting state ends.
  */
 import { Context } from '@deepseek-ai/cordis'
 import { mountAgentLoopTestDependencies, mountAgentLoopTestHarness } from '@deepseek-ai/dsh-agent-loop-testkit'
@@ -57,7 +57,7 @@ class RefusingConsent implements Pick<SeatConsent, 'reviewSeat' | 'leaseOf' | 'e
 }
 
 describe('a first turn of an unregistered seat child on the real gate', () => {
-  it('ends with the consent refusal, opens no program and logs no starting state', async () => {
+  it('ends with the consent refusal, opens no program and ends the starting state', async () => {
     const ctx = new Context()
     contexts.push(ctx)
     await mountAgentLoopTestDependencies(ctx)
@@ -82,7 +82,7 @@ describe('a first turn of an unregistered seat child on the real gate', () => {
     })
     const driver = new CountingDriver()
     ctx.externalAgents.registerDriver(driver)
-    const starting: string[] = []
+    const reported: string[] = []
     await ctx.plugin({
       name: 'seat-routes-under-real-gate',
       inject: ['llm', 'sessions', 'externalAgents'],
@@ -91,7 +91,7 @@ describe('a first turn of an unregistered seat child on the real gate', () => {
           { route: ROUTE, provider: 'claude-code', descriptorProvider: 'claude-code', displayName: 'Claude Code', recordPrefix: 'claude_code.', contextWindow: 200_000 },
         ], {
           states: new MemoryStates(), models: new MemoryModels(), descriptorOf: id => records.providerOf(id), workspaceOf: () => 'workspace-1',
-          approve: () => Promise.resolve('reject'), events: { onStarting: (id) => { starting.push(id) } },
+          approve: () => Promise.resolve('reject'), events: { onStarting: (id) => { reported.push(`starting ${id}`) }, onStartFailed: (id) => { reported.push(`failed ${id}`) } },
         })
       },
     })
@@ -102,7 +102,8 @@ describe('a first turn of an unregistered seat child on the real gate', () => {
     expect(finishOf(chunks)).toMatchObject({ kind: 'error', failure: { code: 'EXTERNAL_AGENT_CONSENT' } })
     expect(consent.reviews.map(review => [review.phase, review.child.id])).toEqual([['hand-off', child.id]])
     expect(driver.opens).toEqual([])
-    expect(starting).toEqual([])
+    // The chat is told the start began and then that it ended, so it does not stay at "Starting".
+    expect(reported).toEqual([`starting ${child.id}`, `failed ${child.id}`])
     expect(ctx.externalAgents.seat(child.id)).toBeUndefined()
   })
 })

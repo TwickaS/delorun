@@ -11,7 +11,7 @@ import {
 import {
   GateRefusedError, ProgramOpenError,
   type ExternalAgentName, type ExternalAgentsGate, type ProgramApprovalAnswer, type ProgramApprovalRequest, type ProgramFailure,
-  type SessionId,
+  type SeatSession, type SessionId,
 } from '@delorun/external-agents/contract'
 import {
   gateRefusal, HISTORY_PARTED, PROGRAM_CLOSED, programFailure, SEAT_FOLDER_UNKNOWN, SEAT_ROUTE_REFUSED,
@@ -286,16 +286,21 @@ export class SeatAdapter extends LlmAdapter {
     if (creator === undefined || cwd === undefined) throw new SeatFolderUnknown()
     const workspace = host.workspaceOf(child)
     const model = workspace === undefined ? undefined : models.get(workspace)
-    const program = await gate.start({
-      purpose: 'seat', provider, creator, child, cwd,
-      ...resume === undefined ? {} : { resume },
-      ...model === undefined ? {} : { model },
-      harnessTools: [],
-      onApproval: request => host.approve(child, request, signal),
-      signal,
-    })
-    // After the gate accepted the start: a refused chat gets no `starting` record.
     events?.onStarting?.(child, provider)
+    let program: SeatSession
+    try {
+      program = await gate.start({
+        purpose: 'seat', provider, creator, child, cwd,
+        ...resume === undefined ? {} : { resume },
+        ...model === undefined ? {} : { model },
+        harnessTools: [],
+        onApproval: request => host.approve(child, request, signal),
+        signal,
+      })
+    } catch (error: unknown) {
+      events?.onStartFailed?.(child)
+      throw error
+    }
     events?.onStarted?.(child)
     const run = new SeatRun(program)
     run.cursor = cursor

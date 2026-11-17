@@ -149,6 +149,7 @@ export class MemoryModels implements SeatModelChoices {
 export interface Reports {
   readonly starting: string[]
   readonly started: string[]
+  readonly startFailed: string[]
   readonly notOffered: ModelNotOffered[]
   readonly failures: Array<{ readonly child: string, readonly category: string, readonly resetsAt?: number }>
 }
@@ -174,10 +175,11 @@ export function world(change: { readonly host?: Partial<SeatHost>, readonly seat
   const states = new MemoryStates()
   const models = new MemoryModels()
   const approvals: ProgramApprovalRequest[] = []
-  const reports: Reports = { starting: [], started: [], notOffered: [], failures: [] }
+  const reports: Reports = { starting: [], started: [], startFailed: [], notOffered: [], failures: [] }
   const events: SeatAdapterEvents = {
     onStarting: (child, provider) => { reports.starting.push(`${child}:${provider}`) },
     onStarted: (child) => { reports.started.push(child) },
+    onStartFailed: (child) => { reports.startFailed.push(child) },
     onModelNotOffered: (payload) => { reports.notOffered.push(payload) },
     onTurnFailure: (child, failure) => {
       reports.failures.push({ child, category: failure.category, ...failure.category === 'limit' && failure.resetsAt !== undefined ? { resetsAt: failure.resetsAt } : {} })

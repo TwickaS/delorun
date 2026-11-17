@@ -132,6 +132,11 @@ export async function mountSeatState(ctx: Context, options: SeatStateOptions): P
         options.warn(`the parting check of ${child} failed: ${String(error)}`)
       })
     },
+    onStartFailed: (child) => {
+      resuming.delete(child)
+      // A failure the chat shows, such as a plan limit, sets its own state next.
+      if (store.viewOf(child)?.state === 'starting') store.setStatus(child, 'idle')
+    },
     onModelNotOffered: ({ child, configured, offered }) => {
       resuming.delete(child)
       const planDefault = offered.find(model => model.isDefault)?.id ?? offered[0]?.id ?? configured
