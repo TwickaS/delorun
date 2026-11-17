@@ -65,6 +65,7 @@ export const PLUGIN_ROUTE_ACCESS: Readonly<Record<string, Readonly<Record<string
   },
   'plugin-delegation-consent/src/routes.ts': {
     'DELEGATION_CONSENT_ROUTES.grants': READ('lists which agents may work in which workspaces'),
+    'DELEGATION_CONSENT_ROUTES.levels': READ('reads each external agent\'s saved level and what its sandbox lacks; it changes no level, which only a settings write does, and the reach policy ranks that'),
     'DELEGATION_CONSENT_ROUTES.allow': UNLOCKED('allowing lets an external agent work in a workspace'),
     'DELEGATION_CONSENT_ROUTES.revoke': READ('revoking only withdraws a grant'),
   },
