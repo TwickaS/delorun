@@ -110,6 +110,7 @@ const DECLARATIONS: Readonly<Record<string, string | null>> = {
   // Documents a person exports, passes in or reads; no release reads them back from the home's data.
   ARCHIVE_CUSTOMISATION_SCHEMA_VERSION: null,
   SETUP_ANSWERS_SCHEMA_VERSION: null,
+  SETUP_DOCUMENT_SCHEMA_VERSION: null,
   VERIFICATION_REPORT_SCHEMA_VERSION: null,
   // A release's own signed file, read from the runtime closure, never from the home's data.
   'delorun.data-formats': null,
