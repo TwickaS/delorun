@@ -4,7 +4,9 @@
  * dependencies, except (1) packages the closure already carries at the same version, which the install links
  * into the pack as peers (a third-party package at another version stays in the pack; see `keepsOneCopy`), and (2) packages whose licence forbids redistribution (`closure.json`'s `packExternals`),
  * which the packs file pins by npm tarball URL and SHA-512 and the client fetches from the registry. A Delorun package
- * in a pack has its TypeScript sources transpiled to JavaScript, as the closure's are.
+ * in a pack has its TypeScript sources transpiled to JavaScript, as the closure's are. A package the pack's packages need
+ * (`./pack-imports.ts`) that the pack does not carry is linked as a peer when the closure carries it; a build whose pack
+ * would still miss one is refused.
  *
  * @module @delorun/release/closure/packs
  */
@@ -22,6 +24,7 @@ import { buildPackArchive } from '@delorun/release-formats/packs/archive'
 import { parse as parseYaml } from 'yaml'
 import { closureName } from '../rebuild/compare.ts'
 import { transpileDelorunPackage, transpileDelorunPackages } from './delorun.ts'
+import { describeUnresolved, packNeeds, resolvesInPack, type PackLayout } from './pack-imports.ts'
 import { listStagedTree, unsignedEnvelopeText } from './tree.ts'
 import { packCandidates, readWorkspacePackages, selectClosurePackages } from './plugin-set.ts'
 
@@ -216,6 +219,7 @@ export async function buildPack(name: string, version: string, experimental: boo
     }
     const untranspiled = entries.map(entry => entry.path).filter(path => isDelorunSource(name, path))
     if (untranspiled.length > 0) throw new Error(`${name} for ${platform} carries TypeScript sources of a Delorun package, which Node does not run from a pack: ${untranspiled.slice(0, 3).join(', ')}`)
+    await linkClosureNeeds(name, platform, entries, peers, external, sources)
     const result = await buildPackArchive(packArchiveName(releaseVersion, name, platform), entries, epoch)
     built.set(platform, { ...result, external: external.sort((a, b) => (a.name < b.name ? -1 : 1)), peers: [...peers].sort() })
   }
@@ -238,6 +242,31 @@ export async function buildPack(name: string, version: string, experimental: boo
     }
   }
   return { entry: { name, version: brandString<SemanticVersion>(version), experimental, variants }, archives }
+}
+
+/**
+ * Make every package of a pack loadable once installed: link each package name a bundled package needs and the pack does
+ * not carry to the closure's copy, as a peer, when the closure carries it. A deployment carries a package's
+ * `dependencies` but not its `peerDependencies`, which a workspace plugin uses for the harness packages it shares with
+ * the runtime, so those reach the pack only this way.
+ * @param name - the pack's package name.
+ * @param platform - the platform.
+ * @param entries - the pack's files.
+ * @param peers - the peers so far; the linked names are added.
+ * @param external - the pinned externals.
+ * @param sources - the closure.
+ * @throws Error naming each need neither the pack nor the closure carries, which would fail at load with "Cannot find
+ * package": the pack's package must list it in `dependencies` so the pack carries it, or the closure must carry it.
+ */
+async function linkClosureNeeds(name: string, platform: RuntimePlatform, entries: readonly ArchiveEntry[], peers: Set<string>, external: readonly PackExternal[], sources: PackSources): Promise<void> {
+  const files = new Map(entries.map(entry => [entry.path, entry.data]))
+  const layout: PackLayout = { paths: new Set(files.keys()), read: path => Promise.resolve(files.get(path)!.toString('utf8')), peers, external: new Set(external.map(pin => pin.name)) }
+  const needs = await packNeeds(layout)
+  for (const need of needs) {
+    if (!resolvesInPack(need, layout) && await versionIn(join(sources.closureNodeModules(platform), need.name)) !== undefined) peers.add(need.name)
+  }
+  const unresolved = needs.filter(need => !resolvesInPack(need, layout))
+  if (unresolved.length > 0) throw new Error(`${name} for ${platform} would not load: neither the pack nor the closure carries what its packages need (${unresolved.slice(0, 5).map(describeUnresolved).join('; ')}${unresolved.length > 5 ? `; and ${String(unresolved.length - 5)} more` : ''}); list each in ${name}'s dependencies so the pack carries it, or carry it in the closure`)
 }
 
 async function entriesOf(scratch: string, name: string, platform: RuntimePlatform, paths: readonly string[]): Promise<ArchiveEntry[]> {
