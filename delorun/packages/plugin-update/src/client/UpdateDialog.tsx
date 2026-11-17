@@ -73,7 +73,6 @@ export function UpdateDialog({ state, t, actions, onClose, openChanges }: Update
   useEffect(() => {
     if (state.prepared === undefined) prepare()
     // Prepare once when the dialog opens with nothing held; later state reads must not prepare again.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const lines = state.progress.kind === 'preparing' ? state.progress.lines : []
   if (step.kind === 'preparing') {
