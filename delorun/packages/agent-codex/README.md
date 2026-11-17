@@ -1,0 +1,52 @@
+---
+description: "Delorun's driver for Codex as a live agent, for maintainers changing how Delorun opens, steers, stops and resumes the pinned Codex app-server, relays its approval questions and reads its plan limits."
+kind: "package-bundle"
+---
+
+# @delorun/agent-codex
+
+English | [中文](README.zh.md)
+
+## Summary
+
+`@delorun/agent-codex` is the Codex driver of `@delorun/external-agents`. It ships in the default install and stays dormant: it registers with the gate only while upstream's `codex` subagent provider is registered, which happens when the person adds the Codex pack. It then runs that pack's pinned launcher as `node <launcher> app-server --stdio` through the spawn the gate hands it, and speaks Codex's stable app-server protocol over the pipes. Codex runs unmodified, under the person's own sign-in, Codex home and MCP servers; the driver reads no credential and adds no environment variable. Upstream's one-shot provider, `@deepseek-ai/dsh-subagent-codex`, is untouched.
+
+## Contents
+
+- [Contract](#contract)
+- [Configuration](#configuration)
+- [Known limitations](#known-limitations)
+- [Tests](#tests)
+
+## Contract
+
+- **Loading.** The driver finds the launcher with the gate's `locateCodex` from the profile's directory on every open and limits check. It accepts only the Codex version it was tested with, `TESTED_CODEX_VERSION` in [`protocol.ts`](src/protocol.ts), which equals the version upstream's package pins; a missing launcher or any other version fails the open with `ProgramOpenError` category `program` before anything starts.
+- **Wire.** [`rpc.ts`](src/rpc.ts) is a newline-delimited JSON-RPC client for the stable methods the driver uses (`experimentalApi: false`). Every result, notification and server request it reads is validated with zod in [`protocol.ts`](src/protocol.ts). A server request of a method it does not know is refused with `-32601` and the session goes on; a known frame it cannot read ends a running turn `failed` and closes the process, because the frame may hide a call or a question.
+- **Sessions.** `open` initialises the app-server, checks the sign-in with `account/read`, then starts a lasting thread (`ephemeral: false`) or resumes one by id. A thread Codex no longer has fails the open with `resume-failed`; no sign-in fails it with `signed-out` before a thread opens. Each Codex item becomes events: agent messages and reasoning as `text` and `reasoning`; commands, file changes, MCP calls and web searches as a `tool-call` (named `shell`, `apply_patch`, `mcp__<server>__<tool>` and `web_search`) and its `tool-result`. A program message ends (`message-end`) before its calls' results, and usage Codex reports after a message ended goes on the next `message-end` or on `turn-end`, so summing every `usage` counts each request once.
+- **Sandbox.** Threads ask under approval policy `untrusted`. The thread's own sandbox is `read-only`, and each `turn/start` sets a `workspaceWrite` sandbox policy with the run folder as its only writable root and no network. A thread started with sandbox `workspace-write` makes Codex write `trust_level = "trusted"` for the folder into the person's own `config.toml`; a turn's sandbox policy writes nothing there.
+- **Model.** A model the person picked is passed on `thread/start` and `thread/resume`. Without one, the model the thread reports must be one `model/list` offers to the account; otherwise the open fails `model-not-offered` with the configured name and the offered list, before any turn. The driver never picks a model for the person.
+- **Input.** `send(text, 'start')` begins a turn and is refused while one runs (`CodexTurnRunningError`). `send(text, 'steer')` joins the running turn through `turn/steer`; a steer that arrives as the turn ends starts the next turn instead.
+- **Stop.** `interrupt()` sends `turn/interrupt` and waits for the turn to end. When a command is still running at the end of the turn, the driver closes the app-server, which ends the command with it, and `interrupt()` returns `closed`; the seat resumes the thread in a new process on its next message. A command still waiting for its answer has not started and does not count. Codex not ending the turn within the request timeout also closes the process. Otherwise `interrupt()` returns `interrupted` and the process stays. `close()` ends the input, waits `closeWaitSeconds`, then terminates the process; Codex keeps the thread for a later resume. The open request's signal closes the session.
+- **Failures.** A turn that fails carries one of the contract's categories: `signed-out` from Codex's `unauthorized` error, a 401 or its sign-in text; `limit` from `usageLimitExceeded` or `rateLimitExceeded`, with the latest reset time among the reached windows of the last rate-limit snapshot; or `program` with Codex's own words for the person's view. The process ending during a turn ends it `failed`.
+- **Questions.** A command or file-change approval request becomes the seat's approval request, after the driver ends the open program message and announces the call, so the seat records the call first. The reason is Codex's own reason or the exact command, never a model's description. Allow once answers `accept`; reject answers `decline` and the turn goes on; cancel answers `cancel` and ends the turn `interrupted`. A question Codex resolves itself, a turn that ends and a closed session each withdraw the question and abort its signal. A rejected `onApproval` promise answers `decline`. A Codex MCP elicitation that asks to approve a call to one of the person's own MCP servers is asked the same way; every other elicitation is declined. A permissions request is granted nothing, for that turn only.
+- **Allow for this run.** It is offered only for a plain command question with no network context; the run rule holds the command and its folder, and its summary is the command as Codex reports it. The answer is `acceptForSession`, so Codex itself lets the same command through for the rest of that process. Allow for this run on any other question is answered as allow once.
+- **Limits.** `probe` initialises the app-server, reads `account/read`, `account/rateLimits/read` and `model/list`, opens no thread and sends no model request, and closes the process. Rate-limit snapshots during runs reach `onLimits`, and the offered models reach it once the thread opens. Windows are named `five_hour` for 300 minutes, `seven_day` for 10080 minutes, and `window_<minutes>m` otherwise; a window at 100 % or more is `reached`. The plan name and the sign-in state are kept; the email and account id are dropped. A sign-in without plan limits reports no windows.
+
+## Configuration
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `requestTimeoutSeconds` | 120 | How long one request may wait for Codex's answer; a fresh thread can take 30 s. |
+| `closeWaitSeconds` | 5 | How long the app-server gets to exit after its input ends before it is terminated. |
+
+## Known limitations
+
+- Rules allowed for this run are not re-applied on a new process yet: after a resume, Codex asks again.
+- Harness tools over MCP are not offered yet.
+- Codex updates its own state databases, logs and model cache in the person's Codex home on every start, as in their terminal.
+
+## Tests
+
+- Unit specs drive a fake app-server over in-memory pipes with recorded frames and start no process: `nice -n 10 node_modules/.bin/vitest run --config delorun/vitest.config.ts delorun/packages/agent-codex --maxWorkers=4`.
+- [`real-codex.integration.spec.ts`](tests/real-codex.integration.spec.ts) runs the pinned app-server in a scratch Codex home against a local Responses fixture with no key: a turn, questions allowed and rejected, a resume in a new process, `resume-failed`, the model rule, Stop during a command, an unchanged `config.toml` and a limits check, each leaving no process.
+- Live runs under the person's own sign-in, one command each and never in a Vitest lane: `node_modules/.bin/tsx delorun/packages/agent-codex/live/run.ts task|steer|interrupt|resume|questions|model|limits|hostkill`. Their redacted logs go under `~/delorun-rc-release/ea1-codex-logs/`. [`trust-write.ts`](live/trust-write.ts) shows, in scratch Codex homes only, which thread settings make Codex write a trust entry.
