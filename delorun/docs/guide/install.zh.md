@@ -268,13 +268,14 @@ studio 监听 `127.0.0.1`，只有你自己的电脑才能访问，除非你开�
 ![新 home 上 studio 的首次运行向导：欢迎步骤，列出语言选项和预发布说明，背后是空的 chat 列表。](pictures/first-run-guide.webp)
 
 1. **Welcome。**选择语言。一条预览版通知会说明 Delorun 是 DeepSeek Harness 的社区分支，仍处于预览阶段；选择 Continue 表示你已知晓。
-2. **Models。**勾选你使用的模型提供方。对每一家，粘贴它的密钥并选择 **Connect**，或选择 **Skip**。环境变量中找到的密钥会显示为 “Key found”。随后一份摘要会列出已设置的内容。
-3. **Look。**选择颜色和主题，或 stock 外观。
+2. **Models。**勾选你使用的模型提供方。对每一家，粘贴它的密钥并选择 **Connect**，或选择 **Skip**。Delorun 已经拥有的密钥会显示为 “Key found”，并注明它的来源（例如“From DEEPSEEK_API_KEY in the environment Delorun started with”）和一条 “How does Delorun know?” 说明。这时没有密钥输入框：选择 **Next** 使用它，或选择 **Replace key** 输入另一个。随后一份摘要会列出已设置的内容。
+3. **Look。**选择颜色和主题。选项下方的一个链接会打开一个界面，说明原版 DeepSeek Harness 外观会关闭什么、保留什么；如果你确认，切换会在你完成引导时发生。
 4. **Agents。**可选地添加 Claude Code 或 Codex，作为 chat 可以把工作交给的助手。
 5. **Recommended plugins。**可选地添加[插件](../reference/glossary.zh.md#plugin)，这些小型附加组件让 Delorun 拥有更多工具。
 6. **Phone access。**在远程访问尚未设置时显示。它列出 Tailscale 还需要什么，并提供 **Not now** 或 **I've done this**。
-7. **Workspace。**为你的第一次 chat 选择[工作区](../reference/glossary.zh.md#workspace)：默认的那个、你电脑上的一个文件夹，或要克隆的 git 地址。
-8. **Ready。**选择 **Start a chat**。
+7. **PIN。**只在运行 Delorun 的那台电脑上的 studio 中显示，并且要在手机访问已开启之后。选择一个 PIN 或口令，输入两次，然后选择 **Set PIN**；或选择 **Skip**，让 PIN 模式保持关闭。如果 PIN 模式已经开启，这一步会这样说明，并链接到“设置”。
+8. **Workspace。**为你的第一次 chat 选择[工作区](../reference/glossary.zh.md#workspace)：默认的那个、你电脑上的一个文件夹，或要克隆的 git 地址。
+9. **Ready。**选择 **Start a chat**。
 
 大多数步骤都有 Back、Continue 和 **Skip**，Skip 只会跳过那一步；Models 步骤在你逐个处理提供方时有 **Connect** 和 **Next**，Phone access 步骤有它自己的两个按钮。步骤名称旁边的 **Finish later** 会关闭引导并保留你的位置，下次引导会再次显示。要重新走一遍这些步骤，请选择“设置”、“通用”、“Getting started”、**Run setup again**。每一步都从你当前的选择开始，例如“设置”中保存的模式和主题，只有当你更改时选择才会改变。在手机上，Phone access 步骤会说明 Tailscale 是在运行 Delorun 的那台电脑上设置的。
 

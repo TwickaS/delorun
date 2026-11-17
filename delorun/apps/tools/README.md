@@ -231,7 +231,7 @@ The specs in `tests/issues/` run the tool in scratch repositories with a fake `g
 ## Studio browser
 
 [`src/studio-browser.ts`](src/studio-browser.ts) runs a Playwright-style script against a studio on a loopback address, and can record the run to WebM: `node_modules/.bin/tsx delorun/apps/tools/src/studio-browser.ts check` and `... run --url <studio url> --code '<js>' [--record <out.webm>]`.
-The browser tool sits behind the `StudioBrowser` interface in [`src/studio-browser/adapter.ts`](src/studio-browser/adapter.ts); the first adapter drives the person's own Chrome through the `browse` CLI, and [`origin.ts`](src/studio-browser/origin.ts) refuses every non-loopback address with no way to widen it.
+The browser tool sits behind the `StudioBrowser` interface in [`src/studio-browser/adapter.ts`](src/studio-browser/adapter.ts); the default adapter, `playwright`, launches the repository's headless Chromium at a chosen viewport and colour scheme, runs steps and scripts and takes screenshots, while the `browse` adapter, chosen with `--adapter browse`, drives the person's own Chrome through the `browse` CLI. [`origin.ts`](src/studio-browser/origin.ts) refuses every non-loopback address with no way to widen it.
 The procedure is the [`delorun-studio-browser`](../../../.agents/skills/delorun-studio-browser/SKILL.md) skill.
 
 ## The demonstration home and the pictures

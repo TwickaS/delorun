@@ -67,6 +67,7 @@ kind: "package-library"
 | `ConfirmAction` | `Button` | 带一次行内确认的破坏性操作 |
 | `Link` | 无 | 文字安全的桃色，带下划线 |
 | `Mark` | 无 | 六角插头标志；螺母取文字颜色，插头取 `--dl-accent` |
+| `LookChooser` | 无 | 配色方案一行、以“自定义”结尾的主题方块网格、自定义面板（仅在选择“自定义”时显示）和实时示例；“设置”→“外观”与新手引导的“外观”步骤都用它自己的文字渲染它 |
 | `ChipGroup`、`ThemePicker`、`AccentPicker`、`StudioLookSwitch` | 无 | 芯片单选组（44 px 目标、一个 Tab 停靠点、方向键）以及建立在其上的主题和强调色选择器（设置 → 外观与新手引导的“外观”步骤共用它们），还有设置 → 通用使用的 Delorun 外观开关（默认开启；关闭即选择原版）；`@delorun/plugin-theme/controls` 会重新导出它们 |
 | `SettingsCard`、`SettingHeading`、`SettingRow`、`ChoiceGroup`、`RadioList`、`TileGroup` | 无 | 设置分区的控件。它们（以及芯片控件）的 CSS 读取 studio 的 `--dsw-*` 与 `--delorun-space-*` 属性，并带有 `--dl-*` 或像素回退值，因此在 studio 之外也能渲染，网站的包管理器选择器就是如此。`ChoiceGroup` 支持方向键、Home 和 End，以及用于以品牌等宽字体显示的全宽组的 `fill` 和 `mono`。[`@delorun/settings-controls`](../settings-controls/README.zh.md) 会重新导出它们 |
 

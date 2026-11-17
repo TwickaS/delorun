@@ -16,6 +16,7 @@
 - `src/ledger-record.ts` 写入台账：桩条目、对不再有差异的条目的移除，以及安全摘要，如下文的差异台账一节所述。
 - `src/ledger-digests.ts` 计算并比较安全条目的摘要。
 - `src/demo-home.ts` 建出用来拍摄图片的演示主目录，见下文“演示主目录与图片”一节。
+- `src/fresh-home-smoke.ts` 从全新的临时主目录启动已发布的 studio，端口在 18600–18619 之间；当它没有监听、日志报告启动失败，或新手引导的设置记录没有应答时，就判为失败。请在 `pnpm run build:artifacts` 和 `delorun/packages` 的构建之后运行它，并在每次合并进集成分支之后运行它。
 - `src/ledger-merge.ts` 是台账的 git 合并驱动。它按路径合并条目，按模式合并规则，规则见下文的差异台账一节。
 - `src/rehearse-upstream.ts` 是预演合并。它在临时工作树中合并一个上游标签或本地引用，并按差异预算检验结果，如下文的预演合并一节所述。
 - `src/upstream-update.ts` 在临时工作树中把列出的补丁带到较新的上游标签上，并在发布合并进入 `HEAD` 之后写出带过去的台账。
@@ -234,7 +235,7 @@ brief 已带有的链接以同样的方式改写。
 ## Studio 浏览器
 
 [`src/studio-browser.ts`](src/studio-browser.ts) 针对回环地址上的 studio 运行 Playwright 风格的脚本，并可把运行录制为 WebM：`node_modules/.bin/tsx delorun/apps/tools/src/studio-browser.ts check` 与 `... run --url <studio url> --code '<js>' [--record <out.webm>]`。
-浏览器工具位于 [`src/studio-browser/adapter.ts`](src/studio-browser/adapter.ts) 中的 `StudioBrowser` 接口之后；第一个适配器通过 `browse` CLI 驱动此人自己的 Chrome，[`origin.ts`](src/studio-browser/origin.ts) 拒绝每个非回环地址，且没有办法放宽。
+浏览器工具位于 [`src/studio-browser/adapter.ts`](src/studio-browser/adapter.ts) 中的 `StudioBrowser` 接口之后；默认适配器 `playwright` 会按所选视口和配色方案启动仓库自带的无头 Chromium，运行步骤和脚本并截图，而用 `--adapter browse` 选择的 `browse` 适配器则通过 `browse` CLI 驱动此人自己的 Chrome。[`origin.ts`](src/studio-browser/origin.ts) 拒绝每个非回环地址，且没有办法放宽。
 流程见 [`delorun-studio-browser`](../../../.agents/skills/delorun-studio-browser/SKILL.md) skill。
 
 <a id="local-checks"></a>

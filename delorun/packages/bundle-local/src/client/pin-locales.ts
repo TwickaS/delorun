@@ -34,11 +34,11 @@ export type PinLocaleKey = keyof typeof en
 export const zh: typeof en = {
   'title': '解锁敏感操作',
   'lead.pin': '这需要你的 PIN。输入后即可继续；不输入也可以继续使用 studio。',
-  'lead.passcode': '这需要你的密码短语。输入后即可继续；不输入也可以继续使用 studio。',
+  'lead.passcode': '这需要你的口令。输入后即可继续；不输入也可以继续使用 studio。',
   'notNow': '暂不',
   'close': '关闭',
   'label.pin': 'PIN',
-  'label.passcode': '密码短语',
+  'label.passcode': '口令',
   'unlock': '解锁',
   'unlocking': '正在解锁…',
   'key.delete': '删除最后一位数字',
