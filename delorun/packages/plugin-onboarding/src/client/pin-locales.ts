@@ -6,7 +6,7 @@
 /** English dictionary. */
 export const pinEn = {
   'step.pin': 'PIN',
-  'pin.lead': 'Choose a PIN or passcode. A paired phone can then unlock sensitive actions, such as adding plugins or approving full access, by typing it instead of a code from this computer. It stays unlocked for the unlock time you set in Settings.',
+  'pin.lead': 'A paired phone asks for your PIN only before actions that need an unlock, such as adding plugins or allowing full access. It stays unlocked while you use it.',
   'pin.here': 'You set or change it here, at this computer. A phone never can.',
   'pin.reading': 'Checking PIN mode…',
   'pin.label': 'PIN or passcode',
@@ -36,7 +36,7 @@ export type PinLocaleKey = keyof typeof pinEn
 /** Chinese dictionary. */
 export const pinZh: Record<PinLocaleKey, string> = {
   'step.pin': 'PIN',
-  'pin.lead': '选择一个 PIN 或密码短语。之后，已配对的手机可以输入它来解锁敏感操作（例如添加插件或批准完全访问），不必再使用这台电脑上的验证码。解锁时长可在设置中调整。',
+  'pin.lead': '已配对的手机只会在需要解锁的操作之前（例如添加插件或允许完全访问）询问你的 PIN。你在使用期间，它会保持解锁。',
   'pin.here': '只能在这台电脑上设置或更改，手机不能。',
   'pin.reading': '正在检查 PIN 模式…',
   'pin.label': 'PIN 或密码短语',

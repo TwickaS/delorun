@@ -15,7 +15,10 @@
     "src/config.ts",
     "src/wire.ts",
     "src/clone-address.ts",
-    "src/css-modules.d.ts"
+    "src/css-modules.d.ts",
+    "tests/previews.spec.ts",
+    "tests/providers.spec.ts",
+    "tests/directory.fixture.ts"
   ],
   "references": [
     {

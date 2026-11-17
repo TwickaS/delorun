@@ -710,7 +710,8 @@ describe('the ready step', () => {
       ['Phone access', 'On', undefined],
       ['Workspace', '/home/person/app', undefined],
     ])
-    expect(screen.getAllByRole('listitem').map(each => each.textContent)).toEqual([en['starter.code.1.label'], en['starter.code.2.label'], en['starter.code.3.label']])
+    expect(screen.getByText(en['ready.ideas'])).toBeTruthy()
+    expect(screen.getAllByRole('listitem').map(each => each.textContent)).toEqual(['code.1', 'code.2', 'code.3'].map(key => `${en[`starter.${key}.label` as 'starter.code.1.label']}${en[`starter.${key}.prompt` as 'starter.code.1.prompt']}${en.copy}`))
   })
 
   it('says what is missing: no working key, no workspace, and leaves phone access out where the home has no reach', async () => {
@@ -726,14 +727,25 @@ describe('the ready step', () => {
       ['Plugins', en['ready.none'], undefined],
       ['Workspace', en['ready.workspace.none'], 'attention'],
     ])
-    expect(screen.queryByText(en['ready.starters'])).toBeNull()
+    expect(screen.queryByText(en['ready.ideas'])).toBeNull()
   })
 
   it('names the last-used workspace with the general prompts, and phone access as off', async () => {
     ready(guideOf(hostFake({ keys: undefined }).host), { target: { kind: 'other' } })
     await settle()
     expect(rows().slice(-2)).toEqual([['Phone access', 'Not set up', undefined], ['Workspace', en['ready.workspace.last'], undefined]])
-    expect(screen.getAllByRole('listitem').map(each => each.textContent)).toEqual([en['starter.general.1.label'], en['starter.general.2.label'], en['starter.general.3.label']])
+    expect(screen.getAllByRole('listitem').map(each => each.textContent)).toEqual([1, 2, 3].map(n => `${en[`starter.general.${String(n)}.label` as 'starter.general.1.label']}${en[`starter.general.${String(n)}.prompt` as 'starter.general.1.prompt']}${en.copy}`))
+  })
+
+  it('copies an idea to the clipboard and writes nothing into a message box', async () => {
+    const writeText = vi.fn(() => Promise.resolve())
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
+    ready(guideOf(hostFake({ keys: undefined }).host), { target: { kind: 'other' } })
+    await settle()
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: `Copy the idea “${en['starter.general.1.label']}”` })) })
+    expect(writeText).toHaveBeenCalledExactlyOnceWith(en['starter.general.1.prompt'])
+    expect(screen.getByText(en['copy.done'])).toBeTruthy()
+    vi.unstubAllGlobals()
   })
 
   it('names the default look while the theme settings are still loading', async () => {

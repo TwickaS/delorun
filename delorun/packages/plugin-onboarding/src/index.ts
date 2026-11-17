@@ -8,6 +8,7 @@
  * which refuse the folders Delorun never adds and answer only the loopback listener.
  * @module @delorun/plugin-onboarding
  */
+import { randomUUID } from 'node:crypto'
 import { basename } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: the ctx.profileContext merge.
@@ -41,8 +42,8 @@ import { findLocalServers } from './local-models.ts'
 import { processReadinessEnvironment, readReadiness } from './readiness.ts'
 import { installedReader, recommend, registryReader } from './recommend.ts'
 import {
-  ADD_WORKSPACE_PATH, AGENT_MODELS_PATH, AgentModelsRequest, CLONE_PATH, DEFER_STEP_PATH, DeferStepRequest, CLONE_STATUS_PATH, KEY_TEST_PATH, LOCAL_MODELS_PATH, MAX_SET_ASIDE, READINESS_PATH, RECOMMEND_PATH, RecommendRequest, SETUP_RECORD_PATH, WORKSPACE_NOTICE_PATH,
-  type WorkspaceNoticeAnswer,
+  ADD_WORKSPACE_PATH, AGENT_MODELS_PATH, AgentModelsRequest, CLONE_PATH, DEFER_STEP_PATH, DeferStepRequest, CLONE_STATUS_PATH, KEY_TEST_PATH, LOCAL_MODELS_PATH, MAX_SET_ASIDE, READINESS_PATH, RECOMMEND_PATH, RecommendRequest, SETUP_RECORD_PATH, START_PATH, WORKSPACE_NOTICE_PATH,
+  type StartAnswer, type WorkspaceNoticeAnswer,
 } from './wire.ts'
 import { listAgentModels } from './agent-models.ts'
 import { addWorkspace, arrivedAtComputerOrDevice } from './workspace-route.ts'
@@ -52,7 +53,7 @@ export { Config, DEFAULT_SETTINGS, ONBOARDING_ROW_ID, PACKAGE_NAME, RECOMMENDED_
 export {
   ADD_WORKSPACE_PATH, AddWorkspaceAnswer, AddWorkspaceRequest, CLONE_FAILURES, CLONE_PATH, CLONE_PROBLEMS, CLONE_STATUS_PATH, CloneRequest, CloneStart, CloneStatus,
   CONNECTION_ID, FOLDER_KINDS, KEY_RESULTS, KEY_TEST_PATH, KeyTestAnswer, LOCAL_MODELS_PATH, LOCAL_SERVER_KINDS, LocalModelsAnswer, LocalServer, isLoopbackBaseURL, LOCATION_PROBLEMS, MAX_ADD_BODY_BYTES, MAX_PATH_LENGTH, MAX_SECTIONS, NO_RECORD, READINESS_PATH, Readiness,
-  DEFER_STEP_PATH, DEFERRABLE_STEPS, DeferStepAnswer, DeferStepRequest, DeferrableStep, MAX_SET_ASIDE, RECOMMEND_PATH, RecommendAnswer, SECTION_NAME, SETUP_RECORD_PATH, SetupRecord, WORKSPACE_NOTICE_PATH, WorkspaceNoticeAnswer,
+  DEFER_STEP_PATH, DEFERRABLE_STEPS, DeferStepAnswer, DeferStepRequest, DeferrableStep, MAX_SET_ASIDE, RECOMMEND_PATH, RecommendAnswer, SECTION_NAME, SETUP_RECORD_PATH, SetupRecord, START_ID, START_PATH, StartAnswer, WORKSPACE_NOTICE_PATH, WorkspaceNoticeAnswer,
   type CloneFailure, type CloneProblem, type FolderKind, type KeyResult, type LocationProblem,
 } from './wire.ts'
 export { cloneEnvironment, failureOf, type GitOutcome, type GitRunner } from './clone.ts'
@@ -176,6 +177,14 @@ export function apply(ctx: Context, config: Config): void {
     requestBody: 'buffered',
     admitPeer: admitApprovedDevice(),
     fetch: async () => json(await readReadiness(processReadinessEnvironment(systemTailscale()))),
+  })
+  // Named once per start, so "Finish later" holds until Delorun next starts and not longer.
+  const startId = randomUUID()
+  ctx.connection.fetch.register({
+    path: START_PATH,
+    methods: ['GET'],
+    requestBody: 'buffered',
+    fetch: () => Promise.resolve(json({ startId } satisfies StartAnswer)),
   })
   ctx.connection.fetch.register({
     path: KEY_TEST_PATH,

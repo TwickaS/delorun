@@ -12,6 +12,7 @@ export { BRAND_COLOURS, BRAND_FONTS, BRAND_RADII, BRAND_SPACE } from './tokens.t
 export { MARK, Mark } from './mark.tsx'
 export { Button, type ButtonProps, type ButtonVariant } from './components/Button.tsx'
 export { Card, type CardProps } from './components/Card.tsx'
+export { CARD_ICON_TINTS, CardIcon, cardIconLetter, cardIconTint, type CardIconProps, type CardIconTint } from './components/CardIcon.tsx'
 export { ConfirmAction, type ConfirmActionProps } from './components/ConfirmAction.tsx'
 export { Dialog, type DialogProps } from './components/Dialog.tsx'
 export { Keypad, type KeypadProps } from './components/Keypad.tsx'

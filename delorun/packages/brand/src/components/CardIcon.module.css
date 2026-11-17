@@ -1,0 +1,16 @@
+.icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--card-icon-size, 32px);
+  height: var(--card-icon-size, 32px);
+  border-radius: 25%;
+  background: color-mix(in srgb, var(--card-icon-color) 14%, transparent);
+  color: var(--card-icon-color);
+  font-family: var(--dl-font-sans, inherit);
+  font-size: calc(var(--card-icon-size, 32px) * 0.44);
+  font-weight: 600;
+  line-height: 1;
+  user-select: none;
+}
