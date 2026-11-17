@@ -17,10 +17,13 @@ import { HANDOVER_FD, type HandoverMessage } from '@delorun/contract-home-proces
 import { z } from 'zod'
 import type { HealthExpectations, HomeCommand } from './seams.ts'
 
-/** What the predecessor tells its successor, in the first line on the pipe. */
+/**
+ * What the predecessor tells its successor, in the first line on the pipe: an update's or a rollback's handover, or a
+ * restart's ([restart](./restart.ts)), whose successor runs the same runtime and settles no update record.
+ */
 export interface HandoverLine {
-  /** The line's kind. */
-  readonly type: 'handover'
+  /** The line's kind: `restart` when `from` and `to` are the version this process runs. */
+  readonly type: 'handover' | 'restart'
   /** Record version. */
   readonly v: 1
   /** The resolved Delorun home. */
@@ -50,7 +53,7 @@ const version = z.string().regex(new RegExp(RUNTIME_VERSION_PATTERN))
  */
 const bootRow = z.object({ id: z.string(), name: z.string(), generated: z.boolean(), configHash: z.string().regex(/^[0-9a-f]{64}$/u).optional() })
 const handoverSchema = z.object({
-  type: z.literal('handover'),
+  type: z.enum(['handover', 'restart']),
   v: z.literal(1),
   home: z.string().min(1),
   profile: z.string().min(1),
@@ -73,7 +76,7 @@ const handoverSchema = z.object({
     }).optional(),
   }),
   startedAt: z.string().datetime(),
-})
+}).refine(line => line.type === 'handover' || line.from === line.to, { message: 'a restart runs the version its predecessor runs' })
 const messageSchema = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('ready') }),
   z.strictObject({ type: z.literal('failed'), reason: z.literal('HEALTH_CHECK_FAILED'), criterion: z.string().regex(/^H[1-5]-[a-z-]{1,40}$/u).optional() }),

@@ -18,7 +18,7 @@ it('denies with a thrown value that is not an Error as the reason', async () => 
   onTestFinished(() => ctx.fiber.dispose())
   ctx.provide('tools', { guard: () => () => {} } as never)
   ctx.provide('profileContext', { name: 'default', dir: '/p', home: '/h' } as never)
-  plugin.apply(ctx, { enabled: true, installationBundles: [] })
+  plugin.apply(ctx, { enabled: true, installationBundles: [], restartWaitSeconds: 600 })
   const decision: PreToolDecision = await ctx.waterfall('tools/pre-execute', { name: 'plugin_manager', arguments: { action: 'install_bundle', target: 'x' } } as never, () => Promise.resolve({ kind: 'allow' as const }))
   expect(decision).toMatchObject({ kind: 'deny', reason: 'Plugin installs, updates and removals wait for the person\'s review at their computer, and this one could not be recorded: the log is busy. Nothing was changed.' })
 })

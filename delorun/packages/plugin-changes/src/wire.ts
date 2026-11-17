@@ -187,6 +187,70 @@ export const CONFIRM_PROTECTION = 'CONFIRM_PROTECTION'
 /** The refusal code of a harness route on a Host that does not run an installed release under `delorun start`. */
 export const HARNESS_UNAVAILABLE = 'HARNESS_UNAVAILABLE'
 
+/**
+ * The routes that restart Delorun on the release it runs, so the changes to Delorun itself that wait for a restart
+ * run, each a `POST`: `restart` takes `{ stopChats? }` and answers {@link RestartBegunView}; `cancel` takes `{}` and
+ * ends a restart that still waits for running chats, answering {@link RestartCancelView}.
+ */
+export const RESTART_PATHS = {
+  restart: `${CHANGES_ROUTE_PREFIX}/restart`,
+  cancel: `${CHANGES_ROUTE_PREFIX}/restart-cancel`,
+} as const
+
+/** The refusal code of a restart while another runs. */
+export const RESTART_IN_PROGRESS = 'RESTART_IN_PROGRESS'
+
+/** The refusal code of a restart while an update or a rollback of Delorun runs. */
+export const UPDATE_IN_PROGRESS = 'UPDATE_IN_PROGRESS'
+
+/** The refusal code of a restart on a Host that no home process of an installed release runs. */
+export const RESTART_UNAVAILABLE = 'RESTART_UNAVAILABLE'
+
+/**
+ * Whether Delorun needs a restart for changes to Delorun itself to run, and the restart under way or the last one's
+ * failure. Absent when nothing waits for a restart and none ran since the last decision.
+ */
+export type RestartStateView =
+  | {
+    readonly kind: 'needed'
+    /** How many files of decided changes run only after a restart. */
+    readonly changes: number
+    /** The chats a restart waits for now. */
+    readonly runningChats: number
+    /** Whether this Host can restart itself; false means the changes run at the next start. */
+    readonly available: boolean
+  }
+  | {
+    readonly kind: 'restarting'
+    /** RFC 3339 UTC time it began. */
+    readonly since: string
+    /** `waiting`: this Host answers and refuses new turns; `starting`: no Host answers until the new one or this one runs. */
+    readonly phase: 'waiting' | 'starting'
+    readonly runningChats: number
+  }
+  | {
+    readonly kind: 'failed'
+    /** RFC 3339 UTC time it ended. */
+    readonly at: string
+    /** Why, in the person's words. */
+    readonly failure: string
+    /** `health`: the new start failed and this one kept running; `chats`: chats still ran when the wait ended; `host`: Delorun could not stop to restart. */
+    readonly reason: 'health' | 'chats' | 'host'
+    /** The change to Delorun itself it left out, when it left one out. */
+    readonly leftOut?: { readonly id: string, readonly file: string }
+  }
+
+/** `restart`'s answer: the restart began and waits for these chats first. */
+export interface RestartBegunView {
+  readonly kind: 'restarting'
+  readonly runningChats: number
+}
+
+/** `restart-cancel`'s answer: whether a restart was waiting for chats and ended. */
+export interface RestartCancelView {
+  readonly cancelled: boolean
+}
+
 /** Where a request came from. A device in its approval grace counts as locked for every Changes write. */
 export type ActorView = 'computer' | 'device-unlocked' | 'device-grace' | 'device-locked'
 
@@ -399,6 +463,8 @@ export interface ChangesStateView {
   /** Protection changes a paired device made, oldest first; only the computer's request carries them. */
   readonly notices: readonly ProtectionNoticeView[]
   readonly workSession?: WorkSessionView
+  /** Whether a restart is needed, under way, or failed; absent otherwise and on a Host that cannot change Delorun's own files. */
+  readonly restart?: RestartStateView
   /** One sentence per record that cannot be read. */
   readonly problems: readonly string[]
 }
@@ -511,11 +577,16 @@ export interface DiscardView {
   readonly entry: EntryView
 }
 
-/** When a decided change to Delorun itself takes effect; the live-apply module decides it. */
+/**
+ * When a decided change to Delorun itself takes effect: `live` at once (`page`: the studio's own files changed, so a
+ * page reload shows them), `restart` after a restart or the next start, `not-running` at the next start because no
+ * home process can restart this Host, or `left-out` when it could not take effect live and was left out, with why.
+ */
 export type HarnessEffectView =
-  | { readonly kind: 'live' }
+  | { readonly kind: 'live', readonly page: boolean }
   | { readonly kind: 'restart' }
   | { readonly kind: 'not-running' }
+  | { readonly kind: 'left-out', readonly failure: string }
 
 /** `harness-apply` and `harness-undo`. */
 export interface HarnessActionView {

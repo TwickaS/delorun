@@ -218,7 +218,7 @@ it('with the switch off the plugin still provides the check before a reload and 
   const listeners = (): number => ctx.events._hooks['tools/pre-execute']?.length ?? 0
   await mountTools(ctx)
   const upstreamListeners = listeners()
-  await ctx.plugin(plugin, { enabled: false, installationBundles: [] })
+  await ctx.plugin(plugin, { enabled: false, installationBundles: [], restartWaitSeconds: 600 })
   expect(listeners()).toBe(upstreamListeners)
   expect(ctx.get('profileReconcileCheck')).toEqual({ check: expect.any(Function) })
   const restore = { name: 'plugin_manager', arguments: { action: 'restore', version: 'v' } }

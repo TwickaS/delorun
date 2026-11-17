@@ -436,6 +436,7 @@ export type HomeProcessErrorCode =
   | 'REQUEST_TOO_LARGE'
   | 'BUSY'
   | 'UPDATE_IN_PROGRESS'
+  | 'RESTART_IN_PROGRESS'
   | 'REPORT_EXPIRED'
   | 'UPDATE_PENDING'
   | 'CHATS_RUNNING'

@@ -31,6 +31,8 @@ function homeProcessRefusal(error: HomeProcessError, context: RefusalContext): O
       return { lead: 'The home process refused the request because too many connections are open.', remedies: [again] }
     case 'UPDATE_IN_PROGRESS':
       return { lead: 'Delorun did not start this: an update or rollback already runs.', remedies: [`Wait for it to end, then check: delorun status${profile}`] }
+    case 'RESTART_IN_PROGRESS':
+      return { lead: 'Delorun did not start this: it is restarting.', remedies: [`Wait for it to end, then check: delorun status${profile}`] }
     case 'REPORT_EXPIRED':
       return { lead: 'Delorun did not update: the update report is unknown or older than ten minutes.', remedies: [`Read a fresh report and confirm it: delorun update${profile}`] }
     case 'UPDATE_PENDING':

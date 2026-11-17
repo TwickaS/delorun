@@ -7,6 +7,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { expect, it, onTestFinished } from 'vitest'
 import * as plugin from '../src/index.ts'
 import { ACTION_PATHS, CHANGES_ROUTE_PREFIX, HARNESS_PATHS, NOTICE_SEEN_PATH, PROTECTION_PATHS, SETUP_PATHS, SHOW_PATH, STATE_PATH, WORKSPACES_PATH, type ChangesRoute } from '../src/routes.ts'
+import { RESTART_PATHS } from '../src/wire.ts'
 
 it('registers the Changes routes with the web server and names them to the boot page, and removes them with the plugin', async () => {
   for (const enabled of [false, true]) {
@@ -22,8 +23,8 @@ it('registers the Changes routes with the web server and names them to the boot 
       },
     } as never)
     ctx.provide('connection', { admit: () => ({ rejection: 401 }), isReachPeer: () => false } as never)
-    const fiber = await ctx.plugin(plugin, { enabled, installationBundles: [] })
-    const paths = [STATE_PATH, SHOW_PATH, WORKSPACES_PATH, ...Object.values(ACTION_PATHS), ...Object.values(HARNESS_PATHS), PROTECTION_PATHS.on, PROTECTION_PATHS.off, NOTICE_SEEN_PATH, ...Object.values(SETUP_PATHS)]
+    const fiber = await ctx.plugin(plugin, { enabled, installationBundles: [], restartWaitSeconds: 600 })
+    const paths = [STATE_PATH, SHOW_PATH, WORKSPACES_PATH, ...Object.values(ACTION_PATHS), ...Object.values(HARNESS_PATHS), PROTECTION_PATHS.on, PROTECTION_PATHS.off, NOTICE_SEEN_PATH, ...Object.values(SETUP_PATHS), ...Object.values(RESTART_PATHS)]
     expect(registered.map(route => [route.kind, route.path])).toEqual(paths.map(path => ['exact', path]))
     const table: { kind: string, name?: string, value?: unknown }[] = []
     ctx.emit('webserver/index-inject', table as never, {} as never)
@@ -41,7 +42,7 @@ it('gives the routes the profile the Host runs and its hot reload', async () => 
   ctx.provide('webServer', { port: 3080, register: (route: ChangesRoute) => { handlers.set(route.path, route.handler); return () => {} } } as never)
   ctx.provide('connection', { admit: () => ({ peer: {} }), isReachPeer: () => false } as never)
   ctx.provide('hmr', { runExclusive: <T>(operation: () => Promise<T>) => operation(), reconcileProfile: () => Promise.resolve({}) } as never)
-  await ctx.plugin(plugin, { enabled: false, installationBundles: [] })
+  await ctx.plugin(plugin, { enabled: false, installationBundles: [], restartWaitSeconds: 600 })
   // Without a profile the state route says so; with one, it reads that profile.
   const answer = async (): Promise<{ status: number, body: Record<string, unknown> }> => {
     let status = 0
@@ -70,7 +71,7 @@ it('registers no Changes route when Connection cannot name a remote session', as
   ctx.provide('webServer', { register: (route: ChangesRoute) => { registered.push(route); return () => {} } } as never)
   // Without `isReachPeer` every admitted session would read as the person at their computer.
   ctx.provide('connection', { admit: () => ({ peer: {} }) } as never)
-  await ctx.plugin(plugin, { enabled: false, installationBundles: [] })
+  await ctx.plugin(plugin, { enabled: false, installationBundles: [], restartWaitSeconds: 600 })
   expect(registered).toEqual([])
   expect(() => plugin.routeConnection({ admit: () => ({ peer: {} }) } as never)).toThrow(/cannot tell a remote session/)
 })
