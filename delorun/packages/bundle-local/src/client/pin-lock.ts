@@ -1,8 +1,10 @@
 /**
  * The page's lock under PIN mode (C14, "PIN mode"): one store behind the lock screen and the Lock button.
  *
- * - **When it locks the studio.** On a device whose home answers `GET /auth/pin/state` with the mode on, a page that
- *   holds no unlock token shows the lock screen. A home that answers 404 (an older home), the mode off, or a page on the
+ * - **When it asks.** On a device whose home answers `GET /auth/pin/state` with the mode on, a page that holds no
+ *   unlock token is `locked`, and the studio opens without the PIN. The lock screen shows only after {@link PinSource.ask},
+ *   which the unlock store calls when an action needs an unlock, and goes with {@link PinSource.dismiss} or an unlock.
+ *   A home that answers 404 (an older home), the mode off, or a page on the
  *   computer's own address leave the phase `off`, and today's unlock overlay applies unchanged.
  * - **The token.** It lives only in [`./page-unlock-token.ts`](./page-unlock-token.ts); the store never stores or logs
  *   it, and a reload starts locked.
@@ -50,6 +52,8 @@ export interface PinView {
   readonly outcome: PinOutcome | undefined
   /** Whether unlocks are paused home-wide, as the last read said. */
   readonly paused: boolean
+  /** Whether an action asked for the unlock, so the lock screen shows over the open studio. */
+  readonly asked: boolean
 }
 
 /** The store, as the lock screen, the Lock button and the page triggers use it. */
@@ -64,6 +68,13 @@ export interface PinSource {
   readonly unlock: (secret: string) => Promise<void>
   /** Lock this page: tell the home, and drop the token whatever the home answers. */
   readonly lock: () => Promise<void>
+  /**
+   * An action needs an unlock: show the lock screen when PIN mode is on and this page holds no unlock.
+   * @returns whether the lock screen handles it; false leaves the device's code unlock to apply.
+   */
+  readonly ask: () => boolean
+  /** Close the lock screen without unlocking; the studio stays open and locked. */
+  readonly dismiss: () => void
   /** Report input on the page; touches the home at most once per throttle interval. */
   readonly activity: () => void
   /** The page became hidden. */
@@ -87,7 +98,7 @@ export interface PinSource {
  * @returns the store.
  */
 export function createPinSource(fetch: HostFetch, now: () => number = Date.now, onComputer = false): PinSource {
-  let view: PinView = { phase: onComputer ? 'off' : 'unknown', secret: 'pin', busy: false, outcome: undefined, paused: false }
+  let view: PinView = { phase: onComputer ? 'off' : 'unknown', secret: 'pin', busy: false, outcome: undefined, paused: false, asked: false }
   let timer: ReturnType<typeof setTimeout> | undefined
   let disposed = false
   let lockWhenHidden = false
@@ -149,13 +160,13 @@ export function createPinSource(fetch: HostFetch, now: () => number = Date.now, 
       clearTimeout(timer)
       timer = undefined
       setUnlockToken(null)
-      publish({ phase: 'off', busy: false, outcome: undefined, paused: false })
+      publish({ phase: 'off', busy: false, outcome: undefined, paused: false, asked: false })
       return
     }
     lockWhenHidden = state.lockWhenHidden === true
     throttleMs = Math.min(TOUCH_INTERVAL_MS, state.idleMinutes * 30_000)
     if (currentUnlockToken() !== null && state.unlock !== null) {
-      publish({ phase: 'unlocked', secret: state.secret, paused: state.paused, outcome: undefined })
+      publish({ phase: 'unlocked', secret: state.secret, paused: state.paused, outcome: undefined, asked: false })
       holdUntil(state.unlock.idleEndsAt)
       return
     }
@@ -195,7 +206,7 @@ export function createPinSource(fetch: HostFetch, now: () => number = Date.now, 
         const unlocked = await unlockPin(fetch, secret)
         setUnlockToken(unlocked.token)
         lastTouch = now()
-        publish({ phase: 'unlocked', busy: false, outcome: undefined })
+        publish({ phase: 'unlocked', busy: false, outcome: undefined, asked: false })
         holdUntil(unlocked.idleEndsAt)
       } catch (error) {
         const failure = hostFailureOf(error)
@@ -205,6 +216,14 @@ export function createPinSource(fetch: HostFetch, now: () => number = Date.now, 
       }
     },
     lock,
+    ask() {
+      if (view.phase !== 'locked') return false
+      publish({ asked: true })
+      return true
+    },
+    dismiss() {
+      if (view.asked) publish({ asked: false, outcome: undefined })
+    },
     activity() {
       const token = currentUnlockToken()
       if (view.phase !== 'unlocked' || token === null || now() - lastTouch < throttleMs) return

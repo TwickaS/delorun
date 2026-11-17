@@ -1,12 +1,14 @@
 /** The Setup versions settings section's copy. */
 
+import { gateEn, gateZh } from './gate.ts'
+
 /** English dictionary. */
 export const en = {
+  ...gateEn,
   'nav': 'Setup versions',
   'title': 'Setup versions',
   'intro': 'Delorun keeps your setup, which is your plugins, bundles and settings, as versions. It saves one before each update and before each switch, and you can save one yourself. Try another version, then switch back or keep it.',
-  'atComputer': 'Saving a setup and switching to one are done at your computer, so a phone or other device can look but not change. Open the studio on the computer Delorun runs on.',
-  'doAtComputer': 'Do this at your computer',
+  'transferReason': 'a setup file leaves the computer and changes what Delorun runs, so it is recorded as done at the computer.',
   'loading': 'Reading the versions…',
   'empty': 'No versions yet. Save this setup to keep a way back.',
   'unsaved': 'Your setup has changes that no version holds. Switching saves it first, so you can switch back.',
@@ -135,11 +137,11 @@ export type VersionsLocaleKey = keyof typeof en
 
 /** Chinese dictionary. */
 export const zh: typeof en = {
+  ...gateZh,
   'nav': '设置版本',
   'title': '设置版本',
   'intro': 'Delorun 会把你的设置（插件、bundle 和配置）保存为版本。每次更新前和每次切换前都会自动保存一个，你也可以自己保存。试用另一个版本后，可以切换回来，也可以保留。',
-  'atComputer': '保存设置和切换版本只能在你的电脑上进行，手机或其他设备只能查看。请在运行 Delorun 的电脑上打开 studio。',
-  'doAtComputer': '请在你的电脑上操作',
+  'transferReason': '设置文件会离开这台电脑并改变 Delorun 运行的内容，所以要在电脑上完成并记录。',
   'loading': '正在读取版本…',
   'empty': '还没有版本。保存当前设置，以便日后返回。',
   'unsaved': '你的设置有尚未保存到任何版本的更改。切换会先保存它，因此可以切换回来。',

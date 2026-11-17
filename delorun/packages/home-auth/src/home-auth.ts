@@ -216,6 +216,16 @@ export interface HomeAuthOptions {
   readonly pairing?: () => PairingSpec
   /** How many sign-in challenges one source and one device may be issued a minute; {@link CHALLENGE_LIMIT_DEFAULTS} when absent. */
   readonly challengeLimits?: ChallengeLimits
+  /**
+   * The minutes after its approval during which a device's first sign-in starts an unlock (the approval grace), read at
+   * each sign-in; the grace is also capped at the unlock minutes of the listener. 0 turns it off; absent is off.
+   */
+  readonly approvalGraceMinutes?: () => number
+  /**
+   * The most minutes a computer-approved unlock lasts from its start, however much it is used, read at each unlock;
+   * a listener's unlock minutes must not exceed it. Absent, an unlock does not slide.
+   */
+  readonly unlockCapMinutes?: () => number
 }
 
 /**
@@ -234,6 +244,8 @@ export class HomeAuth {
   private readonly challengeSources: AttemptLimiter
   private readonly challengeDevices: AttemptLimiter
   private readonly now: () => number
+  private readonly approvalGraceMinutes: () => number
+  private readonly unlockCapMinutes: (() => number) | undefined
   private readonly closeReachConnections: HomeAuthOptions['closeReachConnections']
   private readonly loopbackPort: LoopbackPort
   private readonly random: RandomBytes
@@ -281,8 +293,10 @@ export class HomeAuth {
     this.challenges = new Challenges(this.now, this.random)
     this.pairingSpec = options.pairing ?? (() => PAIRING_DEFAULTS)
     this.approvals = new Approvals({ now: this.now, random: this.random, homeKey: () => this.key(), pairing: this.pairingSpec, secrets: options.secrets })
+    const capMinutes = options.unlockCapMinutes
     this.elevations = new Elevations({
       now: this.now,
+      ...capMinutes === undefined ? {} : { capMs: () => capMinutes() * 60_000 },
       random: this.random,
       secrets: options.secrets,
       changed: (change) => {
@@ -323,6 +337,8 @@ export class HomeAuth {
       windowMs: CLAIM_WINDOW_MS,
       ...(options.now === undefined ? {} : { now: options.now }),
     })
+    this.approvalGraceMinutes = options.approvalGraceMinutes ?? (() => 0)
+    this.unlockCapMinutes = options.unlockCapMinutes
     const challengeLimits = options.challengeLimits ?? CHALLENGE_LIMIT_DEFAULTS
     this.challengeSources = new AttemptLimiter({ limit: challengeLimits.perSourcePerMinute, windowMs: CLAIM_WINDOW_MS, ...(options.now === undefined ? {} : { now: options.now }) })
     this.challengeDevices = new AttemptLimiter({ limit: challengeLimits.perDevicePerMinute, windowMs: CLAIM_WINDOW_MS, ...(options.now === undefined ? {} : { now: options.now }) })
@@ -570,6 +586,10 @@ export class HomeAuth {
     if (served.elevationMinutes !== undefined && !isElevationMinutes(served.elevationMinutes)) {
       throw new HomeAuthError('BAD_REQUEST', `an elevation lasts a whole number of minutes from 1 to ${String(ELEVATION_LIMITS.maxMinutes)}, got ${String(served.elevationMinutes)}`)
     }
+    const cap = this.unlockCapMinutes?.()
+    if (cap !== undefined && (served.elevationMinutes ?? ELEVATION_LIMITS.defaultMinutes) > cap) {
+      throw new HomeAuthError('BAD_REQUEST', `an unlock lasts ${String(served.elevationMinutes ?? ELEVATION_LIMITS.defaultMinutes)} minutes, more than the ${String(cap)}-minute cap on one unlock`)
+    }
     this.served.set(served.listener, served)
     return () => {
       if (this.served.get(served.listener) !== served) return
@@ -630,7 +650,8 @@ export class HomeAuth {
    */
   private stateWithMinutes(deviceId: string, listener: ReachListenerId): ElevationState {
     const state = this.elevations.stateOf(deviceId, listener)
-    if (state.kind === 'elevated') return state
+    if (state.kind === 'elevated' && this.elevationOf(deviceId, listener) !== undefined) return state
+    if (state.kind === 'elevated') return { kind: 'none', unlockMinutes: this.served.get(listener)?.elevationMinutes ?? ELEVATION_LIMITS.defaultMinutes }
     return { ...state, unlockMinutes: this.served.get(listener)?.elevationMinutes ?? ELEVATION_LIMITS.defaultMinutes }
   }
 
@@ -641,7 +662,18 @@ export class HomeAuth {
    * @returns the elevation, or undefined.
    */
   elevationOf(deviceId: string, listener: ReachListenerId): ElevationRecord | undefined {
-    return this.elevations.of(deviceId, listener)
+    const record = this.elevations.of(deviceId, listener)
+    // With PIN mode on there is no approval grace: the first unlock-needing action asks for the PIN.
+    return record?.grace === true && this.pin.enabled() ? undefined : record
+  }
+
+  /**
+   * Renew a computer-approved unlock after an action that needed it, which the reach-device policy and the unlock-gated
+   * routes call; reads and polling never do.
+   * @param elevationId - the id of the unlock the action ran under.
+   */
+  touchUnlock(elevationId: string): void {
+    this.elevations.touch(elevationId)
   }
 
   /**
@@ -863,8 +895,39 @@ export class HomeAuth {
         ...(replaces === undefined ? {} : { replaces }),
       })
       await this.deviceStore.write((await this.deviceStore.list()).map(record => record.id === device.id ? { ...record, lastSignInAt: this.now() } : record))
+      this.startApprovalGrace(device, request, served, opened.sessionId)
       return opened
     })
+  }
+
+  /**
+   * Start the approval grace for a device that has just signed in for the first time: an unlock that runs from the
+   * approval for the grace minutes, at most the listener's unlock minutes, so a newly approved phone runs its first-run
+   * setup without unlock prompts. It starts only on the first sign-in of a device whose record shows no earlier one,
+   * never on a rotation, never while PIN mode is on, and not once the grace window since the approval has passed. It admits only what an unlock
+   * admits: the computer-only table is refused during it as at any other time.
+   * @param device - the device's record as read before this sign-in.
+   * @param request - the sign-in request.
+   * @param served - the listener it signed in on.
+   * @param sessionId - the session the sign-in opened, which the unlock belongs to and which ends it.
+   */
+  private startApprovalGrace(device: DeviceRecord, request: SignInRequest, served: ServedListener, sessionId: SessionId): void {
+    const minutes = this.approvalGraceMinutes()
+    if (minutes <= 0 || device.lastSignInAt !== null || request.rotate !== undefined || this.pin.enabled()) return
+    const graceMs = Math.min(minutes, served.elevationMinutes ?? ELEVATION_LIMITS.defaultMinutes) * 60_000
+    const endsAt = device.approvedAt + graceMs
+    if (this.now() >= endsAt) return
+    this.elevations.startGrace({ deviceId: request.deviceId, listener: request.listener, sessionId }, endsAt)
+  }
+
+  /**
+   * End the approval grace of a device on one listener, which the device's own studio asks for once its first-run setup
+   * finishes. Any other unlock the device holds stays.
+   * @param deviceId - the device.
+   * @param listener - the listener.
+   */
+  endApprovalGrace(deviceId: string, listener: ReachListenerId): void {
+    this.elevations.endGraceFor(deviceId, listener)
   }
 
   /**

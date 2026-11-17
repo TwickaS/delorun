@@ -236,14 +236,13 @@ export const REACH_DENIED_ACTIONS = {
 } as const satisfies Readonly<Record<RemoteAccessAction, string>>
 
 /**
- * The actions of {@link REACH_DENIED_ACTIONS} that dangerous mode lifts for a device that holds an unlock: the role
+ * The actions of {@link REACH_DENIED_ACTIONS} that dangerous mode lifts for a device that holds an unlock. None: opening a
+ * chat's folder in an application acts on the computer's own screen, so both such actions stay at the computer. The role
  * lists them, and the condition refuses them with `loopback-required: <action>` while the mode is off and with
  * `elevation-required: <action>` to a locked device while it holds. Each other action of the never table stays at the
  * computer in every mode.
  */
 export const REACH_DANGEROUS_ACTIONS = {
-  'session/openWorkspacePath': 'open a chat\'s folder in an application on the home\'s computer',
-  'session/workspacePathApplications': 'list the applications on the home\'s computer that open a chat\'s folder',
 } as const satisfies Partial<Readonly<Record<keyof typeof REACH_DENIED_ACTIONS, string>>>
 const DANGEROUS_SET: ReadonlySet<string> = new Set(Object.keys(REACH_DANGEROUS_ACTIONS))
 
@@ -439,6 +438,18 @@ function isEverydayCall(action: RemoteAccessAction, args: Readonly<Record<string
   if (action === 'pluginManager/setBundleEnabled') return typeof args.name === 'string' && Object.hasOwn(REACH_SHIPPED_BUNDLES, args.name)
   return false
 }
+
+/**
+ * The actions of {@link REACH_ELEVATED_ACTIONS} that only read or re-attach: they need the unlock but never renew it, because
+ * a studio lists, watches and reattaches on its own while the person does nothing. Every other elevated call renews the
+ * unlock it ran under once the condition allows it.
+ */
+export const ELEVATED_READS: ReadonlySet<string> = new Set([
+  'terminal/list', 'terminal/watch', 'terminal/shells', 'terminal/environment', 'terminal/attach',
+  'mcpManager/watch',
+  'directoryPicker/list',
+  'dynamicCordisRunner/getClientCode', 'dynamicCordisRunner/inventory', 'dynamicCordisRunner/resolveInspectQuery', 'dynamicCordisRunner/syncInspectManifest',
+])
 
 const PLUGIN_MANAGEMENT = 'install, enable, update or remove a plugin, code that runs in the Host outside any sandbox; the plugin manager still refuses every change to a guard plugin'
 const PROFILE_HISTORY = 'undo or restore a profile change; the plugin manager still refuses one that changes a guard plugin'
@@ -918,6 +929,82 @@ function namesProtectedRow(facts: Pick<ReachAccessFacts, 'protectedEntryIds'>, a
 }
 
 /**
+ * The modules whose plugin rows only the computer changes, with the reason for each: disabling one removes the unlock
+ * gate or the sandbox, so no unlock, PIN page or dangerous mode lets a device do it.
+ */
+export const COMPUTER_ONLY_ROW_MODULES = {
+  '@delorun/home-auth': 'it holds the pairing and unlock gate',
+  '@delorun/reach': 'it decides which addresses reach the studio',
+  '@deepseek-ai/dsh-sandbox-local': 'it confines the commands a chat runs',
+  '@deepseek-ai/dsh-sandbox-policy': 'it decides what the sandbox allows',
+} as const satisfies Readonly<Record<string, string>>
+
+/**
+ * Whether a settings write names the namespace of a row of {@link COMPUTER_ONLY_ROW_MODULES} (a namespace is the row's
+ * Loader entry id, with or without its `include:` prefix), or while those rows cannot be read. A call whose
+ * namespace is not text names no row; the wire validates it.
+ * @param facts - the computer-only rows.
+ * @param args - the call's arguments.
+ * @returns whether the write is refused to a device in every mode.
+ */
+function settingsOfComputerOnlyRow(facts: Pick<ReachAccessFacts, 'computerOnlyEntryIds'>, args: Readonly<Record<string, unknown>>): boolean {
+  const ids = facts.computerOnlyEntryIds()
+  if (ids === undefined) return true
+  if (typeof args.ns !== 'string') return false
+  return ids.has(args.ns) || ids.has(`include:${args.ns}`)
+}
+
+/**
+ * Whether a settings write names the namespace of a row the plugin manager protects (its `protectedPlugins`), or the
+ * protected rows cannot be read.
+ * @param facts - the protected rows.
+ * @param args - the call's arguments.
+ * @returns whether the write needs a real unlock.
+ */
+function settingsOfProtectedRow(facts: Pick<ReachAccessFacts, 'protectedEntryIds'>, args: Readonly<Record<string, unknown>>): boolean {
+  const ids = facts.protectedEntryIds()
+  if (ids === undefined) return true
+  return typeof args.ns === 'string' && (ids.has(args.ns) || ids.has(`include:${args.ns}`))
+}
+
+/** The plugin-manager calls that enable, disable, remove or update one bundle (package) by `name`. */
+const BUNDLE_CALLS: ReadonlySet<string> = new Set(['pluginManager/setBundleEnabled', 'pluginManager/removeBundle', 'pluginManager/updateBundle'])
+
+/**
+ * The bundles whose rows include a {@link COMPUTER_ONLY_ROW_MODULES} module, besides the packages that provide those
+ * modules: turning one off, removing or replacing it would take the unlock gate, reach or the sandbox with it.
+ */
+export const COMPUTER_ONLY_BUNDLES: readonly string[] = [
+  '@delorun/bundle-local', '@delorun/bundle-headless', '@delorun/bundle-studio',
+  '@deepseek-ai/dsh-base', '@deepseek-ai/dsh-sdk-minimal', '@deepseek-ai/dsh-headless',
+]
+
+/**
+ * Whether a bundle call names a package that provides a computer-only module or holds its rows, or names its package in
+ * a non-text `name`. A call with no `name` is malformed and is left to the unlock and the plugin manager.
+ * @param args - the call's arguments.
+ * @returns whether the call is refused to a device in every mode.
+ */
+function namesComputerOnlyBundle(args: Readonly<Record<string, unknown>>): boolean {
+  if (args.name === undefined) return false
+  if (typeof args.name !== 'string') return true
+  const name = args.name
+  return COMPUTER_ONLY_BUNDLES.includes(name) || Object.keys(COMPUTER_ONLY_ROW_MODULES).some(module => module === name || module.startsWith(`${name}/`))
+}
+
+/**
+ * Whether a plugin-manager call names a row of {@link COMPUTER_ONLY_ROW_MODULES}, or names its row in arguments the
+ * condition cannot read. While those rows cannot be read, every call that names a row counts.
+ * @param facts - the computer-only rows.
+ * @param args - the call's arguments.
+ * @returns whether the call is refused to a device in every mode.
+ */
+function namesComputerOnlyRow(facts: Pick<ReachAccessFacts, 'computerOnlyEntryIds'>, args: Readonly<Record<string, unknown>>): boolean {
+  const ids = facts.computerOnlyEntryIds()
+  return ids === undefined || typeof args.id !== 'string' || ids.has(args.id)
+}
+
+/**
  * The slash commands a device runs, by name, with what each changes; `commands/execute` of any other command, or of a
  * line that names none, is refused to a device, unlocked or not. Each listed command changes only its own chat or
  * reads it: none writes a setting, a plugin row or the profile, so a new command a plugin registers is refused until
@@ -993,7 +1080,7 @@ function createsInKnownWorkspace(facts: Pick<ReachAccessFacts, 'workspaces'>, ar
  * @returns the condition.
  */
 export function createCondition(
-  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'delorunHome' | 'elevationOf' | 'logElevated' | 'liftedSettings' | 'computerOnlySwitches' | 'protectedEntryIds' | 'defaultPermission' | 'dangerousMode' | 'pageUnlockOf' | 'pinEnabled' | 'pinLiftedSettings' | 'keyRefs'>,
+  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'delorunHome' | 'elevationOf' | 'touchUnlock' | 'logElevated' | 'liftedSettings' | 'computerOnlySwitches' | 'protectedEntryIds' | 'computerOnlyEntryIds' | 'defaultPermission' | 'dangerousMode' | 'pageUnlockOf' | 'pinEnabled' | 'pinLiftedSettings' | 'keyRefs'>,
   principal: ReachDevicePrincipal,
 ): ReachCondition {
   const { deviceId, listener, unlockId } = principal
@@ -1012,10 +1099,15 @@ export function createCondition(
   const unlocked = (action: RemoteAccessAction, reason: string, call: boolean): RemoteAccessDecision | undefined => {
     const elevation = unlock()
     if (elevation === undefined) return { kind: 'deny', reason }
-    if (call) facts.logElevated(`home-auth: elevated action: device=${deviceId} listener=${listener} action=${action} elevation=${elevation.id}`)
+    if (call) {
+      facts.logElevated(`home-auth: elevated action: device=${deviceId} listener=${listener} action=${action} elevation=${elevation.id}`)
+      // Renewed below, once the whole condition allows the call.
+      if (!ELEVATED_READS.has(action)) renew = elevation.id
+    }
     return undefined
   }
-  return ({ action, resource, args }) => {
+  let renew: string | undefined
+  const decide: ReachCondition = ({ action, resource, args }) => {
     // Dangerous mode lifts the four refusals below for an unlocked device: an elevated action is still refused to a
     // locked one, and the unlock check follows. The mode is read per call, so withdrawing the grant restores them.
     const lifts: SettingsLift[] = []
@@ -1031,10 +1123,17 @@ export function createCondition(
       if (SETTINGS_WRITES.has(action)) {
         const off = facts.computerOnlySwitches().find(target => !(lifted && DANGEROUS_LIFTABLE_SWITCHES.has(target.ns)) && turnsSwitchOff(action, args, target))
         if (off !== undefined) return { kind: 'deny', reason: switchOffRefusal(off.label) }
+        // The settings of the gate, reach and sandbox rows stay as the computer set them: a write there replaces the row in effect.
+        if (settingsOfComputerOnlyRow(facts, args)) return { kind: 'deny', reason: PROTECTED_ROW_REFUSAL }
+        // The approval grace never covers a consent or guard row's settings: those need a code or a PIN page.
+        if (unlockId === undefined && facts.elevationOf(deviceId, listener)?.grace === true && settingsOfProtectedRow(facts, args)) return { kind: 'deny', reason: `elevation-required: ${action}` }
         const loosens = loosensDefaultPermission(action, args, facts.defaultPermission())
         if (!lifted && loosens) return { kind: 'deny', reason: DEFAULT_PERMISSION_REFUSAL }
         if (lifted) lifts.push(...liftsOf(facts, action, args, loosens))
       }
+      // The rows that carry the unlock gate and the sandbox stay refused to every device: no unlock and no mode lifts them.
+      if (ROW_CALLS.has(action) && namesComputerOnlyRow(facts, args)) return { kind: 'deny', reason: PROTECTED_ROW_REFUSAL }
+      if (BUNDLE_CALLS.has(action) && namesComputerOnlyBundle(args)) return { kind: 'deny', reason: PROTECTED_ROW_REFUSAL }
       if (!lifted) {
         if (ROW_CALLS.has(action) && namesProtectedRow(facts, args)) return { kind: 'deny', reason: PROTECTED_ROW_REFUSAL }
         if (action === 'commands/execute' && !runsDeviceCommand(args)) return { kind: 'deny', reason: UNLISTED_COMMAND_REFUSAL }
@@ -1072,6 +1171,13 @@ export function createCondition(
       return { kind: 'deny', reason: outside }
     }
     return ALLOW
+  }
+  return (question) => {
+    renew = undefined
+    const decision = decide(question)
+    // An unlock is renewed by a state-changing call that was allowed, never by a read or a call refused after the unlock check.
+    if (decision.kind === 'allow' && renew !== undefined) facts.touchUnlock?.(renew)
+    return decision
   }
 }
 
@@ -1112,7 +1218,12 @@ export interface ReachAccessFacts {
    * @param listener - the listener its Peer sits on.
    * @returns its id, or undefined.
    */
-  readonly elevationOf: (deviceId: string, listener: ReachListenerId) => { readonly id: string } | undefined
+  readonly elevationOf: (deviceId: string, listener: ReachListenerId) => { readonly id: string; readonly grace?: true } | undefined
+  /**
+   * Renew an unlock after a call that needed it; reads and questions without arguments never call it.
+   * @param elevationId - the id of the unlock the call ran under.
+   */
+  readonly touchUnlock?: (elevationId: string) => void
   /**
    * The running PIN mode page unlock one Peer was admitted under.
    * @param unlockId - the id in the Peer's principal.
@@ -1160,6 +1271,11 @@ export interface ReachAccessFacts {
    * @returns the ids, or undefined when the list cannot be read.
    */
   readonly protectedEntryIds: () => ReadonlySet<string> | undefined
+  /**
+   * The Loader entry ids of the rows whose module is in {@link COMPUTER_ONLY_ROW_MODULES}.
+   * @returns the ids, or undefined when they cannot be read.
+   */
+  readonly computerOnlyEntryIds: () => ReadonlySet<string> | undefined
   /**
    * The permission new chats start in, which a device's settings write may tighten but not loosen.
    * @returns it, or undefined while no permission presets run.

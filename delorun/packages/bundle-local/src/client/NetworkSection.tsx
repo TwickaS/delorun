@@ -8,6 +8,7 @@ import { useCallback, useEffect, useId, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button, Modal, SegmentedControl, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import { GateFailure } from './GateNotice.tsx'
 import { useDangerousMode } from './dangerous-mode.ts'
 import { failureSentence, isRefused, LOOPBACK_REQUIRED, type HostFetch, type Loaded } from './host-api.ts'
 import {
@@ -133,7 +134,8 @@ function WorkspaceRow({ t, fetch, workspace, defaultNetwork, locked, onSaved }: 
   const [accept, setAccept] = useState(workspace.network.acceptAbstractSockets === true)
   const [offering, setOffering] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [failure, setFailure] = useState<string | undefined>()
+  const [failure, setFailure] = useState<unknown>()
+  const [retryDraft, setRetryDraft] = useState<{ network: WorkspaceNetwork | undefined; confirmed: boolean } | undefined>()
   const dangerous = useDangerousMode(fetch)
   const [confirming, setConfirming] = useState<PendingLoosening | undefined>()
   const draft: WorkspaceNetwork = { access, hosts: hostLines(hostsText), ...access === 'open' && accept ? { acceptAbstractSockets: true } : {} }
@@ -148,7 +150,8 @@ function WorkspaceRow({ t, fetch, workspace, defaultNetwork, locked, onSaved }: 
       if (!confirmed && isRefused(error, NETWORK_UNCONFIRMED)) {
         setConfirming({ network, text: looseningText(t, workspace.title, workspace.network, network ?? defaultNetwork) })
       } else {
-        setFailure(networkFailureText(t, error, dangerous))
+        setFailure(error)
+        setRetryDraft({ network, confirmed })
       }
       return
     } finally {
@@ -201,7 +204,7 @@ function WorkspaceRow({ t, fetch, workspace, defaultNetwork, locked, onSaved }: 
         {offering ? <p className={css.description}>{t('common.hint')}</p> : null}
       </> : null}
     </div>
-    {failure === undefined ? null : <p className={css.failed} role="alert">{failure}</p>}
+    {failure === undefined ? null : <GateFailure t={t} error={failure} text={networkFailureText(t, failure, dangerous)} className={css.failed} retry={() => { if (retryDraft !== undefined) void save(retryDraft.network, retryDraft.confirmed) }} />}
     <div className={css.actions}>
       <Button variant="primary" size="sm" disabled={locked || busy || sameNetwork(draft, workspace.network)}
         onClick={() => { void save(draft, false) }}>{t('save')}</Button>

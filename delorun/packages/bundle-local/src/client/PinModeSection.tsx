@@ -10,6 +10,8 @@ import type { FormEvent, ReactNode } from 'react'
 import { Button, IconChevronDownOutlineRegular, IconPauseOutlineRegular, IconShieldOutlineRegular, IconWarningOutlineRegular, Input, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { failureSentence, LOOPBACK_REQUIRED, type HostFetch, type Loaded } from './host-api.ts'
+import { gateOf } from './gate.ts'
+import { GateNotice } from './GateNotice.tsx'
 import { PIN_MAX_IDLE_MINUTES, readPinMode, resumePin, setPinMode, setPinOptions, turnPinOff, type PinMode } from './pin-api.ts'
 import { secretPairProblem } from './pin-rules.ts'
 import { ConfirmAction, Notice, SecretPair, StatusCard } from '@delorun/brand'
@@ -67,26 +69,54 @@ export function settingWords(t: Translate, setting: { readonly ns: string; reado
 export function PinModeSection({ t, fetch, atComputer }: PinModeSectionProps): ReactNode {
   const computer = atComputer()
   const [mode, setMode] = useState<Loaded<PinMode | undefined>>({ kind: 'loading' })
+  // Whether the home answered this device's read with "computer only".
+  const [readAtComputer, setReadAtComputer] = useState(false)
   const refresh = useCallback(async (): Promise<void> => {
     try {
       setMode({ kind: 'ready', value: await readPinMode(fetch) })
     } catch (error) {
+      if (!computer && gateOf(error)?.kind === 'computer') {
+        setReadAtComputer(true)
+        setMode({ kind: 'ready', value: undefined })
+        return
+      }
       setMode({ kind: 'failed', text: pinModeFailureText(t, error) })
     }
-  }, [fetch, t])
-  useEffect(() => { if (computer) void refresh() }, [computer, refresh])
+  }, [fetch, t, computer])
+  // A device reads the state too; only changing it is done at the computer.
+  useEffect(() => { void refresh() }, [refresh])
   return <div className={css.section} data-pin-mode-section>
     <h2 className={css.heading}>{t('title')}</h2>
     <p className={css.intro}>{t('intro')}</p>
-    {!computer
-      ? <p className={css.line} data-pin-mode-away>{t('atComputer')}</p>
-      : mode.kind === 'loading'
+    {mode.kind === 'loading'
         ? <p className={css.line}>{t('loading')}</p>
         : mode.kind === 'failed'
           ? <p className={css.failed} role="alert">{mode.text}</p>
           : mode.value === undefined
-            ? <p className={css.line}>{t('unavailable')}</p>
-            : <Controls t={t} fetch={fetch} mode={mode.value} onChanged={refresh} />}
+            ? readAtComputer
+              ? <p className={css.line} data-pin-mode-away><GateNotice gate={{ kind: 'computer' }} t={t} reason={t('computerReason')} /></p>
+              : <p className={css.line}>{t('unavailable')}</p>
+            : computer
+              ? <Controls t={t} fetch={fetch} mode={mode.value} onChanged={refresh} />
+              : <ReadOnly t={t} mode={mode.value} />}
+  </div>
+}
+
+/**
+ * What a device sees: the state, and the line that changing it is done on the computer, with the reason.
+ * @param props - the copy and the mode.
+ * @returns the state card and the reason line.
+ */
+function ReadOnly({ t, mode }: { t: Translate; mode: PinMode }): ReactNode {
+  return <div className={cardCss.stack} data-pin-mode-away>
+    <SettingsCard title={t('card.status')} group="pin-status">
+      <div className={cardCss.block}>
+        <StatusCard Icon={IconShieldOutlineRegular} on={mode.enabled} titleAttribute={mode.enabled ? 'on' : 'off'} pill={t(mode.enabled ? 'pill.on' : 'pill.off')}
+          title={t(mode.enabled ? (mode.kind === 'passcode' ? 'state.passcode' : 'state.pin') : 'state.off')}
+          detail={mode.enabled ? `${t('state.settings', { minutes: String(mode.idleMinutes) })}${mode.lockWhenHidden ? ` ${t('state.hidden')}` : ''}` : undefined} />
+      </div>
+    </SettingsCard>
+    <p className={css.line}><GateNotice gate={{ kind: 'computer' }} t={t} reason={t('computerReason')} /></p>
   </div>
 }
 

@@ -81,12 +81,12 @@ describe('the unlock copy', () => {
 
   it('states the configured length before an unlock, in minutes', async () => {
     await askDialog({ kind: 'none', unlockMinutes: 45 })
-    expect(screen.getByText(/The unlock lasts 45 minutes and ends on its own\./u)).toBeTruthy()
+    expect(screen.getByText(/Stays unlocked while you use it; locks after 45 minutes without a sensitive action\./u)).toBeTruthy()
   })
 
   it('says one minute in the singular', async () => {
     await askDialog({ kind: 'none', unlockMinutes: 1 })
-    expect(screen.getByText(/The unlock lasts 1 minute and ends on its own\./u)).toBeTruthy()
+    expect(screen.getByText(/Stays unlocked while you use it; locks after 1 minute without a sensitive action\./u)).toBeTruthy()
   })
 
   it('keeps the sentence without a length when the home does not send one', async () => {
@@ -411,22 +411,16 @@ describe('the unlock dialog and banner', () => {
     unlock.dispose()
   })
 
-  it('shows the banner while unlocked, locks from it, and says once that sensitive actions are locked again', async () => {
+  it('shows no banner or countdown while unlocked, and says once that sensitive actions are locked again', async () => {
     const host = deviceHost(ELEVATED)
     const unlock = createUnlockSource(host.fetch)
     await unlock.refresh()
     renderOverlay(unlock)
-    const banner = screen.getByRole('status')
-    expect(banner.textContent).toContain(t('unlock.banner', { time: clockTime(t, ELEVATED.endsAt) }))
-    expect(banner.getAttribute('aria-live')).toBe('polite')
-    host.script[`POST ${ELEVATION_ROUTES.lock}`] = 'unreachable'
-    fireEvent.click(within(banner).getByRole('button', { name: en['unlock.lockNow'] }))
-    await settle()
-    expect(screen.getByRole('alert').textContent).toBe(en['unlock.lockFailed'])
-    host.script[`POST ${ELEVATION_ROUTES.lock}`] = ok(NONE)
-    fireEvent.click(screen.getByRole('button', { name: en['unlock.lockNow'] }))
-    await settle()
     expect(screen.queryByRole('status')).toBeNull()
+    expect(screen.queryByText(/until|至/)).toBeNull()
+    host.script[`POST ${ELEVATION_ROUTES.lock}`] = ok(NONE)
+    await unlock.lock()
+    await settle()
     expect(screen.getByText(en['unlock.ended'])).toBeTruthy()
     await settle(60_000)
     expect(screen.queryByText(en['unlock.ended'])).toBeNull()
@@ -434,11 +428,6 @@ describe('the unlock dialog and banner', () => {
     unlock.dispose()
   })
 
-  it('names the end time in Chinese too', () => {
-    const zht = makeTranslate(zh)
-    expect(zht('unlock.banner', { time: clockTime(zht, NOW) })).toMatch(/^敏感操作已解锁，至 \d{2}:\d{2}$/)
-    expect(zht('unlock.needed')).toBe('这需要先在你的电脑上快速解锁。')
-  })
 })
 
 describe('the plugin\'s unlock', () => {

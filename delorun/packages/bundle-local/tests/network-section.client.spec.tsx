@@ -19,6 +19,9 @@ import {
 } from '../src/client/network-api.ts'
 import { PERMISSION_ROUTES } from '@delorun/plugin-permission-defaults/wire'
 import { en, zh } from '../src/client/network-locales.ts'
+import { installGateUnlock } from '../src/client/gate-unlock.ts'
+import { createUnlockSource } from '../src/client/unlock.ts'
+import { ELEVATION_ROUTES } from '../src/client/devices-api.ts'
 import { looseningText, NetworkSection, type NetworkSectionProps } from '../src/client/NetworkSection.tsx'
 
 afterEach(() => {
@@ -133,6 +136,28 @@ describe('the Network section', () => {
     expect(host.posts()).toEqual([{ path: ALPHA.path, network: off }])
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(host.count(`GET ${NETWORK_ROUTES.list}`)).toBe(2)
+  })
+
+  it('asks a locked device to unlock, then saves the change by itself once the unlock begins', async () => {
+    // Fails without: the retry on unlock (the person would tap Save again).
+    const off: WorkspaceNetwork = { access: 'off', hosts: [] }
+    const ELEVATED = { status: 200, body: { kind: 'elevated', elevationId: 'e1', endsAt: Date.now() + 900_000 } }
+    const host = fakeHost({
+      [`GET ${NETWORK_ROUTES.list}`]: LIST,
+      [`GET ${ELEVATION_ROUTES.state}`]: [{ status: 200, body: { kind: 'none', unlockMinutes: 15 } }, ELEVATED],
+      [`POST ${NETWORK_ROUTES.set}`]: [{ status: 403, body: { error: 'ELEVATION_REQUIRED', message: 'Unlock first' } }, saved(off)],
+    })
+    const store = createUnlockSource(host.fetch)
+    await store.refresh()
+    const dispose = installGateUnlock(store)
+    renderSection(host)
+    const alpha = await rowOf('Alpha')
+    fireEvent.click(within(alpha).getByRole('tab', { name: en['access.off'] }))
+    fireEvent.click(within(alpha).getByRole('button', { name: en.save }))
+    expect(await screen.findByText(/locks after 15 minutes/)).toBeTruthy()
+    await store.refresh()
+    await vi.waitFor(() => { expect(host.posts()).toHaveLength(2) })
+    dispose()
   })
 
   it('confirms a loosening before it resends the change with confirmed', async () => {

@@ -23,7 +23,7 @@ import {
   elevationRevokeHandler,
   elevationStateHandler,
 } from '../src/elevation-routes.ts'
-import type { RouteHandler } from '../src/routes.ts'
+import { DEVICE_REMOVE_PATH, DEVICES_PATH, devicesHandler, removeDeviceHandler, type RouteHandler } from '../src/routes.ts'
 import { claimOf, homeFixture, recordOf, STUDIO_COOKIE, testCredential, type Home } from './fixtures/home.ts'
 import { DeviceStore } from '../src/devices.ts'
 
@@ -47,6 +47,8 @@ beforeEach(async () => {
   const claimed = await home.auth.claim(claimOf(issued.code, { address: ADDRESS }))
   token = (await home.auth.openSession({ deviceId: claimed.device.id, listener: LISTENER, address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: 60 * 60 * 1000 })).token
   const routes: Readonly<Record<string, RouteHandler>> = {
+    [DEVICES_PATH]: devicesHandler(home.auth, testCredential),
+    [DEVICE_REMOVE_PATH]: removeDeviceHandler(home.auth, testCredential),
     [ELEVATION_PATHS.state]: elevationStateHandler(home.auth),
     [ELEVATION_PATHS.request]: elevationRequestHandler(home.auth),
     [ELEVATION_PATHS.lock]: elevationLockHandler(home.auth),
@@ -106,6 +108,35 @@ function send(method: string, path: string, body?: unknown, headers: Record<stri
     request.end(text)
   })
 }
+
+describe('the device list and removal for a signed-in device', () => {
+  it('lists the paired devices with the device\'s own id, and shows the unlocks running now', async () => {
+    const before = await send('GET', `${DEVICES_PATH}?reach`)
+    expect(before).toMatchObject({ status: 200, body: { current: expect.any(String), unlocks: [], devices: [expect.objectContaining({ id: expect.any(String) })] } })
+    const asked = await send('POST', `${ELEVATION_PATHS.request}?reach`)
+    home.auth.approveElevation(String(asked.body['requestId']), String(asked.body['code']))
+    const after = await send('GET', `${DEVICES_PATH}?reach`)
+    expect(after.body['unlocks']).toEqual([{ deviceId: before.body['current'], endsAt: expect.any(Number) }])
+    // Pins the public listing: no public key travels to the device.
+    expect(JSON.stringify(after.body)).not.toContain('publicKey')
+  })
+
+  it('lets the device remove itself and refuses the removal of any other device with LOOPBACK_REQUIRED, unlocked or not', async () => {
+    const { body: listing } = await send('GET', `${DEVICES_PATH}?reach`)
+    const other = await send('POST', `${DEVICE_REMOVE_PATH}?reach`, { v: 1, deviceId: 'someone-else' })
+    expect(other).toMatchObject({ status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
+    const asked = await send('POST', `${ELEVATION_PATHS.request}?reach`)
+    home.auth.approveElevation(String(asked.body['requestId']), String(asked.body['code']))
+    // Pins the self check: an unlock does not widen the removal to another device.
+    expect(await send('POST', `${DEVICE_REMOVE_PATH}?reach`, { v: 1, deviceId: 'someone-else' })).toMatchObject({ status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
+    expect(await send('POST', `${DEVICE_REMOVE_PATH}?reach`, { v: 1, deviceId: listing['current'] })).toMatchObject({ status: 200, body: { removed: true } })
+    expect((await send('GET', `${DEVICES_PATH}?reach`)).status).toBe(403)
+  })
+
+  it('refuses an unsigned request', async () => {
+    expect(await send('GET', `${DEVICES_PATH}?reach`, undefined, { cookie: undefined })).toMatchObject({ status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
+  })
+})
 
 describe('the device routes', () => {
   it('ask for an elevation, show the code, and lock it', async () => {

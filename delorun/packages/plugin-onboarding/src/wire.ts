@@ -17,13 +17,42 @@ export const MAX_SECTIONS = 32
 /** The section names a record lists. */
 export const SectionNames = z.array(z.string().regex(SECTION_NAME)).max(MAX_SECTIONS)
 
+/** The route that records or clears a deferred step. `POST` takes {@link DeferStepRequest} and answers {@link DeferStepAnswer}. The studio fetches it without its leading `/`. */
+export const DEFER_STEP_PATH = '/api/delorunOnboarding.deferStep'
+
+/**
+ * The onboarding steps only the home's own computer can do, which a phone defers: turning phone access on, setting the PIN,
+ * and approving a device. The list is closed; the route refuses any other id.
+ */
+export const DEFERRABLE_STEPS = ['reach', 'pin', 'approve'] as const
+
+/** One deferrable step's id. */
+export const DeferrableStep = z.enum(DEFERRABLE_STEPS)
+
+/** One deferrable step's id. */
+export type DeferrableStep = z.output<typeof DeferrableStep>
+
+/** The body of {@link DEFER_STEP_PATH}: the step, and whether it is deferred (true) or done (false). */
+export const DeferStepRequest = z.strictObject({ id: DeferrableStep, deferred: z.boolean() })
+
+/** The body of {@link DEFER_STEP_PATH}. */
+export type DeferStepRequest = z.output<typeof DeferStepRequest>
+
+/** The answer of {@link DEFER_STEP_PATH}: every step deferred now, in the order of {@link DEFERRABLE_STEPS}. */
+export const DeferStepAnswer = z.strictObject({ deferred: z.array(DeferrableStep).max(DEFERRABLE_STEPS.length) })
+
+/** The answer of {@link DEFER_STEP_PATH}. */
+export type DeferStepAnswer = z.output<typeof DeferStepAnswer>
+
 /**
  * What the terminal setup recorded, reduced to what onboarding uses: the ids of the sections the terminal showed or
- * asked when the record lists them, and whether reach is set up.
+ * asked when the record lists them, and whether reach is set up. `deferred` is not from the terminal: it lists the steps
+ * a phone deferred to the computer, kept in the home; absent means none.
  */
 export const SetupRecord = z.strictObject({
   sections: SectionNames.optional(),
   reachSetUp: z.boolean(),
+  deferred: z.array(DeferrableStep).max(DEFERRABLE_STEPS.length).optional(),
 })
 
 /** What the terminal setup recorded, as {@link SetupRecord} parses it. */
