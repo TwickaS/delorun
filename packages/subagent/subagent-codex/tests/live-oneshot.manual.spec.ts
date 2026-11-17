@@ -1,9 +1,8 @@
 import { mountWorkingDirectoryFixture } from '../../subagent/tests/working-directory-fixture.ts'
-import { startExternalActivation } from '../../subagent/tests/external-activation-helpers.ts'
+import { externalTestParent, startExternalActivation } from '../../subagent/tests/external-activation-helpers.ts'
 import { appendFileSync } from 'node:fs'
 import { Context } from '@deepseek-ai/cordis'
 import { afterEach, describe, it } from 'vitest'
-import type { Agent } from '@deepseek-ai/dsh-agent'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
@@ -32,7 +31,7 @@ describe.skipIf(folder === undefined)('live one-shot Codex run', () => {
       ...process.env.P2_CODEX_MODEL === undefined ? {} : { model: process.env.P2_CODEX_MODEL },
       disposeGraceMs: 3_000,
     })
-    const parent = { id: 'live-parent', session: { header: { cwd: folder } } } as unknown as Agent
+    const parent = await externalTestParent(ctx, folder)
     try {
       const run = await startExternalActivation(ctx, 'codex', {
         prompt: [{ type: 'text', text: 'Create a file named hello.txt containing the single word hi, then reply done.' }],
