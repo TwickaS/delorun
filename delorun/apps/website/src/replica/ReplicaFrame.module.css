@@ -42,9 +42,10 @@
   .replica[data-width='pair'] [data-slot='desktop'] > * { min-width: 600px; scroll-snap-align: start; }
 }
 
-/* Responsive: the desktop width from 1024 px up, the phone width below; `WIDE` in ReplicaFrame.tsx is the same query. */
-.replica[data-width='responsive'] [data-slot='phone'] { display: none; }
-@media (max-width: 1023.98px) {
-  .replica[data-width='responsive'] [data-slot='desktop'] { display: none; }
-  .replica[data-width='responsive'] [data-slot='phone'] { display: block; }
+/* Responsive: the desktop width when the replica's column is 700 px or wider, the phone width below; `WIDE` in ReplicaFrame.tsx is the same width. */
+.replica[data-width='responsive'] { container: replica / inline-size; }
+.frames[data-width='responsive'] > [data-slot='phone'] { display: none; }
+@container replica (max-width: 699.98px) {
+  .frames[data-width='responsive'] > [data-slot='desktop'] { display: none; }
+  .frames[data-width='responsive'] > [data-slot='phone'] { display: block; }
 }

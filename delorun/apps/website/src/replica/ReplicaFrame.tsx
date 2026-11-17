@@ -7,7 +7,7 @@
  * phone width comes first and the desktop width scrolls sideways.
  * @module @delorun/website/replica/ReplicaFrame
  */
-import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore, type ComponentType, type RefObject } from 'react'
+import { useCallback, useEffect, useId, useRef, useState, type ComponentType, type RefObject } from 'react'
 import { Button, Frame, TabList, TabPanel } from '@brand'
 import { REPLICA_COPY } from './copy.ts'
 import type { PressTarget, SessionId } from './model.ts'
@@ -24,24 +24,30 @@ export const REPLICA_BOXES: Readonly<Record<ReplicaWidth, { readonly width: numb
   phone: { width: 390, height: 760 },
 }
 
-/** The media query from which a responsive replica draws the desktop width; `ReplicaFrame.module.css` uses the same width. */
-export const WIDE = '(min-width: 1024px)'
+/**
+ * The replica's own width, in CSS pixels, from which a responsive replica draws the desktop width; below it, the phone
+ * width. `ReplicaFrame.module.css` uses the same width in its container query.
+ */
+export const WIDE = 700
 
 /**
- * The widths a responsive replica may draw now.
- * @returns the width the media query picks; on the server, both, so each still is in the page.
+ * The widths a responsive replica may draw now, from the width of its own element.
+ * @param element - the replica's element.
+ * @returns the width that fits; on the server and before the first measure, both, so each still is in the page.
  */
-function useResponsiveWidth(): readonly ReplicaWidth[] {
-  const wide = useSyncExternalStore(
-    (listener) => {
-      const query = matchMedia(WIDE)
-      query.addEventListener('change', listener)
-      return () => { query.removeEventListener('change', listener) }
-    },
-    () => matchMedia(WIDE).matches ? 'wide' : 'narrow',
-    () => 'both',
-  )
-  return wide === 'both' ? ['desktop', 'phone'] : wide === 'wide' ? ['desktop'] : ['phone']
+function useResponsiveWidth(element: RefObject<Element | null>): readonly ReplicaWidth[] {
+  const [wide, setWide] = useState<boolean | undefined>()
+  useEffect(() => {
+    const target = element.current
+    if (target === null) return
+    const observer = new ResizeObserver((entries) => {
+      const width = entries.at(-1)?.contentRect.width
+      if (width !== undefined) setWide(width >= WIDE)
+    })
+    observer.observe(target)
+    return () => { observer.disconnect() }
+  }, [element])
+  return wide === undefined ? ['desktop', 'phone'] : wide ? ['desktop'] : ['phone']
 }
 
 /** The props of {@link ReplicaFrame}. */
@@ -49,8 +55,8 @@ export interface ReplicaFrameProps {
   readonly session: SessionId
   /**
    * One width; `pair`, the desktop and phone widths side by side, playing together under one rail; or `responsive`, the
-   * desktop width from {@link WIDE} up and the phone width below it, chosen by the stylesheet, with only the shown one
-   * loaded.
+   * desktop width when the replica's own column is {@link WIDE} pixels or wider and the phone width below it, chosen by
+   * the stylesheet, with only the shown one loaded.
    */
   readonly width: ReplicaWidth | 'pair' | 'responsive'
   readonly className?: string | undefined
@@ -85,9 +91,9 @@ function useStudioNear(element: RefObject<Element | null>): ComponentType<Studio
 export function ReplicaFrame({ session, width, className }: ReplicaFrameProps) {
   const file = CHAPTER_FILES[session]
   const widths: readonly ReplicaWidth[] = width === 'pair' || width === 'responsive' ? ['desktop', 'phone'] : [width]
-  const responsive = useResponsiveWidth()
-  const live = width === 'responsive' ? responsive : widths
   const frame = useRef<HTMLDivElement>(null)
+  const responsive = useResponsiveWidth(frame)
+  const live = width === 'responsive' ? responsive : widths
   const studios = useRef(new Map<ReplicaWidth, StudioHandle>())
   const [readyWidths, setReadyWidths] = useState<readonly ReplicaWidth[]>([])
   const ready = live.every(each => readyWidths.includes(each))
@@ -99,7 +105,7 @@ export function ReplicaFrame({ session, width, className }: ReplicaFrameProps) {
   const chapterIds = file.chapters.map(chapter => chapter.id)
   return <div className={`${css.replica} ${className ?? ''}`.trim()} data-width={width}>
     <TabPanel idBase={idBase} selected={current?.id ?? ''} className={css.panel}>
-      <div ref={frame} className={css.frames}>
+      <div ref={frame} className={css.frames} data-width={width}>
         {widths.map((each) => {
           const box = REPLICA_BOXES[each]
           return <div key={each} className={css.slot} data-slot={each}>
