@@ -24,7 +24,7 @@ const INNER = 'max-w-[1440px] px-4 sm:px-6'
  * @param props.closing - the footer's closing composition, passed to the shared footer.
  * @returns the frame.
  */
-export function Frame({ children, signup = '/privacy', closing }: { children: ReactNode; signup?: string | false; closing?: ReactNode }) {
+export function Frame({ children, signup, closing }: { children: ReactNode; signup: string | false; closing?: ReactNode }) {
   return (
     <>
       <a href="#content" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-(--dl-text) focus:px-3 focus:py-2 focus:text-(--dl-surface)">{COPY.footer.skip}</a>

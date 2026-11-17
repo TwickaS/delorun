@@ -5,11 +5,8 @@
  * @module @delorun/website/signup
  */
 
-/** The sentence beside the tick box. The Worker stores {@link CONSENT_TEXT_VERSION} with each sign-up. */
-export const CONSENT_TEXT = 'Email me Delorun release news. One click unsubscribes.'
-
-/** Names the wording of {@link CONSENT_TEXT}. Change it whenever the sentence changes, so each stored consent names the words that were agreed to. */
-export const CONSENT_TEXT_VERSION = '1'
+/** The consent sentence, its version, and the answer to a page that shows an older one; see `words/consent-en.ts`. */
+export { CONSENT_OUT_OF_DATE, CONSENT_TEXT, CONSENT_TEXT_VERSION } from './words/consent-en.ts'
 
 /** The longest first name the form accepts, in characters. */
 export const MAX_NAME_LENGTH = 80
@@ -17,8 +14,11 @@ export const MAX_NAME_LENGTH = 80
 /** The longest email address the form accepts, in characters (RFC 5321). */
 export const MAX_EMAIL_LENGTH = 254
 
-/** The pages that carry the form, which the Worker stores as the place of consent. */
-export const SIGNUP_PAGES = ['/', '/privacy'] as const
+/** The home page, whose sign-up section records it as the place of consent. */
+export const HOME_SIGNUP_PAGE = '/'
+
+/** The pages that carry the form, which the Worker stores as the place of consent; any other value is stored as `unknown`. */
+export const SIGNUP_PAGES = [HOME_SIGNUP_PAGE, '/privacy', '/notices', '/blog'] as const
 
 /** The form fields, which the browser and the Worker read by the same names. */
 export const FIELDS = {

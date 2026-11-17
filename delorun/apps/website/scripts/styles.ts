@@ -35,14 +35,14 @@ export function unstyledClasses(out: string, page: string): string[] {
  * Links the stylesheets of chunks a page renders on the server but the browser loads later.
  * @param out - the built directory.
  * @param chunks - by page file name, the chunk names (the file name before the hash) whose stylesheets the page needs.
- * @throws Error when a named chunk has no stylesheet, so a renamed chunk cannot silently stop being linked.
+ * @throws Error when a named page was not prerendered or a named chunk has no stylesheet, so a rename cannot silently stop a stylesheet being linked.
  */
 export function linkChunkStyles(out: string, chunks: Readonly<Record<string, readonly string[]>>): void {
   const assets = join(out, 'assets')
   const files = existsSync(assets) ? readdirSync(assets) : []
   for (const [page, names] of Object.entries(chunks)) {
     const path = join(out, page)
-    if (!existsSync(path)) continue
+    if (!existsSync(path)) throw new Error(`${path} does not exist; "${page}" in RENDERED_CHUNK_STYLES names a page the build did not prerender`)
     let html = readFileSync(path, 'utf8')
     const linked = new Set(linkedStyles(html))
     const links: string[] = []

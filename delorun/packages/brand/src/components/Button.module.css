@@ -8,6 +8,9 @@
     transform var(--dl-motion-press) var(--dl-ease-out);
 }
 
+/* A link drawn as a button keeps no underline. */
+a.button { text-decoration: none; }
+
 .button:focus-visible {
   outline: var(--dl-focus-ring);
   outline-offset: var(--dl-focus-ring-offset);
