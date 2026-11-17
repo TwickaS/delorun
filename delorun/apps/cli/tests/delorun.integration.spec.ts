@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
+import { fileURLToPath } from 'node:url'
 import { dirname, join, relative } from 'node:path'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import type { RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
@@ -496,6 +497,26 @@ describe('starting the home process', { timeout: 60_000 }, () => {
     const upstreamOnly: BootedRow[] = [{ id: 'mcp', name: '@deepseek-ai/dsh-mcp-client', disabled: false, state: 'failed' }]
     expect(await startForeground({ home: delorunHome, profile: 'default', open: false, output: context, env: context.env }, recording([], upstreamOnly, shutdowns))).toBeUndefined()
     expect(shutdowns).toEqual([])
+  })
+
+  it('starts and starts again over a release pack whose rows did not activate, logging the pack, and refuses them when no packs list names the pack', async () => {
+    expect(await main(['setup', '--yes'], context)).toBe(EXIT.ok)
+    linkIntoProfile('@delorun/bundle-webhooks', fileURLToPath(new URL('../../../packages/bundle-webhooks/', import.meta.url)))
+    appendBundles('@delorun/bundle-webhooks')
+    const rows: BootedRow[] = [
+      { id: 'webhook-runtime', name: '@deepseek-ai/dsh-webhook', disabled: false, state: 'failed' },
+      { id: 'github-webhook-server', name: '@delorun/bundle-webhooks/server', disabled: false, state: 'not-imported' },
+    ]
+    const withPack: StartDependencies = { ...recording([], rows), releasePacks: () => Promise.resolve(new Set(['@delorun/bundle-webhooks'])) }
+    const lock = join(delorunHome, 'run', 'default', 'home.lock')
+    const log = resolveSurface({ kind: 'home', home: delorunHome, profile: 'default' }).file
+    const warning = 'The plugin pack @delorun/bundle-webhooks did not start in the CLI profile default (webhook-runtime (@deepseek-ai/dsh-webhook) failed to start, github-webhook-server (@delorun/bundle-webhooks/server) failed to import), so Delorun runs without it'
+    for (const start of [1, 2]) {
+      expect(await startForeground({ home: delorunHome, profile: 'default', open: false, output: context, env: context.env }, withPack), `start ${String(start)}`).toBeUndefined()
+      expect(readFileSync(log, 'utf8').split(warning).length - 1).toBe(start)
+      rmSync(lock, { force: true })
+    }
+    await expect(startForeground({ home: delorunHome, profile: 'default', open: false, output: context, env: context.env }, recording([], rows))).rejects.toThrow(/github-webhook-server \(@delorun\/bundle-webhooks\/server\) failed to import/)
   })
 
   it('reports a refused Host whose teardown fails with the refusal, keeps the lock, and ends the process only after the report', async () => {

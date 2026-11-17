@@ -683,6 +683,19 @@ describe('a profile with the release\'s optional packs installed through Changes
     expect((await composeWithPacks(ALL)).required).toEqual(composed.required)
   })
 
+  it('starts without a pack bundle the profile skipped, with a notice, and refuses it when no packs list names it', async () => {
+    const prepare = upstreamDependencies().prepareProfile
+    const skipping = async (profile: string): ReturnType<typeof prepare> => {
+      const prepared = await prepare(profile)
+      return { ...prepared, profile: { ...prepared.profile, skippedBundles: [...prepared.profile.skippedBundles, { packageName: '@delorun/bundle-webhooks', reason: 'its folder is missing' }] } }
+    }
+    const printed: string[] = []
+    const output = { ...context, stderr: (text: string) => { printed.push(text) } }
+    await composeDelorunProfile({ home: delorunHome, profile: 'default', kind: 'cli', output, env: {}, osHome }, { prepareProfile: skipping, approvedPluginContent: NO_APPROVED_CONTENT, releasePacks: () => Promise.resolve(new Set(ALL)) })
+    expect(printed.join('')).toContain('delorun: the plugin pack @delorun/bundle-webhooks did not load in the profile default (its folder is missing), so Delorun starts without it.')
+    expect(await refused(() => composeDelorunProfile({ home: delorunHome, profile: 'default', kind: 'cli', output: context, env: {}, osHome }, { prepareProfile: skipping, approvedPluginContent: NO_APPROVED_CONTENT, releasePacks: NO_RELEASE_PACKS }))).toContain('@delorun/bundle-webhooks: its folder is missing')
+  })
+
   it('still refuses a same-named stand-in of a runtime bundle beside the packs, even when a packs list names it', async () => {
     installReleasePack('bundle-webhooks')
     const standIn = join(delorunHome, 'profiles', 'default', 'node_modules', '@delorun', 'bundle-local-stand-in')

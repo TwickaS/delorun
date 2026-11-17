@@ -7,8 +7,9 @@
  *
  * The composition, in order:
  *
- * 1. upstream's profile preparation, the refusal of a profile that skipped a Delorun bundle, and for `delorun headless` the
- *    refusal of a `headless` profile that does not load `@delorun/bundle-headless`;
+ * 1. upstream's profile preparation, the refusal of a profile that skipped a Delorun bundle (a skipped pack bundle only
+ *    prints a notice), and for `delorun headless` the refusal of a `headless` profile that does not load
+ *    `@delorun/bundle-headless`;
  * 2. safe mode's filtered layers and overlay, when its marker is set; otherwise the person's `--patch` overlays of
  *    `delorun start`, in the order given, which safe mode refuses;
  * 3. the approved plugin content step ({@link ApprovedPluginContent}), whose overlays apply after safe mode's;
@@ -61,7 +62,7 @@ import type { ResolvedProfileRuntime } from '@deepseek-ai/dsh/profile-boot'
 import type { PromptsAnswer } from '@delorun/contract-setup-answers'
 import type { CommandOutput } from './command.ts'
 import { DELORUN_PROFILE_BUNDLES, HEADLESS_BUNDLE } from '@delorun/bundle-local/profile'
-import { delorunRowIds, isDelorunPackage, OPT_IN_ROWS, refuseSkippedDelorunBundles, type BootedRow } from './delorun-bundles.ts'
+import { delorunRowIds, isDelorunPackage, OPT_IN_ROWS, packageOfModule, refuseSkippedDelorunBundles, skippedPackNotices, type BootedRow } from './delorun-bundles.ts'
 import { CliError, EXIT } from './exit.ts'
 import { composedRow, isRecord, patchLayers, rowInserts, rowPatches, sourcesSetting, type PatchLayer } from './patch-layers.ts'
 import { delorunPackagesRoot } from './package-manager.ts'
@@ -246,16 +247,17 @@ export const ROW_SERVICES: Readonly<Record<string, readonly string[]>> = {
  *   carries expressions on the row, the approved content step refuses, or the composed rows break an invariant.
  */
 export async function composeDelorunProfile(request: ComposeRequest, dependencies: ComposeDependencies): Promise<ComposedStart> {
+  const packBundles = new Set([...await dependencies.releasePacks(request)].filter(name => !RUNTIME_BUNDLES.has(name)))
   let resolvedProfile: ResolvedProfileRuntime
   try {
     resolvedProfile = await dependencies.prepareProfile(request.profile)
-    refuseSkippedDelorunBundles(resolvedProfile.profile)
+    refuseSkippedDelorunBundles(resolvedProfile.profile, packBundles)
   } catch (error) {
     if (error instanceof CliError) throw error
     throw new CliError(EXIT.failed, `delorun: the profile ${request.profile} could not be loaded: ${error instanceof Error ? error.message : String(error)}`)
   }
+  for (const notice of skippedPackNotices(resolvedProfile.profile, packBundles)) request.output.stderr(notice)
   if (request.kind === 'headless') refuseHeadlessWithoutBundle(request.home, resolvedProfile)
-  const packBundles = new Set([...await dependencies.releasePacks(request)].filter(name => !RUNTIME_BUNDLES.has(name)))
   const delorunRows = delorunRowIds(resolvedProfile.profile, packBundles)
   // Safe mode boots the same profile with its third-party layers and rows left out, and edits none of its files.
   const safe = safeModeStart({ home: request.home, profile: request.profile, resolvedProfile })
@@ -334,15 +336,6 @@ function refuseHeadlessWithoutBundle(home: string, resolvedProfile: ResolvedProf
     `delorun headless: the ${resolvedProfile.profile.name} profile does not load Delorun's headless bundle ${HEADLESS_BUNDLE}, which holds the guards a headless task runs under, so Delorun did not start the task.`,
     `To fix it, remove ${record} so that the next delorun headless adds the bundle again, or remove the folder ${resolvedProfile.profile.dir} so that Delorun creates the profile again with it.`,
   ].join('\n'))
-}
-
-/**
- * The package a module name belongs to.
- * @param moduleName - a row's module, such as `@delorun/bundle-local/update-gate`.
- * @returns the package, such as `@delorun/bundle-local`.
- */
-function packageOfModule(moduleName: string): string {
-  return moduleName.split('/').slice(0, moduleName.startsWith('@') ? 2 : 1).join('/')
 }
 
 /**
