@@ -1,5 +1,5 @@
 /**
- * Phone access: what it does and the command that turns it on, with the Tailscale checks and the PIN option under More.
+ * Phone access: what it does and the command that turns it on, with the Tailscale checks under More.
  */
 import { TAILSCALE_OPERATOR_COMMAND } from '@delorun/contract-reach-providers'
 import type { ReactNode } from 'react'
@@ -57,7 +57,7 @@ function TailscaleChecks({ tailscale, t }: { readonly tailscale: TailscaleReadin
 
 /**
  * Phone access, while reach is not set up: one sentence on what it does and the command that turns it on; the Tailscale
- * checks, the approval command and the PIN option sit under More. A studio opened from a phone has no such step.
+ * checks and the approval command sit under More; the PIN step follows once reach is on. A studio opened from a phone has no such step.
  * @param props - the services and the guide.
  * @returns the step body.
  */
@@ -81,7 +81,6 @@ export function ReachStep({ services, guide }: StepProps): ReactNode {
           <CommandRow command={APPROVE_COMMAND} t={t} />
           {tailscale?.state === 'ready' && <span>{t('reach.address', { address: `https://${tailscale.dnsName}` })}</span>}
           <span>{t('reach.limits')}</span>
-          <span>{t('reach.pin')}</span>
         </div>
       </details>
     </div>

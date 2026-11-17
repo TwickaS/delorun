@@ -571,12 +571,10 @@ describe('the phone access step', () => {
     expect(en['reach.lead']).not.toMatch(/\b(reach|tailnet|serve|PIN mode)\b/i)
   })
 
-  it('recommends PIN mode and says where to turn it on', async () => {
+  it('leaves the PIN to its own step instead of offering it under More', async () => {
     render(<ReachStep services={stepServices()} guide={guideOf(reachWith({ state: 'not-installed' } as TailscaleReadiness))} />)
     await settle()
-    expect(screen.getByText(en['reach.pin'])).toBeTruthy()
-    expect(en['reach.pin']).toContain('Settings → PIN mode')
-    expect(en['reach.pin']).toContain('delorun devices pin set')
+    expect(screen.queryByText(/PIN/)).toBeNull()
   })
 
   it('marks every check done and names the address the phone opens once Tailscale is ready', async () => {

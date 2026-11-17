@@ -1,0 +1,30 @@
+/* The PIN step: the form, its actions and the on state. */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--onb-gap-2);
+  max-width: 24rem;
+  min-width: 0;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--onb-gap-2);
+}
+
+.actions button {
+  min-height: var(--onb-target);
+}
+
+.on {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--onb-gap-1);
+}
+
+.link {
+  min-height: var(--onb-target);
+}

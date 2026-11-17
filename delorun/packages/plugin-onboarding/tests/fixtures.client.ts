@@ -240,6 +240,7 @@ export function stepServices(change: Partial<StepServices> = {}): StepServices &
     start: startFace().face,
     renderSection: (id: string) => `section ${id}`,
     resolveText: text => (typeof text === 'string' ? text : text.en),
+    pin: { fetch: () => Promise.reject(new Error('no PIN requests in this spec')), openSettings: () => undefined },
     spies: bundles,
     ...change,
   }

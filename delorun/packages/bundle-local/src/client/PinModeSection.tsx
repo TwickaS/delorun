@@ -11,8 +11,8 @@ import { Button, IconChevronDownOutlineRegular, IconPauseOutlineRegular, IconShi
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { failureSentence, LOOPBACK_REQUIRED, type HostFetch, type Loaded } from './host-api.ts'
 import { PIN_MAX_IDLE_MINUTES, readPinMode, resumePin, setPinMode, setPinOptions, turnPinOff, type PinMode } from './pin-api.ts'
-import { secretProblem } from './pin-rules.ts'
-import { ConfirmAction, Notice, StatusCard } from '@delorun/brand'
+import { secretPairProblem } from './pin-rules.ts'
+import { ConfirmAction, Notice, SecretPair, StatusCard } from '@delorun/brand'
 import { cardCss, SettingsCard } from '@delorun/settings-controls'
 import css from './PinModeSection.module.css'
 
@@ -132,10 +132,9 @@ function Controls({ t, fetch, mode, onChanged }: { t: Translate; fetch: HostFetc
 
   /** The secret typed twice, or undefined after saying why it is wrong. */
   const checkedSecret = (): string | undefined => {
-    const weak = secretProblem(secret)
-    if (weak !== undefined) setProblem(t(`problem.${weak}`))
-    else if (secret !== again) setProblem(t('problem.mismatch'))
-    else return secret
+    const wrong = secretPairProblem(secret, again)
+    if (wrong === undefined) return secret
+    setProblem(t(`problem.${wrong}`))
     return undefined
   }
 
@@ -170,21 +169,8 @@ function Controls({ t, fetch, mode, onChanged }: { t: Translate; fetch: HostFetc
     if (typed !== undefined) sendSecret(typed, mode.idleMinutes, mode.lockWhenHidden)
   }
 
-  const secretFields = <>
-    <div className={css.fieldRow}>
-      <label className={cardCss.title} htmlFor={`${id}-secret`}>{t('secret.label')}</label>
-      <Input id={`${id}-secret`} className={css.field ?? ''} type="password" inputMode="text" autoComplete="new-password"
-        autoCapitalize="off" spellCheck={false} value={secret} disabled={busy}
-        onChange={(event) => { setSecret(event.target.value) }} />
-    </div>
-    <div className={css.fieldRow}>
-      <label className={cardCss.title} htmlFor={`${id}-again`}>{t('secret.confirm')}</label>
-      <Input id={`${id}-again`} className={css.field ?? ''} type="password" inputMode="text" autoComplete="new-password"
-        autoCapitalize="off" spellCheck={false} value={again} disabled={busy}
-        onChange={(event) => { setAgain(event.target.value) }} />
-    </div>
-    <p className={css.hint}>{t('secret.hint')}</p>
-  </>
+  const secretFields = <SecretPair label={t('secret.label')} confirmLabel={t('secret.confirm')} help={t('secret.hint')}
+    secret={secret} again={again} disabled={busy} onSecret={setSecret} onAgain={setAgain} />
   const optionFields = <>
     <div className={css.fieldRow}>
       <label className={cardCss.title} htmlFor={`${id}-idle`}>{t('idle.label')}</label>

@@ -250,6 +250,19 @@ describe('the services the dialog draws with', () => {
     expect(services.appearance('mode')).toBeTruthy()
   })
 
+  it('give the PIN step the page\'s fetch and a link that opens Settings at PIN mode', async () => {
+    const openSection = vi.fn()
+    const fetched = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'))
+    const { entries, served } = await harness({ provide: { settingsShell: { openSection, openOnboarding: vi.fn() } } })
+    served.on()
+    const { pin } = face<OnboardingInjected>(entries, STEP_KEY).services
+    await pin.fetch('/auth/pin/mode')
+    expect(fetched).toHaveBeenCalledWith('/auth/pin/mode', undefined)
+    pin.openSettings()
+    expect(openSection).toHaveBeenCalledExactlyOnceWith('delorun-pin-mode')
+    fetched.mockRestore()
+  })
+
   it('give the preview notice from bundle-local\'s dictionary and acknowledgement, and none where bundle-local is absent', async () => {
     const service = { acknowledged: vi.fn(() => false), acknowledge: vi.fn() }
     const present = await harness({ provide: { delorunNotice: service } })

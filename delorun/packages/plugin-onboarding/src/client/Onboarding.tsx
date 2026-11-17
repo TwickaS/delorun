@@ -112,6 +112,7 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
   useInertRoot()
   const addedSteps = useSyncExternalStore(useCallback(listener => extra.subscribe(listener), [extra]), () => extra.getSnapshot())
   const target = useSyncExternalStore(start.target.subscribe, start.target.getSnapshot)
+  const phone = useSyncExternalStore(useCallback(listener => guide.phone.subscribe(listener), [guide]), () => guide.phone.getSnapshot())
   const workspace = useSyncExternalStore(useCallback(listener => guide.workspace.subscribe(listener), [guide]), () => guide.workspace.getSnapshot())
   // The default workspace is looked up when the dialog opens, and chosen once it resolves unless the person chose another.
   useEffect(() => { start.resolve() }, [start])
@@ -136,8 +137,8 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
   // The notice is decided once: acknowledging it must not remove it from under Back.
   const [notice] = useState(() => (!explicit && fixed.notice !== undefined && !fixed.notice.acknowledged() ? fixed.notice : undefined))
   const steps = useMemo(
-    () => buildSteps({ services, guide, record, extra: addedSteps, reach, target, notice, keepCurrent }),
-    [services, guide, record, addedSteps, reach, target, notice, keepCurrent],
+    () => buildSteps({ services, guide, record, extra: addedSteps, reach, phone, target, notice, keepCurrent }),
+    [services, guide, record, addedSteps, reach, phone, target, notice, keepCurrent],
   )
   const [index, setIndex] = useState(() => (notice === undefined ? Math.max(0, steps.findIndex(each => each.id === settings.step)) : 0))
   const current = Math.min(index, steps.length - 1)

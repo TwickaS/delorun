@@ -51,3 +51,16 @@ export function secretProblem(typed: string): SecretProblem | undefined {
   if (length < MIN_PIN_DIGITS) return 'pinShort'
   return isRepeat(secret) || isRun(secret) || COMMON_PINS.has(secret) ? 'pinWeak' : undefined
 }
+
+/** What is wrong with a secret typed twice: a broken rule, or the two entries differing. */
+export type SecretPairProblem = SecretProblem | 'mismatch'
+
+/**
+ * Check a secret and its repeat.
+ * @param secret - the first entry.
+ * @param again - the second entry.
+ * @returns the broken rule, `mismatch` when the entries differ, or undefined when the pair passes.
+ */
+export function secretPairProblem(secret: string, again: string): SecretPairProblem | undefined {
+  return secretProblem(secret) ?? (secret === again ? undefined : 'mismatch')
+}
