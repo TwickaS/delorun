@@ -767,10 +767,25 @@ describe('SubagentHeaderLineage', () => {
     hoverCatalog(screen.getByRole('button', { name: /\d+ 个子智能体$/ }))
 
     const row = screen.getByRole('treeitem', { name: /worker/ })
+    expect(renderSlot).toHaveBeenCalledWith(expect.stringContaining('.row.trail'), expect.objectContaining({ awaitingApproval: false }))
     for (const position of ['lead', 'detail', 'trail']) {
       expect(row.querySelector(`[data-row-slot="${position}"]`)?.getAttribute('data-label')).toBe('worker')
     }
     expect(document.querySelector('[data-row-slot="trigger"]')?.getAttribute('data-label')).toBe('2')
+  })
+
+  it('tells the row positions which children wait for an approval answer', () => {
+    const input = props(catalog())
+    const waiting = new Map([[CHILD, { running: true, pendingInteraction: { key: 'a1', kind: 'approval', sessionId: CHILD }, completionUnread: false }]]) as never
+    const renderSlot = vi.fn(() => null)
+    render(<HeaderCatalog
+      {...input} useRowSlotsAvailable={select => select(true)} renderSlot={renderSlot as never}
+      useSessionStatus={(select => select(waiting)) as typeof input.useSessionStatus}
+    />)
+    hoverCatalog(screen.getByRole('button', { name: /\d+ 个子智能体$/ }))
+
+    expect(renderSlot).toHaveBeenCalledWith(expect.stringContaining('.row.trail'), expect.objectContaining({ sessionId: CHILD, awaitingApproval: true }))
+    expect(renderSlot).toHaveBeenCalledWith(expect.stringContaining('.row.trail'), expect.objectContaining({ sessionId: 'child-2', awaitingApproval: false }))
   })
 
   it('aligns a known leaf with siblings whose child catalog contains descendants', () => {

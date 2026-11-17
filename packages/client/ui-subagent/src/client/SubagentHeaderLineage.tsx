@@ -32,6 +32,8 @@ export interface SubagentRowSlots {
   readonly trigger: (owner: SubagentTriggerOwner) => ReactNode
   /** Child projection values by session, as last read. */
   readonly values: Readonly<Record<string, SubagentChildValues>>
+  /** Children with an approval card waiting for an answer. */
+  readonly awaitingApproval: ReadonlySet<string>
 }
 
 /** Business actions supplied by the slot registration. */
@@ -59,6 +61,7 @@ function bindRowSlots(
     row: (key, owner) => renderSlot(`conversation.session.header.actions.subagent.row.${key}` as const, owner),
     trigger: owner => renderSlot('conversation.session.header.actions.subagent.trigger', owner),
     values: {},
+    awaitingApproval: new Set(),
   }
 }
 
@@ -280,6 +283,7 @@ function triggerRow(
   entry: SubagentCatalogSnapshot['entries'][number],
   summary: SessionSummary | undefined,
   values: SubagentChildValues | undefined,
+  awaitingApproval: boolean,
 ): SubagentTriggerOwner['rows'][number] {
   return {
     sessionId: entry.id,
@@ -288,6 +292,7 @@ function triggerRow(
     running: entry.activity === 'running',
     summary,
     values: values ?? {},
+    awaitingApproval,
     tokens: tokenTotal(summary?.projectionValues?.tokenUsage),
     durationMs: undefined,
   }
@@ -387,6 +392,7 @@ function CatalogRows({
           running: entry.activity === 'running',
           summary,
           values: rowSlots.values[entry.id] ?? {},
+          awaitingApproval: rowSlots.awaitingApproval.has(entry.id),
           tokens: totalTokens,
           durationMs,
           open,
@@ -596,7 +602,8 @@ function CatalogDropdown(props: CatalogDropdownProps) {
     row: props.rowSlots.row,
     trigger: props.rowSlots.trigger,
     values: Object.fromEntries(Object.entries(projections).map(([id, snapshot]) => [id, snapshot.values])),
-  }, [props.rowSlots, projections])
+    awaitingApproval: new Set([...statuses].filter(([, status]) => status.pendingInteraction?.kind === 'approval').map(([id]) => id)),
+  }, [props.rowSlots, projections, statuses])
   const prepareLevel = (sessionId: SessionId): void => {
     void prepareCatalog(sessionId).catch((error: unknown) => {
       console.error('[ui-subagent] catalog discovery failed:', error)
@@ -844,7 +851,10 @@ function CatalogDropdown(props: CatalogDropdownProps) {
                 </span>
                 <span ref={countRef} className={css.count} data-subagent-count>{t(totalCountKey, { count: directCount })}</span>
                 {rowSlotsWithValues !== undefined && rowSlotsWithValues.trigger({
-                  rows: directChildren.map(entry => triggerRow(entry, summaries[entry.id], rowSlotsWithValues.values[entry.id])),
+                  rows: directChildren.map(entry => triggerRow(
+                    entry, summaries[entry.id], rowSlotsWithValues.values[entry.id],
+                    rowSlotsWithValues.awaitingApproval.has(entry.id),
+                  )),
                 })}
               </>
             )}

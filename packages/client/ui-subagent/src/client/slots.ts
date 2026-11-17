@@ -19,6 +19,8 @@ export interface SubagentRowOwner {
   readonly summary: SessionSummary | undefined
   /** The child's projection values as last read; `{}` until the catalog has read them. */
   readonly values: SubagentChildValues
+  /** Whether an approval card of the child waits for an answer. */
+  readonly awaitingApproval: boolean
   /** Total tokens the row shows, when known. */
   readonly tokens: number | undefined
   /** Elapsed or last-turn duration the row shows, in milliseconds, when known. */
