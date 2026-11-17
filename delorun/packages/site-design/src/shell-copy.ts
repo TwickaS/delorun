@@ -23,6 +23,8 @@ export interface ThemeCopy {
   readonly dark: string
   /** The button that returns the page to how it started. */
   readonly back: string
+  /** The line that names the look the page is in, shown beside the button while a look is chosen; `scheme` is the light or dark word, when one was chosen. */
+  readonly current: (name: string, scheme: string | undefined) => string
   /** The name of each preset theme. */
   readonly names: Readonly<Record<LookId, string>>
   /** The toast that follows a change from the control. */

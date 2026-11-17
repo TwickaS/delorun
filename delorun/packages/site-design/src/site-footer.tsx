@@ -14,6 +14,9 @@ import { BackToStart } from './back-to-start.tsx'
 /** The link list's layout. */
 const LIST = 'flex flex-wrap items-center gap-x-6 gap-y-2' // us-spelling: quoted output (Tailwind class names)
 
+/** Where focus goes after the page is reset: the footer's first link. */
+const FOOTER_FOCUS = (): HTMLElement | null => document.querySelector<HTMLElement>('footer nav a')
+
 /** The owner line's layout. */
 const OWNER = 'flex items-center gap-2' // us-spelling: quoted output (Tailwind class names)
 
@@ -40,13 +43,13 @@ export function SiteFooter({ copy, links, top, closing, inner = DEFAULT_INNER }:
     <footer className="mt-24 border-t border-(--dl-border)">
       <div className={`mx-auto flex w-full flex-col gap-6 py-10 text-sm text-(--dl-text-muted) ${inner}`}>
         {top}
-        {closing === undefined ? null : <>{closing}<BackToStart copy={copy.theme} className="self-start" /></>}
+        {closing === undefined ? null : <>{closing}<BackToStart copy={copy.theme} className="self-start" after={FOOTER_FOCUS} /></>}
         <nav aria-label={copy.navLabel}>
           <ul className={LIST}>
             {links.map(link => <li key={link.href} className={HIT}><FooterLink link={link} /></li>)}
           </ul>
         </nav>
-        {closing === undefined ? <BackToStart copy={copy.theme} className="self-start" /> : null}
+        {closing === undefined ? <BackToStart copy={copy.theme} className="self-start" after={FOOTER_FOCUS} /> : null}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
           <p className={OWNER}><ProductMark size={18} />{copy.owner} &middot; <SiteLink link={copy.licence} /></p>
           <p className="self-end text-xs sm:self-auto"><SiteLink link={copy.upstream} /></p>

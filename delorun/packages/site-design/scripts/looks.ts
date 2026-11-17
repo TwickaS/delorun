@@ -22,6 +22,7 @@ export const ROLES = {
   'on-accent': '--dsw-alias-label-primary-foreground',
   text: '--dsw-alias-label-primary',
   muted: '--dsw-alias-label-secondary',
+  tertiary: '--dsw-alias-label-tertiary',
   surface: '--dsw-alias-bg-base',
   raised: '--dsw-alias-bg-layer-1',
   sunken: '--dsw-alias-bg-layer-2',
@@ -79,6 +80,9 @@ export function ratio(colours: LookColours, foreground: RoleName, background: Ro
 /** The value of `--look-contrast` for each stop: both stops move quiet text and rules towards the text colour. The palettes put quiet text at the AA floor, so no stop weakens it. */
 export const CONTRAST_STOPS = { high: 0.25, highest: 0.5 } as const
 
+/** The root before a look is chosen, which draws as Soft. */
+export const DEFAULT_SELECTOR = ':root:not([data-look])'
+
 /** The attribute selector of a look. */
 export function selector(look: Look): string {
   return look.accent === undefined ? `[data-look="${look.palette}"]` : `[data-look="custom"][data-accent="${look.accent}"]`
@@ -105,7 +109,9 @@ export function buildLooks(): string {
     const light = resolveLook(look, 'light')
     const dark = resolveLook(look, 'dark')
     const lines = (Object.keys(ROLES) as RoleName[]).map(name => `  --look-${name}: light-dark(${formatRgb(light[name])}, ${formatRgb(dark[name])});`)
-    return `${selector(look)} {\n${lines.join('\n')}\n}`
+    // Before any choice the page has no look attribute; it draws exactly as Soft, the default look.
+    const at = look.palette === 'soft' ? `${selector(look)},\n${DEFAULT_SELECTOR}` : selector(look)
+    return `${at} {\n${lines.join('\n')}\n}`
   })
   const stops = Object.entries(CONTRAST_STOPS).map(([name, value]) => `[data-contrast="${name}"] { --look-contrast: ${value}; }`)
   const density = Object.entries(DENSITY_SCALE).map(([name, scale]) => `[data-density="${name}"] { --dsh-density: ${scale}; }`)
@@ -116,11 +122,12 @@ export function buildLooks(): string {
  * Maps a look's roles onto the studio roles the brand tokens read. Contrast is one number on the root,
  * `--look-contrast` from 0 to 1: quiet text and rules move up to 60% towards the text colour.
  */
-const GENERIC = `[data-look] {
+const GENERIC = `[data-look],\n${DEFAULT_SELECTOR} {
   --dsw-alias-brand-primary: var(--look-accent);
   --dsw-alias-brand-text: var(--look-accent-text);
   --dl-on-accent: var(--look-on-accent);
   --dsw-alias-label-primary: var(--look-text);
+  --dsw-alias-label-tertiary: var(--look-tertiary);
   --dsw-alias-bg-base: var(--look-surface);
   --dsw-alias-bg-layer-1: var(--look-raised);
   --dsw-alias-bg-layer-2: var(--look-sunken);

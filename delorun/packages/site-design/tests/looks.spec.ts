@@ -24,13 +24,20 @@ describe('the looks stylesheet', () => {
     for (const accent of ACCENT_IDS) expect(source).toContain(`'${accent}': { light: '${formatRgb(resolveLook({ palette: 'custom', accent }, 'light').accent)}'`)
   })
 
+  it('draws the page as Soft before any look is chosen, with every role the controls read', () => {
+    const css = buildLooks()
+    expect(css).toContain('[data-look="soft"],\n:root:not([data-look]) {')
+    expect(css).toContain('[data-look],\n:root:not([data-look]) {')
+    expect(css).toContain('--dsw-alias-label-tertiary: var(--look-tertiary)')
+  })
+
   it('keeps the T3 Code copyright comment', () => {
     expect(buildLooks()).toMatch(/T3 Code \(MIT licence\), commit [0-9a-f]{40}\.\n \* Copyright \(c\) \d{4} T3 Tools Inc\./)
   })
 
   it('has a rule for every preset palette and every custom accent preset', () => {
     const css = buildLooks()
-    for (const palette of PRESET_PALETTES) expect(css).toContain(`${selector({ palette })} {`)
+    for (const palette of PRESET_PALETTES) expect(css.includes(`${selector({ palette })} {`) || css.includes(`${selector({ palette })},`), palette).toBe(true)
     for (const accent of ACCENT_IDS) expect(css).toContain(`${selector({ palette: 'custom', accent })} {`)
     expect(LOOKS).toHaveLength(PRESET_PALETTES.length + ACCENT_IDS.length)
   })
@@ -53,6 +60,7 @@ describe('text contrast in every look', () => {
   const pairs: ReadonlyArray<readonly [RoleName, RoleName]> = [
     ['text', 'surface'], ['text', 'raised'], ['text', 'sunken'],
     ['muted', 'surface'], ['muted', 'raised'], ['muted', 'sunken'],
+    ['tertiary', 'surface'], ['tertiary', 'raised'], ['tertiary', 'sunken'],
     ['accent-text', 'surface'], ['accent-text', 'raised'], ['accent-text', 'sunken'],
     ['on-accent', 'accent'],
     // The documentation paints surface-coloured text on the text-safe accent (Fumadocs' primary fill).
@@ -76,6 +84,6 @@ describe('text contrast in every look', () => {
   })
 
   it('resolves every role', () => {
-    expect(Object.keys(ROLES)).toHaveLength(13)
+    expect(Object.keys(ROLES)).toHaveLength(14)
   })
 })
