@@ -10,6 +10,8 @@ import { FullAccessStartNotice, type FullAccessStartNoticeProps } from '../src/c
 import {
   APPROVAL_POLICY_KIND, approvalPolicyDefinition, FULL_ACCESS_START_KIND, fullAccessStartDefinition, SANDBOX_MODE_KIND, sandboxModeDefinition,
 } from '../src/client/full-access-start.ts'
+import { AgentLevelsNotice } from '../src/client/AgentLevelsNotice.tsx'
+import { AGENT_LEVEL_NOTICE_KIND, agentLevelNoticeDefinition } from '../src/client/agent-level-notice.ts'
 import { applyConsents } from '../src/client/index.ts'
 
 afterEach(cleanup)
@@ -115,7 +117,8 @@ describe('registration', () => {
     ctx.provide('sessions', {} as never)
     const fiber = ctx.plugin({ name: 'consents', inject: ['slots', 'locale', 'configForms', 'sessions'], apply: scope => { applyConsents(scope, (() => Promise.reject(new Error('unused'))) as never) } })
     await fiber
-    expect([...definitions]).toEqual([approvalPolicyDefinition, sandboxModeDefinition, fullAccessStartDefinition])
+    expect([...definitions]).toEqual([approvalPolicyDefinition, sandboxModeDefinition, fullAccessStartDefinition, agentLevelNoticeDefinition])
+    expect(rows.get(`conversation.chat.node#${AGENT_LEVEL_NOTICE_KIND}`)).toBe(AgentLevelsNotice)
     expect(rows.get(`conversation.chat.node#${FULL_ACCESS_START_KIND}`)).toBe(FullAccessStartNotice)
     await fiber.dispose()
     expect(definitions.size).toBe(0)

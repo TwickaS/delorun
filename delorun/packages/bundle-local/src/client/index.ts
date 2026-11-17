@@ -116,6 +116,8 @@ import { DangerousBadge, type DangerousBadgeInjected } from './DangerousBadge.ts
 import { ExternalAgentsSection, type ExternalAgentsSectionInjected } from './ExternalAgentsSection.tsx'
 import { approvalPolicyDefinition, FULL_ACCESS_START_KIND, fullAccessStartDefinition, sandboxModeDefinition } from './full-access-start.ts'
 import { FullAccessStartNotice } from './FullAccessStartNotice.tsx'
+import { AgentLevelsNotice, type AgentLevelsNoticeInjected } from './AgentLevelsNotice.tsx'
+import { agentLevelNoticeDefinition, AGENT_LEVEL_NOTICE_KIND } from './agent-level-notice.ts'
 import { PermissionsSection, type PermissionsSectionInjected } from './PermissionsSection.tsx'
 import { DELEGATION_CONSENT_ROW, type DelegationConsentSettings } from '@delorun/plugin-delegation-consent/wire'
 
@@ -774,6 +776,11 @@ export function applyConsents(ctx: Context, fetch: HostFetch): void {
     conversation.effect(() => conversation.slots.inject('conversation.chat.node', () => conversation.slots.register({
       name: 'conversation.chat.node', key: FULL_ACCESS_START_KIND, locale: CONSENTS_NS,
     }, FullAccessStartNotice)), 'delorun-consents: full-access start row')
+    conversation.effect(() => conversation.uiConversation.events.register(agentLevelNoticeDefinition), 'delorun-consents: agent level chips')
+    conversation.effect(() => conversation.slots.inject('conversation.chat.node', () => conversation.slots.register({
+      name: 'conversation.chat.node', key: AGENT_LEVEL_NOTICE_KIND, locale: CONSENTS_NS,
+      inject: (): AgentLevelsNoticeInjected => ({ fetch, openLevels: () => { ctx.get('settingsShell')?.openSection(EXTERNAL_AGENTS_SECTION_ID) } }),
+    }, AgentLevelsNotice)), 'delorun-consents: agent level chips row')
   })
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
