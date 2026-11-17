@@ -1,8 +1,8 @@
 /**
  * The calm inline banner above the message box while no model key works: upstream's "Add an API key" dialog is off in
  * Delorun's studio (`credentialOnboarding: false` in `@delorun/bundle-studio`), so this is the only nudge. It asks the key
- * test, which spends no tokens, once when the box mounts and every few seconds while it shows, so it leaves once a key
- * is added. A key test that cannot be read shows nothing.
+ * test, which spends no tokens, once when the box mounts and again whenever the window regains focus while it shows, so it
+ * leaves soon after a key is added elsewhere and never polls on a timer. A key test that cannot be read shows nothing.
  */
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { useEffect, useState } from 'react'
@@ -10,9 +10,6 @@ import type { ReactNode } from 'react'
 import type { KeyTestAnswer } from '../wire.ts'
 import { DEEPSEEK_ROUTE } from '../wire.ts'
 import css from './KeyBanner.module.css'
-
-/** How often the banner asks again while it shows, in milliseconds. */
-export const KEY_RECHECK_MS = 5000
 
 /** What the banner reads and calls. */
 export interface KeyBannerInjected {
@@ -63,11 +60,11 @@ export function KeyBanner({ t, keyTest, openModels }: KeyBannerProps): ReactNode
     let current = true
     const check = (): void => { void keyTest().then((answer) => { if (current) setState(bannerState(answer)) }) }
     check()
-    // Only a showing banner can change, so a person with a key is never asked again.
-    const timer = missing ? setInterval(check, KEY_RECHECK_MS) : undefined
+    // Only a showing banner can change, and a key is added in another place, so the person coming back asks again.
+    if (missing) window.addEventListener('focus', check)
     return () => {
       current = false
-      clearInterval(timer)
+      window.removeEventListener('focus', check)
     }
   }, [keyTest, missing])
   if (!missing) return null

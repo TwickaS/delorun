@@ -217,10 +217,24 @@ async function ignoredOutputFolder(folder: string): Promise<void> {
   }
 }
 
+declare module '@deepseek-ai/cordis' {
+  interface Events {
+    /**
+     * The add-time consent accepted one server's start. A provider that mounts the server per Session starts it again
+     * in the live Sessions the refusal left without its tools; the consent is still checked at that start.
+     * @param serverName - the accepted server.
+     * @mode parallel
+     */
+    'mcp-client/consent-accepted'(serverName: string): void | Promise<void>
+  }
+}
+
 interface ClientState {
   /** `ready` holds a started client; `blocked` waits for a busy attachment; `refused` is a start the add-time consent did not allow. */
   status: 'ready' | 'blocked' | 'refused'
   mask?: Scope
+  /** The Agent's creation signal, which a later start of a `refused` Session runs under. */
+  signal?: AbortSignal | undefined
 }
 
 /**
@@ -238,7 +252,10 @@ function isConsentStop(error: unknown): error is McpClient.McpConsentRefusedErro
  * A busy attachment leaves that activation without browser tools; its other turns continue. A start the mounted
  * add-time consent refuses, or a declared consent that did not start, also leaves that activation without browser
  * tools and logs a warning naming the server and the consent's reason; the Agent is still created, and the next
- * activation reviews the start again. Every other startup failure fails the Agent's creation.
+ * activation reviews the start again. When the consent accepts that server's start (`mcp-client/consent-accepted`),
+ * each live Session left without tools by a refusal runs the same consent check once more and, when it passes, gets the
+ * server's tools; a Session the check still refuses stays without them and starts nothing.
+ * Every other startup failure fails the Agent's creation.
  * Once a Session's server has started, its output folder, when the provider names one, is created if missing and given
  * a `.gitignore` of `*` if it has none; a failure to do so is logged as a warning and the Session keeps its tools.
  * A call the provider's `refuseCall` refuses fails with the provider's text and never reaches the server.
@@ -341,7 +358,7 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
     }
   }, `${options.name}.sessions`)
   ctx.on('agent/created', async ({ agent, signal }) => {
-    const state: ClientState = { status: resources.available(agent) ? 'ready' : 'blocked' }
+    const state: ClientState = { status: resources.available(agent) ? 'ready' : 'blocked', signal }
     agent.ctx.effect(() => async () => {
       clients.delete(agent)
       await state.mask?.dispose()
@@ -365,6 +382,26 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
     clients.set(agent, state)
   }, { prepend: true })
   ctx.on('tools/change', refreshBlockedMasks)
+  ctx.on('mcp-client/consent-accepted', async (serverName) => {
+    if (stopping || serverName !== options.name) return
+    for (const [agent, state] of [...clients]) {
+      if (state.status !== 'refused' || state.signal === undefined || state.signal.aborted) continue
+      // The mask denies the server's tools in this Session; it comes off first, because the new registration names them.
+      const mask = state.mask
+      delete state.mask
+      await mask?.dispose()
+      // Ready while it starts, so the registration's own `tools/change` does not mask the tools it adds.
+      state.status = 'ready'
+      try {
+        // The same acquisition as at creation: the add-time consent decides again, and a refusal starts nothing.
+        await resources.get(agent, state.signal)
+      } catch (error) {
+        state.status = 'refused'
+        if (!isConsentStop(error)) ctx.logger.warn(`${options.name}: the browser tools could not start in Session ${agent.id} after the server was allowed: ${(error as Error).message}`)
+        refreshBlockedMasks()
+      }
+    }
+  })
   ctx.on('tools/execute', async (exec, next) => {
     const ownResource = resourceTools.has(exec.name)
       && typeof exec.arguments === 'object' && exec.arguments !== null

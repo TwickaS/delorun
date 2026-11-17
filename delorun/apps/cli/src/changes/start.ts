@@ -181,11 +181,12 @@ export interface ChangesBootRequest {
  * @param request - the home, the profile and the logger.
  * @param rows - the Loader's rows after startup settled; empty when the profile did not boot.
  * @param failure - what the profile's boot failed with, when it failed.
+ * @param insertedRows - the ids of the rows each bundle layer inserts, by package name.
  */
-export async function recordChangesBoot(request: ChangesBootRequest, rows: readonly BootRow[], failure?: unknown): Promise<void> {
+export async function recordChangesBoot(request: ChangesBootRequest, rows: readonly BootRow[], failure?: unknown, insertedRows?: Readonly<Record<string, readonly string[]>>): Promise<void> {
   const { home, profile, logger } = request
   try {
-    await writeBootRecord({ home, profile, profileDir: profileDirectory(home, profile), rows, ...failure === undefined ? {} : { failure: failure instanceof Error ? failure.message : String(failure) } })
+    await writeBootRecord({ home, profile, profileDir: profileDirectory(home, profile), rows, ...insertedRows === undefined ? {} : { insertedRows }, ...failure === undefined ? {} : { failure: failure instanceof Error ? failure.message : String(failure) } })
   } catch (error) {
     logger.warn(`Changes could not record which plugins loaded at this start: ${isChangesError(error) ? error.detail : String(error)}`)
   }
