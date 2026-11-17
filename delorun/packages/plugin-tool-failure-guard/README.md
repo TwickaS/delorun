@@ -31,7 +31,7 @@ English | [中文](README.zh.md)
 
 | Key | Default | Meaning |
 |---|---|---|
-| `enabled` | `false` | The C16 switch `tool_failure_guard`; `@delorun/bundle-local` sets it on. |
+| `enabled` | `false` | The C16 switch `tool_failure_guard`; `@delorun/bundle-local` and `@delorun/bundle-headless` set it on. |
 | `consecutiveFailures` | `6` | Failed calls in a row that stop the turn; at least 2. |
 | `windowSize` | `12` | How many of the latest counted calls the window holds; at least 2. |
 | `windowFailures` | `8` | Failed calls within the window that stop the turn; at least 2 and at most `windowSize`. |
@@ -48,5 +48,6 @@ A limit outside its range fails the row at load with `ToolFailureGuardConfigErro
 
 ## Tests
 
-- [`tests/guard.spec.ts`](tests/guard.spec.ts) drives a real agent loop against a scripted model: both stop rules, the reminder, refusals, policy denials, excluded tools, the switch, carrying on and the Config checks.
+- [`tests/guard.spec.ts`](tests/guard.spec.ts) drives a real agent loop against a scripted model: both stop rules, the reminder, the headless line, refusals, policy denials, excluded tools, the switch, carrying on and the Config checks.
 - [`tests/stop-notice.client.spec.tsx`](tests/stop-notice.client.spec.tsx) covers which turn endings get the notice, the row's copy and the registrations.
+- [`snapshots/session/delorun-tool-failure-guard`](../../../snapshots/session/delorun-tool-failure-guard) is the switch-on scenario: a scripted model reads a missing file until the turn stops, recorded keyless against `pnpm run mock:llm` and replayed through `dsh --profile headless`.

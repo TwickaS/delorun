@@ -12,7 +12,7 @@
 
 每行给出一项证据。检查名（如 `parity-switches`）运行 `node_modules/.bin/tsx delorun/apps/tools/src/parity/composition/check-parity-switches.ts`，该检查读取开关注册表、开关字段与对等覆盖层。规格路径指向断言该行的测试文件。以「Manual check:」开头的条目指出审阅者用来确认该行的源码行。
 
-有十一个已构建的开关，其开关开启场景仍待录制：`main_chat`、`rename_workspace_tool`、`permission_defaults`、`fetch_guard`、`scheduled_task_consent`、`instruction_layer_consent`、`mcp_add_consent`、`external_agent_consent`、`sandbox_protected_reads`、`update_turn_refusal` 和 `default_workspace_directory`。`parity-switches` 将它们报告为待录制，而不是通过，因此本页对这些开关不声称任何回放结果。对模型可见的开关 `preset_inspect`、`plugin_manager_read_exemption`、`profile_history` 和 `container_denial_marker` 在 `snapshots/` 之下有已录制的场景，对等回放在覆盖层之下运行它们。
+有十一个已构建的开关，其开关开启场景仍待录制：`main_chat`、`rename_workspace_tool`、`permission_defaults`、`fetch_guard`、`scheduled_task_consent`、`instruction_layer_consent`、`mcp_add_consent`、`external_agent_consent`、`sandbox_protected_reads`、`update_turn_refusal` 和 `default_workspace_directory`。`parity-switches` 将它们报告为待录制，而不是通过，因此本页对这些开关不声称任何回放结果。对模型可见的开关 `preset_inspect`、`plugin_manager_read_exemption`、`profile_history`、`container_denial_marker` 和 `tool_failure_guard` 在 `snapshots/` 之下有已录制的场景，对等回放在覆盖层之下运行它们。
 
 ## Liveshare
 
@@ -75,6 +75,7 @@ setup 的提示回答设定下面四个开关：`permission_defaults`、`instruc
 | --- | --- | --- | --- |
 | `preset_inspect` | `dsh-v0.2.2-rc.3`：没有 `preset_inspect` 工具。本树只在 `presetInspect` 开启时注册它，而该开关默认关闭。随附的 Standard、PTC 和 Cordis 预设在没有该开关的情况下挂载工具行，因此本树中没有任何随附预设列出该工具 | 已构建：`preset_inspect`，带已录制的场景 | `packages/preset/agent-preset-registry/tests/tools.spec.ts` |
 | 唯一新的对模型可见的 Delorun 工具 | `dsh-v0.2.2-rc.3`：没有 `preset_inspect` 工具。在本树中，`preset_inspect` 是 Delorun 的注册中唯一带有新名称的工具；`plugin_manager` 的注册是被编辑而不是被添加 | 已构建：`preset_inspect` | Manual check：`git diff --unified=0 dsh-v0.2.2-rc.3 -- packages apps scripts delorun` 在 `packages/preset/agent-preset-registry/src/tools.ts` 中添加了一个带新名称 `preset_inspect` 的工具注册。 |
+| 工具失败守卫 | `dsh-v0.2.2-rc.3`：一个轮次中失败的工具调用没有上限；`repeat-tool-reminder` 只就完全相同的重复调用提醒模型。本树：[`@delorun/plugin-tool-failure-guard`](../../packages/plugin-tool-failure-guard/README.zh.md) 在连续 3 次调用失败后提醒模型，在连续 6 次或最近 12 次中有 8 次失败时停止轮次；`@delorun/bundle-local` 和 `@delorun/bundle-headless` 将它挂载为开启；上游的 profile 不挂载它 | 已构建：`tool_failure_guard` | `delorun/packages/plugin-tool-failure-guard/tests/guard.spec.ts`、`snapshots/session/delorun-tool-failure-guard` 和 `parity-switches` |
 
 ### 数据共享
 
