@@ -25,12 +25,6 @@ export const STRIP_COPY = {
   /** Shown in place of the versions before the first change. */
   versionsEmpty: 'Each change is listed here as a version.',
   /**
-   * The line under the newest versions when older ones are not shown.
-   * @param count - how many older rows there are.
-   * @returns the line.
-   */
-  earlier: (count: number): string => count === 1 ? 'and 1 earlier version' : `and ${String(count)} earlier versions`,
-  /**
    * The way back, named for the earlier look.
    * @param name - the earlier look's name.
    * @returns the control's text.

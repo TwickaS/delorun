@@ -189,7 +189,7 @@ describe('the strip on the page', () => {
     expect(document.documentElement.dataset['look']).toBe('ocean')
     expect(host.querySelector('pre')?.textContent).toContain('palette: ocean')
     expect(status()).toBe('Ocean. The entry and a new version are listed beside the controls.')
-    press(radio(`${studio['palette.custom']}: ${studio.accent}`, 'Moss'))
+    press(radio(studio.accent, 'Moss'))
     expect(document.documentElement.dataset['accent']).toBe('moss')
     const back = [...host.querySelectorAll('button')].find(each => each.textContent === 'Back to Ocean')
     expect(back).toBeDefined()

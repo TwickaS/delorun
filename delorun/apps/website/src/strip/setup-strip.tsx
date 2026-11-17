@@ -19,9 +19,6 @@ import { differenceName, themeName } from './names.ts'
 import { centreOf, spread, type Point } from './spread.ts'
 import css from './strip.module.css'
 
-/** How many version rows the list shows; older ones are counted under them. */
-export const SHOWN_VERSIONS = 4
-
 /** How long after a pointer press a change still spreads from the pointer rather than from the focused control. */
 const POINTER_WINDOW_MS = 1000
 
@@ -38,12 +35,16 @@ export function fill(template: string, fields: Readonly<Record<string, string>>)
   return template.replaceAll(/\{(\w+)\}/g, (whole, key: string) => fields[key] ?? whole)
 }
 
-/** A theme tile's picture: the theme's page in light and in dark, each with a line of text and an accent pill. */
+/**
+ * A theme tile's picture: the theme's page in light and in dark, each with a line of text and an accent pill. Each half
+ * carries the look itself, so the looks stylesheet's `light-dark()` colours resolve in that half's own colour scheme.
+ */
 function Swatch({ look, accent }: { readonly look: LookId; readonly accent: AccentId }) {
+  const custom = look === 'custom' ? accent : undefined
   return (
-    <span className={css.swatch} data-look={look} data-accent={look === 'custom' ? accent : undefined}>
-      <span className={css.half} data-half="light"><span className={css.line} /><span className={css.pill} /></span>
-      <span className={css.half} data-half="dark"><span className={css.line} /><span className={css.pill} /></span>
+    <span className={css.swatch}>
+      <span className={css.half} data-half="light" data-look={look} data-accent={custom}><span className={css.line} /><span className={css.pill} /></span>
+      <span className={css.half} data-half="dark" data-look={look} data-accent={custom}><span className={css.line} /><span className={css.pill} /></span>
     </span>
   )
 }
@@ -55,30 +56,26 @@ function Entry({ entry, changes }: { readonly entry: EntryConfig | undefined; re
   return <CodeBlock key={changes} className={css.seat} code={entryYaml(entry)} caption={STRIP_COPY.entryFile} copyLabel={STRIP_COPY.copyEntry} copiedLabel={STRIP_COPY.copied} failedLabel={STRIP_COPY.copyFailed} />
 }
 
-/** The setup versions, newest first, as the studio's Setup versions section titles and groups them. */
+/** The setup versions, newest first, as the studio's Setup versions section titles and groups them; every change here has the same title, so they collapse into one row with a count. */
 function Versions({ state }: { readonly state: StripState }) {
   const rows = versionRows(state.versions)
   if (rows.length === 0) return <p className={css.empty}>{STRIP_COPY.versionsEmpty}</p>
   const time = new Intl.DateTimeFormat(versionsCopy['time.locale'], { timeStyle: 'short' })
   const title = fill(versionsCopy['version.settings'], { name: editedName() })
-  const hidden = rows.length - SHOWN_VERSIONS
   return (
-    <>
-      <ol className={css.versions}>
-        {rows.slice(0, SHOWN_VERSIONS).map(({ version, count }) => (
-          <li key={version.id} className={`${css.version} ${css.seat} ${css.later}`} data-current={version.current}>
-            <span className={css.versionTitle}>
-              {title}
-              {version.current ? <span className={css.current}>{versionsCopy.current}</span> : null}
-            </span>
-            <span className={css.versionLine}>
-              {time.format(version.at)} · {versionsCopy['origin.other']}{count > 1 ? ` · ${fill(versionsCopy['version.repeated'], { count: String(count) })}` : ''}
-            </span>
-          </li>
-        ))}
-      </ol>
-      {hidden > 0 ? <p className={css.earlier}>{STRIP_COPY.earlier(hidden)}</p> : null}
-    </>
+    <ol className={css.versions}>
+      {rows.map(({ version, count }) => (
+        <li key={version.id} className={`${css.version} ${css.seat} ${css.later}`} data-current={version.current}>
+          <span className={css.versionTitle}>
+            {title}
+            {version.current ? <span className={css.current}>{versionsCopy.current}</span> : null}
+          </span>
+          <span className={css.versionLine}>
+            {time.format(version.at)} · {versionsCopy['origin.other']}{count > 1 ? ` · ${fill(versionsCopy['version.repeated'], { count: String(count) })}` : ''}
+          </span>
+        </li>
+      ))}
+    </ol>
   )
 }
 
@@ -94,7 +91,7 @@ function StripBody({ look, state, onLook, announcement }: {
   readonly look: Look
   readonly state: StripState
   readonly onLook?: ((next: Look, from: Point | undefined) => void) | undefined
-  readonly announcement?: string | undefined
+  readonly announcement?: { readonly text: string; readonly count: number } | undefined
 }) {
   const themesId = useId()
   const pointer = useRef<{ readonly at: number; readonly point: Point } | undefined>(undefined)
@@ -121,20 +118,27 @@ function StripBody({ look, state, onLook, announcement }: {
             onChange={(id) => { press(id === 'custom' ? { ...look, look: id, accent: custom.accent, contrast: custom.contrast } : { ...look, look: id, contrast: 'default' }) }}
             tiles={KNOWN_LOOKS.map(id => ({ value: id, label: studio[`palette.${id}`], preview: <Swatch look={id} accent={custom.accent} /> }))} />
         </div>
-        <ChoiceGroup<SchemeChoice> label={studio.mode} value={look.scheme ?? 'system'} disabled={false} fill
-          options={(['system', 'light', 'dark'] as const).map(value => ({ value, label: studio[`mode.${value}`] }))}
-          onChange={(value) => { press({ ...look, scheme: value === 'system' ? undefined : value }) }} />
-        <div className={css.custom}>
-          <ChipGroup<AccentId | 'none'> label={`${studio['palette.custom']}: ${studio.accent}`} value={look.look === 'custom' ? look.accent : 'none'}
+        <div className={css.group}>
+          <span className={css.label} aria-hidden="true">{studio.mode}</span>
+          <ChoiceGroup<SchemeChoice> label={studio.mode} value={look.scheme ?? 'system'} disabled={false} fill
+            options={(['system', 'light', 'dark'] as const).map(value => ({ value, label: studio[`mode.${value}`] }))}
+            onChange={(value) => { press({ ...look, scheme: value === 'system' ? undefined : value }) }} />
+        </div>
+        <div className={css.group}>
+          <h3 className={css.label}>{studio['palette.custom']}</h3>
+          <ChipGroup<AccentId | 'none'> label={studio.accent} variant="segmented" hideLabel value={look.look === 'custom' ? look.accent : 'none'}
             onChange={(accent) => { if (accent !== 'none') toCustom({ accent }) }}
             options={KNOWN_ACCENTS.map(accent => ({ value: accent, label: studio[`accent.${accent}`], mark: <span className={css.dot} data-look="custom" data-accent={accent} /> }))} />
-          <ChoiceGroup<ContrastId> label={`${studio['palette.custom']}: ${studio.contrast}`} value={look.look === 'custom' ? look.contrast : 'default'} disabled={false} fill
-            options={KNOWN_CONTRASTS.map(stop => ({ value: stop, label: `${String(STOP_CONTRAST[stop])}%` }))}
+          <ChoiceGroup<ContrastId> label={studio.contrast} value={look.look === 'custom' ? look.contrast : 'default'} disabled={false} fill
+            options={KNOWN_CONTRASTS.map(stop => ({ value: stop, label: `${studio.contrast} ${String(STOP_CONTRAST[stop])}%` }))}
             onChange={(contrast) => { toCustom({ contrast }) }} />
         </div>
-        <ChoiceGroup label={studio.density} value={look.density} disabled={false} fill
-          options={KNOWN_DENSITIES.map(density => ({ value: density, label: studio[`density.${density}`] }))}
-          onChange={(density) => { press({ ...look, density }) }} />
+        <div className={css.group}>
+          <span className={css.label} aria-hidden="true">{studio.density}</span>
+          <ChoiceGroup label={studio.density} value={look.density} disabled={false} fill
+            options={KNOWN_DENSITIES.map(density => ({ value: density, label: studio[`density.${density}`] }))}
+            onChange={(density) => { press({ ...look, density }) }} />
+        </div>
       </div>
       <div className={css.record}>
         <section className={css.group} aria-label={STRIP_COPY.entry}>
@@ -142,18 +146,21 @@ function StripBody({ look, state, onLook, announcement }: {
           <div className={css.entry}><Entry entry={state.entry} changes={state.versions.length} /></div>
         </section>
         <section className={css.group} aria-label={versionsCopy.title}>
-          <h3 className={css.label}>{versionsCopy.title}</h3>
+          <div className={css.head}>
+            <h3 className={css.label}>{versionsCopy.title}</h3>
+            {earlier === undefined || still
+              ? null
+              : <Button variant="secondary" size="sm" onClick={() => { press({ ...earlier, scheme: look.scheme }) }}>{STRIP_COPY.back(differenceName(earlier, look))}</Button>}
+          </div>
           <div className={css.list}><Versions state={state} /></div>
         </section>
-        <div className={css.back}>
-          {earlier === undefined || still
-            ? null
-            : <Button variant="secondary" size="sm" onClick={() => { press({ ...earlier, scheme: look.scheme }) }}>{STRIP_COPY.back(differenceName(earlier, look))}</Button>}
+        <div className={css.notes}>
           <p className={css.note}>{STRIP_COPY.backStudio}</p>
           <p className={css.note}>{STRIP_COPY.backCovers}</p>
         </div>
       </div>
-      {still ? null : <p className={css.announce} role="status" aria-live="polite" data-strip-announce="">{announcement}</p>}
+      {/* A new key per change replaces the text, so the same sentence twice is announced twice. */}
+      {still || announcement === undefined ? null : <p className={css.announce} role="status" aria-live="polite" data-strip-announce=""><span key={announcement.count}>{announcement.text}</span></p>}
     </div>
   )
 }
@@ -172,13 +179,13 @@ const STILL_STATE: StripState = record(START, STILL_LOOK, Date.UTC(2026, 0, 1, 9
 export function SetupStrip() {
   const look = useLook()
   const [state, setState] = useState<StripState>(START)
-  const [announcement, setAnnouncement] = useState('')
+  const [announcement, setAnnouncement] = useState({ text: '', count: 0 })
   // Every look the page shows, from the strip, the header or a link, is recorded as the studio would record it.
   useEffect(() => { setState(current => record(current, look, Date.now())) }, [look])
   const onLook = (next: Look, from: Point | undefined): void => {
     const before = getLook()
     spread(from, () => { setLook(next) })
-    setAnnouncement(STRIP_COPY.announce(differenceName(next, before)))
+    setAnnouncement(current => ({ text: STRIP_COPY.announce(differenceName(next, before)), count: current.count + 1 }))
   }
   return (
     <div className={css.strip} data-setup-strip="">
@@ -186,8 +193,8 @@ export function SetupStrip() {
       <noscript>
         <style>{`.${css.live}{visibility:hidden}`}</style>
         <div className={css.still} data-look={STILL_LOOK.look}>
-          <StripBody look={STILL_LOOK} state={STILL_STATE} />
           <p className={css.stillCaption}>{STRIP_COPY.still}</p>
+          <StripBody look={STILL_LOOK} state={STILL_STATE} />
         </div>
       </noscript>
     </div>
