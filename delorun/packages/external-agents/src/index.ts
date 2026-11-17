@@ -14,6 +14,7 @@ import type {} from '@deepseek-ai/dsh-subprocess'
 import z from '@deepseek-ai/schemastery'
 import { resolveDelorunHome } from '@delorun/home'
 import type { AccountRefreshReason } from './contract.ts'
+import { wireAccounts } from './accounts/index.ts'
 import { ExternalAgentsService } from './gate.ts'
 import { programRecordPath } from './reap.ts'
 
@@ -48,11 +49,14 @@ export const Config: z<Config> = z.object({
 })
 
 /**
- * Mount the gate once the subprocess service is present.
+ * Mount the gate once the subprocess service is present, and the account and limits store (`ctx.agentAccounts`) with
+ * its routes once the gate and the connection are.
  * @param ctx - the scope that loads the plugin.
  * @param config - the row's validated configuration.
+ * @throws {HomeLayoutError} when the Delorun home cannot be resolved, so neither the gate nor the store mounts.
  */
-export function apply(ctx: Context, config: Config): void {
+export async function apply(ctx: Context, config: Config): Promise<void> {
+  const home = (await resolveDelorunHome(process.env)).path
   ctx.inject(['subprocess'], (scope) => {
     scope.plugin(ExternalAgentsService, {
       maxLivePrograms: config.maxLivePrograms,
@@ -61,8 +65,18 @@ export function apply(ctx: Context, config: Config): void {
       env: process.env,
       now: Date.now,
       probeFolder: () => mkdtemp(join(tmpdir(), 'delorun-agent-check-')),
-      programRecords: async () => programRecordPath((await resolveDelorunHome(process.env)).path),
+      programRecords: () => Promise.resolve(programRecordPath(home)),
       processTable: undefined,
     })
+  })
+  ctx.inject(['externalAgents', 'connection'], (scope) => {
+    const gate = scope.externalAgents
+    const accounts = wireAccounts(scope, gate, {
+      home,
+      config: () => config,
+      installed: provider => gate.hasDriver(provider),
+      report: message => scope.logger.warn(message),
+    })
+    scope.effect(() => scope.provide('agentAccounts', accounts), 'external agents: agentAccounts')
   })
 }

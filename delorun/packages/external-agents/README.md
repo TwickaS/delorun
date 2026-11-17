@@ -14,6 +14,7 @@ English | [中文](README.zh.md)
 ## Contents
 
 - [Contract](#contract)
+- [Accounts and limits](#accounts-and-limits)
 - [Configuration](#configuration)
 - [Known limitations](#known-limitations)
 - [Tests](#tests)
@@ -28,10 +29,14 @@ English | [中文](README.zh.md)
 - **Time limit.** With the consent on, each seat turn has the consent's run time limit: at the limit the gate interrupts the turn, waits `graceMs`, ends the program if the turn still runs, and the turn ends `failed` with the failure `time-limit`. With the consent off a seat turn has no time limit, as a one-shot run has none.
 - **Processes.** Every process a driver starts goes through the gate's spawn, which runs it through `ctx.subprocess` in the run folder with the program's abort signal and `graceMs`, and removes `NODE_OPTIONS` and every `DELORUN_*` variable from its environment on top of the subprocess owner's own scrub. A spawn after the program ended throws. Ending a program closes the driver's session, aborts the signal, terminates each process and waits up to twice `graceMs` for it to exit.
 - **Limits checks.** `probe(provider, signal)` takes no folder, no child and no input: the gate makes an empty folder under the system's temporary directory, admits the check under the same cap, runs the driver's probe and removes the folder. The CLI never starts a check.
-- **Limit refusal.** With `limitRefusal` on and an accounts store mounted, a recorded limit whose reset time is in the future refuses a seat start, and `limitRefusal(provider)` gives the consent the sentence that refuses a one-shot run ([`limitRefusal`](src/copy.ts)). A limit whose reset time has passed never refuses.
+- **Limit refusal.** With `limitRefusal` on, a recorded limit whose reset time is in the future refuses a seat start, and `limitRefusal(provider)` gives the consent the sentence that refuses a one-shot run ([`limitRefusal`](src/copy.ts)). A limit whose reset time has passed never refuses.
 - **Seat registry.** `seat(child)` answers whether a session is a seat the gate started, with its root and agent. A seat is recognised by this registry, never by an approval policy value.
 - **Host death.** While a program runs, the gate keeps the identity of each of its processes that leads a process group in `secrets/external-agents/programs.json` under the Delorun home: on Linux the process id, the kernel start time, the boot id, the executable path and the subprocess owner's systemd scope; on macOS the process id, the start time and the path. At the next start it stops each recorded program whose identity still matches in full, stopping the scope when there is one and otherwise the group, SIGTERM then SIGKILL after `graceMs`, and drops every record; a process id that now names another process is never signalled.
 - **Stopping.** Disposing the plugin, an `agent/disposed` event for the seat child and a driver leaving each end the programs concerned.
+
+## Accounts and limits
+
+`ctx.agentAccounts` keeps each agent's sign-in, plan and plan-limit windows in `secrets/external-agents/accounts.json` (mode 0600). It holds only `signedIn`, `plan`, each window's `kind`, `usedPercent`, `resetsAt`, `status`, `seenAt` and `source`, the offered models, and when a check last answered, failed or was asked for; every observation is rebuilt field by field, so an email, organisation, account id or token in a program's reply never reaches the file. A file that cannot be read reads as no figures, and nothing refuses because of it. Runs report figures through the driver's `onLimits`. A limits check is the gate's `probe` and runs only on an explicit act about that agent that `probeTriggers` lists: its pack was just added (no stored entry), a sign-in finished (`delorun agents login`, or the mark it leaves for the next start), or "Check now"; a Host start alone checks nothing, and `probeMinIntervalMinutes` is a floor between checks, not a timer. A window whose reset time has passed never refuses a start. `GET /api/delorunExternalAgents.accounts` answers any approved device and never starts a check; `POST /api/delorunExternalAgents.refresh` needs the computer or an unlocked device. `delorun agents status` reads the same figures through the update channel or the file. The store mounts once the gate and the connection are present.
 
 ## Configuration
 
@@ -40,6 +45,7 @@ English | [中文](README.zh.md)
 | `maxLivePrograms` | 4 | How many programs may run at once in this home, seats and limits checks together; at least 1. |
 | `graceMs` | 3000 | How long a program has to exit after it is asked to stop, in milliseconds, before it is killed; at least 100. |
 | `probeMinIntervalMinutes` | 30 | The shortest time between two limits checks of one agent, in whole minutes; at least 1. |
+| `probeTriggers` | `pack-added`, `signed-in`, `check-now` | The explicit acts that run a limits check with no card; an act not listed starts no check. |
 | `limitRefusal` | false | The C16 switch `external_agent_limit_refusal`; `@delorun/bundle-local` turns it on. |
 
 `@delorun/bundle-local` inserts the row `delorun-external-agents`. While the consent is on, its `plugin_manager` guard refuses a model's install, enable or configure of this package and the agent packs by name.

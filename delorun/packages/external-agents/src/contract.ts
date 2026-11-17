@@ -212,8 +212,9 @@ export interface ProgramSession {
 /** One limit window as a program reports it. */
 export interface LimitWindow {
   /**
-   * The window, normalised by the driver from the program's own name: `five-hour`, `seven-day`, `seven-day-opus`,
-   * `seven-day-sonnet`, `thirty-day` or `<n>-minute`; another program name passes through unchanged.
+   * The window, as the drivers name it: Claude Code's `five_hour`, `seven_day`, `seven_day_opus`, `seven_day_sonnet`,
+   * `seven_day_overage_included`, `overage` or `unknown`; Codex's `five_hour`, `seven_day` or `window_<minutes>m`.
+   * `windowTitle` in `./accounts/wire.ts` names each.
    */
   readonly kind: string
   /** Share of the window used, 0 to 100, when the program says. */
@@ -377,6 +378,12 @@ export interface ExternalAgentsGate {
    * @returns the disposer.
    */
   onDriverRegistered(listener: (provider: ExternalAgentName) => void): () => void
+  /**
+   * Whether an agent's driver is registered, that is whether its pack is added and running.
+   * @param provider - the agent.
+   * @returns true while a driver is registered.
+   */
+  hasDriver(provider: ExternalAgentName): boolean
   /**
    * The seat the gate holds a program or a lease for. A seat is recognised by this registry, never by an approval
    * policy value.

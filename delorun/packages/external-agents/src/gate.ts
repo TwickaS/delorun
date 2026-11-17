@@ -187,6 +187,10 @@ export class ExternalAgentsService extends Service implements ExternalAgentsGate
     })
   }
 
+  hasDriver(provider: ExternalAgentName): boolean {
+    return this.drivers.has(provider)
+  }
+
   onDriverRegistered(listener: (provider: ExternalAgentName) => void): () => void {
     this.registered.add(listener)
     return () => { this.registered.delete(listener) }

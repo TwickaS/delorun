@@ -549,14 +549,14 @@ describe('the limits check (review D8)', () => {
 describe('a reached limit (T12)', () => {
   const now = Date.UTC(2026, 10, 17, 12, 5)
   const reached = (resetsAt: number): AccountRecord => ({
-    provider: 'claude-code', signedIn: 'yes', installed: true, windows: [{ kind: 'five-hour', status: 'reached', resetsAt, seenAt: now - 1, source: 'run' }],
+    provider: 'claude-code', signedIn: 'yes', installed: true, windows: [{ kind: 'five_hour', status: 'reached', resetsAt, seenAt: now - 1, source: 'run' }],
   })
 
   it('refuses a seat start with the window and reset time while the switch is on', async () => {
     const w = await world({ limitRefusal: true, accounts: reached(now + 7_500_000), now })
-    await expect(refusal(w.gate.start(start(w)))).resolves.toEqual({ category: 'limit', window: 'five-hour', resetsAt: now + 7_500_000 })
+    await expect(refusal(w.gate.start(start(w)))).resolves.toEqual({ category: 'limit', window: 'five_hour', resetsAt: now + 7_500_000 })
     expect(w.driver.opens).toEqual([])
-    await expect(w.gate.limitRefusal('claude-code')).resolves.toBe(limitRefusal({ provider: 'claude-code', window: 'five-hour', resetsAt: now + 7_500_000, now }))
+    await expect(w.gate.limitRefusal('claude-code')).resolves.toBe(limitRefusal({ provider: 'claude-code', window: 'five_hour', resetsAt: now + 7_500_000, now }))
   })
 
   it('never refuses on stale figures whose reset time has passed', async () => {
@@ -574,16 +574,16 @@ describe('a reached limit (T12)', () => {
   })
 
   it('words the refusal with the plan, the window, the local reset time and the time left', () => {
-    expect(limitRefusal({ provider: 'claude-code', window: 'five-hour', resetsAt: now + 7_500_000, now, timeZone: 'UTC' })).toBe(
+    expect(limitRefusal({ provider: 'claude-code', window: 'five_hour', resetsAt: now + 7_500_000, now, timeZone: 'UTC' })).toBe(
       'Claude Code was not started: your Claude plan\'s 5-hour limit is reached until 14:10 (in 2 h 5 min). '
       + 'Do not hand work to Claude Code before then; do the task yourself or tell the person.',
     )
-    expect(limitRefusal({ provider: 'codex', window: 'seven-day', resetsAt: now + 3 * 86_400_000, now, timeZone: 'UTC' })).toBe(
+    expect(limitRefusal({ provider: 'codex', window: 'seven_day', resetsAt: now + 3 * 86_400_000, now, timeZone: 'UTC' })).toBe(
       'Codex was not started: your ChatGPT plan\'s weekly limit is reached until Friday 20 November at 12:05 (in 72 h). '
       + 'Do not hand work to Codex before then; do the task yourself or tell the person.',
     )
-    const named = (window: string): string => limitRefusal({ provider: 'codex', window, resetsAt: now + 60_000, now, timeZone: 'UTC' }).split(' limit is')[0]!.split('plan\'s ')[1]!
-    expect(['seven-day-opus', 'thirty-day', '90-minute', 'primary'].map(named)).toEqual(['weekly Opus', '30-day', '90-minute', '"primary"'])
+    const named = (window: string): string => limitRefusal({ provider: 'codex', window, resetsAt: now + 60_000, now, timeZone: 'UTC' }).split(' is reached')[0]!.split('plan\'s ')[1]!
+    expect(['seven_day_opus', 'window_43200m', 'window_90m', 'overage'].map(named)).toEqual(['weekly Opus limit', '30-day limit', '90-minute limit', 'extra usage'])
   })
 })
 
