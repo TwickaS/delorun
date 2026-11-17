@@ -72,6 +72,7 @@ import { dangerousModeLine } from './setup/dangerous.ts'
 import { openSetupLog, upstreamLinking } from './setup/index.ts'
 import { addStudioBundle } from './studio-bundle.ts'
 import { preStartSteps, runPreStartSteps, type PreStartStep } from './pre-start.ts'
+import { runningReleasePacks, type ReleasePacks } from './release-packs.ts'
 import { fetchPacksFromRelease } from './profile-packs.ts'
 import { addHeadlessBundle, headlessBundleMigration } from './headless-bundle.ts'
 import { studioBundleMigration } from './profile-migrations.ts'
@@ -185,6 +186,8 @@ export interface StartDependencies {
   readonly opener: StudioOpener
   /** The composition's approved plugin content step ([compose](./compose.ts)); {@link changesApprovedContent} in a real start. */
   readonly approvedPluginContent: ApprovedPluginContent
+  /** The running release's optional plugin packs, which the composition holds to no Delorun row rule ([release packs](./release-packs.ts)); {@link runningReleasePacks} in a real start. */
+  readonly releasePacks: ReleasePacks
   /** The ordered steps before any Host boots ([pre-start](./pre-start.ts)); {@link realPreStartSteps} in a real start. */
   readonly preStartSteps: readonly PreStartStep[]
   /** The second start after a start left a change out ([retry](./changes/retry.ts)); {@link relaunchForeground} in a real start. */
@@ -500,6 +503,7 @@ export async function upstreamAddHeadlessBundle(home: string, output: CommandOut
 export function upstreamDependencies(): StartDependencies {
   return {
     approvedPluginContent: changesApprovedContent,
+    releasePacks: runningReleasePacks,
     preStartSteps: realPreStartSteps(upstreamAddStudioBundle, upstreamAddHeadlessBundle),
     async prepareProfile(profile) {
       // Loaded after the launch variables are set, so upstream resolves the Delorun home.
@@ -733,6 +737,7 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
   const composed = await composeDelorunProfile({ home: request.home, profile: request.profile, kind: 'cli', output: request.output, env: request.env, ...request.patchFiles === undefined ? {} : { patchFiles: request.patchFiles } }, {
     prepareProfile: dependencies.prepareProfile,
     approvedPluginContent: dependencies.approvedPluginContent,
+    releasePacks: dependencies.releasePacks,
   }).catch(async (error: unknown) => {
     await removeSandboxOverlay(request.home, request.profile)
     throw error
@@ -764,7 +769,7 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
   }
   await recordChangesBoot({ home: request.home, profile: request.profile, logger }, booted.rows())
   try {
-    const inactive = inactiveDelorunRows(booted.rows(), delorunRowIds(composed.resolvedProfile.profile))
+    const inactive = inactiveDelorunRows(booted.rows(), delorunRowIds(composed.resolvedProfile.profile, composed.packBundles))
     if (inactive.length > 0) throw inactiveRowsRefusal(request.profile, inactive)
     assertDelorunInvariants(composed, booted)
     await retry.checkRows(booted.rows())

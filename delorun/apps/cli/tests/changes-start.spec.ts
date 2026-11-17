@@ -14,6 +14,7 @@ import { changesApprovedContent, isCarriedPackage, startChanges } from '../src/c
 import { carriedPackageDirectory } from '../src/delorun-bundles.ts'
 import { prepareHome, type CommandContext } from '../src/command.ts'
 import { NO_APPROVED_CONTENT } from '../src/compose.ts'
+import { NO_RELEASE_PACKS } from '../src/release-packs.ts'
 import { CliError, EXIT } from '../src/exit.ts'
 import type { HeadlessDependencies } from '../src/headless.ts'
 import { realPreStartSteps, startForeground, upstreamDependencies, type StartDependencies } from '../src/start.ts'
@@ -92,6 +93,7 @@ function plugSpec(profile: string): string | undefined {
 function stoppingAtPrepare(seen: (string | undefined)[], overrides: Partial<StartDependencies> = {}): StartDependencies {
   return {
     approvedPluginContent: NO_APPROVED_CONTENT,
+    releasePacks: NO_RELEASE_PACKS,
     preStartSteps: realPreStartSteps(() => Promise.resolve(false), () => Promise.resolve(false)),
     fatalRelease: () => () => undefined,
     prepareProfile: () => {
@@ -327,6 +329,7 @@ describe('delorun headless', () => {
       },
       missingModelKey: () => Promise.resolve(undefined),
       approvedPluginContent: changesApprovedContent,
+      releasePacks: NO_RELEASE_PACKS,
       preStartSteps: start.preStartSteps,
       runProfile: start.runProfile,
       loadEnvironment: start.loadEnvironment,

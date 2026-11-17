@@ -40,6 +40,11 @@
  *   the consent services, `pluginAudit` and `delorunPluginTrust`, and `delorunTurnGate`, through which an update's or a stop's
  *   wait refuses new turns.
  *
+ * A Delorun bundle here is a bundle in the `@delorun/` scope that is not one of the running release's optional plugin packs
+ * ([release packs](./release-packs.ts)). A pack bundle loads from its Changes review copy, so the rows it inserts, nested
+ * ones included, are not required rows and it declares none; a pack that inserts or changes a required row is held to the
+ * invariants like any other layer.
+ *
  * A violation stops the start with one refusal that names each row, the files that set the value, and the remedy.
  *
  * @module @delorun/cli/compose
@@ -55,7 +60,7 @@ import { CLI_PROFILE } from '@delorun/contract-home-layout'
 import type { ResolvedProfileRuntime } from '@deepseek-ai/dsh/profile-boot'
 import type { PromptsAnswer } from '@delorun/contract-setup-answers'
 import type { CommandOutput } from './command.ts'
-import { HEADLESS_BUNDLE } from '@delorun/bundle-local/profile'
+import { DELORUN_PROFILE_BUNDLES, HEADLESS_BUNDLE } from '@delorun/bundle-local/profile'
 import { delorunRowIds, isDelorunPackage, OPT_IN_ROWS, refuseSkippedDelorunBundles, type BootedRow } from './delorun-bundles.ts'
 import { CliError, EXIT } from './exit.ts'
 import { composedRow, isRecord, patchLayers, rowInserts, rowPatches, sourcesSetting, type PatchLayer } from './patch-layers.ts'
@@ -64,6 +69,7 @@ import { INSTALL_CHECK_ROW } from './plugin-install-check.ts'
 import { safeModeNotice, safeModeStart, type SafeModeStart } from './safe-mode.ts'
 import { missingEscapeSocketDirectories, SANDBOX_ROW, sandboxProtection, startOnlySockets, writeSandboxOverlay, type SandboxProtection } from './sandbox-protection.ts'
 import { migrationsPath } from './profile-migrations.ts'
+import type { ReleasePacks } from './release-packs.ts'
 import { promptRows, readPromptsAnswer } from './setup/prompt-switches.ts'
 
 /**
@@ -125,6 +131,8 @@ export interface ComposeDependencies {
   readonly prepareProfile: (profile: string) => Promise<ResolvedProfileRuntime>
   /** The approved plugin content step; Changes' `changesApprovedContent` in a real start ([changes](./changes/start.ts)). */
   readonly approvedPluginContent: ApprovedPluginContent
+  /** The running release's optional plugin packs; `runningReleasePacks` in a real start ([release packs](./release-packs.ts)). */
+  readonly releasePacks: ReleasePacks
 }
 
 /** One row the Host must run as its declaring bundle composed it. */
@@ -159,6 +167,8 @@ export interface ComposedStart {
   readonly prompts: PromptsAnswer | undefined
   /** Where each required Delorun row's package resolves, real path, for the rows whose package resolves. */
   readonly rowPackages: readonly RowPackage[]
+  /** The running release's optional plugin pack bundles, without the runtime's own bundles; their rows are not required Delorun rows. */
+  readonly packBundles: ReadonlySet<string>
   /** The directory this Delorun's own packages lie in ({@link delorunPackagesRoot}). */
   readonly packagesRoot: string
   /** Whether the npm mirror is on ({@link npmMirrorOf}); the start passes it to the Host as `DELORUN_NPM_MIRROR`. */
@@ -201,6 +211,9 @@ export const HEADLESS_ROW_VALUES: Readonly<Record<string, Readonly<Record<string
   ...GUARD_ROWS,
 }
 
+/** The bundles the runtime ships and its profiles require, which are never packs, whatever a packs file lists. */
+const RUNTIME_BUNDLES: ReadonlySet<string> = new Set([...DELORUN_PROFILE_BUNDLES, HEADLESS_BUNDLE])
+
 /** The service an update's or a stop's wait attaches its gate to. */
 export const TURN_GATE_SERVICE = 'delorunTurnGate'
 
@@ -242,7 +255,8 @@ export async function composeDelorunProfile(request: ComposeRequest, dependencie
     throw new CliError(EXIT.failed, `delorun: the profile ${request.profile} could not be loaded: ${error instanceof Error ? error.message : String(error)}`)
   }
   if (request.kind === 'headless') refuseHeadlessWithoutBundle(request.home, resolvedProfile)
-  const delorunRows = delorunRowIds(resolvedProfile.profile)
+  const packBundles = new Set([...await dependencies.releasePacks(request)].filter(name => !RUNTIME_BUNDLES.has(name)))
+  const delorunRows = delorunRowIds(resolvedProfile.profile, packBundles)
   // Safe mode boots the same profile with its third-party layers and rows left out, and edits none of its files.
   const safe = safeModeStart({ home: request.home, profile: request.profile, resolvedProfile })
   const overlays = request.patchFiles ?? []
@@ -277,10 +291,11 @@ export async function composeDelorunProfile(request: ComposeRequest, dependencie
     protection,
     startOnlySockets: startOnly,
     layers,
-    required: requiredIds.map(id => ({ id, name: declaredName(layers, id) })),
+    required: requiredIds.map(id => ({ id, name: declaredName(layers, id, packBundles) })),
     values,
     prompts,
     rowPackages,
+    packBundles,
     packagesRoot: delorunPackagesRoot(),
     npmMirror: npmMirrorOf(layers),
   }
@@ -400,24 +415,27 @@ export function npmMirrorOf(layers: readonly PatchLayer[]): boolean {
  * Whether a layer is the bundle that declares a required row.
  * @param layer - the layer.
  * @param id - the row's id.
- * @returns true for upstream's base bundle and the `sandbox` row, and for a Delorun bundle and any other required row.
+ * @param packBundles - the running release's pack bundles, which declare no required row.
+ * @returns true for upstream's base bundle and the `sandbox` row, and for a Delorun bundle that is not a pack and any
+ *   other required row.
  */
-function declares(layer: PatchLayer, id: string): boolean {
+function declares(layer: PatchLayer, id: string, packBundles: ReadonlySet<string>): boolean {
   if (layer.packageName === undefined) return false
-  return id === SANDBOX_ROW ? layer.packageName === SANDBOX_BUNDLE : isDelorunPackage(layer.packageName)
+  return id === SANDBOX_ROW ? layer.packageName === SANDBOX_BUNDLE : isDelorunPackage(layer.packageName) && !packBundles.has(layer.packageName)
 }
 
 /**
  * The plugin the declaring bundle names for a required row.
  * @param layers - the layers.
  * @param id - the row's id.
+ * @param packBundles - the running release's pack bundles.
  * @returns the name of the first insert of the row, when the declaring bundle made it; otherwise `undefined`.
  */
-function declaredName(layers: readonly PatchLayer[], id: string): string | undefined {
+function declaredName(layers: readonly PatchLayer[], id: string, packBundles: ReadonlySet<string>): string | undefined {
   for (const layer of layers) {
     const insert = rowInserts(layer.patches, id)[0]
     if (insert === undefined) continue
-    return declares(layer, id) && typeof insert.name === 'string' ? insert.name : undefined
+    return declares(layer, id, packBundles) && typeof insert.name === 'string' ? insert.name : undefined
   }
   return undefined
 }
@@ -434,7 +452,7 @@ function insertViolations(composed: ComposedStart, row: RequiredRow): Violation[
   const first = inserts[0]
   if (first === undefined) return []
   const violations: Violation[] = []
-  if (!declares(first.layer, row.id)) {
+  if (!declares(first.layer, row.id, composed.packBundles)) {
     violations.push({ subject: row.id, problem: `is inserted with the plugin ${JSON.stringify(first.entry.name)} by a layer that does not declare it`, sources: [first.layer.source] })
   }
   const again = inserts.slice(1)
@@ -492,7 +510,7 @@ function isSecurityRow(composed: ComposedStart, id: string): boolean {
  */
 function declaresNeeds(composed: ComposedStart, id: string): boolean {
   if (isSecurityRow(composed, id)) return false
-  const layer = composed.layers.find(each => each.packageDir !== undefined && declares(each, id) && rowInserts(each.patches, id).length > 0)
+  const layer = composed.layers.find(each => each.packageDir !== undefined && declares(each, id, composed.packBundles) && rowInserts(each.patches, id).length > 0)
   if (layer?.packageDir === undefined) return false
   let manifest: unknown
   try {

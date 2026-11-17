@@ -15,6 +15,7 @@ import { isCarriedPackage } from '../src/changes/start.ts'
 import { CHANGES_RETRY_ENV, relaunchForeground, SECOND_FAILURE_LINE } from '../src/changes/retry.ts'
 import type { CommandContext } from '../src/command.ts'
 import { NO_APPROVED_CONTENT } from '../src/compose.ts'
+import { NO_RELEASE_PACKS } from '../src/release-packs.ts'
 import type { BootedRow } from '../src/delorun-bundles.ts'
 import { CliError, EXIT } from '../src/exit.ts'
 import { main } from '../src/main.ts'
@@ -127,6 +128,7 @@ function breakingDependencies(plugins: readonly string[], fails: (seen: Record<s
   const runs: Runs = { boots: [], relaunches: [] }
   const dependencies: StartDependencies = {
     approvedPluginContent: NO_APPROVED_CONTENT,
+    releasePacks: NO_RELEASE_PACKS,
     preStartSteps: realPreStartSteps(() => Promise.resolve(false), () => Promise.resolve(false)),
     fatalRelease: () => () => undefined,
     prepareProfile: upstreamDependencies().prepareProfile,

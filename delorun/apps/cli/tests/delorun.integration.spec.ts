@@ -20,6 +20,7 @@ import { CliError, EXIT } from '../src/exit.ts'
 import { main } from '../src/main.ts'
 import { cliRefusal } from '../src/refusals.ts'
 import { NO_APPROVED_CONTENT } from '../src/compose.ts'
+import { NO_RELEASE_PACKS } from '../src/release-packs.ts'
 import type { BootedRow } from '../src/delorun-bundles.ts'
 import { requestStudioLink } from '../src/open/studio.ts'
 import { delorunPackagesRoot } from '../src/package-manager.ts'
@@ -251,6 +252,7 @@ describe('starting the home process', { timeout: 60_000 }, () => {
   function recording(seen: { options: RunProfileOptions, dshHome: string | undefined }[], rows: readonly BootedRow[] = [], shutdowns: number[] = [], events: string[] = []): StartDependencies {
     return {
       approvedPluginContent: NO_APPROVED_CONTENT,
+      releasePacks: NO_RELEASE_PACKS,
       preStartSteps: realPreStartSteps(() => Promise.resolve(false), () => Promise.resolve(false)),
       prepareProfile: upstreamDependencies().prepareProfile,
       runProfile: (options) => {

@@ -410,6 +410,7 @@ export function headlessDependencies(): HeadlessDependencies {
   return {
     prepareProfile: upstream.prepareProfile,
     approvedPluginContent: upstream.approvedPluginContent,
+    releasePacks: upstream.releasePacks,
     preStartSteps: upstream.preStartSteps,
     cwd: () => process.cwd(),
     missingModelKey: async ({ home, env, output }) => {

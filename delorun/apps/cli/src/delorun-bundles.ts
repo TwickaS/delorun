@@ -191,11 +191,13 @@ export interface BootedRow {
 export const OPT_IN_ROWS: ReadonlySet<string> = new Set(['delorun-cost-meter', 'delorun-thinking-rsvp', 'browser-use-chrome-devtools-mcp', 'browser-use-stagehand-native'])
 
 /**
- * The ids of the rows that Delorun bundles insert into a profile.
+ * The ids of the rows that Delorun bundles insert into a profile. The running release's optional plugin packs are not
+ * Delorun bundles here: they load from their Changes review copy, and their rows are optional.
  * @param profile - the loaded profile.
+ * @param packBundles - the running release's pack bundles ([release packs](./release-packs.ts)), whose layers are left out.
  * @returns the ids, from every `insert` list of each Delorun layer's patches, nested lists included.
  */
-export function delorunRowIds(profile: Pick<Profile, 'layers'>): Set<string> {
+export function delorunRowIds(profile: Pick<Profile, 'layers'>, packBundles: ReadonlySet<string>): Set<string> {
   const ids = new Set<string>()
   const visit = (value: unknown): void => {
     if (Array.isArray(value)) {
@@ -208,7 +210,7 @@ export function delorunRowIds(profile: Pick<Profile, 'layers'>): Set<string> {
     for (const child of Object.values(record)) if (typeof child === 'object') visit(child)
   }
   for (const layer of profile.layers) {
-    if (!isDelorunPackage(layer.packageName)) continue
+    if (!isDelorunPackage(layer.packageName) || packBundles.has(layer.packageName)) continue
     for (const patch of layer.patches) visit((patch as { insert?: unknown }).insert)
   }
   return ids

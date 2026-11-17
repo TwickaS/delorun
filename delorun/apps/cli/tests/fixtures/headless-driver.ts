@@ -34,6 +34,7 @@ import { prepareHome } from '../../src/command.ts'
 import { CliError } from '../../src/exit.ts'
 import { runHeadless, type HeadlessDependencies } from '../../src/headless.ts'
 import { bootedRows, serviceProvider, upstreamDependencies, type BootedProfile } from '../../src/start.ts'
+import { NO_RELEASE_PACKS } from '../../src/release-packs.ts'
 import { configSchemasOf, settleSecretValues } from '../../src/secret-fields.ts'
 
 type Mode = 'probe' | 'permission-mode' | 'disable-guard' | 'replace-guard'
@@ -67,6 +68,7 @@ const dependencies: HeadlessDependencies = {
   fatalRelease: upstream.fatalRelease,
   cwd: () => process.cwd(),
   missingModelKey: () => Promise.resolve(undefined),
+  releasePacks: NO_RELEASE_PACKS,
   approvedPluginContent: () => {
     if (mode === 'permission-mode') return Promise.resolve([])
     const file = join(home.path, 'run', 'headless-driver-overlay.patch.yml')

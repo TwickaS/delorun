@@ -163,8 +163,19 @@ describe('the rows of Delorun\'s bundles', () => {
         { packageName: LOCAL_BUNDLE, patches: [{ insert: [{ id: 'delorun-privacy', name: LOCAL_BUNDLE, config: { nested: [{ id: 'inner', name: '@delorun/inner' }] } }, 'text', null] }, {}] },
         { packageName: '@deepseek-ai/dsh-base', patches: [{ insert: [{ id: 'upstream-row', name: '@deepseek-ai/dsh-x' }] }] },
       ],
-    } as never)
+    } as never, new Set())
     expect([...ids].sort()).toEqual(['delorun-privacy', 'inner'])
+  })
+
+  it('leaves out every row a pack bundle of the running release inserts, nested ones included, and keeps another @delorun/ bundle\'s', () => {
+    const ids = delorunRowIds({
+      layers: [
+        { packageName: LOCAL_BUNDLE, patches: [{ insert: [{ id: 'delorun-privacy', name: LOCAL_BUNDLE }] }] },
+        { packageName: '@delorun/bundle-webhooks', patches: [{ insert: [{ id: 'webhook-runtime', name: '@deepseek-ai/dsh-webhook' }, { id: 'github-webhook-ingress', name: 'cordis:group', config: [{ id: 'github-webhook-server', name: '@delorun/bundle-webhooks/server' }] }] }] },
+        { packageName: '@delorun/bundle-unlisted', patches: [{ insert: [{ id: 'unlisted-row', name: '@delorun/bundle-unlisted' }] }] },
+      ],
+    } as never, new Set(['@delorun/bundle-webhooks']))
+    expect([...ids].sort()).toEqual(['delorun-privacy', 'unlisted-row'])
   })
 
   it('reports the enabled Delorun rows that did not activate, with a fix for each', () => {
