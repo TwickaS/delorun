@@ -1,0 +1,265 @@
+/*
+ * The setup strip. Spacing uses the brand's spacing tokens, so the density the visitor chooses applies here. Colours come
+ * from the brand's tokens, and the theme swatches and accent dots read the looks stylesheet's `--look-*` roles on their
+ * own `data-look` element. Only opacity and transform move; under reduced motion the `--dl-motion-*` tokens are 0ms, so
+ * the seat keeps its fade and drops its travel.
+ */
+
+.strip {
+  position: relative;
+}
+
+.live {
+  display: block;
+}
+
+.body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--dl-space-6);
+  min-height: 1040px;
+  color: var(--dl-text);
+}
+
+@media (min-width: 1024px) {
+  .body {
+    grid-template-columns: minmax(0, 4fr) minmax(0, 8fr);
+    min-height: 640px;
+  }
+}
+
+.controls,
+.record {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dl-space-5);
+  min-width: 0;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dl-space-2);
+  min-width: 0;
+}
+
+.label {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--dl-text);
+}
+
+.custom {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dl-space-3);
+}
+
+/* The theme tiles: four to a row on a wide screen, one sideways row that snaps on a phone. */
+.tiles {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--dl-space-2);
+}
+
+@media (max-width: 1023px) {
+  .tiles {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: 7.5rem;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    scroll-padding-inline: var(--dl-space-1);
+    padding: var(--dl-space-1);
+    margin: calc(-1 * var(--dl-space-1));
+  }
+
+  .tiles > * {
+    scroll-snap-align: start;
+  }
+}
+
+.swatch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  height: 2.75rem;
+  overflow: hidden;
+  border: 1px solid var(--dl-border);
+  border-radius: var(--dl-radius-xs);
+}
+
+.half {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 6px;
+  color-scheme: light;
+  background: var(--look-surface);
+}
+
+.half[data-half='dark'] {
+  color-scheme: dark;
+}
+
+.line {
+  width: 75%;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--look-text);
+}
+
+.pill {
+  width: 45%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--look-accent);
+}
+
+.dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--look-accent);
+}
+
+/* The entry and the versions keep their room as they change, so nothing around them moves. */
+.entry {
+  min-height: 15.5rem;
+}
+
+.list {
+  min-height: 15rem;
+}
+
+.empty {
+  margin: 0;
+  padding: var(--dl-space-4);
+  border: 1px dashed var(--dl-border);
+  border-radius: var(--dl-radius-md);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--dl-text-muted);
+}
+
+.versions {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--dl-border);
+  border-radius: var(--dl-radius-md);
+  background: var(--dl-surface-raised);
+}
+
+.version {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dl-space-1);
+  padding: var(--dl-space-2) var(--dl-space-4);
+  border-top: 1px solid var(--dl-border);
+}
+
+.version:first-child {
+  border-top: 0;
+}
+
+.versionTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--dl-space-2);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.versionLine {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--dl-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The accent marks the current version, one of the accent's three places on the page. */
+.current {
+  padding: 0 var(--dl-space-2);
+  border-radius: var(--dl-radius-xs);
+  background: var(--dl-accent);
+  color: var(--dl-on-accent);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+.earlier {
+  margin: var(--dl-space-2) 0 0;
+  font-size: 13px;
+  color: var(--dl-text-muted);
+}
+
+.back {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--dl-space-2);
+  min-height: 9rem;
+}
+
+.note {
+  margin: 0;
+  max-width: 70ch;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--dl-text-muted);
+}
+
+/* A new entry and a new version seat: a short travel up and a fade, the version a moment after the entry. */
+.seat {
+  transition: opacity var(--dl-duration-quick) var(--dl-ease-out), transform var(--dl-motion-quick) var(--dl-ease-out);
+}
+
+.later {
+  transition-delay: calc(var(--dl-duration-press) / 2);
+}
+
+@starting-style {
+  .seat {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.announce {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* With scripts off the still covers the live strip, drawn in its own look. */
+.still {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--dl-space-3);
+  background: var(--dl-surface);
+  color: var(--dl-text);
+}
+
+.stillCaption {
+  margin: 0;
+  font-size: 14px;
+  color: var(--dl-text-muted);
+}
+
+/* The spread: the new page is revealed by the clip the script animates, not cross-faded. */
+:global(html.strip-spread)::view-transition-old(root),
+:global(html.strip-spread)::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
