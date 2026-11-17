@@ -52,21 +52,27 @@ export type BrowserServerDirectory = 'session' | 'home'
 /** Fixed launch or attachment choice for one MCP browser provider. */
 export type BrowserMcpConfig = BrowserMcpLaunchConfig | BrowserMcpAttachConfig
 
+/** The launch fields every MCP browser provider accepts; a provider with fields of its own adds them to these. */
+export const browserMcpLaunchFields = {
+  mode: Schema.const('launch').required(),
+  headless: Schema.boolean().default(true),
+  executablePath: Schema.string().pattern(/\S/u),
+  toolCallTimeoutMs: Schema.number().min(1),
+  serverDirectory: Schema.union(['session', 'home']),
+}
+
+/** The attachment fields every MCP browser provider accepts. */
+export const browserMcpAttachFields = {
+  mode: Schema.const('attach').required(),
+  endpoint: Schema.string().pattern(/^https?:\/\/[^\s/]+|^wss?:\/\/[^\s/]+/u).required(),
+  toolCallTimeoutMs: Schema.number().min(1),
+  serverDirectory: Schema.union(['session', 'home']),
+}
+
 /** Validate the browser mode before the provider reserves browser use. */
 export const BrowserMcpConfig: Schema<BrowserMcpAttachConfig | (Omit<BrowserMcpLaunchConfig, 'headless'> & { headless?: boolean }), BrowserMcpConfig> = Schema.union([
-  Schema.object({
-    mode: Schema.const('launch').required(),
-    headless: Schema.boolean().default(true),
-    executablePath: Schema.string().pattern(/\S/u),
-    toolCallTimeoutMs: Schema.number().min(1),
-    serverDirectory: Schema.union(['session', 'home']),
-  }),
-  Schema.object({
-    mode: Schema.const('attach').required(),
-    endpoint: Schema.string().pattern(/^https?:\/\/[^\s/]+|^wss?:\/\/[^\s/]+/u).required(),
-    toolCallTimeoutMs: Schema.number().min(1),
-    serverDirectory: Schema.union(['session', 'home']),
-  }),
+  Schema.object(browserMcpLaunchFields),
+  Schema.object(browserMcpAttachFields),
 ])
 
 /**

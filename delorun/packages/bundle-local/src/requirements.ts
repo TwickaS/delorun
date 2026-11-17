@@ -22,6 +22,13 @@
  * `playwright-install`, answers as the command that runs that exact MCP package version's own installer:
  * `npx -y <package>@<version> install-browser <browser>`.
  *
+ * A `chromium` need tests the browser that will launch. The row's own configuration, read from its Loader entry, names
+ * a `browser` of `auto`, `chrome` or `chromium` (`auto` when the row has no entry or names none), and the same function
+ * the Playwright provider builds its launch arguments with, `launchedBrowser`, answers Chrome or Chromium. When Chrome
+ * launches, the need is met by Google Chrome installed where Playwright's `chrome` channel looks, with no download, and
+ * an unmet one reads "Needs Google Chrome installed" with the installer's `chrome` command; when Chromium launches, the
+ * exact build is needed as above. A `browser` that is none of the three is the bundle's problem.
+ *
  * A check never stops a row and never throws across bundles: a bundle whose declaration cannot be read, names a row its
  * patch does not declare, or lacks the reason in English is reported as a problem of that bundle, and every other bundle
  * answers as usual. The check reads the computer afresh on each request, so a met need clears the next time Plugins asks.
@@ -34,6 +41,7 @@ import { homedir } from 'node:os'
 import { delimiter, dirname, isAbsolute, join, posix, resolve, win32 } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { resolveBundleDir } from '@deepseek-ai/dsh-app-boot'
+import { chromeChannelExecutable, launchedBrowser, parseBrowserChoice } from '@deepseek-ai/dsh-native-command/chrome-channel'
 import type { ProfileContext } from '@deepseek-ai/dsh-app-boot'
 // Type-only: the ctx.pluginManager service.
 import type {} from '@deepseek-ai/dsh-plugin-manager'
@@ -202,20 +210,39 @@ export function playwrightBuild(need: Extract<Need, { kind: 'playwright-browser'
   return { installer: `${mcp.name}@${mcp.version}`, folders: builds.map(entry => join(cache, `${entry.name.replaceAll('-', '_')}-${entry.revision}`)) }
 }
 
+const RowBrowser = z.looseObject({ browser: z.unknown().optional() })
+
+/**
+ * Whether a `playwright-browser` need tests the installed Chrome instead of a downloaded build: a `chromium` need whose
+ * row launches Chrome.
+ * @param need - the need.
+ * @param rowConfig - the row's Loader entry configuration, or `undefined` for a row without an entry.
+ * @param host - the computer.
+ * @returns true when Chrome launches.
+ * @throws when the configuration names a `browser` that is not `auto`, `chrome` or `chromium`.
+ */
+export function launchesChrome(need: Extract<Need, { kind: 'playwright-browser' }>, rowConfig: unknown, host: CheckEnvironment): boolean {
+  if (need.browser !== 'chromium') return false
+  const config = RowBrowser.safeParse(rowConfig)
+  return launchedBrowser(parseBrowserChoice(config.success ? config.data.browser : undefined), host) === 'chrome'
+}
+
 /**
  * Whether one need is met.
  * @param need - the need.
  * @param host - the computer.
  * @param bundleDir - the declaring bundle's folder, which a `playwright-browser` need resolves its packages from.
+ * @param rowConfig - the row's Loader entry configuration, which names the browser a `playwright-browser` need tests.
  * @returns true when met.
- * @throws when a `playwright-browser` need's packages cannot be read.
+ * @throws when a `playwright-browser` need's packages cannot be read or its row names an unknown `browser`.
  */
-export function isMet(need: Need, host: CheckEnvironment, bundleDir: string): boolean {
+export function isMet(need: Need, host: CheckEnvironment, bundleDir: string, rowConfig?: unknown): boolean {
   switch (need.kind) {
     case 'program': return hasProgram(need, host)
     case 'env': return (host.env[need.name] ?? '') !== ''
     case 'platform': return need.os.includes(host.platform)
     case 'playwright-browser':
+      if (launchesChrome(need, rowConfig, host)) return chromeChannelExecutable(host) !== undefined
       return playwrightBuild(need, bundleDir, host).folders.every(folder => host.exists(join(folder, 'INSTALLATION_COMPLETE')))
   }
 }
@@ -225,6 +252,8 @@ export interface BundleToCheck {
   readonly name: string
   readonly dir: string
   readonly rowIds: readonly string[]
+  /** Each row's Loader entry configuration, by row id; a row without an entry has none. */
+  readonly rowConfigs?: Readonly<Record<string, unknown>>
 }
 
 /** The sentences of the reasons, by studio language. */
@@ -249,15 +278,16 @@ const REASONS = {
  * The reason a need is unmet, in the studio's language.
  * @param need - the unmet need.
  * @param language - `en` or `zh`.
+ * @param chrome - whether a `playwright-browser` need tests the installed Chrome.
  * @returns the sentence.
  */
-function reasonOf(need: Need, language: string): string {
+function reasonOf(need: Need, language: string, chrome: boolean): string {
   const words = language === 'zh' ? REASONS.zh : REASONS.en
   switch (need.kind) {
     case 'program': return words.program(need.label ?? need.names.join(words.or))
     case 'env': return words.env(need.name)
     case 'platform': return words.platform
-    case 'playwright-browser': return words.download(BROWSER_NAMES[need.browser])
+    case 'playwright-browser': return chrome ? words.program('Google Chrome') : words.download(BROWSER_NAMES[need.browser])
   }
 }
 
@@ -267,17 +297,20 @@ const BROWSER_NAMES = { chromium: 'Chromium', firefox: 'Firefox', webkit: 'WebKi
 /**
  * The fix as Plugins shows it: a `playwright-install` fix becomes the command that runs the installer of the exact
  * Playwright MCP version the row's `playwright-browser` need resolves.
+ * The installer is asked for `chrome` when the row launches Chrome.
  * @param requirement - the row's declaration.
  * @param bundle - the bundle.
  * @param host - the computer.
+ * @param rowConfig - the row's Loader entry configuration.
  * @returns the fix to show.
  * @throws when a `playwright-install` fix has no `playwright-browser` need beside it.
  */
-function shownFix(requirement: RowRequirement, bundle: BundleToCheck, host: CheckEnvironment): RequirementFix {
+function shownFix(requirement: RowRequirement, bundle: BundleToCheck, host: CheckEnvironment, rowConfig: unknown): RequirementFix {
   if (requirement.fix.kind !== 'playwright-install') return requirement.fix
   const need = requirement.needs.find(entry => entry.kind === 'playwright-browser')
   if (need === undefined) throw new Error('a "playwright-install" fix needs a "playwright-browser" need in the same row')
-  return { kind: 'command', command: `npx -y ${playwrightBuild(need, bundle.dir, host).installer} install-browser ${need.browser}` }
+  const browser = launchesChrome(need, rowConfig, host) ? 'chrome' : need.browser
+  return { kind: 'command', command: `npx -y ${playwrightBuild(need, bundle.dir, host).installer} install-browser ${browser}` }
 }
 
 /**
@@ -296,10 +329,12 @@ function checkBundle(bundle: BundleToCheck, language: string, host: CheckEnviron
   const declared = Declaration.parse(raw)
   return Object.entries(declared).map(([rowId, requirement]) => {
     if (!bundle.rowIds.includes(rowId)) throw new Error(`"requires" names the row "${rowId}", which the patch does not declare`)
-    const fix = shownFix(requirement, bundle, host)
-    const unmet = requirement.needs.find(need => !isMet(need, host, bundle.dir))
+    const rowConfig = bundle.rowConfigs?.[rowId]
+    const fix = shownFix(requirement, bundle, host, rowConfig)
+    const unmet = requirement.needs.find(need => !isMet(need, host, bundle.dir, rowConfig))
     if (unmet === undefined) return { packageName: bundle.name, rowId, state: 'ready' as const }
-    return { packageName: bundle.name, rowId, state: 'needs-setup' as const, reason: reasonOf(unmet, language), fix }
+    const chrome = unmet.kind === 'playwright-browser' && launchesChrome(unmet, rowConfig, host)
+    return { packageName: bundle.name, rowId, state: 'needs-setup' as const, reason: reasonOf(unmet, language, chrome), fix }
   })
 }
 
@@ -336,9 +371,16 @@ async function listedBundles(ctx: Context): Promise<BundleToCheck[]> {
   const profile = ctx.get('profileContext') as ProfileContext | undefined
   if (manager === undefined || profile === undefined) return []
   const listed = await manager.listBundles()
+  // The Loader keeps one entry for a row id, switched on or off, and its configuration is what the row runs with.
+  const configs: Record<string, unknown> = {}
+  for (const entry of ctx.get('loader')?.entries() ?? []) {
+    if (typeof entry.options.id === 'string') configs[entry.options.id] = entry.options.config
+  }
   return listed.filter(bundle => bundle.availability !== 'missing').flatMap((bundle) => {
+    const rowIds = bundle.rows.map(row => row.rowId)
+    const rowConfigs = Object.fromEntries(rowIds.filter(rowId => Object.hasOwn(configs, rowId)).map(rowId => [rowId, configs[rowId]]))
     try {
-      return [{ name: bundle.name, dir: resolveBundleDir('dsh', bundle.name, profile.installAnchor, profile.dir), rowIds: bundle.rows.map(row => row.rowId) }]
+      return [{ name: bundle.name, dir: resolveBundleDir('dsh', bundle.name, profile.installAnchor, profile.dir), rowIds, rowConfigs }]
     } catch (error) {
       // The directory cannot be resolved: the plugin manager reports that bundle's own error, and it declares no needs here.
       ctx.logger('delorun-requirements').warn(`${bundle.name}: ${(error as Error).message}`)

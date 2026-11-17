@@ -53,6 +53,10 @@ The `NativeCommandRunner` type is the injectable command boundary for host integ
 
 `nativeFileApplications(path, signal)` returns registered applications, localized names, icons, and the current default. macOS 12 and later use LaunchServices; Windows uses Shell association handlers and resolves a packaged application’s indirect icon reference before extraction; Linux uses GIO with shared XDG desktop-entry and icon lookup. On macOS, copies sharing a bundle identifier and display name (staged self-updates, per-version installs) collapse to the system default, else the highest version; deliberate side-by-side installs keep distinct display names and both entries. `openNativeFileApplication(path, application, signal)` revalidates the handler against the complete registered list, so copies collapsed out of the display list stay openable, and never changes the system default. Windows delegates invocation to the Shell, and Linux delegates argument expansion to `gio launch`. WSL translates the path and uses the Windows adapter. Callers authorize the local file path. Native integration tests use private Windows file associations and Linux XDG roots on their respective platforms.
 
+### Finding the Chrome a Playwright launch uses
+
+`@deepseek-ai/dsh-native-command/chrome-channel` answers which Chromium-family browser a Playwright launch uses on a computer, without running anything. `launchedBrowser(choice)` takes `auto`, `chrome`, or `chromium`: `auto` answers `chrome` when Google Chrome is installed where Playwright's `chrome` channel looks and `chromium`, Playwright's own downloaded build, otherwise; the other two answer themselves. `chromeChannelCandidates` lists the paths in Playwright's order: `/opt/google/chrome/chrome` on Linux, `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome` on macOS, and `\Google\Chrome\Application\chrome.exe` under `LOCALAPPDATA`, `PROGRAMFILES`, `PROGRAMFILES(X86)`, and `Program Files` and `Program Files (x86)` on `HOMEDRIVE` on Windows; `PATH` is never searched. `parseBrowserChoice` validates a choice read from another plugin's configuration, and an unset one is `auto`. A provider's launch arguments and a setup check call the same function, so the check reports a missing download only for the browser that launches. The subpath imports Node builtins only.
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -70,6 +74,7 @@ The command runner is a thin wrapper over Node's `execFile`. The path opener sel
 | [`src/index.ts`](src/index.ts) | Public command-runner and path-opener exports |
 | [`src/runner.ts`](src/runner.ts) | Shell-free `execFile` adapter |
 | [`src/path-opener.ts`](src/path-opener.ts) | Desktop detection, open intents, browser preference, and WSL translation |
+| [`src/chrome-channel.ts`](src/chrome-channel.ts) | Playwright's `chrome` channel paths and the browser a launch uses |
 
 ### What execFile gives the runner
 

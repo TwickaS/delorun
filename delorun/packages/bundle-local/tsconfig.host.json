@@ -19,6 +19,9 @@
     },
     {
       "path": "../../../packages/host/webserver"
+    },
+    {
+      "path": "../../../packages/util/native-command"
     }
   ]
 }

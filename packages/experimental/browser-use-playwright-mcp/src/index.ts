@@ -1,9 +1,14 @@
-/** Chromium browser tools from the pinned Playwright MCP server. @module */
+/** Chrome or Chromium browser tools from the pinned Playwright MCP server. @module */
 
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
-import { BrowserMcpConfig, browserServerDirectory, mountSessionMcp, validateBrowserMcpConfig } from '@deepseek-ai/dsh-experimental-browser-use-runtime/mcp'
+import {
+  browserMcpAttachFields, browserMcpLaunchFields, browserServerDirectory, mountSessionMcp, validateBrowserMcpConfig,
+  type BrowserMcpAttachConfig, type BrowserMcpLaunchConfig,
+} from '@deepseek-ai/dsh-experimental-browser-use-runtime/mcp'
+import { BROWSER_CHOICES, launchedBrowser, UNSET_BROWSER_CHOICE, type BrowserChoice, type LaunchedBrowser } from '@deepseek-ai/dsh-native-command/chrome-channel'
+import Schema from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-working-directory'
 
 /** Cordis identity for the Playwright MCP browser provider. */
@@ -12,11 +17,39 @@ export const name = 'experimental-browser-use-playwright-mcp'
 /** Services required for scoped MCP startup and prompt readiness checks. */
 export const inject = ['browserUse', 'agents', 'tools', 'systemPrompt', 'workingDirectory']
 
-/** Fixed Chromium launch or existing-browser attachment settings. */
-export type Config = BrowserMcpConfig
+/** Launch settings: the shared ones and which browser launches. */
+export interface LaunchConfig extends BrowserMcpLaunchConfig {
+  /**
+   * Which browser launches: `auto` is the installed Google Chrome when Playwright's `chrome` channel finds one and
+   * Playwright's own Chromium build otherwise; `chrome` and `chromium` always launch that one. Chrome runs with a
+   * profile Playwright creates for the launch, never the person's own.
+   */
+  browser: BrowserChoice
+}
+
+/** Chrome or Chromium launch, or existing-browser attachment settings. */
+export type Config = LaunchConfig | BrowserMcpAttachConfig
 
 /** Validate the launch or attachment configuration before activation. */
-export const Config: typeof BrowserMcpConfig = BrowserMcpConfig
+export const Config: Schema<
+  BrowserMcpAttachConfig | (Omit<LaunchConfig, 'headless' | 'browser'> & { headless?: boolean; browser?: BrowserChoice }), Config
+> = Schema.union([
+  Schema.object({ ...browserMcpLaunchFields, browser: Schema.union([...BROWSER_CHOICES]).default(UNSET_BROWSER_CHOICE) }),
+  Schema.object(browserMcpAttachFields),
+])
+
+/**
+ * The `--browser` value of a launch. The answer reads only the configuration and whether Chrome is installed, so the
+ * server's arguments, which the MCP add-time consent covers, stay the same on one computer until Chrome is installed
+ * or removed.
+ * @param config - the launch settings.
+ * @returns the configured browser; under `auto`, Chrome when {@link launchedBrowser} finds it, except that a
+ * configured `executablePath` keeps `chromium`, whose launch settings that executable has always run with.
+ */
+export function launchBrowser(config: LaunchConfig): LaunchedBrowser {
+  if (config.browser === 'auto' && config.executablePath !== undefined) return 'chromium'
+  return launchedBrowser(config.browser)
+}
 
 /**
  * The tool failure that replaces Playwright's report of a browser build that is not installed. The model cannot install
@@ -55,11 +88,11 @@ export function apply(ctx: Context, config: Config): void {
   const env = Object.fromEntries(Object.keys(process.env)
     .filter(key => key.toUpperCase().startsWith('PLAYWRIGHT_MCP_'))
     .map(key => [key, '']))
-  const args = [cli, '--browser', 'chromium']
+  const args = [cli]
   if (config.mode === 'attach') {
-    args.push('--cdp-endpoint', config.endpoint)
+    args.push('--browser', 'chromium', '--cdp-endpoint', config.endpoint)
   } else {
-    args.push('--isolated')
+    args.push('--browser', launchBrowser(config), '--isolated')
     if (config.headless) args.push('--headless')
     if (config.executablePath !== undefined) args.push('--executable-path', config.executablePath)
   }

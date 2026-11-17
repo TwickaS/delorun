@@ -12,7 +12,13 @@
       "path": "../../../vendor/cordis"
     },
     {
+      "path": "../../../vendor/schemastery"
+    },
+    {
       "path": "../browser-use-runtime"
+    },
+    {
+      "path": "../../util/native-command"
     },
     {
       "path": "../../session/working-directory"

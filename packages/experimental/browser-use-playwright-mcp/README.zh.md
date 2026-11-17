@@ -25,7 +25,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用此包
 
-在创建或恢复 Session 前，将以下条目挂载到已提供 Agent、工具、系统提示词和工作目录服务的 profile 组合中。加载或重新加载此提供方不会接管已经活动的 Session。浏览器安装遵循上游运行时；使用 `executablePath` 选择已有 Chromium 安装。固定的 Playwright 所需的 Chromium 版本未安装时，浏览器工具调用会以一条简短消息失败，告诉模型停止尝试，并请用户完成 Browser 设置。
+在创建或恢复 Session 前，将以下条目挂载到已提供 Agent、工具、系统提示词和工作目录服务的 profile 组合中。加载或重新加载此提供方不会接管已经活动的 Session。`browser` 决定启动哪个浏览器：默认值 `auto` 在 Playwright 的 `chrome` 通道查找的位置装有 Google Chrome 时启动它，否则启动 Playwright 自己的 Chromium 版本；`chrome` 和 `chromium` 总是启动对应的那一个。Chrome 使用 Playwright 为本次启动创建的配置文件（`--isolated`）运行，从不使用用户自己的 Chrome 配置文件。只有 Chromium 版本与固定的 Playwright 版本绑定，因此本包更新后，仅在实际启动 Chromium 时才可能需要重新下载 Chromium：即 `chromium`，或没有安装 Chrome 的电脑上的 `auto`。使用 `executablePath` 选择其他 Chromium 安装；在 `auto` 下它保留 Chromium 的启动设置。固定的 Playwright 所需的 Chromium 版本未安装时，浏览器工具调用会以一条简短消息失败，告诉模型停止尝试，并请用户完成 Browser 设置。
 
 ```yaml
 - name: '@deepseek-ai/dsh-browser-use'
@@ -41,6 +41,7 @@ kind: "package-reference"
 |---|---|---|
 | `mode` | 必填 | `launch` 或 `attach`，在本次提供方激活期间固定 |
 | `headless` | `true` | 启动时不显示窗口 |
+| `browser` | `auto` | `auto` 启动已安装的 Chrome，否则启动 Playwright 的 Chromium 版本；`chrome` 或 `chromium` 强制使用其一。仅用于 launch 模式 |
 | `executablePath` | 上游发现 | 启动使用的 Chromium 可执行文件 |
 | `endpoint` | attach 时必填 | 已有浏览器调试端点 |
 | `toolCallTimeoutMs` | MCP 客户端默认值 | 单次调用超时，单位为毫秒 |
@@ -98,7 +99,7 @@ kind: "package-reference"
 
 本集成保留固定版本服务器的浏览器与工具限制。
 
-- 仅支持 Chromium；不可选择 Firefox 或 WebKit。
+- 仅支持 Chrome 与 Chromium；不可选择 Firefox 或 WebKit。
 - 启动失败或取消会拒绝 Session 创建或恢复，并触发客户端清理。断开的客户端不会重试；修复原因后，创建新 Session，或卸载并恢复已有 Session。
 - 连接独占仅在此提供方实例内有效。其他进程与浏览器用户仍可修改相同页面。
 - 共享资源服务器目录可以显示继承的服务器名称，但不会授予对其他 Session 浏览器的访问权限。

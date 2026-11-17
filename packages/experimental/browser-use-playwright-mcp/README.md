@@ -25,7 +25,7 @@ Use Playwright MCP to inspect pages and operate Chromium through its upstream to
 <a id="use-this-package"></a>
 ## Use this package
 
-Mount both entries before creating or resuming a Session, in a profile composition that supplies Agents, tools, system prompts, and the working-directory service. Loading or reloading this provider does not adopt Sessions that are already active. Browser installation follows the upstream runtime; select an existing Chromium installation with `executablePath`. When the Chromium build the pinned Playwright expects is not installed, a browser tool call fails with one short message that tells the model to stop and send the person to finish Browser setup.
+Mount both entries before creating or resuming a Session, in a profile composition that supplies Agents, tools, system prompts, and the working-directory service. Loading or reloading this provider does not adopt Sessions that are already active. `browser` chooses what launches: `auto`, the default, launches Google Chrome when it is installed where Playwright's `chrome` channel looks, and Playwright's own Chromium build otherwise; `chrome` and `chromium` always launch that one. Chrome runs with a profile Playwright creates for the launch (`--isolated`), never the person's own Chrome profile. Only the Chromium build is tied to the pinned Playwright version, so an update of this package can need a new Chromium download only when Chromium is what launches: under `chromium`, or under `auto` on a computer without Chrome. Select another Chromium installation with `executablePath`; under `auto` it keeps Chromium's launch settings. When the Chromium build the pinned Playwright expects is not installed, a browser tool call fails with one short message that tells the model to stop and send the person to finish Browser setup.
 
 ```yaml
 - name: '@deepseek-ai/dsh-browser-use'
@@ -41,6 +41,7 @@ Use `mode: attach` and set `endpoint` to an HTTP(S) debugging URL or WS(S) brows
 |---|---|---|
 | `mode` | required | `launch` or `attach`, fixed for this provider activation |
 | `headless` | `true` | Launch without a visible window |
+| `browser` | `auto` | `auto` launches the installed Chrome, else Playwright's Chromium build; `chrome` or `chromium` forces one. Launch mode only |
 | `executablePath` | upstream discovery | Chromium executable for launch |
 | `endpoint` | required for attach | Existing browser debugging endpoint |
 | `toolCallTimeoutMs` | MCP client default | Per-call timeout in milliseconds |
@@ -98,7 +99,7 @@ An unchanged catalog preserves its tool-definition prefix. Results append to his
 
 The integration retains the pinned server's browser and tool restrictions.
 
-- Chromium only; Firefox and WebKit are not selectable.
+- Chrome and Chromium only; Firefox and WebKit are not selectable.
 - Startup failure or cancellation rejects Session creation or resume and triggers client cleanup. A disconnected client is not retried; after fixing the cause, create a new Session or unload and resume the existing one.
 - Attachment exclusivity is local to this provider instance. Other processes and browser users can still modify the same pages.
 - The shared resource-server inventory can show inherited server names; it does not grant access to another Session's browser.
