@@ -158,6 +158,23 @@ describe('the approval grace', () => {
     expect(changes.filter(change => change.kind === 'ended').map(change => change.reason)).toEqual(['revoked-at-computer', 'locked-from-device', 'device-removed'])
   })
 
+  it('is replaced by a code approval, so the unlock the device reads is the code\'s, not the grace', async () => {
+    const { home: served, changes } = await graced(10)
+    const phone = device()
+    await approve(served.auth, phone)
+    const opened = await signIn(served.auth, phone)
+    expect(served.auth.elevationOf(phone.id, LISTENER)).toMatchObject({ grace: true })
+    const admitted = served.auth.admitToken(opened.token, LISTENER)
+    if (admitted.kind !== 'admitted') throw new Error('the device was not admitted')
+    const state = served.auth.requestElevation(admitted.sessionId, admitted.session)
+    if (state.kind !== 'pending') throw new Error('no request is waiting')
+    const code = served.auth.approveElevation(state.requestId, state.code)
+    // Pins the replacement: the loosening routes read the device's one unlock, which must be the code's.
+    expect(served.auth.elevationOf(phone.id, LISTENER)).toEqual(code)
+    expect(served.auth.elevationOf(phone.id, LISTENER)?.grace).toBeUndefined()
+    expect(changes.filter(change => change.kind === 'ended').map(change => change.reason)).toEqual(['replaced'])
+  })
+
   it('expires with the grace minutes', async () => {
     const { home: served } = await graced(10)
     const phone = device()

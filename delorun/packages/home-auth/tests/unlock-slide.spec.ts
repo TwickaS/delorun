@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { SESSION_LIMITS, type StudioAddress } from '@delorun/contract-admission'
 import { gateByUnlock } from '../src/computer-only.ts'
-import { createCondition, reachDevicePrincipal, type ReachAccessFacts } from '../src/reach-access.ts'
+import { createCondition, ELEVATED_READS, REACH_ELEVATED_ACTIONS, reachDevicePrincipal, type ReachAccessFacts } from '../src/reach-access.ts'
 import { claimOf, homeFixture, type Home } from './fixtures/home.ts'
 
 const ADDRESS = brandString<StudioAddress>('https://home.example.ts.net')
@@ -109,7 +109,34 @@ describe('what renews an unlock', () => {
     expect(touch).toHaveBeenCalledWith('unlock-1')
   })
 
-  it('is a call of an unlock-gated route, and not one a locked device made', () => {
+  it('is never an elevated read: listing, watching and reattaching leave the unlock to end at its own time', () => {
+    const touch = vi.fn()
+    const condition = createCondition(facts(touch), principal)
+    expect([...ELEVATED_READS].every(action => Object.hasOwn(REACH_ELEVATED_ACTIONS, action))).toBe(true)
+    for (const action of ELEVATED_READS) {
+      // Pins the read list: a studio that re-lists or reopens a watch on reconnect must not keep an idle unlock alive.
+      expect(condition({ action: action as never, resource, args: {} }).kind, action).toBe('allow')
+    }
+    expect(touch).not.toHaveBeenCalled()
+    for (const action of ['terminal/create', 'terminal/close', 'mcpManager/restart', 'directoryPicker/pick', 'pluginManager/setBundleEnabled']) {
+      condition({ action: action as never, resource, args: { name: '@delorun/plugin-trash' } })
+    }
+    expect(touch).toHaveBeenCalledTimes(5)
+  })
+
+  it('is not a call the condition refuses after the unlock check', () => {
+    const touch = vi.fn()
+    const loosening = {
+      ...facts(touch), dangerousMode: () => true, liftedSettings: () => 'could not record',
+      defaultPermission: () => ({ namespaces: new Set(['permission']), current: { sandbox: 'workspace-write', approval: 'ask' }, levelOf: () => ({ sandbox: 'danger-full-access', approval: 'never' }) }),
+    } as ReachAccessFacts
+    const refused = createCondition(loosening, principal)({ action: 'settings/update', resource, args: { ns: 'permission', patch: { defaultPreset: 'danger-full-access' } } })
+    // Pins the order: the unlock is renewed only once the whole condition allows the call.
+    expect(refused.kind).toBe('deny')
+    expect(touch).not.toHaveBeenCalled()
+  })
+
+  it('is a call of an unlock-gated route, and not one a locked device made or a polled route', () => {
     const touch = vi.fn()
     const home = { elevationOf: (deviceId: string) => (deviceId === 'unlocked' ? { id: 'unlock-2' } : undefined), pageUnlockOf: () => undefined, touchUnlock: touch } as never
     const route = gateByUnlock(() => home, () => Promise.resolve(new Response('ran')))
@@ -117,6 +144,10 @@ describe('what renews an unlock', () => {
     expect(touch).not.toHaveBeenCalled()
     route.admitPeer(new Request('http://localhost/x'), { principal: reachDevicePrincipal('unlocked', LISTENER) })
     expect(touch).toHaveBeenCalledWith('unlock-2')
+    touch.mockClear()
+    // Pins the option: a polled route needs the unlock and does not renew it.
+    gateByUnlock(() => home, () => Promise.resolve(new Response('ran')), { renews: false }).admitPeer(new Request('http://localhost/x'), { principal: reachDevicePrincipal('unlocked', LISTENER) })
+    expect(touch).not.toHaveBeenCalled()
   })
 })
 

@@ -170,7 +170,7 @@ export function apply(ctx: Context, config: Config): void {
       ...gateByUnlock(() => scope.get('homeAuth'), () => {
         const profile = scope.get('profileContext')
         return Promise.resolve(detailsResponse(config, profile === undefined ? undefined : { home: profile.home, name: profile.name }))
-      }),
+      }, { renews: false }),
     })
   })
 }
