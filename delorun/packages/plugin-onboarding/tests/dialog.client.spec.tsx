@@ -563,7 +563,7 @@ describe('finishing later and the last step', () => {
 
   describe.each<readonly [string, 'skip' | 'done', ReachState, string]>([
     ['Not now', 'skip', 'off', 'Not set up'],
-    ['"I\'ve done this" while reach still reads off', 'done', 'off', 'Check in Settings → Devices'],
+    ['"I\'ve done this" while reach still reads off', 'done', 'off', en['ready.reach.check']],
     ['"I\'ve done this" once reach reads on', 'done', 'set-up', 'On'],
   ])('phone access with %s', (_, action, reachNow, summary) => {
     it(`tells Ready: ${summary}`, async () => {
