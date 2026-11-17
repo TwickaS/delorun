@@ -69,7 +69,7 @@ async function ownerSpawn(argv: string[]): Promise<SubprocessHandle> {
   const ctx = new Context()
   contexts.push(ctx)
   await ctx.plugin(LocalSubprocessRuntime)
-  return ctx.subprocess.spawn({ argv, cwd: process.cwd(), stdio: { stdin: 'pipe', stdout: 'pipe', stderr: 'ignore' }, graceMs: 3000 })
+  return ctx.subprocess.spawn({ argv, cwd: process.cwd(), stdio: { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' }, graceMs: 3000 })
 }
 
 describe.skipIf(process.platform === 'win32')('the watcher', () => {

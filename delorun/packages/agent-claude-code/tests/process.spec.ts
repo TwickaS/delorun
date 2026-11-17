@@ -38,7 +38,7 @@ describe('the program process', () => {
       .toEqual({ PATH: '/bin', MCP_TOOL_TIMEOUT: '900000', HOME: undefined, LANG: undefined })
     const request = programSpawnRequest({ command: '/pack/claude', args: ['-p'], cwd: '/tmp/task', env: { PATH: '/bin' }, signal: new AbortController().signal }, 'linux', '/w.mjs')
     expect(Object.keys(request.env).filter(name => /KEY|TOKEN|SECRET|PASSWORD/.test(name) && request.env[name] !== undefined)).toEqual([])
-    expect(request.stdio).toEqual({ stdin: 'pipe', stdout: 'pipe', stderr: 'ignore' })
+    expect(request.stdio).toEqual({ stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' })
     expect(request).not.toHaveProperty('cwd')
   })
 
@@ -57,6 +57,13 @@ describe('the program process', () => {
     expect(await exited).toEqual([null, 'SIGTERM'])
     expect(process.exitCode).toBeNull()
     expect(process.signalCode).toBe('SIGTERM')
+  })
+
+  it('drains the program\'s standard error without keeping it', () => {
+    const { handle } = fakeHandle()
+    const stderr = new PassThrough()
+    new GateProcess({ ...handle, stderr })
+    expect(stderr.readableFlowing).toBe(true)
   })
 
   it('refuses a handle without piped standard input and output', () => {

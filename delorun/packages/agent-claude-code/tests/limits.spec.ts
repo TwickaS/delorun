@@ -39,8 +39,10 @@ describe('Claude Code limits', () => {
   })
 
   it('reads the sign-in state from the account answer alone', () => {
-    expect(signedInFrom({ subscriptionType: 'pro' })).toBe('yes')
+    expect(signedInFrom({ subscriptionType: 'pro', tokenSource: 'claude.ai', apiProvider: 'firstParty' })).toBe('yes')
+    expect(signedInFrom({ tokenSource: 'none', apiKeySource: 'ANTHROPIC_API_KEY', apiProvider: 'firstParty' })).toBe('yes')
     expect(signedInFrom({ apiProvider: 'bedrock' })).toBe('yes')
+    expect(signedInFrom({ tokenSource: 'none', apiProvider: 'firstParty' })).toBe('no')
     expect(signedInFrom({})).toBe('unknown')
   })
 })

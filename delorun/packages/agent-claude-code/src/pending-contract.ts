@@ -59,7 +59,7 @@ export interface ProgramHarnessTool {
 export interface ProgramSpawnRequest {
   readonly argv: readonly string[]
   readonly env: NodeJS.ProcessEnv
-  readonly stdio: { readonly stdin: 'pipe'; readonly stdout: 'pipe'; readonly stderr: 'pipe' | 'ignore' }
+  readonly stdio: { readonly stdin: 'pipe'; readonly stdout: 'pipe'; readonly stderr: 'pipe' }
 }
 
 /** The gate's spawn; the only way a driver gets a process. */

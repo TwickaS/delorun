@@ -270,7 +270,7 @@ describe('a Claude Code session', () => {
       harnessToolTimeoutMs: () => 1,
       spawnOption: spawn => (options): SpawnedProcess => {
         spawned.push(options.command)
-        return new GateProcess(spawn({ argv: [options.command], env: {}, stdio: { stdin: 'pipe', stdout: 'pipe', stderr: 'ignore' } }))
+        return new GateProcess(spawn({ argv: [options.command], env: {}, stdio: { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' } }))
       },
     }).open(request({ spawn: gateSpawn }))
     expect(() => sdk.last.options.spawnClaudeCodeProcess?.({ command: 'claude', args: [], cwd: '/tmp/task', env: {}, signal })).toThrow('not started')

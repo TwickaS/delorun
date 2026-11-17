@@ -62,14 +62,21 @@ export function usageWindows(usage: SDKControlGetUsageResponse): LimitWindow[] {
   })
 }
 
+function names(source: string | undefined): boolean {
+  return source !== undefined && source !== 'none'
+}
+
 /**
- * Whether the account answer shows a signed-in program: an Anthropic sign-in reports its plan, another backend its
- * provider.
- * @param account - the account answer.
- * @returns `yes` when either is present, otherwise `unknown`.
+ * The sign-in state from the account answer. A plan, a token or key source, or a backend other than Anthropic's own
+ * (whose sign-in is outside Claude Code) means signed in. Anthropic's own backend with no plan and no source means
+ * signed out; an answer with none of these fields tells nothing.
+ * @param account - the account answer; only these fields are read, none is kept.
+ * @returns the state.
  */
 export function signedInFrom(account: AccountInfo): AccountObservation['signedIn'] {
-  return account.subscriptionType !== undefined || account.apiProvider !== undefined ? 'yes' : 'unknown'
+  if (account.subscriptionType !== undefined || names(account.tokenSource) || names(account.apiKeySource)) return 'yes'
+  if (account.apiProvider !== undefined && account.apiProvider !== 'firstParty') return 'yes'
+  return account.apiProvider === 'firstParty' || account.tokenSource !== undefined ? 'no' : 'unknown'
 }
 
 /**

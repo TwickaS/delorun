@@ -44,7 +44,7 @@ export function environmentOverlay(env: SpawnOptions['env'], base: NodeJS.Proces
 
 /**
  * The spawn request for one SDK spawn. The SDK's own abort signal and folder are not passed: the gate owns the process's
- * life and its folder.
+ * life and its folder. Standard error is piped so the driver can drain it.
  * @param options - the SDK's spawn request.
  * @param platform - the operating system.
  * @param watcher - the watcher script's path.
@@ -54,7 +54,7 @@ export function programSpawnRequest(options: SpawnOptions, platform: NodeJS.Plat
   return {
     argv: watchedArgv([options.command, ...options.args], platform, watcher),
     env: environmentOverlay(options.env),
-    stdio: { stdin: 'pipe', stdout: 'pipe', stderr: 'ignore' },
+    stdio: { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' },
   }
 }
 
@@ -80,6 +80,8 @@ export class GateProcess implements SpawnedProcess {
     if (stdin === undefined || stdout === undefined) throw new Error('agent-claude-code: the program was spawned without piped standard input and output')
     this.stdin = stdin
     this.stdout = stdout
+    // The program's diagnostics may quote paths, settings or account details, so they are read and dropped, never logged.
+    handle.stderr?.resume()
     this.#handle = handle
     // EventEmitter throws an `error` without a listener; the SDK adds its own right after spawn returns.
     this.#events.on('error', () => {})
