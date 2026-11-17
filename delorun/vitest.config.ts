@@ -58,6 +58,7 @@ export const forkUnitProject = {
   resolve: {
     alias: [
       { find: '@design', replacement: fileURLToPath(new URL('./packages/site-design/src', import.meta.url)) },
+      { find: '#upstream', replacement: fileURLToPath(new URL('./packages/brand/src/upstream.web.tsx', import.meta.url)) },
       { find: '@brand', replacement: fileURLToPath(new URL('./packages/brand/src/index.ts', import.meta.url)) },
       // The brand package resolves its own React; the website's spec renders it, so both use the website's copy. Without
       // an installed website, each package resolves its own React.
