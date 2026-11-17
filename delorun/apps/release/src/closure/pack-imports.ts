@@ -173,7 +173,7 @@ export function describeUnresolved(need: UnresolvedImport): string {
  * @param version - the closure's version of the package.
  * @returns why it does not, or `undefined` when it does or the need is an import, which declares no version. A
  * `workspace:` specifier with no range, and a `file:` or `link:` one of a workspace or Delorun package, name the
- * workspace's own copy, which is the closure's.
+ * workspace's own copy, which is the closure's. An `npm:` alias names another package, so the closure's never meets it.
  */
 export function rangeProblem(need: UnresolvedImport, version: string): string | undefined {
   if (need.range === undefined) return undefined
@@ -181,7 +181,8 @@ export function rangeProblem(need: UnresolvedImport, version: string): string | 
   if (range.startsWith('workspace:')) range = range.slice('workspace:'.length)
   if (['', '*', '~', '^'].includes(range)) return undefined
   if (/(?:^|@)(?:file|link):/u.test(range) && OWN_SCOPES.some(scope => need.name.startsWith(scope))) return undefined
-  if (range.startsWith('npm:')) range = range.slice(range.lastIndexOf('@') + 1)
+  // An alias installs another package under this name; the closure's package of this name is not it.
+  if (range.startsWith('npm:')) return `${describeUnresolved(need)} at ${need.range}, an alias of another package, which the closure's ${need.name} cannot stand for`
   if (semver.validRange(range) === null) return `${describeUnresolved(need)} at ${need.range}, which is not a version range the build can compare with the closure's ${need.name}@${version}`
   return semver.satisfies(version, range, { includePrerelease: true }) ? undefined : `${describeUnresolved(need)} at ${need.range}, but the closure carries ${need.name}@${version}`
 }
