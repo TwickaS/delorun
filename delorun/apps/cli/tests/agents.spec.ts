@@ -122,4 +122,8 @@ describe('delorun agents login', () => {
     expect(error).toBeInstanceOf(CliError)
     expect((error as CliError).exit).toBe(EXIT.usage)
   })
+
+  it('names an unknown agent in one line and offers the two it knows', async () => {
+    await expect(run(['login', 'nope']).result).rejects.toThrow('✗ Unknown agent "nope". Choose claude-code or codex.')
+  })
 })

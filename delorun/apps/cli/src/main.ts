@@ -46,8 +46,11 @@ import { CliError, EXIT } from './exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandContext, type CommandResult } from './command.ts'
 import { hasCliProfile, profileDirectory } from './profile.ts'
 import { asksForHelp, commandHelp } from './help.ts'
+import { closestMatch } from './output.ts'
 import { pruneLogsAtStart } from './logs/startup.ts'
-import { applyDelorunVersionEnvironment, versionCommand } from './version.ts'
+import { mainHelp } from './main-help.ts'
+import { styleOf } from './style.ts'
+import { applyDelorunVersionEnvironment, delorunVersion, versionCommand } from './version.ts'
 
 /**
  * A command listed for `delorun --help` and loaded only when it is named: most commands import a large part of upstream
@@ -78,7 +81,7 @@ export const COMMANDS: readonly CommandEntry[] = [
   { name: 'doctor', summary: 'Check Docker, the DeepSeek API key format, the home, the studio port, the sandbox, the release-log check, the last update check, your changes, the workspace registry and the plugins', load: async () => (await import('./doctor/index.ts')).doctorCommand },
   { name: 'logs', summary: 'Show where each operational log is and its recent records; follow, clear or prune them', load: async () => (await import('./logs/command.ts')).logsCommand },
   { name: 'update', summary: 'Fetch the newest release, show what it changes, and apply it: --check only says whether one exists; --report shows what it changes and applies nothing; --from installs a release from a folder or https address; --yes, --data-copy, --no-data-copy', load: async () => (await import('./update/command.ts')).updateCommand },
-  { name: 'recover', summary: 'Where the profile stands after an update, and the way back: status, rollback [--profile-only], restore <version>, safe-mode, exit-safe-mode, discard <path>, workspaces [--yes]', load: async () => (await import('./recover.ts')).recoverCommand },
+  { name: 'recover', summary: 'Where the profile stands after an update, and the way back: status, rollback [--profile-only], restore <version>, safe-mode, exit-safe-mode, discard <path>, workspaces [--yes], packs', load: async () => (await import('./recover.ts')).recoverCommand },
   { name: 'changes', summary: 'What waits for your review, and apply <id>, discard <id>, undo <id>, off <plugin>, on <plugin>, protection, work <plugin>, done <plugin>, edit-harness', load: async () => (await import('./changes/command.ts')).changesCommand },
   { name: 'reach', summary: 'Reach the studio from your phone over your own tailnet: status, on tailscale, off', load: async () => (await import('./reach/command.ts')).reachCommand },
   { name: 'devices', summary: 'The devices you let sign in to your studio: list, approve, elevate, remove, code', load: async () => (await import('./devices/command.ts')).devicesCommand },
@@ -96,33 +99,11 @@ export const COMMANDS: readonly CommandEntry[] = [
 
 /**
  * The help text.
- * @returns the usage lines and one line per command.
+ * @param env - the environment, which decides the colour.
+ * @returns the grouped command list, the words used and the exit codes, wrapped to the terminal.
  */
-function usage(): string {
-  const width = Math.max(...COMMANDS.map(command => command.name.length))
-  return [
-    'Usage: delorun [--profile <name>] [--foreground | --background]',
-    '       delorun <command> [options]',
-    '',
-    'With no command, delorun sets up a new home, or starts Delorun and opens the studio: --background keeps it running after you',
-    'close the terminal and --foreground keeps it in this terminal; without either, setup\'s answer chooses (delorun setup background).',
-    '',
-    'Commands:',
-    ...COMMANDS.map(command => `  ${command.name.padEnd(width)}  ${command.summary}`),
-    '',
-    'delorun <command> --help shows a command\'s options. delorun --version prints Delorun\'s and DSH\'s versions; --json prints them as one JSON line.',
-    '',
-    'Words used here:',
-    '  home       the folder where Delorun keeps your chats and settings: ~/.delorun, or DELORUN_HOME',
-    '  profile    one named setup of Delorun on this computer: default, or DELORUN_PROFILE or --profile',
-    '  studio     the web page Delorun serves on this computer, where you chat',
-    '  workspace  a folder your chats work in',
-    '  full access  a workspace setting that lets chats run commands outside the sandbox',
-    '  reach      using the studio from your phone over your own Tailscale network',
-    '',
-    'Exit codes: 0 done, 1 failed, 2 wrong command line, 3 Delorun is not running.',
-    '',
-  ].join('\n')
+function usage(env: Readonly<Record<string, string | undefined>>): string {
+  return mainHelp({ commands: COMMANDS.map(command => command.name), version: String(delorunVersion()), columns: process.stdout.columns > 0 ? process.stdout.columns : 80, style: styleOf(env) })
 }
 
 /**
@@ -179,7 +160,7 @@ export async function main(argv: readonly string[], context: CommandContext = {
   const [first, ...rest] = argv
   try {
     if (first === '--help' || first === '-h' || (first === 'help' && rest.length === 0)) {
-      context.stdout(usage())
+      context.stdout(usage(context.env))
       return EXIT.ok
     }
     if (first === 'help') return helpFor(rest, context)
@@ -188,9 +169,12 @@ export async function main(argv: readonly string[], context: CommandContext = {
     await pruneLogsAtStart(context, Date.now())
     if (first === undefined || first.startsWith('-')) return await bare(argv, context)
     const entry = COMMANDS.find(candidate => candidate.name === first)
-    if (entry === undefined) throw new CliError(EXIT.usage, `delorun: unknown command ${JSON.stringify(first)}\n\n${usage()}`)
+    if (entry === undefined) {
+      const near = closestMatch(first, COMMANDS.map(command => command.name))
+      throw new CliError(EXIT.usage, `✗ Unknown command ${JSON.stringify(first)}.${near === undefined ? '' : ` Did you mean ${JSON.stringify(near)}?`} delorun --help lists commands.`)
+    }
     if (asksForHelp(rest)) {
-      context.stdout(commandHelp(entry.name) ?? usage())
+      context.stdout(commandHelp(entry.name) ?? usage(context.env))
       return EXIT.ok
     }
     return await (await entry.load()).run(rest, context)

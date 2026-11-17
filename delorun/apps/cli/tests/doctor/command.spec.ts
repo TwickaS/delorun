@@ -11,7 +11,7 @@ import { recorded, serializeCheckState } from '@delorun/release-verify'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createDoctorCommand, doctorCommand, type DoctorEnvironment } from '../../src/doctor/index.ts'
 import type { DshImportRecordEntry } from '../../src/doctor/records.ts'
-import { CHECK_NAMES, closeServer, GOOD_KEY, listenOnEphemeralPort, plantInstallation, RUNNING_VERSIONS, usableBwrap, writeJson } from './fixtures.ts'
+import { CHECK_NAMES, SUMMARY, closeServer, GOOD_KEY, listenOnEphemeralPort, plantInstallation, RUNNING_VERSIONS, usableBwrap, writeJson } from './fixtures.ts'
 
 const RELEASE = '0.4.0'
 /** 2026-11-10T12:00:00Z. */
@@ -76,7 +76,7 @@ async function run(environment: Partial<DoctorEnvironment> = {}, env: Record<str
     stdout: (text) => { stdout += text },
     stderr: (text) => { stderr += text },
   })
-  return { code: code ?? undefined, stdout, stderr, lines: (stdout + stderr).split('\n').filter(line => line !== '') }
+  return { code: code ?? undefined, stdout, stderr, lines: (stdout + stderr).split('\n').filter(line => line !== '' && !SUMMARY.test(line)) }
 }
 
 /**
@@ -93,13 +93,22 @@ function writeState(state: 'verified' | 'unchecked' | 'failed'): void {
 const IMPORT: DshImportRecordEntry = { at: '2026-11-09T08:00:00.000Z', source: '/home/person/.dsh', chats: 2, workspaces: 1, profiles: ['web'], credentials: [], skipped: 0 }
 
 describe('delorun doctor in process', { timeout: 60_000 }, () => {
+  it('ends with the count of passed, warned and failed checks, and colours the marks only when asked', async () => {
+    writeState('verified')
+    const plain = await run({}, { DEEPSEEK_API_KEY: GOOD_KEY, NO_COLOR: '1' })
+    expect(plain.stdout.trimEnd().split('\n').at(-1)).toMatch(SUMMARY)
+    expect(plain.stdout + plain.stderr).not.toContain('\u001b[')
+    const coloured = await run({}, { DEEPSEEK_API_KEY: GOOD_KEY, FORCE_COLOR: '1' })
+    expect(coloured.stdout).toContain('\u001b[32m✓\u001b[0m release-log: ')
+  })
+
   it('prints the release-log line and the update line after the four checks, and no import line without a reader', async () => {
     writeState('verified')
     const result = await run({}, { DEEPSEEK_API_KEY: GOOD_KEY })
     expect(result.code).toBe(0)
-    expect(result.stdout).toContain('pass release-log: release 0.4.0 verified against the release log at 2026-11-10T10:00:00Z.\n')
+    expect(result.stdout).toContain('✓ release-log: release 0.4.0 verified against the release log at 2026-11-10T10:00:00Z.\n')
     // The `changes` lines report the home's Changes; their own specs are in changes.spec.ts.
-    const checks = result.lines.map(line => /^(?:pass|warn|fail) ([\w-]+): /.exec(line)?.[1]).filter(name => name !== 'changes').sort()
+    const checks = result.lines.map(line => /^[✓!✗] ([\w-]+): /.exec(line)?.[1]).filter(name => name !== 'changes').sort()
     expect(checks).toEqual(CHECK_NAMES)
     expect(result.lines.some(line => / import: /.test(line))).toBe(false)
   })
@@ -108,26 +117,26 @@ describe('delorun doctor in process', { timeout: 60_000 }, () => {
     writeState('unchecked')
     const result = await run({}, { DEEPSEEK_API_KEY: GOOD_KEY })
     expect(result.code).toBe(0)
-    expect(result.stderr).toContain('warn release-log: Release 0.4.0 has not been checked against the release log; Delorun checks it at the next connection. It has stayed unchecked since 2026-11-10T10:00:00Z (2 hours); the last attempt, at 2026-11-10T10:00:00Z, recorded: no network.\n')
+    expect(result.stderr).toContain('! release-log: Release 0.4.0 has not been checked against the release log; Delorun checks it at the next connection. It has stayed unchecked since 2026-11-10T10:00:00Z (2 hours); the last attempt, at 2026-11-10T10:00:00Z, recorded: no network.\n')
   })
 
   it('fails a refused release and exits 1', async () => {
     writeState('failed')
     const result = await run({}, { DEEPSEEK_API_KEY: GOOD_KEY })
     expect(result.code).toBe(1)
-    expect(result.stderr).toContain('fail release-log: the release log refused release 0.4.0 (inclusion-proof-invalid) at 2026-11-10T10:00:00Z: the proof does not reach the root\n')
+    expect(result.stderr).toContain('✗ release-log: the release log refused release 0.4.0 (inclusion-proof-invalid) at 2026-11-10T10:00:00Z: the proof does not reach the root\n')
   })
 
   it('warns when no state is recorded for the running release', async () => {
     const result = await run({}, { DEEPSEEK_API_KEY: GOOD_KEY })
     expect(result.code).toBe(0)
-    expect(result.stderr).toContain(`warn release-log: no release-log check of release 0.4.0 is recorded in ${join(home, 'trust', 'release-log.json')}; run delorun verify to check it against the release log.\n`)
+    expect(result.stderr).toContain(`! release-log: no release-log check of release 0.4.0 is recorded in ${join(home, 'trust', 'release-log.json')}; run delorun verify to check it against the release log.\n`)
   })
 
   it('fails the release-log line when the running version cannot be read', async () => {
     const result = await run({ running: () => { throw new Error('the version cannot be read') } }, { DEEPSEEK_API_KEY: GOOD_KEY })
     expect(result.code).toBe(1)
-    expect(result.stderr).toContain('fail release-log: the check could not complete: the version cannot be read\n')
+    expect(result.stderr).toContain('✗ release-log: the check could not complete: the version cannot be read\n')
   })
 
   it('prints the import line last when a reader is wired: pass, warn for entries left behind, and fail for a reader that throws', async () => {
@@ -136,13 +145,13 @@ describe('delorun doctor in process', { timeout: 60_000 }, () => {
     const passed = await run({ importRecord: (from) => { homes.push(from); return Promise.resolve([IMPORT]) } }, { DEEPSEEK_API_KEY: GOOD_KEY })
     expect(homes).toEqual([home])
     expect(passed.code).toBe(0)
-    expect(passed.stdout.trimEnd().split('\n').at(-1)).toBe('pass import: the newest of 1 stock-home import, from /home/person/.dsh at 2026-11-09T08:00:00.000Z, carried 2 chats, 1 workspace, 1 profile and 0 credentials.')
+    expect(passed.stdout.trimEnd().split('\n').at(-2)).toBe('✓ import: the newest of 1 stock-home import, from /home/person/.dsh at 2026-11-09T08:00:00.000Z, carried 2 chats, 1 workspace, 1 profile and 0 credentials.')
     const warned = await run({ importRecord: () => Promise.resolve([{ ...IMPORT, skipped: 3 }]) }, { DEEPSEEK_API_KEY: GOOD_KEY })
     expect(warned.code).toBe(0)
-    expect(warned.stderr).toContain('warn import: the newest of 1 stock-home import, from /home/person/.dsh at 2026-11-09T08:00:00.000Z, carried 2 chats, 1 workspace, 1 profile and 0 credentials; it left 3 entries of the stock home behind, which it did not copy.\n')
+    expect(warned.stderr).toContain('! import: the newest of 1 stock-home import, from /home/person/.dsh at 2026-11-09T08:00:00.000Z, carried 2 chats, 1 workspace, 1 profile and 0 credentials; it left 3 entries of the stock home behind, which it did not copy.\n')
     const failed = await run({ importRecord: () => Promise.reject(new Error('the record is a directory')) }, { DEEPSEEK_API_KEY: GOOD_KEY })
     expect(failed.code).toBe(1)
-    expect(failed.stderr).toContain('fail import: the check could not complete: the record is a directory\n')
+    expect(failed.stderr).toContain('✗ import: the check could not complete: the record is a directory\n')
   })
 
   it('prints the plugin lines with the plugin\'s name, escapes what a manifest carries, and fails the exit code', async () => {
@@ -152,9 +161,9 @@ describe('delorun doctor in process', { timeout: 60_000 }, () => {
     writeJson(join(profileDir, 'node_modules', 'acme-tools', 'package.json'), { name: 'acme-tools', version: '1.0.0\u001b[2J', engines: { dsh: '^0.1.0' }, dsh: { bundle: {} } })
     const result = await run({}, { DEEPSEEK_API_KEY: GOOD_KEY })
     expect(result.code).toBe(1)
-    expect(result.stdout).toContain('pass plugins: the profile default has 1 installed package; it enables 1 bundle, loaded in this order: acme-tools.\n')
-    expect(result.stdout).toContain('pass plugin acme-tools: acme-tools@1.0.0\\u001b[2J from the registry (^1.0.0): enabled, and it declares dsh.bundle.\n')
-    expect(result.stderr).toContain('fail plugin acme-tools: acme-tools@1.0.0\\u001b[2J requires DSH "^0.1.0" (engines.dsh), and this is DSH 0.2.2, ')
+    expect(result.stdout).toContain('✓ plugins: the profile default has 1 installed package; it enables 1 bundle, loaded in this order: acme-tools.\n')
+    expect(result.stdout).toContain('✓ plugin acme-tools: acme-tools@1.0.0\\u001b[2J from the registry (^1.0.0): enabled, and it declares dsh.bundle.\n')
+    expect(result.stderr).toContain('✗ plugin acme-tools: acme-tools@1.0.0\\u001b[2J requires DSH "^0.1.0" (engines.dsh), and this is DSH 0.2.2, ')
     expect(result.stdout + result.stderr).not.toContain('\u001b')
   })
 
@@ -164,9 +173,9 @@ describe('delorun doctor in process', { timeout: 60_000 }, () => {
     writeFileSync(join(home, 'profiles', 'default', 'package.json'), '{')
     const result = await run({}, { DEEPSEEK_API_KEY: GOOD_KEY })
     expect(result.code).toBe(1)
-    expect(result.stderr).toMatch(/^fail plugins: .*package\.json is not JSON: .*; the profile's plugins are not checked\.$/m)
-    expect(result.stdout).toContain('pass release-log: ')
-    expect(result.stdout).toContain('pass plugins: no start of the profile default is logged, so no plugin is known to have failed to load.\n')
+    expect(result.stderr).toMatch(/^✗ plugins: .*package\.json is not JSON: .*; the profile's plugins are not checked\.$/m)
+    expect(result.stdout).toContain('✓ release-log: ')
+    expect(result.stdout).toContain('✓ plugins: no start of the profile default is logged, so no plugin is known to have failed to load.\n')
   })
 
   it('fails the plugins line when the installation or the versions cannot be read, and goes on', async () => {
@@ -174,26 +183,26 @@ describe('delorun doctor in process', { timeout: 60_000 }, () => {
     writeJson(join(home, 'profiles', 'default', 'node_modules', 'acme-tools', 'package.json'), { name: 'acme-tools', version: '1.0.0' })
     const result = await run({ versions: () => { throw new Error('the DSH version cannot be read') } }, { DEEPSEEK_API_KEY: GOOD_KEY })
     expect(result.code).toBe(1)
-    expect(result.stderr).toContain('fail plugins: the check could not complete: the DSH version cannot be read\n')
-    expect(result.stdout).toContain('pass plugins: no start of the profile default is logged')
+    expect(result.stderr).toContain('✗ plugins: the check could not complete: the DSH version cannot be read\n')
+    expect(result.stdout).toContain('✓ plugins: no start of the profile default is logged')
   })
 
   it('reports a thrown value that is not an Error by its text', async () => {
     // A reader from another package may reject with any value; the line still names it.
     const result = await run({ importRecord: () => Promise.reject(new TypeError('x').name) }, { DEEPSEEK_API_KEY: GOOD_KEY })
-    expect(result.stderr).toContain('fail import: the check could not complete: TypeError\n')
+    expect(result.stderr).toContain('✗ import: the check could not complete: TypeError\n')
   })
 
   it('reads the key from the home credentials document first, then from the environment layers, and warns when none sets it', async () => {
     writeFileSync(join(home, '.credentials.yaml'), `version: 1\nrefs:\n  DEEPSEEK_API_KEY: ${GOOD_KEY}\n`, { mode: 0o600 })
-    expect((await run({}, {})).stdout).toContain('pass key: ')
+    expect((await run({}, {})).stdout).toContain('✓ key: ')
     writeFileSync(join(home, '.credentials.yaml'), 'version: 1\nrefs: []\n', { mode: 0o600 })
-    expect((await run({}, {})).stderr).toContain('warn key: no DeepSeek API key is set')
+    expect((await run({}, {})).stderr).toContain('! key: no DeepSeek API key is set')
     writeFileSync(join(home, '.credentials.yaml'), 'refs: [broken\n', { mode: 0o600 })
-    expect((await run({}, {})).stderr).toMatch(/^fail key: the check could not complete: .*\.credentials\.yaml is not a readable credentials document \([A-Z_]+\)$/m)
+    expect((await run({}, {})).stderr).toMatch(/^✗ key: the check could not complete: .*\.credentials\.yaml is not a readable credentials document \([A-Z_]+\)$/m)
     writeFileSync(join(home, '.credentials.yaml'), 'just text\n', { mode: 0o600 })
     writeFileSync(join(base, '.env'), `DEEPSEEK_API_KEY=${GOOD_KEY}\n`, { mode: 0o600 })
-    expect((await run({}, {})).stdout).toContain('pass key: ')
+    expect((await run({}, {})).stdout).toContain('✓ key: ')
   })
 
   it('passes a .env loader warning to standard error and goes on', async () => {
@@ -201,13 +210,13 @@ describe('delorun doctor in process', { timeout: 60_000 }, () => {
     process.env['DEEPSEEK_API_KEY'] = GOOD_KEY
     const result = await run()
     expect(result.stderr).toContain('delorun: failed to load .env: ')
-    expect(result.stdout).toContain('pass key: ')
+    expect(result.stdout).toContain('✓ key: ')
   })
 
   it('reads this process\'s version in the shipped command', async () => {
     let stderr = ''
     await doctorCommand.run(['--port', String(await freePort())], { env: { DELORUN_HOME: home, PATH: join(base, 'no-bin') }, stdout: () => undefined, stderr: (text) => { stderr += text } })
-    expect(stderr).toMatch(/^warn release-log: no release-log check of release \d+\.\d+\.\d+\S* is recorded in /m)
+    expect(stderr).toMatch(/^! release-log: no release-log check of release \d+\.\d+\.\d+\S* is recorded in /m)
     expect(stderr).not.toContain(' import: ')
   })
 })

@@ -588,12 +588,12 @@ describe('delorun update --check and delorun doctor', { timeout: 60_000 }, () =>
 
   it('prints the notice and the summary, and starts no home process', async () => {
     expect(await update(['--check'])).toBe(EXIT.ok)
-    expect(output.stdout).toBe(`Delorun 0.2.0 is available (security fix on DSH 0.2.3; it would turn off 1 of your plugins). Run: delorun update\n  Release note: ${SUMMARY}\n`)
+    expect(output.stdout).toBe(`● Delorun 0.2.0 is available (security fix on DSH 0.2.3; it would turn off 1 of your plugins). Run: delorun update\n  Release note: ${SUMMARY}\n  delorun update --report  see what changes\n  delorun update           install it\n`)
   })
 
   it('says the running release is the newest when the channel names it, and prints no summary a manifest lacks', async () => {
     expect(await update(['--check'], true, NEWEST)).toBe(EXIT.ok)
-    expect(output.stdout).toBe('Delorun 0.2.0 is the newest release on the stable channel.\n')
+    expect(output.stdout).toBe('✓ Up to date · 0.2.0 (newest on the stable channel)\n')
     await writeUpdateCheck(home, PROFILE, { schema: UPDATE_CHECK_SCHEMA, checked: brandString<UtcTimestamp>('2027-01-15T08:00:00.000Z'), newest: { delorun: semantic('0.2.0'), dsh: semantic('0.2.3'), channel: 'stable', security: false } })
     const lines: string[] = []
     await updateCheckSource({ home, profile: PROFILE, platform, running: RUNNING, anchor, line: (text) => { lines.push(text) } }).read()
@@ -605,7 +605,10 @@ describe('delorun update --check and delorun doctor', { timeout: 60_000 }, () =>
     expect(await update(['--check'])).toBe(EXIT.failed)
     expect(output.stderr).toBe('delorun update --check: the check failed, so nothing is known about a newer release: the release host did not answer, answered with an error, or sent a file larger than its limit\n')
     expect(await update(['--check'], false)).toBe(EXIT.failed)
-    expect(output.stderr).toContain('was not installed by the launcher')
+    expect(output.stderr).toContain("This is a source build, so it doesn't update itself. Install Delorun with: npx delorun")
+    output.stderr = ''
+    expect(await update(['--report'], false)).toBe(EXIT.failed)
+    expect(output.stderr).toBe("This is a source build, so it doesn't update itself. Install Delorun with: npx delorun\n")
     await expect(update(['--check', '--yes'])).rejects.toMatchObject({ exit: EXIT.usage })
     await expect(update(['--check', '--no-data-copy'])).rejects.toMatchObject({ exit: EXIT.usage })
     expect(await updateCommand.run(['--check'], context())).toBe(EXIT.failed)
@@ -613,7 +616,7 @@ describe('delorun update --check and delorun doctor', { timeout: 60_000 }, () =>
 
   it('reports the last check in delorun doctor', async () => {
     const store = { version: RUNNING, store: true }
-    expect(await checkUpdate(home, PROFILE, { ...store, store: false }, () => platform, anchor.root)).toMatchObject({ status: 'pass', message: expect.stringContaining('was not installed by the launcher') })
+    expect(await checkUpdate(home, PROFILE, { ...store, store: false }, () => platform, anchor.root)).toMatchObject({ status: 'pass', message: expect.stringContaining('is a source build') })
     expect(await checkUpdate(home, PROFILE, store, () => platform, anchor.root)).toMatchObject({ status: 'pass', message: expect.stringContaining('no update check is recorded') })
     await check()
     expect(await checkUpdate(home, PROFILE, store, () => platform, anchor.root)).toMatchObject({ status: 'warn', message: expect.stringContaining('Delorun 0.2.0 is available') })

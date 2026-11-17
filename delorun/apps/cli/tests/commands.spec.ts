@@ -35,22 +35,27 @@ describe('the lazily loaded command table', () => {
     expect(new Set(names).size).toBe(names.length)
   })
 
-  it('prints one help line per command, in table order, for --help, -h and help', async () => {
-    const width = Math.max(...COMMANDS.map(entry => entry.name.length))
+  it('lists every command once, in a group, for --help, -h and help', async () => {
     for (const word of ['--help', '-h', 'help']) {
       const { exit, stdout, stderr } = await run([word])
       expect(exit, word).toBe(EXIT.ok)
       expect(stderr, word).toBe('')
-      const listed = stdout.split('\n').slice(stdout.split('\n').indexOf('Commands:') + 1, -1).filter(line => line.startsWith('  ')).slice(0, COMMANDS.length)
-      expect(listed, word).toEqual(COMMANDS.map(entry => `  ${entry.name.padEnd(width)}  ${entry.summary}`))
+      const listing = stdout.slice(0, stdout.indexOf('Words used here'))
+      for (const entry of COMMANDS) expect(listing.split('\n').filter(line => line.startsWith(`  ${entry.name} `)), `${word} ${entry.name}`).toHaveLength(1)
+      expect(stdout).toContain('\nEveryday\n')
+      expect(stdout).toContain('\nAdvanced\n')
     }
   })
 
-  it('refuses an unknown command with the usage code and the help text', async () => {
+  it('refuses an unknown command in one line with the usage code', async () => {
     const { exit, stdout, stderr } = await run(['frobnicate'])
     expect(exit).toBe(EXIT.usage)
     expect(stdout).toBe('')
-    expect(stderr).toContain('delorun: unknown command "frobnicate"\n\nUsage: delorun')
-    expect(stderr).toContain('Commands:')
+    expect(stderr).toBe('✗ Unknown command "frobnicate". delorun --help lists commands.\n')
+  })
+
+  it('suggests the closest command for a typing slip', async () => {
+    expect((await run(['doctr'])).stderr).toBe('✗ Unknown command "doctr". Did you mean "doctor"? delorun --help lists commands.\n')
+    expect((await run(['stat'])).stderr).toContain('Did you mean "status"?')
   })
 })

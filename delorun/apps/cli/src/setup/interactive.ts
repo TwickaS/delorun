@@ -10,7 +10,7 @@
 import { SETUP_DEFAULTS, type SetupAnswers, type SetupUseCase } from '@delorun/contract-setup-answers'
 import { BACK, runSteps, type Back, type RunStep } from './steps.ts'
 import { SetupCancelled, type Prompter } from './prompts.ts'
-import { choiceNote, USE_CASE_ORDER, USE_CASE_QUESTION, USE_CASE_REVIEW, USE_CASE_TEXT } from './choices.ts'
+import { choiceNote, USE_CASE_EXPLAIN, USE_CASE_HINT, USE_CASE_ORDER, USE_CASE_QUESTION, USE_CASE_REVIEW, USE_CASE_TEXT } from './choices.ts'
 import { withRecord, type Draft, type SectionEnvironment, type SectionRegistry, type SetupPhase, type SetupSection } from './sections.ts'
 
 /** What the interactive form returns: the answers, and the model key the person typed, which is never stored in them. */
@@ -22,6 +22,9 @@ export interface InteractiveAnswers {
   /** True when the key section kept the key saved in the home. */
   readonly keepSavedKey: boolean
 }
+
+/** The value of the choice that explains the others. */
+const EXPLAIN = 'explain'
 
 /**
  * @returns true: a step that always asks.
@@ -131,8 +134,12 @@ export async function askAnswers(prompter: Prompter, registry: SectionRegistry, 
   const useCaseStep: RunStep<Draft> = {
     asks: alwaysAsks,
     async run(io, draft) {
-      io.note(choiceNote(USE_CASE_ORDER.map(useCase => USE_CASE_TEXT[useCase])), 'Delorun runs on your computer')
-      const useCase = await io.select<SetupUseCase>(USE_CASE_QUESTION, USE_CASE_ORDER.map(each => ({ value: each, label: USE_CASE_TEXT[each].label })), draft.answers.useCase)
+      const options = [...USE_CASE_ORDER.map(each => ({ value: each, label: USE_CASE_TEXT[each].label, hint: USE_CASE_HINT[each] })), { value: EXPLAIN, label: USE_CASE_EXPLAIN }]
+      let useCase = await io.select<SetupUseCase | typeof EXPLAIN>(USE_CASE_QUESTION, options, draft.answers.useCase)
+      while (useCase === EXPLAIN) {
+        io.note(choiceNote(USE_CASE_ORDER.map(each => USE_CASE_TEXT[each])), 'What each one means')
+        useCase = await io.select<SetupUseCase | typeof EXPLAIN>(USE_CASE_QUESTION, options, draft.answers.useCase)
+      }
       // The use-case question is the first step, so it offers no back choice.
       return { ...draft, answers: before !== undefined && useCase === before.useCase ? defaults : useCaseAnswers(useCase as SetupUseCase, defaults) }
     },

@@ -91,6 +91,8 @@ import { registerFatalRelease } from './last-resort.ts'
 import { runtimePlatformOf } from './update/channel.ts'
 import { startNoticeLine, watchUpdates, type UpdateWatchOptions } from './update/notice-host.ts'
 import { hostTrustOptions, PROCESS_FETCH, TRUST_STAGES, watchTrust, type TrustWatchOptions } from './verify/trust-host.ts'
+import { studioAddress } from './status.ts'
+import { commandRows, startSpinner, styleOf } from './style.ts'
 
 /**
  * Adds `@delorun/bundle-studio` to a profile setup created before it existed ({@link addStudioBundle}).
@@ -890,7 +892,7 @@ export async function startDetached(home: string, profile: string, output: Comma
   const handing = await handsOff(home, profile, runtimeOfFile(home, fileURLToPath(import.meta.url)))
   return retryDetached({ home, profile, output }, async (variables) => {
     const outcome = await launchDetached(home, profile, output, { ...entry, handsOff: handing }, variables, forwarded)
-    if (outcome.kind === 'running') await announceStudio(home, profile, open, output, opener)
+    if (outcome.kind === 'running') await announceStudio(home, profile, open, output, opener, false)
     return outcome
   })
 }
@@ -914,14 +916,18 @@ async function launchDetached(home: string, profile: string, output: CommandOutp
   child.unref()
   const log = resolveSurface({ kind: 'home', home, profile }).file
   const deadline = Date.now() + START_WAIT_MS
+  const style = styleOf(process.env)
+  const spinner = startSpinner('Starting Delorun', style)
   while (Date.now() < deadline) {
     const status = await answeringStatus(home, profile)
     if (status?.state === 'running' && (status.pid === child.pid || (entry.handsOff && exitCode === undefined))) {
       const notice = await startNoticeLine(home, profile, process.env)
       const dangerous = await dangerousModeLine(home, profileDirectory(home, profile))
+      const address = studioAddress(status.studio)
       output.stdout([
-        `Delorun is running in the background for the profile ${profile}${status.studio === undefined ? '' : ` at ${status.studio}`}; it keeps running after this terminal closes.`,
-        'See it with delorun status, follow its log with delorun logs --follow, and stop it with delorun stop.',
+        spinner.stop('ok', `Delorun is running${profile === 'default' ? '' : ` for the profile ${profile}`}${address === undefined ? '' : ` · ${address.href}`}`),
+        `  ${style.dim('It keeps running after you close this terminal.')}`,
+        ...commandRows(style, [[`delorun open${profileFlag(profile)}`, 'open the studio'], [`delorun logs --follow${profileFlag(profile)}`, 'watch what it does'], [`delorun stop${profileFlag(profile)}`, 'stop it']]),
         ...dangerous === undefined ? [] : [dangerous],
         ...notice === undefined ? [] : [notice],
         '',
@@ -929,11 +935,13 @@ async function launchDetached(home: string, profile: string, output: CommandOutp
       return { kind: 'running' }
     }
     if (exitCode !== undefined) {
+      spinner.stop('fail', 'Delorun did not start')
       if (exitCode !== EXIT.changeLeftOut) output.stderr(startFailure(profile, `Delorun stopped with exit code ${String(exitCode)} before it was running`, log))
       return { kind: 'exited', code: exitCode }
     }
     await sleep(100)
   }
+  spinner.stop('fail', 'Delorun did not start')
   output.stderr(startFailure(profile, `Delorun was not running after ${String(START_WAIT_MS / 1000)} seconds`, log))
   return { kind: 'timeout' }
 }

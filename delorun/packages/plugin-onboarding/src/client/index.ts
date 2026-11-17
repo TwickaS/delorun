@@ -47,10 +47,10 @@ import type {} from '@delorun/plugin-theme/client'
 import { DELEGATION_CONSENT_ROW, type DelegationConsentSettings } from '@delorun/plugin-delegation-consent/wire'
 import type { ThemeSettings } from '@delorun/plugin-theme'
 import { DEFAULT_SETTINGS, ONBOARDING_ROW_ID, THEME_ROW_ID, type OnboardingSettings } from '../config.ts'
-import { ADD_WORKSPACE_PATH, AddWorkspaceAnswer, NO_RECORD, SETUP_RECORD_PATH, SetupRecord, type AddWorkspaceRequest, type FolderKind } from '../wire.ts'
+import { ADD_WORKSPACE_PATH, AddWorkspaceAnswer, NO_RECORD, SETUP_RECORD_PATH, SetupRecord, type AddWorkspaceRequest } from '../wire.ts'
 import { createBundleInstaller } from './bundles.ts'
 import { closeSidebarDrawer } from './focus.ts'
-import { hostApi, isLoopbackHostname, readWorkspaceNotice } from './host-api.ts'
+import { hostApi, isLoopbackHostname, readStartId, readWorkspaceNotice } from './host-api.ts'
 import { createKeyStatus } from './key-status.ts'
 import { DICTIONARIES, type OnboardingLocaleKey } from './locales.ts'
 import { createProvidersFace } from './providers-face.ts'
@@ -60,7 +60,6 @@ import { KeyBanner, type KeyBannerInjected } from './KeyBanner.tsx'
 import { RenameRow } from './RenameRow.tsx'
 import { DeferredSetupEntry, type DeferredSetupInjected } from './DeferredSetupEntry.tsx'
 import { SetAsideBanner, type SetAsideInjected } from './SetAsideBanner.tsx'
-import { StarterPrompts, type StarterInjected } from './StarterPrompts.tsx'
 import type {
   AddOutcome, AgentRowSettings, DelorunOnboarding, FolderBrowse, FolderChoice, NoticeFace, OnboardingInjected, OnboardingStep, SchemePreference, StartFace, StartTarget,
   StaticServices,
@@ -76,8 +75,7 @@ export type { KeyBannerInjected, KeyBannerProps } from './KeyBanner.tsx'
 export type { RenameModel, RenameRowProps } from './RenameRow.tsx'
 export { renameModel } from './RenameRow.tsx'
 export type { SetAsideInjected, SetAsideBannerProps } from './SetAsideBanner.tsx'
-export type { StarterInjected, StarterPromptsProps } from './StarterPrompts.tsx'
-export { hostApi, readReach, readWorkspaceNotice, REACH_STATUS_PATH } from './host-api.ts'
+export { hostApi, readReach, readStartId, readWorkspaceNotice, REACH_STATUS_PATH } from './host-api.ts'
 export type {
   AddedFolder, AddOutcome, AppearanceTranslate, CloneStartOutcome, DelorunOnboarding, FolderBrowse, FolderChoice, HostFace, LanguageFace, LookFace, NoticeFace, OnboardingInjected, OnboardingStep,
   OnboardingStepProps, ReachState, SchemeFace, SchemePreference, StartFace, StartTarget, StaticServices, StepServices,
@@ -106,10 +104,10 @@ export const ONBOARDING_STEP = { id: ONBOARDING_ROW_ID, order: -200 } as const
 /** The General row that opens onboarding again, by the id Delorun's Settings layout places it under. */
 export const SHOW_AGAIN_ROW = { id: ONBOARDING_ROW_ID, order: 50 } as const
 
-/** The no-key banner's place in the input dock: above the starter prompts. */
+/** The no-key banner's place in the input dock. */
 export const KEY_BANNER_ENTRY = { id: 'delorun-onboarding.key-banner', order: 5 } as const
 
-/** The set-aside notice's place in the input dock: beside the no-key banner, above the starter prompts. */
+/** The set-aside notice's place in the input dock: beside the no-key banner. */
 export const SET_ASIDE_ENTRY = { id: 'delorun-onboarding.set-aside', order: 6 } as const
 
 /** The `sidebar.footer.action` id and order of the entry that counts the steps a phone left for this computer. */
@@ -117,9 +115,6 @@ export const DEFERRED_ENTRY = { id: 'delorun-onboarding.deferred-steps', order: 
 
 /** The wire name of the model tool whose row {@link RenameRow} draws; `@delorun/plugin-workspaces` defines the tool. */
 export const RENAME_TOOL = 'rename_workspace'
-
-/** The starter prompts' place in the input dock: just above the message box. */
-export const STARTER_ENTRY = { id: 'delorun-onboarding.starters', order: 10 } as const
 
 /** The id of the PIN mode section in Settings, which bundle-local registers. */
 const PIN_MODE_SECTION_ID = 'delorun-pin-mode'
@@ -341,10 +336,10 @@ export function applyStudio(ctx: Context): void {
   const start: StartFace = { target: startTarget, resolve: () => { void resolve() }, chooseFolder, addFolder: addWorkspaceFolder, browse, holdNotice, hasWorkspace }
 
   /**
-   * Open a new chat and keep it as the one whose empty state offers starter prompts. Without a workspace the person
-   * chose or a default one, the workspace UI's own New Session choice applies and no prompts follow.
+   * Open a new chat. Without a workspace the person chose or a default one, the workspace UI's own New Session
+   * choice applies.
    */
-  const startChat = async (chosen?: WorkspaceId, folder?: FolderKind, keepCurrent = false): Promise<void> => {
+  const startChat = async (chosen?: WorkspaceId, keepCurrent = false): Promise<void> => {
     const workspace = ctx.get('uiWorkspace')
     if (workspace === undefined) return
     let target = chosen
@@ -356,16 +351,42 @@ export function applyStudio(ctx: Context): void {
       workspace.startSession()
       return
     }
-    writeProgress('starterKind', folder ?? '')
     try {
-      await workspace.openWorkspace(target, (sessionId) => { writeProgress('starterSession', sessionId) })
+      await workspace.openWorkspace(target)
     } catch (error) {
       // The workspace UI already told the person why no chat opened.
       console.warn('delorun onboarding: the chat was not opened', error)
     }
   }
 
-  const laterStore = createSnapshotStore(false)
+  // "Finish later" is kept in the home as the id of the start it was pressed in, so a reload or another tab keeps the
+  // guide closed and the next start of Delorun shows it again. Where the start id cannot be read, as on a phone, the
+  // flag lasts only until the page reloads.
+  const laterBase = createSnapshotStore(false)
+  // Read the first time it is needed, so a studio that never sets the guide aside does not ask.
+  let startRead: Promise<string | undefined> | undefined
+  const currentStart = (): Promise<string | undefined> => (startRead ??= readStartId())
+  // Set once the person opens the guide again, so a saved pause that has not been cleared yet does not close it.
+  let reopened = false
+  const syncLater = (): void => {
+    const saved = progress.getSnapshot().value?.pausedStart ?? ''
+    if (reopened || saved === '') return
+    void currentStart().then((id) => { if (!reopened && id === saved) laterBase.set(true) })
+  }
+  ctx.effect(() => {
+    syncLater()
+    return progress.subscribe(syncLater)
+  }, 'delorun-onboarding: finish later')
+  const laterStore = {
+    ...laterBase,
+    set: (next: boolean): void => {
+      reopened = !next
+      laterBase.set(next)
+      void currentStart().then((id) => {
+        if (id !== undefined && (next || (progress.getSnapshot().value?.pausedStart ?? '') !== '')) writeProgress('pausedStart', next ? id : '')
+      })
+    },
+  }
   const deferredOnly = createSnapshotStore(false)
   const face = (): OnboardingInjected => ({ progress, extra, loadRecord: loadSetupRecord, services: services(), startChat, aside: laterStore, deferredOnly })
   const deferredEntry: DeferredSetupInjected = {
@@ -393,20 +414,6 @@ export function applyStudio(ctx: Context): void {
       if (layout !== undefined) closeSidebarDrawer(document, layout)
     },
   }
-  const starters: StarterInjected = {
-    starter: { getSnapshot: () => progress.getSnapshot().value?.starterSession ?? '', subscribe: listener => progress.subscribe(listener) },
-    folder: () => progress.getSnapshot().value?.starterKind ?? '',
-    prefill: (sessionId, text) => {
-      const scope = ctx.get('sessions')?.scope(sessionId)
-      const input = scope?.get('conversation')?.input.for(scope)
-      if (input === undefined) return
-      input.setDraft(text)
-      // Keyboard-less devices keep their keyboard down until the person taps the box.
-      if (window.matchMedia('(pointer: fine)').matches) input.focus()
-    },
-    bind: (sessionId) => { writeProgress('starterSession', sessionId) },
-    dismiss: () => { writeProgress('starterSession', '') },
-  }
   const keyBanner: KeyBannerInjected = {
     keyTest: () => keyStatus.refresh(),
     // Looked up on click: `settingsShell` is not in this plugin's `inject`, so the property read does not reach the service.
@@ -429,9 +436,6 @@ export function applyStudio(ctx: Context): void {
       ctx.slots.inject('settings.general.item', () => ctx.slots.register({
         name: 'settings.general.item', id: SHOW_AGAIN_ROW.id, order: SHOW_AGAIN_ROW.order, locale: NS, inject: () => showAgain,
       }, ShowAgainRow)),
-      ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
-        name: 'conversation.input.dock', id: STARTER_ENTRY.id, order: STARTER_ENTRY.order, locale: NS, inject: () => starters,
-      }, StarterPrompts)),
       ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
         name: 'sidebar.footer.action', id: DEFERRED_ENTRY.id, order: DEFERRED_ENTRY.order, locale: NS, inject: () => deferredEntry,
       }, DeferredSetupEntry)),

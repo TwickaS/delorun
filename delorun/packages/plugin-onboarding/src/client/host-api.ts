@@ -5,7 +5,7 @@
  */
 import type { z } from 'zod'
 import {
-  AGENT_MODELS_PATH, AgentModelsAnswer, CLONE_PATH, CLONE_STATUS_PATH, CloneStart, CloneStatus, DEFER_STEP_PATH, DeferStepAnswer, KEY_TEST_PATH, KeyTestAnswer, LOCAL_MODELS_PATH, LocalModelsAnswer, READINESS_PATH, Readiness, RECOMMEND_PATH, RecommendAnswer, WORKSPACE_NOTICE_PATH, WorkspaceNoticeAnswer,
+  AGENT_MODELS_PATH, AgentModelsAnswer, CLONE_PATH, CLONE_STATUS_PATH, CloneStart, CloneStatus, DEFER_STEP_PATH, DeferStepAnswer, KEY_TEST_PATH, KeyTestAnswer, LOCAL_MODELS_PATH, LocalModelsAnswer, READINESS_PATH, Readiness, RECOMMEND_PATH, RecommendAnswer, START_PATH, StartAnswer, WORKSPACE_NOTICE_PATH, WorkspaceNoticeAnswer,
   type CloneRequest,
 } from '../wire.ts'
 import type { CloneStartOutcome, HostFace, ReachState } from './types.ts'
@@ -67,6 +67,14 @@ export async function readReach(): Promise<ReachState> {
  */
 export async function readWorkspaceNotice(): Promise<readonly string[] | undefined> {
   return (await ask(WORKSPACE_NOTICE_PATH, WorkspaceNoticeAnswer))?.setAside
+}
+
+/**
+ * Read the id of this start of Delorun.
+ * @returns the id; undefined when the route is absent or refused, as it is to a phone.
+ */
+export async function readStartId(): Promise<string | undefined> {
+  return (await ask(START_PATH, StartAnswer))?.startId
 }
 
 /** The routes, over the page's `fetch`. */

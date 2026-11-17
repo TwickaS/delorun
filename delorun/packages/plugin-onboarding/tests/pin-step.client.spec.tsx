@@ -48,6 +48,7 @@ describe('the PIN step', () => {
     expect(screen.getByText(en['pin.lead'])).toBeTruthy()
     expect(en['pin.lead']).toContain('adding plugins')
     expect(en['pin.lead']).toContain('full access')
+    expect(en['pin.lead']).toContain('only before actions that need an unlock')
     expect(screen.getByText(en['pin.here'])).toBeTruthy()
   })
 

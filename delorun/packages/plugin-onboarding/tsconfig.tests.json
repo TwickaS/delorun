@@ -28,7 +28,10 @@
   ],
   "exclude": [
     "tests/**/*.client.spec.tsx",
-    "tests/**/*.client.ts"
+    "tests/**/*.client.ts",
+    "tests/previews.spec.ts",
+    "tests/providers.spec.ts",
+    "tests/directory.fixture.ts"
   ],
   "references": [
     {

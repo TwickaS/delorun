@@ -221,8 +221,8 @@ describe('delorun open', TIMEOUT, () => {
 
   it('reports a home process that serves no studio, a profile with no home process and a computer with no browser', async () => {
     const launched: string[] = []
-    expect(await open([], browserOpener(launched))).toEqual({ code: EXIT.notRunning, stdout: '', stderr: 'Delorun is not running for the profile default; start it with delorun start.\n' })
-    expect(await open(['--print', '--profile', 'work'], browserOpener(launched))).toEqual({ code: EXIT.notRunning, stdout: '', stderr: 'Delorun is not running for the profile work; start it with delorun start --profile work.\n' })
+    expect(await open([], browserOpener(launched))).toEqual({ code: EXIT.notRunning, stdout: '', stderr: "Delorun isn't running. Start it with: delorun start\n" })
+    expect(await open(['--print', '--profile', 'work'], browserOpener(launched))).toEqual({ code: EXIT.notRunning, stdout: '', stderr: "Delorun isn't running. Start it with: delorun start --profile work\n" })
     await runHome(undefined)
     expect(Reflect.get(await queryHomeStatus(home, PROFILE, HOME_STATUS_TIMEOUT_MS), 'studio')).toBeUndefined()
     expect(await open([], browserOpener(launched))).toEqual({ code: EXIT.failed, stdout: '', stderr: 'The home process for the profile default did not give a studio link (STUDIO_UNAVAILABLE: the Host serves no studio); see delorun status.\n' })

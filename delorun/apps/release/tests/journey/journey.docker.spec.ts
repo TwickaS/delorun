@@ -403,7 +403,7 @@ describe.runIf(SELECTED)('the journey of an installed release', () => {
     await writeInMachine(`${PERSON_HOME}/.local/bin/xdg-open`, BROWSER_SCRIPT)
     await run(['chmod', '755', `${PERSON_HOME}/.local/bin/xdg-open`])
     const started = await delorun([])
-    expect(started.stdout).toContain('Delorun is running in the background for the profile default')
+    expect(started.stdout).toContain('Delorun is running · http://127.0.0.1:')
     expect(started.status, started.stderr).toBe(0)
     await waitFor('the studio\'s address in the person\'s browser', async () => (await run(['test', '-s', `${PERSON_HOME}/.journey-browser/opened`])).status === 0)
     expect(await probe('index')).toEqual({ withCookie: 200, html: true, without: 401 })

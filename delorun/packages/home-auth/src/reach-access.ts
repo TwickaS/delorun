@@ -308,7 +308,7 @@ export const REACH_EVERYDAY_SETTINGS = {
  * operation on the section's root) or cannot be read is not an everyday call and needs an unlock.
  */
 export const REACH_EVERYDAY_FIELDS: Readonly<Record<string, readonly string[]>> = {
-  'delorun-onboarding': ['done', 'step', 'starterSession', 'starterKind'],
+  'delorun-onboarding': ['done', 'step', 'pausedStart'],
   'delorun-chat-states': ['snoozePresets', 'autoSettleDays', 'refreshSeconds'],
 }
 
