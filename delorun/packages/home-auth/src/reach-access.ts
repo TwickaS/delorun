@@ -455,6 +455,7 @@ export const RENEWING_ACTIONS: ReadonlySet<string> = new Set([
   'workspace/create', 'session/create',
   'dynamicCordisRunner/invoke', 'dynamicCordisRunner/runHostHalf', 'dynamicCordisRunner/settleUserRun', 'dynamicCordisRunner/resolveRequestRun',
   'dynamicCordisRunner/stopFromPanel', 'dynamicCordisRunner/undefineFromPanel',
+  'packs/enqueue', 'packs/retry', 'packs/remove',
 ])
 
 /**

@@ -146,7 +146,8 @@ describe('an unlocked device and the protected plugin rows', () => {
       '@delorun/plugin-instruction-consent', '@delorun/plugin-fetch-guard', '@delorun/bundle-local/update-check', '@delorun/home-auth',
     ]))
     // The policy reads the same rows from the Loader that the plugin-manager row names.
-    expect(protectedEntryIdsOf(studio.ctx)).toEqual(new Set(protectedRows().map(row => row.entryId)))
+    // Each row is named by its Loader entry id and by its `id` option, which is its settings namespace.
+    expect(protectedEntryIdsOf(studio.ctx)).toEqual(new Set(protectedRows().flatMap(row => [row.entryId, row.rowId])))
   })
 
   it('finds among the settings namespaces only the protected rows whose live fields the reach policy decides', async () => {
@@ -177,13 +178,10 @@ describe('an unlocked device and the protected plugin rows', () => {
 
   it('never deselects or removes the bundle that carries the protected rows', async () => {
     const before = await profileFiles()
-    // Pins the manager's bundle refusal for a device's call: the policy admits it under an unlock.
-    const deselected = await expectAdmitted('pluginManager/setBundleEnabled', { name: LOCAL_BUNDLE, enabled: false })
-    expect(deselected).toMatchObject({ ok: true, value: { changed: false, error: { code: 'management-required', diagnostic: expect.stringContaining('@delorun/plugin-delegation-consent') } } })
-    // This composition links the bundle from the checkout, so the manager refuses its removal before it asks about
-    // protection; the protection's removal refusal is pinned by the plugin manager's own `delorun-protected-plugins.spec.ts`.
-    const removed = await expectAdmitted('pluginManager/removeBundle', { name: LOCAL_BUNDLE })
-    expect(removed).toMatchObject({ ok: true, value: { changed: false, error: { code: 'not-removable' } } })
+    // Pins the policy's bundle refusal: a bundle that carries a computer-only row is refused to an unlocked device before the
+    // plugin manager is asked (the manager's own refusal is pinned by its `delorun-protected-plugins.spec.ts`).
+    await expectDenied('pluginManager/setBundleEnabled', { name: LOCAL_BUNDLE, enabled: false }, PROTECTED_ROW_REFUSAL)
+    await expectDenied('pluginManager/removeBundle', { name: LOCAL_BUNDLE }, PROTECTED_ROW_REFUSAL)
     expect(await profileFiles()).toEqual(before)
   })
 
