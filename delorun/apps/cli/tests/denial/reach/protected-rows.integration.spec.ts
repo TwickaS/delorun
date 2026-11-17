@@ -27,7 +27,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import type { StudioAddress } from '@delorun/contract-admission'
 import {
-  DEFAULT_PERMISSION_REFUSAL, DeviceStore, HOME_AUTH_SWITCH, PROTECTED_ROW_REFUSAL, protectedEntryIdsOf, protectedPluginsIn, REACH_DEVICE_COMMANDS, REACH_SWITCH, switchOffRefusal, UNLISTED_COMMAND_REFUSAL,
+  COMPUTER_ONLY_ROW_MODULES, DEFAULT_PERMISSION_REFUSAL, DeviceStore, HOME_AUTH_SWITCH, PROTECTED_ROW_REFUSAL, protectedEntryIdsOf, protectedPluginsIn, REACH_DEVICE_COMMANDS, REACH_SWITCH, switchOffRefusal, UNLISTED_COMMAND_REFUSAL,
 } from '@delorun/home-auth'
 import { EXTERNAL_AGENT_CONSENT_SWITCH } from '@delorun/plugin-delegation-consent'
 import { DELEGATION_CONSENT_ROW } from '@delorun/plugin-delegation-consent/wire'
@@ -208,6 +208,30 @@ describe('an unlocked device and the protected plugin rows', () => {
       expect(await profileFiles()).toEqual(before)
       expect(studio.ctx.get('delegationConsent')).toBeDefined()
     })
+  })
+})
+
+describe('an unlocked device and the settings of the computer-only rows', () => {
+  // Each row of the composed profile whose module `COMPUTER_ONLY_ROW_MODULES` lists keeps its settings namespace (the
+  // row's `id` option) computer-only: a write there replaces the row in effect. Dropping a module from the list, or a
+  // row from the composition's reading of it, makes this fail.
+  it('refuses a settings write to every row of a computer-only module and to every protected row', async () => {
+    const entries = [...studio.ctx.loader.entries()]
+    const computerOnly = entries.filter(entry => entry.options.name in COMPUTER_ONLY_ROW_MODULES).map(entry => entry.options.id)
+    expect(computerOnly.length).toBeGreaterThan(0)
+    const namespaces = [...new Set([...computerOnly, ...protectedRows().map(row => row.rowId)])]
+    const files = await profileFiles()
+    const seen: string[] = []
+    for (const ns of namespaces) {
+      for (const [endpoint, args] of [['settings/replace', { ns, section: {} }], ['settings/update', { ns, patch: {} }], ['settings/mutate', { ns, ops: [{ op: 'set', path: ['enabled'], value: false }] }]] as const) {
+        const result = await call(endpoint, args)
+        // The reach policy refuses it, or the row has no live field so the settings service rejects it; it is never applied.
+        seen.push(`${endpoint} ${ns} ${result.ok ? 'applied' : result.error.code}`)
+      }
+    }
+    expect(seen.filter(line => !/ (remote-access\/denied|settings\/rejected)$/u.test(line))).toEqual([])
+    expect(seen.some(line => line.endsWith('remote-access/denied'))).toBe(true)
+    expect(await profileFiles()).toEqual(files)
   })
 })
 
