@@ -4338,6 +4338,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'screen recovery, output, writable state and provider-acceptance acknowledgements.',
       },
       {
+        signature: 'onTyped(listener: (peer: PeerScope) => void): () => void',
+        description: 'Listen for the person typing in an attached terminal: a keyboard, paste, IME or pointer write, never terminal-protocol replies, resizes or output. A listener runs once per typed frame, so one that acts on activity throttles itself.',
+        parameters: [{ name: 'listener', description: 'called with the Peer whose attachment received the input.' }],
+        returns: 'the disposer that removes the listener.',
+      },
+      {
         signature: '@Remote rename(agent: Agent, id: WebTerminalId, title: string): void',
         description: 'Rename a terminal without changing its shell.',
         parameters: [{ name: 'agent', description: 'Session owner supplied by the Gateway.' }, { name: 'id', description: 'terminal identity.' }, { name: 'title', description: 'nonempty display title, at most 120 characters.' }],

@@ -220,6 +220,8 @@ export class Elevations {
     const cap = this.options.capMs?.()
     if (running === undefined || cap === undefined || running.record.slideMs === undefined) return false
     const at = this.options.now()
+    // An unlock whose end has passed stays ended even if its timer has not fired yet.
+    if (running.record.endsAt <= at) return false
     const end = Math.min(at + running.record.slideMs, running.record.startedAt + cap)
     return end > running.record.endsAt && this.moveEnd(elevationId, end)
   }

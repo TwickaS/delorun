@@ -313,7 +313,7 @@ export function registerVersionRoutes(ctx: Context, service: ProfileVersions): v
       const body = await parsed(request, SaveBody)
       if (body === undefined) return json(400, { error: 'BAD_REQUEST', message: 'The request must be JSON with an optional name.' })
       return run(() => service.save(body.name))
-    }),
+    }, { renews: true }),
   })
   ctx.connection.fetch.register({
     path: PROFILE_VERSION_ROUTES.switch, methods: ['POST'], requestBody: 'buffered',
@@ -321,7 +321,7 @@ export function registerVersionRoutes(ctx: Context, service: ProfileVersions): v
       const body = await parsed(request, SwitchBody)
       if (body === undefined) return json(400, { error: 'BAD_REQUEST', message: 'The request must be JSON with the version.' })
       return run(() => service.switch(body.version))
-    }),
+    }, { renews: true }),
   })
 }
 
