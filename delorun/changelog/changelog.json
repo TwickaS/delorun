@@ -1957,6 +1957,16 @@
     },
     {
       "area": "Plugins",
+      "section": "Fixed",
+      "text": "The Claude Code and Codex packs now load once added; in 0.1.0-preview.1.5 they installed but failed to load with \"Cannot find package\", because the copy Changes reviews left out the Delorun packages they share with the running release. Each pack's package.json now names every package the pack links, and a release is no longer built when the reviewed copy of a pack would miss one."
+    },
+    {
+      "area": "Plugins",
+      "section": "Fixed",
+      "text": "Delorun starts again after you add an optional pack such as Browser or Webhooks; in 0.1.0-preview.1.5 the next start refused the profile, saying its plugins were not Delorun's own copy. A pack counts as Delorun's only when it loads from the signed pack the running release installed. A pack that does not load is now turned off with a reason in Plugins and home.log instead of stopping the studio, and a pack that cannot be fetched no longer blocks the start."
+    },
+    {
+      "area": "Plugins",
       "section": "Security",
       "text": "Installing a plugin checks it and every package it brings before any of its files are fetched or any install script runs: a package without an integrity hash, a git source not pinned to a full commit, a registry or download URL that is plain http, a known GitHub advisory, a version published in the last 24 hours and a name close to one you already have are each shown where you install it, on the Plugins page and in `delorun plugin`'s output. A known critical advisory stops the installation until you choose to install it anyway, with \"Install anyway\" or `--allow-advisory <id>`; everything else only warns. When the advisory or publish-time lookup cannot run, you are told so. Scopes and git owners you trust can be listed so their plugins show only critical advisories; linked and local plugin folders are not checked."
     },
@@ -2287,6 +2297,31 @@
     }
   ],
   "versions": [
+    {
+      "version": "0.1.0-preview.1.6",
+      "date": "2026-11-17",
+      "preview": true,
+      "areas": [
+        {
+          "area": "Plugins",
+          "items": [
+            {
+              "section": "Fixed",
+              "text": "The Claude Code and Codex packs now load once added; in 0.1.0-preview.1.5 they installed but failed to load with \"Cannot find package\", because the copy Changes reviews left out the Delorun packages they share with the running release. Each pack's package.json now names every package the pack links, and a release is no longer built when the reviewed copy of a pack would miss one."
+            },
+            {
+              "section": "Fixed",
+              "text": "Delorun starts again after you add an optional pack such as Browser or Webhooks; in 0.1.0-preview.1.5 the next start refused the profile, saying its plugins were not Delorun's own copy. A pack counts as Delorun's only when it loads from the signed pack the running release installed. A pack that does not load is now turned off with a reason in Plugins and home.log instead of stopping the studio, and a pack that cannot be fetched no longer blocks the start."
+            }
+          ]
+        }
+      ],
+      "fromUpstream": {
+        "ref": "dsh-v0.2.2-rc.3",
+        "items": []
+      },
+      "previews": []
+    },
     {
       "version": "0.1.0-preview.1.5",
       "date": "2026-11-17",
