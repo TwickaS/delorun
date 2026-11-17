@@ -30,7 +30,7 @@ description: "Host 的插件安装队列：把插件的下载和安装放进同�
 
 ## 使用此包
 
-用运行器、`reload`、`runningChats`、`load` 和 `save` 创建一个 `InstallQueue`，启动时调用一次 `restore()`，用 `subscribe` 把每次变化发送给 studio，并在对话结束时调用 `chatsChanged()`，让等待对话结束的重新加载得以执行。`concurrency` 是调用方一个经过验证的 `Config` 字段；小于 1 或不是整数的值会在构造时被拒绝。重启之后，`restore()` 会把当时正在进行的项标为失败（`interrupted`），并重新开始排队中的项。
+用运行器、`reload`、`runningChats`、`load` 和 `save` 创建一个 `InstallQueue`，启动时调用一次 `restore()`，用 `subscribe` 把每次变化发送给 studio，并在对话结束时调用 `chatsChanged()`，让等待对话结束的重新加载得以执行。`concurrency` 是调用方一个经过验证的 `Config` 字段；小于 1 或不是整数的值会在构造时被拒绝。`progressIntervalMs` 同样是调用方的 `Config` 字段，是同一项两次发布字节报告之间的最短间隔；完成下载的那次报告总会发布。重启之后，`restore()` 会把当时正在进行的项标为失败（`interrupted`），并重新开始排队中的项。
 
 <a id="tests"></a>
 

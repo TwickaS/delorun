@@ -36,6 +36,19 @@ export interface PackTransportOptions {
   readonly stallSeconds: number
 }
 
+/**
+ * An address as a message shows it: without any user name or password, which a channel address may carry and which
+ * every device that reads the install list would otherwise see.
+ * @param url - the address.
+ * @returns the address without credentials.
+ */
+function shown(url: URL): string {
+  const plain = new URL(url.href)
+  plain.username = ''
+  plain.password = ''
+  return plain.href
+}
+
 /** The stalled download's mark: set when the stall timer, not the caller, aborted the request. */
 interface Stall { stalled: boolean }
 
@@ -59,7 +72,7 @@ async function readBounded(response: Response, size: PackSize, abort: () => void
     abort()
     throw new PackRefusal(`${label} declares ${String(declared)} bytes, above the ${String(limit)} allowed`, 'SIZE_MISMATCH')
   }
-  const exact = 'exact' in size ? Buffer.allocUnsafe(size.exact) : undefined
+  const exact = 'exact' in size ? Buffer.allocUnsafeSlow(size.exact) : undefined
   const hash = 'exact' in size && size.sha512 !== undefined ? createHash('sha512') : undefined
   const hash256 = 'exact' in size && size.sha256 !== undefined ? createHash('sha256') : undefined
   const chunks: Uint8Array[] = []
@@ -123,18 +136,18 @@ export function createPackFiles(options: PackTransportOptions): PackFiles {
       try {
         response = await fetcher(url, { redirect: 'error', signal: controller.signal, headers: { 'accept-encoding': 'identity' } })
       } catch (error) {
-        if (stall.stalled) throw new PackRefusal(`${label} (${url.href}) ${download ? 'received no data' : 'did not answer'} for ${String(limitSeconds)} seconds`, 'FETCH_REFUSED', { cause: error })
+        if (stall.stalled) throw new PackRefusal(`${label} (${shown(url)}) ${download ? 'received no data' : 'did not answer'} for ${String(limitSeconds)} seconds`, 'FETCH_REFUSED', { cause: error })
         const reason = ((error as { cause?: { code?: string } }).cause)?.code
         if (reason !== undefined && NO_CONNECTION.has(reason)) throw new PackRefusal(`${label} needs a connection: ${reason}`, 'OFFLINE', { cause: error })
-        throw new PackRefusal(`${label} (${url.href}) could not be fetched (a redirect is refused): ${(error as Error).message}`, 'FETCH_REFUSED', { cause: error })
+        throw new PackRefusal(`${label} (${shown(url)}) could not be fetched (a redirect is refused): ${(error as Error).message}`, 'FETCH_REFUSED', { cause: error })
       }
       if (response.status === 404 && missingIsUndefined) return undefined
       if (response.status !== 200) throw new PackRefusal(`${label} answered ${String(response.status)}`, 'FETCH_REFUSED')
       return await readBounded(response, size, () => { controller.abort() }, label, () => { if (download) arm() }, transfer.onBytes)
     } catch (error) {
       if (error instanceof PackRefusal) throw error
-      if (stall.stalled) throw new PackRefusal(`${label} (${url.href}) ${download ? `received no data for ${String(limitSeconds)} seconds` : `took more than ${String(limitSeconds)} seconds in total`}`, 'FETCH_REFUSED', { cause: error })
-      throw new PackRefusal(`${label} (${url.href}) could not be read: ${(error as Error).message}`, 'FETCH_REFUSED', { cause: error })
+      if (stall.stalled) throw new PackRefusal(`${label} (${shown(url)}) ${download ? `received no data for ${String(limitSeconds)} seconds` : `took more than ${String(limitSeconds)} seconds in total`}`, 'FETCH_REFUSED', { cause: error })
+      throw new PackRefusal(`${label} (${shown(url)}) could not be read: ${(error as Error).message}`, 'FETCH_REFUSED', { cause: error })
     } finally {
       clearTimeout(timer)
       transfer.signal?.removeEventListener('abort', outer)

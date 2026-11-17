@@ -103,9 +103,9 @@ export interface PackInstallTargets {
  * @param error - what the install raised.
  * @returns the message followed by each cause's message.
  */
-function describeFailure(error: unknown): string {
+export function describeFailure(error: unknown): string {
   const parts: string[] = []
-  for (let current: unknown = error; current !== undefined && parts.length < 4; current = (current as { cause?: unknown }).cause) {
+  for (let current: unknown = error; current !== undefined && current !== null && parts.length < 4; current = (current as { cause?: unknown }).cause) {
     parts.push(current instanceof Error ? current.message : String(current))
   }
   return parts.join(' <- ')
@@ -114,21 +114,27 @@ function describeFailure(error: unknown): string {
 /** The plugin's name in the loader's diagnostics. */
 export const name = 'packs'
 
+/** The longest `stallSeconds`: an hour, far below the 2^31-1 ms Node's timers accept before firing at once. */
+export const MAX_STALL_SECONDS = 3600
+
+/** The longest `progressIntervalMs`: ten seconds, so a download's progress still moves. */
+export const MAX_PROGRESS_INTERVAL_MS = 10_000
+
 /** The plugin's configuration. */
 export interface Config {
   /** How many pack downloads and installs run at once; at least 1. */
   readonly concurrency: number
-  /** Seconds a pack download may receive nothing before it fails; a download that keeps receiving is never cut off. At least 1. */
+  /** Seconds a pack download may receive nothing before it fails; a download that keeps receiving is never cut off. From 1 to 3600. */
   readonly stallSeconds: number
-  /** The least time between two progress reports of one download, in milliseconds, so a large download does not rewrite the install list and every device's view at each piece. */
+  /** The least time between two progress reports of one download, in milliseconds, so a large download does not rewrite the install list and every device's view at each piece. From 0 to 10000. */
   readonly progressIntervalMs: number
 }
 
 /** The plugin's configuration schema. */
 export const Config: z<Config> = z.object({
   concurrency: z.number().step(1).min(1).default(2),
-  stallSeconds: z.number().min(1).default(DEFAULT_STALL_SECONDS),
-  progressIntervalMs: z.number().min(0).default(500),
+  stallSeconds: z.number().min(1).max(MAX_STALL_SECONDS).default(DEFAULT_STALL_SECONDS),
+  progressIntervalMs: z.number().min(0).max(MAX_PROGRESS_INTERVAL_MS).default(500),
 })
 
 /** No required services: a profile without the plugin manager still mounts the plugin and lists no packs. */

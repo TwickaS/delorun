@@ -61,7 +61,7 @@ description: "Delorun 在 Host 上的插件包：安装队列、packs 路由，�
 
 ## 配置
 
-`concurrency`（默认 2，至少为 1）是同时运行的安装数量。队列保存在 Delorun home 中的 `run/<profile>/installs.json`，权限为 0600，因此页面重新加载或 Host 重启后仍能找到它；重启会把正在进行的项标为失败（`interrupted`），并重新开始排队中的项。
+`concurrency`（默认 2，至少为 1）是同时运行的安装数量。`stallSeconds`（默认 60，范围 1 到 3600）是插件包下载在失败之前可以多少秒收不到数据，从请求开始计时，之后从每一段数据开始计时；持续收到数据的慢速下载不会被中断，而 packs 文件及其日志 bundle 仍保持总共 30 秒的限制。`progressIntervalMs`（默认 500，范围 0 到 10000）是同一个下载两次进度报告之间的最短间隔，避免大文件下载在每一段数据到达时都重写安装列表和每台设备的视图。失败的安装会连同原因和地址写入 home 日志。队列保存在 Delorun home 中的 `run/<profile>/installs.json`，权限为 0600，因此页面重新加载或 Host 重启后仍能找到它；重启会把正在进行的项标为失败（`interrupted`），并重新开始排队中的项。
 
 <a id="phones"></a>
 
