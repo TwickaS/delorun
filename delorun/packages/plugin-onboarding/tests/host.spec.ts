@@ -1,12 +1,13 @@
 import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { readFileSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
+import { DEFERRED_FILENAME } from '../src/deferred.ts'
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import {
   apply, Config, DEFAULT_SETTINGS, inject, MAX_ANSWERS_BYTES, name, NO_RECORD, ONBOARDING_ROW_ID, readSetupRecord, RECOMMENDED_LIMIT,
-  KEY_TEST_PATH, LOCAL_MODELS_PATH, READINESS_PATH, Readiness, RECOMMEND_PATH, SETUP_ANSWERS_FILENAME, SETUP_RECORD_PATH, SetupRecord, type OnboardingSettings,
+  DEFER_STEP_PATH, KEY_TEST_PATH, LOCAL_MODELS_PATH, READINESS_PATH, Readiness, RECOMMEND_PATH, SETUP_ANSWERS_FILENAME, SETUP_RECORD_PATH, SetupRecord, type OnboardingSettings,
 } from '../src/index.ts'
 import { PENDING_STARTERS, THEME_ROW_ID } from '../src/config.ts'
 import { THEME_ROW_ID as THEME_ROW } from '../../plugin-theme/src/config.ts'
@@ -197,13 +198,14 @@ async function mount(directory: string | undefined) {
   onTestFinished(async () => { await ctx.fiber.dispose() })
   const route = routes.get(SETUP_RECORD_PATH)
   if (route === undefined) throw new Error('no route')
-  return { ctx, fiber, routes, route, warn, configure, unconfigure, get: () => route.fetch(new Request('http://harness.test/api', { method: 'GET' })) }
+  const defer = (body: unknown) => routes.get(DEFER_STEP_PATH)!.fetch(new Request('http://harness.test/api', { method: 'POST', body: typeof body === 'string' ? body : JSON.stringify(body) }))
+  return { defer, ctx, fiber, routes, route, warn, configure, unconfigure, get: () => route.fetch(new Request('http://harness.test/api', { method: 'GET' })) }
 }
 
 describe('the route', () => {
   it('is one exact GET route that serves the record uncached, beside the guide\'s read-only routes', async () => {
     const { routes, route, get } = await mount(await profile(answers({ reach: { option: 'tailscale-private' }, sections: [{ id: 'reach', status: 'answered' }] })))
-    expect([...routes.keys()]).toEqual([SETUP_RECORD_PATH, READINESS_PATH, KEY_TEST_PATH, LOCAL_MODELS_PATH, RECOMMEND_PATH])
+    expect([...routes.keys()]).toEqual([SETUP_RECORD_PATH, DEFER_STEP_PATH, READINESS_PATH, KEY_TEST_PATH, LOCAL_MODELS_PATH, RECOMMEND_PATH])
     expect(SETUP_RECORD_PATH).toBe('/api/delorunOnboarding.setupRecord')
     expect([route.methods, route.requestBody]).toEqual([['GET'], 'buffered'])
     const response = await get()
@@ -268,6 +270,68 @@ describe('the route', () => {
 
   it('requires only the Connection', () => {
     expect(inject).toEqual(['connection'])
+  })
+})
+
+describe('the deferred steps', () => {
+  it('is a POST route a paired phone may call, which only notes a step for the computer', async () => {
+    const { routes } = await mount(await profile())
+    const route = routes.get(DEFER_STEP_PATH) as { methods: readonly string[]; admitPeer?: unknown } | undefined
+    expect(route?.methods).toEqual(['POST'])
+    expect(typeof route?.admitPeer).toBe('function')
+  })
+
+  it('keeps a deferred step in the profile directory and serves it with the record, in the list\'s order', async () => {
+    const directory = await profile(answers())
+    const { defer, get } = await mount(directory)
+    expect((await get().then(response => response.json()))).toEqual({ sections: [], reachSetUp: false })
+    expect(await (await defer({ id: 'pin', deferred: true })).json()).toEqual({ deferred: ['pin'] })
+    expect(await (await defer({ id: 'reach', deferred: true })).json()).toEqual({ deferred: ['reach', 'pin'] })
+    expect(await get().then(response => response.json())).toEqual({ sections: [], reachSetUp: false, deferred: ['reach', 'pin'] })
+    expect(SetupRecord.parse(await get().then(response => response.json())).deferred).toEqual(['reach', 'pin'])
+    expect(statSync(join(directory, DEFERRED_FILENAME)).mode & 0o777).toBe(0o600)
+  })
+
+  it('clears a step, and does nothing the second time', async () => {
+    const { defer, get } = await mount(await profile())
+    await defer({ id: 'pin', deferred: true })
+    expect(await (await defer({ id: 'pin', deferred: false })).json()).toEqual({ deferred: [] })
+    expect(await (await defer({ id: 'pin', deferred: false })).json()).toEqual({ deferred: [] })
+    expect(await get().then(response => response.json())).toEqual({ reachSetUp: false })
+  })
+
+  it('keeps both of two requests made at once', async () => {
+    const { defer, get } = await mount(await profile())
+    await Promise.all([defer({ id: 'pin', deferred: true }), defer({ id: 'approve', deferred: true })])
+    expect((await get().then(response => response.json())).deferred).toEqual(['pin', 'approve'])
+  })
+
+  it.each<readonly [string, unknown]>([
+    ['an id outside the list', { id: 'workspace', deferred: true }],
+    ['a missing flag', { id: 'pin' }],
+    ['an extra field', { id: 'pin', deferred: true, more: 1 }],
+    ['text that is not JSON', 'not json sk-test-secret-marker-7f3a'],
+  ])('refuses %s with 400 and writes nothing', async (_, body) => {
+    const directory = await profile()
+    const { defer, get } = await mount(directory)
+    const response = await defer(body)
+    expect(response.status).toBe(400)
+    expect(JSON.stringify(await response.json())).not.toContain(SECRET)
+    expect(await get().then(r => r.json())).toEqual({ reachSetUp: false })
+  })
+
+  it('reads an unusable file as none, with a warning that does not quote it', async () => {
+    const directory = await profile()
+    await writeFile(join(directory, DEFERRED_FILENAME), `{"version":1,"deferred":["${SECRET}"]}`)
+    const { get, warn } = await mount(directory)
+    expect(await get().then(response => response.json())).toEqual({ reachSetUp: false })
+    expect(warn).toHaveBeenCalledOnce()
+    expect(String(warn.mock.calls[0]?.[0])).not.toContain(SECRET)
+  })
+
+  it('refuses a write where there is no profile directory, with 500', async () => {
+    const { defer } = await mount(undefined)
+    expect((await defer({ id: 'pin', deferred: true })).status).toBe(500)
   })
 })
 
