@@ -188,6 +188,14 @@ describe('a Playwright browser build', () => {
       expect(row([CHROME], { browser: 'chrome' })).toMatchObject(ready)
     })
 
+    it('needs nothing for a row that names its own executable, which never counts as launching Chrome', () => {
+      for (const browser of ['auto', 'chrome', 'chromium']) expect(row([], { browser, executablePath: '/custom/chromium' })).toMatchObject(ready)
+      expect(launchesChrome(need, { executablePath: '/custom/chromium' }, playwrightComputer([CHROME]))).toBe(false)
+      expect(launchesChrome(need, { browser: 'chrome', executablePath: '/custom/chrome' }, playwrightComputer([]))).toBe(true)
+      expect(launchesChrome(need, { executablePath: '' }, playwrightComputer([CHROME]))).toBe(true)
+      expect(row([], { executablePath: '' })).toMatchObject(chromium)
+    })
+
     it('looks for Chrome only where Playwright does, never on PATH', () => {
       expect(row(['/usr/bin/google-chrome', '/usr/bin/chrome', '/opt/bin/chrome'])).toMatchObject(chromium)
     })

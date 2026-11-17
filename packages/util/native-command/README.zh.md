@@ -55,7 +55,7 @@ const { stdout, stderr } = await runNativeCommand('osascript', ['-e', script], s
 
 ### 查找 Playwright 启动时使用的 Chrome
 
-`@deepseek-ai/dsh-native-command/chrome-channel` 在不运行任何程序的前提下回答：某台电脑上的 Playwright 启动会使用哪个 Chromium 系浏览器。`launchedBrowser(choice)` 接受 `auto`、`chrome` 或 `chromium`：`auto` 在 Playwright 的 `chrome` 通道查找的位置装有 Google Chrome 时回答 `chrome`，否则回答 `chromium`，即 Playwright 自己下载的版本；另外两个值回答其自身。`chromeChannelCandidates` 按 Playwright 的顺序列出路径：Linux 为 `/opt/google/chrome/chrome`，macOS 为 `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`，Windows 为 `LOCALAPPDATA`、`PROGRAMFILES`、`PROGRAMFILES(X86)` 以及 `HOMEDRIVE` 上的 `Program Files` 与 `Program Files (x86)` 之下的 `\Google\Chrome\Application\chrome.exe`；从不搜索 `PATH`。`parseBrowserChoice` 校验从其他插件配置读到的选择，未设置时为 `auto`。提供方的启动参数与安装检查调用同一个函数，因此检查只对实际启动的浏览器报告缺少下载。该子路径只导入 Node 内置模块。
+`@deepseek-ai/dsh-native-command/chrome-channel` 在不运行任何程序的前提下回答：某台电脑上的 Playwright 启动会使用哪个 Chromium 系浏览器。`launchedBrowser(choice)` 接受 `auto`、`chrome` 或 `chromium`：`auto` 在 Playwright 的 `chrome` 通道查找的位置装有 Google Chrome 时回答 `chrome`，否则回答 `chromium`，即 Playwright 自己下载的版本；调用方传入其配置为启动指定的可执行文件时也回答 `chromium`；另外两个值回答其自身。`chromeChannelCandidates` 按 Playwright 的顺序列出路径：Linux 为 `/opt/google/chrome/chrome`，macOS 为 `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`，Windows 为 `LOCALAPPDATA`、`PROGRAMFILES`、`PROGRAMFILES(X86)` 以及 `HOMEDRIVE` 上的 `Program Files` 与 `Program Files (x86)` 之下的 `\Google\Chrome\Application\chrome.exe`；从不搜索 `PATH`。`parseBrowserChoice` 校验从其他插件配置读到的选择，未设置时为 `auto`。提供方的启动参数与安装检查调用同一个函数，因此检查只对实际启动的浏览器报告缺少下载。该子路径只导入 Node 内置模块。
 
 -----
 
