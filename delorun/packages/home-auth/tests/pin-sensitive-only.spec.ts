@@ -48,7 +48,7 @@ describe('a paired phone in PIN mode', () => {
   it('is told to unlock at each unlock route and unlock action, and passes them after the PIN unlock', async () => {
     for (const unlocked of [false, true]) {
       const { home, facts } = pinHome(unlocked)
-      const route = gateByUnlock(() => home, () => Promise.resolve(new Response('ran')))
+      const route = gateByUnlock(() => home, () => Promise.resolve(new Response('ran')), { renews: true })
       const request = new Request('http://localhost/x', { method: 'POST' })
       expect(route.admitPeer(request, peer(unlocked))).toBe(true)
       const answer = await route.fetch(request)

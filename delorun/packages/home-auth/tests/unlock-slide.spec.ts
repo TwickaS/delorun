@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { SESSION_LIMITS, type StudioAddress } from '@delorun/contract-admission'
 import { gateByUnlock } from '../src/computer-only.ts'
-import { createCondition, ELEVATED_READS, REACH_ELEVATED_ACTIONS, reachDevicePrincipal, type ReachAccessFacts } from '../src/reach-access.ts'
+import { createCondition, ELEVATED_READS, REACH_ELEVATED_ACTIONS, reachDevicePrincipal, RENEWING_ACTIONS, type ReachAccessFacts } from '../src/reach-access.ts'
 import { claimOf, homeFixture, type Home } from './fixtures/home.ts'
 
 const ADDRESS = brandString<StudioAddress>('https://home.example.ts.net')
@@ -85,6 +85,45 @@ describe('a sliding unlock', () => {
   })
 })
 
+describe('which actions renew an unlock', () => {
+  it('classify every elevated action, in exactly one of the renewing and non-renewing lists', () => {
+    // Pins the gate: a new elevated action fails here until its author decides whether it renews.
+    const unclassified = Object.keys(REACH_ELEVATED_ACTIONS).filter(action => !RENEWING_ACTIONS.has(action) && !ELEVATED_READS.has(action))
+    expect(unclassified).toEqual([])
+    expect([...RENEWING_ACTIONS].filter(action => ELEVATED_READS.has(action))).toEqual([])
+    const known = new Set([...Object.keys(REACH_ELEVATED_ACTIONS), 'session/create'])
+    expect([...RENEWING_ACTIONS, ...ELEVATED_READS].filter(action => !known.has(action))).toEqual([])
+  })
+
+  it('keep the keepalives off the renewing list and the everyday state-changing steps on it', () => {
+    for (const action of ['terminal/retain', 'terminal/watch', 'terminal/list', 'mcpManager/watch', 'dynamicCordisRunner/reportRenderFailure']) expect(RENEWING_ACTIONS.has(action), action).toBe(false)
+    for (const action of ['terminal/create', 'terminal/attach', 'settings/update', 'pluginManager/setBundleEnabled', 'commands/execute', 'mcpManager/restart', 'workspace/create', 'session/create']) expect(RENEWING_ACTIONS.has(action), action).toBe(true)
+  })
+
+  it('end the unlock at its original end when only reads and keepalives are polled past the slide minutes', async () => {
+    const { home: served, deviceId, record } = await unlocked(480)
+    const real: ReachAccessFacts = {
+      admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere',
+      elevationOf: (id, listener) => served.auth.elevationOf(id, listener), touchUnlock: id => { served.auth.touchUnlock(id) },
+      pageUnlockOf: () => undefined, pinEnabled: () => false,
+      keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
+      computerOnlySwitches: () => [], protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set(),
+      defaultPermission: () => undefined, dangerousMode: () => false,
+    }
+    const condition = createCondition(real, reachDevicePrincipal(deviceId, LISTENER))
+    const polled = ['terminal/list', 'terminal/watch', 'terminal/retain', 'mcpManager/watch', 'directoryPicker/list', 'dynamicCordisRunner/getClientCode']
+    for (let minute = 1; minute < 15; minute += 1) {
+      served.clock.advance(MINUTE)
+      for (const action of polled) expect(condition({ action: action as never, resource: { kind: 'global' }, args: {} }).kind, `${action} at ${String(minute)}`).toBe('allow')
+    }
+    // Pins the original end: fourteen minutes of polling moved nothing, so the unlock ends at its fifteenth minute.
+    expect(served.auth.elevationOf(deviceId, LISTENER)?.endsAt).toBe(record.endsAt)
+    served.clock.advance(MINUTE)
+    expect(served.auth.elevationOf(deviceId, LISTENER)).toBeUndefined()
+    expect(condition({ action: 'terminal/list' as never, resource: { kind: 'global' }, args: {} })).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/list' })
+  })
+})
+
 describe('what renews an unlock', () => {
   const facts = (touch: (id: string) => void): ReachAccessFacts => ({
     admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere',
@@ -139,7 +178,7 @@ describe('what renews an unlock', () => {
   it('is a call of an unlock-gated route, and not one a locked device made or a polled route', () => {
     const touch = vi.fn()
     const home = { elevationOf: (deviceId: string) => (deviceId === 'unlocked' ? { id: 'unlock-2' } : undefined), pageUnlockOf: () => undefined, touchUnlock: touch } as never
-    const route = gateByUnlock(() => home, () => Promise.resolve(new Response('ran')))
+    const route = gateByUnlock(() => home, () => Promise.resolve(new Response('ran')), { renews: true })
     route.admitPeer(new Request('http://localhost/x'), { principal: reachDevicePrincipal('locked', LISTENER) })
     expect(touch).not.toHaveBeenCalled()
     route.admitPeer(new Request('http://localhost/x'), { principal: reachDevicePrincipal('unlocked', LISTENER) })
@@ -155,13 +194,13 @@ describe('gateByUnlock with the grace excluded', () => {
   it('records a grace-only unlock as locked, and a code unlock as unlocked', () => {
     const touch = vi.fn()
     const home = { elevationOf: (deviceId: string) => (deviceId === 'grace' ? { id: 'g', grace: true } : deviceId === 'code' ? { id: 'c' } : undefined), pageUnlockOf: () => undefined, touchUnlock: touch } as never
-    const ask = async (deviceId: string, options?: { grace?: boolean }) => {
+    const ask = async (deviceId: string, options: { grace?: boolean, renews: boolean } = { renews: true }) => {
       const route = gateByUnlock(() => home, () => Promise.resolve(new Response('ran')), options)
       const request = new Request('http://localhost/x')
       route.admitPeer(request, { principal: reachDevicePrincipal(deviceId, LISTENER) })
       return (await route.fetch(request)).status
     }
-    return Promise.all([ask('grace', { grace: false }), ask('grace'), ask('code', { grace: false })]).then((statuses) => {
+    return Promise.all([ask('grace', { grace: false, renews: true }), ask('grace'), ask('code', { grace: false, renews: true })]).then((statuses) => {
       // Pins the option: the grace opens an ordinary unlock route and not one that loosens a consent row.
       expect(statuses).toEqual([403, 200, 200])
       expect(touch).toHaveBeenCalledTimes(2)

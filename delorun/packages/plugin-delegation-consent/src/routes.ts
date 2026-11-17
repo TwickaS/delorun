@@ -101,7 +101,7 @@ export function registerDelegationRoutes(ctx: Context, service: DelorunDelegatio
       const body = await parsed(request, AllowBody)
       if (body === undefined) return json(400, { error: 'INVALID_REQUEST', message: 'the request must be JSON with the chat, the agent and confirmed' })
       return run(() => service.allowWorkspace(body))
-    }, { grace: false }),
+    }, { grace: false, renews: true }),
   })
   ctx.connection.fetch.register({
     path: DELEGATION_CONSENT_ROUTES.revoke, methods: ['POST'], requestBody: 'buffered', admitPeer,

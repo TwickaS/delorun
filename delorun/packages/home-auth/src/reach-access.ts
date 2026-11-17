@@ -437,15 +437,36 @@ function isEverydayCall(action: RemoteAccessAction, args: Readonly<Record<string
 }
 
 /**
- * The actions of {@link REACH_ELEVATED_ACTIONS} that only read or re-attach: they need the unlock but never renew it, because
- * a studio lists, watches and reattaches on its own while the person does nothing. Every other elevated call renews the
- * unlock it ran under once the condition allows it.
+ * The actions of {@link REACH_ELEVATED_ACTIONS} (and `session/create` outside the known workspaces) that renew a sliding
+ * unlock when allowed: the deliberate, state-changing steps a person takes while working. Every other action, including
+ * one added later, does not renew: a studio lists, watches, retains and reattaches on its own while the person does
+ * nothing, and reports client errors automatically.
+ */
+export const RENEWING_ACTIONS: ReadonlySet<string> = new Set([
+  'settings/mutate', 'settings/replace', 'settings/update', 'commands/execute',
+  'pluginManager/cancelInstall', 'pluginManager/installBundle', 'pluginManager/removeBundle', 'pluginManager/setBundleEnabled',
+  'pluginManager/setPluginEnabled', 'pluginManager/setVersionExemption', 'pluginManager/updateBundle', 'pluginManager/undo', 'pluginManager/restore',
+  'terminal/create', 'terminal/close', 'terminal/rename', 'terminal/attach',
+  'mcpManager/probe', 'mcpManager/restart',
+  'directoryPicker/createDirectory', 'directoryPicker/pick',
+  'workspace/create', 'session/create',
+  'dynamicCordisRunner/invoke', 'dynamicCordisRunner/runHostHalf', 'dynamicCordisRunner/settleUserRun', 'dynamicCordisRunner/resolveRequestRun',
+  'dynamicCordisRunner/stopFromPanel', 'dynamicCordisRunner/undefineFromPanel',
+])
+
+/**
+ * The actions of {@link REACH_ELEVATED_ACTIONS} that need the unlock and never renew it: reads, keepalive streams
+ * (`terminal/retain`, `terminal/watch`), automatic client reports and events. Together with {@link RENEWING_ACTIONS} it
+ * covers every elevated action, which `tests/unlock-slide.spec.ts` checks, so a new action is classified on purpose.
  */
 export const ELEVATED_READS: ReadonlySet<string> = new Set([
-  'terminal/list', 'terminal/watch', 'terminal/shells', 'terminal/environment', 'terminal/attach',
+  'terminal/list', 'terminal/watch', 'terminal/shells', 'terminal/environment', 'terminal/retain',
   'mcpManager/watch',
   'directoryPicker/list',
   'dynamicCordisRunner/getClientCode', 'dynamicCordisRunner/inventory', 'dynamicCordisRunner/resolveInspectQuery', 'dynamicCordisRunner/syncInspectManifest',
+  'dynamicCordisRunner/reportClientGuardFailure', 'dynamicCordisRunner/reportRenderFailure',
+  'event:cordis/request-run', 'event:cordis/request-run-resolved', 'event:cordis/dynamic-package', 'event:cordis/dynamic-retract',
+  'event:cordis/inspect-query', 'event:cordis/inspect-query-resolved',
 ])
 
 const PLUGIN_MANAGEMENT = 'install, enable, update or remove a plugin, code that runs in the Host outside any sandbox; the plugin manager still refuses every change to a guard plugin'
@@ -1096,7 +1117,7 @@ export function createCondition(
     if (call) {
       facts.logElevated(`home-auth: elevated action: device=${deviceId} listener=${listener} action=${action} elevation=${elevation.id}`)
       // Renewed below, once the whole condition allows the call.
-      if (!ELEVATED_READS.has(action)) renew = elevation.id
+      if (RENEWING_ACTIONS.has(action)) renew = elevation.id
     }
     return undefined
   }
