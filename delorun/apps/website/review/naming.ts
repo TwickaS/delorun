@@ -39,7 +39,7 @@ export const SCHEMES = ['light', 'dark'] as const
 export type Scheme = (typeof SCHEMES)[number]
 
 /** The states a picture can be taken in. `default` is the plain page. */
-export type PictureState = 'default' | 'reduced-motion' | 'scripts-off' | `k-${string}`
+export type PictureState = 'default' | 'reduced-motion' | 'scripts-off' | `k-${string}` | `chapter-${string}` | `worst-${string}`
 
 /** What one picture shows. */
 export interface PictureSpec {
