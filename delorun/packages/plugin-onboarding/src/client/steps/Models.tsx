@@ -159,7 +159,7 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
   const present = (card: ProviderCard): ReactNode => (
     <li key={card.provider}>
       <Card title={card.name} monogram={monogramOf(card)} labels={labels} selected={ticked.has(card.provider)} description={card.custom === true ? t('providers.custom.hint') : undefined}
-        action={(
+        leading={(
           <label className={css.tickLabel}>
             <input type="checkbox" className={css.tick} checked={ticked.has(card.provider)} aria-label={t('providers.use', { name: card.name })} onChange={(event) => {
               const on = event.currentTarget.checked

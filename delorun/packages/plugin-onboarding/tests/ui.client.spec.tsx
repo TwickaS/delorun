@@ -90,7 +90,14 @@ describe('the card', () => {
     expect(document.querySelector('[data-open]')?.textContent).toBe(long)
   })
 
-  it('offers no More for a description that fits on one line', () => {
+  it('puts a leading control, such as a tick, before the icon', () => {
+    render(<Card title="T" labels={LABELS} leading={<input type="checkbox" aria-label="Use T" />} />)
+    const row = screen.getByRole('checkbox').closest('div') as HTMLElement
+    expect(row.firstElementChild?.querySelector('input')).not.toBeNull()
+    expect(row.children[1]?.querySelector('svg')).not.toBeNull()
+  })
+
+  it('offers no More for a description that fits on two lines', () => {
     render(<Card title="Short" description="Short text." labels={LABELS} />)
     expect(screen.queryByRole('button', { name: en.more })).toBeNull()
   })

@@ -1,5 +1,5 @@
 /**
- * A card for one thing the person can add or tick: a fixed icon slot, a title, a one-line summary with the rest of a
+ * A card for one thing the person can add or tick: a fixed icon slot, a title, a summary of up to two lines with the rest of a
  * long description behind "More", one action area and a state line under them. A card without artwork shows a neutral
  * glyph, so every title in a list starts at the same place.
  */
@@ -9,7 +9,7 @@ import type { ReactNode } from 'react'
 import css from './Card.module.css'
 
 /** A description longer than this many characters is shortened to one line with the full text behind "More". */
-export const SUMMARY_LIMIT = 72
+export const SUMMARY_LIMIT = 140
 
 /** The props of the card. */
 export interface CardProps {
@@ -23,6 +23,8 @@ export interface CardProps {
   readonly description?: string | undefined
   /** Labels of the disclosure. */
   readonly labels: { readonly more: string; readonly less: string }
+  /** A control before the icon, such as the tick of a list of choices. */
+  readonly leading?: ReactNode
   /** The action area: a button or a mark. */
   readonly action?: ReactNode
   /** The state lines and other content under the card's row. */
@@ -55,13 +57,14 @@ export function Monogram({ letters }: { readonly letters: string }): ReactNode {
  * @param props - the title, icon, description, action and what sits under the row.
  * @returns the card.
  */
-export function Card({ title, icon, monogram, description, labels, action, children, selected = false }: CardProps): ReactNode {
+export function Card({ title, icon, monogram, description, labels, leading, action, children, selected = false }: CardProps): ReactNode {
   const [open, setOpen] = useState(false)
   const id = useId()
   const long = description !== undefined && description.length > SUMMARY_LIMIT
   return (
     <div className={css.card} data-selected={selected || undefined}>
       <div className={css.row}>
+        {leading !== undefined && <span className={css.leading}>{leading}</span>}
         <span className={css.icon}>
           {icon !== undefined ? <img className={css.image} src={icon} alt="" />
             : monogram !== undefined ? <Monogram letters={monogram} /> : <Glyph />}

@@ -393,10 +393,17 @@
 .cards {
   display: flex;
   flex-direction: column;
-  gap: var(--onb-gap-1);
   margin: 0;
   padding: 0;
+  overflow: hidden;
   list-style: none;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.cards > li + li {
+  border-top: 0.5px solid var(--dsw-alias-border-l1);
 }
 
 .actions {
@@ -452,10 +459,8 @@
   display: flex;
   align-items: center;
   gap: var(--delorun-space-5);
-  min-height: 72px;
-  padding: var(--delorun-space-5);
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--dsw-radius-lg);
+  min-height: 48px;
+  padding: var(--delorun-space-3) var(--delorun-space-5);
 }
 
 .skeletonIcon,
