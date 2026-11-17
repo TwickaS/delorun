@@ -26,6 +26,7 @@ import {
 import { DEVICE_REMOVE_PATH, DEVICES_PATH, devicesHandler, removeDeviceHandler, type RouteHandler } from '../src/routes.ts'
 import { claimOf, homeFixture, recordOf, STUDIO_COOKIE, testCredential, type Home } from './fixtures/home.ts'
 import { DeviceStore } from '../src/devices.ts'
+import { HOME_AUTH_FILES } from '@delorun/contract-device-approval'
 
 const ADDRESS = brandString<StudioAddress>('https://home.example.ts.net')
 const LISTENER = 'reach-tailscale-private'
@@ -131,6 +132,18 @@ describe('the device list and removal for a signed-in device', () => {
     expect(await send('POST', `${DEVICE_REMOVE_PATH}?reach`, { v: 1, deviceId: 'someone-else' })).toMatchObject({ status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
     expect(await send('POST', `${DEVICE_REMOVE_PATH}?reach`, { v: 1, deviceId: listing['current'] })).toMatchObject({ status: 200, body: { removed: true } })
     expect((await send('GET', `${DEVICES_PATH}?reach`)).status).toBe(403)
+  })
+
+  it('leaves a real second paired device paired when a signed-in device asks to remove it', async () => {
+    const other = recordOf(9, ADDRESS)
+    await new DeviceStore({ file: join(home.directory, HOME_AUTH_FILES.devices) }).add(other)
+    expect((await home.auth.devices()).devices).toHaveLength(2)
+    const asked = await send('POST', `${ELEVATION_PATHS.request}?reach`)
+    home.auth.approveElevation(String(asked.body['requestId']), String(asked.body['code']))
+    // Pins the self check against a real record: neither the session nor an unlock removes another device.
+    expect(await send('POST', `${DEVICE_REMOVE_PATH}?reach`, { v: 1, deviceId: other.id })).toMatchObject({ status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
+    expect((await home.auth.devices()).devices.map(device => device.id)).toContain(other.id)
+    expect((await home.auth.devices()).devices).toHaveLength(2)
   })
 
   it('refuses an unsigned request', async () => {
