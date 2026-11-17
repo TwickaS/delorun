@@ -207,17 +207,25 @@ export async function composedProblem(home: string, signed: SignedRuntime, files
   const expected = await treeFiles(home, signed, files)
   const found = await listEntries(root)
   const paths = [...new Set([...expected.keys(), ...found.keys()])].sort(compareCodeUnits)
-  for (const path of paths) {
+  // Every path is checked, many at once; the first in path order that differs, or fails to be read, decides.
+  const outcomes = await eachLimited(paths, TREE_FILE_CONCURRENCY, async (path): Promise<ComposedProblem['kind'] | { readonly failed: unknown } | undefined> => {
     const file = expected.get(path)
     const regular = found.get(path)
-    if (file === undefined) return { path, kind: 'extra' }
-    if (regular === undefined) return { path, kind: 'missing' }
-    if (!regular) return { path, kind: 'not-regular' }
+    if (file === undefined) return 'extra'
+    if (regular === undefined) return 'missing'
+    if (!regular) return 'not-regular'
+    try {
+      return await pathHolds(signed, root, path, file) ? undefined : 'changed'
+    } catch (failed) {
+      return { failed }
+    }
+  })
+  for (const [index, outcome] of outcomes.entries()) {
+    if (outcome === undefined) continue
+    if (typeof outcome === 'object') throw outcome.failed
+    return { path: paths[index]!, kind: outcome }
   }
-  // Every path is now an expected regular file; each is checked, and the first that differs in path order is named.
-  const holding = await eachLimited(paths, TREE_FILE_CONCURRENCY, path => pathHolds(signed, root, path, expected.get(path)!))
-  const changed = holding.indexOf(false)
-  return changed === -1 ? undefined : { path: paths[changed]!, kind: 'changed' }
+  return undefined
 }
 
 /**
@@ -275,11 +283,12 @@ async function buildTree(home: string, signed: SignedRuntime, files: Readonly<Re
   // Every directory first, parents before children, so the files can then be placed in any order.
   for (const [path] of entries) {
     const missing: string[] = []
-    for (let directory = dirname(join(root, ...path.split('/'))); !directories.has(directory); directory = dirname(directory)) missing.push(directory)
-    for (const directory of missing.reverse()) {
-      await mkdir(directory, { mode: PRIVATE_DIR_MODE })
+    // Each directory joins the set as it is found, so the walk ends at the root's own filesystem root at the latest.
+    for (let directory = dirname(join(root, ...path.split('/'))); !directories.has(directory); directory = dirname(directory)) {
       directories.add(directory)
+      missing.push(directory)
     }
+    for (const directory of missing.reverse()) await mkdir(directory, { mode: PRIVATE_DIR_MODE })
   }
   await eachLimited(entries, TREE_FILE_CONCURRENCY, place)
   for (const directory of [...directories].sort((a, b) => b.length - a.length)) await chmod(directory, TREE_EXECUTABLE_MODE)

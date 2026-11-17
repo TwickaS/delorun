@@ -119,6 +119,20 @@ describe('the composed tree', () => {
     }
   })
 
+  it('names the first path that differs in path order, whatever kind of difference comes later', async () => {
+    const { ctx, home, signed } = harnessFixture()
+    await approveStart(ctx)
+    const root = (await prepareComposedTree(home, RUNTIME, signed))!.directory
+    // `bin.js` sorts before `start.js`: a changed file first and a missing one after it names the changed one.
+    writable(root, 'app/node_modules/@delorun/cli/src')
+    rmSync(join(root, 'app/node_modules/@delorun/cli/src/bin.js'))
+    writeFileSync(join(root, 'app/node_modules/@delorun/cli/src/bin.js'), 'other\n')
+    rmSync(join(root, START_FILE))
+    const refused = await rejection(checkComposedTree(home, RUNTIME, signed, root), 'HARNESS_CHANGED')
+    expect(refused.subject).toBe(join(root, 'app/node_modules/@delorun/cli/src/bin.js'))
+    expect(refused.message).toContain('is not the signed or approved file')
+  })
+
   it('a copy of a signed file where a hard link was refused passes the check by its bytes', async () => {
     const { ctx, home, signed } = harnessFixture()
     await approveStart(ctx)
