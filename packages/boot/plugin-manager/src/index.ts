@@ -864,7 +864,7 @@ export class PluginManager extends TypertRemoteService {
       let target: Pick<BundleInfo, 'installTarget'> = {}
       let targetError: ManagementError | undefined
       if (offered !== undefined) {
-        try { target = { installTarget: officialBundleInstallTarget(name, this.profile.installAnchor, runtimeVersion) } }
+        try { target = { installTarget: this.ownerContext.get('packInstallTargets')?.resolve(name, runtimeVersion) ?? officialBundleInstallTarget(name, this.profile.installAnchor, runtimeVersion) } }
         catch (error) { targetError = managementError(error) }
       }
       const catalogMeta = offered === undefined ? {} : { meta: offered.meta }

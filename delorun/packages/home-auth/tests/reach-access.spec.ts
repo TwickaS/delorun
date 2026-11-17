@@ -550,6 +550,25 @@ describe('an elevated action', () => {
   })
 })
 
+describe('the plugin pack actions (A408)', () => {
+  const UNLOCK = { id: 'elevation-1' }
+  const CHANGING = ['packs/enqueue', 'packs/cancel', 'packs/remove', 'packs/retry'] as const
+
+  it('lets a paired phone read the packs and the install list without an unlock', () => {
+    const condition = createCondition(facts(), DEVICE)
+    expect(condition({ action: 'packs/list', resource: GLOBAL, args: {} })).toEqual({ kind: 'allow' })
+    expect(Object.keys(REACH_ALLOWED_ACTIONS)).toContain('packs/list')
+  })
+
+  it('refuses every action that changes the install list without an unlock, and accepts it after one', () => {
+    for (const action of CHANGING) {
+      expect(Object.keys(REACH_ELEVATED_ACTIONS)).toContain(action)
+      expect(createCondition(facts(), DEVICE)({ action, resource: GLOBAL, args: { names: ['x'], name: 'x' } })).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
+      expect(createCondition(facts({ elevationOf: () => UNLOCK }), DEVICE)({ action, resource: GLOBAL, args: { names: ['x'], name: 'x' } })).toEqual({ kind: 'allow' })
+    }
+  })
+})
+
 describe('the model key actions', () => {
   const locked = reachDevicePrincipal('device-1', LISTENER)
   const unlockedPage = { ...locked, unlockId: 'page-1' }
@@ -633,7 +652,7 @@ const NEVER = [/^account\//, /^event:deepseek-account\//, /^settings\/openSettin
 const KEYS = [/^credentials\//, /^event:credentials\//]
 const UNLOCK = [
   /^settings\/(mutate|replace|update)$/, /^commands\/execute$/,
-  /^pluginManager\/(installBundle|removeBundle|setBundleEnabled|setPluginEnabled|setVersionExemption|updateBundle|cancelInstall|undo|restore)$/,
+  /^pluginManager\/(installBundle|removeBundle|setBundleEnabled|setPluginEnabled|setVersionExemption|updateBundle|cancelInstall|undo|restore)$/, /^packs\/(enqueue|cancel|remove|retry)$/,
   /^terminal\//, /^mcpManager\//, /^directoryPicker\//, /^workspace\/create$/, /^dynamicCordisRunner\//, /^event:cordis\//,
 ]
 

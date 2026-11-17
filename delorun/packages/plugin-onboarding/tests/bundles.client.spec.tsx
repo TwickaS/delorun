@@ -68,6 +68,26 @@ describe('where a listed bundle stands', () => {
   })
 })
 
+describe('a plugin pack the release publishes', () => {
+  const item = { key: 'a', state: 'downloading', receivedBytes: 1, reloadNeeded: false } as const
+  it.each([
+    ['is available to add', { kind: 'available' }, 'available'],
+    ['is downloading', { kind: 'working', item }, 'installing'],
+    ['needs a restart', { kind: 'restart', item }, 'restart'],
+    ['is installed', { kind: 'installed' }, 'installed'],
+    ['could not be installed', { kind: 'failed', failure: { code: 'failed', message: 'x' } }, 'failed'],
+    ['needs a connection', { kind: 'offline', message: 'Connect and try again.' }, 'unavailable'],
+    ['is not published for this computer', { kind: 'unavailable', reason: 'Not for this computer.' }, 'unavailable'],
+  ] as const)('is %s: %s', (_, pack, state) => {
+    expect(stateOf(undefined, pack)).toBe(state)
+    expect(stateOf(row({ name: 'a', availability: 'missing' }) as never, pack)).toBe(state)
+  })
+
+  it('leaves a bundle the profile already holds to the plugin manager, whatever the pack says', () => {
+    expect(stateOf(row({ name: 'a', enabled: true }) as never, { kind: 'available' })).toBe('installed')
+  })
+})
+
 describe('the agent bundles the installation ships switched off', () => {
   const agents = ['@deepseek-ai/dsh-subagent-claude-code', '@deepseek-ai/dsh-subagent-codex']
 

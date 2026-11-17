@@ -1388,6 +1388,9 @@ importers:
       '@delorun/plugin-mcp-consent':
         specifier: workspace:*
         version: link:../../packages/plugin-mcp-consent
+      '@delorun/plugin-packs':
+        specifier: workspace:*
+        version: link:../../packages/plugin-packs
       '@delorun/plugin-permission-defaults':
         specifier: workspace:*
         version: link:../../packages/plugin-permission-defaults
@@ -1956,6 +1959,9 @@ importers:
       '@delorun/plugin-mcp-consent':
         specifier: workspace:*
         version: link:../plugin-mcp-consent
+      '@delorun/plugin-packs':
+        specifier: workspace:*
+        version: link:../plugin-packs
       '@delorun/plugin-permission-defaults':
         specifier: workspace:*
         version: link:../plugin-permission-defaults
@@ -3116,6 +3122,9 @@ importers:
       '@delorun/home-auth':
         specifier: workspace:*
         version: link:../home-auth
+      '@delorun/plugin-packs':
+        specifier: workspace:*
+        version: link:../plugin-packs
       '@delorun/plugin-theme':
         specifier: workspace:*
         version: link:../plugin-theme
@@ -3228,6 +3237,55 @@ importers:
       tsdown:
         specifier: ^0.22.2
         version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
+
+  delorun/packages/plugin-packs:
+    dependencies:
+      '@deepseek-ai/dsh-hmr':
+        specifier: workspace:*
+        version: link:../../../packages/boot/hmr
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+      '@delorun/changes':
+        specifier: workspace:*
+        version: link:../changes
+      '@delorun/contract-home-layout':
+        specifier: workspace:*
+        version: link:../contract-home-layout
+      '@delorun/contract-release-manifest':
+        specifier: workspace:*
+        version: link:../contract-release-manifest
+      '@delorun/home-process':
+        specifier: workspace:*
+        version: link:../home-process
+      '@delorun/install':
+        specifier: workspace:*
+        version: link:../../apps/install
+      '@delorun/install-queue':
+        specifier: workspace:*
+        version: link:../install-queue
+      '@delorun/release-formats':
+        specifier: workspace:*
+        version: link:../release-formats
+      '@delorun/release-verify':
+        specifier: workspace:*
+        version: link:../release-verify
+      '@delorun/runtime-store':
+        specifier: workspace:*
+        version: link:../runtime-store
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:*
+        version: link:../../../packages/boot/app-boot
+      '@deepseek-ai/dsh-plugin-manager':
+        specifier: workspace:*
+        version: link:../../../packages/boot/plugin-manager
+      '@deepseek-ai/dsh-typert-protocol':
+        specifier: workspace:*
+        version: link:../../../packages/typert/protocol
 
   delorun/packages/plugin-permission-defaults:
     dependencies:

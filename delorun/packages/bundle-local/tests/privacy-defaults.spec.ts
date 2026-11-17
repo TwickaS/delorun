@@ -159,7 +159,7 @@ describe('a Delorun CLI profile', () => {
     const studioRows = ['delorun-theme', 'delorun-settings-layout', 'delorun-chat-states', 'delorun-sidebar', 'delorun-onboarding', 'delorun-cost-meter', 'delorun-thinking-rsvp']
     expect(delorunRows.map(row => row.id)).toEqual([...LOCAL_ROWS.filter(row => row.kind === 'added').map(row => row.id), ...studioRows])
     // The bundle's own browser half, each consent and guard plugin it mounts, its update gate, its update check, which fetches
-    // the release channel's signed files and sends nothing about the person, the trust bill, which serves what the start check and the stored records say, the plugin install check, which asks the advisory
+    // the release channel's signed files and sends nothing about the person, the trust bill, which serves what the start check and the stored records say, the plugin packs, which fetch the signed packs file and a pack only when the person adds one, the plugin install check, which asks the advisory
     // feed and the registry only when the person installs a plugin, the trash, which keeps everything local, the home's
     // admission and remote access, and the studio plugins of @delorun/bundle-studio.
     expect(delorunRows.map(row => row.name)).toEqual([
@@ -173,6 +173,7 @@ describe('a Delorun CLI profile', () => {
       '@delorun/skill-report-problem',
       '@delorun/plugin-delegation-consent',
       '@delorun/plugin-changes',
+      '@delorun/plugin-packs',
       '@delorun/bundle-local/workspace-rename',
       `${LOCAL_BUNDLE}/update-gate`,
       `${LOCAL_BUNDLE}/update-check`,

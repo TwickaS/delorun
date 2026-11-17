@@ -8,6 +8,7 @@ import type { ClientRemote } from '@deepseek-ai/dsh-api-remotes/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { LocalizedText } from '@deepseek-ai/dsh-package-manifest'
 import { randomUUID } from '@deepseek-ai/dsh-util-crypto'
+import { packView, type PackView, type PacksResult, type PacksSnapshot } from '@delorun/plugin-packs/wire'
 
 type PluginManager = ClientRemote['pluginManager']
 type BundleInfo = Extract<Awaited<ReturnType<PluginManager['listBundles']>>, { ok: true }>['value'][number]
@@ -80,7 +81,18 @@ export interface BundleInstaller {
  * @param bundle - the plugin manager's row, or undefined when it lists none by that name.
  * @returns the state before any action.
  */
-export function stateOf(bundle: BundleInfo | undefined): BundleState {
+export function stateOf(bundle: BundleInfo | undefined, pack?: PackView): BundleState {
+  // A plugin pack the release publishes is offered while the profile does not hold it; the install list says how far it is.
+  if (pack !== undefined && (bundle === undefined || (bundle.availability === 'missing' && !bundle.installed))) {
+    switch (pack.kind) {
+      case 'available': return 'available'
+      case 'working': return 'installing'
+      case 'restart': return 'restart'
+      case 'installed': return 'installed'
+      case 'failed': return 'failed'
+      case 'offline': case 'unavailable': return 'unavailable'
+    }
+  }
   if (bundle === undefined) return 'unavailable'
   if (bundle.availability === 'missing') {
     // A profile that records the dependency but lost its files is broken, not absent from the installation.
@@ -91,6 +103,22 @@ export function stateOf(bundle: BundleInfo | undefined): BundleState {
   if (bundle.error?.code === 'unsupported-platform') return 'unavailable'
   if (bundle.error !== undefined || bundle.readOnlyReason !== undefined) return 'failed'
   return bundle.enabled ? 'installed' : 'available'
+}
+
+/** The part of the `packs` remote the guide uses. */
+interface PacksRemote {
+  list(): Promise<PacksSnapshot>
+  enqueue(request: { readonly names: readonly string[] }): Promise<PacksResult>
+}
+
+/**
+ * The words that say why a pack is not available to add.
+ * @param pack - the pack's view.
+ * @returns the reason, for an offline or unavailable pack.
+ */
+export function packReason(pack: PackView | undefined): string | undefined {
+  if (pack?.kind === 'offline') return pack.message
+  return pack?.kind === 'unavailable' ? pack.reason : undefined
 }
 
 /**
@@ -152,7 +180,23 @@ export function createBundleInstaller(ctx: Context): BundleInstaller {
   const setAll = (names: readonly string[], state: BundleState): void => {
     views.set({ ...views.getSnapshot(), ...Object.fromEntries(names.map(name => [name, { state }])) })
   }
+  const packViews = new Map<string, PackView>()
+  const readPacks = async (names: readonly string[]): Promise<void> => {
+    const remote: PacksRemote | undefined = ctx.get('remote.packs')
+    packViews.clear()
+    if (remote === undefined) return
+    try {
+      const snapshot = await remote.list()
+      for (const name of names) {
+        const pack = snapshot.packs.find(each => each.name === name)
+        if (pack !== undefined) packViews.set(name, packView(pack, snapshot.queue.find(item => item.key === name)))
+      }
+    } catch (error) {
+      console.warn('delorun onboarding: the plugin packs were not read', error)
+    }
+  }
   const read = async (names: readonly string[]): Promise<void> => {
+    await readPacks(names)
     const remote = pluginManager(ctx)
     if (remote === undefined) {
       setAll(names, 'failed')
@@ -167,8 +211,10 @@ export function createBundleInstaller(ctx: Context): BundleInstaller {
       const bundle = listed.value.find(each => each.name === name)
       if (bundle === undefined) known.delete(name)
       else known.set(name, bundle)
+      const pack = packViews.get(name)
       set(name, {
-        state: stateOf(bundle),
+        state: stateOf(bundle, pack),
+        ...packReason(pack) === undefined ? {} : { reason: packReason(pack) },
         ...bundle?.meta?.title === undefined ? {} : { title: bundle.meta.title },
         ...bundle?.meta?.description === undefined ? {} : { description: bundle.meta.description },
         ...bundle?.error?.code === 'unsupported-platform' && bundle.error.diagnostic !== undefined ? { reason: bundle.error.diagnostic } : {},
@@ -188,6 +234,20 @@ export function createBundleInstaller(ctx: Context): BundleInstaller {
       const bundle = known.get(name)
       const remote = pluginManager(ctx)
       const before = views.getSnapshot()[name]
+      const pack = packViews.get(name)
+      if (before?.state === 'available' && pack?.kind === 'available') {
+        const packs: PacksRemote | undefined = ctx.get('remote.packs')
+        if (packs === undefined) return
+        set(name, { ...before, state: 'installing' })
+        try {
+          const queued = await packs.enqueue({ names: [name] })
+          set(name, { ...before, state: queued.ok ? 'installing' : 'failed' })
+        } catch (error) {
+          console.warn('delorun onboarding: the plugin pack was not queued', error)
+          set(name, { ...before, state: 'failed' })
+        }
+        return
+      }
       if (before?.state !== 'available' || bundle === undefined || remote === undefined) return
       set(name, { ...before, state: 'installing' })
       try {
