@@ -1,8 +1,0 @@
-version: 1
-scenario: delorun-tool-failure-guard
-profile: headless
-composition: ptc
-recording: live
-header:
-  class: delorun-tool-failure-guard
-  pin: true

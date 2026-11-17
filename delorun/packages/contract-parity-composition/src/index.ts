@@ -209,7 +209,7 @@ export const PARITY_SWITCHES = [
     parityValue: false,
     modelVisible: true,
     scenario: 'session/delorun-tool-failure-guard',
-    scenarioState: 'pending recording',
+    scenarioState: 'recorded',
     field: {
       module: '@delorun/plugin-tool-failure-guard',
       source: 'delorun/packages/plugin-tool-failure-guard/src/index.ts',
