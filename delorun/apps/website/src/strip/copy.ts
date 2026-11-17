@@ -1,13 +1,14 @@
 /**
- * The setup strip's words. The names of the controls and their choices are the studio's own (the Theme plugin's
- * Appearance dictionary) and the version list's are the studio's Setup versions dictionary; this module holds only the
- * sentences the strip adds around them.
+ * The setup strip's words, one dictionary per language. The live strip takes the names of the controls and their choices
+ * from the studio's own dictionaries (the Theme plugin's Appearance dictionary and the Setup versions dictionary); this
+ * module holds the sentences the strip adds around them, and the copies of the studio's words the still shows, which
+ * `tests/strip.spec.ts` keeps equal to the studio's so the still does not load the studio's dictionaries.
  *
  * @module website/strip/copy
  */
 
-/** The strip's own sentences. */
-export const STRIP_COPY = {
+/** The strip's English words. */
+const EN = {
   /** The accessible name of the controls. */
   controls: 'Change this page',
   /** The heading over the entry. */
@@ -59,9 +60,35 @@ export const STRIP_COPY = {
    * @returns the name, such as "comfortable density".
    */
   densityName: (density: string): string => `${density.toLowerCase()} density`,
-  /** The caption of the still shown with scripts off. */
-  still: 'With scripts on, these controls change this page. This is the strip after choosing Ocean.',
-} as const
+  /** The still shown until the strip's script has loaded, and with scripts off. */
+  still: {
+    /** The still's caption. */
+    caption: 'With scripts on, these controls change this page. This is the strip after choosing Ocean.',
+    /** The studio's name for the themes. */
+    themes: 'Theme',
+    /** The studio's theme names. */
+    theme: { soft: 'Soft', 't3-code': 'Slate', 't3-chat': 'Berry', grove: 'Grove', ocean: 'Ocean', ember: 'Ember', iris: 'Iris', custom: 'Custom' },
+    /** The studio's name for light or dark. */
+    mode: 'Mode',
+    /** The studio's light or dark choices. */
+    modes: ['System', 'Light', 'Dark'],
+    /** The studio's name for the density. */
+    density: 'Density',
+    /** The studio's densities. */
+    densities: ['Compact', 'Comfortable', 'Spacious'],
+    /** The studio's Setup versions heading. */
+    versions: 'Setup versions',
+    /** The studio's title of a Theme settings change. */
+    version: 'Changed the settings of Theme',
+    /** The studio's mark of the current version. */
+    current: 'Current',
+    /** The studio's origin line of a plugin's settings change, with the still's time. */
+    line: '09:00 · Saved by a plugin change',
+  },
+}
 
-/** The strip's words. */
-export type StripCopy = typeof STRIP_COPY
+/** The strip's words in one language. */
+export type StripCopy = Readonly<typeof EN>
+
+/** The strip's words in each language the site is built for. */
+export const STRIP_COPY: { readonly en: StripCopy } = { en: EN }

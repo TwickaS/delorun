@@ -5,27 +5,26 @@
  * the seat keeps its fade and drops its travel.
  */
 
+/*
+ * The box the page holds for the strip; the still and the live strip both fill it, so nothing moves when one replaces the
+ * other. Each height holds the tallest strip, with the spacious density and the longest entry.
+ */
 .strip {
   position: relative;
-}
-
-.live {
-  display: block;
-}
-
-.body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--dl-space-6);
-  min-height: 1040px;
+  min-height: 1240px;
   color: var(--dl-text);
 }
 
 @media (min-width: 1024px) {
-  .body {
-    grid-template-columns: minmax(0, 4fr) minmax(0, 8fr);
+  .strip {
     min-height: 640px;
   }
+}
+
+/* The columns and the gap between them are the page's grid utilities on the same element; only the row gap is set here. */
+.body {
+  row-gap: var(--dl-space-6);
+  align-content: start;
 }
 
 .controls {
@@ -38,17 +37,9 @@
 
 /* The entry and the versions side by side on a wide screen, the notes under both. */
 .record {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
   align-content: start;
-  gap: var(--dl-space-5);
+  row-gap: var(--dl-space-5);
   min-width: 0;
-}
-
-@media (min-width: 1024px) {
-  .record {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  }
 }
 
 .head {
@@ -82,12 +73,6 @@
   font-weight: 600;
   line-height: 1.4;
   color: var(--dl-text);
-}
-
-.custom {
-  display: flex;
-  flex-direction: column;
-  gap: var(--dl-space-3);
 }
 
 /*
@@ -269,22 +254,86 @@
   white-space: nowrap;
 }
 
-/* With scripts off the still covers the live strip, drawn in its own look. */
-.still {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  gap: var(--dl-space-3);
-  background: var(--dl-surface);
-  color: var(--dl-text);
-}
-
+/* The still: the same parts drawn as plain markup, after the studio's tile group, segmented control and code block. */
 .stillCaption {
   margin: 0;
   font-size: 14px;
+  line-height: 1.5;
   color: var(--dl-text-muted);
+}
+
+.stillTiles {
+  display: grid;
+  gap: var(--dl-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stillTile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dl-space-1);
+  padding: var(--dl-space-2);
+  border: 1px solid var(--dl-border);
+  border-radius: var(--dl-radius-md);
+  background: var(--dl-surface-raised);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.stillTile[aria-current] {
+  border-color: var(--dl-accent);
+  box-shadow: inset 0 0 0 1px var(--dl-accent);
+}
+
+.segments {
+  display: flex;
+  margin: 0;
+  padding: 3px;
+  list-style: none;
+  border: 1px solid var(--dl-border);
+  border-radius: var(--dl-radius-md);
+  background: var(--dl-surface-raised);
+}
+
+.segment {
+  flex: 1;
+  padding: 6px var(--dl-space-2);
+  border-radius: var(--dl-radius-sm);
+  font-size: 13px;
+  line-height: 18px;
+  text-align: center;
+  color: var(--dl-text-muted);
+}
+
+.segment[aria-current] {
+  background: var(--dl-surface);
+  color: var(--dl-text);
+  font-weight: 500;
+}
+
+.code {
+  display: grid;
+  gap: var(--dl-space-2);
+  margin: 0;
+}
+
+.codeCaption {
+  font-size: 13px;
+  color: var(--dl-text-muted);
+}
+
+.codePre {
+  margin: 0;
+  padding: var(--dl-space-2) var(--dl-space-4);
+  border: 1px solid var(--dl-border);
+  border-radius: var(--dl-radius-md);
+  background: var(--dl-surface-sunken);
+  font-family: var(--dl-font-mono);
+  font-size: 15px;
+  line-height: 1.5;
+  white-space: pre-wrap;
 }
 
 /* The spread: the new page is revealed by the clip the script animates, not cross-faded. */

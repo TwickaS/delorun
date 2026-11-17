@@ -19,9 +19,12 @@ import { ACCENT_CHOICES, CONTRAST, DEFAULT_SETTINGS, DENSITIES, PALETTES, THEME_
 import { en as studio } from '../../../packages/plugin-theme/src/client/locales.ts'
 import * as settings from '../../../packages/plugin-theme/src/settings.ts'
 import { originOf } from '../../../packages/profile-safety/src/versions.ts'
-import { applyWrites, BUNDLE_CONFIG, changesBetween, earlierLook, entryYaml, FRESH_STUDIO, record, START, STOP_CONTRAST, THEME_PLUGIN, versionRows, type StripState } from '../src/strip/model.ts'
+import { en as versionsCopy } from '../../../packages/bundle-local/src/client/versions-locales.ts'
+import { STRIP_COPY } from '../src/strip/copy.ts'
+import { applyWrites, BUNDLE_CONFIG, changesBetween, earlierLook, editedName, entryYaml, FRESH_STUDIO, record, START, STOP_CONTRAST, THEME_PLUGIN, versionRows, type StripState } from '../src/strip/model.ts'
 import { differenceName, themeName } from '../src/strip/names.ts'
-import { fill, SetupStrip, STILL } from '../src/strip/setup-strip.tsx'
+import SetupStrip, { fill } from '../src/strip/setup-strip.tsx'
+import { SetupStripStill, STILL_ENTRY, STILL_LOOK_ID } from '../src/strip/still.tsx'
 import { coverRadius, spread, SPREAD_CLASS } from '../src/strip/spread.ts'
 
 vi.mock('../../../packages/plugin-theme/src/settings.ts', async (original) => {
@@ -137,7 +140,7 @@ describe('the entry', () => {
 
 describe('the versions', () => {
   it('lists each change as the studio titles it, collapses repeats and keeps every version', () => {
-    expect(originOf(STILL.state.versions[0]?.summary ?? '').origin).toBe('other')
+    expect(originOf(after(OCEAN).versions[0]?.summary ?? '').origin).toBe('other')
     const state = after(OCEAN, MOSS, OCEAN)
     const rows = versionRows(state.versions)
     expect(rows).toHaveLength(1)
@@ -216,14 +219,33 @@ describe('the strip on the page', () => {
   })
 })
 
-describe('the still for scripts off', () => {
-  it('draws the strip after choosing Ocean, with its caption', () => {
-    const html = renderToStaticMarkup(createElement(SetupStrip))
-    const still = html.slice(html.indexOf('<noscript>'))
-    expect(still).toContain('data-look="ocean"')
-    expect(still).toContain('palette: ocean')
-    expect(still).toContain('With scripts on')
-    expect(STILL.name).toBe('Ocean')
+describe('the still', () => {
+  it('draws the strip after choosing Ocean, with its caption, and loads none of the live strip', () => {
+    const html = renderToStaticMarkup(createElement(SetupStripStill))
+    expect(html).toContain('data-look="ocean"')
+    expect(html).toContain('With scripts on')
+    const ocean = { ...DEFAULT_LOOK, look: STILL_LOOK_ID }
+    expect(STILL_ENTRY).toBe(entryYaml(after(ocean).entry ?? []))
+    expect(themeName(ocean)).toBe('Ocean')
+    const source = readFileSync(resolve(DELORUN, 'apps/website/src/strip/still.tsx'), 'utf8')
+    expect([...source.matchAll(/^import .* from '([^']+)'$/gm)].map(match => match[1])).toEqual(['@design/looks.ts', './copy.ts', './strip.module.css'])
+    expect(readFileSync(resolve(DELORUN, 'apps/website/src/strip/copy.ts'), 'utf8')).not.toMatch(/^import /m)
+  })
+
+  it('shows the studio\'s own words, chosen as a fresh studio chooses them', () => {
+    const words = STRIP_COPY.en.still
+    expect(words.themes).toBe(studio.palette)
+    expect(words.theme).toEqual(Object.fromEntries(KNOWN_LOOKS.map(id => [id, studio[`palette.${id}`]])))
+    expect(words.mode).toBe(studio.mode)
+    expect(words.modes).toEqual([studio['mode.system'], studio['mode.light'], studio['mode.dark']])
+    expect(DEFAULT_LOOK.scheme).toBeUndefined()
+    expect(words.density).toBe(studio.density)
+    expect(words.densities).toEqual(KNOWN_DENSITIES.map(density => studio[`density.${density}`]))
+    expect(KNOWN_DENSITIES.indexOf(DEFAULT_LOOK.density)).toBe(1)
+    expect(words.versions).toBe(versionsCopy.title)
+    expect(words.version).toBe(fill(versionsCopy['version.settings'], { name: editedName() }))
+    expect(words.current).toBe(versionsCopy.current)
+    expect(words.line).toBe(`09:00 · ${versionsCopy['origin.other']}`)
   })
 })
 
