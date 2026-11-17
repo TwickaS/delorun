@@ -171,8 +171,8 @@ export function ChangesSection(props: ChangesSectionProps) {
     <div className={css.header}>
       <h2 className={css.heading}>{t('title')}</h2>
     </div>
-    <p className={css.meta}>{t('intro')}</p>
-    {state?.protection === 'off' ? <p className={css.meta} role="note" data-delorun-changes-live>{t('live')}</p> : null}
+    <p className={css.lead}>{t('intro')}</p>
+    {state?.protection === 'off' ? <p className={css.lead} role="note" data-delorun-changes-live>{t('live')}</p> : null}
     {load.status === 'loading'
       ? <div className={css.rows} role="status">
         <span className={css.visuallyHidden}>{t('loading')}</span>
