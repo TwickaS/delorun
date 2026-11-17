@@ -148,7 +148,7 @@ describe('a seat review at hand-off', () => {
     expect(w.asks[0]).toMatchObject({ toolName: 'claude-code', grants: 'external-agent' })
     expect(w.asks[0]?.agent.id).toBe('root')
     expect(w.consent.leaseOf(SessionId('seat'))).toEqual({
-      child: 'seat', root: 'root', workspace: w.workspace, cwd: w.workspace, provider: 'claude-code', workspaceListed: true, grantedAt: 7,
+      child: 'seat', root: 'root', workspace: w.workspace, cwd: w.workspace, provider: 'claude-code', workspaceListed: true, grantedAt: 7, why: 'asked',
     })
   })
 
@@ -186,6 +186,29 @@ describe('a seat review at hand-off', () => {
     await expect(w.consent.reviewSeat(seat(w, 'hand-off'))).resolves.toEqual({ kind: 'allow', timeoutMs: expect.any(Number), why: 'full-access' })
     expect(w.asks).toEqual([])
     expect(w.consent.leaseOf(SessionId('seat'))).toMatchObject({ root: 'root', workspace: w.workspace, provider: 'claude-code' })
+    await expect(w.consent.reviewSeat(seat(w, 'turn'))).resolves.toMatchObject({ kind: 'allow', why: 'lease' })
+  })
+
+  it('ends a Full access lease when the root\'s policy or the switch changes', async () => {
+    for (const leave of ['policy', 'sandbox', 'switch'] as const) {
+      const w = await world()
+      w.policies.set('root', 'never')
+      w.fullAccess.add('root')
+      await expect(w.consent.reviewSeat(seat(w, 'hand-off'))).resolves.toMatchObject({ kind: 'allow', why: 'full-access' })
+      expect(w.consent.leaseOf(SessionId('seat'))).toMatchObject({ why: 'full-access' })
+      if (leave === 'policy') w.policies.set('root', 'ask')
+      else if (leave === 'sandbox') w.fullAccess.delete('root')
+      else w.fullAccessStartsAgents = false
+      await expect(w.consent.reviewSeat(seat(w, 'turn'))).resolves.toEqual({ kind: 'refuse', reason: leaseEndedRefusal('claude-code') })
+      expect(w.consent.leaseOf(SessionId('seat'))).toBeUndefined()
+      expect(w.ended.map(ended => ended.reason)).toEqual(['refused'])
+    }
+  })
+
+  it('keeps a lease the person asked for when the root leaves Full access', async () => {
+    const w = await world()
+    await expect(w.consent.reviewSeat(seat(w, 'hand-off'))).resolves.toMatchObject({ kind: 'allow', why: 'asked' })
+    w.fullAccessStartsAgents = false
     await expect(w.consent.reviewSeat(seat(w, 'turn'))).resolves.toMatchObject({ kind: 'allow', why: 'lease' })
   })
 

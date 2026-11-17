@@ -246,12 +246,14 @@ export class DelorunDelegationConsent extends Service implements DelegationConse
     const lease = this.leases.leaseOf(child.id)
     if (lease !== undefined) {
       const same = lease.root === root.id && lease.workspace === rules.workspace && lease.cwd === rules.cwd && lease.provider === provider
-      if (same && (!lease.workspaceListed || listed !== false)) return allowed('lease')
+      const stillFullAccess = lease.why !== 'full-access' || this.fullAccessRoot(root)
+      if (same && stillFullAccess && (!lease.workspaceListed || listed !== false)) return allowed('lease')
       this.leases.end(child.id, 'refused')
     }
-    const record = (why: SeatAllowReason): SeatVerdict => {
+    const record = (why: Exclude<SeatAllowReason, 'lease'>): SeatVerdict => {
       this.leases.record({
         child: child.id, root: root.id, workspace: rules.workspace, cwd: rules.cwd, provider, workspaceListed: listed === true, grantedAt: this.options.now(),
+        why,
       })
       return allowed(why)
     }
@@ -261,7 +263,7 @@ export class DelorunDelegationConsent extends Service implements DelegationConse
     if (approval === undefined) return { kind: 'refuse', reason: notApprovedRefusal(provider, 'no-approval', rules.workspace) }
     if ((approval.overrideOf(root.session) ?? approval.config.policy) === 'never') {
       // Full access starts the seat with no card and no grant (owner, EA28, EA33); any other `never` chat refuses (D10).
-      if (this.fullAccess(root)) return record('full-access')
+      if (this.fullAccessRoot(root)) return record('full-access')
       return { kind: 'refuse', reason: notApprovedRefusal(provider, 'never', rules.workspace) }
     }
     const asked = this.hasOpenTurn(root) ? root : review.phase === 'resume' ? child : undefined
@@ -271,13 +273,15 @@ export class DelorunDelegationConsent extends Service implements DelegationConse
   }
 
   /**
-   * Whether a root chat whose approval policy is `never` is Full access (lead decision 10): its sandbox runs
-   * `danger-full-access` and the consent's `fullAccessStartsAgents` is on.
+   * Whether a root chat is Full access (lead decision 10): its approval policy is `never`, its sandbox runs
+   * `danger-full-access`, and the consent's `fullAccessStartsAgents` is on.
    * @param root - the root chat.
    * @returns true for Full access.
    */
-  private fullAccess(root: Agent): boolean {
+  private fullAccessRoot(root: Agent): boolean {
     if (!this.options.fullAccessStartsAgents()) return false
+    const approval = this.ctx.get('approval')
+    if (approval === undefined || (approval.overrideOf(root.session) ?? approval.config.policy) !== 'never') return false
     return this.ctx.get('sandboxPolicy')?.resolve({ session: root.session }).mode === 'danger-full-access'
   }
 

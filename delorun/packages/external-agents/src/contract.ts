@@ -547,6 +547,8 @@ export interface SeatLease {
   readonly workspaceListed: boolean
   /** When the person or a grant allowed it, in milliseconds since the epoch. */
   readonly grantedAt: number
+  /** Why it was allowed; a `full-access` lease ends once the root chat leaves Full access or its switch turns off. */
+  readonly why: Exclude<SeatAllowReason, 'lease'>
 }
 
 /** Why a lease ended. */

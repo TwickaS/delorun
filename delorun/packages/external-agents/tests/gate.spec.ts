@@ -143,7 +143,7 @@ class ScriptedConsent implements SeatConsent {
     this.reviews.push(review)
     const verdict = this.verdict(review)
     if (verdict.kind === 'allow' && review.phase !== 'turn') {
-      this.leases.set(review.child.id, { child: review.child.id, root: review.root.id, workspace: review.cwd, cwd: review.cwd, provider: review.provider, workspaceListed: true, grantedAt: 1 })
+      this.leases.set(review.child.id, { child: review.child.id, root: review.root.id, workspace: review.cwd, cwd: review.cwd, provider: review.provider, workspaceListed: true, grantedAt: 1, why: verdict.why === 'lease' ? 'asked' : verdict.why })
     }
     return Promise.resolve(verdict)
   }
