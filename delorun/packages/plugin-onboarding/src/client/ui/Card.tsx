@@ -7,7 +7,7 @@ import { CardIcon } from '@delorun/brand'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import { useId, useState } from 'react'
 import type { ReactNode } from 'react'
-import css from './Card.module.css'
+import css from './ListRow.module.css'
 
 /** A description longer than this many characters is shortened to one line with the full text behind "More". */
 export const SUMMARY_LIMIT = 140
