@@ -404,13 +404,16 @@ describe('a pack the Host downloads', () => {
   const item = (state: 'downloading' | 'failed', message?: string) => ({ key: 'p', state, receivedBytes: 1, reloadNeeded: false, ...message === undefined ? {} : { failure: { code: 'failed', message } } })
 
   /** A Host whose packs list answers each call with the next answer, and whose enqueue answers ok. */
-  function host(answers: readonly { readonly queue: readonly unknown[] }[]): void {
+  function host(answers: readonly { readonly queue: readonly unknown[] }[]): string[] {
     let call = 0
+    const posts: string[] = []
     vi.stubGlobal('fetch', (url: string) => {
-      if (String(url).endsWith('enqueue')) return Promise.resolve(Response.json({ ok: true, value: { supported: true, release: '0.1.0', packs: [pack], queue: [] } }))
+      posts.push(String(url))
+      if (String(url).endsWith('enqueue') || String(url).endsWith('retry')) return Promise.resolve(Response.json({ ok: true, value: { supported: true, release: '0.1.0', packs: [pack], queue: [] } }))
       const answer = answers[Math.min(call++, answers.length - 1)]!
       return Promise.resolve(Response.json({ supported: true, release: '0.1.0', packs: [pack], ...answer }))
     })
+    return posts
   }
 
   it('stops following a pack when the plugin is disposed', async () => {
@@ -459,7 +462,7 @@ describe('a pack the Host downloads', () => {
   it('leaves "installing" with the Host\'s reason when the download fails, and stops asking', async () => {
     vi.useFakeTimers()
     try {
-      host([{ queue: [] }, { queue: [item('downloading')] }, { queue: [item('failed', 'received no data for 60 seconds')] }])
+      const posts = host([{ queue: [] }, { queue: [item('downloading')] }, { queue: [item('failed', 'received no data for 60 seconds')] }])
       const { installer, state } = bench([])
       installer.refresh(['p'])
       await vi.advanceTimersByTimeAsync(0)
@@ -473,6 +476,7 @@ describe('a pack the Host downloads', () => {
       // Retry from the failed card queues the pack again.
       await installer.install('p')
       expect(state('p')).toEqual({ state: 'installing' })
+      expect(posts.filter(url => url.endsWith('retry'))).toHaveLength(1)
     } finally {
       vi.useRealTimers()
     }
