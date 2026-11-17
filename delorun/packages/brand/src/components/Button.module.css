@@ -1,7 +1,7 @@
 /* The variant rules sit on `.button.<variant>`, which outranks upstream's variant rules whatever order the page's stylesheets load in. */
 .button {
   font-family: var(--dl-font-sans);
-  transition: background-color var(--dl-motion), border-color var(--dl-motion), color var(--dl-motion);
+  transition: background-color var(--dl-motion), border-color var(--dl-motion), color var(--dl-motion), transform 120ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 .button:focus-visible {

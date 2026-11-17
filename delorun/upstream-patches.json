@@ -2743,6 +2743,12 @@
       "class": "delorun-feature",
       "feature": "hero-row-wrap",
       "reason": "The workspace chip takes at most 60% of its row and ends a long name in an ellipsis."
+    },
+    {
+      "path": "packages/client/ui-primitives/src/Button.module.css",
+      "class": "delorun-feature",
+      "feature": "settings-buttons",
+      "reason": "Settings cards get 32px inline buttons on a pointer screen, and primary and outline buttons sink to 97% while pressed."
     }
   ],
   "retired": []
