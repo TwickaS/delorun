@@ -6,7 +6,7 @@ import { prepareReload } from '../src/enforce.ts'
 import { checkChangesInvariants, checkLoadedContent } from '../src/invariants.ts'
 import { changesStatus } from '../src/status.ts'
 import { activeDirectory, objectsDirectory, profileChangesDirectory, protectionPath, versionsDirectory } from '../src/paths.ts'
-import { openWorkSession, writeActiveRecord } from '../src/records.ts'
+import { openWorkSession, readApproved, writeActiveRecord } from '../src/records.ts'
 import { materialize, storeFolder } from '../src/store.ts'
 import { ACTIVE_RECORD_SCHEMA } from '../src/types.ts'
 import { fixture, folder, linkAs, migrated, PROFILE, start, terminal, type Fixture } from './profile-fixture.ts'
@@ -83,6 +83,10 @@ describe('checkChangesInvariants', () => {
     it('keeps naming the old release\'s packages when the old Host acts on it, and that Host\'s recomposition accepts it', async () => {
       const { fx, peer } = await updated()
       const host = { home: fx.home, profile: PROFILE, profileDir: fx.profileDir, now: () => new Date('2026-01-01T00:00:00Z'), runningRelease: '0.1.0' }
+      // The pack source is linked through packs/current, which the switch moved to 0.2.0 with runtimes/current: stored
+      // against that release, its peers keep the approved version.
+      const approved = (await readApproved(fx.profileDir)).plugins.plug!.version
+      expect((await storeFolder(fx.home, join(fx.home, 'packs', 'current', 'plug', 'package'))).version).toBe(approved)
       await startWork(host, 'plug', terminal(), { reload: () => Promise.resolve({ ok: true }), minutes: 60 })
       expect(realpathSync(peer)).toBe(realpathSync(join(fx.home, 'runtimes', '0.1.0', 'app', 'node_modules', '@s', 'peer')))
       await expect(prepareReload({ ...host, harnessLink: undefined })).resolves.toBeDefined()
