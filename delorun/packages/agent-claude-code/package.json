@@ -1,0 +1,34 @@
+{
+  "name": "@delorun/agent-claude-code",
+  "description": "Delorun's driver for Claude Code as a live agent: opens, steers, interrupts and resumes the pinned Claude Code program through the external-agents gate, relays its permission questions and reads its plan limits. Dormant until the Claude Code pack is added",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./watcher": "./src/watcher.mjs",
+    "./package.json": "./package.json"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-llm": "workspace:*",
+    "@deepseek-ai/dsh-subagent": "workspace:*",
+    "@deepseek-ai/dsh-subprocess": "workspace:*",
+    "@deepseek-ai/schemastery": "workspace:~"
+  },
+  "devDependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.263",
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-llm": "workspace:*",
+    "@deepseek-ai/dsh-subagent": "workspace:*",
+    "@deepseek-ai/dsh-subagent-claude-code": "workspace:*",
+    "@deepseek-ai/dsh-subprocess": "workspace:*",
+    "@deepseek-ai/dsh-subprocess-local": "workspace:*",
+    "@deepseek-ai/schemastery": "workspace:~"
+  },
+  "delorun": {
+    "state": "shipped",
+    "unreached": "ea1-gate adds the row to @delorun/bundle-local"
+  }
+}
