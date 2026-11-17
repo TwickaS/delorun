@@ -1,6 +1,6 @@
 /** Session-owned MCP browser processes and provider catalog activation. @module */
 
-import { chmod, mkdir, stat, writeFile } from 'node:fs/promises'
+import { chmod, lstat, mkdir, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
@@ -121,9 +121,9 @@ export interface SessionMcpOptions {
   directory?: string
   /**
    * The folder, relative to the Session's working directory, that the server saves its output files to. When a
-   * Session's server has started and that folder does not exist, it is created holding a `.gitignore` of `*`, so Git
-   * leaves the files out of commits. An existing folder and the project's own `.gitignore` are never changed, and a
-   * Session whose server did not start gets no folder.
+   * Session's server has started, that folder is created if missing and given a `.gitignore` of `*` if it has none, so
+   * Git leaves the files out of commits. A link at the folder's name, an existing `.gitignore` and the project's own
+   * `.gitignore` are never changed, and a Session whose server did not start gets no folder.
    */
   outputFolder?: string
   /** Explicit overrides merged into the MCP client's scrubbed child environment. */
@@ -191,19 +191,25 @@ async function fixedDirectory(directory: string): Promise<string> {
 }
 
 /**
- * Create a server's output folder so that Git ignores everything in it. An existing folder is left as it is.
+ * Make Git ignore everything in a server's output folder: create the folder when it is missing, and give it a
+ * `.gitignore` of `*` when it has none. Nothing is written through a link: a link or a file at the folder's name is
+ * left alone, and so is whatever exists at `.gitignore`, a link included.
  * @param folder - the absolute folder.
- * @throws when the folder or its `.gitignore` cannot be created for a reason other than the folder existing.
+ * @throws when the folder or its `.gitignore` cannot be created for a reason other than already existing.
  */
 async function ignoredOutputFolder(folder: string): Promise<void> {
   try {
     await mkdir(folder, { mode: 0o700 })
   } catch (error) {
-    // The folder is the person's or an earlier Session's: its contents, ignore rules included, stay theirs.
-    if ((error as NodeJS.ErrnoException).code === 'EEXIST') return
-    throw error
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+    if (!(await lstat(folder)).isDirectory()) return
   }
-  await writeFile(join(folder, '.gitignore'), '*\n', { flag: 'wx' })
+  try {
+    // Exclusive creation fails on any existing name without following it, so a person's own rules stay theirs.
+    await writeFile(join(folder, '.gitignore'), '*\n', { flag: 'wx' })
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+  }
 }
 
 interface ClientState {
@@ -228,8 +234,8 @@ function isConsentStop(error: unknown): error is McpClient.McpConsentRefusedErro
  * add-time consent refuses, or a declared consent that did not start, also leaves that activation without browser
  * tools and logs a warning naming the server and the consent's reason; the Agent is still created, and the next
  * activation reviews the start again. Every other startup failure fails the Agent's creation.
- * Once a Session's server has started, its output folder, when the provider names one, is created with a `.gitignore`
- * of `*` unless the folder already exists; a failure to create it is logged as a warning and the Session keeps its tools.
+ * Once a Session's server has started, its output folder, when the provider names one, is created if missing and given
+ * a `.gitignore` of `*` if it has none; a failure to do so is logged as a warning and the Session keeps its tools.
  * A call the provider's `refuseCall` refuses fails with the provider's text and never reaches the server.
  * Calls are serialized per Session; unload closes every server before releasing registration.
  * @param ctx - provider context supplying browser use, Agents, tools, prompt assembly, and working directories.

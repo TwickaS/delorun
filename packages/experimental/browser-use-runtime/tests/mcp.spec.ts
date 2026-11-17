@@ -1,7 +1,7 @@
 import { executeToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import * as PtcToolExecutor from '@deepseek-ai/dsh-tool-executor-ptc'
-import { chmod, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readdir, readFile, readlink, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -448,7 +448,7 @@ describe('Session MCP Loader composition', () => {
     ]))
   })
 
-  it('creates the output folder with a .gitignore of * when a Session\'s server starts, and leaves an existing folder alone', async () => {
+  it('creates the output folder with a .gitignore of * when a Session\'s server starts, and adds one to an existing folder that has none', async () => {
     const { ctx, root } = await load(false, undefined, undefined, undefined, false, undefined, undefined, '.fixture-output')
     const fresh = join(root, 'fresh'), used = join(root, 'used')
     await Promise.all([mkdir(fresh), mkdir(join(used, '.fixture-output'), { recursive: true })])
@@ -461,7 +461,30 @@ describe('Session MCP Loader composition', () => {
     expect(await readdir(join(fresh, '.fixture-output'))).toEqual(['.gitignore'])
     expect(await readFile(join(fresh, '.fixture-output', '.gitignore'), 'utf8')).toBe('*\n')
     expect(await readdir(used)).toEqual(['.fixture-output'])
-    expect(await readdir(join(used, '.fixture-output'))).toEqual(['kept.png'])
+    expect((await readdir(join(used, '.fixture-output'))).sort()).toEqual(['.gitignore', 'kept.png'])
+    expect(await readFile(join(used, '.fixture-output', '.gitignore'), 'utf8')).toBe('*\n')
+    expect(await readFile(join(used, '.fixture-output', 'kept.png'), 'utf8')).toBe('kept')
+  })
+
+  it('never writes through a link or over a person\'s own rules in the output folder', async () => {
+    const { ctx, root, warnings } = await load(false, undefined, undefined, undefined, false, undefined, undefined, '.fixture-output')
+    const elsewhere = join(root, 'elsewhere')
+    await mkdir(elsewhere)
+    const linked = join(root, 'linked'), ruled = join(root, 'ruled'), dangling = join(root, 'dangling'), file = join(root, 'file')
+    await Promise.all([mkdir(linked), mkdir(join(ruled, '.fixture-output'), { recursive: true }), mkdir(join(dangling, '.fixture-output'), { recursive: true }), mkdir(file)])
+    await symlink(elsewhere, join(linked, '.fixture-output'))
+    await writeFile(join(ruled, '.fixture-output', '.gitignore'), '!keep.png\n')
+    await symlink(join(elsewhere, 'written-through'), join(dangling, '.fixture-output', '.gitignore'))
+    await writeFile(join(file, '.fixture-output'), 'a file, not a folder')
+    for (const [id, cwd] of [['output-linked', linked], ['output-ruled', ruled], ['output-dangling', dangling], ['output-file', file]] as const) {
+      const { agent } = await ctx.agents.create({ sessionId: SessionId(id), meta: { cwd } })
+      expect((await warm(ctx, agent)).tools.map(tool => tool.name)).toContain(TOOL)
+    }
+    expect(await readdir(elsewhere)).toEqual([])
+    expect(await readFile(join(ruled, '.fixture-output', '.gitignore'), 'utf8')).toBe('!keep.png\n')
+    expect(await readlink(join(dangling, '.fixture-output', '.gitignore'))).toBe(join(elsewhere, 'written-through'))
+    expect(await readFile(join(file, '.fixture-output'), 'utf8')).toBe('a file, not a folder')
+    expect(warnings).toEqual([])
   })
 
   it('creates no output folder for a Session whose server the add-time consent refuses', async () => {
