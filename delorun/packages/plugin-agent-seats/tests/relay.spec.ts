@@ -227,6 +227,43 @@ describe('the lift at the first question', () => {
     expect(bare.session.snapshotEvents().some(event => event.type === 'approval/policy')).toBe(false)
   })
 
+  it('never lifts for a fork of a seat or a child of a seat, though both carry the seat descriptor and the pin', async () => {
+    const w = await world()
+    w.child.session.append('subagent/descriptor', { version: SUBAGENT_DESCRIPTOR_VERSION, mode: 'continuable', provider: 'agent-seat', label: 'Fix the tests' } as never)
+    pin(w)
+    const real = new SeatRelay(w.ctx, {
+      seatProviders: new Set(['agent-seat']),
+      descriptorOf: agent => foldSubagentDescriptor(agent.session.snapshotEvents())?.provider,
+      recorded: () => Promise.resolve(), recordName: (_a, name) => name,
+    })
+    const events = w.child.session.snapshotEvents()
+    const seed = buildForkSeed(events, SessionSeq(events.length - 1))
+    const forkSession = w.ctx.sessions.create(undefined, { seed, inheritedEventCount: SessionLogOffset(seed.length), meta: { isSeeded: true } })
+    const fork = { id: forkSession.id, session: forkSession, ctx: w.ctx } as never
+    expect(foldSubagentDescriptor(forkSession.snapshotEvents())?.provider).toBe('agent-seat')
+    const before = forkSession.snapshotEvents().length
+    expect(real.liftOnce(fork)).toBe('not-a-seat')
+    expect(forkSession.snapshotEvents()).toHaveLength(before)
+    const grandSession = w.ctx.sessions.create()
+    appendDelegatedPolicyOverrides(grandSession, captureDelegatedPolicyOverrides({ ...w.child, ctx: w.ctx } as never))
+    grandSession.append('subagent/descriptor', { version: SUBAGENT_DESCRIPTOR_VERSION, mode: 'continuable', provider: 'agent-seat', label: 'Nested' } as never)
+    const grandchild = { id: grandSession.id, session: grandSession } as Agent
+    expect(real.liftOnce(grandchild)).toBe('not-a-seat')
+    expect(w.ctx.approval.overrideOf(grandSession)).toBe('never')
+  })
+
+  it('checks the registry and the exact descriptor name at the moment it lifts', async () => {
+    const w = await world()
+    pin(w)
+    w.descriptors.set(w.child.id, 'subagent_claude_code')
+    expect(w.relay.liftOnce(w.child)).toBe('not-a-seat')
+    w.descriptors.set(w.child.id, 'agent-seat')
+    w.seats.delete(w.child.id)
+    expect(w.relay.liftOnce(w.child)).toBe('not-a-seat')
+    expect(w.ctx.approval.overrideOf(w.child.session)).toBe('never')
+    expect(policies(w)).toEqual(['never'])
+  })
+
   it('leaves a Session that is not a seat pinned', async () => {
     const w = await world()
     const ordinary = agentOf(w.ctx)

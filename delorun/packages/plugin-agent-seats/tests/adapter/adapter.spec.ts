@@ -333,15 +333,43 @@ describe('closing a quiet agent\'s program', () => {
   })
 })
 
+describe('the names of the program\'s tool calls', () => {
+  const toolNames = (chunks: Awaited<ReturnType<typeof collect>>): string[] => chunks.flatMap(chunk => chunk.type === 'block-end' && chunk.block.type === 'tool-call' ? [chunk.block.name] : [])
+
+  it('gives every program tool the seat\'s record prefix, so the native executor never sees an unprefixed record', async () => {
+    const w = world()
+    const chunks = await turn(w, [user('task')], [
+      { kind: 'tool-call', id: 'c1', name: 'Bash', input: '{}' },
+      { kind: 'tool-call', id: 'c2', name: 'mcp__server__tool', input: '{}' },
+      { kind: 'message-end' },
+    ])
+    expect(toolNames(chunks)).toEqual(['claude_code.Bash', 'claude_code.mcp__server__tool'])
+    const deltas = chunks.flatMap(chunk => chunk.type === 'tool-call-delta' ? [chunk.name] : [])
+    expect(deltas).toEqual(['claude_code.Bash', 'claude_code.mcp__server__tool'])
+  })
+
+  it('keeps the name of a harness tool offered to the program over MCP', async () => {
+    const w = world({ host: { isHarnessTool: (_child, name) => name === 'delorun_read_file' } })
+    const chunks = await turn(w, [user('task')], [
+      { kind: 'tool-call', id: 'c1', name: 'delorun_read_file', input: '{}' },
+      { kind: 'tool-call', id: 'c2', name: 'Bash', input: '{}' },
+      { kind: 'message-end' },
+    ])
+    expect(toolNames(chunks)).toEqual(['delorun_read_file', 'claude_code.Bash'])
+  })
+})
+
 describe('the relay\'s and the executor\'s view of a seat', () => {
   it('relays a question to the host with the child, and holds a result for the recorded call', async () => {
-    const w = world()
+    const asked: Array<{ readonly callId: string, readonly signal: AbortSignal }> = []
+    const w = world({ host: { approve: (_child, request, signal) => { asked.push({ callId: request.callId, signal }); return Promise.resolve('allow-once') } } })
     await turn(w, [user('task')], [{ kind: 'tool-call', id: 'c1', name: 'Bash', input: '{}' }, { kind: 'message-end' }])
     const run = w.adapter.runOf(CHILD)
     expect(run).toBeDefined()
     const answer = w.gate.starts[0]?.onApproval({ callId: 'c1', toolName: 'Bash', reason: 'run ls', signal: new AbortController().signal })
     await expect(answer).resolves.toBe('allow-once')
-    expect(w.approvals.map(request => request.callId)).toEqual(['c1'])
+    expect(asked.map(question => question.callId)).toEqual(['c1'])
+    expect(asked[0]?.signal).toBe(w.gate.starts[0]?.signal)
     w.gate.latest.emit({ kind: 'tool-result', id: 'c1', output: 'file.txt', isError: false })
     await expect(run?.result('c1', new AbortController().signal)).resolves.toEqual({ output: 'file.txt', isError: false })
   })

@@ -52,7 +52,7 @@ async function setup(tail?: () => Promise<{ lastMessageId?: string }>) {
     approve: () => Promise.resolve('allow-once'),
   }
   adapter = new SeatAdapter({
-    route: ROUTE, provider: 'claude-code', descriptorProvider: 'claude-code', displayName: 'Claude Code', contextWindow: 200_000,
+    route: ROUTE, provider: 'claude-code', descriptorProvider: 'claude-code', displayName: 'Claude Code', recordPrefix: 'claude_code.', contextWindow: 200_000,
     gate, host, states: mount.store, models: mount.choices, events: mount.events,
   })
   ctx.llm.registerAdapter([ROUTE], adapter)

@@ -11,9 +11,11 @@ import { Config } from './config.ts'
 import { liveAgentsOn } from './live-agents.ts'
 import { mountSeats } from './mount.ts'
 import { PREVIEW_FLAGS } from './preview-flags.ts'
+import { seatRelay } from './relay/index.ts'
 
 export { Config, SEATS_ROW_ID, type SeatConfig } from './config.ts'
-export { mountSeats, type SeatMountOptions, type SeatRelayHook, type SeatRelayWiring } from './mount.ts'
+export { mountSeats, type SeatApprover, type SeatMountOptions, type SeatRelayHook, type SeatRelayWiring } from './mount.ts'
+export { seatRelay } from './relay/index.ts'
 export { LIVE_AGENTS, PREVIEW_FLAGS } from './preview-flags.ts'
 
 /** The Loader row name. */
@@ -35,5 +37,5 @@ export { Config as schema }
 export async function apply(ctx: Context, config: Config): Promise<void> {
   for (const flag of PREVIEW_FLAGS) ctx.effect(() => ctx.previewFlags.declare(flag), `delorun-agent-seats: preview flag ${flag.id}`)
   if (!liveAgentsOn(ctx)) return
-  await mountSeats(ctx, config)
+  await mountSeats(ctx, config, { relay: seatRelay })
 }

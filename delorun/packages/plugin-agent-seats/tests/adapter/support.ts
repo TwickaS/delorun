@@ -6,7 +6,7 @@ import type { GenerateOptions, Message, RequestMessage, StreamChunk } from '@dee
 import { MessageId, ToolCallId } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import type {
-  ProgramApprovalAnswer, ProgramApprovalRequest, ProgramEvent, ProgramInterruptOutcome, ProgramSession, SeatRecord, SeatStartRequest,
+  ProgramApprovalAnswer, ProgramApprovalRequest, ProgramEvent, ProgramInterruptOutcome, SeatRecord, SeatSession, SeatStartRequest,
 } from '@delorun/external-agents/contract'
 import { SeatAdapter, type SeatAdapterOptions, type SeatHost } from '../../src/adapter/adapter.ts'
 import type {
@@ -26,7 +26,8 @@ export const ROUTE = 'delorun-seat-claude-code'
 export const CHILD = SessionId('child-1')
 
 /** A program session that does only what a spec tells it to, and records what it receives. */
-export class ScriptedProgram implements ProgramSession {
+export class ScriptedProgram implements SeatSession {
+  readonly allowedBy = 'consent-off' as const
   readonly sent: Array<{ readonly text: string, readonly mode: 'start' | 'steer' }> = []
   interrupts = 0
   closed = false
@@ -96,7 +97,7 @@ export class ScriptedGate {
   /** The program the next start returns. */
   next = (): ScriptedProgram => new ScriptedProgram(`program-${this.programs.length + 1}`)
 
-  start(request: SeatStartRequest): Promise<ProgramSession> {
+  start(request: SeatStartRequest): Promise<SeatSession> {
     this.starts.push(request)
     if (this.failure !== undefined) return Promise.reject(this.failure)
     const program = this.next()
@@ -194,7 +195,7 @@ export function world(change: { readonly host?: Partial<SeatHost>, readonly seat
     ...change.host,
   }
   const options: SeatAdapterOptions = {
-    route: ROUTE, provider: 'claude-code', descriptorProvider: 'claude-code', displayName: 'Claude Code', contextWindow: 200_000,
+    route: ROUTE, provider: 'claude-code', descriptorProvider: 'claude-code', displayName: 'Claude Code', recordPrefix: 'claude_code.', contextWindow: 200_000,
     gate, host, states, models, events,
   }
   return { adapter: new SeatAdapter(options), gate, states, models, reports, approvals }

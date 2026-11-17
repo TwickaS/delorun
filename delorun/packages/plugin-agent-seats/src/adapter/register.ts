@@ -19,6 +19,8 @@ export interface SeatRouteSpec {
   readonly descriptorProvider: string
   /** The agent's display name. */
   readonly displayName: string
+  /** The prefix of the seat's recorded tool names. */
+  readonly recordPrefix: string
   /** The program's context window in tokens. */
   readonly contextWindow: number
 }
@@ -41,9 +43,10 @@ export interface SeatRouteDependencies {
    * Ask the person about one of the program's tool calls (the relay's).
    * @param child - the seat child.
    * @param request - the program's question.
+   * @param startSignal - the signal of the start that opened the program.
    * @returns the person's answer.
    */
-  approve(child: SessionId, request: ProgramApprovalRequest): Promise<ProgramApprovalAnswer>
+  approve(child: SessionId, request: ProgramApprovalRequest, startSignal: AbortSignal): Promise<ProgramApprovalAnswer>
 }
 
 /** The adapters registered, by route, for the executor and the relay. */

@@ -31,7 +31,7 @@ async function mounted(): Promise<{ ctx: Context, gate: ScriptedGate, routes: Se
     inject: ['llm', 'sessions', 'externalAgents'],
     apply: (inner: Context) => {
       routes = registerSeatRoutes(inner, [
-        { route: ROUTE, provider: 'claude-code', descriptorProvider: 'claude-code', displayName: 'Claude Code', contextWindow: 200_000 },
+        { route: ROUTE, provider: 'claude-code', descriptorProvider: 'claude-code', displayName: 'Claude Code', recordPrefix: 'claude_code.', contextWindow: 200_000 },
       ], {
         states, models: new MemoryModels(), workspaceOf: () => 'workspace-1', approve: () => Promise.resolve('reject'),
       })

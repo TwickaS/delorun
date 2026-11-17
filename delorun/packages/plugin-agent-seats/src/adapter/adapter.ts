@@ -51,9 +51,10 @@ export interface SeatHost {
    * Ask the person about one of the program's tool calls.
    * @param child - the seat child.
    * @param request - the program's question.
+   * @param startSignal - the signal of the start that opened the program; stop and archive abort it.
    * @returns the person's answer.
    */
-  approve(child: SessionId, request: ProgramApprovalRequest): Promise<ProgramApprovalAnswer>
+  approve(child: SessionId, request: ProgramApprovalRequest, startSignal: AbortSignal): Promise<ProgramApprovalAnswer>
   /**
    * Whether a tool call is one the program made on a harness tool (Stage 3), so its result goes back to the program.
    * @param child - the seat child.
@@ -61,6 +62,14 @@ export interface SeatHost {
    * @returns true for a harness tool call; absent means none is.
    */
   isHarnessCall?(child: SessionId, callId: string): boolean
+  /**
+   * Whether a tool name is one of the harness tools offered to the program over MCP (Stage 3, D18); the adapter keeps
+   * such a name as it is, so the native executor runs the call. Every other name is the program's own tool.
+   * @param child - the seat child.
+   * @param name - the tool name the program reported.
+   * @returns true for a harness tool; absent means none is.
+   */
+  isHarnessTool?(child: SessionId, name: string): boolean
   /**
    * Hand a harness tool's result back to the program.
    * @param child - the seat child.
@@ -79,6 +88,8 @@ export interface SeatAdapterOptions {
   readonly descriptorProvider: string
   /** The agent's display name, such as `Claude Code`. */
   readonly displayName: string
+  /** The prefix of the seat's recorded tool names, such as `claude_code.`; the executor treats a call with it as a record. */
+  readonly recordPrefix: string
   /** The program's context window in tokens, for the token meter. */
   readonly contextWindow: number
   /** The start gate. */
@@ -278,7 +289,7 @@ export class SeatAdapter extends LlmAdapter {
       ...resume === undefined ? {} : { resume },
       ...model === undefined ? {} : { model },
       harnessTools: [],
-      onApproval: request => host.approve(child, request),
+      onApproval: request => host.approve(child, request, signal),
       signal,
     })
     events?.onStarted?.(child)
@@ -369,9 +380,10 @@ export class SeatAdapter extends LlmAdapter {
           yield* close()
           const at = index++
           const id = ToolCallId(event.id)
+          const name = this.options.host.isHarnessTool?.(child, event.name) === true ? event.name : `${this.options.recordPrefix}${event.name}`
           yield { type: 'block-start', index: at, blockType: 'tool-call' }
-          yield { type: 'tool-call-delta', index: at, id, name: event.name, argumentsDelta: event.input }
-          yield { type: 'block-end', index: at, block: { type: 'tool-call', id, name: event.name, arguments: event.input } }
+          yield { type: 'tool-call-delta', index: at, id, name, argumentsDelta: event.input }
+          yield { type: 'block-end', index: at, block: { type: 'tool-call', id, name, arguments: event.input } }
           calls++
           break
         }

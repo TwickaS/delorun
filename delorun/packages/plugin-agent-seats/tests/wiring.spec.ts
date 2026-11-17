@@ -8,81 +8,17 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
-import type { PresetDefinition } from '@deepseek-ai/dsh-agent-preset-registry'
-import type { ConnectionFetchRoute } from '@deepseek-ai/dsh-client-connection'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import { onTestFinished } from 'vitest'
 import { describe, expect, it } from 'vitest'
-import type { PreviewFlagDeclaration, PreviewFlagId, PreviewFlags } from '@delorun/preview-flags'
 import type { SeatLease, SeatLeaseEnd } from '@delorun/external-agents/contract'
 import * as Plugin from '../src/index.ts'
 import { Config, LIVE_AGENTS, mountSeats, type SeatRelayHook } from '../src/index.ts'
 import { LEASE_END_TEXT } from '../src/lease.ts'
 import { CHOOSE_MODEL_PATH, RESUME_PATH } from '../src/state/index.ts'
+import { FakeConnection, FakeFlags, FakePresets, FakeProfile } from './mount-support.ts'
 import { FakeGate, FixtureWorkingDirectory } from './provider/harness.ts'
-
-/** The stand-in for the preview-flags row: it records declarations and reports one flag as on or off. */
-class FakeFlags extends Service implements PreviewFlags {
-  static on = false
-  readonly declared: PreviewFlagDeclaration[] = []
-
-  constructor(ctx: Context) {
-    super(ctx, 'previewFlags')
-  }
-
-  declare(flag: PreviewFlagDeclaration): () => void {
-    this.declared.push(flag)
-    return () => { this.declared.splice(this.declared.indexOf(flag), 1) }
-  }
-
-  isOn(id: PreviewFlagId): boolean {
-    return id === LIVE_AGENTS.id && FakeFlags.on
-  }
-
-  list(): never[] {
-    return []
-  }
-}
-
-/** The stand-in for the Connection: it records the Fetch routes and the request listeners. */
-class FakeConnection extends Service {
-  readonly routes: ConnectionFetchRoute[] = []
-  readonly fetch = {
-    register: (route: ConnectionFetchRoute): (() => Promise<void>) => {
-      this.routes.push(route)
-      return () => { this.routes.splice(this.routes.indexOf(route), 1); return Promise.resolve() }
-    },
-  }
-
-  constructor(ctx: Context) {
-    super(ctx, 'connection')
-  }
-}
-
-/** The stand-in for the preset registry: it records the definitions. */
-class FakePresets extends Service {
-  readonly definitions: PresetDefinition[] = []
-
-  constructor(ctx: Context) {
-    super(ctx, 'agentPresets')
-  }
-
-  register(definition: PresetDefinition): Promise<() => Promise<void>> {
-    this.definitions.push(definition)
-    return Promise.resolve(() => { this.definitions.splice(this.definitions.indexOf(definition), 1); return Promise.resolve() })
-  }
-}
-
-/** The stand-in for the profile's folder. */
-class FakeProfile extends Service {
-  readonly dir: string
-
-  constructor(ctx: Context, dir: string) {
-    super(ctx, 'profileContext')
-    this.dir = dir
-  }
-}
 
 /** A consent service that tells when a lease ends. */
 class FakeConsent extends Service {
@@ -213,7 +149,7 @@ describe('the relay seam', () => {
     const relay: SeatRelayHook = (wiring) => {
       seen.providers = wiring.seatProviders
       seen.state = wiring.state
-      return () => Promise.resolve('reject')
+      return () => () => Promise.resolve('reject')
     }
     const mounted = await mountSeats(ctx, Config(null), { relay })
     expect([...seen.providers ?? []]).toEqual(['claude-code-seat', 'codex-seat'])

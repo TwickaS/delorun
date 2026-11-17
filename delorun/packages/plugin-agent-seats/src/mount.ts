@@ -10,6 +10,7 @@ import type {} from '@deepseek-ai/dsh-app-boot'
 import { brandString } from '@deepseek-ai/dsh-brand'
 // Type-only: the ctx.connection merge.
 import type {} from '@deepseek-ai/dsh-client-connection'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { SubagentPromptRequestId } from '@deepseek-ai/dsh-subagent'
 // Type-only: the ctx.workspaceRegistry merge.
@@ -18,10 +19,10 @@ import { agentTitle } from '@delorun/external-agents/copy'
 import type { ProgramApprovalAnswer, ProgramApprovalRequest } from '@delorun/external-agents/contract'
 import { gateByUnlock, requireComputerOrDevice, routedPathname } from '@delorun/home-auth'
 import { registerSeatRoutes, type SeatRouteRegistration, type SeatRouteSpec } from './adapter/index.ts'
-import type { Config } from './config.ts'
+import type { Config, SeatConfig } from './config.ts'
 import { followLeaseEnds } from './lease.ts'
 import { isExternalAgentName, registerSeatProviders, seatProviderName } from './provider/index.ts'
-import { seatPreset } from './executor/index.ts'
+import { recordPrefixOf, seatPreset } from './executor/index.ts'
 import { mountSeatState, type SeatStateMount } from './state/index.ts'
 
 /** What a relay is built from: the mounted seat state and the exact provider names that identify a seat child. */
@@ -32,14 +33,25 @@ export interface SeatRelayWiring {
   readonly state: SeatStateMount
   /** The `subagent/descriptor` provider names of the configured seats, such as `claude-code-seat`. */
   readonly seatProviders: ReadonlySet<string>
+  /** The configured seats, which name the tool prefix of each seat's recorded calls. */
+  readonly seats: readonly SeatConfig[]
 }
+
+/**
+ * The answer path of one seat child's program: called when its program starts, it gives the callback the start takes
+ * as `onApproval`.
+ * @param child - the seat child's live Agent.
+ * @param startSignal - the signal of the start; stop and archive abort it.
+ * @returns the decision for each question; it answers `reject` for a child it does not serve.
+ */
+export type SeatApprover = (child: Agent, startSignal: AbortSignal) => (request: ProgramApprovalRequest) => Promise<ProgramApprovalAnswer>
 
 /**
  * Builds the answer path for a program's permission questions.
  * @param wiring - the mounted seat state and the seat provider names.
- * @returns the decision for one question; it answers `reject` for a child it does not serve.
+ * @returns the approver; it answers `reject` for a child it does not serve.
  */
-export type SeatRelayHook = (wiring: SeatRelayWiring) => (child: SessionId, request: ProgramApprovalRequest) => Promise<ProgramApprovalAnswer>
+export type SeatRelayHook = (wiring: SeatRelayWiring) => SeatApprover
 
 /** What the entry passes to {@link mountSeats}. */
 export interface SeatMountOptions {
@@ -89,7 +101,7 @@ export async function mountSeats(ctx: Context, config: Config, options: SeatMoun
     warn: (message) => { logger.warn(message) },
   })
   const seatProviders = new Set(config.seats.map(seat => seatProviderName(seat.provider)))
-  const decide = options.relay?.({ ctx, state, seatProviders })
+  const approver = options.relay?.({ ctx, state, seatProviders, seats: config.seats })
   const routes: SeatRouteSpec[] = []
   for (const seat of config.seats) {
     if (!isExternalAgentName(seat.provider)) continue
@@ -98,6 +110,7 @@ export async function mountSeats(ctx: Context, config: Config, options: SeatMoun
       provider: seat.provider,
       descriptorProvider: seatProviderName(seat.provider),
       displayName: agentTitle(seat.provider),
+      recordPrefix: recordPrefixOf(seat),
       contextWindow: seat.contextWindow,
     })
   }
@@ -106,7 +119,10 @@ export async function mountSeats(ctx: Context, config: Config, options: SeatMoun
     models: state.choices,
     events: state.events,
     workspaceOf,
-    approve: (child, request) => decide === undefined ? Promise.resolve('reject') : decide(child, request),
+    approve: (child, request, startSignal) => {
+      const agent = ctx.get('agents')?.get(child)
+      return approver === undefined || agent === undefined ? Promise.resolve('reject') : approver(agent, startSignal)(request)
+    },
   })
   for (const seat of config.seats) {
     const dispose = await ctx.agentPresets.register(seatPreset(seat))
