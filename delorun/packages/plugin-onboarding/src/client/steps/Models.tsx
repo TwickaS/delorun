@@ -174,7 +174,7 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
           : couldNotTest(card.result)
             ? <StateLine tone="info">{t('keyStatus.unverified')}</StateLine>
             : <StateLine tone="success">{connectedLine(t, card.source)}</StateLine>)}
-        {card.found && !didNotPass(card.result) && <FoundKey t={t} source={card.source} />}
+        {card.found && !didNotPass(card.result) && <FoundKey t={t} source={card.source} compact />}
         {card.found && (
           <Button variant="outline" size="sm" className={`${css.replace} ${shared.inline}`} onClick={() => {
             setTicked(held => new Set(held).add(card.provider))

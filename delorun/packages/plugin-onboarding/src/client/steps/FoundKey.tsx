@@ -35,6 +35,8 @@ interface FoundKeyProps {
   readonly t: StepServices['t']
   /** Where the key came from, when the host said. */
   readonly source: KeySource | undefined
+  /** Leave the source line out because the screen already says it, as "Connected · from …" does. */
+  readonly compact?: boolean
 }
 
 /**
@@ -42,12 +44,12 @@ interface FoundKeyProps {
  * @param props - the lookup and the source.
  * @returns the group.
  */
-export function FoundKey({ t, source }: FoundKeyProps): ReactNode {
+export function FoundKey({ t, source, compact = false }: FoundKeyProps): ReactNode {
   const id = useId()
   const line = sourceLine(t, source)
   return (
     <div className={css.found}>
-      <p id={`${id}-source`} className={css.source} aria-label={t('providers.source.label', { source: line })}>{line}</p>
+      {!compact && <p id={`${id}-source`} className={css.source} aria-label={t('providers.source.label', { source: line })}>{line}</p>}
       <details className={css.how}>
         <summary className={css.moreSummary}>{t('providers.how')}</summary>
         <p className={css.howBody}>{t('providers.how.body')}</p>

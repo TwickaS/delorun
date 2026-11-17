@@ -377,20 +377,25 @@ describe('a key Delorun already has', () => {
     return mounted
   }
 
-  it('says where the key came from, for each source kind', async () => {
+  it('says where the key came from on the landing, for each source kind', async () => {
     const cases = [
-      [{ kind: 'environment', variable: 'DEEPSEEK_API_KEY' }, 'From DEEPSEEK_API_KEY in the environment Delorun started with'],
-      [{ kind: 'saved', variable: 'DEEPSEEK_API_KEY' }, 'Saved by Delorun on this computer as DEEPSEEK_API_KEY'],
-      [{ kind: 'project-file', variable: 'DEEPSEEK_API_KEY' }, 'From DEEPSEEK_API_KEY in the .env file of the folder Delorun started in'],
-      [{ kind: 'home-file', variable: 'DEEPSEEK_API_KEY' }, 'From DEEPSEEK_API_KEY in the .env file in Delorun\'s home folder'],
-      [{ kind: 'unknown' }, en['providers.source.unknown']],
-      [undefined, en['providers.source.unknown']],
+      [{ kind: 'environment', variable: 'DEEPSEEK_API_KEY' }, 'Connected · from DEEPSEEK_API_KEY in the environment Delorun started with'],
+      [{ kind: 'saved', variable: 'DEEPSEEK_API_KEY' }, 'Connected · saved by Delorun on this computer as DEEPSEEK_API_KEY'],
+      [{ kind: 'project-file', variable: 'DEEPSEEK_API_KEY' }, 'Connected · from DEEPSEEK_API_KEY in the .env file of the folder Delorun started in'],
+      [{ kind: 'home-file', variable: 'DEEPSEEK_API_KEY' }, 'Connected · from DEEPSEEK_API_KEY in the .env file in Delorun\'s home folder'],
+      [{ kind: 'unknown' }, en['providers.connected']],
+      [undefined, en['providers.connected']],
     ] as const
     for (const [source, line] of cases) {
       await mount({}, found(source))
       expect(screen.getByText(line)).toBeTruthy()
       cleanup()
     }
+  })
+
+  it('says it on the key\'s own screen too, in the full sentence', async () => {
+    await walk({ kind: 'environment', variable: 'DEEPSEEK_API_KEY' })
+    expect(screen.getByText('From DEEPSEEK_API_KEY in the environment Delorun started with')).toBeTruthy()
   })
 
   it('explains behind a disclosure how Delorun knows', async () => {
