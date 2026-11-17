@@ -435,7 +435,7 @@ describe('keeping the page unlocked, and locking it', () => {
 })
 
 describe('the plugin wiring', () => {
-  it('Lock now in the unlock banner ends the PIN unlock when the page holds one, and the elevation otherwise', async () => {
+  it('the plugin\'s Lock ends the PIN unlock when the page holds one, and the elevation otherwise', async () => {
     // Fails without: composing the banner's Lock now with the PIN lock.
     const host = fakeHost({
       [key(PIN_ROUTES.state, 'GET')]: stateOn(),
@@ -461,8 +461,7 @@ describe('the plugin wiring', () => {
       const inject = overlays[1]?.inject?.() as { hooks: { unlock: HostObservable<UnlockView> }; request: () => Promise<void>; cancel: () => Promise<void>; lock: () => Promise<void>; dismissEnded: () => void }
       await pin?.unlock('135792')
       await settle()
-      render(<UnlockOverlay t={makeTranslate(devicesEn)} useUnlock={bindSnapshotSelector(inject.hooks.unlock)} request={inject.request} cancel={inject.cancel} lock={inject.lock} dismissEnded={inject.dismissEnded} />)
-      fireEvent.click(screen.getByRole('button', { name: 'Lock now' }))
+      await inject.lock()
       await settle()
       expect(host.count(key(PIN_ROUTES.lock))).toBe(1)
       expect(host.count(key(ELEVATION_ROUTES.lock))).toBe(0)

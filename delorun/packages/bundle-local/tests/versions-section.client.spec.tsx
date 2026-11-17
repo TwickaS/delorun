@@ -4,7 +4,7 @@
  * words, saves and switches only in the studio at the computer, and says in place what a reach device cannot do.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { HostFetch } from '../src/client/host-api.ts'
 import { PROFILE_VERSION_ROUTES, type VersionChanges, type VersionEntry } from '../src/client/versions-api.ts'
@@ -60,6 +60,10 @@ function renderSection(host: ReturnType<typeof fakeHost>, atComputer = true, dic
   const props = { t: makeTranslate(dictionary), close: () => {}, fetch: host.fetch, atComputer: () => atComputer } as VersionsSectionProps
   return render(<VersionsSection {...props} />)
 }
+
+import { installGateUnlock } from '../src/client/gate-unlock.ts'
+import { createUnlockSource } from '../src/client/unlock.ts'
+import { ELEVATION_ROUTES } from '../src/client/devices-api.ts'
 
 describe('the Setup versions section', () => {
   it('shows the empty state with Save this setup', async () => {
@@ -233,5 +237,34 @@ describe('the Setup versions section', () => {
 
   it('writes no sentences for an unchanged comparison', () => {
     expect(changeSentences(makeTranslate(en) as never, NONE)).toEqual([])
+  })
+})
+
+describe('an unlock prompt, the unlock and the action', () => {
+  it('runs the action once after the unlock without a second tap, then a second action asks nothing', async () => {
+    // Fails without: the retry on unlock (a second tap), a double run, or a prompt while the device is unlocked.
+    const ELEVATED = { status: 200, body: { kind: 'elevated', elevationId: 'e1', endsAt: Date.now() + 900_000 } }
+    const host = fakeHost({
+      [LIST]: listing([entry('a', { current: true })]),
+      [`GET ${ELEVATION_ROUTES.state}`]: [{ status: 200, body: { kind: 'none', unlockMinutes: 15 } }, ELEVATED],
+      [SAVE]: [{ status: 403, body: { error: 'ELEVATION_REQUIRED', message: 'Unlock first' } }, { status: 200, body: { created: true } }],
+    })
+    const store = createUnlockSource(host.fetch)
+    await store.refresh()
+    const dispose = installGateUnlock(store)
+    renderSection(host, false)
+    await screen.findByRole('button', { name: en['save.action'] })
+    fireEvent.click(screen.getByRole('button', { name: en['save.action'] }))
+    expect(await screen.findByText(/locks after 15 minutes/)).toBeTruthy()
+    expect(host.count(SAVE)).toBe(1)
+    // The computer approves: the store reads the unlock, and the refused save repeats by itself.
+    await act(async () => { await store.refresh() })
+    await waitFor(() => { expect(host.count(SAVE)).toBe(2) })
+    expect(screen.queryByText(/locks after 15 minutes/)).toBeNull()
+    // A second sensitive action runs with no prompt.
+    fireEvent.click(screen.getByRole('button', { name: en['save.action'] }))
+    await waitFor(() => { expect(host.count(SAVE)).toBe(3) })
+    expect(screen.queryByText(/locks after 15 minutes/)).toBeNull()
+    dispose()
   })
 })
