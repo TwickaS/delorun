@@ -8,6 +8,7 @@
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join, parse } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type { ExternalAgentName } from './contract.ts'
 
 /** The agents a pack can add, by upstream's provider name. */
@@ -224,7 +225,7 @@ export function locateCodexProgram(codex: LocatedPackage, machine: Machine): str
 
 /**
  * The executables a live agent's process-group leader runs, as real paths, for reaping only located programs: the Node
- * binary that runs the subprocess runner, the Codex launcher and Claude Code's watcher, Claude Code's native program
+ * binary that runs the subprocess runner (see {@link agentScripts} for the scripts it may run), Claude Code's native program
  * and the native Codex program when the added packs bring them.
  * @param profileDirectory - the profile's directory, when known.
  * @param machine - the platform and architecture.
@@ -237,6 +238,24 @@ export function agentExecutables(profileDirectory: string | undefined, machine: 
   const codex = profileDirectory === undefined ? undefined : locateCodex(profileDirectory)
   const codexProgram = codex === undefined ? undefined : locateCodexProgram(codex, machine)
   return [...new Set([nodePath, claude, codexProgram].filter((path): path is string => path !== undefined && existsSync(path)).map(path => realpathSync(path)))]
+}
+
+/** The specifier of Claude Code's watcher script, which runs under Node as the leader of the program's process group. */
+const CLAUDE_WATCHER = '@delorun/agent-claude-code/watcher'
+
+/**
+ * The scripts a live agent's Node leader runs, as real paths, for reaping only located programs: the Codex launcher
+ * and Claude Code's watcher. The watcher belongs to a Delorun package that depends on this one, so it is found by name
+ * from the profile's directory and from this module, and is absent where that package is not installed.
+ * @param profileDirectory - the profile's directory, when known.
+ * @param moduleFiles - the files besides the profile's `package.json` that resolution of the watcher starts from.
+ * @returns the paths that exist.
+ */
+export function agentScripts(profileDirectory: string | undefined, moduleFiles: readonly string[] = [fileURLToPath(import.meta.url)]): string[] {
+  const codex = profileDirectory === undefined ? undefined : locateCodex(profileDirectory)
+  const starts = [...(profileDirectory === undefined ? [] : [join(profileDirectory, 'package.json')]), ...moduleFiles]
+  const watcher = starts.map(from => resolveFrom(from, CLAUDE_WATCHER)).find(path => path !== undefined)
+  return [...new Set([codex?.script, watcher].filter((path): path is string => path !== undefined && existsSync(path)).map(path => realpathSync(path)))]
 }
 
 /**

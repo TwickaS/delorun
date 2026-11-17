@@ -9,8 +9,8 @@
  * records nothing and reaps nothing, because the subprocess owner's kill-on-close Job ends the programs with the Host.
  * @module @delorun/external-agents/reap
  */
-import { mkdir, readFile, readlink } from 'node:fs/promises'
-import { basename, dirname, join } from 'node:path'
+import { mkdir, readFile, readlink, realpath } from 'node:fs/promises'
+import { basename, dirname, isAbsolute, join } from 'node:path'
 import { DELORUN_HOME_ENTRIES } from '@delorun/contract-home-layout'
 import { readProtectedFile, writeProtectedFile } from '@delorun/home'
 import { z } from 'zod'
@@ -154,6 +154,11 @@ export interface ProgramRecordsOptions {
   readonly settleMs: number
   /** The real paths of the executables a live agent's leader runs; a record naming another executable is never stopped. */
   readonly located: () => ReadonlySet<string>
+  /**
+   * The real paths of the scripts a Node leader of a live agent runs (the Codex launcher, Claude Code's watcher); a
+   * record whose executable is Node is stopped only when its script is one of these.
+   */
+  readonly locatedScripts: () => ReadonlySet<string>
   /** Report a problem the reaper contained. */
   readonly warn: (message: string) => void
 }
@@ -219,8 +224,8 @@ export class ProgramRecords {
   /**
    * Stop every recorded program whose identity still matches in full and whose executable is a located one, and clear
    * the records. A record whose process is gone, whose id now names another process or whose executable is not a
-   * located agent program is dropped without a signal. An unreadable record file stops
-   * nothing and is left in place, with a warning.
+   * located agent program is dropped without a signal, as is a Node leader whose script is not a located one. An unreadable
+   * record file stops nothing and is left in place, with a warning.
    * @returns each record with what was done.
    */
   async reap(): Promise<readonly { readonly record: ProgramRecord, readonly outcome: ReapOutcome }[]> {
@@ -244,6 +249,7 @@ export class ProgramRecords {
     if (current === undefined) return 'gone'
     if (!sameProcess(record.identity, current)) return 'not-the-program'
     if (!this.options.located().has(record.identity.exe)) return 'not-located'
+    if (isNodeExecutable(record.identity.exe) && !(await this.scriptLocated(record.identity.script))) return 'not-located'
     if (record.identity.unit !== undefined) {
       await table.stopUnit(record.identity.unit)
       return 'stopped-unit'
@@ -253,6 +259,25 @@ export class ProgramRecords {
     const after = await table.identify(record.identity.pid)
     if (after !== undefined && sameProcess(record.identity, after)) table.killGroup(record.identity.pid, 'SIGKILL')
     return 'stopped-group'
+  }
+
+  /**
+   * Whether a Node leader's script is one Delorun locates. A forged record can copy the script of a live process, so
+   * the match with the live process does not stand for this.
+   * @param script - the script the identity records.
+   * @returns true only for an absolute path whose real path is a located script.
+   */
+  private async scriptLocated(script: string | undefined): Promise<boolean> {
+    if (script === undefined || !isAbsolute(script)) return false
+    let real: string
+    try {
+      real = await realpath(script)
+    } catch (error) {
+      // A script that cannot be resolved (removed, unreadable) is not a located one; the reap leaves the process alone.
+      this.options.warn(`external agents: the script ${script} of a recorded process cannot be resolved, so the process is not stopped: ${String(error)}`)
+      return false
+    }
+    return this.options.locatedScripts().has(real)
   }
 
   /**

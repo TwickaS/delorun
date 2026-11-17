@@ -127,7 +127,7 @@ describe('the consent and the start gate together', () => {
     await ctx.plugin(ExternalAgentsService, {
       maxLivePrograms: 4, graceMs: 100, limitRefusal: false, env: {}, now: Date.now,
       probeFolder: () => Promise.reject(new Error('no limits check in this spec')),
-      programRecords: undefined, processTable: undefined, programExecutables: () => [],
+      programRecords: undefined, processTable: undefined, programExecutables: () => [], programScripts: () => [],
     })
     const driver = new OneProgramDriver()
     ctx.get('externalAgents')!.registerDriver(driver)

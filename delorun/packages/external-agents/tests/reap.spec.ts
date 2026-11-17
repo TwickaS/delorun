@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { execFile, spawn } from 'node:child_process'
@@ -48,7 +48,7 @@ function records(test: { onTestFinished: (fn: () => void) => void }, table: Proc
   test.onTestFinished(() => rmSync(home, { recursive: true, force: true }))
   const warnings: string[] = []
   const path = programRecordPath(home)
-  return { records: new ProgramRecords({ path, table, graceMs: 5, settleMs, located: () => new Set(located), warn: message => warnings.push(message) }), warnings, path }
+  return { records: new ProgramRecords({ path, table, graceMs: 5, settleMs, located: () => new Set(located), locatedScripts: () => new Set(), warn: message => warnings.push(message) }), warnings, path }
 }
 
 const run = promisify(execFile)
@@ -101,18 +101,61 @@ describe('a Node leader is told apart by the script it runs (review P2)', () => 
     table.processes.set(node.pid, node)
     const { path } = records(test, table)
     writeRecord(path, { ...node, ...change })
-    const after = new ProgramRecords({ path, table, graceMs: 5, settleMs: 5, located: () => new Set([node.exe]), warn: () => {} })
+    const after = new ProgramRecords({ path, table, graceMs: 5, settleMs: 5, located: () => new Set([node.exe]), locatedScripts: () => new Set(), warn: () => {} })
     expect((await after.reap()).map(done => done.outcome)).toEqual(['not-the-program'])
     expect(table.calls).toEqual([])
   })
 
-  it('stops a Node program whose script still matches', async (test) => {
+  /**
+   * @param test - the running test, whose teardown removes the folder.
+   * @returns the real path of a script file that exists.
+   */
+  function scriptFile(test: { onTestFinished: (fn: () => void) => void }): string {
+    const folder = realpathSync(mkdtempSync(join(tmpdir(), 'ea1-gate-script-')))
+    test.onTestFinished(() => rmSync(folder, { recursive: true, force: true }))
+    const script = join(folder, 'watcher.mjs')
+    writeFileSync(script, 'setTimeout(() => {}, 30_000)\n')
+    return script
+  }
+
+  it('stops a Node program whose script still matches and is a located script', async (test) => {
+    const script = scriptFile(test)
     const table = new FakeTable()
-    table.processes.set(node.pid, node)
+    table.processes.set(node.pid, { ...node, script })
     const { path } = records(test, table)
-    writeRecord(path, node)
-    const after = new ProgramRecords({ path, table, graceMs: 5, settleMs: 5, located: () => new Set([node.exe]), warn: () => {} })
+    writeRecord(path, { ...node, script })
+    const after = new ProgramRecords({ path, table, graceMs: 5, settleMs: 5, located: () => new Set([node.exe]), locatedScripts: () => new Set([script]), warn: () => {} })
     expect((await after.reap()).map(done => done.outcome)).toEqual(['stopped-group'])
+    expect(table.calls).toEqual([`kill -${node.pid} SIGTERM`])
+  })
+
+  it('reaps a located script reached through a link, by its real path', async (test) => {
+    const script = scriptFile(test)
+    const link = `${script}.link`
+    symlinkSync(script, link)
+    const table = new FakeTable()
+    table.processes.set(node.pid, { ...node, script: link })
+    const { path } = records(test, table)
+    writeRecord(path, { ...node, script: link })
+    const after = new ProgramRecords({ path, table, graceMs: 5, settleMs: 5, located: () => new Set([node.exe]), locatedScripts: () => new Set([script]), warn: () => {} })
+    expect((await after.reap()).map(done => done.outcome)).toEqual(['stopped-group'])
+  })
+
+  it.for([
+    ['a script that is not a located one', (script: string) => script],
+    ['a script that does not exist', () => '/nowhere/server.js'],
+    ['a relative script', () => 'watcher.mjs'],
+    ['no script', () => undefined],
+  ] as const)('never stops a Node process with a matching id and start time whose record names %s, as a forged record copying the live process would', async ([, pick], test) => {
+    const script = pick(scriptFile(test))
+    const table = new FakeTable()
+    table.processes.set(node.pid, { ...node, script })
+    const { path } = records(test, table)
+    writeRecord(path, { ...node, script })
+    const after = new ProgramRecords({ path, table, graceMs: 5, settleMs: 5, located: () => new Set([node.exe]), locatedScripts: () => new Set(['/profile/node_modules/@openai/codex/bin/codex.js']), warn: () => {} })
+    expect((await after.reap()).map(done => done.outcome)).toEqual(['not-located'])
+    expect(table.calls).toEqual([])
+    expect(table.processes.has(node.pid)).toBe(true)
   })
 
   it('records a scoped Node program once the subprocess runner has handed over to it', async (test) => {
@@ -149,7 +192,7 @@ describe('reaping only located programs (review P3)', () => {
     table.processes.set(vim.pid, vim)
     const { records: one, path } = records(test, table)
     await one.started('claude-code', vim.pid)
-    const after = new ProgramRecords({ path, table, graceMs: 5, settleMs: 5, located: () => new Set([claude.exe]), warn: () => {} })
+    const after = new ProgramRecords({ path, table, graceMs: 5, settleMs: 5, located: () => new Set([claude.exe]), locatedScripts: () => new Set(), warn: () => {} })
     expect((await after.reap()).map(done => done.outcome)).toEqual(['not-located'])
     expect(table.calls).toEqual([])
     expect(table.processes.has(vim.pid)).toBe(true)
@@ -191,7 +234,7 @@ describe('a program the subprocess owner starts in a systemd scope (review P2)',
     const { records: one, path } = records(test, table, 2_000, [sleep])
     const identity = await one.started('claude-code', child.pid!, unit)
     expect(identity).toMatchObject({ pid: child.pid, unit, exe: sleep })
-    const after = new ProgramRecords({ path, table, graceMs: 5, settleMs: 5, located: () => new Set([sleep]), warn: () => {} })
+    const after = new ProgramRecords({ path, table, graceMs: 5, settleMs: 5, located: () => new Set([sleep]), locatedScripts: () => new Set(), warn: () => {} })
     expect((await after.reap()).map(done => done.outcome)).toEqual(['stopped-unit'])
     await expect.poll(async () => (await table.identify(child.pid!)) === undefined, { timeout: 5_000 }).toBe(true)
   })
@@ -206,7 +249,7 @@ describe('reaping programs a dead Host left behind', () => {
     expect((readFileSync(path).length)).toBeGreaterThan(0)
 
     table.honoursTerm = false
-    const after = new ProgramRecords({ path, table, graceMs: 5, settleMs: 5, located: () => new Set([claude.exe]), warn: () => {} })
+    const after = new ProgramRecords({ path, table, graceMs: 5, settleMs: 5, located: () => new Set([claude.exe]), locatedScripts: () => new Set(), warn: () => {} })
     expect((await after.reap()).map(done => done.outcome)).toEqual(['stopped-group'])
     expect(table.calls).toEqual(['kill -4242 SIGTERM', 'kill -4242 SIGKILL'])
     expect(await after.reap()).toEqual([])

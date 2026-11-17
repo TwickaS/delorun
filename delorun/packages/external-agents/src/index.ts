@@ -16,7 +16,7 @@ import { resolveDelorunHome } from '@delorun/home'
 import type { AccountRefreshReason } from './contract.ts'
 import { wireAccounts } from './accounts/index.ts'
 import { ExternalAgentsService } from './gate.ts'
-import { agentExecutables } from './locate.ts'
+import { agentExecutables, agentScripts } from './locate.ts'
 import { programRecordPath } from './reap.ts'
 
 export * from './contract.ts'
@@ -69,6 +69,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       programRecords: () => Promise.resolve(programRecordPath(home)),
       processTable: undefined,
       programExecutables: () => agentExecutables(scope.get('profileContext')?.dir, process, process.execPath),
+      programScripts: () => agentScripts(scope.get('profileContext')?.dir),
     })
   })
   ctx.inject(['externalAgents', 'connection'], (scope) => {

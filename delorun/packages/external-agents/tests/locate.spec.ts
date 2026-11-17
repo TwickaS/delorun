@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { agentExecutables, locateClaudeProgram, locateCodexProgram, locateClaudeSdk, locateCodex, locatePack, locatePackage, loginProgramFor } from '../src/locate.ts'
+import { agentExecutables, agentScripts, locateClaudeProgram, locateCodexProgram, locateClaudeSdk, locateCodex, locatePack, locatePackage, loginProgramFor } from '../src/locate.ts'
 
 const roots: string[] = []
 const nodePath = process.env.NODE_PATH
@@ -89,6 +89,28 @@ describe('finding the native Codex program', () => {
     expect(agentExecutables(dir, LINUX, process.execPath)).toEqual([
       realpathSync(process.execPath), realpathSync(join(dir, 'node_modules', PLATFORM, 'claude')), realpathSync(join(dir, 'node_modules', CODEX_BINARY)),
     ])
+  })
+})
+
+describe('the scripts a Node leader of a live agent runs', () => {
+  const WATCHER_PACKAGE = '@delorun/agent-claude-code'
+  const WATCHER = {
+    [`${WATCHER_PACKAGE}/package.json`]: JSON.stringify({ name: WATCHER_PACKAGE, version: '0.0.0', exports: { './watcher': './src/watcher.mjs' } }),
+    [`${WATCHER_PACKAGE}/src/watcher.mjs`]: '\n',
+  }
+
+  it('names the Codex launcher and Claude Code\'s watcher, as real paths', () => {
+    const dir = profileWith({ ...CODEX_ADDED, ...WATCHER })
+    expect(agentScripts(dir, [])).toEqual([
+      realpathSync(join(dir, 'node_modules', CODEX, 'bin', 'codex.js')), realpathSync(join(dir, 'node_modules', WATCHER_PACKAGE, 'src', 'watcher.mjs')),
+    ])
+  })
+
+  it('names only what is installed', () => {
+    const dir = profileWith(CODEX_ADDED)
+    expect(agentScripts(dir, [])).toEqual([realpathSync(join(dir, 'node_modules', CODEX, 'bin', 'codex.js'))])
+    expect(agentScripts(profileWith({}), [])).toEqual([])
+    expect(agentScripts(undefined, [])).toEqual([])
   })
 })
 

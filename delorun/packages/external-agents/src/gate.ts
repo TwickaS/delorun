@@ -44,6 +44,8 @@ export interface GateOptions {
   readonly processTable: ProcessTable | undefined
   /** The real paths of the executables a live agent's leader runs, read at each reap; only these are ever stopped. */
   readonly programExecutables: () => readonly string[]
+  /** The real paths of the scripts a Node leader of a live agent runs, read at each reap; a Node record is stopped only for these. */
+  readonly programScripts: () => readonly string[]
 }
 
 /** The consent for one seat start: none composed by the person's choice, or the service that reviews it. */
@@ -170,6 +172,7 @@ export class ExternalAgentsService extends Service implements ExternalAgentsGate
       graceMs: this.options.graceMs,
       settleMs: this.options.graceMs,
       located: () => new Set(this.options.programExecutables()),
+      locatedScripts: () => new Set(this.options.programScripts()),
       warn: message => this.ctx.logger.warn(message),
     })
     const reaped = await records.reap()
