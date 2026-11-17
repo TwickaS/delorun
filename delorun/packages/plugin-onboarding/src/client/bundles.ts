@@ -280,6 +280,9 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
   // The install list says how a queued pack ends; the card follows it, so it never stays on "Adding…" after a failure.
   // One loop per pack runs while the card shows an install, whoever started it and across the card being re-read.
   const following = new Set<string>()
+  // The loops end with the plugin: disposal aborts this controller and a waiting loop leaves at its next tick.
+  const disposed = new AbortController()
+  ctx.effect(() => () => { disposed.abort() }, 'delorun-onboarding: the pack install loops end with the plugin')
   const followPack = async (name: string): Promise<void> => {
     if (following.has(name)) return
     following.add(name)
@@ -288,6 +291,7 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
     try {
       for (;;) {
         await new Promise<void>((resolve) => { setTimeout(resolve, options.pollMs) })
+        if (disposed.signal.aborted) return
         const now = views.getSnapshot()[name]
         // A card being re-read shows "checking" for a moment; the loop waits it out, for as long as an add may run, and reads the outcome after.
         if (now?.state === 'checking') {
