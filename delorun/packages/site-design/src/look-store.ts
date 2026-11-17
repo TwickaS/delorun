@@ -17,7 +17,7 @@ let cached: { readonly key: string; readonly look: Look } = { key: '', look: DEF
  */
 export function getLook(): Look {
   const root = document.documentElement
-  const key = `${root.dataset['look'] ?? ''}|${root.dataset['accent'] ?? ''}|${root.dataset['density'] ?? ''}|${root.dataset['contrast'] ?? ''}|${root.classList.contains('dark')}`
+  const key = `${root.dataset['look'] ?? ''}|${root.dataset['accent'] ?? ''}|${root.dataset['density'] ?? ''}|${root.dataset['contrast'] ?? ''}|${root.dataset['scheme'] ?? ''}`
   if (cached.key !== key) cached = { key, look: currentLook(root) }
   return cached.look
 }
@@ -27,7 +27,7 @@ export function getLook(): Look {
  * @param next - the look.
  */
 export function setLook(next: Look): void {
-  applyLook(document.documentElement, next)
+  applyLook(document.documentElement, next, matchMedia('(prefers-color-scheme: dark)').matches)
   window.dispatchEvent(new Event(EVENT))
 }
 

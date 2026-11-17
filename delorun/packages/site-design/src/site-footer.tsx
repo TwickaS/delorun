@@ -8,7 +8,7 @@ import { ProductMark } from './product-mark.tsx'
 import type { ReactNode } from 'react'
 import { Link } from '../../brand/src/components/Link.tsx'
 import type { FooterCopy, ShellLink } from './shell-copy.ts'
-import { SiteLink, useLinkHref } from './site-header.tsx'
+import { DEFAULT_INNER, SiteLink, useLinkHref } from './site-header.tsx'
 import { BackToStart } from './back-to-start.tsx'
 
 /** The link list's layout. */
@@ -31,13 +31,14 @@ function FooterLink({ link }: { link: ShellLink }) {
  * @param props.copy - its text.
  * @param props.links - the link list, in order.
  * @param props.top - content above the links, such as a sign-up form.
+ * @param props.inner - Tailwind classes for the inner column's maximum width and margins; defaults to the header's.
  * @param props.closing - the closing composition of the product site; "Back to how it started" follows it, before the links.
  * @returns the footer landmark.
  */
-export function SiteFooter({ copy, links, top, closing }: { copy: FooterCopy; links: readonly ShellLink[]; top?: ReactNode; closing?: ReactNode }) {
+export function SiteFooter({ copy, links, top, closing, inner = DEFAULT_INNER }: { copy: FooterCopy; links: readonly ShellLink[]; top?: ReactNode; closing?: ReactNode; inner?: string }) {
   return (
     <footer className="mt-24 border-t border-(--dl-border)">
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-5 py-10 text-sm text-(--dl-text-muted) sm:px-8">
+      <div className={`mx-auto flex w-full flex-col gap-6 py-10 text-sm text-(--dl-text-muted) ${inner}`}>
         {top}
         {closing === undefined ? null : <>{closing}<BackToStart copy={copy.theme} className="self-start" /></>}
         <nav aria-label={copy.navLabel}>

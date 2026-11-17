@@ -35,9 +35,9 @@ export default function ThemeMenu({ copy, onReady }: { copy: ThemeCopy; onReady:
       <ThemePicker label={copy.themes} value={look.look === 'custom' ? 'soft' : look.look}
         themes={PRESETS.map(id => ({ value: id, label: copy.names[id], ...LOOK_SWATCHES[id]! }))}
         onChange={id => change({ ...look, look: id, contrast: 'default' })} />
-      <ChoiceGroup label={copy.scheme} value={look.scheme ?? 'light'} disabled={false} fill
-        options={[{ value: 'light', label: copy.light }, { value: 'dark', label: copy.dark }]}
-        onChange={scheme => change({ ...look, scheme })} />
+      <ChoiceGroup label={copy.scheme} value={look.scheme ?? 'device'} disabled={false} fill
+        options={[{ value: 'device', label: copy.device }, { value: 'light', label: copy.light }, { value: 'dark', label: copy.dark }]}
+        onChange={scheme => change({ ...look, scheme: scheme === 'device' ? undefined : scheme })} />
       <BackToStart copy={copy} className="self-start" />
     </div>
   )

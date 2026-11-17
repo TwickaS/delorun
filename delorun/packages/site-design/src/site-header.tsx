@@ -15,7 +15,10 @@ import { ThemeControl } from './theme-control.tsx'
 const FOCUS = 'rounded-(--dl-radius-xs) focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-(--dl-accent-text)'
 
 /** The header bar, the mark with the name, and a row of items. */
-const BAR = 'mx-auto flex w-full max-w-5xl items-center justify-between gap-4 px-5 py-5 sm:px-8' // us-spelling: quoted output (Tailwind class names)
+const BAR = 'mx-auto flex w-full items-center justify-between gap-4 py-5' // us-spelling: quoted output (Tailwind class names)
+
+/** The default inner width and margins of the header and the footer; a site passes its own grid's as `inner`. */
+export const DEFAULT_INNER = 'max-w-5xl px-5 sm:px-8'
 const BRAND = 'flex items-center gap-2.5 font-semibold tracking-tight text-(--dl-text)' // us-spelling: quoted output (Tailwind class names)
 const ROW = 'flex items-center gap-4 sm:gap-5' // us-spelling: quoted output (Tailwind class names)
 
@@ -47,11 +50,12 @@ export function useLinkHref(link: ShellLink): string {
  * @param props.home - the link home.
  * @param props.links - the main links, in order.
  * @param props.leading - extra content between the links and the control, such as a search box.
+ * @param props.inner - Tailwind classes for the inner row's maximum width and margins; defaults to {@link DEFAULT_INNER}.
  * @returns the header landmark.
  */
-export function SiteHeader({ copy, home, links, leading }: { copy: HeaderCopy; home: string; links: readonly ShellLink[]; leading?: ReactNode }) {
+export function SiteHeader({ copy, home, links, leading, inner = DEFAULT_INNER }: { copy: HeaderCopy; home: string; links: readonly ShellLink[]; leading?: ReactNode; inner?: string }) {
   return (
-    <header className={BAR}>
+    <header className={`${BAR} ${inner}`}>
       <a href={home} className={`${BRAND} ${FOCUS}`}>
         <ProductMark size={28} />
         <span className="text-lg">{copy.title}</span>
