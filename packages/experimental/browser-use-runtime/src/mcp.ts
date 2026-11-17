@@ -107,7 +107,8 @@ export interface SessionMcpOptions {
   args: string[]
   /**
    * Absolute folder every Session's server runs in, created with mode 0700 before a start when it is missing.
-   * Omission starts each Session's server in that Session's working directory.
+   * Omission starts each Session's server in that Session's working directory. Either way the server is told the
+   * Session's working directory as its one MCP root, where a server such as Playwright's saves its output files.
    */
   directory?: string
   /** Explicit overrides merged into the MCP client's scrubbed child environment. */
@@ -219,13 +220,15 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
             }
             return next()
           })
+          const sessionDirectory = await workingDirectory.ensure(agent, signal)
           await scope.ctx.plugin(McpClient, McpClient.Config({
             transport: 'stdio',
             serverName: options.name,
             command: options.command,
             args: options.args,
             ...options.env === undefined ? {} : { env: options.env },
-            cwd: options.directory === undefined ? await workingDirectory.ensure(agent, signal) : await fixedDirectory(options.directory),
+            cwd: options.directory === undefined ? sessionDirectory : await fixedDirectory(options.directory),
+            roots: [sessionDirectory],
             ...options.toolCallTimeoutMs === undefined ? {} : { toolCallTimeoutMs: options.toolCallTimeoutMs },
             failOnStartupError: true,
             reconnect: { enabled: false },

@@ -2507,7 +2507,7 @@ export interface LspLocalServerConfig {
 ## `@deepseek-ai/dsh-mcp-client`
 
 - `inject`: `tools`
-- `source`: [`packages/mcp/mcp-client/src/index.ts:159`](../packages/mcp/mcp-client/src/index.ts)
+- `source`: [`packages/mcp/mcp-client/src/index.ts:176`](../packages/mcp/mcp-client/src/index.ts)
 
 ```ts config-catalog
 /** Configuration for one stdio or Streamable HTTP MCP server. */
@@ -2553,6 +2553,13 @@ export interface StdioConfig {
   maxInstructionBytes?: number
   /** Automatic reconnect policy after a lost connection; omission uses the defaults. */
   reconnect?: ReconnectConfig
+  /**
+   * Absolute folders advertised to the server as its MCP roots, the client's
+   * `roots` capability, answered on `roots/list` as `file:` URLs. Roots only
+   * tell the server which folders the session works in; they grant the server
+   * no access it does not already have. Omission or an empty list advertises no roots.
+   */
+  roots?: string[]
 }
 
 /** Config for connecting to an MCP server over Streamable HTTP (SSE). */
@@ -2583,6 +2590,13 @@ export interface StreamableHttpConfig {
   maxInstructionBytes?: number
   /** Automatic reconnect policy after a lost connection; omission uses the defaults. */
   reconnect?: ReconnectConfig
+  /**
+   * Absolute folders advertised to the server as its MCP roots, the client's
+   * `roots` capability, answered on `roots/list` as `file:` URLs. Roots only
+   * tell the server which folders the session works in; they grant the server
+   * no access it does not already have. Omission or an empty list advertises no roots.
+   */
+  roots?: string[]
 }
 
 /** Automatic reconnect policy for one MCP server connection. */

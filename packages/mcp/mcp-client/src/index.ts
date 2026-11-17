@@ -61,6 +61,9 @@ const DEFAULT_TOOL_CALL_TIMEOUT_MS = 60_000
 /** Default budget for transport closure and local cleanup (ms). */
 const DEFAULT_CLOSE_TIMEOUT_MS = 5_000
 
+/** An absolute POSIX or Windows folder path, the only form a configured MCP root takes. */
+const ABSOLUTE_ROOT_PATTERN = /^(?:\/|[A-Za-z]:[\\/]|\\\\)/u
+
 /** Valid `serverName`, kept below the public tool-name budget. */
 export const SERVER_NAME_PATTERN = /^[A-Za-z0-9_-]{1,32}$/
 
@@ -123,6 +126,13 @@ export interface StdioConfig {
   maxInstructionBytes?: number
   /** Automatic reconnect policy after a lost connection; omission uses the defaults. */
   reconnect?: ReconnectConfig
+  /**
+   * Absolute folders advertised to the server as its MCP roots, the client's
+   * `roots` capability, answered on `roots/list` as `file:` URLs. Roots only
+   * tell the server which folders the session works in; they grant the server
+   * no access it does not already have. Omission or an empty list advertises no roots.
+   */
+  roots?: string[]
 }
 
 /** Config for connecting to an MCP server over Streamable HTTP (SSE). */
@@ -153,6 +163,13 @@ export interface StreamableHttpConfig {
   maxInstructionBytes?: number
   /** Automatic reconnect policy after a lost connection; omission uses the defaults. */
   reconnect?: ReconnectConfig
+  /**
+   * Absolute folders advertised to the server as its MCP roots, the client's
+   * `roots` capability, answered on `roots/list` as `file:` URLs. Roots only
+   * tell the server which folders the session works in; they grant the server
+   * no access it does not already have. Omission or an empty list advertises no roots.
+   */
+  roots?: string[]
 }
 
 /** Configuration for one stdio or Streamable HTTP MCP server. */
@@ -194,6 +211,7 @@ export const Config = z.union([
     failOnStartupError: z.boolean().default(false),
     maxInstructionBytes: z.number().step(1).min(1).default(DEFAULT_MAX_INSTRUCTION_BYTES),
     reconnect: ReconnectSchema,
+    roots: z.array(z.string().pattern(ABSOLUTE_ROOT_PATTERN)),
   }),
   z.object({
     transport: z.const('streamable-http'),
@@ -207,6 +225,7 @@ export const Config = z.union([
     failOnStartupError: z.boolean().default(false),
     maxInstructionBytes: z.number().step(1).min(1).default(DEFAULT_MAX_INSTRUCTION_BYTES),
     reconnect: ReconnectSchema,
+    roots: z.array(z.string().pattern(ABSOLUTE_ROOT_PATTERN)),
   }),
 ]) as z<ConfigInput, Config>
 /* jscpd:ignore-end */

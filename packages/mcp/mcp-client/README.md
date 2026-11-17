@@ -63,6 +63,7 @@ Add one entry per server; nothing else is required. After the harness starts, th
 | `closeTimeoutMs` | `5,000` | Budget for transport closure and pending local work to settle |
 | `expandTemplates` | `false` | Resolve `${credential:REF}` in transport strings at runtime and redact resolved values from diagnostics |
 | `maxInstructionBytes` | `32,768` | Maximum UTF-8 bytes of server instructions including attribution; an oversized value rejects the connection |
+| `roots` | unset | Absolute folders advertised as the client's MCP roots and returned by `roots/list`; they tell the server where the session works and grant no access; unset or empty advertises no roots |
 | `failOnStartupError` | `false` | Reject plugin activation when the initial connection or tool synchronization fails |
 | `reconnect.enabled` | `true` | Reconnect automatically after a lost connection |
 | `reconnect.initialDelayMs` | `500` | First reconnect delay; doubles per consecutive failed attempt |

@@ -82,7 +82,7 @@ Browser state survives turns while its live Session remains attached. The MCP se
 
 #### What the model sees
 
-Tools retain upstream descriptions and JSON schemas under `mcp__playwright-mcp__<tool>` names. Text and screenshots use the normal tool-result pipeline and Session log. Screenshots require an attachment store and an image-capable model route; other routes receive the MCP image diagnostic. The MCP client also exposes resource helpers and attributed server instructions. Browser instructions are shown only after this Session owns a connection; targeted resource requests enforce the same ownership.
+Tools retain upstream descriptions and JSON schemas under `mcp__playwright-mcp__<tool>` names. Text and screenshots use the normal tool-result pipeline and Session log. Files the server saves, such as screenshots and PDFs, go to `.playwright-mcp` in the Session's working directory, its MCP root, and the tool result links each one relative to that directory. Screenshots require an attachment store and an image-capable model route; other routes receive the MCP image diagnostic. The MCP client also exposes resource helpers and attributed server instructions. Browser instructions are shown only after this Session owns a connection; targeted resource requests enforce the same ownership.
 
 #### Token effect
 

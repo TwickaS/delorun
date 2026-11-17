@@ -176,7 +176,7 @@ function registerIndependentTool(ctx: Context) {
 }
 
 async function events(root: string) {
-  return (await readFile(join(root, 'events.ndjson'), 'utf8')).trim().split('\n').map(line => JSON.parse(line) as { event: string; pid: number; name?: string; cwd?: string })
+  return (await readFile(join(root, 'events.ndjson'), 'utf8')).trim().split('\n').map(line => JSON.parse(line) as { event: string; pid: number; name?: string; cwd?: string; roots?: { uri: string; name: string }[] })
 }
 
 it('requires a browser mode and validates launch and attachment settings', () => {
@@ -387,6 +387,26 @@ describe('Session MCP Loader composition', () => {
     const starts = (await events(root)).filter(event => event.event === 'start')
     expect(starts.length).toBeGreaterThan(0)
     expect(new Set(starts.map(event => event.cwd))).toEqual(new Set([await realpath(fixed)]))
+  })
+
+  it('tells each Session\'s server that Session\'s working directory as its one MCP root', async () => {
+    const base = await mkdtemp(join(tmpdir(), 'dsh-browser-mcp-roots-'))
+    roots.push(base)
+    const { ctx, root } = await load(false, undefined, undefined, undefined, false, undefined, join(base, 'fixed'))
+    const first = join(root, 'first'), second = join(root, 'second')
+    await Promise.all([mkdir(first), mkdir(second)])
+    for (const [id, cwd] of [['roots-first', first], ['roots-second', second]] as const) {
+      const { agent } = await ctx.agents.create({ sessionId: SessionId(id), meta: { cwd } })
+      await warm(ctx, agent)
+    }
+    await vi.waitFor(async () => {
+      expect((await events(root)).filter(event => event.event === 'roots')).toHaveLength(2)
+    })
+    const answered = (await events(root)).filter(event => event.event === 'roots').map(event => event.roots)
+    expect(answered).toEqual(expect.arrayContaining([
+      [{ uri: pathToFileURL(first).href, name: 'first' }],
+      [{ uri: pathToFileURL(second).href, name: 'second' }],
+    ]))
   })
 
   it('replaces a browser failure the provider explains and keeps every other failure and result', async () => {
