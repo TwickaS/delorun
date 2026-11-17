@@ -108,7 +108,7 @@ const questions = (): Promise<void> => inTask('questions', async (rt, folder, lo
   let runRule: ProgramRunRule | undefined
   const onApproval = (question: ProgramApprovalRequest): Promise<ProgramApprovalAnswer> => {
     const answer = answers.shift() ?? 'reject'
-    if (answer === 'allow-run') runRule = question.runRule
+    if (answer === 'allow-run' && question.runRule !== undefined) runRule = question.runRule
     log.line('question', { tool: question.toolName, reason: question.reason, runRule: question.runRule?.summary ?? null, answer })
     return Promise.resolve(answer)
   }
@@ -119,14 +119,15 @@ const questions = (): Promise<void> => inTask('questions', async (rt, folder, lo
     log.line('turn', { outcome: events.at(-1)?.kind === 'turn-end' ? events.at(-1) : null, unusedAnswers: answers.length })
   }
   const session = await driver().open(request(rt, folder, log, { onApproval }))
-  await turn(session, 'Run this shell command exactly: echo once > once.txt. Then say done.', ['allow-once'])
-  await turn(session, 'Run this shell command exactly, twice, one call after the other: echo run > run.txt. Then say done.', ['allow-run'])
-  await turn(session, 'Run this shell command exactly: echo no > rejected.txt. Then say done.', ['reject'])
-  await turn(session, 'Run this shell command exactly: echo stop > cancelled.txt. Then say done.', ['cancel'])
+  await turn(session, 'Run this shell command exactly: touch once.txt. Then say done.', ['allow-once'])
+  await turn(session, 'Run this shell command exactly, twice, one call after the other: touch run.txt. Then say done.', ['allow-run'])
+  await turn(session, 'Run this shell command exactly: touch rejected.txt. Then say done.', ['reject'])
+  await turn(session, 'Run this shell command exactly: touch cancelled.txt. Then say done.', ['cancel'])
+  await turn(session, 'Run this shell command exactly: echo prefix > prefix.txt. Then say done.', ['allow-once'])
   await session.close()
   log.line('files', { once: existsSync(join(folder, 'once.txt')), run: existsSync(join(folder, 'run.txt')), rejected: existsSync(join(folder, 'rejected.txt')), cancelled: existsSync(join(folder, 'cancelled.txt')), settingsWritten: existsSync(join(folder, '.claude')) })
   const resumed = await driver().open(request(rt, folder, log, { onApproval, resume: session.programSessionId, runRules: runRule === undefined ? [] : [runRule] }))
-  await turn(resumed, 'Run this shell command exactly once more: echo run > run.txt. Then say done.', [])
+  await turn(resumed, 'Run this shell command exactly once more: touch run.txt. Then say done.', [])
   await resumed.close()
 })
 

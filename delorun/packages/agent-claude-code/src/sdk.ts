@@ -9,7 +9,7 @@ import type {
   AccountInfo, McpSdkServerConfigWithInstance, ModelInfo, Options, SDKControlGetUsageResponse, SDKMessage, SdkMcpToolDefinition, SDKUserMessage,
 } from '@anthropic-ai/claude-agent-sdk'
 import { ClaudeCodeDriverError } from './errors.ts'
-import type { LocatedClaudeSdk } from '@delorun/external-agents/locate'
+import { locateClaudeSdk, type LocatedClaudeSdk } from '@delorun/external-agents/locate'
 
 /** The SDK version this driver was tested with: the version upstream's `@deepseek-ai/dsh-subagent-claude-code` pins. */
 export const TESTED_SDK_VERSION = '0.3.263'
@@ -68,4 +68,16 @@ export async function loadClaudeSdk(located: Pick<LocatedClaudeSdk, 'entry' | 'v
   } catch (error: unknown) {
     throw new ClaudeCodeDriverError('sdk-missing', 'Claude Code could not start: the Claude Agent SDK in the Claude Code pack failed to load. Remove and add the Claude Code pack again.', { cause: error })
   }
+}
+
+/**
+ * Load the SDK the Claude Code pack in a profile brings.
+ * @param profileDirectory - the profile's folder, or undefined when the composition has none.
+ * @returns the SDK module.
+ * @throws ClaudeCodeDriverError `sdk-missing` when the pack or its SDK is not installed; as {@link loadClaudeSdk} otherwise.
+ */
+export async function loadPackSdk(profileDirectory: string | undefined): Promise<ClaudeSdk> {
+  const located = profileDirectory === undefined ? undefined : locateClaudeSdk(profileDirectory)
+  if (located === undefined) throw new ClaudeCodeDriverError('sdk-missing', 'Claude Code could not start: the Claude Code pack or the Claude Agent SDK inside it is not installed. Add the Claude Code pack again.')
+  return await loadClaudeSdk(located)
 }
