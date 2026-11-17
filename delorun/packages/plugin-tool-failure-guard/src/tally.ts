@@ -100,7 +100,8 @@ export type TallyVerdict = 'none' | 'remind' | 'stop'
 
 /**
  * One agent's running count of failed tool calls. A success ends the current run of failures but stays in the window;
- * a neutral outcome changes nothing. Once a limit is reached the tally stays stopped until the plugin discards it.
+ * a neutral outcome changes nothing. The tally reminds at most once, and once a limit is reached it stays stopped until
+ * the plugin discards it.
  */
 export class FailureTally {
   private readonly limits: FailureLimits
@@ -108,6 +109,7 @@ export class FailureTally {
   private readonly window: boolean[] = []
   private run = 0
   private stopped = false
+  private reminded = false
 
   /** @param limits - the validated limits. */
   constructor(limits: FailureLimits) {
@@ -127,7 +129,7 @@ export class FailureTally {
   /**
    * Record one call.
    * @param outcome - the call's outcome from {@link outcomeOf}.
-   * @returns `stop` when this call reaches a limit, `remind` when it makes the run reach `reminderAfter`, else `none`.
+   * @returns `stop` when this call reaches a limit, `remind` the first time a run reaches `reminderAfter`, else `none`.
    */
   record(outcome: CallOutcome): TallyVerdict {
     if (outcome === 'neutral') return 'none'
@@ -141,6 +143,8 @@ export class FailureTally {
       this.stopped = true
       return 'stop'
     }
-    return this.run === this.limits.reminderAfter ? 'remind' : 'none'
+    if (this.reminded || this.run !== this.limits.reminderAfter) return 'none'
+    this.reminded = true
+    return 'remind'
   }
 }
