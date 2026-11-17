@@ -11,7 +11,7 @@ import { Button, Checkbox, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { HostObservable, InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { FULL_ACCESS_PRESET, readEverywhere, reviewChat, setFullAccess, type WorkspaceAccess } from './consents-api.ts'
 import { ELEVATION_REQUIRED, unlockSentence } from './gate.ts'
-import { currentGateUnlock, useGateUnlock } from './gate-unlock.ts'
+import { currentGateUnlock, noteUnlockedAction, useGateUnlock } from './gate-unlock.ts'
 import { hostFailureOf, isRefused, LOOPBACK_REQUIRED, type HostFetch } from './host-api.ts'
 import css from './ConsentSections.module.css'
 
@@ -156,7 +156,7 @@ export function createFullAccessConsentSource(fetch: HostFetch): FullAccessConse
       if (open.access === undefined) return
       publish({ ...open, busy: true })
       setFullAccess(fetch, open.access, true, open.chat).then(
-        () => { if (state?.seq === open.seq) close(true) },
+        () => { noteUnlockedAction(); if (state?.seq === open.seq) close(true) },
         (error: unknown) => { if (state?.seq === open.seq) publish({ ...open, busy: false, failure: consentFailureOf(error) }) },
       )
     },

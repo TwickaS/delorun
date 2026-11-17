@@ -30,6 +30,14 @@ export interface GateUnlock {
 }
 
 /**
+ * Tell the device's unlock that an action which needs it just succeeded: the home slides the unlock's end after each such
+ * action, so the end is read again instead of kept.
+ */
+export function noteUnlockedAction(): void {
+  if (installed !== undefined) void installed.refresh()
+}
+
+/**
  * Read the unlock now, outside rendering, for a sentence built where a hook cannot run.
  * @returns the minutes and the opener; both undefined where there is no unlock to offer.
  */

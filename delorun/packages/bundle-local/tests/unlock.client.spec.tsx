@@ -81,12 +81,12 @@ describe('the unlock copy', () => {
 
   it('states the configured length before an unlock, in minutes', async () => {
     await askDialog({ kind: 'none', unlockMinutes: 45 })
-    expect(screen.getByText(/The unlock lasts 45 minutes and ends on its own\./u)).toBeTruthy()
+    expect(screen.getByText(/Stays unlocked while you use it; locks after 45 minutes without a sensitive action\./u)).toBeTruthy()
   })
 
   it('says one minute in the singular', async () => {
     await askDialog({ kind: 'none', unlockMinutes: 1 })
-    expect(screen.getByText(/The unlock lasts 1 minute and ends on its own\./u)).toBeTruthy()
+    expect(screen.getByText(/Stays unlocked while you use it; locks after 1 minute without a sensitive action\./u)).toBeTruthy()
   })
 
   it('keeps the sentence without a length when the home does not send one', async () => {

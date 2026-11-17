@@ -17,6 +17,7 @@ import { PinLock } from '../src/client/PinLock.tsx'
 import { ELEVATION_ROUTES } from '../src/client/devices-api.ts'
 import { applyPin, applyUnlock, PIN_LOCK_OVERLAY_ID, UNLOCK_OVERLAY_ID } from '../src/client/index.ts'
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
+import { installGateUnlock, noteUnlockedAction } from '../src/client/gate-unlock.ts'
 import { createUnlockSource, type UnlockView } from '../src/client/unlock.ts'
 import { UnlockOverlay } from '../src/client/UnlockOverlay.tsx'
 import { en as devicesEn } from '../src/client/devices-locales.ts'
@@ -489,5 +490,26 @@ describe('an action that needs an unlock, under PIN mode', () => {
     await withoutPin.refresh()
     withoutPin.refused('elevation-required: terminal/create')
     expect(withoutPin.hooks.unlock.getSnapshot().dialog).toMatchObject({ action: 'terminal/create' })
+  })
+})
+
+describe('the unlock slides on the home', () => {
+  it('reads the end again after an action that needed the unlock, and does not prompt while unlocked', async () => {
+    // Fails without: noteUnlockedAction refreshing the store (the banner would keep the old end), or a prompt while unlocked.
+    let endsAt = NOW + 15 * 60_000
+    const host = fakeHost({})
+    const reads = vi.fn(() => ({ status: 200, body: { kind: 'elevated', elevationId: 'e1', endsAt } }) as Answer)
+    const fetch = vi.fn(async (input: string, init?: RequestInit) => { void init; return new Response(JSON.stringify(reads().body), { status: 200 }) })
+    const asked = vi.fn(() => false)
+    const store = createUnlockSource(fetch as never, () => NOW, false, asked)
+    await store.refresh()
+    const dispose = installGateUnlock(store)
+    expect(host).toBeTruthy()
+    endsAt += 5 * 60_000
+    noteUnlockedAction()
+    await act(async () => { await Promise.resolve(); await Promise.resolve() })
+    expect(store.hooks.unlock.getSnapshot().state).toMatchObject({ kind: 'elevated', endsAt })
+    expect(store.hooks.unlock.getSnapshot().dialog).toBeNull()
+    dispose()
   })
 })

@@ -28,8 +28,8 @@ export function gateOf(error: unknown): Gate | undefined {
 
 /** The copy of {@link Gate}, merged into the dictionary of each namespace whose section shows it. */
 export const gateEn = {
-  'gate.unlock': 'Unlock this device for {minutes} minutes to do this. The unlock ends on its own.',
-  'gate.unlockOne': 'Unlock this device for 1 minute to do this. The unlock ends on its own.',
+  'gate.unlock': 'Unlock this device to do this. It stays unlocked while you use it, and locks after {minutes} minutes without a sensitive action.',
+  'gate.unlockOne': 'Unlock this device to do this. It stays unlocked while you use it, and locks after 1 minute without a sensitive action.',
   'gate.unlockUnknown': 'Unlock this device to do this. The unlock ends on its own.',
   'gate.unlockButton': 'Unlock',
   'gate.computer': 'Do this on your computer: {reason}',
@@ -37,8 +37,8 @@ export const gateEn = {
 
 /** Chinese copy of {@link Gate}. */
 export const gateZh: typeof gateEn = {
-  'gate.unlock': '解锁此设备 {minutes} 分钟后即可进行此操作。解锁会自行结束。',
-  'gate.unlockOne': '解锁此设备 1 分钟后即可进行此操作。解锁会自行结束。',
+  'gate.unlock': '解锁此设备后即可进行此操作。使用期间保持解锁；{minutes} 分钟没有敏感操作后自动锁定。',
+  'gate.unlockOne': '解锁此设备后即可进行此操作。使用期间保持解锁；1 分钟没有敏感操作后自动锁定。',
   'gate.unlockUnknown': '解锁此设备后即可进行此操作。解锁会自行结束。',
   'gate.unlockButton': '解锁',
   'gate.computer': '请在你的电脑上进行此操作：{reason}',
