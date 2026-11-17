@@ -245,6 +245,8 @@ describe('real @openai/codex 0.153.4 product', () => {
     })
     expect(schema.definitions.ThreadStartParams.required).toBeUndefined()
 
+    const configPath = join(harness.env.CODEX_HOME!, 'config.toml')
+    const configBefore = readFileSync(configPath)
     const run = await startExternalActivation(harness.ctx, 'codex', {
       prompt: [{ type: 'text', text: task }],
       parent: harness.parent,
@@ -255,6 +257,8 @@ describe('real @openai/codex 0.153.4 product', () => {
       stopReason: 'completed',
     })
     await run.dispose()
+    // A writable-sandbox thread would append a trusted-folder entry for the workspace.
+    expect(readFileSync(configPath).equals(configBefore)).toBe(true)
 
     expect(harness.spawnSpecs[0]?.argv).toEqual([
       process.execPath,
