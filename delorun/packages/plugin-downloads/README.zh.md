@@ -26,7 +26,7 @@ studio 的下载面板。它列出安装队列正在处理的每个插件，显�
 
 ## 数据来源
 
-面板读取一个 `DownloadsSource`，并不了解安装队列的远程接口：
+面板读取一个 `DownloadsSource`，并不了解安装队列的路由：
 
 ```ts
 interface DownloadsSource {
@@ -40,7 +40,7 @@ interface DownloadsSource {
 
 `DownloadItem` 有 `key`（包名）、`title`、`iconUrl`、`state`、`receivedBytes`、`totalBytes`、`position` 和 `failure`。状态有 `queued`、`waiting-for-unlock`、`downloading`、`verifying`、`installing`、`ready`、`needs-reload`、`failed` 和 `cancelled`。
 
-`createFakeDownloadsSource(items)` 把各项保存在内存中；它的 `set` 和 `update` 用于驱动测试和试验页面。`createRemoteDownloadsSource(ctx)` 是 `@delorun/plugin-packs` 的 `packs` 远程接口的适配器：当有界面订阅时它读取安装列表（在 Host 发出安装通知时、连接重置之后，以及有项排队或进行中时每 1.5 秒一次），并发送取消、重试、移除和关闭请求。要求解锁的拒绝会让该行保持在“等待解锁”。没有插件包的 Host 显示为空列表。
+`createFakeDownloadsSource(items)` 把各项保存在内存中；它的 `set` 和 `update` 用于驱动测试和试验页面。`createRemoteDownloadsSource(ctx)` 是 `@delorun/plugin-packs` 路由（`createPacksClient()`）的适配器：当有界面订阅时它读取安装列表（在 Host 发出安装通知时、连接重置之后，以及有项排队或进行中时每 1.5 秒一次），并发送取消、重试、移除和关闭请求。要求解锁的拒绝会让该行保持在“等待解锁”。没有插件包的 Host 显示为空列表。
 
 <a id="in-the-setup-guide"></a>
 

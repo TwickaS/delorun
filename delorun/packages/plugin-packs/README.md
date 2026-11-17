@@ -1,5 +1,5 @@
 ---
-description: "Delorun's plugin packs on the Host: the install queue, the packs remote and the places other plugins call it."
+description: "Delorun's plugin packs on the Host: the install queue, the packs routes and the places other plugins call it."
 ---
 
 # @delorun/plugin-packs
@@ -13,7 +13,7 @@ A **pack** is a plugin that is not in the default install. Each release publishe
 ## Contents
 
 - [How an install runs](#how-an-install-runs)
-- [The `packs` remote](#the-packs-remote)
+- [The routes](#the-routes)
 - [Reading progress](#reading-progress)
 - [Configuration](#configuration)
 - [Phones](#phones)
@@ -30,22 +30,24 @@ A **pack** is a plugin that is not in the default install. Each release publishe
 
 An item is `queued`, `downloading`, `verifying`, `installing`, `needs-reload`, `ready`, `failed` or `cancelled`. A failure carries a code: `offline` (the first download needs a connection), `interrupted` (the Host stopped during it) or `failed`.
 
-## The `packs` remote
+## The routes
 
-| Action | Arguments | Returns |
+Each route is a `POST` with a JSON body, fetched relative to the document (`api/delorunPacks.<action>`; the paths are `PACK_ROUTES` in `@delorun/plugin-packs/wire`). `createPacksClient()` in `@delorun/plugin-packs/client` calls them and is what the downloads panel, Plugins and the setup guide use.
+
+| Route | Arguments | Returns |
 | --- | --- | --- |
-| `packs/list` | none | `PacksSnapshot`: `supported`, `reason`, `release`, `packs` (`PackInfo`: name, version, `experimental`, `downloadBytes`, `availability`) and `queue` (`InstallItem[]`) |
-| `packs/enqueue` | `{ names }` | `PacksResult` |
-| `packs/cancel` | `{ name }` | `PacksResult` |
-| `packs/dismiss` | `{ name }` | `PacksResult` |
-| `packs/remove` | `{ name }` (a finished, failed or cancelled item) | `PacksResult` |
-| `packs/retry` | `{ name }` | `PacksResult` |
+| `list` | none | `PacksSnapshot`: `supported`, `reason`, `release`, `packs` (`PackInfo`: name, version, `experimental`, `downloadBytes`, `availability`) and `queue` (`InstallItem[]`) |
+| `enqueue` | `{ names }` | `PacksResult` |
+| `cancel` | `{ name }` | `PacksResult` |
+| `dismiss` | `{ name }` | `PacksResult` |
+| `remove` | `{ name }` (a finished, failed or cancelled item) | `PacksResult` |
+| `retry` | `{ name }` | `PacksResult` |
 
 `PacksResult` is `{ ok: true, value: PacksSnapshot }` or `{ ok: false, error: { code: 'unsupported' | 'unknown-pack' | 'unavailable-pack', message } }`. The types and `packView(pack, item)`, which maps a pack and its queue item to what a surface draws, are in `@delorun/plugin-packs/wire`, which imports no Cordis.
 
 ## Reading progress
 
-The service announces every item of the list on the plugin manager's `plugin-manager/install-state` event under the request id `pack:<name>` after each change. A surface listens for that event and calls `packs/list` for the bytes, percent, state and queue position; it also reads the whole list when it connects.
+The plugin announces every item of the list on the plugin manager's `plugin-manager/install-state` event under the request id `pack:<name>` after each change. A surface listens for that event and calls the `list` route for the bytes, percent, state and queue position; it also reads the whole list when it connects.
 
 ## Configuration
 
@@ -53,7 +55,7 @@ The service announces every item of the list on the plugin manager's `plugin-man
 
 ## Phones
 
-`packs/list` is a read action every paired phone may take, and so are `packs/cancel` (stops a queued or downloading install) and `packs/dismiss` (clears a failed or cancelled row, a queue record only); neither touches an installed pack (A408). `packs/enqueue`, `packs/remove` and `packs/retry` are elevated actions of contract C14: a phone takes them only while it holds an unlock (A408).
+The `list`, `cancel` (stops a queued or downloading install) and `dismiss` (clears a failed or cancelled row, a queue record only) routes answer any approved phone; neither touches an installed pack (A408). The `enqueue`, `retry` and `remove` routes answer a phone only while it holds an unlock, and a phone without one is answered `403`, which the client turns into the unlock dialog's `elevation-required: packs/<route>` (A408).
 
 ## Where the Host connects it
 
