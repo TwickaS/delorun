@@ -539,7 +539,7 @@ describe.runIf(SELECTED)('the journey of an installed release', () => {
     expect(refused.status).toBe(1)
     // The update check reads the channel's signed files and changes nothing, so it runs without git.
     const checked = await delorun(['update', '--check'], noGit)
-    expect(checked.stdout, checked.stderr).toBe(`Delorun ${R1} is the newest release on the stable channel.\n`)
+    expect(checked.stdout, checked.stderr).toBe(`✓ Up to date · ${R1} (newest on the stable channel)\n`)
     expect(checked.status).toBe(0)
     expect(await stats(`${HOME}/runtimes`)).toEqual(before)
   }, STEP)
@@ -702,10 +702,11 @@ describe.runIf(SELECTED)('the journey of an installed release', () => {
     const archive = join(parts().scratch, 'first-chat.delorun')
     execFileSync('docker', ['cp', `${parts().machine}:${PERSON_HOME}/first-chat.delorun`, archive], { timeout: 60_000 })
     execFileSync('docker', ['cp', archive, `${second}:/tmp/first-chat.delorun`], { timeout: 60_000 })
-    // Without a terminal nothing is asked and nothing is imported; the preview names the signer's fingerprint.
+    // Without a terminal nothing is asked and nothing is imported; the preview names the signer's fingerprint in groups.
     const unasked = await delorun(['import', '/tmp/first-chat.delorun'], {}, second)
     expect(unasked.status).not.toBe(0)
-    const fingerprint = /fingerprint ([0-9a-zA-Z:+/=_-]{16,})/u.exec(`${unasked.stdout}\n${unasked.stderr}`)?.[1]
+    // The signer's fingerprint is printed in groups of four; a person types it as shown.
+    const fingerprint = /Unverified signer · ([0-9a-zA-Z:+/=_ -]{16,})\n/u.exec(`${unasked.stdout}\n${unasked.stderr}`)?.[1]
     expect(fingerprint, unasked.stdout).toBeDefined()
     const imported = await interact(second, 'delorun import /tmp/first-chat.delorun', parts().env, [
       { when: /type the key fingerprint/u, send: `${fingerprint!}\r` },
