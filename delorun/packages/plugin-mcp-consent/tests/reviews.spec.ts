@@ -333,7 +333,7 @@ function routesOver(listener: string, dangerous = false) {
   const routes = new Map<string, Route>()
   registerMcpConsentRoutes({
     on: (_name: string, registered: typeof hook) => { hook = registered },
-    get: (name: string) => (name === 'homeAuth' ? { arrivalOf: () => ({ listener }), dangerousMode: () => dangerous, pinEnabled: () => false, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : undefined) } : undefined),
+    get: (name: string) => (name === 'homeAuth' ? { arrivalOf: () => ({ listener }), dangerousMode: () => dangerous, pinEnabled: () => false, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : deviceId === 'grace-phone' ? { id: 'g', grace: true } : undefined) } : undefined),
     connection: { fetch: { register: (route: Route) => { routes.set(route.path, route) } } },
   } as never, consent)
   return {
@@ -497,6 +497,16 @@ describe('the routes', () => {
       expect(unlocked.status).not.toBe(403)
       expect((await remote.callAs(MCP_CONSENT_ROUTES.accept, { kind: 'sdk' }, {})).status).toBe(403)
     }
+  })
+
+  it('answers a device holding only the approval grace ELEVATION_REQUIRED on accept, and runs it after a code', async () => {
+    const remote = routesOver('tailscale-private')
+    const body = { serverName: 'files', reviewId: 'x', confirmed: false }
+    // Pins the grace exclusion: accepting a server lets its command run on the computer.
+    const grace = await remote.callAs(MCP_CONSENT_ROUTES.accept, device('grace-phone'), body)
+    expect([grace.status, await grace.json()]).toEqual([403, expect.objectContaining({ error: 'ELEVATION_REQUIRED' })])
+    expect((await remote.callAs(MCP_CONSENT_ROUTES.accept, device('unlocked-phone'), body)).status).not.toBe(403)
+    expect(remote.admits(MCP_CONSENT_ROUTES.decline, device('grace-phone'))).toBe(true)
   })
 
   it('refuses a request the home cannot place, or that names a foreign Host on the loopback listener, before any route runs', async () => {

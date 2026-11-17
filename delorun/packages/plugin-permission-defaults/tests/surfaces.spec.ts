@@ -294,7 +294,7 @@ function routesOver(defaults: PermissionDefaults, listener: string | undefined, 
   const routes = new Map<string, { fetch: (request: Request) => Promise<Response> | Response, admitPeer?: (request: Request, peer: { principal: { kind: string, deviceId?: string, listener?: string } }) => boolean }>()
   const ctx = {
     on: (_name: string, listener: FakeConnection['hook']) => { hook = listener },
-    get: (name: string) => (name === 'homeAuth' ? { arrivalOf: () => ({ listener }), dangerousMode: () => dangerous, pinEnabled: () => false, elevationOf: (deviceId: string) => (unlocked.includes(deviceId) ? { id: 'e' } : undefined) } : undefined),
+    get: (name: string) => (name === 'homeAuth' ? { arrivalOf: () => ({ listener }), dangerousMode: () => dangerous, pinEnabled: () => false, elevationOf: (deviceId: string) => (unlocked.includes(deviceId) ? { id: 'e', ...deviceId === 'grace-phone' ? { grace: true } : {} } : undefined) } : undefined),
     connection: { fetch: { register: (route: { path: string, fetch: (request: Request) => Promise<Response>, admitPeer?: (request: Request, peer: { principal: { kind: string, deviceId?: string, listener?: string } }) => boolean }) => { routes.set(route.path, route) } } },
     permissionDefaults: defaults,
   }
@@ -711,6 +711,17 @@ describe('the dangerous-mode routes', () => {
       expect((await routes.fetchAs(PERMISSION_ROUTES.setFullAccess, init, { ...reach, deviceId: 'unlocked-phone' })).status).toBe(400)
       expect((await routes.fetchAs(PERMISSION_ROUTES.setFullAccess, init, { kind: 'anonymous' })).status).toBe(403)
     }
+  })
+
+  it('answer a device holding only the approval grace ELEVATION_REQUIRED on setting full access, and admit it to the reads', async () => {
+    const { defaults } = await mounted()
+    const routes = routesOver(defaults, 'tailscale-private', ['grace-phone', 'unlocked-phone'])
+    const init = { method: 'POST', body: '{}' }
+    // Pins the grace exclusion: full access loosens the sandbox for a workspace.
+    const grace = await routes.fetchAs(PERMISSION_ROUTES.setFullAccess, init, { ...reach, deviceId: 'grace-phone' })
+    expect([grace.status, await grace.json()]).toEqual([403, expect.objectContaining({ error: 'ELEVATION_REQUIRED' })])
+    expect((await routes.fetchAs(PERMISSION_ROUTES.setFullAccess, init, { ...reach, deviceId: 'unlocked-phone' })).status).toBe(400)
+    expect(routes.admits(PERMISSION_ROUTES.workspaces, { ...reach, deviceId: 'grace-phone' })).toBe(true)
   })
 
   it('still refuse an off-loopback Host on the loopback listener and an unplaced request in dangerous mode', async () => {

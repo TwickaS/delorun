@@ -322,7 +322,7 @@ export class CommandNetwork extends Service {
     })
     // Any approved device reads the network settings; changing one needs an unlock.
     ctx.connection.fetch.register({ path: NETWORK_LIST_PATH, methods: ['GET'], requestBody: 'buffered', admitPeer: admitApprovedDevice(), fetch: () => Promise.resolve(json(200, this.list())) })
-    ctx.connection.fetch.register({ path: NETWORK_SET_PATH, methods: ['POST'], requestBody: 'buffered', ...gateByUnlock(() => ctx.get('homeAuth'), request => this.handleSet(request)) })
+    ctx.connection.fetch.register({ path: NETWORK_SET_PATH, methods: ['POST'], requestBody: 'buffered', ...gateByUnlock(() => ctx.get('homeAuth'), request => this.handleSet(request), { grace: false }) })
   }
 
   /**

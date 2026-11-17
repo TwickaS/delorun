@@ -119,3 +119,21 @@ describe('what renews an unlock', () => {
     expect(touch).toHaveBeenCalledWith('unlock-2')
   })
 })
+
+describe('gateByUnlock with the grace excluded', () => {
+  it('records a grace-only unlock as locked, and a code unlock as unlocked', () => {
+    const touch = vi.fn()
+    const home = { elevationOf: (deviceId: string) => (deviceId === 'grace' ? { id: 'g', grace: true } : deviceId === 'code' ? { id: 'c' } : undefined), pageUnlockOf: () => undefined, touchUnlock: touch } as never
+    const ask = async (deviceId: string, options?: { grace?: boolean }) => {
+      const route = gateByUnlock(() => home, () => Promise.resolve(new Response('ran')), options)
+      const request = new Request('http://localhost/x')
+      route.admitPeer(request, { principal: reachDevicePrincipal(deviceId, LISTENER) })
+      return (await route.fetch(request)).status
+    }
+    return Promise.all([ask('grace', { grace: false }), ask('grace'), ask('code', { grace: false })]).then((statuses) => {
+      // Pins the option: the grace opens an ordinary unlock route and not one that loosens a consent row.
+      expect(statuses).toEqual([403, 200, 200])
+      expect(touch).toHaveBeenCalledTimes(2)
+    })
+  })
+})
