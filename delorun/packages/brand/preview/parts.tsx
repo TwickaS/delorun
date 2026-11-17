@@ -42,6 +42,7 @@ function Column({ scheme }: { scheme: 'light' | 'dark' }) {
       </div>
       <CodeBlock code="npm install -g delorun" {...COPY} />
       <CodeBlock code="delorun" caption="Then start it" size="lg" {...COPY} />
+      <CodeBlock code="npm install -g delorun" caption="The main button" emphasis="primary" {...COPY} />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <Frame width={480} height={300} label="The studio, still" still={still} />
         <Frame width={480} height={300} label="The studio, live" still={still}><div style={{ padding: 16, fontSize: 14 }}>The live replica</div></Frame>

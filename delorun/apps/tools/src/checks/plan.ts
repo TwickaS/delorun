@@ -11,6 +11,12 @@ import { selectWebLane, WEB_CHECK_ID, WEB_LANE_MODULE, type WebSelection, type W
 import { CLOSURE_CHECK_ID, CLOSURE_LANE_MODULE } from './closure.ts'
 import type { GateCheck } from './types.ts'
 
+/** Upstream and Delorun sources the website's studio replica builds from, so a change to one rebuilds the site. */
+const REPLICA_INPUTS = [
+  ...['ui-primitives', 'ui-approval', 'ui-conversation', 'ui-chat', 'ui-theme', 'ui-sidebar'].map(name => `packages/client/${name}/src/**`),
+  ...['plugin-changes', 'bundle-local', 'plugin-theme', 'plugin-settings-layout'].map(name => `delorun/packages/${name}/src/**`),
+] as const
+
 /**
  * The invocations that select a check: `pre-commit` runs the staged paths, `changed` selects by change (`--changed`
  * and the pre-push hook), and `full` is the full gate. A check with no tier runs only when `--only` names it.
@@ -517,7 +523,7 @@ function draft(tree: ForkTree, host: Host): Draft[] {
       command: ['node_modules/.bin/tsx', 'delorun/apps/tools/src/check-docs-site.ts', 'website'],
       // The site's type check reaches upstream's client primitives through `@delorun/brand`, which resolve to their built `lib/`.
       needs: built,
-      inputs: [`${WEBSITE_DIR}/**`, 'delorun/packages/site-design/**', 'delorun/packages/brand/**', 'delorun/changelog/changelog.json'],
+      inputs: [`${WEBSITE_DIR}/**`, 'delorun/packages/site-design/**', 'delorun/packages/brand/**', 'delorun/changelog/changelog.json', ...REPLICA_INPUTS],
       tiers: ['changed', 'full'],
       cpus: 2,
     },

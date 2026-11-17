@@ -108,6 +108,14 @@ describe('CodeBlock', () => {
     expect(screen.getByRole('status').textContent).toBe('')
   })
 
+  it('marks the copy button as the main button only when asked', () => {
+    const { unmount } = render(<CodeBlock code="delorun" emphasis="primary" {...labels} />)
+    expect(screen.getByRole('button', { name: 'Copy command' }).dataset.emphasis).toBe('primary')
+    unmount()
+    render(<CodeBlock code="delorun" {...labels} />)
+    expect(screen.getByRole('button', { name: 'Copy command' }).dataset.emphasis).toBeUndefined()
+  })
+
   it('announces a second copy again with new text in the live region', async () => {
     vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn(async () => {}) } })
     render(<CodeBlock code="delorun" {...labels} />)
