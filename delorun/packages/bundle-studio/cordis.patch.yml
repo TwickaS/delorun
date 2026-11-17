@@ -43,6 +43,7 @@
           # Optional bundles the release publishes as signed packs (A405): off until the person adds one, then downloaded
           # through the install queue. Claude Code and Codex have their own step.
           - '@delorun/bundle-browser'
+          - '@delorun/bundle-real-browser'
           - '@delorun/bundle-code-intelligence'
           - '@delorun/bundle-agent-hooks'
           - '@delorun/bundle-webhooks'
@@ -59,6 +60,11 @@
         # the running release did not. The guide's provider list leaves the route out.
         hiddenProviders:
           - deepseek-account
+
+    # The new-workspace flow: its routes add, create and clone workspaces for onboarding, the sidebar and the new-chat
+    # picker, and its harness half starts each new chat in a workspace on that workspace's model.
+    - id: delorun-new-workspace
+      name: '@delorun/plugin-new-workspace'
 
     # The downloads panel: every plugin being installed, with its progress and place in the queue. Its browser half needs
     # `delorunStudio` like the rows above; its harness half only names the plugin.

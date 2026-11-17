@@ -1029,7 +1029,7 @@ export type Config = BrowserMcpConfig
 
 - `inject`: `browserUse` · `agents` · `tools` · `systemPrompt` · `workingDirectory`
 - `refs`: `BrowserChoice` (`@deepseek-ai/dsh-native-command/chrome-channel`) · `BrowserMcpAttachConfig` (`@deepseek-ai/dsh-experimental-browser-use-runtime/mcp`) · `BrowserMcpLaunchConfig` (`@deepseek-ai/dsh-experimental-browser-use-runtime/mcp`)
-- `source`: [`packages/experimental/browser-use-playwright-mcp/src/index.ts:64`](../packages/experimental/browser-use-playwright-mcp/src/index.ts)
+- `source`: [`packages/experimental/browser-use-playwright-mcp/src/index.ts:99`](../packages/experimental/browser-use-playwright-mcp/src/index.ts)
 
 ```ts config-catalog
 /** Chrome or Chromium launch, or existing-browser attachment settings. */

@@ -6,7 +6,10 @@
  * configuration, traces, proxies, transports or template directories. A token
  * reaches git only through a credential helper that answers for the clone URL's
  * host and path, so the token is in neither the argument list nor the URL the
- * clone stores. A private repository therefore needs that token.
+ * clone stores. A private repository therefore needs that token. The clone's
+ * shared hardened arguments (hooks and LFS filters off, no submodules, no
+ * checkout filters) come from `@delorun/plugin-new-workspace`; the clone appends them
+ * after the options here.
  *
  * While git runs, the token is in git's environment and in the environment of
  * the processes git starts, so any of those processes can read it.

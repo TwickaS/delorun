@@ -1,0 +1,27 @@
+{
+  "name": "@delorun/skill-real-browser",
+  "description": "The delorun-real-browser skill: how the agent works in the person's own Chrome through browse's execute tool (read the page first, one short script per step, hand sign-ins and payments back). Loads only while the browse driver is on",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src",
+    "assets",
+    "NOTICE.md"
+  ],
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-skill": "workspace:*"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-skill": "workspace:*"
+  },
+  "delorun": {
+    "state": "experimental"
+  }
+}

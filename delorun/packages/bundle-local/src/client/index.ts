@@ -52,10 +52,12 @@ import { acknowledgeNotice, DelorunNotice, noticeAcknowledged, type DelorunNotic
 import { DelorunVersionRow, type DelorunVersionRowInjected } from './DelorunVersionRow.tsx'
 import { en as devicesEn, zh as devicesZh, type DevicesLocaleKey } from './devices-locales.ts'
 import type { HostFetch } from './devices-api.ts'
+import { isRefused, LOOPBACK_REQUIRED } from './host-api.ts'
 import { DevicesSection, type DevicesSectionInjected } from './DevicesSection.tsx'
 import { en, zh, type PrivacyLocaleKey } from './locales.ts'
 import { en as requirementsEn, zh as requirementsZh, type RequirementsLocaleKey } from './requirements-locales.ts'
 import { NeedsSetup, type NeedsSetupInjected } from './NeedsSetup.tsx'
+import { startBrowsePair } from './browse-pair-api.ts'
 import { documentLanguage, RequirementsStore } from './requirements-store.ts'
 import { en as versionsEn, zh as versionsZh, type VersionsLocaleKey } from './versions-locales.ts'
 import { saveBrowserFile } from './save-file.ts'
@@ -97,7 +99,9 @@ import { ConsentToast, createConsentToastSource } from './ConsentToast.tsx'
 import { AllowForChat, ChatSwitchRefused, type AllowForChatInjected } from './AllowForChat.tsx'
 import { FullAccessAction, type FullAccessActionInjected } from './FullAccessAction.tsx'
 import { ExternalAgentAction, type ExternalAgentActionInjected } from './ExternalAgentAction.tsx'
-import { confirmPermissionSwitch, createFullAccessConsentSource, FullAccessConsent, ownsPermissionConfirmation } from './FullAccessConsent.tsx'
+import { confirmPermissionSwitch, createFullAccessConsentSource, FullAccessConsent, ownsPermissionConfirmation, type FullAccessConsentSource } from './FullAccessConsent.tsx'
+import { FULL_ACCESS_PRESET, readWorkspaces, type WorkspacesAnswer } from './consents-api.ts'
+import type { DelorunFullAccessService } from './full-access.ts'
 import { createMcpReviewSource, McpServerReview } from './McpServerReview.tsx'
 import { PairingNotice, type PairingNoticeInjected } from './PairingNotice.tsx'
 import { createPairingSource } from './pairing-source.ts'
@@ -126,6 +130,7 @@ export {
 export type { ConsentsLocaleKey } from './consents-locales.ts'
 export type { ExternalAgentsSectionInjected, ExternalAgentsSectionProps } from './ExternalAgentsSection.tsx'
 export type { PermissionsSectionInjected, PermissionsSectionProps } from './PermissionsSection.tsx'
+export type { DelorunFullAccessService } from './full-access.ts'
 export type { FullAccessConsentProps, FullAccessConsentSource, FullAccessConsentState } from './FullAccessConsent.tsx'
 export type { FullAccessActionInjected, FullAccessActionProps } from './FullAccessAction.tsx'
 export type { ExternalAgentActionInjected, ExternalAgentActionProps } from './ExternalAgentAction.tsx'
@@ -601,6 +606,7 @@ export function applyNeedsSetup(ctx: Context, fetch: HostFetch): void {
       store,
       openSettings: (section) => { shelled.settingsShell.openSection(section) },
       copy: (text) => navigator.clipboard.writeText(text),
+      pairBrowse: (request, signal) => startBrowsePair(fetch, request, signal),
     })
     const register = (name: 'plugins.row.state' | 'plugins.detail.section') => shelled.slots.inject(name, () => shelled.slots.register({
       name, id: 'delorun-requirements', order: 10, locale: REQUIREMENTS_NS, inject: face,
@@ -635,6 +641,31 @@ export function applyTrustBadge(ctx: Context, api: TrustApi): void {
 }
 
 /**
+ * Ask the full-access consent for the workspace at one folder.
+ * @param fetch - the request function.
+ * @param consent - the consent's store.
+ * @param path - the workspace's canonical folder.
+ * @returns what {@link DelorunFullAccessService.askForWorkspace} returns.
+ * @throws HostRequestError when the home's workspace list cannot be read, except as a remote studio.
+ */
+export async function askForWorkspace(fetch: HostFetch, consent: FullAccessConsentSource, path: string): Promise<boolean> {
+  let answer: WorkspacesAnswer | undefined
+  try {
+    answer = await readWorkspaces(fetch)
+  } catch (error) {
+    // A remote studio gets the consent's remote form, which names the command for the home's own computer.
+    if (isRefused(error, LOOPBACK_REQUIRED)) return await consent.ask(undefined)
+    throw error
+  }
+  // A profile without the per-workspace consent has no grant to record.
+  if (answer === undefined) return false
+  const access = answer.workspaces.find(workspace => workspace.workspace === path)
+  if (access === undefined) return false
+  if (access.preset === FULL_ACCESS_PRESET && access.grantedAt !== null) return true
+  return await consent.ask(access)
+}
+
+/**
  * Register the consent surfaces: the full-access consent behind upstream's `permissionSwitchConsent` service and its
  * `shell.overlay` entry, the approval card's full-access action, the MCP server review and the notice that a server
  * waits, and the Permissions and External agents sections.
@@ -650,6 +681,7 @@ export function applyConsents(ctx: Context, fetch: HostFetch): void {
     ownsConfirmation: ownsPermissionConfirmation,
   } satisfies PermissionSwitchConsent)
   ctx.effect(() => () => { consent.cancel() }, 'delorun-consents: an open consent answers no once the plugin unloads')
+  ctx.provide('delorunFullAccess', { askForWorkspace: path => askForWorkspace(fetch, consent, path) } satisfies DelorunFullAccessService)
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({
     name: 'shell.overlay',
     id: FULL_ACCESS_CONSENT_ID,

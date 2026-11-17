@@ -1,12 +1,11 @@
 // @vitest-environment jsdom
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
-import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createFakeDownloadsSource, provideDownloadsSource } from '@delorun/plugin-downloads/row'
 import { OnboardingStepEntry, UPSTREAM_KEY_STEP, type OnboardingStepEntryProps } from '../src/client/Onboarding.tsx'
 import { en } from '../src/client/locales.ts'
-import type { FolderChoice, OnboardingStep, ReachState, StartTarget } from '../src/client/types.ts'
+import type { OnboardingStep, ReachState, StartTarget } from '../src/client/types.ts'
 import type { OnboardingSettings } from '../src/config.ts'
 import { NO_RECORD, type Readiness, type SetupRecord } from '../src/wire.ts'
 import { DEFAULT_PATH, DEFAULT_WORKSPACE, hostFake, liveForm, noticeFace, READY, settings, startFace, stepServices, t, THEME } from './fixtures.client.ts'
@@ -397,12 +396,13 @@ describe('the workspace and the last button', () => {
     expect(screen.getByText(DEFAULT_PATH)).toBeTruthy()
   })
 
-  it('starts the chat in a folder the Workspace step added, with what the folder holds', async () => {
-    const start = startFace(undefined, { kind: 'chosen', workspaceId: 'workspace-2' as WorkspaceId, path: '/home/person/app', folder: 'code' })
+  it('starts the chat in a workspace the new-workspace dialog made, with what the folder holds', async () => {
+    const start = startFace(undefined, { kind: 'created', workspaceId: 'workspace-2', path: '/home/person/app', folder: 'code' })
     const { startChat } = await mountEntry({ start })
     await forward(4)
-    await click(screen.getByRole('radio', { name: en['workspace.mode.folder'] }))
-    await click(button(en['workspace.folder.choose']))
+    await click(screen.getByRole('radio', { name: en['workspace.mode.another'] }))
+    await click(button(en['workspace.new']))
+    expect(start.openNewWorkspace).toHaveBeenCalledOnce()
     await settle()
     await forward(1)
     expect(screen.getByText('/home/person/app')).toBeTruthy()
@@ -418,30 +418,28 @@ describe('the workspace and the last button', () => {
   })
 
   it('sends the person back to Workspace from Ready while no folder is chosen and there is no default', async () => {
-    const start = startFace({ kind: 'none' }, { kind: 'chosen', workspaceId: 'workspace-2' as WorkspaceId, path: '/home/person/app', folder: 'empty' })
+    const start = startFace({ kind: 'none' }, { kind: 'created', workspaceId: 'workspace-2', path: '/home/person/app', folder: 'empty' })
     const { startChat, complete } = await mountEntry({ start })
     await forward(5)
     expect(screen.queryByRole('button', { name: en.start })).toBeNull()
     await click(button(en.chooseFolder))
     expect(heading().textContent).toBe(en['step.workspace'])
     expect([startChat.mock.calls.length, complete.mock.calls.length]).toEqual([0, 0])
-    await click(button(en['workspace.folder.choose']))
+    await click(button(en['workspace.new']))
     await settle()
     await forward(1)
     await click(button(en.start))
     expect(startChat).toHaveBeenCalledExactlyOnceWith('workspace-2', false)
   })
 
-  it.each<readonly [string, FolderChoice, string]>([
-    ['refuses the home directory', { kind: 'refused', problem: 'home-directory' }, en['problem.home-directory']],
-    ['cannot add the folder', { kind: 'failed' }, en['problem.failed']],
-  ])('keeps the dialog open and says why when the harness %s', async (_, choice, text) => {
-    const start = startFace({ kind: 'none' }, choice)
+  it('keeps the dialog open and starts no chat when the new-workspace dialog is cancelled', async () => {
+    const start = startFace({ kind: 'none' })
     const { startChat, complete } = await mountEntry({ start })
     await forward(4)
-    await click(button(en['workspace.folder.choose']))
+    await click(button(en['workspace.new']))
     await settle()
-    expect(screen.getByRole('alert').textContent).toBe(`✕${text}`)
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(heading().textContent).toBe(en['step.workspace'])
     expect([startChat.mock.calls.length, complete.mock.calls.length]).toEqual([0, 0])
   })
 
@@ -550,7 +548,7 @@ describe('finishing later and the last step', () => {
   })
 
   it('uses the default workspace when the guide was opened again with no workspace and Workspace is skipped', async () => {
-    const { startChat } = await mountEntry({ explicit: true, start: startFace(undefined, undefined, undefined, false) })
+    const { startChat } = await mountEntry({ explicit: true, start: startFace(undefined, undefined, false) })
     await forward(4)
     expect(heading().textContent).toBe(en['step.workspace'])
     await click(button(en.skip))

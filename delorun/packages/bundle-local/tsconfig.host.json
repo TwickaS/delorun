@@ -25,6 +25,9 @@
     },
     {
       "path": "../../../packages/util/native-command"
+    },
+    {
+      "path": "../../../packages/subprocess/subprocess"
     }
   ]
 }

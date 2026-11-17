@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { childEnv, Config, installedPackageDirectory, NEVER_INHERITED, resolveCommand, validateConfig, variantOf } from '../src/config.ts'
+import { childEnv, Config, hostFacts, installedPackageDirectory, NEVER_INHERITED, resolveCommand, validateConfig, variantOf } from '../src/config.ts'
 
 describe('the browse row configuration', () => {
   it('defaults to the switch off and the pinned binary for this computer, run as `browse mcp`, with nothing inherited', () => {
@@ -68,9 +68,11 @@ describe('the browse row configuration', () => {
     expect(resolveCommand(Config({ command: '/opt/fixture', args: ['serve'] }), host, () => undefined)).toEqual({ command: '/opt/fixture', args: ['serve'] })
   })
 
-  it('finds no platform package where the browse launcher is not installed', () => {
-    // The browse pack installs the launcher and its platform packages; this workspace installs neither.
-    expect(installedPackageDirectory('linux-x64')).toBeUndefined()
-    expect(installedPackageDirectory('windows-x64')).toBeUndefined()
+  it('finds the platform package beside the launcher the browse pack installs, and none for a variant not installed', () => {
+    // The workspace installs the pack's pinned launcher with the platform package of the computer it runs on only.
+    const own = variantOf(hostFacts())
+    if (own !== undefined) expect(installedPackageDirectory(own)).toMatch(new RegExp(`@opencode[/\\\\]browse-${own}$`, 'u'))
+    // No computer that runs these specs is Linux on Arm with musl.
+    expect(installedPackageDirectory('linux-arm64-musl')).toBeUndefined()
   })
 })

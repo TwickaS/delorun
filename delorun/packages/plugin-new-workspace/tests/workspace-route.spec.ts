@@ -12,7 +12,7 @@ import type { HomeAuthService } from '@delorun/home-auth'
 import type { WorkspaceLocationProblem } from '@delorun/home'
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, onTestFinished, vi } from 'vitest'
 import {
-  ADD_WORKSPACE_PATH, AddWorkspaceAnswer, WORKSPACE_NOTICE_PATH, WorkspaceNoticeAnswer, CLONE_PATH, CLONE_STATUS_PATH, apply, Config, inject, LOCATION_PROBLEMS, MAX_ADD_BODY_BYTES, MAX_PATH_LENGTH, name, type LocationProblem,
+  ADD_WORKSPACE_PATH, AddWorkspaceAnswer, CLONE_PATH, CLONE_STATUS_PATH, apply, Config, inject, LOCATION_PROBLEMS, MAX_BODY_BYTES, MAX_PATH_LENGTH, name, type LocationProblem,
 } from '../src/index.ts'
 
 /** The scratch layout: the OS home three levels down with its stock home, and the Delorun home beside it. */
@@ -22,7 +22,7 @@ let delorunHome = ''
 let stockHome = ''
 
 beforeEach(async () => {
-  scratch = await mkdtemp(join(tmpdir(), 'delorun-onboarding-route-'))
+  scratch = await mkdtemp(join(tmpdir(), 'delorun-new-workspace-route-'))
   person = join(scratch, 'a', 'b', 'person')
   delorunHome = join(scratch, 'delorun')
   stockHome = join(person, '.dsh')
@@ -37,8 +37,8 @@ afterEach(async () => {
 })
 
 /** A registry that records the folders it is asked to add. */
-function registryFake(quarantined: readonly string[] = []) {
-  return { create: vi.fn(async (_path: string) => ({ id: 'workspace-7' })), quarantined }
+function registryFake() {
+  return { create: vi.fn(async (path: string) => ({ id: 'workspace-7', path })) }
 }
 
 /** The plugin over a stub Connection and, unless `null`, a registry, reached as the studio reaches the route. */
@@ -70,7 +70,7 @@ async function mount(registry: ReturnType<typeof registryFake> | null = registry
 describe('the add-workspace route', () => {
   it('is one exact POST route, present only while the workspace registry is', async () => {
     const { routes } = await mount()
-    expect(ADD_WORKSPACE_PATH).toBe('/api/delorunOnboarding.addWorkspace')
+    expect(ADD_WORKSPACE_PATH).toBe('/api/delorunNewWorkspace.add')
     const route = routes.get(ADD_WORKSPACE_PATH)
     expect([route?.methods, route?.requestBody]).toEqual([['POST'], 'buffered'])
     const without = await mount(null)
@@ -90,7 +90,7 @@ describe('the add-workspace route', () => {
     const { add, registry } = await mount()
     const response = await add(join(person, 'projects'))
     expect([response.status, response.headers.get('cache-control'), response.headers.get('content-type')]).toEqual([200, 'no-store', 'application/json'])
-    expect(AddWorkspaceAnswer.parse(await response.json())).toEqual({ result: 'added', workspaceId: 'workspace-7', kind: 'empty' })
+    expect(AddWorkspaceAnswer.parse(await response.json())).toEqual({ result: 'added', workspaceId: 'workspace-7', path: join(person, 'projects'), kind: 'empty' })
     expect(registry.create).toHaveBeenCalledExactlyOnceWith(join(person, 'projects'))
   })
 
@@ -126,7 +126,7 @@ describe('the add-workspace route', () => {
     ['a body with another field', () => JSON.stringify({ path: '/x', title: 'X' })],
     ['an empty path', () => JSON.stringify({ path: '' })],
     ['a path over the longest path', () => JSON.stringify({ path: `/${'a'.repeat(MAX_PATH_LENGTH)}` })],
-    ['a body over the largest body', () => JSON.stringify({ path: '/x', pad: ' '.repeat(MAX_ADD_BODY_BYTES) })],
+    ['a body over the largest body', () => JSON.stringify({ path: '/x', pad: ' '.repeat(MAX_BODY_BYTES) })],
   ])('answers 400 to %s and registers nothing', async (_, body) => {
     const { post, registry } = await mount()
     const response = await post(body())
@@ -155,7 +155,11 @@ describe('the add-workspace route', () => {
     expect(response.status).toBe(500)
     expect(await response.json()).toEqual({ result: 'failed' })
     expect(registry.create).not.toHaveBeenCalled()
-    expect(warn).toHaveBeenCalledExactlyOnceWith(`${name}: the Delorun home could not be resolved, so no folder is added: HOME_INVALID`)
+    // The mount's read of the browser choices says the same first.
+    expect(warn.mock.calls).toEqual([
+      [`${name}: the Delorun home could not be resolved, so no workspace default is read or kept: HOME_INVALID`],
+      [`${name}: the Delorun home could not be resolved, so no folder is used: HOME_INVALID`],
+    ])
   })
 
   it('names the same location codes as @delorun/home', () => {
@@ -172,9 +176,9 @@ describe('the add-workspace route', () => {
 
 describe('the add-workspace route on a remote session', () => {
   /** A listener id, as the `homeAuth` service names the one that admitted a request. */
-type ListenerId = NonNullable<ReturnType<HomeAuthService['arrivalOf']>['listener']>
+  type ListenerId = NonNullable<ReturnType<HomeAuthService['arrivalOf']>['listener']>
 
-/** The `homeAuth` service's answer for a request: the listener it says admitted it, as the mounted service reads its stamp. */
+  /** The `homeAuth` service's answer for a request: the listener it says admitted it, as the mounted service reads its stamp. */
   function homeAuthOn(listener: ListenerId | undefined): Pick<HomeAuthService, 'arrivalOf' | 'elevationOf' | 'pageUnlockOf'> {
     return { arrivalOf: request => ({ listener, host: request.headers.host, source: 'test' }), elevationOf: deviceId => (deviceId === 'unlocked-phone' ? { id: 'e' } as never : undefined), pageUnlockOf: () => undefined }
   }
@@ -216,7 +220,7 @@ type ListenerId = NonNullable<ReturnType<HomeAuthService['arrivalOf']>['listener
       const next = vi.fn(async () => {})
       await ctx.waterfall('connection/request', request, response, next)
       expect({ url, calls: next.mock.calls.length, status: writeHead.mock.calls[0]?.[0] }).toEqual({ url, calls: 0, status: 403 })
-      expect(JSON.parse(end.mock.calls[0]?.[0] as string)).toMatchObject({ error: 'LOOPBACK_ONLY' })
+      expect(JSON.parse(end.mock.calls[0]?.[0] as string)).toMatchObject({ error: 'LOOPBACK_REQUIRED' })
     }
   })
 
@@ -246,31 +250,5 @@ type ListenerId = NonNullable<ReturnType<HomeAuthService['arrivalOf']>['listener
       await ctx.waterfall('connection/request', request, response, next)
       expect([next.mock.calls.length, writeHead.mock.calls.length]).toEqual([1, 0])
     }
-  })
-})
-
-describe('the workspace notice route', () => {
-  const get = async (registry: ReturnType<typeof registryFake>) => {
-    const { routes } = await mount(registry)
-    const route = routes.get(WORKSPACE_NOTICE_PATH)
-    return { route, response: await route?.fetch(new Request('http://harness.test/api')) }
-  }
-
-  it('is one exact GET route, present only while the workspace registry is', async () => {
-    expect(WORKSPACE_NOTICE_PATH).toBe('/api/delorunOnboarding.workspaceNotice')
-    const { route } = await get(registryFake())
-    expect([route?.methods, route?.requestBody]).toEqual([['GET'], 'buffered'])
-    expect((await mount(null)).routes.has(WORKSPACE_NOTICE_PATH)).toBe(false)
-  })
-
-  it('exposes the quarantine by file name, not path, oldest first', async () => {
-    const { response } = await get(registryFake(['/home/p/.delorun/workspaces.json.quarantined-1.json', '/home/p/.delorun/workspaces.json.quarantined-2.json']))
-    expect([response?.status, response?.headers.get('cache-control')]).toEqual([200, 'no-store'])
-    expect(WorkspaceNoticeAnswer.parse(await response?.json())).toEqual({ setAside: ['workspaces.json.quarantined-1.json', 'workspaces.json.quarantined-2.json'] })
-  })
-
-  it('answers an empty list when nothing was set aside', async () => {
-    const { response } = await get(registryFake())
-    expect(await response?.json()).toEqual({ setAside: [] })
   })
 })

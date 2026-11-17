@@ -214,7 +214,7 @@ describe('the planned choice of browser', () => {
     expect(fetch).not.toHaveBeenCalled()
     expect(browser.refresh.mock.calls.length).toBe(reads)
     expect([browser.turnOff, browser.openSettings, bundles.install, bundles.enableRow, bundles.openPlugins].every(spy => spy.mock.calls.length === 0)).toBe(true)
-    expect([host.defer, host.cloneStart, host.recommend].every(spy => spy.mock.calls.length === 0)).toBe(true)
+    expect([host.defer, host.recommend].every(spy => spy.mock.calls.length === 0)).toBe(true)
     fetch.mockRestore()
   })
 })

@@ -1,5 +1,5 @@
 /* Shared styles of the step bodies not yet moved to their own component: stacks, text, the Look preview, the Phone access
-   checks, the Ready list and the Workspace folder chooser. */
+   checks and the Ready list. */
 .stack {
   display: flex;
   flex-direction: column;
@@ -65,105 +65,11 @@
   color: var(--dsw-alias-state-warn-primary);
 }
 
-/* The Workspace step's own folder chooser: a bar with Up, the location and New folder, the list of folders, and its actions. */
-.chooser {
-  display: flex;
-  flex-direction: column;
-  gap: var(--delorun-space-5);
-  /* A fixed height keeps the list's scroll inside the chooser and its actions in view, not nested in the dialog's scroll. */
-  height: min(30rem, 64dvh);
-  min-width: 0;
-}
-
-.chooserBar,
-.newFolder,
-.chooserFailure,
-.chooserActions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--delorun-space-4);
-}
-
-.location {
-  display: flex;
-  flex: 1 1 160px;
-  flex-direction: column;
-  min-width: 0;
-}
-
 .path {
   overflow-wrap: anywhere;
   font-size: var(--dsw-font-xs-13-font-size);
   line-height: var(--dsw-font-xs-13-line-height);
   color: var(--dsw-alias-label-secondary);
-}
-
-.nameInput {
-  flex: 1 1 160px;
-  min-width: 0;
-}
-
-.folders {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  gap: var(--delorun-space-1);
-  min-height: 0;
-  margin: 0;
-  padding: var(--delorun-space-2);
-  overflow-y: auto;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--dsw-radius-md);
-  background: var(--dsw-alias-bg-layer-1);
-  list-style: none;
-}
-
-.folders:empty {
-  display: none;
-}
-
-.folder {
-  display: flex;
-  align-items: center;
-  min-height: 36px;
-  box-sizing: border-box;
-  padding: 0 var(--delorun-space-5);
-  border-radius: var(--dsw-radius-sm);
-  overflow-wrap: anywhere;
-  font-size: var(--dsw-font-xs-13-font-size);
-  line-height: var(--dsw-font-xs-13-line-height);
-  color: var(--dsw-alias-label-primary);
-  cursor: pointer;
-}
-
-@media (hover: hover) {
-  .folder:hover {
-    background: var(--dsw-alias-interactive-bg-hover);
-  }
-}
-
-
-@media (pointer: coarse) {
-  .folder {
-    min-height: 44px;
-  }
-}
-
-
-.folder[aria-selected='true'] {
-  box-shadow: inset 0 0 0 1px var(--dsw-alias-brand-primary);
-  background: var(--dsw-alias-interactive-bg-hover);
-}
-
-.folder:focus-visible {
-  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
-  outline-offset: -2px;
-}
-
-.chooserActions {
-  flex: none;
-  justify-content: flex-end;
 }
 
 /* The command to run in a terminal. */
@@ -298,26 +204,6 @@
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
-}
-
-/* Workspace: the chosen folder and a clone's progress. */
-.chosen {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--delorun-space-2) var(--delorun-space-4);
-}
-
-.cloneProgress {
-  display: flex;
-  flex-direction: column;
-  gap: var(--delorun-space-3);
-}
-
-.meter {
-  width: 100%;
-  height: 4px;
-  accent-color: var(--dsw-alias-brand-primary);
 }
 
 /* Ready: what the guide set, as label and value rows, and the starting prompts the chat will offer. */

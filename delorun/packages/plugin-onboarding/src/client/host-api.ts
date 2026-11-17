@@ -5,10 +5,9 @@
  */
 import type { z } from 'zod'
 import {
-  AGENT_MODELS_PATH, AgentModelsAnswer, CLONE_PATH, CLONE_STATUS_PATH, CloneStart, CloneStatus, DEFER_STEP_PATH, DeferStepAnswer, KEY_TEST_PATH, KeyTestAnswer, LOCAL_MODELS_PATH, LocalModelsAnswer, READINESS_PATH, Readiness, RECOMMEND_PATH, RecommendAnswer, START_PATH, StartAnswer, WORKSPACE_NOTICE_PATH, WorkspaceNoticeAnswer,
-  type CloneRequest,
+  AGENT_MODELS_PATH, AgentModelsAnswer, DEFER_STEP_PATH, DeferStepAnswer, KEY_TEST_PATH, KeyTestAnswer, LOCAL_MODELS_PATH, LocalModelsAnswer, READINESS_PATH, Readiness, RECOMMEND_PATH, RecommendAnswer, START_PATH, StartAnswer, WORKSPACE_NOTICE_PATH, WorkspaceNoticeAnswer,
 } from '../wire.ts'
-import type { CloneStartOutcome, HostFace, ReachState } from './types.ts'
+import type { HostFace, ReachState } from './types.ts'
 
 /** The home's reach status route, which `@delorun/reach` serves while the profile has reach. */
 export const REACH_STATUS_PATH = '/delorun/reach/status'
@@ -28,8 +27,7 @@ async function ask<T>(path: string, schema: z.ZodType<T>, body?: unknown): Promi
     const response = await fetch(path.slice(1), body === undefined
       ? { headers: { accept: 'application/json' } }
       : { method: 'POST', headers: { 'accept': 'application/json', 'content-type': 'application/json' }, body: JSON.stringify(body) })
-    // A refusal answers JSON too, which the schema below would not take; a 422 clone refusal is a CloneStart.
-    if (!response.ok && response.status !== 422) throw new Error(`answered ${String(response.status)}`)
+    if (!response.ok) throw new Error(`answered ${String(response.status)}`)
     return schema.parse(await response.json())
   } catch (error) {
     console.warn(`delorun onboarding: ${path} was not read`, error)
@@ -86,10 +84,4 @@ export const hostApi: HostFace = {
   recommend: registry => ask(RECOMMEND_PATH, RecommendAnswer, { registry }),
   reach: readReach,
   defer: async (id, deferred) => (await ask(DEFER_STEP_PATH, DeferStepAnswer, { id, deferred }))?.deferred,
-  cloneStart: async (request: CloneRequest): Promise<CloneStartOutcome> => {
-    const answer = await ask(CLONE_PATH, CloneStart, request)
-    if (answer === undefined) return { kind: 'failed' }
-    return answer.result === 'started' ? { kind: 'started', job: answer.job } : { kind: 'refused', problem: answer.problem }
-  },
-  cloneStatus: async job => await ask(CLONE_STATUS_PATH, CloneStatus, { job }) ?? { state: 'unknown' },
 }

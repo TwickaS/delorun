@@ -2,13 +2,22 @@
  * The clone step of a workspace import: git clones one repository into an
  * empty directory through the subprocess provider. The clone reports git's
  * progress lines as they arrive and keeps git's latest `fatal:` and `error:`
- * lines for the reason. It deletes nothing; the caller removes the directory
- * when the clone fails. {@link resolveClone} builds the spawn without I/O, and
- * the clone reads its environment only from {@link CloneOptions.env}.
+ * lines for the reason. It deletes nothing but its own template directory and
+ * the `.git/info/attributes` file that template leaves in a finished clone; the
+ * caller removes the directory when the clone fails. The clone's hardened
+ * arguments (hooks and LFS filters off, submodules off, a template that unsets
+ * every `filter` attribute) come from `@delorun/plugin-new-workspace`, which
+ * the new-workspace flow's Git clone shares; the options, token, certificate,
+ * proxy and environment here are this feature's own. {@link resolveClone}
+ * builds the spawn without I/O, and the clone reads its environment only from
+ * {@link CloneOptions.env}.
  * @module @delorun/plugin-workspaces/clone
  */
+import { rm } from 'node:fs/promises'
+import { join } from 'node:path'
 import type { Readable } from 'node:stream'
 import type { SubprocessHandle, SubprocessOutcome, SubprocessRuntime } from '@deepseek-ai/dsh-subprocess'
+import { cloneArguments, createCloneTemplate } from '@delorun/plugin-new-workspace'
 import { cloneEnvironment, cloneUrlProblem, GIT_ENV, GIT_OPTIONS, redactClone, tokenGit, tokenProblem } from './git.ts'
 import type { GitInvocation } from './git.ts'
 
@@ -98,15 +107,26 @@ export interface CloneSpawn {
 export type CloneSpec = ({ readonly ok: true } & CloneSpawn) | { readonly ok: false, readonly reason: string }
 
 /**
+ * Why a clone is refused before any process starts.
+ * @param options - the clone's inputs.
+ * @returns the refusal of {@link cloneUrlProblem} or {@link tokenProblem}, which holds no token, or undefined when neither refuses.
+ */
+function refusalOf(options: CloneOptions): string | undefined {
+  return cloneUrlProblem(options.url) ?? (options.token === undefined ? undefined : tokenProblem(options.token))
+}
+
+/**
  * Resolve a clone into its spawn: the refusals of {@link cloneUrlProblem} and
  * {@link tokenProblem}, git's arguments with the credential helper when a token
- * is given, and the child's environment entries. The URL in git's arguments is the parsed URL, with a lower-case host and no
- * default port. It does no I/O and reads no process state, so its result depends on `options` alone.
+ * is given followed by the shared hardened clone arguments, and the child's
+ * environment entries. The URL in git's arguments is the parsed URL, with a lower-case host and no
+ * default port. It does no I/O and reads no process state, so its result depends on its arguments alone.
  * @param options - the clone's inputs.
+ * @param template - the directory `createCloneTemplate` of `@delorun/plugin-new-workspace` made; git copies it into the new repository.
  * @returns the spawn, or a refusal whose reason holds no token.
  */
-export function resolveClone(options: CloneOptions): CloneSpec {
-  const refusal = cloneUrlProblem(options.url) ?? (options.token === undefined ? undefined : tokenProblem(options.token))
+export function resolveClone(options: CloneOptions, template: string): CloneSpec {
+  const refusal = refusalOf(options)
   if (refusal !== undefined) return { ok: false, reason: refusal }
   // git sends the host and path of the URL it is given as written, and the token helper compares them with the parsed URL's, so git gets the parsed URL.
   const url = new URL(options.url).href
@@ -115,7 +135,7 @@ export function resolveClone(options: CloneOptions): CloneSpec {
   const proxyOptions = options.proxy === undefined ? [] : ['-c', `http.proxy=${options.proxy}`]
   return {
     ok: true,
-    argv: ['git', ...invocation.options, ...caOptions, ...proxyOptions, 'clone', '--progress', '--', url, '.'],
+    argv: ['git', ...invocation.options, ...caOptions, ...proxyOptions, ...cloneArguments(url, '.', template)],
     cwd: options.directory,
     env: { ...cloneEnvironment(options.env), ...invocation.env },
     graceMs: DRAIN_GRACE_MS,
@@ -125,12 +145,32 @@ export function resolveClone(options: CloneOptions): CloneSpec {
 /**
  * Clone {@link CloneOptions.url} into {@link CloneOptions.directory}: the
  * command {@link resolveClone} resolves, spawned through the subprocess
- * provider. A refused URL or token is reported before any process starts.
+ * provider. A refused URL or token is reported before any process starts. The
+ * clone's template directory exists only while git runs, and a finished clone
+ * has no `.git/info/attributes`, so filters the person sets up later apply.
  * @param options - the clone's inputs.
  * @returns `{ ok: true }` when git exits 0; otherwise a reason that states what stopped git and then holds git's latest error lines.
+ * @throws Error when the template directory cannot be made or removed, or when the finished clone's `.git/info/attributes` cannot be removed.
  */
 export async function cloneRepository(options: CloneOptions): Promise<CloneResult> {
-  const spec = resolveClone(options)
+  const refusal = refusalOf(options)
+  if (refusal !== undefined) return { ok: false, reason: refusal }
+  const template = await createCloneTemplate()
+  try {
+    return await cloneInto(options, template)
+  } finally {
+    await rm(template, { recursive: true, force: true })
+  }
+}
+
+/**
+ * Spawn git for a clone that is not refused, and wait for it.
+ * @param options - the clone's inputs.
+ * @param template - the template directory for the clone.
+ * @returns the clone's result, as {@link cloneRepository} reports it.
+ */
+async function cloneInto(options: CloneOptions, template: string): Promise<CloneResult> {
+  const spec = resolveClone(options, template)
   if (!spec.ok) return spec
   const { token } = options
   const secrets = token === undefined ? [] : [token, encodeURIComponent(token)]
@@ -166,7 +206,11 @@ export async function cloneRepository(options: CloneOptions): Promise<CloneResul
     options.warn('git clone: the error output stayed open after git exited, so the reason may be incomplete')
   }
   output.end()
-  if (outcome.exitCode === 0) return { ok: true }
+  if (outcome.exitCode === 0) {
+    // The template's attributes were for the checkout only.
+    await rm(join(options.directory, '.git', 'info', 'attributes'), { force: true })
+    return { ok: true }
+  }
   const facts: string[] = []
   if (timedOut) facts.push(`the clone did not finish within ${options.timeoutMs} ms`)
   if (cancelled) facts.push('the clone was cancelled')

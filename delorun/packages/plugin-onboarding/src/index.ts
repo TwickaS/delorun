@@ -3,9 +3,9 @@
  * the recommended packages and rows) as live settings and serves the guide's exact Connection Fetch routes: what the terminal
  * setup recorded ({@link SETUP_RECORD_PATH}), so onboarding can leave out what the terminal covered; this computer's
  * readiness ({@link READINESS_PATH}); the key test ({@link KEY_TEST_PATH}); which connections the recommended plugins
- * are for ({@link RECOMMEND_PATH}); and, while upstream's workspace registry is present, adding a folder
- * ({@link ADD_WORKSPACE_PATH}) or cloning one from Git ({@link CLONE_PATH}, {@link CLONE_STATUS_PATH}) as a workspace,
- * which refuse the folders Delorun never adds and answer only the loopback listener.
+ * are for ({@link RECOMMEND_PATH}); and, while upstream's workspace registry is present, which workspace records it set
+ * aside ({@link WORKSPACE_NOTICE_PATH}) and an installed agent's models ({@link AGENT_MODELS_PATH}). Adding, creating and
+ * cloning a workspace are `@delorun/plugin-new-workspace`'s routes.
  * @module @delorun/plugin-onboarding
  */
 import { randomUUID } from 'node:crypto'
@@ -18,7 +18,7 @@ import type {} from '@deepseek-ai/dsh-client-connection'
 // Type-only: the ctx.settings merge.
 import type {} from '@deepseek-ai/dsh-settings'
 // The ctx.homeAuth merge, and the pathname the guard compares.
-import { admitApprovedDevice, admitKeyDevice, gateByUnlock, routedPathname } from '@delorun/home-auth'
+import { admitApprovedDevice, admitKeyDevice, gateByUnlock, requireComputerOrDevice, routedPathname } from '@delorun/home-auth'
 // Type-only: the ctx.workspaceRegistry merge.
 import type {} from '@deepseek-ai/dsh-workspace'
 // Type-only: the ctx.subagents merge.
@@ -34,7 +34,6 @@ import { SETUP_DEFAULT_CREDENTIAL_VARIABLE } from '@delorun/contract-setup-answe
 // Type-only: the ctx.previewFlags merge.
 import type {} from '@delorun/preview-flags'
 import { readSetupRecord } from './answers.ts'
-import { createCloneService, spawnGit } from './clone.ts'
 import { createDeferredStore } from './deferred.ts'
 import type { Config } from './config.ts'
 import { DEEPSEEK_ROUTE, listingResult, testKeys, type KeyTestDeps } from './key-test.ts'
@@ -45,22 +44,18 @@ import { PREVIEW_FLAGS } from './preview-flags.ts'
 import { processReadinessEnvironment, readReadiness } from './readiness.ts'
 import { installedReader, recommend, registryReader } from './recommend.ts'
 import {
-  ADD_WORKSPACE_PATH, AGENT_MODELS_PATH, AgentModelsRequest, CLONE_PATH, DEFER_STEP_PATH, DeferStepRequest, CLONE_STATUS_PATH, KEY_TEST_PATH, LOCAL_MODELS_PATH, MAX_SET_ASIDE, READINESS_PATH, RECOMMEND_PATH, RecommendRequest, SETUP_RECORD_PATH, START_PATH, WORKSPACE_NOTICE_PATH,
+  AGENT_MODELS_PATH, AgentModelsRequest, DEFER_STEP_PATH, DeferStepRequest, KEY_TEST_PATH, LOCAL_MODELS_PATH, MAX_SET_ASIDE, READINESS_PATH, RECOMMEND_PATH, RecommendRequest, SETUP_RECORD_PATH, START_PATH, WORKSPACE_NOTICE_PATH,
   type StartAnswer, type WorkspaceNoticeAnswer,
 } from './wire.ts'
 import { listAgentModels } from './agent-models.ts'
-import { addWorkspace, arrivedAtComputerOrDevice } from './workspace-route.ts'
 
 export { SETUP_ANSWERS_FILENAME, MAX_ANSWERS_BYTES, readSetupRecord } from './answers.ts'
 export { Config, DEFAULT_SETTINGS, ONBOARDING_ROW_ID, PACKAGE_NAME, RECOMMENDED_LIMIT, ROW_ID, type OnboardingSettings } from './config.ts'
 export {
-  ADD_WORKSPACE_PATH, AddWorkspaceAnswer, AddWorkspaceRequest, CLONE_FAILURES, CLONE_PATH, CLONE_PROBLEMS, CLONE_STATUS_PATH, CloneRequest, CloneStart, CloneStatus,
-  CONNECTION_ID, FOLDER_KINDS, KEY_RESULTS, KEY_TEST_PATH, KeyTestAnswer, LOCAL_MODELS_PATH, LOCAL_SERVER_KINDS, LocalModelsAnswer, LocalServer, isLoopbackBaseURL, LOCATION_PROBLEMS, MAX_ADD_BODY_BYTES, MAX_PATH_LENGTH, MAX_SECTIONS, NO_RECORD, READINESS_PATH, Readiness,
+  CONNECTION_ID, FOLDER_KINDS, KEY_RESULTS, KEY_TEST_PATH, KeyTestAnswer, LOCAL_MODELS_PATH, LOCAL_SERVER_KINDS, LocalModelsAnswer, LocalServer, isLoopbackBaseURL, MAX_SECTIONS, NO_RECORD, READINESS_PATH, Readiness,
   DEFER_STEP_PATH, DEFERRABLE_STEPS, DeferStepAnswer, DeferStepRequest, DeferrableStep, MAX_SET_ASIDE, RECOMMEND_PATH, RecommendAnswer, SECTION_NAME, SETUP_RECORD_PATH, SetupRecord, START_ID, START_PATH, StartAnswer, WORKSPACE_NOTICE_PATH, WorkspaceNoticeAnswer,
-  type CloneFailure, type CloneProblem, type FolderKind, type KeyResult, type LocationProblem,
+  type FolderKind, type KeyResult,
 } from './wire.ts'
-export { cloneEnvironment, failureOf, type GitOutcome, type GitRunner } from './clone.ts'
-export { isCloneAddress, isFolderName, suggestedName } from './clone-address.ts'
 export { declaredConnections } from './recommend.ts'
 export { assertRowsExist, type RowSource } from './rows.ts'
 export { PREVIEW_FLAGS, PREVIEW_STEPS } from './preview-flags.ts'
@@ -81,8 +76,8 @@ function json(body: unknown): Response {
 }
 
 /**
- * Keep the row's settings, serve the setup record, this computer's readiness, the key test and the recommendations, and
- * add or clone workspaces while the registry is present.
+ * Keep the row's settings, and serve the setup record, this computer's readiness, the key test, the recommendations,
+ * and, while the registry is present, the workspace notice and an agent's models.
  * @param ctx - the plugin context with the injected services.
  * @param config - the row's configuration.
  * @throws when `optionalRows` names a row the profile does not hold.
@@ -99,14 +94,9 @@ export function apply(ctx: Context, config: Config): void {
   })
   // Without the registry the routes are absent and the studio's requests fail, which its folder choice reports.
   ctx.inject(['workspaceRegistry'], (child) => {
-    // The process environment boundary: the Delorun home is resolved from it, as every Delorun plugin resolves it.
-    const deps = { registry: child.workspaceRegistry, env: process.env, warn }
-    const clones = createCloneService({ ...deps, git: spawnGit, timeoutMs: config.cloneTimeoutMs })
-    child.effect(() => () => { clones.dispose() }, 'delorun-onboarding: clones')
-    // Before the body is read: only the computer or a reach device reaches these routes, and a device needs an unlock.
-    const gated = new Set<string>([ADD_WORKSPACE_PATH, CLONE_PATH, CLONE_STATUS_PATH, AGENT_MODELS_PATH])
+    // Before the body is read: only the computer or a reach device reaches the route, and a device needs an unlock.
     child.on('connection/request', async (request, response, next) => {
-      if (gated.has(routedPathname(request.url)) && !arrivedAtComputerOrDevice(request, response, child.get('homeAuth'))) return
+      if (routedPathname(request.url) === AGENT_MODELS_PATH && !requireComputerOrDevice(request, response, child.get('homeAuth'), 'Listing an agent\'s models')) return
       await next()
     })
     child.connection.fetch.register({
@@ -117,7 +107,6 @@ export function apply(ctx: Context, config: Config): void {
       fetch: () => Promise.resolve(json({ setAside: child.workspaceRegistry.quarantined.slice(-MAX_SET_ASIDE).map(file => basename(file)) } satisfies WorkspaceNoticeAnswer)),
     })
     const unlocked = (fetch: (request: Request) => Promise<Response>, options: { readonly renews: boolean }) => gateByUnlock(() => child.get('homeAuth'), fetch, { renews: options.renews })
-    child.connection.fetch.register({ path: ADD_WORKSPACE_PATH, methods: ['POST'], requestBody: 'buffered', ...unlocked(request => addWorkspace(request, deps), { renews: true }) })
     child.connection.fetch.register({
       path: AGENT_MODELS_PATH,
       methods: ['POST'],
@@ -140,8 +129,6 @@ export function apply(ctx: Context, config: Config): void {
         }))
       }, { renews: false }),
     })
-    child.connection.fetch.register({ path: CLONE_PATH, methods: ['POST'], requestBody: 'buffered', ...unlocked(request => clones.start(request), { renews: true }) })
-    child.connection.fetch.register({ path: CLONE_STATUS_PATH, methods: ['POST'], requestBody: 'buffered', ...unlocked(request => clones.status(request), { renews: false }) })
   })
   const deferred = createDeferredStore(ctx.get('profileContext')?.dir, warn)
   ctx.connection.fetch.register({

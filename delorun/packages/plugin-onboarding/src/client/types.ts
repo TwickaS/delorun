@@ -2,7 +2,6 @@
  * What the onboarding's pieces share: the step type other plugins add, and the services the built-in steps draw with.
  * @module @delorun/plugin-onboarding/client/types
  */
-import type { DirectoryListing } from '@deepseek-ai/dsh-api-remotes/client'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { LocaleRuntime, LocaleSnapshot, TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -14,7 +13,7 @@ import type { PreviewFlagsStore } from '@delorun/preview-flags/client'
 import type { ComponentType, ReactNode } from 'react'
 import type { OnboardingSettings } from '../config.ts'
 import type { DirectoryEntry, KeyProbe } from './providers.ts'
-import type { AgentModelsAnswer, CloneProblem, CloneRequest, CloneStatus, DeferrableStep, FolderKind, KeyTestAnswer, LocalServer, LocationProblem, Readiness, RecommendAnswer, SetupRecord } from '../wire.ts'
+import type { AgentModelsAnswer, DeferrableStep, FolderKind, KeyTestAnswer, LocalServer, Readiness, RecommendAnswer, SetupRecord } from '../wire.ts'
 import type { BrowserSetupStore } from '@delorun/browser-setup'
 import type { TurnOffOutcome } from './browser-pack.ts'
 import type { BundleInstaller } from './bundles.ts'
@@ -126,71 +125,32 @@ export type StartTarget =
   /** No default workspace and no other: the person chooses a folder first. */
   | { readonly kind: 'none' }
 
-/** What adding a folder through the harness's route came to. */
-export type AddOutcome =
-  /** The folder was added as this workspace, or already was one; `folder` is what it holds. */
-  | ({ readonly kind: 'chosen' } & AddedFolder)
-  /** The folder is one Delorun never adds as a workspace; nothing was registered. */
-  | { readonly kind: 'refused'; readonly problem: LocationProblem }
-  /** The harness could not add the folder, or could not be asked; nothing was registered. */
-  | { readonly kind: 'failed' }
-
-/** A folder the Workspace step added: the workspace, its folder and what the folder holds. */
+/** A workspace the new-workspace dialog made: the workspace, its folder and what the folder holds. */
 export interface AddedFolder {
   readonly workspaceId: WorkspaceId
   readonly path: string
   readonly folder: FolderKind
 }
 
-/** What choosing a folder came to. */
-export type FolderChoice =
-  | AddOutcome
-  /** The person closed the chooser; nothing changed. */
+/** How the new-workspace dialog ended. */
+export type NewWorkspaceOutcome =
+  /** The dialog made, or chose, this workspace; the id is the plain string the dialog's service answers. */
+  | { readonly kind: 'created'; readonly workspaceId: string; readonly path: string; readonly folder: FolderKind }
+  /** The person closed the dialog; nothing changed. */
   | { readonly kind: 'cancelled' }
-  /** The host has no native chooser, so the Workspace step shows its own; see {@link StartFace.browse}. */
-  | { readonly kind: 'in-step' }
-  /** The studio has no workspace navigation; the workspace UI's own New Session applies. */
-  | { readonly kind: 'unavailable' }
 
-/** The host's folders, as the Workspace step's own chooser lists and creates them. */
-export interface FolderBrowse {
-  /**
-   * List one folder's child folders.
-   * @param path - the folder; absent lists the home directory.
-   * @param signal - cancels a listing a newer one replaced.
-   * @returns the folder, its ancestors and its child folders.
-   * @throws when the host cannot list the folder.
-   */
-  readonly list: (path?: string, signal?: AbortSignal) => Promise<DirectoryListing>
-  /**
-   * Create a child folder.
-   * @param path - the existing parent folder.
-   * @param name - the new folder's name.
-   * @returns the new folder's absolute path.
-   * @throws when the host cannot create the folder.
-   */
-  readonly create: (path: string, name: string) => Promise<string>
-}
-
-/** The Workspace step's face: where the chat opens without a choice, and how a folder is chosen or added. */
+/** The Workspace step's face: where the chat opens without a choice, and how a workspace is made. */
 export interface StartFace {
   /** Where the chat opens, once resolved. */
   readonly target: { getSnapshot(): StartTarget; subscribe(listener: () => void): () => void }
   /** Begin resolving the default workspace, which the host reuses if it already exists; the dialog calls it when it opens. */
   readonly resolve: () => void
   /**
-   * Open the host's native folder chooser and add the chosen folder through the harness's route.
-   * @returns what the choice came to; `in-step` where the host has no native chooser. It never rejects.
+   * Open the new-workspace dialog over onboarding; undefined where the profile has no new-workspace plugin. It is read
+   * each time the Workspace step renders, so a plugin that loads later appears.
+   * @returns how the dialog ended.
    */
-  readonly chooseFolder: () => Promise<FolderChoice>
-  /**
-   * Add a folder through the harness's route, which refuses the folders Delorun never adds.
-   * @param path - the folder's absolute path.
-   * @returns what adding it came to; it never rejects.
-   */
-  readonly addFolder: (path: string) => Promise<AddOutcome>
-  /** The host's folders, for the Workspace step's own chooser. */
-  readonly browse: FolderBrowse
+  readonly openNewWorkspace: (() => Promise<NewWorkspaceOutcome>) | undefined
   /**
    * Keep the workspace UI's "Unable to create default workspace" notice back while the dialog shows.
    * @returns the release; `told` true says the Workspace step told the person there is no default workspace, which drops
@@ -200,12 +160,6 @@ export interface StartFace {
   /** @returns whether the studio already holds a workspace, which a re-run's Skip on Workspace keeps. */
   readonly hasWorkspace: () => boolean
 }
-
-/** What starting a clone came to: its job, why it was refused, or that the harness could not be asked. */
-export type CloneStartOutcome =
-  | { readonly kind: 'started'; readonly job: string }
-  | { readonly kind: 'refused'; readonly problem: CloneProblem }
-  | { readonly kind: 'failed' }
 
 /** The harness's routes the guide reads; each resolves `undefined` when the harness cannot be asked or answers something else, and never rejects. */
 export interface HostFace {
@@ -235,17 +189,6 @@ export interface HostFace {
    * @returns every step deferred now; undefined when the route cannot be asked.
    */
   readonly defer: (id: DeferrableStep, deferred: boolean) => Promise<readonly DeferrableStep[] | undefined>
-  /**
-   * Start cloning a repository into a new folder.
-   * @param request - the address, the folder to clone into and the new folder's name.
-   * @returns the job, or why it did not start.
-   */
-  readonly cloneStart: (request: CloneRequest) => Promise<CloneStartOutcome>
-  /**
-   * @param job - a started clone.
-   * @returns where it stands; `unknown` when the harness cannot be asked.
-   */
-  readonly cloneStatus: (job: string) => Promise<CloneStatus>
 }
 
 /** The model providers' directory, key test and key saving, which go through the studio's own credential and settings routes. */

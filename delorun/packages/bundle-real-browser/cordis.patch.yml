@@ -1,0 +1,12 @@
+# Your own browser: the browse driver works in the person's real Chrome through the browse extension, only in a chat
+# whose grant the person gave. The driver row starts off: it runs a program outside the sandbox, which the MCP consent
+# reviews when the row is turned on, and it needs the extension paired once (Plugins shows "Needs setup" until then).
+# The driver runs browse in one folder of the home, so one MCP consent covers every chat. `variant: windows-x64` runs
+# the pack's pinned Windows copy through WSL interop, for Chrome on the Windows side; `auto` runs this computer's copy.
+- insert:
+    - id: browser-use-browse
+      name: '@delorun/browser-use-browse'
+      disabled: true
+    # The skill teaches the agent to work in the person's browser; it loads only while the driver row is on.
+    - id: skill-real-browser
+      name: '@delorun/skill-real-browser'

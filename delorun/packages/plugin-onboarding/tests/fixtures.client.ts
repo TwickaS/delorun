@@ -14,10 +14,9 @@ import type { PreviewFlagsStore, PreviewFlagView } from '@delorun/preview-flags/
 import type { ThemeSettings } from '@delorun/plugin-theme'
 import { DEFAULT_SETTINGS as THEME_DEFAULTS } from '../../plugin-theme/src/config.ts'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
-import type { DirectoryListing } from '@deepseek-ai/dsh-api-remotes/client'
-import type { AgentModelsAnswer, CloneStatus, DeferrableStep, KeyTestAnswer, LocalServer, Readiness, RecommendAnswer } from '../src/wire.ts'
+import type { AgentModelsAnswer, DeferrableStep, KeyTestAnswer, LocalServer, Readiness, RecommendAnswer } from '../src/wire.ts'
 import type {
-  AddOutcome, AgentRowSettings, AgentsFace, BrowserFace, CustomEndpoint, CloneStartOutcome, FolderBrowse, FolderChoice, HostFace, LanguageFace, NoticeFace, ProvidersFace, ReachState, SchemeFace, SchemePreference, StartFace, StartTarget, StepServices,
+  AgentRowSettings, AgentsFace, BrowserFace, CustomEndpoint, HostFace, LanguageFace, NewWorkspaceOutcome, NoticeFace, ProvidersFace, ReachState, SchemeFace, SchemePreference, StartFace, StartTarget, StepServices,
 } from '../src/client/types.ts'
 import type { DirectoryEntry, KeyProbe } from '../src/client/providers.ts'
 import { DIRECTORY } from './directory.fixture.ts'
@@ -150,69 +149,45 @@ export function hostFake(change: {
   readonly agentModels?: AgentModelsAnswer
   readonly reach?: ReachState
   readonly localModels?: readonly LocalServer[] | undefined
-  readonly cloneStart?: CloneStartOutcome
-  readonly cloneStatus?: readonly CloneStatus[]
 } = {}) {
   const deferred = new Set<DeferrableStep>()
-  const statuses = [...change.cloneStatus ?? [{ state: 'unknown' } as const]]
   const readiness = vi.fn(() => Promise.resolve('readiness' in change ? change.readiness : READY))
   const keyTest = vi.fn(() => Promise.resolve('keys' in change ? change.keys : KEYS))
   const localModels = vi.fn(() => Promise.resolve('localModels' in change ? change.localModels : []))
   const recommend = vi.fn((_registry: boolean) => Promise.resolve('recommend' in change ? change.recommend : { plugins: [], registry: 'not-asked' as const }))
   const reach = vi.fn(() => Promise.resolve(change.reach ?? 'absent'))
-  const cloneStart = vi.fn((_request: unknown) => Promise.resolve(change.cloneStart ?? { kind: 'started', job: 'job-1' } as const))
-  const cloneStatus = vi.fn((_job: string) => Promise.resolve((statuses.length > 1 ? statuses.shift() : statuses[0]) as CloneStatus))
   const agentModels = vi.fn((_agent: 'claude-code' | 'codex') => Promise.resolve(change.agentModels ?? { state: 'unavailable' as const, reason: 'not-running' as const }))
   const defer = vi.fn((id: DeferrableStep, on: boolean) => {
     if (on) deferred.add(id)
     else deferred.delete(id)
     return Promise.resolve([...deferred] as readonly DeferrableStep[] | undefined)
   })
-  const host: HostFace = { agentModels, readiness, keyTest, localModels, recommend, reach, defer, cloneStart, cloneStatus }
-  return { host, agentModels, readiness, keyTest, localModels, recommend, reach, defer, cloneStart, cloneStatus }
+  const host: HostFace = { agentModels, readiness, keyTest, localModels, recommend, reach, defer }
+  return { host, agentModels, readiness, keyTest, localModels, recommend, reach, defer }
 }
 
 /** The home directory the folder listings start at. */
 export const HOME = '/home/person'
 
 /**
- * One folder's listing as the host gives it: its ancestors from the filesystem root, and its child folders.
- * @param path - the folder, absolute, without a trailing separator except for the root.
- * @param names - the child folders' names; a dot-led name is hidden.
- * @param truncated - whether the host cut the list.
- * @returns the listing.
+ * A start face over a store, recording the dialog opening, the new-workspace dialog and the notice hold.
+ * @param initial - where the chat opens.
+ * @param outcome - how the new-workspace dialog ends, or `absent` for a profile without it.
+ * @param hasWorkspace - whether the studio already holds a workspace.
+ * @returns the face and its spies.
  */
-export function listingOf(path: string, names: readonly string[], truncated = false): DirectoryListing {
-  const parts = path.split('/').filter(part => part !== '')
-  const crumbs = [{ name: '/', path: '/', hidden: false }, ...parts.map((part, index) => ({ name: part, path: `/${parts.slice(0, index + 1).join('/')}`, hidden: false }))]
-  const base = path === '/' ? '' : path
-  return { path, home: HOME, crumbs, entries: names.map(name => ({ name, path: `${base}/${name}`, hidden: name.startsWith('.') })), truncated }
-}
-
-/** A host's folders: the home directory with a few folders, each folder empty unless listed here. */
-export function browseFake(listings: Readonly<Record<string, DirectoryListing>> = { [HOME]: listingOf(HOME, ['.config', 'notes', 'projects']) }) {
-  const list = vi.fn(async (path?: string, _signal?: AbortSignal): Promise<DirectoryListing> => listings[path ?? HOME] ?? listingOf(path ?? HOME, []))
-  const create = vi.fn(async (path: string, name: string): Promise<string> => `${path}/${name}`)
-  const browse: FolderBrowse = { list, create }
-  return { browse, list, create }
-}
-
-/** A start face over a store, recording the dialog opening it, the folder chosen or added, and the notice hold. */
 export function startFace(
   initial: StartTarget = { kind: 'default', workspaceId: DEFAULT_WORKSPACE, path: DEFAULT_PATH },
-  choice: FolderChoice = { kind: 'cancelled' },
-  outcome: AddOutcome = { kind: 'chosen', workspaceId: 'workspace-2' as WorkspaceId, path: `${HOME}/projects`, folder: 'code' },
+  outcome: NewWorkspaceOutcome | 'absent' = { kind: 'cancelled' },
   hasWorkspace = true,
 ) {
   const store = createSnapshotStore<StartTarget>(initial)
   const resolve = vi.fn()
-  const chooseFolder = vi.fn((): Promise<FolderChoice> => Promise.resolve(choice))
-  const addFolder = vi.fn((_path: string): Promise<AddOutcome> => Promise.resolve(outcome))
-  const folders = browseFake()
+  const openNewWorkspace = vi.fn((): Promise<NewWorkspaceOutcome> => Promise.resolve(outcome === 'absent' ? { kind: 'cancelled' } : outcome))
   const release = vi.fn((_told: boolean) => {})
   const holdNotice = vi.fn(() => release)
-  const face: StartFace = { target: store, resolve, chooseFolder, addFolder, browse: folders.browse, holdNotice, hasWorkspace: () => hasWorkspace }
-  return { face, set: store.set, resolve, chooseFolder, addFolder, folders, holdNotice, release }
+  const face: StartFace = { target: store, resolve, openNewWorkspace: outcome === 'absent' ? undefined : openNewWorkspace, holdNotice, hasWorkspace: () => hasWorkspace }
+  return { face, set: store.set, resolve, openNewWorkspace, holdNotice, release }
 }
 
 /** The providers service with every call a spy; each can be replaced. */
