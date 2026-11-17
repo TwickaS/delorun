@@ -3,7 +3,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { PluginsSubject } from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
-import { PackAddAction, packToAdd } from '../src/client/Action.tsx'
+import { PackAddAction, PackNotLoadingAction, packNotLoading, packToAdd } from '../src/client/Action.tsx'
 import { fallbackTranslate as t } from '../src/client/locales.ts'
 import { createFakeDownloadsSource, provideDownloadsSource } from '../src/client/source.ts'
 
@@ -59,6 +59,37 @@ describe('the Add action', () => {
     const release = provideDownloadsSource(source)
     render(<PackAddAction matched={BROWSER} t={t} />)
     expect(screen.getByRole('button', { name: 'Add Browser' })).toBeTruthy()
+    release()
+  })
+})
+
+describe('an installed pack whose last install failed', () => {
+  const failed = { key: BROWSER, state: 'failed' as const, receivedBytes: 0, failure: { code: 'failed' as const, message: 'The plugin manager could not load @delorun/bundle-browser (operation-error).' } }
+
+  it('takes the place of the switch only while the queue holds the failure, and only for an installed pack of the release', () => {
+    const source = createFakeDownloadsSource([failed])
+    const release = provideDownloadsSource(source)
+    expect(packNotLoading(bundle(BROWSER, { installed: true, availability: 'profile' }))).toBe(BROWSER)
+    expect(packNotLoading(bundle(BROWSER))).toBeNull()
+    expect(packNotLoading(bundle('some-other-bundle', { installed: true }))).toBeNull()
+    expect(packNotLoading({ kind: 'item', id: BROWSER })).toBeNull()
+    act(() => { source.update(BROWSER, { state: 'ready' }) })
+    expect(packNotLoading(bundle(BROWSER, { installed: true, availability: 'profile' }))).toBeNull()
+    release()
+  })
+
+  it('says it is installed but not loading, with the reason, and offers Try again and Remove', () => {
+    const source = createFakeDownloadsSource([failed])
+    const release = provideDownloadsSource(source)
+    render(<PackNotLoadingAction matched={BROWSER} t={t} />)
+    expect(screen.getByRole('status').textContent).toContain('Installed, but not loading: The plugin manager could not load')
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Browser from the list' }))
+    expect(source.calls).toEqual([`remove:${BROWSER}`])
+    cleanup()
+    source.set([failed])
+    render(<PackNotLoadingAction matched={BROWSER} t={t} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Try Browser again' }))
+    expect(source.calls).toEqual([`remove:${BROWSER}`, `retry:${BROWSER}`])
     release()
   })
 })
