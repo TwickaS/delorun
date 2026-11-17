@@ -19,7 +19,7 @@ import type { ThemeCopy } from './shell-copy.ts'
  * @returns the toast, or undefined when neither the theme nor the scheme changed.
  */
 export function lookToast(copy: ThemeCopy, previous: Look, next: Look): ToastMessage | undefined {
-  const scheme = (look: Look): string => look.scheme === 'dark' ? copy.dark : copy.light
+  const scheme = (look: Look): string => look.scheme === 'dark' ? copy.dark : look.scheme === 'light' ? copy.light : copy.device
   if (previous.look !== next.look) return { message: copy.toast.theme(copy.names[next.look]), action: { label: copy.toast.undo(copy.names[previous.look]), onClick: () => setLook(previous) } }
   if (previous.scheme !== next.scheme) return { message: copy.toast.scheme(scheme(next)), action: { label: copy.toast.undo(scheme(previous)), onClick: () => setLook(previous) } }
   return undefined

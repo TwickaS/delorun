@@ -106,6 +106,19 @@ describe('links that carry a look', () => {
     expect(parseLook(new URLSearchParams('x=1'))).toBeUndefined()
   })
 
+  it('follows the device again when the look has no scheme, and reads no scheme from a page that follows it', () => {
+    const root = fakeRoot()
+    applyLook(root, { ...DEFAULT_LOOK, scheme: 'dark' })
+    expect(root.dataset['scheme']).toBe('dark')
+    expect(currentLook(root).scheme).toBe('dark')
+    applyLook(root, { ...DEFAULT_LOOK, scheme: undefined }, false)
+    expect(root.dataset['scheme']).toBeUndefined()
+    expect(root.classList.contains('dark')).toBe(false)
+    expect(currentLook(root).scheme).toBeUndefined()
+    applyLook(root, DEFAULT_LOOK, true)
+    expect(root.classList.contains('dark')).toBe(true)
+  })
+
   it('applies a look to the root and reads it back', () => {
     const root = fakeRoot()
     applyLook(root, { ...DEFAULT_LOOK, look: 'custom', accent: 'cobalt', contrast: 'high' })

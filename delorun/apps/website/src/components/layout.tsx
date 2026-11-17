@@ -14,6 +14,9 @@ import { DOCS_URL } from '@/site/config.ts'
 import { COPY } from '@/site/copy.ts'
 import { SignupForm } from '@/components/signup.tsx'
 
+/** The header's and footer's inner width and margins: the page grid's (a 1440 px maximum, 16 px margins and 24 px from 640 px). */
+const INNER = 'max-w-[1440px] px-4 sm:px-6'
+
 /**
  * The page frame.
  * @param props.children - the page's content, which supplies its own sections.
@@ -25,9 +28,9 @@ export function Frame({ children, signup = '/privacy', closing }: { children: Re
   return (
     <>
       <a href="#content" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-(--dl-text) focus:px-3 focus:py-2 focus:text-(--dl-surface)">{COPY.footer.skip}</a>
-      <SiteHeader copy={HEADER_COPY} home="/" links={HEADER_LINKS} leading={<SearchForm action={DOCS_URL} copy={SEARCH_COPY} className="hidden w-48 lg:block" />} />
+      <SiteHeader inner={INNER} copy={HEADER_COPY} home="/" links={HEADER_LINKS} leading={<SearchForm action={DOCS_URL} copy={SEARCH_COPY} className="hidden w-48 lg:block" />} />
       <div id="content" tabIndex={-1} className="flex-1 outline-none">{children}</div>
-      <SiteFooter copy={FOOTER_COPY} links={FOOTER_LINKS} closing={closing}
+      <SiteFooter inner={INNER} copy={FOOTER_COPY} links={FOOTER_LINKS} closing={closing}
         top={signup === false ? null : (
           <section aria-labelledby="footer-updates" className="max-w-xl text-(--dl-text)">
             <h2 id="footer-updates" className="mb-4 text-base font-semibold">{COPY.signup.footerHeading}</h2>
