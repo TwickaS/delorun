@@ -637,7 +637,8 @@ export class HomeAuth {
    */
   private stateWithMinutes(deviceId: string, listener: ReachListenerId): ElevationState {
     const state = this.elevations.stateOf(deviceId, listener)
-    if (state.kind === 'elevated') return state
+    if (state.kind === 'elevated' && this.elevationOf(deviceId, listener) !== undefined) return state
+    if (state.kind === 'elevated') return { kind: 'none', unlockMinutes: this.served.get(listener)?.elevationMinutes ?? ELEVATION_LIMITS.defaultMinutes }
     return { ...state, unlockMinutes: this.served.get(listener)?.elevationMinutes ?? ELEVATION_LIMITS.defaultMinutes }
   }
 
@@ -648,7 +649,9 @@ export class HomeAuth {
    * @returns the elevation, or undefined.
    */
   elevationOf(deviceId: string, listener: ReachListenerId): ElevationRecord | undefined {
-    return this.elevations.of(deviceId, listener)
+    const record = this.elevations.of(deviceId, listener)
+    // With PIN mode on there is no approval grace: the first unlock-needing action asks for the PIN.
+    return record?.grace === true && this.pin.enabled() ? undefined : record
   }
 
   /**
@@ -879,7 +882,7 @@ export class HomeAuth {
    * Start the approval grace for a device that has just signed in for the first time: an unlock that runs from the
    * approval for the grace minutes, at most the listener's unlock minutes, so a newly approved phone runs its first-run
    * setup without unlock prompts. It starts only on the first sign-in of a device whose record shows no earlier one,
-   * never on a rotation, and not once the grace window since the approval has passed. It admits only what an unlock
+   * never on a rotation, never while PIN mode is on, and not once the grace window since the approval has passed. It admits only what an unlock
    * admits: the computer-only table is refused during it as at any other time.
    * @param device - the device's record as read before this sign-in.
    * @param request - the sign-in request.
@@ -888,7 +891,7 @@ export class HomeAuth {
    */
   private startApprovalGrace(device: DeviceRecord, request: SignInRequest, served: ServedListener, sessionId: SessionId): void {
     const minutes = this.approvalGraceMinutes()
-    if (minutes <= 0 || device.lastSignInAt !== null || request.rotate !== undefined) return
+    if (minutes <= 0 || device.lastSignInAt !== null || request.rotate !== undefined || this.pin.enabled()) return
     const graceMs = Math.min(minutes, served.elevationMinutes ?? ELEVATION_LIMITS.defaultMinutes) * 60_000
     const endsAt = device.approvedAt + graceMs
     if (this.now() >= endsAt) return

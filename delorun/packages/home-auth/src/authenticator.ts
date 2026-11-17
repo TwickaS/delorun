@@ -171,7 +171,7 @@ export function protectedEntryIdsOf(ctx: Context): ReadonlySet<string> | undefin
     if (listed === undefined) return undefined
     for (const name of listed) modules.add(name)
   }
-  return new Set(entries.filter(row => modules.has(row.options.name)).map(row => row.id))
+  return new Set(entries.filter(row => modules.has(row.options.name)).flatMap(row => typeof row.options.id === 'string' ? [row.id, row.options.id] : [row.id]))
 }
 
 /**

@@ -936,6 +936,19 @@ function settingsOfComputerOnlyRow(facts: Pick<ReachAccessFacts, 'computerOnlyEn
   return ids.has(args.ns) || ids.has(`include:${args.ns}`)
 }
 
+/**
+ * Whether a settings write names the namespace of a row the plugin manager protects (its `protectedPlugins`), or the
+ * protected rows cannot be read.
+ * @param facts - the protected rows.
+ * @param args - the call's arguments.
+ * @returns whether the write needs a real unlock.
+ */
+function settingsOfProtectedRow(facts: Pick<ReachAccessFacts, 'protectedEntryIds'>, args: Readonly<Record<string, unknown>>): boolean {
+  const ids = facts.protectedEntryIds()
+  if (ids === undefined) return true
+  return typeof args.ns === 'string' && (ids.has(args.ns) || ids.has(`include:${args.ns}`))
+}
+
 /** The plugin-manager calls that enable, disable, remove or update one bundle (package) by `name`. */
 const BUNDLE_CALLS: ReadonlySet<string> = new Set(['pluginManager/setBundleEnabled', 'pluginManager/removeBundle', 'pluginManager/updateBundle'])
 
@@ -1089,6 +1102,8 @@ export function createCondition(
         if (off !== undefined) return { kind: 'deny', reason: switchOffRefusal(off.label) }
         // The settings of the gate, reach and sandbox rows stay as the computer set them: a write there replaces the row in effect.
         if (settingsOfComputerOnlyRow(facts, args)) return { kind: 'deny', reason: PROTECTED_ROW_REFUSAL }
+        // The approval grace never covers a consent or guard row's settings: those need a code or a PIN page.
+        if (unlockId === undefined && facts.elevationOf(deviceId, listener)?.grace === true && settingsOfProtectedRow(facts, args)) return { kind: 'deny', reason: `elevation-required: ${action}` }
         const loosens = loosensDefaultPermission(action, args, facts.defaultPermission())
         if (!lifted && loosens) return { kind: 'deny', reason: DEFAULT_PERMISSION_REFUSAL }
         if (lifted) lifts.push(...liftsOf(facts, action, args, loosens))
@@ -1173,7 +1188,7 @@ export interface ReachAccessFacts {
    * @param listener - the listener its Peer sits on.
    * @returns its id, or undefined.
    */
-  readonly elevationOf: (deviceId: string, listener: ReachListenerId) => { readonly id: string } | undefined
+  readonly elevationOf: (deviceId: string, listener: ReachListenerId) => { readonly id: string; readonly grace?: true } | undefined
   /**
    * The running PIN mode page unlock one Peer was admitted under.
    * @param unlockId - the id in the Peer's principal.

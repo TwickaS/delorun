@@ -169,6 +169,48 @@ describe('the approval grace', () => {
   })
 })
 
+describe('the approval grace and PIN mode', () => {
+  it('starts nothing while PIN mode is on, and hides a running grace once it turns on', async () => {
+    const { home: served } = await graced(10)
+    await served.auth.pin.set('739150', {})
+    const phone = device()
+    await approve(served.auth, phone)
+    await signIn(served.auth, phone)
+    // Pins the PIN check: with PIN mode on the first unlock-needing action asks for the PIN.
+    expect(served.auth.elevationOf(phone.id, LISTENER)).toBeUndefined()
+    expect(served.auth.elevationState(phone.id, LISTENER)).toMatchObject({ kind: 'none' })
+    await served.auth.pin.off()
+    const other = device()
+    await approve(served.auth, other)
+    await signIn(served.auth, other)
+    expect(served.auth.elevationOf(other.id, LISTENER)).toMatchObject({ grace: true })
+    await served.auth.pin.set('739150', {})
+    expect(served.auth.elevationOf(other.id, LISTENER)).toBeUndefined()
+  })
+
+  it('does not cover a consent or guard row\'s settings, which need a code or a PIN page', async () => {
+    const { home: served } = await graced(10)
+    const phone = device()
+    await approve(served.auth, phone)
+    await signIn(served.auth, phone)
+    const grace = served.auth.elevationOf(phone.id, LISTENER)
+    const facts = (elevation: { readonly id: string; readonly grace?: true } | undefined): ReachAccessFacts => ({
+      admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere',
+      elevationOf: () => elevation, pageUnlockOf: () => undefined, pinEnabled: () => false,
+      keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
+      computerOnlySwitches: () => [], protectedEntryIds: () => new Set(['include:delorun-mcp-consent', 'delorun-mcp-consent']), computerOnlyEntryIds: () => new Set(),
+      defaultPermission: () => undefined, dangerousMode: () => false,
+    })
+    const call = { action: 'settings/update' as const, resource: { kind: 'global' } as const, args: { ns: 'delorun-mcp-consent', patch: {} } }
+    const principal = reachDevicePrincipal(phone.id, LISTENER)
+    // Pins the grace flag: the same write under a code is the unlock's to allow.
+    expect(createCondition(facts(grace), principal)(call)).toEqual({ kind: 'deny', reason: 'elevation-required: settings/update' })
+    expect(createCondition(facts({ id: 'code' }), principal)(call).kind).toBe('allow')
+    // An ordinary write is the grace's to allow.
+    expect(createCondition(facts(grace), principal)({ ...call, args: { ns: 'delorun-cost-meter', patch: {} } }).kind).toBe('allow')
+  })
+})
+
 describe('the approval grace and the computer-only table', () => {
   it('admits no computer-only row to a device holding the grace, in either dangerous mode', async () => {
     const { home: served } = await graced(10)

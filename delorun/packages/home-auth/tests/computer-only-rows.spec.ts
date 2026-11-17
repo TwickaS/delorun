@@ -95,15 +95,15 @@ describe('the approval grace while PIN mode is on', () => {
 
 describe('the bundles that carry a computer-only row', () => {
   it('are all listed: a bundle patch that names one of the modules and is missing from COMPUTER_ONLY_BUNDLES fails', async () => {
-    const { readdirSync, readFileSync, existsSync } = await import('node:fs')
+    const { readdirSync, readFileSync, existsSync, statSync } = await import('node:fs')
     const { join, dirname } = await import('node:path')
     const { fileURLToPath } = await import('node:url')
     const { COMPUTER_ONLY_BUNDLES, COMPUTER_ONLY_ROW_MODULES } = await import('../src/reach-access.ts')
     const repo = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..')
-    const roots = [join(repo, 'packages', 'bundle'), join(repo, 'delorun', 'packages')]
+    const roots = [join(repo, 'delorun', 'packages'), ...readdirSync(join(repo, 'packages')).map(group => join(repo, 'packages', group))]
     const missing: string[] = []
     for (const root of roots) {
-      for (const entry of readdirSync(root)) {
+      for (const entry of statSync(root).isDirectory() ? readdirSync(root) : []) {
         const patch = join(root, entry, 'cordis.patch.yml')
         const manifest = join(root, entry, 'package.json')
         if (!existsSync(patch) || !existsSync(manifest)) continue
