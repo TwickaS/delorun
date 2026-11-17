@@ -11,7 +11,7 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import SessionStore, { buildForkSeed, SessionLogOffset, SessionSeq, type SessionId } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import ApprovalService, { setApprovalPolicy, type ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
-import type { ProgramApprovalRequest, SeatRecord } from '@delorun/external-agents/contract'
+import type { ProgramApprovalRequest, ProgramRunRule, SeatRecord } from '@delorun/external-agents/contract'
 import { appendDelegatedPolicyOverrides, captureDelegatedPolicyOverrides, foldSubagentDescriptor, SUBAGENT_DESCRIPTOR_VERSION } from '@deepseek-ai/dsh-subagent'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import { assertMarked, EXTERNAL_AGENT_GRANT, RUN_ANSWER, RunScope, SeatRelay, type SeatRelayOptions } from '../src/relay/index.ts'
@@ -51,6 +51,10 @@ interface World {
   readonly openTurns: Set<string>
   readonly sandbox: Map<string, string>
   readonly consent: Record<string, unknown>
+  /** The rules the stand-in consent kept, as the real consent keeps them beside a lease. */
+  readonly kept: ProgramRunRule[]
+  /** Whether the stand-in consent still holds the child's lease. */
+  leased: boolean
   readonly recorded: Map<string, () => void>
   readonly seats: Map<string, SeatRecord>
   readonly descriptors: Map<string, string>
@@ -92,7 +96,13 @@ async function world(rootPolicy: 'ask' | 'never' = 'ask', mountListener = true):
   const openTurns = new Set<string>([root.id, child.id])
   const sandbox = new Map<string, string>([[root.id, rootPolicy === 'never' ? 'danger-full-access' : 'workspace-write']])
   ctx.provide('agents', { get: (id: string) => agents.get(id), turnBoundaryOf: (session: { id: string }) => ({ openTurnStartSeq: openTurns.has(session.id) ? 1 : null }) } as never)
-  const consent: Record<string, unknown> = { fullAccessStartsAgents: () => true }
+  const kept: ProgramRunRule[] = []
+  const lease = { held: true }
+  const consent: Record<string, unknown> = {
+    fullAccessStartsAgents: () => true,
+    runRules: () => [...kept],
+    addRunRule: (_child: SessionId, rule: ProgramRunRule) => lease.held && kept.push(rule) > 0,
+  }
   ctx.provide('delegationConsent', consent as never)
   ctx.provide('sandboxPolicy', { resolve: ({ session }: { session: { id: string } }) => ({ mode: sandbox.get(session.id) ?? 'workspace-write' }), overrideOf: () => undefined } as never)
   const recorded = new Map<string, () => void>()
@@ -115,7 +125,9 @@ async function world(rootPolicy: 'ask' | 'never' = 'ask', mountListener = true):
     return (log.get(agent.id) ?? []).filter(event => event.type === type).map(event => ({ ...event.data }))
   }
   return {
-    ctx, relay, root, child, waiting, openTurns, sandbox, consent, recorded, seats, descriptors, events,
+    ctx, relay, root, child, waiting, openTurns, sandbox, consent, kept, recorded, seats, descriptors, events,
+    get leased() { return lease.held },
+    set leased(value: boolean) { lease.held = value },
     answer(peer, value, which = waiting.length - 1) {
       const entry = waiting[which]
       if (entry === undefined) throw new Error('no question is pending')
@@ -531,6 +543,60 @@ describe('ending a question', () => {
     w.openTurns.delete(w.child.id)
     await expect(w.relay.onApproval(w.child, new AbortController().signal)(question())).resolves.toBe('cancel')
     expect(w.waiting).toHaveLength(0)
+  })
+})
+
+/**
+ * The relay's answer as the start gate settles it: `allow-run` stays only when the consent keeps the rule.
+ * @param w - the world.
+ * @param request - the program's question.
+ * @returns the answer the program gets.
+ */
+async function viaGate(w: World, request: ProgramApprovalRequest) {
+  const answer = await w.relay.onApproval(w.child, new AbortController().signal)(request)
+  const consent = w.consent as { addRunRule(child: SessionId, rule: ProgramRunRule): boolean }
+  return answer === 'allow-run' && !(request.runRule !== undefined && consent.addRunRule(w.child.id, request.runRule)) ? 'allow-once' : answer
+}
+
+const runAllowed = (w: World): Array<{ seq: number, ignorable?: true, data: unknown }> => w.child.session.snapshotEvents()
+  .filter(event => (event.type as string) === 'plugin:delorun/agent-seat/run-allowed')
+
+describe('the log of Allow for this run', () => {
+  it('appends a run-allowed record naming the question once the gate kept the rule', async () => {
+    const w = await world()
+    w.relay.prepareChild(w.child)
+    const result = viaGate(w, question({ runRule: RULE }))
+    await settle()
+    w.answer('computer', RUN_ANSWER)
+    await expect(result).resolves.toBe('allow-run')
+    await settle()
+    const asked = w.child.session.snapshotEvents().find(event => event.type === 'approval/asked')
+    expect(runAllowed(w)).toMatchObject([{ ignorable: true, data: { askedSeq: asked?.seq } }])
+    expect(w.kept).toEqual([RULE])
+  })
+
+  it('appends nothing when the gate falls back to allow once because the lease is gone', async () => {
+    const w = await world()
+    w.relay.prepareChild(w.child)
+    w.leased = false
+    const result = viaGate(w, question({ runRule: RULE }))
+    await settle()
+    w.answer('computer', RUN_ANSWER)
+    await expect(result).resolves.toBe('allow-once')
+    await settle()
+    expect(runAllowed(w)).toEqual([])
+    expect(w.kept).toEqual([])
+  })
+
+  it('appends nothing for Allow once', async () => {
+    const w = await world()
+    w.relay.prepareChild(w.child)
+    const result = viaGate(w, question({ runRule: RULE }))
+    await settle()
+    w.answer('computer', 'allowed-once')
+    await expect(result).resolves.toBe('allow-once')
+    await settle()
+    expect(runAllowed(w)).toEqual([])
   })
 })
 

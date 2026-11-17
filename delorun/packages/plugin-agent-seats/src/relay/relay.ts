@@ -8,9 +8,10 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import { ToolCallId } from '@deepseek-ai/dsh-llm/brand'
-import type { SessionId } from '@deepseek-ai/dsh-session'
+import { appendPluginRecord, type SessionId, type SessionSeq } from '@deepseek-ai/dsh-session'
 import { setApprovalPolicy, type ApprovalOutcome, type ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
-import type { ProgramApprovalAnswer, ProgramApprovalRequest } from '@delorun/external-agents/contract'
+import type { ProgramApprovalAnswer, ProgramApprovalRequest, ProgramRunRule, SeatConsent } from '@delorun/external-agents/contract'
+import { SEAT_RUN_ALLOWED_RECORD } from '../state/record.ts'
 import { RunScope, RUN_SCOPE } from './run-scope.ts'
 
 /** The marker every relayed question carries, so only the computer or an unlocked page may allow it (D1). */
@@ -43,6 +44,12 @@ export interface SeatRelayOptions {
    * @returns the record's tool name.
    */
   recordName(child: Agent, toolName: string): string
+}
+
+/** The program's answer, with the `approval/asked` event of the question when it was asked. */
+interface Asked {
+  readonly answer: ProgramApprovalAnswer
+  readonly askedSeq?: SessionSeq | undefined
 }
 
 /** Why a Session is not served by the relay. */
@@ -155,13 +162,38 @@ export class SeatRelay {
    * @returns the callback for `SeatStartRequest.onApproval`.
    */
   onApproval(child: Agent, startSignal: AbortSignal): (request: ProgramApprovalRequest) => Promise<ProgramApprovalAnswer> {
-    return request => this.ask(child, startSignal, request)
+    return async (request) => {
+      const { answer, askedSeq } = await this.ask(child, startSignal, request)
+      if (answer === 'allow-run' && request.runRule !== undefined && askedSeq !== undefined) {
+        this.logWhenKept(child, request.runRule, askedSeq)
+      }
+      return answer
+    }
   }
 
-  private async ask(child: Agent, startSignal: AbortSignal, request: ProgramApprovalRequest): Promise<ProgramApprovalAnswer> {
-    if (!this.isSeat(child)) return 'reject'
+  /**
+   * Log "Allow for this run" once the gate kept the rule. The gate calls `addRunRule` after the answer is returned
+   * and falls back to allow once when the lease is gone, so the log is written a macrotask later, from the rule list.
+   * @param child - the seat child.
+   * @param rule - the rule the question offered.
+   * @param askedSeq - the question's `approval/asked` event.
+   */
+  private logWhenKept(child: Agent, rule: ProgramRunRule, askedSeq: SessionSeq): void {
+    setImmediate(() => {
+      try {
+        const consent: unknown = this.ctx.get('delegationConsent')
+        if (!keepsRunRules(consent) || !consent.runRules(child.id).includes(rule)) return
+        appendPluginRecord(child.session, SEAT_RUN_ALLOWED_RECORD, { askedSeq })
+      } catch (error) {
+        this.ctx.logger('agent-seats').warn('the run allowance could not be logged: %s', error instanceof Error ? error.message : String(error))
+      }
+    })
+  }
+
+  private async ask(child: Agent, startSignal: AbortSignal, request: ProgramApprovalRequest): Promise<Asked> {
+    if (!this.isSeat(child)) return { answer: 'reject' }
     const approval = this.ctx.get('approval')
-    if (approval === undefined) return 'reject'
+    if (approval === undefined) return { answer: 'reject' }
     let finish: () => void = () => {}
     const settled = new Promise<void>((resolve) => { finish = resolve })
     const entry: Pending = { controller: new AbortController(), settled, finish }
@@ -172,10 +204,10 @@ export class SeatRelay {
     this.hold(child.id, entry)
     try {
       await untilOrAborted(this.options.recorded(child, request.callId, signal), signal)
-      if (signal.aborted) return 'cancel'
+      if (signal.aborted) return { answer: 'cancel' }
       // The hold can outlast the seat or the turn.
-      if (!this.isSeat(child)) return 'cancel'
-      if (this.ctx.get('agents')?.turnBoundaryOf(child.session).openTurnStartSeq === null) return 'cancel'
+      if (!this.isSeat(child)) return { answer: 'cancel' }
+      if (this.ctx.get('agents')?.turnBoundaryOf(child.session).openTurnStartSeq === null) return { answer: 'cancel' }
       const full = this.rootIsFullAccess(child)
       const built: ApprovalRequest = {
         agent: child,
@@ -191,11 +223,12 @@ export class SeatRelay {
       assertMarked(built)
       this.scope.adopt(built, full)
       const outcome = await approval.request(built)
-      return this.answerOf(outcome, built, request)
+      const answer = this.answerOf(outcome, built, request)
+      return answer === 'allow-run' ? { answer, askedSeq: askedSeqOf(child, request.callId) } : { answer }
     } catch (error) {
-      if (signal.aborted) return 'cancel'
+      if (signal.aborted) return { answer: 'cancel' }
       this.ctx.logger('agent-seats').warn('a program question could not be asked: %s', error instanceof Error ? error.message : String(error))
-      return 'reject'
+      return { answer: 'reject' }
     } finally {
       this.release(child.id, entry)
       entry.finish()
@@ -259,6 +292,25 @@ export class SeatRelay {
   private abortAll(child: SessionId): void {
     for (const entry of this.pending.get(child) ?? []) entry.controller.abort(new Error('the seat turn ended'))
   }
+}
+
+/**
+ * The consent service's run rules, which a seat-aware consent has.
+ * @param consent - whatever the service provides.
+ * @returns true for a consent that lists the rules kept for a child.
+ */
+function keepsRunRules(consent: unknown): consent is Pick<SeatConsent, 'runRules'> {
+  return typeof consent === 'object' && consent !== null && typeof Reflect.get(consent, 'runRules') === 'function'
+}
+
+/**
+ * The `approval/asked` event of a call's latest question.
+ * @param child - the seat child.
+ * @param callId - the question's call.
+ * @returns its sequence number, or undefined when the log holds none.
+ */
+function askedSeqOf(child: Agent, callId: string): SessionSeq | undefined {
+  return child.session.snapshotEvents().findLast(event => event.type === 'approval/asked' && event.data.callId === callId)?.seq
 }
 
 /**

@@ -3,6 +3,7 @@
  * an archive restore and a fork carry them with the rest of the log; the `agentSeat` projection folds them.
  * @module @delorun/plugin-agent-seats/state/record
  */
+import type { SessionSeq } from '@deepseek-ai/dsh-session'
 import type { SeatModelPicker, SeatViewState } from './view.ts'
 
 /** The plugin record type of the seat state. */
@@ -13,6 +14,12 @@ export const SEAT_STATUS_RECORD = 'plugin:delorun/agent-seat/status'
 
 /** The plugin record type of a notice the chat shows in its transcript. */
 export const SEAT_NOTICE_RECORD = 'plugin:delorun/agent-seat/notice'
+
+/**
+ * The plugin record type of "Allow for this run": the gate kept the rule, so later questions it covers are not asked.
+ * It is ignorable and lives in the plugin namespace, outside the Session event vocabulary.
+ */
+export const SEAT_RUN_ALLOWED_RECORD = 'plugin:delorun/agent-seat/run-allowed'
 
 /**
  * One state record; the latest wins and replaces every field. A record with no `programSessionId` says the program has
@@ -66,6 +73,12 @@ export interface SeatNoticeRecordData {
   readonly text: string
 }
 
+/** The seat child's record that the person allowed a program rule for the rest of the run. */
+export interface SeatRunAllowedRecordData {
+  /** The `approval/asked` event of the question the person answered with "Allow for this run". */
+  readonly askedSeq: SessionSeq
+}
+
 declare module '@deepseek-ai/dsh-session' {
   interface PluginRecordMap {
     /** The seat child's program session and input cursor. */
@@ -74,5 +87,7 @@ declare module '@deepseek-ai/dsh-session' {
     'plugin:delorun/agent-seat/status': SeatStatusRecordData
     /** A notice in the seat child's transcript. */
     'plugin:delorun/agent-seat/notice': SeatNoticeRecordData
+    /** The person allowed a program rule for this run. */
+    'plugin:delorun/agent-seat/run-allowed': SeatRunAllowedRecordData
   }
 }
