@@ -405,9 +405,10 @@ export async function buildPack(name: string, version: string, experimental: boo
     const packPeers = await peerDependencyNames(directory)
     const entries: ArchiveEntry[] = []
     for (const file of await listStagedTree(directory, platform)) {
-      const deeper = externalNestedIn(file.path, externals)
-      if (deeper !== undefined) throw new Error(`${name} for ${platform} carries ${deeper} nested inside another package (${file.path}); an external package is fetched from its publisher only when it is at the top level of the pack's node_modules, so a nested copy would ship its files in the pack`)
       const nested = /^node_modules\/((?:@[^/]+\/)?[^/]+)\//u.exec(file.path)?.[1]
+      // A top-level external's whole subtree is dropped from the pack, so what is nested inside it ships nothing.
+      const deeper = nested !== undefined && isExternal(nested, externals) ? undefined : externalNestedIn(file.path, externals)
+      if (deeper !== undefined) throw new Error(`${name} for ${platform} carries ${deeper} nested inside another package (${file.path}); an external package is fetched from its publisher only when it is at the top level of the pack's node_modules, so a nested copy would ship its files in the pack`)
       if (nested !== undefined && !dropped.has(nested) && !kept.has(nested)) {
         if (isExternal(nested, externals)) {
           dropped.add(nested)
