@@ -22,12 +22,13 @@ import { ChangeDetail } from './ChangeDetail.tsx'
 import css from './ChangesSection.module.css'
 import { controlUse, Group, LoadLine, pluralKey, SHORT_VERSION, useLoaded, WIDE_DIALOG, type Loaded, type T } from './parts.tsx'
 import { ProtectionGroup, ProtectionNotices, ProtectionOffDialog, ProtectionOnDialog } from './ProtectionGroup.tsx'
+import { RestartCard, RestartDialog } from './RestartCard.tsx'
 import { SelfDialog, SelfGroup, SelfReviewDialog } from './SelfGroup.tsx'
 import { timeOfDay } from './time.ts'
 
 /** The controller's reads and calls the section uses. */
 export interface ChangesSectionInjected {
-  readonly hooks: { readonly changes: HostObservable<ChangesLoad>, readonly harnessEffects: HostObservable<HarnessEffects> }
+  readonly hooks: { readonly changes: HostObservable<ChangesLoad>, readonly harnessEffects: HostObservable<HarnessEffects>, readonly restarting: HostObservable<boolean> }
   /**
    * Read the state again without showing the loading state.
    * @returns after the state is current.
@@ -137,6 +138,19 @@ export interface ChangesSectionInjected {
    * @returns the outcome.
    */
   readonly noticeSeen: (id: string) => Promise<ActionOutcome>
+  /**
+   * Restart Delorun so the changes to Delorun itself that wait for a restart run.
+   * @param stopChats - stop the running chats instead of waiting for them.
+   * @returns the outcome.
+   */
+  readonly restart: (stopChats: boolean) => Promise<ActionOutcome>
+  /**
+   * End a restart that still waits for running chats.
+   * @returns the outcome.
+   */
+  readonly cancelRestart: () => Promise<ActionOutcome>
+  /** Load the page again, so a change to the studio's own files shows. */
+  readonly reloadPage: () => void
 }
 
 /** Props the renderer binds for the section. */
@@ -169,6 +183,7 @@ type Dialog =
   | { readonly kind: 'ask', readonly ask: Ask }
   | { readonly kind: 'protectionOn' }
   | { readonly kind: 'protectionOff', readonly willLoad: WillLoadView }
+  | { readonly kind: 'restart', readonly runningChats: number | undefined }
 
 /** Skeleton rows the first load lays out. */
 const SKELETON_ROWS = [0, 1, 2] as const
@@ -185,6 +200,7 @@ export function ChangesSection(props: ChangesSectionProps) {
   const { t, reload, retry } = props
   const load = props.useChanges(value => value)
   const effects = props.useHarnessEffects(value => value)
+  const restarting = props.useRestarting(value => value)
   const [dialog, setDialog] = useState<Dialog | undefined>()
   const [busy, setBusy] = useState(false)
   const [copy, setCopy] = useState<HarnessCopyView | undefined>()
@@ -240,6 +256,10 @@ export function ChangesSection(props: ChangesSectionProps) {
       : null}
     {state === undefined ? null : <>
       <AccessNote access={state.access} t={t} />
+      <RestartCard state={state} restarting={restarting} t={t} busy={busy}
+        onRestart={(runningChats) => { setDialog({ kind: 'restart', runningChats }) }}
+        onCancel={() => { run(() => props.cancelRestart()) }}
+        onUndo={(entry) => { setDialog({ kind: 'ask', ask: { kind: 'selfUndo', entry } }) }} />
       <ProtectionNotices notices={state.notices} t={t} busy={busy} onDismiss={(id) => { run(() => props.noticeSeen(id)) }} />
       <Facts state={state} t={t} />
       <WorkCard state={state} t={t} busy={busy}
@@ -280,7 +300,8 @@ export function ChangesSection(props: ChangesSectionProps) {
         onDiscard={(change) => { setDialog({ kind: 'ask', ask: { kind: 'selfDiscard', change } }) }}
         onShow={(entry) => { setDialog({ kind: 'self', entry }) }}
         onUndo={(entry) => { setDialog({ kind: 'ask', ask: { kind: 'selfUndo', entry } }) }}
-        onReadAgain={() => { setFolderRead(read => read + 1) }} />
+        onReadAgain={() => { setFolderRead(read => read + 1) }}
+        onReloadPage={props.reloadPage} />
       <ProtectionGroup state={state} t={t} busy={busy}
         onTurn={(level) => { if (level === 'on') setDialog({ kind: 'protectionOn' }); else run(() => props.protectionOff(false)) }} />
     </>}
@@ -313,6 +334,8 @@ function Dialogs(props: ChangesSectionProps & {
       onDiscard={() => { run(() => props.harnessDiscard(dialog.change.id)) }} />
     case 'self': return <SelfDialog key={dialog.entry.id} entry={dialog.entry} state={state} t={t} show={props.show} busy={busy}
       onClose={close} onUndo={() => { run(() => props.harnessUndo(dialog.entry.id)) }} />
+    case 'restart': return <RestartDialog runningChats={dialog.runningChats} t={t} busy={busy} onClose={close}
+      onRestart={(stopChats) => { run(() => props.restart(stopChats)) }} />
     case 'done': return <DoneDialog key={dialog.plugin} plugin={dialog.plugin} state={state} t={t} reviewWork={props.reviewWork} busy={busy}
       onClose={close}
       onApprove={(version) => { run(() => props.done(dialog.plugin, version, false), { kind: 'done', plugin: dialog.plugin, version }) }} />

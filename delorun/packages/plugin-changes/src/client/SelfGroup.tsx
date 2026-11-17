@@ -31,6 +31,8 @@ export interface SelfGroupProps {
   readonly onShow: (entry: HarnessEntryView) => void
   readonly onUndo: (entry: HarnessEntryView) => void
   readonly onReadAgain: () => void
+  /** Load the page again, offered where a change this page applied changed the studio's own files. */
+  readonly onReloadPage: () => void
 }
 
 /**
@@ -99,7 +101,7 @@ export function SelfGroup(props: SelfGroupProps) {
  * @param props - the group's props.
  * @returns the rows.
  */
-function Decided({ state, t, busy, effects, onShow, onUndo }: SelfGroupProps) {
+function Decided({ state, t, busy, effects, onShow, onUndo, onReloadPage }: SelfGroupProps) {
   const now = Date.now()
   const undo = controlUse(state, 'harness-undo', t)
   if (state.harness.length === 0) return <li className={css.empty}>{t('self.empty')}</li>
@@ -117,11 +119,14 @@ function Decided({ state, t, busy, effects, onShow, onUndo }: SelfGroupProps) {
             <span>{t('self.version', { version: entry.runtime })}</span>
           </div>
           {effect === undefined || entry.state === 'discarded' ? null : <div className={css.tags}>
-            <Tag tone={effect === 'live' ? 'success' : 'warning'}>{t(`self.effect.${effect}`)}</Tag>
+            <Tag tone={effect.kind === 'live' ? 'success' : effect.kind === 'left-out' ? 'danger' : 'warning'}>{t(`self.effect.${effect.kind}`)}</Tag>
           </div>}
           {entry.leftOut === undefined ? null : <p className={css.failureText}><StateDot state="error" />{t('self.leftOut', { failure: entry.leftOut.failure })}</p>}
         </div>
         <div className={css.actions}>
+          {effect?.kind === 'live' && effect.page && entry.state !== 'discarded'
+            ? <Button variant="outline" size="sm" onClick={onReloadPage}>{t('self.reloadPage')}</Button>
+            : null}
           <Button variant="outline" size="sm" disabled={busy} onClick={() => { onShow(entry) }}>{t('pending.review')}</Button>
           {entry.undoable
             ? <Button variant="outline" size="sm" disabled={busy || undo.disabled} title={undo.title} onClick={() => { onUndo(entry) }}>{t('confirm.undo')}</Button>

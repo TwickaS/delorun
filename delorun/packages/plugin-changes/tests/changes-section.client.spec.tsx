@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apply, CHANGES_SECTION_ID, CHANGES_SECTION_ORDER, inject, NS, STATE_REFRESH_MS, WORK_BADGE_ID, WORK_BADGE_ORDER } from '../src/client/index.ts'
 import { RELEASE_COMMAND } from '../src/client/SelfGroup.tsx'
 import { en, zh } from '../src/client/locales.ts'
-import { ACTION_PATHS, HARNESS_PATHS, NOTICE_SEEN_PATH, PROTECTION_PATHS, SHOW_PATH, STATE_PATH, type AccessView, type ActorView, type ChangesStateView, type ChangeView, type EntryView, type HarnessEffectView, type HarnessEntryView, type HarnessPendingView, type HarnessReviewView, type MayView, type PendingView, type WorkReviewView } from '../src/wire.ts'
+import { ACTION_PATHS, HARNESS_PATHS, NOTICE_SEEN_PATH, PROTECTION_PATHS, RESTART_PATHS, SHOW_PATH, STATE_PATH, type AccessView, type ActorView, type ChangesStateView, type ChangeView, type EntryView, type HarnessEffectView, type HarnessEntryView, type HarnessPendingView, type HarnessReviewView, type MayView, type RestartStateView, type PendingView, type WorkReviewView } from '../src/wire.ts'
 
 const VERSION = 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9'
 const HOUR = 3_600_000
@@ -153,7 +153,7 @@ function harness(initial: FakeState = emptyState()) {
   const calls: Array<{ path: string, body: Record<string, unknown> }> = []
   const replaced = new Map<string, Route>()
   const changes = new Map<string, ChangeView>([[PENDING.id, change()], [FLAGGED.id, FLAGGED_CHANGE]])
-  let effect: HarnessEffectView = { kind: 'live' }
+  let effect: HarnessEffectView = { kind: 'live', page: false }
   let work: WorkReviewView = { kind: 'work', plugin: 'hello-plugin', source: '/work/hello-plugin', startedAt: new Date().toISOString(), endsAt: new Date(Date.now() + HOUR).toISOString(), version: VERSION, failedToLoad: false, change: change() }
   const decided = (body: Record<string, unknown>, fields: Partial<EntryView>) => logged({ id: String(body.id), ...fields })
   const routes: Record<string, Route> = {
@@ -222,6 +222,16 @@ function harness(initial: FakeState = emptyState()) {
       }
       state = { ...state, protection: 'off' }
       return Response.json({ protection: 'off', unreviewedSinceOff: 0 })
+    },
+    [RESTART_PATHS.restart]: () => {
+      const runningChats = state.restart?.kind === 'needed' ? state.restart.runningChats : 0
+      state = { ...state, restart: { kind: 'restarting', since: new Date().toISOString(), phase: runningChats === 0 ? 'starting' : 'waiting', runningChats } }
+      return Response.json({ kind: 'restarting', runningChats })
+    },
+    [RESTART_PATHS.cancel]: () => {
+      const waiting = state.restart?.kind === 'restarting' && state.restart.phase === 'waiting' ? state.restart : undefined
+      if (waiting !== undefined) state = { ...state, restart: { kind: 'needed', changes: 1, runningChats: waiting.runningChats, available: true } }
+      return Response.json({ cancelled: waiting !== undefined })
     },
     [NOTICE_SEEN_PATH]: ({ body }) => {
       state = { ...state, notices: state.notices.filter(item => item.id !== body.id) }
@@ -895,7 +905,7 @@ describe('the Changes section', () => {
   })
 
   it.each([
-    [{ kind: 'live' }, 'toast.self.live', 'self.effect.live'],
+    [{ kind: 'live', page: false }, 'toast.self.live', 'self.effect.live'],
     [{ kind: 'restart' }, 'toast.self.restart', 'self.effect.restart'],
     [{ kind: 'not-running' }, 'toast.self.nextStart', 'self.effect.not-running'],
   ] as const)('tells when an applied change to Delorun itself takes effect: %o', async (effect, toast, tag) => {
@@ -943,7 +953,7 @@ describe('the Changes section', () => {
   })
 
   it.each([
-    [{ kind: 'live' }, 'toast.self.undoneLive'],
+    [{ kind: 'live', page: false }, 'toast.self.undoneLive'],
     [{ kind: 'restart' }, 'toast.self.undoneRestart'],
   ] as const)('undoes a decided change to Delorun itself after a confirmation, and tells when the undo takes effect: %o', async (effect, toast) => {
     const applied = self({ id: 'c00000000a1', state: 'applied', undoable: true })
@@ -1123,6 +1133,108 @@ describe('the Changes section', () => {
     await waitFor(() => { expect(fake.callsTo(NOTICE_SEEN_PATH)).toEqual([{ id: 'n1' }]) })
     await waitFor(() => { expect(within(screen.getByRole('list', { name: en['notice.heading'] })).getAllByRole('note')).toHaveLength(1) })
     expect(toasts()).toEqual([])
+  })
+})
+
+describe('the restart', () => {
+  const NEEDED: RestartStateView = { kind: 'needed', changes: 2, runningChats: 1, available: true }
+  const card = () => document.querySelector('[data-restart]')
+
+  it('says what a restart interrupts, waits for the running chat, and shows Restarting until Delorun answers again without one', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true })
+    const { fake } = await openSection(emptyState({ restart: NEEDED }))
+    expect(card()?.textContent).toContain(en['restart.needed.other'].replace('{n}', '2'))
+    expect(card()?.textContent).toContain(en['restart.body'])
+    fireEvent.click(screen.getByRole('button', { name: en['restart.now'] }))
+    const dialog = await screen.findByRole('dialog', { name: en['restart.title'] })
+    expect(dialog.textContent).toContain(en['restart.chats.one'].replace('{n}', '1'))
+    fireEvent.click(within(dialog).getByRole('button', { name: en['restart.wait'] }))
+    await waitFor(() => { expect(card()?.getAttribute('data-restart')).toBe('restarting') })
+    expect(fake.callsTo(RESTART_PATHS.restart)).toEqual([{}])
+    expect(card()?.textContent).toContain(en['restart.waiting.one'].replace('{n}', '1'))
+    // While the Host is down, a failed read keeps the card; the next read without a restart ends it.
+    fake.replace(STATE_PATH, () => { throw new TypeError('offline') })
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000) })
+    expect(card()?.getAttribute('data-restart')).toBe('restarting')
+    const { restart: _done, ...back } = emptyState({ restart: NEEDED })
+    fake.set(back)
+    fake.replace(STATE_PATH, () => Response.json({ ...back, folders: [] }))
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000) })
+    await waitFor(() => { expect(card()).toBeNull() })
+    expect(toasts()).toContain(en['toast.restarted'])
+  })
+
+  it('stops the running chats when asked, and cancels a restart still waiting for them', async () => {
+    const { fake } = await openSection(emptyState({ restart: NEEDED }))
+    fireEvent.click(screen.getByRole('button', { name: en['restart.now'] }))
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: en['restart.stopChats'] }))
+    await waitFor(() => { expect(fake.callsTo(RESTART_PATHS.restart)).toEqual([{ stopChats: true }]) })
+    await waitFor(() => { expect(screen.getByRole('button', { name: en['restart.cancel'] })).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: en['restart.cancel'] }))
+    await waitFor(() => { expect(toasts()).toContain(en['toast.restartCancelled']) })
+    expect(fake.callsTo(RESTART_PATHS.cancel)).toEqual([{}])
+    await waitFor(() => { expect(card()?.getAttribute('data-restart')).toBe('needed') })
+  })
+
+  it('says the changes run at the next start where Delorun cannot restart itself, with no Restart', async () => {
+    await openSection(emptyState({ restart: { ...NEEDED, available: false } }))
+    expect(card()?.textContent).toContain(en['restart.unavailable'])
+    expect(screen.queryByRole('button', { name: en['restart.now'] })).toBeNull()
+  })
+
+  it('after a failed start says Delorun kept running and names the change left out, which Undo takes back after a confirmation', async () => {
+    const leftOut = self({ id: 'c00000000c1', state: 'left-out-at-start', undoable: true })
+    const { fake } = await openSection(emptyState({ harness: [leftOut], restart: { kind: 'failed', at: new Date().toISOString(), failure: 'The new start did not answer.', reason: 'health', leftOut: { id: leftOut.id, file: SELF_FILE } } }))
+    expect(card()?.getAttribute('role')).toBe('alert')
+    expect(card()?.textContent).toContain(en['restart.failed.health'])
+    expect(card()?.textContent).toContain(en['restart.failed.kept'].replace('{failure}', 'The new start did not answer.'))
+    expect(card()?.textContent).toContain(en['restart.failed.leftOut'].replace('{file}', SELF_FILE))
+    expect(within(card() as HTMLElement).queryByRole('button', { name: en['restart.again'] })).toBeNull()
+    fireEvent.click(within(card() as HTMLElement).getByRole('button', { name: en['restart.failed.undo'] }))
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: en['confirm.undo'] }))
+    await waitFor(() => { expect(fake.callsTo(HARNESS_PATHS.undo)).toEqual([{ id: leftOut.id }]) })
+  })
+
+  it('offers Try again when the chats were still running, without claiming how many', async () => {
+    const { fake } = await openSection(emptyState({ restart: { kind: 'failed', at: new Date().toISOString(), failure: 'Two chats still ran.', reason: 'chats' } }))
+    expect(card()?.textContent).toContain(en['restart.failed.chats'])
+    fireEvent.click(screen.getByRole('button', { name: en['restart.again'] }))
+    const dialog = await screen.findByRole('dialog', { name: en['restart.title'] })
+    expect(dialog.textContent).toContain(en['restart.chats.unknown'])
+    fireEvent.click(within(dialog).getByRole('button', { name: en['restart.wait'] }))
+    await waitFor(() => { expect(fake.callsTo(RESTART_PATHS.restart)).toEqual([{}]) })
+  })
+
+  it('keeps Restart at the computer under Careful, and asks a phone under Full to unlock first', async () => {
+    await openSection(emptyState({ atComputer: false, access: phoneAccess('device-unlocked', 'careful'), restart: NEEDED }))
+    const careful = screen.getByRole('button', { name: en['restart.now'] })
+    expect(careful.hasAttribute('disabled')).toBe(true)
+    expect(careful.getAttribute('title')).toBe(en['access.needsComputer'])
+    cleanup()
+    await openSection(emptyState({ atComputer: false, access: phoneAccess('device-locked', 'full'), restart: NEEDED }))
+    const full = screen.getByRole('button', { name: en['restart.now'] })
+    expect(full.hasAttribute('disabled')).toBe(false)
+    expect(full.getAttribute('title')).toBe(en['access.needsUnlock'])
+  })
+
+  it('offers to reload the page after a change to the studio\'s own files, and says when a change could not run live and is left out', async () => {
+    const { fake } = await openSection(emptyState({ harnessAvailable: COPY_MADE, harnessPending: [WAITING, WAITING_FLAGGED] }))
+    fake.setEffect({ kind: 'live', page: true })
+    const apply = async (file: string) => {
+      const row = (await screen.findByText(file)).closest('li') as HTMLElement
+      fireEvent.click(within(row).getByRole('button', { name: en['pending.review'] }))
+      const dialog = await screen.findByRole('dialog')
+      await within(dialog).findByRole('region', { name: en['review.files'] })
+      fireEvent.click(within(dialog).getByRole('button', { name: en['review.apply'] }))
+    }
+    await apply(WAITING.file)
+    await waitFor(() => { expect(toasts()).toContain(en['toast.self.livePage']) })
+    const row = (await screen.findByRole('button', { name: en['self.reloadPage'] })).closest('li')
+    expect(row?.getAttribute('data-change-id')).toBe(WAITING.id)
+    fake.setEffect({ kind: 'left-out', failure: 'It did not load.' })
+    fake.replace(HARNESS_PATHS.apply, ({ body }) => Response.json({ kind: 'harness', entry: self({ id: String(body.id), state: 'left-out-at-start', file: WAITING_FLAGGED.file }), effect: { kind: 'left-out', failure: 'It did not load.' } }))
+    await apply(WAITING_FLAGGED.file)
+    await waitFor(() => { expect(toasts()).toContain(en['toast.self.leftOut'].replace('{failure}', 'It did not load.')) })
   })
 })
 

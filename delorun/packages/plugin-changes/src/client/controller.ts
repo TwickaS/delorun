@@ -14,6 +14,7 @@ import {
   LOOPBACK_REQUIRED,
   NOTICE_SEEN_PATH,
   PROTECTION_PATHS,
+  RESTART_PATHS,
   SHOW_PATH,
   STATE_PATH,
   WORKSPACES_PATH,
@@ -31,6 +32,8 @@ import {
   type InstallView,
   type PendingListView,
   type RefusalView,
+  type RestartBegunView,
+  type RestartCancelView,
   type RequestedView,
   type RevealedView,
   type ReloadView,
@@ -74,7 +77,10 @@ export type CopyOutcome = { readonly kind: 'done', readonly copy: HarnessCopyVie
  * When each change to Delorun itself this page applied or undid takes effect, by change id, as the harness route
  * answered; the log does not keep it, so a reload of the page forgets it.
  */
-export type HarnessEffects = Readonly<Record<string, HarnessEffectView['kind']>>
+export type HarnessEffects = Readonly<Record<string, HarnessEffectView>>
+
+/** How often the state is read while Delorun restarts, in milliseconds. */
+export const RESTART_REFRESH_MS = 2000
 
 /** A refusal with the fields `CONFIRM_PROTECTION` adds. */
 type ProtectionRefusal = RefusalView & { readonly willLoad?: WillLoadView }
@@ -101,9 +107,10 @@ export interface ChangesControllerDeps {
  */
 function effectNotice(effect: HarnessEffectView, action: 'apply' | 'undo'): ChangesNotice {
   switch (effect.kind) {
-    case 'live': return { ok: true, key: action === 'apply' ? 'toast.self.live' : 'toast.self.undoneLive' }
+    case 'live': return { ok: true, key: action === 'undo' ? 'toast.self.undoneLive' : effect.page ? 'toast.self.livePage' : 'toast.self.live' }
     case 'restart': return { ok: true, key: action === 'apply' ? 'toast.self.restart' : 'toast.self.undoneRestart' }
     case 'not-running': return { ok: true, key: 'toast.self.nextStart' }
+    case 'left-out': return { ok: false, key: 'toast.self.leftOut', values: { failure: effect.failure } }
   }
 }
 
@@ -176,6 +183,12 @@ export class ChangesController {
   readonly state = createSnapshotStore<ChangesLoad>({ status: 'loading' })
   /** When the changes to Delorun itself this page decided take effect. */
   readonly harnessEffects = createSnapshotStore<HarnessEffects>({})
+  /** True from this page's Restart until a state read shows no restart under way. */
+  readonly restarting = createSnapshotStore(false)
+  /** The quick read that runs while a restart is under way. */
+  private restartTimer: ReturnType<typeof setTimeout> | undefined
+  /** Whether {@link dispose} ran, after which no quick read starts. */
+  private disposed = false
 
   /** The page's toast. */
   private readonly deps: ChangesControllerDeps
@@ -196,9 +209,33 @@ export class ChangesController {
     } catch (error) {
       console.warn('delorun-changes: the state was not read:', error)
       if (this.state.getSnapshot().status !== 'ready') this.state.set({ status: 'error' })
+      this.followRestart()
       return
     }
     this.state.set({ status: 'ready', state })
+    if (this.restarting.getSnapshot() && state.restart?.kind !== 'restarting') {
+      this.restarting.set(false)
+      if (state.restart === undefined) this.deps.report({ ok: true, key: 'toast.restarted' })
+    }
+    this.followRestart()
+  }
+
+  /** While a restart is under way, read the state again after {@link RESTART_REFRESH_MS}; a failed read keeps waiting. */
+  private followRestart(): void {
+    const load = this.state.getSnapshot()
+    const under = this.restarting.getSnapshot() || (load.status === 'ready' && load.state.restart?.kind === 'restarting')
+    if (!under || this.disposed || this.restartTimer !== undefined) return
+    this.restartTimer = setTimeout(() => {
+      this.restartTimer = undefined
+      void this.refresh()
+    }, RESTART_REFRESH_MS)
+  }
+
+  /** Stop the quick read of a restart under way. */
+  dispose(): void {
+    this.disposed = true
+    if (this.restartTimer !== undefined) clearTimeout(this.restartTimer)
+    this.restartTimer = undefined
   }
 
   /**
@@ -432,6 +469,32 @@ export class ChangesController {
     return await this.act('plugin-other', () => request<RevealedView>(ACTION_PATHS.reveal, { name, workspace }), () => ({ ok: true, key: 'toast.revealed' }))
   }
 
+  /**
+   * Restart Delorun so the changes to Delorun itself that wait for a restart run; the state is read every
+   * {@link RESTART_REFRESH_MS} until the restart ends.
+   * @param stopChats - stop the running chats instead of waiting for them.
+   * @returns the outcome.
+   */
+  async restart(stopChats: boolean): Promise<ActionOutcome> {
+    return await this.act('restart', async () => {
+      const begun = await request<RestartBegunView>(RESTART_PATHS.restart, stopChats ? { stopChats } : {})
+      this.restarting.set(true)
+      return begun
+    }, () => undefined)
+  }
+
+  /**
+   * End a restart that still waits for running chats.
+   * @returns the outcome.
+   */
+  async cancelRestart(): Promise<ActionOutcome> {
+    return await this.act('restart', () => request<RestartCancelView>(RESTART_PATHS.cancel, {}), (result) => {
+      if (!result.cancelled) return undefined
+      this.restarting.set(false)
+      return { ok: true, key: 'toast.restartCancelled' }
+    })
+  }
+
   private refusedWords(error: unknown): { readonly refused: string } {
     console.warn('delorun-changes: the plugin was not created:', error)
     const refusal = error instanceof ChangesRequestError ? error.refusal : undefined
@@ -446,7 +509,7 @@ export class ChangesController {
    * @returns the notice.
    */
   private decidedSelf(result: HarnessActionView, action: 'apply' | 'undo'): ChangesNotice {
-    this.harnessEffects.set({ ...this.harnessEffects.getSnapshot(), [result.entry.id]: result.effect.kind })
+    this.harnessEffects.set({ ...this.harnessEffects.getSnapshot(), [result.entry.id]: result.effect })
     return effectNotice(result.effect, action)
   }
 

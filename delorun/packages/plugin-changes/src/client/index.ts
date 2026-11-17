@@ -88,7 +88,11 @@ export function apply(ctx: Context): void {
   })
   ctx.effect(() => {
     void changes.refresh()
-    return changes.poll(STATE_REFRESH_MS)
+    const stop = changes.poll(STATE_REFRESH_MS)
+    return () => {
+      stop()
+      changes.dispose()
+    }
   }, 'delorun-changes: the state the section and the badge show')
   // Frame-wide, so an outcome outlives the Settings dialog that raised it.
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({
@@ -96,7 +100,7 @@ export function apply(ctx: Context): void {
     inject: () => ({ hooks: toast.hooks, dismiss: toast.dismiss }),
   }, ChangesToast))
   const section: ChangesSectionInjected = {
-    hooks: { changes: changes.state, harnessEffects: changes.harnessEffects },
+    hooks: { changes: changes.state, harnessEffects: changes.harnessEffects, restarting: changes.restarting },
     reload: () => changes.refresh(),
     retry: () => changes.retry(),
     show: id => changes.show(id),
@@ -115,6 +119,9 @@ export function apply(ctx: Context): void {
     protectionOn: () => changes.protectionOn(),
     protectionOff: confirmed => changes.protectionOff(confirmed),
     noticeSeen: id => changes.noticeSeen(id),
+    restart: stopChats => changes.restart(stopChats),
+    cancelRestart: () => changes.cancelRestart(),
+    reloadPage: () => { location.reload() },
   }
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section', id: CHANGES_SECTION_ID, order: CHANGES_SECTION_ORDER, label: () => t('nav'), locale: NS,
