@@ -48,8 +48,8 @@ The first time a chat hands an agent a task in a workspace, Delorun asks at the 
 <summary>Edge cases</summary>
 
 - If the chat is on Read Only, then no agent starts — change the chat's permission first.
-- If the chat is on Full access, then every approval is refused without asking, so an agent starts only in a workspace where you allowed it.
-- If you run `delorun headless`, then no one can be asked, so an agent starts only where you allowed it.
+- If the chat is on Full access, then the agent starts without asking, because you already chose to run without prompts, and the chat shows "Started without asking · Full access". To make a Full access chat ask again, turn off **Full access chats start agents without asking** in Settings, Safety, External agents; the agent then starts only in a workspace where you allowed it.
+- If you run `delorun headless`, then no one can be asked, so an agent starts only where you allowed it or the run has full access.
 - If a task needs longer than the time limit, then it stops. The limit is 30 minutes unless you change it under [Advanced options](#advanced-options).
 
 </details>

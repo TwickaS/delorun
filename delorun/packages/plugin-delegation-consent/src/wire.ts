@@ -23,6 +23,8 @@ export interface DelegationConsentSettings {
   readonly enabled: boolean
   /** How long one external agent run may take before it is stopped, in whole minutes; a change applies from the next run. */
   readonly runTimeoutMinutes: number
+  /** Whether a chat in Full access (approval policy `never` and sandbox mode `danger-full-access`) starts an external agent without asking ([`Config`](./index.ts)). */
+  readonly fullAccessStartsAgents: boolean
 }
 
 /** The run time limit's bounds and default, in whole minutes: one minute to one day. */

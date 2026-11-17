@@ -423,6 +423,45 @@ describe('the external-agent consent\'s settings row', () => {
   })
 })
 
+describe('a computer-only switch whose safe value is false', () => {
+  /** The shape of `@delorun/plugin-delegation-consent`'s full-access start. */
+  const FULL: ComputerOnlySwitch = { ns: 'delorun-delegation-consent', field: 'fullAccessStartsAgents', label: 'the full-access start', safeValue: false }
+  const ON = { kind: 'deny', reason: 'loopback-required: turning the full-access start on' }
+  const ALLOW = { kind: 'allow' }
+  const unlocked = createCondition(facts({ elevationOf: () => ({ id: 'elevation-1' }), computerOnlySwitches: () => [FULL] }), DEVICE)
+  const write = (action: string, args: Record<string, unknown>) => unlocked({ action: action as RemoteAccessAction, resource: GLOBAL, args })
+  const ns = FULL.ns
+
+  it('names the direction in its refusal', () => {
+    expect(switchOffRefusal('the full-access start', false)).toBe(ON.reason)
+    expect(switchOffRefusal('the full-access start')).toBe('loopback-required: turning the full-access start off')
+  })
+
+  it('is never turned on from a device, even under an unlock, through any settings write', () => {
+    expect(write('settings/mutate', { ns, ops: [{ op: 'set', path: ['fullAccessStartsAgents'], value: true }] })).toEqual(ON)
+    expect(write('settings/mutate', { ns, ops: [{ op: 'unset', path: ['fullAccessStartsAgents'] }] })).toEqual(ON)
+    expect(write('settings/mutate', { ns, ops: [{ op: 'set', path: [], value: { fullAccessStartsAgents: true } }] })).toEqual(ON)
+    expect(write('settings/mutate', { ns, ops: [{ op: 'set', path: [], value: { enabled: true } }] })).toEqual(ON)
+    expect(write('settings/update', { ns, patch: { fullAccessStartsAgents: true } })).toEqual(ON)
+    expect(write('settings/update', { ns, patch: { fullAccessStartsAgents: 'false' } })).toEqual(ON)
+    expect(write('settings/replace', { ns, section: { enabled: true, runTimeoutMinutes: 45 } })).toEqual(ON)
+    expect(write('settings/replace', { ns, section: { enabled: true, fullAccessStartsAgents: true } })).toEqual(ON)
+    expect(write('settings/update', { ns, patch: 'unreadable' })).toEqual(ON)
+  })
+
+  it('takes a literal false and every other field from an unlocked device', () => {
+    expect(write('settings/mutate', { ns, ops: [{ op: 'set', path: ['fullAccessStartsAgents'], value: false }] })).toEqual(ALLOW)
+    expect(write('settings/mutate', { ns, ops: [{ op: 'set', path: ['runTimeoutMinutes'], value: 45 }] })).toEqual(ALLOW)
+    expect(write('settings/update', { ns, patch: { fullAccessStartsAgents: false, runTimeoutMinutes: 45 } })).toEqual(ALLOW)
+    expect(write('settings/update', { ns, patch: { enabled: true } })).toEqual(ALLOW)
+    expect(write('settings/replace', { ns, section: { enabled: true, fullAccessStartsAgents: false } })).toEqual(ALLOW)
+    // The consent's own switch keeps its direction beside it.
+    const both = createCondition(facts({ elevationOf: () => ({ id: 'elevation-1' }), computerOnlySwitches: () => [CONSENT, FULL] }), DEVICE)
+    expect(both({ action: 'settings/update', resource: GLOBAL, args: { ns, patch: { enabled: false } } })).toEqual({ kind: 'deny', reason: switchOffRefusal(CONSENT.label) })
+    expect(both({ action: 'settings/update', resource: GLOBAL, args: { ns, patch: { enabled: true, fullAccessStartsAgents: false } } })).toEqual(ALLOW)
+  })
+})
+
 describe('a plugin-manager call that names a protected row', () => {
   const NEVER = { kind: 'deny', reason: PROTECTED_ROW_REFUSAL }
   const unlocked = (overrides: Partial<ReachAccessFacts> = {}) => createCondition(facts({ elevationOf: () => ({ id: 'elevation-1' }), ...overrides }), DEVICE)

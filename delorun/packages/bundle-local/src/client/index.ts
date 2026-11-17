@@ -34,6 +34,10 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 import { installGateUnlock } from './gate-unlock.ts'
 import { applyUnlockConnection } from './unlock-connection.ts'
+// Type-only: the Chat node slot and its keyed data map.
+import type {} from '@deepseek-ai/dsh-client-ui-chat/client'
+// Type-only: the ctx.uiConversation Context merge.
+import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 // Type-only: the ctx.locale Context merge.
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 // Type-only: the ctx.slots Context merge.
@@ -110,6 +114,8 @@ import { HOME_AUTH_ROW } from '@delorun/home-auth/wire'
 import { McpWaitingNotice, type McpWaitingNoticeInjected } from './McpWaitingNotice.tsx'
 import { DangerousBadge, type DangerousBadgeInjected } from './DangerousBadge.tsx'
 import { ExternalAgentsSection, type ExternalAgentsSectionInjected } from './ExternalAgentsSection.tsx'
+import { approvalPolicyDefinition, FULL_ACCESS_START_KIND, fullAccessStartDefinition } from './full-access-start.ts'
+import { FullAccessStartNotice } from './FullAccessStartNotice.tsx'
 import { PermissionsSection, type PermissionsSectionInjected } from './PermissionsSection.tsx'
 import { DELEGATION_CONSENT_ROW, type DelegationConsentSettings } from '@delorun/plugin-delegation-consent/wire'
 
@@ -760,6 +766,14 @@ export function applyConsents(ctx: Context, fetch: HostFetch): void {
     locale: CONSENTS_NS,
     inject: permissionsFace,
   }, PermissionsSection))
+  // The line under an external agent's start in a Full access chat; a studio without the conversation shows none.
+  ctx.inject(['uiConversation'], (conversation) => {
+    conversation.effect(() => conversation.uiConversation.events.register(approvalPolicyDefinition), 'delorun-consents: approval policy record')
+    conversation.effect(() => conversation.uiConversation.events.register(fullAccessStartDefinition), 'delorun-consents: full-access start line')
+    conversation.effect(() => conversation.slots.inject('conversation.chat.node', () => conversation.slots.register({
+      name: 'conversation.chat.node', key: FULL_ACCESS_START_KIND, locale: CONSENTS_NS,
+    }, FullAccessStartNotice)), 'delorun-consents: full-access start row')
+  })
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: EXTERNAL_AGENTS_SECTION_ID,

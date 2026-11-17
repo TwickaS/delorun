@@ -34,12 +34,19 @@ export interface Config {
   readonly enabled: Volatile<boolean>
   /** How long one external agent run may take before it is stopped, in whole minutes; a change applies from the next run. */
   readonly runTimeoutMinutes: Volatile<number>
+  /**
+   * Whether a chat in Full access, with approval policy `never` and sandbox mode `danger-full-access` together, starts
+   * an external agent without asking and without a workspace grant. On by default: such a chat is the person's choice
+   * to run without prompts. Off, the start is refused unless the workspace allows the agent. Only the home's own computer turns it on.
+   */
+  readonly fullAccessStartsAgents: Volatile<boolean>
 }
 
 /** The schema of {@link Config}; `enabled` defaults to the switch's parity value, off. */
 export const Config: z<Partial<DelegationConsentSettings>, Config> = z.object({
   enabled: z.boolean().volatile().default(false),
   runTimeoutMinutes: z.natural().min(RUN_TIMEOUT_MINUTES.min).max(RUN_TIMEOUT_MINUTES.max).volatile().default(RUN_TIMEOUT_MINUTES.default),
+  fullAccessStartsAgents: z.boolean().volatile().default(true),
 })
 
 /**
@@ -60,6 +67,17 @@ export const EXTERNAL_AGENT_CONSENT_SWITCH: ComputerOnlySwitch = Object.freeze({
 })
 
 /**
+ * The consent's `fullAccessStartsAgents` field as a switch only the home's own computer turns on. A device may write
+ * `false`, which makes Full access chats ask again as the grants require; its write of `true` is refused, unlocked or not.
+ */
+export const FULL_ACCESS_STARTS_AGENTS_SWITCH: ComputerOnlySwitch = Object.freeze({
+  ns: DELEGATION_CONSENT_ROW,
+  field: 'fullAccessStartsAgents',
+  label: 'external agents starting without asking in Full access chats',
+  safeValue: false,
+})
+
+/**
  * Mount the consent's service, routes, tool guard and computer-only switch in a scope of their own.
  * @param ctx - the scope, disposed when the switch turns off.
  * @param config - the row's live configuration.
@@ -70,7 +88,7 @@ function mountConsent(ctx: Context, config: Config): void {
   }))
   let disposed = false
   ctx.effect(() => () => { disposed = true })
-  ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => config.runTimeoutMinutes.get() * 60_000, env: process.env, now: Date.now })
+  ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => config.runTimeoutMinutes.get() * 60_000, fullAccessStartsAgents: () => config.fullAccessStartsAgents.get(), env: process.env, now: Date.now })
     .await().catch((error: unknown) => {
       // The row stays active, so the declaring-row check of the subagent runtime cannot see this failure; a refusing
       // service takes the seam's slot, and every start is refused until the row starts again.
@@ -87,6 +105,7 @@ function mountConsent(ctx: Context, config: Config): void {
   })
   ctx.inject(['homeAuth'], (scope) => {
     scope.effect(() => scope.homeAuth.registerComputerOnlySwitch(EXTERNAL_AGENT_CONSENT_SWITCH), 'delegation consent: computer-only switch')
+    scope.effect(() => scope.homeAuth.registerComputerOnlySwitch(FULL_ACCESS_STARTS_AGENTS_SWITCH), 'delegation consent: computer-only full-access switch')
   })
 }
 
