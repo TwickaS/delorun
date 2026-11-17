@@ -93,6 +93,15 @@ function specifierOf(file: string): string {
 /** The brand components the replica's still draws outside `packages/brand/src/replica/`. */
 const BRAND_STILL_COMPONENTS = ['Frame', 'TabList', 'Button', 'Pill'] as const
 
+/** The stylesheets of the real section a still draws (Changes) and of the upstream primitives it renders, from the root. */
+const STILL_SECTION_STYLES = [
+  'delorun/packages/plugin-changes/src/client/ChangesSection.module.css',
+  'packages/client/ui-primitives/src/Button.module.css',
+  'packages/client/ui-primitives/src/Tag.module.css',
+  'packages/client/ui-primitives/src/StateDot.module.css',
+  'packages/client/ui-primitives/src/CommandText.module.css',
+] as const
+
 /**
  * Every CSS module of a directory and its subdirectories, but a `preview/` one.
  * @param dir - the directory.
@@ -105,20 +114,22 @@ function cssModules(dir: string): string[] {
 }
 
 /**
- * The `virtual:replica-island` module. On the server it renders `ReplicaLive` to static markup, led by a `<style>` with
- * every style the markup uses (the replica's CSS modules and the brand components' it draws, compiled with the same
- * class names), so the markup is styled before any script runs. In the browser it is empty: the live replica's chunk
- * brings its own styles before it replaces the markup.
+ * The `virtual:replica-island` module. On the server it renders `ReplicaLive` to static markup with each slot's still
+ * drawn from the session's fixture (`StillScene.tsx`), led by a `<style>` with every style the markup uses (the
+ * replica's CSS modules, the brand components' and the real section's it draws, compiled with the same class names, and
+ * Soft's scoped tokens, which the real section reads), so the markup is styled before any script runs. In the browser it is
+ * empty: the live replica's chunk brings its own styles before it replaces the markup.
  * @param server - whether the module is for the server's render.
+ * @param tokens - Soft's scoped tokens.
  * @returns the module's source.
  */
-function island(server: boolean): string {
+function island(server: boolean, tokens: string): string {
   if (!server) return "export function island() { return '' }\n"
-  const styles = [...cssModules(here('../')), ...cssModules(`${ROOT}delorun/packages/brand/src/replica`), ...BRAND_STILL_COMPONENTS.map(name => `${ROOT}delorun/packages/brand/src/components/${name}.module.css`)]
-  return `import { createElement } from 'react'\nimport { renderToStaticMarkup } from 'react-dom/server'\nimport { ReplicaLive } from ${JSON.stringify(here('../ReplicaLive.tsx'))}\n`
+  const styles = [...cssModules(here('../')), ...cssModules(`${ROOT}delorun/packages/brand/src/replica`), ...BRAND_STILL_COMPONENTS.map(name => `${ROOT}delorun/packages/brand/src/components/${name}.module.css`), ...STILL_SECTION_STYLES.map(file => `${ROOT}${file}`)]
+  return `import { createElement } from 'react'\nimport { renderToStaticMarkup } from 'react-dom/server'\nimport { ReplicaLive } from ${JSON.stringify(here('../ReplicaLive.tsx'))}\nimport { stillMarkup } from ${JSON.stringify(here('../StillScene.tsx'))}\n`
     + styles.map((file, index) => `import style${String(index)} from ${JSON.stringify(`${file}?inline`)}\n`).join('')
-    + `const STYLE = [${styles.map((_, index) => `style${String(index)}`).join(', ')}].join('')\n`
-    + 'export function island(props) { return `<style>${STYLE}</style>` + renderToStaticMarkup(createElement(ReplicaLive, props)) }\n'
+    + `const STYLE = [${JSON.stringify(tokens)}, ${styles.map((_, index) => `style${String(index)}`).join(', ')}].join('')\n`
+    + 'export function island(props) { return `<style>${STYLE}</style>` + renderToStaticMarkup(createElement(ReplicaLive, { ...props, stills: stillMarkup(props) })) }\n'
 }
 
 /**
@@ -177,7 +188,7 @@ export function replicaPlugins(options: ReplicaBuildOptions): Plugin[] {
     },
     async load(id, options) {
       switch (id) {
-        case '\0virtual:replica-island': return island(options?.ssr === true || this.environment.config.consumer === 'server')
+        case '\0virtual:replica-island': return island(options?.ssr === true || this.environment.config.consumer === 'server', buildTokens({ ...tokenInputs(ROOT, here('../')), stylesheets: STILL_SECTION_STYLES.map(file => `${ROOT}${file}`) }, 'soft'))
         case '\0virtual:replica-strings': return (await productModules()).strings
         case '\0virtual:replica-icons': return (await productModules()).icons
         case '\0virtual:replica-tokens.css': return buildTokens(tokenInputs(ROOT, here('../')))

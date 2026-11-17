@@ -129,8 +129,13 @@ export interface ChapterFile {
   readonly workspace: string
   /** The chat's title, and the titles of the older chats the sidebar lists under it. */
   readonly chats: readonly string[]
-  /** The first state the studio shows, before the first chapter's steps. */
+  /** The first state the studio shows, before the first chapter's steps; the still the frame shows until the replay plays. */
   readonly start: Pick<StudioState, 'shown' | 'changes' | 'groups' | 'versions'> & { readonly screen: StudioScreen }
+  /**
+   * The chapter a replay that does not play shows first: under reduced motion, and with scripts off, where the still
+   * draws its last state. That state shows the same screen as {@link start}.
+   */
+  readonly resting: number
   readonly chapters: readonly Chapter[]
 }
 

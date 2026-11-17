@@ -1,6 +1,7 @@
 /**
  * The chapters of "every change is one step": what each shows, its caption and its pacing. State names point into
- * `changes-and-versions.session.ts`.
+ * `changes-and-versions.session.ts`. Each chapter looks different from the one before within its first moments: the
+ * Undo chapter opens its confirmation at once, and the terminal chapter has its command typed within half a second.
  * @module @delorun/website/replica/sessions/changes-and-versions.chapters
  */
 import type { ChapterFile } from '../model.ts'
@@ -11,6 +12,7 @@ export const CHAPTERS: ChapterFile = {
   workspace: 'shop-api',
   chats: ['Make the theme warmer', 'Count words in my notes', 'Tidy the README'],
   start: { screen: 'changes', shown: 0, changes: 'two', groups: ['recent.heading'], versions: 'list' },
+  resting: 0,
   chapters: [
     {
       id: 'listed',
@@ -23,8 +25,8 @@ export const CHAPTERS: ChapterFile = {
       title: 'Undo one',
       caption: 'Undo takes one change back and asks first. The other change stays.',
       steps: [
-        { kind: 'wait', hold: 1200 },
-        { kind: 'press', target: { dictionary: 'changes', key: 'confirm.undo', within: '[data-change-id="chg-2"]' }, hold: 2600 },
+        { kind: 'wait', hold: 200 },
+        { kind: 'press', target: { dictionary: 'changes', key: 'confirm.undo', within: '[data-change-id="chg-1"]' }, hold: 3400 },
         { kind: 'press', target: { dictionary: 'changes', key: 'confirm.undo', within: '[role="dialog"]' }, hold: 400 },
         { kind: 'changes', state: 'undone', groups: ['recent.heading'], hold: 3200 },
       ],
@@ -42,8 +44,8 @@ export const CHAPTERS: ChapterFile = {
       title: 'From the terminal',
       caption: 'In a terminal, delorun logs shows where Delorun keeps its logs, then the latest records.',
       steps: [
-        { kind: 'screen', screen: 'terminal', hold: 700 },
-        { kind: 'command', command: 'delorun logs', perChar: 70, hold: 5600 },
+        { kind: 'screen', screen: 'terminal', hold: 0 },
+        { kind: 'command', command: 'delorun logs', perChar: 30, hold: 6400 },
       ],
     },
   ],

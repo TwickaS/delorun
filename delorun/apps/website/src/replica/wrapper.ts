@@ -12,3 +12,6 @@ export const WRAPPER_SELECTOR = `[${WRAPPER_ATTRIBUTE}]`
 
 /** The props that mark a wrapper element. */
 export const WRAPPER_PROPS = { [WRAPPER_ATTRIBUTE]: '' } as const
+
+/** The attribute that marks a still's element, carrying its width; `ReplicaFrame` reads the server's stills by it. */
+export const STILL_ATTRIBUTE = 'data-replica-still'

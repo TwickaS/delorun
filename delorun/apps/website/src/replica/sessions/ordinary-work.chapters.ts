@@ -1,6 +1,7 @@
 /**
  * The chapters of "a piece of ordinary work": what each shows, its caption and its pacing. The event indexes point into
- * `ordinary-work.session.ts`.
+ * `ordinary-work.session.ts`. The replay opens on the question already asked and the agent's first reply, so the frame
+ * is never an empty chat; a replay that does not play rests on the answer.
  * @module @delorun/website/replica/sessions/ordinary-work.chapters
  */
 import type { ChapterFile } from '../model.ts'
@@ -10,18 +11,15 @@ export const CHAPTERS: ChapterFile = {
   session: 'ordinary-work',
   workspace: 'shop-api',
   chats: ['Count and run the tests', 'Tidy the README', 'Why is the build slow?'],
-  start: { screen: 'chat', shown: 0, changes: '', groups: [], versions: '' },
+  start: { screen: 'chat', shown: 4, changes: '', groups: [], versions: '' },
+  resting: 3,
   chapters: [
     {
       id: 'ask',
       title: 'Ask',
       caption: 'You ask for a piece of work in a chat, in your own words.',
       steps: [
-        { kind: 'wait', hold: 600 },
-        { kind: 'type', text: 'How many tests does this project have, and do they pass?', perChar: 38, hold: 500 },
-        { kind: 'send', hold: 0 },
-        { kind: 'show', through: 1, hold: 1400 },
-        { kind: 'show', through: 3, hold: 1800 },
+        { kind: 'wait', hold: 3200 },
       ],
     },
     {

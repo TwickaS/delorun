@@ -37,6 +37,11 @@ describe('the replica token block', () => {
     expect([...read].filter(name => !declaredNames.has(name))).toEqual([])
   })
 
+  it('declares the Delorun look\'s spacing steps, which the real sections\' cards read for their padding', () => {
+    const light = new Set(declared(WRAPPER_SELECTOR))
+    expect(['--delorun-space-2', '--delorun-space-4', '--delorun-space-7'].filter(name => !light.has(name))).toEqual([])
+  })
+
   it('has a rule for every look that differs from Soft, in each scheme, keyed on the page root', () => {
     // The custom look with the peach accent draws exactly Soft, so the block needs no rule for it.
     const same = new Set(['[data-look="soft"]', '[data-look="custom"][data-accent="peach"]'])

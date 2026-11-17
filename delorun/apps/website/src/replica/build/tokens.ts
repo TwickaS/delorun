@@ -1,5 +1,5 @@
 /**
- * The replica's scoped token block: the studio's `--dsw-*` values that the replica's stylesheets read (and every token
+ * The replica's scoped token block: the studio's `--dsw-*` and `--delorun-*` values that the replica's stylesheets read (and every token
  * those values refer to), for every look the site offers in light and dark, scoped to the replica's wrapper. It is made
  * at build time from the Theme plugin's own data (`STOCK_TOKENS`, the layers `themeLayers` gives a look, and upstream's
  * base sheets), for the looks and selectors `site-design`'s looks stylesheet uses, so the replica follows the visitor's
@@ -23,9 +23,15 @@ import { WRAPPER_SELECTOR } from '../wrapper.ts'
 
 type Values = Record<string, string>
 
+/**
+ * A stylesheet's read of a studio token: upstream's `--dsw-*` values, and the `--delorun-*` steps (spacing, density) the
+ * Delorun look adds, which Delorun's own sections read for their padding.
+ */
+const STUDIO_TOKEN = /var\((--(?:dsw|delorun)-[\w-]+)/g
+
 /** Where the block's inputs are, as absolute paths. */
 export interface TokenInputs {
-  /** Directories whose `.css` files the replica loads; every `var(--dsw-*)` they read is kept. */
+  /** Directories, or single `.css` files, the replica loads; every `var(--dsw-*)` and `var(--delorun-*)` they read is kept. */
   readonly stylesheets: readonly string[]
   /** Upstream's `ui-theme/src/styles/` directory, whose base sheets set tokens outside the token data. */
   readonly upstreamStyles: string
@@ -68,10 +74,11 @@ function rules(css: string): { readonly selector: string, readonly values: Value
 
 /**
  * Every `.css` file under a directory.
- * @param dir - the directory.
+ * @param dir - the directory, or one `.css` file.
  * @returns the files' absolute paths.
  */
 function stylesheets(dir: string): string[] {
+  if (dir.endsWith('.css')) return [dir]
   return readdirSync(dir).flatMap((name) => {
     const path = join(dir, name)
     if (statSync(path).isDirectory()) return name === 'node_modules' ? [] : stylesheets(path)
@@ -135,14 +142,17 @@ function delta(values: Values, base: Values, names: ReadonlySet<string>): Values
 /**
  * Build the token block.
  * @param inputs - where the inputs are.
+ * @param looks - `all` for the live studio's block; `soft` for the still the server inlines in the page, which holds
+ *   Soft in both schemes and no brand roles, for the stylesheets `inputs` names alone. With scripts off the page is
+ *   always Soft, and the brand pieces of the still keep the page's own look until the live studio replaces them.
  * @returns the stylesheet's text.
  */
-export function buildTokens(inputs: TokenInputs): string {
+export function buildTokens(inputs: TokenInputs, looks: 'all' | 'soft' = 'all'): string {
   const read = new Set<string>()
-  for (const dir of inputs.stylesheets) for (const file of stylesheets(dir)) for (const match of readFileSync(file, 'utf8').matchAll(/var\((--dsw-[\w-]+)/g)) read.add(match[1]!)
+  for (const dir of inputs.stylesheets) for (const file of stylesheets(dir)) for (const match of readFileSync(file, 'utf8').matchAll(STUDIO_TOKEN)) read.add(match[1]!)
   const brandRoles = rules(readFileSync(inputs.brandTokens, 'utf8')).filter(rule => rule.selector === ':where(:root)').flatMap(rule => Object.entries(rule.values))
   const brand = Object.fromEntries(brandRoles.filter(([, value]) => value.includes('var(--dsw-')))
-  for (const value of Object.values(brand)) for (const match of value.matchAll(/var\((--dsw-[\w-]+)/g)) read.add(match[1]!)
+  if (looks === 'all') for (const value of Object.values(brand)) for (const match of value.matchAll(STUDIO_TOKEN)) read.add(match[1]!)
 
   const extras = { light: {} as Values, dark: {} as Values }
   for (const file of ['base.css', 'focus.css', 'gradient-shadow-text.css']) {
@@ -159,9 +169,9 @@ export function buildTokens(inputs: TokenInputs): string {
   const softDark = lookValues(soft, 'dark', extras.dark)
   const names = closure(read, [softLight, softDark, ...LOOKS.flatMap(look => [lookValues(look, 'light', extras.light), lookValues(look, 'dark', extras.dark)])])
   const at = WRAPPER_SELECTOR
-  let css = block(at, delta(softLight, {}, names), 'color-scheme:light;')
-    + block(`.dark ${at}`, delta(softDark, softLight, names), 'color-scheme:dark;')
-    + block(at, brand)
+  const softBlocks = block(at, delta(softLight, {}, names), 'color-scheme:light;') + block(`.dark ${at}`, delta(softDark, softLight, names), 'color-scheme:dark;')
+  if (looks === 'soft') return softBlocks
+  let css = softBlocks + block(at, brand)
   for (const look of LOOKS) {
     if (look === soft) continue
     css += block(`${selector(look)}:not(.dark) ${at}`, delta(lookValues(look, 'light', extras.light), softLight, names))
