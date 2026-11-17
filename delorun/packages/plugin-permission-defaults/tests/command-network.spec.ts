@@ -270,37 +270,41 @@ describe('the route hook', () => {
   /** The service mounted with a `homeAuth` that places every request on one listener and reports dangerous mode. */
   async function withListener(listener: string, dangerous = false): Promise<Context> {
     const { ctx } = await mounted()
-    ctx.provide('homeAuth', { arrivalOf: (request: IncomingMessage) => ({ listener, host: request.headers.host, source: 'test' }), dangerousMode: () => dangerous, pinEnabled: () => false, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : undefined) } as never)
+    ctx.provide('homeAuth', { arrivalOf: (request: IncomingMessage) => ({ listener, host: request.headers.host, source: 'test' }), dangerousMode: () => dangerous, pinEnabled: () => false, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : deviceId === 'grace-phone' ? { id: 'g', grace: true } : undefined) } as never)
     return ctx
   }
 
-  it('lets an unlocked device through to either route only while dangerous mode holds, and refuses a locked one at the peer check', async () => {
+  it('lets a reach device through the hook, reads for any approved device, and answers a locked device ELEVATION_REQUIRED on the change, in either dangerous mode', async () => {
     const { ctx, routes } = await mounted()
     let dangerous = false
-    ctx.provide('homeAuth', { arrivalOf: (request: IncomingMessage) => ({ listener: 'reach-tailscale-private', host: request.headers.host, source: 'test' }), dangerousMode: () => dangerous, pinEnabled: () => false, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : undefined) } as never)
+    ctx.provide('homeAuth', { arrivalOf: (request: IncomingMessage) => ({ listener: 'reach-tailscale-private', host: request.headers.host, source: 'test' }), dangerousMode: () => dangerous, pinEnabled: () => false, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : deviceId === 'grace-phone' ? { id: 'g', grace: true } : undefined) } as never)
     const device = (deviceId: string) => ({ principal: { kind: 'reach-device', deviceId, listener: 'reach-tailscale-private' } })
-    for (const url of [NETWORK_LIST_PATH, NETWORK_SET_PATH]) {
-      // Pins the mode check: with the mode off the hook refuses the device before any route.
-      dangerous = false
-      const off = arrival(url, 'home.example.ts.net')
-      const refused = vi.fn(async () => {})
-      await ctx.waterfall('connection/request', off.request, off.response, refused)
-      expect([url, refused.mock.calls.length, off.writeHead.mock.calls[0]?.[0]]).toEqual([url, 0, 403])
-      dangerous = true
-      const { request, response, writeHead } = arrival(url, 'home.example.ts.net')
-      const next = vi.fn(async () => {})
-      await ctx.waterfall('connection/request', request, response, next)
-      expect([url, next.mock.calls.length, writeHead.mock.calls.length]).toEqual([url, 1, 0])
-      const admit = routes.get(url)?.admitPeer
-      expect(admit?.(new Request(`http://localhost${url}`), device('unlocked-phone'))).toBe(true)
-      expect(admit?.(new Request(`http://localhost${url}`), device('locked-phone'))).toBe(false)
-      expect(admit?.(new Request(`http://localhost${url}`), { principal: { kind: 'anonymous' } })).toBe(false)
+    for (const mode of [false, true]) {
+      dangerous = mode
+      for (const url of [NETWORK_LIST_PATH, NETWORK_SET_PATH]) {
+        const { request, response, writeHead } = arrival(url, 'home.example.ts.net')
+        const next = vi.fn(async () => {})
+        await ctx.waterfall('connection/request', request, response, next)
+        expect([url, next.mock.calls.length, writeHead.mock.calls.length]).toEqual([url, 1, 0])
+        expect(routes.get(url)?.admitPeer?.(new Request(`http://localhost${url}`), { principal: { kind: 'anonymous' } })).toBe(false)
+      }
+      // Reading is for any approved device.
+      expect(routes.get(NETWORK_LIST_PATH)?.admitPeer?.(new Request(`http://localhost${NETWORK_LIST_PATH}`), device('locked-phone'))).toBe(true)
+      // Pins the unlock check: the change is admitted to the route and refused by it for a locked device.
+      const set = routes.get(NETWORK_SET_PATH)!
+      const asked = (deviceId: string) => {
+        const call = new Request(`http://localhost${NETWORK_SET_PATH}`, { method: 'POST', body: '{}' })
+        return set.admitPeer?.(call, device(deviceId)) === true ? set.fetch(call) : Promise.resolve(new Response('forbidden', { status: 403 }))
+      }
+      const locked = await asked('locked-phone')
+      expect([locked.status, await locked.json()]).toEqual([403, expect.objectContaining({ error: 'ELEVATION_REQUIRED' })])
+      expect((await asked('unlocked-phone')).status).not.toBe(403)
     }
   })
 
-  it('refuses a device\'s request and one under another Host for either route with LOOPBACK_REQUIRED, however its path is spelled', async () => {
+  it('refuses a request under another Host for either route with LOOPBACK_REQUIRED, however its path is spelled', async () => {
     const spellings = [NETWORK_LIST_PATH, `${NETWORK_SET_PATH}?confirmed=1`, '/x/../api/delorunNetwork.list', '/api/x/%2e%2e/delorunNetwork.set', '/api\\delorunNetwork.list', 'http://127.0.0.1:3080/api/delorunNetwork.list']
-    for (const [listener, host] of [['reach-tailscale-private', '127.0.0.1:3080'], ['loopback', 'evil.example']] as const) {
+    for (const [listener, host] of [['loopback', 'evil.example']] as const) {
       const ctx = await withListener(listener)
       for (const url of spellings) {
         const { request, response, writeHead, end } = arrival(url, host)

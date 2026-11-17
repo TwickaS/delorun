@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Claude Code 与 Codex 钩子",
+    "description": "在 Delorun 对话的相同环节运行你的 Claude Code 设置和 Codex 钩子文件里的钩子，并加载 Claude Code 模组"
+  }
+}

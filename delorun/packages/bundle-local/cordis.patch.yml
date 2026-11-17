@@ -182,6 +182,13 @@
           - '@delorun/bundle-local'
           - '@delorun/bundle-studio'
 
+    # Plugin packs (A403, A404): the Host's install queue for plugins outside the default install, and the `packs`
+    # remote that the downloads panel, Plugins and onboarding call.
+    - id: delorun-packs
+      name: '@delorun/plugin-packs'
+      config:
+        concurrency: 2
+
     # The rename_workspace tool (C16 switch `rename_workspace_tool`): it renames a
     # workspace through upstream's workspace registry, as the studio's rename
     # does, and asks the person inside the call, so only an allowed-once answer
@@ -244,6 +251,11 @@
 - insert:
     - id: delorun-profile-versions
       name: '@delorun/bundle-local/profile-versions'
+
+    # Needs setup: which rows of an optional bundle lack a program, a setting or a platform they need, read from each
+    # bundle's `delorun.requires`. Read-only; Plugins shows the answer beside the row.
+    - id: delorun-requirements
+      name: '@delorun/bundle-local/requirements'
 
     # Report a problem: the studio's details route (versions, system, redacted recent errors and the issue form's address). The row
     # makes no request; the person opens the pre-filled issue and sends it.

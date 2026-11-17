@@ -1,10 +1,12 @@
-/** The copy of the PIN lock screen that covers the studio on a device. */
+/** The copy of the PIN lock screen that a device shows when an action needs an unlock. */
 
 /** English dictionary. */
 export const en = {
-  'title': 'Delorun is locked',
-  'lead.pin': 'Enter your PIN to open the studio on this device.',
-  'lead.passcode': 'Enter your passcode to open the studio on this device.',
+  'title': 'Unlock sensitive actions',
+  'lead.pin': 'This needs your PIN. Enter it to go on; the studio stays open without it.',
+  'lead.passcode': 'This needs your passcode. Enter it to go on; the studio stays open without it.',
+  'notNow': 'Not now',
+  'close': 'Close',
   'label.pin': 'PIN',
   'label.passcode': 'Passcode',
   'unlock': 'Unlock',
@@ -30,9 +32,11 @@ export type PinLocaleKey = keyof typeof en
 
 /** Chinese dictionary. */
 export const zh: typeof en = {
-  'title': 'Delorun 已锁定',
-  'lead.pin': '输入 PIN，在这台设备上打开 studio。',
-  'lead.passcode': '输入密码短语，在这台设备上打开 studio。',
+  'title': '解锁敏感操作',
+  'lead.pin': '这需要你的 PIN。输入后即可继续；不输入也可以继续使用 studio。',
+  'lead.passcode': '这需要你的密码短语。输入后即可继续；不输入也可以继续使用 studio。',
+  'notNow': '暂不',
+  'close': '关闭',
   'label.pin': 'PIN',
   'label.passcode': '密码短语',
   'unlock': '解锁',

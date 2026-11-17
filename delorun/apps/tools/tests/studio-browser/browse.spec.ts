@@ -137,7 +137,7 @@ describe('browse adapter check', () => {
 })
 
 describe('browse adapter run', () => {
-  const spec = { origin: ORIGIN, code: 'return 1', timeoutMs: 5000 }
+  const spec = { origin: ORIGIN, startUrl: `${ORIGIN}/`, code: 'return 1', timeoutMs: 5000 }
 
   it('runs create, execute, delete and removes the script file', () => {
     const h = harness((_file, args) => (args[0] === 'execute' ? { status: 0, stdout: '"probe"\nPage: a -> b\n', stderr: '' } : undefined))

@@ -39,7 +39,7 @@ import type { IdentityFactor, LoopbackRequiredAction } from '@delorun/contract-o
 import { stampListener } from '@delorun/home'
 import { ADMISSION_REFUSAL_STATUS } from '@delorun/contract-admission'
 import { pathnameOf, REACH_PRE_LOGIN_ROUTES, sessionCookie, signInLocation, targetOf } from './reach-routes.ts'
-import { createReachAccessPolicy, protectedPluginsIn, REACH_DEVICE, reachDevicePrincipal, type DefaultPermission, type PermissionLevel, type ReachDevicePrincipal } from './reach-access.ts'
+import { COMPUTER_ONLY_ROW_MODULES, createReachAccessPolicy, protectedPluginsIn, REACH_DEVICE, reachDevicePrincipal, type DefaultPermission, type PermissionLevel, type ReachDevicePrincipal } from './reach-access.ts'
 import { reachesDevicePath } from './reach-paths.ts'
 import { HOME_AUTH_HTTP_STATUS, HomeAuthError } from './errors.ts'
 import { takeUnlockToken } from './unlock-token.ts'
@@ -171,7 +171,18 @@ export function protectedEntryIdsOf(ctx: Context): ReadonlySet<string> | undefin
     if (listed === undefined) return undefined
     for (const name of listed) modules.add(name)
   }
-  return new Set(entries.filter(row => modules.has(row.options.name)).map(row => row.id))
+  return new Set(entries.filter(row => modules.has(row.options.name)).flatMap(row => typeof row.options.id === 'string' ? [row.id, row.options.id] : [row.id]))
+}
+
+/**
+ * The Loader entry ids of the rows whose module is in {@link COMPUTER_ONLY_ROW_MODULES}, and each such row's own `id`
+ * option, which names its settings namespace (a row `id: sandbox` has the entry id `include:sandbox`).
+ * @param ctx - a context of the running profile.
+ * @returns the ids and namespaces, none without a Loader.
+ */
+export function computerOnlyEntryIdsOf(ctx: Context): ReadonlySet<string> {
+  const rows = [...ctx.get('loader')?.entries() ?? []].filter(row => Object.hasOwn(COMPUTER_ONLY_ROW_MODULES, row.options.name))
+  return new Set(rows.flatMap(row => typeof row.options.id === 'string' ? [row.id, row.options.id] : [row.id]))
 }
 
 /** What {@link keyRefsOf} reads of the model provider directory. */
@@ -275,6 +286,7 @@ export class HomeAuthAuthenticator extends Authenticator {
         },
         delorunHome: ctx.homeAuth.delorunHome,
         elevationOf: (deviceId, listener) => ctx.homeAuth.elevationOf(deviceId, listener),
+        touchUnlock: id => { ctx.homeAuth.touchUnlock(id) },
         pageUnlockOf: unlockId => ctx.homeAuth.pageUnlockOf(unlockId),
         pinEnabled: () => ctx.homeAuth.pinEnabled(),
         keyRefs: () => keyRefsOf(access),
@@ -283,6 +295,7 @@ export class HomeAuthAuthenticator extends Authenticator {
         pinLiftedSettings: lifts => ctx.homeAuth.recordPinLifts(lifts),
         computerOnlySwitches: () => ctx.homeAuth.computerOnlySwitches(),
         protectedEntryIds: () => protectedEntryIdsOf(ctx),
+        computerOnlyEntryIds: () => computerOnlyEntryIdsOf(ctx),
         defaultPermission: () => defaultPermissionOf(access),
         dangerousMode: () => ctx.homeAuth.dangerousMode(),
       }))

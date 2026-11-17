@@ -24,3 +24,15 @@ describe('the studio bundle keeps the DeepSeek account route out of the guide', 
     expect(rows.find(row => row.id === 'delorun-onboarding')?.config?.hiddenProviders).toEqual(['deepseek-account'])
   })
 })
+
+const OPTIONAL_BUNDLES = ['browser', 'code-intelligence', 'agent-hooks', 'webhooks', 'external-agents'].map(name => `@delorun/bundle-${name}`)
+
+describe('the studio bundle offers the optional bundles as packs (A405)', () => {
+  it('names each bundle on the onboarding row, so the guide offers it and the install queue downloads it', () => {
+    expect(rows.find(row => row.id === 'delorun-onboarding')?.config?.plugins).toEqual(expect.arrayContaining(OPTIONAL_BUNDLES))
+  })
+
+  it('mounts none of them as a row, so each stays off until the person adds it', () => {
+    for (const name of OPTIONAL_BUNDLES) expect(rows.some(row => row.name === name), name).toBe(false)
+  })
+})

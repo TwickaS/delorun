@@ -48,6 +48,9 @@ export const BundleSchema = z.strictObject({
   checkpoint: z.string().min(1),
 })
 
+/** The release file a bundle covers: the manifest, or the packs file (`delorun-<version>.packs.log.json`). */
+export type SignedDocument = 'manifest' | 'packs'
+
 /** A bundle that verified, with what the online check starts from. */
 export interface VerifiedBundle {
   /** The bundle's own tree size. */
@@ -92,18 +95,19 @@ function entryBodyBytes(text: string): Buffer {
  * Verify a bundle offline against the client's trusted root (contract C18, `Verifying a bundle`).
  * @param root - the trusted root metadata; it alone names the log and the witnesses.
  * @param version - the release's version, which decides the targets keys that may have signed the entry.
- * @param manifest - the manifest file's bytes, verified under contract C2.
+ * @param manifest - the signed file's bytes, verified under contract C2 (the manifest, or the packs file).
+ * @param document - which release file the bundle covers; the manifest by default.
  * @param bundle - the bundle.
  * @returns what verified.
  * @throws ReleaseLogRefusalError naming the step that refused: `entry-key-untrusted` when the version is not a semantic
  * version, `manifest-digest-mismatch` when the bundle names or covers another manifest file, and the step's own refusal.
  */
-export function verifyBundle(root: RootMetadata, version: string, manifest: Uint8Array, bundle: ReleaseLogBundle): VerifiedBundle {
+export function verifyBundle(root: RootMetadata, version: string, manifest: Uint8Array, bundle: ReleaseLogBundle, document: SignedDocument = 'manifest'): VerifiedBundle {
   requireReleaseVersion(version)
-  // The bundle names the manifest file it covers, so a bundle naming another file covers another manifest, whatever
-  // digest it carries: contract C2 names the release's manifest file `delorun-<version>.manifest.json`.
-  const name = `delorun-${version}.manifest.json`
-  if (bundle.manifest.name !== name) throw refuse('manifest-digest-mismatch', `the bundle names ${JSON.stringify(bundle.manifest.name)}, not the release's manifest file ${JSON.stringify(name)}`)
+  // The bundle names the signed file it covers, so a bundle naming another file covers another document, whatever
+  // digest it carries: contract C2 names the release's files `delorun-<version>.manifest.json` and `.packs.json`.
+  const name = `delorun-${version}.${document}.json`
+  if (bundle.manifest.name !== name) throw refuse('manifest-digest-mismatch', `the bundle names ${JSON.stringify(bundle.manifest.name)}, not the release's ${document} file ${JSON.stringify(name)}`)
   const sha256 = createHash('sha256').update(manifest).digest('hex')
   if (bundle.manifest.sha256 !== sha256) throw refuse('manifest-digest-mismatch', `the bundle covers manifest ${bundle.manifest.sha256}, not ${sha256}`)
   const body = entryBodyBytes(bundle.entry.body)
@@ -148,15 +152,28 @@ export type BundleVerdict =
  * Verify a bundle file offline, as a verdict: the start check records a refusal instead of throwing it.
  * @param root - the trusted root metadata.
  * @param version - the release's version.
- * @param manifest - the manifest file's bytes.
+ * @param manifest - the signed file's bytes (the manifest, or the packs file when `document` is `packs`).
  * @param bytes - the bundle file's bytes.
  * @returns the verdict.
  */
-export function checkBundle(root: RootMetadata, version: string, manifest: Uint8Array, bytes: Uint8Array): BundleVerdict {
+export function checkBundle(root: RootMetadata, version: string, manifest: Uint8Array, bytes: Uint8Array, document: SignedDocument = 'manifest'): BundleVerdict {
   try {
-    return { ok: true, bundle: verifyBundle(root, version, manifest, readBundle(bytes)) }
+    return { ok: true, bundle: verifyBundle(root, version, manifest, readBundle(bytes), document) }
   } catch (error) {
     if (error instanceof ReleaseLogRefusalError) return { ok: false, refusal: error.refusal, detail: error.detail }
     throw error
   }
+}
+
+/**
+ * Verify the release-log bundle of a packs file, as a verdict: the same five steps over the packs file's bytes, with the
+ * bundle required to name `delorun-<version>.packs.json`.
+ * @param root - the trusted root metadata.
+ * @param version - the release's version.
+ * @param packs - the packs file's bytes.
+ * @param bytes - the bundle file's bytes.
+ * @returns the verdict.
+ */
+export function checkPacksBundle(root: RootMetadata, version: string, packs: Uint8Array, bytes: Uint8Array): BundleVerdict {
+  return checkBundle(root, version, packs, bytes, 'packs')
 }

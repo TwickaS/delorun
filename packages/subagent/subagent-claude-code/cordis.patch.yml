@@ -1,6 +1,10 @@
 - insert:
     - id: subagent-claude-code
       name: '@deepseek-ai/dsh-subagent-claude-code'
+      config:
+        # Delorun: the row every way of adding the plugin gets starts with edits accepted. A value the person sets in the
+        # profile's own patch replaces it, because that layer comes after the bundle's.
+        permissionMode: acceptEdits
     - id: tool-subagent-claude-code
       name: '@deepseek-ai/dsh-tool-subagent'
       config:

@@ -72,6 +72,7 @@ import { dangerousModeLine } from './setup/dangerous.ts'
 import { openSetupLog, upstreamLinking } from './setup/index.ts'
 import { addStudioBundle } from './studio-bundle.ts'
 import { preStartSteps, runPreStartSteps, type PreStartStep } from './pre-start.ts'
+import { fetchPacksFromRelease } from './profile-packs.ts'
 import { addHeadlessBundle, headlessBundleMigration } from './headless-bundle.ts'
 import { studioBundleMigration } from './profile-migrations.ts'
 import { checkInstalledPlugins } from './plugin-install-check.ts'
@@ -214,6 +215,7 @@ export function realPreStartSteps(add: AddStudioBundle, addHeadless: AddHeadless
         : studioBundleMigration(() => add(context.home, context.profile, context.output), context.output, context.profile),
       copyImportMigration(profileDirectory(context.home, context.profile), context.output),
     ],
+    fetchPacks: fetchPacksFromRelease,
     pluginChanges: async (context) => {
       const { INSTALL_ANCHOR } = await import('@deepseek-ai/dsh/profile-boot')
       await checkInstalledPlugins({ home: context.home, profile: context.profile, profileDir: profileDirectory(context.home, context.profile), installAnchor: INSTALL_ANCHOR, full: false, output: context.output })

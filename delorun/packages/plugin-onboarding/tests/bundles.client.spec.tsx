@@ -10,7 +10,7 @@ interface Row {
   availability: 'installation' | 'profile' | 'missing'
   enabled: boolean
   installTarget?: { spec: string; version: string }
-  error?: { code: string; message: string }
+  error?: { code: string; message?: string; diagnostic?: string }
   readOnlyReason?: string
   installed?: boolean
   meta?: { title?: string | { en: string }; description?: string }
@@ -33,9 +33,8 @@ function bench(rows: readonly Row[] | 'refused' | 'rejects' | 'no-remote', optio
   if (rows !== 'no-remote') ctx.provide('remote.pluginManager', pluginManager as never)
   const openList = vi.fn()
   ctx.provide('pluginNavigation', { openList } as never)
-  const afterAdd = vi.fn(() => Promise.resolve())
-  const installer = createBundleInstaller(ctx, { addWaitMs: () => options.addWaitMs ?? 60_000, pollMs: 1000, afterAdd })
-  return { ctx, installer, pluginManager, openList, afterAdd, state: (name: string) => installer.views.getSnapshot()[name] }
+  const installer = createBundleInstaller(ctx, { addWaitMs: () => options.addWaitMs ?? 60_000, pollMs: 1000 })
+  return { ctx, installer, pluginManager, openList, state: (name: string) => installer.views.getSnapshot()[name] }
 }
 
 describe('the plugin manager', () => {
@@ -63,8 +62,50 @@ describe('where a listed bundle stands', () => {
     ['ships with the installation and is switched on', row({ name: 'a', enabled: true }), 'installed'],
     ['ships with the installation and is switched off', row({ name: 'a' }), 'available'],
     ['is installed in the profile and switched off', row({ name: 'a', availability: 'profile' }), 'available'],
+    ['ships with the installation, is switched off, and cannot run on this platform', row({ name: 'a', error: { code: 'unsupported-platform', message: 'x' } }), 'unavailable'],
   ])('says a bundle that %s is %s', (_, bundle, state) => {
     expect(stateOf(bundle as never)).toBe(state)
+  })
+})
+
+describe('a plugin pack the release publishes', () => {
+  const item = { key: 'a', state: 'downloading', receivedBytes: 1, reloadNeeded: false } as const
+  it.each([
+    ['is available to add', { kind: 'available' }, 'available'],
+    ['is downloading', { kind: 'working', item }, 'installing'],
+    ['needs a restart', { kind: 'restart', item }, 'restart'],
+    ['is installed', { kind: 'installed' }, 'installed'],
+    ['could not be installed', { kind: 'failed', failure: { code: 'failed', message: 'x' } }, 'failed'],
+    ['needs a connection', { kind: 'offline', message: 'Connect and try again.' }, 'offline'],
+    ['is not published for this computer', { kind: 'unavailable', reason: 'Not for this computer.' }, 'unavailable'],
+  ] as const)('is %s: %s', (_, pack, state) => {
+    expect(stateOf(undefined, pack)).toBe(state)
+    expect(stateOf(row({ name: 'a', availability: 'missing' }) as never, pack)).toBe(state)
+  })
+
+  it('leaves a bundle the profile already holds to the plugin manager, whatever the pack says', () => {
+    expect(stateOf(row({ name: 'a', enabled: true }) as never, { kind: 'available' })).toBe('installed')
+  })
+})
+
+describe('the agent bundles the installation ships switched off', () => {
+  const agents = ['@deepseek-ai/dsh-subagent-claude-code', '@deepseek-ai/dsh-subagent-codex']
+
+  it('are available to add from the installation, and adding switches them on without a download', async () => {
+    const { installer, pluginManager, state } = bench(agents.map(name => row({ name })))
+    installer.refresh(agents)
+    await flush()
+    expect(agents.map(name => state(name)?.state)).toEqual(['available', 'available'])
+    await installer.install(agents[0]!)
+    expect(pluginManager.setBundleEnabled).toHaveBeenCalledWith(agents[0], true)
+    expect(pluginManager.installBundle).not.toHaveBeenCalled()
+  })
+
+  it('say why a shipped bundle is unavailable on this platform', async () => {
+    const { installer, state } = bench([row({ name: agents[0]!, error: { code: 'unsupported-platform', diagnostic: 'macOS only' } })])
+    installer.refresh([agents[0]!])
+    await flush()
+    expect(state(agents[0]!)).toMatchObject({ state: 'unavailable', reason: 'macOS only' })
   })
 })
 
@@ -172,7 +213,7 @@ describe('adding a bundle', () => {
   it('says a long add is still working, reads its state, and ends when the plugin manager reports it added', async () => {
     vi.useFakeTimers()
     try {
-      const { installer, pluginManager, afterAdd, state } = bench([row({ name: 'a' })], { addWaitMs: 5000 })
+      const { installer, pluginManager, state } = bench([row({ name: 'a' })], { addWaitMs: 5000 })
       pluginManager.setBundleEnabled.mockImplementationOnce(() => new Promise(() => {}))
       installer.refresh(['a'])
       await vi.advanceTimersByTimeAsync(0)
@@ -183,19 +224,7 @@ describe('adding a bundle', () => {
       pluginManager.listBundles.mockResolvedValue({ ok: true, value: [row({ name: 'a', enabled: true })] } as never)
       await vi.advanceTimersByTimeAsync(1000)
       expect(state('a')?.state).toBe('installed')
-      expect(afterAdd).toHaveBeenCalledExactlyOnceWith('a')
     } finally { vi.useRealTimers() }
-  })
-
-  it('runs the after-add hook once for an add that applied and not for one that failed', async () => {
-    const { installer, pluginManager, afterAdd } = bench([row({ name: 'a' }), row({ name: 'b' })])
-    pluginManager.setBundleEnabled.mockResolvedValueOnce({ ok: true, value: { application: 'failed', changed: false, stage: 'enable', target: 'b', error: { code: 'operation-error', diagnostic: 'boom' } } } as never)
-    installer.refresh(['a', 'b'])
-    await flush()
-    await installer.install('b')
-    expect(afterAdd).not.toHaveBeenCalled()
-    await installer.install('a')
-    expect(afterAdd).toHaveBeenCalledExactlyOnceWith('a')
   })
 
   it('adds nothing for a bundle that is not available, is unknown, or has no plugin manager to ask', async () => {
@@ -244,7 +273,7 @@ describe('opening Plugins', () => {
     const { installer, openList } = bench([])
     installer.openPlugins()
     expect(openList).toHaveBeenCalledOnce()
-    const bare = createBundleInstaller(new Context(), { addWaitMs: () => 1000, pollMs: 1000, afterAdd: () => Promise.resolve() })
+    const bare = createBundleInstaller(new Context(), { addWaitMs: () => 1000, pollMs: 1000 })
     expect(() => { bare.openPlugins() }).not.toThrow()
   })
 })

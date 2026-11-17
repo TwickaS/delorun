@@ -73,7 +73,7 @@ const START = Date.UTC(2026, 0, 1)
  *   as the fake `Date` of a spec whose timers must fire at the time the home reads.
  * @returns the fixture.
  */
-export async function homeFixture(options: { readonly fill?: number; readonly now?: () => number; readonly pairing?: PairingSpec; readonly challengeLimits?: ChallengeLimits } = {}): Promise<Home> {
+export async function homeFixture(options: { readonly fill?: number; readonly now?: () => number; readonly pairing?: PairingSpec; readonly challengeLimits?: ChallengeLimits; readonly approvalGraceMinutes?: number; readonly unlockCapMinutes?: number } = {}): Promise<Home> {
   const directory = await mkdtemp(join(tmpdir(), 'delorun-home-auth-'))
   const clock = {
     now: START,
@@ -93,6 +93,8 @@ export async function homeFixture(options: { readonly fill?: number; readonly no
     loopbackPort: () => loopback.port,
     ...(pairing === undefined ? {} : { pairing: (): PairingSpec => pairing }),
     ...(options.challengeLimits === undefined ? {} : { challengeLimits: options.challengeLimits }),
+    ...(options.approvalGraceMinutes === undefined ? {} : { approvalGraceMinutes: () => options.approvalGraceMinutes ?? 0 }),
+    ...(options.unlockCapMinutes === undefined ? {} : { unlockCapMinutes: () => options.unlockCapMinutes ?? 0 }),
     directory,
     now: options.now ?? clock.read,
     random,

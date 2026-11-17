@@ -173,8 +173,8 @@ describe('where the PIN step shows', () => {
     expect(ids('off')).not.toContain(STEPS.pin.id)
   })
 
-  it('is skipped from a phone and where there is no reach', () => {
-    expect(ids('remote', 'on')).not.toContain(STEPS.pin.id)
+  it('is skipped where there is no reach, and a phone gets the computer-only version', () => {
+    expect(ids('remote', 'on')).toContain(STEPS.pin.id)
     expect(ids('absent')).not.toContain(STEPS.pin.id)
   })
 })

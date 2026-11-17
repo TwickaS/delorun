@@ -51,7 +51,7 @@ export function installedFileMode(mode: RuntimeFileList['files'][number]['mode']
  * @param root - the tree.
  * @param list - its file list.
  */
-export async function setInstalledModes(root: string, list: RuntimeFileList): Promise<void> {
+export async function setInstalledModes(root: string, list: Pick<RuntimeFileList, 'files'>): Promise<void> {
   for (const file of list.files) {
     const path = join(root, ...file.path.split('/'))
     const stats = await lstat(path).catch((error: unknown) => {

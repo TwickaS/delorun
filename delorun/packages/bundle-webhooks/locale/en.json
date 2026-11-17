@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Webhooks",
+    "description": "Starts a chat when a signed GitHub webhook arrives. Needs a secret in DELORUN_GITHUB_WEBHOOK_SECRET and a rule of your own"
+  }
+}

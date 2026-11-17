@@ -1,0 +1,19 @@
+# One browser provider at a time: the browser-use registration is exclusive. Playwright is on. Chrome DevTools is the
+# alternative (turn the Playwright row off first); Stagehand needs a model of its own, so it is off until configured.
+- insert:
+    - id: browser-use
+      name: '@deepseek-ai/dsh-browser-use'
+    - id: browser-use-playwright-mcp
+      name: '@deepseek-ai/dsh-experimental-browser-use-playwright-mcp'
+      config:
+        mode: launch
+        headless: true
+    - id: browser-use-chrome-devtools-mcp
+      name: '@deepseek-ai/dsh-experimental-browser-use-chrome-devtools-mcp'
+      disabled: true
+      config:
+        mode: launch
+        headless: true
+    - id: browser-use-stagehand-native
+      name: '@deepseek-ai/dsh-experimental-browser-use-stagehand-native'
+      disabled: true

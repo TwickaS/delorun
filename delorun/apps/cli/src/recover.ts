@@ -34,6 +34,7 @@ import type { ProfileVersionId } from '@deepseek-ai/dsh-plugin-manager/history'
 import { CliError, EXIT } from './exit.ts'
 import { parseFailure, prepareHome, type CliCommand, type CommandContext, type CommandResult } from './command.ts'
 import { assertSoleDataUser, registerDataUser } from './home-exclusion.ts'
+import { recoverPacks } from './recover-packs.ts'
 import { recoverWorkspaces, terminalRestoreConfirm } from './recover-workspaces.ts'
 import { helpPointer } from './help.ts'
 import { withReadableTimes } from './output.ts'
@@ -57,7 +58,7 @@ const RECOVER_OPTIONS = {
 export const SILENT: DelorunLogger = { error: () => {}, warn: () => {}, info: () => {}, debug: () => {} }
 
 /** The actions, in usage order. */
-const ACTIONS = ['status', 'rollback', 'restore', 'safe-mode', 'exit-safe-mode', 'discard', 'workspaces'] as const
+const ACTIONS = ['status', 'rollback', 'restore', 'safe-mode', 'exit-safe-mode', 'discard', 'workspaces', 'packs'] as const
 
 /** One action and its argument. */
 type Requested =
@@ -68,6 +69,7 @@ type Requested =
   | { readonly kind: 'exit-safe-mode' }
   | { readonly kind: 'discard', readonly path: string }
   | { readonly kind: 'workspaces', readonly yes: boolean }
+  | { readonly kind: 'packs' }
 
 /**
  * Read the action from the command line.
@@ -268,7 +270,7 @@ async function rollbackLive(home: string, profile: string, profileOnly: boolean,
 /** `delorun recover`: where the profile stands, and the ways back contract C3 offers. */
 export const recoverCommand: CliCommand = {
   name: 'recover',
-  summary: 'Where the profile stands after an update, and the way back: status, rollback [--profile-only], restore <version>, safe-mode, exit-safe-mode, discard <path>, workspaces [--yes]',
+  summary: 'Where the profile stands after an update, and the way back: status, rollback [--profile-only], restore <version>, safe-mode, exit-safe-mode, discard <path>, workspaces [--yes], packs',
   /**
    * Run `delorun recover`.
    * @param args - the arguments after `recover`.
@@ -287,6 +289,8 @@ export const recoverCommand: CliCommand = {
           : await rollbackOffline(home.path, profile, action.profileOnly, context, launcherAnchor(home.path, context.env).root)
       case 'discard':
         return await discard(home.path, profile, action.path, context)
+      case 'packs':
+        return await recoverPacks(home.path, context)
       case 'workspaces':
         return await recoverWorkspaces({ home: home.path, profile, yes: action.yes, confirm: terminalRestoreConfirm() }, context)
       default:

@@ -1,7 +1,10 @@
 /** The Network settings section's copy. */
 
+import { gateEn, gateZh } from './gate.ts'
+
 /** English dictionary. */
 export const en = {
+  ...gateEn,
   'nav': 'Network',
   'title': 'Network',
   'intro': 'Choose which hosts each workspace\'s sandboxed commands and the web fetch tool can reach. Commands that run with full access run outside the sandbox and are not limited, and neither are plugins or MCP servers.',
@@ -49,6 +52,7 @@ export type NetworkLocaleKey = keyof typeof en
 
 /** Chinese dictionary. */
 export const zh: typeof en = {
+  ...gateZh,
   'nav': '网络',
   'title': '网络',
   'intro': '选择每个工作区中沙箱内的命令和 web_fetch 可以访问哪些主机。以完全访问权限运行的命令在沙箱之外运行，不受此限制；插件和 MCP 服务器同样不受限制。',
