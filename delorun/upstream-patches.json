@@ -2890,9 +2890,9 @@
     },
     {
       "path": "packages/subagent/subagent/src/archive-admission.ts",
-      "class": "delorun-feature",
-      "feature": "external-agents",
-      "reason": "Lists external runs beneath an archived Session as subagent activity and stops them with it; local-child handling is unchanged."
+      "class": "security",
+      "reason": "Lists external runs beneath an archived Session as subagent activity and stops them with it; local-child handling is unchanged.",
+      "sha256": "4bad2d7aba3c158abb6bca91c78334cadfd72b91179a48e51695f59bfac8c887"
     },
     {
       "path": "packages/subagent/subagent/src/manager.ts",

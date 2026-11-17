@@ -27,7 +27,7 @@ import type { ChildComposition, DelegatedPolicyOverrides } from './child-agent.t
 import {
   createAgentMessage, createSettlementMessage, withResultDeliveryGuidance,
 } from './continuation-messages.ts'
-import { installSubagentArchiveAdmission } from './archive-admission.ts'
+import { installExternalRunArchiveAdmission, installSubagentArchiveAdmission } from './archive-admission.ts'
 import type { ExternalRunHandle } from './archive-admission.ts'
 import { foldSubagentDescriptor, snapshotSubagentDescriptor } from './descriptor.ts'
 import type { SubagentDescriptorData } from './descriptor.ts'
@@ -173,7 +173,8 @@ export class SubagentManager {
     installSubagentArchiveAdmission(ctx, (agent) => {
       const activation = this.resident.get(agent.id)
       return activation !== undefined && activationAgent(activation) === agent ? activation.ancestors : undefined
-    }, session => host.identityOf(session), sessionId => this.externalRunsOf(sessionId))
+    }, session => host.identityOf(session))
+    installExternalRunArchiveAdmission(ctx, sessionId => this.externalRunsOf(sessionId))
     ctx.on('session/event', (session, event) => {
       if (event.type === 'turn/start') {
         this.turnStarts.set(session.id, event.seq)
