@@ -8,3 +8,4 @@ section: Changed
 - Provider and plugin lists are compact rows in one bordered list: a tick, the mark, the name and a two-line description.
 - Agents, plugins and providers without artwork show a tinted square with the first letter of their name, in a colour that stays the same for that name.
 - "Finish later" keeps the setup guide closed until Delorun next starts, in every tab and after a reload; the Finish setup entry in the sidebar footer opens it again whenever you like.
+- The Claude Code explainer now says exactly what it may do: create, change, move and delete files in the workspace without asking; other commands and anything outside the workspace are refused. The PIN step says a paired phone asks for the PIN only before actions that need an unlock.
