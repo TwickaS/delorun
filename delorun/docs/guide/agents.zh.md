@@ -58,6 +58,7 @@ Claude Code 和 Codex 是可选的[外部智能体](../reference/glossary.zh.md#
 - 如果对话处于“只读”，则不会启动任何智能体——请先更改该对话的权限。
 - 如果对话处于“完全访问”，则所有批准都会被直接拒绝而不询问，因此只有在你已为工作区允许的情况下才会启动智能体。
 - 如果你运行 `delorun headless`，则没有人可以询问，因此只有在你已允许的工作区才会启动智能体。
+- 如果你停止某个对话，则它在该轮交出的任务也会停止。更早轮次的任务会继续运行，直到完成、达到时间限制，或你归档该对话（归档会停止该对话启动的每个任务）。
 - 如果任务所需时间超过时间限制，则任务会停止。除非你在[高级选项](#advanced-options)中更改，限制为 30 分钟。
 
 </details>
@@ -73,6 +74,14 @@ Claude Code 和 Codex 是可选的[外部智能体](../reference/glossary.zh.md#
 ## 结果显示在哪里
 
 结果会作为智能体的答案回到交出任务的那个对话中。任务失败时，原因也显示在同一处。
+
+Codex 的三种失败有专门的措辞：
+
+- **你配置的模型不在你的套餐中。**Codex 在任务开始前停止，并指出该模型以及你的套餐提供的模型，例如“Codex's configured model gpt-5.5 is not offered on your plan. Choose one of: gpt-5.6-luna, gpt-5.5, in your Codex settings.”请在**高级选项**下或在你的 Codex 设置中选择模型。Delorun 从不替你选择。
+- **已达到套餐的限额。**结果会这样说明，并在 Codex 报告时给出限额重置的时间。
+- **Codex 未登录。**结果会给出 `delorun agents login codex` 命令。
+
+Delorun 的 Codex 运行从不修改你自己的 Codex 设置文件，因此你交给 Codex 的文件夹不会成为你终端 Codex 中的受信任文件夹。
 
 <a id="advanced-options"></a>
 

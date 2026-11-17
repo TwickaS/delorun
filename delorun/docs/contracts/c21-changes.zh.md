@@ -61,6 +61,7 @@ description: "约定 C21：更改。本人的 harness 是已签名的发布加�
 | `harness/<runtime>/approved.json` | `{"schema":"delorun.changes-harness/1","runtime","files":{"<path>":{"version","signed"?,"change","approvedAt"}}}`：运行时 `app/` 之下已批准内容与已签名发布不同的文件 |
 | `harness/<runtime>/copy/app/` | 本人对运行时 `app/` 目录的可写副本 |
 | `harness/<runtime>/scan-cache.json` | 该副本的扫描缓存 |
+| `harness/<runtime>/pending.json` | 上一次读取该副本时找到的每项更改所在的文件，按更改 id 记录；针对单项更改的操作用它只读取该文件，无法使用时则读取整个副本 |
 | `harness/<runtime>/run/<digest>/` | 该运行时的一次启动所运行的组合树 |
 | `harness.lock` | 每项 harness 决定、组合和保留所持有的锁 |
 
@@ -111,7 +112,7 @@ description: "约定 C21：更改。本人的 harness 是已签名的发布加�
 | 已签名的文件列表 | 读取安装的每个操作都读取运行时仓库经过验证的文件列表：在启动器锚定的根之下的启动检查（如 `checkStoredRuntime` 所运行的那样），并且从安装读取的每个字节都再次对照该列表的长度和 SHA-256 检查 |
 | 记录 | `harness/<runtime>/approved.json`：已批准内容与已签名文件不同的每个文件，作为存储中的单文件内容版本（`version`，对被移除的文件为空版本），连同已签名文件的版本（`signed`）、批准它的更改及其时间。没有记录的运行时运行其已签名的发布 |
 | 可写副本 | `delorun changes edit-harness` 为运行中的运行时创建 `harness/<runtime>/copy/app/`：安装的 `app/` 的副本，从不是硬链接，其中记录的已批准文件在位，被移除的文件缺失；文件为 0600，可执行文件为 0700，目录为 0700。第二次运行打印该文件夹且不改变任何内容。在复制任何内容之前，它根据已签名的文件列表和记录，按副本的扫描方式计算副本将持有的条目和字节，当任一项超过扫描上限时，以 `CONTENT_TOO_LARGE` 拒绝，写明上限以及无法为此发布进行 harness 编辑 |
-| 待处理的更改 | 副本中内容或执行位与运行时所运行的内容（记录的版本，或已签名的文件）不同的每个文件，是一项待处理的 `harness-edit` 更改，主体为 `{file, runtime}`，`from` 为所运行内容的单文件版本（什么都没有运行时为空版本），`to` 为副本的版本（本人删除了它时为空版本）。新增的文件也计算在内。链接、FIFO、套接字、设备和 `app/` 之外的路径被列为已跳过，且从不被跟随；名为 `*.mine` 的文件（更新在无法合并的文件旁边写入它们）被列为保留在旁。扫描具有插件扫描的上限，以及它自己的扫描缓存。不是目录的副本、超过上限的副本或持有无法读取的条目的副本，使对它的每次读取都以 `HARNESS_COPY_UNREADABLE` 被拒绝，主体为该副本的 `app/` 目录，其详情写明原因和 `delorun changes edit-harness --discard`；在读取期间发生变化的文件以 `CHANGED_WHILE_READING` 被拒绝。待处理的更改在每次读取时计算，只在被决定时才记入日志 |
+| 待处理的更改 | 副本中内容或执行位与运行时所运行的内容（记录的版本，或已签名的文件）不同的每个文件，是一项待处理的 `harness-edit` 更改，主体为 `{file, runtime}`，`from` 为所运行内容的单文件版本（什么都没有运行时为空版本），`to` 为副本的版本（本人删除了它时为空版本）。新增的文件也计算在内。链接、FIFO、套接字、设备和 `app/` 之外的路径被列为已跳过，且从不被跟随；名为 `*.mine` 的文件（更新在无法合并的文件旁边写入它们）被列为保留在旁。扫描具有插件扫描的上限，以及它自己的扫描缓存。不是目录的副本、超过上限的副本或持有无法读取的条目的副本，使对整个副本的每次读取都以 `HARNESS_COPY_UNREADABLE` 被拒绝，主体为该副本的 `app/` 目录，其详情写明原因和 `delorun changes edit-harness --discard`；在读取期间发生变化的文件以 `CHANGED_WHILE_READING` 被拒绝。对单项更改的 `show`、`apply` 和 `discard` 只读取 `pending.json` 为其 id 指明的文件：该文件会被重新读取并重新哈希，从不取自扫描缓存，且仅当结果与该 id 一致时才使用；否则它们读取整个副本。待处理的更改在每次读取时计算，只在被决定时才记入日志 |
 | 日志 | `harness/log.json`，与 profile 的日志模式相同的更改日志，其条目携带 `subject.runtime`；每个 profile 的 `list` 和 `show` 都包含它 |
 
 每项决定都在 `harness.lock` 之下运行，并以 `decidedFrom` 记入日志；本人的每项决定都需要在场证明，并在读取或写入任何内容之前，拒绝 attest 函数未签发的证明：
