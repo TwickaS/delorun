@@ -33,8 +33,6 @@ export interface CostModelRow {
 export interface CostMeterView {
   /** Estimated cost in USD. */
   usd: number
-  /** Tokens of every bucket. */
-  tokens: number
   /** Requests that reported usage. */
   requests: number
   /** Requests whose model has no price. */
@@ -84,7 +82,6 @@ export function sumRows(rows: readonly CostModelRow[]): CostMeterView {
   const models = orderRows([...merged.values()])
   return {
     usd: models.reduce((total, row) => total + row.usd, 0),
-    tokens: models.reduce((total, row) => total + row.input + row.output + row.cacheRead + row.cacheWrite, 0),
     requests: models.reduce((total, row) => total + row.requests, 0),
     unpriced: models.reduce((total, row) => total + row.unpriced, 0),
     models,
