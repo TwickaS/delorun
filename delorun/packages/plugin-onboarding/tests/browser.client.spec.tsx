@@ -1,23 +1,25 @@
 // @vitest-environment jsdom
 /**
- * The Browser step: whether Browser is ready, read from the Host's requirement check; the action that meets an unmet
- * need; what the first chat asks; and, under the preview flag only, the planned choice of the person's own browser,
- * which records nothing. Each denial test's comment names the check whose removal makes it fail.
+ * The Browser step: the shared Browser choice over the Browser plugin pack. Choosing the isolated browser adds the
+ * pack, No browser turns it off, the readiness comes from the Host's requirement check, and the planned third choice
+ * shows only under the preview flag and can never be chosen. Each denial test's comment names the check whose removal
+ * makes it fail.
  */
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
-import type { RequirementsAnswer } from '@delorun/bundle-local/requirements-api'
-import { BROWSER_BUNDLE, browserAdded, browserSetupOf, createBrowserSetup, type BrowserSetup } from '../src/client/browser-setup.ts'
+import { BROWSER_BUNDLE, type BrowserReadiness } from '@delorun/browser-setup'
+import { turnBrowserOff } from '../src/client/browser-pack.ts'
+import type { BundleState } from '../src/client/bundles.ts'
 import { buildSteps, STEPS } from '../src/client/flow.tsx'
 import { createGuide } from '../src/client/guide.ts'
 import { en } from '../src/client/locales.ts'
 import { OnboardingStepEntry, type OnboardingStepEntryProps } from '../src/client/Onboarding.tsx'
 import { BrowserStep } from '../src/client/steps/Browser.tsx'
 import type { OnboardingStep, StepServices } from '../src/client/types.ts'
+import type { OnboardingSettings } from '../src/config.ts'
 import { NO_RECORD } from '../src/wire.ts'
 import { PREVIEW_STEPS } from '../src/preview-flags.ts'
-import type { OnboardingSettings } from '../src/config.ts'
 import { browserFake, flagsFake, hostFake, installerFake, liveForm, settings, stepServices, t } from './fixtures.client.ts'
 
 afterEach(cleanup)
@@ -25,8 +27,7 @@ afterEach(cleanup)
 const click = async (element: HTMLElement) => { await act(async () => { fireEvent.click(element) }) }
 const settle = async () => { await act(async () => { await Promise.resolve(); await Promise.resolve() }) }
 
-const ROW = 'browser-use-playwright-mcp'
-const NEEDS_COMMAND: BrowserSetup = { kind: 'needs-setup', reason: 'Needs the Chromium build downloaded', fix: { kind: 'command', command: 'delorun browser install' } }
+const NEEDS_COMMAND: BrowserReadiness = { kind: 'needs-setup', reason: 'Needs the Chromium build downloaded', fix: { kind: 'command', command: 'delorun browser install' } }
 
 /** Render the step over faked services. */
 async function show(change: Partial<StepServices> = {}) {
@@ -37,189 +38,183 @@ async function show(change: Partial<StepServices> = {}) {
   return { services, host }
 }
 
-describe('Browser\'s setup, narrowed from the Host\'s requirement check', () => {
-  const answer = (rows: RequirementsAnswer['rows'], problems: RequirementsAnswer['problems'] = []): RequirementsAnswer => ({ rows, problems })
+const radios = (): HTMLInputElement[] => screen.getAllByRole('radio') as HTMLInputElement[]
+const checked = (): boolean[] => radios().map(radio => radio.checked)
+const pack = (state: BundleState, more: object = {}) => installerFake({ [BROWSER_BUNDLE]: { state, ...more } })
 
-  it('is ready when every row of the pack is, and not added when the Host lists none', () => {
-    expect(browserSetupOf(answer([{ packageName: BROWSER_BUNDLE, rowId: ROW, state: 'ready' }]))).toEqual({ kind: 'ready' })
-    expect(browserSetupOf(answer([{ packageName: '@delorun/bundle-other', rowId: 'row', state: 'needs-setup', reason: 'Needs x installed', fix: { kind: 'docs', url: 'https://example.test' } }]))).toEqual({ kind: 'not-added' })
-    expect(browserSetupOf(answer([]))).toEqual({ kind: 'not-added' })
+describe('the Browser step', () => {
+  it('has No browser chosen while the pack is not added, and adds the pack when the isolated browser is chosen', async () => {
+    const bundles = pack('available')
+    await show({ bundles: bundles.installer })
+    expect(screen.getByRole('radiogroup', { name: en['browser.which'] })).toBeTruthy()
+    expect(checked()).toEqual([false, true])
+    expect(bundles.refresh).toHaveBeenCalledWith([BROWSER_BUNDLE])
+    expect(bundles.install).not.toHaveBeenCalled()
+    await click(radios()[0] as HTMLInputElement)
+    expect(bundles.install).toHaveBeenCalledExactlyOnceWith(BROWSER_BUNDLE)
+    expect(checked()).toEqual([true, false])
   })
 
-  it('carries the Host\'s reason and fix for the first row that needs setup, whatever they are', () => {
-    const fix = { kind: 'command', command: 'npx playwright install chromium' } as const
-    expect(browserSetupOf(answer([
-      { packageName: BROWSER_BUNDLE, rowId: 'browser-use', state: 'ready' },
-      { packageName: BROWSER_BUNDLE, rowId: ROW, state: 'needs-setup', reason: 'Needs Chromium downloaded', fix },
-    ]))).toEqual({ kind: 'needs-setup', reason: 'Needs Chromium downloaded', fix })
+  it('has the isolated browser chosen for an added pack, and says Browser is ready and what the first chat asks', async () => {
+    const browser = browserFake({ kind: 'ready' })
+    await show({ browser: browser.face, bundles: pack('installed').installer })
+    expect(checked()).toEqual([true, false])
+    expect(screen.getByText(en['browser.ready'])).toBeTruthy()
+    expect(screen.getByText(en['browser.expect.asks.text']).textContent).toBe('The first chat that uses Browser asks you to allow its browser tool, playwright-mcp. Allow it once and Delorun does not ask again.')
   })
 
-  it('reports a declaration the Host could not read', () => {
-    expect(browserSetupOf(answer([], [{ packageName: BROWSER_BUNDLE, message: 'bad needs' }]))).toEqual({ kind: 'problem', message: 'bad needs' })
+  it('shows the Host\'s reason as "Needs setup · reason" with its command, and opens the Settings section a need is met in', async () => {
+    await show({ browser: browserFake(NEEDS_COMMAND).face, bundles: pack('installed').installer })
+    expect(screen.getByText('Needs setup · Needs the Chromium build downloaded')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Copy delorun browser install' })).toBeTruthy()
+    cleanup()
+    const browser = browserFake({ kind: 'needs-setup', reason: 'Needs BROWSER_KEY set', fix: { kind: 'settings', section: 'models' } })
+    await show({ browser: browser.face, bundles: pack('installed').installer })
+    await click(screen.getByRole('button', { name: en['browser.fix.settings'] }))
+    expect(browser.openSettings).toHaveBeenCalledExactlyOnceWith('models')
   })
 
-  it('counts the pack as added for every state the Host reports about it', () => {
-    expect([{ kind: 'ready' }, NEEDS_COMMAND, { kind: 'problem', message: 'x' }].map(setup => browserAdded(setup as BrowserSetup))).toEqual([true, true, true])
-    expect([{ kind: 'checking' }, { kind: 'not-added' }, { kind: 'failed' }].map(setup => browserAdded(setup as BrowserSetup))).toEqual([false, false, false])
+  it('reads the check again on Try again, when the pack\'s state changes, and when the window regains focus', async () => {
+    const browser = browserFake({ kind: 'failed' }, NEEDS_COMMAND, { kind: 'ready' })
+    const bundles = pack('installed')
+    await show({ browser: browser.face, bundles: bundles.installer })
+    await click(screen.getByRole('button', { name: en['browser.retry'] }))
+    expect(screen.getByText(/^Needs setup/)).toBeTruthy()
+    await act(async () => { window.dispatchEvent(new Event('focus')) })
+    await settle()
+    expect(screen.getByText(en['browser.ready'])).toBeTruthy()
+    const reads = browser.refresh.mock.calls.length
+    await act(async () => { bundles.store.set({ [BROWSER_BUNDLE]: { state: 'restart' } }) })
+    await settle()
+    expect(browser.refresh.mock.calls.length).toBe(reads + 1)
   })
 
-  it('asks the check in the studio\'s language and shares one request between overlapping reads', async () => {
-    const urls: string[] = []
-    let language = 'en'
-    const store = createBrowserSetup(async (input) => {
-      urls.push(input)
-      return new Response(JSON.stringify(answer([{ packageName: BROWSER_BUNDLE, rowId: ROW, state: 'ready' }])), { status: 200 })
-    }, () => language)
-    expect(store.getSnapshot()).toEqual({ kind: 'checking' })
-    const [first, second] = await Promise.all([store.refresh(), store.refresh()])
-    expect([first, second, store.getSnapshot()]).toEqual([{ kind: 'ready' }, { kind: 'ready' }, { kind: 'ready' }])
-    language = 'zh-CN'
-    const listener = vi.fn()
-    const unsubscribe = store.subscribe(listener)
-    await store.refresh()
-    expect(listener).toHaveBeenCalledTimes(1)
-    unsubscribe()
-    await store.refresh()
-    expect(listener).toHaveBeenCalledTimes(1)
-    urls.pop()
-    expect(urls).toEqual(['/api/delorunRequirements.check?language=en', '/api/delorunRequirements.check?language=zh'])
+  it.each<readonly [BundleState, string, object]>([
+    ['checking', en['bundle.checking'], {}],
+    ['installing', en['bundle.adding'], {}],
+    ['slow', en['bundle.slow'], {}],
+    ['offline', en['bundle.offline'], {}],
+    ['unavailable', en['bundle.unavailable'], {}],
+    ['unavailable', 'Not available here. A build from source has no plugin packs.', { packsReason: 'A build from source has no plugin packs.' }],
+    ['failed', en['bundle.failed'], {}],
+    ['failed', 'Could not add it: the download stopped. Try again, or add it from Plugins.', { reason: 'the download stopped' }],
+    ['restart', en['bundle.restart'], {}],
+    ['installed', en['browser.added'], {}],
+  ])('says where the pack stands while it is %s and the Host does not list it yet', async (state, text, more) => {
+    await show({ bundles: pack(state, more).installer })
+    // An unavailable, offline or failed pack is off, so the line shows once the person asks for the isolated browser.
+    if (!(radios()[0] as HTMLInputElement).checked && !(radios()[0] as HTMLInputElement).disabled) await click(radios()[0] as HTMLInputElement)
+    expect(screen.getByText(text)).toBeTruthy()
   })
 
-  it('is failed, with a warning, when the check cannot be read', async () => {
+  it('holds the choices while the pack is being added, and retries a failed add', async () => {
+    const bundles = pack('installing')
+    await show({ bundles: bundles.installer })
+    expect(radios().map(radio => radio.disabled)).toEqual([true, true])
+    await act(async () => { bundles.store.set({ [BROWSER_BUNDLE]: { state: 'failed' } }) })
+    expect(radios().map(radio => radio.disabled)).toEqual([false, false])
+    await click(radios()[0] as HTMLInputElement)
+    await click(screen.getByRole('button', { name: en['bundle.retry'] }))
+    expect(bundles.install).toHaveBeenCalledWith(BROWSER_BUNDLE)
+  })
+
+  it('turns the pack off when No browser is chosen for an added pack, and reads the pack again', async () => {
+    const browser = browserFake({ kind: 'ready' })
+    const bundles = pack('installed')
+    await show({ browser: browser.face, bundles: bundles.installer })
+    bundles.refresh.mockClear()
+    await click(radios()[1] as HTMLInputElement)
+    await settle()
+    expect(browser.turnOff).toHaveBeenCalledTimes(1)
+    expect(bundles.refresh).toHaveBeenCalledExactlyOnceWith([BROWSER_BUNDLE])
+    expect(checked()).toEqual([false, true])
+    expect(screen.queryByText(en['browser.ready'])).toBeNull()
+    expect(bundles.install).not.toHaveBeenCalled()
+  })
+
+  it('does nothing to a pack that is not added when No browser is chosen', async () => {
+    // Pins the guard: without it choosing No browser on a fresh profile asks the plugin manager to disable a bundle it does not hold.
+    const browser = browserFake()
+    const bundles = pack('unavailable')
+    await show({ browser: browser.face, bundles: bundles.installer })
+    await click(radios()[0] as HTMLInputElement)
+    await click(radios()[1] as HTMLInputElement)
+    expect(checked()).toEqual([false, true])
+    expect(browser.turnOff).not.toHaveBeenCalled()
+    // The one call is the isolated browser's add, which the installer itself refuses for a pack it cannot add.
+    expect(bundles.install).toHaveBeenCalledTimes(1)
+  })
+
+  it('says Browser turns off at the next start when the plugin manager needs a restart', async () => {
+    const browser = browserFake({ kind: 'ready' })
+    browser.outcome.value = 'restart'
+    await show({ browser: browser.face, bundles: pack('installed').installer })
+    await click(radios()[1] as HTMLInputElement)
+    await settle()
+    expect(screen.getByText(en['browser.turnOff.restart'])).toBeTruthy()
+    expect(checked()).toEqual([false, true])
+  })
+
+  it('keeps the isolated browser chosen and says so when the pack could not be turned off', async () => {
+    // Pins the failure branch: without it the step shows No browser while Browser is still on.
+    const browser = browserFake({ kind: 'ready' })
+    browser.outcome.value = 'failed'
+    await show({ browser: browser.face, bundles: pack('installed').installer })
+    await click(radios()[1] as HTMLInputElement)
+    await settle()
+    expect(screen.getByRole('alert').textContent).toContain(en['browser.turnOff.failed'])
+    expect(checked()).toEqual([true, false])
+  })
+})
+
+describe('turning the Browser pack off', () => {
+  const ctx = (remote: object | undefined): Parameters<typeof turnBrowserOff>[0] => ({ get: () => remote }) as never
+  const answers = (application: string) => vi.fn(() => Promise.resolve({ ok: true, value: { application } }))
+
+  it('disables the bundle through the plugin manager and reports how it ended', async () => {
+    const applied = answers('applied')
+    expect(await turnBrowserOff(ctx({ setBundleEnabled: applied }))).toBe('off')
+    expect(applied).toHaveBeenCalledExactlyOnceWith(BROWSER_BUNDLE, false)
+    expect(await turnBrowserOff(ctx({ setBundleEnabled: answers('restart-required') }))).toBe('restart')
+    expect(await turnBrowserOff(ctx({ setBundleEnabled: answers('failed') }))).toBe('failed')
+  })
+
+  it('fails without a plugin manager, on a refusal and on a call that throws', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const store = createBrowserSetup(async () => new Response('{}', { status: 500 }), () => 'en')
-    expect(await store.refresh()).toEqual({ kind: 'failed' })
+    expect(await turnBrowserOff(ctx(undefined))).toBe('failed')
+    expect(await turnBrowserOff(ctx({ setBundleEnabled: () => Promise.resolve({ ok: false, error: { code: 'ELEVATION_REQUIRED' } }) }))).toBe('failed')
+    expect(await turnBrowserOff(ctx({ setBundleEnabled: () => Promise.reject(new Error('transport')) }))).toBe('failed')
     expect(warn).toHaveBeenCalledTimes(1)
     warn.mockRestore()
   })
 })
 
-describe('the Browser step', () => {
-  it('says Browser is ready, and that the first chat asks once to allow playwright-mcp and never again', async () => {
-    const browser = browserFake({ kind: 'ready' })
-    const bundles = installerFake({ [BROWSER_BUNDLE]: { state: 'installed', title: 'Browser', description: 'The pack\'s own description' } })
-    await show({ browser: browser.face, bundles: bundles.installer })
-    expect(screen.getByText(en['browser.ready'])).toBeTruthy()
-    // Once the pack is in the profile, the card shows its own words.
-    expect(screen.getByText('The pack\'s own description')).toBeTruthy()
-    expect(screen.queryByText(en['browser.pack.description'])).toBeNull()
-    expect(screen.getByText(en['browser.expect.asks.text']).textContent).toBe('The first chat that uses Browser asks you to allow its browser tool, playwright-mcp. Allow it once and Delorun does not ask again.')
-    expect(screen.getByText(en['bundle.added'])).toBeTruthy()
-    expect(bundles.refresh).toHaveBeenCalledWith([BROWSER_BUNDLE])
-  })
-
-  it('shows the Host\'s reason as "Needs setup · reason" with its command and a copy button', async () => {
-    await show({ browser: browserFake(NEEDS_COMMAND).face })
-    expect(screen.getByText('Needs setup · Needs the Chromium build downloaded')).toBeTruthy()
-    expect(screen.getByText('delorun browser install').tagName).toBe('CODE')
-    expect(screen.getByRole('button', { name: 'Copy delorun browser install' })).toBeTruthy()
-    expect(screen.queryByText(en['browser.ready'])).toBeNull()
-  })
-
-  it('links to the page that says how, for a need a page explains', async () => {
-    await show({ browser: browserFake({ kind: 'needs-setup', reason: 'Needs Chrome or Chromium installed', fix: { kind: 'docs', url: 'https://www.google.com/chrome/' } }).face })
-    const link = screen.getByRole('link', { name: en['browser.fix.docs'] })
-    expect([link.getAttribute('href'), link.getAttribute('target'), link.getAttribute('rel')]).toEqual(['https://www.google.com/chrome/', '_blank', 'noopener noreferrer'])
-  })
-
-  it('opens the Settings section a need is met in', async () => {
-    const browser = browserFake({ kind: 'needs-setup', reason: 'Needs BROWSER_KEY set', fix: { kind: 'settings', section: 'models' } })
-    await show({ browser: browser.face })
-    await click(screen.getByRole('button', { name: en['browser.fix.settings'] }))
-    expect(browser.openSettings).toHaveBeenCalledExactlyOnceWith('models')
-  })
-
-  it('offers Try again when the check cannot be read, and reports a declaration the Host could not read', async () => {
-    const browser = browserFake({ kind: 'failed' }, { kind: 'problem', message: 'bad needs' })
-    await show({ browser: browser.face })
-    expect(screen.getByText(en['browser.unread'])).toBeTruthy()
-    await click(screen.getByRole('button', { name: en['bundle.retry'] }))
-    expect(screen.getByRole('alert').textContent).toContain('Delorun could not read what Browser needs: bad needs')
-  })
-
-  it('offers to add the pack while it is not in the profile, and says what the step shows once it is', async () => {
-    const bundles = installerFake({ [BROWSER_BUNDLE]: { state: 'available' } })
-    await show({ bundles: bundles.installer })
-    expect(screen.getByText(en['browser.notAdded'])).toBeTruthy()
-    expect(screen.getByText(en['browser.pack.description'])).toBeTruthy()
-    await click(screen.getByRole('button', { name: 'Add Browser' }))
-    expect(bundles.install).toHaveBeenCalledExactlyOnceWith(BROWSER_BUNDLE)
-  })
-
-  it.each(['unavailable', 'offline', 'failed', 'restart', 'checking'] as const)('leaves the add hint out while the pack is %s, which its card explains', async (state) => {
-    // Pins the condition: without it the step says "Add Browser" under a card that says it cannot be added here.
-    await show({ bundles: installerFake({ [BROWSER_BUNDLE]: { state } }).installer })
-    expect(screen.queryByText(en['browser.notAdded'])).toBeNull()
-    expect(screen.queryByText(en['browser.added'])).toBeNull()
-  })
-
-  it('says an added pack is checked once it has loaded, while the Host does not list it yet', async () => {
-    await show({ bundles: installerFake({ [BROWSER_BUNDLE]: { state: 'installed' } }).installer })
-    expect(screen.getByText(en['browser.added'])).toBeTruthy()
-  })
-
-  it('says a pack that was just added is checked once it has loaded, then reads again when its state changes', async () => {
-    const browser = browserFake({ kind: 'not-added' }, { kind: 'ready' })
-    const bundles = installerFake({ [BROWSER_BUNDLE]: { state: 'installing' } })
-    await show({ browser: browser.face, bundles: bundles.installer })
-    expect(screen.getByText(en['browser.notAdded'])).toBeTruthy()
-    await act(async () => { bundles.store.set({ [BROWSER_BUNDLE]: { state: 'installed' } }) })
-    await settle()
-    expect(screen.getByText(en['browser.ready'])).toBeTruthy()
-  })
-
-  it('checks again when the window regains focus, so a need met in a terminal clears', async () => {
-    const browser = browserFake(NEEDS_COMMAND, { kind: 'ready' })
-    await show({ browser: browser.face })
-    expect(screen.getByText(/^Needs setup/)).toBeTruthy()
-    await act(async () => { window.dispatchEvent(new Event('focus')) })
-    await settle()
-    expect(screen.getByText(en['browser.ready'])).toBeTruthy()
-    expect(screen.queryByText(/^Needs setup/)).toBeNull()
-  })
-})
-
 describe('the planned choice of browser', () => {
-  it('is absent while the preview flag is off', async () => {
+  it('is absent while the preview flag is off: two choices', async () => {
     // Pins the flag read: without it the unbuilt choice shows to everyone.
-    await show({ browser: browserFake({ kind: 'ready' }).face })
-    expect(screen.queryByRole('radiogroup')).toBeNull()
-    expect(screen.queryByText(en['browser.which.mine.title'])).toBeNull()
+    await show({ browser: browserFake({ kind: 'ready' }).face, bundles: pack('installed').installer })
+    expect(radios()).toHaveLength(2)
+    expect(screen.queryByText(en['browser.choice.mine.title'])).toBeNull()
     expect(screen.queryByText(en['previewFlag.chip'])).toBeNull()
   })
 
-  it('shows Use my browser with the Preview chip beside its title while the flag is on', async () => {
-    await show({ browser: browserFake({ kind: 'ready' }).face, previewFlags: flagsFake(PREVIEW_STEPS.id) })
-    const group = screen.getByRole('radiogroup', { name: en['browser.which'] })
-    const radios = within(group).getAllByRole('radio') as HTMLInputElement[]
-    expect(radios.map(radio => [radio.getAttribute('aria-labelledby') === null ? '' : document.getElementById(radio.getAttribute('aria-labelledby') ?? '')?.textContent, radio.checked]))
-      .toEqual([['Delorun\'s browser', true], ['Use my browser', false]])
-    expect(screen.getByText(en['browser.which.mine.text']).textContent).toBe('Your Chrome with your sign-ins, approved per chat.')
-    const chips = screen.getAllByText('Preview')
-    expect(chips).toHaveLength(1)
-    // The chip sits in the title row of Use my browser and nowhere else.
-    expect(chips[0]?.closest('div')?.textContent).toContain('Use my browser')
-    fireEvent.focus(chips[0] as HTMLElement)
-    expect((await screen.findByRole('tooltip')).textContent).toBe(en['browser.which.mine.preview'])
-    expect(screen.getByText(en['browser.which.note'])).toBeTruthy()
-  })
-
-  it('records nothing and changes nothing when Use my browser is chosen', async () => {
-    // Pins the preview's promise: a write, a request or an install here would make the planned choice real.
+  it('shows as a disabled third choice with the Preview chip while the flag is on, and records nothing', async () => {
+    // Pins the preview's promise: a write, a request, an install or a turn-off here would make the planned choice real.
     const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.reject(new Error('no request may be made')))
     const browser = browserFake({ kind: 'ready' })
-    const bundles = installerFake({ [BROWSER_BUNDLE]: { state: 'installed', title: 'Browser' } })
+    const bundles = pack('installed')
     const { host } = await show({ browser: browser.face, bundles: bundles.installer, previewFlags: flagsFake(PREVIEW_STEPS.id) })
+    const [, , mine] = radios()
+    expect(radios()).toHaveLength(3)
+    expect([mine?.disabled, mine?.checked]).toEqual([true, false])
+    expect(screen.getAllByText('Preview')).toHaveLength(1)
     const reads = browser.refresh.mock.calls.length
-    const mine = screen.getAllByRole('radio')[1] as HTMLInputElement
-    await click(mine)
-    await waitFor(() => { expect(mine.checked).toBe(true) })
+    await click(mine as HTMLInputElement)
+    expect(checked()).toEqual([true, false, false])
     expect(fetch).not.toHaveBeenCalled()
     expect(browser.refresh.mock.calls.length).toBe(reads)
-    expect(browser.openSettings).not.toHaveBeenCalled()
-    expect([bundles.install, bundles.enableRow, bundles.openPlugins].every(spy => spy.mock.calls.length === 0)).toBe(true)
+    expect([browser.turnOff, browser.openSettings, bundles.install, bundles.enableRow, bundles.openPlugins].every(spy => spy.mock.calls.length === 0)).toBe(true)
     expect([host.defer, host.cloneStart, host.recommend].every(spy => spy.mock.calls.length === 0)).toBe(true)
-    expect(screen.getByText(en['browser.ready'])).toBeTruthy()
     fetch.mockRestore()
   })
 })

@@ -4,7 +4,7 @@
  */
 import type { ReactNode } from 'react'
 import type { DeferrableStep, SetupRecord } from '../wire.ts'
-import { BROWSER_BUNDLE } from './browser-setup.ts'
+import { BROWSER_BUNDLE } from '@delorun/browser-setup'
 import type { Guide, PhoneOutcome } from './guide.ts'
 import { AgentsStep } from './steps/Agents.tsx'
 import { BrowserStep } from './steps/Browser.tsx'

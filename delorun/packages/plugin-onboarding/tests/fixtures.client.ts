@@ -5,7 +5,8 @@ import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { LocaleSnapshot } from '@deepseek-ai/dsh-client-locale/client'
 import { vi } from 'vitest'
 import { DEFAULT_SETTINGS, type OnboardingSettings } from '../src/config.ts'
-import type { BrowserSetup, BrowserSetupStore } from '../src/client/browser-setup.ts'
+import type { BrowserReadiness, BrowserSetupStore } from '@delorun/browser-setup'
+import type { TurnOffOutcome } from '../src/client/browser-pack.ts'
 import type { BundleInstaller, BundleView, RowView } from '../src/client/bundles.ts'
 import { en } from '../src/client/locales.ts'
 import type { DelegationConsentSettings } from '@delorun/plugin-delegation-consent/wire'
@@ -242,18 +243,21 @@ export function agentsFake(options: { readonly rows?: boolean; readonly minutes?
  * @param states - where Browser stands at each read; `checking` until the first.
  * @returns the face, its store's setter and the spies.
  */
-export function browserFake(...states: readonly BrowserSetup[]) {
-  const store = createSnapshotStore<BrowserSetup>({ kind: 'checking' })
+export function browserFake(...states: readonly BrowserReadiness[]) {
+  const store = createSnapshotStore<BrowserReadiness>({ kind: 'checking' })
   const queue = [...states.length === 0 ? [{ kind: 'not-added' } as const] : states]
-  const refresh = vi.fn((): Promise<BrowserSetup> => {
-    const next = (queue.length > 1 ? queue.shift() : queue[0]) as BrowserSetup
+  const refresh = vi.fn((): Promise<BrowserReadiness> => {
+    const next = (queue.length > 1 ? queue.shift() : queue[0]) as BrowserReadiness
     store.set(next)
     return Promise.resolve(next)
   })
   const openSettings = vi.fn((_section: string) => {})
   const setup: BrowserSetupStore = { getSnapshot: store.getSnapshot, subscribe: store.subscribe, refresh }
-  const face: BrowserFace = { setup, openSettings }
-  return { face, set: store.set, refresh, openSettings }
+  /** How turning Browser off ends; a spec replaces it. */
+  const outcome: { value: TurnOffOutcome } = { value: 'off' }
+  const turnOff = vi.fn(() => Promise.resolve(outcome.value))
+  const face: BrowserFace = { setup, openSettings, turnOff }
+  return { face, set: store.set, refresh, openSettings, turnOff, outcome }
 }
 
 /**

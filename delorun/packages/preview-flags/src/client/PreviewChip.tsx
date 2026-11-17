@@ -27,7 +27,7 @@ export interface PreviewChipProps {
  */
 export function PreviewChip({ t, tooltip }: PreviewChipProps): ReactNode {
   return (
-    <Tooltip label={tooltip ?? t('previewFlag.tooltip')} side="top" portal openOnClick maxWidth={280}>
+    <Tooltip label={tooltip ?? t('previewFlag.tooltip')} side="right" portal openOnClick maxWidth={280}>
       <span className={css.chip} tabIndex={0} data-preview-chip>{t('previewFlag.chip')}</span>
     </Tooltip>
   )

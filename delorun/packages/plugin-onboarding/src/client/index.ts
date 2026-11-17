@@ -49,7 +49,8 @@ import type { ThemeSettings } from '@delorun/plugin-theme'
 import { DEFAULT_SETTINGS, ONBOARDING_ROW_ID, THEME_ROW_ID, type OnboardingSettings } from '../config.ts'
 import { ADD_WORKSPACE_PATH, AddWorkspaceAnswer, NO_RECORD, SETUP_RECORD_PATH, SetupRecord, type AddWorkspaceRequest } from '../wire.ts'
 import { createPreviewFlagsStore } from '@delorun/preview-flags/client'
-import { createBrowserSetup } from './browser-setup.ts'
+import { createBrowserSetup } from '@delorun/browser-setup'
+import { turnBrowserOff } from './browser-pack.ts'
 import { createBundleInstaller } from './bundles.ts'
 import { closeSidebarDrawer } from './focus.ts'
 import { hostApi, isLoopbackHostname, readStartId, readWorkspaceNotice } from './host-api.ts'
@@ -286,6 +287,7 @@ export function applyStudio(ctx: Context): void {
     },
     browser: {
       setup: browserSetup,
+      turnOff: () => turnBrowserOff(ctx),
       // Looked up on click, as for the PIN link above.
       openSettings: (section) => { ctx.get('settingsShell')?.openSection(section) },
     },
