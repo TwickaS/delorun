@@ -45,7 +45,7 @@ const PROBLEMS: Record<SignupProblem, string> = {
  * @param request - the request.
  * @param status - the HTTP status.
  * @param message - the text to show.
- * @param code - `out_of_date` when the page shows older consent words; the form's script shows a reload prompt for it.
+ * @param code - `out_of_date` when the page shows older consent words; the message already tells the visitor to reload, and a script may read the code.
  * @returns the response.
  */
 function answer(request: Request, status: number, message: string, code?: 'out_of_date'): Response {

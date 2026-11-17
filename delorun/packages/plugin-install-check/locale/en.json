@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Install check",
+    "description": "Warns about plugins with no integrity check, known security problems, very new versions or names that look like another plugin, and tells you when an installed plugin has changed"
+  }
+}

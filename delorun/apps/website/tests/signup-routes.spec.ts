@@ -25,11 +25,12 @@ function harness(options: { sending: boolean; turnstile?: 'passed' | 'failed' | 
     if (options.turnstile === 'down') throw new TypeError('network')
     return Response.json({ success: (options.turnstile ?? 'passed') === 'passed' })
   })
+  const rateLimit = vi.fn(async () => ({ success: options.allowed ?? true }))
   const state = { clock: NOW }
   const env: Env = {
     DB: db,
     ASSETS: { fetch: async () => new Response('asset', { status: 200 }) },
-    RATE_LIMIT: { limit: async () => ({ success: options.allowed ?? true }) },
+    RATE_LIMIT: { limit: rateLimit },
     TURNSTILE_SITEKEY: 'site-key',
     TURNSTILE_SECRET: 'secret',
     SEND_CONFIRMATION: options.sending ? 'on' : 'off',
@@ -39,7 +40,7 @@ function harness(options: { sending: boolean; turnstile?: 'passed' | 'failed' | 
     ...(options.sending ? { EMAIL: email } : {}),
   }
   return {
-    env, db, sent, siteverify,
+    env, db, sent, siteverify, rateLimit,
     deps: { fetch: siteverify as typeof fetch, now: () => state.clock },
     get clock() { return state.clock },
     set clock(value) { state.clock = value },
@@ -107,6 +108,7 @@ describe('POST /api/subscribe', () => {
     }
     const page = await route(post('/api/subscribe', { ...SIGNUP, consent_version: 'old' }, 'text/html'), h.env, h.deps)
     expect(page.status).toBe(409)
+    expect(h.rateLimit).not.toHaveBeenCalled()
     expect(h.siteverify).not.toHaveBeenCalled()
     expect(h.db.rows('SELECT email FROM subscribers')).toEqual([])
     expect(h.sent).toHaveLength(0)

@@ -35,6 +35,7 @@ export const SHARE_RULES: Readonly<Record<string, ShareRule>> = {
   'boundary': { share: false, security: true, reason: 'reads git history: the pinned upstream commit and the retired entries\' commits must be ancestors of HEAD, and the security paths are read at HEAD' },
   'gates:licence': { share: false, reason: 'walks git-ignored manifests under delorun/, such as built output and the documentation site\'s install, which no key covers' },
   'gates:package-states': { share: true, note: 'reads the Delorun manifests, which are its inputs' },
+  'gates:plugin-sentences': { share: true, note: 'reads the Delorun manifests, bundle patches and English locale files, which are its inputs' },
   'gates:secrets': { share: false, security: true, reason: 'security class; reads the pinned upstream commit\'s objects' },
   'gates:personal-data': { share: false, security: true, reason: 'security class; reads the range\'s commits and a pattern file in the home directory' },
   'gates:infrastructure': { share: false, security: true, reason: 'security class; reads the pinned upstream commit\'s objects' },
