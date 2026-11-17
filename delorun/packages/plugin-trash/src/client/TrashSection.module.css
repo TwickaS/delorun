@@ -3,7 +3,7 @@
 .section {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--dsh-settings-page-gap, 20px);
   max-width: var(--dsh-settings-section-max-width, 760px);
   color: var(--dsw-alias-label-primary);
 }
@@ -31,9 +31,10 @@
 
 .status {
   margin: 0;
-  font-size: 13px;
-  line-height: 20px;
-  color: var(--dsw-alias-label-tertiary);
+  padding: 0 4px;
+  font-size: var(--dsh-settings-lead-size, 13px);
+  line-height: var(--dsh-settings-lead-line-height, 20px);
+  color: var(--dsh-settings-lead-color, var(--dsw-alias-label-secondary));
 }
 
 .rows {

@@ -57,12 +57,12 @@ export function PairingSettings({ t, time, state, form, mutation, set, openCode,
     {state.requests.length === 0 ? null : <WaitingRequests t={t} time={time} requests={state.requests} openCode={openCode} decline={decline} />}
     <SettingsCard title={t('pairing.heading')} description={t('pairing.fixed')} group="pairing">
       <SettingRow title={t('pairing.may.title')} description={t('pairing.may.description')} failure={mutation.failed ? t('pairing.failed') : undefined} stacked>
-        <ChoiceGroup label={t('pairing.may.title')} value={shown.mayAskWithoutWindow} disabled={disabled}
+        <ChoiceGroup label={t('pairing.may.title')} value={shown.mayAskWithoutWindow} disabled={disabled} fill
           options={WINDOWLESS_MODES.map(value => ({ value, label: t(`pairing.may.${value}`) }))}
           onChange={(next) => { void set('mayAskWithoutWindow', next) }} />
       </SettingRow>
       <SettingRow title={t('pairing.show.title')} description={t('pairing.show.description')} stacked>
-        <ChoiceGroup label={t('pairing.show.title')} value={shown.showRequest} disabled={disabled}
+        <ChoiceGroup label={t('pairing.show.title')} value={shown.showRequest} disabled={disabled} fill
           options={REQUEST_DISPLAYS.map(value => ({ value, label: t(`pairing.show.${value}`) }))}
           onChange={(next) => { void set('showRequest', next) }} />
       </SettingRow>

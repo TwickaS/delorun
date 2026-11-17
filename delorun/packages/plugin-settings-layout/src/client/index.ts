@@ -72,8 +72,9 @@ const NS = 'settings.delorunLayout'
  * heading colour resolves in light and dark.
  */
 export const PANEL_STYLE = 'body{--dsh-settings-panel-width:1080px;--dsh-settings-panel-height:88vh;--dsh-settings-nav-width:min(220px,40vw);'
-  + '--dsh-settings-card-heading-size:15px;--dsh-settings-card-heading-line-height:22px;--dsh-settings-card-heading-weight:600;'
-  + '--dsh-settings-card-heading-letter-spacing:normal;--dsh-settings-card-heading-transform:none;--dsh-settings-card-heading-color:var(--dsw-alias-label-primary)}'
+  + '--dsh-settings-card-heading-size:15px;--dsh-settings-card-heading-line-height:22px;--dsh-settings-card-heading-weight:500;'
+  + '--dsh-settings-card-heading-letter-spacing:normal;--dsh-settings-card-heading-transform:none;--dsh-settings-card-heading-color:var(--dsw-alias-label-primary);'
+  + '--dsh-settings-lead-size:13px;--dsh-settings-lead-line-height:20px;--dsh-settings-lead-color:var(--dsw-alias-label-secondary);--dsh-settings-page-gap:20px}'
 
 /**
  * The phone Settings strip. Upstream's shell has no slot that replaces its narrow layout, so the strip is restyled from
@@ -83,7 +84,7 @@ export const PANEL_STYLE = 'body{--dsh-settings-panel-width:1080px;--dsh-setting
  */
 export const PHONE_NAV_STYLE = '@keyframes dlo-nav-edges{0%{--dsh-nav-fade-start:0px;--dsh-nav-fade-end:24px}4%{--dsh-nav-fade-start:24px;--dsh-nav-fade-end:24px}'
   + '96%{--dsh-nav-fade-start:24px;--dsh-nav-fade-end:24px}100%{--dsh-nav-fade-start:24px;--dsh-nav-fade-end:0px}}'
-  + '@media (max-width:767px){'
+  + '@media (min-width:601px) and (max-width:767px){'
   + 'html [data-shortcut-modal="settings"] [role="group"]>[aria-hidden="true"]:first-child{display:flex;align-items:center;flex:none;padding:0 4px 0 12px;' // us-spelling: quoted output (CSS)
   + 'font-size:12px;font-weight:600;line-height:16px;letter-spacing:.02em;white-space:nowrap;color:var(--dsw-alias-label-secondary)}' // us-spelling: quoted output (CSS)
   + 'html [data-shortcut-modal="settings"] [role="group"]+[role="group"]{margin-inline-start:8px;padding-inline-start:4px;border-inline-start:1px solid var(--dsw-alias-border-l2)}'

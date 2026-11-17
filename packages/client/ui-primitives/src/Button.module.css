@@ -33,6 +33,16 @@
   border-radius: var(--dsw-radius-sm);
 }
 
+/* Settings cards carry inline actions beside text and 44px footer buttons: on a pointer screen they get a 32px target, not the 28px chip size. */
+@media (min-width: 640px) and (pointer: fine) {
+  :global([data-settings-anchor]) .sm {
+    height: 32px;
+    padding: 0 12px;
+    font-size: 13px;
+    line-height: 20px;
+  }
+}
+
 .primary {
   background: var(--dsw-alias-button-primary-fill);
   color: var(--dsw-alias-label-primary-foreground);
@@ -81,4 +91,17 @@
   height: 16px;
   align-items: center;
   justify-content: center;
+}
+
+/* A press sinks the filled and outlined buttons slightly; the whole press is 120ms, so a quick tap still reads. */
+@media (prefers-reduced-motion: no-preference) {
+  .primary,
+  .outline {
+    transition: transform 120ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  .primary:active:not(:disabled),
+  .outline:active:not(:disabled) {
+    transform: scale(0.97);
+  }
 }

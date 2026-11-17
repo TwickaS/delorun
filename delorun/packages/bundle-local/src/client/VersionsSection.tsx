@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
+import { SettingsCard } from '@delorun/settings-controls'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { GateFailure, GateNotice } from './GateNotice.tsx'
 import { noteUnlockedAction } from './gate-unlock.ts'
@@ -94,15 +95,19 @@ export function VersionsSection({ t, fetch, atComputer, saveFile }: VersionsSect
   return <div className={css.section}>
     <h2 className={css.heading}>{t('title')}</h2>
     <p className={css.intro}>{t('intro')}</p>
-    <SaveSetup t={t} fetch={fetch} onSaved={async (text) => { setNotice(text); await refresh() }} />
+    <SettingsCard title={t('save.heading')}><SaveSetup t={t} fetch={fetch} onSaved={async (text) => { setNotice(text); await refresh() }} /></SettingsCard>
     {notice === undefined ? null : <p className={css.notice} role="status">{notice}</p>}
     {computer
       ? <SetupTransfer t={t} fetch={fetch} saveFile={saveFile} onChanged={refresh} />
       : <p className={css.line} data-versions-away><GateNotice gate={{ kind: 'computer' }} t={t} reason={t('transferReason')} /></p>}
     {list.kind === 'loading' ? <p className={css.line}>{t('loading')}</p> : null}
     {list.kind === 'failed' ? <p className={css.failed} role="alert">{list.text}</p> : null}
-    {list.kind === 'ready' ? <VersionList t={t} fetch={fetch} answer={list.value}
-      onSwitched={async (text) => { setNotice(text); await refresh() }} /> : null}
+    {list.kind === 'ready'
+      ? <SettingsCard title={t('list.heading')}>
+        <VersionList t={t} fetch={fetch} answer={list.value}
+          onSwitched={async (text) => { setNotice(text); await refresh() }} />
+      </SettingsCard>
+      : null}
   </div>
 }
 
@@ -149,9 +154,9 @@ function VersionList({ t, fetch, answer, onSwitched }: {
   t: Translate; fetch: HostFetch; answer: VersionsAnswer; onSwitched: (text: string) => Promise<void>
 }): ReactNode {
   if (answer.problem !== undefined) return <p className={css.failed} role="alert">{answer.problem}</p>
-  if (answer.versions.length === 0) return <p className={css.line}>{t('empty')}</p>
+  if (answer.versions.length === 0) return <p className={css.empty}>{t('empty')}</p>
   return <>
-    {answer.unsaved ? <p className={css.line}>{t('unsaved')}</p> : null}
+    {answer.unsaved ? <p className={css.empty}>{t('unsaved')}</p> : null}
     <ul className={css.list}>
       {groupVersions(answer.versions).map(({ version, count }) => <VersionRow key={version.id} t={t} fetch={fetch} version={version} count={count} onSwitched={onSwitched} />)}
     </ul>

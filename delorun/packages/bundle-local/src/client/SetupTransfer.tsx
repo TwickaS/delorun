@@ -7,6 +7,7 @@
 import { useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button, Input, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
+import { SettingsCard } from '@delorun/settings-controls'
 import type { SetupApplyView, SetupInspectView, SetupKeyView, SetupLeftOutView, SetupWasView } from '@delorun/plugin-changes/wire'
 import { applySetupFile, exportSetupFile, fromBase64, inspectSetupFile, listSetupPlugins, replanSetupFile, type ExportChoices, type ImportChoices } from './setup-transfer-api.ts'
 import { failureSentence, LOOPBACK_REQUIRED, type HostFetch } from './host-api.ts'
@@ -96,9 +97,8 @@ export function SetupTransfer({ t, fetch, saveFile, onChanged }: {
     await onChanged()
   })
   const busy = stage.kind === 'busy'
-  return <div className={css.transfer}>
-    <h3 className={css.reviewTitle}>{t('transfer.title')}</h3>
-    <p className={css.line}>{t('transfer.intro')}</p>
+  return <SettingsCard title={t('transfer.title')} description={t('transfer.intro')}>
+    <div className={css.transfer}>
     <div className={css.transferButtons}>
       <Button variant="outline" size="sm" disabled={busy || stage.kind === 'review' || stage.kind === 'exporting'} onClick={() => { void openExport() }}>{t('transfer.export')}</Button>
       <Button variant="outline" size="sm" disabled={busy || stage.kind === 'review' || stage.kind === 'exporting'} onClick={() => { input.current?.click() }}>{t('transfer.import')}</Button>
@@ -117,7 +117,8 @@ export function SetupTransfer({ t, fetch, saveFile, onChanged }: {
     {stage.kind === 'review' ? <Review t={t} view={stage.view} choices={stage.choices} onChoose={(choices) => { void choose(stage.view, choices) }}
       onApply={() => { void apply(stage.view.token, stage.choices) }} onCancel={() => { setStage({ kind: 'idle' }) }} /> : null}
     {stage.kind === 'done' ? <Done t={t} view={stage.view} /> : null}
-  </div>
+    </div>
+  </SettingsCard>
 }
 
 /** An import replaces the settings and keeps the plugins the file does not list, until the person chooses otherwise. */

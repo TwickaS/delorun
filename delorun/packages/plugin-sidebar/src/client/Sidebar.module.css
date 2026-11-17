@@ -273,6 +273,41 @@
   list-style: none;
 }
 
+/* Placeholder rows for a list that has not loaded: quiet bars the height of a chat row, pulsing only when motion is allowed. */
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delorun-space-2);
+  padding: var(--delorun-space-3) var(--delorun-space-4);
+  list-style: none;
+}
+
+.skeletonRow {
+  height: 28px;
+  border-radius: var(--dsw-radius-sm);
+  background-color: var(--dsw-alias-interactive-bg-hover);
+}
+
+.skeletonRow:nth-child(3n + 2) {
+  width: 82%;
+}
+
+.skeletonRow:nth-child(3n) {
+  width: 64%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .skeletonRow {
+    animation: skeleton-pulse 1.4s ease-in-out infinite;
+  }
+
+  @keyframes skeleton-pulse {
+    50% {
+      opacity: 0.5;
+    }
+  }
+}
+
 /* The first shelf takes the free space above it, so the shelves sit at the bottom of a short list. */
 .shelfItem {
   margin: 0 var(--delorun-space-1);

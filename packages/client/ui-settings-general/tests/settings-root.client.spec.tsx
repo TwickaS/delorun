@@ -179,7 +179,7 @@ function mount({
     act(() => { sessions.byId[activeId] = { ...session, blank: next } })
     view.rerender(<SettingsRoot {...props} />)
   }
-  return { view, renderSlot, bump, listeners, reconnect, setConnectionState, setDesktopUpdate, setShortcuts, setOnboardingActive }
+  return { shell, view, renderSlot, bump, listeners, reconnect, setConnectionState, setDesktopUpdate, setShortcuts, setOnboardingActive }
 }
 
 function openPanel() {
@@ -625,5 +625,44 @@ describe('SettingsPanel with a layout', () => {
     fireEvent.click(screen.getByRole('button', { name: /Enter sends/ }))
     expect(screen.getByRole('heading', { name: 'Chat' })).toBeTruthy()
     expect((search as HTMLInputElement).value).toBe('')
+  })
+})
+
+describe('SettingsPanel on a phone', () => {
+  beforeEach(() => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: true, media: query, addEventListener: () => {}, removeEventListener: () => {},
+    }))
+  })
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  it('opens on the list, shows a pick under a back arrow and its title, and returns focus to the row', () => {
+    mount({ rows: GROUPED_ROWS, nav: groupedNav() })
+    openPanel()
+    const dialog = screen.getByRole('dialog')
+    expect(dialog.dataset.phone).toBe('list')
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Agent presets' }))
+    expect(dialog.dataset.phone).toBe('page')
+    const back = screen.getByRole('button', { name: 'Back' })
+    expect(document.activeElement).toBe(back)
+    expect(dialog.getAttribute('aria-labelledby')).not.toBeNull()
+    expect(document.getElementById(dialog.getAttribute('aria-labelledby') ?? '')?.textContent).toBe('Agent presets')
+    fireEvent.click(back)
+    expect(dialog.dataset.phone).toBe('list')
+    expect((document.activeElement as HTMLElement).dataset.pageId).toBe('agent-presets')
+  })
+
+  it('opens straight on the page of a requested section', () => {
+    const { shell } = mount({ rows: GROUPED_ROWS, nav: groupedNav() })
+    act(() => { shell.actions.openSection('agent-presets') })
+    expect(screen.getByRole('dialog').dataset.phone).toBe('page')
+  })
+
+  it('keeps search results on screen while a query is typed', () => {
+    mount({ rows: GROUPED_ROWS, nav: groupedNav() })
+    openPanel()
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search settings' }), { target: { value: 'enter' } })
+    expect(screen.getByRole('dialog').dataset.phone).toBe('results')
   })
 })

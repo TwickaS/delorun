@@ -321,18 +321,24 @@ describe('the chat list', () => {
     expect(screen.queryByRole('button', { name: en['workspace.add'] })).toBeNull()
   })
 
+  it('shows placeholder rows, not an empty message, until the Workspace list has loaded', () => {
+    show({ list: listOf() })
+    expect(screen.getByTestId('sidebar-skeleton').children).toHaveLength(6)
+    expect(screen.queryByText(en['empty.none'])).toBeNull()
+  })
+
   it('says what is missing when the list is empty', () => {
     const none = listOf()
-    show({ list: none, workspaces: [] })
+    show({ list: none, workspaces: [], workspacesLoaded: true })
     expect(screen.getByText(en['empty.noWorkspaces'])).toBeTruthy()
     cleanup()
-    show({ list: none })
+    show({ list: none, workspacesLoaded: true })
     expect(screen.getByText(en['empty.none'])).toBeTruthy()
     cleanup()
-    show({ list: none, stored: { scope: 'w-site' } })
+    show({ list: none, stored: { scope: 'w-site' }, workspacesLoaded: true })
     expect(screen.getByText(en['empty.scoped'].replace('{name}', 'site'))).toBeTruthy()
     cleanup()
-    show({ list: none, stored: { scope: 'w-site\nw-api' } })
+    show({ list: none, stored: { scope: 'w-site\nw-api' }, workspacesLoaded: true })
     expect(screen.getByText(en['empty.scopedMany'])).toBeTruthy()
   })
 

@@ -73,6 +73,8 @@ describe('Create a plugin', () => {
     const heading = await screen.findByRole('heading', { name: en['create.title'] })
     // The heading ignores a titled page's rule that hides section titles: Plugins' page title names only the inventory.
     expect(heading.className).toContain('createHeading')
+    // The kind and the workspace are the studio's selector buttons, not the browser's own selects.
+    expect(document.querySelector('select')).toBeNull()
   })
 
   it('creates the plugin in the chosen workspace, shows where it goes and lists the files', async () => {
@@ -80,10 +82,12 @@ describe('Create a plugin', () => {
     await open()
     await screen.findByLabelText(en['create.name'])
     expect(screen.getByText('Goes in /work/home/plugins')).toBeTruthy()
-    fireEvent.change(screen.getByLabelText(en['create.workspace']), { target: { value: 'w2' } })
+    fireEvent.click(screen.getByLabelText(en['create.workspace']))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Side' }))
     expect(screen.getByText('Goes in /work/side/plugins')).toBeTruthy()
     fireEvent.change(screen.getByLabelText(en['create.name']), { target: { value: ' @me/hello ' } })
-    fireEvent.change(screen.getByLabelText(en['create.kind']), { target: { value: 'preset' } })
+    fireEvent.click(screen.getByLabelText(en['create.kind']))
+    fireEvent.click(await screen.findByRole('menuitem', { name: en['create.kind.preset'] }))
     fireEvent.click(screen.getByRole('button', { name: en['create.submit'] }))
     await screen.findByText('package.json')
     expect(fake.calls(ACTION_PATHS.create)).toEqual([{ name: '@me/hello', kind: 'preset', workspace: 'w2' }])

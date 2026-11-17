@@ -192,12 +192,18 @@ describe('composer stats pills', () => {
     expect(view.container.textContent).toBe('')
   })
 
+  it('uses singular and plural forms for each count on its own', () => {
+    const { source } = makeSource({ nodes: [assistant(1, 1), assistant(2, 1)] })
+    const view = render(<StatsPills {...props(source)} />)
+    expect(view.getByText('1 turn 2 steps')).toBeTruthy()
+  })
+
   it('renders the counts reading and usage pill and hides a brand-new empty session', () => {
     const { source } = makeSource({ nodes: [assistant(1, 1)] })
     const view = render(<StatsPills {...props(source)} />)
     // No timing on the fixture: the speed segment drops out and the dialog
     // would have no rows, so the counts reading stays a static pill (no button).
-    expect(view.getByText('1 turns 1 steps').closest('button')).toBeNull()
+    expect(view.getByText('1 turn 1 step').closest('button')).toBeNull()
     // Cache hit comes from the projection, so paging the window cannot change
     // it; the usage pill leads with the whole-log token total. Its accessible
     // name separates the segments the visual sep glyph joins.
@@ -239,8 +245,8 @@ describe('composer stats pills', () => {
     const { source } = makeSource({ nodes: [timedStep()] })
     const view = render(<StatsPills {...props(source)} />)
     const timePill = view.getAllByRole('button')[0]!
-    expect(timePill.textContent).toBe('1 turns 1 steps·20 tok/s')
-    expect(timePill.getAttribute('aria-label')).toBe('1 turns 1 steps · 20 tok/s')
+    expect(timePill.textContent).toBe('1 turn 1 step·20 tok/s')
+    expect(timePill.getAttribute('aria-label')).toBe('1 turn 1 step · 20 tok/s')
   })
 
   it('marks each pill with its dock entry id', () => {
@@ -248,7 +254,7 @@ describe('composer stats pills', () => {
     const view = render(<StatsPills {...props(source)} />)
     const pills = [...view.container.querySelectorAll('[data-composer-stat]')]
     expect(pills.map(pill => [pill.getAttribute('data-composer-stat'), pill.textContent])).toEqual([
-      ['activity', '1 turns 1 steps·20 tok/s'],
+      ['activity', '1 turn 1 step·20 tok/s'],
       ['usage', '105 tok·Cache hit 90%'],
     ])
   })
@@ -268,7 +274,7 @@ describe('composer stats pills', () => {
     expect(dialog.getAttribute('aria-label')).toBe('Session statistics')
     // Portaled out of the composer dock.
     expect(dialog.parentElement).toBe(document.body)
-    expect(dialog.firstChild?.textContent).toBe('Session statistics1 turns 1 steps')
+    expect(dialog.firstChild?.textContent).toBe('Session statistics1 turn 1 step')
     const details = dialog.querySelector('[data-session-stats-details]') as HTMLElement
     expect(details).toBeTruthy()
     expect(details.textContent).toContain('LLM time3.8s')
@@ -410,7 +416,7 @@ describe('composer stats pills', () => {
       fireEvent.pointerEnter(timePill)
       act(() => { vi.advanceTimersByTime(200) })
       expect(tooltipText(view)).toBeNull()
-      expect(view.getByRole('dialog').firstChild?.textContent).toBe('Session statistics1 turns 1 steps')
+      expect(view.getByRole('dialog').firstChild?.textContent).toBe('Session statistics1 turn 1 step')
     })
 
     it('pins a cut-off static reading on tap', () => {
@@ -437,7 +443,7 @@ describe('composer stats pills', () => {
   it('drops the usage pill when no projection is composed', () => {
     const { source } = makeSource({ nodes: [assistant(1, 1)] })
     const view = render(<StatsPills {...props(source, {})} />)
-    expect(view.container.textContent).toBe('1 turns 1 steps')
+    expect(view.container.textContent).toBe('1 turn 1 step')
     // The untimed window has no dialog rows either, so no button renders at all.
     expect(view.queryAllByRole('button')).toHaveLength(0)
   })
@@ -472,7 +478,7 @@ describe('composer stats pills', () => {
       tokenUsage: { uncachedInputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
       sessionStats: sessionStats({ turns: 1, steps: 1 }),
     })} />)
-    expect(view.container.textContent).toBe('1 turns 1 steps')
+    expect(view.container.textContent).toBe('1 turn 1 step')
     expect(view.queryAllByRole('button')).toHaveLength(0)
   })
 
