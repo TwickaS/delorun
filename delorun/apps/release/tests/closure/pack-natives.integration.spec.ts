@@ -164,8 +164,7 @@ describe('the deploy selection and the lockfile systems', () => {
 describe('the Your own browser pack in the workspace', () => {
   const ROOT = fileURLToPath(new URL('../../../../../', import.meta.url))
   const json = (path: string): { [key: string]: unknown } => JSON.parse(readFileSync(join(ROOT, path), 'utf8')) as { [key: string]: unknown }
-  const bundle = json('delorun/packages/bundle-real-browser/package.json') as { delorun: { packNatives: unknown } }
-  const driver = json('delorun/packages/browser-use-browse/package.json') as { dependencies: Record<string, string> }
+  const bundle = json('delorun/packages/bundle-real-browser/package.json') as { dependencies: Record<string, string>, delorun: { packNatives: unknown } }
   const platforms = (json('delorun/apps/release/closure.json') as { platforms: RuntimePlatform[] }).platforms
   const lockfile = readFileSync(join(ROOT, 'pnpm-lock.yaml'), 'utf8')
   const OWN: Readonly<Record<RuntimePlatform, { readonly os: string, readonly cpu: string }>> = {
@@ -173,12 +172,9 @@ describe('the Your own browser pack in the workspace', () => {
     'darwin-x64': { os: 'darwin', cpu: 'x64' }, 'darwin-arm64': { os: 'darwin', cpu: 'arm64' }, 'win32-x64': { os: 'win32', cpu: 'x64' },
   }
 
-  // Skipped, and shown as skipped, while the driver pins no browse version: the pin waits for a version that passes the
-  // release-age rule, and a release built before it fails at the closure step, where the listed packages are missing.
-  const pinned = '@opencode/browse' in driver.dependencies
-  it.skipIf(!pinned)('carries browse\'s program for each release platform\'s own system, pinned with its integrity at the driver\'s browse version', () => {
+  it('carries browse\'s program for each release platform\'s own system, pinned with its integrity at the pack\'s browse version', () => {
     const natives = PackNatives.parse(bundle.delorun.packNatives)
-    const version = driver.dependencies['@opencode/browse']
+    const version = bundle.dependencies['@opencode/browse']
     expect(version).toMatch(/^\d+\.\d+\.\d+$/u)
     for (const platform of platforms) {
       const listed = natives[platform] ?? []

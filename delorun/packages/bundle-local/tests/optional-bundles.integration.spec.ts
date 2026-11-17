@@ -28,8 +28,6 @@ function interpolate(scope: { process: NodeJS.Process }, value: unknown): unknow
 
 const PACKAGES = fileURLToPath(new URL('../../', import.meta.url))
 const UPSTREAM = fileURLToPath(new URL('../../../../packages/', import.meta.url))
-/** Whether the browse driver pins a browse version, whose programs the Your own browser pack carries. */
-const browsePinned = '@opencode/browse' in (JSON.parse(readFileSync(join(PACKAGES, 'browser-use-browse/package.json'), 'utf8')) as { dependencies: Record<string, string> }).dependencies
 
 interface Row { readonly id?: string; readonly name?: string; readonly disabled?: unknown; readonly config?: unknown; readonly group?: boolean }
 
@@ -184,8 +182,7 @@ describe('what needs setup', () => {
     }
   })
 
-  // Skipped, and shown as skipped, while the driver pins no browse version, so browse's program is not installed.
-  it.skipIf(!browsePinned)('says Your own browser needs Chrome connected until browse has seen a paired browser, reading only browsers.json', () => {
+  it('says Your own browser needs Chrome connected until browse has seen a paired browser, reading only browsers.json', () => {
     const data = mkdtempSync(join(scratch, 'xdg-data-'))
     vi.stubEnv('XDG_DATA_HOME', data)
     try {

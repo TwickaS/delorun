@@ -20,8 +20,11 @@
     }
   },
   "dependencies": {
+    "@deepseek-ai/dsh-browser-use": "workspace:*",
+    "@deepseek-ai/dsh-experimental-browser-use-runtime": "workspace:*",
     "@delorun/browser-use-browse": "workspace:*",
-    "@delorun/skill-real-browser": "workspace:*"
+    "@delorun/skill-real-browser": "workspace:*",
+    "@opencode/browse": "0.1.1"
   },
   "delorun": {
     "state": "experimental",
@@ -50,7 +53,6 @@
           {
             "kind": "browse-paired",
             "via": [
-              "@delorun/browser-use-browse",
               "@opencode/browse"
             ]
           }
