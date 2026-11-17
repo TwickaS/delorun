@@ -1,0 +1,28 @@
+# Bilingual-pair consistency record for 2026-11-17-run-allowed-event.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/persistence-changes/2026-11-17-run-allowed-event.md
+/:
+  en: 3d5a424ae7d7e46b
+  zh: c22a8e4a62d8cc1a
+/2026-11-17-run-allowed-event:
+  en: 9d493b4e00520143
+  zh: aec2bcdea47358e7
+/2026-11-17-run-allowed-event/summary:
+  en: 414e1c48d90bcc22
+  zh: c87eee8b0403faea
+/2026-11-17-run-allowed-event/table-of-contents:
+  en: 6cf314a069ceb451
+  zh: 9adff678e9ecab3b
+/2026-11-17-run-allowed-event/declaration:
+  en: 6907136f28e48c90
+  zh: 02f8298485f3d8e7
+/2026-11-17-run-allowed-event/compatibility:
+  en: f3079873092baac8
+  zh: 1129fb2cc77c2cf7
+/2026-11-17-run-allowed-event/verification:
+  en: 4b00b0c7e7614a2d
+  zh: 6f6f14e2c6fe2690
+/2026-11-17-run-allowed-event/dev-note:
+  en: b75c8458928b72b9
+  zh: 003ba4e17b4b5269

@@ -81,12 +81,12 @@ A change applies the next time Delorun starts. The row checks its `flags` when i
 
 ## Contract
 
-- **A preview flag changes studio UI only.** It never changes what reaches a model: no prompt, tool, tool result or request field may depend on a flag. A future flag that would change model-visible input adds a session event first, so the input stays reconstructable from the session log, and that event, not the flag, is what the request is built from.
+- **A preview flag changes studio UI only.** It never changes what reaches a model: no prompt, tool, tool result or request field may depend on a flag. A future flag that would change model-visible input adds a session event first, so the input stays reconstructable from the session log, and that event, not the flag, is what the request is built from. The one exception is `@delorun/plugin-agent-seats`, whose Host reads `externalAgents.liveAgents` in a single file to decide whether the live-agent hand-off tools exist; the session log records the tool list a model sees, so the input stays reconstructable from the log.
 - **Off by default.** A flag is on only where a profile's row sets it to `true`; no plugin and no bundle patch turns one on.
 - **No Settings page.** The row is written by `delorun preview` or by hand.
 - **One owner per flag.** Two packages that list one id, a plugin that declares another package's flag, and a second declaration of one flag are refused.
 
-Two checks hold the first rule as far as code can. `tests/ui-only.spec.ts`: nothing in the package imports the session, model or tool packages, and the Host API exposes no way to change a flag while Delorun runs. The `gates:preview-flags` gate: no Host source reads a flag with `isOn` unless the gate's list names the file with the reason the read cannot reach a model; no file is named today, and the studio reads flags through the route.
+Two checks hold the first rule as far as code can. `tests/ui-only.spec.ts`: nothing in the package imports the session, model or tool packages, and the Host API exposes no way to change a flag while Delorun runs. The `gates:preview-flags` gate: no Host source reads a flag with `isOn` unless the gate's list names the file with the reason the read cannot reach a model; only `plugin-agent-seats/src/live-agents.ts` is named today, and the studio reads flags through the route.
 
 ## Tests
 

@@ -1,0 +1,64 @@
+# Stop: while Claude Code's Bash command is open the person stops the agent. The turn aborts, the program is interrupted,
+# the open call's record closes as stopped, and the child's turn ends cancelled.
+# The connection needs the credentials service, which the headless profile turns off.
+- id: credentials
+  disabled: false
+
+- insert:
+    - id: agent-preset-registry
+      name: '@deepseek-ai/dsh-agent-preset-registry'
+      config:
+        default: standard
+    - id: subagent-claude-code
+      name: '@deepseek-ai/dsh-subagent-claude-code'
+    - id: tool-subagent-claude-code
+      name: '@deepseek-ai/dsh-tool-subagent'
+      config:
+        provider: claude-code
+        toolName: subagent_claude_code
+        maxDepth: provider-managed
+    - id: subagent-codex
+      name: '@deepseek-ai/dsh-subagent-codex'
+    - id: tool-subagent-codex
+      name: '@deepseek-ai/dsh-tool-subagent'
+      config:
+        provider: codex
+        toolName: subagent_codex
+        maxDepth: provider-managed
+    - id: connection
+      name: '@deepseek-ai/dsh-client-connection'
+    - id: delorun-preview-flags
+      name: '@delorun/preview-flags'
+      config:
+        flags:
+          externalAgents.liveAgents: true
+    - id: delorun-delegation-consent
+      name: '@delorun/plugin-delegation-consent'
+      config:
+        enabled: true
+    - id: delorun-external-agents
+      name: '@delorun/external-agents'
+      config:
+        maxLivePrograms: 4
+        graceMs: 3000
+        probeMinIntervalMinutes: 30
+        probeTriggers: []
+    - id: scripted-program
+      name: '../../../delorun/packages/plugin-agent-seats/tests/scripted-program-plugin.ts'
+      config:
+        provider: claude-code
+        turns:
+          - - event: { kind: text, text: I will run the tests. }
+            - event: { kind: tool-call, id: toolu_01, name: Bash, input: '{"command":"npm test"}' }
+            - event: { kind: message-end, usage: { inputTokens: 1200, outputTokens: 80 } }
+            - interrupt: true
+    - id: delorun-agent-seats
+      name: '@delorun/plugin-agent-seats'
+    - id: live-agent-person
+      name: './person.mjs'
+# Pins the corpus model.
+- id: agent-default-model
+  name: '@deepseek-ai/dsh-agent-default-model'
+  config:
+    provider: deepseek-official
+    model: deepseek-v4-flash

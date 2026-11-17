@@ -37,6 +37,7 @@ The [format references](persistence-changes/historical-formats/README.md) cover 
 | `event:compaction/summary` | event | `e2f9a41e0989f54ed8cee80f8db2bcf9d60a5c810dc9d45b83fa050b9dce7602` | [`{ type: "compaction/summary" }`](#persistence-type-sha256-e2f9a41e0989f54ed8cee80f8db2bcf9d60a5c810dc9d45b83fa050b9dce7602) |
 | `event:deliverables/presented` | event | `13d3d180f977bf78081d487ffa0ecb75857349bcab29a5a3fb48189fca2a6176` | [`{ type: "deliverables/presented" }`](#persistence-type-sha256-13d3d180f977bf78081d487ffa0ecb75857349bcab29a5a3fb48189fca2a6176) |
 | `event:developer/message` | event | `510826cf4e1f9220d75c1efd90b349dd9a77fc5ba15d19e16f87e85a48db5f99` | [`{ type: "developer/message" }`](#persistence-type-sha256-510826cf4e1f9220d75c1efd90b349dd9a77fc5ba15d19e16f87e85a48db5f99) |
+| `event:external-agent/run-allowed` | event | `0c201d883a00e1f807504b13aaffc6aeee8b9d0b654e5a16f49b2975fa0b31fe` | [`{ type: "external-agent/run-allowed" }`](#persistence-type-sha256-0c201d883a00e1f807504b13aaffc6aeee8b9d0b654e5a16f49b2975fa0b31fe) |
 | `event:feedback/message-delete` | event | `3ee93b06f3a125850337602bcdf155d2538c43a5c944ec55b1b3c365152d6796` | [`{ type: "feedback/message-delete" }`](#persistence-type-sha256-3ee93b06f3a125850337602bcdf155d2538c43a5c944ec55b1b3c365152d6796) |
 | `event:feedback/message-put` | event | `b5086d249e8502e9ead1d39156bb8d559bde7951cac0f14ce150345b4e42a2bf` | [`{ type: "feedback/message-put" }`](#persistence-type-sha256-b5086d249e8502e9ead1d39156bb8d559bde7951cac0f14ce150345b4e42a2bf) |
 | `event:feedback/record` | event | `b54940ff095c17e874c5be03815f4c2145a256cf3a1d34dae4ab2f7769dfffe8` | [`{ type: "feedback/record" }`](#persistence-type-sha256-b54940ff095c17e874c5be03815f4c2145a256cf3a1d34dae4ab2f7769dfffe8) |
@@ -512,6 +513,25 @@ Source: [`packages/deliverables/tool-present/src/types.ts:15`](../packages/deliv
 ```
 
 Source: [`packages/core/session/src/types.ts:317`](../packages/core/session/src/types.ts)
+
+### `external-agent/*`
+
+<a id="external-agentrun-allowed--log-only"></a>
+
+#### `external-agent/run-allowed` — log-only
+
+```ts persistence-catalog
+/**
+ * The person answered a live external agent's question with "Allow for this run" and the start gate kept the
+ * program's rule for the rest of the run. Log-only audit: it carries no `surfaceOp` and never enters model
+ * history. Declared here because the persistence catalog scans `packages/` for Session event declarations;
+ * `@delorun/plugin-agent-seats` appends it.
+ * @param data - `askedSeq`, the `approval/asked` event of the question the person answered, in the same log.
+ */
+'external-agent/run-allowed': { askedSeq: SessionSeq }
+```
+
+Source: [`packages/subagent/subagent/src/descriptor.ts:46`](../packages/subagent/subagent/src/descriptor.ts)
 
 ### `feedback/*`
 
@@ -1881,6 +1901,14 @@ SHA-256: `66c5bf7473db21dd157d2535a6eb3f4849c73a1c1f429e9faf5e9fd1f65b3756`
 SHA-256: `fc351843b8ecbd05d739c4ca4fcd4bc7cfad6c0beacbbd48389959bb1bf06cf3`
 
 `"external"`
+
+<a id="persistence-type-sha256-6733f4ad03f3fbe0c196b509303777122972e1249602af6d5136b9b68ab88aed"></a>
+
+### `"external-agent/run-allowed"`
+
+SHA-256: `6733f4ad03f3fbe0c196b509303777122972e1249602af6d5136b9b68ab88aed`
+
+`"external-agent/run-allowed"`
 
 <a id="persistence-type-sha256-b57a2889408de36e4516807194c73bdecd51a92f633ccd05db81bf049200f420"></a>
 
@@ -3490,7 +3518,7 @@ Array of [`ContextSnapshotSection`](#persistence-type-sha256-86e1e384495ee09ac2d
 
 SHA-256: `6487b10ba7542f3c447b1e41a1c6a590b7bfafe0b9b66b49f34028da85bb970f`
 
-Sources: [`packages/subagent/subagent/src/descriptor.ts:72`](../packages/subagent/subagent/src/descriptor.ts)
+Sources: [`packages/subagent/subagent/src/descriptor.ts:80`](../packages/subagent/subagent/src/descriptor.ts)
 
 | Property | Presence | Type |
 |---|---|---|
@@ -4538,7 +4566,7 @@ Sources: [`packages/schedule/schedule/src/types.ts:214`](../packages/schedule/sc
 
 SHA-256: `5f758f3de5f00c18968a7c6d347083aac5c9ae13f6a79c78f6611b23c4973564`
 
-Sources: [`packages/subagent/subagent/src/descriptor.ts:61`](../packages/subagent/subagent/src/descriptor.ts)
+Sources: [`packages/subagent/subagent/src/descriptor.ts:69`](../packages/subagent/subagent/src/descriptor.ts)
 
 | Property | Presence | Type |
 |---|---|---|
@@ -5053,7 +5081,7 @@ One of:
 
 SHA-256: `86d1d0e9cfebb240421187e3dc37fb71cc38a1501885cf32f8f9adef7b0a2bde`
 
-Sources: [`packages/subagent/subagent/src/descriptor.ts:89`](../packages/subagent/subagent/src/descriptor.ts)
+Sources: [`packages/subagent/subagent/src/descriptor.ts:97`](../packages/subagent/subagent/src/descriptor.ts)
 
 One of:
 
@@ -6060,6 +6088,18 @@ Sources: [`packages/core/session/src/types.ts:369`](../packages/core/session/src
 | `name` | required | `string` |
 | `step` | required | `number` |
 | `turn` | required | `number` |
+
+<a id="persistence-type-sha256-4272b05b85ca6834f3af937de661ac623c24c63cac86a836c8aa7f518d276440"></a>
+
+### `{ askedSeq }`
+
+SHA-256: `4272b05b85ca6834f3af937de661ac623c24c63cac86a836c8aa7f518d276440`
+
+Sources: [`packages/subagent/subagent/src/descriptor.ts:46`](../packages/subagent/subagent/src/descriptor.ts)
+
+| Property | Presence | Type |
+|---|---|---|
+| `askedSeq` | required | `number` |
 
 <a id="persistence-type-sha256-1528539c63db8b23506f0209a99ce77d8ad138adfbfcee3d4769b7382d93756c"></a>
 
@@ -8660,6 +8700,22 @@ Sources: [`packages/web/web-search-deepseek/src/provider.ts:82`](../packages/web
 | Property | Presence | Type |
 |---|---|---|
 | `type` | required | `"disabled"` |
+
+<a id="persistence-type-sha256-0c201d883a00e1f807504b13aaffc6aeee8b9d0b654e5a16f49b2975fa0b31fe"></a>
+
+<a id="persistence-type-eventexternal-agentrun-allowed"></a>
+
+### `{ type: "external-agent/run-allowed" }`
+
+SHA-256: `0c201d883a00e1f807504b13aaffc6aeee8b9d0b654e5a16f49b2975fa0b31fe`
+
+| Property | Presence | Type |
+|---|---|---|
+| `data` | required | [`{ askedSeq }`](#persistence-type-sha256-4272b05b85ca6834f3af937de661ac623c24c63cac86a836c8aa7f518d276440) |
+| `ignorable` | optional | `true` |
+| `seq` | required | `number` |
+| `time` | required | `number` |
+| `type` | required | `"external-agent/run-allowed"` |
 
 <a id="persistence-type-sha256-3ee93b06f3a125850337602bcdf155d2538c43a5c944ec55b1b3c365152d6796"></a>
 

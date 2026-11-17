@@ -1041,6 +1041,7 @@ async function verifyHeaders(scenario: HeadlessScenario, actualLogs: readonly Se
     childSchemas.set(index, [child.initial, ...child.changes])
   }
 
+  const childFixtures = await fixtureSessions(scenario)
   for (const [logIndex, log] of actualLogs.entries()) {
     const headers = normalizedHeaders(log.content, ctx)
     const prompts = normalizedSystemPrompts(log.content, ctx)
@@ -1052,7 +1053,10 @@ async function verifyHeaders(scenario: HeadlessScenario, actualLogs: readonly Se
     for (const [index, header] of headers.entries()) {
       const selectedSchemas = childSchemas.get(logIndex)?.[index]
       const base = reconstructed[index] ?? reconstructed[0]
-      const expected = selectedSchemas === undefined ? base : { ...base as JsonObject, tools: selectedSchemas }
+      // A child on its own model route (a live agent's seat) keeps the route its committed fixture recorded.
+      const childFixture = selectedSchemas === undefined ? undefined : childFixtures[logIndex]
+      const childConfig = childFixture === undefined ? undefined : (normalizedHeaders(childFixture, fixtureContext(childFixture))[index] as JsonObject | undefined)?.config
+      const expected = selectedSchemas === undefined ? base : { ...base as JsonObject, ...childConfig === undefined ? {} : { config: childConfig }, tools: selectedSchemas }
       expect(header, `${scenario.name}: request header ${index + 1}`).toEqual(expected)
     }
     if (prompts.length > 0) {
