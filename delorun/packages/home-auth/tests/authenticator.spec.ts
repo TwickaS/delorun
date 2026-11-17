@@ -257,7 +257,7 @@ describe('the authenticator provider', () => {
     expect(() => { give('workspace-management') }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
   })
 
-  it('refuses a real-browser grant from a merely signed-in device and lets an unlocked device give it, with dangerous mode off', async () => {
+  it('refuses a real-browser grant from a merely signed-in device or one in its approval grace and lets an unlocked device give it, with dangerous mode off', async () => {
     ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
     const admitted = provider().admit(request({ headers: { cookie: `__Host-delorun-session=${await session(2)}` } }), 'reach-tailscale-private')
     if (admitted.kind !== 'admitted') throw new Error('not admitted')
@@ -275,6 +275,9 @@ describe('the authenticator provider', () => {
     // A locked device may still say no, and the computer may always say yes.
     for (const value of ['rejected', 'cancelled', 'unavailable']) expect(() => { give(admitted.peer, value) }, value).not.toThrow()
     expect(() => { give(fakePeer('local')) }).not.toThrow()
+    // Pins the grace exclusion: a device in its approval grace typed no code or PIN, so it cannot give the grant.
+    unlock = { id: 'grace-1', grace: true }
+    expect(() => { give(admitted.peer) }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED', message: REAL_BROWSER_REFUSAL, details: { action: 'real-browser' } }))
     // Pins the unlocked device: a running unlock gives the grant, while the computer's other reserved grants stay refused.
     unlock = { id: 'elevation-1' }
     expect(() => { give(admitted.peer) }).not.toThrow()

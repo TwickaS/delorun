@@ -108,10 +108,12 @@ describe('the real-browser routes', () => {
     expect([locked.status, await locked.json()]).toEqual([403, expect.objectContaining({ error: 'ELEVATION_REQUIRED' })])
     expect(grants.view(agent.session).awayUntil).toBeNull()
     expect((await routes.call(REAL_BROWSER_ROUTES.away, { sessionId: 'chat-1', on: true }, { kind: 'sdk' })).status).toBe(403)
-    // The grant's own approval counts the approval grace as an unlock, so the away permission does too.
-    for (const unlocked of ['unlocked-phone', 'grace-phone']) {
-      expect((await routes.call(REAL_BROWSER_ROUTES.away, { sessionId: 'chat-1', on: true }, device(unlocked))).status, unlocked).toBe(200)
-    }
+    // Pins the grace exclusion: a phone in its approval grace typed no code or PIN, so it cannot widen the grant.
+    const grace = await routes.call(REAL_BROWSER_ROUTES.away, { sessionId: 'chat-1', on: true }, device('grace-phone'))
+    expect([grace.status, await grace.json()]).toEqual([403, expect.objectContaining({ error: 'ELEVATION_REQUIRED' })])
+    expect(grants.view(agent.session).awayUntil).toBeNull()
+    expect(routes.admits(REAL_BROWSER_ROUTES.end, device('grace-phone'))).toBe(true)
+    expect((await routes.call(REAL_BROWSER_ROUTES.away, { sessionId: 'chat-1', on: true }, device('unlocked-phone'))).status).toBe(200)
   })
 
   it('answer the state, the away permission and the end, and refuse what they cannot do', async () => {

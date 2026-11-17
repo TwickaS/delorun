@@ -87,7 +87,7 @@ description: "在哪里定制 Delorun：设置、profile 补丁、agent 预设�
 
 | 插件 | 作用 | 需要你提供 | 状态 |
 | --- | --- | --- | --- |
-| 浏览器 | 智能体通过 Playwright，在你电脑上的 Chromium 浏览器中浏览。Chrome DevTools 和 Stagehand 在同一个 bundle 中，处于关闭状态，因为同一时间只能运行一个浏览器提供方。 | 它的 Playwright 所需的 Chromium 版本；下载之前，“插件”会显示“需要设置 · 需要下载 Chromium”，并附上下载它的命令。Stagehand 还需要它自己的模型。 | 实验性 |
+| 浏览器 | 智能体通过 Playwright，在你电脑上的浏览器中浏览：装有 Chrome 时使用 Chrome，并使用它自己的配置文件；否则使用 Playwright 的 Chromium。Chrome DevTools 和 Stagehand 在同一个 bundle 中，处于关闭状态，因为同一时间只能运行一个浏览器提供方。 | 装有 Chrome 时无需任何东西。没有 Chrome 时，需要它的 Playwright 所需的 Chromium 版本；下载之前，“插件”会显示“需要设置 · 需要下载 Chromium”，并附上下载它的命令。Stagehand 还需要它自己的模型。 | 实验性 |
 | 代码智能 | 一个只读的 `lsp` 工具：跳转到定义、查找引用、查找实现、悬停信息。 | 你的 PATH 上有 `typescript-language-server`；在此之前“插件”会显示“需要设置”。其他服务器放进你的 profile 补丁。 | 稳定 |
 | Claude Code 与 Codex 钩子 | 在一轮对话的相同时间点运行 `~/.claude/settings.json` 和 `~/.codex/hooks.json` 中的钩子，并加载 Claude Code mod。 | 你自己的钩子文件；文件缺失时不注册任何钩子。 | 实验性 |
 | Webhook | 已签名的 GitHub webhook 可以开始一次对话，监听 `127.0.0.1:3081`，前面需要你自己提供的代理或隧道。 | 环境中的 `DELORUN_GITHUB_WEBHOOK_SECRET`，以及你自己的规则；端点行起初是关闭的，在设置好密钥之前“插件”会显示“需要设置”。 | 实验性 |

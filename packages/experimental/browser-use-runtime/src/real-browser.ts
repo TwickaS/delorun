@@ -12,6 +12,12 @@ import type { SessionSeq } from '@deepseek-ai/dsh-session/types'
  */
 export type RealBrowserGrantSource = { readonly kind: 'approval'; readonly askedSeq: SessionSeq }
 
+/**
+ * Why a chat's away permission changed: `person` is the person turning it on or off; `expired` records that it ran out
+ * and a run the person did not start was refused for it.
+ */
+export type RealBrowserAwayCause = 'person' | 'expired'
+
 /** Why a chat's real-browser grant ended: the person turned it off. */
 export type RealBrowserEndReason = 'person'
 
@@ -23,7 +29,7 @@ declare module '@deepseek-ai/dsh-session/types' {
      * Whether a run the person did not start, such as a scheduled one, may use the running grant: until the Unix
      * epoch milliseconds `until`, or no longer for `null`. A later one replaces it; `real-browser/ended` ends it.
      */
-    'real-browser/away': { until: number | null }
+    'real-browser/away': { until: number | null; cause: RealBrowserAwayCause }
     /** The Session's real-browser grant ended, its away permission with it; a later `real-browser/granted` starts a new one. */
     'real-browser/ended': { reason: RealBrowserEndReason }
   }

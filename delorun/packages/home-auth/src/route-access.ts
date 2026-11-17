@@ -51,7 +51,7 @@ export const PLUGIN_ROUTE_ACCESS: Readonly<Record<string, Readonly<Record<string
   'browser-use-browse/src/routes.ts': {
     'REAL_BROWSER_ROUTES.state': READ('reads whether a chat may use the person\'s own browser'),
     'REAL_BROWSER_ROUTES.end': READ('ending the grant only narrows what the agent may reach'),
-    'REAL_BROWSER_ROUTES.away': UNLOCKED('lets runs the person did not start use their own browser, with their sign-ins; the grace counts, as it does for the grant\'s approval'),
+    'REAL_BROWSER_ROUTES.away': UNLOCKED('lets runs the person did not start use their own browser, with their sign-ins; the approval grace does not open it, as it does not give the grant'),
   },
   'plugin-delegation-consent/src/routes.ts': {
     'DELEGATION_CONSENT_ROUTES.grants': READ('lists which agents may work in which workspaces'),

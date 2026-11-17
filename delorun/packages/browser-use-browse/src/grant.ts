@@ -91,7 +91,8 @@ export type UseVerdict =
  * a forked Session starts without its parent's.
  */
 export class RealBrowserGrants {
-  private readonly listeners = new Set<(change: GrantChange) => void>()
+  private readonly listeners = new Set<(change: GrantChange) => void | Promise<void>>()
+  private readonly pending = new WeakMap<Session, Promise<unknown>>()
   private readonly handle: ProjectionHandle<GrantState>
   private readonly now: () => number
 
@@ -106,7 +107,9 @@ export class RealBrowserGrants {
     ctx.on('session/event', (session: Session, event: SessionEvent) => {
       if (event.type !== 'real-browser/granted' && event.type !== 'real-browser/ended') return
       const live = this.live(session)
-      for (const listener of this.listeners) listener({ session, live })
+      const previous = this.pending.get(session) ?? Promise.resolve()
+      const results = [...this.listeners].map(listener => listener({ session, live }))
+      this.pending.set(session, Promise.allSettled([previous, ...results]))
     })
   }
 
@@ -154,6 +157,22 @@ export class RealBrowserGrants {
   }
 
   /**
+   * {@link mayUse} for a browse call about to run. When the call is refused because the away permission ran out, the
+   * lapse is recorded once, as a `real-browser/away` with `cause: 'expired'`, which also stops later refusals from
+   * recording it again.
+   * @param session - the Session.
+   * @returns the verdict.
+   */
+  admitCall(session: Session): UseVerdict {
+    const verdict = this.mayUse(session)
+    const { awayUntil } = this.handle.stateOf(session)
+    if (verdict.kind === 'refuse' && verdict.reason === 'away' && awayUntil !== null) {
+      session.append('real-browser/away', { until: null, cause: 'expired' })
+    }
+    return verdict
+  }
+
+  /**
    * Whether the current turn of a Session holds a prompt the person sent.
    * @param session - the Session.
    * @returns the answer the log gives.
@@ -174,14 +193,15 @@ export class RealBrowserGrants {
   }
 
   /**
-   * Allow runs the person did not start to use the running grant until a time, or stop allowing them.
+   * Allow runs the person did not start to use the running grant until a time, or stop allowing them, as the person
+   * chose.
    * @param session - the chat.
    * @param until - Unix epoch milliseconds, or null to stop.
    * @returns whether a grant runs, so the change was recorded.
    */
   setAway(session: Session, until: number | null): boolean {
     if (!this.live(session)) return false
-    if (this.handle.stateOf(session).awayUntil !== until) session.append('real-browser/away', { until })
+    if (this.handle.stateOf(session).awayUntil !== until) session.append('real-browser/away', { until, cause: 'person' })
     return true
   }
 
@@ -197,11 +217,21 @@ export class RealBrowserGrants {
   }
 
   /**
+   * Wait for the listeners of a Session's grant changes so far, such as the browse server starting.
+   * @param session - the chat.
+   * @returns when every listener has settled; a listener's failure is its own to report.
+   */
+  async settled(session: Session): Promise<void> {
+    await this.pending.get(session)
+  }
+
+  /**
    * Hear every start and end of a grant in any Session.
-   * @param listener - called after the event commits, with whether the grant now runs.
+   * @param listener - called after the event commits, with whether the grant now runs; {@link settled} waits for the
+   *   promise it returns.
    * @returns the disposer.
    */
-  onChange(listener: (change: GrantChange) => void): () => void {
+  onChange(listener: (change: GrantChange) => void | Promise<void>): () => void {
     this.listeners.add(listener)
     return () => { this.listeners.delete(listener) }
   }

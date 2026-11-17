@@ -64,12 +64,12 @@ export const WORKSPACE_MANAGEMENT_REFUSAL = 'This needs you at your computer: ma
 export const EXTERNAL_AGENT_REFUSAL = 'This needs you at your computer: starting an external agent such as Claude Code or Codex, which runs outside Delorun\'s sandbox. Answer this prompt in the studio on the home\'s own computer'
 
 /** The sentence the remote studio shows for a refused real-browser grant, answered from a locked device. */
-export const REAL_BROWSER_REFUSAL = 'This needs an unlocked device: letting the agent use your own browser, with your sign-ins, in this chat. Unlock this device and answer again, or answer at the home\'s own computer'
+export const REAL_BROWSER_REFUSAL = 'This needs an unlocked device: letting the agent use your own browser, with your sign-ins, in this chat. Unlock this device with its code or PIN and answer again, or answer at the home\'s own computer'
 
 /**
  * Who besides the home's own computer may give a reserved grant: `computer` keeps it to the computer (and to a device
- * that holds an unlock while dangerous mode holds); `unlocked-device` also lets any device that holds a running unlock
- * give it.
+ * that holds an unlock while dangerous mode holds); `unlocked-device` also lets any device unlocked with a code or PIN
+ * give it, but not one that holds only the approval grace.
  */
 type GrantReach = 'computer' | 'unlocked-device'
 
@@ -339,8 +339,9 @@ export class HomeAuthAuthenticator extends Authenticator {
    * consent) and `workspace-management` (creating, cloning, trashing or restoring a workspace, changing an
    * instruction-layer file, and the main chat's commands and writes) and `external-agent` (starting an external
    * agent program, such as Claude Code or Codex, outside the sandbox). A `real-browser` grant (the person's own
-   * browser for one chat) is refused only to a device that holds no running unlock ({@link unlockOf}): a device that
-   * is merely signed in stays refused, and an unlocked one gives it as the computer does. Any answer but `rejected`,
+   * browser for one chat) is refused only to a device that holds no running unlock ({@link unlockOf}) or holds only the
+   * approval grace: a device that is merely signed in or in its grace stays refused, and one unlocked with a code or
+   * PIN gives it as the computer does. Any answer but `rejected`,
    * `cancelled` and `unavailable` counts as granting. Every other answer, a refusal of the same prompt included, applies.
    * @param answer - the answer and the Peer that gave it.
    * @throws {RemoteError} `LOOPBACK_REQUIRED` naming the action for a refused grant.
@@ -353,7 +354,11 @@ export class HomeAuthAuthenticator extends Authenticator {
     // `tailnet-membership`.
     const reach = this.reachPeers.get(answer.peer.id)
     if (reach === undefined) return
-    if (refusal.reach === 'unlocked-device' && unlockOf(this.ctx.homeAuth, reachDevicePrincipal(reach.deviceId, reach.listener, reach.unlockId)) !== undefined) return
+    if (refusal.reach === 'unlocked-device') {
+      const unlock = unlockOf(this.ctx.homeAuth, reachDevicePrincipal(reach.deviceId, reach.listener, reach.unlockId))
+      // The approval grace follows an approval, not a code or PIN typed on the device, so it gives no such grant.
+      if (unlock !== undefined && unlock.grace !== true) return
+    }
     // An unlocked PIN page gives what the computer gives. This Peer is the answering page's, so a locked tab stays
     // refused while a sibling tab is unlocked.
     if (reach.unlockId !== undefined && this.ctx.homeAuth.pageUnlockOf(reach.unlockId) !== undefined) return

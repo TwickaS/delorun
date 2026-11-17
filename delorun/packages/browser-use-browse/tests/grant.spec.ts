@@ -8,7 +8,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import { SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
+import { SessionId, SessionLogOffset, type SessionEvent } from '@deepseek-ai/dsh-session'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import ApprovalService, { type ApprovalOutcome, type ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
 import { describe, expect, it } from 'vitest'
@@ -135,7 +135,7 @@ describe('use_my_browser', () => {
 
 describe('the grant in later runs', () => {
   it('admits a scheduled run in a granted chat only while the away permission runs, and the end turns everything off', async () => {
-    const h = await harness(new MockAdapter([ASK, textResponse('allowed'), BROWSE, textResponse('a'), BROWSE, textResponse('b'), BROWSE, textResponse('c'), BROWSE, textResponse('d')]), () => 'allowed-once')
+    const h = await harness(new MockAdapter([ASK, textResponse('allowed'), BROWSE, textResponse('a'), BROWSE, textResponse('b'), BROWSE, textResponse('c'), BROWSE, textResponse('c2'), BROWSE, textResponse('d')]), () => 'allowed-once')
     const agent = await h.ctx.agentLoop.create(SessionId('scheduled'), { provider: 'mock', model: 'mock' })
     await run(h.ctx, agent, 'check my order')
     expect(h.grants.admitted(agent)).toBe(true)
@@ -146,20 +146,44 @@ describe('the grant in later runs', () => {
     expect(h.grants.setAway(agent.session, 2_000)).toBe(true)
     await run(h.ctx, agent, 'nightly check', 'schedule')
     expect(h.browseCalls).toEqual(['page.title()'])
-    // Pins the lapse: after `until` the scheduled turn is refused again.
+    // Pins the lapse: after `until` the scheduled turn is refused again, and the lapse is logged once, not per call.
     h.clock.now = 2_000
     await run(h.ctx, agent, 'nightly check', 'schedule')
     expect(h.browseCalls).toEqual(['page.title()'])
     expect(results(agent).at(-1)).toContain(AWAY_REFUSAL)
+    const aways = () => agent.session.snapshotEvents().filter(event => event.type === 'real-browser/away').map(event => event.data)
+    expect(aways()).toEqual([{ until: 2_000, cause: 'person' }, { until: null, cause: 'expired' }])
+    await run(h.ctx, agent, 'nightly check', 'schedule')
+    expect(results(agent).at(-1)).toContain(AWAY_REFUSAL)
+    expect(aways()).toHaveLength(2)
+    expect(h.grants.view(agent.session)).toEqual({ live: true, awayUntil: null })
     // Pins the end: turning it off ends the grant and its away permission, logged, and the person's own turn is refused.
     expect(h.grants.end(agent.session)).toBe(true)
     expect(h.grants.view(agent.session)).toEqual({ live: false, awayUntil: null })
     await run(h.ctx, agent, 'check again')
     expect(h.browseCalls).toEqual(['page.title()'])
     expect(results(agent).at(-1)).toContain(NO_GRANT_REFUSAL)
-    expect(grantEvents(agent).filter(type => type.startsWith('real-browser/'))).toEqual(['real-browser/granted', 'real-browser/away', 'real-browser/ended'])
+    expect(grantEvents(agent).filter(type => type.startsWith('real-browser/'))).toEqual(['real-browser/granted', 'real-browser/away', 'real-browser/away', 'real-browser/ended'])
     expect(h.grants.end(agent.session)).toBe(false)
     expect(h.grants.setAway(agent.session, 9_000)).toBe(false)
+  })
+})
+
+describe('the grant across a restart', () => {
+  it('stays live in a chat restored from its log, and stays ended once turned off', async () => {
+    const h = await harness(new MockAdapter([ASK, textResponse('allowed')]), () => 'allowed-once')
+    const agent = await h.ctx.agentLoop.create(SessionId('restart'), { provider: 'mock', model: 'mock' })
+    await run(h.ctx, agent, 'check my order')
+    const restore = async (events: readonly SessionEvent[]): Promise<boolean> => {
+      const next = new Context()
+      await mountAgentLoopTestDependencies(next)
+      const grants = await registerGrants(next, () => 1_000)
+      const session = next.sessions.prepare(SessionId('restart'), { seed: structuredClone([...events]), meta: structuredClone(agent.session.header), inheritedEventCount: SessionLogOffset(0), eventState: 'detached' })
+      return grants.live(session)
+    }
+    expect(await restore(agent.session.snapshotEvents())).toBe(true)
+    h.grants.end(agent.session)
+    expect(await restore(agent.session.snapshotEvents())).toBe(false)
   })
 })
 
@@ -186,9 +210,9 @@ describe('the projection', () => {
   })
 
   it('keeps the away permission only while a grant runs', () => {
-    expect(applyGrantEvent(state(), event(1, 'real-browser/away', { until: 9 }))).toEqual(state())
+    expect(applyGrantEvent(state(), event(1, 'real-browser/away', { until: 9, cause: 'person' }))).toEqual(state())
     const granted = state({ grantedSeq: 1 })
-    expect(applyGrantEvent(granted, event(2, 'real-browser/away', { until: 9 }))).toEqual(state({ grantedSeq: 1, awayUntil: 9 }))
+    expect(applyGrantEvent(granted, event(2, 'real-browser/away', { until: 9, cause: 'person' }))).toEqual(state({ grantedSeq: 1, awayUntil: 9 }))
     expect(applyGrantEvent(state({ grantedSeq: 1, awayUntil: 9 }), event(3, 'real-browser/ended', { reason: 'person' }))).toEqual(state())
   })
 })

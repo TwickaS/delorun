@@ -10,7 +10,8 @@
   },
   "include": [
     "src",
-    "tests"
+    "tests",
+    "scripts"
   ],
   "references": [
     {
@@ -35,6 +36,9 @@
       "path": "../../../packages/boot/app-boot"
     },
     {
+      "path": "../../../packages/browser-use/browser-use"
+    },
+    {
       "path": "../../../packages/client/connection/tsconfig.host.json"
     },
     {
@@ -48,6 +52,9 @@
     },
     {
       "path": "../../../packages/core/system-prompt"
+    },
+    {
+      "path": "../../../packages/core/tool-executor-native"
     },
     {
       "path": "../../../packages/core/tools"
@@ -66,6 +73,9 @@
     },
     {
       "path": "../../../packages/llm/llm"
+    },
+    {
+      "path": "../../../packages/mcp/mcp-client"
     },
     {
       "path": "../../../packages/session/session-projection"

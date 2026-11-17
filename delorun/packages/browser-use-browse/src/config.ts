@@ -28,7 +28,8 @@ export const BROWSE_ENV_PREFIX = 'OPENCODE_BROWSER_'
 /**
  * The browse variables that never come from the person's shell: the update switches, which Delorun sets itself, and the
  * escape hatches that widen what a page or the agent may reach (every cookie, every site's storage, `file:` pages,
- * focus stealing, extra file folders). A row that lists one in `inheritEnv` fails to load.
+ * focus stealing, extra file folders), and the tool-surface switch, so the agent always gets browse's `execute`
+ * tools. A row that lists one in `inheritEnv` fails to load.
  */
 export const NEVER_INHERITED = [
   'AUTO_UPDATE',
@@ -38,6 +39,7 @@ export const NEVER_INHERITED = [
   'ALLOW_FILE_URLS',
   'ALLOW_FOREGROUND',
   'FILE_ROOTS',
+  'TOOLS',
 ] as const
 
 /**
@@ -146,16 +148,29 @@ export function binaryIn(packageDirectory: string, variant: BrowseVariant): stri
 }
 
 /**
- * The folder of an installed platform package, found beside `@opencode/browse` as its own launcher finds it.
+ * The folder of an installed platform package, found beside `@opencode/browse` as its own launcher finds it. The
+ * browse pack installs both; this package does not depend on them.
  * @param variant - the platform package.
  * @returns the folder, or undefined when the package is not installed.
  */
 export function installedPackageDirectory(variant: BrowseVariant): string | undefined {
-  const launcher = createRequire(import.meta.url).resolve('@opencode/browse/package.json')
+  const launcher = resolvedFrom(import.meta.url, '@opencode/browse/package.json')
+  if (launcher === undefined) return undefined
+  const platform = resolvedFrom(launcher, `@opencode/browse-${variant}/package.json`)
+  return platform === undefined ? undefined : dirname(platform)
+}
+
+/**
+ * Resolve a package file as Node would from one file.
+ * @param from - the file the lookup starts at, a path or a `file:` URL.
+ * @param specifier - the package file.
+ * @returns its path, or undefined when the package is not installed.
+ */
+function resolvedFrom(from: string, specifier: string): string | undefined {
   try {
-    return dirname(createRequire(launcher).resolve(`@opencode/browse-${variant}/package.json`))
+    return createRequire(from).resolve(specifier)
   } catch (error) {
-    // An optional platform package that is not installed fails to resolve; the caller reports the missing variant.
+    // A package the pack did not install fails to resolve; the caller reports the missing variant.
     if ((error as NodeJS.ErrnoException).code === 'MODULE_NOT_FOUND') return undefined
     throw error
   }

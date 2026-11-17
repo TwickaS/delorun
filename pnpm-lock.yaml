@@ -1902,9 +1902,6 @@ importers:
       '@delorun/home-auth':
         specifier: workspace:*
         version: link:../home-auth
-      '@opencode/browse':
-        specifier: 0.1.1
-        version: 0.1.1
       zod:
         specifier: 4.6.6
         version: 4.6.6
@@ -1921,6 +1918,9 @@ importers:
       '@deepseek-ai/dsh-agent-loop-testkit':
         specifier: workspace:*
         version: link:../../../packages/test-support/agent-loop-testkit
+      '@deepseek-ai/dsh-browser-use':
+        specifier: workspace:*
+        version: link:../../../packages/browser-use/browser-use
       '@deepseek-ai/dsh-client-connection':
         specifier: workspace:*
         version: link:../../../packages/client/connection
@@ -1933,6 +1933,9 @@ importers:
       '@deepseek-ai/dsh-llm':
         specifier: workspace:*
         version: link:../../../packages/llm/llm
+      '@deepseek-ai/dsh-mcp-client':
+        specifier: workspace:*
+        version: link:../../../packages/mcp/mcp-client
       '@deepseek-ai/dsh-session':
         specifier: workspace:*
         version: link:../../../packages/core/session
@@ -1942,6 +1945,9 @@ importers:
       '@deepseek-ai/dsh-system-prompt':
         specifier: workspace:*
         version: link:../../../packages/core/system-prompt
+      '@deepseek-ai/dsh-tool-executor-native':
+        specifier: workspace:*
+        version: link:../../../packages/core/tool-executor-native
       '@deepseek-ai/dsh-tools':
         specifier: workspace:*
         version: link:../../../packages/core/tools
@@ -2053,6 +2059,12 @@ importers:
       '@deepseek-ai/dsh-app-boot':
         specifier: workspace:*
         version: link:../../../packages/boot/app-boot
+      '@deepseek-ai/dsh-home-paths':
+        specifier: workspace:*
+        version: link:../../../packages/util/home-paths
+      '@deepseek-ai/dsh-native-command':
+        specifier: workspace:*
+        version: link:../../../packages/util/native-command
       '@deepseek-ai/dsh-official-bundles':
         specifier: workspace:*
         version: link:../../../packages/util/official-bundles
@@ -2198,9 +2210,6 @@ importers:
       '@deepseek-ai/dsh-deepseek-llm-api-extensions':
         specifier: workspace:*
         version: link:../../../packages/llm/deepseek-llm-api-extensions
-      '@deepseek-ai/dsh-home-paths':
-        specifier: workspace:*
-        version: link:../../../packages/util/home-paths
       '@deepseek-ai/dsh-host-product-telemetry-otel':
         specifier: workspace:*
         version: link:../../../packages/host/product-telemetry-otel
@@ -11926,6 +11935,9 @@ importers:
       '@deepseek-ai/dsh-experimental-browser-use-runtime':
         specifier: workspace:*
         version: link:../browser-use-runtime
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
       '@playwright/mcp':
         specifier: 0.0.80
         version: 0.0.80
@@ -11951,6 +11963,9 @@ importers:
       '@deepseek-ai/dsh-llm':
         specifier: workspace:*
         version: link:../../llm/llm
+      '@deepseek-ai/dsh-native-command':
+        specifier: workspace:*
+        version: link:../../util/native-command
       '@deepseek-ai/dsh-session':
         specifier: workspace:*
         version: link:../../core/session
@@ -24247,50 +24262,6 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@opencode/browse-darwin-arm64@0.1.1':
-    resolution: {integrity: sha512-1fIzN9OrxqD3ZGQ0n7K+iZgRQWIZrUZIsma5FWvSi4haWB1QumsmRNfh1kaRzSOsthn863RbUQvLsplO2KAv2g==}
-    cpu: [arm64]
-    os: [darwin]
-
-  '@opencode/browse-darwin-x64@0.1.1':
-    resolution: {integrity: sha512-8wsSqYMW0GWXiURTd5puvPG3rmE2aCnbx6fkT/P9TobYfQ1bGu3K7RgLD0wak4UslzZTNCgYVZhwFhT/jqQ6kA==}
-    cpu: [x64]
-    os: [darwin]
-
-  '@opencode/browse-linux-arm64-musl@0.1.1':
-    resolution: {integrity: sha512-diosJYaWLoNs75gE9iiC+YXpgNQbN+UyjcNM3cDAeRaUhWBCrzMt35P+bFI7HXjfuZiR2C1aUqIfWdV2cEb/aw==}
-    cpu: [arm64]
-    os: [linux]
-    libc: [musl]
-
-  '@opencode/browse-linux-arm64@0.1.1':
-    resolution: {integrity: sha512-klF2M7mElXniJQ4pDwhtg6m/8FgAx+EDoWzuNN8QlfA/gtYqrG1Hl2j5DsRXxF0s2JrhdJr/Zld9Q2rg8Ncc2Q==}
-    cpu: [arm64]
-    os: [linux]
-    libc: [glibc]
-
-  '@opencode/browse-linux-x64-musl@0.1.1':
-    resolution: {integrity: sha512-aU0CYeZGQFmGkvSM7cFFLtYWQwvDFk+GsG8sCmpp3ilUKdBYgjPwBazerPY2fIa7zrwbfkzjG7cKBV/N4WtZUQ==}
-    cpu: [x64]
-    os: [linux]
-    libc: [musl]
-
-  '@opencode/browse-linux-x64@0.1.1':
-    resolution: {integrity: sha512-N0dEMW6hBj8Duzv9lF51uHMUg9TAsJGElJ+NMHMK+yl0rW2PGVc44Lsk4rICe2ctXBHvIdbzQybjTvbGdXXyiQ==}
-    cpu: [x64]
-    os: [linux]
-    libc: [glibc]
-
-  '@opencode/browse-windows-x64@0.1.1':
-    resolution: {integrity: sha512-hFBDowhYmyDVfy4/Lt1lSDPHMLA2jo3uESRlCG2WIEWJbOq4Oc32oF4S9dbjfNX05dAqpkESLkA+F7mfg8rVlA==}
-    cpu: [x64]
-    os: [win32]
-
-  '@opencode/browse@0.1.1':
-    resolution: {integrity: sha512-AytWqCqD/iinW1nyaFoY9633+Escj6gca6ZBX1MFa85diEuNThSd9h2tEzw1DqTD/cB7r2pShL164XjzD0BPtQ==}
-    engines: {node: '>=22'}
-    hasBin: true
-
   '@opentelemetry/api-logs@0.222.0':
     resolution: {integrity: sha512-9mb1If+IF6u0ZVXkHQ6ogEae5HwA6ajIVUgpSDQyRASxft6BSXHvBvPooRle3yFN/fKnCdSOnuu0OC3PLcF6+g==}
     engines: {node: '>=8.0.0'}
@@ -32197,37 +32168,6 @@ snapshots:
 
   '@openai/codex@0.153.4-win32-x64':
     optional: true
-
-  '@opencode/browse-darwin-arm64@0.1.1':
-    optional: true
-
-  '@opencode/browse-darwin-x64@0.1.1':
-    optional: true
-
-  '@opencode/browse-linux-arm64-musl@0.1.1':
-    optional: true
-
-  '@opencode/browse-linux-arm64@0.1.1':
-    optional: true
-
-  '@opencode/browse-linux-x64-musl@0.1.1':
-    optional: true
-
-  '@opencode/browse-linux-x64@0.1.1':
-    optional: true
-
-  '@opencode/browse-windows-x64@0.1.1':
-    optional: true
-
-  '@opencode/browse@0.1.1':
-    optionalDependencies:
-      '@opencode/browse-darwin-arm64': 0.1.1
-      '@opencode/browse-darwin-x64': 0.1.1
-      '@opencode/browse-linux-arm64': 0.1.1
-      '@opencode/browse-linux-arm64-musl': 0.1.1
-      '@opencode/browse-linux-x64': 0.1.1
-      '@opencode/browse-linux-x64-musl': 0.1.1
-      '@opencode/browse-windows-x64': 0.1.1
 
   '@opentelemetry/api-logs@0.222.0':
     dependencies:

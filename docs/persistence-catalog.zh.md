@@ -53,7 +53,7 @@
 | `event:model/selection` | event | `35203ba7ad5ef6f97d556b85df20ae98f04f09c65748cecdf8eefdb8b6405ffc` | [`{ type: "model/selection" }`](#persistence-type-sha256-35203ba7ad5ef6f97d556b85df20ae98f04f09c65748cecdf8eefdb8b6405ffc) |
 | `event:permission/preset` | event | `5c45bf4c544a7211dcd8ba6ba7e5f1bc39b49e7a9df9d5cbdc8e87c22771b37b` | [`{ type: "permission/preset" }`](#persistence-type-sha256-5c45bf4c544a7211dcd8ba6ba7e5f1bc39b49e7a9df9d5cbdc8e87c22771b37b) |
 | `event:plan/mode` | event | `a7cf43ce7c2a4c038feed1885cd7a00d5c6ee2d90a7e0d56b46f78a3e1ca327f` | [`{ type: "plan/mode" }`](#persistence-type-sha256-a7cf43ce7c2a4c038feed1885cd7a00d5c6ee2d90a7e0d56b46f78a3e1ca327f) |
-| `event:real-browser/away` | event | `a20ee5ade286773dec82ee1b5bfa0ca3bc7f5de8a9a5645b88589de5572347e0` | [`{ type: "real-browser/away" }`](#persistence-type-sha256-a20ee5ade286773dec82ee1b5bfa0ca3bc7f5de8a9a5645b88589de5572347e0) |
+| `event:real-browser/away` | event | `ba5aeeab52703d0cfd5ed0f3d92f914e1ecae896c2b13f48d29101e21876c59d` | [`{ type: "real-browser/away" }`](#persistence-type-sha256-ba5aeeab52703d0cfd5ed0f3d92f914e1ecae896c2b13f48d29101e21876c59d) |
 | `event:real-browser/ended` | event | `8cc928f857619a6ecd26bb2e2ae08d84ba320b74ddae35c287d36afa65de61a5` | [`{ type: "real-browser/ended" }`](#persistence-type-sha256-8cc928f857619a6ecd26bb2e2ae08d84ba320b74ddae35c287d36afa65de61a5) |
 | `event:real-browser/granted` | event | `23afe2b636b2258c47a86a1ec92709a9494737b1e99e61fdf62f4b0d37b3ccb1` | [`{ type: "real-browser/granted" }`](#persistence-type-sha256-23afe2b636b2258c47a86a1ec92709a9494737b1e99e61fdf62f4b0d37b3ccb1) |
 | `event:request/context` | event | `37cbc9cf06d494cfe5c67f078af1605eacb8e4c2c853e9e26455b73de0ee7ccf` | [`{ type: "request/context" }`](#persistence-type-sha256-37cbc9cf06d494cfe5c67f078af1605eacb8e4c2c853e9e26455b73de0ee7ccf) |
@@ -754,10 +754,10 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
  * Whether a run the person did not start, such as a scheduled one, may use the running grant: until the Unix
  * epoch milliseconds `until`, or no longer for `null`. A later one replaces it; `real-browser/ended` ends it.
  */
-'real-browser/away': { until: number | null }
+'real-browser/away': { until: number | null; cause: RealBrowserAwayCause }
 ```
 
-来源：[`packages/experimental/browser-use-runtime/src/real-browser.ts:26`](../packages/experimental/browser-use-runtime/src/real-browser.ts)
+来源：[`packages/experimental/browser-use-runtime/src/real-browser.ts:32`](../packages/experimental/browser-use-runtime/src/real-browser.ts)
 
 <a id="real-browserended--log-only"></a>
 
@@ -768,7 +768,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'real-browser/ended': { reason: RealBrowserEndReason }
 ```
 
-来源：[`packages/experimental/browser-use-runtime/src/real-browser.ts:28`](../packages/experimental/browser-use-runtime/src/real-browser.ts)
+来源：[`packages/experimental/browser-use-runtime/src/real-browser.ts:34`](../packages/experimental/browser-use-runtime/src/real-browser.ts)
 
 <a id="real-browsergranted--log-only"></a>
 
@@ -779,7 +779,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'real-browser/granted': { source: RealBrowserGrantSource }
 ```
 
-来源：[`packages/experimental/browser-use-runtime/src/real-browser.ts:21`](../packages/experimental/browser-use-runtime/src/real-browser.ts)
+来源：[`packages/experimental/browser-use-runtime/src/real-browser.ts:27`](../packages/experimental/browser-use-runtime/src/real-browser.ts)
 
 ### `request/*`
 
@@ -1868,6 +1868,14 @@ SHA-256: `e42b0f40b5d0b628c6e1c44a8fb9eda0780037a81959e1b93d2dfb47b46b0e87`
 
 `"every"`
 
+<a id="persistence-type-sha256-66c5bf7473db21dd157d2535a6eb3f4849c73a1c1f429e9faf5e9fd1f65b3756"></a>
+
+### `"expired"`
+
+SHA-256: `66c5bf7473db21dd157d2535a6eb3f4849c73a1c1f429e9faf5e9fd1f65b3756`
+
+`"expired"`
+
 <a id="persistence-type-sha256-fc351843b8ecbd05d739c4ca4fcd4bc7cfad6c0beacbbd48389959bb1bf06cf3"></a>
 
 ### `"external"`
@@ -2324,7 +2332,7 @@ SHA-256: `ae63d9d1080ed8945031594d93f8d96651d7101b848719cc3e1475875cd3d649`
 
 SHA-256: `8759a561541fffb56a5feef4bc9a1f7c0015f53b7cf8f97c134af52c320e41aa`
 
-来源：[`packages/experimental/browser-use-runtime/src/real-browser.ts:16`](../packages/experimental/browser-use-runtime/src/real-browser.ts)
+来源：[`packages/experimental/browser-use-runtime/src/real-browser.ts:22`](../packages/experimental/browser-use-runtime/src/real-browser.ts)
 
 `"person"`
 
@@ -4627,6 +4635,23 @@ SHA-256: `2fe5026daf14bd4ff2b7bfb7cf9791c302d9cbba06802178b6dfec00b892698f`
 | `rootCallId` | 必需 | `string` |
 | `subCallId` | 必需 | `string` |
 
+<a id="persistence-type-sha256-e09d605554003bc31e422687a05574e4697d9b5c894082b1f1114a3536c0e160"></a>
+
+<a id="persistence-type-packagesexperimentalbrowser-use-runtimesrcreal-browsertsrealbrowserawaycause"></a>
+
+<a id="persistence-type-realbrowserawaycause"></a>
+
+### `RealBrowserAwayCause`
+
+SHA-256: `e09d605554003bc31e422687a05574e4697d9b5c894082b1f1114a3536c0e160`
+
+来源：[`packages/experimental/browser-use-runtime/src/real-browser.ts:19`](../packages/experimental/browser-use-runtime/src/real-browser.ts)
+
+以下类型之一：
+
+- `"expired"`
+- `"person"`
+
 <a id="persistence-type-sha256-6db2226d1696010ee3f2b9c4907a614242c7036f342c45a786c0555d4a1b9b16"></a>
 
 <a id="persistence-type-packagesexperimentalbrowser-use-runtimesrcreal-browsertsrealbrowsergrantsource"></a>
@@ -6096,6 +6121,19 @@ SHA-256: `4f91f187baeabef5c7950c4780d31bbe39f3345dff591a6cf26ac7e135ac1cf4`
 SHA-256: `df843efd87c78cf8de98f8e0d0216956cd568d0d0e56a22c853663e274aa1a18`
 
 [`{ capturedFormatVersion?, capturedThroughSeq, compacted, inputIndex, … }`](#persistence-type-sha256-4f91f187baeabef5c7950c4780d31bbe39f3345dff591a6cf26ac7e135ac1cf4) 的数组。
+
+<a id="persistence-type-sha256-664a28a5385dacbe2fcd164e33b75c3efa89adb4a532421b84f067607da2c1f5"></a>
+
+### `{ cause, until }`
+
+SHA-256: `664a28a5385dacbe2fcd164e33b75c3efa89adb4a532421b84f067607da2c1f5`
+
+来源：[`packages/experimental/browser-use-runtime/src/real-browser.ts:32`](../packages/experimental/browser-use-runtime/src/real-browser.ts)
+
+| 属性 | 存在性 | 类型 |
+|---|---|---|
+| `cause` | 必需 | [`RealBrowserAwayCause`](#persistence-type-sha256-e09d605554003bc31e422687a05574e4697d9b5c894082b1f1114a3536c0e160) |
+| `until` | 必需 | [`OptionalSessionSeq`](#persistence-type-sha256-3bd652ebfa8726b3ce3937a4f1bd2759e02f86b3a08a20f9e41a8513656fbc5f) |
 
 <a id="persistence-type-sha256-0e10d7c096b47e61defe372a5fc8bd37d835199410eac44367f95c45082498bd"></a>
 
@@ -8179,7 +8217,7 @@ SHA-256: `8a9c990773f798eac10ca8878e6bcc531ee080bc589cac956730e462cc6a09ad`
 
 SHA-256: `0b19dfa092f699cbb5654040869d27848038ad508eec0ed259c92be0d11d7c68`
 
-来源：[`packages/experimental/browser-use-runtime/src/real-browser.ts:28`](../packages/experimental/browser-use-runtime/src/real-browser.ts)
+来源：[`packages/experimental/browser-use-runtime/src/real-browser.ts:34`](../packages/experimental/browser-use-runtime/src/real-browser.ts)
 
 | 属性 | 存在性 | 类型 |
 |---|---|---|
@@ -8245,7 +8283,7 @@ SHA-256: `5dd766ccd1702a1142ad8b4bd44f2242f8e8a6752669ad3de0a5d224329b1438`
 
 SHA-256: `84733e6147348b2bb6044e3be238fc891b0750dc121fd09a5c45ac29c8b1e338`
 
-来源：[`packages/experimental/browser-use-runtime/src/real-browser.ts:21`](../packages/experimental/browser-use-runtime/src/real-browser.ts)
+来源：[`packages/experimental/browser-use-runtime/src/real-browser.ts:27`](../packages/experimental/browser-use-runtime/src/real-browser.ts)
 
 | 属性 | 存在性 | 类型 |
 |---|---|---|
@@ -8863,17 +8901,17 @@ SHA-256: `a7cf43ce7c2a4c038feed1885cd7a00d5c6ee2d90a7e0d56b46f78a3e1ca327f`
 | `time` | 必需 | `number` |
 | `type` | 必需 | `"plan/mode"` |
 
-<a id="persistence-type-sha256-a20ee5ade286773dec82ee1b5bfa0ca3bc7f5de8a9a5645b88589de5572347e0"></a>
+<a id="persistence-type-sha256-ba5aeeab52703d0cfd5ed0f3d92f914e1ecae896c2b13f48d29101e21876c59d"></a>
 
 <a id="persistence-type-eventreal-browseraway"></a>
 
 ### `{ type: "real-browser/away" }`
 
-SHA-256: `a20ee5ade286773dec82ee1b5bfa0ca3bc7f5de8a9a5645b88589de5572347e0`
+SHA-256: `ba5aeeab52703d0cfd5ed0f3d92f914e1ecae896c2b13f48d29101e21876c59d`
 
 | 属性 | 存在性 | 类型 |
 |---|---|---|
-| `data` | 必需 | [`{ until }`](#persistence-type-sha256-1d849a5b337cee9df75b8500451d8ee0a3b4588dbbf7599b7ea3fa378d47cce5) |
+| `data` | 必需 | [`{ cause, until }`](#persistence-type-sha256-664a28a5385dacbe2fcd164e33b75c3efa89adb4a532421b84f067607da2c1f5) |
 | `ignorable` | 可选 | `true` |
 | `seq` | 必需 | `number` |
 | `time` | 必需 | `number` |
@@ -9581,18 +9619,6 @@ SHA-256: `e308ccf867a5398e316e0af8cb6ce238a8d33a63b9b384c8250a686786285f72`
 | `seq` | 必需 | `number` |
 | `time` | 必需 | `number` |
 | `type` | 必需 | `"workspace/changes"` |
-
-<a id="persistence-type-sha256-1d849a5b337cee9df75b8500451d8ee0a3b4588dbbf7599b7ea3fa378d47cce5"></a>
-
-### `{ until }`
-
-SHA-256: `1d849a5b337cee9df75b8500451d8ee0a3b4588dbbf7599b7ea3fa378d47cce5`
-
-来源：[`packages/experimental/browser-use-runtime/src/real-browser.ts:26`](../packages/experimental/browser-use-runtime/src/real-browser.ts)
-
-| 属性 | 存在性 | 类型 |
-|---|---|---|
-| `until` | 必需 | [`OptionalSessionSeq`](#persistence-type-sha256-3bd652ebfa8726b3ce3937a4f1bd2759e02f86b3a08a20f9e41a8513656fbc5f) |
 
 <a id="persistence-type-sha256-0aa62ab51b36c0e64b134bd03ba8725d758744180a1a447da49beaad194f219f"></a>
 

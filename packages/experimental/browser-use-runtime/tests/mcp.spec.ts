@@ -1,7 +1,7 @@
 import { executeToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import * as PtcToolExecutor from '@deepseek-ai/dsh-tool-executor-ptc'
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readdir, readFile, readlink, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -28,7 +28,7 @@ import WorkingDirectory from '@deepseek-ai/dsh-working-directory'
 import { bindScopeParent } from '@deepseek-ai/dsh-scope'
 import * as McpClient from '@deepseek-ai/dsh-mcp-client'
 import type { McpConsentDecision, McpServerCommand } from '@deepseek-ai/dsh-mcp-client'
-import { BrowserMcpConfig, mountSessionMcp, validateBrowserMcpConfig } from '../src/mcp.ts'
+import { BrowserMcpConfig, mountSessionMcp, validateBrowserMcpConfig, type BrowserToolCall, type SessionMcpOptions } from '../src/mcp.ts'
 
 const fixture = fileURLToPath(new URL('./mcp-fixture.mjs', import.meta.url))
 const roots: string[] = []
@@ -92,13 +92,33 @@ class RefuseBrowserConsent extends McpClient.McpAddConsent {
   }
 }
 
+/** A row that declares the add-time consent and fails to start, so no consent service exists. */
+const FailedConsent = {
+  providesMcpAddConsent: true,
+  apply(): void { throw new Error('the consent row failed to start') },
+}
+
 /** A Loader row of an MCP server outside the browser provider, beside the refused browser server. */
 const OTHER_TOOL = 'mcp__other-fixture__visit'
 
-async function load(
-  exclusive = false, mode?: string, toolCallTimeoutMs?: number, toolOrder?: string[], consent = false,
-  explainFailure?: (message: string) => string | undefined, directory?: string,
-) {
+/** The fixture provider's settings for one {@link load}; each omitted field keeps the mount's default. */
+interface LoadOptions {
+  exclusive?: boolean
+  mode?: string
+  toolCallTimeoutMs?: number
+  toolOrder?: string[]
+  consent?: boolean | 'failed'
+  explainFailure?: (message: string) => string | undefined
+  directory?: string
+  outputFolder?: string
+  refuseCall?: SessionMcpOptions['refuseCall']
+  registration?: SessionMcpOptions['registration']
+  admission?: SessionMcpOptions['admission']
+}
+
+async function load(options: LoadOptions = {}) {
+  const { exclusive = false, mode, toolCallTimeoutMs, toolOrder, consent = false } = options
+  const { explainFailure, directory, outputFolder, refuseCall, registration, admission } = options
   const root = await mkdtemp(join(tmpdir(), 'dsh-browser-mcp-'))
   roots.push(root)
   const model = new FixtureModel()
@@ -113,10 +133,13 @@ async function load(
       mountSessionMcp(ctx, {
         name: 'browser-fixture', exclusive, command: process.execPath, args: [fixture, root, ...mode === undefined ? [] : [mode]],
         ...toolCallTimeoutMs === undefined ? {} : { toolCallTimeoutMs, env: {} }, ...explainFailure === undefined ? {} : { explainFailure },
-        ...directory === undefined ? {} : { directory },
+        ...directory === undefined ? {} : { directory }, ...outputFolder === undefined ? {} : { outputFolder },
+        ...refuseCall === undefined ? {} : { refuseCall },
+        ...registration === undefined ? {} : { registration }, ...admission === undefined ? {} : { admission },
       })
     } }],
-    ...consent ? [['consent', RefuseBrowserConsent], ['other', McpClient]] as const : [],
+    ...consent === true ? [['consent', RefuseBrowserConsent], ['other', McpClient]] as const : [],
+    ...consent === 'failed' ? [['consent', FailedConsent]] as const : [],
   ])
   const otherRoot = join(root, 'other')
   await mkdir(otherRoot)
@@ -151,6 +174,11 @@ async function warm(ctx: Context, agent: Agent, signal = new AbortController().s
 
 function execute(ctx: Context, agent: Agent, name = TOOL) {
   return executeToolFixture(ctx, { agent, name, arguments: name === TOOL ? { label: 'direct' } : {}, callId: ToolCallId('direct'), signal: new AbortController().signal })
+}
+
+function visit(ctx: Context, agent: Agent, label: string) {
+  const signal = new AbortController().signal
+  return executeToolFixture(ctx, { agent, name: TOOL, arguments: { label }, callId: ToolCallId(label), signal })
 }
 
 function resource(ctx: Context, agent: Agent | undefined, name = 'read_mcp_resource', server = 'browser-fixture', callId = name) {
@@ -215,7 +243,7 @@ it('waits for SystemPrompt and ToolRuntime before reserving the provider', async
 
 describe('Session MCP Loader composition', () => {
   it('discovers schemas before the first model request and retains distinct state across turns', async () => {
-    const { ctx, root, model, browser } = await load(false, undefined, 5000, [TOOL, '<unlisted-tools>'])
+    const { ctx, root, model, browser } = await load({ toolCallTimeoutMs: 5000, toolOrder: [TOOL, '<unlisted-tools>'] })
     const first = await ctx.agents.create({ sessionId: SessionId('first'), meta: { cwd: root }, agentOptions: { provider: 'fixture', model: 'fixture' } })
     const second = await ctx.agents.create({ sessionId: SessionId('second') })
     expect(ctx.tools.schemas()).toEqual([])
@@ -251,7 +279,7 @@ describe('Session MCP Loader composition', () => {
   })
 
   it('keeps unrelated and child Sessions running without a busy attachment and admits a later owner', async () => {
-    const { ctx, root, model } = await load(true)
+    const { ctx, root, model } = await load({ exclusive: true })
     registerIndependentTool(ctx)
     const first = await ctx.agents.create({ sessionId: SessionId('first') })
     const second = await ctx.agents.create({ sessionId: SessionId('second'), agentOptions: { provider: 'fixture', model: 'fixture' } })
@@ -299,7 +327,7 @@ describe('Session MCP Loader composition', () => {
   })
 
   it('allows another Session to answer while attached-browser discovery is pending', async () => {
-    const { ctx, root, model, browser } = await load(true, 'hold')
+    const { ctx, root, model, browser } = await load({ exclusive: true, mode: 'hold' })
     const first = observeActivation(ctx.agents.create({ sessionId: SessionId('first') }))
     await expect.poll(async () => (await events(root)).some(event => event.event === 'probe')).toBe(true)
     const second = await ctx.agents.create({ sessionId: SessionId('second'), agentOptions: { provider: 'fixture', model: 'fixture' } })
@@ -315,7 +343,7 @@ describe('Session MCP Loader composition', () => {
   })
 
   it('rolls back failed discovery and stops a child when unload interrupts discovery', async () => {
-    const failed = await load(false, 'fail', undefined, [TOOL, '<unlisted-tools>'])
+    const failed = await load({ mode: 'fail', toolOrder: [TOOL, '<unlisted-tools>'] })
     let failedAgent!: Agent
     const laterListener = vi.fn()
     await expect(failed.ctx.agents.create({
@@ -336,7 +364,7 @@ describe('Session MCP Loader composition', () => {
     for (const { pid } of failedEvents.filter(event => event.event === 'start')) {
       expect(() => process.kill(pid, 0)).toThrow(expect.objectContaining({ code: 'ESRCH' }))
     }
-    const held = await load(false, 'hold')
+    const held = await load({ mode: 'hold' })
     const pendingOwner = observeActivation(held.ctx.agents.create({ sessionId: SessionId('pending') }))
     await expect.poll(async () => (await events(held.root)).some(event => event.event === 'probe')).toBe(true)
     await held.browser.dispose()
@@ -347,8 +375,52 @@ describe('Session MCP Loader composition', () => {
     }
   })
 
+  it('starts no server for a Session the admission does not admit, refuses its browser calls, and follows its admission', async () => {
+    const admittedSessions = new Set<string>()
+    const listeners = new Set<(session: Agent['session']) => Promise<void>>()
+    const admission: NonNullable<SessionMcpOptions['admission']> = {
+      admitted: agent => admittedSessions.has(agent.id),
+      changed: (listener) => { listeners.add(listener); return () => { listeners.delete(listener) } },
+    }
+    const { ctx, root } = await load({ registration: 'none', admission })
+    // One `initialize` per Session's server; the client's discovery probe starts a process of its own that never initializes.
+    const starts = async () => (await events(root).catch(() => [])).filter(event => event.event === 'initialize')
+    admittedSessions.add('granted')
+    const granted = await ctx.agents.create({ sessionId: SessionId('granted'), agentOptions: { provider: 'fixture', model: 'fixture' } })
+    const other = await ctx.agents.create({ sessionId: SessionId('other'), agentOptions: { provider: 'fixture', model: 'fixture' } })
+    // Pins admission: only the admitted Session starts a server; the other gets no tools, no prompt section, no process.
+    expect(await starts()).toHaveLength(1)
+    const assembled = await warm(ctx, other.agent)
+    expect(assembled.tools.some(tool => tool.name.startsWith('mcp__browser-fixture__'))).toBe(false)
+    expect(assembled.sections.some(section => section.name === 'mcp:browser-fixture')).toBe(false)
+    expect((await warm(ctx, granted.agent)).tools.map(tool => tool.name)).toContain(TOOL)
+    // Pins the denial: a browser call from a Session that is not admitted is refused before any server sees it.
+    const refused = await execute(ctx, other.agent)
+    expect(refused.isError).toBe(true)
+    expect(JSON.stringify(refused)).toContain('this Session may not use this browser')
+    expect((await events(root)).filter(event => event.event === 'call')).toHaveLength(0)
+    expect((await visit(ctx, granted.agent, 'first')).isError).toBe(false)
+    // A change of admission starts the newly admitted Session's server and stops the one no longer admitted.
+    admittedSessions.add('other')
+    admittedSessions.delete('granted')
+    // Each listener settles once the Session's server has started or stopped.
+    await Promise.all([...listeners].flatMap(listener => [listener(other.agent.session), listener(granted.agent.session)]))
+    expect(await starts()).toHaveLength(2)
+    const [first] = await starts()
+    expect(() => process.kill(first!.pid, 0)).toThrow(expect.objectContaining({ code: 'ESRCH' }))
+    expect((await warm(ctx, other.agent)).tools.map(tool => tool.name)).toContain(TOOL)
+    expect((await visit(ctx, other.agent, 'second')).isError).toBe(false)
+    // Pins the end of admission: the Session's calls are refused and reach no server.
+    const callsBefore = (await events(root)).filter(event => event.event === 'call').length
+    expect((await execute(ctx, granted.agent)).isError).toBe(true)
+    expect((await events(root)).filter(event => event.event === 'call')).toHaveLength(callsBefore)
+    expect((await warm(ctx, granted.agent)).tools.some(tool => tool.name.startsWith('mcp__browser-fixture__'))).toBe(false)
+    // Pins the slot: with `registration: 'none'` the mount takes no browser-use slot.
+    expect(ctx.browserUse.providerName).toBeUndefined()
+  })
+
   it('creates the Session without browser tools when the add-time consent refuses the browser server', async () => {
-    const { ctx, root, model, warnings } = await load(false, undefined, undefined, undefined, true)
+    const { ctx, root, model, warnings } = await load({ consent: true })
     const consent = ctx.get('mcpAddConsent') as RefuseBrowserConsent
     const created = await ctx.agents.create({ sessionId: SessionId('refused'), agentOptions: { provider: 'fixture', model: 'fixture' } })
     expect(ctx.agents.get(created.agent.id)).toBe(created.agent)
@@ -373,11 +445,36 @@ describe('Session MCP Loader composition', () => {
     expect(warnings).toHaveLength(2)
   })
 
+  it('creates the Session without browser tools when a row declares the add-time consent and did not start', async () => {
+    const { ctx, root, warnings } = await load({ consent: 'failed' })
+    const created = await ctx.agents.create({ sessionId: SessionId('unavailable'), agentOptions: { provider: 'fixture', model: 'fixture' } })
+    expect(ctx.agents.get(created.agent.id)).toBe(created.agent)
+    const assembled = await warm(ctx, created.agent)
+    expect(assembled.tools.some(tool => tool.name === TOOL)).toBe(false)
+    expect(assembled.sections.some(section => section.name === 'mcp:browser-fixture')).toBe(false)
+    expect(warnings).toEqual([expect.stringContaining('browser-fixture: the browser tools are off in Session unavailable until the server\'s start is allowed')])
+    expect(warnings[0]).toContain('declares the add-time consent but did not start, so the server stays stopped')
+    await expect(readFile(join(root, 'events.ndjson'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+    expect((await execute(ctx, created.agent)).isError).toBe(true)
+  })
+
+  it.skipIf(process.platform === 'win32')('narrows an existing fixed directory that others can enter to its owner', async () => {
+    const base = await mkdtemp(join(tmpdir(), 'dsh-browser-mcp-wide-'))
+    roots.push(base)
+    const fixed = join(base, 'fixed')
+    await mkdir(fixed, { mode: 0o755 })
+    await chmod(fixed, 0o755)
+    const { ctx } = await load({ directory: fixed })
+    const { agent } = await ctx.agents.create({ sessionId: SessionId('narrowed') })
+    await warm(ctx, agent)
+    expect((await stat(fixed)).mode & 0o777).toBe(0o700)
+  })
+
   it('starts every Session\'s server in the fixed directory, creating it, whatever each Session\'s working directory', async () => {
     const base = await mkdtemp(join(tmpdir(), 'dsh-browser-mcp-fixed-'))
     roots.push(base)
     const fixed = join(base, 'browser-use', 'browser-fixture')
-    const { ctx, root } = await load(false, undefined, undefined, undefined, false, undefined, fixed)
+    const { ctx, root } = await load({ directory: fixed })
     const first = join(root, 'first'), second = join(root, 'second')
     await Promise.all([mkdir(first), mkdir(second)])
     for (const [id, cwd] of [['fixed-first', first], ['fixed-second', second]] as const) {
@@ -392,7 +489,7 @@ describe('Session MCP Loader composition', () => {
   it('tells each Session\'s server that Session\'s working directory as its one MCP root', async () => {
     const base = await mkdtemp(join(tmpdir(), 'dsh-browser-mcp-roots-'))
     roots.push(base)
-    const { ctx, root } = await load(false, undefined, undefined, undefined, false, undefined, join(base, 'fixed'))
+    const { ctx, root } = await load({ directory: join(base, 'fixed') })
     const first = join(root, 'first'), second = join(root, 'second')
     await Promise.all([mkdir(first), mkdir(second)])
     for (const [id, cwd] of [['roots-first', first], ['roots-second', second]] as const) {
@@ -409,14 +506,93 @@ describe('Session MCP Loader composition', () => {
     ]))
   })
 
+  it('creates the output folder with a .gitignore of * when a Session\'s server starts, and adds one to an existing folder that has none', async () => {
+    const { ctx, root } = await load({ outputFolder: '.fixture-output' })
+    const fresh = join(root, 'fresh'), used = join(root, 'used')
+    await Promise.all([mkdir(fresh), mkdir(join(used, '.fixture-output'), { recursive: true })])
+    await writeFile(join(used, '.fixture-output', 'kept.png'), 'kept')
+    for (const [id, cwd] of [['output-fresh', fresh], ['output-used', used]] as const) {
+      const { agent } = await ctx.agents.create({ sessionId: SessionId(id), meta: { cwd } })
+      expect((await warm(ctx, agent)).tools.map(tool => tool.name)).toContain(TOOL)
+    }
+    expect(await readdir(fresh)).toEqual(['.fixture-output'])
+    expect(await readdir(join(fresh, '.fixture-output'))).toEqual(['.gitignore'])
+    expect(await readFile(join(fresh, '.fixture-output', '.gitignore'), 'utf8')).toBe('*\n')
+    expect(await readdir(used)).toEqual(['.fixture-output'])
+    expect((await readdir(join(used, '.fixture-output'))).sort()).toEqual(['.gitignore', 'kept.png'])
+    expect(await readFile(join(used, '.fixture-output', '.gitignore'), 'utf8')).toBe('*\n')
+    expect(await readFile(join(used, '.fixture-output', 'kept.png'), 'utf8')).toBe('kept')
+  })
+
+  it('never writes through a link or over a person\'s own rules in the output folder', async () => {
+    const { ctx, root, warnings } = await load({ outputFolder: '.fixture-output' })
+    const elsewhere = join(root, 'elsewhere')
+    await mkdir(elsewhere)
+    const linked = join(root, 'linked'), ruled = join(root, 'ruled'), dangling = join(root, 'dangling'), file = join(root, 'file')
+    await Promise.all([mkdir(linked), mkdir(join(ruled, '.fixture-output'), { recursive: true }), mkdir(join(dangling, '.fixture-output'), { recursive: true }), mkdir(file)])
+    await symlink(elsewhere, join(linked, '.fixture-output'))
+    await writeFile(join(ruled, '.fixture-output', '.gitignore'), '!keep.png\n')
+    await symlink(join(elsewhere, 'written-through'), join(dangling, '.fixture-output', '.gitignore'))
+    await writeFile(join(file, '.fixture-output'), 'a file, not a folder')
+    for (const [id, cwd] of [['output-linked', linked], ['output-ruled', ruled], ['output-dangling', dangling], ['output-file', file]] as const) {
+      const { agent } = await ctx.agents.create({ sessionId: SessionId(id), meta: { cwd } })
+      expect((await warm(ctx, agent)).tools.map(tool => tool.name)).toContain(TOOL)
+    }
+    expect(await readdir(elsewhere)).toEqual([])
+    expect(await readFile(join(ruled, '.fixture-output', '.gitignore'), 'utf8')).toBe('!keep.png\n')
+    expect(await readlink(join(dangling, '.fixture-output', '.gitignore'))).toBe(join(elsewhere, 'written-through'))
+    expect(await readFile(join(file, '.fixture-output'), 'utf8')).toBe('a file, not a folder')
+    expect(warnings).toEqual([])
+  })
+
+  it('creates no output folder for a Session whose server the add-time consent refuses', async () => {
+    const { ctx, root } = await load({ consent: true, outputFolder: '.fixture-output' })
+    const cwd = join(root, 'refused')
+    await mkdir(cwd)
+    const { agent } = await ctx.agents.create({ sessionId: SessionId('output-refused'), meta: { cwd } })
+    expect((await warm(ctx, agent)).tools.some(tool => tool.name === TOOL)).toBe(false)
+    expect(await readdir(cwd)).toEqual([])
+  })
+
+  it('keeps the browser tools and logs a warning when the output folder cannot be created', async () => {
+    const { ctx, root, warnings } = await load({ outputFolder: join('absent', 'output') })
+    const cwd = join(root, 'unwritable')
+    await mkdir(cwd)
+    const { agent } = await ctx.agents.create({ sessionId: SessionId('output-failed'), meta: { cwd } })
+    expect((await warm(ctx, agent)).tools.map(tool => tool.name)).toContain(TOOL)
+    expect(await readdir(cwd)).toEqual([])
+    expect(warnings).toEqual([expect.stringContaining('with a .gitignore in Session output-failed\'s folder, so Git may pick up files')])
+    expect(warnings[0]).toMatch(/^browser-fixture: could not create absent[/\\]output .*ENOENT/u)
+  })
+
+  it('fails a call the provider refuses without sending it to the server, and sends every other call', async () => {
+    const offered: BrowserToolCall[] = []
+    const { ctx, root } = await load({ refuseCall: async (call) => {
+      offered.push(call)
+      return (call.arguments as { label: string }).label === 'refused' ? 'This call is refused.' : undefined
+    } })
+    const cwd = join(root, 'guarded')
+    await mkdir(cwd)
+    const { agent } = await ctx.agents.create({ sessionId: SessionId('guarded'), meta: { cwd } })
+    await warm(ctx, agent)
+    const call = (label: string) => visit(ctx, agent, label)
+    const refused = await call('refused')
+    expect(refused).toMatchObject({ isError: true, error: { message: 'This call is refused.' }, content: [{ type: 'text', text: 'Error: This call is refused.' }] })
+    expect((await events(root)).filter(event => event.event === 'call')).toEqual([])
+    expect((await call('allowed')).isError).toBe(false)
+    expect((await events(root)).filter(event => event.event === 'call')).toHaveLength(1)
+    expect(offered).toEqual([
+      { tool: 'visit', arguments: { label: 'refused' }, directory: cwd },
+      { tool: 'visit', arguments: { label: 'allowed' }, directory: cwd },
+    ])
+  })
+
   it('replaces a browser failure the provider explains and keeps every other failure and result', async () => {
     const explainFailure = (message: string) => message.includes('is not installed') ? 'Browser needs setup; ask the person.' : undefined
-    const { ctx } = await load(false, undefined, undefined, undefined, false, explainFailure)
+    const { ctx } = await load({ explainFailure })
     const { agent } = await ctx.agents.create({ sessionId: SessionId('explained') })
     await warm(ctx, agent)
-    const call = (label: string) => executeToolFixture(ctx, {
-      agent, name: TOOL, arguments: { label }, callId: ToolCallId(label), signal: new AbortController().signal,
-    })
+    const call = (label: string) => visit(ctx, agent, label)
     const missing = await call('missing-browser')
     expect(missing.isError).toBe(true)
     expect(missing.content).toEqual([{ type: 'text', text: 'Error: Browser needs setup; ask the person.' }])
@@ -468,7 +644,7 @@ describe('Session MCP Loader composition', () => {
   })
 
   it('denies inherited browser resources and instructions while keeping unrelated MCP servers usable', async () => {
-    const { ctx, root } = await load(true)
+    const { ctx, root } = await load({ exclusive: true })
     await ctx.plugin(McpResources)
     ctx.mcpResources.register('docs', { request: async () => ({ contents: [{ uri: 'docs://memo', text: 'Independent document.' }] }) })
     const parent = await ctx.agents.create({ sessionId: SessionId('resource-parent') })
@@ -554,7 +730,7 @@ describe('Session MCP Loader composition', () => {
   })
 
   it('holds an immediate PTC turn until the first SDK includes browser tools', async () => {
-    const { ctx, root, model } = await load(false, 'gate', undefined, ['run_code', '<unlisted-tools>'])
+    const { ctx, root, model } = await load({ mode: 'gate', toolOrder: ['run_code', '<unlisted-tools>'] })
     await ctx.plugin(PresentationRuntime)
     let created = false
     let initializing!: Agent
@@ -584,7 +760,7 @@ describe('Session MCP Loader composition', () => {
   })
 
   it('cancels creation during discovery, closes its process, and releases the attachment', async () => {
-    const { ctx, root, model } = await load(true, 'gate')
+    const { ctx, root, model } = await load({ exclusive: true, mode: 'gate' })
     const controller = new AbortController()
     let initializing!: Agent
     const creation = observeActivation(ctx.agents.create({
@@ -614,7 +790,7 @@ describe('Session MCP Loader composition', () => {
   })
 
   it('closes the discovered client when a later creation listener rejects', async () => {
-    const { ctx, root, model } = await load(false, undefined, undefined, [TOOL, '<unlisted-tools>'])
+    const { ctx, root, model } = await load({ toolOrder: [TOOL, '<unlisted-tools>'] })
     let initializing!: Agent
     await expect(ctx.agents.create({
       sessionId: SessionId('later-listener-failure'), agentOptions: { provider: 'fixture', model: 'fixture' },
@@ -638,7 +814,7 @@ describe('Session MCP Loader composition', () => {
   })
 
   it('cancels before browser discovery without starting a process', async () => {
-    const { ctx, root, model } = await load(false, 'gate')
+    const { ctx, root, model } = await load({ mode: 'gate' })
     const controller = new AbortController()
     await expect(ctx.agents.create({
       sessionId: SessionId('canceled-at-creation'), signal: controller.signal,
@@ -685,7 +861,7 @@ describe('Session MCP Loader composition', () => {
   })
 
   it('awaits discovery on persisted resume and releases a canceled resume before retry', async () => {
-    const { ctx, root, model } = await load(true, 'gate')
+    const { ctx, root, model } = await load({ exclusive: true, mode: 'gate' })
     await ctx.plugin(JsonlSessionPersistence, { root: join(root, 'sessions') })
     await writeFile(join(root, 'release'), '')
     const sessionId = SessionId('persisted-browser')
