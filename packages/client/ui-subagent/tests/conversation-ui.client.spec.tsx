@@ -30,7 +30,7 @@ const GRANDCHILD = 'grandchild' as SessionId
 const t: SubagentHeaderLineageProps['t'] = makeTranslate(zh)
 
 type HeaderCatalogProps = SubagentHeaderLineageProps
-  & Pick<SubagentCatalogActionProps, 'useFooterAvailable' | 'renderSlot'>
+  & Pick<SubagentCatalogActionProps, 'useFooterAvailable' | 'renderSlot' | 'useRowSlotsAvailable'>
 
 type CatalogFixtureEntry<Entry = SubagentCatalogEntry> = Entry extends SubagentCatalogEntry
   ? Omit<Entry, 'createdAt'> & { activity: 'running' | 'inactive' }
@@ -150,6 +150,7 @@ function props(
     sessionId: PARENT,
     useSessions,
     useFooterAvailable: <T,>(select: (available: boolean) => T): T => select(true),
+    useRowSlotsAvailable: <T,>(select: (available: boolean) => T): T => select(false),
     useSessionStatus: <T,>(select: (snapshot: SessionStatusSnapshot) => T): T => select(statuses),
     useSession: <T,>(select: (snapshot: SessionSnapshot) => T): T => select(snapshot),
     openChild: vi.fn(),
@@ -744,6 +745,32 @@ describe('SubagentHeaderLineage', () => {
     hoverCatalog(screen.getByRole('button', { name: /1 个子智能体/ }))
 
     expect(screen.getByRole('treeitem', { name: /worker/ }).children).toHaveLength(1)
+  })
+
+  it('renders rows exactly as before while no plugin fills the row positions', () => {
+    const input = props(catalog())
+    render(<HeaderCatalog {...input} />)
+    hoverCatalog(screen.getByRole('button', { name: /\d+ 个子智能体$/ }))
+
+    expect(input.renderSlot).not.toHaveBeenCalledWith(expect.stringContaining('.row.'), expect.anything())
+    const row = screen.getByRole('treeitem', { name: /worker/ })
+    expect(row.querySelector('[data-row-slot]')).toBeNull()
+    expect(row.children).toHaveLength(1)
+  })
+
+  it('renders the plugin positions of each row and the trigger, and hands over the row to open', () => {
+    const input = props(catalog())
+    const renderSlot = vi.fn((key: string, owner: { label?: string; rows?: unknown[]; open?: () => void }) => (
+      <span data-row-slot={key.slice(key.lastIndexOf('.') + 1)} data-label={owner.label ?? String(owner.rows?.length)} />
+    ))
+    render(<HeaderCatalog {...input} useRowSlotsAvailable={select => select(true)} renderSlot={renderSlot as never} />)
+    hoverCatalog(screen.getByRole('button', { name: /\d+ 个子智能体$/ }))
+
+    const row = screen.getByRole('treeitem', { name: /worker/ })
+    for (const position of ['lead', 'detail', 'trail']) {
+      expect(row.querySelector(`[data-row-slot="${position}"]`)?.getAttribute('data-label')).toBe('worker')
+    }
+    expect(document.querySelector('[data-row-slot="trigger"]')?.getAttribute('data-label')).toBe('2')
   })
 
   it('aligns a known leaf with siblings whose child catalog contains descendants', () => {
