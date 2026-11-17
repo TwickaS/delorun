@@ -16,7 +16,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 // Type-only: the 'shell.overlay' slot.
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import { en, NS, zh, type DownloadsLocaleKey, type Translate } from './locales.ts'
-import { packToAdd, PackAddAction } from './Action.tsx'
+import { packNotLoading, packToAdd, PackAddAction, PackNotLoadingAction } from './Action.tsx'
 import { DownloadsSurface } from './Surface.tsx'
 import { createPacksClient } from '@delorun/plugin-packs/client'
 import { createRemoteDownloadsSource as createPacksSource } from './remote.ts'
@@ -80,6 +80,9 @@ export function applyStudio(ctx: Context, source: DownloadsSource): void {
   ctx.effect(() => ctx.slots.inject('plugins.bundle.action', () => ctx.slots.register({
     name: 'plugins.bundle.action', select: owner => packToAdd(owner.subject), locale: NS,
   }, PackAddAction)), 'delorun-downloads: the Add action of a pack on the Plugins page')
+  ctx.effect(() => ctx.slots.inject('plugins.bundle.action', () => ctx.slots.register({
+    name: 'plugins.bundle.action', select: owner => packNotLoading(owner.subject), locale: NS,
+  }, PackNotLoadingAction)), 'delorun-downloads: the not-loading state of an installed pack on the Plugins page')
   ctx.effect(() => ctx.slots.inject('shell.overlay', () => ctx.slots.register({
     name: 'shell.overlay', id: 'delorun-downloads', locale: NS,
   }, DownloadsSurface)), 'delorun-downloads: the overlay entry')

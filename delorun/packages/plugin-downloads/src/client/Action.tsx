@@ -6,7 +6,7 @@ import type { Translate } from './locales.ts'
 import { nameOf, PACK_TITLE_KEYS } from './names.ts'
 import { statusText } from './Items.tsx'
 import { useHubSource } from './Phone.tsx'
-import { isActive } from './source.ts'
+import { currentDownloadsSource, isActive } from './source.ts'
 
 /**
  * The routing decision of the chain entry: the page's own switch stands unless the subject is a pack of this release
@@ -43,4 +43,45 @@ export function PackAddAction({ matched, t }: { readonly matched: string, readon
     )
   }
   return <span role="status">{isActive(item) ? statusText(item, t) : t('added')}</span>
+}
+
+/**
+ * The routing decision of the second chain entry: a pack that is in the home but whose last install failed, such as one
+ * whose plugins would not load. The page would draw its switch and say "installed" while the queue says it failed; this
+ * entry stands there instead, with the reason. It reads the queue as it is when the page draws, and the page draws again
+ * on the install announcement that ends the failed install.
+ * @param subject - what the card or page is about.
+ * @returns the package name the entry acts for, or `null` to leave the switch.
+ */
+export function packNotLoading(subject: PluginsSubject): string | null {
+  if (subject.kind !== 'bundle') return null
+  const { pkg } = subject
+  if (!Object.hasOwn(PACK_TITLE_KEYS, pkg.name) || !pkg.installed) return null
+  return currentDownloadsSource().snapshot().some(item => item.key === pkg.name && item.state === 'failed') ? pkg.name : null
+}
+
+/**
+ * Say that the pack is installed but not loading, with the reason, and offer Try again and Dismiss. Dismiss clears the
+ * failed record only; the pack stays installed, and the plugin page's own Remove uninstalls it.
+ * @param props - the package this entry acts for and the copy.
+ * @returns the failure and its two controls, the install's progress after Try again, or nothing when the failure was cleared.
+ */
+export function PackNotLoadingAction({ matched, t }: { readonly matched: string, readonly t: Translate }): ReactNode {
+  const source = useHubSource()
+  const items = useSyncExternalStore(source.subscribe, source.snapshot, source.snapshot)
+  const item = items.find(each => each.key === matched)
+  if (item === undefined) return null
+  const name = nameOf({ key: matched }, t)
+  // After Try again the item is queued or working until the page draws again: say where it stands, never a blank.
+  if (isActive(item)) return <span role="status">{statusText(item, t)}</span>
+  if (item.state !== 'failed') return null
+  return (
+    <span role="status">
+      <span>{t('notLoading', { reason: statusText(item, t) })}</span>
+      {' '}
+      <Button variant="outline" size="sm" aria-label={t('retryItem', { name })} onClick={() => { source.retry(matched) }}>{t('retry')}</Button>
+      {' '}
+      <Button variant="outline" size="sm" aria-label={t('dismissItem', { name })} onClick={() => { source.remove(matched) }}>{t('dismissFailure')}</Button>
+    </span>
+  )
 }
