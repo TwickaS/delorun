@@ -55,7 +55,7 @@ beforeEach(async () => {
   context = { env: { HOME: base, DSH_HOME: join(base, '.dsh'), DELORUN_HOME: home }, stdout: text => void printed.push(text), stderr: text => void errors.push(text), printed, errors }
   source = join(base, 'plug')
   mkdirSync(source, { recursive: true })
-  writeFileSync(join(source, 'package.json'), '{"name":"plug","version":"1.0.0"}\n')
+  writeFileSync(join(source, 'package.json'), '{"name":"plug","version":"1.0.0","dependencies":{"dep":"1.0.0"}}\n')
   writeFileSync(join(source, 'index.js'), 'export default 1\n')
   profileDir = join(home, 'profiles', PROFILE)
   mkdirSync(home, { mode: 0o700 })
