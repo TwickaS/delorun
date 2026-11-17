@@ -18,12 +18,10 @@ export const EXTERNAL_AGENT_GRANT = 'external-agent'
 /** What the relay needs from the seat lane. */
 export interface SeatRelayOptions {
   /**
-   * Whether a `subagent/descriptor` provider name is a seat provider's (`claude-code-seat`, `codex-seat`); a seat is a
-   * Session the gate knows that also carries one (D13).
-   * @param name - the descriptor's provider name.
-   * @returns true for a seat provider.
+   * The exact `subagent/descriptor` provider names of the seat providers (`claude-code-seat`, `codex-seat`), fixed at
+   * mount; a seat is a Session the gate knows that also carries one (D13).
    */
-  isSeatProvider(name: string): boolean
+  readonly seatProviders: ReadonlySet<string>
   /**
    * Read the child's descriptor provider.
    * @param child - a candidate seat child.
@@ -78,7 +76,7 @@ export class SeatRelay {
    * @returns true for a seat child.
    */
   isSeat(child: Agent): boolean {
-    return this.ctx.get('externalAgents')?.seat(child.id) !== undefined && (this.options.descriptorOf(child) ?? '') !== '' && this.options.isSeatProvider(this.options.descriptorOf(child) ?? '')
+    return this.ctx.get('externalAgents')?.seat(child.id) !== undefined && this.options.seatProviders.has(this.options.descriptorOf(child) ?? '')
   }
 
   /**
@@ -142,7 +140,7 @@ export class SeatRelay {
         displayReason: { en: request.reason },
         grants: EXTERNAL_AGENT_GRANT,
         // A Full access root allows with no card, so it offers no run rule either.
-        ...request.runRule !== undefined && !full ? { runScope: RUN_SCOPE } : {},
+        ...request.runRule !== undefined && full === undefined ? { runScope: RUN_SCOPE } : {},
         signal,
       }
       assertMarked(built)
@@ -169,12 +167,29 @@ export class SeatRelay {
     }
   }
 
-  private rootIsFullAccess(child: Agent): boolean {
+  /**
+   * The decision a Full access root makes without a card: allowed, or rejected while the owner's consent switch
+   * `fullAccessStartsAgents` is off (EA33).
+   * @param child - the seat child.
+   * @returns the decision, or undefined when the root is not in Full access.
+   */
+  private rootIsFullAccess(child: Agent): 'allowed-once' | 'rejected' | undefined {
     const root = this.ctx.get('externalAgents')?.seat(child.id)?.root
     const rootAgent = root === undefined ? undefined : this.ctx.get('agents')?.get(root)
     const approval = this.ctx.get('approval')
-    if (rootAgent === undefined || approval === undefined) return false
-    return (approval.overrideOf(rootAgent.session) ?? approval.config.policy) === 'never'
+    if (rootAgent === undefined || approval === undefined) return undefined
+    if ((approval.overrideOf(rootAgent.session) ?? approval.config.policy) !== 'never') return undefined
+    return this.fullAccessStartsAgents() ? 'allowed-once' : 'rejected'
+  }
+
+  /**
+   * The consent service's switch `fullAccessStartsAgents`; true while the consent service does not offer it yet.
+   * @returns whether a Full access chat's agents may act without asking.
+   */
+  private fullAccessStartsAgents(): boolean {
+    const consent = this.ctx.get('delegationConsent')
+    const read: unknown = consent === undefined ? undefined : Reflect.get(consent, 'fullAccessStartsAgents')
+    return typeof read === 'function' ? read.call(consent) !== false : true
   }
 
   private hold(child: SessionId, entry: Pending): void {

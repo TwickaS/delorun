@@ -30,19 +30,19 @@ declare module '@deepseek-ai/dsh-user-approval/types' {
 export class RunScope {
   /** Requests the relay built and sent. */
   private readonly owned = new WeakSet<object>()
-  /** Requests the Full access root allows without a card. */
-  private readonly automatic = new WeakSet<object>()
+  /** Requests a Full access root decides without a card, with the decision. */
+  private readonly automatic = new WeakMap<object, ApprovalOutcome>()
   /** Requests whose raw answer was `'allowed-for-run'`. */
   private readonly marked = new WeakSet<object>()
 
   /**
    * Take a request as the relay's own.
    * @param request - the request about to be sent.
-   * @param automatic - whether it is allowed without a card.
+   * @param automatic - the decision made without a card, when the root is in Full access.
    */
-  adopt(request: ApprovalRequestEvent, automatic: boolean): void {
+  adopt(request: ApprovalRequestEvent, automatic?: 'allowed-once' | 'rejected'): void {
     this.owned.add(request)
-    if (automatic) this.automatic.add(request)
+    if (automatic !== undefined) this.automatic.set(request, automatic)
   }
 
   /**
@@ -63,7 +63,8 @@ export class RunScope {
    */
   mount(ctx: Context): () => boolean {
     return ctx.on('approval/request', async (request, next): Promise<ApprovalOutcome> => {
-      if (this.owned.has(request) && this.automatic.has(request)) return 'allowed-once'
+      const decided = this.owned.has(request) ? this.automatic.get(request) : undefined
+      if (decided !== undefined) return decided
       if (request.runScope === undefined) return next()
       const raw: unknown = await next()
       if (raw !== RUN_ANSWER) return typeof raw === 'string' && isOutcome(raw) ? raw : 'unavailable'

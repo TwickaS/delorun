@@ -88,7 +88,7 @@ async function world(rootPolicy: 'ask' | 'never' = 'ask', mountListener = true):
   ctx.provide('agents', { get: (id: string) => agents.get(id) } as never)
   const recorded = new Map<string, () => void>()
   const options: SeatRelayOptions = {
-    isSeatProvider: name => name === 'agent-seat',
+    seatProviders: new Set(['agent-seat']),
     descriptorOf: agent => descriptors.get(agent.id),
     recorded: (_agent, callId) => new Promise<void>((resolve) => { recorded.set(callId, resolve); resolve() }),
     recordName: (_agent, toolName) => `claude_code.${toolName}`,
@@ -210,7 +210,7 @@ describe('the question', () => {
     let release: () => void = () => {}
     const gate = new Promise<void>((resolve) => { release = resolve })
     const held = new SeatRelay(w.ctx, {
-      isSeatProvider: name => name === 'agent-seat', descriptorOf: () => 'agent-seat', recordName: (_a, name) => name, recorded: () => gate,
+      seatProviders: new Set(['agent-seat']), descriptorOf: () => 'agent-seat', recordName: (_a, name) => name, recorded: () => gate,
     })
     const result = held.onApproval(w.child, new AbortController().signal)(question())
     await settle()
@@ -233,6 +233,16 @@ describe('Full access', () => {
     expect(answer).toBe('allow-once')
     expect(w.waiting).toHaveLength(0)
     expect(w.events(w.child, 'approval/decided')).toMatchObject([{ outcome: 'allowed-once' }])
+  })
+
+  it('rejects with the decision logged, and no card, while the consent switch fullAccessStartsAgents is off', async () => {
+    const w = await world('never')
+    w.ctx.provide('delegationConsent', { fullAccessStartsAgents: () => false } as never)
+    w.relay.prepareChild(w.child)
+    const answer = await w.relay.onApproval(w.child, new AbortController().signal)(question({ runRule: RULE }))
+    expect(answer).toBe('reject')
+    expect(w.waiting).toHaveLength(0)
+    expect(w.events(w.child, 'approval/decided')).toMatchObject([{ outcome: 'rejected' }])
   })
 
   it('asks as usual after the root leaves Full access', async () => {
