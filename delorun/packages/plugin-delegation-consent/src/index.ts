@@ -60,6 +60,21 @@ export const EXTERNAL_AGENT_CONSENT_SWITCH: ComputerOnlySwitch = Object.freeze({
 })
 
 /**
+ * The consent's `fullAccessStartsAgents` switch, read by name: a Full access chat starts live agents with no card while
+ * it is on (lead decisions 9 and 10, owner EA33).
+ * @param config - the row's live configuration.
+ * @returns the switch's value; on while the field is absent, its default.
+ */
+export function fullAccessStartsAgents(config: Config): boolean {
+  // TODO(lead decision 9): once fix/p2-fullaccess adds `fullAccessStartsAgents` to Config, read the typed field and
+  // make an absent or unreadable switch refuse (false), failing closed; until then the field is absent and on.
+  const field: { get?: () => unknown } | boolean | undefined = Reflect.get(config, 'fullAccessStartsAgents')
+  if (field === undefined) return true
+  if (typeof field === 'boolean') return field
+  return field.get?.() === true
+}
+
+/**
  * Mount the consent's service, routes, tool guard and computer-only switch in a scope of their own.
  * @param ctx - the scope, disposed when the switch turns off.
  * @param config - the row's live configuration.
@@ -72,9 +87,7 @@ function mountConsent(ctx: Context, config: Config): void {
   ctx.effect(() => () => { disposed = true })
   ctx.plugin(DelorunDelegationConsent, {
     timeoutMs: () => config.runTimeoutMinutes.get() * 60_000,
-    // TODO(lead decision 9): read the consent's `fullAccessStartsAgents` switch once fix/p2-fullaccess adds it to Config;
-    // its default is on.
-    fullAccessStartsAgents: () => true,
+    fullAccessStartsAgents: () => fullAccessStartsAgents(config),
     env: process.env,
     now: Date.now,
   })

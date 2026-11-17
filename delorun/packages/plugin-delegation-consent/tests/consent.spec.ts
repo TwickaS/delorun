@@ -17,7 +17,7 @@ import SubagentRuntime, { DELEGATION_CONSENT_PROVIDER_EXPORT } from '@deepseek-a
 import type { ExternalDelegationVerdict, SubagentResult } from '@deepseek-ai/dsh-subagent'
 import ApprovalService, { setApprovalPolicy, type ApprovalOutcome, type ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { apply, Config, DelorunDelegationConsent, EXTERNAL_AGENT_CONSENT_SWITCH, DelegationConsentError, PLUGIN_MANAGER_REFUSAL, pluginManagerVerdict } from '../src/index.ts'
+import { apply, Config, DelorunDelegationConsent, EXTERNAL_AGENT_CONSENT_SWITCH, DelegationConsentError, fullAccessStartsAgents, PLUGIN_MANAGER_REFUSAL, pluginManagerVerdict } from '../src/index.ts'
 import { guardProfile, isExternalAgentPackage, modulePackage, targetPackageNames, type GuardProfile } from '../src/guard.ts'
 import { agentName, askText, askTextZh, describeAgent, noSandboxPolicyRefusal, notApprovedRefusal, noWorkspaceRefusal } from '../src/copy.ts'
 import { registerDelegationRoutes } from '../src/routes.ts'
@@ -385,6 +385,15 @@ describe('mounting', () => {
     expect(() => configOf({ enabled: true, runTimeoutMinutes: 0 })).toThrow()
     expect(() => configOf({ enabled: true, runTimeoutMinutes: 1441 })).toThrow()
     expect(() => configOf({ enabled: true, runTimeoutMinutes: 1.5 })).toThrow()
+  })
+
+  it('reads fullAccessStartsAgents by name: on while absent, else its saved value, and off when it reads no boolean', () => {
+    const base = configOf({ enabled: true })
+    expect(fullAccessStartsAgents(base)).toBe(true)
+    expect(fullAccessStartsAgents(Object.assign({}, base, { fullAccessStartsAgents: { get: () => false } }))).toBe(false)
+    expect(fullAccessStartsAgents(Object.assign({}, base, { fullAccessStartsAgents: { get: () => true } }))).toBe(true)
+    expect(fullAccessStartsAgents(Object.assign({}, base, { fullAccessStartsAgents: false }))).toBe(false)
+    expect(fullAccessStartsAgents(Object.assign({}, base, { fullAccessStartsAgents: { get: () => 'yes' } }))).toBe(false)
   })
 
   it('provides the service, the guard and the routes with the switch on', async () => {
