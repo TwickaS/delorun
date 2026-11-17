@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useId, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button, Modal, SegmentedControl, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
+import { cardCss, SettingsCard } from '@delorun/settings-controls'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { useDangerousMode } from './dangerous-mode.ts'
 import { failureSentence, isRefused, LOOPBACK_REQUIRED, type HostFetch, type Loaded } from './host-api.ts'
@@ -84,6 +85,7 @@ export function NetworkSection({ t, fetch }: NetworkSectionProps): ReactNode {
       ? <p className={css.line}>{t('unavailable')}</p>
       : <>
         <p className={css.intro}>{t('intro')}</p>
+        <p className={css.risk} role="note">{t('risk')}</p>
         {list.kind === 'failed' ? <p className={css.failed} role="alert">{list.text}</p> : null}
         {list.kind === 'ready' && list.value !== undefined ? <WorkspaceList t={t} fetch={fetch} list={list.value} onSaved={refresh} /> : null}
       </>}
@@ -100,10 +102,12 @@ function WorkspaceList({ t, fetch, list, onSaved }: { t: Translate; fetch: HostF
     {list.problem === undefined ? null : <p className={css.failed} role="alert">{t('problem', { problem: list.problem })}</p>}
     {list.workspaces.length === 0
       ? <p className={css.line}>{t('none')}</p>
-      : <ul className={css.list}>
-        {list.workspaces.map(workspace => <WorkspaceRow key={`${workspace.path}\n${JSON.stringify(workspace.network)}\n${String(workspace.own)}`}
-          t={t} fetch={fetch} workspace={workspace} defaultNetwork={list.default} locked={list.problem !== undefined} onSaved={onSaved} />)}
-      </ul>}
+      : <SettingsCard title={t('workspaces')}>
+        <ul className={css.list}>
+          {list.workspaces.map(workspace => <WorkspaceRow key={`${workspace.path}\n${JSON.stringify(workspace.network)}\n${String(workspace.own)}`}
+            t={t} fetch={fetch} workspace={workspace} defaultNetwork={list.default} locked={list.problem !== undefined} onSaved={onSaved} />)}
+        </ul>
+      </SettingsCard>}
   </>
 }
 
@@ -114,8 +118,9 @@ interface PendingLoosening {
 }
 
 /**
- * One workspace: its title and folder, whether it follows the default, the access choice, the allowlist editor, Save
- * and Use default, and the confirmation of a loosening.
+ * One workspace: its title and folder, whether it follows the default, the access choice, the allowlist editor, Use
+ * default, and the confirmation of a loosening. Each change is sent as soon as it is made: a choice of access, the
+ * switch, the common hosts and a changed host list when the field loses focus.
  * @param props - the copy, the request function, the workspace, the default, whether changes are refused, and what runs
  *   after a saved change.
  * @returns the row.
@@ -139,6 +144,13 @@ function WorkspaceRow({ t, fetch, workspace, defaultNetwork, locked, onSaved }: 
   const draft: WorkspaceNetwork = { access, hosts: hostLines(hostsText), ...access === 'open' && accept ? { acceptAbstractSockets: true } : {} }
   const id = useId()
 
+  /** Puts the controls back to the setting in effect, after a refused or cancelled change. */
+  const revert = (): void => {
+    setAccess(workspace.network.access)
+    setHostsText(workspace.network.hosts.join('\n'))
+    setAccept(workspace.network.acceptAbstractSockets === true)
+  }
+
   const save = async (network: WorkspaceNetwork | undefined, confirmed: boolean): Promise<void> => {
     setFailure(undefined)
     setBusy(true)
@@ -149,6 +161,7 @@ function WorkspaceRow({ t, fetch, workspace, defaultNetwork, locked, onSaved }: 
         setConfirming({ network, text: looseningText(t, workspace.title, workspace.network, network ?? defaultNetwork) })
       } else {
         setFailure(networkFailureText(t, error, dangerous))
+        revert()
       }
       return
     } finally {
@@ -157,14 +170,31 @@ function WorkspaceRow({ t, fetch, workspace, defaultNetwork, locked, onSaved }: 
     await onSaved()
   }
 
+  /** Sends the setting the controls now show when it differs from the one in effect. */
+  const commit = (next: WorkspaceNetwork): void => {
+    if (!sameNetwork(next, workspace.network)) void save(next, false)
+  }
+
+  const choose = (value: NetworkAccess): void => {
+    setAccess(value)
+    commit({ access: value, hosts: hostLines(hostsText), ...value === 'open' && accept ? { acceptAbstractSockets: true } : {} })
+  }
+
+  const accepting = (value: boolean): void => {
+    setAccept(value)
+    commit({ access, hosts: hostLines(hostsText), ...access === 'open' && value ? { acceptAbstractSockets: true } : {} })
+  }
+
   const addCommon = (group: CommonHostGroup): void => {
     const lines = hostLines(hostsText)
     const present = new Set(comparableHosts(lines))
-    setHostsText([...lines, ...COMMON_HOSTS[group].filter(host => !present.has(host))].join('\n'))
+    const added = [...lines, ...COMMON_HOSTS[group].filter(host => !present.has(host))]
+    setHostsText(added.join('\n'))
+    commit({ access, hosts: added, ...access === 'open' && accept ? { acceptAbstractSockets: true } : {} })
   }
 
   const accessName = (value: NetworkAccess): string => t(`access.${value}`)
-  return <li className={css.row} data-workspace-path={workspace.path}>
+  return <li className={`${cardCss.block} ${css.row}`} data-workspace-path={workspace.path}>
     <div className={css.head}>
       <div className={css.details}>
         <div className={css.title}>{workspace.title}</div>
@@ -175,7 +205,7 @@ function WorkspaceRow({ t, fetch, workspace, defaultNetwork, locked, onSaved }: 
       </div>
       <SegmentedControl id={id} label={t('access.label', { workspace: workspace.title })} value={access}
         disabled={locked || busy} options={SHOWN_ACCESSES.map(value => ({ value, label: accessName(value) }))}
-        onChange={setAccess} />
+        onChange={choose} />
     </div>
     <div className={css.panel} role="tabpanel" id={`${id}-${access}-panel`} aria-labelledby={`${id}-${access}`}>
       <p className={css.description}>{t(`access.${access}.description`)}</p>
@@ -184,13 +214,13 @@ function WorkspaceRow({ t, fetch, workspace, defaultNetwork, locked, onSaved }: 
           <div className={css.title}>{t('abstract.title')}</div>
           <div className={css.description}>{t('abstract.description')}</div>
         </div>
-        <Switch checked={accept} label={t('abstract.title')} disabled={locked || busy} onChange={setAccept} />
+        <Switch checked={accept} label={t('abstract.title')} disabled={locked || busy} onChange={accepting} />
       </div> : null}
       {access === 'allowlist' ? <>
         <label className={css.hostsLabel} htmlFor={`${id}-hosts`}>{t('hosts.label', { workspace: workspace.title })}</label>
         <textarea id={`${id}-hosts`} className={css.hosts} rows={5} value={hostsText} disabled={locked || busy}
           spellCheck={false} autoCapitalize="off" autoComplete="off"
-          onChange={(event) => { setHostsText(event.target.value) }} />
+          onChange={(event) => { setHostsText(event.target.value) }} onBlur={() => { commit(draft) }} />
         <p className={css.description}>{t('hosts.hint')}</p>
         <div className={css.common}>
           <Button variant="outline" size="sm" aria-expanded={offering} disabled={locked || busy}
@@ -202,16 +232,14 @@ function WorkspaceRow({ t, fetch, workspace, defaultNetwork, locked, onSaved }: 
       </> : null}
     </div>
     {failure === undefined ? null : <p className={css.failed} role="alert">{failure}</p>}
-    <div className={css.actions}>
-      <Button variant="primary" size="sm" disabled={locked || busy || sameNetwork(draft, workspace.network)}
-        onClick={() => { void save(draft, false) }}>{t('save')}</Button>
-      {workspace.own ? <Button variant="outline" size="sm" disabled={locked || busy}
-        onClick={() => { void save(undefined, false) }}>{t('useDefault')}</Button> : null}
-    </div>
-    {confirming === undefined ? null : <Modal open onClose={() => { setConfirming(undefined) }}
+    {workspace.own ? <div className={css.actions}>
+      <Button variant="outline" size="sm" disabled={locked || busy}
+        onClick={() => { void save(undefined, false) }}>{t('useDefault')}</Button>
+    </div> : null}
+    {confirming === undefined ? null : <Modal open onClose={() => { setConfirming(undefined); revert() }}
       title={t('confirm.title', { workspace: workspace.title })} closeLabel={t('confirm.close')}
       footer={<>
-        <Button variant="outline" onClick={() => { setConfirming(undefined) }}>{t('confirm.cancel')}</Button>
+        <Button variant="outline" onClick={() => { setConfirming(undefined); revert() }}>{t('confirm.cancel')}</Button>
         <Button variant="primary" data-modal-autofocus onClick={() => {
           const { network } = confirming
           setConfirming(undefined)
