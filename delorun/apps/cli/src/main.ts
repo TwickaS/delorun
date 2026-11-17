@@ -48,7 +48,9 @@ import { hasCliProfile, profileDirectory } from './profile.ts'
 import { asksForHelp, commandHelp } from './help.ts'
 import { closestMatch } from './output.ts'
 import { pruneLogsAtStart } from './logs/startup.ts'
-import { applyDelorunVersionEnvironment, versionCommand } from './version.ts'
+import { mainHelp } from './main-help.ts'
+import { styleOf } from './style.ts'
+import { applyDelorunVersionEnvironment, delorunVersion, versionCommand } from './version.ts'
 
 /**
  * A command listed for `delorun --help` and loaded only when it is named: most commands import a large part of upstream
@@ -97,33 +99,11 @@ export const COMMANDS: readonly CommandEntry[] = [
 
 /**
  * The help text.
- * @returns the usage lines and one line per command.
+ * @param env - the environment, which decides the colour.
+ * @returns the grouped command list, the words used and the exit codes, wrapped to the terminal.
  */
-function usage(): string {
-  const width = Math.max(...COMMANDS.map(command => command.name.length))
-  return [
-    'Usage: delorun [--profile <name>] [--foreground | --background]',
-    '       delorun <command> [options]',
-    '',
-    'With no command, delorun sets up a new home, or starts Delorun and opens the studio: --background keeps it running after you',
-    'close the terminal and --foreground keeps it in this terminal; without either, setup\'s answer chooses (delorun setup background).',
-    '',
-    'Commands:',
-    ...COMMANDS.map(command => `  ${command.name.padEnd(width)}  ${command.summary}`),
-    '',
-    'delorun <command> --help shows a command\'s options. delorun --version prints Delorun\'s and DSH\'s versions; --json prints them as one JSON line.',
-    '',
-    'Words used here:',
-    '  home       the folder where Delorun keeps your chats and settings: ~/.delorun, or DELORUN_HOME',
-    '  profile    one named setup of Delorun on this computer: default, or DELORUN_PROFILE or --profile',
-    '  studio     the web page Delorun serves on this computer, where you chat',
-    '  workspace  a folder your chats work in',
-    '  full access  a workspace setting that lets chats run commands outside the sandbox',
-    '  reach      using the studio from your phone over your own Tailscale network',
-    '',
-    'Exit codes: 0 done, 1 failed, 2 wrong command line, 3 Delorun is not running.',
-    '',
-  ].join('\n')
+function usage(env: Readonly<Record<string, string | undefined>>): string {
+  return mainHelp({ commands: COMMANDS.map(command => command.name), version: String(delorunVersion()), columns: process.stdout.columns > 0 ? process.stdout.columns : 80, style: styleOf(env) })
 }
 
 /**
@@ -180,7 +160,7 @@ export async function main(argv: readonly string[], context: CommandContext = {
   const [first, ...rest] = argv
   try {
     if (first === '--help' || first === '-h' || (first === 'help' && rest.length === 0)) {
-      context.stdout(usage())
+      context.stdout(usage(context.env))
       return EXIT.ok
     }
     if (first === 'help') return helpFor(rest, context)
@@ -194,7 +174,7 @@ export async function main(argv: readonly string[], context: CommandContext = {
       throw new CliError(EXIT.usage, `✗ Unknown command ${JSON.stringify(first)}.${near === undefined ? '' : ` Did you mean ${JSON.stringify(near)}?`} delorun --help lists commands.`)
     }
     if (asksForHelp(rest)) {
-      context.stdout(commandHelp(entry.name) ?? usage())
+      context.stdout(commandHelp(entry.name) ?? usage(context.env))
       return EXIT.ok
     }
     return await (await entry.load()).run(rest, context)
