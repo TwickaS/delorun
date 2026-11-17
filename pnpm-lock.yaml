@@ -1804,6 +1804,9 @@ importers:
       fflate:
         specifier: ^0.8.2
         version: 0.8.3
+      playwright:
+        specifier: ^1.49.0
+        version: 1.61.1
 
   delorun/packages/archive:
     dependencies:

@@ -10,12 +10,13 @@ const DEPS: BrowseDeps = {
 }
 
 describe('selectAdapter', () => {
-  it('creates the browse adapter', () => {
-    expect(Object.keys(ADAPTERS)).toEqual(['browse'])
+  it('creates each adapter by id', () => {
+    expect(Object.keys(ADAPTERS)).toEqual(['playwright', 'browse'])
     expect(selectAdapter('browse', DEPS).id).toBe('browse')
+    expect(selectAdapter('playwright', DEPS).id).toBe('playwright')
   })
 
-  it.each(['playwright', 'toString', ''])('refuses unknown id "%s" and lists the known ids', id => {
-    expect(() => selectAdapter(id, DEPS)).toThrow(`unknown studio-browser adapter "${id}"; known adapters: browse`)
+  it.each(['firefox', 'toString', ''])('refuses unknown id "%s" and lists the known ids', id => {
+    expect(() => selectAdapter(id, DEPS)).toThrow(`unknown studio-browser adapter "${id}"; known adapters: playwright, browse`)
   })
 })

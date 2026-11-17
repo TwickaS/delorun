@@ -13,6 +13,7 @@ import type { BrowseDeps, ProcessRunner } from './browse.ts'
 
 export { ADAPTERS, selectAdapter, type BrowserCheck, type RunResult, type RunSpec, type StudioBrowser } from './adapter.ts'
 export { createBrowseAdapter, locateBrowse, type BrowseDeps, type ProcessResult, type ProcessRunner } from './browse.ts'
+export { createPlaywrightAdapter, parseWorkerAnswer } from './playwright.ts'
 export { errorMessage } from './message.ts'
 export { loopbackOrigin, type LoopbackOrigin } from './origin.ts'
 
@@ -24,7 +25,9 @@ export { loopbackOrigin, type LoopbackOrigin } from './origin.ts'
  * @returns the exit status and output; a process that cannot start has status null and the error as `stderr`.
  */
 export const spawnRunner: ProcessRunner = (file, args, options) => {
-  const result = spawnSync(file, [...args], { encoding: 'utf8', timeout: options.timeoutMs, stdio: ['ignore', 'pipe', 'pipe'] })
+  const result = spawnSync(file, [...args], {
+    encoding: 'utf8', timeout: options.timeoutMs, ...(options.input === undefined ? { stdio: ['ignore', 'pipe', 'pipe'] as const } : { input: options.input }),
+  })
   const stderr = result.error === undefined ? result.stderr : `${result.error.message}\n${result.stderr}`
   return { status: result.status, stdout: result.stdout, stderr }
 }
