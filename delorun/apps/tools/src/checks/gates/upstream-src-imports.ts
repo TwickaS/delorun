@@ -22,6 +22,12 @@ const SOURCE = /(?<!\.d)\.(?:ts|tsx|mts|cts)$/u
 /** A bare specifier that names a file under an upstream package's `src/`. */
 const UPSTREAM_SRC_SPECIFIER = /^@deepseek-ai\/[^/]+\/src(?:\/|$)/u
 
+/** The product website's alias for upstream client source, which only the replica's browser code may use (it never runs under Node). */
+const STUDIO_SPECIFIER = /^#studio\//u
+
+/** The one directory whose sources may import `#studio/`. */
+const STUDIO_ALLOWED = 'delorun/apps/website/src/replica/'
+
 /** The top-level directories that hold upstream's packages. */
 const UPSTREAM_ROOTS = ['packages', 'vendor']
 
@@ -93,7 +99,9 @@ export function upstreamSourceImportErrors(root: string): string[] {
       if (!entry.isDirectory() || !existsSync(src)) continue
       for (const path of sources(src)) {
         for (const { specifier, position } of specifiers(path, readFileSync(path, 'utf8'))) {
-          if (reachesUpstreamSource(root, path, specifier)) {
+          if (STUDIO_SPECIFIER.test(specifier) && !relative(root, path).split(sep).join('/').startsWith(STUDIO_ALLOWED)) {
+            errors.push(`${relative(root, path)}:${position}: imports '${specifier}', the replica's alias for upstream client source; only ${STUDIO_ALLOWED} may`)
+          } else if (reachesUpstreamSource(root, path, specifier)) {
             errors.push(`${relative(root, path)}:${position}: imports upstream source '${specifier}'; import the package entry and export what it lacks`)
           }
         }

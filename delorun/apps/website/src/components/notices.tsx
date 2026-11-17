@@ -13,7 +13,7 @@ import { NOTICES_COPY } from '@/site/notices-copy.ts'
  */
 export function Notices() {
   return (
-    <Frame>
+    <Frame signup="/notices">
       <main className="mx-auto w-full max-w-2xl px-5 pt-10 sm:px-8 sm:pt-16">
         <h1 className="text-4xl font-semibold tracking-tight">{NOTICES_COPY.title}</h1>
         <p className="mt-5 text-lg leading-8 text-(--dl-text-muted)">{NOTICES_COPY.intro}</p>
