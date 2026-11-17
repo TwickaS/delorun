@@ -50,7 +50,6 @@
     "@deepseek-ai/schemastery": "workspace:~"
   },
   "delorun": {
-    "state": "experimental",
-    "unreached": "realbpack"
+    "state": "experimental"
   }
 }

@@ -58,6 +58,12 @@ function levelOf(home: string): unknown {
   return (JSON.parse(readFileSync(protectionPath(home), 'utf8')) as { level?: unknown }).level
 }
 const TSX_LOADER = import.meta.resolve('tsx/esm')
+
+/** The prompt of each question `delorun changes protection off` asks. */
+const ANSWER_PROMPT = '[y/N]'
+
+/** How many questions `delorun changes protection off` asks before it lowers the setting. */
+const QUESTIONS = 2
 const PROFILE = 'default'
 
 /** Where the specs' homes are created: outside the OS temporary directory, which upstream's profiles replace. */
@@ -137,7 +143,7 @@ interface Ran {
 }
 
 /**
- * Run `delorun changes protection off` inside a pseudo-terminal that `script` opens, answering `y`.
+ * Run `delorun changes protection off` inside a pseudo-terminal that `script` opens, answering `y` to both of its questions.
  * @param prefix - the confinement, or nothing for the person's own full access.
  * @param paths - the homes and the workspace.
  * @returns its exit status and what the pseudo-terminal showed.
@@ -147,7 +153,15 @@ async function lowerProtection(prefix: readonly string[], paths: { readonly home
   const command = [process.execPath, '--import', TSX_LOADER, BIN, 'changes', 'protection', 'off'].map(word => `'${word}'`).join(' ')
   const argv = [...prefix, 'script', '-qec', command, '/dev/null']
   const child = execFileAsync(argv[0]!, argv.slice(1), { cwd: paths.workspace, env: { ...inherited, HOME: paths.osHome, DELORUN_HOME: paths.home, DSH_HOME: join(paths.osHome, '.dsh') }, encoding: 'utf8', timeout: 60_000 })
-  child.child.stdin?.end('y\n')
+  // Each answer is typed once its question shows, as a person types it: the first read would take a second line typed early.
+  let shown = ''
+  let answered = 0
+  child.child.stdout?.on('data', (chunk: string) => {
+    shown += chunk
+    const asked = shown.split(ANSWER_PROMPT).length - 1
+    for (; answered < asked && answered < QUESTIONS; answered += 1) child.child.stdin?.write('y\n')
+    if (answered === QUESTIONS) child.child.stdin?.end()
+  })
   try {
     const { stdout } = await child
     return { status: 0, output: stdout }

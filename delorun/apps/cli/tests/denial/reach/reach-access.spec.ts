@@ -93,6 +93,7 @@ const ADMITTED_ROUTES: ReadonlySet<string> = new Set([
   '/api/delorunOnboarding.keyTest', '/api/delorunOnboarding.recommend', '/api/delorunOnboarding.setupRecord', '/api/delorunOnboarding.deferStep',
   '/api/delorunOnboarding.readiness', '/api/delorunOnboarding.start', '/api/delorunOnboarding.localModels', '/api/delorunOnboarding.workspaceNotice',
   '/api/delorunMcpConsent.waiting', '/api/delorunBranding.icon', '/api/delorunChatStates.list', '/api/delorunChatStates.set',
+  '/api/delorunPreviewFlags.list',
 ])
 
 /**
@@ -750,7 +751,7 @@ describe('a reach device and the exact Fetch routes', () => {
     // The routes this rule is about: a file read by path, deliverable actions and change reads.
     expect([...routes.keys()]).toEqual(expect.arrayContaining(['/api/file', '/api/present.open', '/api/changes.summary', '/api/changes.diff', UPLOAD]))
     for (const [path, methods] of routes) {
-      // The upload route, the guide's read routes and key test, the recommended plugins' purposes, the chat states' list and set and the branding icon upload admit an approved device.
+      // The upload route, the guide's read routes and key test, the recommended plugins' purposes, the chat states' list and set, the branding icon upload and the preview flags' list admit an approved device.
       if (path === UPLOAD || ADMITTED_ROUTES.has(path)) continue
       for (const method of methods) {
         // Pins Connection's owner rule for exact routes: a route that declares no `admitPeer` refuses every other Peer.
