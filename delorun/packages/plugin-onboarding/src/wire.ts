@@ -125,6 +125,25 @@ export const KEY_RESULTS = ['works', 'rejected', 'unreachable', 'failed', 'no-ke
 /** One of {@link KEY_RESULTS}. */
 export type KeyResult = typeof KEY_RESULTS[number]
 
+/**
+ * Where a provider's key came from: `saved` the key file in Delorun's home, `environment` the environment Delorun started
+ * with, `project-file` a `.env` in the folder Delorun started in, `home-file` the `.env` in Delorun's home, `unknown` a layer
+ * this list does not name.
+ */
+export const KEY_SOURCE_KINDS = ['saved', 'environment', 'project-file', 'home-file', 'unknown'] as const
+
+/** One of {@link KEY_SOURCE_KINDS}. */
+export type KeySourceKind = typeof KEY_SOURCE_KINDS[number]
+
+/** A variable name: letters, digits and underscores only, so a value pasted in its place is refused. */
+export const VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/
+
+/** Where one provider's key came from: the kind and the NAME of the variable that holds it, never its value. */
+export const KeySource = z.strictObject({ kind: z.enum(KEY_SOURCE_KINDS), variable: z.string().regex(VARIABLE_NAME).optional() })
+
+/** {@link KeySource}'s parsed value. */
+export type KeySource = z.output<typeof KeySource>
+
 /** The most providers one test reports. */
 export const MAX_PROVIDERS = 32
 
@@ -134,7 +153,7 @@ export const MAX_PROVIDERS = 32
  */
 export const KeyTestAnswer = z.strictObject({
   hidden: z.array(z.string().min(1).max(200)).max(MAX_PROVIDERS).optional(),
-  providers: z.array(z.strictObject({ provider: z.string().min(1).max(200), name: z.string().min(1).max(200), result: z.enum(KEY_RESULTS) })).max(MAX_PROVIDERS),
+  providers: z.array(z.strictObject({ provider: z.string().min(1).max(200), name: z.string().min(1).max(200), result: z.enum(KEY_RESULTS), source: KeySource.optional() })).max(MAX_PROVIDERS),
 })
 
 /** {@link KeyTestAnswer}'s parsed value. */

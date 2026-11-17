@@ -7,7 +7,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { DEEPSEEK_ROUTE, discoveryResult, listingResult, testKeys, type KeyTestDeps } from '../src/key-test.ts'
 import { keyTestDeps } from '../src/index.ts'
-import { MAX_PROVIDERS } from '../src/wire.ts'
+import { KeyTestAnswer, MAX_PROVIDERS } from '../src/wire.ts'
 
 afterEach(() => {
   vi.unstubAllEnvs()
@@ -300,5 +300,61 @@ describe('the key test in the harness', () => {
       unmounted.provide('llm', { listConfigurableProviders: () => [{ provider: 'custom', displayName: 'Custom', settingsNs: 'llm.custom', settingsPath: [] }] } as never)
       await expect(keyTestDeps(unmounted, 1000, []).credentialConfigured('custom')).rejects.toThrow('the settings service is not mounted')
     })
+  })
+})
+
+describe('where a found key came from', () => {
+  const FAKE_KEY = 'sk-FAKEFAKEFAKE0123456789'
+  const withRoute = (describe: (ref: string) => Promise<unknown>, ref = 'OPENAI_API_KEY') => {
+    const ctx = new Context()
+    ctx.provide('credentials', { describe } as never)
+    ctx.provide('llm', { listConfigurableProviders: () => [{ provider: 'openai', settingsNs: 'llm.openai', settingsPath: [] }, { provider: DEEPSEEK_ROUTE, settingsNs: 'llm.deepseek', settingsPath: [] }] } as never)
+    ctx.provide('settings', { describe: () => [{ ns: 'llm.openai', value: { apiKeyEnv: ref } }] } as never)
+    return keyTestDeps(ctx, 1000, [])
+  }
+
+  it('names each credentials layer and the variable, and never the key', async () => {
+    for (const [layer, kind] of [['env', 'environment'], ['file', 'saved'], ['project-env', 'project-file'], ['user-env', 'home-file'], ['other', 'unknown']] as const) {
+      const parts = withRoute(async () => ({ configured: true, source: layer, writable: true, masked: FAKE_KEY }))
+      const source = await parts.credentialSource?.('openai')
+      expect(source).toEqual({ kind, variable: 'OPENAI_API_KEY' })
+      expect(JSON.stringify(source)).not.toContain(FAKE_KEY)
+    }
+  })
+
+  it('names the default DeepSeek variable, and nothing for an unconfigured or unknown route', async () => {
+    const parts = withRoute(async (ref) => ({ configured: ref === 'DEEPSEEK_API_KEY', source: 'env', writable: true }))
+    expect(await parts.credentialSource?.(DEEPSEEK_ROUTE)).toEqual({ kind: 'environment', variable: 'DEEPSEEK_API_KEY' })
+    expect(await parts.credentialSource?.('openai')).toBeUndefined()
+    expect(await parts.credentialSource?.('nowhere')).toBeUndefined()
+  })
+
+  it('leaves a reference that is not a plain variable name out of the answer', async () => {
+    const parts = withRoute(async () => ({ configured: true, source: 'env', writable: true }), `sk-${'x'.repeat(10)}=1 2`)
+    expect(await parts.credentialSource?.('openai')).toEqual({ kind: 'environment' })
+  })
+
+  it('puts the source in the answer only for a route that holds a key', async () => {
+    const answer = await testKeys(deps({
+      credentialConfigured: vi.fn(async (provider: string) => provider === 'openai'),
+      providers: () => [{ id: 'openai', name: 'OpenAI' }, { id: 'groq', name: 'Groq' }],
+      credentialSource: vi.fn(async () => ({ kind: 'saved' as const, variable: 'X_API_KEY' })),
+    }))
+    expect(answer.providers.find(each => each.provider === 'openai')?.source).toEqual({ kind: 'saved', variable: 'X_API_KEY' })
+    expect(answer.providers.find(each => each.provider === 'groq')).not.toHaveProperty('source')
+  })
+})
+
+describe('the key test answer on the wire', () => {
+  const row = (source: unknown) => ({ providers: [{ provider: 'openai', name: 'OpenAI', result: 'works', source }] })
+
+  it('accepts a source kind with a variable name', () => {
+    expect(KeyTestAnswer.safeParse(row({ kind: 'environment', variable: 'OPENAI_API_KEY' })).success).toBe(true)
+  })
+
+  it('rejects an unknown source kind, a variable that is not a name, and an extra field', () => {
+    expect(KeyTestAnswer.safeParse(row({ kind: 'keychain' })).success).toBe(false)
+    expect(KeyTestAnswer.safeParse(row({ kind: 'environment', variable: 'sk-abc def' })).success).toBe(false)
+    expect(KeyTestAnswer.safeParse(row({ kind: 'saved', value: 'sk-abc' })).success).toBe(false)
   })
 })

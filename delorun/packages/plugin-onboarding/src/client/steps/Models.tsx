@@ -1,6 +1,6 @@
 /**
  * The providers step: a landing of provider cards to tick, a guided walk through each ticked provider (key, test, Skip and
- * Next) and a summary. A key is write-only here: the field never shows a stored key, only "Key found" or "Key saved".
+ * Next) and a summary. A key is write-only here: a key Delorun already has shows as text (found, and where it came from) with no input until the person presses Replace key.
  */
 import { useEffect, useId, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
@@ -14,6 +14,7 @@ import type { LocalServer } from '../../wire.ts'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import { Card, Monogram } from '../ui/Card.tsx'
 import { StateLine } from '../ui/StateLine.tsx'
+import { FoundKey } from './FoundKey.tsx'
 import { useStore } from './shared.ts'
 import css from './models.module.css'
 import shared from './steps.module.css'
@@ -168,6 +169,7 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
           : couldNotTest(card.result)
             ? <StateLine tone="info">{t('keyStatus.unverified')}</StateLine>
             : <StateLine tone="success">{t('providers.found')}</StateLine>)}
+        {card.found && !didNotPass(card.result) && <FoundKey t={t} source={card.source} />}
       </Card>
     </li>
   )
@@ -286,12 +288,15 @@ function WalkScreen({ card, services, place, onBack, onSkip, onDone }: WalkProps
   const [endpointName, setEndpointName] = useState('')
   const [test, setTest] = useState<Test>({ state: 'idle' })
   const [saving, setSaving] = useState(false)
+  // A found key shows as text; the input exists only after Replace key.
+  const [replacing, setReplacing] = useState(false)
+  const showField = !card.found || replacing
   const [problem, setProblem] = useState(false)
   const latest = useRef(0)
   const id = useId()
   const keyField = useRef<HTMLInputElement>(null)
   // Each provider's screen mounts fresh, so its key field takes focus when it appears.
-  useEffect(() => { keyField.current?.focus({ preventScroll: true }) }, [])
+  useEffect(() => { if (showField) keyField.current?.focus({ preventScroll: true }) }, [showField])
   const address = baseURL.trim() === '' ? undefined : baseURL.trim()
   const custom = card.custom === true
   // An endpoint is tested only once its address is one a request can go to.
@@ -344,24 +349,34 @@ function WalkScreen({ card, services, place, onBack, onSkip, onDone }: WalkProps
           </div>
         </>
       )}
-      <div className={css.field}>
-        <label htmlFor={`${id}-key`} className={css.label}>{t('providers.key')}</label>
-        <input id={`${id}-key`} ref={keyField} className={css.input} type="password" autoComplete="off" autoCapitalize="none" spellCheck={false}
-          value={key} aria-describedby={`${id}-state`} aria-invalid={invalid || undefined}
-          placeholder={card.found ? t('providers.key.keep') : ''} onChange={(event) => { setKey(event.currentTarget.value) }} />
-        <div id={`${id}-state`} className={css.keyState}>
-          {card.found && key === '' && <StateLine tone="success">{t('providers.found')}</StateLine>}
-          {test.state === 'testing' && <StateLine tone="loading">{t('providers.testing')}</StateLine>}
-          {invalid && <StateLine tone="warning">{t('providers.invalid')}</StateLine>}
-          {works !== undefined && <StateLine tone="success">{t('providers.works', { n: String(works.models) })}{works.defaultModel === undefined ? null : <span className={css.defaultModel}>{t('providers.default', { model: works.defaultModel })}</span>}</StateLine>}
-          {test.state === 'done' && test.probe.kind === 'failed' && <StateLine tone="error">{t('providers.failed')}</StateLine>}
-          {test.state === 'done' && test.probe.kind === 'unchecked' && <StateLine tone="info">{t('providers.unchecked')}</StateLine>}
-          {problem && <StateLine tone="error" action={{ label: t('retry'), onClick: next }}>{t(custom ? 'providers.custom.failed' : 'providers.saveFailed')}</StateLine>}
+      {!showField ? (
+        <div className={css.field}>
+          {didNotPass(card.result)
+            ? <StateLine tone="warning">{t('providers.foundFailed')}</StateLine>
+            : <StateLine tone="success">{t('providers.found')}</StateLine>}
+          <FoundKey t={t} source={card.source} />
+          <Button variant="outline" size="sm" className={css.replace} onClick={() => { setReplacing(true) }}>{t('providers.replace')}</Button>
         </div>
-        {card.keyPage !== undefined && (
-          <a className={css.link} href={card.keyPage} target="_blank" rel="noopener noreferrer">{t('providers.getKey')}</a>
-        )}
-      </div>
+      ) : (
+        <div className={css.field}>
+          <label htmlFor={`${id}-key`} className={css.label}>{t('providers.key')}</label>
+          <input id={`${id}-key`} ref={keyField} className={css.input} type="password" autoComplete="off" autoCapitalize="none" spellCheck={false}
+            value={key} aria-describedby={`${id}-state`} aria-invalid={invalid || undefined}
+            onChange={(event) => { setKey(event.currentTarget.value) }} />
+          <div id={`${id}-state`} className={css.keyState}>
+            {test.state === 'testing' && <StateLine tone="loading">{t('providers.testing')}</StateLine>}
+            {invalid && <StateLine tone="warning">{t('providers.invalid')}</StateLine>}
+            {works !== undefined && <StateLine tone="success">{t('providers.works', { n: String(works.models) })}{works.defaultModel === undefined ? null : <span className={css.defaultModel}>{t('providers.default', { model: works.defaultModel })}</span>}</StateLine>}
+            {test.state === 'done' && test.probe.kind === 'failed' && <StateLine tone="error">{t('providers.failed')}</StateLine>}
+            {test.state === 'done' && test.probe.kind === 'unchecked' && <StateLine tone="info">{t('providers.unchecked')}</StateLine>}
+            {problem && <StateLine tone="error" action={{ label: t('retry'), onClick: next }}>{t(custom ? 'providers.custom.failed' : 'providers.saveFailed')}</StateLine>}
+          </div>
+          {card.found && <Button variant="ghost" size="sm" className={css.replace} onClick={() => { setReplacing(false); setKey(''); setProblem(false) }}>{t('providers.replace.cancel')}</Button>}
+          {card.keyPage !== undefined && (
+            <a className={css.link} href={card.keyPage} target="_blank" rel="noopener noreferrer">{t('providers.getKey')}</a>
+          )}
+        </div>
+      )}
       {card.needsBaseURL && !custom && (
         <details className={css.more}>
           <summary className={css.moreSummary}>{t('providers.more')}</summary>
@@ -372,7 +387,7 @@ function WalkScreen({ card, services, place, onBack, onSkip, onDone }: WalkProps
       )}
       <FooterPortal>
         <StepFooter skip={{ label: t('providers.skipOne'), onClick: onSkip }} back={{ label: t('back'), onClick: onBack }}
-          next={{ label: t('providers.next'), onClick: next, disabled: saving || invalid || incomplete || (typed === undefined && !card.found) }} />
+          next={{ label: t('providers.next'), onClick: next, disabled: saving || invalid || incomplete || (typed === undefined && (!card.found || replacing)), focus: showField ? undefined : card.provider }} />
       </FooterPortal>
     </div>
   )

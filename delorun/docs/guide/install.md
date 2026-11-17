@@ -254,7 +254,7 @@ The first time, the studio shows a short first-run guide, one step at a time, en
 ![The studio's first-run guide on a new home: the Welcome step, with the language choices and the pre-release notice, over an empty chat list.](pictures/first-run-guide.webp)
 
 1. **Welcome.** Choose the language. A pre-release notice says that Delorun is a community fork of DeepSeek Harness that is still in preview; choose Continue to acknowledge it.
-2. **Models.** Tick the model providers you use. For each, paste its key and choose **Connect**, or choose **Skip**. A key found in an environment variable shows as "Key found". A summary then lists what is set up.
+2. **Models.** Tick the model providers you use. For each, paste its key and choose **Connect**, or choose **Skip**. A key Delorun already has shows as "Key found", with where it came from (for example "From DEEPSEEK_API_KEY in the environment Delorun started with") and a "How does Delorun know?" note. There is no key box then: choose **Next** to use it, or **Replace key** to type a different one. A summary then lists what is set up.
 3. **Look.** Choose colours and theme, or the stock look.
 4. **Agents.** Optionally add Claude Code or Codex as helpers a chat can hand work to.
 5. **Recommended plugins.** Optionally add [plugins](../reference/glossary.md#plugin), small add-ons that give Delorun more tools.

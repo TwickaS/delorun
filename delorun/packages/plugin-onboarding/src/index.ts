@@ -32,6 +32,7 @@ import { readSetupRecord } from './answers.ts'
 import { createCloneService, spawnGit } from './clone.ts'
 import type { Config } from './config.ts'
 import { DEEPSEEK_ROUTE, listingResult, testKeys, type KeyTestDeps } from './key-test.ts'
+import { VARIABLE_NAME, type KeySource, type KeySourceKind } from './wire.ts'
 import { assertRowsExist, type RowSource } from './rows.ts'
 import { findLocalServers } from './local-models.ts'
 import { processReadinessEnvironment, readReadiness } from './readiness.ts'
@@ -172,6 +173,9 @@ function credentialRef(ctx: Context, entry: { readonly settingsNs: string; reado
   return typeof ref === 'string' && ref !== '' ? ref : undefined
 }
 
+/** The credentials service's source layers, as the wire names them. */
+const SOURCE_KINDS: Readonly<Record<string, KeySourceKind>> = { 'file': 'saved', 'env': 'environment', 'project-env': 'project-file', 'user-env': 'home-file' }
+
 /**
  * The key test's parts in this harness: upstream's provider registry and discoveries, each configurable route's credential
  * as the credentials service describes its reference (`configured`, read without the value), and the official DeepSeek
@@ -204,6 +208,19 @@ export function keyTestDeps(ctx: Context, timeoutMs: number, hidden: readonly st
       // Without the credentials service the launch environment is the store, as for the DeepSeek route below.
       if (credentials === undefined) return (env[ref] ?? '') !== ''
       return (await credentials.describe(brandString<CredentialRef>(ref))).configured
+    },
+    credentialSource: async (provider): Promise<KeySource | undefined> => {
+      const entry = ctx.get('llm')?.listConfigurableProviders().find(each => each.provider === provider)
+      if (entry === undefined) return undefined
+      const variable = credentialRef(ctx, entry) ?? (provider === DEEPSEEK_ROUTE ? SETUP_DEFAULT_CREDENTIAL_VARIABLE : undefined)
+      if (variable === undefined) return undefined
+      // Only the variable's name travels; a reference that is not a plain name is left out rather than sent.
+      const name = VARIABLE_NAME.test(variable) ? variable : undefined
+      const credentials = ctx.get('credentials')
+      if (credentials === undefined) return (env[variable] ?? '') === '' ? undefined : { kind: 'environment', ...(name === undefined ? {} : { variable: name }) }
+      const info = await credentials.describe(brandString<CredentialRef>(variable))
+      if (!info.configured) return undefined
+      return { kind: (info.source === undefined ? undefined : SOURCE_KINDS[info.source]) ?? 'unknown', ...(name === undefined ? {} : { variable: name }) }
     },
     discover: async (settingsNs, provider, signal) => {
       const llm = ctx.get('llm')

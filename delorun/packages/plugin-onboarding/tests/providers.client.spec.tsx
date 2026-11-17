@@ -113,8 +113,8 @@ describe('the walk', () => {
     expect(screen.getAllByText('DeepSeek')).toHaveLength(1)
     expect(screen.getByRole('heading', { level: 3, name: 'DeepSeek' }).textContent).toBe('DDeepSeek')
     expect(screen.getByRole('heading', { level: 3, name: 'DeepSeek' })).toBeTruthy()
-    // A found key is never echoed: the field is empty and the status says so.
-    expect((screen.getByLabelText(en['providers.key']) as HTMLInputElement).value).toBe('')
+    // A found key has no input at all; the status says so.
+    expect(screen.queryByLabelText(en['providers.key'])).toBeNull()
     expect(screen.getByText(en['providers.found'])).toBeTruthy()
     await click(screen.getByRole('button', { name: en['providers.next'] }))
     expect(screen.getByText('2 of 2')).toBeTruthy()
@@ -359,5 +359,82 @@ describe('local model servers', () => {
   it('offers nothing when no server answered', async () => {
     await mountLocal([])
     expect(screen.queryByRole('list', { name: en['local.label'] })).toBeNull()
+  })
+})
+
+describe('a key Delorun already has', () => {
+  const FAKE_KEY = 'sk-FAKEFAKE0123456789'
+  const found = (source?: KeyTestAnswer['providers'][number]['source']): KeyTestAnswer => ({ providers: [
+    { provider: 'deepseek-official', name: 'DeepSeek', result: 'works', ...(source === undefined ? {} : { source }) },
+    { provider: 'openai', name: 'OpenAI', result: 'no-key' },
+  ] })
+  const walk = async (source?: KeyTestAnswer['providers'][number]['source'], change: Parameters<typeof providersFake>[0] = {}) => {
+    const mounted = await mount(change, found(source))
+    await click(screen.getByRole('button', { name: en['providers.connect'] }))
+    return mounted
+  }
+
+  it('says where the key came from, for each source kind', async () => {
+    const cases = [
+      [{ kind: 'environment', variable: 'DEEPSEEK_API_KEY' }, 'From DEEPSEEK_API_KEY in the environment Delorun started with'],
+      [{ kind: 'saved', variable: 'DEEPSEEK_API_KEY' }, 'Saved by Delorun on this computer as DEEPSEEK_API_KEY'],
+      [{ kind: 'project-file', variable: 'DEEPSEEK_API_KEY' }, 'From DEEPSEEK_API_KEY in the .env file of the folder Delorun started in'],
+      [{ kind: 'home-file', variable: 'DEEPSEEK_API_KEY' }, 'From DEEPSEEK_API_KEY in the .env file in Delorun\'s home folder'],
+      [{ kind: 'unknown' }, en['providers.source.unknown']],
+      [undefined, en['providers.source.unknown']],
+    ] as const
+    for (const [source, line] of cases) {
+      await mount({}, found(source))
+      expect(screen.getByText(line)).toBeTruthy()
+      cleanup()
+    }
+  })
+
+  it('explains behind a disclosure how Delorun knows', async () => {
+    await mount({}, found({ kind: 'environment', variable: 'DEEPSEEK_API_KEY' }))
+    const summary = screen.getByText(en['providers.how'])
+    expect(summary.closest('details')?.hasAttribute('open')).toBe(false)
+    expect(screen.getByText(en['providers.how.body']).textContent).toContain('never shows it')
+  })
+
+  it('renders no input while the key is found, announces the source, and makes Next the focused primary action', async () => {
+    await walk({ kind: 'environment', variable: 'DEEPSEEK_API_KEY' })
+    expect(document.body.querySelector('input')).toBeNull()
+    expect(document.body.innerHTML).not.toContain(FAKE_KEY)
+    expect(screen.getByLabelText('Key saved. From DEEPSEEK_API_KEY in the environment Delorun started with')).toBeTruthy()
+    const next = screen.getByRole('button', { name: en['providers.next'] })
+    expect(document.activeElement).toBe(next)
+    expect(next.hasAttribute('disabled')).toBe(false)
+  })
+
+  it('keeps the provider connected, and saves nothing, when Next is pressed untouched', async () => {
+    const { save } = await walk({ kind: 'saved' })
+    await click(screen.getByRole('button', { name: en['providers.next'] }))
+    expect(save).not.toHaveBeenCalled()
+    expect(screen.getByText(en['providers.outcome.connected'])).toBeTruthy()
+  })
+
+  it('shows the input, focused and empty, only after Replace key, and sends the new key', async () => {
+    const { save } = await walk({ kind: 'saved' })
+    await click(screen.getByRole('button', { name: en['providers.replace'] }))
+    const field = screen.getByLabelText(en['providers.key']) as HTMLInputElement
+    expect(field.value).toBe('')
+    expect(document.activeElement).toBe(field)
+    expect(screen.getByRole('button', { name: en['providers.next'] }).hasAttribute('disabled')).toBe(true)
+    await type(field, 'sk-new-key')
+    await flush(TEST_DELAY_MS)
+    await click(screen.getByRole('button', { name: en['providers.next'] }))
+    expect(save).toHaveBeenCalledWith(expect.anything(), 'sk-new-key', undefined)
+  })
+
+  it('goes back to the found state, with no input, when Replace is cancelled', async () => {
+    const { save } = await walk({ kind: 'saved' })
+    await click(screen.getByRole('button', { name: en['providers.replace'] }))
+    await type(screen.getByLabelText(en['providers.key']), 'sk-half')
+    await click(screen.getByRole('button', { name: en['providers.replace.cancel'] }))
+    expect(document.body.querySelector('input')).toBeNull()
+    expect(screen.getByText(en['providers.found'])).toBeTruthy()
+    await click(screen.getByRole('button', { name: en['providers.next'] }))
+    expect(save).not.toHaveBeenCalled()
   })
 })
