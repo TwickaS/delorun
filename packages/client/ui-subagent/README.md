@@ -65,6 +65,8 @@ The header lineage renderer reads `subagentCatalog` only from `projectionsBySess
 
 Each header entry declares a footer slot below its tree. Optional UI contributes there within the same scroll container; the catalog owns opening and dismissal. CSS anchors keep the panel attached to its trigger within layout-viewport size limits. Browser zoom and panning move it with the page, so it may extend beyond the visual viewport. Internal scrolling, hover behavior, pinned opening, and focus restoration remain independent.
 
+Four list slots let optional UI add to a catalog row or to the trigger without changing the catalog's own rendering. `conversation.session.header.actions.subagent.row.lead` adds a mark before the row's state dot, `.row.detail` adds words to the row's second line, and `.row.trail` adds an indicator after its metrics; each receives a `SubagentRowOwner` with the child's session id, label, running state, summary, projection values, pending-approval flag, tokens, duration and an `open` callback. `conversation.session.header.actions.subagent.trigger` adds text after the trigger's count and receives a `SubagentTriggerOwner` with the direct rows. A slot with no contribution renders nothing.
+
 Explicit menu activation, branch expansion, and failed-read retries call `prepareCatalog` to read the current catalog and its direct children. Ancestor-title clicks navigate to that Session. The Session object layer deduplicates reads and refreshes previously requested projections after reconnect.
 
 Breadcrumb addresses derive from the Provider-bound Session address, loaded parent catalogs, or already-listed subagent lineage, including never-selected ancestors.
