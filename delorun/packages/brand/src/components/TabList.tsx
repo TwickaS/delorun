@@ -1,7 +1,8 @@
 /**
  * A row of tabs and the panel they control, after the WAI-ARIA tabs pattern: one tab stop, the arrow keys, Home and
  * End move the selection, and the panel is named by its selected tab. The panel is a separate component so a page may
- * place it above or beside the row, as the replays' chapter rail does.
+ * place it above or beside the row, as the replays' chapter rail does. Tabs have no disabled state: leave out a tab
+ * that cannot be chosen.
  * @module @delorun/brand/components/TabList
  */
 import { useRef, type KeyboardEvent, type ReactNode } from 'react'
@@ -31,6 +32,8 @@ export interface TabPanelProps<T extends string> {
   /** The {@link TabListProps.idBase} of the row that controls the panel. */
   readonly idBase: string
   readonly selected: T
+  /** Whether the panel itself takes focus; true (the default) for content with no control of its own, false when it holds controls. */
+  readonly focusable?: boolean
   readonly className?: string | undefined
   readonly children: ReactNode
 }
@@ -56,8 +59,10 @@ function target(key: string, at: number, count: number): number | undefined {
  */
 export function TabList<T extends string>({ label, tabs, selected, onSelect, idBase, className }: TabListProps<T>) {
   const buttons = useRef(new Map<T, HTMLButtonElement>())
+  // A selection outside the row falls back to the first tab, so the row keeps its one tab stop.
+  const current = tabs.some(tab => tab.id === selected) ? selected : tabs[0]?.id
   const move = (event: KeyboardEvent<HTMLDivElement>) => {
-    const next = target(event.key, tabs.findIndex(tab => tab.id === selected), tabs.length)
+    const next = target(event.key, Math.max(0, tabs.findIndex(tab => tab.id === current)), tabs.length)
     const tab = next === undefined ? undefined : tabs[next]
     if (tab === undefined) return
     event.preventDefault()
@@ -67,7 +72,7 @@ export function TabList<T extends string>({ label, tabs, selected, onSelect, idB
   return (
     <div role="tablist" aria-label={label} aria-orientation="horizontal" className={`${css.list} ${className ?? ''}`.trim()} onKeyDown={move}>
       {tabs.map(tab => {
-        const on = tab.id === selected
+        const on = tab.id === current
         return (
           <button
             key={tab.id}
@@ -90,11 +95,11 @@ export function TabList<T extends string>({ label, tabs, selected, onSelect, idB
 }
 
 /**
- * Render the panel the selected tab names. It is focusable, so a keyboard user can reach content that holds no
- * control of its own.
+ * Render the panel the selected tab names. By default it is focusable, so a keyboard user can reach content that
+ * holds no control of its own.
  * @param props - see {@link TabPanelProps}.
  * @returns the panel.
  */
-export function TabPanel<T extends string>({ idBase, selected, className, children }: TabPanelProps<T>) {
-  return <div id={panelId(idBase)} role="tabpanel" aria-labelledby={tabId(idBase, selected)} tabIndex={0} className={`${css.panel} ${className ?? ''}`.trim()}>{children}</div>
+export function TabPanel<T extends string>({ idBase, selected, focusable = true, className, children }: TabPanelProps<T>) {
+  return <div id={panelId(idBase)} role="tabpanel" aria-labelledby={tabId(idBase, selected)} tabIndex={focusable ? 0 : undefined} className={`${css.panel} ${className ?? ''}`.trim()}>{children}</div>
 }

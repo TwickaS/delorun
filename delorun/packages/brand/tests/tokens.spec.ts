@@ -107,6 +107,17 @@ describe('the motion tokens', () => {
   })
 })
 
+describe('the custom properties the stylesheets read', () => {
+  it('are each declared, by tokens.css or by a stylesheet of the library', () => {
+    const files = readdirSync(new URL('../src', import.meta.url), { recursive: true, encoding: 'utf8' }).filter(file => file.endsWith('.css'))
+    const texts = files.map(file => read(`../src/${file}`))
+    const declared = new Set(texts.flatMap(text => [...text.matchAll(/(--dl-[\w-]+)\s*:/g)].map(match => match[1])))
+    const used = files.flatMap((file, index) => [...(texts[index] ?? '').matchAll(/var\((--dl-[\w-]+)/g)].map(match => `${file}: ${match[1]}`))
+    expect(used.length).toBeGreaterThan(50)
+    expect(used.filter(entry => !declared.has(entry.split(': ')[1]))).toEqual([])
+  })
+})
+
 describe('the package manifest', () => {
   it('declares no sideEffects, because the studio bundler then drops the tokens.css import and the components lose every --dl-* value', () => {
     expect(JSON.parse(read('../package.json'))).not.toHaveProperty('sideEffects')

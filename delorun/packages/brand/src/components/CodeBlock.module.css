@@ -85,6 +85,17 @@
   }
 }
 
+.failed {
+  margin: 0;
+  color: var(--dl-error);
+  font-size: 14px;
+  transition: opacity var(--dl-duration-quick) var(--dl-ease-out);
+
+  @starting-style {
+    opacity: 0;
+  }
+}
+
 .announce {
   position: absolute;
   width: 1px;

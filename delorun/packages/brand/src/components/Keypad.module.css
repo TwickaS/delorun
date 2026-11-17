@@ -18,14 +18,14 @@
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
-  transition: background-color var(--dl-motion), transform var(--dl-motion);
+  transition: background-color var(--dl-duration-press) var(--dl-ease), transform var(--dl-motion-press) var(--dl-ease-out);
 }
 
 .erase { border-color: transparent; background: transparent; font-size: 22px; }
-.key:active:not(:disabled) { background: color-mix(in oklab, var(--dl-accent) 20%, var(--dl-surface-sunken)); transform: scale(0.94); }
+.key:active:not(:disabled) { background: color-mix(in oklab, var(--dl-accent) 20%, var(--dl-surface-sunken)); transform: scale(var(--dl-scale-pressed)); }
 .key:disabled { opacity: 0.5; }
-.key:focus-visible { outline: var(--dl-focus-ring); outline-offset: 2px; }
+.key:focus-visible { outline: var(--dl-focus-ring); outline-offset: var(--dl-focus-ring-offset); }
 
-@media (hover: hover) {
+@media (hover: hover) and (pointer: fine) {
   .key:hover:not(:disabled) { background: color-mix(in oklab, var(--dl-accent) 12%, var(--dl-surface-sunken)); }
 }
