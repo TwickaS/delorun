@@ -161,7 +161,9 @@ Without an unlock, the phone can:
 - rename, pin, archive, restore and reorder chats, rename and reorder workspaces, and move a workspace to the trash;
 - set, edit, pause and clear a chat's goal, and create, edit, run and delete scheduled follow-ups;
 - choose a chat's model, which also saves it as the default for new chats;
-- read the installed [plugins](../reference/glossary.md#plugin) and the profile changes you can undo;
+- read the installed [plugins](../reference/glossary.md#plugin), the profile changes you can undo, the saved setup versions and what differs between them, what the harness trusts, and the release notes of a newer version;
+- see which chats are snoozed or settled and snooze or settle them, and turn dangerous mode off;
+- see which MCP servers and external agents wait for your OK or hold a grant, and decline or revoke them (declining and revoking only withdraw consent);
 - give feedback on a chat or a message;
 - answer ordinary prompts and questions the model asks, and stop a run or a background job.
 
@@ -172,18 +174,32 @@ With an unlock, the phone can also:
 - install, enable, update or remove plugins, and undo or restore a profile change. Delorun's own guard plugins and remote access cannot be turned off or changed this way, and an undo or restore that would change one is refused;
 - open or attach to a terminal in any folder, full-access workspaces included;
 - browse folders with the folder picker, add a workspace, and start a chat in a folder that is not one of your workspaces;
-- run plugin code the model wrote.
+- run plugin code the model wrote;
+- grant full access, whether a command asks to run outside the sandbox or a workspace asks to be put on full access, and allow an external agent to work in a workspace. Without the unlock the phone says how many minutes the unlock lasts and offers **Unlock**, and the prompt keeps waiting;
+- accept an [MCP server](../reference/glossary.md#mcp-server), because accepting lets its command run on your computer;
+- save the setup as a version and switch to a saved version;
+- loosen a workspace's network, run a trust check, and send a problem report, which can hold paths from your computer;
+- keep what you changed: nothing is set back when the unlock ends, and undo and the saved setup versions are how you roll a change back.
+
+A newly approved phone starts unlocked on its first sign-in, for the unlock time or until onboarding finishes, whichever comes first, so setting up from the phone needs no unlock prompts. That start never covers the actions that only the computer does.
+
+Only your computer, even when the phone is unlocked:
+
+- turn remote access on or off, set or change the PIN, and approve or remove devices;
+- apply, discard or undo a change, create a plugin, and move a setup file in or out, because each is recorded as done by you in person;
+- turn update checks off (turning them on works from the phone);
+- open a file or folder in an application on your computer.
+
+The phone shows these as "Do this on your computer" with the reason.
 
 Never, even unlocked:
 
-- grant full access, whether a command asks to run outside the sandbox or a workspace asks to be put on full access. The approval card on the phone says "Approve this at your computer", an answer from the phone shows "This needs you at your computer: granting full access. Answer this prompt in the studio on the home's computer.", and the prompt keeps waiting for your computer;
-- accept, decline or revoke an [MCP server](../reference/glossary.md#mcp-server). The phone names the servers waiting for your OK and says to approve them at your computer, and Settings, Safety, Permissions on the phone says the same;
 - read or change your keys and other credentials, or your account;
 - turn off **Ask before external agents run**; the phone can still turn it on and change its run time limit ([External agents](safety.md#external-agents));
 - loosen the permission new chats start in, such as moving it toward full access; the phone can still make it stricter;
 - answer a prompt that would let the model manage workspaces and their instructions;
-- open a file or folder in an application on your computer, or open the settings file in an editor there;
-- approve or remove devices, change remote access, unlock itself or make an unlock longer, or reset the home.
+- open the settings file in an editor on your computer;
+- unlock itself without your computer or make an unlock longer, or reset the home.
 
 You should see the studio's error message when a phone tries another refused action.
 
@@ -204,6 +220,7 @@ A workspace that you already put on full access at your computer can still be dr
 <summary>Go further</summary>
 
 - **Ask before external agents run** in Settings, Safety, External agents stays a computer-only setting ([External agents](safety.md#external-agents)).
+- **Set up from your phone.** The setup guide on a phone marks a step only your computer can do, such as the PIN, says why, and offers **Do it on my computer**. That keeps the step in your home, not in the phone's browser, and the studio on your computer then shows a quiet **Finish setup · N left** in its sidebar. It opens just those steps, drops a step you already did, and goes away when none are left.
 
 </details>
 
