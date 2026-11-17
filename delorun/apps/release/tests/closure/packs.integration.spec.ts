@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { RuntimePlatform } from '@delorun/contract-release-manifest'
+import { buildPackArchive } from '@delorun/release-formats/packs/archive'
 import { closureName } from '../../src/rebuild/compare.ts'
 import { buildPack, isExternal, keepsOneCopy, packArchiveName, lockedFrom, SINGLETON_LIBRARIES, tarballUrl, type PackSources } from '../../src/closure/packs.ts'
 import { packCandidates, readWorkspacePackages, selectClosurePackages } from '../../src/closure/plugin-set.ts'
@@ -18,7 +19,8 @@ const put = (root: string, files: Readonly<Record<string, string>>): void => {
   }
 }
 const PLATFORMS: RuntimePlatform[] = ['linux-x64', 'linux-arm64']
-const NATIVE = Buffer.from('registry tarball bytes')
+/** A registry tarball of an external package: its files under `package/`, as npm packs them. */
+const NATIVE = (await buildPackArchive('native.tgz', [{ path: 'package/package.json', mode: '0644', data: Buffer.from('{"name":"native","version":"9.9.9"}') }], 1_800_000_000)).bytes
 const integrity = (bytes: Buffer): string => `sha512-${createHash('sha512').update(bytes).digest('base64')}`
 
 function sources(options: { readonly native: boolean, readonly served?: Buffer, readonly bundledPeer?: string, readonly armOnlyPeer?: boolean, readonly extra?: string, readonly peerDependencies?: Record<string, string>, readonly typescript?: boolean, readonly files?: Record<string, string> }): PackSources {

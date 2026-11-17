@@ -2,25 +2,27 @@
  * The import check of a built release's packs: `node_modules/.bin/tsx delorun/apps/release/src/check-pack-imports.ts
  * <release directory> <runtime app/node_modules> <platform>` reads `delorun-<version>.packs.json` in the release
  * directory without checking its signatures, extracts each pack's archive for the platform into a temporary directory,
- * and reports each package name a pack needs that neither the pack carries, links as a peer nor fetches, or that the
- * needing package does not declare in its `package.json`, so Changes' review copy of the pack leaves it out; each peer
- * the runtime does not carry; and each copy of a package that must exist once nested inside another package. With
+ * and reports each package name a pack needs that neither the pack carries, links as a peer nor fetches; each peer the
+ * runtime does not carry; and each copy of a package that must exist once nested inside another package. With
  * `--link-carried` it first links, as peers, the needs the runtime carries at a version they accept, with the function
- * the cut uses (`linkCarriedNeeds`), and reports what is left. It is a report on a release already built: the cut's own
- * refusal in `buildPack` is the gate. It exits 0 when every pack loads, 1 with one line per problem, and 2 on a usage error or a
- * file it cannot read.
+ * the cut uses (`linkCarriedNeeds`), and reports what is left. It then installs each pack as signed against the runtime
+ * and checks the review copy Changes makes of it (`installedReviewCopyProblems`), downloading each external package from
+ * its pinned URL, or reading it from `--externals <dir>` by the URL's file name and saving it there. It is a report on
+ * a release already built: the cut's own refusal in `buildPack` is the gate. It exits 0 when every pack loads, 1 with one
+ * line per problem, and 2 on a usage error or a file it cannot read.
  *
  * @module @delorun/release/check-pack-imports
  */
 import { existsSync } from 'node:fs'
-import { mkdir, mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
-import { RUNTIME_PLATFORMS, type PackEntry, type ReleasePacks, type RuntimePlatform } from '@delorun/contract-release-manifest'
+import { RUNTIME_PLATFORMS, type PackEntry, type PackExternal, type ReleasePacks, type RuntimePlatform } from '@delorun/contract-release-manifest'
 import { extractPack } from '@delorun/release-formats/packs/archive'
-import { describeUnresolved, linkCarriedNeeds, nestedSingleCopies, resolvesInPack, unresolvedPackImports } from './closure/pack-imports.ts'
+import { describeUnresolved, linkCarriedNeeds, nestedSingleCopies, unresolvedPackImports } from './closure/pack-imports.ts'
+import { installedReviewCopyProblems } from './closure/review-copy.ts'
 import { keepsOneCopy } from './closure/packs.ts'
 
 /**
@@ -43,20 +45,27 @@ export async function packProblemsAt(entry: PackEntry, platform: RuntimePlatform
   for (const copy of nestedSingleCopies(paths, name => keepsOneCopy(name, rootPeers, externals))) problems.push(`${entry.name}: a second copy of a package that must exist once, nested at ${copy}`)
   const layout = { paths, read, peers: new Set(variant.peers), external: new Set(externals) }
   const unmet = linkCarried
-    ? [
-        ...await linkCarriedNeeds(layout, async (name) => {
-          const manifest = join(runtimeNodeModules, ...name.split('/'), 'package.json')
-          return existsSync(manifest) ? (JSON.parse(await readFile(manifest, 'utf8')) as { version?: string }).version : undefined
-        }),
-        // linkCarriedNeeds reports what the installed pack cannot resolve; what resolves there but is undeclared is added here.
-        ...(await unresolvedPackImports(layout)).filter(need => resolvesInPack(need, layout)).map(describeUnresolved),
-      ]
+    ? await linkCarriedNeeds(layout, async (name) => {
+      const manifest = join(runtimeNodeModules, ...name.split('/'), 'package.json')
+      return existsSync(manifest) ? (JSON.parse(await readFile(manifest, 'utf8')) as { version?: string }).version : undefined
+    })
     : (await unresolvedPackImports(layout)).map(describeUnresolved)
   return [...problems, ...unmet.map(line => `${entry.name}: ${line}`)]
 }
 
+/** An external package's tarball: from `cache` by the URL's file name when it holds it, else downloaded and kept there. */
+async function externalBytes(pin: PackExternal, cache: string | undefined): Promise<Uint8Array> {
+  const cached = cache === undefined ? undefined : join(cache, basename(new URL(pin.url).pathname))
+  if (cached !== undefined && existsSync(cached)) return readFile(cached)
+  const response = await fetch(pin.url)
+  if (!response.ok) throw new Error(`${pin.url} answered ${String(response.status)}`)
+  const bytes = Buffer.from(await response.arrayBuffer())
+  if (cached !== undefined) await writeFile(cached, bytes)
+  return bytes
+}
+
 async function main(argv: readonly string[]): Promise<number> {
-  const { positionals, values } = parseArgs({ args: [...argv], allowPositionals: true, strict: true, options: { 'link-carried': { type: 'boolean', default: false } } })
+  const { positionals, values } = parseArgs({ args: [...argv], allowPositionals: true, strict: true, options: { 'link-carried': { type: 'boolean', default: false }, externals: { type: 'string' } } })
   if (positionals.length !== 3) {
     console.error('check-pack-imports: pass the release directory, the runtime\'s app/node_modules and the platform')
     return 2
@@ -81,8 +90,10 @@ async function main(argv: readonly string[]): Promise<number> {
       }
       const directory = join(scratch, entry.name.replaceAll('/', '__'))
       await mkdir(directory, { mode: 0o700 })
-      await extractPack(await readFile(join(release, variant.archive.name)), variant, directory)
-      const found = await packProblemsAt(entry, platform, directory, runtimeNodeModules, values['link-carried'])
+      const archive = await readFile(join(release, variant.archive.name))
+      await extractPack(archive, variant, directory)
+      const copy = await installedReviewCopyProblems({ entry, platform, archive, release: packs.version, runtimeNodeModules, fetchExternal: pin => externalBytes(pin, values.externals), scratch })
+      const found = [...await packProblemsAt(entry, platform, directory, runtimeNodeModules, values['link-carried']), ...copy.map(line => `${entry.name}: ${line}`)]
       console.log(`${entry.name}: ${found.length === 0 ? 'every import resolves' : `${String(found.length)} problems`}`)
       problems = [...problems, ...found]
     }

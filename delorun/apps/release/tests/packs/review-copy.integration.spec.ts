@@ -2,6 +2,7 @@
  * A built pack loads from the review copy Changes makes of it: the cut builds a pack whose deployment emptied the
  * package's `peerDependencies`, the runtime store installs it with its peer links into the runtime, Changes stores and
  * materializes the installed pack, and every plugin entry of the pack imports from the copy in a separate Node process.
+ * The review copy check the cut runs (`reviewCopyProblems`) agrees with what the copy loads.
  */
 import { execFileSync } from 'node:child_process'
 import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
@@ -9,12 +10,14 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { RuntimePlatform } from '@delorun/contract-release-manifest'
+import { RUNTIME_PLATFORMS, type RuntimePlatform } from '@delorun/contract-release-manifest'
 import { materialize, scanFolder, storeFolder } from '@delorun/changes'
 import { installPack, parseRuntimeVersion, StorePaths } from '@delorun/runtime-store'
 import { buildPack, type PackSources } from '../../src/closure/packs.ts'
+import { pluginModules, reviewCopyProblems } from '../../src/closure/review-copy.ts'
 
-const PLATFORM: RuntimePlatform = 'linux-x64'
+/** This computer's platform: only its variant's plugin modules are imported from the copy. */
+const PLATFORM: RuntimePlatform = RUNTIME_PLATFORMS.find(each => each === `${process.platform}-${process.arch}`) ?? 'linux-x64'
 const RELEASE = parseRuntimeVersion('0.1.0')!
 
 const roots: string[] = []
@@ -59,8 +62,22 @@ const DEPLOYED: Record<string, string> = {
   'package.json': json({
     name: '@deepseek-ai/dsh-subagent-demo', version: '0.2.2', type: 'module',
     exports: { '.': './lib/index.js', './client': './lib/client.js' },
+    dsh: { bundle: { patch: './cordis.patch.yml' } },
     peerDependencies: {}, dependencies: { '@deepseek-ai/dsh-brand': '1.0.0', '@deepseek-ai/dsh-demo-ui': '0.2.2' },
   }),
+  'cordis.patch.yml': [
+    '- insert:',
+    '    - id: demo',
+    '      name: \'@deepseek-ai/dsh-subagent-demo\'',
+    '      config:',
+    '        home: !!js "process.env.HOME"',
+    '    - name: cordis:group',
+    '      config:',
+    '        - id: client',
+    '          name: \'@deepseek-ai/dsh-subagent-demo/client\'',
+    '          disabled: true',
+    '',
+  ].join('\n'),
   'lib/index.js': [
     'import { name as brand } from "@deepseek-ai/dsh-brand"',
     'import { name as timeout } from "@deepseek-ai/dsh-timeout"',
@@ -115,6 +132,9 @@ describe('a built pack\'s review copy', () => {
     const scanned = await scanFolder(installed, { home })
     expect(scanned.entries.flatMap(entry => (entry.type === 'link' && entry.runtime === true ? [entry.target] : [])).sort()).toEqual([...RUNTIME].sort())
 
+    expect(await reviewCopyProblems(installed, home)).toEqual([])
+    // The cut imported these from a copy already; a group's child and a disabled row count.
+    expect(await pluginModules(installed)).toEqual(['@deepseek-ai/dsh-subagent-demo', '@deepseek-ai/dsh-subagent-demo/client'])
     const { version } = await storeFolder(home, installed)
     const copy = join(temp('delorun-pack-review-active-'), 'plugin')
     await materialize(home, version, copy)
@@ -122,7 +142,22 @@ describe('a built pack\'s review copy', () => {
     expect(namesFrom(copy, 'lib/client.js')).toEqual(['react'])
   })
 
-  it('leaves out a peer link no package.json declares, so the copy fails to load where the installed pack loads', async () => {
+  it('refuses the cut when a plugin module the patch names does not import from the copy, which resolving package names cannot see', async () => {
+    const { paths } = runtimeHome()
+    // The client entry is exported for require only, so an import of it finds no export, although every package resolves.
+    const requireOnly = { ...DEPLOYED, 'package.json': DEPLOYED['package.json']!.replace('"./client":"./lib/client.js"', '"./client":{"require":"./lib/client.cjs"}'), 'lib/client.cjs': 'module.exports = {}\n' }
+    const sources: PackSources = {
+      deploy: (_name, _platform, directory) => Promise.resolve(put(directory, requireOnly)),
+      closureNodeModules: () => paths.runtimeNodeModules(RELEASE),
+      locked: () => undefined,
+      download: () => Promise.reject(new Error('no download in this test')),
+      declaredPeers: () => Promise.resolve({}),
+    }
+    await expect(buildPack('@deepseek-ai/dsh-subagent-demo', '0.2.2', false, RELEASE, [PLATFORM], 1_800_000_000, [], sources, temp('delorun-pack-review-build-')))
+      .rejects.toThrow(/would not load from the review copy Changes makes of it: @deepseek-ai\/dsh-subagent-demo\/client: .*, imported from the review copy/u)
+  })
+
+  it('leaves out a peer link no package.json declares, so the copy fails to load where the installed pack loads, as the review copy check reports', async () => {
     const { home, paths } = runtimeHome()
     // An installed pack as 0.1.0-preview.1.5 shipped it: a bundled package beside the link, and the import of
     // dsh-timeout linked but declared nowhere.
@@ -135,6 +170,7 @@ describe('a built pack\'s review copy', () => {
     mkdirSync(join(installed, 'node_modules', '@deepseek-ai'), { recursive: true })
     symlinkSync(join(paths.runtimeNodeModules(RELEASE), '@deepseek-ai', 'dsh-timeout'), join(installed, 'node_modules', '@deepseek-ai', 'dsh-timeout'))
     expect(namesFrom(installed, 'lib/index.js')).toEqual(['@deepseek-ai/dsh-timeout'])
+    expect(await reviewCopyProblems(installed, home)).toEqual(['@deepseek-ai/dsh-subagent-demo imports @deepseek-ai/dsh-timeout in lib/index.js without declaring it in its package.json, which the review copy does not hold'])
     const { version } = await storeFolder(home, installed)
     const copy = join(temp('delorun-pack-review-active-'), 'plugin')
     await materialize(home, version, copy)
