@@ -3,12 +3,14 @@
  * default install does not carry, for each platform whose files differ. A pack holds the package and its production
  * dependencies, except (1) packages the closure already carries at the same version, which the install links
  * into the pack as peers (a third-party package at another version stays in the pack; see `keepsOneCopy`), and (2) packages whose licence forbids redistribution (`closure.json`'s `packExternals`),
- * which the packs file pins by npm tarball URL and SHA-512 and the client fetches from the registry.
+ * which the packs file pins by npm tarball URL and SHA-512 and the client fetches from the registry. A Delorun package
+ * in a pack has its TypeScript sources transpiled to JavaScript, as the closure's are.
  *
  * @module @delorun/release/closure/packs
  */
 import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { PackEntry, PackExternal, PackVariant, ReleasePacks, RuntimePlatform, SemanticVersion, Sha512Base64 } from '@delorun/contract-release-manifest'
@@ -19,6 +21,7 @@ import { sha256Hex } from '@delorun/release-formats/brands'
 import { buildPackArchive } from '@delorun/release-formats/packs/archive'
 import { parse as parseYaml } from 'yaml'
 import { closureName } from '../rebuild/compare.ts'
+import { transpileDelorunPackage, transpileDelorunPackages } from './delorun.ts'
 import { listStagedTree, unsignedEnvelopeText } from './tree.ts'
 import { packCandidates, readWorkspacePackages, selectClosurePackages } from './plugin-set.ts'
 
@@ -141,6 +144,17 @@ async function versionIn(directory: string): Promise<string | undefined> {
 }
 
 /**
+ * Transpile the Delorun packages of a deployed pack in place, as the closure's are: the package itself when it is one,
+ * and each `@delorun/` package it carries in its own `node_modules`.
+ * @param name - the pack's package name.
+ * @param directory - the deployment.
+ */
+async function transpilePackPackages(name: string, directory: string): Promise<void> {
+  if (name.startsWith('@delorun/')) await transpileDelorunPackage(directory)
+  if (existsSync(join(directory, 'node_modules', '@delorun'))) await transpileDelorunPackages(join(directory, 'node_modules'))
+}
+
+/**
  * Build one pack's archives from a deployed package.
  * @param name - the package name.
  * @param version - the package version.
@@ -159,6 +173,8 @@ export async function buildPack(name: string, version: string, experimental: boo
   for (const platform of platforms) {
     const directory = join(scratch, `${name.replaceAll('/', '__')}-${platform}`)
     await sources.deploy(name, platform, directory)
+    // A Delorun package exports TypeScript sources, which Node does not run from a pack; the closure's are transpiled too.
+    await transpilePackPackages(name, directory)
     const external: PackExternal[] = []
     const dropped = new Set<string>()
     const peers = new Set<string>()

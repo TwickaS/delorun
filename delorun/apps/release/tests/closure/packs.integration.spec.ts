@@ -21,7 +21,7 @@ const PLATFORMS: RuntimePlatform[] = ['linux-x64', 'linux-arm64']
 const NATIVE = Buffer.from('registry tarball bytes')
 const integrity = (bytes: Buffer): string => `sha512-${createHash('sha512').update(bytes).digest('base64')}`
 
-function sources(options: { readonly native: boolean, readonly served?: Buffer, readonly bundledPeer?: string, readonly armOnlyPeer?: boolean, readonly extra?: string, readonly peerDependencies?: Record<string, string> }): PackSources {
+function sources(options: { readonly native: boolean, readonly served?: Buffer, readonly bundledPeer?: string, readonly armOnlyPeer?: boolean, readonly extra?: string, readonly peerDependencies?: Record<string, string>, readonly typescript?: boolean }): PackSources {
   const closure = temp()
   const extra = options.extra
   put(closure, { ...extra === undefined ? {} : { [`node_modules/${extra}/package.json`]: `{"name":"${extra}","version":"2.0.0"}` }, 'node_modules/shared-peer/package.json': '{"name":"shared-peer","version":"2.0.0"}', 'node_modules/arm-peer/package.json': '{"name":"arm-peer","version":"1.0.0"}' })
@@ -29,9 +29,16 @@ function sources(options: { readonly native: boolean, readonly served?: Buffer, 
     closureNodeModules: () => join(closure, 'node_modules'),
     deploy: async (_name, platform, directory) => {
       put(directory, {
-        'package.json': JSON.stringify({ name: '@delorun/demo', version: '1.0.0', peerDependencies: options.peerDependencies }),
+        'package.json': JSON.stringify({ name: '@delorun/demo', version: '1.0.0', peerDependencies: options.peerDependencies, ...options.typescript === true ? { exports: { './server': './src/server.ts' } } : {} }),
         ...extra === undefined ? {} : { [`node_modules/${extra}/package.json`]: `{"name":"${extra}","version":"1.0.0"}`, [`node_modules/${extra}/index.js`]: 'own\n' },
         'lib/index.js': 'export {}\n',
+        ...options.typescript === true
+          ? {
+              'src/server.ts': 'export { default } from \'shared-peer\'\nexport const port: number = 3081\n',
+              'node_modules/@delorun/helper/package.json': JSON.stringify({ name: '@delorun/helper', version: '1.0.0', exports: { '.': './src/index.ts' } }),
+              'node_modules/@delorun/helper/src/index.ts': 'export const answer: number = 42\n',
+            }
+          : {},
         'node_modules/shared-peer/package.json': `{"name":"shared-peer","version":"${options.bundledPeer ?? '2.0.0'}"}`,
         ...options.armOnlyPeer === true && platform === 'linux-arm64' ? { 'node_modules/arm-peer/package.json': '{"name":"arm-peer","version":"1.0.0"}' } : {},
         'node_modules/shared-peer/index.js': 'peer\n',
@@ -53,6 +60,18 @@ describe('building a pack', () => {
     expect(built.entry.variants.any!.files.map(file => file.path)).toEqual(['lib/index.js', 'node_modules/own-dep/package.json', 'package.json'])
     expect(built.entry.variants.any!.archive.name).toBe('delorun-0.1.0-pack-delorun__demo.any.tar.gz')
     expect([...built.archives.keys()]).toEqual([built.entry.variants.any!.archive.name])
+  })
+
+  it('carries a Delorun package\'s TypeScript sources, its own and a bundled Delorun dependency\'s, as JavaScript its entry points name', async () => {
+    const scratch = temp()
+    const built = await buildPack('@delorun/demo', '1.0.0', false, '0.1.0', PLATFORMS, 1_800_000_000, [], sources({ native: false, typescript: true }), scratch)
+    const paths = built.entry.variants.any!.files.map(file => file.path)
+    expect(paths).toEqual(expect.arrayContaining(['src/server.js', 'node_modules/@delorun/helper/src/index.js']))
+    expect(paths.filter(path => path.endsWith('.ts'))).toEqual([])
+    const deployed = join(scratch, '@delorun__demo-linux-x64')
+    expect(JSON.parse(readFileSync(join(deployed, 'package.json'), 'utf8'))).toMatchObject({ exports: { './server': './src/server.js' } })
+    expect(readFileSync(join(deployed, 'src/server.js'), 'utf8')).toBe('export { default } from \'shared-peer\';\nexport const port = 3081;\n')
+    expect(JSON.parse(readFileSync(join(deployed, 'node_modules/@delorun/helper/package.json'), 'utf8'))).toMatchObject({ exports: { '.': './src/index.js' } })
   })
 
   it('pins an external package per platform by URL and SHA-512, leaving its files out of the archive', async () => {

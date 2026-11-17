@@ -9,6 +9,10 @@
  *   `link` entry with the target as written;
  * - any other target that does not resolve: skipped, since a copy holding the link would load whatever appears there;
  * - a target the walk already included, or below one: a relative `link` entry to its path in the version (see below);
+ * - a target whose real path lies in the active runtime's installed packages, `runtimes/<version runtimes/current
+ *   names>/app/node_modules/` in the Delorun home, as a plugin pack links the packages the running release carries: a
+ *   `link` entry marked `outside` with that real path, so the copy loads the signed release's package as the pack does;
+ *   every other target in the home, another runtime version's included, stays out;
  * - a target the scan may follow: dereferenced, so its files are part of the content under the link's path and nothing
  *   loads from outside the approved copy. The scan follows a link only to an installed package (a real path below a
  *   `node_modules` directory, such as one in pnpm's `.pnpm` store), to a sibling workspace package (a directory holding
@@ -48,10 +52,10 @@
  */
 import { createHash } from 'node:crypto'
 import { constants, type Stats } from 'node:fs'
-import { lstat, mkdir, open, readdir, readlink, realpath, stat, type FileHandle } from 'node:fs/promises'
+import { lstat, mkdir, open, readdir, readFile, readlink, realpath, stat, type FileHandle } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { brandString } from '@deepseek-ai/dsh-brand'
-import { PRIVATE_DIR_MODE } from '@delorun/contract-home-layout'
+import { DELORUN_HOME_ENTRIES, PRIVATE_DIR_MODE, STORE_ENTRIES } from '@delorun/contract-home-layout'
 import { readProtectedFile, writeProtectedFile } from '@delorun/home'
 import { ChangesError } from './errors.ts'
 import { PACKAGE_NAME_PATTERN } from './paths.ts'
@@ -422,6 +426,8 @@ interface Walk {
   readonly dependencies: DependencyMode | 'active'
   /** The Delorun home's real path, or its absolute path when it does not resolve; undefined for an active directory. */
   readonly home: string | undefined
+  /** The real path of the active runtime's `app/node_modules`; undefined without a readable `runtimes/current`. */
+  readonly runtimeModules: string | undefined
   /** The folder scanned, named in a refusal. */
   readonly folder: string
   /** The limits it stops at. */
@@ -579,7 +585,7 @@ async function addTarget(walk: Walk, real: string, path: string, dereference: bo
   }
   if ([...walk.included.keys()].some((directory) => contains(real, directory))) {
     walk.skipped.push(path)
-  } else if (!dereference) {
+  } else if (!dereference || inRuntimeStore(walk, real)) {
     admit(walk, 0)
     walk.entries.push({ type: 'link', path, target: real, outside: true })
   } else if (!await mayFollow(walk, real, path, stats.isDirectory())) {
@@ -591,6 +597,37 @@ async function addTarget(walk: Walk, real: string, path: string, dereference: bo
   } else {
     await addFile(walk, real, path)
   }
+}
+
+/** A runtime version as `runtimes/current` names it: one path segment that is not `.` or `..`. */
+const RUNTIME_VERSION_PATTERN = /^[0-9A-Za-z][0-9A-Za-z.+-]*$/u
+
+/**
+ * @param home - the Delorun home's real path.
+ * @returns the real path of the active runtime's installed packages, `runtimes/<current>/app/node_modules`, or
+ *   undefined when `runtimes/current` is missing, does not name one version, or that folder does not exist.
+ * @throws the filesystem error other than a missing file.
+ */
+async function activeRuntimeModules(home: string): Promise<string | undefined> {
+  const runtimes = join(home, DELORUN_HOME_ENTRIES.runtimes)
+  let version: string
+  try {
+    version = (await readFile(join(runtimes, STORE_ENTRIES.current), 'utf8')).trim()
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+    throw error
+  }
+  if (!RUNTIME_VERSION_PATTERN.test(version)) return undefined
+  return await realTarget(join(runtimes, version, 'app', DEPENDENCY_DIRECTORY))
+}
+
+/**
+ * @param walk - the scan.
+ * @param real - a link's real target, with every link and `..` resolved.
+ * @returns whether it lies in the active runtime's installed packages, which hold only the running release's verified files.
+ */
+function inRuntimeStore(walk: Walk, real: string): boolean {
+  return walk.runtimeModules !== undefined && contains(walk.runtimeModules, real)
 }
 
 /** A version path a pnpm workspace links a package at: `node_modules/<name>`, below any directory. */
@@ -858,6 +895,7 @@ export async function scanFolder(folder: string, options: ScanOptions): Promise<
     included: new Map([[root, '']]),
     dependencies: 'home' in options ? options.dependencies ?? 'include' : 'active',
     home,
+    runtimeModules: home === undefined ? undefined : await activeRuntimeModules(home),
     folder,
     limits: options.limits ?? CONTENT_LIMITS,
     pruned: new Set(),

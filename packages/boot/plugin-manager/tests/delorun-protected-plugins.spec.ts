@@ -4,11 +4,12 @@
  * module, give its row id to another row, or deselect, remove, install or change the package that carries or provides
  * it, and the profile's files stay as they were.
  */
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { realpath } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
+import { createRequire } from 'node:module'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import Timer from '@deepseek-ai/cordis-plugin-timer'
 import {
@@ -25,6 +26,9 @@ import { executeToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import ToolRuntime, { type ToolExecutionResult } from '@deepseek-ai/dsh-tools'
 import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from 'vitest'
 import PluginManager from '../src/index.ts'
+import type { PackFolderCheck, PluginInstallRequestId } from '../src/types.ts'
+import { DELORUN_PROFILE_BUNDLES } from '../../../../delorun/packages/bundle-local/src/profile.ts'
+import { materialize, storeFolder } from '../../../../delorun/packages/changes/src/store.ts'
 import * as operations from '../src/operations.ts'
 import * as tool from '../src/tools.ts'
 import { isolateGitCommandLineConfig } from './git-environment.ts'
@@ -36,7 +40,9 @@ const LOCAL_BUNDLE = '@delorun/bundle-local'
  * workspace's own copy answers when a runner puts the workspace's packages on `NODE_PATH`.
  */
 const GUARD_BUNDLE = 'guard-bundle'
-const LOCAL_PATCH = fileURLToPath(new URL('../../../../delorun/packages/bundle-local/cordis.patch.yml', import.meta.url))
+const LOCAL_DIR = fileURLToPath(new URL('../../../../delorun/packages/bundle-local/', import.meta.url))
+const STUDIO_DIR = fileURLToPath(new URL('../../../../delorun/packages/bundle-studio/', import.meta.url))
+const LOCAL_PATCH = join(LOCAL_DIR, 'cordis.patch.yml')
 
 /** The manager row's config as `@delorun/bundle-local` writes it. */
 function delorunManagerConfig(): { protectedPlugins: string[] } {
@@ -78,6 +84,12 @@ interface FixtureOptions {
   config?: object
   reload?: 'live' | 'startup'
   bundles?: Record<string, Patch>
+  /**
+   * Compose Delorun's default CLI profile instead: `DELORUN_PROFILE_BUNDLES` with `@delorun/bundle-local` and
+   * `@delorun/bundle-studio` linked, booting only the manager's row, with a `packInstallTargets` service that names these
+   * packages, by name, as packs whose `link:` spec is their workspace folder.
+   */
+  delorunDefault?: { packs: Record<string, string> }
 }
 
 // The undo and restore cases run real Git, so the host's command-line configuration group must not reach it.
@@ -103,30 +115,48 @@ function writeBundle(dir: string, name: string, patch: Patch): void {
  * @param options - see {@link FixtureOptions}; live HMR and Delorun's config by default.
  */
 async function fixture(options: FixtureOptions = {}) {
-  const { config = delorunManagerConfig(), reload = 'live', bundles = {} } = options
+  const { config = delorunManagerConfig(), reload = 'live', bundles = {}, delorunDefault } = options
   const temporaryHome = mkdtempSync(join(tmpdir(), 'plugin-manager-delorun-'))
   let owner: Context | undefined
   onTestFinished(async () => { await owner?.fiber.dispose(); rmSync(temporaryHome, { recursive: true, force: true }) })
   const home = await realpath(temporaryHome)
   const dir = join(home, 'profiles', 'default')
-  const anchor = join(home, 'package.json')
-  writeFileSync(anchor, JSON.stringify({ name: 'installation', dependencies: {} }))
-  initProfile(dir, ['core', GUARD_BUNDLE, ...Object.keys(bundles)])
-  writeBundle(dir, 'core', [{ insert: [{ id: 'plugin-manager', name: 'cordis:manager', config }] }])
-  // Delorun links its bundle into the profile, and the fixture's bundles are not dependencies, so no pnpm run is real.
-  writeBundle(dir, GUARD_BUNDLE, [{ insert: PROTECTED.map(name => ({ id: rowId(name), name, config: { enabled: true } })) }])
-  for (const [name, patch] of Object.entries(bundles)) writeBundle(dir, name, patch)
-  writePackage(dir, LOCAL_BUNDLE, {}, ['update-check', 'update-gate'])
-  for (const name of PROTECTED.filter(name => !name.startsWith(`${LOCAL_BUNDLE}/`))) writePackage(dir, name)
+  const managerRow: Patch = [{ insert: [{ id: 'plugin-manager', name: 'cordis:manager', config }] }]
+  let anchor = join(home, 'package.json')
+  if (delorunDefault === undefined) {
+    writeFileSync(anchor, JSON.stringify({ name: 'installation', dependencies: {} }))
+    initProfile(dir, ['core', GUARD_BUNDLE, ...Object.keys(bundles)])
+    writeBundle(dir, 'core', managerRow)
+    // Delorun links its bundle into the profile, and the fixture's bundles are not dependencies, so no pnpm run is real.
+    writeBundle(dir, GUARD_BUNDLE, [{ insert: PROTECTED.map(name => ({ id: rowId(name), name, config: { enabled: true } })) }])
+    for (const [name, patch] of Object.entries(bundles)) writeBundle(dir, name, patch)
+    writePackage(dir, LOCAL_BUNDLE, {}, ['update-check', 'update-gate'])
+    for (const name of PROTECTED.filter(name => !name.startsWith(`${LOCAL_BUNDLE}/`))) writePackage(dir, name)
+  } else {
+    // Upstream's bundles resolve through the CLI's package, as a source checkout's Delorun profile does.
+    anchor = fileURLToPath(new URL('../../../../apps/cli/package.json', import.meta.url))
+    initProfile(dir, DELORUN_PROFILE_BUNDLES)
+    for (const [name, target] of [[LOCAL_BUNDLE, LOCAL_DIR], ['@delorun/bundle-studio', STUDIO_DIR]] as const) {
+      mkdirSync(dirname(join(dir, 'node_modules', name)), { recursive: true })
+      symlinkSync(target, join(dir, 'node_modules', name), 'junction')
+    }
+  }
   writeFileSync(join(dir, 'cordis.yml'), '[]\n')
   const profile: ProfileContext = {
     name: 'default', startedBundles: loadProfileDirectory('dsh', dir, anchor).layers.map(layer => layer.packageName),
     dir, patchPath: join(dir, 'cordis.patch.yml'), installAnchor: anchor, cwd: home, home, overlays: [], telemetryDisabledEnv: undefined,
   }
-  const ctx = await boot('dsh', join(dir, 'cordis.yml'), readProfilePatches('dsh', profile), (ctx) => {
+  // Delorun's default profile composes rows of modules a unit test does not run, so only the manager's row boots.
+  const ctx = await boot('dsh', join(dir, 'cordis.yml'), delorunDefault === undefined ? readProfilePatches('dsh', profile) : managerRow, (ctx) => {
     owner = ctx
     ctx.provide('appReady', { onReady: (listener: () => void) => { listener(); return () => {} } })
     ctx.provide('profileContext', profile)
+    if (delorunDefault !== undefined) {
+      const packs = delorunDefault.packs
+      ctx.provide('packInstallTargets', {
+        isPack: name => Promise.resolve(Object.hasOwn(packs, name)), linkSpec: name => (Object.hasOwn(packs, name) ? `link:${packs[name]}` : undefined), runsCurrentRelease: () => Promise.resolve(true),
+      } satisfies PackFolderCheck)
+    }
     ctx.loader.builtins.manager = PluginManager
   })
   if (reload === 'live') {
@@ -184,6 +214,29 @@ function changeResult(result: ToolExecutionResult): Record<string, unknown> {
   if (typeof result.value !== 'string') throw new Error(`Expected a serialized change result, got ${JSON.stringify(result.content)}`)
   return JSON.parse(result.value) as Record<string, unknown>
 }
+
+/** A pack bundle Delorun publishes: its package name, which the fixture installs it by, its patch and its row modules. */
+interface PackBundle { name: string; spec: string; patch: Patch; modules: string[] }
+
+/** The modules a patch's inserted rows name, in groups too; built-in and relative modules are left out. */
+function patchModules(rows: readonly unknown[]): string[] {
+  return rows.flatMap((row) => {
+    const { insert, name, config } = row as { insert?: unknown[]; name?: unknown; config?: unknown }
+    const own = typeof name === 'string' && !name.startsWith('cordis:') && !name.startsWith('./') ? [name] : []
+    return [...own, ...Array.isArray(insert) ? patchModules(insert) : [], ...Array.isArray(config) ? patchModules(config) : []]
+  })
+}
+
+/** Every bundle under `delorun/packages` that the release publishes as a signed pack (`delorun.pack`). */
+const PACK_BUNDLES: PackBundle[] = (() => {
+  const packages = fileURLToPath(new URL('../../../../delorun/packages/', import.meta.url))
+  return readdirSync(packages).filter(dir => dir.startsWith('bundle-')).flatMap((dir) => {
+    const manifest = JSON.parse(readFileSync(join(packages, dir, 'package.json'), 'utf8')) as { name: string; delorun?: { pack?: boolean } }
+    if (manifest.delorun?.pack !== true) return []
+    const patch = loadOverlayPatches('dsh', join(packages, dir, 'cordis.patch.yml')) as Patch
+    return [{ name: manifest.name, spec: manifest.name, patch, modules: [...new Set(patchModules(patch))] }]
+  })
+})()
 
 /** The refusal a change of a protected guard ends with: its diagnostic names the guard, and its next step says so. */
 const GUARD_REFUSAL = {
@@ -322,6 +375,30 @@ describe('plugin_manager in danger-full-access with @delorun/bundle-local\'s pro
     expect(guard()).toMatchObject({ disabled: false, options: { config: { enabled: true } } })
   })
 
+  it.each(PACK_BUNDLES.map(bundle => [bundle.name, bundle] as const))('installs and turns on the published pack %s with its own patch, which leaves the protected rows as they are', async (_name, bundle) => {
+    const { dir, call, files } = await fixture()
+    pnpmInstalls(dir, { [bundle.spec]: { name: bundle.name, patch: bundle.patch } })
+    for (const module of bundle.modules) {
+      if (module.startsWith(`${bundle.name}/`)) continue
+      writePackage(dir, module)
+    }
+    const result = changeResult(await call({ action: 'install_bundle', target: bundle.spec }))
+    expect(result['error']).toBeUndefined()
+    expect(result).toMatchObject({ changed: true, application: 'applied', bundle: bundle.name })
+    expect(files()['package.json']).toContain(bundle.name)
+  })
+
+  it('refuses to install a bundle whose isolated group adds a row of upstream\'s web server module, and puts the profile back', async () => {
+    const { dir, call, files } = await fixture()
+    const server = '@deepseek-ai/dsh-host-webserver'
+    writePackage(dir, server)
+    const patch: Patch = [{ insert: [{ id: 'second-server-group', name: 'cordis:group', group: true, disabled: true, isolate: { webServer: true }, config: [{ id: 'second-server', name: server }] }] }]
+    pnpmInstalls(dir, { 'server-bundle': { name: 'server-bundle', patch } })
+    const before = files()
+    expect(changeResult(await call({ action: 'install_bundle', target: 'server-bundle' }))).toMatchObject({ changed: false, application: 'failed', error: { code: 'management-required' } })
+    expect(files()).toEqual(before)
+  })
+
   it('installs and selects a bundle whose patch leaves the protected rows as they are', async () => {
     const { dir, call } = await fixture()
     pnpmInstalls(dir, { 'other-bundle': { name: 'other-bundle', patch: [{ insert: [{ id: 'other', name: './plugin.mjs' }] }] } })
@@ -337,6 +414,135 @@ describe('plugin_manager in danger-full-access with @delorun/bundle-local\'s pro
     // A tarball names its package only once pnpm has installed it; the profile's files go back as they were.
     expect(changeResult(await call({ action: 'install_bundle', target: 'https://example.invalid/guard.tgz' }))).toMatchObject(GUARD_REFUSAL)
     expect(files()).toEqual(before)
+  })
+})
+
+/** The packs 0.1.0-preview.1.3 publishes, by package name: Delorun's optional bundles and upstream's two agent bundles. */
+const RELEASE_PACKS = [
+  '@deepseek-ai/dsh-subagent-claude-code', '@deepseek-ai/dsh-subagent-codex', '@delorun/bundle-agent-hooks', '@delorun/bundle-browser',
+  '@delorun/bundle-code-intelligence', '@delorun/bundle-computer-use-driver', '@delorun/bundle-external-agents', '@delorun/bundle-webhooks',
+] as const
+
+/** Every workspace package's folder by name, under `packages/<group>/` and `delorun/packages/`. */
+const WORKSPACE_DIRS: Record<string, string> = (() => {
+  const root = fileURLToPath(new URL('../../../../', import.meta.url))
+  const groups = readdirSync(join(root, 'packages'), { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => join(root, 'packages', entry.name))
+  const parents = [...groups, join(root, 'delorun', 'packages')]
+  return Object.fromEntries(parents.flatMap(parent => readdirSync(parent).flatMap((entry) => {
+    try {
+      return [[(JSON.parse(readFileSync(join(parent, entry, 'package.json'), 'utf8')) as { name: string }).name, join(parent, entry)]]
+    } catch (_error) {
+      // A group's README or a folder without a package.json is no package.
+      return []
+    }
+  })))
+})()
+
+/** Each release pack's workspace folder, which the fixture's `packInstallTargets` names as its `link:` spec. */
+const PACK_DIRS: Record<string, string> = Object.fromEntries(RELEASE_PACKS.map(name => [name, WORKSPACE_DIRS[name]!]))
+
+/**
+ * Answer every pnpm run with success; an `add` of a `link:` spec links the folder at `node_modules/<its name>` and saves
+ * the dependency, as pnpm does for a pack.
+ * @param dir - the profile directory.
+ * @returns the spy.
+ */
+function pnpmLinks(dir: string) {
+  const pnpm = vi.spyOn(operations, 'runProfilePnpm').mockImplementation(async (_context, args) => {
+    const spec = String(args[1])
+    if (args[0] === 'add' && spec.startsWith('link:')) {
+      const target = spec.slice('link:'.length)
+      const { name } = JSON.parse(readFileSync(join(target, 'package.json'), 'utf8')) as { name: string }
+      rmSync(join(dir, 'node_modules', name), { force: true })
+      mkdirSync(dirname(join(dir, 'node_modules', name)), { recursive: true })
+      symlinkSync(target, join(dir, 'node_modules', name), 'junction')
+      const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as { dependencies?: Record<string, string> }
+      manifest.dependencies = { ...manifest.dependencies, [name]: spec }
+      writeFileSync(join(dir, 'package.json'), JSON.stringify(manifest))
+    }
+    return await Promise.resolve({ exitCode: 0, output: '', truncated: false, logPath: join(dir, 'pnpm.log') })
+  })
+  onTestFinished(() => { pnpm.mockRestore() })
+  return pnpm
+}
+
+/**
+ * Store a pack folder as Changes does for a linked plugin and put the copy where the profile's link was. The folder's
+ * installed packages stand for the pack's peers: the fixture home's active runtime, `runtimes/test/app/node_modules`,
+ * is a link to this repository, so the copy keeps every link into it as Changes keeps a pack's links into the runtime.
+ * @param home - the fixture's Delorun home.
+ * @param folder - the pack folder.
+ * @param target - where the profile loads the package from.
+ * @returns the copy's path.
+ */
+async function reviewCopy(home: string, folder: string, target: string): Promise<string> {
+  mkdirSync(join(home, 'runtimes', 'test', 'app'), { recursive: true })
+  writeFileSync(join(home, 'runtimes', 'current'), 'test\n')
+  rmSync(join(home, 'runtimes', 'test', 'app', 'node_modules'), { force: true })
+  symlinkSync(fileURLToPath(new URL('../../../../', import.meta.url)), join(home, 'runtimes', 'test', 'app', 'node_modules'), 'junction')
+  const { version, skipped } = await storeFolder(home, folder, { dependencies: 'include' })
+  expect(skipped.filter(path => !path.startsWith('node_modules/') || path.includes('/node_modules/')), 'paths the copy left out').toEqual([])
+  rmSync(target, { force: true })
+  await materialize(home, version, target)
+  return target
+}
+
+describe('every pack the release publishes, on Delorun\'s default profile', () => {
+  it('names every Delorun bundle marked as a pack', () => {
+    const marked = Object.entries(WORKSPACE_DIRS).filter(([name, folder]) => name.startsWith('@delorun/bundle-')
+      && (JSON.parse(readFileSync(join(folder, 'package.json'), 'utf8')) as { delorun?: { pack?: boolean } }).delorun?.pack === true).map(([name]) => name)
+    expect(RELEASE_PACKS).toEqual(expect.arrayContaining(marked))
+  })
+
+  it.each(RELEASE_PACKS)('installs %s through its pack folder, turns it off and on again, with no refusal', async (name) => {
+    const { ctx, dir } = await fixture({ reload: 'startup', delorunDefault: { packs: PACK_DIRS } })
+    const pnpm = pnpmLinks(dir)
+    const { version } = JSON.parse(readFileSync(join(PACK_DIRS[name]!, 'package.json'), 'utf8')) as { version: string }
+    const installed = await ctx.pluginManager.installBundle(`link:${PACK_DIRS[name]!}`, { enabled: true, requestId: `pack:${name}` as PluginInstallRequestId, expected: { name, version } })
+    expect(installed.error, JSON.stringify(installed.error)).toBeUndefined()
+    expect(installed).toMatchObject({ changed: true, bundle: name })
+    expect(['applied', 'restart-required']).toContain(installed.application)
+    // The pack path resolves without running anything, then installs the lockfile: the guarded two-phase install.
+    expect(pnpm.mock.calls.map(([, args]) => args[0])).toEqual(['add', 'install'])
+    for (const enabled of [false, true]) {
+      const switched = await ctx.pluginManager.setBundleEnabled(name, enabled)
+      expect(switched.error, `${String(enabled)} ${JSON.stringify(switched.error)}`).toBeUndefined()
+    }
+    // Changes copies the linked pack into the profile, and every row module loads from that copy.
+    const copy = await reviewCopy(dirname(dirname(dir)), PACK_DIRS[name]!, join(dir, 'node_modules', name))
+    // Each package the pack depends on stays a link into the active runtime, as a pack's peers are linked.
+    const { dependencies = {} } = JSON.parse(readFileSync(join(copy, 'package.json'), 'utf8')) as { dependencies?: Record<string, string> }
+    for (const dependency of Object.keys(dependencies)) expect(lstatSync(join(copy, 'node_modules', dependency)).isSymbolicLink(), dependency).toBe(true)
+    const patch = loadOverlayPatches('dsh', join(copy, 'cordis.patch.yml')) as Patch
+    for (const module of new Set(patchModules(patch))) {
+      const resolved = createRequire(join(copy, 'package.json')).resolve(module)
+      await expect(import(/* @vite-ignore */ pathToFileURL(resolved).href), module).resolves.toBeDefined()
+    }
+  })
+
+  it('refuses a pack through any spec but its pack folder, before pnpm runs', async () => {
+    const { ctx, dir } = await fixture({ reload: 'startup', delorunDefault: { packs: PACK_DIRS } })
+    const pnpm = pnpmLinks(dir)
+    const result = await ctx.pluginManager.installBundle('@delorun/bundle-browser', { enabled: true })
+    expect(result).toMatchObject({ changed: false, application: 'failed', error: { code: 'operation-error' } })
+    expect(pnpm).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['moves the webhook server\'s port, which only the device policy protects', 'github-webhook-server', true],
+    ['moves the studio\'s own web server off loopback', 'webserver', false],
+  ] as const)('a second bundle that %s is %s', async (_way, id, accepted) => {
+    const { ctx, dir } = await fixture({ reload: 'startup', delorunDefault: { packs: PACK_DIRS } })
+    pnpmLinks(dir)
+    const webhooks = '@delorun/bundle-webhooks'
+    expect((await ctx.pluginManager.installBundle(`link:${PACK_DIRS[webhooks]!}`, { enabled: true })).error).toBeUndefined()
+    const mover = join(dir, 'mover')
+    mkdirSync(mover)
+    writeFileSync(join(mover, 'package.json'), JSON.stringify({ name: 'mover', version: '1.0.0', type: 'module', dsh: { bundle: { patch: './cordis.patch.yml' } } }))
+    writeFileSync(join(mover, 'cordis.patch.yml'), JSON.stringify([{ id, config: { host: '0.0.0.0', port: 3091 } }]))
+    const result = await ctx.pluginManager.installBundle(`link:${mover}`, { enabled: true })
+    if (accepted) expect(result.error, JSON.stringify(result.error)).toBeUndefined()
+    else expect(result).toMatchObject({ changed: false, application: 'failed', error: { code: 'management-required' } })
   })
 })
 

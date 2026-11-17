@@ -137,3 +137,34 @@ describe('the settings namespace of a composed row', () => {
     }
   })
 })
+
+describe('the webhook server row of @delorun/bundle-webhooks', () => {
+  const ctx = async () => {
+    const { Context } = await import('@deepseek-ai/cordis')
+    const context = new Context()
+    context.provide('loader', { entries: () => [
+      { id: 'include:github-webhook-ingress', options: { id: 'github-webhook-ingress', name: 'cordis:group' } },
+      { id: 'github-webhook-ingress:github-webhook-server', options: { id: 'github-webhook-server', name: '@delorun/bundle-webhooks/server' } },
+    ] } as never)
+    return context
+  }
+
+  it('is refused to a device under every unlock kind and in dangerous mode: no write moves its listener off loopback', async () => {
+    const { computerOnlyEntryIdsOf } = await import('../src/authenticator.ts')
+    const context = await ctx()
+    for (const kind of KINDS) {
+      const real = { ...facts(kind), computerOnlyEntryIds: () => computerOnlyEntryIdsOf(context) }
+      const calls = [
+        { action: 'settings/update', args: { ns: 'github-webhook-server', patch: { host: '0.0.0.0' } } },
+        { action: 'settings/mutate', args: { ns: 'github-webhook-server', ops: [{ op: 'set', path: ['port'], value: 80 }] } },
+        { action: 'settings/replace', args: { ns: 'github-webhook-server', section: { host: '0.0.0.0', port: 3081 } } },
+        { action: 'pluginManager/setPluginEnabled', args: { id: 'github-webhook-server', enabled: false } },
+        { action: 'pluginManager/setBundleEnabled', args: { name: '@delorun/bundle-webhooks', enabled: false } },
+      ] as const
+      for (const call of calls) {
+        // Pins `@delorun/bundle-webhooks/server` in COMPUTER_ONLY_ROW_MODULES and the bundle in COMPUTER_ONLY_BUNDLES.
+        expect(createCondition(real, principal(kind))({ ...call, resource: GLOBAL }), `${kind} ${call.action}`).toEqual({ kind: 'deny', reason: PROTECTED_ROW_REFUSAL })
+      }
+    }
+  })
+})

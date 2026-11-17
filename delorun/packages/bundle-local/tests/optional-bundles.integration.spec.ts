@@ -40,7 +40,7 @@ const BUNDLES = [
   { dir: 'bundle-computer-use-driver', rows: ['computer-use-registry', 'computer-use-cua-driver-native'], on: ['computer-use-registry', 'computer-use-cua-driver-native'] },
 ] as const
 
-const manifest = (dir: string): { name: string; dsh: { bundle: { patch: string; platforms?: string[] } }; delorun: { state: string; pack?: boolean }; dependencies: Record<string, string> } =>
+const manifest = (dir: string): { name: string; dsh: { bundle: { patch: string; platforms?: string[] } }; delorun: { state: string; pack?: boolean }; dependencies: Record<string, string>; exports: Record<string, string> } =>
   JSON.parse(readFileSync(join(PACKAGES, dir, 'package.json'), 'utf8'))
 const patchRows = (dir: string): Row[] => (yaml.load(readFileSync(join(PACKAGES, dir, 'cordis.patch.yml'), 'utf8'), { schema: patchSchema }) as { insert: Row[] }[])[0]!.insert
 /** A row's `disabled` as the Loader evaluates it for a given platform and environment. */
@@ -81,11 +81,15 @@ describe.each(BUNDLES)('$dir', ({ dir, rows, on }) => {
     for (const id of rows) expect(off, id).not.toContain(id)
   })
 
-  it('declares a dependency on every package it mounts, and mounts rows with ids and names only', () => {
+  it('declares a dependency on every package it mounts, or exports the module itself, and mounts rows with ids and names only', () => {
     const top = patchRows(dir)
     expect(top.map(row => row.id)).toEqual([...rows])
     const names = top.flatMap(row => row.group ? ((row.config as Row[]) ?? []).map(child => child.name) : [row.name])
-    for (const name of names) if (name !== undefined && name !== 'cordis:group') expect(Object.keys(info.dependencies), name).toContain(name)
+    for (const name of names) {
+      if (name === undefined || name === 'cordis:group') continue
+      if (name.startsWith(`${info.name}/`)) expect(Object.keys(info.exports), name).toContain(`.${name.slice(info.name.length)}`)
+      else expect(Object.keys(info.dependencies), name).toContain(name)
+    }
   })
 
   it('mounts exactly the rows meant to be on with nothing set up', () => {
@@ -198,6 +202,16 @@ describe('default configuration', () => {
     ['bundle-external-agents', 'experimental-subagent-oar-codex', 'experimental/subagent-oar'],
     ['bundle-external-agents', 'experimental-subagent-oar-claude', 'experimental/subagent-oar'],
   ] as const
+
+  it('bundle-webhooks: row github-webhook-server mounts upstream\'s web server through the bundle\'s own module, and passes its schema', async () => {
+    const flat = (rows: Row[]): Row[] => rows.flatMap(row => row.group ? [row, ...flat((row.config as Row[]) ?? [])] : [row])
+    const row = flat(patchRows('bundle-webhooks')).find(each => each.id === 'github-webhook-server')!
+    expect(row.name).toBe('@delorun/bundle-webhooks/server')
+    const server = await import(/* @vite-ignore */ join(PACKAGES, 'bundle-webhooks', 'src/server.ts')) as { default: { Config: (value: unknown) => unknown } }
+    const upstream = await import('@deepseek-ai/dsh-host-webserver')
+    expect(server.default).toBe(upstream.default)
+    expect(server.default.Config(interpolate({ process }, row.config))).toMatchObject({ host: '127.0.0.1', port: 3081 })
+  })
 
   it.each(CHECKED)('%s: row %s passes its plugin schema', async (dir, id, plugin) => {
     const flat = (rows: Row[]): Row[] => rows.flatMap(row => row.group ? [row, ...flat((row.config as Row[]) ?? [])] : [row])
