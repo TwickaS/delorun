@@ -3,8 +3,10 @@ import { Context } from '@deepseek-ai/cordis'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createBundleInstaller, stateOf } from '../src/client/bundles.ts'
 
-// The Host's packs routes answer that this studio has no plugin packs, so the bundles read as the plugin manager lists them.
-beforeEach(() => { vi.stubGlobal('fetch', () => Promise.resolve(Response.json({ supported: false, reason: 'no packs here', packs: [], queue: [] }))) })
+// The Host's packs routes publish no pack, so the bundles read as the plugin manager lists them.
+beforeEach(() => { vi.stubGlobal('fetch', () => Promise.resolve(Response.json({ supported: true, release: '0.1.0', packs: [], queue: [] }))) })
+/** Make the Host's packs routes answer that it has no plugin packs, with a reason. */
+const noPacks = (): void => { vi.stubGlobal('fetch', () => Promise.resolve(Response.json({ supported: false, reason: 'no packs here', packs: [], queue: [] }))) }
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
 interface Row {
@@ -111,6 +113,7 @@ describe('the agent bundles the installation ships switched off', () => {
   })
 
   it('keeps the platform reason apart from a Host that has no plugin packs, as a build from source has none', async () => {
+    noPacks()
     const { installer, state } = bench([row({ name: agents[0]!, error: { code: 'unsupported-platform', diagnostic: 'macOS only' } })])
     installer.refresh([agents[0]!, 'not-listed'])
     await flush()
@@ -128,7 +131,7 @@ describe('reading the bundles', () => {
     await flush()
     expect(state('a')).toEqual({ state: 'installed', title: { en: 'A' } })
     expect(state('b')).toEqual({ state: 'checking' })
-    answer(Response.json({ supported: false, reason: 'no packs here', packs: [], queue: [] }))
+    answer(Response.json({ supported: true, release: '0.1.0', packs: [], queue: [] }))
     await flush()
     expect(state('b')).toEqual({ state: 'available', title: { en: 'B' } })
   })
@@ -143,7 +146,7 @@ describe('reading the bundles', () => {
     await flush()
     expect(state('a')).toEqual({ state: 'available', title: { en: 'A' }, description: 'About a.' })
     expect(state('b')).toEqual({ state: 'installed' })
-    expect(state('c')).toEqual({ state: 'unavailable', packsReason: 'no packs here' })
+    expect(state('c')).toEqual({ state: 'unavailable' })
     expect(pluginManager.setBundleEnabled).not.toHaveBeenCalled()
     expect(pluginManager.installBundle).not.toHaveBeenCalled()
   })
@@ -362,5 +365,18 @@ describe('the bundled rows', () => {
     none.installer.refreshRows(['delorun-cost-meter'])
     await flush()
     expect(none.installer.rows.getSnapshot()['delorun-cost-meter']).toEqual({ state: 'failed' })
+  })
+})
+
+describe('a Host that reports no plugin packs', () => {
+  it('lists a bundle the profile does not hold as unavailable with the Host\'s reason, and does not install it', async () => {
+    noPacks()
+    const { installer, pluginManager, state } = bench([row({ name: 'a', availability: 'missing', installTarget: { spec: 'link:/x', version: '1' } }), row({ name: 'held' })])
+    installer.refresh(['a', 'held'])
+    await flush()
+    expect(state('a')).toEqual({ state: 'unavailable', packsReason: 'no packs here' })
+    expect(state('held')).toEqual({ state: 'available' })
+    await installer.install('a')
+    expect(pluginManager.installBundle).not.toHaveBeenCalled()
   })
 })

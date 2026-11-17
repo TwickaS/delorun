@@ -258,7 +258,9 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
       // A bundle the profile does not hold may be a pack the release publishes, which only the packs answer settles.
       if (!packsKnown && (bundle === undefined || (bundle.availability === 'missing' && !bundle.installed))) return
       const pack = packViews.get(name)
-      const state = stateOf(bundle, pack)
+      // A bundle that is not in the profile can only come from a plugin pack; a Host with no packs would try an install that never finishes.
+      const needsPack = bundle?.availability === 'missing' && !bundle.installed && pack === undefined && packsUnsupported !== undefined
+      const state = needsPack ? 'unavailable' : stateOf(bundle, pack)
       const reason = state === 'failed' ? reasonOf(bundle) : packReason(pack)
       const platformLimit = bundle?.error?.code === 'unsupported-platform' || pack?.kind === 'unavailable'
       set(name, {
