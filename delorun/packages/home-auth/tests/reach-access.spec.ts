@@ -637,7 +637,7 @@ const KEYS = [/^credentials\//, /^event:credentials\//]
 const UNLOCK = [
   /^settings\/(mutate|replace|update)$/, /^commands\/execute$/,
   /^pluginManager\/(installBundle|removeBundle|setBundleEnabled|setPluginEnabled|setVersionExemption|updateBundle|cancelInstall|undo|restore)$/,
-  /^terminal\//, /^mcpManager\//, /^directoryPicker\//, /^workspace\/create$/, /^dynamicCordisRunner\//, /^event:cordis\//,
+  /^terminal\//, /^mcpManager\/(?!watch$)/, /^directoryPicker\//, /^workspace\/create$/, /^dynamicCordisRunner\//, /^event:cordis\//,
 ]
 
 /**
