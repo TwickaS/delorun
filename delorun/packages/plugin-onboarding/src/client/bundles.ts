@@ -276,6 +276,28 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
     await packsRead
     for (const name of names) show(name, true)
   }
+  // The install list says how a queued pack ends; the card follows it, so it never stays on "Adding…" after a failure.
+  const followPack = async (name: string, before: BundleView, packs: PacksRemote): Promise<void> => {
+    for (;;) {
+      await new Promise<void>((resolve) => { setTimeout(resolve, options.pollMs) })
+      const now = views.getSnapshot()[name]
+      if (now?.state !== 'installing' && now?.state !== 'slow') return
+      let snapshot: PacksSnapshot
+      try {
+        snapshot = await packs.list()
+      } catch (error) {
+        console.warn('delorun onboarding: the plugin pack install was not followed', error)
+        continue
+      }
+      const pack = snapshot.packs.find(each => each.name === name)
+      if (pack === undefined) return
+      const view = packView(pack, snapshot.queue.find(item => item.key === name))
+      if (view.kind === 'working') continue
+      packViews.set(name, view)
+      set(name, { ...before, state: stateOf(known.get(name), view), ...view.kind === 'failed' ? { reason: view.failure.message } : {} })
+      return
+    }
+  }
   return {
     views,
     refresh: (names) => {
@@ -290,15 +312,18 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
       const remote = pluginManager(ctx)
       const before = views.getSnapshot()[name]
       const pack = packViews.get(name)
-      if (before?.state === 'available' && pack?.kind === 'available') {
+      // A failed pack starts again from the same Retry; the Host's queue takes a failed item back.
+      if ((before?.state === 'available' && pack?.kind === 'available') || (before?.state === 'failed' && pack?.kind === 'failed')) {
         const packs: PacksRemote = packsClient
-        set(name, { ...before, state: 'installing' })
+        const { reason: _failure, ...fresh } = before
+        set(name, { ...fresh, state: 'installing' })
         try {
           const queued = await packs.enqueue({ names: [name] })
-          set(name, { ...before, state: queued.ok ? 'installing' : 'failed' })
+          set(name, { ...fresh, state: queued.ok ? 'installing' : 'failed' })
+          if (queued.ok) void followPack(name, fresh, packs)
         } catch (error) {
           console.warn('delorun onboarding: the plugin pack was not queued', error)
-          set(name, { ...before, state: 'failed' })
+          set(name, { ...fresh, state: 'failed' })
         }
         return
       }

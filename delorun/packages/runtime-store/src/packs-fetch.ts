@@ -6,6 +6,7 @@
  *
  * @module @delorun/runtime-store/packs-fetch
  */
+import { createHash } from 'node:crypto'
 import { METADATA_REQUEST_TIMEOUT_SECONDS, type PackExternal } from '@delorun/contract-release-manifest'
 import { PackRefusal } from '@delorun/release-formats/packs/archive'
 import type { PackFiles, PackSize, PackTransfer } from './packs-client.ts'
@@ -25,27 +26,42 @@ export interface PackTransportOptions {
   readonly channel: string
   /** The fetch every request goes through; defaults to the global one. */
   readonly fetch?: typeof globalThis.fetch
-  /** Seconds before a request is abandoned; defaults to the release files' request timeout. */
+  /** Seconds a metadata file (a body bounded by `max`, such as the packs file) may take in total; defaults to the release files' request timeout. */
   readonly timeoutSeconds?: number
+  /**
+   * Seconds a download of a signed length (a pack archive or an external package) may go without receiving a byte,
+   * counted from the request and then from each piece, so the first byte is covered and a slow download that keeps
+   * receiving data is never cut off.
+   */
+  readonly stallSeconds: number
 }
 
+/** The stalled download's mark: set when the stall timer, not the caller, aborted the request. */
+interface Stall { stalled: boolean }
+
 /**
- * Read a response body up to a limit.
+ * Read a response body up to a limit, hashing it as it arrives. An exact size is read into one preallocated buffer, so
+ * the body is held once, not as a list of pieces and again as their concatenation.
  * @param response - the response.
- * @param size - the most the body may have, or exactly what it must have.
+ * @param size - the most the body may have, or exactly what it must have, with the SHA-512 and SHA-256 it must have when known.
  * @param abort - aborts the request.
  * @param label - names the download in a refusal.
+ * @param onPiece - called after each piece, before the next is read.
  * @param onBytes - called with the bytes read so far after each piece.
  * @returns the body.
- * @throws PackRefusal `SIZE_MISMATCH` when the body is longer than allowed, or shorter than an exact size.
+ * @throws PackRefusal `SIZE_MISMATCH` when the body is longer than allowed, or shorter than an exact size, and
+ * `DIGEST_MISMATCH` when it does not have the SHA-512 or SHA-256 `size` names.
  */
-async function readBounded(response: Response, size: PackSize, abort: () => void, label: string, onBytes?: (received: number) => void): Promise<Uint8Array> {
+async function readBounded(response: Response, size: PackSize, abort: () => void, label: string, onPiece: () => void, onBytes?: (received: number) => void): Promise<Uint8Array> {
   const limit = 'exact' in size ? size.exact : size.max
   const declared = Number(response.headers.get('content-length') ?? '')
   if (Number.isFinite(declared) && declared > limit) {
     abort()
     throw new PackRefusal(`${label} declares ${String(declared)} bytes, above the ${String(limit)} allowed`, 'SIZE_MISMATCH')
   }
+  const exact = 'exact' in size ? Buffer.allocUnsafe(size.exact) : undefined
+  const hash = 'exact' in size && size.sha512 !== undefined ? createHash('sha512') : undefined
+  const hash256 = 'exact' in size && size.sha256 !== undefined ? createHash('sha256') : undefined
   const chunks: Uint8Array[] = []
   let total = 0
   if (response.body !== null) {
@@ -53,17 +69,23 @@ async function readBounded(response: Response, size: PackSize, abort: () => void
     for (;;) {
       const { done, value } = await reader.read()
       if (done) break
-      total += value.byteLength
-      if (total > limit) {
+      if (total + value.byteLength > limit) {
         abort()
         throw new PackRefusal(`${label} sent more than the ${String(limit)} bytes allowed`, 'SIZE_MISMATCH')
       }
-      chunks.push(value)
+      if (exact === undefined) chunks.push(value)
+      else exact.set(value, total)
+      hash?.update(value)
+      hash256?.update(value)
+      total += value.byteLength
+      onPiece()
       onBytes?.(total)
     }
   }
   if ('exact' in size && total !== size.exact) throw new PackRefusal(`${label} has ${String(total)} bytes; the signed packs file lists ${String(size.exact)}`, 'SIZE_MISMATCH')
-  return Buffer.concat(chunks)
+  if (hash !== undefined && 'exact' in size && hash.digest('base64') !== size.sha512) throw new PackRefusal(`${label} does not match its signed SHA-512`, 'DIGEST_MISMATCH')
+  if (hash256 !== undefined && 'exact' in size && hash256.digest('hex') !== size.sha256) throw new PackRefusal(`${label} does not match its signed SHA-256`, 'DIGEST_MISMATCH')
+  return exact ?? Buffer.concat(chunks)
 }
 
 /**
@@ -78,29 +100,41 @@ export function createPackFiles(options: PackTransportOptions): PackFiles {
   const base = new URL(options.channel.endsWith('/') ? options.channel : `${options.channel}/`)
   const secure = base.protocol === 'https:' || (base.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(base.hostname))
   if (!secure) throw new PackRefusal(`the pack channel ${options.channel} is not an https address`, 'FETCH_REFUSED')
-  const timeout = (options.timeoutSeconds ?? METADATA_REQUEST_TIMEOUT_SECONDS) * 1000
+  const requestSeconds = options.timeoutSeconds ?? METADATA_REQUEST_TIMEOUT_SECONDS
 
   async function get(url: URL, size: PackSize, label: string, missingIsUndefined: boolean, transfer: PackTransfer = {}): Promise<Uint8Array | undefined> {
     const controller = new AbortController()
+    const stall: Stall = { stalled: false }
     const outer = (): void => { controller.abort() }
     if (transfer.signal?.aborted === true) controller.abort()
     transfer.signal?.addEventListener('abort', outer, { once: true })
-    const timer = setTimeout(() => controller.abort(), timeout)
+    // A download of a signed length waits at most stallSeconds for the response and then for each next piece; a metadata
+    // file has one total limit that no piece extends.
+    const download = 'exact' in size
+    const limitSeconds = download ? options.stallSeconds : requestSeconds
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const arm = (): void => {
+      clearTimeout(timer)
+      timer = setTimeout(() => { stall.stalled = true; controller.abort() }, limitSeconds * 1000)
+    }
+    arm()
     try {
       let response: Response
       try {
         response = await fetcher(url, { redirect: 'error', signal: controller.signal, headers: { 'accept-encoding': 'identity' } })
       } catch (error) {
+        if (stall.stalled) throw new PackRefusal(`${label} (${url.href}) ${download ? 'received no data' : 'did not answer'} for ${String(limitSeconds)} seconds`, 'FETCH_REFUSED', { cause: error })
         const reason = ((error as { cause?: { code?: string } }).cause)?.code
         if (reason !== undefined && NO_CONNECTION.has(reason)) throw new PackRefusal(`${label} needs a connection: ${reason}`, 'OFFLINE', { cause: error })
-        throw new PackRefusal(`${label} could not be fetched (a redirect is refused): ${(error as Error).message}`, 'FETCH_REFUSED', { cause: error })
+        throw new PackRefusal(`${label} (${url.href}) could not be fetched (a redirect is refused): ${(error as Error).message}`, 'FETCH_REFUSED', { cause: error })
       }
       if (response.status === 404 && missingIsUndefined) return undefined
       if (response.status !== 200) throw new PackRefusal(`${label} answered ${String(response.status)}`, 'FETCH_REFUSED')
-      return await readBounded(response, size, () => { controller.abort() }, label, transfer.onBytes)
+      return await readBounded(response, size, () => { controller.abort() }, label, () => { if (download) arm() }, transfer.onBytes)
     } catch (error) {
       if (error instanceof PackRefusal) throw error
-      throw new PackRefusal(`${label} could not be read: ${(error as Error).message}`, 'FETCH_REFUSED', { cause: error })
+      if (stall.stalled) throw new PackRefusal(`${label} (${url.href}) ${download ? `received no data for ${String(limitSeconds)} seconds` : `took more than ${String(limitSeconds)} seconds in total`}`, 'FETCH_REFUSED', { cause: error })
+      throw new PackRefusal(`${label} (${url.href}) could not be read: ${(error as Error).message}`, 'FETCH_REFUSED', { cause: error })
     } finally {
       clearTimeout(timer)
       transfer.signal?.removeEventListener('abort', outer)
@@ -117,7 +151,7 @@ export function createPackFiles(options: PackTransportOptions): PackFiles {
       if (url.protocol !== 'https:' || url.hostname !== NPM_REGISTRY_HOST || url.port !== '' || url.username !== '' || url.password !== '' || url.search !== '' || url.hash !== '') {
         throw new PackRefusal(`${pin.name} is signed with ${pin.url}, which is not a plain ${NPM_REGISTRY_HOST} address`, 'FETCH_REFUSED')
       }
-      return (await get(url, { exact: pin.length }, `${pin.name}@${pin.version}`, false, transfer))!
+      return (await get(url, { exact: pin.length, sha512: pin.sha512 }, `${pin.name}@${pin.version}`, false, transfer))!
     },
   }
 }

@@ -13,8 +13,10 @@ import { PACK_ROUTES } from '../src/wire.ts'
 describe('the configuration', () => {
   it('defaults the concurrency to 2 and refuses less than 1 or a fraction', () => {
     expect(plugin.Config({} as plugin.Config).concurrency).toBe(2)
-    expect(() => plugin.Config({ concurrency: 0 })).toThrow()
-    expect(() => plugin.Config({ concurrency: 1.5 })).toThrow()
+    expect(() => plugin.Config({ concurrency: 0, stallSeconds: 60, progressIntervalMs: 0 })).toThrow()
+    expect(() => plugin.Config({ concurrency: 1.5, stallSeconds: 60, progressIntervalMs: 0 })).toThrow()
+    expect(plugin.Config({} as plugin.Config)).toMatchObject({ stallSeconds: 60, progressIntervalMs: 500 })
+    expect(() => plugin.Config({ concurrency: 1, stallSeconds: 0, progressIntervalMs: 0 })).toThrow()
   })
 })
 

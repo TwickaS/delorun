@@ -21,6 +21,8 @@ export interface RunnerDeps {
   readonly installBundle: InstallBundle
   /** Makes the request id a pack's install is announced under, so `plugin-manager/install-state` follows it. */
   readonly requestId: (key: string) => string
+  /** Report why an install failed, with its cause and address, where the Host logs. */
+  readonly logFailure: (key: string, error: unknown) => void
 }
 
 /**
@@ -75,6 +77,7 @@ export function createPackRunner(deps: RunnerDeps): (key: string, signal: AbortS
       if (result.application === 'failed') throw new InstallRefusal('failed', `The plugin manager could not load ${key}${result.error?.code === undefined ? '' : ` (${result.error.code})`}.`)
       return { reloadNeeded: result.application === 'restart-required' }
     } catch (error) {
+      if (!signal.aborted) deps.logFailure(key, error)
       throw failureOf(error)
     }
   }

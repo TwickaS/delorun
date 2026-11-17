@@ -74,6 +74,12 @@ export interface InstallQueueOptions {
   /** How many installs run at once; a validated Config field of the caller, at least 1. */
   readonly concurrency: number
   /**
+   * The least time between two published byte reports of one item, in milliseconds; a report that completes the
+   * download is always published. A byte report publishes the whole list to every subscriber and saves it, so a
+   * large download must not report at each piece.
+   */
+  readonly progressIntervalMs: number
+  /**
    * Download, verify and install one plugin.
    * @param key - the package name.
    * @param signal - aborted when the person cancels the item.
@@ -235,9 +241,21 @@ export class InstallQueue {
     const controller = new AbortController()
     this.running.set(key, controller)
     this.replace(key, { state: 'downloading', receivedBytes: 0 })
+    let published = 0
     const progress: InstallProgress = {
       stage: state => { this.replace(key, { state }) },
-      bytes: (received, total) => { this.replace(key, { receivedBytes: received, ...total === undefined ? {} : { totalBytes: total } }) },
+      bytes: (received, total) => {
+        const change = { receivedBytes: received, ...total === undefined ? {} : { totalBytes: total } }
+        const now = Date.now()
+        const finished = total !== undefined && received >= total
+        if (!finished && published !== 0 && now - published < this.options.progressIntervalMs) {
+          // Held until the next published change, which carries the newest count.
+          this.items = this.items.map(item => (item.key === key ? { ...item, ...change } : item))
+          return
+        }
+        published = now
+        this.replace(key, change)
+      },
     }
     this.options.run(key, controller.signal, progress).then(
       outcome => { this.finish(key, outcome.reloadNeeded ? { state: 'needs-reload', reloadNeeded: true } : { state: 'ready', reloadNeeded: false }) },

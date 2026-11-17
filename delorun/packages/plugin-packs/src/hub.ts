@@ -26,6 +26,10 @@ export interface HubDeps {
   readonly file: string
   /** How many installs run at once. */
   readonly concurrency: number
+  /** The least time between two published progress reports of one download, in milliseconds. */
+  readonly progressIntervalMs: number
+  /** Report a failed install to the Host's log; the install queue's item carries the failure to the person. */
+  readonly logFailure: (key: string, error: unknown) => void
   /** Makes a request id the plugin manager announces an install under. */
   readonly requestId: (key: string) => string
 }
@@ -70,9 +74,10 @@ export class PacksHub {
     const environment = deps.environment
     this.queue = new InstallQueue({
       concurrency: deps.concurrency,
+      progressIntervalMs: deps.progressIntervalMs,
       run: 'unsupported' in environment
         ? () => Promise.reject(new Error(environment.unsupported))
-        : createPackRunner({ environment, installBundle: deps.installBundle, requestId: deps.requestId }),
+        : createPackRunner({ environment, installBundle: deps.installBundle, requestId: deps.requestId, logFailure: deps.logFailure }),
       reload: deps.reload,
       runningChats: deps.runningChats,
       load: () => loadItems(deps.file),

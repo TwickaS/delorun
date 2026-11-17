@@ -34,6 +34,7 @@ interface Setup {
   readonly paths: StorePaths
   readonly chats: { count: number }
   readonly files: { fetchRelease: PackFiles['fetchRelease'] }
+  readonly failures: Array<readonly [string, unknown]>
 }
 
 async function setup(options: { application?: string, archive?: (signal?: AbortSignal) => Promise<Uint8Array> } = {}): Promise<Setup> {
@@ -60,8 +61,9 @@ async function setup(options: { application?: string, archive?: (signal?: AbortS
     return Promise.resolve({ application: options.application ?? 'applied' })
   }
   const file = join(fixture.home, 'run', 'default', 'installs.json')
-  const hub = new PacksHub({ environment, installBundle, runningChats: () => chats.count, reload: () => { reloads.push(Date.now()); return Promise.resolve() }, file, concurrency: 2, requestId: key => `pack:${key}` })
-  return { hub, installs, reloads, file, paths, chats, files }
+  const failures: Array<readonly [string, unknown]> = []
+  const hub = new PacksHub({ environment, installBundle, runningChats: () => chats.count, reload: () => { reloads.push(Date.now()); return Promise.resolve() }, file, concurrency: 2, progressIntervalMs: 0, logFailure: (key, error) => { failures.push([key, error]) }, requestId: key => `pack:${key}` })
+  return { hub, installs, reloads, file, paths, chats, files, failures }
 }
 
 async function until(hub: PacksHub, done: (snapshot: PacksSnapshot) => boolean): Promise<PacksSnapshot> {
@@ -167,6 +169,16 @@ describe('the pack hub', () => {
     expect(existsSync(paths.packLink('one'))).toBe(false)
   })
 
+  it('logs why a download failed, with its cause, and leaves the failure on the item; a cancelled one is not logged', async () => {
+    const { hub, failures } = await setup({ archive: () => Promise.reject(new PackRefusal('delorun-0.1.0-pack-one.any.tar.gz (https://example.test/a) received no data for 60 seconds', 'FETCH_REFUSED', { cause: new Error('This operation was aborted') })) })
+    await hub.enqueue(['one'])
+    const snapshot = await until(hub, each => each.queue[0]?.state === 'failed')
+    expect(snapshot.queue[0]).toMatchObject({ state: 'failed', failure: { message: expect.stringContaining('received no data for 60 seconds') } })
+    expect(failures).toHaveLength(1)
+    expect(failures[0]![0]).toBe('one')
+    expect(failures[0]![1]).toMatchObject({ code: 'FETCH_REFUSED', cause: { message: 'This operation was aborted' } })
+  })
+
   it('dismisses a failed or cancelled row but never a ready one', async () => {
     const { hub } = await setup({ archive: () => Promise.reject(new PackRefusal('x needs a connection', 'OFFLINE')) })
     await hub.enqueue(['one'])
@@ -193,7 +205,7 @@ describe('the pack hub', () => {
   })
 
   it('says why a Host without an installed release has no packs', async () => {
-    const hub = new PacksHub({ environment: { unsupported: 'not an installation' }, installBundle: () => Promise.reject(new Error('unused')), runningChats: () => 0, reload: () => Promise.resolve(), file: join(fixture.home, 'run', 'q.json'), concurrency: 1, requestId: key => key })
+    const hub = new PacksHub({ environment: { unsupported: 'not an installation' }, installBundle: () => Promise.reject(new Error('unused')), runningChats: () => 0, reload: () => Promise.resolve(), file: join(fixture.home, 'run', 'q.json'), concurrency: 1, progressIntervalMs: 0, logFailure: () => undefined, requestId: key => key })
     expect(await hub.snapshot()).toEqual({ supported: false, reason: 'not an installation', packs: [], queue: [] })
     expect(await hub.enqueue(['one'])).toMatchObject({ ok: false, error: { code: 'unsupported' } })
   })

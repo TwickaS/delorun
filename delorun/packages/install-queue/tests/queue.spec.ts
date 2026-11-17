@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { InstallQueue, InstallRefusal, type InstallItem, type InstallOutcome, type InstallProgress } from '../src/index.ts'
 
 interface Job {
@@ -9,13 +9,14 @@ interface Job {
   fail(error: Error): void
 }
 
-function bench(options: { readonly concurrency?: number, readonly chats?: { count: number }, readonly persisted?: InstallItem[] } = {}) {
+function bench(options: { readonly concurrency?: number, readonly progressIntervalMs?: number, readonly chats?: { count: number }, readonly persisted?: InstallItem[] } = {}) {
   const jobs: Job[] = []
   const reloads: number[] = []
   const saved: Array<readonly InstallItem[]> = []
   const chats = options.chats ?? { count: 0 }
   const queue = new InstallQueue({
     concurrency: options.concurrency ?? 2,
+    progressIntervalMs: options.progressIntervalMs ?? 0,
     run: (key, signal, progress) => new Promise<InstallOutcome>((resolve, reject) => {
       jobs.push({ key, signal, progress, finish: outcome => { resolve(outcome ?? { reloadNeeded: false }) }, fail: reject })
       signal.addEventListener('abort', () => { reject(new Error('aborted')) })
@@ -53,6 +54,29 @@ describe('the install queue', () => {
     expect(queue.snapshot()[0]).toMatchObject({ state: 'failed', failure: { code: 'failed', message: 'network' } })
     queue.enqueue('a')
     expect(jobs).toHaveLength(2)
+  })
+
+  it('publishes and saves a download\'s byte reports at most once per interval, keeps the newest count, and always publishes the last', () => {
+    vi.useFakeTimers()
+    try {
+      const { queue, jobs, saved } = bench({ progressIntervalMs: 500 })
+      queue.enqueue('a')
+      const published: number[] = []
+      queue.subscribe(items => { published.push(items[0]!.receivedBytes) })
+      const before = saved.length
+      for (const received of [10, 20, 30, 40]) { jobs[0]!.progress.bytes(received, 100) }
+      expect(published).toEqual([10])
+      expect(saved.length - before).toBe(1)
+      vi.advanceTimersByTime(600)
+      jobs[0]!.progress.bytes(50, 100)
+      expect(published).toEqual([10, 50])
+      jobs[0]!.progress.bytes(60, 100)
+      expect(queue.snapshot()[0]!.receivedBytes).toBe(60)
+      jobs[0]!.progress.bytes(100, 100)
+      expect(published).toEqual([10, 50, 100])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('shows progress, and a failure never stops the others', async () => {
@@ -116,6 +140,7 @@ describe('the install queue', () => {
     const jobs: Array<() => void> = []
     const queue = new InstallQueue({
       concurrency: 1,
+      progressIntervalMs: 0,
       run: () => new Promise<InstallOutcome>((resolve) => { jobs.push(() => { resolve({ reloadNeeded: true }) }) }),
       reload: () => Promise.reject(new Error('port busy')),
       runningChats: () => 0,

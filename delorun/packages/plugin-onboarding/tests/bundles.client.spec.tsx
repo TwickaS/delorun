@@ -380,3 +380,40 @@ describe('a Host that reports no plugin packs', () => {
     expect(pluginManager.installBundle).not.toHaveBeenCalled()
   })
 })
+
+describe('a pack the Host downloads', () => {
+  const pack = { name: 'p', version: '1.0.0', experimental: false, downloadBytes: 10, availability: 'available' as const }
+  const item = (state: 'downloading' | 'failed', message?: string) => ({ key: 'p', state, receivedBytes: 1, reloadNeeded: false, ...message === undefined ? {} : { failure: { code: 'failed', message } } })
+
+  /** A Host whose packs list answers each call with the next answer, and whose enqueue answers ok. */
+  function host(answers: readonly { readonly queue: readonly unknown[] }[]): void {
+    let call = 0
+    vi.stubGlobal('fetch', (url: string) => {
+      if (String(url).endsWith('enqueue')) return Promise.resolve(Response.json({ ok: true, value: { supported: true, release: '0.1.0', packs: [pack], queue: [] } }))
+      const answer = answers[Math.min(call++, answers.length - 1)]!
+      return Promise.resolve(Response.json({ supported: true, release: '0.1.0', packs: [pack], ...answer }))
+    })
+  }
+
+  it('leaves "installing" with the Host\'s reason when the download fails, and stops asking', async () => {
+    vi.useFakeTimers()
+    try {
+      host([{ queue: [] }, { queue: [item('downloading')] }, { queue: [item('failed', 'received no data for 60 seconds')] }])
+      const { installer, state } = bench([])
+      installer.refresh(['p'])
+      await vi.advanceTimersByTimeAsync(0)
+      expect(state('p')).toEqual({ state: 'available' })
+      await installer.install('p')
+      expect(state('p')?.state).toBe('installing')
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(state('p')?.state).toBe('installing')
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(state('p')).toEqual({ state: 'failed', reason: 'received no data for 60 seconds' })
+      // Retry from the failed card queues the pack again.
+      await installer.install('p')
+      expect(state('p')).toEqual({ state: 'installing' })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})

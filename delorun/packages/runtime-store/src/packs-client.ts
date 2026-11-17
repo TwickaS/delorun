@@ -22,8 +22,11 @@ import type { StorePaths } from './paths.ts'
  */
 export type PacksLogCheck = (root: RootMetadata, version: string, packsBytes: Uint8Array, bundleBytes: Uint8Array) => { readonly ok: boolean, readonly detail?: string }
 
-/** How many bytes a download may have: at most `max`, or exactly `exact` when the signed file list names the length. */
-export type PackSize = { readonly max: number } | { readonly exact: number }
+/**
+ * How many bytes a download may have: at most `max`, or exactly `exact` when the signed file list names the length, with
+ * the standard base64 SHA-512 and the hex SHA-256 the transport checks while the bytes arrive when the file list names them.
+ */
+export type PackSize = { readonly max: number } | { readonly exact: number, readonly sha512?: string, readonly sha256?: string }
 
 /** What a caller may ask of one download. */
 export interface PackTransfer {
@@ -145,7 +148,7 @@ export async function fetchPack(release: InstalledRelease, name: string, files: 
   const variant = packVariantFor(entry, release.paths.platform)
   let done = 0
   const counted = (): PackTransfer => ({ ...transfer.signal === undefined ? {} : { signal: transfer.signal }, onBytes: (received) => { transfer.onBytes?.(done + received) } })
-  const archive = await files.fetchRelease(variant.archive.name, { exact: variant.archive.length }, counted())
+  const archive = await files.fetchRelease(variant.archive.name, { exact: variant.archive.length, sha512: variant.archive.sha512, sha256: variant.archive.sha256 }, counted())
   if (archive === undefined) throw new PackRefusal(`the release channel has no ${variant.archive.name}`, 'NOT_ON_CHANNEL')
   done += archive.byteLength
   const externals = new Map<string, Uint8Array>()
