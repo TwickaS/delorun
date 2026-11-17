@@ -2713,6 +2713,12 @@
       "class": "delorun-feature",
       "feature": "agent-sign-in-failures",
       "reason": "Adds helpers that recognise an external agent sign-in failure and word the chat result, shared by the Codex and Claude Code providers."
+    },
+    {
+      "path": "apps/web/public/favicon.ico",
+      "class": "delorun-feature",
+      "feature": "studio-favicon",
+      "reason": "Adds the favicon.ico the studio serves for its tab icon."
     }
   ],
   "retired": []
