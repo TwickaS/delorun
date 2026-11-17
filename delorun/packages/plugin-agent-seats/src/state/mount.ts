@@ -182,9 +182,10 @@ export async function mountSeatState(ctx: Context, options: SeatStateOptions): P
     const { programSessionId, programMessageId } = state.logged
     if (state.shown.agent === null || programSessionId === null || options.tail === undefined) return
     const { agent } = state.shown
-    // Not inside the turn end's own publication: a record cannot be appended from there.
     const stopped = event.data.reason.kind === 'aborted' || event.data.reason.kind === 'interrupted'
     const remember = async (): Promise<void> => {
+      // A record cannot be appended while the turn end is being published, so it waits for the listener to return.
+      await Promise.resolve()
       // A stopped turn's program may still be writing, so its last message is not recorded.
       const id = stopped || options.tail === undefined ? undefined : (await options.tail(agent, programSessionId)).lastMessageId
       if (id !== undefined || programMessageId !== null) store.recordProgramMessage(child, id)

@@ -70,7 +70,6 @@ export async function stateWorld(options: Partial<SeatStateOptions> = {}): Promi
   describeSeat(session)
   const child = session.header.id
   const dir = await mkdtemp(join(tmpdir(), 'ea2-seat-state-'))
-  onTestFinished(() => rm(dir, { recursive: true, force: true }))
   const gate = new ScriptedGate()
   gate.seats.set(child, { child, root: SessionId('root'), provider: 'claude-code' })
   const prompts: Array<{ child: SessionId, text: string }> = []
@@ -84,6 +83,10 @@ export async function stateWorld(options: Partial<SeatStateOptions> = {}): Promi
     prompt: (id, text) => { prompts.push({ child: id, text }); return Promise.resolve() },
     warn: message => { warnings.push(message) },
     ...options,
+  })
+  onTestFinished(async () => {
+    await mount.settled()
+    await rm(dir, { recursive: true, force: true })
   })
   const host: SeatHost = {
     descriptorProvider: () => 'claude-code',
