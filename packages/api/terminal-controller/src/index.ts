@@ -7,7 +7,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { SandboxExecutionPolicy } from '@deepseek-ai/dsh-sandbox'
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import type {} from '@deepseek-ai/dsh-working-directory'
-import { Remote, RemoteError, TypertRemoteService, type RemoteStream } from '@deepseek-ai/dsh-typert-protocol'
+import { Remote, RemoteError, TypertRemoteService, type PeerScope, type RemoteStream } from '@deepseek-ai/dsh-typert-protocol'
 import { AgentTerminalHandle, type AgentTerminal, type AgentTerminalRequest } from './agent.ts'
 import { discoverShells, findShell, resolveShell } from './shells.ts'
 import { BrowserTerminal } from './terminal.ts'
@@ -329,7 +329,45 @@ export class TerminalController extends TypertRemoteService {
   attach(agent: Agent, id: WebTerminalId, signal: AbortSignal): RemoteStream<TerminalFrame, TerminalInput> {
     const invocation = this.ctx.invocation
     if (invocation === undefined) throw new Error('Terminal attachment requires a Remote invocation')
-    return this.terminal(agent, id).attach(invocation.uplink<TerminalInput>(), this.config, signal, invocation.uplinkWindow)
+    const input = this.notingTyped(invocation.uplink<TerminalInput>(), invocation.peer)
+    return this.terminal(agent, id).attach(input, this.config, signal, invocation.uplinkWindow)
+  }
+
+  /** Listeners of {@link onTyped}. */
+  private readonly typedListeners = new Set<(peer: PeerScope) => void>()
+
+  /**
+   * Listen for the person typing in an attached terminal: a keyboard, paste, IME or pointer write, never terminal-protocol
+   * replies, resizes or output. A listener runs once per typed frame, so one that acts on activity throttles itself.
+   * @param listener - called with the Peer whose attachment received the input.
+   * @returns the disposer that removes the listener.
+   */
+  onTyped(listener: (peer: PeerScope) => void): () => void {
+    this.typedListeners.add(listener)
+    return () => { this.typedListeners.delete(listener) }
+  }
+
+  /**
+   * Pass an attachment's input through and announce each typed write, so a listener can tell the person is working.
+   * @param input - the attachment's uplink.
+   * @param peer - the Peer the attachment speaks for.
+   * @returns an iterable whose iterator forwards `next` and `return` to the uplink's.
+   */
+  private notingTyped(input: AsyncIterable<TerminalInput>, peer: PeerScope): AsyncIterable<TerminalInput> {
+    return {
+      [Symbol.asyncIterator]: () => {
+        const source = input[Symbol.asyncIterator]()
+        return {
+          next: async () => {
+            const next = await source.next()
+            if (next.done !== true && next.value.type === 'write' && next.value.typed === true) for (const listener of this.typedListeners) listener(peer)
+            return next
+          },
+          // The attachment's cleanup returns the iterator to interrupt a pending read.
+          return: async value => (source.return === undefined ? { done: true, value } : source.return(value)),
+        }
+      },
+    }
   }
 
   /**

@@ -324,6 +324,14 @@ inspectActivity(agent: Agent, id: WebTerminalId): Promise<'idle' | 'busy' | 'unk
 @Remote({ mode: 'stream' }) attach(agent: Agent, id: WebTerminalId, signal: AbortSignal): RemoteStream<TerminalFrame, TerminalInput>
 
 /**
+ * Listen for the person typing in an attached terminal: a keyboard, paste, IME or pointer write, never terminal-protocol
+ * replies, resizes or output. A listener runs once per typed frame, so one that acts on activity throttles itself.
+ * @param listener - called with the Peer whose attachment received the input.
+ * @returns the disposer that removes the listener.
+ */
+onTyped(listener: (peer: PeerScope) => void): () => void
+
+/**
  * Rename a terminal without changing its shell.
  * @param agent - Session owner supplied by the Gateway.
  * @param id - terminal identity.

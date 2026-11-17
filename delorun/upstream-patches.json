@@ -2677,6 +2677,12 @@
       "class": "delorun-feature",
       "feature": "product-name",
       "reason": "The source manifest names the product Delorun, so a build without `DSH_CLIENT_TITLE` (such as `build:artifacts`) no longer installs as `DeepSeek Harness`; the build still renames it from the variable when set."
+    },
+    {
+      "path": "packages/api/terminal-controller/src/index.ts",
+      "class": "delorun-feature",
+      "feature": "phone-parity",
+      "reason": "`TerminalController.onTyped` announces each typed write of a terminal attachment (the person's keystrokes, never output, retention, resizes or protocol replies), so a sliding unlock stays alive while the person types: an ended unlock closes the device's terminal stream, and keystrokes are stream traffic the reach policy does not decide."
     }
   ],
   "retired": []

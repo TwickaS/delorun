@@ -25,6 +25,8 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 import type {} from '@deepseek-ai/dsh-api-remote-access'
+import type {} from '@deepseek-ai/dsh-api-terminal-controller'
+import { typedInputRenewal } from './typed-renewal.ts'
 import type {} from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-workspace'
 import type {} from '@deepseek-ai/dsh-working-directory'
@@ -269,6 +271,9 @@ export class HomeAuthAuthenticator extends Authenticator {
     ctx.effect(() => ctx.homeAuth.onElevationChange((change) => {
       if (change.kind === 'ended' && change.elevation.page === true) this.disposePageUnlock(change.elevation.id)
     }), 'home-auth page unlock peers')
+    // The person typing in an attached terminal keeps the device's sliding unlock alive: its end closes the stream.
+    const renewTyping = typedInputRenewal({ reachPeer: id => this.reachPeers.get(id as PeerId), touchDevice: (deviceId, listener) => { ctx.homeAuth.touchDeviceUnlock(deviceId, listener) }, now: () => Date.now() })
+    ctx.inject(['terminalController'], (scope) => { scope.effect(() => scope.terminalController.onTyped((peer) => { renewTyping(peer) }), 'home-auth typed terminal input') })
     ctx.effect(() => ctx.homeAuth.onDeviceRemoved((deviceId) => { this.disposeDevice(deviceId) }), 'home-auth peer removal')
     ctx.effect(() => ctx.provide('remoteAnswerGuard', { check: (answer: RemoteEventAnswer) => { this.checkAnswer(answer) } }), 'home-auth reserved grant guard')
     // Without remote access no Gateway is mounted, so no reach Peer's call is dispatched at all. The policy lives in

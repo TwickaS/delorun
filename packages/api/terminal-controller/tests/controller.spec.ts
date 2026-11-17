@@ -354,6 +354,43 @@ describe('TerminalController', () => {
     } finally { await stream.return?.() }
   })
 
+  it('announces each typed write of an attachment and nothing else, and passes the uplink\'s return through', async () => {
+    const { controller, agent } = fixture()
+    await controller.create(agent, request, signal())
+    const typed = vi.fn()
+    const stopListening = controller.onTyped((peer) => { typed(peer.id) })
+    const input = inputChannel<TerminalInput>()
+    const stream = attachController(agent, id, signal(), input.source)[Symbol.asyncIterator]()
+    await stream.next()
+    try {
+      // Pins the filter: protocol replies and resizes are not the person typing, and output is not input.
+      input.push({ type: 'write', sequence: 1, data: 'a' })
+      await stream.next()
+      input.push({ type: 'resize', sequence: 2, cols: 90, rows: 30 })
+      await stream.next()
+      await stream.next()
+      expect(typed).not.toHaveBeenCalled()
+      input.push({ type: 'write', sequence: 3, data: 'b', typed: true })
+      await stream.next()
+      expect(typed).toHaveBeenCalledOnce()
+      expect(typed).toHaveBeenCalledWith('test-peer')
+      stopListening()
+      input.push({ type: 'write', sequence: 4, data: 'c', typed: true })
+      await stream.next()
+      expect(typed).toHaveBeenCalledOnce()
+    } finally { await stream.return?.() }
+  })
+
+  it('ends an attachment whose uplink has no return and ends at once', async () => {
+    const { controller, agent } = fixture()
+    await controller.create(agent, request, signal())
+    const next = async () => ({ done: true as const, value: undefined })
+    const finished: AsyncIterable<TerminalInput> = { [Symbol.asyncIterator]: () => ({ next }) }
+    const stream = attachController(agent, id, signal(), finished)[Symbol.asyncIterator]()
+    await stream.next()
+    await stream.return?.()
+  })
+
   it.each([{ cols: 1.5, rows: 24 }, { cols: 201, rows: 24 }, { cols: 80, rows: 1.5 }, { cols: 80, rows: 0 }, { cols: 80, rows: 101 }])('rejects dimensions $cols × $rows before allocation', async (dimensions) => {
     const { controller, agent, subprocess, handle } = fixture()
     await expect(controller.create(agent, { ...request, ...dimensions }, signal())).rejects.toThrow('dimensions')
