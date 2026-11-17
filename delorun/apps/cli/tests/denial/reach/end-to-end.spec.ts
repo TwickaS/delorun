@@ -288,7 +288,11 @@ describe('reach on the Tailscale private address', () => {
         type: 'client-request', rpcId: 'reach-row', method: 'pluginManager/setPluginEnabled', payload: { args: { id: 'delorun-reach', enabled: false } },
       })
       expect(switched.status).toBe(200)
-      expect(json(switched).result).toMatchObject({ ok: false, error: { code: 'remote-access/denied', details: { action: 'pluginManager/setPluginEnabled' } } })
+      // This fixture mounts the reach and home-auth plugins directly, so the Loader holds no `delorun-reach` row for the policy to
+      // name (the real profile does: `protected-rows.integration.spec.ts` pins the policy refusal on the composed rows). The call
+      // is therefore refused by the policy or answered by the plugin manager as an unknown row that it changed nothing of.
+      const result = json(switched).result as { ok: boolean; error?: { code: string }; value?: { changed?: boolean; error?: { code: string } } }
+      expect(result.ok ? { changed: result.value?.changed, error: result.value?.error?.code } : { denied: result.error?.code }).toEqual(result.ok ? { changed: false, error: 'unknown-plugin' } : { denied: 'remote-access/denied' })
       expect(studio.ctx.reach.status()[0]?.state).toBe('ready')
       expect(calls.filter(call => call.at(-1) === 'off')).toEqual([])
     })
