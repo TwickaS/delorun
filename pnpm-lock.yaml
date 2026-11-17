@@ -4168,6 +4168,15 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/skill/skill
 
+  delorun/packages/skill-real-browser:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-skill':
+        specifier: workspace:*
+        version: link:../../../packages/skill/skill
+
   delorun/packages/skill-report-problem:
     devDependencies:
       '@deepseek-ai/cordis':
