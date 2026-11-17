@@ -165,6 +165,15 @@ export class PacksHub {
   }
 
   /**
+   * Whether this Host still runs the release `runtimes/current` names.
+   * @returns false once an update switched `current`; true when this process has no installed release to compare.
+   */
+  async runsCurrentRelease(): Promise<boolean> {
+    await this.snapshot().catch(() => undefined)
+    return this.release === undefined || await isRunningRelease(this.release.paths, this.release.version)
+  }
+
+  /**
    * Whether the release's packs file lists a package, waiting for the file to be read.
    * @param name - the package name.
    * @returns `true` for a pack; `false` for any other package and when this process has no installed release.

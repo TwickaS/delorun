@@ -86,6 +86,11 @@ export interface PackInstallTargets {
    */
   listed(name: string): boolean | undefined
   /**
+   * Whether this Host still runs the release `runtimes/current` names, which an update switches away from.
+   * @returns false once an update switched; a pack installed then would be linked through `packs/current` to another release.
+   */
+  runsCurrentRelease(): Promise<boolean>
+  /**
    * Whether the release's packs file lists a package, waiting for the file to be read.
    * @param name - the package name.
    * @returns whether it is a pack.
@@ -163,7 +168,7 @@ export function apply(ctx: Context, config: Config): void {
         requestId: packRequestId,
       })
       scope.effect(() => slot.onChatEnded(() => { hub.chatsChanged() }))
-      scope.provide('packInstallTargets', { resolve: (packName, version) => hub.installedTarget(packName, version), linkSpec: packName => hub.linkSpec(packName), listed: packName => hub.listed(packName), isPack: packName => hub.isPack(packName) })
+      scope.provide('packInstallTargets', { resolve: (packName, version) => hub.installedTarget(packName, version), linkSpec: packName => hub.linkSpec(packName), listed: packName => hub.listed(packName), isPack: packName => hub.isPack(packName), runsCurrentRelease: () => hub.runsCurrentRelease() })
       scope.plugin(PacksService, hub)
     })()
   })

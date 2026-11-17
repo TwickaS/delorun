@@ -3077,12 +3077,13 @@ it('refuses an update whose target does not match where the copy was installed f
 })
 
 describe('a package the release publishes as a signed pack', () => {
-  const targets = (listed: boolean, installed?: string) => (ctx: Context) => {
+  const targets = (listed: boolean, installed?: string, running = true) => (ctx: Context) => {
     ctx.provide('packInstallTargets', {
       resolve: (_name: string, version: string) => installed === undefined ? undefined : { spec: installed, version },
       linkSpec: () => 'link:/home/packs/current/pack/package',
       listed: () => listed,
       isPack: () => Promise.resolve(listed),
+      runsCurrentRelease: () => Promise.resolve(running),
     })
   }
 
@@ -3142,6 +3143,16 @@ describe('a package the release publishes as a signed pack', () => {
     // Only a resolution may have run: the install, which runs scripts, never does.
     expect(calls.every(call => call[0] === 'add' && call.includes('--lockfile-only') && call.includes('--ignore-scripts'))).toBe(true)
     expect(existsSync(marker)).toBe(false)
+    expect(profileFiles(dir)).toEqual(before)
+  })
+
+  it('refuses the pack\'s own folder once an update has switched away from this Host\'s release, before pnpm runs', async () => {
+    const { manager, dir } = await fixture('live', false, targets(true, undefined, false))
+    const pnpm = vi.spyOn(operations, 'runProfilePnpm')
+    onTestFinished(() => { pnpm.mockRestore() })
+    const before = profileFiles(dir)
+    const result = await manager.installBundle('link:/home/packs/current/pack/package', { enabled: false })
+    expect(result).toMatchObject({ application: 'failed', changed: false, error: { code: 'operation-error', diagnostic: expect.stringMatching(/Restart Delorun to finish the update/u) } })
     expect(profileFiles(dir)).toEqual(before)
   })
 

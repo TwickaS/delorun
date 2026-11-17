@@ -303,6 +303,9 @@ export function specPackageName(spec: string, dependencies: Readonly<Record<stri
 /** Why a version that holds a pack from another source is not restored. */
 const PACK_RESTORE = 'this version holds the plugin pack from a registry or another folder, not from its pack folder; remove the pack first, then add it again from Plugins.'
 
+/** Why a pack is not installed into a Host an update has switched away from. */
+const PACK_UPDATE_PENDING = 'Restart Delorun to finish the update before adding plugins: this Host runs the release before it.'
+
 const PACK_ONLY = 'This plugin is a signed plugin pack of this release; add it from Plugins or the setup guide, which downloads it from the release.'
 
 /** The package name a local directory declares, or `undefined` without a readable manifest. */
@@ -689,6 +692,20 @@ export class PluginManager extends TypertRemoteService {
     const pack = await this.packOutsideItsFolder(changes)
     if (pack !== undefined) return { ok: false, error: { code: 'operation-error', diagnostic: `${pack}: ${PACK_RESTORE}` } }
     return { ok: true, version: { version: held.id, summary: held.summary }, changes }
+  }
+
+  /**
+   * Refuse a package the release publishes as a pack unless the spec is its pack folder and this Host still runs the
+   * release `runtimes/current` names, since an update that switched leaves the folder's link naming another release.
+   * @param packs - the composed pack targets.
+   * @param name - the package name.
+   * @param spec - the spec being installed.
+   * @throws ManagementFailure `operation-error` with the diagnostic.
+   */
+  private async requirePackFolder(packs: NonNullable<ReturnType<typeof this.ownerContext.get<'packInstallTargets'>>>, name: string, spec: string): Promise<void> {
+    if (!await packs.isPack(name)) return
+    if (packs.linkSpec(name) !== spec) throw new ManagementFailure('operation-error', undefined, PACK_ONLY)
+    if (!await packs.runsCurrentRelease()) throw new ManagementFailure('operation-error', undefined, PACK_UPDATE_PENDING)
   }
 
   /**
@@ -1358,7 +1375,7 @@ export class PluginManager extends TypertRemoteService {
       const known = specPackageName(spec, before, this.profile.dir)
       // A package the release publishes as a signed pack installs only from its pack folder, never from a registry or another source.
       const packs = this.ownerContext.get('packInstallTargets')
-      if (known !== undefined && packs !== undefined && await packs.isPack(known) && packs.linkSpec(known) !== spec) throw new ManagementFailure('operation-error', undefined, PACK_ONLY)
+      if (known !== undefined && packs !== undefined) await this.requirePackFolder(packs, known, spec)
       const provided = known === undefined ? [] : this.providedProtected(known)
       if (provided.length > 0) throw this.protectionFailure(provided)
       if (this.ownerContext.get('hmr') !== undefined && known !== undefined && Object.hasOwn(before, known)) {
@@ -1475,7 +1492,7 @@ export class PluginManager extends TypertRemoteService {
         if (providedByTarget.length > 0) throw this.protectionFailure(providedByTarget)
         // Whatever source the spec named, a package the release publishes as a pack installs only from its pack folder.
         // The resolution ran no script and fetched nothing, so a refusal here leaves the files as they were.
-        if (packs !== undefined && await packs.isPack(name) && packs.linkSpec(name) !== spec) throw new ManagementFailure('operation-error', undefined, PACK_ONLY)
+        if (packs !== undefined) await this.requirePackFolder(packs, name, spec)
         if (twoPhase) {
           // The lockfile names what will be installed; a refusal here leaves nothing fetched and no script run.
           if (audited) await this.auditBundle(name, join(this.profile.dir, 'node_modules', name), undefined, options?.acceptedAudit, 'install', result.registries)
