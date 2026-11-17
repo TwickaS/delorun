@@ -27,6 +27,31 @@
   },
   "delorun": {
     "state": "experimental",
-    "pack": true
+    "pack": true,
+    "requires": {
+      "browser-use-playwright-mcp": {
+        "needs": [
+          {
+            "kind": "program",
+            "names": [
+              "google-chrome",
+              "google-chrome-stable",
+              "chromium",
+              "chromium-browser",
+              "chrome"
+            ],
+            "paths": [
+              "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+              "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+              "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe"
+            ]
+          }
+        ],
+        "fix": {
+          "kind": "docs",
+          "url": "https://www.google.com/chrome/"
+        }
+      }
+    }
   }
 }

@@ -46,7 +46,7 @@ export type PluginManagerPageProps =
   & PropsRenderSlots<
     | 'plugins.item' | 'plugins.bundle.config' | 'plugins.row.config' | 'plugins.bundle.activation'
     | 'plugins.add.actions' | 'plugins.tab'
-    | 'plugins.detail.actions' | 'plugins.detail.badge' | 'plugins.detail.section'
+    | 'plugins.detail.actions' | 'plugins.detail.badge' | 'plugins.detail.section' | 'plugins.row.state'
   >
   & InjectFace<PluginManagerFace & PluginHeaderLayoutFace>
   & PropsStore<ReturnType<typeof createNavigationStore>>
@@ -275,8 +275,10 @@ function RuntimeError({ error, t }: { readonly error: string | undefined; readon
  * registered a page, and, when the pack is on, a switch. A pack like base
  * carries close to a hundred rows, so a long list gets a filter.
  */
-function RowsSection({ rows, t, resolveText, toggle, configure }: {
+function RowsSection({ rows, t, resolveText, toggle, configure, state }: {
   readonly rows: readonly PackageRow[]
+  /** The contributed line under a row, from the `plugins.row.state` slot. */
+  readonly state?: ((row: PackageRow) => ReactNode) | undefined
   readonly t: Translate
   readonly resolveText: ResolveText
   readonly toggle?: RowToggles | undefined
@@ -346,6 +348,7 @@ function RowsSection({ rows, t, resolveText, toggle, configure }: {
                 </div>
                 <MetadataError error={row.meta?.error} t={t} />
                 <RuntimeError error={row.diagnostic} t={t} />
+                {state?.(row)}
               </li>
             ))}
           </ul>
@@ -911,6 +914,7 @@ function PackageDetail({
           resolveText={resolveText}
           toggle={pkg.enabled ? { busy: row => busy || rowBusy(row), onSetEnabled: onSetRowEnabled } : undefined}
           configure={configure}
+          state={row => renderSlot('plugins.row.state', { subject: { kind: 'row', pkg: packageRef(pkg), row: rowRef(row) } })}
         />)}
         <VersionSection
           pkg={pkg} check={versions} t={t} busy={busy} onEnsure={onEnsureVersions} onCheck={onCheckVersions} onUpdate={onUpdateVersion}

@@ -2,5 +2,11 @@
   "meta": {
     "title": "Browser",
     "description": "Lets the agent open pages, click and read in a Chromium browser on this computer, through Playwright"
+  },
+  "requirements": {
+    "browser-use-playwright-mcp": {
+      "reason": "Needs Chrome installed",
+      "fix": "Get Chrome"
+    }
   }
 }

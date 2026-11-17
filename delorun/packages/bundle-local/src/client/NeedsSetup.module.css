@@ -1,0 +1,48 @@
+/* One line under a row: the reason in the warning role, then the fix; it wraps under the reason on a narrow screen. */
+.state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin: 6px 0 0;
+  min-width: 0;
+}
+
+.reason {
+  color: var(--dsw-alias-state-warn-primary);
+  font-size: 13px;
+  line-height: 20px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.command {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.commandText {
+  min-width: 0;
+  overflow-x: auto;
+  padding: 2px 8px;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.link {
+  color: var(--dsw-alias-brand-primary);
+  font-size: 13px;
+}
+
+.problem {
+  margin: 0;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}

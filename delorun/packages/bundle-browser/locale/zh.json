@@ -2,5 +2,11 @@
   "meta": {
     "title": "浏览器",
     "description": "让智能体在本机的 Chromium 浏览器中打开网页、点击和阅读，通过 Playwright 实现"
+  },
+  "requirements": {
+    "browser-use-playwright-mcp": {
+      "reason": "需要安装 Chrome",
+      "fix": "获取 Chrome"
+    }
   }
 }
