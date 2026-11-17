@@ -45,6 +45,13 @@ export interface SeatRelayOptions {
    */
   agentName(child: Agent): string
   /**
+   * Report a question refused without asking the person.
+   * @param child - the child whose program asked.
+   * @param request - the program's question.
+   * @param why - the reason.
+   */
+  refused?(child: Agent, request: ProgramApprovalRequest, why: 'not-a-seat' | 'no-approval'): void
+  /**
    * The name the seat's record gives the program's tool, shown on the card.
    * @param child - the seat child.
    * @param toolName - the program's own tool name.
@@ -198,9 +205,15 @@ export class SeatRelay {
   }
 
   private async ask(child: Agent, startSignal: AbortSignal, request: ProgramApprovalRequest): Promise<Asked> {
-    if (!this.isSeat(child)) return { answer: 'reject' }
+    if (!this.isSeat(child)) {
+      this.options.refused?.(child, request, 'not-a-seat')
+      return { answer: 'reject' }
+    }
     const approval = this.ctx.get('approval')
-    if (approval === undefined) return { answer: 'reject' }
+    if (approval === undefined) {
+      this.options.refused?.(child, request, 'no-approval')
+      return { answer: 'reject' }
+    }
     let finish: () => void = () => {}
     const settled = new Promise<void>((resolve) => { finish = resolve })
     const entry: Pending = { controller: new AbortController(), settled, finish }

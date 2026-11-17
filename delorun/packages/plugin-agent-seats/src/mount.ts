@@ -18,6 +18,7 @@ import { gateByUnlock, requireComputerOrDevice, routedPathname } from '@delorun/
 import { registerSeatRoutes, type SeatRouteRegistration, type SeatRouteSpec } from './adapter/index.ts'
 import type { Config, SeatConfig } from './config.ts'
 import { followLeaseEnds } from './lease.ts'
+import { questionRefusedNotice } from './relay/copy.ts'
 import { isExternalAgentName, registerSeatProviders, seatProviderName } from './provider/index.ts'
 import { recordPrefixOf, seatPreset } from './executor/index.ts'
 import { mountSeatState, type SeatStateMount } from './state/index.ts'
@@ -110,7 +111,15 @@ export async function mountSeats(ctx: Context, config: Config, options: SeatMoun
     workspaceOf,
     approve: (child, request, startSignal) => {
       const agent = ctx.get('agents')?.get(child)
-      return approver === undefined || agent === undefined ? Promise.resolve('reject') : approver(agent, startSignal)(request)
+      if (approver === undefined || agent === undefined) {
+        try {
+          state.store.notice(child, 'question-refused', questionRefusedNotice(request.toolName, approver === undefined ? 'no-relay' : 'not-a-seat'))
+        } catch (error: unknown) {
+          logger.warn(`a refused question of ${child} could not be shown: ${String(error)}`)
+        }
+        return Promise.resolve('reject')
+      }
+      return approver(agent, startSignal)(request)
     },
   })
   for (const seat of config.seats) {

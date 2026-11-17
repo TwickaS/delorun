@@ -10,6 +10,9 @@ import { isExternalAgentName, seatProviderName } from '../provider/index.ts'
 import type { SeatConfig } from '../config.ts'
 import { agentTitle } from '@delorun/external-agents/copy'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { SessionId } from '@deepseek-ai/dsh-session'
+import type { ProgramApprovalRequest } from '@delorun/external-agents/contract'
+import { questionRefusedNotice, type QuestionRefusal } from './copy.ts'
 import { SeatRelay } from './relay.ts'
 
 /**
@@ -26,6 +29,14 @@ export const seatRelay: SeatRelayHook = ({ ctx, state, seatProviders, seats }) =
     if (seat === undefined) throw new Error(`delorun-agent-seats: ${child.id} is no configured seat, so its calls have no record name`)
     return seat
   }
+  const logger = ctx.logger('agent-seats')
+  const refuse = (child: SessionId, request: ProgramApprovalRequest, why: QuestionRefusal): void => {
+    try {
+      state.store.notice(child, 'question-refused', questionRefusedNotice(request.toolName, why))
+    } catch (error: unknown) {
+      logger.warn('a refused question of %s could not be shown: %s', child, error instanceof Error ? error.message : String(error))
+    }
+  }
   const relay = new SeatRelay(ctx, {
     seatProviders,
     descriptorOf: child => foldSubagentDescriptor(child.session.snapshotEvents())?.provider,
@@ -34,12 +45,12 @@ export const seatRelay: SeatRelayHook = ({ ctx, state, seatProviders, seats }) =
       if (!signal.aborted) throw error
     }),
     recordName: (child, toolName) => `${recordPrefixOf(seatOf(child))}${toolName}`,
+    refused: (child, request, why) => { refuse(child.id, request, why) },
     agentName: (child) => {
       const { provider } = seatOf(child)
       return isExternalAgentName(provider) ? agentTitle(provider) : provider
     },
   })
-  const logger = ctx.logger('agent-seats')
   ctx.effect(() => relay.onPendingChange((child, waiting) => {
     try {
       // A seat whose turn already ended shows no question, so clearing it again would only add a record.

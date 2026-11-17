@@ -190,6 +190,8 @@ describe('a program question on a seat child', () => {
     const answer = w.gate.starts[0]?.onApproval?.({ callId: 'call-1', toolName: 'Bash', reason: 'Run', signal: new AbortController().signal })
     await expect(answer).resolves.toBe('reject')
     expect(w.waiting).toEqual([])
+    expect(w.child.session.snapshotEvents().filter(event => (event.type as string) === 'plugin:delorun/agent-seat/notice').map(event => event.data))
+      .toEqual([{ kind: 'question-refused', text: expect.stringContaining('no way to ask you') }])
     w.gate.latest.emit({ kind: 'turn-end', outcome: 'completed' })
     await done
   })

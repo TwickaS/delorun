@@ -64,6 +64,8 @@ export type SeatNoticeKind =
   | 'unresumable'
   /** The person picked the model for this workspace's agent. */
   | 'model-chosen'
+  /** Delorun refused a question of the program without asking the person. */
+  | 'question-refused'
 
 /** One notice record, shown in the chat's transcript. */
 export interface SeatNoticeRecordData {
