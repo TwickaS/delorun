@@ -11,17 +11,12 @@ import { getDelorunRuntimeVersion, getDshRuntimeVersion } from '@deepseek-ai/dsh
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import z from '@deepseek-ai/schemastery'
 import { DRAIN_TIMEOUT_DEFAULT_S, DRAIN_TIMEOUT_MAX_S, DRAIN_TIMEOUT_MIN_S } from '@delorun/contract-home-process'
-import type { UpdateChannelAccess } from '@delorun/home-process'
 import type {} from '@delorun/bundle-local/update-check'
 import type {} from '@delorun/plugin-changes'
+import { heldUpdateChannel } from './channel-handover.ts'
 import { updateRoutes } from './routes.ts'
 
-declare module '@deepseek-ai/cordis' {
-  interface Context {
-    /** The Host's way to the home process's update channel, which `delorun start` provides; absent outside an installed release. */
-    updateChannel?: UpdateChannelAccess
-  }
-}
+export { handUpdateChannel } from './channel-handover.ts'
 
 /** The plugin's name in the loader's diagnostics. */
 export const name = 'plugin-update'
@@ -54,7 +49,7 @@ export function apply(ctx: Context, config: Config): void {
     if (gate === undefined) return
     const routes = updateRoutes({
       gate,
-      channel: () => scope.get('updateChannel'),
+      channel: heldUpdateChannel,
       check: () => scope.get('delorunUpdateCheck'),
       checkGapMs: config.checkGapSeconds * 1000,
       waitSeconds: config.waitSeconds,
