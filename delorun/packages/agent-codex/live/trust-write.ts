@@ -1,5 +1,5 @@
 /**
- * Which `thread/start` settings make Codex write a project trust entry into its home's `config.toml`. Runs the pinned
+ * Which `thread/start` settings, the driver's and upstream's one-shot provider's, make Codex write a project trust entry into its home's `config.toml`. Runs the pinned
  * program keyless in scratch Codex homes only (never the person's), one variant per home, and prints the lines each
  * variant added.
  *
@@ -29,6 +29,10 @@ const VARIANTS: Readonly<Record<string, (workspace: string) => Variant>> = {
   'untrusted, turn sandboxPolicy workspaceWrite': workspace => ({ thread: { approvalPolicy: 'untrusted' }, turn: { sandboxPolicy: WORKSPACE_WRITE(workspace) } }),
   'untrusted + read-only, turn sandboxPolicy workspaceWrite': workspace => ({ thread: { approvalPolicy: 'untrusted', sandbox: 'read-only' }, turn: { sandboxPolicy: WORKSPACE_WRITE(workspace) } }),
   'untrusted + sandbox_mode workspace-write in thread config': () => ({ thread: { approvalPolicy: 'untrusted', config: { sandbox_mode: 'workspace-write' } } }),
+  // Upstream's one-shot provider's three modes, on its ephemeral threads.
+  'upstream never (ephemeral)': () => ({ thread: { ephemeral: true, approvalPolicy: 'never' } }),
+  'upstream approve-for-me (ephemeral)': () => ({ thread: { ephemeral: true, approvalPolicy: 'on-request', approvalsReviewer: 'auto_review', sandbox: 'workspace-write' } }),
+  'upstream bypass (ephemeral)': () => ({ thread: { ephemeral: true, approvalPolicy: 'never', sandbox: 'danger-full-access' } }),
 }
 
 const ctx = new Context()
