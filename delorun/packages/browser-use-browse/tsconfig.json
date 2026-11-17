@@ -36,6 +36,9 @@
       "path": "../../../packages/boot/app-boot"
     },
     {
+      "path": "../../../packages/browser-use/browser-use"
+    },
+    {
       "path": "../../../packages/client/connection/tsconfig.host.json"
     },
     {

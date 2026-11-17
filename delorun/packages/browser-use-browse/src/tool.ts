@@ -80,6 +80,8 @@ export function useMyBrowserTool(ctx: Context, grants: RealBrowserGrants): ToolD
       if (outcome !== 'allowed-once') return { allowed: false, message: declinedRefusal(outcome) }
       if (askedSeq === undefined) throw new Error(`${USE_MY_BROWSER_TOOL}: the approval of call ${exec.callId} is not in the chat's log, so no grant was recorded`)
       grants.grant(session, { kind: 'approval', askedSeq })
+      // The browse server starts for the chat now, so its tools are there for the model's next step.
+      await grants.settled(session)
       return { allowed: true, message: grantedAnswer(purpose) }
     },
     presentCall: args => ({ card: 'generic', title: 'Ask to use your own browser', kind: 'other', rawInput: args }),

@@ -134,6 +134,17 @@ export class SessionResources<T> {
   }
 
   /**
+   * Close one owner's resource, after its running operations, and keep the owner live: a later {@link get} acquires a
+   * new one. Does nothing while the owner holds none.
+   * @param agent - exact live resource owner.
+   * @returns when the resource is closed.
+   */
+  async release(agent: Agent): Promise<void> {
+    const entry = this.entries.get(agent)
+    if (entry !== undefined) await this.closeEntry(agent, entry)
+  }
+
+  /**
    * Stop new acquisitions and await every acquired resource and owned operation.
    * A failed close retains its entry and rejects disposal, preserving exclusive ownership.
    * @returns the shared quiescent disposal promise.

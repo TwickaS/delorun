@@ -145,6 +145,35 @@ export interface SessionMcpOptions {
    * @returns the model-visible refusal, or `undefined` to let the call through.
    */
   refuseCall?: (call: BrowserToolCall) => Promise<string | undefined>
+  /**
+   * `slot` (the default) registers the provider as the browser-use slot's one provider; `none` registers nothing, for a
+   * second browser that sits beside the slot's provider, such as the person's own browser.
+   */
+  registration?: 'slot' | 'none'
+  /**
+   * Which Sessions the server serves. Omission serves every Session. With it, a Session it does not admit gets no
+   * server, its browser tools are masked and refused, and the server's prompt section is left out; when
+   * {@link SessionMcpAdmission.changed} reports the Session, an admitted one starts the server and one no longer
+   * admitted stops it.
+   */
+  admission?: SessionMcpAdmission
+}
+
+/** The provider's rule for which Sessions a {@link mountSessionMcp} server serves. */
+export interface SessionMcpAdmission {
+  /**
+   * Whether a live Agent's Session is served now.
+   * @param agent - the Agent.
+   * @returns whether the server may start and serve its tools to it.
+   */
+  admitted(agent: Agent): boolean
+  /**
+   * Hear each Session whose admission may have changed.
+   * @param listener - called with the Session after the change; it settles once the Session's server has started or
+   *   stopped to match, so a provider can wait for the browser tools before it answers.
+   * @returns the disposer, called when the mount unloads.
+   */
+  changed(listener: (session: Agent['session']) => Promise<void>): () => void
 }
 
 /** One browser tool call offered to a provider's {@link SessionMcpOptions.refuseCall}. */
@@ -213,9 +242,19 @@ async function ignoredOutputFolder(folder: string): Promise<void> {
 }
 
 interface ClientState {
-  /** `ready` holds a started client; `blocked` waits for a busy attachment; `refused` is a start the add-time consent did not allow. */
-  status: 'ready' | 'blocked' | 'refused'
+  /**
+   * `ready` holds a started client; `blocked` waits for a busy attachment; `refused` is a start the add-time consent did
+   * not allow; `unadmitted` is a Session the provider's admission does not serve.
+   */
+  status: 'ready' | 'blocked' | 'refused' | 'unadmitted'
   mask?: Scope
+  /** The admission change running for this Session; changes run one after another. */
+  transition?: Promise<void>
+  /**
+   * Whether an admission change is starting or closing the Session's server: its own tools, which the start adds and
+   * the close removes, are not masked meanwhile.
+   */
+  changing?: boolean
 }
 
 /**
@@ -237,6 +276,9 @@ function isConsentStop(error: unknown): error is McpClient.McpConsentRefusedErro
  * Once a Session's server has started, its output folder, when the provider names one, is created if missing and given
  * a `.gitignore` of `*` if it has none; a failure to do so is logged as a warning and the Session keeps its tools.
  * A call the provider's `refuseCall` refuses fails with the provider's text and never reaches the server.
+ * With an admission, a Session it does not admit gets no server and its browser tool calls are refused; its later
+ * admission starts the server, and the end of its admission stops it. A start that fails after creation is logged and
+ * leaves the Session without the tools. With `registration: 'none'` the mount takes no browser-use slot.
  * Calls are serialized per Session; unload closes every server before releasing registration.
  * @param ctx - provider context supplying browser use, Agents, tools, prompt assembly, and working directories.
  * @param options - provider identity, attachment exclusivity, and executable configuration.
@@ -257,7 +299,7 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
     refreshingMasks = true
     try {
       for (const [agent, state] of clients) {
-        if (state.status === 'ready') continue
+        if (state.status === 'ready' || state.changing === true) continue
         const inherited = ctx.tools.schemas(agent).filter(tool => tool.name.startsWith(toolPrefix))
         if (inherited.length === 0) continue
         state.mask ??= createScope(ctx, agent)
@@ -269,7 +311,7 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
   }
 
   ctx.effect(function* () {
-    yield ctx.browserUse.register(BrowserUseProviderName(options.name))
+    if (options.registration !== 'none') yield ctx.browserUse.register(BrowserUseProviderName(options.name))
     resources = new SessionResources(ctx, {
       label: options.name,
       exclusive: options.exclusive,
@@ -334,13 +376,81 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
       clients.clear()
     }
   }, `${options.name}.sessions`)
+  /** Start the server for an admitted Session that holds no client; a consent refusal leaves it `refused`. */
+  const start = async (agent: Agent, state: ClientState, signal?: AbortSignal): Promise<void> => {
+    if (!resources.available(agent)) {
+      state.status = 'blocked'
+      refreshBlockedMasks()
+      return
+    }
+    try {
+      await resources.get(agent, signal)
+    } catch (error) {
+      if (!isConsentStop(error)) throw error
+      // The consent keeps the server stopped and lists it for the person's answer; this Session runs without its tools.
+      ctx.logger.warn(`${options.name}: the browser tools are off in Session ${agent.id} until the server's start is allowed: ${error.message}`)
+      state.status = 'refused'
+      refreshBlockedMasks()
+      return
+    }
+    state.status = 'ready'
+    const mask = state.mask
+    delete state.mask
+    await mask?.dispose()
+  }
+
+  /** Follow one Session's admission: start its server once admitted, stop it once no longer admitted. */
+  const readmit = async (agent: Agent, state: ClientState): Promise<void> => {
+    if (stopping || clients.get(agent) !== state) return
+    const admitted = options.admission?.admitted(agent) ?? true
+    if (admitted && state.status === 'unadmitted') {
+      state.changing = true
+      try {
+        await start(agent, state)
+      } catch (error) {
+        // The Session keeps running without the browser tools; the next change of its admission tries again.
+        state.status = 'unadmitted'
+        ctx.logger.error(`${options.name}: could not start the browser server for Session ${agent.id}: ${(error as Error).message}`)
+      } finally {
+        state.changing = false
+        refreshBlockedMasks()
+      }
+    } else if (!admitted && state.status !== 'unadmitted') {
+      // Calls are refused from here on; the server's own tools leave with it, and only inherited ones need a mask.
+      state.status = 'unadmitted'
+      state.changing = true
+      try {
+        await resources.release(agent)
+      } finally {
+        state.changing = false
+        refreshBlockedMasks()
+      }
+    }
+  }
+
+  if (options.admission !== undefined) {
+    const admission = options.admission
+    ctx.effect(() => admission.changed(async (session) => {
+      const transitions: Promise<void>[] = []
+      for (const [agent, state] of clients) {
+        if (agent.session !== session) continue
+        const previous = state.transition ?? Promise.resolve()
+        state.transition = previous.then(() => readmit(agent, state))
+        transitions.push(state.transition)
+      }
+      await Promise.all(transitions)
+    }), `${options.name}.admission`)
+  }
+
   ctx.on('agent/created', async ({ agent, signal }) => {
-    const state: ClientState = { status: resources.available(agent) ? 'ready' : 'blocked' }
+    const unadmitted = options.admission !== undefined && !options.admission.admitted(agent)
+    const state: ClientState = { status: unadmitted ? 'unadmitted' : resources.available(agent) ? 'ready' : 'blocked' }
     agent.ctx.effect(() => async () => {
       clients.delete(agent)
+      await state.transition
       await state.mask?.dispose()
     }, `${options.name}.activation`)
-    if (state.status === 'blocked') {
+    if (state.status === 'unadmitted' || state.status === 'blocked') {
       clients.set(agent, state)
       refreshBlockedMasks()
       return
@@ -365,7 +475,9 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
       && (exec.arguments as { server?: unknown }).server === options.name
     if (!exec.name.startsWith(toolPrefix) && !ownResource) return next()
     const agent = exec.agent
-    if (agent === undefined || clients.get(agent)?.status !== 'ready') {
+    const status = agent === undefined ? undefined : clients.get(agent)?.status
+    if (status === 'unadmitted') throw new Error(`${options.name}: this Session may not use this browser`)
+    if (agent === undefined || status !== 'ready') {
       throw new Error(`${options.name}: browser tool belongs to another Session`)
     }
     const result = await resources.run(agent, exec.signal, async (_scope, combined) => {
