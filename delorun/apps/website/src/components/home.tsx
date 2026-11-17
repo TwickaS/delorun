@@ -34,7 +34,7 @@ const SUBLINE = 'block max-w-[34ch] text-[clamp(20px,1rem_+_0.8vw,28px)] font-me
 function Hero({ install }: { install: ReactNode }) {
   const copy = COPY.hero
   return (
-    <section aria-labelledby="hero" className={`${GRID} gap-y-12 pt-10 lg:items-start lg:pt-20`}>
+    <section aria-labelledby="hero" className={`${GRID} gap-y-12 pt-10 lg:items-start lg:pt-14`}>
       <div className="col-span-full flex flex-col gap-8 lg:col-span-5">
         {/* The sub-line names what Delorun is, so it is set as part of the statement rather than as a muted lead. */}
         <SectionHeading level={1} id="hero" title={copy.title} lead={<span className={SUBLINE}>{copy.subline}</span>} />

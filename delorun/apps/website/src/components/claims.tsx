@@ -10,12 +10,12 @@ import { GRID, SPACE } from './grid.ts'
 const CLASSES = {
   claims: 'col-span-full m-0 list-none border-b border-(--dl-border) p-0',
   // Below 640 px the number sits above its claim; from 640 px it takes a narrow column beside it, and from 1024 px the
-  // first grid column, so the claim starts at column 2.
+  // first grid column, with the headline on columns 2 to 7 and the second line beside it on 8 to 12.
   claim: 'group grid grid-cols-1 items-baseline gap-x-(--grid-gap) gap-y-1 border-t border-(--dl-border) py-(--dl-space-5) text-(--dl-text) no-underline focus-visible:rounded-(--dl-radius-xs) focus-visible:[outline:var(--dl-focus-ring)] focus-visible:[outline-offset:var(--dl-focus-ring-offset)] sm:grid-cols-[3rem_minmax(0,1fr)] lg:grid-cols-12',
   number: 'text-[clamp(18px,0.95rem_+_0.8vw,28px)] font-medium leading-[1.2] text-(--dl-text-muted) tabular-nums lg:col-span-1',
-  text: 'grid gap-1 lg:col-start-2 lg:col-end-11',
-  sentence: 'max-w-[40ch] text-[clamp(20px,0.95rem_+_0.9vw,28px)] font-medium leading-[1.2] tracking-[-0.02em] text-pretty underline decoration-transparent decoration-1 underline-offset-[0.18em] transition-[text-decoration-color] duration-(--dl-duration-quick) ease-(--dl-ease) group-focus-visible:decoration-current pointer-fine:group-hover:decoration-current',
-  detail: 'max-w-[60ch] text-[clamp(16px,0.95rem_+_0.25vw,18px)] leading-normal text-(--dl-text-muted) text-pretty',
+  text: 'grid gap-y-1 lg:col-start-2 lg:col-end-13 lg:grid-cols-subgrid lg:items-baseline',
+  sentence: 'max-w-[40ch] lg:col-span-6 lg:last:col-span-10 text-[clamp(20px,0.95rem_+_0.9vw,28px)] font-medium leading-[1.2] tracking-[-0.02em] text-pretty underline decoration-transparent decoration-1 underline-offset-[0.18em] transition-[text-decoration-color] duration-(--dl-duration-quick) ease-(--dl-ease) group-focus-visible:decoration-current pointer-fine:group-hover:decoration-current',
+  detail: 'max-w-[60ch] lg:col-span-5 text-[clamp(16px,0.95rem_+_0.25vw,18px)] leading-normal text-(--dl-text-muted) text-pretty',
 } as const
 
 /** One claim: a headline line, an optional second line, and the guide page that states it. */
