@@ -178,6 +178,12 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: the delegationConsent service is absent, so external providers start and describe themselves as upstream\'s do.' },
   },
   {
+    id: 'delorun-external-agents',
+    kind: 'added',
+    reason: 'The start gate of live external agents, the only path that starts Claude Code or Codex for a seat or a limits check, with the C16 switch `external_agent_limit_refusal` on: a reached plan limit with a reset time in the future refuses a start with a fixed sentence to the model; upstream has no gate, and the plugin\'s own default, off, is the parity value.',
+    parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: no externalAgents service exists, so no live agent starts and no limit refuses a one-shot run.' },
+  },
+  {
     id: 'delorun-plugin-changes',
     kind: 'added',
     reason: 'The C16 switch `plugin_changes_pending` on: an agent\'s `plugin_manager` install or removal does not run, it is recorded in the profile\'s change log as a pending change for the person\'s review, and the model reads that nothing was installed; the plugin\'s own default, off, is the parity value.',

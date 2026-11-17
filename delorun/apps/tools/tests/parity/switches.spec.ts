@@ -120,7 +120,7 @@ describe('the real tree', () => {
     // A row may be restated per profile; one switch is still one claim. The consent plugins and the update gate are
     // inserted rows, which carry their module as `name`.
     expect([...new Set(covered.map(({ id }) => id))].sort()).toEqual([
-      'approved_plugin_write_consent', 'external_agent_consent', 'fetch_guard', 'instruction_layer_consent', 'mcp_add_consent', 'one_time_launch_tokens', 'permission_defaults',
+      'approved_plugin_write_consent', 'external_agent_consent', 'external_agent_limit_refusal', 'fetch_guard', 'instruction_layer_consent', 'mcp_add_consent', 'one_time_launch_tokens', 'permission_defaults',
       'plugin_changes_pending', 'reach', 'rename_workspace_tool', 'scheduled_task_consent', 'studio_additions', 'tool_failure_guard', 'update_check', 'update_turn_refusal',
     ])
     for (const { id, value, declared } of covered) expect(value, id).toBe(declared)
@@ -494,7 +494,7 @@ describe('the parity overlay', () => {
     expect(overlayErrors(rows, PARITY_SWITCHES)).toEqual([])
     expect(rows).toEqual([{ id: 'tool-plugin-manager', name: '@deepseek-ai/dsh-plugin-manager/tools', config: { readActionsExempt: false, profileHistory: false } }])
     expect(Object.keys(DEFAULT_PARITY).sort()).toEqual([
-      'approved_plugin_write_consent', 'browser_additions', 'container_denial_marker', 'default_workspace_directory', 'doctor', 'external_agent_consent', 'fetch_guard', 'instruction_layer_consent',
+      'approved_plugin_write_consent', 'browser_additions', 'container_denial_marker', 'default_workspace_directory', 'doctor', 'external_agent_consent', 'external_agent_limit_refusal', 'fetch_guard', 'instruction_layer_consent',
       'main_chat', 'mcp_add_consent', 'one_time_launch_tokens', 'permission_defaults', 'plugin_changes_pending', 'preset_inspect', 'reach', 'rename_workspace_tool', 'sandbox_protected_reads',
       'scheduled_task_consent', 'studio_additions', 'tool_failure_guard', 'update_check', 'update_turn_refusal', 'use_my_browser',
     ])
@@ -534,6 +534,7 @@ describe('the parity overlay\'s mount of @delorun/bundle-local', () => {
       { id: 'delorun-plugin-authoring', name: '@delorun/skill-plugin-authoring', disabled: true },
       { id: 'delorun-report-problem', name: '@delorun/skill-report-problem', disabled: true },
       { id: 'delorun-delegation-consent', name: '@delorun/plugin-delegation-consent', config: { enabled: true }, disabled: true },
+      { id: 'delorun-external-agents', name: '@delorun/external-agents', config: { maxLivePrograms: 4, graceMs: 3000, probeMinIntervalMinutes: 30, limitRefusal: true }, disabled: true },
       { id: 'delorun-plugin-changes', name: '@delorun/plugin-changes', config: { enabled: true, installationBundles: CHANGES_BUNDLES }, disabled: true },
       { id: 'delorun-packs', name: '@delorun/plugin-packs', config: { concurrency: 2 }, disabled: true },
       { id: 'delorun-workspace-rename', name: '@delorun/bundle-local/workspace-rename', config: { enabled: true }, disabled: true },
@@ -594,6 +595,7 @@ describe('the parity overlay\'s mount of @delorun/bundle-local', () => {
           { id: 'delorun-plugin-authoring', name: '@delorun/skill-plugin-authoring', disabled: true },
           { id: 'delorun-report-problem', name: '@delorun/skill-report-problem', disabled: true },
           { id: 'delorun-delegation-consent', name: '@delorun/plugin-delegation-consent', config: { enabled: true }, disabled: true },
+          { id: 'delorun-external-agents', name: '@delorun/external-agents', config: { maxLivePrograms: 4, graceMs: 3000, probeMinIntervalMinutes: 30, limitRefusal: true }, disabled: true },
           { id: 'delorun-plugin-changes', name: '@delorun/plugin-changes', config: { enabled: true, installationBundles: CHANGES_BUNDLES }, disabled: true },
           { id: 'delorun-packs', name: '@delorun/plugin-packs', config: { concurrency: 2 }, disabled: true },
           { id: 'delorun-workspace-rename', name: '@delorun/bundle-local/workspace-rename', config: { enabled: true }, disabled: true },

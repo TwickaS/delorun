@@ -1,0 +1,18 @@
+# C16 switch external_agent_limit_refusal on: the externalAgents gate is
+# mounted with limitRefusal on, so while the agent's recorded plan limit is
+# reached and its reset time is in the future, a live start and a one-shot
+# external run are refused with one fixed sentence to the model naming the
+# agent, the window and the reset time. Without this row no gate is mounted
+# and no limit refuses a run.
+- insert:
+    - id: delorun-delegation-consent
+      name: '@delorun/plugin-delegation-consent'
+      config:
+        enabled: true
+    - id: delorun-external-agents
+      name: '@delorun/external-agents'
+      config:
+        maxLivePrograms: 4
+        graceMs: 3000
+        probeMinIntervalMinutes: 30
+        limitRefusal: true
