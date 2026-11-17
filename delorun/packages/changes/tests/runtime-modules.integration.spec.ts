@@ -65,6 +65,14 @@ describe('a linked folder with npm-installed packages', () => {
     expect((await storeFolder(temporaryDirectory('delorun-changes-home-'), folder)).skipped).toEqual(expected)
   })
 
+  it('names the first 25 left-out packages and counts the rest', async () => {
+    const folder = npmFolder()
+    for (let index = 0; index < 30; index++) writeFiles(folder, installed(`node_modules/extra-${String(index).padStart(2, '0')}`, { name: `extra-${String(index).padStart(2, '0')}` }))
+    const { skipped } = await scan(folder)
+    expect(skipped).toHaveLength(26)
+    expect(skipped[0]).toBe('node_modules (and 7 more packages left out)')
+  })
+
   it('copies the dependencies of a package an npm workspace links from inside the folder', async () => {
     const folder = temporaryDirectory('delorun-changes-npm-')
     writeFiles(folder, {

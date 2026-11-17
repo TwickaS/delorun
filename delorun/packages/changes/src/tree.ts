@@ -741,8 +741,8 @@ async function installedAt(root: string, from: string, name: string): Promise<st
  * the folder's `package.json` names in {@link DEPENDENCY_FIELDS} and, repeatedly, those each of them names, each found
  * where Node finds it, including npm's hoisted layout. A folder without a readable `package.json` keeps every package.
  * Development packages and the packages only they need stay out, as does each included package's own `node_modules`
- * directory, whose packages the closure reaches by name. Every top-level installed package not reached is listed among
- * the skipped paths, so the review shows what the copy leaves out.
+ * directory, whose packages the closure reaches by name. The top-level installed packages not reached are listed among
+ * the skipped paths, the first 25 by name and the rest as a count, so the review shows what the copy leaves out.
  * @param walk - the scan.
  * @param root - the folder's real path.
  */
@@ -766,10 +766,13 @@ async function addRuntimeModules(walk: Walk, root: string): Promise<void> {
     await walkDirectory(walk, root, installed, path, true)
     queue.push(...(await dependencyNames(installed)).map((name) => ({ from: installed, name })))
   }
-  for (const name of await installedNames(join(root, DEPENDENCY_DIRECTORY))) {
-    if (!reached.has(join(root, DEPENDENCY_DIRECTORY, ...name.split('/')))) walk.skipped.push(`${DEPENDENCY_DIRECTORY}/${name}`)
-  }
+  const left = (await installedNames(join(root, DEPENDENCY_DIRECTORY))).filter((name) => !reached.has(join(root, DEPENDENCY_DIRECTORY, ...name.split('/'))))
+  for (const name of left.slice(0, LEFT_OUT_LISTED)) walk.skipped.push(`${DEPENDENCY_DIRECTORY}/${name}`)
+  if (left.length > LEFT_OUT_LISTED) walk.skipped.push(`${DEPENDENCY_DIRECTORY} (and ${String(left.length - LEFT_OUT_LISTED)} more packages left out)`)
 }
+
+/** The most left-out installed packages a scan names one by one; the rest are counted in one entry. */
+const LEFT_OUT_LISTED = 25
 
 /**
  * @param modules - a folder's top-level `node_modules` directory.
