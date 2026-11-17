@@ -136,6 +136,9 @@ describe('the browse row', () => {
     expect(reviewed).toHaveLength(2)
     const [one, two] = reviewed.map(({ command, args, cwd, env }) => ({ command, args, cwd, env }))
     expect(two).toEqual(one)
+    // Pins the fixed folder: browse runs in the Harness home's browser-use/browse folder, never in a chat's folder.
+    expect(one?.cwd.endsWith(join('browser-use', 'browse'))).toBe(true)
+    expect([root, elsewhere]).not.toContain(one?.cwd)
     // Pins the blanking of a variable set after load: the client reads the Host's environment at each start.
     expect(one?.env['OPENCODE_BROWSER_ALLOW_ALL_COOKIES']).toBe('')
   })
