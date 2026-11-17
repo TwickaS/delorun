@@ -619,8 +619,10 @@ class GateSession implements SeatSession {
     if (mode === 'start') this.arm()
   }
 
-  interrupt(): Promise<ProgramInterruptOutcome> {
-    return this.inner.interrupt()
+  async interrupt(): Promise<ProgramInterruptOutcome> {
+    // A stopped turn has no time limit left to enforce; the timer must not fire on the idle program afterwards.
+    this.disarm()
+    return await this.inner.interrupt()
   }
 
   async next(signal: AbortSignal): Promise<ProgramEvent> {
@@ -658,6 +660,8 @@ class GateSession implements SeatSession {
       this.timedOut = true
       void this.expire()
     }, limit)
+    // The limit never holds the Host's process open on its own.
+    this.timer.unref()
   }
 
   /** Stop the turn's time limit. */

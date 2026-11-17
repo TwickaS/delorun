@@ -569,6 +569,17 @@ describe('each seat turn', () => {
     expect(w.driver.processes[0]?.terminated).toBe(false)
   })
 
+  it('stops the turn\'s time limit when the person stops the turn, so it never fires on the idle program', async () => {
+    const w = await world()
+    w.consent.verdict = () => ({ kind: 'allow', timeoutMs: 20, why: 'asked' })
+    const session = await w.gate.start(start(w))
+    await session.send('work', 'start')
+    await session.interrupt()
+    await new Promise(resolve => setTimeout(resolve, 120))
+    expect(await session.next(new AbortController().signal)).toEqual({ kind: 'turn-end', outcome: 'interrupted' })
+    expect(w.driver.processes[0]?.terminated).toBe(false)
+  })
+
   it('ends the program after the grace period when the interrupt does not end the turn', async () => {
     const w = await world()
     w.consent.verdict = () => ({ kind: 'allow', timeoutMs: 20, why: 'asked' })
