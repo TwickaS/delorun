@@ -2868,25 +2868,7 @@
       "path": "packages/subagent/subagent/src/archive-admission.ts",
       "class": "security",
       "reason": "Lists external runs beneath an archived Session as subagent activity and stops them with it; local-child handling is unchanged.",
-      "sha256": "84d2f1c724792aa2d03b9f04a606ecee40b3d117dde2a243edf2069a4677f53d",
-      "nonModelVisibleHunks": [
-        {
-          "sha256": "395a9b05acacaf625a3f4eb5bf862f39c34fd96531f7a2802f49f06c7df2be26",
-          "reason": "Adds the externalRunsOf parameter for the activity and stop listeners; the agent/pre-step listener that blocks steps beneath archived ancestors is unchanged"
-        },
-        {
-          "sha256": "87acf667b526f12fb79eec98f9149dc364e88e9c807cb8fd6274b04ceffb3016",
-          "reason": "Lists external runs beside the running subagents in workspace/session-activity; the activity answer goes to the Workspace registry, and the agent/pre-step listener is unchanged"
-        },
-        {
-          "sha256": "0bb9abf6c4481f5d5ed4327bfadf43ab7f926b0465bd1d8d38da62bc1d3eebc1",
-          "reason": "Builds the subagent activity item from the running subagents and the external runs for workspace/session-activity; the agent/pre-step listener is unchanged"
-        },
-        {
-          "sha256": "4bb3c305000bfbe164b6e28b3e85eba13b089e25cbc0a5c0acb4bff94bc080ca",
-          "reason": "Stops the external runs beneath an archived Session in workspace/session-stop; the agent/pre-step listener is unchanged"
-        }
-      ]
+      "sha256": "4bad2d7aba3c158abb6bca91c78334cadfd72b91179a48e51695f59bfac8c887"
     },
     {
       "path": "packages/subagent/subagent/src/manager.ts",
