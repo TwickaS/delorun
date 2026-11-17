@@ -10,6 +10,7 @@
     "src/index.ts",
     "src/boot-settings.ts",
     "src/config.ts",
+    "src/settings.ts",
     "src/icon-upload.ts",
     "src/palette/color.ts",
     "src/palette/generate.ts",
