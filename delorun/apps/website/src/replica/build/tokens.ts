@@ -21,7 +21,6 @@ import { STOCK_TOKENS } from '../../../../../packages/plugin-theme/src/palette/s
 import { LOOKS, selector, type Look } from '../../../../../packages/site-design/scripts/looks.ts'
 import { WRAPPER } from '../wrapper.ts'
 
-
 type Values = Record<string, string>
 
 /** Where the block's inputs are, as absolute paths. */
@@ -32,6 +31,20 @@ export interface TokenInputs {
   readonly upstreamStyles: string
   /** The brand's `tokens.css`. */
   readonly brandTokens: string
+}
+
+/**
+ * The block's inputs in this repository.
+ * @param root - the repository's root, ending in `/`.
+ * @param replica - the replica's own directory, `apps/website/src/replica/`.
+ * @returns the inputs.
+ */
+export function tokenInputs(root: string, replica: string): TokenInputs {
+  return {
+    stylesheets: [`${root}packages/client/ui-primitives/src`, `${root}packages/client/ui-approval/src`, `${root}delorun/packages/plugin-changes/src`, `${root}delorun/packages/bundle-local/src/client`, `${root}delorun/packages/brand/src`, replica],
+    upstreamStyles: `${root}packages/client/ui-theme/src/styles`,
+    brandTokens: `${root}delorun/packages/brand/src/tokens.css`,
+  }
 }
 
 /**

@@ -21,7 +21,7 @@ import { VOCABULARY } from '../../../../../packages/plugin-theme/src/client/voca
 import { REPLICA_ICONS } from '../studio/icon-list.ts'
 import { STUDIO_COMPONENTS } from '../studio/components.ts'
 import { pickStrings, STRING_SOURCES, type DictionaryModule, type StringSource } from '../strings.ts'
-import { buildTokens } from './tokens.ts'
+import { buildTokens, tokenInputs } from './tokens.ts'
 
 /** The plugins' options. */
 export interface ReplicaBuildOptions {
@@ -120,11 +120,7 @@ export function replicaPlugins(options: ReplicaBuildOptions): Plugin[] {
       switch (id) {
         case '\0virtual:replica-strings': return (await productModules()).strings
         case '\0virtual:replica-icons': return (await productModules()).icons
-        case '\0virtual:replica-tokens.css': return buildTokens({
-          stylesheets: [`${ROOT}packages/client/ui-primitives/src`, `${ROOT}packages/client/ui-approval/src`, `${ROOT}delorun/packages/plugin-changes/src`, `${ROOT}delorun/packages/bundle-local/src/client`, `${ROOT}delorun/packages/brand/src`, here('../')],
-          upstreamStyles: `${ROOT}packages/client/ui-theme/src/styles`,
-          brandTokens: `${ROOT}delorun/packages/brand/src/tokens.css`,
-        })
+        case '\0virtual:replica-tokens.css': return buildTokens(tokenInputs(ROOT, here('../')))
         case '\0virtual:replica-studio': return STUDIO_COMPONENTS.map(component => `export { ${component.name} } from ${JSON.stringify(specifierOf(component.file))}\n`).join('')
         default: return undefined
       }
