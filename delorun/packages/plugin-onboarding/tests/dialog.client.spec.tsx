@@ -566,6 +566,10 @@ describe('finishing later and the last step', () => {
       await click(button(action === 'skip' ? en['reach.notNow'] : en['reach.done']))
       await settle()
       await forward(1)
+      // A computer reached from the phone adds the PIN and Workspace steps before Ready.
+      for (const between of [en['step.pin'], en['step.workspace']]) {
+        if (heading().textContent === between) await forward(1)
+      }
       expect(heading().textContent).toBe(en['step.ready'])
       const term = [...document.querySelectorAll('dt')].find(each => each.textContent === 'Phone access')
       expect(term?.nextElementSibling?.textContent).toBe(summary)
