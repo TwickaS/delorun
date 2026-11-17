@@ -1,0 +1,23 @@
+---
+description: "让智能体通过 Playwright，在这台电脑上的 Chromium 浏览器中打开页面、点击和阅读。"
+---
+
+# @delorun/bundle-browser
+
+[English](README.md) | 中文
+
+> 英文页面是当前版本；本页可能落后于它。
+
+## 摘要
+
+在“插件”中开启 **浏览器**，即可让智能体在这台电脑上的真实 Chromium 浏览器中浏览。它使用 Playwright 提供方，并启动由它自己管理的无头浏览器。
+
+同一时间只能开启一个浏览器提供方。若要改用 Chrome DevTools，请关闭 `browser-use-playwright-mcp` 行，并在你 profile 的 `cordis.patch.yml` 中开启 `browser-use-chrome-devtools-mcp` 行。Stagehand 需要它自己的模型（`model.modelName` 和 `model.apiKey`），所以在你配置之前它的行保持关闭。
+
+需要提供方能启动的 Chromium 浏览器。它是实验性的。
+
+## 需要设置
+
+- Stagehand 在你给它一个模型之前保持关闭；Playwright 提供方需要这台电脑上有 Chromium 浏览器。
+
+此 bundle 在新 profile 中是关闭的。[`@delorun/bundle-local`](../bundle-local/README.zh.md) 没有列出它；用户在“插件”中开启它，发行版把它作为可选包提供，而不是放进默认安装。

@@ -62,6 +62,9 @@ export function AddableCard({ services, state, reason, title, icon, description,
     case 'installing':
       line = <StateLine tone="loading">{t('bundle.adding')}</StateLine>
       break
+    case 'offline':
+      line = <StateLine tone="info">{t('bundle.offline')}</StateLine>
+      break
     case 'slow':
       line = <StateLine tone="loading">{t('bundle.slow')}</StateLine>
       break

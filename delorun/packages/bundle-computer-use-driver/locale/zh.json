@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "计算机使用（Cua Driver）",
+    "description": "通过 Cua Driver SDK 让智能体在 Linux 和 Windows 上查看并操作桌面窗口。macOS 请使用“计算机使用”"
+  }
+}

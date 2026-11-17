@@ -45,14 +45,14 @@ function recorded(ran: string[], migrated: PreStartContext[]): PreStartStep[] {
 }
 
 describe('the pre-start steps', () => {
-  it('run in one order: the import recovery, the restore recovery, the data-format record, the migrations, Changes, the plugin change check, then the update notice', () => {
-    expect(preStartSteps({ migrations: () => [], pluginChanges: () => Promise.resolve() }).map(step => step.name)).toEqual(['stock-import-recovery', 'data-copy-recovery', 'data-format-record', 'profile-migrations', 'changes', 'plugin-changes', 'update-notice'])
+  it('run in one order: the import recovery, the restore recovery, the data-format record, the migrations, the missing packs, Changes, the plugin change check, then the update notice', () => {
+    expect(preStartSteps({ migrations: () => [], pluginChanges: () => Promise.resolve() }).map(step => step.name)).toEqual(['stock-import-recovery', 'data-copy-recovery', 'data-format-record', 'profile-migrations', 'profile-packs', 'changes', 'plugin-changes', 'update-notice'])
   })
 
   it('run every step for the CLI profile, and all but the restore recovery for delorun headless', async () => {
     const cli: string[] = []
     await runPreStartSteps(recorded(cli, []), context('cli'))
-    expect(cli).toEqual(['stock-import-recovery', 'data-copy-recovery', 'data-format-record', 'profile-migrations', 'changes', 'plugin-changes', 'update-notice'])
+    expect(cli).toEqual(['stock-import-recovery', 'data-copy-recovery', 'data-format-record', 'profile-migrations', 'profile-packs', 'changes', 'plugin-changes', 'update-notice'])
     const headless: string[] = []
     await runPreStartSteps(recorded(headless, []), context('headless'))
     expect(headless).toEqual(['stock-import-recovery', 'data-format-record', 'profile-migrations', 'changes', 'plugin-changes', 'update-notice'])

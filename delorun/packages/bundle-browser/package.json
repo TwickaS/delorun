@@ -1,0 +1,58 @@
+{
+  "name": "@delorun/bundle-browser",
+  "description": "Browser as an optional bundle: lets the agent open pages, click and read in a Chromium browser on this computer, through Playwright. Off until the person turns it on",
+  "version": "0.1.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "cordis.patch.yml",
+    "locale/*.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-browser-use": "workspace:*",
+    "@deepseek-ai/dsh-experimental-browser-use-chrome-devtools-mcp": "workspace:*",
+    "@deepseek-ai/dsh-experimental-browser-use-playwright-mcp": "workspace:*",
+    "@deepseek-ai/dsh-experimental-browser-use-stagehand-native": "workspace:*"
+  },
+  "delorun": {
+    "state": "experimental",
+    "pack": true,
+    "requires": {
+      "browser-use-playwright-mcp": {
+        "needs": [
+          {
+            "kind": "program",
+            "names": [
+              "google-chrome",
+              "google-chrome-stable",
+              "chromium",
+              "chromium-browser",
+              "chrome"
+            ],
+            "paths": [
+              "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+              "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+              "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe"
+            ],
+            "label": "Chrome or Chromium"
+          }
+        ],
+        "fix": {
+          "kind": "docs",
+          "url": "https://www.google.com/chrome/"
+        }
+      }
+    }
+  }
+}

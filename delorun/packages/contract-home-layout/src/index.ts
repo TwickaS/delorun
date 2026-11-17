@@ -159,6 +159,8 @@ export const DELORUN_HOME_ENTRIES = {
   runtimes: 'runtimes',
   /** Runtime installs in progress, outside the store on the same filesystem. */
   staging: 'staging',
+  /** Plugin packs, verified and unpacked per release: `packs/<release>/<pack>/` (C1, C2). */
+  packs: 'packs',
   /** The verified release root, timestamp and log checkpoint (C2, C18). */
   trust: 'trust',
   /** Each installation's update status record (C3). */
