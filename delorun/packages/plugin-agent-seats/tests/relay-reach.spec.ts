@@ -81,6 +81,14 @@ describe('the real reach guard on a seat question', () => {
     expect(() => { check(coded, 'rejected') }).not.toThrow()
   })
 
+  it('refuses a device that holds only the approval grace, with dangerous mode off', async () => {
+    const grace = await phone(5)
+    vi.spyOn(ctx.homeAuth, 'elevationOf').mockImplementation(() => ({ id: 'grace-1', grace: true }) as never)
+    expect(ctx.homeAuth.dangerousMode()).toBe(false)
+    expect(() => { check(grace, RUN_ANSWER) }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
+    expect(() => { check(grace, 'allowed-once') }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
+  })
+
   it('accepts a for-run answer from an unlocked PIN page', async () => {
     const page = await phone(4)
     const reach = provider()['reachPeers'].get(page.id as never)

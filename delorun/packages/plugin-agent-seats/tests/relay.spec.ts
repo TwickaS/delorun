@@ -47,6 +47,8 @@ interface World {
   readonly root: Agent
   readonly child: Agent
   readonly waiting: Waiting[]
+  readonly openTurns: Set<string>
+  readonly sandbox: Map<string, string>
   readonly recorded: Map<string, () => void>
   readonly seats: Map<string, SeatRecord>
   readonly descriptors: Map<string, string>
@@ -85,7 +87,10 @@ async function world(rootPolicy: 'ask' | 'never' = 'ask', mountListener = true):
   const descriptors = new Map<string, string>([[child.id, 'agent-seat']])
   const agents = new Map<string, Agent>([[root.id, root], [child.id, child]])
   ctx.provide('externalAgents', { seat: (id: SessionId) => seats.get(id) } as never)
-  ctx.provide('agents', { get: (id: string) => agents.get(id) } as never)
+  const openTurns = new Set<string>([root.id, child.id])
+  const sandbox = new Map<string, string>([[root.id, rootPolicy === 'never' ? 'danger-full-access' : 'workspace-write']])
+  ctx.provide('agents', { get: (id: string) => agents.get(id), turnBoundaryOf: (session: { id: string }) => ({ openTurnStartSeq: openTurns.has(session.id) ? 1 : null }) } as never)
+  ctx.provide('sandboxPolicy', { resolve: ({ session }: { session: { id: string } }) => ({ mode: sandbox.get(session.id) ?? 'workspace-write' }) } as never)
   const recorded = new Map<string, () => void>()
   const options: SeatRelayOptions = {
     seatProviders: new Set(['agent-seat']),
@@ -106,7 +111,7 @@ async function world(rootPolicy: 'ask' | 'never' = 'ask', mountListener = true):
     return (log.get(agent.id) ?? []).filter(event => event.type === type).map(event => ({ ...event.data }))
   }
   return {
-    ctx, relay, root, child, waiting, recorded, seats, descriptors, events,
+    ctx, relay, root, child, waiting, openTurns, sandbox, recorded, seats, descriptors, events,
     answer(peer, value, which = waiting.length - 1) {
       const entry = waiting[which]
       if (entry === undefined) throw new Error('no question is pending')
@@ -245,6 +250,28 @@ describe('Full access', () => {
     expect(w.events(w.child, 'approval/decided')).toMatchObject([{ outcome: 'rejected' }])
   })
 
+  it('rejects with the decision logged when the policy is never but the sandbox is not danger-full-access', async () => {
+    const w = await world('never')
+    w.sandbox.set(w.root.id, 'workspace-write')
+    w.relay.prepareChild(w.child)
+    await expect(w.relay.onApproval(w.child, new AbortController().signal)(question())).resolves.toBe('reject')
+    expect(w.waiting).toHaveLength(0)
+    expect(w.events(w.child, 'approval/decided')).toMatchObject([{ outcome: 'rejected' }])
+  })
+
+  it('allows a later question without a card when the root enters Full access mid-run', async () => {
+    const w = await world('ask')
+    w.relay.prepareChild(w.child)
+    const first = w.relay.onApproval(w.child, new AbortController().signal)(question())
+    await settle()
+    w.answer('computer', 'rejected')
+    await first
+    setApprovalPolicy(w.root.session, 'never')
+    w.sandbox.set(w.root.id, 'danger-full-access')
+    await expect(w.relay.onApproval(w.child, new AbortController().signal)(question({ callId: 'call-2' }))).resolves.toBe('allow-once')
+    expect(w.waiting).toHaveLength(1)
+  })
+
   it('asks as usual after the root leaves Full access', async () => {
     const w = await world('never')
     w.relay.prepareChild(w.child)
@@ -268,7 +295,13 @@ describe('Full access', () => {
 })
 
 describe('ending a question', () => {
-  it('answers cancel at stop, when the program withdraws it and at the end of the turn, and clears the waiting state', async () => {
+  /** Stop the seat turn as the loop does at its stop boundary, before `turn/end` is written. */
+  async function stopTurn(w: World): Promise<void> {
+    await w.ctx.serial('agent/turn-stopping', { agent: w.child, turn: 1, signal: new AbortController().signal })
+    w.child.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+  }
+
+  it('answers cancel at stop and when the program withdraws it, and clears the waiting state', async () => {
     const w = await world()
     w.relay.prepareChild(w.child)
     const changes: boolean[] = []
@@ -284,12 +317,69 @@ describe('ending a question', () => {
     await settle()
     withdrawn.abort()
     await expect(second).resolves.toBe('cancel')
-    const third = w.relay.onApproval(w.child, new AbortController().signal)(question({ callId: 'call-3' }))
+    expect(w.relay.pendingOf(w.child.id)).toBe(false)
+    expect(changes).toEqual([true, false, true, false])
+  })
+
+  it('logs the cancelled decision before the turn ends, from the stop boundary', async () => {
+    const w = await world()
+    w.relay.prepareChild(w.child)
+    const types: string[] = []
+    w.ctx.on('session/event', (session, event) => { if (session === w.child.session && (event.type === 'approval/decided' || event.type === 'turn/end')) types.push(event.type) })
+    const result = w.relay.onApproval(w.child, new AbortController().signal)(question())
+    await settle()
+    await stopTurn(w)
+    await expect(result).resolves.toBe('cancel')
+    expect(types).toEqual(['approval/decided', 'turn/end'])
+    expect(w.events(w.child, 'approval/decided')).toMatchObject([{ outcome: 'cancelled' }])
+  })
+
+  it('cancels at a bare turn end with a warning when no stop boundary came', async () => {
+    const w = await world()
+    w.relay.prepareChild(w.child)
+    const result = w.relay.onApproval(w.child, new AbortController().signal)(question())
     await settle()
     w.child.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
-    await expect(third).resolves.toBe('cancel')
+    await expect(result).resolves.toBe('cancel')
     expect(w.relay.pendingOf(w.child.id)).toBe(false)
-    expect(changes).toEqual([true, false, true, false, true, false])
+  })
+
+  it('stops a wait for a record that never comes', async () => {
+    const w = await world()
+    w.relay.prepareChild(w.child)
+    const never = new SeatRelay(w.ctx, {
+      seatProviders: new Set(['agent-seat']), descriptorOf: () => 'agent-seat', recordName: (_a, name) => name, recorded: () => new Promise<void>(() => {}),
+    })
+    const stop = new AbortController()
+    const result = never.onApproval(w.child, stop.signal)(question())
+    await settle()
+    expect(never.pendingOf(w.child.id)).toBe(true)
+    stop.abort()
+    await expect(result).resolves.toBe('cancel')
+    expect(never.pendingOf(w.child.id)).toBe(false)
+  })
+
+  it('cancels when the seat is gone by the time the call is recorded', async () => {
+    const w = await world()
+    w.relay.prepareChild(w.child)
+    let release: () => void = () => {}
+    const held = new SeatRelay(w.ctx, {
+      seatProviders: new Set(['agent-seat']), descriptorOf: () => 'agent-seat', recordName: (_a, name) => name, recorded: () => new Promise<void>((resolve) => { release = resolve }),
+    })
+    const result = held.onApproval(w.child, new AbortController().signal)(question())
+    await settle()
+    w.seats.delete(w.child.id)
+    release()
+    await expect(result).resolves.toBe('cancel')
+    expect(w.waiting).toHaveLength(0)
+  })
+
+  it('answers cancel, not reject, for a question between turns', async () => {
+    const w = await world()
+    w.relay.prepareChild(w.child)
+    w.openTurns.delete(w.child.id)
+    await expect(w.relay.onApproval(w.child, new AbortController().signal)(question())).resolves.toBe('cancel')
+    expect(w.waiting).toHaveLength(0)
   })
 })
 

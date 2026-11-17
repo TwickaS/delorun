@@ -6,6 +6,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import { ToolCallId } from '@deepseek-ai/dsh-llm/brand'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { setApprovalPolicy, type ApprovalOutcome, type ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
@@ -49,6 +50,9 @@ export type PrepareResult = 'lifted' | 'not-a-seat'
 
 interface Pending {
   readonly controller: AbortController
+  /** Settles once the question's decision is logged and released. */
+  readonly settled: Promise<void>
+  readonly finish: () => void
 }
 
 /** The relay for all seats of one home. */
@@ -63,8 +67,17 @@ export class SeatRelay {
    */
   constructor(private readonly ctx: Context, private readonly options: SeatRelayOptions, private readonly scope = new RunScope()) {
     ctx.effect(() => this.scope.mount(ctx), 'agent seats: the relay\'s approval listener')
+    // The stop boundary comes before `turn/end` is written, so the cancelled decision lands inside the turn.
+    ctx.on('agent/turn-stopping', async ({ agent }) => {
+      const entries = [...this.pending.get(agent.id) ?? []]
+      this.abortAll(agent.id)
+      await Promise.all(entries.map(entry => entry.settled))
+    })
+    // Backstop for a turn that ended without a stop boundary: its question can no longer be decided in the turn.
     ctx.on('session/event', (session, event) => {
-      if (event.type === 'turn/end') this.abortAll(session.id)
+      if (event.type !== 'turn/end' || !this.pendingOf(session.id)) return
+      ctx.logger('agent-seats').warn('a seat turn ended with a question pending; it is cancelled')
+      this.abortAll(session.id)
     })
     ctx.effect(() => () => { for (const child of [...this.pending.keys()]) this.abortAll(child) }, 'agent seats: the relay\'s pending questions')
   }
@@ -125,12 +138,17 @@ export class SeatRelay {
     if (!this.isSeat(child)) return 'reject'
     const approval = this.ctx.get('approval')
     if (approval === undefined) return 'reject'
-    const entry: Pending = { controller: new AbortController() }
+    let finish: () => void = () => {}
+    const settled = new Promise<void>((resolve) => { finish = resolve })
+    const entry: Pending = { controller: new AbortController(), settled, finish }
     const signal = AbortSignal.any([request.signal, startSignal, entry.controller.signal])
     this.hold(child.id, entry)
     try {
-      await this.options.recorded(child, request.callId, signal)
+      await untilOrAborted(this.options.recorded(child, request.callId, signal), signal)
       if (signal.aborted) return 'cancel'
+      // The hold can outlast the seat or the turn.
+      if (!this.isSeat(child)) return 'cancel'
+      if (this.ctx.get('agents')?.turnBoundaryOf(child.session).openTurnStartSeq === null) return 'cancel'
       const full = this.rootIsFullAccess(child)
       const built: ApprovalRequest = {
         agent: child,
@@ -153,6 +171,7 @@ export class SeatRelay {
       return 'reject'
     } finally {
       this.release(child.id, entry)
+      entry.finish()
     }
   }
 
@@ -179,7 +198,9 @@ export class SeatRelay {
     const approval = this.ctx.get('approval')
     if (rootAgent === undefined || approval === undefined) return undefined
     if ((approval.overrideOf(rootAgent.session) ?? approval.config.policy) !== 'never') return undefined
-    return this.fullAccessStartsAgents() ? 'allowed-once' : 'rejected'
+    // Full access is a `never` policy on the `danger-full-access` sandbox together; `never` alone only refuses.
+    const sandbox = this.ctx.get('sandboxPolicy')?.resolve({ session: rootAgent.session }).mode
+    return sandbox === 'danger-full-access' && this.fullAccessStartsAgents() ? 'allowed-once' : 'rejected'
   }
 
   /**
@@ -209,6 +230,22 @@ export class SeatRelay {
 
   private abortAll(child: SessionId): void {
     for (const entry of this.pending.get(child) ?? []) entry.controller.abort(new Error('the seat turn ended'))
+  }
+}
+
+/**
+ * Wait for a promise, or for the signal to abort, whichever comes first.
+ * @param work - the work awaited.
+ * @param signal - ends the wait.
+ */
+async function untilOrAborted(work: Promise<void>, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return
+  let onAbort: () => void = () => {}
+  const aborted = new Promise<void>((resolve) => { onAbort = resolve; signal.addEventListener('abort', onAbort, { once: true }) })
+  try {
+    await Promise.race([work, aborted])
+  } finally {
+    signal.removeEventListener('abort', onAbort)
   }
 }
 
