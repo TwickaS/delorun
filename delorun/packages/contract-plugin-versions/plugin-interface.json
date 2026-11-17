@@ -27,6 +27,10 @@
     { "kind": "service", "name": "mcpReviews", "side": "host", "source": "delorun/packages/plugin-mcp-consent/src/review.ts" },
     { "kind": "service", "name": "permissionDefaults", "side": "host", "source": "delorun/packages/plugin-permission-defaults/src/index.ts" },
     { "kind": "service", "name": "delorunCommandNetwork", "side": "host", "source": "delorun/packages/plugin-permission-defaults/src/command-network.ts" },
-    { "kind": "service", "name": "settingsPluginGroups", "side": "browser", "source": "delorun/packages/plugin-settings-layout/src/client/index.ts" }
+    { "kind": "service", "name": "settingsPluginGroups", "side": "browser", "source": "delorun/packages/plugin-settings-layout/src/client/index.ts" },
+    { "kind": "service", "name": "realBrowser", "side": "host", "source": "delorun/packages/browser-use-browse/src/index.ts" },
+    { "kind": "service", "name": "delorunFullAccess", "side": "browser", "source": "delorun/packages/bundle-local/src/client/full-access.ts" },
+    { "kind": "service", "name": "delorunNewWorkspace", "side": "browser", "source": "delorun/packages/plugin-new-workspace/src/client/index.ts" },
+    { "kind": "service", "name": "previewFlags", "side": "host", "source": "delorun/packages/preview-flags/src/index.ts" }
   ]
 }

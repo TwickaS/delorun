@@ -78,6 +78,8 @@ const NOT_THE_HOME: Readonly<Record<string, string>> = {
   'apps/cli/src/import-home/index.ts: UPSTREAM_HOME_DIR_NAME': 'the person\'s OS home: the stock DeepSeek Harness home ~/.dsh, which the import reads',
   'apps/tools/src/checks/shared-cache.ts: \'.cache\'': 'the OS home of a developer machine: the check runner\'s shared cache',
   'packages/archive/src/dsh-import/profiles.ts: \'profile\'': 'a scratch directory under the system\'s temporary directory',
+  'packages/bundle-local/src/requirements.ts: \'.local\'': 'the person\'s OS home: browse\'s data folder .local/share/browse, where the Needs setup check reads browsers.json (paired browsers\' ids and names) and nothing else',
+  'packages/plugin-new-workspace/src/location.ts: place.slice': 'the person\'s OS home: a configured workspace root or suggested place written ~/…, where the new-workspace flow lists, searches and makes folders; placeProblem refuses the Delorun and stock homes',
   'packages/plugin-onboarding/src/readiness.ts: \'.claude\'': 'the person\'s OS home: Claude Code\'s sign-in file, whose existence onboarding checks without opening it',
   'packages/plugin-onboarding/src/readiness.ts: \'.claude.json\'': 'the person\'s OS home: Claude Code\'s settings file on macOS, whose existence onboarding checks without opening it',
   'packages/plugin-onboarding/src/readiness.ts: \'.codex\'': 'the person\'s OS home: Codex\'s home, where onboarding checks whether auth.json exists without opening it',
