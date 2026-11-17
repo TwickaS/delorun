@@ -46,7 +46,7 @@ describe('the providers landing', () => {
     expect(screen.getAllByRole('checkbox').map(box => [box.closest('li')?.querySelector('h4')?.textContent, (box as HTMLInputElement).checked])).toEqual([
       ['DeepSeek', true], ['OpenAI', false], ['Gateway', false], ['Typesafe', false], [en['providers.custom.name'], false],
     ])
-    expect(screen.getByText(en['providers.found'])).toBeTruthy()
+    expect(screen.getByText(en['providers.connected'])).toBeTruthy()
     // Every ticked provider has its key, so the primary goes straight on.
     expect(screen.getByRole('button', { name: en.continue })).toBeTruthy()
     expect(screen.queryByRole('button', { name: en['providers.connect'] })).toBeNull()
@@ -440,5 +440,17 @@ describe('a key Delorun already has', () => {
     expect(screen.getByText(en['providers.found'])).toBeTruthy()
     await click(screen.getByRole('button', { name: en['providers.next'] }))
     expect(save).not.toHaveBeenCalled()
+  })
+
+  it('replaces a found key from the landing, then returns to the landing without a summary', async () => {
+    const { save } = await mount({}, found({ kind: 'environment', variable: 'DEEPSEEK_API_KEY' }))
+    expect(screen.getByText('Connected · from DEEPSEEK_API_KEY in the environment Delorun started with')).toBeTruthy()
+    await click(screen.getByRole('button', { name: en['providers.replace'] }))
+    await type(screen.getByLabelText(en['providers.key']), 'sk-new-key')
+    await flush(TEST_DELAY_MS)
+    await click(screen.getByRole('button', { name: en['providers.next'] }))
+    expect(save).toHaveBeenCalledWith(expect.anything(), 'sk-new-key', undefined)
+    expect(screen.queryByText(en['providers.summary.lead'])).toBeNull()
+    expect(screen.getByRole('button', { name: en.continue })).toBeTruthy()
   })
 })

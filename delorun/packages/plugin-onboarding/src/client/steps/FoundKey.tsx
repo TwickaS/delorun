@@ -18,6 +18,17 @@ export function sourceLine(t: StepServices['t'], source: KeySource | undefined):
   return t(`providers.source.${source.kind}`, { variable: source.variable ?? t('providers.source.variable') })
 }
 
+/**
+ * @param t - the dictionary lookup.
+ * @param source - where the key came from, when the host said.
+ * @returns "Connected · from <source>", or only "Connected" when the source is not known.
+ */
+export function connectedLine(t: StepServices['t'], source: KeySource | undefined): string {
+  if (source === undefined || source.kind === 'unknown') return t('providers.connected')
+  const line = sourceLine(t, source)
+  return t('providers.connectedFrom', { source: line.replace(/^[A-Z]/, letter => letter.toLowerCase()) })
+}
+
 /** The props of the explanation. */
 interface FoundKeyProps {
   /** The dictionary lookup. */

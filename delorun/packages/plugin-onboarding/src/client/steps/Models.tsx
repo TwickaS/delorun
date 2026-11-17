@@ -14,7 +14,7 @@ import type { LocalServer } from '../../wire.ts'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import { Card, Monogram } from '../ui/Card.tsx'
 import { StateLine } from '../ui/StateLine.tsx'
-import { FoundKey } from './FoundKey.tsx'
+import { FoundKey, connectedLine } from './FoundKey.tsx'
 import { useStore } from './shared.ts'
 import css from './models.module.css'
 import shared from './steps.module.css'
@@ -55,6 +55,8 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
   const [index, setIndex] = useState(0)
   // A provider whose key failed and is tried again on its own; the walk then returns to the summary.
   const [only, setOnly] = useState<string | undefined>()
+  // A key replaced from the landing: the walk shows that one provider's key field and returns to the landing.
+  const [replacingOnly, setReplacingOnly] = useState(false)
   const [outcomes, setOutcomes] = useState<Readonly<Record<string, Outcome>>>({})
   // The providers this walk visits, fixed when it starts so that finishing one does not shorten the queue under the index.
   const [order, setOrder] = useState<readonly string[]>([])
@@ -88,7 +90,8 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
   }
   const settle = (card: ProviderCard, outcome: Outcome): void => {
     setOutcomes(held => ({ ...held, [card.provider]: outcome }))
-    if (index + 1 < queue.length) setIndex(index + 1)
+    if (replacingOnly) { setReplacingOnly(false); setOnly(undefined); guide.testKeys(); guide.setProvidersPhase('landing') }
+    else if (index + 1 < queue.length) setIndex(index + 1)
     else { setOnly(undefined); finishWalk() }
   }
 
@@ -138,8 +141,8 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
   if (phase === 'walk' && queue[index] !== undefined) {
     const card = queue[index]
     return (
-      <WalkScreen key={card.provider} card={card} services={services} place={{ k: index + 1, n: queue.length }}
-        onBack={() => { if (index > 0) setIndex(index - 1); else if (only !== undefined) { setOnly(undefined); guide.setProvidersPhase('summary') } else guide.setProvidersPhase('landing') }}
+      <WalkScreen key={card.provider} card={card} services={services} place={{ k: index + 1, n: queue.length }} startReplacing={replacingOnly}
+        onBack={() => { if (replacingOnly) { setReplacingOnly(false); setOnly(undefined); guide.setProvidersPhase('landing') } else if (index > 0) setIndex(index - 1); else if (only !== undefined) { setOnly(undefined); guide.setProvidersPhase('summary') } else guide.setProvidersPhase('landing') }}
         onSkip={() => { settle(card, 'skipped') }} onDone={(outcome) => { settle(card, outcome) }} />
     )
   }
@@ -170,8 +173,15 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
           ? <StateLine tone="warning">{t('providers.foundFailed')}</StateLine>
           : couldNotTest(card.result)
             ? <StateLine tone="info">{t('keyStatus.unverified')}</StateLine>
-            : <StateLine tone="success">{t('providers.found')}</StateLine>)}
+            : <StateLine tone="success">{connectedLine(t, card.source)}</StateLine>)}
         {card.found && !didNotPass(card.result) && <FoundKey t={t} source={card.source} />}
+        {card.found && (
+          <Button variant="outline" size="sm" className={`${css.replace} ${shared.inline}`} onClick={() => {
+            setTicked(held => new Set(held).add(card.provider))
+            setOutcomes(held => Object.fromEntries(Object.entries(held).filter(([provider]) => provider !== card.provider)))
+            setOnly(card.provider); setReplacingOnly(true); setIndex(0); guide.setProvidersPhase('walk')
+          }}>{t('providers.replace')}</Button>
+        )}
       </Card>
     </li>
   )
@@ -271,6 +281,8 @@ interface WalkProps {
   readonly onBack: () => void
   /** The person passed over this provider. */
   readonly onSkip: () => void
+  /** Start with the key field open, as after Replace key. */
+  readonly startReplacing?: boolean
   /** This provider is done. */
   readonly onDone: (outcome: Outcome) => void
 }
@@ -283,7 +295,7 @@ type Test = { readonly state: 'idle' } | { readonly state: 'testing' } | { reado
  * @param props - the provider, the services, its place and the two exits.
  * @returns the screen.
  */
-function WalkScreen({ card, services, place, onBack, onSkip, onDone }: WalkProps): ReactNode {
+function WalkScreen({ card, services, place, startReplacing = false, onBack, onSkip, onDone }: WalkProps): ReactNode {
   const { t, providers } = services
   const [key, setKey] = useState('')
   const [baseURL, setBaseURL] = useState('')
@@ -291,7 +303,7 @@ function WalkScreen({ card, services, place, onBack, onSkip, onDone }: WalkProps
   const [test, setTest] = useState<Test>({ state: 'idle' })
   const [saving, setSaving] = useState(false)
   // A found key shows as text; the input exists only after Replace key.
-  const [replacing, setReplacing] = useState(false)
+  const [replacing, setReplacing] = useState(startReplacing)
   const showField = !card.found || replacing
   const [problem, setProblem] = useState(false)
   const latest = useRef(0)
@@ -373,7 +385,7 @@ function WalkScreen({ card, services, place, onBack, onSkip, onDone }: WalkProps
             {test.state === 'done' && test.probe.kind === 'unchecked' && <StateLine tone="info">{t('providers.unchecked')}</StateLine>}
             {problem && <StateLine tone="error" action={{ label: t('retry'), onClick: next }}>{t(custom ? 'providers.custom.failed' : 'providers.saveFailed')}</StateLine>}
           </div>
-          {card.found && <Button variant="ghost" size="sm" className={`${css.replace} ${shared.inline}`} onClick={() => { setReplacing(false); setKey(''); setProblem(false) }}>{t('providers.replace.cancel')}</Button>}
+          {card.found && <Button variant="ghost" size="sm" className={`${css.replace} ${shared.inline}`} onClick={() => { if (startReplacing) { onBack(); return } setReplacing(false); setKey(''); setProblem(false) }}>{t('providers.replace.cancel')}</Button>}
           {card.keyPage !== undefined && (
             <a className={css.link} href={card.keyPage} target="_blank" rel="noopener noreferrer">{t('providers.getKey')}</a>
           )}
