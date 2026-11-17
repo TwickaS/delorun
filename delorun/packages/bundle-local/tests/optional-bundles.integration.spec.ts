@@ -34,6 +34,7 @@ const BUNDLES = [
   { dir: 'bundle-browser', rows: ['browser-use', 'browser-use-playwright-mcp', 'browser-use-chrome-devtools-mcp', 'browser-use-stagehand-native'], on: ['browser-use', 'browser-use-playwright-mcp'] },
   { dir: 'bundle-code-intelligence', rows: ['lsp', 'lsp-stdio', 'tool-lsp'], on: ['lsp'] },
   { dir: 'bundle-agent-hooks', rows: ['hooks-claude-code', 'hooks-codex', 'claude-code-mods', 'client-ui-claude-code-mods'], on: ['hooks-claude-code', 'hooks-codex', 'claude-code-mods', 'client-ui-claude-code-mods'] },
+  { dir: 'bundle-webhooks', rows: ['webhook-runtime', 'github-webhook-ingress'], on: ['webhook-runtime'] },
 ] as const
 
 const manifest = (dir: string): { name: string; dsh: { bundle: { patch: string; platforms?: string[] } }; delorun: { state: string; pack?: boolean }; dependencies: Record<string, string> } =>
@@ -131,6 +132,11 @@ describe('what needs setup', () => {
     expect(ids('bundle-code-intelligence', binDir())).toEqual(['lsp'])
     expect(ids('bundle-code-intelligence', binDir('typescript-language-server'))).toEqual(['lsp', 'lsp-stdio', 'tool-lsp'])
   })
+
+  it('mounts the GitHub endpoint only when the webhook secret is set', () => {
+    expect(ids('bundle-webhooks', binDir())).toEqual(['webhook-runtime'])
+    expect(ids('bundle-webhooks', binDir(), 'a-long-random-secret')).toEqual(['webhook-runtime', 'github-webhook-ingress'])
+  })
 })
 
 describe('default configuration', () => {
@@ -139,6 +145,7 @@ describe('default configuration', () => {
     ['bundle-agent-hooks', 'hooks-claude-code', 'experimental/hooks-claude-code'],
     ['bundle-agent-hooks', 'hooks-codex', 'experimental/hooks-codex'],
     ['bundle-code-intelligence', 'lsp-stdio', 'lsp/lsp-stdio'],
+    ['bundle-webhooks', 'github-webhook-adapter', 'experimental/webhook-github'],
   ] as const
 
   it.each(CHECKED)('%s: row %s passes its plugin schema', async (dir, id, plugin) => {

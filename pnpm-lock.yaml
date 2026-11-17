@@ -2199,6 +2199,18 @@ importers:
         specifier: ^4.3.2
         version: 4.3.2
 
+  delorun/packages/bundle-webhooks:
+    dependencies:
+      '@deepseek-ai/dsh-host-webserver':
+        specifier: workspace:*
+        version: link:../../../packages/host/webserver
+      '@deepseek-ai/dsh-webhook':
+        specifier: workspace:*
+        version: link:../../../packages/experimental/webhook
+      '@deepseek-ai/dsh-webhook-github':
+        specifier: workspace:*
+        version: link:../../../packages/experimental/webhook-github
+
   delorun/packages/changes:
     dependencies:
       '@deepseek-ai/dsh-app-boot':

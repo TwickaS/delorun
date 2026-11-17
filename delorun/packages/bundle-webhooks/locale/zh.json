@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Webhook",
+    "description": "收到已签名的 GitHub webhook 时开始一次对话。需要在 DELORUN_GITHUB_WEBHOOK_SECRET 中设置密钥，并自行编写规则"
+  }
+}
