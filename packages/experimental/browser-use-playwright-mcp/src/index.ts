@@ -11,6 +11,7 @@ import {
 import { BROWSER_CHOICES, launchedBrowser, UNSET_BROWSER_CHOICE, type BrowserChoice, type LaunchedBrowser } from '@deepseek-ai/dsh-native-command/chrome-channel'
 import Schema from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-working-directory'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 
 /** Cordis identity for the Playwright MCP browser provider. */
 export const name = 'experimental-browser-use-playwright-mcp'
@@ -24,21 +25,31 @@ declare module '@deepseek-ai/cordis' {
      * An optional rule for which Sessions the browser serves, such as one that keeps the browser from chats in a folder
      * whose owner chose none. Absent, every Session is served.
      */
-    browserUseAdmission: SessionMcpAdmission
+    browserUseAdmission: Pick<SessionMcpAdmission, 'admitted'>
+  }
+
+  interface Events {
+    /**
+     * A Session's answer from `browserUseAdmission` may have changed; the browser server starts or stops to match.
+     * @mode parallel
+     * @param session - the Session.
+     * @returns settles once the Session's server has started or stopped to match.
+     */
+    'browser-use/admission-changed'(session: Agent['session']): Promise<void>
   }
 }
 
 /**
  * The admission the mount gets: the `browserUseAdmission` service's answer at each ask, or every Session while no
- * service is provided. A service provided after the mount still answers each later ask; its change reports reach the
- * mount only when it was provided first.
+ * service is provided, and the `browser-use/admission-changed` event as its change reports, so a service provided
+ * after the mount is heard too.
  * @param ctx - the provider context.
  * @returns the admission.
  */
 export function providedAdmission(ctx: Context): SessionMcpAdmission {
   return {
     admitted: agent => ctx.get('browserUseAdmission')?.admitted(agent) ?? true,
-    changed: listener => ctx.get('browserUseAdmission')?.changed(listener) ?? (() => {}),
+    changed: listener => ctx.on('browser-use/admission-changed', listener),
   }
 }
 

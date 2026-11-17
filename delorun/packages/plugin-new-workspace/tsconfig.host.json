@@ -23,6 +23,9 @@
       "path": "../../../packages/core/agent"
     },
     {
+      "path": "../../../packages/experimental/browser-use-playwright-mcp"
+    },
+    {
       "path": "../../../packages/core/session"
     },
     {

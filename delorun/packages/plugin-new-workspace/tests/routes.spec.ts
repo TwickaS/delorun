@@ -130,13 +130,16 @@ describe('the routes of the plugin', () => {
     expect([...(await mount({ registry: false })).routes.keys()]).toEqual([])
   })
 
-  it('provides the browser admission, and a "no browser" choice recorded through .setDefaults closes it for the next chat', async () => {
+  it('provides the browser admission, and a "no browser" choice recorded through .setDefaults closes it for the next chat and reports the running one', async () => {
     const { ctx, routes } = await mount({ homeAuth: homeAuthOn('loopback') })
-    const admission: { admitted(agent: { session: { header: { cwd?: string } } }): boolean } | undefined = ctx.get('browserUseAdmission')
-    const chat = { session: { header: { cwd: projects } } }
+    const admission = ctx.get('browserUseAdmission')
+    const reported = vi.fn(async (_session: unknown) => {})
+    ctx.on('browser-use/admission-changed', reported)
+    const chat = { session: { header: { cwd: projects } } } as Parameters<NonNullable<typeof admission>['admitted']>[0]
     expect(admission?.admitted(chat)).toBe(true)
     expect((await routes.get(SET_DEFAULTS_PATH)!.fetch(post(SET_DEFAULTS_PATH, { path: projects, defaults: { browser: 'none' } }))).status).toBe(200)
     expect(admission?.admitted(chat)).toBe(false)
+    expect(reported.mock.calls).toEqual([[chat.session]])
   })
 })
 

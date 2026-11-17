@@ -38,7 +38,7 @@ Delorun 的新建工作区流程。Host 端提供流程各屏调用的路由：�
 
 当顶层对话在默认设置含有模型的工作区里开始时，插件会在第一个请求之前追加上游的 `model/selection` 事件，因此对话日志会记录它起始使用的模型。恢复、分叉或委派的对话、已经记录了模型的对话，以及模型提供方未连接的工作区都不受影响；最后一种情况会写入日志。
 
-插件还提供 `browserUseAdmission`，浏览器插件包的隔离浏览器（`@deepseek-ai/dsh-experimental-browser-use-playwright-mcp`）在每个对话开始时和每次浏览器工具调用时都会询问它：对话所在文件夹是选择了“不使用浏览器”的工作区，或位于这样的工作区之内时，该对话不会获得浏览器服务器，其浏览器工具调用会被拒绝。这些选择保存在内存中，在提供服务之前读取一次，并在每次 `.setDefaults` 更改后重新读取，因此更改后的选择会作用于下一个对话，并拒绝正在运行的对话之后的浏览器调用。已存在的存储文件无法读取时，任何对话都不会获得隔离浏览器，日志会说明原因。没有此插件时，每个对话都会获得浏览器。本人自己的浏览器（`@delorun/browser-use-browse`）有自己的授权，不受影响。
+插件还提供 `browserUseAdmission`，浏览器插件包的隔离浏览器（`@deepseek-ai/dsh-experimental-browser-use-playwright-mcp`）在每个对话开始时和每次浏览器工具调用时都会询问它。对话所在文件夹及其上级中，最近一个保存了浏览器选择的工作区起决定作用：选择“不使用浏览器”时，该对话不会获得浏览器服务器，其浏览器工具调用会被拒绝；因此，位于“不使用浏览器”工作区之内、设为“隔离浏览器”的工作区仍会获得浏览器。这些选择保存在内存中，在提供服务之前读取一次，并在每次 `.setDefaults` 更改后重新读取；回答发生变化的每个正在运行的对话都会通过 `browser-use/admission-changed` 事件报告，因此其浏览器服务器会立即停止或启动，新对话则遵循新的选择。已存在的存储文件无法读取时，任何对话都不会获得隔离浏览器，日志会说明原因。此插件的行关闭或失败时，没有任何插件提供准入，每个对话都会获得隔离浏览器，无论保存了什么选择。“不使用浏览器”只针对隔离浏览器：在该工作区中仍可请求使用本人自己的浏览器（`@delorun/browser-use-browse`、`use_my_browser`），因为每次使用都需要本人为该对话单独批准。
 
 ## 配置
 
@@ -68,4 +68,4 @@ Delorun 的新建工作区流程。Host 端提供流程各屏调用的路由：�
 
 ## 测试
 
-`tests/routes.spec.ts` 挂载插件，并对每条路由检查被拒绝的来源、已锁定的设备和本机电脑。`create.spec.ts`、`clone.spec.ts`、`places.spec.ts` 和 `search.spec.ts` 覆盖主文件夹、Delorun 主目录、根目录之外的文件夹以及离开根目录的链接；`defaults.spec.ts` 覆盖存储文件的权限和格式，以及种子写入的条件。 Studio 端的规格是 `tests/*.client.spec.tsx`（对话框、API 客户端和服务）、`finish-flow.client.spec.tsx`（包括设置顺序）和 `flow.spec.ts`（流程的状态机）；`setup.client.spec.tsx` 覆盖模型屏、安全屏和各条完成路径，`browser.client.spec.tsx` 覆盖浏览器屏，`models.client.spec.tsx` 覆盖目录映射和主机列表。 `browser-admission.spec.ts` 覆盖准入：位于选择了“不使用浏览器”的工作区或其内部文件夹中的对话被拒绝，无法读取的存储不准入任何对话，更改后的选择作用于下一个对话。
+`tests/routes.spec.ts` 挂载插件，并对每条路由检查被拒绝的来源、已锁定的设备和本机电脑。`create.spec.ts`、`clone.spec.ts`、`places.spec.ts` 和 `search.spec.ts` 覆盖主文件夹、Delorun 主目录、根目录之外的文件夹以及离开根目录的链接；`defaults.spec.ts` 覆盖存储文件的权限和格式，以及种子写入的条件。 Studio 端的规格是 `tests/*.client.spec.tsx`（对话框、API 客户端和服务）、`finish-flow.client.spec.tsx`（包括设置顺序）和 `flow.spec.ts`（流程的状态机）；`setup.client.spec.tsx` 覆盖模型屏、安全屏和各条完成路径，`browser.client.spec.tsx` 覆盖浏览器屏，`models.client.spec.tsx` 覆盖目录映射和主机列表。 `browser-admission.spec.ts` 覆盖准入：位于选择了“不使用浏览器”的工作区或其内部文件夹中的对话被拒绝，最近的工作区的选择起决定作用，无法读取的存储不准入任何对话，更改后的选择作用于下一个对话，并为回答发生变化的每个正在运行的对话报告。

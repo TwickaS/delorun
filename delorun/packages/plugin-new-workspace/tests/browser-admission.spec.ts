@@ -1,7 +1,7 @@
 /**
  * The isolated browser's admission by workspace. The denial cases prove that a chat in a workspace that chose no browser,
- * or in a folder inside one, is not admitted, that a stored choice the store refuses admits no chat, and that a changed
- * choice applies to the next chat once `.setDefaults` has recorded it.
+ * or in a folder inside one, is not admitted, that a store the store rules refuse admits no chat, and that a changed
+ * choice applies to the next chat and is reported for each running chat whose answer it changed.
  */
 import { chmod, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -57,7 +57,7 @@ describe('the browser admission by workspace', () => {
   it('admits no chat in a workspace that chose no browser, nor in a folder inside it, and admits every other chat', async () => {
     await record(quiet, { browser: 'none' })
     await record(open, { browser: 'isolated' })
-    const admission = await createBrowserAdmission(deps())
+    const admission = await createBrowserAdmission(deps(), vi.fn(async () => {}))
     expect(admission.admitted(chat(quiet))).toBe(false)
     expect(admission.admitted(chat(join(quiet, 'docs')))).toBe(false)
     expect(admission.admitted(chat(open))).toBe(true)
@@ -65,9 +65,37 @@ describe('the browser admission by workspace', () => {
     expect(admission.admitted(chat(undefined))).toBe(true)
   })
 
+  it('lets the nearest workspace\'s choice decide for a workspace inside another', async () => {
+    const inner = join(quiet, 'docs')
+    await record(quiet, { browser: 'none' })
+    await record(inner, { browser: 'isolated' })
+    await record(join(person, 'src'), { browser: 'none' })
+    const admission = await createBrowserAdmission(deps(), vi.fn(async () => {}))
+    expect(admission.admitted(chat(inner))).toBe(true)
+    expect(admission.admitted(chat(quiet))).toBe(false)
+    expect(admission.admitted(chat(open))).toBe(false)
+  })
+
+  it('reports each chat it was asked about whose answer a refresh changed, and no other', async () => {
+    await record(quiet, { browser: 'isolated' })
+    const changed = vi.fn(async (_session: unknown) => {})
+    const admission = await createBrowserAdmission(deps(), changed)
+    const inQuiet = chat(quiet), inOpen = chat(open)
+    expect([admission.admitted(inQuiet), admission.admitted(inOpen)]).toEqual([true, true])
+    await record(quiet, { browser: 'none' })
+    await admission.refresh()
+    expect(changed.mock.calls).toEqual([[inQuiet.session]])
+    expect(admission.admitted(inQuiet)).toBe(false)
+    await record(quiet, { browser: 'isolated' })
+    await admission.refresh()
+    expect(changed.mock.calls).toEqual([[inQuiet.session], [inQuiet.session]])
+    await admission.refresh()
+    expect(changed).toHaveBeenCalledTimes(2)
+  })
+
   it('applies a changed choice to the next chat once it is recorded and read again', async () => {
     await record(quiet, { browser: 'isolated' })
-    const admission = await createBrowserAdmission(deps())
+    const admission = await createBrowserAdmission(deps(), vi.fn(async () => {}))
     expect(admission.admitted(chat(quiet))).toBe(true)
     await record(quiet, { browser: 'none' })
     await admission.refresh()
@@ -83,14 +111,14 @@ describe('the browser admission by workspace', () => {
     await writeFile(file, JSON.stringify({ v: 1, workspaces: {} }))
     await chmod(file, 0o644)
     const harness = deps()
-    const admission = await createBrowserAdmission(harness)
+    const admission = await createBrowserAdmission(harness, vi.fn(async () => {}))
     expect(admission.admitted(chat(open))).toBe(false)
     expect(harness.warn).toHaveBeenCalledOnce()
     expect(String(harness.warn.mock.calls[0]?.[0])).not.toContain(scratch)
   })
 
   it('admits every chat while no choice is stored', async () => {
-    const admission = await createBrowserAdmission(deps())
+    const admission = await createBrowserAdmission(deps(), vi.fn(async () => {}))
     expect(admission.admitted(chat(quiet))).toBe(true)
   })
 })

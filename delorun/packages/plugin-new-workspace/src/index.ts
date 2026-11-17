@@ -10,6 +10,8 @@
  * @module @delorun/plugin-new-workspace
  */
 import type { Context } from '@deepseek-ai/cordis'
+// Type-only: the ctx.browserUseAdmission merge and the browser-use/admission-changed event.
+import type {} from '@deepseek-ai/dsh-experimental-browser-use-playwright-mcp'
 // Type-only: the ctx.connection merge.
 import type {} from '@deepseek-ai/dsh-client-connection'
 // Type-only: the ctx.workspaceRegistry merge.
@@ -62,8 +64,8 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     return undefined
   }, { prepend: true })
   // Read before it is provided, so no chat starts while the choices are unknown.
-  const browserAdmission = await createBrowserAdmission(located)
-  ctx.provide('browserUseAdmission', browserAdmission)
+  const browserAdmission = await createBrowserAdmission(located, session => ctx.parallel('browser-use/admission-changed', session))
+  ctx.provide('browserUseAdmission', { admitted: agent => browserAdmission.admitted(agent) })
   ctx.inject(['workspaceRegistry'], (child) => {
     const deps = { registry: child.workspaceRegistry, ...located }
     const remember = (parent: string): Promise<void> => rememberParent(parent, located)
