@@ -4,8 +4,8 @@
  * It reads the sources under `delorun/packages/*\/src` and `delorun/apps/*\/src` and refuses, outside the files
  * {@link ALLOWED} names for each rule:
  *
- * - `sdk`: a string naming the Claude Agent SDK or its platform packages (`@anthropic-ai/claude-agent-sdk…`), except in
- *   a type-only import;
+ * - `sdk`: a string naming the Claude Agent SDK or its platform packages (`@anthropic-ai/claude-agent-sdk…`) or the
+ *   Claude Code package (`@anthropic-ai/claude-code…`), except in a type-only import;
  * - `codex`: a string naming the Codex package or its platform packages (`@openai/codex…`);
  * - `locate`: a use of the locator functions that find those programs (`locateClaudeSdk`, `locateClaudeProgram`,
  *   `locateCodex`, `locateCodexProgram`, `loginProgramFor`);
@@ -13,10 +13,13 @@
  * - `subprocess`: `subprocess` used in the gate's package or a driver package, other than in the gate's module;
  * - `provider`: `getProvider('claude-code')` or `getProvider('codex')` used for anything but a presence check
  *   (`=== undefined`, `!== undefined` and the `null` forms), which upstream's tool path owns;
- * - `program`: `claude`, `codex`, `claude.exe`, `codex.exe` or a path ending in one of them as the program a process
- *   runs: the first argument of `spawn`, `spawnSync`, `execFile`, `execFileSync` or `fork`, the first word of the
- *   command of `exec` or `execSync`, or the first element of an argv array given to those calls or as an `argv`
- *   property.
+ * - `program`: `claude`, `codex`, `claude.exe`, `codex.exe` or a path ending in one of them as a literal the process
+ *   runs or passes on: the first argument of `spawn`, `spawnSync`, `execFile`, `execFileSync` or `fork`, any element
+ *   of an argv array given to those calls or as an `argv` property (so `env claude` is caught), and the first command
+ *   word of a shell command line: the command of `exec` or `execSync`, and the element after a `-c` option (as in
+ *   `sh -c` or `bash -lc`), skipping leading `exec`, `env`, `nohup` and `NAME=value` words.
+ *
+ * An argv held in a variable, or built from non-literal parts, is out of scope: the gate reads literals only.
  *
  * A name built at run time escapes the `sdk`, `codex` and `provider` rules; the `locate` rule covers how a Delorun
  * module finds the pinned programs. Run from anywhere inside the repository:
@@ -52,12 +55,14 @@ export const ALLOWED: Readonly<Record<SpawnRule, readonly string[]>> = {
 export const GATED_PACKAGES = ['delorun/packages/external-agents/', 'delorun/packages/agent-claude-code/', 'delorun/packages/agent-codex/']
 
 const SOURCE = /(?<!\.d)\.(?:ts|tsx|mts|cts|js|mjs|cjs)$/u
-const SDK_NAME = /^@anthropic-ai\/claude-agent-sdk(?:[-/]|$)/u
+const SDK_NAME = /^@anthropic-ai\/claude-(?:agent-sdk|code)(?:[-/]|$)/u
 const CODEX_NAME = /^@openai\/codex(?:[-/]|$)/u
 const LOCATORS = new Set(['locateClaudeSdk', 'locateClaudeProgram', 'locateCodex', 'locateCodexProgram', 'loginProgramFor'])
 const PROVIDERS = new Set(['claude-code', 'codex'])
 const SPAWNERS = new Set(['spawn', 'spawnSync', 'execFile', 'execFileSync', 'fork'])
 const SHELL_SPAWNERS = new Set(['exec', 'execSync'])
+const SHELL_COMMAND_OPTION = /^-[a-z]*c$/u
+const COMMAND_PREFIX = /^(?:exec|env|nohup|[A-Za-z_][\w]*=.*)$/u
 const PROGRAM_NAME = /(?:^|[\\/])(?:claude|codex)(?:\.exe)?$/iu
 const EQUALITY = new Set([ts.SyntaxKind.EqualsEqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken, ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsToken])
 
@@ -124,23 +129,33 @@ function literalEnding(node: ts.Node | undefined): string | undefined {
 }
 
 /**
- * The program an argv array runs, when its first element is a literal naming one.
- * @param node - the expression that may be the array.
- * @returns the first element, or undefined.
- */
-function argvProgram(node: ts.Node | undefined): ts.Node | undefined {
-  return node !== undefined && ts.isArrayLiteralExpression(node) ? node.elements[0] : undefined
-}
-
-/**
  * Whether a program position names Claude Code or Codex.
  * @param node - the expression in the position.
- * @param shell - whether it is a shell command line, whose first word is the program.
+ * @param shell - whether it is a shell command line, whose first command word is the program.
  * @returns the literal found, or undefined.
  */
 function namesAgentProgram(node: ts.Node | undefined, shell = false): string | undefined {
-  const text = shell && node !== undefined && ts.isStringLiteralLike(node) ? node.text.trim().split(/\s+/u)[0] : literalEnding(node)
-  return text !== undefined && PROGRAM_NAME.test(text) ? text : undefined
+  const text = shell && node !== undefined && ts.isStringLiteralLike(node)
+    ? node.text.trim().split(/\s+/u).find(word => !COMMAND_PREFIX.test(word))
+    : literalEnding(node)
+  // A package name such as `@openai/codex` is the `sdk` or `codex` rule's, not a program path.
+  return text !== undefined && !text.startsWith('@') && PROGRAM_NAME.test(text) ? text : undefined
+}
+
+/**
+ * The literals of an argv array that name Claude Code or Codex: any element, and the first command word of the element
+ * after a `-c` shell option.
+ * @param node - the expression that may be the array.
+ * @returns each element found with the text it names.
+ */
+function argvPrograms(node: ts.Node | undefined): Array<{ readonly at: ts.Node, readonly found: string }> {
+  if (node === undefined || !ts.isArrayLiteralExpression(node)) return []
+  return node.elements.flatMap((element, index) => {
+    const previous = node.elements[index - 1]
+    const shell = previous !== undefined && ts.isStringLiteralLike(previous) && SHELL_COMMAND_OPTION.test(previous.text)
+    const found = namesAgentProgram(element, shell)
+    return found === undefined ? [] : [{ at: element, found }]
+  })
 }
 
 /**
@@ -170,18 +185,20 @@ export function sourceViolations(path: string, text: string): SpawnViolation[] {
     if (gated && ts.isPropertyAccessExpression(node) && node.name.text === 'subprocess') report(node.name, 'subprocess', 'subprocess')
     if (gated && ts.isStringLiteral(node) && node.text === 'subprocess' && ts.isCallExpression(node.parent)) report(node, 'subprocess', 'subprocess')
     if (ts.isPropertyAssignment(node) && ts.isIdentifier(node.name) && node.name.text === 'argv') {
-      const program = argvProgram(node.initializer)
-      const found = namesAgentProgram(program)
-      if (program !== undefined && found !== undefined) report(program, 'program', found)
+      for (const { at, found } of argvPrograms(node.initializer)) report(at, 'program', found)
     }
     if (ts.isCallExpression(node)) {
       const callee = node.expression
       const name = ts.isPropertyAccessExpression(callee) ? callee.name.text : ts.isIdentifier(callee) ? callee.text : undefined
       const first = node.arguments[0]
-      if (name !== undefined && first !== undefined && (SPAWNERS.has(name) || SHELL_SPAWNERS.has(name))) {
-        const program = argvProgram(first) ?? first
-        const found = namesAgentProgram(program, SHELL_SPAWNERS.has(name) && program === first)
-        if (found !== undefined) report(program, 'program', found)
+      if (name !== undefined && first !== undefined && SPAWNERS.has(name)) {
+        const found = namesAgentProgram(first)
+        if (found !== undefined) report(first, 'program', found)
+        for (const argv of node.arguments.slice(0, 2)) for (const { at, found: named } of argvPrograms(argv)) report(at, 'program', named)
+      }
+      if (name !== undefined && first !== undefined && SHELL_SPAWNERS.has(name)) {
+        const found = namesAgentProgram(first, true)
+        if (found !== undefined) report(first, 'program', found)
       }
       if (name === 'getProvider' && first !== undefined && ts.isStringLiteralLike(first) && PROVIDERS.has(first.text) && !presenceCheck(node)) {
         report(node, 'provider', `getProvider('${first.text}')`)
