@@ -3,10 +3,12 @@
  * runs, in order, the consent (review D6, D10), the limit, the capacity, then the driver's open with a spawn bound to
  * this program. The gate keeps one program per seat child, ends it when the child's Agent is disposed, its lease ends,
  * its driver leaves, or this plugin stops, and bounds each seat turn by the consent's time limit: interrupt, wait the
- * grace period, then end the program.
+ * grace period, then end the program. While a program runs, the identity of each of its processes that leads a process
+ * group is kept in the home's program records, and at the next start the gate stops what a dead Host left (review D15).
  * @module @delorun/external-agents/gate
  */
 import { rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { Service, type Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-app-boot'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -20,6 +22,7 @@ import {
   type SeatRecord, type SeatReviewPhase, type SeatStartRequest,
 } from './contract.ts'
 import { consentMissingRefusal, consentRowDisabledRefusal, limitRefusal, noRootRefusal } from './copy.ts'
+import { ProgramRecords, systemProcessTable, type ProcessTable } from './reap.ts'
 
 /** What the gate needs beyond its context. */
 export interface GateOptions {
@@ -35,6 +38,10 @@ export interface GateOptions {
   readonly now: () => number
   /** Make an empty folder for one limits check; the gate removes it afterwards. */
   readonly probeFolder: () => Promise<string>
+  /** The path of the home's program records; absent, nothing is recorded or reaped. */
+  readonly programRecords: (() => Promise<string>) | undefined
+  /** The process table the records read; absent, the computer's own. */
+  readonly processTable: ProcessTable | undefined
 }
 
 /** The consent for one seat start: none composed by the person's choice, or the service that reviews it. */
@@ -79,10 +86,13 @@ export class ExternalAgentsService extends Service implements ExternalAgentsGate
   private readonly registered = new Set<(provider: ExternalAgentName) => void>()
   private readonly live = new Set<Live>()
   private readonly seats = new Map<SessionId, Live>()
+  /** The program records, once their path is known; undefined when they are off or their path failed. */
+  private readonly records: Promise<ProgramRecords | undefined>
 
   constructor(ctx: Context, options: GateOptions) {
     super(ctx, 'externalAgents')
     this.options = options
+    this.records = this.openRecords()
     ctx.effect(() => () => this.endAll(), 'external agents: end every program')
     ctx.on('agent/disposed', ({ agent }) => { this.endSeat(agent.id) })
     ctx.inject(['delegationConsent'], (scope) => {
@@ -109,6 +119,72 @@ export class ExternalAgentsService extends Service implements ExternalAgentsGate
       this.drivers.delete(driver.provider)
       for (const live of [...this.live]) if (live.provider === driver.provider) void this.end(live)
     }
+  }
+
+  /**
+   * Open the program records and stop what a dead Host left, before any program of this start is recorded.
+   * @returns the records, or undefined when they are off or their path cannot be resolved.
+   */
+  private async openRecords(): Promise<ProgramRecords | undefined> {
+    const { programRecords } = this.options
+    if (programRecords === undefined) return undefined
+    let path: string
+    try {
+      path = await programRecords()
+    } catch (error) {
+      this.ctx.logger.warn(`external agents: the program records cannot be found, so no program is recorded or reaped: ${String(error)}`)
+      return undefined
+    }
+    const records = new ProgramRecords({
+      path,
+      table: this.options.processTable ?? systemProcessTable(process.platform, argv => this.runCommand(argv)),
+      graceMs: this.options.graceMs,
+      warn: message => this.ctx.logger.warn(message),
+    })
+    const reaped = await records.reap()
+    for (const { record, outcome } of reaped) {
+      if (outcome === 'stopped-group' || outcome === 'stopped-unit') {
+        this.ctx.logger.warn(`external agents: stopped ${record.provider}'s process ${String(record.identity.pid)}, which a Host that ended left running`)
+      }
+    }
+    return records
+  }
+
+  /**
+   * Run a short command of the operating system (`ps`, `systemctl`) and read its output.
+   * @param argv - the command.
+   * @returns its standard output.
+   * @throws Error when it exits other than 0.
+   */
+  private async runCommand(argv: readonly string[]): Promise<string> {
+    const handle = this.ctx.subprocess.spawn({
+      argv, cwd: tmpdir(), stdio: { stdin: 'ignore', stdout: { maxBytes: 64 * 1024 }, stderr: { maxBytes: 4096 } }, graceMs: this.options.graceMs,
+    })
+    const outcome = await handle.done
+    if (outcome.exitCode !== 0) throw new Error(`${argv[0] ?? 'command'} exited with ${String(outcome.exitCode ?? outcome.signal)}`)
+    return handle.collected.stdout?.readFrom(0).text ?? ''
+  }
+
+  /**
+   * Keep a process's identity in the program records while its managed range runs. A process the provider names no
+   * leader for, such as on Windows, is not recorded.
+   * @param provider - the agent.
+   * @param handle - the process.
+   */
+  private track(provider: ExternalAgentName, handle: SubprocessHandle): void {
+    const pid = handle.pid
+    if (pid === undefined) return
+    const recorded = this.records.then(async (records) => {
+      const identity = await records?.started(provider, pid)
+      return records === undefined || identity === undefined ? undefined : { records, identity }
+    })
+    // A range the provider can no longer observe keeps its record, so the next start checks it.
+    handle.waitForExit().then(async () => {
+      const entry = await recorded
+      await entry?.records.ended(entry.identity)
+    }, (error: unknown) => {
+      this.ctx.logger.warn(`external agents: ${provider}'s process ${String(pid)} cannot be observed, so its record stays: ${String(error)}`)
+    })
   }
 
   onDriverRegistered(listener: (provider: ExternalAgentName) => void): () => void {
@@ -315,6 +391,7 @@ export class ExternalAgentsService extends Service implements ExternalAgentsGate
         env: spawnEnvironment(request.env, this.options.env),
       })
       live.handles.add(handle)
+      this.track(live.provider, handle)
       const forget = (): void => { live.handles.delete(handle) }
       handle.done.then(forget, forget)
       return handle

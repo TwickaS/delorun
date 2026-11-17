@@ -3,15 +3,15 @@
  * process table: no process starts. They cover the start order and every refusal, one program per child, the cap, the
  * spawn the gate hands a driver, every event that ends a program, the turn time limit and the "for this run" relay.
  */
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, existsSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { mountAgentLoopTestDependencies, mountAgentLoopTestHarness } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import type { SubprocessHandle, SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   DELEGATION_CONSENT_ROW_ID, ExternalAgentsService, GateRefusedError, type AccountRecord, type ExternalAgentDriver,
   type ExternalAgentName, type ProgramApprovalAnswer, type ProgramApprovalRequest, type ProgramEvent, type ProgramOpenRequest,
@@ -19,6 +19,7 @@ import {
   type SeatStartRequest, type SeatVerdict,
 } from '../src/index.ts'
 import { limitRefusal } from '../src/copy.ts'
+import { programRecordPath, ProgramRecords, type ProcessIdentity, type ProcessTable } from '../src/reap.ts'
 
 const roots: string[] = []
 const contexts: Context[] = []
@@ -35,9 +36,10 @@ interface FakeProcess extends SubprocessHandle {
 
 /**
  * @param spec - the spawn request.
+ * @param pid - the process id the handle reports, when it reports one.
  * @returns a fake handle.
  */
-function fakeProcess(spec: SubprocessSpawnSpec): FakeProcess {
+function fakeProcess(spec: SubprocessSpawnSpec, pid?: number): FakeProcess {
   const exit = Promise.withResolvers<{ exitCode: number | null, signal: NodeJS.Signals | null }>()
   let terminated = false
   const terminate = (): void => {
@@ -50,6 +52,7 @@ function fakeProcess(spec: SubprocessSpawnSpec): FakeProcess {
     get terminated() { return terminated },
     stdin: undefined, stdout: undefined, stderr: undefined, control: undefined,
     collected: {} as never,
+    ...pid === undefined ? {} : { pid },
     done: exit.promise,
     terminate,
     waitForExit: async () => { await exit.promise; return true },
@@ -196,6 +199,10 @@ interface WorldOptions {
   readonly limitRefusal?: boolean
   readonly accounts?: AccountRecord
   readonly now?: number
+  /** The program records' path and process table; absent, the gate records nothing. */
+  readonly records?: { readonly path: string, readonly table: ProcessTable }
+  /** The process id each fake process reports. */
+  readonly pid?: number
 }
 
 /** The gate over production Agents `root` and `seat` (a subagent of `root`), with fake neighbours. */
@@ -211,7 +218,7 @@ async function world(options: WorldOptions = {}): Promise<World> {
   const root = await harness.create(SessionId('root'), {}, { cwd: workspace })
   const seat = await harness.create(SessionId('seat'), {}, { cwd: workspace })
   await harness.create(SessionId('orphan'), {}, { cwd: workspace })
-  ctx.provide('subprocess', { spawn: (spec: SubprocessSpawnSpec) => fakeProcess(spec) } as never)
+  ctx.provide('subprocess', { spawn: (spec: SubprocessSpawnSpec) => fakeProcess(spec, options.pid) } as never)
   ctx.provide('subagents', { rootOf: (agent: Agent) => (agent.id === 'orphan' ? (() => { throw new Error('no owner') })() : root) } as never)
   const row = options.row ?? { enabled: true }
   const entries = row === 'absent' ? [] : [{ id: DELEGATION_CONSENT_ROW_ID, options: { id: DELEGATION_CONSENT_ROW_ID, config: row === 'disabled' ? { enabled: true } : row }, disabled: row === 'disabled' }]
@@ -242,6 +249,8 @@ async function world(options: WorldOptions = {}): Promise<World> {
       probeFolders.push(folder)
       return Promise.resolve(folder)
     },
+    programRecords: options.records === undefined ? undefined : () => Promise.resolve(options.records!.path),
+    processTable: options.records?.table,
   })
   await fiber
   const gate = ctx.get('externalAgents') as ExternalAgentsService
@@ -575,5 +584,64 @@ describe('a reached limit (T12)', () => {
     )
     const named = (window: string): string => limitRefusal({ provider: 'codex', window, resetsAt: now + 60_000, now, timeZone: 'UTC' }).split(' limit is')[0]!.split('plan\'s ')[1]!
     expect(['seven-day-opus', 'thirty-day', '90-minute', 'primary'].map(named)).toEqual(['weekly Opus', '30-day', '90-minute', '"primary"'])
+  })
+})
+
+describe('programs a dead Host left (T11, review D15)', () => {
+  const identity: ProcessIdentity = { pid: 4242, startTime: '81234', bootId: 'b-1', exe: '/opt/claude/claude' }
+
+  /** A process table with one process and the signals sent to it. */
+  const table = (): ProcessTable & { readonly processes: Map<number, ProcessIdentity>, readonly calls: string[] } => {
+    const processes = new Map<number, ProcessIdentity>([[identity.pid, identity]])
+    const calls: string[] = []
+    return {
+      platform: 'linux',
+      processes,
+      calls,
+      identify: pid => Promise.resolve(processes.get(pid)),
+      killGroup: (pgid, signal) => { calls.push(`kill -${String(pgid)} ${signal}`); processes.delete(pgid) },
+      stopUnit: (unit) => { calls.push(`stop ${unit}`); return Promise.resolve() },
+    }
+  }
+
+  /**
+   * @param path - the record file.
+   * @returns the recorded process ids.
+   */
+  const recorded = (path: string): number[] => existsSync(path)
+    ? (JSON.parse(readFileSync(path, 'utf8')) as { programs: { identity: ProcessIdentity }[] }).programs.map(record => record.identity.pid)
+    : []
+
+  it('records a running process\'s identity and forgets it once the process has exited', async () => {
+    const path = programRecordPath(realpathSync(mkdtempSync(join(tmpdir(), 'delorun-gate-home-'))))
+    roots.push(dirname(dirname(dirname(path))))
+    const w = await world({ records: { path, table: table() }, pid: identity.pid })
+    await w.gate.start(start(w))
+    await vi.waitFor(() => { expect(recorded(path)).toEqual([4242]) })
+    await w.stop()
+    await vi.waitFor(() => { expect(recorded(path)).toEqual([]) })
+  })
+
+  it('stops a recorded program whose identity still matches at the next start, and never a reused id', async () => {
+    const path = programRecordPath(realpathSync(mkdtempSync(join(tmpdir(), 'delorun-gate-home-'))))
+    roots.push(dirname(dirname(dirname(path))))
+    const before = table()
+    const left = new ProgramRecords({ path, table: before, graceMs: 5, warn: () => {} })
+    await left.started('claude-code', identity.pid)
+    await left.started('codex', 77)
+    const after = table()
+    after.processes.set(77, { pid: 77, startTime: '1', exe: '/usr/bin/vim', bootId: 'b-1' })
+    await world({ records: { path, table: after } })
+    await vi.waitFor(() => { expect(recorded(path)).toEqual([]) })
+    expect(after.calls).toEqual(['kill -4242 SIGTERM'])
+  })
+
+  it('records nothing for a process the provider names no leader for', async () => {
+    const path = programRecordPath(realpathSync(mkdtempSync(join(tmpdir(), 'delorun-gate-home-'))))
+    roots.push(dirname(dirname(dirname(path))))
+    const w = await world({ records: { path, table: table() } })
+    await w.gate.start(start(w))
+    await new Promise(resolve => setTimeout(resolve, 20))
+    expect(recorded(path)).toEqual([])
   })
 })

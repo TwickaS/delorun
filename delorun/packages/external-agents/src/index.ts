@@ -12,8 +12,10 @@ import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-subprocess'
 import z from '@deepseek-ai/schemastery'
+import { resolveDelorunHome } from '@delorun/home'
 import type { AccountRefreshReason } from './contract.ts'
 import { ExternalAgentsService } from './gate.ts'
+import { programRecordPath } from './reap.ts'
 
 export * from './contract.ts'
 export { ExternalAgentsService, spawnEnvironment } from './gate.ts'
@@ -59,6 +61,8 @@ export function apply(ctx: Context, config: Config): void {
       env: process.env,
       now: Date.now,
       probeFolder: () => mkdtemp(join(tmpdir(), 'delorun-agent-check-')),
+      programRecords: async () => programRecordPath((await resolveDelorunHome(process.env)).path),
+      processTable: undefined,
     })
   })
 }

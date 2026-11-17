@@ -30,6 +30,7 @@ English | [中文](README.zh.md)
 - **Limits checks.** `probe(provider, signal)` takes no folder, no child and no input: the gate makes an empty folder under the system's temporary directory, admits the check under the same cap, runs the driver's probe and removes the folder. The CLI never starts a check.
 - **Limit refusal.** With `limitRefusal` on and an accounts store mounted, a recorded limit whose reset time is in the future refuses a seat start, and `limitRefusal(provider)` gives the consent the sentence that refuses a one-shot run ([`limitRefusal`](src/copy.ts)). A limit whose reset time has passed never refuses.
 - **Seat registry.** `seat(child)` answers whether a session is a seat the gate started, with its root and agent. A seat is recognised by this registry, never by an approval policy value.
+- **Host death.** While a program runs, the gate keeps the identity of each of its processes that leads a process group in `secrets/external-agents/programs.json` under the Delorun home: on Linux the process id, the kernel start time, the boot id, the executable path and the subprocess owner's systemd scope; on macOS the process id, the start time and the path. At the next start it stops each recorded program whose identity still matches in full, stopping the scope when there is one and otherwise the group, SIGTERM then SIGKILL after `graceMs`, and drops every record; a process id that now names another process is never signalled.
 - **Stopping.** Disposing the plugin, an `agent/disposed` event for the seat child and a driver leaving each end the programs concerned.
 
 ## Configuration
@@ -47,7 +48,7 @@ English | [中文](README.zh.md)
 
 - `maxLivePrograms` does not count one-shot runs, which upstream's subagent runtime starts.
 - A limit refusal can outlast a plan upgrade until the next limits check.
-- The gate does not yet record the programs it starts, because the subprocess handle exposes no process id; a program that outlives a killed Host is left to the agent pack's own watcher.
+- On Windows nothing is recorded for reaping; the subprocess owner's kill-on-close Job ends the programs with the Host.
 
 ## Tests
 
