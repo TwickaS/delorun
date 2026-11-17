@@ -41,3 +41,7 @@ Surfaces use studio design tokens only. Copy is in `src/client/locales.ts` (Engl
 ## Tests
 
 `pnpm exec vitest run --config delorun/vitest.config.ts delorun/packages/plugin-downloads` runs the component tests: each state, the summary and its hide, a failure that stays, collapse and expand, the quiet row, the badge and the keyboard.
+
+## Harness page
+
+`harness/` is a static page over the fake source: `pnpm exec vite --config delorun/packages/plugin-downloads/harness/vite.config.ts` serves it on port 18571. `?scene=mixed|done|failure|unlock` picks the items, `?mode=card|row|sheet` picks the presentation and `?dark=1` the dark scheme.

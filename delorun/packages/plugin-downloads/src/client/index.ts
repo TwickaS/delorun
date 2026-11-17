@@ -46,6 +46,16 @@ export function createRemoteDownloadsSource(): DownloadsSource {
  * @param source - the source; the remote adapter when absent.
  */
 export function apply(ctx: Context, source: DownloadsSource = createRemoteDownloadsSource()): void {
+  // The spacing tokens exist only while the Delorun look is on, as with every row of the studio bundle.
+  ctx.inject(['delorunStudio'], inner => { applyStudio(inner, source) })
+}
+
+/**
+ * Everything the plugin registers while the Delorun look provides `delorunStudio`.
+ * @param ctx - the browser plugin context, holding `delorunStudio`.
+ * @param source - the source every surface reads.
+ */
+export function applyStudio(ctx: Context, source: DownloadsSource): void {
   ctx.effect(() => ctx.locale.register(NS, { en, zh }), 'delorun-downloads: dictionaries')
   ctx.effect(() => provideDownloadsSource(source), 'delorun-downloads: the source')
   const bound: Translate = (key: DownloadsLocaleKey, params) => ctx.locale.bind(NS)(key, params)
