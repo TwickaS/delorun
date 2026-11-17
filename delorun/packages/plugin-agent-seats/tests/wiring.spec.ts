@@ -61,6 +61,8 @@ async function world(on: boolean): Promise<World> {
   await ctx.plugin(FakePresets)
   await ctx.plugin(FakeProfile, dir)
   await ctx.plugin(FakeConnection)
+  // The question relay needs these services; the surface under test never asks a question.
+  for (const service of ['approval', 'agents'] as const) if (ctx.get(service) === undefined) ctx.provide(service, {} as never)
   return { ctx, flags: ctx.previewFlags as FakeFlags, connection: ctx.connection as unknown as FakeConnection, presets: ctx.agentPresets as unknown as FakePresets, dir }
 }
 

@@ -23,7 +23,7 @@ export const name = 'delorun-agent-seats'
 
 /** The services the plugin needs before it starts. */
 export const inject = [
-  'previewFlags', 'llm', 'sessions', 'sessionProjections', 'externalAgents', 'subagents', 'tools', 'agentPresets', 'connection', 'profileContext',
+  'previewFlags', 'llm', 'sessions', 'sessionProjections', 'externalAgents', 'subagents', 'tools', 'agentPresets', 'connection', 'profileContext', 'approval', 'agents',
 ]
 
 export { Config as schema }
