@@ -109,6 +109,14 @@ describe('the agent bundles the installation ships switched off', () => {
     await flush()
     expect(state(agents[0]!)).toMatchObject({ state: 'unavailable', reason: 'macOS only' })
   })
+
+  it('keeps the platform reason apart from a Host that has no plugin packs, as a build from source has none', async () => {
+    const { installer, state } = bench([row({ name: agents[0]!, error: { code: 'unsupported-platform', diagnostic: 'macOS only' } })])
+    installer.refresh([agents[0]!, 'not-listed'])
+    await flush()
+    expect(state(agents[0]!)).not.toHaveProperty('packsReason')
+    expect(state('not-listed')).toEqual({ state: 'unavailable', packsReason: 'no packs here' })
+  })
 })
 
 describe('reading the bundles', () => {
@@ -122,7 +130,7 @@ describe('reading the bundles', () => {
     await flush()
     expect(state('a')).toEqual({ state: 'available', title: { en: 'A' }, description: 'About a.' })
     expect(state('b')).toEqual({ state: 'installed' })
-    expect(state('c')).toEqual({ state: 'unavailable' })
+    expect(state('c')).toEqual({ state: 'unavailable', packsReason: 'no packs here' })
     expect(pluginManager.setBundleEnabled).not.toHaveBeenCalled()
     expect(pluginManager.installBundle).not.toHaveBeenCalled()
   })

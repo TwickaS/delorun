@@ -36,6 +36,8 @@ export interface BundleView {
   readonly description?: LocalizedText
   /** Why the bundle is `failed` (the plugin manager's own words) or `unavailable` or `offline` (the platform or pack reason). */
   readonly reason?: string
+  /** For an `unavailable` bundle: why this Host has no plugin packs to offer (a build from source, for one), which the card says instead of blaming the computer. */
+  readonly packsReason?: string
 }
 
 /** One offered bundled row as the steps draw it: a bundle view with the row's icon, when its package has one. */
@@ -217,11 +219,14 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
   const packViews = new Map<string, PackView>()
   // The Host's packs routes; a Host without plugin packs answers 404, which reads as no packs.
   const packsClient = createPacksClient()
+  let packsUnsupported: string | undefined
   const readPacks = async (names: readonly string[]): Promise<void> => {
     const remote: PacksRemote = packsClient
     packViews.clear()
+    packsUnsupported = undefined
     try {
       const snapshot = await remote.list()
+      if (!snapshot.supported) packsUnsupported = snapshot.reason
       for (const name of names) {
         const pack = snapshot.packs.find(each => each.name === name)
         if (pack !== undefined) packViews.set(name, packView(pack, snapshot.queue.find(item => item.key === name)))
@@ -249,9 +254,11 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
       const pack = packViews.get(name)
       const state = stateOf(bundle, pack)
       const reason = state === 'failed' ? reasonOf(bundle) : packReason(pack)
+      const platformLimit = bundle?.error?.code === 'unsupported-platform' || pack?.kind === 'unavailable'
       set(name, {
         state,
         ...reason === undefined ? {} : { reason },
+        ...state === 'unavailable' && !platformLimit && packsUnsupported !== undefined ? { packsReason: packsUnsupported } : {},
         ...bundle?.meta?.title === undefined ? {} : { title: bundle.meta.title },
         ...bundle?.meta?.description === undefined ? {} : { description: bundle.meta.description },
         ...bundle?.error?.code === 'unsupported-platform' && bundle.error.diagnostic !== undefined ? { reason: bundle.error.diagnostic } : {},

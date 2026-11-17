@@ -31,6 +31,8 @@ interface AddableProps {
   readonly state: BundleState
   /** Why the plugin manager reports `failed`, in its own words. */
   readonly reason?: string | undefined
+  /** Why this Host has no plugin packs, for an unavailable package that is not a platform limit. */
+  readonly packsReason?: string | undefined
   /** The title. */
   readonly title: string
   /** The icon's address, if the package has artwork. */
@@ -48,7 +50,7 @@ interface AddableProps {
  * @param props - the package's state, text and Add handler.
  * @returns the card.
  */
-export function AddableCard({ services, state, reason, title, icon, description, onAdd, children }: AddableProps): ReactNode {
+export function AddableCard({ services, state, reason, packsReason, title, icon, description, onAdd, children }: AddableProps): ReactNode {
   const { t } = services
   let action: ReactNode
   let line: ReactNode
@@ -76,7 +78,7 @@ export function AddableCard({ services, state, reason, title, icon, description,
       line = <StateLine tone="info">{t('bundle.restart')}</StateLine>
       break
     case 'unavailable':
-      line = <StateLine tone="warning">{t('bundle.unavailable')}</StateLine>
+      line = <StateLine tone="warning">{packsReason === undefined ? t('bundle.unavailable') : t('bundle.unavailableWhy', { reason: packsReason })}</StateLine>
       break
     case 'failed':
       line = <StateLine tone="error" action={{ label: t('bundle.retry'), onClick: onAdd }}>{reason === undefined ? t('bundle.failed') : t('bundle.failedWhy', { reason })}</StateLine>
@@ -125,7 +127,7 @@ export function BundleCard({ name, title, description, services, onAdd, children
   const view = useBundle(services, name)
   if (title === undefined) return <SkeletonCard />
   return (
-    <AddableCard services={services} state={view?.state ?? 'checking'} reason={view?.reason} title={title ?? ''} description={description}
+    <AddableCard services={services} state={view?.state ?? 'checking'} reason={view?.reason} packsReason={view?.packsReason} title={title ?? ''} description={description}
       onAdd={onAdd ?? (() => { void services.bundles.install(name) })}>
       {children}
     </AddableCard>
