@@ -27,6 +27,8 @@ export interface GateUnlock {
   readonly minutes: number | undefined
   /** Open the unlock dialog; undefined where no unlock applies (the computer itself, or no store installed). */
   readonly open: (() => void) | undefined
+  /** Whether the device holds a running unlock now. */
+  readonly unlocked: boolean
 }
 
 /**
@@ -43,8 +45,8 @@ export function noteUnlockedAction(): void {
  */
 export function currentGateUnlock(): GateUnlock {
   const view = installed?.hooks.unlock.getSnapshot()
-  if (installed === undefined || view === undefined || view.place !== 'device') return { minutes: undefined, open: undefined }
-  return { minutes: view.state.kind === 'elevated' ? undefined : view.state.unlockMinutes, open: installed.open }
+  if (installed === undefined || view === undefined || view.place !== 'device') return { minutes: undefined, open: undefined, unlocked: false }
+  return { minutes: view.state.kind === 'elevated' ? undefined : view.state.unlockMinutes, open: installed.open, unlocked: view.state.kind === 'elevated' }
 }
 
 /**
@@ -54,6 +56,6 @@ export function currentGateUnlock(): GateUnlock {
 export function useGateUnlock(): GateUnlock {
   const source = installed
   const view: UnlockView | undefined = useSyncExternalStore(source?.hooks.unlock.subscribe ?? NEVER, source === undefined ? NOTHING : source.hooks.unlock.getSnapshot)
-  if (source === undefined || view === undefined || view.place !== 'device') return { minutes: undefined, open: undefined }
-  return { minutes: view.state.kind === 'elevated' ? undefined : view.state.unlockMinutes, open: source.open }
+  if (source === undefined || view === undefined || view.place !== 'device') return { minutes: undefined, open: undefined, unlocked: false }
+  return { minutes: view.state.kind === 'elevated' ? undefined : view.state.unlockMinutes, open: source.open, unlocked: view.state.kind === 'elevated' }
 }

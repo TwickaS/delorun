@@ -136,7 +136,7 @@ function SaveSetup({ t, fetch, onSaved }: { t: Translate; fetch: HostFetch; onSa
         onChange={(event) => { setName(event.target.value) }} />
     </label>
     <Button variant="primary" size="sm" type="submit" disabled={busy}>{t('save.action')}</Button>
-    {failure === undefined ? null : <GateFailure t={t} error={failure} text={versionsFailureText(t, failure)} className={css.failed} />}
+    {failure === undefined ? null : <GateFailure t={t} error={failure} text={versionsFailureText(t, failure)} className={css.failed} retry={() => { void save() }} />}
   </form>
 }
 
@@ -221,7 +221,7 @@ function VersionRow({ t, fetch, version, count, onSwitched }: {
       </div>
     </div>
     {changes === undefined ? null : <ChangesPanel t={t} changes={changes} />}
-    {failure === undefined ? null : <GateFailure t={t} error={failure} text={versionsFailureText(t, failure)} className={css.failed} />}
+    {failure === undefined ? null : <GateFailure t={t} error={failure} text={versionsFailureText(t, failure)} className={css.failed} retry={() => { void switchTo() }} />}
   </li>
 }
 

@@ -11,6 +11,7 @@ import { Button, Checkbox, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { HostObservable, InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { FULL_ACCESS_PRESET, readEverywhere, reviewChat, setFullAccess, type WorkspaceAccess } from './consents-api.ts'
 import { ELEVATION_REQUIRED, unlockSentence } from './gate.ts'
+import { useRetryOnUnlock } from './GateNotice.tsx'
 import { currentGateUnlock, noteUnlockedAction, useGateUnlock } from './gate-unlock.ts'
 import { hostFailureOf, isRefused, LOOPBACK_REQUIRED, type HostFetch } from './host-api.ts'
 import css from './ConsentSections.module.css'
@@ -244,8 +245,9 @@ export function consentFailureText(t: FullAccessConsentProps['t'], failure: Cons
  * @param props - the consents copy and the failure.
  * @returns the alert line.
  */
-export function ConsentFailureLine({ t, failure, action }: { readonly t: FullAccessConsentProps['t']; readonly failure: ConsentFailure; readonly action?: Parameters<typeof consentFailureText>[2] }): ReactNode {
-  const { open } = useGateUnlock()
+export function ConsentFailureLine({ t, failure, action, retry }: { readonly t: FullAccessConsentProps['t']; readonly failure: ConsentFailure; readonly action?: Parameters<typeof consentFailureText>[2]; readonly retry?: (() => void) | undefined }): ReactNode {
+  const { open, unlocked } = useGateUnlock()
+  useRetryOnUnlock(failure.kind === 'unlock', unlocked, retry)
   return <div className={css.failed} role="alert">
     <p>{consentFailureText(t, failure, action)}</p>
     {failure.kind === 'unlock' && open !== undefined ? <Button variant="primary" size="sm" onClick={open}>{t('gate.unlockButton')}</Button> : null}
@@ -296,7 +298,7 @@ function OpenConsent({ consent, confirm, cancel, t }: OpenConsentProps): ReactNo
       ? <div className={css.consent}>
         <p className={css.text}>{t('switch.risk')}</p>
         {acknowledge}
-        {consent.failure === undefined ? null : <ConsentFailureLine t={t} failure={consent.failure} />}
+        {consent.failure === undefined ? null : <ConsentFailureLine t={t} failure={consent.failure} retry={confirm} />}
       </div>
       : access === undefined
       ? <p className={css.text}>{t('consent.remote')} <code className={css.command}>{FULL_ACCESS_COMMAND}</code></p>
@@ -318,7 +320,7 @@ function OpenConsent({ consent, confirm, cancel, t }: OpenConsentProps): ReactNo
           </ul>
           <p className={css.text}>{t('consent.scope')}</p>
         </details>
-        {consent.failure === undefined ? null : <ConsentFailureLine t={t} failure={consent.failure} />}
+        {consent.failure === undefined ? null : <ConsentFailureLine t={t} failure={consent.failure} retry={confirm} />}
       </div>}
   </Modal>
 }

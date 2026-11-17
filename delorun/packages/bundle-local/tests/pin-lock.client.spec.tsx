@@ -17,6 +17,8 @@ import { PinLock } from '../src/client/PinLock.tsx'
 import { ELEVATION_ROUTES } from '../src/client/devices-api.ts'
 import { applyPin, applyUnlock, PIN_LOCK_OVERLAY_ID, UNLOCK_OVERLAY_ID } from '../src/client/index.ts'
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
+import { GateFailure } from '../src/client/GateNotice.tsx'
+import { HostRequestError } from '../src/client/host-api.ts'
 import { installGateUnlock, noteUnlockedAction } from '../src/client/gate-unlock.ts'
 import { createUnlockSource, type UnlockView } from '../src/client/unlock.ts'
 import { UnlockOverlay } from '../src/client/UnlockOverlay.tsx'
@@ -507,6 +509,27 @@ describe('the unlock slides on the home', () => {
     await act(async () => { await Promise.resolve(); await Promise.resolve() })
     expect(store.hooks.unlock.getSnapshot().state).toMatchObject({ kind: 'elevated', endsAt })
     expect(store.hooks.unlock.getSnapshot().dialog).toBeNull()
+    dispose()
+  })
+})
+
+describe('an action refused for the unlock is retried once the device unlocks', () => {
+  it('retries once on the change to unlocked, not before and not again', async () => {
+    // Fails without: the retry on unlock (the person would repeat the tap), or a retry loop while unlocked.
+    let state: object = { kind: 'none', unlockMinutes: 15 }
+    const fetch = vi.fn(async () => new Response(JSON.stringify(state), { status: 200 }))
+    const store = createUnlockSource(fetch as never, () => NOW, false)
+    await store.refresh()
+    const dispose = installGateUnlock(store)
+    const retry = vi.fn()
+    const error = new HostRequestError('/x', { kind: 'refused', status: 403, code: 'ELEVATION_REQUIRED', message: 'no' })
+    render(<GateFailure t={((key: string) => key) as never} error={error} text="no" retry={retry} />)
+    expect(retry).not.toHaveBeenCalled()
+    state = { kind: 'elevated', elevationId: 'e1', endsAt: NOW + 15 * 60_000 }
+    await act(async () => { await store.refresh() })
+    expect(retry).toHaveBeenCalledOnce()
+    await act(async () => { await store.refresh() })
+    expect(retry).toHaveBeenCalledOnce()
     dispose()
   })
 })
