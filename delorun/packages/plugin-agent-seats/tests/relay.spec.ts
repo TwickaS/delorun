@@ -88,7 +88,7 @@ async function world(rootPolicy: 'ask' | 'never' = 'ask', mountListener = true):
   ctx.provide('agents', { get: (id: string) => agents.get(id) } as never)
   const recorded = new Map<string, () => void>()
   const options: SeatRelayOptions = {
-    descriptorProvider: 'agent-seat',
+    isSeatProvider: name => name === 'agent-seat',
     descriptorOf: agent => descriptors.get(agent.id),
     recorded: (_agent, callId) => new Promise<void>((resolve) => { recorded.set(callId, resolve); resolve() }),
     recordName: (_agent, toolName) => `claude_code.${toolName}`,
@@ -210,7 +210,7 @@ describe('the question', () => {
     let release: () => void = () => {}
     const gate = new Promise<void>((resolve) => { release = resolve })
     const held = new SeatRelay(w.ctx, {
-      descriptorProvider: 'agent-seat', descriptorOf: () => 'agent-seat', recordName: (_a, name) => name, recorded: () => gate,
+      isSeatProvider: name => name === 'agent-seat', descriptorOf: () => 'agent-seat', recordName: (_a, name) => name, recorded: () => gate,
     })
     const result = held.onApproval(w.child, new AbortController().signal)(question())
     await settle()

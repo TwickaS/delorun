@@ -18,9 +18,12 @@ export const EXTERNAL_AGENT_GRANT = 'external-agent'
 /** What the relay needs from the seat lane. */
 export interface SeatRelayOptions {
   /**
-   * The seat child's `subagent/descriptor` provider name; a seat is a Session the gate knows that also carries it (D13).
+   * Whether a `subagent/descriptor` provider name is a seat provider's (`claude-code-seat`, `codex-seat`); a seat is a
+   * Session the gate knows that also carries one (D13).
+   * @param name - the descriptor's provider name.
+   * @returns true for a seat provider.
    */
-  readonly descriptorProvider: string
+  isSeatProvider(name: string): boolean
   /**
    * Read the child's descriptor provider.
    * @param child - a candidate seat child.
@@ -75,7 +78,7 @@ export class SeatRelay {
    * @returns true for a seat child.
    */
   isSeat(child: Agent): boolean {
-    return this.ctx.get('externalAgents')?.seat(child.id) !== undefined && this.options.descriptorOf(child) === this.options.descriptorProvider
+    return this.ctx.get('externalAgents')?.seat(child.id) !== undefined && (this.options.descriptorOf(child) ?? '') !== '' && this.options.isSeatProvider(this.options.descriptorOf(child) ?? '')
   }
 
   /**
