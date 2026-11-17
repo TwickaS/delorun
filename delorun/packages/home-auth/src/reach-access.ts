@@ -922,6 +922,28 @@ export const COMPUTER_ONLY_ROW_MODULES = {
   '@deepseek-ai/dsh-sandbox-policy': 'it decides what the sandbox allows',
 } as const satisfies Readonly<Record<string, string>>
 
+/** The plugin-manager calls that enable, disable, remove or update one bundle (package) by `name`. */
+const BUNDLE_CALLS: ReadonlySet<string> = new Set(['pluginManager/setBundleEnabled', 'pluginManager/removeBundle', 'pluginManager/updateBundle'])
+
+/**
+ * The bundles whose rows include a {@link COMPUTER_ONLY_ROW_MODULES} module, besides the packages that provide those
+ * modules: turning one off, removing or replacing it would take the unlock gate, reach or the sandbox with it.
+ */
+export const COMPUTER_ONLY_BUNDLES: readonly string[] = ['@delorun/bundle-local', '@delorun/bundle-headless', '@delorun/bundle-studio']
+
+/**
+ * Whether a bundle call names a package that provides a computer-only module or holds its rows, or names its package in
+ * a non-text `name`. A call with no `name` is malformed and is left to the unlock and the plugin manager.
+ * @param args - the call's arguments.
+ * @returns whether the call is refused to a device in every mode.
+ */
+function namesComputerOnlyBundle(args: Readonly<Record<string, unknown>>): boolean {
+  if (args.name === undefined) return false
+  if (typeof args.name !== 'string') return true
+  const name = args.name
+  return COMPUTER_ONLY_BUNDLES.includes(name) || Object.keys(COMPUTER_ONLY_ROW_MODULES).some(module => module === name || module.startsWith(`${name}/`))
+}
+
 /**
  * Whether a plugin-manager call names a row of {@link COMPUTER_ONLY_ROW_MODULES}, or names its row in arguments the
  * condition cannot read. While those rows cannot be read, every call that names a row counts.
@@ -1054,6 +1076,7 @@ export function createCondition(
       }
       // The rows that carry the unlock gate and the sandbox stay refused to every device: no unlock and no mode lifts them.
       if (ROW_CALLS.has(action) && namesComputerOnlyRow(facts, args)) return { kind: 'deny', reason: PROTECTED_ROW_REFUSAL }
+      if (BUNDLE_CALLS.has(action) && namesComputerOnlyBundle(args)) return { kind: 'deny', reason: PROTECTED_ROW_REFUSAL }
       if (!lifted) {
         if (ROW_CALLS.has(action) && namesProtectedRow(facts, args)) return { kind: 'deny', reason: PROTECTED_ROW_REFUSAL }
         if (action === 'commands/execute' && !runsDeviceCommand(args)) return { kind: 'deny', reason: UNLISTED_COMMAND_REFUSAL }

@@ -115,6 +115,22 @@ describe('the reach policy in dangerous mode', () => {
     expect(createCondition(unreadable, DEVICE)({ ...call, args: { id: PROTECTED_ROW, enabled: false } })).toEqual(refusal)
   })
 
+  it('never lets a device disable, remove or update a bundle that holds a computer-only row, whatever its unlock or the mode', () => {
+    const refusal = { kind: 'deny', reason: PROTECTED_ROW_REFUSAL }
+    const page = reachDevicePrincipal('device-1', LISTENER, 'page-1')
+    for (const action of ['pluginManager/setBundleEnabled', 'pluginManager/removeBundle', 'pluginManager/updateBundle'] as const) {
+      for (const name of ['@delorun/home-auth', '@delorun/reach', '@deepseek-ai/dsh-sandbox-local', '@deepseek-ai/dsh-sandbox-policy', '@delorun/bundle-local', 7]) {
+        const call = { action, resource: GLOBAL, args: { name, enabled: false } }
+        for (const mode of [false, true]) {
+          for (const unlocked of [false, true]) expect(createCondition(facts(mode, unlocked), DEVICE)(call), `${action} ${String(name)}`).toEqual(refusal)
+          expect(createCondition({ ...facts(mode, false), pageUnlockOf: () => UNLOCK }, page)(call), `${action} ${String(name)} page`).toEqual(refusal)
+        }
+      }
+      // A bundle that holds none of them is unaffected: the unlock decides.
+      expect(createCondition(facts(false, true), DEVICE)({ action, resource: GLOBAL, args: { name: '@delorun/plugin-trash', enabled: false } })).toEqual({ kind: 'allow' })
+    }
+  })
+
   it('lifts only the computer-only switches on the allow list: the real reach and home-auth (pairing) switches stay refused in the mode', () => {
     const state = { ...facts(true, true), computerOnlySwitches: () => [CONSENT, REACH_SWITCH, HOME_AUTH_SWITCH] }
     const calls = [

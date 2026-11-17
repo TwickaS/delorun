@@ -20,7 +20,7 @@ import { DEVICE_APPROVAL_VERSION } from '@delorun/contract-device-approval'
 import type { HomeAuth } from './home-auth.ts'
 import { HomeAuthError, refusalBody, STRUCTURED_REFUSALS } from './errors.ts'
 import { isForeignFetchSite, isLoopbackHost, isSameLoopbackOrigin, loopbackAddressOf } from '@delorun/home'
-import { deviceSession } from './elevation-routes.ts'
+import { deviceSession, signedInDevice } from './elevation-routes.ts'
 import { isRecord } from './files.ts'
 import { devicePublicKeyOf } from './records.ts'
 
@@ -227,14 +227,13 @@ export function removeDeviceHandler(auth: HomeAuth, credential: LoopbackCredenti
 }
 
 /**
- * Whether a request arrived on a reach listener, where a signed-in device may use the device routes it is allowed.
+ * Whether a request arrived on a reach listener with a live device session, which may use the device routes it is allowed; any other reach request falls to the computer's checks and is answered `LOOPBACK_REQUIRED`.
  * @param auth - the home-auth instance, which decides the arrival.
  * @param request - the request.
- * @returns whether the arrival is a reach listener.
+ * @returns whether a signed-in device made it.
  */
 function isReachArrival(auth: HomeAuth, request: IncomingMessage): boolean {
-  const listener = auth.arrivalOf(request).listener
-  return listener !== undefined && listener !== 'loopback'
+  return signedInDevice(auth, request) !== undefined
 }
 
 /**

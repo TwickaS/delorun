@@ -130,11 +130,11 @@ describe('the device list and removal for a signed-in device', () => {
     // Pins the self check: an unlock does not widen the removal to another device.
     expect(await send('POST', `${DEVICE_REMOVE_PATH}?reach`, { v: 1, deviceId: 'someone-else' })).toMatchObject({ status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
     expect(await send('POST', `${DEVICE_REMOVE_PATH}?reach`, { v: 1, deviceId: listing['current'] })).toMatchObject({ status: 200, body: { removed: true } })
-    expect((await send('GET', `${DEVICES_PATH}?reach`)).status).toBe(401)
+    expect((await send('GET', `${DEVICES_PATH}?reach`)).status).toBe(403)
   })
 
   it('refuses an unsigned request', async () => {
-    expect((await send('GET', `${DEVICES_PATH}?reach`, undefined, { cookie: undefined })).status).toBe(401)
+    expect(await send('GET', `${DEVICES_PATH}?reach`, undefined, { cookie: undefined })).toMatchObject({ status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
   })
 })
 

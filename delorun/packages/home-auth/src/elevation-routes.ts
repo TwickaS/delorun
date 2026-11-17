@@ -67,6 +67,20 @@ function sameOrigin(request: IncomingMessage): boolean {
 }
 
 /**
+ * The admitted session of a request that carries a reach session cookie, without answering the request.
+ * @param auth - the home-auth instance.
+ * @param request - the request.
+ * @returns the session on the listener the request arrived on, or undefined without one.
+ */
+export function signedInDevice(auth: HomeAuth, request: IncomingMessage): DeviceSession | undefined {
+  const listener = auth.arrivalOf(request).listener
+  const token = tokenOf(request.headers.cookie)
+  if (listener === undefined || listener === 'loopback' || token === undefined) return undefined
+  const admission = auth.admitToken(token, listener)
+  return admission.kind === 'admitted' ? { ...admission, listener } : undefined
+}
+
+/**
  * The admitted session of a device route's request, or the refusal answered.
  * @param auth - the home-auth instance.
  * @param request - the request.
