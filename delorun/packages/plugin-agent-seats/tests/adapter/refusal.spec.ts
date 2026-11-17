@@ -37,6 +37,19 @@ describe('the seat route refuses anything that is not a seat child\'s own turn',
     expect(w.gate.starts).toEqual([])
   })
 
+  it('refuses a fork that kept the descriptor, since it has no creator', async () => {
+    const w = world({ host: { descriptorProvider: () => 'claude-code', creator: () => undefined }, seat: false })
+    expect(await collect(w.adapter.stream(request([user('task')])))).toEqual(refused)
+    expect(w.gate.starts).toEqual([])
+  })
+
+  it('starts the first turn of a child the gate has not registered yet, leaving the consent to the gate', async () => {
+    const w = world({ seat: false })
+    void collect(w.adapter.stream(request([user('task')])))
+    await new Promise(resolve => setTimeout(resolve, 20))
+    expect(w.gate.starts).toHaveLength(1)
+  })
+
   it('refuses a child whose descriptor names another subagent provider, though the gate holds a seat', async () => {
     const w = world({ host: { descriptorProvider: () => 'some-other-provider' } })
     expect(await collect(w.adapter.stream(request([user('task')])))).toEqual(refused)

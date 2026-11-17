@@ -68,7 +68,7 @@ export function registerSeatRoutes(
   const host: SeatHost = {
     descriptorProvider: (child) => {
       const session = ctx.sessions.get(child)
-      return session === undefined ? undefined : foldSubagentDescriptor(session.snapshotEvents())?.provider
+      return session === undefined ? undefined : foldSubagentDescriptor(session.ownEvents())?.provider
     },
     creator: child => ctx.sessions.get(child)?.header.parentSession,
     cwd: child => ctx.sessions.get(child)?.header.cwd,

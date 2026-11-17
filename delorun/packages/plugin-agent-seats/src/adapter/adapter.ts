@@ -199,10 +199,13 @@ export class SeatAdapter extends LlmAdapter {
   private recognise(options: GenerateOptions): SessionId | undefined {
     if (options.purpose !== undefined || options.sessionId === undefined || options.provider !== this.options.route) return undefined
     const child: SessionId = options.sessionId
-    const seat = this.options.gate.seat(child)
-    if (seat === undefined || seat.provider !== this.options.provider) return undefined
     if (this.options.host.descriptorProvider(child) !== this.options.descriptorProvider) return undefined
-    return child
+    const seat = this.options.gate.seat(child)
+    if (seat !== undefined) return seat.provider === this.options.provider ? child : undefined
+    // The gate registers a seat while it starts the program, so the first turn, and the first turn after a Host restart,
+    // arrives before any registration; `gate.start` then runs the consent review and refuses an unapproved seat.
+    // A fork is an ordinary top-level Session with no creator, so it never reaches the start.
+    return this.runs.has(child) || this.options.host.creator(child) === undefined ? undefined : child
   }
 
   private async * serve(child: SessionId, options: GenerateOptions, signal: AbortSignal): AsyncIterable<StreamChunk> {

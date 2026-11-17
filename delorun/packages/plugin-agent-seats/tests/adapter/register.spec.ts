@@ -70,12 +70,12 @@ describe('registering the seat routes', () => {
     expect(gate.starts[0]).toMatchObject({ creator: 'root', cwd: '/work', child: CHILD })
   })
 
-  it('refuses a fork that copied the descriptor, since the gate holds no seat for it', async () => {
+  it('refuses a fork that copied the descriptor, since it is a top-level Session with no creator', async () => {
     const { ctx, gate } = await mounted()
     seatChild(ctx, CHILD, 'claude-code')
     gate.seats.set(CHILD, { child: CHILD, root: SessionId('root'), provider: 'claude-code' })
     const fork = SessionId('fork-1')
-    seatChild(ctx, fork, 'claude-code')
+    ctx.sessions.create(fork, { meta: { cwd: '/work' } }).append('subagent/descriptor', snapshotSubagentDescriptor({ mode: 'continuable', provider: 'claude-code', label: 'task' }))
     const chunks = await collect(ctx.llm.stream(request([user('task')], { sessionId: fork })))
     expect(finishOf(chunks)).toMatchObject({ kind: 'error', failure: { code: SEAT_ROUTE_REFUSED } })
     expect(gate.starts).toEqual([])

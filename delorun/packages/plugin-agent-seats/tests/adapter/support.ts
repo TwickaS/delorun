@@ -184,8 +184,8 @@ export function world(change: { readonly host?: Partial<SeatHost>, readonly seat
     },
   }
   const host: SeatHost = {
-    descriptorProvider: () => 'claude-code',
-    creator: () => SessionId('root'),
+    descriptorProvider: child => child === CHILD ? 'claude-code' : undefined,
+    creator: child => child === CHILD ? SessionId('root') : undefined,
     cwd: () => '/work',
     workspaceOf: () => 'workspace-1',
     approve: (_child, request) => {
