@@ -12,7 +12,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: the ctx.connection merge and its `connection/request` event.
 import type {} from '@deepseek-ai/dsh-client-connection'
-import { REACH_DEVICE, admitApprovedDevice, gateByUnlock, requireComputerOrDevice, routedPathname } from '@delorun/home-auth'
+import { admitApprovedDevice, gateByUnlock, requireComputerOrDevice, routedPathname } from '@delorun/home-auth'
 import { z } from 'zod'
 import { MCP_REVIEW_ID_PATTERN, McpReviewError, type McpReviews } from './review.ts'
 import { ACCEPTANCE_ID_PATTERN } from './store.ts'
@@ -105,7 +105,7 @@ export function registerMcpConsentRoutes(ctx: Context, reviews: McpReviews): voi
     path: MCP_CONSENT_ROUTES.waiting,
     methods: ['GET'],
     requestBody: 'buffered',
-    admitPeer: (_request, peer) => peer.principal.kind === REACH_DEVICE,
+    admitPeer: anyDevice,
     fetch: () => answered(() => ({ servers: reviews.pending().filter(({ state }) => state === 'waiting').map(({ serverName, change }) => ({ serverName, change })) })),
   })
   ctx.connection.fetch.register({
