@@ -207,6 +207,11 @@
     },
     {
       "area": "Install and update",
+      "section": "Fixed",
+      "text": "Updating from an earlier preview no longer fails and rolls back when plugin packs were added with protection off. The new release now points the saved copies of those packs at its own files before it starts, so its safety check no longer refuses them."
+    },
+    {
+      "area": "Install and update",
       "section": "Security",
       "text": "Starting an installed runtime does not trust a release root merely because a file under `~/.delorun/trust/` names a newer version: the launcher keeps the root chain the install walked, checks that it leads from a root the launcher carries, and otherwise stops and offers a reinstall. It starts a runtime only when the release root the home stored is one the launcher ships."
     },
@@ -992,6 +997,26 @@
     },
     {
       "area": "Studio",
+      "section": "Added",
+      "text": "The setup guide has a Browser step while the Browser plugin is offered or added. You choose whether agents may use a web browser: the isolated browser adds the Browser plugin, and No browser leaves it off or turns it off. The step says whether Browser is ready to use and, when it is not, what it needs and how to set that up, with a command to copy where there is one. It also says that the first chat that uses Browser asks once to allow its browser tool, and not again."
+    },
+    {
+      "area": "Studio",
+      "section": "Added",
+      "text": "A change to Delorun's own files now takes effect without a full stop and start. A change to the studio's own built files (its scripts, styles and images) is served at once, and a page reload shows it; chats keep running. Any other change waits for a restart."
+    },
+    {
+      "area": "Studio",
+      "section": "Added",
+      "text": "**Restart** in the studio's Changes section restarts Delorun on the release it runs, so the waiting changes run. It waits for running chats to finish, or stops them if you choose, and refuses new turns while it waits; you can cancel it while it waits. If the new start fails its checks, the running Delorun keeps going unchanged and the newest change to Delorun's own files is left out, with why. Restart needs the same as Apply: the computer, or under Phone powers Full a phone with an unlock you entered on it. It is refused while an update runs, and an update is refused while a restart runs."
+    },
+    {
+      "area": "Studio",
+      "section": "Added",
+      "text": "`restartWaitSeconds` in the Changes plugin's settings sets how long a restart waits for running chats, 10 minutes by default."
+    },
+    {
+      "area": "Studio",
       "section": "Changed",
       "text": "The desktop app, the tray and the installed web app use Delorun's hex mark, in the brand colours, as their icon."
     },
@@ -1212,6 +1237,16 @@
     },
     {
       "area": "Studio",
+      "section": "Changed",
+      "text": "The Changes section and `delorun changes` read your copy of Delorun quickly: on a full-size copy, the list of changes waiting there takes about a second instead of half a minute when few files changed, and Apply, Discard and a change's review read that change's file alone, so they take well under a second. A file changed after you looked at it is still read again before it is applied. The first list after Make my copy still reads every file once."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "The cost meter's breakdown shows new and cached tokens in separate columns, and says that cached tokens cost much less, so a long chat that mostly re-reads its earlier input no longer looks like a large number of fresh tokens."
+    },
+    {
+      "area": "Studio",
       "section": "Fixed",
       "text": "Searching the sidebar now finds words inside chats. Before, the search showed \"Messages could not be searched.\" because the index it reads was switched off. The index is built in memory from your own chats when you first search; it sends nothing anywhere and leaves no copy of your chats on disk."
     },
@@ -1294,6 +1329,26 @@
       "area": "Chats and workspaces",
       "section": "Added",
       "text": "When some workspace records were set aside, the studio says so above the message box, names the file and points to `delorun doctor`; you can dismiss it. A `rename_workspace` call in a chat shows the old and new name, or why it was refused."
+    },
+    {
+      "area": "Chats and workspaces",
+      "section": "Added",
+      "text": "A new workspace can be an existing folder, a new folder with a Git repository started for it, or a clone from Git on a branch you name. Folder search, recent and suggested folders and a preview of each folder help you find the right one."
+    },
+    {
+      "area": "Chats and workspaces",
+      "section": "Added",
+      "text": "Each workspace can have its own model and thinking level, which every new chat there starts with, and can turn the isolated browser off for its chats."
+    },
+    {
+      "area": "Chats and workspaces",
+      "section": "Added",
+      "text": "When you set up a workspace you choose whether chats there can change files or have Full access (asked once, the same question as in a chat) and whether commands reach the whole internet, only sites you list, or nothing. Every choice starts on the safe one, and Create now skips the rest."
+    },
+    {
+      "area": "Chats and workspaces",
+      "section": "Added",
+      "text": "Delorun never makes or adds a workspace in your home folder itself, in its own home or in system folders, or outside the folders it is set to use, even through a link."
     },
     {
       "area": "Chats and workspaces",
@@ -1387,6 +1442,26 @@
     },
     {
       "area": "Safety and privacy",
+      "section": "Added",
+      "text": "Claude Code and Codex each have a level in Settings → Safety → External agents: Careful, Standard, Your own settings or Unrestricted. It decides what the agent may do on its own when you hand it a task."
+    },
+    {
+      "area": "Safety and privacy",
+      "section": "Added",
+      "text": "Phone powers sets how much an unlocked phone may do, and you choose it at your computer only. **Careful**, the default, keeps the terminal, turning protection off, applying plugin changes, changing Delorun's own files or undoing a change to them, making your copy of Delorun and restarting it at the computer; an unlocked phone can still undo a plugin's change, discard any waiting change and turn protection back on. **Full** lets an unlocked phone do everything the computer can, each time with an unlock you entered on the phone: the 15 minutes after you approve a phone never count. `delorun setup` asks you to choose when you turn remote access on; Settings, Devices and `delorun devices powers` change it later, and a phone shows it read-only. Approvals you give from an unlocked phone, such as accepting an MCP server or giving a workspace full access, can still start programs outside the sandbox at either level."
+    },
+    {
+      "area": "Safety and privacy",
+      "section": "Added",
+      "text": "The studio's Changes section can now apply, undo and discard changes to your copy of Delorun, make that copy, and turn protection on or off. Turning protection off asks a second time and names what would then load without review; the second ask guards against a misclick, not against someone who has your computer. A protection change made from a phone shows as a notice at the computer."
+    },
+    {
+      "area": "Safety and privacy",
+      "section": "Added",
+      "text": "A chat whose tool calls keep failing stops on its own instead of using up tokens on workaround after workaround: after 6 failed calls in a row, or 8 of the last 12, the chat shows one notice saying it stopped, and your next message carries on. A call you refused does not count. In `delorun headless` a stopped task also prints one line saying why."
+    },
+    {
+      "area": "Safety and privacy",
       "section": "Changed",
       "text": "Commands the model runs can read, and run scripts in, the approved copies of your profile's plugins, so a plugin that hands the agent the path of its own tool works. They still cannot write those copies, and they cannot read a plugin change that is waiting for your review, another profile's copies or the rest of Delorun's home."
     },
@@ -1429,6 +1504,11 @@
       "area": "Safety and privacy",
       "section": "Changed",
       "text": "The threat model, the execution-vectors page, the contracts and the package READMEs state only the protections the code provides, and where each applies: Delorun's confinement, consents, fetch guard and privacy defaults apply to the profile that `delorun` and `delorun start` run, not to `delorun headless`, `delorun plugin` or the desktop app, and on Windows the sandbox confines writes only. Each contract page opens with what is built, and protections that are not built, such as reach, Docker workspaces, the plugin revocation list and most `delorun verify` checks, are described as design pages instead."
+    },
+    {
+      "area": "Safety and privacy",
+      "section": "Changed",
+      "text": "Claude Code and Codex now start without a card in two cases: a chat on Full access, and `delorun headless` with setup's \"Never ask (dangerous)\" answer. You chose to run these without prompts, so Delorun no longer asks. Each start uses your own Claude or Codex plan, with no card and no one watching, and the agent works outside Delorun's sandbox. Before, both cases refused and told you to allow the agent for the workspace. A Full access chat shows \"Started without asking · Full access\" under the hand-off. Read Only chats, chats without a workspace folder and run folders outside the workspace still refuse, and a chat that asks still asks. To make these runs refuse again unless you allowed the agent for the workspace, turn off **Full access chats start agents without asking** in Settings, Safety, External agents. Only your computer turns it back on; a phone can turn it off."
     },
     {
       "area": "Safety and privacy",
@@ -1942,6 +2022,36 @@
     },
     {
       "area": "Plugins",
+      "section": "Added",
+      "text": "The agent can help you change Delorun's own files when a plugin cannot do the job. In a chat with full access it works in your copy of Delorun, which you can make with Make my copy in Settings, Changes. You still apply, undo or discard each change yourself."
+    },
+    {
+      "area": "Plugins",
+      "section": "Added",
+      "text": "The agent can ask to use your own browser, with your sign-ins, in one chat. You allow it on the approval card at your computer or from an unlocked phone, and it stays allowed in that chat until you turn it off or the chat ends, restarts included. The isolated browser stays available beside it."
+    },
+    {
+      "area": "Plugins",
+      "section": "Added",
+      "text": "Scheduled and background runs in that chat use your own browser only when you also allowed it for when you're away. That permission lasts 7 days unless you renew it; without it they keep the isolated browser and the agent is told why."
+    },
+    {
+      "area": "Plugins",
+      "section": "Added",
+      "text": "**Your own browser** is a new optional pack: in a chat where you allow it, the agent works in your own Chrome, signed in as you, through browse. It carries Delorun's own copy of browse, which never updates itself, and its browser row starts off."
+    },
+    {
+      "area": "Plugins",
+      "section": "Added",
+      "text": "Until Chrome is paired, the row reads \"Needs setup · Connect Chrome\" with the steps: add the browse extension, select **Get a pairing code** and enter the code in the extension. The code comes from the computer only."
+    },
+    {
+      "area": "Plugins",
+      "section": "Added",
+      "text": "A skill teaches the agent to work in your browser carefully: read the page first, hand sign-ins, codes and payments back to you, and close the tabs it opened."
+    },
+    {
+      "area": "Plugins",
       "section": "Changed",
       "text": "The Agents step now says \"A saved sign-in was found on this computer. If it has expired, the first task tells you how to sign in again.\" for Claude Code and Codex, because a sign-in file on disk cannot prove the sign-in still works."
     },
@@ -1989,6 +2099,16 @@
       "area": "Plugins",
       "section": "Changed",
       "text": "Screenshots, PDFs and other files Browser saves go into a hidden `.playwright-mcp` folder in the chat's project, and the agent gets a link to each one. Delorun gives that folder its own `.gitignore`, so Git leaves the files out of commits, including in a `.playwright-mcp` folder you already have that has none. A `.gitignore` already in that folder, and your project's `.gitignore`, are left as they are."
+    },
+    {
+      "area": "Plugins",
+      "section": "Changed",
+      "text": "Turning on Claude Code downloads Anthropic's Claude Agent SDK package from Anthropic's official npm distribution and checks it against the signed release, instead of finding it inside Delorun's own files, so Delorun no longer redistributes that program."
+    },
+    {
+      "area": "Plugins",
+      "section": "Changed",
+      "text": "Settings → Setup versions names a change by what it did, such as `Undid: Turned off reading-list`, instead of its internal id; versions recorded before show without the id too."
     },
     {
       "area": "Plugins",
@@ -2104,6 +2224,31 @@
       "area": "Plugins",
       "section": "Fixed",
       "text": "A plugin that needs something from your computer now says \"Needs setup\" with the reason and the fix on its card in the Plugins list, not only on its own page. Browser shows it when its Chromium download is missing."
+    },
+    {
+      "area": "Plugins",
+      "section": "Fixed",
+      "text": "Handing a task to Codex no longer adds the task's folder to the trusted folders in your own Codex settings."
+    },
+    {
+      "area": "Plugins",
+      "section": "Fixed",
+      "text": "If the model set in your Codex settings is not offered on your plan, Codex now stops before the task and names that model and the ones you can choose, instead of failing with a generic error."
+    },
+    {
+      "area": "Plugins",
+      "section": "Fixed",
+      "text": "When your Codex plan's usage limit is reached, the result says so and, when Codex reports it, when the limit resets."
+    },
+    {
+      "area": "Plugins",
+      "section": "Fixed",
+      "text": "Codex hand-offs read the whole list of models your plan offers, however many pages it has, instead of reporting a model past the tenth page as not offered. If the list cannot be read in full, the run says so."
+    },
+    {
+      "area": "Plugins",
+      "section": "Fixed",
+      "text": "Stopping a chat, or archiving it, now ends the Claude Code and Codex tasks that chat handed off. Stop ends the tasks that turn started; archiving ends every task the chat started. A task from an earlier turn still runs until it finishes, reaches its time limit, or you archive the chat."
     },
     {
       "area": "Plugins",
@@ -2387,6 +2532,11 @@
     },
     {
       "area": "Commands",
+      "section": "Fixed",
+      "text": "`delorun agents login claude-code` finds Claude Code when it is added, instead of reporting it as not installed."
+    },
+    {
+      "area": "Commands",
       "section": "Security",
       "text": "The release an update starts does not inherit variables that load code into Node, its loader or OpenSSL, such as `NODE_OPTIONS` or `LD_PRELOAD`, even when a `.env` file set them for the running release; the launcher already dropped them from every start."
     },
@@ -2442,6 +2592,180 @@
     }
   ],
   "versions": [
+    {
+      "version": "0.1.0-preview.1.10",
+      "date": "2026-11-17",
+      "preview": true,
+      "areas": [
+        {
+          "area": "Studio",
+          "items": [
+            {
+              "section": "Added",
+              "text": "The setup guide has a Browser step while the Browser plugin is offered or added. You choose whether agents may use a web browser: the isolated browser adds the Browser plugin, and No browser leaves it off or turns it off. The step says whether Browser is ready to use and, when it is not, what it needs and how to set that up, with a command to copy where there is one. It also says that the first chat that uses Browser asks once to allow its browser tool, and not again."
+            },
+            {
+              "section": "Added",
+              "text": "A change to Delorun's own files now takes effect without a full stop and start. A change to the studio's own built files (its scripts, styles and images) is served at once, and a page reload shows it; chats keep running. Any other change waits for a restart."
+            },
+            {
+              "section": "Added",
+              "text": "**Restart** in the studio's Changes section restarts Delorun on the release it runs, so the waiting changes run. It waits for running chats to finish, or stops them if you choose, and refuses new turns while it waits; you can cancel it while it waits. If the new start fails its checks, the running Delorun keeps going unchanged and the newest change to Delorun's own files is left out, with why. Restart needs the same as Apply: the computer, or under Phone powers Full a phone with an unlock you entered on it. It is refused while an update runs, and an update is refused while a restart runs."
+            },
+            {
+              "section": "Added",
+              "text": "`restartWaitSeconds` in the Changes plugin's settings sets how long a restart waits for running chats, 10 minutes by default."
+            },
+            {
+              "section": "Changed",
+              "text": "The Changes section and `delorun changes` read your copy of Delorun quickly: on a full-size copy, the list of changes waiting there takes about a second instead of half a minute when few files changed, and Apply, Discard and a change's review read that change's file alone, so they take well under a second. A file changed after you looked at it is still read again before it is applied. The first list after Make my copy still reads every file once."
+            },
+            {
+              "section": "Changed",
+              "text": "The cost meter's breakdown shows new and cached tokens in separate columns, and says that cached tokens cost much less, so a long chat that mostly re-reads its earlier input no longer looks like a large number of fresh tokens."
+            }
+          ]
+        },
+        {
+          "area": "Chats and workspaces",
+          "items": [
+            {
+              "section": "Added",
+              "text": "A new workspace can be an existing folder, a new folder with a Git repository started for it, or a clone from Git on a branch you name. Folder search, recent and suggested folders and a preview of each folder help you find the right one."
+            },
+            {
+              "section": "Added",
+              "text": "Each workspace can have its own model and thinking level, which every new chat there starts with, and can turn the isolated browser off for its chats."
+            },
+            {
+              "section": "Added",
+              "text": "When you set up a workspace you choose whether chats there can change files or have Full access (asked once, the same question as in a chat) and whether commands reach the whole internet, only sites you list, or nothing. Every choice starts on the safe one, and Create now skips the rest."
+            },
+            {
+              "section": "Added",
+              "text": "Delorun never makes or adds a workspace in your home folder itself, in its own home or in system folders, or outside the folders it is set to use, even through a link."
+            }
+          ]
+        },
+        {
+          "area": "Safety and privacy",
+          "items": [
+            {
+              "section": "Added",
+              "text": "Claude Code and Codex each have a level in Settings → Safety → External agents: Careful, Standard, Your own settings or Unrestricted. It decides what the agent may do on its own when you hand it a task."
+            },
+            {
+              "section": "Added",
+              "text": "Phone powers sets how much an unlocked phone may do, and you choose it at your computer only. **Careful**, the default, keeps the terminal, turning protection off, applying plugin changes, changing Delorun's own files or undoing a change to them, making your copy of Delorun and restarting it at the computer; an unlocked phone can still undo a plugin's change, discard any waiting change and turn protection back on. **Full** lets an unlocked phone do everything the computer can, each time with an unlock you entered on the phone: the 15 minutes after you approve a phone never count. `delorun setup` asks you to choose when you turn remote access on; Settings, Devices and `delorun devices powers` change it later, and a phone shows it read-only. Approvals you give from an unlocked phone, such as accepting an MCP server or giving a workspace full access, can still start programs outside the sandbox at either level."
+            },
+            {
+              "section": "Added",
+              "text": "The studio's Changes section can now apply, undo and discard changes to your copy of Delorun, make that copy, and turn protection on or off. Turning protection off asks a second time and names what would then load without review; the second ask guards against a misclick, not against someone who has your computer. A protection change made from a phone shows as a notice at the computer."
+            },
+            {
+              "section": "Added",
+              "text": "A chat whose tool calls keep failing stops on its own instead of using up tokens on workaround after workaround: after 6 failed calls in a row, or 8 of the last 12, the chat shows one notice saying it stopped, and your next message carries on. A call you refused does not count. In `delorun headless` a stopped task also prints one line saying why."
+            },
+            {
+              "section": "Changed",
+              "text": "Claude Code and Codex now start without a card in two cases: a chat on Full access, and `delorun headless` with setup's \"Never ask (dangerous)\" answer. You chose to run these without prompts, so Delorun no longer asks. Each start uses your own Claude or Codex plan, with no card and no one watching, and the agent works outside Delorun's sandbox. Before, both cases refused and told you to allow the agent for the workspace. A Full access chat shows \"Started without asking · Full access\" under the hand-off. Read Only chats, chats without a workspace folder and run folders outside the workspace still refuse, and a chat that asks still asks. To make these runs refuse again unless you allowed the agent for the workspace, turn off **Full access chats start agents without asking** in Settings, Safety, External agents. Only your computer turns it back on; a phone can turn it off."
+            }
+          ]
+        },
+        {
+          "area": "Plugins",
+          "items": [
+            {
+              "section": "Added",
+              "text": "The agent can help you change Delorun's own files when a plugin cannot do the job. In a chat with full access it works in your copy of Delorun, which you can make with Make my copy in Settings, Changes. You still apply, undo or discard each change yourself."
+            },
+            {
+              "section": "Added",
+              "text": "The agent can ask to use your own browser, with your sign-ins, in one chat. You allow it on the approval card at your computer or from an unlocked phone, and it stays allowed in that chat until you turn it off or the chat ends, restarts included. The isolated browser stays available beside it."
+            },
+            {
+              "section": "Added",
+              "text": "Scheduled and background runs in that chat use your own browser only when you also allowed it for when you're away. That permission lasts 7 days unless you renew it; without it they keep the isolated browser and the agent is told why."
+            },
+            {
+              "section": "Added",
+              "text": "**Your own browser** is a new optional pack: in a chat where you allow it, the agent works in your own Chrome, signed in as you, through browse. It carries Delorun's own copy of browse, which never updates itself, and its browser row starts off."
+            },
+            {
+              "section": "Added",
+              "text": "Until Chrome is paired, the row reads \"Needs setup · Connect Chrome\" with the steps: add the browse extension, select **Get a pairing code** and enter the code in the extension. The code comes from the computer only."
+            },
+            {
+              "section": "Added",
+              "text": "A skill teaches the agent to work in your browser carefully: read the page first, hand sign-ins, codes and payments back to you, and close the tabs it opened."
+            },
+            {
+              "section": "Changed",
+              "text": "Turning on Claude Code downloads Anthropic's Claude Agent SDK package from Anthropic's official npm distribution and checks it against the signed release, instead of finding it inside Delorun's own files, so Delorun no longer redistributes that program."
+            },
+            {
+              "section": "Changed",
+              "text": "Settings → Setup versions names a change by what it did, such as `Undid: Turned off reading-list`, instead of its internal id; versions recorded before show without the id too."
+            },
+            {
+              "section": "Fixed",
+              "text": "Handing a task to Codex no longer adds the task's folder to the trusted folders in your own Codex settings."
+            },
+            {
+              "section": "Fixed",
+              "text": "If the model set in your Codex settings is not offered on your plan, Codex now stops before the task and names that model and the ones you can choose, instead of failing with a generic error."
+            },
+            {
+              "section": "Fixed",
+              "text": "When your Codex plan's usage limit is reached, the result says so and, when Codex reports it, when the limit resets."
+            },
+            {
+              "section": "Fixed",
+              "text": "Codex hand-offs read the whole list of models your plan offers, however many pages it has, instead of reporting a model past the tenth page as not offered. If the list cannot be read in full, the run says so."
+            },
+            {
+              "section": "Fixed",
+              "text": "Stopping a chat, or archiving it, now ends the Claude Code and Codex tasks that chat handed off. Stop ends the tasks that turn started; archiving ends every task the chat started. A task from an earlier turn still runs until it finishes, reaches its time limit, or you archive the chat."
+            }
+          ]
+        },
+        {
+          "area": "Commands",
+          "items": [
+            {
+              "section": "Fixed",
+              "text": "`delorun agents login claude-code` finds Claude Code when it is added, instead of reporting it as not installed."
+            }
+          ]
+        }
+      ],
+      "fromUpstream": {
+        "ref": "dsh-v0.2.2-rc.3",
+        "items": []
+      },
+      "previews": []
+    },
+    {
+      "version": "0.1.0-preview.1.9",
+      "date": "2026-11-17",
+      "preview": true,
+      "areas": [
+        {
+          "area": "Install and update",
+          "items": [
+            {
+              "section": "Fixed",
+              "text": "Updating from an earlier preview no longer fails and rolls back when plugin packs were added with protection off. The new release now points the saved copies of those packs at its own files before it starts, so its safety check no longer refuses them."
+            }
+          ]
+        }
+      ],
+      "fromUpstream": {
+        "ref": "dsh-v0.2.2-rc.3",
+        "items": []
+      },
+      "previews": []
+    },
     {
       "version": "0.1.0-preview.1.8",
       "date": "2026-11-17",

@@ -1,5 +1,5 @@
 ---
-area: Safety
+area: Safety and privacy
 section: Added
 ---
 

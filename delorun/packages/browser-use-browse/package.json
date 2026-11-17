@@ -11,6 +11,10 @@
     "./copy": "./src/copy.ts",
     "./wire": "./src/wire.ts"
   },
+  "files": [
+    "src",
+    "LICENSE"
+  ],
   "dependencies": {
     "@delorun/home-auth": "workspace:*",
     "zod": "4.6.6"
