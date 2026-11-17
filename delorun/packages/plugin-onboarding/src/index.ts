@@ -102,10 +102,10 @@ export function apply(ctx: Context, config: Config): void {
       admitPeer: admitApprovedDevice(),
       fetch: () => Promise.resolve(json({ setAside: child.workspaceRegistry.quarantined.slice(-MAX_SET_ASIDE).map(file => basename(file)) } satisfies WorkspaceNoticeAnswer)),
     })
-    const unlocked = (fetch: (request: Request) => Promise<Response>) => gateByUnlock(() => child.get('homeAuth'), fetch)
+    const unlocked = (fetch: (request: Request) => Promise<Response>, options?: { readonly renews?: boolean }) => gateByUnlock(() => child.get('homeAuth'), fetch, options)
     child.connection.fetch.register({ path: ADD_WORKSPACE_PATH, methods: ['POST'], requestBody: 'buffered', ...unlocked(request => addWorkspace(request, deps)) })
     child.connection.fetch.register({ path: CLONE_PATH, methods: ['POST'], requestBody: 'buffered', ...unlocked(request => clones.start(request)) })
-    child.connection.fetch.register({ path: CLONE_STATUS_PATH, methods: ['POST'], requestBody: 'buffered', ...unlocked(request => clones.status(request)) })
+    child.connection.fetch.register({ path: CLONE_STATUS_PATH, methods: ['POST'], requestBody: 'buffered', ...unlocked(request => clones.status(request), { renews: false }) })
   })
   ctx.connection.fetch.register({
     path: SETUP_RECORD_PATH,

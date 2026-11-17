@@ -436,6 +436,18 @@ function isEverydayCall(action: RemoteAccessAction, args: Readonly<Record<string
   return false
 }
 
+/**
+ * The actions of {@link REACH_ELEVATED_ACTIONS} that only read or re-attach: they need the unlock but never renew it, because
+ * a studio lists, watches and reattaches on its own while the person does nothing. Every other elevated call renews the
+ * unlock it ran under once the condition allows it.
+ */
+export const ELEVATED_READS: ReadonlySet<string> = new Set([
+  'terminal/list', 'terminal/watch', 'terminal/shells', 'terminal/environment', 'terminal/attach',
+  'mcpManager/watch',
+  'directoryPicker/list',
+  'dynamicCordisRunner/getClientCode', 'dynamicCordisRunner/inventory', 'dynamicCordisRunner/resolveInspectQuery', 'dynamicCordisRunner/syncInspectManifest',
+])
+
 const PLUGIN_MANAGEMENT = 'install, enable, update or remove a plugin, code that runs in the Host outside any sandbox; the plugin manager still refuses every change to a guard plugin'
 const PROFILE_HISTORY = 'undo or restore a profile change; the plugin manager still refuses one that changes a guard plugin'
 const SETTINGS_WRITE = 'change a setting of the home'
@@ -1083,11 +1095,13 @@ export function createCondition(
     if (elevation === undefined) return { kind: 'deny', reason }
     if (call) {
       facts.logElevated(`home-auth: elevated action: device=${deviceId} listener=${listener} action=${action} elevation=${elevation.id}`)
-      facts.touchUnlock?.(elevation.id)
+      // Renewed below, once the whole condition allows the call.
+      if (!ELEVATED_READS.has(action)) renew = elevation.id
     }
     return undefined
   }
-  return ({ action, resource, args }) => {
+  let renew: string | undefined
+  const decide: ReachCondition = ({ action, resource, args }) => {
     // Dangerous mode lifts the four refusals below for an unlocked device: an elevated action is still refused to a
     // locked one, and the unlock check follows. The mode is read per call, so withdrawing the grant restores them.
     const lifts: SettingsLift[] = []
@@ -1151,6 +1165,13 @@ export function createCondition(
       return { kind: 'deny', reason: outside }
     }
     return ALLOW
+  }
+  return (question) => {
+    renew = undefined
+    const decision = decide(question)
+    // An unlock is renewed by a state-changing call that was allowed, never by a read or a call refused after the unlock check.
+    if (decision.kind === 'allow' && renew !== undefined) facts.touchUnlock?.(renew)
+    return decision
   }
 }
 
