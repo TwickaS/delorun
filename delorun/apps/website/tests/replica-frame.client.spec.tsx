@@ -8,8 +8,8 @@ import { act, createRef, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { renderToString } from 'react-dom/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { SESSION_IDS, stateAt, stepLength, type ChapterFile } from '../src/replica/model.ts'
-import { ReplicaFrame } from '../src/replica/ReplicaFrame.tsx'
+import { openingChapter, SESSION_IDS, stateAt, stepLength, type ChapterFile } from '../src/replica/model.ts'
+import { ReplicaFrame, ReplicaPair } from '../src/replica/ReplicaFrame.tsx'
 import { CHAPTER_FILES, loadFixture } from '../src/replica/sessions/index.ts'
 import { boxOf, ReplicaLive } from '../src/replica/ReplicaLive.tsx'
 import Studio, { type StudioHandle } from '../src/replica/ReplicaStudio.tsx'
@@ -97,7 +97,8 @@ describe('ReplicaFrame', () => {
     expect(html).toContain('role="tablist"')
     for (const chapter of file.chapters) expect(html).toContain(chapter.title)
     expect(html).toContain('<noscript>')
-    expect(html.match(/inert/g)).toBeNull()
+    // The still is inert; the live studio's wrapper, which carries `inert` beside the studio attribute, is not drawn yet.
+    expect(html).not.toMatch(/data-studio-replica=""[^>]*inert/)
   })
 
   it('draws the studio inert and announces the chapter the visitor picks on the rail', async () => {
@@ -127,7 +128,7 @@ describe('ReplicaFrame', () => {
     const stills = stillMarkup({ session: 'ordinary-work', width: 'responsive' })
     const { container } = mount(<ReplicaLive session="ordinary-work" width="responsive" stills={stills} />)
     for (const width of ['desktop', 'phone'] as const) {
-      expect(container.querySelector(`[data-replica-still="${width}"]`)?.innerHTML).toBe(stills[width])
+      expect(container.querySelector(`[data-replica-still="${width}"]`)?.firstElementChild?.innerHTML).toBe(stills[width])
     }
   })
 })
@@ -175,13 +176,25 @@ describe('the still the server draws', () => {
 })
 
 describe('the frames', () => {
-  it('fit the hero to about 420 px at a 390 px window, and keep a phone\'s proportions beside the desktop width', () => {
-    // At a 390 px window the frame is 358 px wide.
-    const phone = boxOf('ordinary-work', 'responsive', 'phone')
-    expect(358 * phone.height / phone.width).toBeGreaterThan(400)
-    expect(358 * phone.height / phone.width).toBeLessThan(460)
-    const paired = boxOf('ordinary-work', 'pair', 'phone')
-    expect(paired.height / paired.width).toBeGreaterThan(1.5)
+  it('give every slot a frame at least as tall at a narrow column as at a wide one, and a phone beside the desktop width its own proportions', () => {
+    for (const id of SESSION_IDS) {
+      for (const width of ['desktop', 'phone'] as const) {
+        const box = boxOf(id, 'responsive', width)
+        expect(box.mid ?? box.height).toBeGreaterThanOrEqual(box.height)
+        expect(box.narrow ?? box.mid ?? box.height).toBeGreaterThanOrEqual(box.mid ?? box.height)
+      }
+      const paired = boxOf(id, 'pair', 'phone')
+      expect(paired.height / paired.width).toBeGreaterThan(1.1)
+    }
+  })
+
+  it('sets the heights on each slot for the stylesheet to choose from', () => {
+    const { container } = mount(<ReplicaLive session="ordinary-work" width="pair" />)
+    const phone = container.querySelector<HTMLElement>('[data-slot="phone"]')!
+    const box = boxOf('ordinary-work', 'pair', 'phone')
+    expect(phone.hasAttribute('data-device')).toBe(true)
+    expect(phone.style.getPropertyValue('--h')).toBe(`${String(box.height)}px`)
+    expect(phone.style.getPropertyValue('--h-side')).toBe(`${String(box.side)}px`)
   })
 })
 
@@ -245,8 +258,10 @@ describe('the terminal chapter', () => {
     expect(container.querySelector('[data-part="terminal"]')?.textContent).toBe('$ del')
     // Every other chapter draws the studio with its sidebar and no terminal window.
     view.rerender(<Studio file={file} width="desktop" state={stateAt(file, 0, 0).state} epoch={0} handle={createRef<StudioHandle>()} onReady={ready} />)
-    expect(container.querySelector('[data-part="sidebar"]')).not.toBeNull()
-    expect(container.querySelector('[data-part="terminal"]')).toBeNull()
+    // The terminal window stays in the outgoing copy until the studio has drawn.
+    const live = [...container.querySelectorAll('[data-studio-replica]')].find(element => element.closest('[data-outgoing]') === null)!
+    expect(live.querySelector('[data-part="sidebar"]')).not.toBeNull()
+    expect(live.querySelector('[data-part="terminal"]')).toBeNull()
   })
 
   it('shows the terminal from the chapter\'s first moment, with the whole command and its output within 700 ms', () => {
@@ -264,5 +279,82 @@ describe('the replays of changes and setup versions', () => {
       const before = stateAt(file, chapter - 1, Number.POSITIVE_INFINITY).state
       expect(JSON.stringify(state) !== JSON.stringify(before) || presses.length > 0).toBe(true)
     }
+  })
+})
+
+describe('the stills', () => {
+  it('are inert as well as hidden, so no control drawn in one takes the keyboard', () => {
+    const stills = stillMarkup({ session: 'changes-and-versions', width: 'responsive' })
+    const { container } = mount(<ReplicaLive session="changes-and-versions" width="responsive" stills={stills} />)
+    const holders = [...container.querySelectorAll('[data-replica-still]')]
+    expect(holders).toHaveLength(2)
+    for (const holder of holders) {
+      expect(holder.getAttribute('aria-hidden')).toBe('true')
+      expect(holder.hasAttribute('inert')).toBe(true)
+    }
+    const undo = buttonsNamed(container, 'Undo')
+    expect(undo.length).toBeGreaterThan(0)
+    for (const button of undo) expect(button.closest('[inert]')).not.toBeNull()
+  })
+
+  it('leave the studio\'s own wrapper to the live studio, which is what `[data-studio-replica][inert]` selects', async () => {
+    const { container } = mount(<ReplicaFrame session="ordinary-work" width="desktop" />)
+    expect(container.querySelector('[data-studio-replica][inert]')).toBeNull()
+    await until(() => { expect(container.querySelector('[data-studio-replica][inert]')).not.toBeNull() }, 15_000)
+    expect(container.querySelectorAll('[data-studio-replica][inert]')).toHaveLength(1)
+  })
+})
+
+describe('the phone section\'s replica', () => {
+  it('opens on the chapter where the agent asks first, with the approval card in the still', () => {
+    const file = CHAPTER_FILES['ordinary-work']
+    const opening = openingChapter(file, 'asks-first')
+    expect(opening).toBe(1)
+    const stills = stillMarkup({ session: 'ordinary-work', width: 'pair', opens: 'asks-first' })
+    const { container } = mount(<ReplicaLive session="ordinary-work" width="pair" opens="asks-first" stills={stills} />)
+    expect(tabsIn(container)[opening]!.getAttribute('aria-selected')).toBe('true')
+    expect(container.querySelector('[aria-live="polite"]')?.textContent).toBe(file.chapters[opening]!.caption)
+    for (const width of ['desktop', 'phone'] as const) {
+      const still = container.querySelector(`[data-replica-still="${width}"]`)!
+      const card = still.querySelector('[data-start-only]')
+      expect(card?.textContent).toContain('Waiting for approval')
+      // The finished chat, which a replay that does not play shows, has the composer in the card's place.
+      expect(still.querySelector('[data-later] textarea, [data-later] input, [data-later] [role="textbox"]')).not.toBeNull()
+    }
+  })
+
+  it('is what ReplicaPair places: the pair, opening there', () => {
+    const element = ReplicaPair({ session: 'ordinary-work' })
+    expect(element.props).toMatchObject({ session: 'ordinary-work', width: 'pair', opens: 'asks-first' })
+  })
+
+  it('names a chapter that does not exist loudly', () => {
+    expect(() => openingChapter(CHAPTER_FILES['ordinary-work'], 'missing')).toThrow('no chapter "missing"')
+    expect(openingChapter(CHAPTER_FILES['ordinary-work'])).toBe(0)
+  })
+
+  it('leaves the hero opening on the question, with no approval card in its still', () => {
+    const { container } = mount(<ReplicaLive session="ordinary-work" width="responsive" stills={stillMarkup({ session: 'ordinary-work', width: 'responsive' })} />)
+    expect(container.querySelector('[data-start-only]')).toBeNull()
+  })
+})
+
+describe('the studio between chapters', () => {
+  it('keeps the outgoing chapter painted as an inert copy until the incoming one has drawn, then removes it', async () => {
+    const file = CHAPTER_FILES['changes-and-versions']
+    const ready = vi.fn()
+    const draw = (chapter: number) => <Studio file={file} width="desktop" state={stateAt(file, chapter, 0).state} epoch={chapter} handle={createRef<StudioHandle>()} onReady={ready} />
+    const view = mount(draw(0))
+    await until(() => { expect(ready).toHaveBeenCalled() }, 15_000)
+    expect(view.container.querySelector('[data-outgoing]')).toBeNull()
+    const before = view.container.querySelector('[data-studio-replica]')!.textContent
+    view.rerender(draw(1))
+    const copy = view.container.querySelector('[data-outgoing]')
+    expect(copy).not.toBeNull()
+    expect(copy!.getAttribute('aria-hidden')).toBe('true')
+    expect(copy!.hasAttribute('inert')).toBe(true)
+    expect(copy!.textContent).toContain(before!.slice(0, 20))
+    expect(copy!.querySelector('[id]')).toBeNull()
+    await until(() => { expect(view.container.querySelector('[data-outgoing]')).toBeNull() }, 5_000)
   })
 })

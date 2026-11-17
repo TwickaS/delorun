@@ -59,9 +59,59 @@
   .replica[data-width='responsive'] .panel > .caption { grid-column: 9 / 13; align-self: start; min-height: 0; max-width: 34ch; font-size: 16px; }
 }
 
-/* On a phone the chapters sit two by two, with Pause beside them, so no chapter is cut off. */
+/* On a phone the chapters are one row that scrolls sideways and snaps, with Pause beside it on the same line. */
 @media (max-width: 479.98px) {
-  .controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
-  .controls .rail { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }
-  .controls .rail [role='tab'] { min-height: 44px; padding-block: var(--dl-space-1); text-align: start; white-space: normal; }
+  .controls { flex-wrap: nowrap; align-items: stretch; gap: var(--dl-space-1); }
+  .controls .rail { flex: 1 1 0; scroll-snap-type: x proximity; }
+  .controls .rail [role='tab'] { padding-inline: var(--dl-space-1); font-size: 14px; white-space: nowrap; }
+  .toggle { align-self: center; }
 }
+
+/*
+ * A frame's height is set by the replica's column, not by an aspect ratio: the drawn studio does not scale, so a narrower
+ * column wraps its text onto more lines. The heights are the fullest chapter's at each width (`REPLICA_BOXES` in ReplicaLive.tsx),
+ * and override the aspect ratio the brand's frame sets for its content.
+ */
+.slot figure { aspect-ratio: auto !important; height: var(--h); }
+
+@container replica (max-width: 899.98px) {
+  .slot[data-slot='desktop'] figure { height: var(--h-mid, var(--h)); }
+}
+
+@container replica (max-width: 399.98px) {
+  .slot[data-slot='phone']:not([data-device]) figure { height: var(--h-mid, var(--h)); }
+}
+
+@container replica (max-width: 349.98px) {
+  .slot[data-device] figure { height: var(--h-mid, var(--h)); }
+}
+
+@container replica (max-width: 309.98px) {
+  .slot[data-slot='phone']:not([data-device]) figure, .slot[data-device] figure { height: var(--h-narrow, var(--h-mid, var(--h))); }
+}
+
+@container replica (min-width: 900px) {
+  .slot[data-device] figure { height: var(--h-side, var(--h)); }
+}
+
+/* The pair's phone width is drawn as a phone: a bezel with rounded corners and a plain status bar above the screen. */
+.slot[data-device] {
+  box-sizing: border-box;
+  max-width: 390px;
+  overflow: hidden;
+  border: 6px solid var(--dl-text);
+  border-radius: calc(var(--dl-radius-lg) * 2);
+  background: var(--dl-text);
+}
+
+.slot[data-device] figure { border: 0; border-radius: 0; }
+
+.statusBar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  background: var(--dl-surface-raised);
+}
+
+.island { width: 64px; height: 8px; border-radius: 4px; background: var(--dl-text); }
