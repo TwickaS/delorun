@@ -80,6 +80,46 @@ describe('while a turn runs', () => {
   })
 
   it.each([
+    ['nothing is known', {}, {}],
+    ['only the plan is known', { plan: 'Max' }, { plan: 'Max' }],
+    ['every figure is known', { plan: 'Max', fiveHourPercent: 42, weeklyPercent: 7, fiveHourResetAt: 1_000 }, { plan: 'Max', fiveHourPercent: 42, weeklyPercent: 7, fiveHourResetAt: 1_000 }],
+  ])('shows the account figures when %s, keeping the state it is in', async (_name, figures, shown) => {
+    const w = await stateWorld({ account: () => Promise.resolve(figures) })
+    const running = collect(w.adapter.stream(w.request([w.say('task')])))
+    await tick()
+    await tick()
+    const current = view(w)
+    expect(current).toMatchObject({ state: 'working', ...shown })
+    for (const key of ['plan', 'fiveHourPercent', 'weeklyPercent', 'fiveHourResetAt'] as const) {
+      if (!(key in shown)) expect(current?.[key]).toBeUndefined()
+    }
+    await finishTurn(w, running)
+  })
+
+  it('logs the account figures once while they stay the same', async () => {
+    const w = await stateWorld({ account: () => Promise.resolve({ plan: 'Pro' }) })
+    const running = collect(w.adapter.stream(w.request([w.say('task')])))
+    await tick()
+    await tick()
+    const before = records(w, SEAT_STATUS_RECORD).length
+    w.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+    await tick()
+    await tick()
+    expect(records(w, SEAT_STATUS_RECORD)).toHaveLength(before)
+    await finishTurn(w, running)
+  })
+
+  it('reports figures that cannot be read and shows none', async () => {
+    const w = await stateWorld({ account: () => Promise.reject(new Error('store unreadable')) })
+    const running = collect(w.adapter.stream(w.request([w.say('task')])))
+    await tick()
+    await tick()
+    expect(w.warnings.join('\n')).toContain('store unreadable')
+    expect(view(w)?.plan).toBeUndefined()
+    await finishTurn(w, running)
+  })
+
+  it.each([
     ['a refusal of the gate', new GateRefusedError({ category: 'consent', reason: 'The person declined.' })],
     ['a failure to open the program', new ProgramOpenError({ category: 'program', detail: 'it crashed' })],
   ])('ends the "Starting" state when the start ends in %s', async (_name, failure) => {

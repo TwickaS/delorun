@@ -29,8 +29,20 @@ export interface SeatStateReader {
   stateOf(session: Session): SeatProjectionState
 }
 
+/** The plan and limit figures of an account, as the chat shows them. */
+export interface AccountFigures {
+  /** The plan's name. */
+  readonly plan?: string
+  /** Percent of the 5-hour allowance used. */
+  readonly fiveHourPercent?: number
+  /** Percent of the weekly allowance used. */
+  readonly weeklyPercent?: number
+  /** When the 5-hour window resets, epoch milliseconds. */
+  readonly fiveHourResetAt?: number
+}
+
 /** What a status record adds to the current view. */
-export interface StatusChange {
+export interface StatusChange extends AccountFigures {
   /** The version of the program, when it has reported one. */
   readonly version?: string
   /** A short name for the program's own settings. */
@@ -172,6 +184,26 @@ export class SeatRecords implements SeatStateStore {
       ...view.endedReason === undefined ? {} : { endedReason: view.endedReason },
       ...view.modelPicker === undefined ? {} : { modelPicker: view.modelPicker },
       ...since === undefined ? {} : { pending: since },
+    })
+  }
+
+  /**
+   * Log the account figures the chat shows, keeping the state it is in. Nothing is logged when they are the ones shown.
+   * @param child - the seat child.
+   * @param figures - the plan and limit figures; an absent field keeps what is shown.
+   */
+  setAccount(child: SessionId, figures: AccountFigures): void {
+    const view = this.viewOf(child)
+    if (view === null) throw new Error(`the chat ${child} is not a seat child`)
+    const changed = (Object.keys(figures) as (keyof AccountFigures)[]).some(key => figures[key] !== view[key])
+    if (!changed) return
+    appendPluginRecord(this.sessionOf(child), SEAT_STATUS_RECORD, {
+      state: view.state,
+      ...view.resetAt === undefined ? {} : { resetAt: view.resetAt },
+      ...view.endedReason === undefined ? {} : { endedReason: view.endedReason },
+      ...view.modelPicker === undefined ? {} : { modelPicker: view.modelPicker },
+      ...view.pending === undefined ? {} : { pending: view.pending.since },
+      ...figures,
     })
   }
 

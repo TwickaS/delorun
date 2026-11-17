@@ -11,7 +11,7 @@ import { SEAT_STATE_RECORD, SEAT_STATUS_RECORD, type SeatStateRecordData, type S
 import type { AgentSeatView, SeatAgent, SeatModelPicker, SeatViewState } from './view.ts'
 
 /** The fold's own version; bump it when the state fields or the fold change. */
-export const SEAT_FOLD_VERSION = 4
+export const SEAT_FOLD_VERSION = 5
 
 /** The shortest `ownSettings` the view shows before the program's settings are known. */
 export const DEFAULT_OWN_SETTINGS = 'its own settings'
@@ -29,6 +29,14 @@ export interface SeatShown {
   readonly version: string | null
   /** A short name for the program's own settings. */
   readonly ownSettings: string | null
+  /** The plan's name. */
+  readonly plan: string | null
+  /** Percent of the 5-hour allowance used. */
+  readonly fiveHourPercent: number | null
+  /** Percent of the weekly allowance used. */
+  readonly weeklyPercent: number | null
+  /** When the 5-hour window resets. */
+  readonly fiveHourResetAt: number | null
   /** Whether the program runs without the command sandbox its level wanted. */
   readonly sandboxUnavailable: boolean
   /** While `limit`: when the limit lifts. */
@@ -76,7 +84,7 @@ export const NO_LOGGED: SeatLogged = { programSessionId: null, cursor: null, pro
 
 /** The view's fields before any event. */
 export const NO_SHOWN: SeatShown = {
-  agent: null, state: 'idle', version: null, ownSettings: null, sandboxUnavailable: false, resetAt: null, endedReason: null, modelPicker: null, pending: null, lastAnswer: null, turns: 0,
+  agent: null, state: 'idle', version: null, ownSettings: null, plan: null, fiveHourPercent: null, weeklyPercent: null, fiveHourResetAt: null, sandboxUnavailable: false, resetAt: null, endedReason: null, modelPicker: null, pending: null, lastAnswer: null, turns: 0,
 }
 
 /**
@@ -126,6 +134,10 @@ function foldStatus(shown: SeatShown, data: Partial<SeatStatusRecordData>): Seat
     state,
     version: text(data.version) ?? shown.version,
     ownSettings: text(data.ownSettings) ?? shown.ownSettings,
+    plan: text(data.plan) ?? shown.plan,
+    fiveHourPercent: count(data.fiveHourPercent) ?? shown.fiveHourPercent,
+    weeklyPercent: count(data.weeklyPercent) ?? shown.weeklyPercent,
+    fiveHourResetAt: count(data.fiveHourResetAt) ?? shown.fiveHourResetAt,
     sandboxUnavailable: data.sandboxUnavailable === true || (state !== 'starting' && shown.sandboxUnavailable),
     resetAt: count(data.resetAt),
     endedReason: text(data.endedReason),
@@ -228,6 +240,10 @@ export function viewOf(shown: SeatShown): AgentSeatView | null {
     sandbox: 'off',
     ...shown.sandboxUnavailable ? { sandboxUnavailable: true } : {},
     state: shown.state,
+    ...shown.plan === null ? {} : { plan: shown.plan },
+    ...shown.fiveHourPercent === null ? {} : { fiveHourPercent: shown.fiveHourPercent },
+    ...shown.weeklyPercent === null ? {} : { weeklyPercent: shown.weeklyPercent },
+    ...shown.fiveHourResetAt === null ? {} : { fiveHourResetAt: shown.fiveHourResetAt },
     ...shown.resetAt === null ? {} : { resetAt: shown.resetAt },
     ...shown.endedReason === null ? {} : { endedReason: shown.endedReason },
     ...shown.pending === null ? {} : { pending: { since: shown.pending } },

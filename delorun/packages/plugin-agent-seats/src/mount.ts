@@ -16,6 +16,7 @@ import { agentTitle } from '@delorun/external-agents/copy'
 import type { ProgramApprovalAnswer, ProgramApprovalRequest } from '@delorun/external-agents/contract'
 import { gateByUnlock, requireComputerOrDevice, routedPathname } from '@delorun/home-auth'
 import { registerSeatRoutes, type SeatRouteRegistration, type SeatRouteSpec } from './adapter/index.ts'
+import { accountFigures, programVersion } from './account.ts'
 import type { Config, SeatConfig } from './config.ts'
 import { followLeaseEnds } from './lease.ts'
 import { questionRefusedNotice } from './relay/copy.ts'
@@ -88,6 +89,14 @@ export async function mountSeats(ctx: Context, config: Config, options: SeatMoun
     },
     workspaceOf,
     dir,
+    info: (agent) => {
+      const version = programVersion(agent, dir)
+      return version === undefined ? {} : { version }
+    },
+    account: async (agent) => {
+      const accounts = ctx.get('agentAccounts')
+      return accounts === undefined ? {} : accountFigures(await accounts.read(agent), Date.now())
+    },
     warn: (message) => { logger.warn(message) },
   })
   const seatProviders = new Set(externalSeats.map(({ agent }) => seatProviderName(agent)))

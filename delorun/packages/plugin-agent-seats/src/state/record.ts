@@ -30,7 +30,7 @@ export interface SeatStateRecordData {
 
 /**
  * One status record. It replaces `state` and the fields that belong to a state (`resetAt`, `endedReason`,
- * `modelPicker`, `pending`); `version` and `ownSettings` stay as they were when absent.
+ * `modelPicker`, `pending`); `version`, `ownSettings` and the account figures stay as they were when absent.
  */
 export interface SeatStatusRecordData {
   /** The agent's state. */
@@ -39,6 +39,14 @@ export interface SeatStatusRecordData {
   readonly version?: string
   /** A short name for the program's own settings. */
   readonly ownSettings?: string
+  /** The plan's name; stays as it was when absent. */
+  readonly plan?: string
+  /** Percent of the 5-hour allowance used; stays as it was when absent. */
+  readonly fiveHourPercent?: number
+  /** Percent of the weekly allowance used; stays as it was when absent. */
+  readonly weeklyPercent?: number
+  /** When the 5-hour window resets, epoch milliseconds; stays as it was when absent. */
+  readonly fiveHourResetAt?: number
   /** Set when the program started without the command sandbox its level wanted; a `starting` record clears it. */
   readonly sandboxUnavailable?: boolean
   /** While `limit`: when the limit lifts, epoch milliseconds. */

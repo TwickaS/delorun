@@ -16,7 +16,7 @@ import { loadModelChoices, MODEL_CHOICES_FILE } from './choices.ts'
 import { partingNotice, unresumableNotice, type ProgramTailReader } from './parting.ts'
 import { agentSeatProjection } from './projection.ts'
 import { chooseModelRoute, resumeRoute, type SeatRoute } from './routes.ts'
-import { SeatRecords, type SeatSessions, type StatusChange } from './store.ts'
+import { SeatRecords, type AccountFigures, type SeatSessions, type StatusChange } from './store.ts'
 import { seatPrograms } from './programs.ts'
 import type { SeatAgent, SeatViewState } from './view.ts'
 
@@ -48,6 +48,12 @@ export interface SeatStateOptions {
    * @returns the program's version and a short name for its own settings, when known.
    */
   info?(agent: SeatAgent): { readonly version?: string, readonly ownSettings?: string }
+  /**
+   * The plan and limit figures the chat shows, read when a program starts and when a turn ends.
+   * @param agent - the agent.
+   * @returns the figures known for the agent's account; an unknown one is absent.
+   */
+  account?(agent: SeatAgent): Promise<AccountFigures>
   /** The clock, in epoch milliseconds; defaults to `Date.now`. */
   readonly now?: () => number
   /** Where a failure that cannot reach the person is reported. */
@@ -119,6 +125,15 @@ export async function mountSeatState(ctx: Context, options: SeatStateOptions): P
     if (notice !== undefined) store.notice(child, notice.kind, notice.text)
   }
 
+  // The figures arrive after the status record that starts or ends a turn, as one more record of the same state.
+  const showAccount = (child: SessionId): void => {
+    const agent = store.viewOf(child)?.agent
+    if (agent === undefined || options.account === undefined) return
+    options.account(agent).then((figures) => { store.setAccount(child, figures) }).catch((error: unknown) => {
+      options.warn(`the account figures of ${child} were not shown: ${String(error)}`)
+    })
+  }
+
   const events: SeatAdapterEvents = {
     onStarting: (child, provider) => {
       const view = store.viewOf(child)
@@ -134,6 +149,7 @@ export async function mountSeatState(ctx: Context, options: SeatStateOptions): P
       }
       if (store.read(child)?.programSessionId !== undefined) resuming.add(child)
       store.setStatus(child, 'starting', options.info?.(provider) ?? {})
+      showAccount(child)
     },
     onStarted: (child, { sandboxUnavailable }) => {
       before.delete(child)
@@ -188,6 +204,8 @@ export async function mountSeatState(ctx: Context, options: SeatStateOptions): P
     if (event.type !== 'turn/end') return
     const child = session.header.id
     const state = handle.stateOf(session)
+    // A record cannot be appended while the turn end is being published.
+    queueMicrotask(() => { if (state.shown.agent !== null) showAccount(child) })
     const { programSessionId, programMessageId } = state.logged
     if (state.shown.agent === null || programSessionId === null || options.tail === undefined) return
     const { agent } = state.shown
