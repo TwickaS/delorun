@@ -39,6 +39,8 @@ export interface SeatStatusRecordData {
   readonly version?: string
   /** A short name for the program's own settings. */
   readonly ownSettings?: string
+  /** Whether the program started without the command sandbox its level wanted; stays as it was when absent. */
+  readonly sandboxUnavailable?: boolean
   /** While `limit`: when the limit lifts, epoch milliseconds. */
   readonly resetAt?: number
   /** While `ended`: the plain-words reason. */

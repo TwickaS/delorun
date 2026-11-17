@@ -36,6 +36,8 @@ export interface AgentSeatView {
   readonly ownSettings: string
   /** Delorun's sandbox never confines the program. */
   readonly sandbox: 'off'
+  /** The program runs without the command sandbox its level wanted, because this computer cannot run one. */
+  readonly sandboxUnavailable?: true
   /** The agent's state. */
   readonly state: SeatViewState
   /** The plan's name, such as `Max`, when known. */

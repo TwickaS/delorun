@@ -40,6 +40,14 @@ describe('the opening card', () => {
     expect(screen.getByText('This agent is Claude Code, running outside Delorun')).toBeTruthy()
   })
 
+  it('says on the card and on the one line that Standard runs without a command sandbox', () => {
+    const { unmount } = banner({ ...base, sandboxUnavailable: true })
+    expect(screen.getByText('Standard · no sandbox')).toBeTruthy()
+    unmount()
+    banner({ ...base, sandboxUnavailable: true, turns: 1 })
+    expect(screen.getByText('Standard · no sandbox')).toBeTruthy()
+  })
+
   it('collapses to one line after the first turn and expands again on a click', () => {
     const { container } = banner({ ...base, turns: 1 })
     expect(container.querySelector('[data-seat-line]')).not.toBeNull()

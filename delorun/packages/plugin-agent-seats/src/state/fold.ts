@@ -11,7 +11,7 @@ import { SEAT_STATE_RECORD, SEAT_STATUS_RECORD, type SeatStateRecordData, type S
 import type { AgentSeatView, SeatAgent, SeatModelPicker, SeatViewState } from './view.ts'
 
 /** The fold's own version; bump it when the state fields or the fold change. */
-export const SEAT_FOLD_VERSION = 3
+export const SEAT_FOLD_VERSION = 4
 
 /** The shortest `ownSettings` the view shows before the program's settings are known. */
 export const DEFAULT_OWN_SETTINGS = 'its own settings'
@@ -29,6 +29,8 @@ export interface SeatShown {
   readonly version: string | null
   /** A short name for the program's own settings. */
   readonly ownSettings: string | null
+  /** Whether the program runs without the command sandbox its level wanted. */
+  readonly sandboxUnavailable: boolean
   /** While `limit`: when the limit lifts. */
   readonly resetAt: number | null
   /** While `ended`: the reason. */
@@ -74,7 +76,7 @@ export const NO_LOGGED: SeatLogged = { programSessionId: null, cursor: null, pro
 
 /** The view's fields before any event. */
 export const NO_SHOWN: SeatShown = {
-  agent: null, state: 'idle', version: null, ownSettings: null, resetAt: null, endedReason: null, modelPicker: null, pending: null, lastAnswer: null, turns: 0,
+  agent: null, state: 'idle', version: null, ownSettings: null, sandboxUnavailable: false, resetAt: null, endedReason: null, modelPicker: null, pending: null, lastAnswer: null, turns: 0,
 }
 
 /**
@@ -124,6 +126,7 @@ function foldStatus(shown: SeatShown, data: Partial<SeatStatusRecordData>): Seat
     state,
     version: text(data.version) ?? shown.version,
     ownSettings: text(data.ownSettings) ?? shown.ownSettings,
+    sandboxUnavailable: typeof data.sandboxUnavailable === 'boolean' ? data.sandboxUnavailable : shown.sandboxUnavailable,
     resetAt: count(data.resetAt),
     endedReason: text(data.endedReason),
     modelPicker: pickerOf(data.modelPicker),
@@ -223,6 +226,7 @@ export function viewOf(shown: SeatShown): AgentSeatView | null {
     ...shown.version === null ? {} : { version: shown.version },
     ownSettings: shown.ownSettings ?? DEFAULT_OWN_SETTINGS,
     sandbox: 'off',
+    ...shown.sandboxUnavailable ? { sandboxUnavailable: true } : {},
     state: shown.state,
     ...shown.resetAt === null ? {} : { resetAt: shown.resetAt },
     ...shown.endedReason === null ? {} : { endedReason: shown.endedReason },

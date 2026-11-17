@@ -52,10 +52,13 @@ export type RefreshOutcome = AccountRefreshOutcome
 /** The `refresh` route's answer, `AgentAccounts.refresh`'s: the outcome, the provider's figures after it, and the time. */
 export type RefreshAnswer = Awaited<ReturnType<AgentAccounts['refresh']>>
 
+/** The weekly window's title, which both agents' weekly windows share. */
+const WEEKLY_TITLE = 'Weekly limit'
+
 /** The names a person knows each limit window kind by, as the drivers name them; any other kind is shown in words. */
 export const WINDOW_TITLES: Readonly<Record<string, string>> = {
   five_hour: '5-hour limit',
-  seven_day: 'Weekly limit',
+  seven_day: WEEKLY_TITLE,
   seven_day_opus: 'Weekly Opus limit',
   seven_day_sonnet: 'Weekly Sonnet limit',
   seven_day_overage_included: 'Weekly limit with extra usage',
@@ -77,7 +80,7 @@ export function windowTitle(kind: string): string {
   const minutes = /^window_(\d+)m$/u.exec(kind)?.[1]
   if (minutes !== undefined) {
     const count = Number(minutes)
-    if (count === WEEK_MINUTES) return WINDOW_TITLES['seven_day']
+    if (count === WEEK_MINUTES) return WEEKLY_TITLE
     if (count > 0 && count % 1440 === 0) return `${String(count / 1440)}-day limit`
     if (count > 0 && count % 60 === 0) return `${String(count / 60)}-hour limit`
     return `${minutes}-minute limit`

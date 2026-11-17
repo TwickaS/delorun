@@ -143,6 +143,8 @@ export class ClaudeCodeSession implements ProgramSession {
   get programSessionId(): string { return this.#programSessionId }
   /** Whether a program turn is running. */
   get turnRunning(): boolean { return this.#running }
+  /** Whether the level wanted a command sandbox this computer cannot run; see `ProgramSession.sandboxUnavailable`. */
+  sandboxUnavailable = false
 
   /**
    * The input the query reads: one SDK user message per {@link ClaudeCodeSession.send}, ending at close.

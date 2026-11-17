@@ -135,9 +135,9 @@ export async function mountSeatState(ctx: Context, options: SeatStateOptions): P
       if (store.read(child)?.programSessionId !== undefined) resuming.add(child)
       store.setStatus(child, 'starting', options.info?.(provider) ?? {})
     },
-    onStarted: (child) => {
+    onStarted: (child, { sandboxUnavailable }) => {
       before.delete(child)
-      store.setStatus(child, 'working')
+      store.setStatus(child, 'working', { sandboxUnavailable })
       if (!resuming.delete(child)) return
       const view = store.viewOf(child)
       const { programSessionId, programMessageId } = store.stateOf(child).logged
