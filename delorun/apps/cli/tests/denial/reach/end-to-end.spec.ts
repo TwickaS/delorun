@@ -289,10 +289,9 @@ describe('reach on the Tailscale private address', () => {
       })
       expect(switched.status).toBe(200)
       // This fixture mounts the reach and home-auth plugins directly, so the Loader holds no `delorun-reach` row for the policy to
-      // name (the real profile does: `protected-rows.integration.spec.ts` pins the policy refusal on the composed rows). The call
-      // is therefore refused by the policy or answered by the plugin manager as an unknown row that it changed nothing of.
-      const result = json(switched).result as { ok: boolean; error?: { code: string }; value?: { changed?: boolean; error?: { code: string } } }
-      expect(result.ok ? { changed: result.value?.changed, error: result.value?.error?.code } : { denied: result.error?.code }).toEqual(result.ok ? { changed: false, error: 'unknown-plugin' } : { denied: 'remote-access/denied' })
+      // name; the call reaches the plugin manager, which changes nothing of an unknown row. The policy's refusal of the real
+      // composed rows (`remote-access/denied`, PROTECTED_ROW_REFUSAL) is pinned by `protected-rows.integration.spec.ts`.
+      expect(json(switched).result).toMatchObject({ ok: true, value: { changed: false, error: { code: 'unknown-plugin' } } })
       expect(studio.ctx.reach.status()[0]?.state).toBe('ready')
       expect(calls.filter(call => call.at(-1) === 'off')).toEqual([])
     })
