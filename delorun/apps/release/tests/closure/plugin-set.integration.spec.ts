@@ -35,7 +35,7 @@ describe('the packages a runtime closure carries (owner decision A399)', () => {
   })
 
   it('selects the optional-plugin bundles as pack candidates, and a private bundle only when its manifest asks', () => {
-    const optional = ['browser', 'code-intelligence', 'agent-hooks', 'webhooks', 'external-agents'].map(name => `@delorun/bundle-${name}`)
+    const optional = ['browser', 'code-intelligence', 'agent-hooks', 'webhooks', 'external-agents', 'computer-use-driver'].map(name => `@delorun/bundle-${name}`)
     expect(selectedBundles(packages, selection)).toEqual(expect.arrayContaining(optional))
     const candidates = packCandidates(packages, selection, new Set()).map(each => each.name)
     expect(candidates).toEqual(expect.arrayContaining(optional))

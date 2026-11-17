@@ -82,6 +82,7 @@ Some plugins do work most people never need, or need something set up first, so 
 | Claude Code and Codex hooks | Runs the hooks in `~/.claude/settings.json` and `~/.codex/hooks.json` at the same points of a turn, and loads Claude Code mods. | Your own hook files; a missing file registers no hooks. | Experimental |
 | Webhooks | A signed GitHub webhook can start a chat, on `127.0.0.1:3081` behind a proxy or tunnel you provide. | `DELORUN_GITHUB_WEBHOOK_SECRET` in the environment, and a rule of your own; the endpoint does not start without the secret. | Experimental |
 | External agents | The agent hands a task to the Codex or Claude Code program you already have installed, and runs Python in tool programs. | The program installed and signed in, and `python3` for Python; one that is missing is left out. Python is not available on Windows. | Experimental |
+| Computer use (Cua Driver) | The agent sees and operates desktop windows through the Cua Driver SDK. | Desktop permissions for the program that starts Delorun. On Linux and Windows only; on macOS it shows as unavailable, and Computer use is the plugin there. | Experimental |
 
 Experimental plugins can change or break between releases. Webhooks and Browser open a network listener or a real browser, so read what each does before you turn it on. Claude Code and Codex as agents are separate plugins in the same list.
 

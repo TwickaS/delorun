@@ -36,6 +36,7 @@ const BUNDLES = [
   { dir: 'bundle-agent-hooks', rows: ['hooks-claude-code', 'hooks-codex', 'claude-code-mods', 'client-ui-claude-code-mods'], on: ['hooks-claude-code', 'hooks-codex', 'claude-code-mods', 'client-ui-claude-code-mods'] },
   { dir: 'bundle-webhooks', rows: ['webhook-runtime', 'github-webhook-ingress'], on: ['webhook-runtime'] },
   { dir: 'bundle-external-agents', rows: ['experimental-subagent-oar-codex', 'experimental-subagent-oar-claude', 'tool-subagent-oar', 'ptc-runtime-python'], on: [] },
+  { dir: 'bundle-computer-use-driver', rows: ['computer-use-registry', 'computer-use-cua-driver-native'], on: ['computer-use-registry', 'computer-use-cua-driver-native'] },
 ] as const
 
 const manifest = (dir: string): { name: string; dsh: { bundle: { patch: string; platforms?: string[] } }; delorun: { state: string; pack?: boolean }; dependencies: Record<string, string> } =>
@@ -145,6 +146,15 @@ describe('what needs setup', () => {
     expect(ids('bundle-external-agents', binDir('claude'))).toEqual(['experimental-subagent-oar-claude', 'tool-subagent-oar'])
     expect(withEnv(binDir('claude'), undefined, () => interpolate({ process }, (some!.config as { providers: unknown }).providers))).toEqual({ claude: 'oar-claude' })
     expect(ids('bundle-external-agents', binDir('codex', 'claude', 'python3'))).toContain('tool-subagent-oar')
+  })
+
+  it('is unavailable on a platform the bundle does not support, with the reason', () => {
+    const platforms = manifest('bundle-computer-use-driver').dsh.bundle.platforms
+    expect(platforms).toEqual(['linux', 'win32'])
+    expect(() => assertBundlePlatform(platforms, 'darwin')).toThrow(UnsupportedBundlePlatformError)
+    expect(() => assertBundlePlatform(platforms, 'darwin')).toThrow(/linux, win32.*darwin/)
+    expect(() => assertBundlePlatform(platforms, 'linux')).not.toThrow()
+    expect(() => assertBundlePlatform(platforms, 'win32')).not.toThrow()
   })
 })
 

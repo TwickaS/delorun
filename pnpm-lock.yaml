@@ -1921,6 +1921,27 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/lsp/tool-lsp
 
+  delorun/packages/bundle-computer-use-driver:
+    dependencies:
+      '@deepseek-ai/dsh-computer-use':
+        specifier: workspace:*
+        version: link:../../../packages/computer-use/computer-use
+      '@deepseek-ai/dsh-experimental-computer-use-cua-driver-native':
+        specifier: workspace:*
+        version: link:../../../packages/experimental/computer-use-cua-driver-native
+
+  delorun/packages/bundle-external-agents:
+    dependencies:
+      '@deepseek-ai/dsh-experimental-ptc-runtime-python':
+        specifier: workspace:*
+        version: link:../../../packages/experimental/ptc-runtime-python
+      '@deepseek-ai/dsh-experimental-subagent-oar':
+        specifier: workspace:*
+        version: link:../../../packages/experimental/subagent-oar
+      '@deepseek-ai/dsh-experimental-tool-subagent-oar':
+        specifier: workspace:*
+        version: link:../../../packages/experimental/tool-subagent-oar
+
   delorun/packages/bundle-headless:
     dependencies:
       '@delorun/bundle-local':
