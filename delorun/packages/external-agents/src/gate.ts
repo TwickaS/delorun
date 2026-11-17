@@ -7,6 +7,7 @@
  * group is kept in the home's program records, and at the next start the gate stops what a dead Host left (review D15).
  * @module @delorun/external-agents/gate
  */
+import { realpathSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { resolve, sep } from 'node:path'
@@ -410,10 +411,10 @@ export class ExternalAgentsService extends Service implements ExternalAgentsGate
    * @returns true when one does.
    */
   private sharesFolder(self: Live): boolean {
-    const mine = resolve(self.folder)
+    const mine = realFolder(self.folder)
     return [...this.live].some((other) => {
       if (other === self) return false
-      const theirs = resolve(other.folder)
+      const theirs = realFolder(other.folder)
       return theirs === mine || theirs.startsWith(mine + sep) || mine.startsWith(theirs + sep)
     })
   }
@@ -554,6 +555,19 @@ function isSeatConsent(consent: unknown): consent is SeatConsent {
     && typeof Reflect.get(consent, 'reviewSeat') === 'function' && typeof Reflect.get(consent, 'permissionLevel') === 'function'
 }
 
+/**
+ * A folder's real path, so two links to one folder compare equal; the resolved path when the folder is missing.
+ * @param folder - the folder.
+ * @returns the path to compare.
+ */
+function realFolder(folder: string): string {
+  try {
+    return realpathSync(folder)
+  } catch (_missing) {
+    return resolve(folder)
+  }
+}
+
 const AGENT_LEVELS: readonly AgentLevel[] = ['careful', 'standard', 'own', 'unrestricted']
 
 /**
@@ -641,9 +655,10 @@ class GateSession implements SeatSession {
   }
 
   async interrupt(): Promise<ProgramInterruptOutcome> {
-    // A stopped turn has no time limit left to enforce; the timer must not fire on the idle program afterwards.
+    const outcome = await this.inner.interrupt()
+    // A stopped turn has no time limit left to enforce; a rejected interrupt leaves the turn running and the limit armed.
     this.disarm()
-    return await this.inner.interrupt()
+    return outcome
   }
 
   async next(signal: AbortSignal): Promise<ProgramEvent> {
@@ -698,7 +713,7 @@ class GateSession implements SeatSession {
     } catch (_ignored) {
       // An interrupt that fails leaves the turn running; the grace period below ends the program.
     }
-    await new Promise(resolve => setTimeout(resolve, this.options.graceMs))
+    await new Promise((resolve) => { setTimeout(resolve, this.options.graceMs).unref() })
     if (!this.timedOut) return
     await this.options.end()
     this.stopped.resolve(this.stoppedEnd)

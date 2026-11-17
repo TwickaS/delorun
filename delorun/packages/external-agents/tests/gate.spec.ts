@@ -3,7 +3,7 @@
  * process table: no process starts. They cover the start order and every refusal, one program per child, the cap, the
  * spawn the gate hands a driver, every event that ends a program, the turn time limit and the "for this run" relay.
  */
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -65,6 +65,7 @@ class ScriptedSession implements ProgramSession {
   turnRunning = false
   closed = false
   honoursInterrupt = true
+  failsInterrupt = false
   readonly sent: Array<[string, 'start' | 'steer']> = []
   private readonly queue: ProgramEvent[] = []
   private waiter: PromiseWithResolvers<ProgramEvent> | undefined
@@ -85,6 +86,7 @@ class ScriptedSession implements ProgramSession {
   }
 
   interrupt(): Promise<'interrupted'> {
+    if (this.failsInterrupt) return Promise.reject(new Error('the program does not answer'))
     if (this.honoursInterrupt && this.turnRunning) this.push({ kind: 'turn-end', outcome: 'interrupted' })
     return Promise.resolve('interrupted')
   }
@@ -138,6 +140,7 @@ class ScriptedConsent implements SeatConsent {
   readonly leases = new Map<SessionId, SeatLease>()
   /** The level each agent is set to; absent reads as `careful`. */
   readonly levels = new Map<string, AgentLevel>()
+  levelFails = false
   readonly rules = new Map<SessionId, ProgramRunRule[]>()
   private readonly listeners = new Set<(lease: SeatLease, reason: SeatLeaseEnd) => void>()
 
@@ -151,6 +154,7 @@ class ScriptedConsent implements SeatConsent {
   }
 
   permissionLevel(provider: string): AgentLevel {
+    if (this.levelFails) throw new Error('the level cannot be read')
     return this.levels.get(provider) ?? 'careful'
   }
 
@@ -433,9 +437,26 @@ describe('programs sharing a run folder', () => {
     await w.gate.start(start(w, { child: SessionId('root'), cwd: sibling }))
     expect(mine?.sharesFolder()).toBe(false)
   })
+
+  it('counts a symlink to the same folder as shared', async () => {
+    const w = await world({ maxLivePrograms: 4 })
+    const link = join(dirname(w.workspace), 'work-link')
+    symlinkSync(w.workspace, link)
+    await w.gate.start(start(w))
+    await w.gate.start(start(w, { child: SessionId('root'), cwd: link }))
+    expect(w.driver.opens[0]?.sharesFolder()).toBe(true)
+  })
 })
 
 describe('one program per seat child and the cap (T10)', () => {
+  it('frees the slot and the child when the level cannot be read', async () => {
+    const w = await world({ maxLivePrograms: 1 })
+    w.consent.levelFails = true
+    await expect(w.gate.start(start(w))).rejects.toThrow(/level cannot be read/)
+    w.consent.levelFails = false
+    await expect(w.gate.start(start(w))).resolves.toBeDefined()
+  })
+
   it('refuses a second program for the same child', async () => {
     const w = await world()
     await w.gate.start(start(w))
@@ -590,6 +611,20 @@ describe('each seat turn', () => {
     await new Promise(resolve => setTimeout(resolve, 120))
     expect(await session.next(new AbortController().signal)).toEqual({ kind: 'turn-end', outcome: 'interrupted' })
     expect(w.driver.processes[0]?.terminated).toBe(false)
+  })
+
+  it('keeps the time limit armed when the interrupt is rejected', async () => {
+    const w = await world()
+    w.consent.verdict = () => ({ kind: 'allow', timeoutMs: 20, why: 'asked' })
+    const session = await w.gate.start(start(w))
+    const program = w.driver.sessions[0]
+    if (program === undefined) throw new Error('no program')
+    await session.send('work', 'start')
+    program.failsInterrupt = true
+    await expect(session.interrupt()).rejects.toThrow(/does not answer/)
+    await new Promise(resolve => setTimeout(resolve, 200))
+    expect(await session.next(new AbortController().signal)).toMatchObject({ kind: 'turn-end', failure: { category: 'time-limit' } })
+    expect(w.driver.processes[0]?.terminated).toBe(true)
   })
 
   it('ends the program after the grace period when the interrupt does not end the turn', async () => {
