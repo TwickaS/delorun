@@ -1010,6 +1010,9 @@ async function verifyProviderCwdResume(
   }
 }
 
+/** The model route ids of `@delorun/plugin-agent-seats`: `claude-code-seat` and `codex-seat`. */
+const SEAT_ROUTE = /-seat$/u
+
 async function verifyHeaders(scenario: HeadlessScenario, actualLogs: readonly SessionLog[], ctx: NormalizeContext): Promise<void> {
   const pin = pinOf(scenario)
   const fixture = await readFile(join(pin.dir, await primaryFixtureFile(pin.dir)), 'utf8')
@@ -1053,9 +1056,12 @@ async function verifyHeaders(scenario: HeadlessScenario, actualLogs: readonly Se
     for (const [index, header] of headers.entries()) {
       const selectedSchemas = childSchemas.get(logIndex)?.[index]
       const base = reconstructed[index] ?? reconstructed[0]
-      // A child on its own model route (a live agent's seat) keeps the route its committed fixture recorded.
-      const childFixture = selectedSchemas === undefined ? undefined : childFixtures[logIndex]
-      const childConfig = childFixture === undefined ? undefined : (normalizedHeaders(childFixture, fixtureContext(childFixture))[index] as JsonObject | undefined)?.config
+      // Only a child on a live agent's seat route keeps the route its committed fixture recorded; every other child
+      // keeps the check that it inherits the root's config. `childFixtures` and `actualLogs` share the fixture index order.
+      const fixtureConfig = selectedSchemas === undefined || childFixtures[logIndex] === undefined
+        ? undefined
+        : (normalizedHeaders(childFixtures[logIndex] as string, fixtureContext(childFixtures[logIndex] as string))[index] as JsonObject | undefined)?.config as JsonObject | undefined
+      const childConfig = typeof fixtureConfig?.provider === 'string' && SEAT_ROUTE.test(fixtureConfig.provider) ? fixtureConfig : undefined
       const expected = selectedSchemas === undefined ? base : { ...base as JsonObject, ...childConfig === undefined ? {} : { config: childConfig }, tools: selectedSchemas }
       expect(header, `${scenario.name}: request header ${index + 1}`).toEqual(expected)
     }
