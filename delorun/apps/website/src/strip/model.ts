@@ -10,7 +10,7 @@ import type { ContrastId, Look } from '@design/looks.ts'
 import { DEFAULT_LOOK } from '@design/looks.ts'
 import { groupVersions, settingsEditName, type VersionGroup } from '../../../../packages/bundle-local/src/client/version-rows.ts'
 import type { VersionEntry } from '../../../../packages/bundle-local/src/client/versions-api.ts'
-import { SETTING_KEYS, THEME_ROW_ID, writesFor, type Density, type LookValues, type SettingWrite, type ThemeChange } from '../../../../packages/plugin-theme/src/settings.ts'
+import { customSeed, lookOf, SETTING_KEYS, THEME_ROW_ID, writesFor, type Density, type LookValues, type SettingWrite, type ThemeChange } from '../../../../packages/plugin-theme/src/settings.ts'
 import { BRAND_COLOURS } from '../../../../packages/brand/src/tokens.ts'
 
 /** The Theme plugin's package name, which the entry carries beside its id. */
@@ -45,30 +45,58 @@ export interface StripState {
   readonly entry: EntryConfig | undefined
   /** The versions, oldest first; the list only grows. */
   readonly versions: readonly VersionEntry[]
-  /** The look after each version, in the same order. */
-  readonly looks: readonly Look[]
+  /** The page's look before the first recorded change, then after each one. */
+  readonly history: readonly Look[]
   /** The look the strip last saw on the page. */
   readonly seen: Look
 }
 
-/** The strip before the visitor changes anything. */
-export const START: StripState = { stored: FRESH_STUDIO, entry: undefined, versions: [], looks: [], seen: DEFAULT_LOOK }
+/** The strip of a fresh studio before the visitor changes anything. */
+export const START: StripState = { stored: FRESH_STUDIO, entry: undefined, versions: [], history: [DEFAULT_LOOK], seen: DEFAULT_LOOK }
 
 /**
- * The changes a control would make to go from one look to another, one per press in the studio: the theme (or the custom
- * theme's accent and contrast), then the density. Light or dark is not a setting of the Theme entry, so it makes none.
- * @param from - the look before.
- * @param to - the look after.
+ * The strip for a page that opens in a look, such as one carried in the link: the entry already holds that look, and no
+ * version is listed, because nothing changed on this page.
+ * @param look - the look the page opens in.
+ * @returns the strip.
+ */
+export function arrive(look: Look): StripState {
+  return { ...record(START, look, 0), versions: [], history: [look] }
+}
+
+/**
+ * The presses the studio needs to go from the settings it shows to a look, one change each: a theme tile; or, for the
+ * custom theme, the Custom tile from a preset, then the accent and the contrast where they differ from what Custom starts
+ * from; then the density. Light or dark is not a setting of the Theme entry, so it needs none.
+ * @param shown - the settings the studio shows, read through `lookOf`.
+ * @param density - the density the studio shows.
+ * @param to - the look to reach.
  * @returns the changes, in the order the studio would make them; empty when only the scheme differs.
  */
-export function changesBetween(from: Look, to: Look): ThemeChange[] {
+export function pressesFor(shown: LookValues, density: Density, to: Look): ThemeChange[] {
   const changes: ThemeChange[] = []
-  const custom = to.look === 'custom'
-  if (from.look !== to.look || (custom && (from.accent !== to.accent || from.contrast !== to.contrast))) {
-    changes.push(custom ? { kind: 'custom', values: { accent: to.accent, contrast: STOP_CONTRAST[to.contrast] } } : { kind: 'palette', palette: to.look })
+  if (to.look !== 'custom') {
+    if (shown.palette !== to.look) changes.push({ kind: 'palette', palette: to.look })
+  } else {
+    const fromPreset = shown.palette !== 'custom'
+    if (fromPreset) changes.push({ kind: 'palette', palette: 'custom' })
+    const start = fromPreset ? customSeed(shown) : shown
+    if (start.accent !== to.accent) changes.push({ kind: 'custom', values: { accent: to.accent } })
+    const contrast = STOP_CONTRAST[to.contrast]
+    if (start.contrast !== contrast) changes.push({ kind: 'custom', values: { contrast } })
   }
-  if (from.density !== to.density) changes.push({ kind: 'density', density: to.density })
+  if (density !== to.density) changes.push({ kind: 'density', density: to.density })
   return changes
+}
+
+/**
+ * The presses a look takes from the strip's state.
+ * @param state - the strip.
+ * @param look - the look to reach.
+ * @returns the changes; empty when only the scheme differs.
+ */
+export function pressesTo(state: StripState, look: Look): ThemeChange[] {
+  return pressesFor(lookOf(state.stored), state.stored.density, look)
 }
 
 /**
@@ -89,24 +117,23 @@ export function applyWrites(entry: EntryConfig | undefined, writes: readonly Set
 }
 
 /**
- * Records one look the page now shows: each change it takes writes the entry and adds a version.
+ * Records one look the page now shows: each press it takes writes the entry and adds a version, as in the studio.
  * @param state - the strip.
  * @param look - the page's look.
  * @param at - the time of the change, in milliseconds since the epoch.
  * @returns the next strip; the same object when the look makes no change.
  */
 export function record(state: StripState, look: Look, at: number): StripState {
-  const changes = changesBetween(state.seen, look)
+  const changes = pressesTo(state, look)
   if (changes.length === 0) return state.seen === look ? state : { ...state, seen: look }
-  let { stored, entry, versions, looks } = state
+  let { stored, entry, versions } = state
   for (const change of changes) {
-    const writes = writesFor(change, stored)
+    const writes = writesFor(change, lookOf(stored))
     entry = applyWrites(entry, writes)
     stored = { ...stored, ...Object.fromEntries(writes.map(write => [write.path[0], write.value])) }
     versions = [...versions, { id: String(versions.length + 1), at, summary: THEME_SUMMARY, origin: 'other', current: false }]
-    looks = [...looks, look]
   }
-  return { stored, entry, versions, looks, seen: look }
+  return { stored, entry, versions, history: [...state.history, look], seen: look }
 }
 
 /**
@@ -127,13 +154,12 @@ export function editedName(): string {
 }
 
 /**
- * The look the way back returns to: the one before the latest change.
+ * The look the way back returns to: the page's look before the latest change.
  * @param state - the strip.
  * @returns the earlier look, or undefined before the first change.
  */
 export function earlierLook(state: StripState): Look | undefined {
-  if (state.looks.length === 0) return undefined
-  return state.looks.at(-2) ?? DEFAULT_LOOK
+  return state.history.length < 2 ? undefined : state.history.at(-2)
 }
 
 /**

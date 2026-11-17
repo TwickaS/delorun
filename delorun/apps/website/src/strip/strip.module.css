@@ -11,7 +11,7 @@
  */
 .strip {
   position: relative;
-  min-height: 1240px;
+  min-height: 1280px;
   color: var(--dl-text);
 }
 
@@ -75,18 +75,8 @@
   color: var(--dl-text);
 }
 
-/*
- * The theme tiles: four to a row on a wide screen, one sideways row that snaps on a phone. The tile group reads the
- * studio's spacing, type and focus tokens, which the site does not define; here they take the brand's.
- */
+/* The theme tiles: four to a row on a wide screen, one sideways row that snaps on a phone. */
 .tiles {
-  --delorun-space-4: var(--dl-space-2);
-  --delorun-space-5: var(--dl-space-2);
-  --dsw-font-xs-13-font-size: 13px;
-  --dsw-font-xs-13-line-height: 18px;
-  --dsw-focus-ring-width: 2px;
-  --dsw-focus-ring-color: var(--dl-accent);
-  --dsw-radius-lg: var(--dl-radius-md);
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
@@ -262,7 +252,9 @@
   color: var(--dl-text-muted);
 }
 
+/* The still's tiles never scroll, so the row is not a keyboard stop. */
 .stillTiles {
+  overflow: hidden;
   display: grid;
   gap: var(--dl-space-2);
   margin: 0;

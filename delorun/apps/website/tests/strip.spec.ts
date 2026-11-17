@@ -21,7 +21,7 @@ import * as settings from '../../../packages/plugin-theme/src/settings.ts'
 import { originOf } from '../../../packages/profile-safety/src/versions.ts'
 import { en as versionsCopy } from '../../../packages/bundle-local/src/client/versions-locales.ts'
 import { STRIP_COPY } from '../src/strip/copy.ts'
-import { applyWrites, BUNDLE_CONFIG, changesBetween, earlierLook, editedName, entryYaml, FRESH_STUDIO, record, START, STOP_CONTRAST, THEME_PLUGIN, versionRows, type StripState } from '../src/strip/model.ts'
+import { applyWrites, arrive, BUNDLE_CONFIG, earlierLook, editedName, entryYaml, FRESH_STUDIO, pressesTo, record, START, STOP_CONTRAST, THEME_PLUGIN, versionRows, type StripState } from '../src/strip/model.ts'
 import { differenceName, themeName } from '../src/strip/names.ts'
 import SetupStrip, { fill } from '../src/strip/setup-strip.tsx'
 import { SetupStripStill, STILL_ENTRY, STILL_LOOK_ID } from '../src/strip/still.tsx'
@@ -102,7 +102,8 @@ describe('the strip and the studio agree', () => {
     after(OCEAN, MOSS)
     expect(vi.mocked(settings.writesFor).mock.calls.map(([change]) => change)).toEqual([
       { kind: 'palette', palette: 'ocean' },
-      { kind: 'custom', values: { accent: 'moss', contrast: 100 } },
+      { kind: 'palette', palette: 'custom' },
+      { kind: 'custom', values: { accent: 'moss' } },
     ])
   })
 
@@ -121,9 +122,8 @@ describe('the entry', () => {
   })
 
   it('writes the custom theme whole and keeps its keys after going back', () => {
-    const custom = after(OCEAN, MOSS)
-    expect(custom.entry).toEqual([['studioAdditions', true], ['palette', 'custom'], ['accent', 'moss'], ['customAccent', settings.PRESET_ACCENT_HEX.ocean], ['contrast', 100]])
     // The settings service puts the keys it holds in the schema's order before the next write.
+    expect(after(OCEAN, MOSS).entry).toEqual([['accent', 'moss'], ['customAccent', settings.PRESET_ACCENT_HEX.ocean], ['studioAdditions', true], ['palette', 'custom'], ['contrast', 100]])
     expect(after(OCEAN, MOSS, OCEAN).entry).toEqual([['accent', 'moss'], ['customAccent', settings.PRESET_ACCENT_HEX.ocean], ['studioAdditions', true], ['palette', 'ocean'], ['contrast', 100]])
   })
 
@@ -132,7 +132,7 @@ describe('the entry', () => {
   })
 
   it('makes no change for light or dark', () => {
-    expect(changesBetween(DEFAULT_LOOK, look({ scheme: 'dark' }))).toEqual([])
+    expect(pressesTo(START, look({ scheme: 'dark' }))).toEqual([])
     const dark = after(OCEAN, look({ look: 'ocean', scheme: 'dark' }))
     expect(dark.versions).toHaveLength(1)
   })
@@ -144,8 +144,8 @@ describe('the versions', () => {
     const state = after(OCEAN, MOSS, OCEAN)
     const rows = versionRows(state.versions)
     expect(rows).toHaveLength(1)
-    expect(rows[0]).toMatchObject({ count: 3, version: { current: true } })
-    expect(fill('{count} identical changes in a row', { count: String(rows[0]?.count) })).toBe('3 identical changes in a row')
+    expect(rows[0]).toMatchObject({ count: 4, version: { current: true } })
+    expect(fill('{count} identical changes in a row', { count: String(rows[0]?.count) })).toBe('4 identical changes in a row')
   })
 
   it('goes back to the look before the latest change, by its name', () => {
@@ -156,6 +156,40 @@ describe('the versions', () => {
     expect(differenceName(OCEAN, MOSS)).toBe('Ocean')
     expect(differenceName(DEFAULT_LOOK, look({ density: 'spacious' }))).toBe('comfortable density')
     expect(differenceName(look({ look: 'custom' }), look({ look: 'custom', contrast: 'high' }))).toBe('contrast 100%')
+  })
+})
+
+describe('the studio\'s presses', () => {
+  const CUSTOM = look({ look: 'custom' })
+
+  it('passes through Custom in the preset\'s colour on the way from a preset, one version a press', () => {
+    expect(pressesTo(after(OCEAN), MOSS)).toEqual([{ kind: 'palette', palette: 'custom' }, { kind: 'custom', values: { accent: 'moss' } }])
+    expect(pressesTo(after(OCEAN), CUSTOM)).toEqual([{ kind: 'palette', palette: 'custom' }, { kind: 'custom', values: { accent: 'peach' } }])
+    expect(pressesTo(START, CUSTOM)).toEqual([{ kind: 'palette', palette: 'custom' }])
+    const state = after(OCEAN, CUSTOM, MOSS)
+    expect(state.versions).toHaveLength(4)
+    expect(state.entry).toEqual([['accent', 'moss'], ['customAccent', settings.PRESET_ACCENT_HEX.ocean], ['studioAdditions', true], ['palette', 'custom'], ['contrast', 100]])
+  })
+
+  it('starts Custom afresh after a preset, as the studio does', () => {
+    const state = after(look({ look: 'custom', accent: 'moss', contrast: 'high' }), OCEAN)
+    expect(pressesTo(state, CUSTOM)).toEqual([{ kind: 'palette', palette: 'custom' }, { kind: 'custom', values: { accent: 'peach' } }])
+  })
+
+  it('brings Soft back after Custom moss, and a preset back after a higher contrast', () => {
+    const soft = after(MOSS, DEFAULT_LOOK)
+    expect(settings.lookOf(soft.stored)).toMatchObject({ palette: 'soft', accent: 'peach', contrast: 100 })
+    const ocean = after(look({ look: 'custom', accent: 'moss', contrast: 'highest' }), OCEAN)
+    expect(settings.lookOf(ocean.stored)).toMatchObject({ palette: 'ocean', contrast: 100 })
+    expect(ocean.entry?.find(([key]) => key === 'contrast')).toEqual(['contrast', 100])
+  })
+
+  it('starts from a look carried in the link with its entry and no version', () => {
+    const arrived = arrive(OCEAN)
+    expect(entryYaml(arrived.entry ?? [])).toContain('palette: ocean')
+    expect(arrived.versions).toEqual([])
+    expect(earlierLook(arrived)).toBeUndefined()
+    expect(earlierLook(record(arrived, MOSS, 0))).toEqual(OCEAN)
   })
 })
 
@@ -194,12 +228,20 @@ describe('the strip on the page', () => {
     expect(status()).toBe('Ocean. The entry and a new version are listed beside the controls.')
     press(radio(studio.accent, 'Moss'))
     expect(document.documentElement.dataset['accent']).toBe('moss')
+    expect(status()).toBe('Custom moss. The entry and 2 new versions are listed beside the controls.')
     const back = [...host.querySelectorAll('button')].find(each => each.textContent === 'Back to Ocean')
     expect(back).toBeDefined()
     act(() => { back?.focus(); back?.click() })
     expect(document.documentElement.dataset['look']).toBe('ocean')
     expect(document.activeElement?.textContent).toBe('Back to Custom moss')
-    expect(host.querySelector('[data-current="true"]')?.textContent).toContain('3 identical changes in a row')
+    expect(host.querySelector('[data-current="true"]')?.textContent).toContain('4 identical changes in a row')
+  })
+
+  it('says light or dark adds no version', () => {
+    press(radio(studio.mode, 'Dark'))
+    expect(document.documentElement.dataset['scheme']).toBe('dark')
+    expect(status()).toBe('Dark. Light or dark is not part of the entry, so no version is added.')
+    expect(host.querySelector('[data-current]')).toBeNull()
   })
 
   it('keeps the focus on the pressed tile and announces each change once', () => {

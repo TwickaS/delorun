@@ -11,11 +11,11 @@
 import { useEffect, useId, useRef, useState, type PointerEvent } from 'react'
 import { Button, ChipGroup, ChoiceGroup, CodeBlock, TileGroup } from '@brand'
 import { getLook, setLook, useLook } from '@design/look-store.ts'
-import { DEFAULT_LOOK, KNOWN_ACCENTS, KNOWN_CONTRASTS, KNOWN_DENSITIES, KNOWN_LOOKS, type AccentId, type ContrastId, type Look } from '@design/looks.ts'
+import { KNOWN_ACCENTS, KNOWN_CONTRASTS, KNOWN_DENSITIES, KNOWN_LOOKS, type AccentId, type ContrastId, type Look } from '@design/looks.ts'
 import { en as studio } from '../../../../packages/plugin-theme/src/client/locales.ts'
 import { en as versionsCopy } from '../../../../packages/bundle-local/src/client/versions-locales.ts'
 import { STRIP_COPY } from './copy.ts'
-import { earlierLook, editedName, entryYaml, record, START, STOP_CONTRAST, versionRows, type EntryConfig, type StripState } from './model.ts'
+import { arrive, earlierLook, editedName, entryYaml, pressesTo, record, STOP_CONTRAST, versionRows, type EntryConfig, type StripState } from './model.ts'
 import { differenceName } from './names.ts'
 import { centreOf, spread, type Point } from './spread.ts'
 import { Swatch } from './still.tsx'
@@ -85,16 +85,16 @@ function StripBody({ look, state, onLook, announcement }: {
 }) {
   const themesId = useId()
   const pointer = useRef<{ readonly at: number; readonly point: Point } | undefined>(undefined)
-  const customValues = useRef<{ accent: AccentId; contrast: ContrastId }>({ accent: DEFAULT_LOOK.accent, contrast: DEFAULT_LOOK.contrast })
-  if (look.look === 'custom') customValues.current = { accent: look.accent, contrast: look.contrast }
-  const custom = customValues.current
+  const custom = look.look === 'custom'
   const press = (next: Look): void => {
     const recent = pointer.current !== undefined && performance.now() - pointer.current.at < POINTER_WINDOW_MS
     const focused = document.activeElement
     onLook(next, recent ? pointer.current?.point : focused instanceof HTMLElement && focused !== document.body ? centreOf(focused) : undefined)
   }
+  // The Custom tile, an accent and a contrast all lead to the custom theme; from a preset it starts at Peach and the
+  // designed contrast, which the site can draw, so a preset's own colour in Custom is passed through on the way.
   const toCustom = (values: Partial<Pick<Look, 'accent' | 'contrast'>>): void => {
-    press({ ...look, look: 'custom', accent: custom.accent, contrast: custom.contrast, ...values })
+    press({ ...look, look: 'custom', accent: custom ? look.accent : 'peach', contrast: custom ? look.contrast : 'default', ...values })
   }
   const earlier = earlierLook(state)
   const onPointerDown = (event: PointerEvent<HTMLDivElement>): void => { pointer.current = { at: performance.now(), point: { x: event.clientX, y: event.clientY } } }
@@ -104,8 +104,8 @@ function StripBody({ look, state, onLook, announcement }: {
         <div className={css.group}>
           <h3 id={themesId} className={css.label}>{studio.palette}</h3>
           <TileGroup labelledBy={themesId} className={css.tiles} value={look.look} disabled={false}
-            onChange={(id) => { press(id === 'custom' ? { ...look, look: id, accent: custom.accent, contrast: custom.contrast } : { ...look, look: id, contrast: 'default' }) }}
-            tiles={KNOWN_LOOKS.map(id => ({ value: id, label: studio[`palette.${id}`], preview: <Swatch look={id} accent={custom.accent} /> }))} />
+            onChange={(id) => { if (id === 'custom') toCustom({}); else press({ ...look, look: id, contrast: 'default' }) }}
+            tiles={KNOWN_LOOKS.map(id => ({ value: id, label: studio[`palette.${id}`], preview: <Swatch look={id} accent={custom ? look.accent : 'peach'} /> }))} />
         </div>
         <div className={css.group}>
           <span className={css.label} aria-hidden="true">{studio.mode}</span>
@@ -115,10 +115,10 @@ function StripBody({ look, state, onLook, announcement }: {
         </div>
         <div className={css.group}>
           <h3 className={css.label}>{studio['palette.custom']}</h3>
-          <ChipGroup<AccentId | 'none'> label={studio.accent} variant="segmented" hideLabel value={look.look === 'custom' ? look.accent : 'none'}
+          <ChipGroup<AccentId | 'none'> label={studio.accent} variant="segmented" hideLabel value={custom ? look.accent : 'none'}
             onChange={(accent) => { if (accent !== 'none') toCustom({ accent }) }}
             options={KNOWN_ACCENTS.map(accent => ({ value: accent, label: studio[`accent.${accent}`], mark: <span className={css.dot} data-look="custom" data-accent={accent} /> }))} />
-          <ChoiceGroup<ContrastId> label={studio.contrast} value={look.look === 'custom' ? look.contrast : 'default'} disabled={false} fill
+          <ChoiceGroup<ContrastId> label={studio.contrast} value={custom ? look.contrast : 'default'} disabled={false} fill
             options={KNOWN_CONTRASTS.map(stop => ({ value: stop, label: `${studio.contrast} ${String(STOP_CONTRAST[stop])}%` }))}
             onChange={(contrast) => { toCustom({ contrast }) }} />
         </div>
@@ -155,19 +155,23 @@ function StripBody({ look, state, onLook, announcement }: {
 }
 
 /**
- * The setup strip, from a fresh studio. It takes no props and fills the box `still.tsx` holds for it.
+ * The setup strip, from a fresh studio showing the page's look. It takes no props and fills the box `still.tsx` holds
+ * for it.
  * @returns the strip.
  */
 export function SetupStrip() {
   const look = useLook()
-  const [state, setState] = useState<StripState>(START)
+  // The page may open in a look carried in the link; the strip starts from it, with no version.
+  const [state, setState] = useState<StripState>(() => arrive(getLook()))
   const [announcement, setAnnouncement] = useState({ text: '', count: 0 })
-  // Every look the page shows, from the strip, the header or a link, is recorded as the studio would record it.
+  // Every look the page shows, from the strip or the header, is recorded as the studio would record it.
   useEffect(() => { setState(current => record(current, look, Date.now())) }, [look])
   const onLook = (next: Look, from: Point | undefined): void => {
     const before = getLook()
+    const presses = pressesTo(state, next).length
     spread(from, () => { setLook(next) })
-    setAnnouncement(current => ({ text: copy.announce(differenceName(next, before)), count: current.count + 1 }))
+    const text = presses === 0 ? copy.schemeOnly(studio[`mode.${next.scheme ?? 'system'}`]) : copy.announce(differenceName(next, before), presses)
+    setAnnouncement(current => ({ text, count: current.count + 1 }))
   }
   return (
     <div className={css.strip} data-setup-strip="live">

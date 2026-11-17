@@ -36,11 +36,18 @@ const EN = {
   /** What going back covers. */
   backCovers: 'Going back covers Delorun\'s setup and your chats. It does not cover the files an agent changes in a workspace, a patch edited by hand is not saved as a version, and saving or switching a version is done at the computer and takes effect after a restart.',
   /**
-   * What the live region says after a change.
+   * What the live region says after a change of the entry.
    * @param name - the look now shown; its first letter is capitalised to start the sentence.
+   * @param versions - how many versions the change added, one per press in the studio.
    * @returns the sentence.
    */
-  announce: (name: string): string => `${name.charAt(0).toUpperCase()}${name.slice(1)}. The entry and a new version are listed beside the controls.`,
+  announce: (name: string, versions: number): string => `${name.charAt(0).toUpperCase()}${name.slice(1)}. The entry and ${versions === 1 ? 'a new version are' : `${String(versions)} new versions are`} listed beside the controls.`,
+  /**
+   * What the live region says after light or dark changes, which the entry does not hold.
+   * @param mode - the studio's name for the mode now chosen.
+   * @returns the sentence.
+   */
+  schemeOnly: (mode: string): string => `${mode}. Light or dark is not part of the entry, so no version is added.`,
   /**
    * A custom look's name.
    * @param custom - the studio's name for the custom theme.
