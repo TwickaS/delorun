@@ -50,3 +50,13 @@ it('replaces only Playwright\'s missing-browser failure with the final setup mes
   expect(explain('page.goto: net::ERR_NAME_NOT_RESOLVED at https://example.invalid/')).toBeUndefined()
   expect(Provider.MISSING_BROWSER_MESSAGE).toContain('finish Browser setup in Plugins')
 })
+
+it('runs the server in one folder of the Harness home for every Session when serverDirectory is home', () => {
+  vi.stubEnv('DSH_HOME', '/home/person/.delorun')
+  Provider.apply(new Context(), Provider.Config({ mode: 'launch', serverDirectory: 'home' }))
+  Provider.apply(new Context(), Provider.Config({ mode: 'launch', serverDirectory: 'session' }))
+  Provider.apply(new Context(), Provider.Config({ mode: 'launch' }))
+  const directories = vi.mocked(mountSessionMcp).mock.calls.map(([, options]) => options.directory)
+  expect(directories).toEqual(['/home/person/.delorun/browser-use/playwright-mcp', undefined, undefined])
+  expect(() => Provider.Config({ mode: 'launch', serverDirectory: 'workspace' } as never)).toThrow()
+})

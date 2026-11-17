@@ -3,7 +3,7 @@
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
-import { BrowserMcpConfig, mountSessionMcp, validateBrowserMcpConfig } from '@deepseek-ai/dsh-experimental-browser-use-runtime/mcp'
+import { BrowserMcpConfig, browserServerDirectory, mountSessionMcp, validateBrowserMcpConfig } from '@deepseek-ai/dsh-experimental-browser-use-runtime/mcp'
 import type {} from '@deepseek-ai/dsh-working-directory'
 
 /** Cordis identity for the Playwright MCP browser provider. */
@@ -60,6 +60,7 @@ export function apply(ctx: Context, config: Config): void {
     if (config.headless) args.push('--headless')
     if (config.executablePath !== undefined) args.push('--executable-path', config.executablePath)
   }
+  const directory = browserServerDirectory(config, 'playwright-mcp')
   mountSessionMcp(ctx, {
     name: 'playwright-mcp',
     exclusive: config.mode === 'attach',
@@ -68,5 +69,6 @@ export function apply(ctx: Context, config: Config): void {
     env,
     explainFailure: explainMissingBrowser,
     ...config.toolCallTimeoutMs === undefined ? {} : { toolCallTimeoutMs: config.toolCallTimeoutMs },
+    ...directory === undefined ? {} : { directory },
   })
 }

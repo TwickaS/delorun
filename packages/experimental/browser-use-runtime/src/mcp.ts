@@ -1,6 +1,8 @@
 /** Session-owned MCP browser processes and provider catalog activation. @module */
 
+import { mkdir } from 'node:fs/promises'
 import type { Context } from '@deepseek-ai/cordis'
+import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import Schema from '@deepseek-ai/schemastery'
 import { BrowserUseProviderName } from '@deepseek-ai/dsh-browser-use/brand'
@@ -23,6 +25,8 @@ export interface BrowserMcpLaunchConfig {
   executablePath?: string
   /** Per-call timeout override in milliseconds; omission uses the MCP client default. */
   toolCallTimeoutMs?: number
+  /** Where the MCP server process runs; see {@link BrowserServerDirectory}. Omission is `session`. */
+  serverDirectory?: BrowserServerDirectory
 }
 
 /** Attachment to an externally owned Chromium browser. */
@@ -33,7 +37,16 @@ export interface BrowserMcpAttachConfig {
   endpoint: string
   /** Per-call timeout override in milliseconds; omission uses the MCP client default. */
   toolCallTimeoutMs?: number
+  /** Where the MCP server process runs; see {@link BrowserServerDirectory}. Omission is `session`. */
+  serverDirectory?: BrowserServerDirectory
 }
+
+/**
+ * Where a browser MCP server process runs: `session` starts each Session's server in that Session's working directory;
+ * `home` starts every Session's server in one folder of the Harness home, `browser-use/<server name>`, so the server's
+ * command, arguments and working directory are the same for every Session.
+ */
+export type BrowserServerDirectory = 'session' | 'home'
 
 /** Fixed launch or attachment choice for one MCP browser provider. */
 export type BrowserMcpConfig = BrowserMcpLaunchConfig | BrowserMcpAttachConfig
@@ -45,11 +58,13 @@ export const BrowserMcpConfig: Schema<BrowserMcpAttachConfig | (Omit<BrowserMcpL
     headless: Schema.boolean().default(true),
     executablePath: Schema.string().pattern(/\S/u),
     toolCallTimeoutMs: Schema.number().min(1),
+    serverDirectory: Schema.union(['session', 'home']),
   }),
   Schema.object({
     mode: Schema.const('attach').required(),
     endpoint: Schema.string().pattern(/^https?:\/\/[^\s/]+|^wss?:\/\/[^\s/]+/u).required(),
     toolCallTimeoutMs: Schema.number().min(1),
+    serverDirectory: Schema.union(['session', 'home']),
   }),
 ])
 
@@ -70,6 +85,16 @@ export function validateBrowserMcpConfig(config: BrowserMcpConfig): void {
   }
 }
 
+/**
+ * The folder a provider's server runs in for every Session.
+ * @param config - the provider's browser configuration.
+ * @param name - the provider's server name.
+ * @returns `browser-use/<name>` in the Harness home for `home`, or `undefined` for each Session's working directory.
+ */
+export function browserServerDirectory(config: BrowserMcpConfig, name: string): string | undefined {
+  return config.serverDirectory === 'home' ? dshHomePath('browser-use', name) : undefined
+}
+
 /** Provider-owned connection options for one live Session. */
 export interface SessionMcpOptions {
   /** Provider identity and MCP tool namespace. */
@@ -80,6 +105,11 @@ export interface SessionMcpOptions {
   command: string
   /** Arguments passed directly without a shell. */
   args: string[]
+  /**
+   * Absolute folder every Session's server runs in, created with mode 0700 before a start when it is missing.
+   * Omission starts each Session's server in that Session's working directory.
+   */
+  directory?: string
   /** Explicit overrides merged into the MCP client's scrubbed child environment. */
   env?: Record<string, string>
   /** Per-call timeout override; omission retains the MCP client default. */
@@ -104,6 +134,16 @@ function explained(result: ToolExecutionResult, explain: SessionMcpOptions['expl
   const message = explain(result.error.message)
   if (message === undefined) return result
   return { isError: true, error: { message }, content: [{ type: 'text', text: `Error: ${message}` }] }
+}
+
+/**
+ * A fixed server folder, created when missing.
+ * @param directory - the absolute folder.
+ * @returns the folder.
+ */
+async function fixedDirectory(directory: string): Promise<string> {
+  await mkdir(directory, { recursive: true, mode: 0o700 })
+  return directory
 }
 
 interface ClientState {
@@ -185,7 +225,7 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
             command: options.command,
             args: options.args,
             ...options.env === undefined ? {} : { env: options.env },
-            cwd: await workingDirectory.ensure(agent, signal),
+            cwd: options.directory === undefined ? await workingDirectory.ensure(agent, signal) : await fixedDirectory(options.directory),
             ...options.toolCallTimeoutMs === undefined ? {} : { toolCallTimeoutMs: options.toolCallTimeoutMs },
             failOnStartupError: true,
             reconnect: { enabled: false },

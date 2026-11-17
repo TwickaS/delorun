@@ -97,7 +97,7 @@ const OTHER_TOOL = 'mcp__other-fixture__visit'
 
 async function load(
   exclusive = false, mode?: string, toolCallTimeoutMs?: number, toolOrder?: string[], consent = false,
-  explainFailure?: (message: string) => string | undefined,
+  explainFailure?: (message: string) => string | undefined, directory?: string,
 ) {
   const root = await mkdtemp(join(tmpdir(), 'dsh-browser-mcp-'))
   roots.push(root)
@@ -113,6 +113,7 @@ async function load(
       mountSessionMcp(ctx, {
         name: 'browser-fixture', exclusive, command: process.execPath, args: [fixture, root, ...mode === undefined ? [] : [mode]],
         ...toolCallTimeoutMs === undefined ? {} : { toolCallTimeoutMs, env: {} }, ...explainFailure === undefined ? {} : { explainFailure },
+        ...directory === undefined ? {} : { directory },
       })
     } }],
     ...consent ? [['consent', RefuseBrowserConsent], ['other', McpClient]] as const : [],
@@ -370,6 +371,22 @@ describe('Session MCP Loader composition', () => {
     await warm(ctx, second.agent)
     expect(consent.reviewed.filter(name => name === 'browser-fixture')).toHaveLength(2)
     expect(warnings).toHaveLength(2)
+  })
+
+  it('starts every Session\'s server in the fixed directory, creating it, whatever each Session\'s working directory', async () => {
+    const base = await mkdtemp(join(tmpdir(), 'dsh-browser-mcp-fixed-'))
+    roots.push(base)
+    const fixed = join(base, 'browser-use', 'browser-fixture')
+    const { ctx, root } = await load(false, undefined, undefined, undefined, false, undefined, fixed)
+    const first = join(root, 'first'), second = join(root, 'second')
+    await Promise.all([mkdir(first), mkdir(second)])
+    for (const [id, cwd] of [['fixed-first', first], ['fixed-second', second]] as const) {
+      const { agent } = await ctx.agents.create({ sessionId: SessionId(id), meta: { cwd } })
+      await warm(ctx, agent)
+    }
+    const starts = (await events(root)).filter(event => event.event === 'start')
+    expect(starts.length).toBeGreaterThan(0)
+    expect(new Set(starts.map(event => event.cwd))).toEqual(new Set([await realpath(fixed)]))
   })
 
   it('replaces a browser failure the provider explains and keeps every other failure and result', async () => {
