@@ -31,6 +31,19 @@ describe('gates:upstream-src-imports', () => {
     expect(upstreamSourceImportErrors(scratchRepo(test).root)).toEqual(['delorun/: no Delorun tree at the repository root, so there are no sources to check'])
   })
 
+  it('lets only the website replica import the #studio alias', (test) => {
+    const repo = scratchRepo(test)
+    repo.write({
+      'delorun/apps/website/src/replica/ok.ts': 'import { a } from \'#studio/ui-primitives/src/Button.tsx\'\n',
+      'delorun/apps/website/src/components/bad.ts': 'import { a } from \'#studio/ui-primitives/src/Button.tsx\'\n',
+      'delorun/packages/home/src/bad.ts': 'export { a } from \'#studio/ui-chat/src/client/locale.ts\'\n',
+    })
+    expect(upstreamSourceImportErrors(repo.root)).toEqual([
+      'delorun/packages/home/src/bad.ts:1:19: imports \'#studio/ui-chat/src/client/locale.ts\', the replica\'s alias for upstream client source; only delorun/apps/website/src/replica/ may',
+      'delorun/apps/website/src/components/bad.ts:1:19: imports \'#studio/ui-primitives/src/Button.tsx\', the replica\'s alias for upstream client source; only delorun/apps/website/src/replica/ may',
+    ])
+  })
+
   it('exits 1 with the violation and 0 on a clean tree, from the command line', (test) => {
     const bad = scratchRepo(test)
     bad.write({ 'delorun/apps/cli/src/a.ts': 'import { a } from \'@deepseek-ai/dsh-tool-fs/src/consent.ts\'\n' })

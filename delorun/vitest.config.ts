@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import tsconfigPaths from 'vite-tsconfig-paths'
 import { defineConfig } from 'vitest/config'
 import { standardDecoratorPlugin } from '../vitest.shared.ts'
+import { STUDIO_ALIASES } from './apps/website/studio-aliases.ts'
 
 /**
  * Vitest for Delorun's own workspaces: the specs under `delorun/apps/*` and `delorun/packages/*`, in three projects.
@@ -74,6 +75,7 @@ export const forkUnitProject = {
 
 /** The client component project: `*.spec.tsx` specs in jsdom, upstream packages resolved to their sources. */
 export const forkClientProject = {
+  resolve: { alias: [...STUDIO_ALIASES] },
   plugins: [tsconfigPaths({ projects: [fileURLToPath(new URL('../tsconfig.base.json', import.meta.url))] })],
   test: {
     name: 'fork-client',
