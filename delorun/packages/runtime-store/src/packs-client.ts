@@ -25,12 +25,20 @@ export type PacksLogCheck = (root: RootMetadata, version: string, packsBytes: Ui
 /** How many bytes a download may have: at most `max`, or exactly `exact` when the signed file list names the length. */
 export type PackSize = { readonly max: number } | { readonly exact: number }
 
+/** What a caller may ask of one download. */
+export interface PackTransfer {
+  /** Aborts the download; the fetch then rejects. */
+  readonly signal?: AbortSignal
+  /** Called with the bytes received so far, after each piece. */
+  readonly onBytes?: (received: number) => void
+}
+
 /** Where a release's files come from. */
 export interface PackFiles {
   /** Fetch a file of the installed release by name from the release channel, within `size`; `undefined` when the channel has no such file. */
-  fetchRelease(name: string, size: PackSize): Promise<Uint8Array | undefined>
+  fetchRelease(name: string, size: PackSize, transfer?: PackTransfer): Promise<Uint8Array | undefined>
   /** Fetch an external package's tarball from the registry URL the signed pin names. */
-  fetchExternal(pin: PackExternal): Promise<Uint8Array>
+  fetchExternal(pin: PackExternal, transfer?: PackTransfer): Promise<Uint8Array>
 }
 
 /** An installed release the packs belong to. */
@@ -109,6 +117,57 @@ export function packDownloadSize(entry: PackEntry, platform: StorePaths['platfor
   return variant.archive.length + variant.external.reduce((sum, pin) => sum + pin.length, 0)
 }
 
+/** A pack's verified entry with every download it needs, before anything is installed. */
+export interface FetchedPack {
+  /** The verified entry. */
+  readonly entry: PackEntry
+  /** The archive's bytes. */
+  readonly archive: Uint8Array
+  /** The external packages' tarballs by their signed URL. */
+  readonly externals: ReadonlyMap<string, Uint8Array>
+}
+
+/**
+ * Find a pack in the installed release's packs file and download its archive and external packages, none of them
+ * installed yet.
+ * @param release - the installed release.
+ * @param name - the pack's package name.
+ * @param files - where files come from.
+ * @param transfer - the abort signal and byte progress; bytes count across the archive and the externals together.
+ * @returns the entry and its downloads.
+ * @throws PackRefusal when the release has no such pack, it is not published for this platform, a file is missing from
+ * the channel, or anything fails a signed check.
+ */
+export async function fetchPack(release: InstalledRelease, name: string, files: PackFiles, transfer: PackTransfer = {}): Promise<FetchedPack> {
+  const packs = await readStoredPacks(release) ?? await acquirePacks(release, files)
+  const entry = packs?.packs.find(each => each.name === name)
+  if (entry === undefined) throw new PackRefusal(`release ${release.version} has no pack ${name}`, 'NO_SUCH_PACK')
+  const variant = packVariantFor(entry, release.paths.platform)
+  let done = 0
+  const counted = (): PackTransfer => ({ ...transfer.signal === undefined ? {} : { signal: transfer.signal }, onBytes: (received) => { transfer.onBytes?.(done + received) } })
+  const archive = await files.fetchRelease(variant.archive.name, { exact: variant.archive.length }, counted())
+  if (archive === undefined) throw new PackRefusal(`the release channel has no ${variant.archive.name}`, 'NOT_ON_CHANNEL')
+  done += archive.byteLength
+  const externals = new Map<string, Uint8Array>()
+  for (const pin of variant.external) {
+    const bytes = await files.fetchExternal(pin, counted())
+    externals.set(pin.url, bytes)
+    done += bytes.byteLength
+  }
+  return { entry, archive, externals }
+}
+
+/**
+ * Install a downloaded pack beside the installed release.
+ * @param release - the installed release.
+ * @param fetched - {@link fetchPack}'s result.
+ * @returns the package directory for the plugin manager to load.
+ * @throws PackRefusal as {@link installPack} does.
+ */
+export function installFetchedPack(release: InstalledRelease, fetched: FetchedPack): Promise<string> {
+  return installPack({ paths: release.paths, release: release.version, entry: fetched.entry, platform: release.paths.platform, archive: fetched.archive, fetchExternal: pin => Promise.resolve(fetched.externals.get(pin.url)!) })
+}
+
 /**
  * Turn a pack on for the installed release: download its archive from the release channel, install it with its
  * external packages, and return its package directory for the plugin manager to load.
@@ -116,15 +175,8 @@ export function packDownloadSize(entry: PackEntry, platform: StorePaths['platfor
  * @param name - the pack's package name.
  * @param files - where files come from.
  * @returns the package directory.
- * @throws PackRefusal when the release has no such pack, it is not published for this platform, a file is missing from
- * the channel, or anything fails a signed check.
+ * @throws PackRefusal as {@link fetchPack} and {@link installPack} do.
  */
 export async function turnOnPack(release: InstalledRelease, name: string, files: PackFiles): Promise<string> {
-  const packs = await readStoredPacks(release) ?? await acquirePacks(release, files)
-  const entry = packs?.packs.find(each => each.name === name)
-  if (entry === undefined) throw new PackRefusal(`release ${release.version} has no pack ${name}`, 'NO_SUCH_PACK')
-  const variant = packVariantFor(entry, release.paths.platform)
-  const archive = await files.fetchRelease(variant.archive.name, { exact: variant.archive.length })
-  if (archive === undefined) throw new PackRefusal(`the release channel has no ${variant.archive.name}`, 'NOT_ON_CHANNEL')
-  return installPack({ paths: release.paths, release: release.version, entry, platform: release.paths.platform, archive, fetchExternal: files.fetchExternal })
+  return installFetchedPack(release, await fetchPack(release, name, files))
 }

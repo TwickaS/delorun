@@ -171,7 +171,7 @@ export class InstallQueue {
   cancel(key: string): void {
     const item = this.items.find(each => each.key === key)
     if (item === undefined) return
-    if (item.state === 'queued') this.replace(key, { state: 'cancelled', position: undefined })
+    if (item.state === 'queued') this.replace(key, { state: 'cancelled' })
     else if (ACTIVE.has(item.state)) this.running.get(key)?.abort()
     this.settle()
   }

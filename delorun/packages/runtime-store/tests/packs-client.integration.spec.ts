@@ -3,7 +3,7 @@
  * have a log record, an archive only downloads from the signed name, and each refusal leaves nothing under `packs/`.
  */
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -79,7 +79,7 @@ describe('turning a pack on', () => {
 
   it('refuses when the signed pack archive is not on the channel', async () => {
     const { release, channel } = await setup()
-    const missing: PackFiles = { ...channel, fetchRelease: name => (name.endsWith('.tar.gz') ? Promise.resolve(undefined) : channel.fetchRelease(name)) }
+    const missing: PackFiles = { ...channel, fetchRelease: name => (name.endsWith('.tar.gz') ? Promise.resolve(undefined) : channel.fetchRelease(name, { max: 1 << 20 })) }
     await expect(turnOnPack(release, 'demo', missing)).rejects.toThrow(/has no delorun-0\.1\.0-pack-demo/u)
   })
 })

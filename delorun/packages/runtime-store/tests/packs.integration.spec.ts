@@ -3,7 +3,7 @@
  * with its own dependency and the runtime's peers, and a refusal leaves nothing under `packs/` or `staging/`.
  */
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -38,7 +38,7 @@ function setup() {
   mkdirSync(join(nodeModules, 'runtime-peer'), { recursive: true })
   writeFileSync(join(nodeModules, 'runtime-peer', 'package.json'), '{"name":"runtime-peer","type":"module","main":"index.js"}')
   writeFileSync(join(nodeModules, 'runtime-peer', 'index.js'), 'export const peer = "from the runtime"\n')
-  return { home, paths: new StorePaths(home, PLATFORM), nodeModules }
+  return { home, paths: new StorePaths(home, PLATFORM) }
 }
 
 async function entryFor(external: PackExternal[] = [], peers: string[] = ['runtime-peer']): Promise<{ entry: PackEntry, archive: Buffer }> {
@@ -56,7 +56,7 @@ async function entryFor(external: PackExternal[] = [], peers: string[] = ['runti
 
 describe('installing a pack', () => {
   it('publishes a package that loads under plain Node ESM with its own dependency and the runtime peer', async () => {
-    const { paths, nodeModules } = setup()
+    const { paths } = setup()
     const { entry, archive } = await entryFor()
     const directory = await installPack({ paths, release: RELEASE, entry, platform: PLATFORM, archive, fetchExternal: () => Promise.reject(new Error('no external expected')) })
     expect(directory).toBe(join(paths.pack(RELEASE, 'demo'), 'package'))
@@ -66,7 +66,7 @@ describe('installing a pack', () => {
   })
 
   it('fetches a signed external package, checks it, and refuses other bytes with nothing published', async () => {
-    const { paths, nodeModules } = setup()
+    const { paths } = setup()
     const real = await tarball({ 'package.json': '{"name":"native-linux-x64"}', 'bin/agent': 'binary' })
     const pin: PackExternal = {
       name: '@vendor/native-linux-x64',
@@ -85,7 +85,7 @@ describe('installing a pack', () => {
   })
 
   it('refuses a pack whose peer the runtime does not provide, and a platform the release does not publish', async () => {
-    const { paths, nodeModules } = setup()
+    const { paths } = setup()
     const missingPeer = await entryFor([], ['not-in-runtime'])
     await expect(installPack({ paths, release: RELEASE, entry: missingPeer.entry, platform: PLATFORM, archive: missingPeer.archive, fetchExternal: () => Promise.reject(new Error('unused')) })).rejects.toThrow(/does not provide/u)
     const { entry, archive } = await entryFor()
