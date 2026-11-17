@@ -107,8 +107,8 @@ id 的形式是：设置 → 模型所列的模型提供方路线 `provider:<id>
 | `step` | 空 | 所到达步骤的 id。 |
 | `starterSession` | 空 | 其空状态提供起始提示词的 chat；`pending` 表示下一个空 chat。 |
 | `starterKind` | 空 | 该 chat 的文件夹包含什么：`empty`、`code`、`files`，或为空表示通用提示词。 |
-| `plugins` | 空 | 「Recommended plugins」步骤提供的最多八个 npm 包名。没有任何包且没有 `optionalRows` 时，该步骤被省略。 |
-| `optionalRows` | 空 | 最多八个行 id（如 `delorun-cost-meter`），即 bundle 以禁用状态插入的行；该步骤提议逐个开启。每个都必须是 profile 的行，否则插件在加载时停止并给出指名它的错误。 |
+| `plugins` | 空 | 「Recommended plugins」步骤提供的最多十二个 npm 包名。没有任何包且没有 `optionalRows` 时，该步骤被省略。 |
+| `optionalRows` | 空 | 最多十二个行 id（如 `delorun-cost-meter`），即 bundle 以禁用状态插入的行；该步骤提议逐个开启。每个都必须是 profile 的行，否则插件在加载时停止并给出指名它的错误。 |
 | `registry` | `https://registry.npmjs.org` | 读取未安装包时所用的 `https://` npm 注册表，仅在本人请求时才使用。 |
 | `registryTimeoutMs` | `10000` | 注册表请求合计最多可花费的时间，1000 到 60000。 |
 | `keyTestTimeoutMs` | `15000` | 一个提供方的密钥测试最多可花费的时间，1000 到 60000。 |
