@@ -470,6 +470,28 @@ export const PARITY_SWITCHES = [
     ],
   },
   {
+    id: 'external_agent_limit_refusal',
+    state: 'built',
+    registeredBy: '@delorun/external-agents',
+    defaultValue: true,
+    parityValue: false,
+    modelVisible: true,
+    scenario: 'session/delorun-external-agent-limit-refusal',
+    scenarioState: 'pending recording',
+    field: {
+      module: '@delorun/external-agents',
+      source: 'delorun/packages/external-agents/src/index.ts',
+      key: 'limitRefusal',
+    },
+    // The refusal reaches the model as the error of a refused live start and
+    // of a refused one-shot run; these files hold the check and its sentence.
+    sources: [
+      'delorun/packages/external-agents/src/gate.ts',
+      'delorun/packages/external-agents/src/copy.ts',
+      'delorun/packages/plugin-delegation-consent/src/service.ts',
+    ],
+  },
+  {
     id: 'container_denial_marker',
     state: 'built',
     registeredBy: 'Delorun edit of upstream container denial reporting',

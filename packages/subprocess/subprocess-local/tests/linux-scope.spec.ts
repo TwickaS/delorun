@@ -1182,6 +1182,24 @@ describe('Linux ordinary launch adapters', () => {
     result.owner.cleanup?.()
   })
 
+  it('names the scope unit it asked systemd-run for, and the leader\'s process id', async () => {
+    const child = new FakeChild()
+    childProcessMocks.spawn.mockReturnValue(child)
+    const result = launchLinuxScope(spec(), { TARGET: 'yes' }, ['--expand-environment=no'])
+    const call = childProcessMocks.spawn.mock.calls[0]
+    const requestPath = (call?.[2] as { env?: NodeJS.ProcessEnv } | undefined)?.env?.[SUBPROCESS_RUNNER_ENV]
+    if (requestPath === undefined) throw new Error('launch did not publish a request locator')
+    directories.push(linuxLaunchFilesFromLocator(requestPath).directory)
+    const unitArg = (call?.[1] as string[]).find(arg => arg.startsWith('--unit='))
+    expect(unitArg).toMatch(/^--unit=dsh-subprocess-/u)
+    expect(result.unit).toBe(`${unitArg!.slice('--unit='.length)}.scope`)
+    expect(result.pid).toBe(321)
+    consumeLinuxLaunchRequest(requestPath)
+    child.exit(0, null)
+    await expect(result.direct).resolves.toEqual({ exitCode: 0, signal: null })
+    result.owner.cleanup?.()
+  })
+
   it('removes the private launch directory when spawn throws synchronously', () => {
     const spawnError = new Error('synchronous spawn failure')
     let requestPath: string | undefined

@@ -33,11 +33,13 @@ function baseRowName(id: string): unknown {
 
 describe('the plugin-manager row of @delorun/bundle-local', () => {
   it('protects every row this bundle mounts with a C16 switch on, and nothing it does not mount', () => {
-    // The rename tool only adds one tool that asks, so turning it off removes a convenience and no guard.
-    const guards = inserted.filter(row => (row['config'] as Patch | undefined)?.['enabled'] === true && row['disabled'] === undefined && row['name'] !== '@delorun/bundle-local/workspace-rename').map(row => row['name'])
+    // The rename tool only adds one tool that asks, so turning it off removes a convenience and no guard. The start gate of
+    // live agents holds its switch in `limitRefusal`, and protecting it keeps a model from raising its cap (review D7).
+    const switchOn = (config: Patch | undefined): boolean => config?.['enabled'] === true || config?.['limitRefusal'] === true
+    const guards = inserted.filter(row => switchOn(row['config'] as Patch | undefined) && row['disabled'] === undefined && row['name'] !== '@delorun/bundle-local/workspace-rename').map(row => row['name'])
     expect(guards).toEqual([
       '@delorun/plugin-instruction-consent', '@delorun/plugin-mcp-consent', '@delorun/plugin-permission-defaults',
-      '@delorun/plugin-schedule-consent', '@delorun/plugin-fetch-guard', '@delorun/plugin-tool-failure-guard', '@delorun/plugin-delegation-consent', '@delorun/plugin-changes', '@delorun/bundle-local/update-gate', '@delorun/bundle-local/update-check',
+      '@delorun/plugin-schedule-consent', '@delorun/plugin-fetch-guard', '@delorun/plugin-tool-failure-guard', '@delorun/plugin-delegation-consent', '@delorun/external-agents', '@delorun/plugin-changes', '@delorun/bundle-local/update-gate', '@delorun/bundle-local/update-check',
       '@delorun/bundle-local/trust', '@delorun/plugin-install-check', '@delorun/reach',
     ])
     // home-auth has no switch; it is protected so no chat points the home's device records elsewhere.

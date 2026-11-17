@@ -17,7 +17,7 @@ import SubagentRuntime, { DELEGATION_CONSENT_PROVIDER_EXPORT } from '@deepseek-a
 import type { ExternalDelegationVerdict, SubagentResult } from '@deepseek-ai/dsh-subagent'
 import ApprovalService, { setApprovalPolicy, type ApprovalOutcome, type ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { apply, Config, DelorunDelegationConsent, EXTERNAL_AGENT_CONSENT_SWITCH, DelegationConsentError, PLUGIN_MANAGER_REFUSAL, pluginManagerVerdict } from '../src/index.ts'
+import { apply, Config, DelorunDelegationConsent, EXTERNAL_AGENT_CONSENT_SWITCH, DelegationConsentError, fullAccessStartsAgents, PLUGIN_MANAGER_REFUSAL, pluginManagerVerdict } from '../src/index.ts'
 import { guardProfile, isExternalAgentPackage, modulePackage, targetPackageNames, type GuardProfile } from '../src/guard.ts'
 import { agentName, askText, askTextZh, describeAgent, noSandboxPolicyRefusal, notApprovedRefusal, noWorkspaceRefusal } from '../src/copy.ts'
 import { registerDelegationRoutes } from '../src/routes.ts'
@@ -75,7 +75,7 @@ async function mounted(options: {
   const agents = options.agents ?? []
   ctx.provide('agents', { get: (id: string) => agents.find(agent => agent.id === id) } as never)
   ctx.provide('subagents', { getProvider: (name: string) => options.providers?.[name] } as never)
-  await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 1_800_000, env: { DELORUN_HOME: paths.home }, now: () => 1_000 })
+  await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 1_800_000, fullAccessStartsAgents: () => true, env: { DELORUN_HOME: paths.home }, now: () => 1_000 })
   return { ctx, consent: ctx.get('delegationConsent') as DelorunDelegationConsent, asks, ...paths }
 }
 
@@ -387,6 +387,15 @@ describe('mounting', () => {
     expect(() => configOf({ enabled: true, runTimeoutMinutes: 1.5 })).toThrow()
   })
 
+  it('reads fullAccessStartsAgents by name: off while absent, else its saved value, and off when it reads no boolean', () => {
+    const base = configOf({ enabled: true })
+    expect(fullAccessStartsAgents(base)).toBe(false)
+    expect(fullAccessStartsAgents(Object.assign({}, base, { fullAccessStartsAgents: { get: () => false } }))).toBe(false)
+    expect(fullAccessStartsAgents(Object.assign({}, base, { fullAccessStartsAgents: { get: () => true } }))).toBe(true)
+    expect(fullAccessStartsAgents(Object.assign({}, base, { fullAccessStartsAgents: false }))).toBe(false)
+    expect(fullAccessStartsAgents(Object.assign({}, base, { fullAccessStartsAgents: { get: () => 'yes' } }))).toBe(false)
+  })
+
   it('provides the service, the guard and the routes with the switch on', async () => {
     const ctx = new Context()
     const guards: ((exec: object) => string | undefined)[] = []
@@ -636,7 +645,7 @@ describe('through the subagent runtime', () => {
     let answer: ApprovalOutcome = 'rejected'
     ctx.provide('approval', { request: () => Promise.resolve(answer), config: {}, overrideOf: () => undefined } as never)
     ctx.provide('sandboxPolicy', { resolve: () => ({ mode: 'workspace-write' }) } as never)
-    await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 60_000, env: { DELORUN_HOME: paths.home }, now: () => 1 })
+    await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 60_000, fullAccessStartsAgents: () => true, env: { DELORUN_HOME: paths.home }, now: () => 1 })
     const parent = await parentChat(ctx, paths.workspace)
     const result = Promise.withResolvers<SubagentResult>()
     const start = vi.fn(() => Promise.resolve({ id: SessionId('run'), result: result.promise, dispose: () => Promise.resolve() }))
@@ -672,7 +681,7 @@ describe('through the approval service', () => {
     ctx.provide('sandboxPolicy', { resolve: () => ({ mode: 'danger-full-access' }) } as never)
     const answerer = vi.fn(() => Promise.resolve<ApprovalOutcome>('allowed-once'))
     ctx.on('approval/request', answerer)
-    await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 60_000, env: { DELORUN_HOME: paths.home }, now: () => 1 })
+    await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 60_000, fullAccessStartsAgents: () => true, env: { DELORUN_HOME: paths.home }, now: () => 1 })
     const session = ctx.sessions.create(SessionId(randomUUID()), { meta: { cwd: paths.workspace } })
     session.append('turn/start', { turn: 1 })
     const parent: Agent = { id: session.id, session } as never

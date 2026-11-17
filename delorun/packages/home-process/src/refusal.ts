@@ -96,6 +96,8 @@ function homeProcessRefusal(error: HomeProcessError, context: RefusalContext): O
       return { lead: 'Delorun did not record the answer.', remedies: [again] }
     case 'REACH_UNAVAILABLE':
       return { lead: 'Delorun did not apply remote access to the running home: its profile does not run the reach service now.', remedies: [`Restart Delorun to apply it: delorun stop${profile}, then delorun start${profile}`] }
+    case 'AGENTS_UNAVAILABLE':
+      return { lead: 'Delorun did not read or check the agents\' plan limits: the running profile does not load external agents.', remedies: [`Add Claude Code or Codex in the studio\'s Plugins, then run this again: delorun agents status${profile}`] }
     case 'STUDIO_UNAVAILABLE':
       return { lead: 'Delorun did not open the studio: the running home process could not make a sign-in link for this computer.', remedies: [`See whether Delorun runs and where its studio listens: delorun status${profile}`] }
   }

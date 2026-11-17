@@ -35,7 +35,7 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
   {
     id: 'plugin-manager',
     kind: 'changed',
-    reason: 'Plugin management protects Delorun\'s consent and guard rows, the plugin changes held for review, the update gate, the update check, the trust bill, the plugin install check and the sandbox rows (`protectedPlugins`), so the `plugin_manager` tool, which full access runs without a prompt, can neither disable them, change their settings, nor deselect or remove this bundle; upstream protects only its management components. It asks the npmmirror registry only when the install check\'s `npmMirror` setting is on (`fallbackRegistries` reads `DELORUN_NPM_MIRROR`, which `delorun` sets at each start), where upstream asks it by default.',
+    reason: 'Plugin management protects Delorun\'s consent and guard rows, the start gate of live external agents, the plugin changes held for review, the update gate, the update check, the trust bill, the plugin install check and the sandbox rows (`protectedPlugins`), so the `plugin_manager` tool, which full access runs without a prompt, can neither disable them, change their settings, nor deselect or remove this bundle; upstream protects only its management components. It asks the npmmirror registry only when the install check\'s `npmMirror` setting is on (`fallbackRegistries` reads `DELORUN_NPM_MIRROR`, which `delorun` sets at each start), where upstream asks it by default.',
     parity: { kind: 'upstream', reason: 'The replay runs upstream\'s protection: the overlay leaves the row out, so `plugin_manager` lists and refuses the recorded scenarios\' rows as upstream does.' },
   },
   {
@@ -176,6 +176,12 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     kind: 'added',
     reason: 'The C16 switch `external_agent_consent` on: an external agent such as Claude Code or Codex starts only after the person approves it at the home\'s computer or allowed it for the workspace, a read-only chat never starts one, each run stops after its time limit, and the model cannot install or enable one through `plugin_manager`; the person turns it off in Settings, External agents, which setup\'s prompts answer does not change, and the plugin\'s own default, off, is the parity value.',
     parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: the delegationConsent service is absent, so external providers start and describe themselves as upstream\'s do.' },
+  },
+  {
+    id: 'delorun-external-agents',
+    kind: 'added',
+    reason: 'The start gate of live external agents, the only path that starts Claude Code or Codex for a seat or a limits check, with the C16 switch `external_agent_limit_refusal` on: a reached plan limit with a reset time in the future refuses a start with a fixed sentence to the model; upstream has no gate, and the plugin\'s own default, off, is the parity value.',
+    parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: no externalAgents service exists, so no live agent starts and no limit refuses a one-shot run.' },
   },
   {
     id: 'delorun-plugin-changes',
