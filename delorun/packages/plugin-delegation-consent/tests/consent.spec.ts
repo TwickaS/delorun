@@ -387,9 +387,9 @@ describe('mounting', () => {
     expect(() => configOf({ enabled: true, runTimeoutMinutes: 1.5 })).toThrow()
   })
 
-  it('reads fullAccessStartsAgents by name: on while absent, else its saved value, and off when it reads no boolean', () => {
+  it('reads fullAccessStartsAgents by name: off while absent, else its saved value, and off when it reads no boolean', () => {
     const base = configOf({ enabled: true })
-    expect(fullAccessStartsAgents(base)).toBe(true)
+    expect(fullAccessStartsAgents(base)).toBe(false)
     expect(fullAccessStartsAgents(Object.assign({}, base, { fullAccessStartsAgents: { get: () => false } }))).toBe(false)
     expect(fullAccessStartsAgents(Object.assign({}, base, { fullAccessStartsAgents: { get: () => true } }))).toBe(true)
     expect(fullAccessStartsAgents(Object.assign({}, base, { fullAccessStartsAgents: false }))).toBe(false)

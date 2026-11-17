@@ -11,14 +11,15 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import type { ApprovalOutcome, ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
 import type { SeatLease, SeatLeaseEnd, SeatReview, SeatReviewPhase } from '@delorun/external-agents/contract'
 import { DELEGATION_CONSENT_ROW_ID } from '@delorun/external-agents/contract'
-import { afterEach, describe, expect, it } from 'vitest'
-import { DelorunDelegationConsent } from '../src/index.ts'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { apply, DelorunDelegationConsent } from '../src/index.ts'
 import { archivedRefusal, leaseEndedRefusal, noOpenTurnRefusal, notApprovedRefusal } from '../src/copy.ts'
 import { changeGrantStore, grantStorePath } from '../src/store.ts'
 import { DELEGATION_CONSENT_ROW } from '../src/wire.ts'
 
 const roots: string[] = []
 afterEach(() => {
+  vi.unstubAllEnvs()
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
 })
 
@@ -62,8 +63,12 @@ interface World {
   answer: ApprovalOutcome
 }
 
-/** The service with fake neighbours that each spec changes. */
-async function world(): Promise<World> {
+/**
+ * The service with fake neighbours that each spec changes.
+ * @param mount - `apply` mounts the consent row with this configuration instead of the service alone; its
+ * `fullAccessStartsAgents` is set only when given.
+ */
+async function world(mount?: { fullAccessStartsAgents?: boolean }): Promise<World> {
   const paths = folders()
   const ctx = new Context()
   const state = {
@@ -96,7 +101,14 @@ async function world(): Promise<World> {
     get archivedSessionIds() { return state.archived },
     list: () => state.listed.map(path => ({ path })),
   } as never)
-  await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 1_800_000, fullAccessStartsAgents: () => state.fullAccessStartsAgents, env: { DELORUN_HOME: paths.home }, now: () => 7 })
+  if (mount === undefined) {
+    await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 1_800_000, fullAccessStartsAgents: () => state.fullAccessStartsAgents, env: { DELORUN_HOME: paths.home }, now: () => 7 })
+  } else {
+    vi.stubEnv('DELORUN_HOME', paths.home)
+    const saved = mount.fullAccessStartsAgents
+    apply(ctx, { enabled: { get: () => true }, runTimeoutMinutes: { get: () => 30 }, ...(saved === undefined ? {} : { fullAccessStartsAgents: { get: () => saved } }) } as never)
+    await vi.waitFor(() => { expect(ctx.get('delegationConsent')).toBeDefined() })
+  }
   const consent = ctx.get('delegationConsent') as DelorunDelegationConsent
   consent.onLeaseEnded((lease, reason) => { state.ended.push({ lease, reason }) })
   return Object.assign(state, { ctx, consent, ...paths })
@@ -175,6 +187,17 @@ describe('a seat review at hand-off', () => {
     expect(w.asks).toEqual([])
     expect(w.consent.leaseOf(SessionId('seat'))).toMatchObject({ root: 'root', workspace: w.workspace, provider: 'claude-code' })
     await expect(w.consent.reviewSeat(seat(w, 'turn'))).resolves.toMatchObject({ kind: 'allow', why: 'lease' })
+  })
+
+  it('refuses a Full access seat with no grant when the consent row has no fullAccessStartsAgents switch, and allows it once the switch is on', async () => {
+    for (const [saved, verdict] of [[undefined, 'refuse'], [false, 'refuse'], [true, 'allow']] as const) {
+      const w = await world(saved === undefined ? {} : { fullAccessStartsAgents: saved })
+      w.policies.set('root', 'never')
+      w.fullAccess.add('root')
+      await expect(w.consent.reviewSeat(seat(w, 'hand-off'))).resolves.toMatchObject({ kind: verdict })
+      expect(w.asks).toEqual([])
+      await w.ctx.fiber.dispose()
+    }
   })
 
   it('refuses a never root whose sandbox is not danger-full-access, and Full access while the switch is off', async () => {

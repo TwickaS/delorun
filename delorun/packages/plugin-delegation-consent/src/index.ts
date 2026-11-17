@@ -60,18 +60,17 @@ export const EXTERNAL_AGENT_CONSENT_SWITCH: ComputerOnlySwitch = Object.freeze({
 })
 
 /**
- * The consent's `fullAccessStartsAgents` switch, read by name: a Full access chat starts live agents with no card while
- * it is on (lead decisions 9 and 10, owner EA33).
+ * The consent's `fullAccessStartsAgents` switch, read by name: a Full access chat starts live agents with no card only
+ * while it is present and on (lead decisions 9 and 10, owner EA33).
  * @param config - the row's live configuration.
- * @returns the switch's value; on while the field is absent, its default.
+ * @returns true only for a present switch that reads `true`; an absent or unreadable switch reads as off.
  */
 export function fullAccessStartsAgents(config: Config): boolean {
-  // TODO(lead decision 9): once fix/p2-fullaccess adds `fullAccessStartsAgents` to Config, read the typed field and
-  // make an absent or unreadable switch refuse (false), failing closed; until then the field is absent and on.
+  // TODO(lead decision 9): read the typed field once fix/p2-fullaccess adds `fullAccessStartsAgents` to Config; until
+  // then the field is absent, so a Full access seat falls back to review D10's refusal.
   const field: { get?: () => unknown } | boolean | undefined = Reflect.get(config, 'fullAccessStartsAgents')
-  if (field === undefined) return true
   if (typeof field === 'boolean') return field
-  return field.get?.() === true
+  return field?.get?.() === true
 }
 
 /**
