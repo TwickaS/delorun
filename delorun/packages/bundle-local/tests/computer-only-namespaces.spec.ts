@@ -45,7 +45,10 @@ describe('the shipped rows that stay at the computer', () => {
   const computerOnly = rows.filter(row => Object.hasOwn(COMPUTER_ONLY_ROW_MODULES, row.name))
 
   it('include the gate, reach and both sandbox rows', () => {
-    expect(computerOnly.map(row => row.name).sort()).toEqual(Object.keys(COMPUTER_ONLY_ROW_MODULES).sort())
+    // The webhook endpoint's server row belongs to the webhooks pack, which a person adds later; its row is protected
+    // through the pack's own patch, not through this bundle's rows.
+    const inThisBundle = Object.keys(COMPUTER_ONLY_ROW_MODULES).filter(name => !name.startsWith('@delorun/bundle-webhooks/'))
+    expect(computerOnly.map(row => row.name).sort()).toEqual(inThisBundle.sort())
   })
 
   it('are found by the policy under their settings namespace and their entry id', () => {
