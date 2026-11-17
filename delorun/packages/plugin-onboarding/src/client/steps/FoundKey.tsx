@@ -6,6 +6,7 @@ import { useId } from 'react'
 import type { ReactNode } from 'react'
 import type { KeySource } from '../../wire.ts'
 import type { StepServices } from '../types.ts'
+import chevron from '../ui/Chevron.module.css'
 import css from './models.module.css'
 
 /**
@@ -51,7 +52,7 @@ export function FoundKey({ t, source, compact = false }: FoundKeyProps): ReactNo
     <div className={css.found}>
       {!compact && <p id={`${id}-source`} className={css.source} aria-label={t('providers.source.label', { source: line })}>{line}</p>}
       <details className={css.how}>
-        <summary className={css.moreSummary}>{t('providers.how')}</summary>
+        <summary className={`${chevron.summary} ${css.moreSummary}`}>{t('providers.how')}</summary>
         <p className={css.howBody}>{t('providers.how.body')}</p>
       </details>
     </div>

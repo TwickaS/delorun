@@ -3,6 +3,7 @@
  * preview notice and for warnings that concern the whole step.
  */
 import type { ReactNode } from 'react'
+import chevron from './Chevron.module.css'
 import css from './Notice.module.css'
 
 /** The props of the notice. */
@@ -31,7 +32,7 @@ export function Notice({ tone, title, children, more, moreLabel }: NoticeProps):
       <p className={css.text}>{children}</p>
       {more !== undefined && (
         <details className={css.details}>
-          <summary className={css.summary}>{moreLabel}</summary>
+          <summary className={`${chevron.summary} ${css.summary}`}>{moreLabel}</summary>
           <div className={css.more}>{more}</div>
         </details>
       )}

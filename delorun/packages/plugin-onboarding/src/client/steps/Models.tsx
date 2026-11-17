@@ -16,6 +16,7 @@ import { Card, Monogram } from '../ui/Card.tsx'
 import { StateLine } from '../ui/StateLine.tsx'
 import { FoundKey, connectedLine } from './FoundKey.tsx'
 import { useStore } from './shared.ts'
+import chevron from '../ui/Chevron.module.css'
 import css from './models.module.css'
 import shared from './steps.module.css'
 
@@ -393,7 +394,7 @@ function WalkScreen({ card, services, place, startReplacing = false, onBack, onS
       )}
       {card.needsBaseURL && !custom && (
         <details className={css.more}>
-          <summary className={css.moreSummary}>{t('providers.more')}</summary>
+          <summary className={`${chevron.summary} ${css.moreSummary}`}>{t('providers.more')}</summary>
           <label htmlFor={`${id}-url`} className={css.label}>{t('providers.baseURL')}</label>
           <input id={`${id}-url`} className={css.input} type="url" autoComplete="off" spellCheck={false} value={baseURL}
             onChange={(event) => { setBaseURL(event.currentTarget.value) }} />
