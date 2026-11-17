@@ -69,10 +69,11 @@ delorun setup import my-setup.delorun
 
 1. 在写入任何内容之前完整检查文件。签名之后被改动过、或含有插件文件夹之外路径的文件会被拒绝。
 2. 说明谁签了名。来自你自己电脑的文件显示为由这台电脑的密钥签名。来自另一台电脑的文件、或未签名的文件，显示为**未验证（UNVERIFIED）**并带密钥指纹。请把指纹与另一台电脑上导出时打印的指纹比对。你仍可导入；接下来你读到的内容就是保障。
-3. 列出它将做的事，并说明它替换哪些部分：它添加或移动的插件、它移除的插件（仅在使用 `--remove-others` 时）、它设置、更改或恢复默认的设置、发送者的备注、文件只写了名称而没有代码的插件、你的模型设置将向其发送请求的端点，以及它不应用的内容。
+3. 列出它将做的事，并说明它替换哪些部分：它添加或移动的插件、它移除的插件（仅在使用 `--remove-others` 时）、它设置、更改或恢复默认的设置、发送者的备注、文件只写了名称而没有代码的插件、你的模型设置将向其发送请求的端点、它保持原样的插件，以及它不应用的内容。
 4. 询问 `Replace the setup of the profile default with this one? [y/N]`。你的密钥、chat、设备、豁免与 setup 的回答从不被触碰。
+5. 若某个模型设置把请求发往不是提供方自己的地址，则对每个这样的地址单独询问：`Requests and your custom key will go to models.example.com. Allow that? [y/N]`。回答否，则不会有任何更改。
 
-默认情况下，导入替换你的模型选择和其他设置，并且只动文件所列的插件，因此只含一个插件的文件无法清空你的 setup。文件未携带的模型或插件设置恢复默认。使用 `--remove-others` 时，文件未列出的插件也会被移除。沙箱、权限、网络这类保护电脑的设置从不被携带，保持原样。
+默认情况下，导入替换你的模型选择和其他设置，并且只动文件所列的插件，因此只含一个插件的文件无法清空你的 setup。文件未携带的模型或插件设置恢复默认，但你保留的插件的设置除外：它们保持原样。模型提供方只能指名它自己的密钥变量，因此文件无法让 Delorun 把你电脑上的另一个变量发给服务器。使用 `--remove-others` 时，文件未列出的插件也会被移除。沙箱、权限、网络这类保护电脑的设置从不被携带，保持原样。
 
 导入像 `delorun plugin` 一样安装与移除插件，检查也相同。在另一台电脑上编写的插件被写入你 home 下的一个文件夹，并从该处链接。它的代码**不会被导入批准**。[保护](../reference/glossary.zh.md#changes-protection)开启时，它在 `delorun changes list` 中等待，直到你审阅（[修改你的 harness](changing-your-harness.zh.md)）。保护关闭时，它在下一次启动时无需审阅即加载，与你从文件夹链接的任何插件一样；若想先读，请先用 `delorun changes protection on` 开启保护。
 
@@ -92,13 +93,13 @@ Delorun 会指出需要密钥的模型提供方。用 `delorun setup key` 添加
 delorun recover restore <version>
 ```
 
-该命令会打印版本号。你也可以在 studio 的 Settings → Setup versions 中选择它（[修改你的 harness](changing-your-harness.zh.md)）。
+该命令会打印版本号。你也可以在 studio 的 Settings → Setup versions 中选择它（[修改你的 harness](changing-your-harness.zh.md)）。退回还会丢弃导入为你在别处编写的插件所扣留的代码审阅。
 
 <details>
 <summary>边缘情况</summary>
 
 - 若导入中途停止，例如某个包无法安装，之前的步骤保持已完成，保存的版本可恢复你原来的 setup。提示信息会指出是哪一步。
-- 若某个包到达时的校验和与文件所写的不同，或校验和无法检查，导入就在那里停止。
+- 若某个包到达时的校验和与文件所写的不同，或校验和无法检查，导入就在那包加载之前停止，其中任何内容都不会被应用。
 - 若文件列出了 Delorun 自己的包，导入会拒绝它。
 - 若你编写的插件需要它在自己文件夹里安装的包，请在导入之后在那里安装。链接不被携带。
 - 若在没有终端的情况下运行导入，它会拒绝；`--dry-run` 无需终端。
@@ -109,7 +110,7 @@ delorun recover restore <version>
 
 ## 在 studio 中
 
-Settings → Setup versions 有 **Export setup** 与 **Import setup** 两个按钮；它们只在运行 Delorun 的那台电脑上的 studio 中可用，手机上不可用。“Export setup”会打开一个对话框，含**包含设置**与**包含我自己编写的插件的代码**两个开关、你的插件清单和备注。“Import setup”先显示更改清单，带有**包含设置**开关（仅当文件含设置时出现）和**移除不在此归档中的插件**（默认关闭），只有在你点击**替换我的 setup**时才替换你的 setup。
+Settings → Setup versions 有 **Export setup** 与 **Import setup** 两个按钮；它们只在运行 Delorun 的那台电脑上的 studio 中可用，手机上不可用。“Export setup”会打开一个对话框，含**包含设置**与**包含我自己编写的插件的代码**两个开关、你的插件清单和备注。“Import setup”先显示更改清单，带有**包含设置**开关（仅当文件含设置时出现）和**移除不在此归档中的插件**（默认关闭），只有在你点击**替换我的 setup**时才替换你的 setup。当某个模型设置把请求发往不是提供方自己的地址时，清单会写出 `Requests and your <provider> key will go to <address>`，在你打开**我确认这些端点**之前，**替换我的 setup**保持不可用。更改任何开关都会重新规划，而你应用的计划始终是你所看到的那个。
 
 <a id="for-the-technically-curious"></a>
 
