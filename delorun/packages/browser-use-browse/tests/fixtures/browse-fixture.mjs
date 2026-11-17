@@ -1,13 +1,13 @@
 /**
  * A stand-in for `browse mcp` over stdio: browse's execute surface (`execute`, `status`, `tabs`) with fixed answers and
- * no browser. Each start, initialize and call is appended to `events.ndjson` in the folder named by the first argument.
+ * no browser. When the first argument names a folder, each start, initialize and call is appended to its `events.ndjson`.
  */
 import { appendFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 
 const [root] = process.argv.slice(2)
-const record = (event, values = {}) => appendFileSync(join(root, 'events.ndjson'), JSON.stringify({ event, pid: process.pid, ...values }) + '\n')
+const record = (event, values = {}) => root !== undefined && appendFileSync(join(root, 'events.ndjson'), JSON.stringify({ event, pid: process.pid, ...values }) + '\n')
 const reply = (id, result) => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\n')
 const text = value => ({ content: [{ type: 'text', text: value }] })
 record('start')
