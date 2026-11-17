@@ -2751,6 +2751,28 @@ importers:
         specifier: workspace:*
         version: link:../contract-device-approval
 
+  delorun/packages/plugin-agent-seats:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+      '@delorun/external-agents':
+        specifier: workspace:*
+        version: link:../external-agents
+      '@delorun/preview-flags':
+        specifier: workspace:*
+        version: link:../preview-flags
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-subagent':
+        specifier: workspace:*
+        version: link:../../../packages/subagent/subagent
+      tsdown:
+        specifier: ^0.22.2
+        version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
+
   delorun/packages/plugin-changes:
     dependencies:
       '@deepseek-ai/schemastery':
