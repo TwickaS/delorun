@@ -1,12 +1,13 @@
 /**
- * Ready: what the guide set, line by line, and the starting prompts the first chat will offer in the chosen folder.
+ * Ready: what the guide set, line by line, and a few ideas to try in the chosen folder, each with a Copy button.
  */
-import { useCallback, useSyncExternalStore } from 'react'
+import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import { useCallback, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import { folderOf } from '../guide.ts'
 import { didNotPass } from '../key-status.ts'
-import { STARTERS, starterSet } from '../StarterPrompts.tsx'
-import type { ReachState, StartTarget } from '../types.ts'
+import { STARTERS, starterSet } from '../ideas.ts'
+import type { ReachState, StartTarget, StepServices } from '../types.ts'
 import { AGENT_BUNDLES } from './Agents.tsx'
 import { useStore, type StepProps, type Tone } from './shared.ts'
 import css from './steps.module.css'
@@ -36,7 +37,30 @@ export function middleEllipsis(path: string): string {
 }
 
 /**
- * Ready: what the guide set, line by line, and the starting prompts the first chat will offer in the chosen folder.
+ * One idea: its title, its text and a button that copies the text. Nothing is written into the message box.
+ * @param props - the dictionary lookup, the idea's title and its text.
+ * @returns the row.
+ */
+function Idea({ t, label, prompt }: { readonly t: StepServices['t']; readonly label: string; readonly prompt: string }): ReactNode {
+  const [copied, setCopied] = useState<'no' | 'yes' | 'failed'>('no')
+  const copy = (): void => {
+    navigator.clipboard.writeText(prompt).then(() => { setCopied('yes') }, () => { setCopied('failed') })
+  }
+  return (
+    <li className={css.idea}>
+      <span className={css.ideaText}>
+        <span className={css.ideaLabel}>{label}</span>
+        <span className={css.ideaPrompt}>{prompt}</span>
+      </span>
+      <Button variant="outline" size="sm" className={css.inline} aria-label={t('ready.ideas.copyNamed', { label })} onClick={copy}>
+        {copied === 'yes' ? t('copy.done') : copied === 'failed' ? t('copy.failed') : t('copy')}
+      </Button>
+    </li>
+  )
+}
+
+/**
+ * Ready: what the guide set, line by line, and a few ideas to try in the chosen folder.
  * @param props - the services, the guide, the reach state and where the chat opens without a choice.
  * @returns the step body.
  */
@@ -85,9 +109,9 @@ export function ReadyStep({ services, guide, reach, target, keepCurrent }: StepP
       </dl>
       {(workspace !== undefined || target.kind === 'other' || keepCurrent) && (
         <div className={css.field}>
-          <span className={css.label}>{t('ready.starters')}</span>
-          <ul className={css.starterPreview}>
-            {STARTERS.map(number => <li key={number}>{t(`starter.${set}.${number}.label`)}</li>)}
+          <span className={css.label}>{t('ready.ideas')}</span>
+          <ul className={css.ideas}>
+            {STARTERS.map(number => <Idea key={number} t={t} label={t(`starter.${set}.${number}.label`)} prompt={t(`starter.${set}.${number}.prompt`)} />)}
           </ul>
         </div>
       )}

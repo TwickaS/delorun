@@ -158,7 +158,7 @@ export function apply(ctx: Context, config: Config): void {
     }
     ctx.effect(() => ctx.connection.fetch.register({
       path, methods: ['POST'], requestBody: 'buffered',
-      ...needsUnlock ? gateByUnlock(() => ctx.get('homeAuth'), answerTo) : { admitPeer: admitApprovedDevice(), fetch: answerTo },
+      ...needsUnlock ? gateByUnlock(() => ctx.get('homeAuth'), answerTo, { renews: true }) : { admitPeer: admitApprovedDevice(), fetch: answerTo },
     }), `${name}: ${path}`)
   }
   route(TRASH_PATHS.list, () => operations.list())

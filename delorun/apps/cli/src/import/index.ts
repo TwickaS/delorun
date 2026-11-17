@@ -36,6 +36,7 @@ import { DELORUN_HOME_ENTRIES } from '@delorun/contract-home-layout'
 import { ArchiveError, ArchiveImporter, DirectoryWorkspaceStore, loadHomeKey, type ArchiveImporterConfig, type ArchivePreview, type ArchiveSizeLimits } from '@delorun/archive'
 import { CliError, EXIT, type ExitCode } from '../exit.ts'
 import { parseFailure } from '../command.ts'
+import { groupsOfFour } from '../output.ts'
 import { printable, quoted } from '../terminal-text.ts'
 import { isYes } from '../trash/terminal.ts'
 
@@ -86,8 +87,8 @@ export function previewLines(preview: ArchivePreview): string {
   const signer = !preview.signed
     ? 'Not signed: nothing shows who made this archive or that it is unchanged.'
     : preview.state === 'verified'
-      ? `Signed by this home's key ${preview.signer.fingerprint}, which this home trusts.`
-      : `Signed by a key this home does not know, fingerprint ${preview.signer.fingerprint}. Compare it with the fingerprint the sending home shows before you trust it.`
+      ? `Signed by this home's key ${groupsOfFour(preview.signer.fingerprint)}, which this home trusts.`
+      : `! Unverified signer · ${groupsOfFour(preview.signer.fingerprint)}\n  Compare it with the fingerprint the other computer printed before you trust it.`
   const workspaces = preview.workspaces.map(workspace =>
     `    ${quoted(workspace.name)}: ${plural(workspace.chats, 'chat')}, ${plural(workspace.attachments, 'attachment')}`)
   const rows = preview.customisation.map(row => `    ${row.kind} ${quoted(row.target)}`)
@@ -162,7 +163,7 @@ async function importArchive(bytes: Uint8Array, source: string, io: ImportIo): P
   } else {
     if (preview.reason === 'key-not-trusted') {
       const typed = await io.ask('To import it anyway, type the key fingerprint shown above: ')
-      if (typed !== preview.signer.fingerprint) throw new CliError(EXIT.failed, 'delorun import: the fingerprint was not confirmed, so nothing was imported')
+      if (typed.replace(/\s+/gu, '') !== preview.signer.fingerprint) throw new CliError(EXIT.failed, 'delorun import: the fingerprint was not confirmed, so nothing was imported')
       confirmation = { confirmedPublicKey: preview.signer.publicKey }
     }
     const answer = await io.ask(`Import ${workspaces} into this home? [y/N] `)
@@ -189,6 +190,7 @@ export async function readArchiveFile(file: string, command = 'delorun import'):
   try {
     handle = await open(file, constants.O_RDONLY | constants.O_NONBLOCK)
   } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw new CliError(EXIT.failed, `No file at ${quoted(file)}. Check the path and try again.`)
     throw new CliError(EXIT.failed, `${command}: the archive cannot be read: ${printable((error as Error).message)}`)
   }
   try {

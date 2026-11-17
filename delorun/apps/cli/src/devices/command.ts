@@ -33,6 +33,8 @@ import { selectProfile } from '../profile.ts'
 import { homeRuns } from '../reach/command.ts'
 import { readReachRow, signInAddress, type TailscalePrivateRow } from '../reach/row.ts'
 import { requireTerminal } from '../needs-terminal.ts'
+import { notRunningText, REMOTE_ACCESS_OFF } from '../messages.ts'
+import { readableTime } from '../output.ts'
 import { printable } from '../terminal-text.ts'
 import { runPin, type PinDependencies } from './pin.ts'
 
@@ -186,8 +188,8 @@ function records(home: string): HomeAuth {
  */
 function deviceLine(device: DeviceSummary): string {
   const approved = device.approvedBy === 'local' ? 'approved at this computer' : device.approvedBy === null ? 'claimed this home' : `approved by ${printable(device.approvedBy)}`
-  const signIn = device.lastSignInAt === null ? 'never signed in' : `last signed in ${new Date(device.lastSignInAt).toISOString()}`
-  return `${printable(device.id)}  ${deviceName(device)}\n    ${printable(device.address)}, ${approved} ${new Date(device.approvedAt).toISOString()}, ${signIn}`
+  const signIn = device.lastSignInAt === null ? 'never signed in' : `last signed in ${readableTime(device.lastSignInAt)}`
+  return `${printable(device.id)}  ${deviceName(device)}\n    ${printable(device.address)}, ${approved} ${readableTime(device.approvedAt)}, ${signIn}`
 }
 
 /**
@@ -248,8 +250,13 @@ type Outcome = ExitCode | 'again'
  */
 async function approve(where: Where): Promise<ExitCode> {
   const { home, profile, context, dependencies } = where
-  if (!dependencies.running(home, profile)) return failed(context, 'Delorun is not running. Start it with delorun start, then run delorun devices approve again')
-  context.stdout(`Waiting for a new device for up to 5 minutes. ${openLine(readReachRow(home, profile))}\n`)
+  if (!dependencies.running(home, profile)) return notRunning(context, profile)
+  const row = readReachRow(home, profile)
+  if (!row.enabled || row.address === '') {
+    context.stderr(`${REMOTE_ACCESS_OFF}\n`)
+    return EXIT.failed
+  }
+  context.stdout(`Waiting for a new device for up to 5 minutes. ${openLine(row)}\n`)
   for (;;) {
     const opened = final(await dependencies.send(home, profile, { op: 'devices.approve', args: {} }))
     if (opened.ok !== true) return failed(context, `Delorun refused: ${refusal(opened)}`)
@@ -270,9 +277,7 @@ async function approve(where: Where): Promise<ExitCode> {
  * @returns the sentence.
  */
 function openLine(row: TailscalePrivateRow): string {
-  return row.enabled && row.address !== ''
-    ? `Open ${signInAddress(row.address)} on it and choose Ask for approval.`
-    : 'Remote access is off for this profile, so a phone cannot reach your studio: turn it on with delorun reach on tailscale. Then open the sign-in address it prints on the device and choose Ask for approval.'
+  return `Open ${signInAddress(row.address)} on it and choose Ask for approval.`
 }
 
 /**
@@ -283,7 +288,7 @@ function openLine(row: TailscalePrivateRow): string {
 function pendingLine(request: PendingRequest): string {
   const who = request.identity === undefined ? '' : `, from Tailscale user ${printable(request.identity)}`
   const how = request.windowless ? ', asked without an approval window' : ''
-  return `${deviceName(request)}${who}, asked at ${new Date(request.createdAt).toISOString()}${how}, request ${printable(request.requestId.slice(0, SHORT_REQUEST_ID))}`
+  return `${deviceName(request)}${who}, asked at ${readableTime(request.createdAt)}${how}, request ${printable(request.requestId.slice(0, SHORT_REQUEST_ID))}`
 }
 
 /**
@@ -434,7 +439,7 @@ interface Unlock {
  */
 async function elevate(where: Where): Promise<ExitCode> {
   const { home, profile, context, dependencies } = where
-  if (!dependencies.running(home, profile)) return failed(context, 'Delorun is not running, so no device holds an unlock. Start it with delorun start')
+  if (!dependencies.running(home, profile)) return notRunning(context, profile)
   for (;;) {
     const listed = final(await dependencies.send(home, profile, { op: 'devices.elevate', args: {} }))
     if (listed.ok !== true) return failed(context, `Delorun refused: ${refusal(listed)}`)
@@ -458,7 +463,7 @@ async function elevate(where: Where): Promise<ExitCode> {
  * @returns the device's name and when it asked, or until when its unlock runs.
  */
 function unlockLine(unlock: Unlock): string {
-  const at = new Date(unlock.at).toISOString()
+  const at = readableTime(unlock.at)
   return unlock.kind === 'request'
     ? `${deviceName(unlock)} asks to unlock, asked at ${at}, request ${printable(unlock.id.slice(0, SHORT_REQUEST_ID))}`
     : `${deviceName(unlock)} is unlocked until ${at}`
@@ -519,7 +524,7 @@ function unlockRound(unlock: Unlock): CodeRound {
     request: typedCode => ({ op: 'devices.elevate', args: { requestId: unlock.id, typedCode } }),
     accepted: (answer) => {
       const endsAt: unknown = typeof answer.elevation === 'object' && answer.elevation !== null ? Reflect.get(answer.elevation, 'endsAt') : undefined
-      const until = typeof endsAt === 'number' && !Number.isNaN(new Date(endsAt).getTime()) ? ` until ${new Date(endsAt).toISOString()}` : ''
+      const until = typeof endsAt === 'number' && !Number.isNaN(new Date(endsAt).getTime()) ? ` until ${readableTime(endsAt)}` : ''
       return `Unlocked sensitive actions on ${printable(unlock.label)}${until}. End it sooner with delorun devices elevate.\n`
     },
     unchanged: 'nothing was unlocked',
@@ -607,6 +612,17 @@ async function code(where: Where): Promise<ExitCode> {
  */
 function final(lines: readonly ResponseLine[]): ResponseLine {
   return lines.at(-1) ?? { ok: false, error: 'NO_ANSWER' }
+}
+
+/**
+ * Report that no home process runs.
+ * @param context - the output.
+ * @param profile - the profile.
+ * @returns {@link EXIT.notRunning}.
+ */
+function notRunning(context: CommandContext, profile: string): ExitCode {
+  context.stderr(`${notRunningText(profile)}\n`)
+  return EXIT.notRunning
 }
 
 /**

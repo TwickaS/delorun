@@ -188,6 +188,21 @@ export const KeyTestAnswer = z.strictObject({
 /** {@link KeyTestAnswer}'s parsed value. */
 export type KeyTestAnswer = z.output<typeof KeyTestAnswer>
 
+/**
+ * The harness's route that names this start of Delorun. `GET` answers {@link StartAnswer}. The guide's "Finish later"
+ * keeps the guide closed while the start it was pressed in is the current one.
+ */
+export const START_PATH = '/api/delorunOnboarding.start'
+
+/** The id of this start of the harness: random, new at every start, never stored by the harness. */
+export const START_ID = /^[A-Za-z0-9-]{1,64}$/
+
+/** What {@link START_PATH} answers. */
+export const StartAnswer = z.strictObject({ startId: z.string().regex(START_ID) })
+
+/** {@link StartAnswer}'s parsed value. */
+export type StartAnswer = z.output<typeof StartAnswer>
+
 /** The most set-aside file names the notice route lists. */
 export const MAX_SET_ASIDE = 64
 

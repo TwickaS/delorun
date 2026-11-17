@@ -2,13 +2,12 @@
 import { Context, FiberState } from '@deepseek-ai/cordis'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
-import { SessionId } from '@deepseek-ai/dsh-session/types'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useSyncExternalStore, type ComponentType } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  addWorkspaceFolder, apply, hostApi, inject, DEFERRED_ENTRY, KEY_BANNER_ENTRY, RENAME_TOOL, SET_ASIDE_ENTRY, type SetAsideInjected, loadSetupRecord, NS, ONBOARDING_STEP, SHOW_AGAIN_ROW, STARTER_ENTRY, type KeyBannerInjected, type OnboardingInjected, type OnboardingStep, type OnboardingStepEntryProps, type ShowAgainRowProps,
-  type StarterInjected, type ShowAgainInjected,
+  addWorkspaceFolder, apply, hostApi, inject, DEFERRED_ENTRY, KEY_BANNER_ENTRY, RENAME_TOOL, SET_ASIDE_ENTRY, type SetAsideInjected, loadSetupRecord, NS, ONBOARDING_STEP, SHOW_AGAIN_ROW, type KeyBannerInjected, type OnboardingInjected, type OnboardingStep, type OnboardingStepEntryProps, type ShowAgainRowProps,
+  type ShowAgainInjected,
 } from '../src/client/index.ts'
 import { en, zh } from '../src/client/locales.ts'
 import { ADD_WORKSPACE_PATH, NO_RECORD, SETUP_RECORD_PATH } from '../src/wire.ts'
@@ -95,7 +94,6 @@ const face = <T,>(entries: Map<string, Registered>, key: string): T => {
 }
 const STEP_KEY = `settings.onboarding#${ONBOARDING_STEP.id}`
 const ROW_KEY = `settings.general.item#${SHOW_AGAIN_ROW.id}`
-const DOCK_KEY = `conversation.input.dock#${STARTER_ENTRY.id}`
 const BANNER_KEY = `conversation.input.dock#${KEY_BANNER_ENTRY.id}`
 const RENAME_KEY = `tool.call.toolview#${RENAME_TOOL}`
 const DEFERRED_KEY = `sidebar.footer.action#${DEFERRED_ENTRY.id}`
@@ -112,7 +110,7 @@ describe('the stock look', () => {
     expect(dictionaries.has(NS)).toBe(true)
     expect(served.ids).toEqual([ONBOARDING_ROW_ID])
     served.on()
-    expect(entries.size).toBe(7)
+    expect(entries.size).toBe(6)
     await studio.dispose()
     expect([dictionaries.size, entries.size, ctx.get('delorunOnboarding')]).toEqual([0, 0, undefined])
     await fiber.dispose()
@@ -139,14 +137,58 @@ describe('the registrations', () => {
     expect([...entries.keys()]).toEqual([RENAME_KEY])
     expect(entries.get(RENAME_KEY)?.options).toMatchObject({ name: 'tool.call.toolview', key: 'rename_workspace', locale: NS })
     served.on()
-    expect([...entries.keys()].toSorted()).toEqual([BANNER_KEY, DEFERRED_KEY, DOCK_KEY, RENAME_KEY, ROW_KEY, SET_ASIDE_KEY, STEP_KEY].toSorted())
+    expect([...entries.keys()].toSorted()).toEqual([BANNER_KEY, DEFERRED_KEY, RENAME_KEY, ROW_KEY, SET_ASIDE_KEY, STEP_KEY].toSorted())
     expect(entries.get(STEP_KEY)?.options).toMatchObject({ name: 'settings.onboarding', id: 'delorun-onboarding', order: -200, locale: NS })
     // bundle-local's step registers at -100, so this one is mounted first.
     expect(ONBOARDING_STEP.order).toBeLessThan(-100)
     expect(entries.get(ROW_KEY)?.options).toMatchObject({ name: 'settings.general.item', id: 'delorun-onboarding', locale: NS })
-    expect(entries.get(DOCK_KEY)?.options).toMatchObject({ name: 'conversation.input.dock', locale: NS })
     served.off()
     expect([...entries.keys()]).toEqual([RENAME_KEY])
+  })
+
+  describe('Finish later is kept in the home until Delorun next starts', () => {
+    const answerStart = (startId: string): void => {
+      vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ startId }), { status: 200 })))
+    }
+    afterEach(() => { vi.unstubAllGlobals() })
+
+    it('saves the id of this start when the guide is set aside, and clears it when the guide is reopened', async () => {
+      answerStart('start-1')
+      const { entries, served, progress } = await harness({ provide: { settingsShell: { openOnboarding: vi.fn() } } })
+      served.on()
+      await act(async () => { face<OnboardingInjected>(entries, STEP_KEY).aside.set(true) })
+      await act(async () => { await flush() })
+      expect(progress.set).toHaveBeenCalledWith('pausedStart', 'start-1')
+      progress.publish({ value: settings({ pausedStart: 'start-1' }) })
+      await act(async () => { face<OnboardingInjected>(entries, STEP_KEY).aside.set(false) })
+      await act(async () => { await flush() })
+      expect(progress.set).toHaveBeenLastCalledWith('pausedStart', '')
+    })
+
+    it('keeps the guide closed in a new tab of the same start, and shows it after a new start', async () => {
+      answerStart('start-1')
+      const same = await harness({ progress: settings({ pausedStart: 'start-1' }) })
+      same.served.on()
+      await act(async () => { await flush() })
+      expect(face<OnboardingInjected>(same.entries, STEP_KEY).aside.getSnapshot()).toBe(true)
+      answerStart('start-2')
+      const next = await harness({ progress: settings({ pausedStart: 'start-1' }) })
+      next.served.on()
+      await act(async () => { await flush() })
+      expect(face<OnboardingInjected>(next.entries, STEP_KEY).aside.getSnapshot()).toBe(false)
+    })
+
+    it('lasts only until the page reloads where the start id cannot be read, as on a phone', async () => {
+      vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 403 })))
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const { entries, served, progress } = await harness()
+      served.on()
+      await act(async () => { await flush() })
+      await act(async () => { face<OnboardingInjected>(entries, STEP_KEY).aside.set(true) })
+      await act(async () => { await flush() })
+      expect(face<OnboardingInjected>(entries, STEP_KEY).aside.getSnapshot()).toBe(true)
+      expect(progress.set).not.toHaveBeenCalled()
+    })
   })
 
   it('open onboarding explicitly from the General row by the step\'s id', async () => {
@@ -307,7 +349,7 @@ describe('the default workspace and the first chat', () => {
   }
 
   async function chat(options: ChatOptions = {}) {
-    const openWorkspace = vi.fn(async (_id: string, beforeOpen?: (sessionId: string) => void) => { beforeOpen?.('session-9') })
+    const openWorkspace = vi.fn(async (_id: string) => {})
     const startSession = vi.fn()
     const pickDirectory = vi.fn(async (): Promise<string | null> => '/work/folder')
     const listDirectory = vi.fn(async (_path?: string, _signal?: AbortSignal) => ({ path: '/home/person' }))
@@ -326,12 +368,11 @@ describe('the default workspace and the first chat', () => {
     return { ...made, injected, startChat: injected.startChat, start: injected.services.start, openWorkspace, startSession, pickDirectory, listDirectory, createDirectory, initializeDefault }
   }
 
-  it('opens a new chat in the default workspace and remembers it as the one that offers starter prompts', async () => {
-    const { startChat, openWorkspace, startSession, progress } = await chat()
+  it('opens a new chat in the default workspace', async () => {
+    const { startChat, openWorkspace, startSession } = await chat()
     await startChat()
-    expect(openWorkspace).toHaveBeenCalledWith(WORKSPACE, expect.any(Function))
+    expect(openWorkspace).toHaveBeenCalledWith(WORKSPACE)
     expect(startSession).not.toHaveBeenCalled()
-    expect(progress.value()?.starterSession).toBe('session-9')
   })
 
   it('looks the default workspace up once when the dialog asks up front and the last button then opens it', async () => {
@@ -367,11 +408,10 @@ describe('the default workspace and the first chat', () => {
   })
 
   it('opens the workspace the person chose without asking for the default one', async () => {
-    const { startChat, openWorkspace, initializeDefault, progress } = await chat()
-    await startChat('workspace-7' as never, 'code')
+    const { startChat, openWorkspace, initializeDefault } = await chat()
+    await startChat('workspace-7' as never)
     expect(initializeDefault).not.toHaveBeenCalled()
-    expect(openWorkspace).toHaveBeenCalledWith('workspace-7', expect.any(Function))
-    expect(progress.value()).toMatchObject({ starterSession: 'session-9', starterKind: 'code' })
+    expect(openWorkspace).toHaveBeenCalledWith('workspace-7')
   })
 
   it.each<readonly [string, ChatOptions, string, number]>([
@@ -380,7 +420,7 @@ describe('the default workspace and the first chat', () => {
     ['fails to resolve and none exist', { workspaces: { initializeDefault: async () => { throw new Error('system Documents directory is unavailable') } } }, 'none', 1],
     ['fails to resolve but others exist', { workspaces: { initializeDefault: async () => { throw new Error('host down') } }, items: [{}] }, 'other', 1],
     ['is not offered by this studio', { workspaces: 'absent' }, 'other', 0],
-  ])('knows up front when the default workspace %s, falls back to the workspace UI\'s own New Session, and offers no starter prompts', async (_, options, kind, warnings) => {
+  ])('knows up front when the default workspace %s, falls back to the workspace UI\'s own New Session', async (_, options, kind, warnings) => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const { start, startChat, startSession, openWorkspace, progress } = await chat(options)
     start.resolve()
@@ -499,7 +539,7 @@ describe('a fresh home with no default workspace', () => {
       { status: path === ADD_WORKSPACE_PATH.slice(1) || path === SETUP_RECORD_PATH.slice(1) ? 200 : 404 },
     ))
     vi.stubGlobal('fetch', fetch)
-    const openWorkspace = vi.fn(async (_id: string, beforeOpen?: (sessionId: string) => void) => { beforeOpen?.('session-9') })
+    const openWorkspace = vi.fn(async (_id: string) => {})
     const pickDirectory = vi.fn(async (): Promise<string | null> => '/work/folder')
     const workspaces = {
       initializeDefault: async () => { throw new Error('system Documents directory is unavailable') },
@@ -529,8 +569,8 @@ describe('a fresh home with no default workspace', () => {
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.continue })) })
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.start })) })
     await act(async () => { await flush() })
-    expect(openWorkspace).toHaveBeenCalledExactlyOnceWith('workspace-7', expect.any(Function))
-    expect(made.progress.value()).toMatchObject({ done: true, starterSession: 'session-9', starterKind: 'empty' })
+    expect(openWorkspace).toHaveBeenCalledExactlyOnceWith('workspace-7')
+    expect(made.progress.value()).toMatchObject({ done: true })
     expect(holdDefaultWorkspaceNotice).toHaveBeenCalledOnce()
     view.unmount()
     expect(release).toHaveBeenCalledExactlyOnceWith({ told: true })
@@ -653,87 +693,5 @@ describe('the set-aside notice\'s services', () => {
     services.dismiss()
     expect(services.dismissed.getSnapshot()).toBe(true)
     expect(listener).toHaveBeenCalled()
-  })
-})
-
-describe('the starter prompts\' services', () => {
-  const CHAT = SessionId('session-9')
-
-  /** A session scope whose conversation has an input, as the sessions service gives one. */
-  function scoped() {
-    const input = { setDraft: vi.fn(), focus: vi.fn() }
-    const conversation = { input: { for: vi.fn(() => input) } }
-    const scope = { get: vi.fn((name: string) => (name === 'conversation' ? conversation : undefined)) }
-    const sessions = { scope: vi.fn(() => scope) }
-    return { input, conversation, scope, sessions }
-  }
-
-  async function starters(provide: Record<string, unknown> = {}, pointer = 'fine') {
-    vi.stubGlobal('matchMedia', (query: string) => ({ matches: query === `(pointer: ${pointer})` }))
-    const made = await harness({ provide })
-    made.served.on()
-    return { ...made, face: face<StarterInjected>(made.entries, DOCK_KEY) }
-  }
-
-  it('follow the chat the progress names', async () => {
-    const { face: services, progress } = await starters()
-    expect(services.starter.getSnapshot()).toBe('')
-    const listener = vi.fn()
-    services.starter.subscribe(listener)
-    expect(services.folder()).toBe('')
-    progress.publish({ value: settings({ starterSession: 'session-9', starterKind: 'code' }) })
-    expect(services.starter.getSnapshot()).toBe('session-9')
-    expect(services.folder()).toBe('code')
-    expect(listener).toHaveBeenCalledOnce()
-    progress.publish({ value: undefined })
-    expect([services.starter.getSnapshot(), services.folder()]).toEqual(['', ''])
-  })
-
-  it('write a prompt into the chat\'s message box without sending, and put the cursor there for a pointer that can hover', async () => {
-    const { sessions, input, scope, conversation } = scoped()
-    const { face: services } = await starters({ sessions })
-    services.prefill(CHAT, 'Plan a project.')
-    expect(sessions.scope).toHaveBeenCalledWith(CHAT)
-    expect(scope.get).toHaveBeenCalledWith('conversation')
-    expect(conversation.input.for).toHaveBeenCalledWith(scope)
-    expect(input.setDraft).toHaveBeenCalledExactlyOnceWith('Plan a project.')
-    expect(input.focus).toHaveBeenCalledOnce()
-    expect(Object.keys(input)).toEqual(['setDraft', 'focus'])
-  })
-
-  it('leave the keyboard down on a touch device', async () => {
-    const { sessions, input } = scoped()
-    const { face: services } = await starters({ sessions }, 'coarse')
-    services.prefill(CHAT, 'Plan a project.')
-    expect(input.setDraft).toHaveBeenCalledOnce()
-    expect(input.focus).not.toHaveBeenCalled()
-  })
-
-  it('write nothing where the chat has no scope or no conversation, or the studio has no sessions', async () => {
-    const { input } = scoped()
-    const noScope = await starters({ sessions: { scope: () => undefined } })
-    noScope.face.prefill(CHAT, 'x')
-    const noConversation = await starters({ sessions: { scope: () => ({ get: () => undefined }) } })
-    noConversation.face.prefill(CHAT, 'x')
-    const none = await starters()
-    none.face.prefill(CHAT, 'x')
-    expect(input.setDraft).not.toHaveBeenCalled()
-  })
-
-  it('take the chat that opens while they are pending', async () => {
-    const { face: services, progress } = await starters()
-    services.bind(CHAT)
-    expect(progress.set).toHaveBeenCalledWith('starterSession', CHAT)
-  })
-
-  it('stop offering the prompts when dismissed, and warn if that cannot be saved', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const { face: services, progress } = await starters()
-    services.dismiss()
-    expect(progress.set).toHaveBeenCalledWith('starterSession', '')
-    progress.set.mockRejectedValueOnce(new Error('transport'))
-    services.dismiss()
-    await flush()
-    expect(warn).toHaveBeenCalledWith('delorun onboarding: progress was not saved', expect.any(Error))
   })
 })

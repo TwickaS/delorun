@@ -24,10 +24,11 @@ import { basename, join } from 'node:path'
 import { parseArgs } from 'node:util'
 import { z } from 'zod'
 import { ARCHIVE_CUSTOMISATION_SCHEMA_VERSION } from '@delorun/contract-archive-and-trash'
-import { exportArchive, loadHomeKey, signManifest, type ArchiveExportInput, type ExportWorkspace, type SecretFinding } from '@delorun/archive'
+import { exportArchive, keyFingerprint, loadHomeKey, signManifest, type ArchiveExportInput, type ExportWorkspace, type SecretFinding } from '@delorun/archive'
 import { attachmentDigests, attachmentPaths, encodeSegment, generationFiles, readGeneration } from '@delorun/trash'
 import { CliError, EXIT, type ExitCode } from '../exit.ts'
 import { parseFailure } from '../command.ts'
+import { groupsOfFour } from '../output.ts'
 import { quoted } from '../terminal-text.ts'
 import { isYes } from '../trash/terminal.ts'
 
@@ -261,6 +262,7 @@ async function writeExport(target: string, out: string, io: ExportIo): Promise<E
     result = exportArchive({ ...input, confirmSecrets: true })
   }
   await writeNewFile(out, result.bytes!)
-  io.stdout(`Wrote ${quoted(basename(out))}: ${quoted(workspace.name)}, ${String(workspace.chats.length)} chat${workspace.chats.length === 1 ? '' : 's'}, ${String(workspace.attachments.length)} attachment${workspace.attachments.length === 1 ? '' : 's'}, signed by this home's key ${key.keyId}.\n`)
+  io.stdout(`Wrote ${quoted(basename(out))}: ${quoted(workspace.name)}, ${String(workspace.chats.length)} chat${workspace.chats.length === 1 ? '' : 's'}, ${String(workspace.attachments.length)} attachment${workspace.attachments.length === 1 ? '' : 's'}.\n`)
+  io.stdout(`Signed by this home's key, fingerprint ${groupsOfFour(keyFingerprint(key.publicKey))}\n  The other computer asks you to compare it.\n`)
   return EXIT.ok
 }

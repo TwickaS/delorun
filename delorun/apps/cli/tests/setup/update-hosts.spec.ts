@@ -4,7 +4,8 @@ import { statementLines } from '../../src/setup/sections.ts'
 describe('the update-check statement', () => {
   it('names releases.delorun.com and GitHub on the production channel', () => {
     const text = statementLines().join('\n')
-    expect(text).toContain('from releases.delorun.com and the newest release\'s manifest and log record from GitHub')
+    expect(text).toContain('About once a day Delorun checks releases.delorun.com and GitHub for a newer release.')
+    expect(text).toContain('It sends nothing about you or your plugins; those sites see this computer\'s address.')
   })
 
   it('names only the channel origin of a launcher built for another channel', () => {

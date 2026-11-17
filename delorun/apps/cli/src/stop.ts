@@ -23,6 +23,7 @@ import { sendHomeRequest } from '@delorun/home-process'
 import { EXIT, type ExitCode } from './exit.ts'
 import { parseOptions, type CliCommand, type CommandOutput } from './command.ts'
 import { selectProfile } from './profile.ts'
+import { notRunningText } from './messages.ts'
 import { cliRedactor } from './refusals.ts'
 
 /** How often a stop checks whether the home process has exited, in milliseconds. */
@@ -243,7 +244,7 @@ export function createStopCommand(dependencies: StopDependencies): CliCommand {
       const record = dependencies.readLock(directory)
       const holderRuns = (): boolean => record !== undefined && !['exited', 'replaced'].includes(checkHolder(record, dependencies.processes).kind)
       if (record === undefined || !holderRuns()) {
-        context.stdout(`Delorun is not running for the profile ${profile}.\n`)
+        context.stdout(`${notRunningText(profile)}\n`)
         return EXIT.ok
       }
       let lines

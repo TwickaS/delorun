@@ -9,6 +9,7 @@ import { Button, Input, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { CREATE_KINDS, type CreatedView, type WorkspacesView } from '../wire.ts'
 import type { ActionOutcome } from './controller.ts'
+import { ChoiceSelect } from './ChoiceSelect.tsx'
 import css from './ChangesSection.module.css'
 
 /** The controller's calls the section uses. */
@@ -106,13 +107,11 @@ export function CreateSection(props: CreateSectionProps) {
           onChange={(event) => { setName(event.target.value) }} />
         <p className={css.meta}>{t('create.nameHint')}</p>
         <label className={css.groupHeading} htmlFor="delorun-create-kind">{t('create.kind')}</label>
-        <select id="delorun-create-kind" value={kind} onChange={(event) => { setKind(event.target.value) }}>
-          {CREATE_KINDS.map(entry => <option key={entry} value={entry}>{t(`create.kind.${entry}`)}</option>)}
-        </select>
+        <ChoiceSelect id="delorun-create-kind" value={kind} onChange={setKind}
+          choices={CREATE_KINDS.map(entry => ({ id: entry, label: t(`create.kind.${entry}`) }))} />
         <label className={css.groupHeading} htmlFor="delorun-create-workspace">{t('create.workspace')}</label>
-        <select id="delorun-create-workspace" value={workspace.id} onChange={(event) => { setChosen(event.target.value) }}>
-          {view.workspaces.map(entry => <option key={entry.id} value={entry.id}>{entry.title}</option>)}
-        </select>
+        <ChoiceSelect id="delorun-create-workspace" value={workspace.id} onChange={setChosen}
+          choices={view.workspaces.map(entry => ({ id: entry.id, label: entry.title }))} />
         <p className={css.meta} data-delorun-create-where>{t('create.where', { folder: `${workspace.path}/plugins` })}</p>
         {refusal === undefined ? null : <p className={css.failureText} role="alert"><StateDot state="error" />{refusal === '' ? t('create.refusedUnknown') : t('create.refused', { message: refusal })}</p>}
         <div>

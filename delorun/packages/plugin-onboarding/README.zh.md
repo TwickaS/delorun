@@ -11,7 +11,7 @@ kind: "package-library"
 
 ## 摘要
 
-studio 的第一分钟是一个以 chat 收尾的对话框。「Welcome」设置语言并显示预览版提示。「Models」连接模型提供方：勾选的卡片、逐个走完每个已勾选的提供方，以及一份摘要。「Look」在一个以该外观呈现的小 chat 旁设置配色方案、主题和强调色。「Agents」提供 Claude Code 和 Codex 及其在这台电脑上的登录状态，并请本人确认添加其中一个意味着什么。「Recommended plugins」提供已配置的插件，与本人的连接相符的排在前面。「Phone access」在远程访问关闭期间，显示 Tailscale 距离能提供 studio 服务还差多少。「Workspace」选择默认工作区，即这台电脑上的一个文件夹，或从 Git 克隆的一个仓库。「Ready」列出引导设置的内容并打开第一个 chat，其空状态根据文件夹的内容提供三个起始提示词；提示词会写入消息框，但不发送任何内容。每一步都位于同一个框架中：步骤名称和「Step n of N」连同进度条位于顶部，其中 N 只统计该本人会看到的步骤（手机上以及设置完成后会省略「Phone access」，终端设置已涵盖的步骤也会省略），正文可滚动，「Skip」「Back」和「Continue」位于底部，在任何宽度下都相同；最后一步没有「Skip」。卡片（图标位、标题、带「More」「Add」或「✓ Added」的一行摘要）和其下的整行状态，由「Models」「Agents」和「Recommended plugins」共用。引导会省略终端设置已涵盖的内容，可从设置 → 通用 → 入门再次显示，并且只在 Delorun 外观开启时加载。
+studio 的第一分钟是一个以 chat 收尾的对话框。「Welcome」设置语言并显示预览版提示。「Models」连接模型提供方：勾选的卡片、逐个走完每个已勾选的提供方，以及一份摘要。「Look」在一个以该外观呈现的小 chat 旁设置配色方案、主题和强调色。「Agents」提供 Claude Code 和 Codex 及其在这台电脑上的登录状态，并请本人确认添加其中一个意味着什么。「Recommended plugins」提供已配置的插件，与本人的连接相符的排在前面。「Phone access」在远程访问关闭期间，显示 Tailscale 距离能提供 studio 服务还差多少。「Workspace」选择默认工作区，即这台电脑上的一个文件夹，或从 Git 克隆的一个仓库。「Ready」列出引导设置的内容并打开第一个 chat；「Ready」本身提供三个值得一试的想法，每个都带一个「Copy」按钮。每一步都位于同一个框架中：步骤名称和「Step n of N」连同进度条位于顶部，其中 N 只统计该本人会看到的步骤（手机上以及设置完成后会省略「Phone access」，终端设置已涵盖的步骤也会省略），正文可滚动，「Skip」「Back」和「Continue」位于底部，在任何宽度下都相同；最后一步没有「Skip」。卡片（图标位、标题、带「More」「Add」或「✓ Added」的一行摘要）和其下的整行状态，由「Models」「Agents」和「Recommended plugins」共用。引导会省略终端设置已涵盖的内容，可从设置 → 通用 → 入门再次显示，并且只在 Delorun 外观开启时加载。
 
 ## 目录
 
@@ -36,13 +36,13 @@ studio 的第一分钟是一个以 chat 收尾的对话框。「Welcome」设置
 | Phone access | 远程访问状态路由应答没有任何远程访问方式就绪，且设置记录没有说明远程访问已设置时 | 按本人修复的顺序排列的四项检查：已安装 Tailscale、这台电脑已登录、tailnet 已开启 HTTPS 证书，以及本人的账户被允许配置 `tailscale serve`。每项显示完成，第一项缺失的显示其修复方法（一个链接、带复制按钮的命令，或管理控制台设置），其余的等待。然后是 `delorun reach on tailscale` 和 `delorun devices approve`，各带一个复制按钮，以及 Tailscale 给出这台电脑的名称之后手机要打开的地址。它说明手机会话无法授予完全访问权限或批准设备，并且 Delorun 在没有远程访问时也可在这台电脑上工作。 |
 | PIN | 手机访问已开启后，在 home 所在电脑上；在手机上，则是在 PIN 模式关闭且该步骤尚未被推迟时 | 在电脑上：选择一个 PIN 或口令，输入两次，已配对的手机之后就用它解锁。在手机上：单独一栏，说明设置 PIN 要在电脑上完成及其原因，并提供 **Do it on my computer**（把该步骤记为已推迟并继续）和 Skip。 |
 | Workspace | 始终 | 默认工作区（当能解析出一个时）、「Another folder」或「Clone from Git」。文件夹来自 host 的原生选择器；host 没有时，则来自该步骤自己的选择器。克隆需要一个地址、要克隆到的文件夹（用该步骤的选择器选取）和新文件夹的名称，该名称跟随地址，直到本人输入一个名称；克隆运行期间显示 Git 的百分比，失败时显示原因。所选文件夹与它包含的内容一起显示：代码项目、文件夹或空文件夹。 |
-| Ready | 始终，最后一步 | 每项一行，分别为：模型（密钥有效的提供方，或没有一个有效）、外观、已添加的 agent 和插件、home 有远程访问时的手机访问，以及工作区，并带有第一个 chat 将提供的起始提示词。「Start a chat」记录引导已完成，并在所选工作区中打开一个新 chat。没有选择工作区且没有能解析出的工作区时，「Start a chat」返回到「Workspace」。 |
+| Ready | 始终，最后一步 | 每项一行，分别为：模型（密钥有效的提供方，或没有一个有效）、外观、已添加的 agent 和插件、home 有远程访问时的手机访问，以及工作区，然后是「Ideas to try」：三个与文件夹内容（通用、空、代码或文件）相符的想法，每个都带一个「Copy」按钮，把它的文字放进剪贴板。「Start a chat」记录引导已完成，并在所选工作区中打开一个新 chat。没有选择工作区且没有能解析出的工作区时，「Start a chat」返回到「Workspace」。 |
 
 其他插件通过 `ctx.delorunOnboarding` 添加的步骤，位于「Phone access」和「Workspace」之间。「Back」「Continue」和「Skip for now」位于每一步之下；「Skip」记录引导已完成，不打开任何 chat，并把焦点移到页面的消息框。设置 → 通用 → 入门中有一行 `delorun-onboarding`，其「Run setup again」按钮从「Welcome」重新打开流程并保留所有其他设置；每一步都从它实时读取的值开始（设置中保存的语言、模式、主题和强调色，路由报告的密钥、agent 和 Tailscale），手机上的「Phone access」步骤是远程说明；重新打开的流程算作未完成，所以重新加载会再次显示它，直到它被完成或跳过。
 
 该步骤自己的选择器在一个带标签的列表中一次列出一个文件夹的子文件夹，从 home 目录开始，隐藏文件夹被省略。它打开时或移动之后都没有选中任何内容，所以其按钮要等到本人选中一个文件夹或创建一个文件夹才可用。点击或方向键选中文件夹；双击、Enter、右方向键或「Open folder」进入该文件夹；「Up one folder」和左方向键向上；「New folder」在所显示的文件夹中创建一个文件夹并选中它。被拒绝的文件夹就地显示其原因，无法列出或创建的文件夹会说明这一点并给出后续办法。
 
-起始提示词显示在「Ready」所打开 chat 的消息框之上，直到该 chat 有了消息、本人自己输入了内容，或本人隐藏它们。它们跟随文件夹包含的内容（通用、空、代码或文件），其文字位于字典中，所以每种语言各有自己的文字。
+「Ready」上的想法跟随文件夹包含的内容，其文字位于字典中，所以每种语言各有自己的文字。复制一个想法不会向消息框写入任何内容，也不会发送任何内容；第一个 chat 打开时是空的。
 
 <a id="contract"></a>
 
@@ -50,7 +50,7 @@ studio 的第一分钟是一个以 chat 收尾的对话框。「Welcome」设置
 
 - **stock 外观。** studio 一半在 `apply` 之内注入 `delorunStudio`（`ctx.inject(['delorunStudio'], applyStudio)`），所以它的条目在 stock 外观下保持激活，这是上游的 web 启动对每个条目的要求。`@delorun/plugin-theme` 只在 Delorun 外观开启期间提供该服务，所以没有它时，插件不注册任何内容，也不提供任何服务。上游的设置外壳 `settingsShell` 不被注入：「Run setup again」在被按下时用 `ctx.get('settingsShell')` 查找它，所以在某个插件关闭上游的通用设置（`ui-settings-general`）并绘制自己的设置的地方（如 DS Bot），该条目同样保持激活。没有外壳时，「Run setup again」只把引导标记为未完成，下次重新加载时显示它。
 - **引导步骤**是一个 `settings.onboarding` 条目，id 为 `delorun-onboarding`，顺序 -200，位于 `@delorun/bundle-local` 的 `delorun-notice`（-100）和上游的 DeepSeek 密钥步骤 `deepseek-official` 之前。它只在 host 提供行 `delorun-onboarding` 时才注册。`done` 已设置且没有 `explicit` 标志时，它立即调用 `complete()`，无法读取的行也是如此。「Models」步骤通过 studio 自己的远程凭据和设置命名空间保存密钥，与设置 → 模型一样。「Start a chat」还会调用 `completeStep('deepseek-official')`，因为「Models」步骤提供的是相同的提供方。`@delorun/bundle-studio` 在 `ui-settings-models` 上设置 `credentialOnboarding: false`，所以上游的密钥步骤从不打开，跳过或重新加载之后也是如此。对话框显示期间拥有页面的 inert 根，每一步都把焦点移到该步骤的标题，且只能通过它自己的按钮关闭。它关闭时，焦点移到消息框（在手机或平板上，移到消息框的卡片，使键盘保持收起），否则移到页面的第一个控件。
-- **进度**是该行的易变配置：`done`、`step`（所到达步骤的 id，用于恢复流程）、`starterSession` 和 `starterKind`。「Run setup again」写入 `done: false` 和空的 `step`，然后请求设置外壳（若存在）打开该步骤。写入失败会被记录日志，流程继续。
+- **进度**是该行的易变配置：`done` 和 `step`（所到达步骤的 id，用于恢复流程）。「Run setup again」写入 `done: false` 和空的 `step`，然后请求设置外壳（若存在）打开该步骤。写入失败会被记录日志，流程继续。
 - **外观**只通过 `ctx.configForms` 写入主题行的 `palette` 和 `accent`，并通过上游的主题服务写入配色方案。选择「Stock」会调用 `ctx.delorunStudio.useStockLook()`，从而卸载此插件。调色板和强调色的标签来自 `@delorun/plugin-theme` 的字典 `settings.delorunAppearance`，[`src/client/previews.ts`](src/client/previews.ts) 中的预览颜色是副本，由一个测试将其与主题自己的颜色比较。
 - **随 bundle 提供的行** <a id="bundled-rows"></a>用 `listBundles` 和 `listPlugins` 读取，它们按行的 id 及其实时条目找到该行。「Turn on」为该条目调用插件管理器的 `setPluginEnabled`，也就是「插件」页面所做的调用，所以它的检查同样适用于这个按钮：受保护的和无法寻址的行会被拒绝，由 profile 自己的补丁记录该更改，而绝不是此插件。`applied` 显示「On」且无需重启，`restart-required` 说明 Delorun 需要重启，其他任何情形，包括没有 bundle 声明的行或无法更改的行，会显示失败或「Not included in this installation」，并带一个打开「插件」的按钮。
 - **推迟的步骤** <a id="deferred-steps"></a>是只有 home 所在电脑才能完成的步骤，手机用 **Do it on my computer** 把它们推迟。它们保存在 profile 目录中的 `onboarding-deferred.json` 里（`{ "version": 1, "deferred": [...] }`，至多三个来自封闭列表的 id，权限 0600，通过临时文件和重命名整体替换，写入依次应用），而不是保存在浏览器中，并作为 `deferred` 随设置记录提供。缺失、过大或不可用的文件会被读作没有，并给出一条不引用其内容的警告。在手机上，PIN 步骤会说明它要在电脑上完成及其原因，并在它已被推迟或 PIN 模式已开启时被略去。在电脑上，`sidebar.footer.action` 条目 **Finish setup**（引导尚未完成时回到引导的途径，也是唯一这样的条目：消息框上方没有芯片）在引导完成后显示为 **Finish setup · N left**，它统计有对应界面（`reach`、`pin`）的已推迟步骤，在读取时清除工作已经完成的步骤（远程访问已设置、PIN 模式已开启），通过设置外壳只打开这些步骤的引导，并在为零或不在电脑上时不显示。该引导不保存位置，不开始 chat，并在最后一步之后关闭。
@@ -61,6 +61,7 @@ studio 的第一分钟是一个以 chat 收尾的对话框。「Welcome」设置
   | --- | --- |
   | `GET /api/delorunOnboarding.setupRecord` | `{ sections?, reachSetUp, deferred? }`：终端设置记录，以及手机推迟到电脑上的步骤（见[推迟的步骤](#deferred-steps)）。 |
   | `POST /api/delorunOnboarding.deferStep` | 请求体为 `{ id, deferred }`，其中 `id` 是 `reach`、`pin` 或 `approve` 之一。推迟或清除一个步骤，并应答 `{ deferred }`，即当前所有被推迟的步骤。已配对的设备无需解锁即可调用它，因为它只记录一条备注，不更改任何设置。任何其他 id 都会被以 400 拒绝。 |
+  | `GET /api/delorunOnboarding.start` | `{ startId }`：这次 Delorun 启动的随机 id，只保存在内存中。 |
   | `GET /api/delorunOnboarding.readiness` | Claude Code 和 Codex 的登录状态（`found`、`missing` 或 `unknown`），以及 Tailscale 的状态和这台电脑的 DNS 名称。 |
   | `GET /api/delorunOnboarding.workspaceNotice` | 工作区注册表集在启动时记录到一旁的文件名，最旧的在前（最多 64 个）；没有时为空。 |
   | `POST /api/delorunOnboarding.keyTest` | 每条模型提供方路线的名称和结果：`works`、`rejected`、`unreachable`、`no-key`（未配置凭据）、`untested`（有凭据或不需要凭据，但没有模型列表）或 `failed`。 |
@@ -76,10 +77,10 @@ studio 的第一分钟是一个以 chat 收尾的对话框。「Welcome」设置
 - **添加文件夹与克隆**只在上游的工作区注册表存在时才有。一个 `connection/request` 监听器在读取请求体之前，拒绝任何没有在回环监听器上、以回环 `Host` 到达的、发往三条仅限回环路由的请求（回环监听器由已挂载的 `homeAuth` 服务报告，并使用 `@delorun/home-auth` 的 `isLoopbackHost`），并在没有挂载 `homeAuth` 服务期间拒绝每个这样的请求：403 `{ error: 'LOOPBACK_ONLY' }`，因为工作区决定模型可以写入什么，只有坐在电脑前的本人才能选择它。每个文件夹都要对照 `@delorun/home` 的 `workspaceLocationProblem` 检查，其中 Delorun home 从环境中解析：文件系统根目录、home 目录本身、Delorun home 或 stock home `~/.dsh`、位于其中任一者之内的文件夹、包含其中任一者的文件夹，以及相对路径，都以 422 被拒绝，且不会注册或克隆任何内容。无法解析 Delorun home 时应答 500，无法读取的请求应答 400。日志携带错误码，从不包含路径、地址或 Git 的输出。
 - **克隆**（[`src/clone.ts`](src/clone.ts)）只接受 `https://`、`ssh://` 和 `user@host:path` 地址；本地路径、`file://`、`ext::`、其他协议、以 `-` 开头的值、以 `-` 开头的主机，以及空白或控制字符，在 Git 运行之前以 `url-form` 拒绝，其中带有本人名或密码的 `https://` 地址以 `url-credentials` 拒绝。新文件夹的名称是一个普通名称（否则为 `name-form`），该文件夹必须不存在或为空（否则为 `not-empty`）。一次只运行一个克隆（`busy`），在第一次等待之前就占用。Git 在 harness 的进程中以该本人的身份运行，从不在 chat 之内，命令为 `git clone --progress --no-recurse-submodules -- <url> <folder>`，不经过 shell，stdin 关闭，环境只保留它在哪里运行、由谁运行以及如何访问网络，并设置 `GIT_TERMINAL_PROMPT=0`、空的 `GIT_ASKPASS` 和 `SSH_ASKPASS`、`SSH_ASKPASS_REQUIRE=never`、`GCM_INTERACTIVE=never`、`ssh -o BatchMode=yes` 和 `GIT_ALLOW_PROTOCOL=https:ssh`，所以需要登录的仓库会立即以 `sign-in` 失败，重定向也无法更改传输方式。Git 还会获得 `-c core.hooksPath=/dev/null`、`-c filter.lfs.smudge=`、`-c filter.lfs.process=`、`-c filter.lfs.required=false`、`GIT_LFS_SKIP_SMUDGE=1`，以及一个 `--template`，其 `info/attributes` 在检出期间对每个路径取消设置 `filter`（该文件随后会从克隆中删除）；无法验证的 SSH 主机密钥以 `host-key` 失败。Git 自己的凭据助手仍会根据本人保存的内容应答。经过 `cloneTimeoutMs` 之后，克隆以 `timeout` 停止；在 POSIX 上 Git 自成一个进程组，所以停止也会结束其传输助手。失败的克隆会删除它自己的 Git 创建的文件夹，或清空此前为空的文件夹。完成的克隆像所选文件夹那样被添加为工作区；`add-failed` 表示克隆已在磁盘上，但无法添加。最新的 16 个结果保留给 `cloneStatus`；停止插件会停止正在运行的克隆。
 - **密钥状态。** 插件提供 `ctx.modelKeyStatus`（由 `ui-settings-models` 声明）：每条模型路线最新的免费密钥测试结果，保存在内存中，绝不包含密钥。引导的「Models」卡片、无密钥横幅和设置 → 模型读取它，所以一个密钥在各处显示同一个状态。
-- **无密钥横幅。** `conversation.input.dock` 中的一个条目（id 为 `delorun-onboarding.key-banner`，顺序 5，位于起始提示词之上）显示「Add a model key to start chatting」，并带一个按钮，在密钥测试发现没有任何可用或可能可用的提供方期间打开设置 → 模型（`ctx.settingsShell.openSection('models')`）：即每条路线都是 `no-key` 或 `rejected`，或没有任何路线。路线有效、无法访问、失败或为 `untested`（它有凭据，或像本地模型服务器那样无需凭据，且其模型无法列出），以及无法读取的密钥测试，都不显示任何内容。横幅在输入框挂载时询问一次，显示期间每 5 秒询问一次，所以一旦添加了密钥它就会离开；它从不打开对话框。它只在 Delorun 外观开启时才注册。
+- **无密钥横幅。** `conversation.input.dock` 中的一个条目（id 为 `delorun-onboarding.key-banner`，顺序 5）显示「Add a model key to start chatting」，并带一个按钮，在密钥测试发现没有任何可用或可能可用的提供方期间打开设置 → 模型（`ctx.settingsShell.openSection('models')`）：即每条路线都是 `no-key` 或 `rejected`，或没有任何路线。路线有效、无法访问、失败或为 `untested`（它有凭据，或像本地模型服务器那样无需凭据，且其模型无法列出），以及无法读取的密钥测试，都不显示任何内容。横幅在输入框挂载时询问一次，显示期间每 5 秒询问一次，所以一旦添加了密钥它就会离开；它从不打开对话框。它只在 Delorun 外观开启时才注册。
 - **搁置提示。** `conversation.input.dock` 中的一个条目（id 为 `delorun-onboarding.set-aside`，顺序 6），在工作区注册表启动时有记录被搁置的情况下，显示「Some workspace records could not be read and were set aside: <files>. Run delorun doctor for details.」并带一个「Dismiss」按钮。它在输入框挂载时读取一次 `GET /api/delorunOnboarding.workspaceNotice`，该路由列出来自注册表 `quarantined` 的被搁置的文件名（不含路径）；列表为空或应答无法读取时不显示任何内容。关闭它会将其隐藏，直到 studio 重新加载。它只在 Delorun 外观开启时才注册。
 - **`rename_workspace` 行。** 一个带键的 `tool.call.toolview` 条目，把 `@delorun/plugin-workspaces` 的工具调用绘制成旧名称、一个箭头和新名称（取自结果中持久化的 `from` 和 `to`），或绘制成以 agent 的措辞给出的拒绝。只要插件在 Delorun 外观开启时加载，它就会注册，在其他情形下回退到通用行。
-- **第一个 chat。** 对话框打开时，它调用一次 `ctx.workspaces.initializeDefault()`，host 以现有的默认工作区应答它，并且仅在 host 没有工作区也没有 chat 时才创建一个。「Start a chat」以所选的工作区调用 `ctx.uiWorkspace.openWorkspace`，并在显示 chat 之前把打开的 chat 的 id 写入 `starterSession`，把文件夹的类型写入 `starterKind`。查找没有解析出任何结果、存在其他工作区且本人没有选择任何工作区的情形，则采用工作区 UI 自己的「New Session」。没有 `ctx.uiWorkspace` 时，采用「New Session」，并且不出现提示词。对话框显示期间，它通过 `ctx.uiWorkspace.holdDefaultWorkspaceNotice()` 持有工作区 UI 的 `defaultWorkspaceFailed` 提示；它关闭时，如果「Workspace」说明没有默认工作区，则丢弃该提示，否则显示它。提示词是 `conversation.input.dock` 中的一个条目（id 为 `delorun-onboarding.starters`，顺序 10）；点击芯片会对该 chat 的输入调用 `setDraft`，且只对能够悬停的指针才聚焦输入框。`starterSession` 为 `pending` 期间，第一个输入区已挂载的空 chat 获得这些提示词。
+- **第一个 chat。** 对话框打开时，它调用一次 `ctx.workspaces.initializeDefault()`，host 以现有的默认工作区应答它，并且仅在 host 没有工作区也没有 chat 时才创建一个。「Start a chat」以所选的工作区调用 `ctx.uiWorkspace.openWorkspace`。查找没有解析出任何结果、存在其他工作区且本人没有选择任何工作区的情形，则采用工作区 UI 自己的「New Session」。没有 `ctx.uiWorkspace` 时，采用「New Session」。对话框显示期间，它通过 `ctx.uiWorkspace.holdDefaultWorkspaceNotice()` 持有工作区 UI 的 `defaultWorkspaceFailed` 提示；它关闭时，如果「Workspace」说明没有默认工作区，则丢弃该提示，否则显示它。
 - **`ctx.delorunOnboarding.registerStep(step)`** 添加一个 `OnboardingStep`（`id`、`order`（600 到 999）、`title`、接收 `next` 的 `component`）并返回它的释放函数；与更早步骤同 id 的步骤会替换它。
 - **文案**位于命名空间 `delorunOnboarding` 之下，有英文和中文（[`src/client/locales.ts`](src/client/locales.ts)）；studio 的其他语言回退到英文。「插件」页面的插件名称来自 [`locale/`](locale/en.json)。CSS 只使用主题令牌。在 768 px 以下，对话框占满整个窗口，步骤列表变为带进度条的计数，页脚保持在底部；对粗指针，行增高到 44 px。
 
@@ -102,14 +103,13 @@ id 的形式是：设置 → 模型所列的模型提供方路线 `provider:<id>
 
 ## 配置
 
-行 `delorun-onboarding` 有下列字段（[`src/config.ts`](src/config.ts)），在配置加载时校验。前五个是易变字段，在 studio 运行时更改。
+行 `delorun-onboarding` 有下列字段（[`src/config.ts`](src/config.ts)），在配置加载时校验。前六个是易变字段，在 studio 运行时更改。
 
 | 字段 | 默认值 | 含义 |
 | --- | --- | --- |
 | `done` | `false` | 本人是否完成或跳过了引导。 |
 | `step` | 空 | 所到达步骤的 id。 |
-| `starterSession` | 空 | 其空状态提供起始提示词的 chat；`pending` 表示下一个空 chat。 |
-| `starterKind` | 空 | 该 chat 的文件夹包含什么：`empty`、`code`、`files`，或为空表示通用提示词。 |
+| `pausedStart` | 空 | 本人按下「Finish later」的那次 Delorun 启动，取自 `GET /api/delorunOnboarding.start`。当它指向当前这次启动时，引导保持关闭，无论在哪个标签页或重新加载之后都是如此，下次启动时会再次显示。从侧边栏页脚的「Finish setup」条目再次打开引导会清除它。 |
 | `plugins` | 空 | 「Recommended plugins」步骤提供的最多十二个 npm 包名。没有任何包且没有 `optionalRows` 时，该步骤被省略。 |
 | `optionalRows` | 空 | 最多十二个行 id（如 `delorun-cost-meter`），即 bundle 以禁用状态插入的行；该步骤提议逐个开启。每个都必须是 profile 的行，否则插件在加载时停止并给出指名它的错误。 |
 | `registry` | `https://registry.npmjs.org` | 读取未安装包时所用的 `https://` npm 注册表，仅在本人请求时才使用。 |

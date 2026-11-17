@@ -51,4 +51,4 @@
 - 'button "Access mode, current: Custom"': Custom
 - button "Stop generating"
 - button "Send message" [disabled]
-- button "1 turns 1 steps"
+- button "1 turn 1 step"

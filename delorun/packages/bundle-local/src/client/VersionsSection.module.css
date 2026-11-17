@@ -17,7 +17,7 @@
 
 .intro,
 .line {
-  margin: 0 0 8px;
+  margin: 0 0 12px;
   color: var(--dsw-alias-label-secondary);
   font-size: 13px;
   line-height: 20px;
@@ -31,12 +31,36 @@
   overflow-wrap: anywhere;
 }
 
+.section {
+  gap: var(--dsh-settings-page-gap, 20px);
+}
+
+.intro {
+  margin: 0;
+  padding: 0 4px;
+  font-size: var(--dsh-settings-lead-size, 13px);
+  line-height: var(--dsh-settings-lead-line-height, 20px);
+}
+
+.line,
+.notice {
+  margin: 0;
+}
+
+.empty {
+  margin: 0;
+  padding: 16px 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
 .save {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
   gap: 8px;
-  margin: 8px 0 16px;
+  padding: 16px 0;
 }
 
 .saveLabel {
@@ -61,6 +85,10 @@
   gap: 8px;
   padding: 16px 0;
   border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.row:last-child {
+  border-bottom: 0;
 }
 
 .head {
@@ -134,7 +162,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin: 8px 0 16px;
+  padding: 16px 0;
 }
 
 .transferButtons {

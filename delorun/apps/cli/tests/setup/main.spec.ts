@@ -55,6 +55,6 @@ describe('delorun on a new home', () => {
   it('lists the setup sections in its help', async () => {
     const lines: string[] = []
     expect(await main(['--help'], { env: {}, stdout: text => void lines.push(text), stderr: () => undefined })).toBe(EXIT.ok)
-    expect(lines.join('')).toContain('Set up Delorun by how you use it, or run one section again')
+    expect(lines.join('')).toContain('set Delorun up, or answer one question again')
   })
 })

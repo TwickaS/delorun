@@ -1,21 +1,26 @@
 .card {
   display: flex;
   flex-direction: column;
-  gap: var(--onb-gap-1);
-  padding: var(--onb-gap-2);
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--dsw-radius-lg);
-  background: var(--dsw-alias-bg-layer-1);
+  gap: var(--delorun-space-3);
+  padding: var(--delorun-space-3) var(--delorun-space-5);
+  background: transparent;
 }
 
 .card[data-selected] {
-  border-color: var(--dsw-alias-brand-primary);
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 6%, transparent);
 }
 
 .row {
   display: flex;
   align-items: center;
   gap: var(--onb-gap-1);
+  min-height: 48px;
+}
+
+.leading {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
 }
 
 .icon {
@@ -33,14 +38,15 @@
   border-radius: var(--dsw-radius-md);
 }
 
-.glyph {
-  width: 32px;
-  height: 32px;
-  fill: var(--dsw-alias-border-l3);
-}
-
 .text {
   flex: 1 1 0;
+  min-width: 0;
+}
+
+.titleLine {
+  display: flex;
+  align-items: center;
+  gap: var(--delorun-space-3);
   min-width: 0;
 }
 
@@ -56,19 +62,23 @@
   font-size: var(--onb-small-size);
   line-height: var(--onb-small-line);
   color: var(--dsw-alias-label-secondary);
+  display: -webkit-box;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .summary[data-open] {
-  white-space: normal;
-  overflow-wrap: anywhere;
+  display: block;
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
 }
 
 .more {
-  min-height: var(--onb-target);
-  padding-left: 0;
+  min-height: 24px;
+  padding: 0 var(--delorun-space-2);
   color: var(--dsw-alias-link);
 }
 
@@ -83,18 +93,4 @@
 
 .action button {
   min-height: var(--onb-target);
-}
-
-.monogram {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--dsw-radius-md);
-  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent);
-  color: var(--dsw-alias-brand-primary);
-  font-size: var(--onb-body-size);
-  font-weight: 600;
-  line-height: 1;
 }

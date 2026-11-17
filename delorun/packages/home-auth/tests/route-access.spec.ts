@@ -124,6 +124,29 @@ describe('the plugin Fetch routes', () => {
     expect(mismatched).toEqual([])
   })
 
+  it('say, at every unlock gate, whether a call of the route renews a sliding unlock', () => {
+    const missing: string[] = []
+    for (const name of readdirSync(PACKAGES)) {
+      const src = join(PACKAGES, name, 'src')
+      if (!exists(src)) continue
+      for (const file of sources(src)) {
+        const text = readFileSync(file, 'utf8')
+        for (const match of text.matchAll(/gateByUnlock\(/g)) {
+          if (text.slice(Math.max(0, match.index - 20), match.index).includes('function ')) continue
+          let depth = 0
+          let end = match.index + match[0].length - 1
+          for (; end < text.length; end += 1) {
+            if (text[end] === '(') depth += 1
+            if (text[end] === ')' && --depth === 0) break
+          }
+          // Pins the choice: a route behind the unlock says whether it renews, so none is left to a default.
+          if (!/renews:\s*(true|false|options\.renews)/.test(text.slice(match.index, end + 1))) missing.push(relative(PACKAGES, file))
+        }
+      }
+    }
+    expect(missing).toEqual([])
+  })
+
   it('see a mismatch when a route\'s code disagrees with its level', () => {
     expect(matches('U', "register({ path: X, admitPeer: admitApprovedDevice(), fetch })")).toBe(false)
     expect(matches('R', "register({ path: X, ...gateByUnlock(home, fetch) })")).toBe(false)

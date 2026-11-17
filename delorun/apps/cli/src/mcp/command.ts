@@ -31,6 +31,7 @@ import { resolveDelorunHome } from '@delorun/home'
 import { sendHomeRequest, type ResponseLine, type UnsignedRequest } from '@delorun/home-process'
 import { CliError, EXIT, type ExitCode } from '../exit.ts'
 import { parseCommandLine, type CliCommand, type CommandContext } from '../command.ts'
+import { notRunningText } from '../messages.ts'
 import { selectProfile } from '../profile.ts'
 import { homeRuns } from '../reach/command.ts'
 import { printable, quoted } from '../terminal-text.ts'
@@ -190,7 +191,7 @@ export const mcpCommand: CliCommand = createMcpCommand({
 async function listed(where: Where): Promise<Listed> {
   const { home, profile, dependencies } = where
   if (!dependencies.running(home, profile)) {
-    throw new CliError(EXIT.notRunning, 'delorun mcp: Delorun is not running. The studio reviews each MCP server as it starts it; start Delorun with delorun start, then run delorun mcp list')
+    throw new CliError(EXIT.notRunning, notRunningText(profile))
   }
   const answer = final(await dependencies.send(home, profile, { op: 'mcp.list' }))
   if (answer.ok !== true) throw new CliError(EXIT.failed, `delorun mcp: Delorun refused: ${refusal(answer)}`)

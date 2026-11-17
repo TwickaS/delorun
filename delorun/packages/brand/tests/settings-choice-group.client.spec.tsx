@@ -68,3 +68,13 @@ describe('the choice group', () => {
     for (const radio of screen.getAllByRole('radio')) expect((radio as HTMLButtonElement).disabled).toBe(true)
   })
 })
+
+describe('a filling choice group', () => {
+  it('wraps a long label inside its segment instead of onto a second row', async () => {
+    const { readFileSync } = await import('node:fs')
+    const css = readFileSync(`${import.meta.dirname}/../src/settings/ChoiceGroup.module.css`, 'utf8')
+    const rule = /\.group\[data-fill='true'\] \.segment\s*\{([^}]*)\}/.exec(css)?.[1] ?? ''
+    expect(rule).toContain('white-space: normal')
+    expect(rule).toContain('height: auto')
+  })
+})

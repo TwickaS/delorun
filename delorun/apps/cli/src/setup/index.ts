@@ -22,7 +22,7 @@ import { linkDelorunBundles, type BundleLinking } from '../delorun-bundles.ts'
 import { hasCliProfile, profileDirectory } from '../profile.ts'
 import { runDirectory } from '@delorun/home'
 import { Redactor, resolveSurface, SurfaceLog } from '@delorun/logs'
-import { PROMPTS_OPTIONS, SETUP_DEFAULTS, type ModelProviderAnswer, type PromptsAnswer, type SetupAnswers } from '@delorun/contract-setup-answers'
+import { PROMPTS_OPTIONS, SETUP_DEFAULT_PORT, SETUP_DEFAULTS, type ModelProviderAnswer, type PromptsAnswer, type SetupAnswers } from '@delorun/contract-setup-answers'
 import { baseURLWarning, checkCatalogModel, chosenProvider, readAnswersDocument, yesAnswers, type ProviderChoice } from './answers.ts'
 import { currentAnswers } from './current.ts'
 import { promptsFromFlags } from './dangerous.ts'
@@ -30,6 +30,8 @@ import { channelOriginOf } from './channel-origin.ts'
 import { checkSandboxHere } from '../doctor/sandbox.ts'
 import type { CheckResult } from '../doctor/checks.ts'
 import { nextSteps } from './ending.ts'
+import { styleOf } from '../style.ts'
+import { delorunVersion } from '../version.ts'
 import { askAnswers } from './interactive.ts'
 import { liveKeyCheck, type KeyCheck } from './key-check.ts'
 import { keyTarget } from './provider-section.ts'
@@ -233,6 +235,43 @@ async function collectAnswers(request: SetupRequest, registry: SectionRegistry, 
   return askAnswers(prompterFor(form), registry, sectionEnvironment(request, current !== undefined), { ...current ?? SETUP_DEFAULTS, ...flags }, current)
 }
 
+/**
+ * The line above the first question: the product, its version and where the new home will be.
+ * @param home - the Delorun home.
+ * @param env - the environment, which decides the colour and names the user's home folder.
+ * @returns the line with its line ending.
+ */
+function setupHeader(home: string, env: Readonly<Record<string, string | undefined>>): string {
+  const style = styleOf(env)
+  const version = String(delorunVersion())
+  const user = env.HOME
+  const shown = user !== undefined && user !== '' && home.startsWith(`${user}/`) ? `~${home.slice(user.length)}` : home
+  return `${style.badge()} ${version === '0.0.0' ? 'source build' : version} ${style.dim(`· new home in ${shown}`)}\n`
+}
+
+/** How many ports after the default {@link settlePort} tries before it gives up. */
+const PORT_SEARCH = 100
+
+/**
+ * Keep the default studio port only when it is free: otherwise pick the next free one and say so. A port the person chose
+ * is left to the profile section, which checks it when it asks.
+ * @param request - the run.
+ * @param answers - the collected answers.
+ * @returns the answers, with `profile.port` set to the next free port when the default one is in use.
+ * @throws {CliError} when no port in the search range is free.
+ */
+async function settlePort(request: SetupRequest, answers: SetupAnswers): Promise<SetupAnswers> {
+  if (answers.profile.port !== null) return answers
+  const isFree = request.portIsFree ?? loopbackPortIsFree
+  if (await isFree(SETUP_DEFAULT_PORT)) return answers
+  for (let port = SETUP_DEFAULT_PORT + 1; port <= SETUP_DEFAULT_PORT + PORT_SEARCH; port++) {
+    if (!await isFree(port)) continue
+    request.output.stdout(`! Port ${String(SETUP_DEFAULT_PORT)} is in use, so the studio will use ${String(port)}. Change it later with: delorun setup profile\n`)
+    return { ...answers, profile: { ...answers.profile, port } }
+  }
+  throw new CliError(EXIT.failed, `delorun setup: ports ${String(SETUP_DEFAULT_PORT)} to ${String(SETUP_DEFAULT_PORT + PORT_SEARCH)} are all in use on this computer; free one, or choose a port with delorun setup profile`)
+}
+
 /** The most detailed level setup writes to the operational log; the home process's log uses the same. */
 const SETUP_LOG_LEVEL = 'info'
 
@@ -340,9 +379,11 @@ export async function runSetup(request: SetupRequest): Promise<ExitCode> {
       // The run records the sections it asks itself.
       before = { ...currentAnswers(profileDirectory(request.home, request.profile)), sections: [] }
     }
+    if (request.form.kind === 'interactive' && !finished) request.output.stdout(setupHeader(request.home, request.env))
     const collected = await collectAnswers(request, registry, before)
     // A re-run changes the existing profile, whatever name the answers carry.
-    const answers = finished ? { ...collected.answers, profile: { ...collected.answers.profile, name: null } } : collected.answers
+    const named = finished ? { ...collected.answers, profile: { ...collected.answers.profile, name: null } } : collected.answers
+    const answers = finished ? named : await settlePort(request, named)
     progress = { answers, completed: finished ? [PROFILE_STEP] : [], ...collected.keepSavedKey ? { credentialSource: 'keep' } : {} }
     writeProgress(runDir, progress)
     secret = collected.secret

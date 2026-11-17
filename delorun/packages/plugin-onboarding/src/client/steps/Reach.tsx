@@ -9,6 +9,7 @@ import { CommandRow } from '../ui/CommandRow.tsx'
 import { StateLine } from '../ui/StateLine.tsx'
 import { useStore, type StepProps } from './shared.ts'
 import more from './reach.module.css'
+import chevron from '../ui/Chevron.module.css'
 import css from './steps.module.css'
 
 /** The command that turns reach on at the computer. */
@@ -72,7 +73,7 @@ export function ReachStep({ services, guide }: StepProps): ReactNode {
         ? <StateLine tone="success">{t('reach.ready')}</StateLine>
         : <><p className={css.lead}>{t('reach.lead')}</p><CommandRow command={REACH_COMMAND} t={t} /></>}
       <details className={more.details}>
-        <summary className={more.summary}>{t('reach.more')}</summary>
+        <summary className={`${chevron.summary} ${more.summary}`}>{t('reach.more')}</summary>
         <div className={more.more}>
           <div aria-live="polite">
             {readiness.status === 'loading' && <p className={css.status}>{t('reach.checking')}</p>}

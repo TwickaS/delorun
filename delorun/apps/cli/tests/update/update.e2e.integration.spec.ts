@@ -147,7 +147,7 @@ async function delorun(args: readonly string[]): Promise<{ readonly code: number
   let stdout = ''
   let stderr = ''
   const context = { env: { ...process.env, HOME: osHome, USERPROFILE: osHome, DELORUN_HOME: home, DELORUN_LAUNCHER_ROOTS: join(base, 'launcher-roots') }, stdout: (text: string) => { stdout += text }, stderr: (text: string) => { stderr += text } }
-  const code = args[0] === 'update' ? await runUpdate(args.slice(1), context, NO_TERMINAL) : await main(args, context)
+  const code = args[0] === 'update' ? await runUpdate(args.slice(1), context, NO_TERMINAL, { runtime: () => ({ version: brandString<RuntimeVersion>('1.0.0'), store: true }) }) : await main(args, context)
   return { code, stdout, stderr }
 }
 

@@ -31,4 +31,18 @@ describe('Button styles', () => {
     expect(declarations('md')).toContain('height: 36px;')
     expect(declarations('sm')).toContain('height: 28px;')
   })
+
+  it('gives Settings inline buttons a 32px pointer target', () => {
+    const rule = /@media \(min-width: 640px\) and \(pointer: fine\) \{\s*:global\(\[data-settings-anchor\]\) \.sm \{([^}]*)\}/.exec(css)
+    expect(rule?.[1]).toContain('height: 32px;')
+    expect(rule?.[1]).toContain('padding: 0 12px;')
+    expect(rule?.[1]).toContain('font-size: 13px;')
+  })
+
+  it('sinks primary and outline buttons to 97% for 120ms while pressed, unless motion is reduced', () => {
+    const block = /@media \(prefers-reduced-motion: no-preference\) \{([\s\S]*?)\n\}/.exec(css)?.[1] ?? ''
+    expect(block).toContain('transition: transform 120ms')
+    expect(block).toContain('.primary:active:not(:disabled)')
+    expect(block).toContain('transform: scale(0.97);')
+  })
 })

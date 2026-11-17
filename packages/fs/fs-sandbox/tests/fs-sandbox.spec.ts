@@ -427,3 +427,15 @@ describe('the sandbox provider\'s protected home', () => {
     expect(await fs.writeText(await target(join(home, 'planted')), 'x')).toBeDefined()
   })
 })
+
+describe.skipIf(process.platform !== 'linux')('a process\'s environment and memory, in every mode', () => {
+  it.each<SandboxMode>(['read-only', 'workspace-write', 'danger-full-access'])('are never read, directly or through a symlink, under %s', async (mode) => {
+    await boot(mode)
+    await symlink('/proc/self/environ', join(workspace, 'link'))
+    const refusal = expect.objectContaining({ code: 'FS_SANDBOX_DENIED', message: expect.stringContaining('never reads another process\'s environment or memory') })
+    // Pins the invariant under full access too: no mode lifts it.
+    for (const path of ['/proc/self/environ', `/proc/${String(process.pid)}/environ`, `/proc/${String(process.pid)}/mem`, '/proc/thread-self/environ', 'link']) {
+      await expect(target(path), `${mode} ${path}`).rejects.toEqual(refusal)
+    }
+  })
+})

@@ -3,6 +3,7 @@
  * one upstream's `auditStartupEntries` writes, produced by calling it over Loader entries that did not activate, and
  * it reaches the home log through `@delorun/logs`' own writer and standard-error capture, as a home process records it.
  */
+import { readableTime } from '../../src/output.ts'
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -112,13 +113,13 @@ describe('checkLastStart', () => {
       name: 'plugin',
       subject: 'acme-tools',
       status: 'fail',
-      message: 'did not activate at the last start: failed to import: Error: Cannot find package \'acme-tools\' (row acme1, start at 2026-11-10T12:00:00.000Z)',
+      message: `did not activate at the last start: failed to import: Error: Cannot find package 'acme-tools' (row acme1, start at ${readableTime('2026-11-10T12:00:00.000Z')})`,
     }])
   })
 
   it('passes when the last start logged no audit, even after an earlier start that did', async () => {
     logStart(FIRST_START, await auditText([PENDING]), Date.parse('2026-11-09T08:00:00Z'))
     logStart(LAST_START, 'starting\n', Date.parse('2026-11-10T12:00:00Z'))
-    expect(checkLastStart(home, PROFILE)).toEqual([{ name: 'plugins', status: 'pass', message: 'the last start of the profile default, at 2026-11-10T12:00:00.000Z, logged no plugin row that did not activate.' }])
+    expect(checkLastStart(home, PROFILE)).toEqual([{ name: 'plugins', status: 'pass', message: `the last start of the profile default, at ${readableTime('2026-11-10T12:00:00.000Z')}, logged no plugin row that did not activate.` }])
   })
 })

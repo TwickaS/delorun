@@ -2,7 +2,7 @@
 
 /** English dictionary. */
 export const en = {
-  'title': 'Conversation',
+  'title': 'Replies',
   'detail': 'Detail',
   'folding': 'Folding',
   'mode': 'Display',
@@ -72,7 +72,7 @@ export type ConversationLocaleKey = keyof typeof en
 
 /** Chinese dictionary. */
 export const zh: Record<ConversationLocaleKey, string> = {
-  'title': '对话',
+  'title': '回复显示',
   'detail': '详细程度',
   'folding': '收起',
   'mode': '显示方式',

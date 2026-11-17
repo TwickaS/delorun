@@ -48,6 +48,7 @@ import { isSetupProviderId, profileModelSelection, routeKeyReference, SETUP_PROV
 import { dangerousModeState, dangerousStateLine } from '../setup/dangerous.ts'
 import { profileStudioPort } from '../setup/sections.ts'
 import { studioAddress } from '../status.ts'
+import { styleOf, type Style } from '../style.ts'
 import { printable } from '../terminal-text.ts'
 import { delorunVersion, versions } from '../version.ts'
 import { checkChanges } from './changes.ts'
@@ -179,13 +180,27 @@ async function pluginLines(context: CommandContext, profile: string, environment
   ]
 }
 
+/** The mark of each check status. */
+const MARK_OF_STATUS = { pass: 'ok', warn: 'warn', fail: 'fail' } as const
+
+/**
+ * The line that counts the results.
+ * @param results - the results.
+ * @returns the counts, as in `9 passed · 2 warnings · 0 failed`.
+ */
+function summaryLine(results: readonly CheckResult[]): string {
+  const count = (status: CheckResult['status']): number => results.filter(result => result.status === status).length
+  const warnings = count('warn')
+  return `${String(count('pass'))} passed · ${String(warnings)} ${warnings === 1 ? 'warning' : 'warnings'} · ${String(count('fail'))} failed`
+}
+
 /**
  * The printed line of one result, with the characters a terminal acts on escaped.
  * @param result - the result.
  * @returns the line with its newline.
  */
-function resultLine(result: CheckResult): string {
-  return `${printable(`${result.status} ${result.name}${result.subject === undefined ? '' : ` ${result.subject}`}: ${result.message}`)}\n`
+function resultLine(result: CheckResult, style: Style): string {
+  return `${style.mark(MARK_OF_STATUS[result.status], printable(`${result.name}${result.subject === undefined ? '' : ` ${result.subject}`}: ${result.message}`))}\n`
 }
 
 /**
@@ -295,10 +310,12 @@ export function createDoctorCommand(environment: DoctorEnvironment): CliCommand 
       if (dangerous !== undefined) results.push(dangerous)
       const { importRecord } = environment
       if (importRecord !== undefined) results.push(await guarded('import', async () => checkImportRecord((await resolveDelorunHome(context.env)).path, importRecord)))
+      const style = styleOf(context.env)
       for (const result of results) {
-        if (result.status === 'pass') context.stdout(resultLine(result))
-        else context.stderr(resultLine(result))
+        if (result.status === 'pass') context.stdout(resultLine(result, style))
+        else context.stderr(resultLine(result, style))
       }
+      context.stdout(`${style.dim(summaryLine(results))}\n`)
       return results.some(result => result.status === 'fail') ? EXIT.failed : EXIT.ok
     },
   }

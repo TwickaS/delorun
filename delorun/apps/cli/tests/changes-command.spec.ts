@@ -5,6 +5,7 @@
  * on, so changes wait for review; `with protection off` covers a home without a protection record, where a start loads
  * a changed folder without review.
  */
+import { readableTime } from '../src/output.ts'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
@@ -641,7 +642,7 @@ describe('delorun changes work and done', () => {
     const session = (await readWorkSession(home, PROFILE))!
     context.printed.length = 0
     await statusCommand.run([], context)
-    expect(out()).toContain(`work session: plug since ${session.startedAt}, ends at ${session.endsAt}\n`)
+    expect(out()).toContain(`work session: plug since ${readableTime(session.startedAt)}, ends at ${readableTime(session.endsAt)}\n`)
     writeFileSync(join(home, 'changes', 'profiles', PROFILE, 'work-session.json'), '{}\n', { mode: 0o600 })
     context.printed.length = 0
     await statusCommand.run([], context)

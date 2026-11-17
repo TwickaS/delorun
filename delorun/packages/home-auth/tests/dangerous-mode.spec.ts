@@ -323,7 +323,7 @@ describe('gateByUnlock', () => {
   const peer = (kind: string, principal: object = {}) => ({ principal: { kind, ...principal } })
   const device = peer('reach-device', { deviceId: 'device-1', listener: LISTENER })
   const call = async (service: ReturnType<typeof home> | undefined, who: ReturnType<typeof peer>) => {
-    const route = gateByUnlock(() => service, () => Promise.resolve(new Response('ran')))
+    const route = gateByUnlock(() => service, () => Promise.resolve(new Response('ran')), { renews: true })
     const request = new Request('http://localhost/x', { method: 'POST' })
     if (!route.admitPeer(request, who)) return new Response('forbidden', { status: 403 })
     return route.fetch(request)
@@ -343,7 +343,7 @@ describe('gateByUnlock', () => {
   })
 
   it('runs the route for the owner, whose Peer never reaches the peer check', async () => {
-    const route = gateByUnlock(() => home(LISTENER, false, false), () => Promise.resolve(new Response('ran')))
+    const route = gateByUnlock(() => home(LISTENER, false, false), () => Promise.resolve(new Response('ran')), { renews: true })
     expect(await (await route.fetch(new Request('http://localhost/x'))).text()).toBe('ran')
   })
 })

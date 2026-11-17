@@ -221,7 +221,7 @@ describe('delorun devices pin', () => {
 
   it('says to start Delorun when the home does not run, and shows a Host without home-auth\'s refusal', async () => {
     await expect(command({ typed: [SECRET, SECRET] }).run(['pin', 'set'], context)).resolves.toBe(EXIT.failed)
-    expect(out.stderr).toContain('Delorun is not running')
+    expect(out.stderr).toContain("Delorun isn't running")
     out.stderr = ''
     running = await startRunningHome(home, PROFILE, undefined)
     await expect(command({ typed: [SECRET, SECRET] }).run(['pin', 'set'], context)).resolves.toBe(EXIT.failed)

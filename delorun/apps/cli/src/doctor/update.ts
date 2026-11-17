@@ -24,7 +24,7 @@ import type { CheckResult } from './checks.ts'
  * @throws {Error} when the running release's signed files do not read or verify.
  */
 export async function checkUpdate(home: string, profile: string, runtime: RunningRuntime, platform: () => RuntimePlatform, root: TrustedRootSource): Promise<CheckResult> {
-  if (!runtime.store) return { name: 'update', status: 'pass', message: 'this copy of Delorun was not installed by the launcher, so it checks for no updates.' }
+  if (!runtime.store) return { name: 'update', status: 'pass', message: "this is a source build, so it doesn't check for updates." }
   const record = await readUpdateCheck(home, profile)
   if (record === undefined) return { name: 'update', status: 'pass', message: `no update check is recorded for this profile; it runs while Delorun runs unless Settings → General → Updates turns it off, and ${UPDATE_COMMAND} --check runs one now.` }
   if (record.failure !== undefined) {

@@ -38,7 +38,7 @@ describe("Delorun's layout", () => {
   it('groups the panes as General, Agent, Safety, Devices and Data, and hides the rows Delorun replaces', () => {
     const nav = projectLayout(layout, SECTION_ROWS, REGISTERED_ITEMS)
     expect(nav.groups.map(group => [group.label, group.pages.map(page => page.label)])).toEqual([
-      ['General', ['General', 'Appearance', 'Sidebar', 'Conversation', 'Chat', 'Account']],
+      ['General', ['General', 'Appearance', 'Sidebar', 'Replies', 'Message box', 'Account']],
       ['Agent', ['Models', 'Modes', 'Tools', 'Plugins']],
       ['Safety', ['Permissions', 'External agents', 'Network', 'Privacy', 'PIN mode']],
       ['Devices', ['Devices']],
@@ -57,8 +57,8 @@ describe("Delorun's layout", () => {
       ],
       Appearance: ['delorun-appearance', 'Text and density: delorun-typeface, font-size, delorun-density'],
       Sidebar: ['delorun-sidebar', 'delorun-chat-states'],
-      Conversation: ['delorun-conversation'],
-      Chat: ['Composer: composer-enter, delorun-effort-labels', 'Links and usage: link-opening, performance-usage'],
+      Replies: ['delorun-conversation'],
+      'Message box': ['Composer: composer-enter, delorun-effort-labels', 'Links and usage: link-opening, performance-usage'],
       Account: ['account'],
       Models: ['models'],
       Modes: ['agent-presets'],
@@ -149,7 +149,7 @@ describe("Delorun's layout", () => {
     const nav = projectLayout(layout, SECTION_ROWS, REGISTERED_ITEMS)
     expect(searchNav(nav, 'onboarding').map(result => result.path)).toEqual([['General'], ['General', 'Getting started', 'Show onboarding again']])
     expect(searchNav(nav, 'telemetry').map(result => result.pageId)).toEqual(['privacy'])
-    expect(searchNav(nav, 'newline').map(result => result.path)).toEqual([['Chat', 'Composer', 'Send behaviour while busy']])
+    expect(searchNav(nav, 'newline').map(result => result.path)).toEqual([['Message box', 'Composer', 'Send behaviour while busy']])
     expect(searchNav(nav, 'release').map(result => result.path)).toEqual([
       ['General'], ['General', 'Updates', 'Check for new releases'], ['General', 'Updates', 'Current versions'], ['About'],
     ])
