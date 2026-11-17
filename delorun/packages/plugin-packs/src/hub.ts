@@ -7,7 +7,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { InstallQueue, type InstallItem } from '@delorun/install-queue'
-import { checkInstalledPack, packDownloadSize, packVariantFor, type InstalledRelease } from '@delorun/runtime-store'
+import { checkInstalledPack, isRunningRelease, packDownloadSize, packVariantFor, type InstalledRelease } from '@delorun/runtime-store'
 import type { PacksEnvironment } from './environment.ts'
 import { createPackRunner, packsOf, type InstallBundle } from './runner.ts'
 import type { PackInfo, PacksResult, PacksSnapshot } from './wire.ts'
@@ -126,7 +126,8 @@ export class PacksHub {
           infos.push({ ...base, downloadBytes: 0, availability: 'unavailable', reason: error instanceof Error ? error.message : String(error) })
         }
       }
-      this.sealed = sealed
+      // After an update switched `current`, this Host's packs are no longer reached through `packs/current`.
+      this.sealed = await isRunningRelease(release.paths, release.version) ? sealed : new Set()
       return { supported: true, release: release.version, packs: infos, queue }
     } catch (error) {
       return { supported: false, reason: error instanceof Error ? error.message : String(error), packs: [], queue }

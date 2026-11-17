@@ -9,9 +9,11 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, readdir, readlink, symlink } from 'node:fs/promises'
 import { basename, join, resolve } from 'node:path'
-import { PRIVATE_DIR_MODE, type RuntimeVersion } from '@delorun/contract-home-layout'
+import { PRIVATE_DIR_MODE, STORE_LOCK_WAIT_MS, type RuntimeVersion } from '@delorun/contract-home-layout'
+import { PackRefusal } from '@delorun/release-formats/packs/archive'
 import type { StorePaths } from './paths.ts'
-import { renameWithRetry, syncDirectory } from './pointer.ts'
+import { withStoreLock } from './lock.ts'
+import { readPointerFile, renameWithRetry, syncDirectory } from './pointer.ts'
 
 /** The name of the link inside `packs/`. */
 export const PACKS_CURRENT = 'current'
@@ -54,6 +56,18 @@ export async function pointPacksIfUsed(paths: StorePaths, version: RuntimeVersio
 }
 
 /**
+ * Make `packs/current` name the release the pointers name, when the home uses packs and the link names another. The link
+ * is derived from `runtimes/current`, so a switch that stopped between the pointers and the link is finished here
+ * without any network.
+ * @param paths - the store's paths.
+ * @param version - the release `runtimes/current` names.
+ * @returns when the link names the release, or at once when nothing uses packs.
+ */
+export async function ensurePacksCurrent(paths: StorePaths, version: RuntimeVersion): Promise<void> {
+  if (await packsCurrentProblem(paths, version) !== undefined) await pointPacksIfUsed(paths, version)
+}
+
+/**
  * Why `packs/current` does not match a release, if it does not.
  * @param paths - the store's paths.
  * @param version - the release that runs.
@@ -72,4 +86,29 @@ export async function packsCurrentProblem(paths: StorePaths, version: RuntimeVer
   }
   if (link.error.code !== 'ENOENT') return `packs/current cannot be read: ${link.error.message}`
   return await holds(version) ? `packs/current is missing, but ${version} has plugin packs installed` : undefined
+}
+
+/**
+ * Whether the release this process runs is still the one `runtimes/current` names.
+ * @param paths - the store's paths.
+ * @param version - the release this process runs.
+ * @returns true until an update switched `current` to another release.
+ */
+export async function isRunningRelease(paths: StorePaths, version: RuntimeVersion): Promise<boolean> {
+  return await readPointerFile(paths.pointer('current')) === version
+}
+
+/**
+ * Refuse a pack install into a Host that an update has already switched away from: its pack would be linked through
+ * `packs/current`, which names the new release now.
+ * @param paths - the store's paths.
+ * @param version - the release this process runs.
+ * @returns when this process still runs the current release; the check holds `store.lock`, so no switch lands during it.
+ * @throws PackRefusal `UPDATE_PENDING` when `current` names another release.
+ */
+export async function requireRunningRelease(paths: StorePaths, version: RuntimeVersion): Promise<void> {
+  await mkdir(paths.root, { recursive: true, mode: PRIVATE_DIR_MODE })
+  await withStoreLock(paths.lock, STORE_LOCK_WAIT_MS, async () => {
+    if (!await isRunningRelease(paths, version)) throw new PackRefusal(`Restart Delorun to finish the update: this Host runs ${version}, but an update has switched to another release`, 'UPDATE_PENDING')
+  })
 }

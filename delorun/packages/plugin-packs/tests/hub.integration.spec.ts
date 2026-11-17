@@ -155,6 +155,18 @@ describe('the pack hub', () => {
     expect(hub.installedTarget('one', '0.1.0')).toBeUndefined()
   })
 
+  it('refuses an install once an update has switched away from this Host\'s release, changing nothing in the profile', async () => {
+    const { hub, paths, installs } = await setup()
+    await fixture.install('0.2.0')
+    await fixture.store.switchTo(V1, version('0.2.0'))
+    await hub.enqueue(['one'])
+    const snapshot = await until(hub, each => each.queue[0]?.state === 'failed')
+    expect(snapshot.queue[0]?.failure?.message).toMatch(/Restart Delorun to finish the update/u)
+    expect(installs).toEqual([])
+    expect(hub.installedTarget('one', '0.1.0')).toBeUndefined()
+    expect(existsSync(paths.packLink('one'))).toBe(false)
+  })
+
   it('dismisses a failed or cancelled row but never a ready one', async () => {
     const { hub } = await setup({ archive: () => Promise.reject(new PackRefusal('x needs a connection', 'OFFLINE')) })
     await hub.enqueue(['one'])

@@ -22,7 +22,7 @@ import { changeTimeOf, fullCheckDue, nowNs, RACY_WINDOW_NS, readIdentityRecord, 
 import { launchCommand, readStoreLayout, requireLayout, requireProtocol, SUPPORTED, type LauncherSupport, type LaunchCommand } from './launch.ts'
 import { withStoreLock } from './lock.ts'
 import { installedPacksProblems } from './packs-check.ts'
-import { packsCurrentProblem, pointPacksIfUsed } from './packs-current.ts'
+import { ensurePacksCurrent, packsCurrentProblem, pointPacksIfUsed } from './packs-current.ts'
 import { identityRecordVersion, parseRuntimeVersion, releaseFileVersion, StorePaths } from './paths.ts'
 import { isInstalled, readPointerFile, readPointers, syncDirectory, writePointers, type RuntimePointers } from './pointer.ts'
 import { readStoredRelease, verifyRelease, type ReleaseFileBytes, type VerifiedRelease } from './release.ts'
@@ -309,6 +309,8 @@ export class RuntimeStore {
       const release = await this.storedRelease(current, request.root)
       requireProtocol(this.paths, current, release.manifest, release.files, request.launcher)
       const check = await this.startCheck(current, release, request.fullCheckDays)
+      // A switch that stopped after the pointers and before the link is finished here, offline; the link follows `current`.
+      if (await packsCurrentProblem(this.paths, current) !== undefined) await this.finishPacksSwitch(current)
       await this.requirePacksIntact(current, request.root)
       return { version: current, check, ...launchCommand(this.paths, current, request.profile, request.args) }
     } catch (error) {
@@ -473,6 +475,21 @@ export class RuntimeStore {
       return await readStoredRelease(this.paths, root, version)
     } catch (error) {
       throw new RuntimeStoreError('RUNTIME_CHANGED', this.paths.version(version), `runtime ${version}'s stored manifest or file list does not verify: ${(error as Error).message}`, await this.remediesFor(version), { cause: error })
+    }
+  }
+
+  /**
+   * Finish a switch that stopped between the pointers and `packs/current`. A launch never waits for `store.lock`, so a
+   * lock another process holds, or one that cannot be taken, leaves the link as it is and the pack check refuses with
+   * `delorun recover packs`.
+   * @param version - the release `runtimes/current` names.
+   */
+  private async finishPacksSwitch(version: RuntimeVersion): Promise<void> {
+    try {
+      await this.locked(() => ensurePacksCurrent(this.paths, version))
+    } catch (error) {
+      // The lock is busy or unusable; the pack check that follows reports the link and names the repair.
+      this.options.logger.warn('the runtime store could not re-point packs/current at launch', { err: error })
     }
   }
 

@@ -7,7 +7,7 @@
  */
 import { InstallRefusal, type InstallOutcome, type InstallProgress } from '@delorun/install-queue'
 import { PackRefusal } from '@delorun/release-formats/packs/archive'
-import { acquirePacks, fetchPack, installFetchedPack, packDownloadSize, readStoredPacks, type InstalledRelease, type PackFiles } from '@delorun/runtime-store'
+import { acquirePacks, fetchPack, installFetchedPack, packDownloadSize, readStoredPacks, requireRunningRelease, type InstalledRelease, type PackFiles } from '@delorun/runtime-store'
 import type { PacksEnvironment } from './environment.ts'
 
 /** The part of the plugin manager's `installBundle` the runner uses. */
@@ -68,6 +68,8 @@ export function createPackRunner(deps: RunnerDeps): (key: string, signal: AbortS
       progress.stage('installing')
       await installFetchedPack(release, fetched)
       signal.throwIfAborted()
+      // The pack is linked through `packs/current`; after an update switched, that names another release.
+      await requireRunningRelease(release.paths, release.version)
       const result = await deps.installBundle(`link:${release.paths.packLink(entry.name)}`, { enabled: true, requestId: deps.requestId(key), expected: { name: entry.name, version: entry.version } })
       if (result.application === 'cancelled') throw new Error('cancelled')
       if (result.application === 'failed') throw new InstallRefusal('failed', `The plugin manager could not load ${key}${result.error?.code === undefined ? '' : ` (${result.error.code})`}.`)

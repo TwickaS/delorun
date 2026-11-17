@@ -14,8 +14,10 @@ import { toJsonValue } from '@delorun/release-formats/sign/json'
 import { HomeRuntimeStore } from '../src/seam.ts'
 import { carryPacks, repairPacks, type PackCarry } from '../src/packs-carry.ts'
 import { packsCurrentProblem, pointPacks } from '../src/packs-current.ts'
+import { writePointers } from '../src/pointer.ts'
 import { installPack, packProblems } from '../src/packs.ts'
 import type { PackFiles } from '../src/packs-client.ts'
+import { SUPPORTED } from '../src/launch.ts'
 import { closureFiles, fixtureHome, makeWritable, PLATFORM, version, type FixtureHome } from './support.ts'
 
 const V1 = version('0.1.0')
@@ -105,6 +107,28 @@ describe('the start check of the link', () => {
     const { paths } = await world()
     rmSync(join(paths.packs, 'current'))
     expect(await packsCurrentProblem(paths, V1)).toMatch(/packs\/current is missing/u)
+  })
+})
+
+describe('a switch that stopped between the pointers and the link', () => {
+  const launch = () => fixture.store.prepareLaunch({ launcher: SUPPORTED, root: fixture.root, mode: 'warn', fullCheckDays: 7, profile: 'default', args: ['status'] })
+
+  it('is finished by the next start, offline, and the pack then loads from the running release', async () => {
+    const { store, paths } = await world()
+    await store.prepare(V2, () => {}, () => {})
+    // The state a process killed after writing `current` leaves: the pointers name 0.2.0, the link still names 0.1.0.
+    await writePointers(paths, { current: V2, previous: V1 })
+    expect(await packsCurrentProblem(paths, V2)).toMatch(/names 0\.1\.0/u)
+    await expect(launch()).resolves.toMatchObject({ version: V2 })
+    expect(linked(paths, 'demo')).toContain('"two"')
+  })
+
+  it('is finished by recover packs before it fetches anything, so it works without a connection', async () => {
+    const { paths } = await world()
+    await writePointers(paths, { current: V2, previous: V1 })
+    const offline: PackCarry = { paths, root: () => Promise.resolve(fixture.root), filesFor: () => Promise.reject(new Error('no connection')), checkLog: () => ({ ok: true }) }
+    await expect(repairPacks(offline, V2)).rejects.toThrow(/no connection/u)
+    expect(await packsCurrentProblem(paths, V2)).toBeUndefined()
   })
 })
 

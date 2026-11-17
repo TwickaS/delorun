@@ -25,7 +25,7 @@ const MAX_PACK_ENTRY_BYTES = 512 * 1024 * 1024
 export type PackRefusalCode =
   | 'SIZE_MISMATCH' | 'DIGEST_MISMATCH' | 'UNLISTED_FILE' | 'MODE_MISMATCH' | 'CONTENT_MISMATCH' | 'MISSING_FILE'
   | 'UNSAFE_PATH' | 'BAD_ARCHIVE' | 'NOT_PUBLISHED' | 'PEER_MISSING' | 'NO_SUCH_PACK' | 'NOT_ON_CHANNEL'
-  | 'PACKS_FILE_REFUSED' | 'FETCH_REFUSED' | 'OFFLINE' | 'INSTALLED_PACK_CHANGED' | 'FILE_ERROR'
+  | 'PACKS_FILE_REFUSED' | 'FETCH_REFUSED' | 'OFFLINE' | 'INSTALLED_PACK_CHANGED' | 'FILE_ERROR' | 'UPDATE_PENDING'
 
 /** A pack or an external package that is refused; `code` says why, `cause` carries a wrapped file error. */
 export class PackRefusal extends Error {

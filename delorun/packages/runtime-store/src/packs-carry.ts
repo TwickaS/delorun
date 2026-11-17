@@ -7,13 +7,14 @@
  */
 import { access, readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { RuntimeVersion } from '@delorun/contract-home-layout'
+import { STORE_LOCK_WAIT_MS, type RuntimeVersion } from '@delorun/contract-home-layout'
 import type { RootMetadata } from '@delorun/contract-release-manifest'
 import { PackRefusal } from '@delorun/release-formats/packs/archive'
 import { verifyPacks } from '@delorun/release-formats/sign/verify'
 import { acquirePacks, fetchPack, installFetchedPack, type InstalledRelease, type PackFiles, type PacksLogCheck, type PackTransfer } from './packs-client.ts'
 import { packProblems, removePack, removeUnlisted } from './packs.ts'
-import { pointPacks } from './packs-current.ts'
+import { ensurePacksCurrent } from './packs-current.ts'
+import { withStoreLock } from './lock.ts'
 import type { StorePaths } from './paths.ts'
 
 /** What carrying and repairing packs need. */
@@ -89,6 +90,8 @@ export async function carryPacks(carry: PackCarry, from: RuntimeVersion, to: Run
  * @throws PackRefusal when a damaged pack cannot be fetched and installed again; it is left removed rather than trusted.
  */
 export async function repairPacks(carry: PackCarry, version: RuntimeVersion, transfer?: PackTransfer): Promise<{ readonly intact: string[], readonly repaired: string[] }> {
+  // The link is derived from the pointers, so it is made right first, without the network.
+  await withStoreLock(carry.paths.lock, STORE_LOCK_WAIT_MS, () => ensurePacksCurrent(carry.paths, version))
   const release = await installedRelease(carry, version)
   const files = await carry.filesFor(version)
   const packs = await acquirePacks(release, files)
@@ -100,7 +103,6 @@ export async function repairPacks(carry: PackCarry, version: RuntimeVersion, tra
     const path = join(carry.paths.packs, version, directory)
     if (!listed.has(path)) await removeUnlisted(carry.paths, path)
   }
-  await pointPacks(carry.paths, version)
   for (const entry of packs.packs) {
     if (!await present(carry.paths.pack(version, entry.name))) continue
     if ((await packProblems(carry.paths, version, entry, carry.paths.platform)).length === 0) {

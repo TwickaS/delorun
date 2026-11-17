@@ -14,7 +14,7 @@ export { launchFiles, launchProtocolOf, SUPPORTED, type LaunchCommand, type Laun
 export { checkInstalledPack, installPack, packProblems, packVariantFor, removePack, type PackInstallRequest } from './packs.ts'
 export { installedPacksProblems } from './packs-check.ts'
 export { acquirePacks, fetchPack, installFetchedPack, packDownloadSize, readStoredPacks, turnOnPack, type FetchedPack, type InstalledRelease, type PacksLogCheck, type PackFiles, type PackSize, type PackTransfer } from './packs-client.ts'
-export { PACKS_CURRENT, packsCurrentProblem, pointPacks, pointPacksIfUsed } from './packs-current.ts'
+export { ensurePacksCurrent, isRunningRelease, requireRunningRelease, PACKS_CURRENT, packsCurrentProblem, pointPacks, pointPacksIfUsed } from './packs-current.ts'
 export { carryPacks, repairPacks, type PackCarry } from './packs-carry.ts'
 export { createPackFiles, NPM_REGISTRY_HOST, type PackTransportOptions } from './packs-fetch.ts'
 export { parseRuntimeVersion, StorePaths } from './paths.ts'
