@@ -335,7 +335,7 @@ profile bwrap /usr/bin/bwrap flags=(unconfined) {
 
 这些消息来自 `delorun devices`：
 
-- **`delorun devices: Delorun is not running. Start it with delorun start, then run delorun devices approve again`。**批准需要正在运行的 Delorun。请运行 `delorun start`，然后再次批准。`delorun devices elevate` 会用 “so no device holds an unlock” 说同样的话。
+- **`Delorun isn't running. Start it with: delorun start`。**`delorun devices approve` 和 `delorun devices elevate` 需要正在运行的 Delorun。请运行 `delorun start`，然后再次运行该命令。
 - **`delorun devices: No device asked for approval before the window closed. Run delorun devices approve again`。**5 分钟内没有人提出请求。请再次运行命令，然后在手机上打开你的地址并选择 **Ask for approval**。
 - **`That request is no longer waiting.`**请求自行结束了（它过期了，或在手机上被取消了）。命令会再次列出等待中的请求；请选择另一个，或再次从手机上提出请求。
 - **`That code is not the one the device shows. Try again.`**你可以再次输入。第三次输错之后请求会被取消；请再次从手机上提出请求以获得新代码。

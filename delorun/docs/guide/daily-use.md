@@ -70,7 +70,7 @@ Most commands take `--profile <name>` after their name to act on another profile
 <details>
 <summary>Edge cases</summary>
 
-- If `doctor` shows `warn key`, then no DeepSeek key is set. Run `delorun setup key`, or set `DEEPSEEK_API_KEY`.
+- If `doctor` shows a `!` line for `key`, then no DeepSeek key is set. Run `delorun setup key`, or set `DEEPSEEK_API_KEY`.
 - If `doctor` shows `warn release-log`, then no release-log check is recorded yet. Run `delorun verify`.
 - If you run from a source checkout, then `doctor` reports that it checks no release channel.
 - If `verify` runs offline, then add `--offline` to skip the online log check. The checks run as you, so a program running as you could change them.

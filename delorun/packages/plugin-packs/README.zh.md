@@ -1,5 +1,5 @@
 ---
-description: "Delorun 在 Host 上的插件包：安装队列、packs 远程接口，以及其他插件调用它的位置。"
+description: "Delorun 在 Host 上的插件包：安装队列、packs 路由，以及其他插件调用它的位置。"
 ---
 
 # @delorun/plugin-packs
@@ -15,7 +15,7 @@ description: "Delorun 在 Host 上的插件包：安装队列、packs 远程接�
 ## 目录
 
 - [一次安装如何运行](#how-an-install-runs)
-- [`packs` 远程接口](#the-packs-remote)
+- [路由](#the-routes)
 - [读取进度](#reading-progress)
 - [配置](#configuration)
 - [手机](#phones)
@@ -34,18 +34,20 @@ description: "Delorun 在 Host 上的插件包：安装队列、packs 远程接�
 
 一项处于 `queued`、`downloading`、`verifying`、`installing`、`needs-reload`、`ready`、`failed` 或 `cancelled` 之一。失败带有一个代码：`offline`（第一次下载需要网络连接）、`interrupted`（下载期间 Host 停止）或 `failed`。
 
-<a id="the-packs-remote"></a>
+<a id="the-routes"></a>
 
-## `packs` 远程接口
+## 路由
 
-| 动作 | 参数 | 返回 |
+每条路由都是带 JSON 请求体的 `POST`，相对于文档获取（`api/delorunPacks.<action>`；路径是 `@delorun/plugin-packs/wire` 中的 `PACK_ROUTES`）。`@delorun/plugin-packs/client` 中的 `createPacksClient()` 会调用它们，下载面板、“插件”和设置引导都使用它。
+
+| 路由 | 参数 | 返回 |
 | --- | --- | --- |
-| `packs/list` | 无 | `PacksSnapshot`：`supported`、`reason`、`release`、`packs`（`PackInfo`：名称、版本、`experimental`、`downloadBytes`、`availability`）和 `queue`（`InstallItem[]`） |
-| `packs/enqueue` | `{ names }` | `PacksResult` |
-| `packs/cancel` | `{ name }` | `PacksResult` |
-| `packs/dismiss` | `{ name }` | `PacksResult` |
-| `packs/remove` | `{ name }`（已完成、失败或已取消的项） | `PacksResult` |
-| `packs/retry` | `{ name }` | `PacksResult` |
+| `list` | 无 | `PacksSnapshot`：`supported`、`reason`、`release`、`packs`（`PackInfo`：名称、版本、`experimental`、`downloadBytes`、`availability`）和 `queue`（`InstallItem[]`） |
+| `enqueue` | `{ names }` | `PacksResult` |
+| `cancel` | `{ name }` | `PacksResult` |
+| `dismiss` | `{ name }` | `PacksResult` |
+| `remove` | `{ name }`（已完成、失败或已取消的项） | `PacksResult` |
+| `retry` | `{ name }` | `PacksResult` |
 
 `PacksResult` 是 `{ ok: true, value: PacksSnapshot }` 或 `{ ok: false, error: { code: 'unsupported' | 'unknown-pack' | 'unavailable-pack', message } }`。这些类型以及 `packView(pack, item)`（把一个插件包及其队列项映射成界面所绘制的内容）位于 `@delorun/plugin-packs/wire`，它不导入 Cordis。
 
@@ -53,7 +55,7 @@ description: "Delorun 在 Host 上的插件包：安装队列、packs 远程接�
 
 ## 读取进度
 
-每次变化之后，该服务会在插件管理器的 `plugin-manager/install-state` 事件上，以请求 id `pack:<name>` 通告列表中的每一项。界面监听该事件，并调用 `packs/list` 获取字节数、百分比、状态和队列位置；它在连接时也会读取整个列表。
+每次变化之后，该插件会在插件管理器的 `plugin-manager/install-state` 事件上，以请求 id `pack:<name>` 通告列表中的每一项。界面监听该事件，并调用 `list` 路由获取字节数、百分比、状态和队列位置；它在连接时也会读取整个列表。
 
 <a id="configuration"></a>
 
@@ -65,7 +67,7 @@ description: "Delorun 在 Host 上的插件包：安装队列、packs 远程接�
 
 ## 手机
 
-`packs/list` 是每台已配对手机都可以执行的读取动作，`packs/cancel`（停止排队中或下载中的安装）和 `packs/dismiss`（清除失败或已取消的行，只是队列记录）也是；两者都不会触及已安装的插件包（A408）。`packs/enqueue`、`packs/remove` 和 `packs/retry` 是契约 C14 的提升权限动作：手机只有在持有解锁时才能执行它们（A408）。
+`list`、`cancel`（停止排队中或下载中的安装）和 `dismiss`（清除失败或已取消的行，只是队列记录）这几条路由对任何已批准的手机应答；两者都不会触及已安装的插件包（A408）。`enqueue`、`retry` 和 `remove` 路由只在手机持有解锁时才对它应答，没有解锁的手机会得到 `403`，客户端会把它变成解锁对话框的 `elevation-required: packs/<route>`（A408）。
 
 <a id="where-the-host-connects-it"></a>
 

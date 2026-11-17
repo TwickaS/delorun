@@ -76,7 +76,7 @@ description: "日常使用 Delorun：启动、打开和停止 studio，status、
 <details>
 <summary>边界情况</summary>
 
-- 如果 `doctor` 显示 `warn key`，那么没有设置 DeepSeek 密钥。请运行 `delorun setup key`，或设置 `DEEPSEEK_API_KEY`。
+- 如果 `doctor` 显示一行以 `!` 开头的 `key`，那么没有设置 DeepSeek 密钥。请运行 `delorun setup key`，或设置 `DEEPSEEK_API_KEY`。
 - 如果 `doctor` 显示 `warn release-log`，那么尚未记录发布日志检查。请运行 `delorun verify`。
 - 如果你从源码检出运行，那么 `doctor` 会报告它不检查任何发布渠道。
 - 如果 `verify` 离线运行，请添加 `--offline` 以跳过在线日志检查。这些检查以你的身份运行，所以以你的身份运行的程序可能改动它们。

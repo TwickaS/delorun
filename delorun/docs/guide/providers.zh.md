@@ -115,7 +115,7 @@ Claude Code 和 Codex 不是 Delorun 的 chat 所用的模型提供方：它们�
 <details>
 <summary>边界情况</summary>
 
-- 如果你选择 **Choose later**，那么在你添加提供方之前，chat 无法回答。新 chat 保持 profile 的模型，`delorun doctor` 会显示 `warn key`。
+- 如果你选择 **Choose later**，那么在你添加提供方之前，chat 无法回答。新 chat 保持 profile 的模型，`delorun doctor` 会显示一行以 `!` 开头的 `key`。
 - 如果 setup 无法连到提供方，那么密钥检查会失败，并给出地址和 HTTP 状态。选择 **Continue without a successful check** 可以无论如何都存储密钥，或先修复网络。
 - 如果你的端点不需要密钥，那么输入任何文本即可；适配器总会发送一个。
 - 如果你使用纯 `http` 访问另一台电脑，那么 setup 会警告你，密钥和提示词会在网络上未经加密地传输。

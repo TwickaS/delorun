@@ -313,7 +313,7 @@ If `delorun reach on tailscale` says "the running Delorun did not make the addre
 
 These messages come from `delorun devices`:
 
-- **`delorun devices: Delorun is not running. Start it with delorun start, then run delorun devices approve again`.** Approving needs the running Delorun. Run `delorun start`, then approve again. `delorun devices elevate` says the same with "so no device holds an unlock".
+- **`Delorun isn't running. Start it with: delorun start`.** `delorun devices approve` and `delorun devices elevate` need the running Delorun. Run `delorun start`, then run the command again.
 - **`delorun devices: No device asked for approval before the window closed. Run delorun devices approve again`.** Nobody asked within 5 minutes. Run the command again, then open your address on the phone and choose **Ask for approval**.
 - **`That request is no longer waiting.`** The request ended on its own (it expired, or was cancelled on the phone). The command lists the waiting requests again; choose another, or ask again from the phone.
 - **`That code is not the one the device shows. Try again.`** You may type it again. After the third wrong code the request is cancelled; ask again from the phone for a new code.

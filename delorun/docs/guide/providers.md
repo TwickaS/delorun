@@ -97,7 +97,7 @@ Claude Code and Codex are not model providers for Delorun's chats: they are agen
 <details>
 <summary>Edge cases</summary>
 
-- If you choose **Choose later**, then chats cannot answer until you add a provider. New chats keep the profile's model, and `delorun doctor` shows `warn key`.
+- If you choose **Choose later**, then chats cannot answer until you add a provider. New chats keep the profile's model, and `delorun doctor` shows a `!` line for `key`.
 - If setup cannot reach the provider, then the key check fails with the address and HTTP status. Choose **Continue without a successful check** to store the key anyway, or fix the network first.
 - If your endpoint needs no key, then enter any text; the adapter always sends one.
 - If you use plain `http` to another computer, then setup warns you that the key and prompts cross the network unencrypted.
