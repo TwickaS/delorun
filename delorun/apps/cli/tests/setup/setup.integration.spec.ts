@@ -73,7 +73,7 @@ function writesOf(root: string): string[] {
  * @returns the promise of the exit code.
  */
 function setup(form: SetupForm, env: Record<string, string | undefined> = { DEEPSEEK_API_KEY: KEY }, hooks?: SetupHooks, root: string = home, extra: Partial<SetupRequest> = {}) {
-  return runSetup({ home: root, profile: PROFILE, output, env, form, keyCheck: () => Promise.resolve({ ok: true }), ...(hooks === undefined ? {} : { hooks }), ...extra })
+  return runSetup({ home: root, profile: PROFILE, output, env, form, keyCheck: () => Promise.resolve({ ok: true }), portIsFree: () => Promise.resolve(true), ...(hooks === undefined ? {} : { hooks }), ...extra })
 }
 
 /** The `--provider deepseek-official` flags. */
@@ -255,6 +255,27 @@ describe('the first start after setup', { timeout: SETUP_TIMEOUT_MS }, () => {
     expect(await mountsCheck(row?.config)).toBe(false)
   })
 
+  it('picks the next free studio port when the default one is in use, and says which', async () => {
+    const taken = new Set([3080, 3081])
+    const lines: string[] = []
+    const request: Partial<SetupRequest> = { portIsFree: port => Promise.resolve(!taken.has(port)), output: { stdout: text => void lines.push(text), stderr: () => undefined } }
+    expect(await setup({ kind: 'yes' }, undefined, undefined, home, request)).toBe(EXIT.ok)
+    expect(lines.join('')).toContain('! Port 3080 is in use, so the studio will use 3082. Change it later with: delorun setup profile')
+    expect(readFileSync(join(home, 'profiles', PROFILE, 'cordis.patch.yml'), 'utf8')).toContain('port: 3082')
+  })
+
+  it('refuses, naming the range, when no studio port near the default is free', async () => {
+    const error = await setup({ kind: 'yes' }, undefined, undefined, home, { portIsFree: () => Promise.resolve(false) }).catch((caught: unknown) => caught)
+    expect(error).toBeInstanceOf(CliError)
+    expect((error as CliError).message).toContain('ports 3080 to 3180 are all in use on this computer')
+  })
+
+  it('keeps the default port without a word when it is free', async () => {
+    const lines: string[] = []
+    expect(await setup({ kind: 'yes' }, undefined, undefined, home, { output: { stdout: text => void lines.push(text), stderr: () => undefined } })).toBe(EXIT.ok)
+    expect(lines.join('')).not.toContain('is in use')
+  })
+
   it('update-notice-off-at-first-start: --yes --no-update-check turns it off the same way, and a setup that keeps it on mounts the check', async () => {
     const onHome = join(osHome, 'on', '.delorun')
     await ensureHomeTree(onHome, PROFILE)
@@ -263,7 +284,7 @@ describe('the first start after setup', { timeout: SETUP_TIMEOUT_MS }, () => {
     expect(on?.config).toEqual({ enabled: true, intervalHours: 24, timeoutSeconds: 15 })
     expect(await mountsCheck(on?.config)).toBe(true)
 
-    expect(await runSetup({ home, profile: PROFILE, output, env: { DEEPSEEK_API_KEY: KEY }, form: { kind: 'yes' }, noUpdateCheck: true })).toBe(EXIT.ok)
+    expect(await runSetup({ home, profile: PROFILE, output, env: { DEEPSEEK_API_KEY: KEY }, form: { kind: 'yes' }, noUpdateCheck: true, portIsFree: () => Promise.resolve(true) })).toBe(EXIT.ok)
     const off = composedUpdateCheckRow()
     expect(off?.config).toEqual({ intervalHours: 24, timeoutSeconds: 15, enabled: false })
     expect(await mountsCheck(off?.config)).toBe(false)

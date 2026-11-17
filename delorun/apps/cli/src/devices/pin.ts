@@ -17,6 +17,7 @@ import type { ResponseLine, UnsignedRequest } from '@delorun/home-process'
 import { PIN_MODE_LIMITS } from '@delorun/contract-oidc-passkeys'
 import { CliError, EXIT, type ExitCode } from '../exit.ts'
 import { parseOptions, type CommandContext } from '../command.ts'
+import { notRunningText } from '../messages.ts'
 import { printable } from '../terminal-text.ts'
 
 /** The usage line of the `pin` actions. */
@@ -167,7 +168,7 @@ function final(lines: readonly ResponseLine[]): ResponseLine {
 async function ask(request: UnsignedRequest, where: PinWhere): Promise<ResponseLine | undefined> {
   const { home, profile, context, dependencies } = where
   if (!dependencies.running(home, profile)) {
-    context.stderr(`delorun devices pin: Delorun is not running, and PIN mode changes only through the running home. Start it with delorun start${profile === 'default' ? '' : ` --profile ${profile}`}, then run this again. Nothing was changed.\n`)
+    context.stderr(`${notRunningText(profile)}\nPIN mode changes only through the running home. Nothing was changed.\n`)
     return undefined
   }
   return final(await dependencies.send(home, profile, request))

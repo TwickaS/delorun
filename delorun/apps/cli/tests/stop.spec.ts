@@ -360,7 +360,7 @@ describe('delorun stop', () => {
   it('prints that Delorun is not running, and sends nothing, when the lock\'s holder has exited', async () => {
     const run = await stop(['--now'], { running: false, record: lockRecord({ processStart: START, pidNamespace: NAMESPACE }), answer: silent })
     expect(run.code).toBe(EXIT.ok)
-    expect(run.stdout).toBe('Delorun is not running for the profile default.\n')
+    expect(run.stdout).toBe("Delorun isn't running. Start it with: delorun start\n")
     expect(run.system.requests).toEqual([])
     expect(run.system.signals).toEqual([])
   })

@@ -3,6 +3,7 @@
  * under Changes, the cause of a failed start or load named with the change to undo, each pending change and each
  * invariant that does not hold. The home has protection on unless a case turns it off.
  */
+import { readableTime } from '../../src/output.ts'
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
@@ -232,7 +233,7 @@ describe('the changes lines of delorun doctor', () => {
     await start()
     const { version } = (await readApproved(profileDir)).plugins.plug!
     const session = await openWorkSession(home, PROFILE, { plugin: 'plug', source, from: version, minutes: 60 }, attestTerminal(TERMINAL))
-    expect((await lines())[1]).toEqual({ name: 'changes', status: 'pass', message: `you are working on plug since ${session.startedAt}: edits in its folder load live until delorun changes done plug.` })
+    expect((await lines())[1]).toEqual({ name: 'changes', status: 'pass', message: `you are working on plug since ${readableTime(session.startedAt)}: edits in its folder load live until delorun changes done plug.` })
     await start()
     expect((await lines())[2]!.message).toBe(`plug from ${source}: no start has recorded what loaded yet; it runs its folder in your work session; it declares no dsh or delorun version requirement; ${NONE_REGISTERED}.`)
     await booted([])
@@ -313,15 +314,15 @@ describe('delorun doctor with the changes lines', () => {
     linkPlugin('plug')
     await start()
     const sound = await doctor({ DELORUN_HOME: home })
-    expect(sound.stdout).toContain('pass changes: protection is on')
+    expect(sound.stdout).toContain('✓ changes: protection is on')
     writeFileSync(join(home, 'changes', 'protection.json'), '{}\n', { mode: 0o600 })
     const broken = await doctor({ DELORUN_HOME: home })
     expect(broken.exit).toBe(EXIT.failed)
-    expect(broken.stderr).toMatch(/^fail changes: The protection setting cannot be read: /mu)
+    expect(broken.stderr).toMatch(/^✗ changes: The protection setting cannot be read: /mu)
   })
 
   it('turns a changes check that throws into one failure line', async () => {
     const run = await doctor({ DELORUN_HOME: 'relative/home' })
-    expect(run.stderr).toMatch(/^fail changes: the check could not complete: /mu)
+    expect(run.stderr).toMatch(/^✗ changes: the check could not complete: /mu)
   })
 })

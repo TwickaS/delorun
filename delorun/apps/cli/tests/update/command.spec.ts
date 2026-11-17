@@ -11,6 +11,7 @@ import { join } from 'node:path'
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { ReleaseChannel, SemanticVersion, Sha256Hex, UtcTimestamp } from '@delorun/contract-release-manifest'
+import type { RuntimeVersion } from '@delorun/contract-home-layout'
 import { UPDATE_REPORT_SCHEMA, type DataCopySize, type InstallationStatus, type ItemVerification, type ReportItem, type ReportVersions, type UpdateReport } from '@delorun/contract-update-report'
 import { ensureHomeTree, writeNewStartToken } from '@delorun/home'
 import { updateSocketPath } from '@delorun/home-process'
@@ -245,7 +246,7 @@ describe('runUpdate', () => {
   async function update(args: readonly string[], prompts: Partial<UpdatePrompts> = {}): Promise<number | undefined> {
     const context = { env: { ...process.env, HOME: osHome, USERPROFILE: osHome, DELORUN_HOME: home }, stdout: (text: string) => { output.stdout += text }, stderr: (text: string) => { output.stderr += text } }
     const answers: UpdatePrompts = { confirm: async () => Promise.reject(new Error('the command asked to confirm')), copy: async () => Promise.reject(new Error('the command asked about the copy')), agree: async () => Promise.reject(new Error('the command asked to agree')), ...prompts }
-    return runUpdate(args, context, answers)
+    return runUpdate(args, context, answers, { runtime: () => ({ version: brandString<RuntimeVersion>('1.0.0'), store: true }) })
   }
 
   it.each([['win32', /runs in WSL2, not on native Windows\. Nothing was downloaded\./u], ['darwin', /macOS joins in a later release\. Nothing was downloaded\./u]])('stops on %s before it asks the home process for anything', async (platform, message) => {
@@ -262,15 +263,17 @@ describe('runUpdate', () => {
 
   it('exits 3 and says to run delorun start when no home process answers', async () => {
     expect(await update([])).toBe(EXIT.notRunning)
-    expect(output.stderr).toBe(`delorun update: Delorun is not running for the profile ${PROFILE}; run delorun start, then delorun update.\n`)
+    expect(output.stderr).toBe(`Delorun isn't running. Start it with: delorun start${PROFILE === 'default' ? '' : ` --profile ${PROFILE}`}\n`)
     expect(output.stdout).toBe('')
   })
 
-  it('exits 3 through the registered command too, which asks on the terminal', async () => {
-    const context = { env: { ...process.env, HOME: osHome, USERPROFILE: osHome, DELORUN_HOME: home }, stdout: () => {}, stderr: () => {} }
+  it('tells a source build, through the registered command, that it does not update itself', async () => {
+    const stderr: string[] = []
+    const context = { env: { ...process.env, HOME: osHome, USERPROFILE: osHome, DELORUN_HOME: home }, stdout: () => {}, stderr: (text: string) => void stderr.push(text) }
 
     expect(updateCommand.name).toBe('update')
-    expect(await updateCommand.run([], context)).toBe(EXIT.notRunning)
+    expect(await updateCommand.run([], context)).toBe(EXIT.failed)
+    expect(stderr.join('')).toBe("This is a source build, so it doesn't update itself. Install Delorun with: npx delorun\n")
   })
 
   it('refuses before it asks the home process for anything when git cannot run, which the profile history needs', async () => {
@@ -298,7 +301,7 @@ describe('runUpdate', () => {
 
     expect(await update(['--yes'])).toBe(EXIT.ok)
 
-    expect(output.stdout).toBe('… fetching\nDelorun 1.0.0 is the newest release on the stable channel.\n')
+    expect(output.stdout).toBe('… fetching\n✓ Up to date · 1.0.0 (newest on the stable channel)\n')
     expect(sent('update.apply')).toHaveLength(0)
   })
 

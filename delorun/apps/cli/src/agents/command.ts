@@ -52,7 +52,10 @@ export function createAgentsCommand(dependencies: AgentsDependencies): CliComman
     async run(args, context): Promise<ExitCode> {
       const { values, positionals } = parseCommandLine('agents', args, { profile: { type: 'string' } })
       const [action, agent, extra] = positionals
-      if (action !== 'login' || agent === undefined || extra !== undefined || !LOGIN_AGENTS.includes(agent as LoginAgent)) {
+      if (action === 'login' && agent !== undefined && extra === undefined && !LOGIN_AGENTS.includes(agent as LoginAgent)) {
+        throw new CliError(EXIT.usage, `✗ Unknown agent ${JSON.stringify(agent)}. Choose ${LOGIN_AGENTS.join(' or ')}.`)
+      }
+      if (action !== 'login' || agent === undefined || extra !== undefined) {
         throw new CliError(EXIT.usage, `delorun agents: ${action === 'login' ? 'name one agent' : 'the only action is login'}\n${AGENTS_USAGE}`)
       }
       const id = agent as LoginAgent

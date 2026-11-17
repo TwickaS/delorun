@@ -43,6 +43,7 @@ import { runtimeOfFile, type RunningRuntime } from '../update/runtime.ts'
 import { isCarriedPackage } from '../changes/start.ts'
 import { hasCliProfile, profileDirectory } from '../profile.ts'
 import { clipped, printable } from '../terminal-text.ts'
+import { readableTime } from '../output.ts'
 import { PROTECTION_WORDS } from '../verify/changes.ts'
 import type { CheckResult, CheckStatus } from './checks.ts'
 
@@ -228,7 +229,7 @@ export async function changesLines(home: string, profile: string, status: Change
     : [line('pass', `protection is ${status.protection}: ${PROTECTION_WORDS[status.protection]}.`)]
   if (status.workSession !== undefined) {
     const { plugin, startedAt } = status.workSession
-    results.push(line('pass', `you are working on ${plugin} since ${startedAt}: edits in its folder load live until delorun changes done ${plugin}.`))
+    results.push(line('pass', `you are working on ${plugin} since ${readableTime(startedAt)}: edits in its folder load live until delorun changes done ${plugin}.`))
   }
   if (status.workFailure !== undefined) {
     const { plugin, at, error } = status.workFailure

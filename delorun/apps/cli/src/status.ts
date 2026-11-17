@@ -17,11 +17,16 @@ import { DSH_HOME_ENV, HOME_STATUS_TIMEOUT_MS } from '@delorun/contract-home-lay
 import type { HomeStatus } from '@delorun/contract-home-process'
 import { holderAlive, readHomeLock, resolveDelorunHome, runDirectory } from '@delorun/home'
 import { queryHomeStatus } from '@delorun/home-process'
+import { fileURLToPath } from 'node:url'
 import { EXIT } from './exit.ts'
+import { runtimeOfFile } from './update/runtime.ts'
 import { parseOptions, type CliCommand } from './command.ts'
 import { profileDirectory, selectProfile } from './profile.ts'
 import { readInspectorRecord, type InspectorRecord } from './inspector.ts'
 import { dangerousModeLine } from './setup/dangerous.ts'
+import { notRunningText } from './messages.ts'
+import { readableTime } from './output.ts'
+import { commandRows, styleOf, type Style } from './style.ts'
 import { printable } from './terminal-text.ts'
 import { changesNotice } from './verify/changes.ts'
 
@@ -34,15 +39,15 @@ import { changesNotice } from './verify/changes.ts'
 async function workSessionLine(home: string, profile: string): Promise<string> {
   try {
     const session = await workSessionFact(home, profile)
-    return session === undefined ? '' : `work session: ${printable(session.plugin)} since ${session.startedAt}, ends at ${session.endsAt}\n`
+    return session === undefined ? '' : `work session: ${printable(session.plugin)} since ${readableTime(session.startedAt)}, ends at ${readableTime(session.endsAt)}\n`
   } catch (error) {
     // workSessionFact refuses a record Delorun did not write with a ChangesError, whose message is its detail.
     return `work session: unreadable: ${printable((error as Error).message)}\n`
   }
 }
 
-/** The line that follows the studio's address. */
-export const OPEN_HINT = 'Run delorun open to open the studio in your browser.'
+/** What `delorun open` does, beside its command in the status output. */
+export const OPEN_EXPLANATION = 'open the studio in your browser'
 
 /**
  * The studio's address from a `status` answer, read at the update channel's wire boundary: an `http:` or `https:` URL
@@ -66,19 +71,23 @@ export function studioAddress(studio: string | undefined): URL | undefined {
  * @param status - the answer.
  * @param verbose - whether to add the process id, the start id and the previous version.
  * @param inspector - the debugger the home process keeps open, if any.
+ * @param fromStore - whether this program runs from the runtime store; a source build has no release version to show.
  * @returns the lines.
  */
-function statusLines(status: HomeStatus, verbose: boolean, inspector: InspectorRecord | undefined): string {
+function statusLines(status: HomeStatus, verbose: boolean, inspector: InspectorRecord | undefined, fromStore: boolean, style: Style): string {
   const studio = studioAddress(status.studio)
-  return [
-    `Delorun is ${status.state}.`,
+  const details = [
     ...studio === undefined ? [] : [`Studio: ${studio.href}`],
-    `Version: ${status.runtime.running}${verbose && status.runtime.previous !== undefined ? ` (previous ${status.runtime.previous})` : ''}`,
+    `Version: ${fromStore ? status.runtime.running : 'source build'}${verbose && status.runtime.previous !== undefined ? ` (previous ${status.runtime.previous})` : ''}`,
     `Running chats: ${String(status.chats)}`,
     ...status.update === undefined ? [] : [`Update: ${status.update.phase} to ${status.update.target}`],
     ...verbose ? [`Process id: ${String(status.pid)}`, `Start id: ${status.startId}`] : [],
-    ...studio === undefined ? [] : [OPEN_HINT],
-    ...inspector === undefined ? [] : [`inspector: open at ${inspector.url} since ${inspector.openedAt}; any process on this computer, including commands the agent runs inside the sandbox, can run code as Delorun outside the sandbox until Delorun restarts without --inspect`],
+    ...inspector === undefined ? [] : [`inspector: open at ${inspector.url} since ${readableTime(inspector.openedAt)}; any process on this computer, including commands the agent runs inside the sandbox, can run code as Delorun outside the sandbox until Delorun restarts without --inspect`],
+  ]
+  return [
+    style.mark(status.state === 'running' ? 'ok' : 'warn', `Delorun is ${status.state}.`),
+    ...details.map(line => `  ${line}`),
+    ...studio === undefined ? [] : commandRows(style, [['delorun open', OPEN_EXPLANATION], ['delorun stop', 'stop it']]),
     '',
   ].join('\n')
 }
@@ -92,6 +101,7 @@ export const statusCommand: CliCommand = {
     const profile = selectProfile(values.profile, context.env)
     const home = await resolveDelorunHome(context.env)
     const json = values.json === true
+    const style = styleOf(context.env)
     const verbose = values.verbose === true
     if (!json) {
       if (verbose) context.stdout(`Home: ${home.path}\nProfile: ${profile}\n`)
@@ -107,7 +117,7 @@ export const statusCommand: CliCommand = {
     const record = readHomeLock(runDirectory(home.path, profile))
     if (record === undefined || !holderAlive(record)) {
       if (json) context.stdout(`${JSON.stringify({ ok: false, state: 'not-running' })}\n`)
-      else context.stdout('Delorun is not running. Start it with delorun start.\n')
+      else context.stdout(`${style.mark('note', notRunningText(profile))}\n`)
       return EXIT.notRunning
     }
     let answer
@@ -122,7 +132,7 @@ export const statusCommand: CliCommand = {
       return EXIT.failed
     }
     const inspector = readInspectorRecord(home.path, profile, record.pid)
-    context.stdout(json ? `${JSON.stringify({ ok: true, status: answer, ...inspector === undefined ? {} : { inspector: { url: inspector.url, openedAt: inspector.openedAt } } })}\n` : statusLines(answer as HomeStatus, verbose, inspector))
+    context.stdout(json ? `${JSON.stringify({ ok: true, status: answer, ...inspector === undefined ? {} : { inspector: { url: inspector.url, openedAt: inspector.openedAt } } })}\n` : statusLines(answer as HomeStatus, verbose, inspector, runtimeOfFile(home.path, fileURLToPath(import.meta.url)).store, style))
     return EXIT.ok
   },
 }

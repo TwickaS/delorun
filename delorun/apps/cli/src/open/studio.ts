@@ -13,6 +13,7 @@ import { canOpenNativePath } from '@deepseek-ai/dsh-native-command'
 import { HOME_STATUS_TIMEOUT_MS } from '@delorun/contract-home-layout'
 import type { StudioLink } from '@delorun/contract-home-process'
 import { sendHomeRequest } from '@delorun/home-process'
+import { notRunningText } from '../messages.ts'
 import { cliRedactor } from '../refusals.ts'
 
 /**
@@ -195,7 +196,7 @@ export function describeOpening(outcome: OpenOutcome, profile: string): string {
     case 'browser-failed':
       return `No browser took the studio link. Run delorun open --print${flag} for a link that signs in once, within one minute.\n`
     case 'not-running':
-      return `Delorun is not running for the profile ${profile}; start it with delorun start${flag}.\n`
+      return `${notRunningText(profile)}\n`
     case 'no-answer':
       return `The home process for the profile ${profile} is listening but did not answer in time; see delorun status${flag} and delorun logs${flag}.\n`
     case 'refused':

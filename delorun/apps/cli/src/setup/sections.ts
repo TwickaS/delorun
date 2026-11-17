@@ -241,12 +241,19 @@ const asksWhenRun = (): boolean => true
 const samePlan = (plan: SectionPlan): Readonly<Record<SetupUseCase, SectionPlan>> => ({ local: plan, remote: plan, automation: plan })
 
 /**
+ * The update-check statement on the production channel: the check reads files from releases.delorun.com, and the newest
+ * release's manifest and log record from GitHub, once a day and at start when a day has passed; those hosts see this
+ * computer's address and receive nothing else.
+ */
+export const PRODUCTION_UPDATE_STATEMENT = 'About once a day Delorun checks releases.delorun.com and GitHub for a newer release. It sends nothing about you or your plugins; those sites see this computer\'s address. Turn it off in Settings → General → Updates.'
+
+/**
  * The statements setup makes about privacy, from the Privacy section's copy.
  * @param channelOrigin - the recorded channel origin of a launcher built for another release channel; absent for production.
  * @returns one line per statement.
  */
 export function statementLines(channelOrigin?: string): string[] {
-  return [en['statement.delorun'], en['statement.optIns'], en['statement.feedback'], channelOrigin === undefined ? en['statement.updateCheck'] : localUpdateStatement(channelOrigin)]
+  return [en['statement.delorun'], en['statement.optIns'], en['statement.feedback'], channelOrigin === undefined ? PRODUCTION_UPDATE_STATEMENT : localUpdateStatement(channelOrigin)]
 }
 
 /**

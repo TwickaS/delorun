@@ -102,14 +102,14 @@ describe('the port delorun doctor checks', { timeout: 30_000 }, () => {
     const { server, port } = await listenOnEphemeralPort()
     await closeServer(server)
     await setStudioPort(port)
-    expect(await doctor()).toEqual({ code: EXIT.ok, port: `pass port: port ${String(port)} on 127.0.0.1, the studio port of the profile default, is free.` })
+    expect(await doctor()).toEqual({ code: EXIT.ok, port: `✓ port: port ${String(port)} on 127.0.0.1, the studio port of the profile default, is free.` })
   })
 
   it('passes a profile port of 0, which each start chooses, without binding anything', async () => {
     const directory = profileDirectory(home, PROFILE)
     mkdirSync(directory, { recursive: true })
     writeFileSync(join(directory, 'cordis.patch.yml'), '- id: webserver\n  config:\n    port: 0\n')
-    expect(await doctor()).toEqual({ code: EXIT.ok, port: 'pass port: the studio port of the profile default is 0, so each start takes a free port the system chooses; `delorun status` shows the address.' })
+    expect(await doctor()).toEqual({ code: EXIT.ok, port: '✓ port: the studio port of the profile default is 0, so each start takes a free port the system chooses; `delorun status` shows the address.' })
   })
 
   it('prints no YAML warning for a profile patch that holds a `!!js` expression', async () => {
@@ -133,14 +133,14 @@ describe('the port delorun doctor checks', { timeout: 30_000 }, () => {
 
   it('checks upstream\'s default port when the profile sets none', async () => {
     const result = await doctor()
-    expect(result.port).toMatch(/^(?:pass|fail) port: port 3080 on 127\.0\.0\.1, the studio's default port, which the profile default does not change, is /u)
+    expect(result.port).toMatch(/^[✓✗] port: port 3080 on 127\.0\.0\.1, the studio's default port, which the profile default does not change, is /u)
   })
 
   it('checks --port instead of the profile\'s port', async () => {
     await setStudioPort(4100)
     const { server, port } = await listenOnEphemeralPort()
     await closeServer(server)
-    expect(await doctor(['--port', String(port)])).toEqual({ code: EXIT.ok, port: `pass port: port ${String(port)} on 127.0.0.1 is free.` })
+    expect(await doctor(['--port', String(port)])).toEqual({ code: EXIT.ok, port: `✓ port: port ${String(port)} on 127.0.0.1 is free.` })
   })
 
   it('passes the port while this home\'s own studio holds it, and says Delorun holds it', async () => {
@@ -148,7 +148,7 @@ describe('the port delorun doctor checks', { timeout: 30_000 }, () => {
     try {
       await setStudioPort(port)
       running = await startRunningHome(home, PROFILE, `http://127.0.0.1:${String(port)}/`)
-      expect(await doctor()).toEqual({ code: EXIT.ok, port: `pass port: port ${String(port)} on 127.0.0.1, the studio port of the profile default, is in use by Delorun's studio, which runs for the profile default.` })
+      expect(await doctor()).toEqual({ code: EXIT.ok, port: `✓ port: port ${String(port)} on 127.0.0.1, the studio port of the profile default, is in use by Delorun's studio, which runs for the profile default.` })
     } finally {
       await closeServer(server)
     }
@@ -161,11 +161,11 @@ describe('the port delorun doctor checks', { timeout: 30_000 }, () => {
       const other = `port ${String(port)} on 127.0.0.1, the studio port of the profile default, is in use by another process`
       const alone = await doctor()
       expect(alone.code).toBe(EXIT.failed)
-      expect(alone.port).toContain(`fail port: ${other}`)
+      expect(alone.port).toContain(`✗ port: ${other}`)
       running = await startRunningHome(home, PROFILE, `http://127.0.0.1:${String(port === 65535 ? port - 1 : port + 1)}/`)
       const beside = await doctor()
       expect(beside.code).toBe(EXIT.failed)
-      expect(beside.port).toContain(`fail port: ${other}`)
+      expect(beside.port).toContain(`✗ port: ${other}`)
     } finally {
       await closeServer(server)
     }
@@ -177,7 +177,7 @@ describe('the port delorun doctor checks', { timeout: 30_000 }, () => {
     writeFileSync(join(directory, 'cordis.patch.yml'), 'id: webserver\n')
     const result = await doctor()
     expect(result.code).toBe(EXIT.failed)
-    expect(result.port).toBe(`fail port: the check could not complete: delorun doctor: ${join(directory, 'cordis.patch.yml')} is not a patch list`)
+    expect(result.port).toBe(`✗ port: the check could not complete: delorun doctor: ${join(directory, 'cordis.patch.yml')} is not a patch list`)
   })
 })
 
@@ -226,19 +226,19 @@ describe('delorun doctor in this process', { timeout: 30_000 }, () => {
 
   it('checks the stored key first, and reports a document that is not YAML by its error code', async () => {
     credentials(`version: 1\nrefs:\n  DEEPSEEK_API_KEY: ${GOOD_KEY}\n`)
-    expect((await doctorOutput(['--port', '1'])).printed).toContain('pass key: ')
+    expect((await doctorOutput(['--port', '1'])).printed).toContain('✓ key: ')
     credentials(`refs: [${GOOD_KEY}\n`)
     const broken = await doctorOutput(['--port', '1'])
-    expect(broken.printed).toMatch(/fail key: the check could not complete: .*is not a readable credentials document \([A-Z_]+\)/u)
+    expect(broken.printed).toMatch(/✗ key: the check could not complete: .*is not a readable credentials document \([A-Z_]+\)/u)
     expect(broken.printed).not.toContain(GOOD_KEY)
   })
 
   it.each([['a list', '- a\n'], ['references that are not a mapping', 'refs: x\n'], ['an empty reference', 'refs:\n  DEEPSEEK_API_KEY: ""\n']])('reads the environment\'s key when the stored document holds %s', async (_label, text) => {
     credentials(text)
-    expect((await doctorOutput(['--port', '1'])).printed).toContain('warn key: no DeepSeek API key is set')
+    expect((await doctorOutput(['--port', '1'])).printed).toContain('! key: no DeepSeek API key is set')
     vi.stubEnv('DEEPSEEK_API_KEY', '')
-    expect((await doctorOutput(['--port', '1'])).printed).toContain('warn key: no DeepSeek API key is set')
+    expect((await doctorOutput(['--port', '1'])).printed).toContain('! key: no DeepSeek API key is set')
     vi.stubEnv('DEEPSEEK_API_KEY', GOOD_KEY)
-    expect((await doctorOutput(['--port', '1'])).printed).toContain('pass key: ')
+    expect((await doctorOutput(['--port', '1'])).printed).toContain('✓ key: ')
   })
 })

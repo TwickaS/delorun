@@ -24,6 +24,7 @@ import { createReachCommand, homeRuns, type ReachDependencies } from '../../src/
 import { localReach, reachRowsOf } from '../../src/reach/host.ts'
 import { createDevicesCommand, type DevicesDependencies } from '../../src/devices/command.ts'
 import { localDeviceApproval } from '../../src/devices/host.ts'
+import { readableTime } from '../../src/output.ts'
 import { listenerPortFor, readReachRow, REACH_OFF, writeReachRow } from '../../src/reach/row.ts'
 import { readPairingAt } from '../../src/reach/pairing-row.ts'
 import { reachSection } from '../../src/reach/setup-section.ts'
@@ -307,6 +308,18 @@ const PENDING = { requestId: 'AAAAAAAAAAAAAAAAAAAAAA', label: 'Phone', platform:
 const SECOND = { requestId: 'BBBBBBBBBBBBBBBBBBBBBB', label: 'Tablet', platform: '', address: `https://${HOST}`, createdAt: 1000, expiresAt: 2 }
 
 describe('delorun devices', () => {
+  beforeEach(() => {
+    writeReachRow(delorunHome, 'default', { ...REACH_OFF, enabled: true, address: `https://${HOST}/` })
+  })
+
+  it('fails at once, without waiting, when remote access is off', async () => {
+    writeReachRow(delorunHome, 'default', REACH_OFF)
+    const { command, sent } = devices()
+    await expect(command.run(['approve'], context)).resolves.toBe(EXIT.failed)
+    expect(sent).toEqual([])
+    expect(out.stderr).toBe('! Remote access is off, so no phone can reach this studio. Turn it on first: delorun reach on tailscale\n')
+  })
+
   it('approves the waiting device with the typed code, giving a wrong code another try', async () => {
     const { command, sent } = devices({
       lines: [
@@ -322,13 +335,10 @@ describe('delorun devices', () => {
       { op: 'devices.approve', args: { requestId: PENDING.requestId, typedCode: '0000 0000' } },
       { op: 'devices.approve', args: { requestId: PENDING.requestId, typedCode: '1234 5678' } },
     ])
-    expect(out.stdout).toContain('  1. Phone (iOS), asked at 1970-01-01T00:00:00.000Z, request AAAAAAAA\n')
+    expect(out.stdout).toContain(`  1. Phone (iOS), asked at ${readableTime(0)}, request AAAAAAAA\n`)
     expect(out.stdout).toContain('Approved Phone.')
     expect(out.stderr).toContain('Try again.')
-    expect(out.stdout).toContain('Remote access is off for this profile')
-    // With remote access on, the waiting line names the sign-in page the phone opens.
-    writeReachRow(delorunHome, 'default', { ...REACH_OFF, enabled: true, address: `https://${HOST}/` })
-    await devices({ lines: [[{ ok: true, closesAt: 1, pending: [] }]] }).command.run(['approve'], context)
+    // The waiting line names the sign-in page the phone opens.
     expect(out.stdout).toContain(`Open https://${HOST}/auth/sign-in on it and choose Ask for approval.`)
   })
 
@@ -341,7 +351,7 @@ describe('delorun devices', () => {
     })
     await expect(command.run(['approve'], context)).resolves.toBe(EXIT.ok)
     expect(out.stdout).toContain('  1. Phone (iOS)')
-    expect(out.stdout).toContain('  2. Tablet, asked at 1970-01-01T00:00:01.000Z, request BBBBBBBB\n')
+    expect(out.stdout).toContain(`  2. Tablet, asked at ${readableTime(1000)}, request BBBBBBBB\n`)
     // Pins the choice: without it the first request, which any tailnet device may have sent, is the one approved.
     expect(sent.at(-1)).toEqual({ op: 'devices.approve', args: { requestId: SECOND.requestId, typedCode: '1234 5678' } })
     expect(out.stderr).toContain('Type a number from 1 to 2, or c and a number.')
@@ -405,7 +415,7 @@ describe('delorun devices', () => {
     const { command } = devices({ lines: [[{ ok: true, pending: [planted] }], [{ ok: true }]], ask: (message) => { asked.push(message); return Promise.resolve(answers.shift()) } })
     await expect(command.run(['approve'], context)).resolves.toBe(EXIT.ok)
     // Pins the escape on print: without it the label clears the screen and reverses the text that follows it.
-    expect(out.stdout).toContain('Ph\\u001b[2Jone\\u202e (iOS\\u000d\\u000a\\u2066), asked at 1970-01-01T00:00:00.000Z, request \\u001b]0;x\\u0007')
+    expect(out.stdout).toContain(`Ph\\u001b[2Jone\\u202e (iOS\\u000d\\u000a\\u2066), asked at ${readableTime(0)}, request \\u001b]0;x\\u0007`)
     expect(out.stdout).toContain('Approved Ph\\u001b[2Jone\\u202e.')
     expect(asked).toContain('Type the 8-digit code Ph\\u001b[2Jone\\u202e shows')
     const base: DeviceSummary = { id: brandString<DeviceId>('dev\u009b1'), label: 'Ph\u2067one', platform: 'i\u0000OS', address: brandString<StudioAddress>(`https://${HOST}\u0008`), approvedAt: 0, approvedBy: brandString<DeviceId>('dev\u007f2'), lastSignInAt: null }
@@ -413,15 +423,15 @@ describe('delorun devices', () => {
     try {
       out.stdout = ''
       await expect(devices().command.run(['list'], context)).resolves.toBe(EXIT.ok)
-      expect(out.stdout).toBe(`dev\\u009b1  Ph\\u2067one (i\\u0000OS)\n    https://${HOST}\\u0008, approved by dev\\u007f2 1970-01-01T00:00:00.000Z, never signed in\n`)
+      expect(out.stdout).toBe(`dev\\u009b1  Ph\\u2067one (i\\u0000OS)\n    https://${HOST}\\u0008, approved by dev\\u007f2 ${readableTime(0)}, never signed in\n`)
     } finally {
       listed.mockRestore()
     }
   })
 
   it('refuses an approval without a running home, a closed window, a refusal, a cancel and an unreadable list', async () => {
-    await expect(devices({ running: () => false }).command.run(['approve'], context)).resolves.toBe(EXIT.failed)
-    expect(out.stderr).toContain('Delorun is not running')
+    await expect(devices({ running: () => false }).command.run(['approve'], context)).resolves.toBe(EXIT.notRunning)
+    expect(out.stderr).toContain("Delorun isn't running. Start it with: delorun start")
     await expect(devices({ lines: [[{ ok: true, closesAt: 1, pending: [] }]] }).command.run(['approve'], context)).resolves.toBe(EXIT.failed)
     await expect(devices({ lines: [[{ ok: true, closesAt: 1 }]] }).command.run(['approve'], context)).resolves.toBe(EXIT.failed)
     await expect(devices({ lines: [[{ ok: false, error: 'LOOPBACK_REQUIRED', detail: 'needs you' }]] }).command.run(['approve'], context)).resolves.toBe(EXIT.failed)
@@ -464,7 +474,7 @@ describe('delorun devices', () => {
     try {
       await expect(devices().command.run(['list'], context)).resolves.toBe(EXIT.ok)
       expect(out.stdout).toContain('dev-1  Phone (iOS)')
-      expect(out.stdout).toContain('approved at this computer 1970-01-01T00:00:00.000Z, last signed in 1970-01-01T00:00:00.000Z')
+      expect(out.stdout).toContain(`approved at this computer ${readableTime(0)}, last signed in ${readableTime(0)}`)
       expect(out.stdout).toContain('dev-2  Phone\n')
       expect(out.stdout).toContain('approved by dev-1')
       // A failure that is not the home's own record error reaches the caller unchanged.
@@ -608,8 +618,8 @@ describe('delorun devices elevate', () => {
       answers: ['2', 'x', '1', '0000 0000', '1234 5678'],
     })
     await expect(command.run(['elevate'], context)).resolves.toBe(EXIT.ok)
-    expect(out.stdout).toContain('  1. Phone (iOS) asks to unlock, asked at 1970-01-01T00:00:00.000Z, request CCCCCCCC\n')
-    expect(out.stdout).toContain('  2. Laptop is unlocked until 1970-01-01T00:15:00.000Z\n')
+    expect(out.stdout).toContain(`  1. Phone (iOS) asks to unlock, asked at ${readableTime(0)}, request CCCCCCCC\n`)
+    expect(out.stdout).toContain(`  2. Laptop is unlocked until ${readableTime(900_000)}\n`)
     // Pins the kind check: a number alone never approves anything for a device that is unlocked already.
     expect(out.stderr).toContain('That device is unlocked already. Type e and its number to end the unlock.')
     expect(out.stderr).toContain('Type a number from 1 to 2, or e and a number.')
@@ -619,7 +629,7 @@ describe('delorun devices elevate', () => {
       { op: 'devices.elevate', args: { requestId: REQUEST.requestId, typedCode: '0000 0000' } },
       { op: 'devices.elevate', args: { requestId: REQUEST.requestId, typedCode: '1234 5678' } },
     ])
-    expect(out.stdout).toContain('Unlocked sensitive actions on Phone until 1970-01-01T00:15:00.000Z.')
+    expect(out.stdout).toContain(`Unlocked sensitive actions on Phone until ${readableTime(900_000)}.`)
   })
 
   it('ends a running unlock or declines a request, and shows the rest again', async () => {
@@ -662,8 +672,8 @@ describe('delorun devices elevate', () => {
   })
 
   it('refuses without a running home, on a refusal, a cancel and an unreadable list', async () => {
-    await expect(devices({ running: () => false }).command.run(['elevate'], context)).resolves.toBe(EXIT.failed)
-    expect(out.stderr).toContain('Delorun is not running, so no device holds an unlock')
+    await expect(devices({ running: () => false }).command.run(['elevate'], context)).resolves.toBe(EXIT.notRunning)
+    expect(out.stderr).toContain("Delorun isn't running. Start it with: delorun start")
     await expect(devices({ lines: [[{ ok: false, error: 'LOOPBACK_REQUIRED', detail: 'needs you' }]] }).command.run(['elevate'], context)).resolves.toBe(EXIT.failed)
     expect(out.stderr).toContain('Delorun refused: LOOPBACK_REQUIRED (needs you)')
     const listed = { ok: true, pending: [REQUEST], running: [RUNNING] }
