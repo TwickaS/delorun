@@ -13,7 +13,9 @@ import type { ReactNode } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ApprovalActionOwnerProps } from '@deepseek-ai/dsh-client-ui-approval/client'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
-import { allowAgentForWorkspace, readAgentGrants } from './consents-api.ts'
+import type { AgentLevelView } from '@delorun/plugin-delegation-consent/wire'
+import { levelChipText } from './AgentLevels.tsx'
+import { allowAgentForWorkspace, readAgentGrants, readAgentLevels } from './consents-api.ts'
 import { consentFailureOf, ConsentFailureLine, type ConsentFailure } from './FullAccessConsent.tsx'
 import { isRefused, LOOPBACK_REQUIRED, type HostFetch } from './host-api.ts'
 import css from './ConsentSections.module.css'
@@ -24,6 +26,8 @@ export interface ExternalAgentActionInjected {
   sessionId: string
   /** Sends the action's same-origin requests: the browser's `fetch`, or a spec's fake. */
   fetch: HostFetch
+  /** Opens the External agents settings section, where the level is chosen. */
+  openLevels(): void
 }
 
 /** Props the renderer binds for the action. */
@@ -47,11 +51,29 @@ export async function agentOfferFor(fetch: HostFetch): Promise<Offer> {
 }
 
 /**
+ * The chip that names the level the agent runs at, with one click to the choice. It shows nothing while the level
+ * cannot be read, as on a profile without the consent.
+ * @param props - the agent, the request function, the copy and the opener of the settings.
+ * @returns the chip, or nothing.
+ */
+function LevelChip({ provider, fetch, t, open }: { readonly provider: string; readonly fetch: HostFetch; readonly t: ExternalAgentActionProps['t']; readonly open: () => void }): ReactNode {
+  const [view, setView] = useState<AgentLevelView | undefined>()
+  useEffect(() => {
+    let current = true
+    void readAgentLevels(fetch).then((answer) => { if (current) setView(answer?.levels.find(entry => entry.provider === provider)) }, () => {})
+    return () => { current = false }
+  }, [fetch, provider])
+  if (view === undefined) return null
+  const text = levelChipText(t, view)
+  return <Button variant="outline" size="sm" data-level-chip={view.level} aria-label={t('levels.chip.change', { agent: view.agent, level: text })} onClick={open}>{view.agent} · {text}</Button>
+}
+
+/**
  * Render the action.
  * @param props - the card's request, its answer, the chat and the copy.
  * @returns the button, the remote line, or nothing.
  */
-export function ExternalAgentAction({ grants, toolName, allow, answered, canAnswer, sessionId, fetch, t }: ExternalAgentActionProps): ReactNode {
+export function ExternalAgentAction({ grants, toolName, allow, answered, canAnswer, sessionId, fetch, openLevels, t }: ExternalAgentActionProps): ReactNode {
   const [offer, setOffer] = useState<Offer>('none')
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<ConsentFailure | undefined>()
@@ -63,7 +85,8 @@ export function ExternalAgentAction({ grants, toolName, allow, answered, canAnsw
     return () => { current = false }
   }, [asks, fetch])
   if (!asks || offer === 'none') return null
-  if (offer === 'remote') return <p className={css.line} role="status" data-external-agent-action="remote">{t('action.atComputer')}</p>
+  const chip = <LevelChip provider={toolName} fetch={fetch} t={t} open={openLevels} />
+  if (offer === 'remote') return <div className={css.action} data-external-agent-action="remote"><p className={css.line} role="status">{t('action.atComputer')}</p>{chip}</div>
   const run = async (): Promise<void> => {
     if (!canAnswer()) return
     setBusy(true)
@@ -80,6 +103,7 @@ export function ExternalAgentAction({ grants, toolName, allow, answered, canAnsw
   }
   return <div className={css.action} data-external-agent-action="allow">
     <Button variant="outline" size="sm" disabled={busy || answered || !canAnswer()} onClick={() => { void run() }}>{t('action.allowAgent')}</Button>
+    {chip}
     {failure === undefined ? null : <ConsentFailureLine t={t} failure={failure} action="action.changeAgent" retry={() => { void run() }} />}
   </div>
 }

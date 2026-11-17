@@ -3077,13 +3077,14 @@ it('refuses an update whose target does not match where the copy was installed f
 })
 
 describe('a package the release publishes as a signed pack', () => {
-  const targets = (listed: boolean, installed?: string, running = true) => (ctx: Context) => {
+  const targets = (listed: boolean, installed?: string, running = true, intact?: boolean) => (ctx: Context) => {
     ctx.provide('packInstallTargets', {
       resolve: (_name: string, version: string) => installed === undefined ? undefined : { spec: installed, version },
       linkSpec: () => 'link:/home/packs/current/pack/package',
       listed: () => listed,
       isPack: () => Promise.resolve(listed),
       runsCurrentRelease: () => Promise.resolve(running),
+      ...intact === undefined ? {} : { intact: () => Promise.resolve(intact) },
     })
   }
 
@@ -3188,6 +3189,24 @@ describe('a package the release publishes as a signed pack', () => {
     const result = await manager.installBundle('link:/home/packs/current/pack/package', { enabled: false })
     expect(calls.every(call => call.includes('--lockfile-only') && call.includes('--ignore-scripts'))).toBe(true)
     expect(result).toMatchObject({ application: 'failed', changed: false, error: { code: 'operation-error', diagnostic: expect.stringMatching(/Restart Delorun to finish the update/u) } })
+    expect(profileFiles(dir)).toEqual(before)
+  })
+
+  it('refuses the pack\'s own folder when its files no longer match the signed list, before any install', async () => {
+    const { manager, dir } = await fixture('live', false, targets(true, undefined, true, false))
+    const calls: string[][] = []
+    const pnpm = vi.spyOn(operations, 'runProfilePnpm').mockImplementation(async (_context, args) => {
+      calls.push([...args])
+      const profile = readProfileManifest('test', dir)
+      profile.dependencies = { ...profile.dependencies, 'listed-pack': 'link:/home/packs/current/pack/package' }
+      writeFileSync(join(dir, 'package.json'), JSON.stringify(profile))
+      return { exitCode: 0, output: 'ok', truncated: false, logPath: join(dir, 'pnpm.log') }
+    })
+    onTestFinished(() => { pnpm.mockRestore() })
+    const before = profileFiles(dir)
+    const result = await manager.installBundle('link:/home/packs/current/pack/package', { enabled: false })
+    expect(calls.every(call => call.includes('--lockfile-only') && call.includes('--ignore-scripts'))).toBe(true)
+    expect(result).toMatchObject({ application: 'failed', changed: false, error: { code: 'operation-error', diagnostic: expect.stringMatching(/missing or differ/u) } })
     expect(profileFiles(dir)).toEqual(before)
   })
 

@@ -13,14 +13,15 @@ import { PACK_ROUTES } from '../src/wire.ts'
 describe('the configuration', () => {
   it('defaults the concurrency to 2 and refuses less than 1 or a fraction', () => {
     expect(plugin.Config({} as plugin.Config).concurrency).toBe(2)
-    expect(() => plugin.Config({ concurrency: 0, stallSeconds: 60, progressIntervalMs: 0 })).toThrow()
-    expect(() => plugin.Config({ concurrency: 1.5, stallSeconds: 60, progressIntervalMs: 0 })).toThrow()
-    expect(plugin.Config({} as plugin.Config)).toMatchObject({ stallSeconds: 60, progressIntervalMs: 500 })
-    expect(() => plugin.Config({ concurrency: 1, stallSeconds: 0, progressIntervalMs: 0 })).toThrow()
+    expect(() => plugin.Config({ concurrency: 0, stallSeconds: 60, progressIntervalMs: 0, verifyCacheMs: 0 })).toThrow()
+    expect(() => plugin.Config({ concurrency: 1.5, stallSeconds: 60, progressIntervalMs: 0, verifyCacheMs: 0 })).toThrow()
+    expect(plugin.Config({} as plugin.Config)).toMatchObject({ stallSeconds: 60, progressIntervalMs: 500, verifyCacheMs: 30_000 })
+    expect(() => plugin.Config({ concurrency: 1, stallSeconds: 60, progressIntervalMs: 0, verifyCacheMs: plugin.MAX_VERIFY_CACHE_MS + 1 })).toThrow()
+    expect(() => plugin.Config({ concurrency: 1, stallSeconds: 0, progressIntervalMs: 0, verifyCacheMs: 0 })).toThrow()
     // Node fires a timer above 2^31-1 ms after 1 ms, which would fail every download at once.
-    expect(() => plugin.Config({ concurrency: 1, stallSeconds: plugin.MAX_STALL_SECONDS + 1, progressIntervalMs: 0 })).toThrow()
-    expect(plugin.Config({ concurrency: 1, stallSeconds: plugin.MAX_STALL_SECONDS, progressIntervalMs: plugin.MAX_PROGRESS_INTERVAL_MS }).stallSeconds).toBe(3600)
-    expect(() => plugin.Config({ concurrency: 1, stallSeconds: 60, progressIntervalMs: plugin.MAX_PROGRESS_INTERVAL_MS + 1 })).toThrow()
+    expect(() => plugin.Config({ concurrency: 1, stallSeconds: plugin.MAX_STALL_SECONDS + 1, progressIntervalMs: 0, verifyCacheMs: 0 })).toThrow()
+    expect(plugin.Config({ concurrency: 1, stallSeconds: plugin.MAX_STALL_SECONDS, progressIntervalMs: plugin.MAX_PROGRESS_INTERVAL_MS, verifyCacheMs: 0 }).stallSeconds).toBe(3600)
+    expect(() => plugin.Config({ concurrency: 1, stallSeconds: 60, progressIntervalMs: plugin.MAX_PROGRESS_INTERVAL_MS + 1, verifyCacheMs: 0 })).toThrow()
   })
 })
 

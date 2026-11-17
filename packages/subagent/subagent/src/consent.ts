@@ -16,6 +16,7 @@ import { FiberState, type Context } from '@deepseek-ai/cordis'
 import type { Entry } from '@deepseek-ai/cordis-plugin-loader'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { SubagentError } from './error.ts'
+import type { SubagentSafetyLevel } from './safety-level.ts'
 import type { SubagentResult, SubagentRun } from './types.ts'
 
 /** The longest delay a Node.js timer accepts, in milliseconds. */
@@ -65,6 +66,13 @@ export interface DelegationConsentService {
    * @returns the verdict.
    */
   review(review: ExternalDelegationReview): Promise<ExternalDelegationVerdict>
+  /**
+   * The safety level for the next run of one external provider, read at every start so a changed level applies to
+   * the next run. A provider with no answer uses its own configured permission mode.
+   * @param provider - the registered provider name.
+   * @returns the level, or undefined to keep the provider's configured mode.
+   */
+  permissionLevel?(provider: string): SubagentSafetyLevel | undefined
 }
 
 declare module '@deepseek-ai/cordis' {

@@ -102,7 +102,7 @@ class CodexProvider implements SubagentProvider {
     const spec: CodexRunSpec = {
       cwd,
       ...this.config.model === undefined ? {} : { model: this.config.model },
-      permissionMode: this.config.permissionMode,
+      permissionMode: this.ctx.get('delegationConsent')?.permissionLevel?.(this.name) ?? this.config.permissionMode,
       env: this.config.env,
       disposeGraceMs: this.config.disposeGraceMs,
       spawn: spawnSpec => this.ctx.subprocess.spawn(spawnSpec),

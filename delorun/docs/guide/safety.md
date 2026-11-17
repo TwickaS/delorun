@@ -178,14 +178,16 @@ Before you answer you see its command, arguments, folder and the names of its en
 
 Claude Code and Codex are optional plugins that let the model hand a task to another agent program, an [external agent](../reference/glossary.md#external-agent). That program runs outside Delorun's sandbox and approval prompts. It can read and change files in the workspace and anywhere else its own settings allow, your Delorun home included. It uses your own Claude Code or Codex sign-in, so any cost goes to that account.
 
+Each agent runs at a level you choose in Settings, Safety, External agents: Careful, Standard, Your own settings or Unrestricted. Standard is the default. An approved device can tighten a level, but loosening one, and Unrestricted in particular, needs you at the computer that runs Delorun, and dangerous mode does not lift that.
+
 Delorun asks before each run, at the computer that runs Delorun, whichever prompts answer you gave in setup. **Allow once** starts that run only. **Allow for this workspace** lets that agent start there without asking until you revoke it in Settings, Safety, External agents, or with `delorun workspace external-agents <folder> <agent> off`. Each run stops after 30 minutes.
 
 <details>
 <summary>Edge cases</summary>
 
 - If the chat is on Read Only, then an external agent never starts — switch the chat's permission first.
-- If the chat is on Full access, then every approval is refused without asking, so an agent starts only in a workspace where you allowed it — allow it for the workspace.
-- If you run `delorun headless`, then no one can be asked, so an agent starts only where you allowed it.
+- If the chat is on Full access, then the agent starts without asking, because you already chose to run without prompts, and the chat shows "Started without asking · Full access". To make a Full access chat ask again, turn off **Full access chats start agents without asking** in Settings, Safety, External agents — then an agent starts only in a workspace where you allowed it. Only the computer that runs Delorun turns the switch on.
+- If you run `delorun headless`, then no one can be asked, so an agent starts only where you allowed it, or when the run has full access, through a workspace's full-access grant or setup's **Never ask (dangerous)** answer. A run with full access starts agents without asking and without a grant, as a Full access chat does.
 - If the chat has no workspace folder, then an agent never starts — give the chat a folder.
 - If you are on a phone, then you cannot answer the question — answer at the computer that runs Delorun.
 - If the model tries to install or turn on these plugins through plugin management, then it is refused — add them yourself from the Plugins page or the first-run setup.

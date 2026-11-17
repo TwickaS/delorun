@@ -145,6 +145,7 @@ export function stateOf(bundle: BundleInfo | undefined, pack?: PackView): Bundle
 /** The part of the `packs` remote the guide uses. */
 interface PacksRemote {
   list(): Promise<PacksSnapshot>
+  retry(request: { readonly name: string }): Promise<PacksResult>
   enqueue(request: { readonly names: readonly string[] }): Promise<PacksResult>
 }
 
@@ -337,13 +338,15 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
     const remote = pluginManager(ctx)
     const before = views.getSnapshot()[name]
     const pack = packViews.get(name)
-    // A failed pack starts again from the same Retry; the Host's queue takes a failed item back.
-    if ((before?.state === 'available' && pack?.kind === 'available') || (before?.state === 'failed' && pack?.kind === 'failed')) {
+    // A pack the profile does not hold, whose last install failed, starts again through the queue's retry, whatever
+    // the last read of the install list said: that read can be older than the failure.
+    const packOnly = pack !== undefined && (bundle === undefined || (bundle.availability === 'missing' && !bundle.installed))
+    if (before !== undefined && ((before.state === 'available' && pack?.kind === 'available') || (before.state === 'failed' && packOnly))) {
       const packs: PacksRemote = packsClient
       const { reason: _failure, ...fresh } = before
       set(name, { ...fresh, state: 'installing' })
       try {
-        const queued = await packs.enqueue({ names: [name] })
+        const queued = before.state === 'failed' ? await packs.retry({ name }) : await packs.enqueue({ names: [name] })
         set(name, { ...fresh, state: queued.ok ? 'installing' : 'failed' })
         // The downloads panel reads the same install list; asking it to read now shows this add at once.
         if (queued.ok) { currentDownloadsSource().refresh(); void followPack(name) }
