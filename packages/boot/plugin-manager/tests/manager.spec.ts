@@ -3187,7 +3187,8 @@ describe('a package the release publishes as a signed pack', () => {
     const { manager, dir } = await fixture('live', false, targets(true))
     const manifest = readFileSync(join(dir, 'package.json'), 'utf8')
     writeFileSync(join(dir, 'package.json'), JSON.stringify({ ...JSON.parse(manifest) as object, dependencies: { extra: '1.0.0', 'listed-pack': recorded } }))
-    const held = await manager.history(1) as { versions: Array<{ id: ProfileVersionId }> }
+    const held = await manager.history(1)
+    if (!held.available) throw new Error('the profile history is unavailable')
     writeFileSync(join(dir, 'package.json'), manifest)
     const version = held.versions[0]!.id
     const pnpm = vi.spyOn(operations, 'runProfilePnpm')
@@ -3203,7 +3204,8 @@ describe('a package the release publishes as a signed pack', () => {
     const { manager, dir } = await fixture('live', false, targets(true, undefined, false))
     const manifest = readFileSync(join(dir, 'package.json'), 'utf8')
     writeFileSync(join(dir, 'package.json'), JSON.stringify({ ...JSON.parse(manifest) as object, dependencies: { extra: '1.0.0', 'listed-pack': 'link:/home/packs/current/pack/package' } }))
-    const held = await manager.history(1) as { versions: Array<{ id: ProfileVersionId }> }
+    const held = await manager.history(1)
+    if (!held.available) throw new Error('the profile history is unavailable')
     writeFileSync(join(dir, 'package.json'), manifest)
     const version = held.versions[0]!.id
     const before = profileFiles(dir)
@@ -3217,7 +3219,8 @@ describe('a package the release publishes as a signed pack', () => {
     const { manager, dir } = await fixture('live', false, targets(true))
     const manifest = readFileSync(join(dir, 'package.json'), 'utf8')
     writeFileSync(join(dir, 'package.json'), JSON.stringify({ ...JSON.parse(manifest) as object, dependencies: { extra: '1.0.0', 'listed-pack': 'link:/home/packs/current/pack/package' } }))
-    const held = await manager.history(1) as { versions: Array<{ id: ProfileVersionId }> }
+    const held = await manager.history(1)
+    if (!held.available) throw new Error('the profile history is unavailable')
     writeFileSync(join(dir, 'package.json'), manifest)
     expect(await manager.previewRestore(held.versions[0]!.id)).toMatchObject({ ok: true })
   })
