@@ -1,6 +1,6 @@
 /** The version list merges identical consecutive edits and names the plugin in plain words. */
 import { describe, expect, it } from 'vitest'
-import { groupVersions, settingsEditName } from '../src/client/version-rows.ts'
+import { groupVersions, settingsEditName, withoutChangeId } from '../src/client/version-rows.ts'
 import type { VersionEntry } from '../src/client/versions-api.ts'
 
 function version(id: string, summary: string, origin: VersionEntry['origin'] = 'other'): VersionEntry {
@@ -30,5 +30,20 @@ describe('settingsEditName', () => {
   })
   it('leaves other summaries alone', () => {
     expect(settingsEditName('Saved before an update')).toBeUndefined()
+  })
+})
+
+describe('withoutChangeId', () => {
+  it('drops the change id from summaries written with one', () => {
+    expect(withoutChangeId('Applied c0123456789: plug: changes in /src/plug')).toBe('Applied: plug: changes in /src/plug')
+    expect(withoutChangeId('Applied c0123456789 again: plug: changes in /src/plug')).toBe('Applied again: plug: changes in /src/plug')
+    expect(withoutChangeId('Undid c0123456789: Turned off plug')).toBe('Undid: Turned off plug')
+    expect(withoutChangeId('Turned off plug (c0123456789)')).toBe('Turned off plug')
+    expect(withoutChangeId('Went back: c0123456789 failed to load')).toBe('Went back: a change failed to load')
+    expect(withoutChangeId('Went back: undoing c0123456789 failed to load')).toBe('Went back: undoing a change failed to load')
+  })
+  it('leaves other summaries alone', () => {
+    expect(withoutChangeId('Applied: plug: changes in /src/plug')).toBe('Applied: plug: changes in /src/plug')
+    expect(withoutChangeId('Turned off plug (beta)')).toBe('Turned off plug (beta)')
   })
 })

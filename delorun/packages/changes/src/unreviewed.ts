@@ -250,7 +250,7 @@ async function commitUnreviewed(ctx: ChangesContext, plugin: string, reload: Rel
   await writeApproved(ctx.profileDir, approved)
   await holdContent(ctx.home, directory, activeVersion, await referenceRelease(ctx.home, ctx.runningRelease))
   await writeActiveRecord(ctx.home, ctx.profile, activeBefore)
-  await recordVersion(ctx, `Went back: ${entry.id} failed to load`)
+  await recordVersion(ctx, `Went back: ${entry.summary} failed to load`)
   const lastFailure: LeftOut = { at: timeOf(ctx), failure: outcome.error }
   const { historyVersion: _historyVersion, ...undecided } = withoutDecision(applied)
   const failed: ChangeEntry = { ...undecided, state: 'pending', lastFailure }

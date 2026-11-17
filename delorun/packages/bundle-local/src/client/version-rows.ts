@@ -38,3 +38,20 @@ export function settingsEditName(summary: string): string | undefined {
   const words = id.replace(/^(delorun|dsh)-/, '').replace(/^(plugin|tool|ui)-/, '').replaceAll(/[-_]+/g, ' ').trim()
   return words === '' ? id : words.charAt(0).toUpperCase() + words.slice(1)
 }
+
+/** A change id as `@delorun/changes` writes it: `c` and 10 hex digits. */
+const CHANGE_ID = String.raw`c[0-9a-f]{10}`
+
+/**
+ * A history summary written before change summaries left out the change id, as the person reads it: `Applied <id>: …`
+ * and `Undid <id>: …` without the id, `Turned off <plugin> (<id>)` without the bracket, and a `Went back` line, which
+ * named only the id, as a change that failed to load.
+ * @param summary - a version's summary.
+ * @returns the summary without a change id.
+ */
+export function withoutChangeId(summary: string): string {
+  return summary
+    .replace(new RegExp(String.raw`^(Applied|Undid) ${CHANGE_ID}( again)?: `), '$1$2: ')
+    .replace(new RegExp(String.raw`^Went back: (undoing )?${CHANGE_ID} failed to load( again)?$`), (_, undoing: string | undefined) => `Went back: ${undoing === undefined ? 'a change' : 'undoing a change'} failed to load`)
+    .replace(new RegExp(String.raw` \(${CHANGE_ID}\)$`), '')
+}

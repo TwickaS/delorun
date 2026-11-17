@@ -191,7 +191,7 @@ profile 写锁决定它是否可以写入。当 Host 自己的进程持有该锁
 
 - **每次启动时。** 启动前步骤存储每个已链接插件的文件夹。当其内容与已批准的内容不同时，它成为 profile 的 `delorun.changes` 记录和 `active.json` 中的已批准内容，并且日志增加一项已应用的 `plugin-edit`（对于新链接或没有已批准内容的插件则是 `plugin-install`），其 `decidedFrom: "unreviewed"`，摘要以 `Loaded without review:` 开头。更改了任何内容的启动记录一个 profile 历史版本，其主题写明这些插件，例如 `Changes: loaded without review my-plugin, other-plugin`，并对每个插件打印 `<plugin> loaded changes without review, because protection is off: delorun changes show <id>`（对于安装则是 `<plugin> loaded without review, …`）。`delorun headless` 在其启动前步骤中做同样的事。
 - **重新加载之前。** 重新加载之前的检查所移动的链接（如插件管理器安装文件夹、`delorun plugin --profile default add link:<folder>` 或恢复所写入的）以同样的方式被批准并记入日志，不产生历史版本（[重新加载与恢复](#reloads-and-restores)）。
-- **Delorun 运行期间。** home 进程监视 profile 链接到其活动目录的每个插件的文件夹，递归监视且不含 `.git`，并跟随 `changes/protection.json` 和 profile 的 `package.json`，因此开启或关闭保护以及链接或移除插件会改变它所监视的内容而无需重启；保护开启时它不监视任何文件夹。当某个文件夹的事件已安静 300 毫秒之后，它通过与 `changes.reload` 相同的 Host 重新加载来加载该文件夹的内容（[`unreviewed-watch.ts`](../../apps/cli/src/changes/unreviewed-watch.ts)）。成功的重新加载批准该内容，并记入一项决定为 `unreviewed` 的已应用更改，带一个 profile 历史版本。失败的重新加载会回退：已批准的记录、活动目录和 `active.json` 保持其原先持有的内容，一个历史版本 `Went back: <id> failed to load` 记录这一点，Host 再重新加载一次，该更改为带 `lastFailure` 的 `pending`，并且在文件夹持有其他内容之前不再尝试。home 进程的日志写明每次加载和失败。不需要工作会话；处于工作会话的插件交给该会话处理，并且 `delorun headless` 不监视文件夹。
+- **Delorun 运行期间。** home 进程监视 profile 链接到其活动目录的每个插件的文件夹，递归监视且不含 `.git`，并跟随 `changes/protection.json` 和 profile 的 `package.json`，因此开启或关闭保护以及链接或移除插件会改变它所监视的内容而无需重启；保护开启时它不监视任何文件夹。当某个文件夹的事件已安静 300 毫秒之后，它通过与 `changes.reload` 相同的 Host 重新加载来加载该文件夹的内容（[`unreviewed-watch.ts`](../../apps/cli/src/changes/unreviewed-watch.ts)）。成功的重新加载批准该内容，并记入一项决定为 `unreviewed` 的已应用更改，带一个 profile 历史版本。失败的重新加载会回退：已批准的记录、活动目录和 `active.json` 保持其原先持有的内容，一个历史版本 `Went back: <summary> failed to load` 记录这一点，Host 再重新加载一次，该更改为带 `lastFailure` 的 `pending`，并且在文件夹持有其他内容之前不再尝试。home 进程的日志写明每次加载和失败。不需要工作会话；处于工作会话的插件交给该会话处理，并且 `delorun headless` 不监视文件夹。
 - **harness 的可写副本。** 已签名安装的启动应用副本的更改（[harness 编辑](#harness-edits)）。
 
 本人拒绝的内容不会再次加载：当某个插件最新被决定的内容更改（`plugin-edit` 或 `plugin-install`，而不是智能体的请求）被撤销或丢弃，且带来的恰好是该文件夹所持有的内容时，该插件保留其已批准的内容，该文件夹的内容像保护开启时那样等待审查，直到该文件夹持有其他内容。失败的启动所遗漏的更改，在文件夹仍持有它所带来的内容期间一直被遗漏（[启动失败时](#when-a-start-fails)）；新的文件夹内容会加载并结束这种状态。
@@ -260,7 +260,7 @@ Delorun 的组合中有两种行为，决定智能体可以对 harness 所运行
 | 当 profile 挂载可选的 `pluginAudit` 服务时，它审计该 bundle | 不咨询：没有任何 Delorun 组合挂载它（[C13](c13-catalogue-revocation.zh.md)） |
 | 按方案顺序询问的注册表（`registryPlan`）、GitHub 连接检查和 Git 传输选择 | 只有 pnpm 自己配置的注册表和传输；这些步骤决定从哪里获取包，而不是它是否运行 |
 
-在终端，pnpm 的输出进入命令的流；在 studio 中，Host 用 profile 启动器的 pnpm 从自己的目录运行该操作，其输出进入 Host 的日志。失败或被拒绝的操作使更改保持待处理并带有 `lastFailure`；成功的操作记录一个历史版本 `Applied <id>: …` 并重新加载运行中的 Host，重新加载失败时更改保持已应用，留给下一次启动。
+在终端，pnpm 的输出进入命令的流；在 studio 中，Host 用 profile 启动器的 pnpm 从自己的目录运行该操作，其输出进入 Host 的日志。失败或被拒绝的操作使更改保持待处理并带有 `lastFailure`；成功的操作记录一个历史版本 `Applied: …` 并重新加载运行中的 Host，重新加载失败时更改保持已应用，留给下一次启动。
 
 模型只读到上面的工具结果，每个结果像任何其他结果一样作为工具调用的结果记入日志，因此这两种行为都不增加会话事件；询问则记为上游的 `approval/asked` 和 `approval/decided`。
 
@@ -357,9 +357,9 @@ Delorun 的组合中有两种行为，决定智能体可以对 harness 所运行
 `list`、`show`、`apply`、`discard` 和 `undo` 在没有任何插件更改拥有某个 id 之后，按 id 到达 harness 更改：`list` 把每个等待中的更改写作 `<id>  Delorun <runtime> itself: <file> (<status>)`，然后是 harness 被遗漏的和已记入日志的更改、副本的文件夹、其被跳过的条目以及保留在旁的文件；`show --diff` 打印两个单文件版本之间的有界差异，该文件算作 harness 自己的而不是依赖的，尽管它位于 `node_modules` 之下。无法读取的副本（例如超过扫描上限的副本）会在列表中被写明而不是使列表失败。
 
 - **在场与确认。** 每个更改任何内容的子命令首先需要标准输入和输出是终端，否则在读取或写入任何内容之前以「This needs you at your computer: run it in a terminal.」拒绝。然后它询问一个是或否的问题；`y` 或 `yes` 之外的任何回答都不改变任何内容。`apply` 首先打印该更改的摘要和风险行以及有界差异，在终端上分页显示（Enter 显示下一页，`a` 显示其余部分），并且当检查标记了该更改时，询问写明各种类和差异不显示内容的每个文件的第二个问题。`protection off` 首先说「Changes will load without your review.」以及关闭意味着什么，`protection on` 说「Changes will wait for your review.」以及开启意味着什么；两者随后都询问。`protection off` 接着在指出等待中的更改会立即加载的插件，以及本人的 Delorun 副本中会在下次启动时应用的文件数量之后，再问一次；第二次询问防的是误点，不是防在电脑前的人。该命令说明更改在 Delorun 的下一次决定时生效，无需重启。
-- **一个历史版本。** 每个操作都在上游的 profile 写锁之下运行，并记录一个 profile 历史版本（`kind: person`），其主题写明该更改的 id：`Applied <id>: …`、`Undid <id>: …`、`Turned off <plugin> (<id>)`。丢弃和保护设置不更改任何 profile 文件，也不记录历史版本。
+- **一个历史版本。** 每个操作都在上游的 profile 写锁之下运行，并记录一个 profile 历史版本（`kind: person`），其主题以该更改的摘要而非其 id 写明它：`Applied: …`、`Applied again: …`、`Undid: …`、`Turned off <plugin>`。丢弃和保护设置不更改任何 profile 文件，也不记录历史版本。
 - **重新加载运行中的 Home。** 当 profile 的 home 进程应答时，该操作在 profile 写锁之下运行，然后发送 [C19](c19-home-process.zh.md) 的 `changes.reload`，它不携带任何内容：Host 通过上游的热重载重新组合 profile。热重载关闭、插件加载或启动失败，或该更改需要重启时，重新加载失败。当没有 home 进程应答时，该命令在该操作期间持有 profile 的 home 锁，因此其间不会运行任何启动，并且下一次启动加载该更改。
-- **失败的重新加载会回退。** 已批准的记录、插件的活动目录和 `active.json`，或 bundle 列表，回到该操作之前所持有的内容；第二个历史版本 `Went back: <id> failed to load` 记录这一点；条目回到 `pending`，对于撤销则保持 `applied`，带有 `lastFailure` `{at, failure}`；Host 再重新加载一次；该命令报告失败并以 1 退出。被关闭或开启而加载失败的插件连同其失败一起被列出，并按其 id 再次应用。
+- **失败的重新加载会回退。** 已批准的记录、插件的活动目录和 `active.json`，或 bundle 列表，回到该操作之前所持有的内容；第二个历史版本 `Went back: <summary> failed to load` 记录这一点；条目回到 `pending`，对于撤销则保持 `applied`，带有 `lastFailure` `{at, failure}`；Host 再重新加载一次；该命令报告失败并以 1 退出。被关闭或开启而加载失败的插件连同其失败一起被列出，并按其 id 再次应用。
 - **处于工作会话的插件。** 对有打开的工作会话的插件执行 `apply` 和 `undo`，以 `NOT_ALLOWED` 被拒绝。
 - **来自文件的文本。** 文件名、文件夹、差异行、摘要、规格和失败消息被打印时，每个控制字符、行或段分隔符和双向字符都写作 `\uXXXX`，超过 200 个字符的行在下一行继续，并以 `  ↪ ` 开头；`--json` 把相同的字符写为 JSON 转义。`off` 和 `on` 把不是包名的名称作为用法错误拒绝，并且 `changes/` 之下的每个路径都只根据包名构建。
 
