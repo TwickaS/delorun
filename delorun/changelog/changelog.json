@@ -472,6 +472,11 @@
     },
     {
       "area": "Setup",
+      "section": "Added",
+      "text": "The setup guide's recommended plugins include Computer use (Cua Driver), marked experimental: it lets an agent see and control the windows on the desktop on Linux and Windows. It stays off until you add it, and it asks for the desktop permissions it needs."
+    },
+    {
+      "area": "Setup",
       "section": "Changed",
       "text": "Delorun's package scope, home folder and environment variables are named Delorun: `@delorun/…`, `~/.delorun` and `DELORUN_*`."
     },
@@ -1932,6 +1937,26 @@
     },
     {
       "area": "Plugins",
+      "section": "Fixed",
+      "text": "The Agents step no longer keeps showing \"Adding…\" under a failed download. The card follows the Host's install list for as long as it shows an install, including after the step re-reads its cards, and ends with the reason when the install fails."
+    },
+    {
+      "area": "Plugins",
+      "section": "Fixed",
+      "text": "Adding Claude Code or Codex no longer fails while unpacking with \"tar header uid is not an octal number\". The reader now accepts the tar headers that `npm publish` writes (empty owner fields, space-padded numbers). It still checks each file's size, mode, type and path, and applies no owner or time from the archive."
+    },
+    {
+      "area": "Plugins",
+      "section": "Fixed",
+      "text": "A plugin pack that installed but whose plugins did not load no longer shows as plain \"installed\" on the Plugins page. The card says \"Installed, but not loading\" with the reason, and offers Try again and Remove, which uninstalls it."
+    },
+    {
+      "area": "Plugins",
+      "section": "Fixed",
+      "text": "The Agent hooks pack's Claude Code and Codex hooks now load once added; in 0.1.0-preview.1.4 they installed but failed to load with \"Cannot find package\". Each optional pack now carries or links every package its plugins use, and a release is no longer built when a pack would miss one."
+    },
+    {
+      "area": "Plugins",
       "section": "Security",
       "text": "Installing a plugin checks it and every package it brings before any of its files are fetched or any install script runs: a package without an integrity hash, a git source not pinned to a full commit, a registry or download URL that is plain http, a known GitHub advisory, a version published in the last 24 hours and a name close to one you already have are each shown where you install it, on the Plugins page and in `delorun plugin`'s output. A known critical advisory stops the installation until you choose to install it anyway, with \"Install anyway\" or `--allow-advisory <id>`; everything else only warns. When the advisory or publish-time lookup cannot run, you are told so. Scopes and git owners you trust can be listed so their plugins show only critical advisories; linked and local plugin folders are not checked."
     },
@@ -2262,6 +2287,48 @@
     }
   ],
   "versions": [
+    {
+      "version": "0.1.0-preview.1.5",
+      "date": "2026-11-17",
+      "preview": true,
+      "areas": [
+        {
+          "area": "Setup",
+          "items": [
+            {
+              "section": "Added",
+              "text": "The setup guide's recommended plugins include Computer use (Cua Driver), marked experimental: it lets an agent see and control the windows on the desktop on Linux and Windows. It stays off until you add it, and it asks for the desktop permissions it needs."
+            }
+          ]
+        },
+        {
+          "area": "Plugins",
+          "items": [
+            {
+              "section": "Fixed",
+              "text": "The Agents step no longer keeps showing \"Adding…\" under a failed download. The card follows the Host's install list for as long as it shows an install, including after the step re-reads its cards, and ends with the reason when the install fails."
+            },
+            {
+              "section": "Fixed",
+              "text": "Adding Claude Code or Codex no longer fails while unpacking with \"tar header uid is not an octal number\". The reader now accepts the tar headers that `npm publish` writes (empty owner fields, space-padded numbers). It still checks each file's size, mode, type and path, and applies no owner or time from the archive."
+            },
+            {
+              "section": "Fixed",
+              "text": "A plugin pack that installed but whose plugins did not load no longer shows as plain \"installed\" on the Plugins page. The card says \"Installed, but not loading\" with the reason, and offers Try again and Remove, which uninstalls it."
+            },
+            {
+              "section": "Fixed",
+              "text": "The Agent hooks pack's Claude Code and Codex hooks now load once added; in 0.1.0-preview.1.4 they installed but failed to load with \"Cannot find package\". Each optional pack now carries or links every package its plugins use, and a release is no longer built when a pack would miss one."
+            }
+          ]
+        }
+      ],
+      "fromUpstream": {
+        "ref": "dsh-v0.2.2-rc.3",
+        "items": []
+      },
+      "previews": []
+    },
     {
       "version": "0.1.0-preview.1.4",
       "date": "2026-11-17",
