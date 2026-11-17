@@ -389,8 +389,8 @@
     {
       "path": "packages/bundle/web-app/presets/cordis.patch.yml",
       "class": "delorun-feature",
-      "feature": "preset-inspect",
-      "reason": "Delorun's preset_inspect row: mounts the agent-preset-registry tools module in the Cordis preset, where its presetInspect switch is off by default."
+      "feature": "preset-switches",
+      "reason": "Delorun's rows in the Cordis preset: the preset_inspect row mounts the agent-preset-registry tools module, where its presetInspect switch is off by default; the plugin_manager_read_exemption switch is on in the tool-plugin-manager row, so the five read actions run without the danger-full-access escalation and every change still requires it."
     },
     {
       "path": "packages/bundle/web-app/presets/ptc.patch.yml",
@@ -401,8 +401,8 @@
     {
       "path": "packages/bundle/web-app/presets/standard.patch.yml",
       "class": "delorun-feature",
-      "feature": "preset-inspect",
-      "reason": "Delorun's preset_inspect row: mounts the agent-preset-registry tools module in the Standard preset, where its presetInspect switch is off by default."
+      "feature": "preset-switches",
+      "reason": "Delorun's rows in the Standard preset: the preset_inspect row mounts the agent-preset-registry tools module, where its presetInspect switch is off by default; the plugin_manager_read_exemption switch is on in the tool-plugin-manager row, so the five read actions run without the danger-full-access escalation and every change still requires it."
     },
     {
       "path": "packages/client/connection/src/authenticator.ts",
