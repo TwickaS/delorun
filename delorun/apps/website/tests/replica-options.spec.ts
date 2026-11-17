@@ -1,14 +1,31 @@
-import { readFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
+import { loadView } from '../../../packages/site-design/src/changelog.ts'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { ALLOW_STANDINS_VARIABLE, MARKETED_RELEASE, replicaOptions } from '../replica-options.ts'
+import { ALLOW_STANDINS_VARIABLE, marketedRelease, replicaOptions } from '../replica-options.ts'
 
 const COMMITTED = ['../replica-options.ts', '../vite.config.ts', '../../../vitest.config.ts', '../alchemy.run.ts']
 
 describe('the replica plugins\' committed options', () => {
-  it('name the marketed release and no way to allow stand-ins', () => {
-    expect(replicaOptions()).toEqual({ aliases: expect.any(Array), release: MARKETED_RELEASE })
-    expect(Object.keys(replicaOptions()).sort()).toEqual(['aliases', 'release'])
+  const ROOT = resolve(import.meta.dirname, '../../../..')
+
+  it('name the marketed release, the changelog\'s newest version, and no way to allow stand-ins', () => {
+    const options = replicaOptions(ROOT)
+    expect(options.release).toBe(loadView(ROOT)?.versions[0]?.version)
+    expect(options.release).not.toBe('0.1.0')
+    expect(Object.keys(options).sort()).toEqual(['aliases', 'release'])
+  })
+
+  it('refuse a repository whose changelog record has no version', () => {
+    const empty = mkdtempSync(join(tmpdir(), 'release-'))
+    try {
+      mkdirSync(join(empty, 'delorun', 'changelog'), { recursive: true })
+      expect(() => marketedRelease(empty)).toThrow(/no version/)
+    } finally {
+      rmSync(empty, { recursive: true, force: true })
+    }
   })
 
   it('set the stand-in variable nowhere in a committed configuration', () => {
