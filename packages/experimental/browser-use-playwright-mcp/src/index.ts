@@ -1,6 +1,6 @@
 /** Chrome or Chromium browser tools from the pinned Playwright MCP server. @module */
 
-import { lstat, realpath } from 'node:fs/promises'
+import { lstat, readdir, realpath, unlink } from 'node:fs/promises'
 import { basename, dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
@@ -267,6 +267,101 @@ export async function refuseOutsideFolder(call: BrowserToolCall): Promise<string
   return undefined
 }
 
+/** The deepest folder level of the {@link OUTPUT_FOLDER} tree that {@link refuseWrittenOutside} looks through. */
+const OUTPUT_TREE_DEPTH = 6
+
+/**
+ * The refusal of a browser tool call whose file landed outside the Session's folder.
+ * @param removed - whether the file was removed.
+ * @returns the model-visible text.
+ */
+export function writtenOutsideMessage(removed: boolean): string {
+  return `Browser saved a file outside this chat's folder, through a link inside "${OUTPUT_FOLDER}", so the result is refused${removed ? ' and the file was removed' : ', and the file could not be removed'}. Stop using browser tools for this request and tell the person to remove the link from "${OUTPUT_FOLDER}" in the chat's folder.`
+}
+
+/**
+ * Remove a file the call wrote, when it is a plain file the call just created.
+ * @param real - the file's real location.
+ * @param startedAt - when the call was sent, in milliseconds since the epoch.
+ * @returns true when the file was removed; false when it was left, because it is not a plain file, is older than the
+ * call, or could not be removed. The final name is never followed.
+ */
+async function removeWritten(real: string, startedAt: number): Promise<boolean> {
+  try {
+    const stats = await lstat(real)
+    if (!stats.isFile() || stats.mtimeMs < startedAt - 1000 || stats.birthtimeMs < startedAt - 1000) return false
+    await unlink(real)
+    return true
+  } catch {
+    // The file is gone or cannot be changed; the refusal says it was not removed.
+    return false
+  }
+}
+
+/**
+ * The links inside the {@link OUTPUT_FOLDER} tree that lead outside the Session's folder. The walk lists folders and
+ * reads link names; it never follows one.
+ * @param folder - the Session's real folder.
+ * @param directory - the folder to look through.
+ * @param depth - how many more levels to look through.
+ * @returns the real locations the links lead to.
+ */
+async function outsideLinks(folder: string, directory: string, depth: number): Promise<string[]> {
+  const entries = await readdir(directory, { withFileTypes: true }).catch(() => [])
+  const found: string[] = []
+  for (const entry of entries) {
+    const path = join(directory, entry.name)
+    if (entry.isSymbolicLink()) {
+      const real = await realLocation(path)
+      if (!inside(folder, real)) found.push(real ?? path)
+    } else if (entry.isDirectory() && depth > 0) {
+      found.push(...await outsideLinks(folder, path, depth - 1))
+    }
+  }
+  return found
+}
+
+/**
+ * Check, after a browser tool call, that nothing it wrote landed outside the Session's folder: the call's `filename`
+ * where the server resolved it, and every folder a link inside {@link OUTPUT_FOLDER} leads to outside the folder (where
+ * downloads and default-named files land). A plain file there that the call created is removed without following the
+ * final name; one that cannot be removed is left and reported. This is what covers the replacement of a folder or link
+ * after {@link refuseOutsideFolder}'s test, which that test cannot stop.
+ * @param call - the finished call.
+ * @param startedAt - when the call was sent, in milliseconds since the epoch.
+ * @param log - receives one line for each refusal.
+ * @returns {@link writtenOutsideMessage}, or `undefined` when nothing landed outside.
+ */
+export async function refuseWrittenOutside(
+  call: BrowserToolCall, startedAt: number, log: (line: string) => void,
+): Promise<string | undefined> {
+  const folder = await realpath(call.directory)
+  const output = join(call.directory, OUTPUT_FOLDER)
+  const landed: string[] = []
+  const { filename } = (typeof call.arguments === 'object' && call.arguments !== null ? call.arguments : {}) as { filename?: unknown }
+  if (typeof filename === 'string') {
+    for (const base of [call.directory, output]) {
+      const real = await realLocation(resolve(base, filename))
+      if (real !== undefined && !inside(folder, real)) landed.push(real)
+    }
+  }
+  for (const target of await outsideLinks(folder, output, OUTPUT_TREE_DEPTH)) {
+    const names = await readdir(target).catch(() => [])
+    landed.push(target, ...names.map(name => join(target, name)))
+  }
+  let found = false
+  let kept = false
+  for (const real of new Set(landed)) {
+    const stats = await lstat(real).catch(() => undefined)
+    if (stats === undefined || !stats.isFile() || stats.mtimeMs < startedAt - 1000) continue
+    found = true
+    if (!await removeWritten(real, startedAt)) kept = true
+  }
+  if (!found) return undefined
+  log(`${name}: ${call.tool} saved a file outside the chat's folder through a link in ${OUTPUT_FOLDER}; the result was refused${kept ? '' : ' and the file removed'}`)
+  return writtenOutsideMessage(!kept)
+}
+
 /**
  * Expose Playwright's upstream tools in each live Session's scope.
  * The pinned npm server runs under the current Node executable; browser state is not persisted by DSH.
@@ -303,6 +398,7 @@ export function apply(ctx: Context, config: Config): void {
     admission: providedAdmission(ctx),
     // The client never registers a denied tool; this refusal holds even if a call to one is routed here.
     refuseCall: call => denied.includes(call.tool) ? Promise.resolve(deniedToolMessage(call.tool)) : refuseOutsideFolder(call),
+    checkResult: (call, startedAt) => refuseWrittenOutside(call, startedAt, (line) => { ctx.logger.warn(line) }),
     ...config.toolCallTimeoutMs === undefined ? {} : { toolCallTimeoutMs: config.toolCallTimeoutMs },
     ...directory === undefined ? {} : { directory },
   })

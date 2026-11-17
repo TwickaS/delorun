@@ -114,6 +114,7 @@ interface LoadOptions {
   directory?: string
   outputFolder?: string
   refuseCall?: SessionMcpOptions['refuseCall']
+  checkResult?: SessionMcpOptions['checkResult']
   registration?: SessionMcpOptions['registration']
   admission?: SessionMcpOptions['admission']
   deniedTools?: string[]
@@ -121,7 +122,7 @@ interface LoadOptions {
 
 async function load(options: LoadOptions = {}) {
   const { exclusive = false, mode, toolCallTimeoutMs, toolOrder, consent = false } = options
-  const { explainFailure, directory, outputFolder, refuseCall, registration, admission, deniedTools } = options
+  const { explainFailure, directory, outputFolder, refuseCall, checkResult, registration, admission, deniedTools } = options
   const root = await mkdtemp(join(tmpdir(), 'dsh-browser-mcp-'))
   roots.push(root)
   const model = new FixtureModel()
@@ -137,7 +138,8 @@ async function load(options: LoadOptions = {}) {
         name: 'browser-fixture', exclusive, command: process.execPath, args: [fixture, root, ...mode === undefined ? [] : [mode]],
         ...toolCallTimeoutMs === undefined ? {} : { toolCallTimeoutMs, env: {} }, ...explainFailure === undefined ? {} : { explainFailure },
         ...directory === undefined ? {} : { directory }, ...outputFolder === undefined ? {} : { outputFolder },
-        ...refuseCall === undefined ? {} : { refuseCall }, ...deniedTools === undefined ? {} : { deniedTools },
+        ...refuseCall === undefined ? {} : { refuseCall }, ...checkResult === undefined ? {} : { checkResult },
+        ...deniedTools === undefined ? {} : { deniedTools },
         ...registration === undefined ? {} : { registration }, ...admission === undefined ? {} : { admission },
       })
     } }],
@@ -667,6 +669,20 @@ describe('Session MCP Loader composition', () => {
       { tool: 'visit', arguments: { label: 'refused' }, directory: cwd },
       { tool: 'visit', arguments: { label: 'allowed' }, directory: cwd },
     ])
+  })
+
+  it('replaces a call\'s result with the provider\'s refusal after the server answered, and keeps it otherwise', async () => {
+    const checked: Array<[BrowserToolCall, boolean]> = []
+    const { ctx, root } = await load({ checkResult: async (call, startedAt) => {
+      checked.push([call, startedAt <= Date.now()])
+      return (call.arguments as { label: string }).label === 'landed-outside' ? 'The file landed outside.' : undefined
+    } })
+    const { agent } = await ctx.agents.create({ sessionId: SessionId('checked') })
+    await warm(ctx, agent)
+    expect(await visit(ctx, agent, 'landed-outside')).toMatchObject({ isError: true, error: { message: 'The file landed outside.' } })
+    expect((await visit(ctx, agent, 'fine')).isError).toBe(false)
+    expect((await events(root)).filter(event => event.event === 'call')).toHaveLength(2)
+    expect(checked.map(([call, timed]) => [(call.arguments as { label: string }).label, timed])).toEqual([['landed-outside', true], ['fine', true]])
   })
 
   it('replaces a browser failure the provider explains and keeps every other failure and result', async () => {

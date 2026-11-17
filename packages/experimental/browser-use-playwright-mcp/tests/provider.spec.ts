@@ -242,6 +242,67 @@ it('lets through file arguments that stay inside the chat\'s folder, and calls w
   }
 })
 
+it('catches a file the server wrote through a nested link, removes it without following links, and refuses the call', async () => {
+  const { chat, outside } = await chatFolder()
+  const output = join(chat, Provider.OUTPUT_FOLDER)
+  await mkdir(join(output, 'sub'), { recursive: true })
+  await writeFile(join(outside, 'older.txt'), 'the person\'s own file')
+  await new Promise(done => setTimeout(done, 1100))
+  await symlink(outside, join(output, 'sub', 'out'))
+  const lines: string[] = []
+  const check = (args: unknown, startedAt: number) =>
+    Provider.refuseWrittenOutside({ tool: 'browser_take_screenshot', arguments: args, directory: chat }, startedAt, line => lines.push(line))
+  const before = Date.now()
+  expect(await check({}, before)).toBeUndefined()
+  await writeFile(join(outside, 'download.pdf'), 'landed')
+  expect(await check({}, before)).toBe(Provider.writtenOutsideMessage(true))
+  expect(existsSync(join(outside, 'download.pdf'))).toBe(false)
+  expect(readFileSync(join(outside, 'older.txt'), 'utf8')).toBe('the person\'s own file')
+  expect(lines).toHaveLength(1)
+  expect(lines[0]).toContain('outside the chat')
+  // The link itself stays: removal never follows or changes it.
+  expect(await realpath(join(output, 'sub', 'out'))).toBe(outside)
+})
+
+it('catches a file written to a filename that leads outside, and leaves a file the call did not create', async () => {
+  const { chat, outside } = await chatFolder()
+  await mkdir(join(chat, Provider.OUTPUT_FOLDER))
+  await symlink(outside, join(chat, Provider.OUTPUT_FOLDER, 'out'))
+  const check = (filename: string, startedAt: number) =>
+    Provider.refuseWrittenOutside({ tool: 'browser_pdf_save', arguments: { filename }, directory: chat }, startedAt, () => {})
+  await writeFile(join(outside, 'old.pdf'), 'old')
+  expect(await check('out/old.pdf', Date.now() + 60_000)).toBeUndefined()
+  expect(existsSync(join(outside, 'old.pdf'))).toBe(true)
+  const startedAt = Date.now()
+  await writeFile(join(outside, 'new.pdf'), 'new')
+  expect(await check('out/new.pdf', startedAt)).toBe(Provider.writtenOutsideMessage(true))
+  expect(existsSync(join(outside, 'new.pdf'))).toBe(false)
+})
+
+it('reports a file it cannot remove, and accepts a screenshot and a download that stay inside the folder', async () => {
+  const { chat, outside } = await chatFolder()
+  await mkdir(join(chat, Provider.OUTPUT_FOLDER))
+  const check = (args: unknown, startedAt: number) =>
+    Provider.refuseWrittenOutside({ tool: 'browser_take_screenshot', arguments: args, directory: chat }, startedAt, () => {})
+  const startedAt = Date.now()
+  await writeFile(join(chat, Provider.OUTPUT_FOLDER, 'page.png'), 'png')
+  await writeFile(join(chat, 'download.zip'), 'zip')
+  expect(await check({ filename: 'page.png' }, startedAt)).toBeUndefined()
+  expect(await check({ filename: 'download.zip' }, startedAt)).toBeUndefined()
+  await symlink(outside, join(chat, Provider.OUTPUT_FOLDER, 'out'))
+  await mkdir(join(outside, 'folder-made-by-call'))
+  expect(await check({}, startedAt)).toBeUndefined()
+  await symlink(join(outside, 'elsewhere'), join(outside, 'link-made-by-call'))
+  expect(await check({}, startedAt)).toBeUndefined()
+  expect(existsSync(join(chat, Provider.OUTPUT_FOLDER, 'page.png'))).toBe(true)
+  expect(existsSync(join(chat, 'download.zip'))).toBe(true)
+})
+
+it('gives mountSessionMcp the after-call check', () => {
+  Provider.apply(new Context(), Provider.Config({ mode: 'launch' }))
+  expect(vi.mocked(mountSessionMcp).mock.calls.at(-1)![1].checkResult).toBeTypeOf('function')
+})
+
 it('keeps the tool denial, the folder guard and the MCP root with browser_additions off', async () => {
   // C16's parity composition turns browser_additions off; the denial and the guard are security invariants that hold
   // with every switch off. The runtime tells the Session's folder as the one MCP root whatever options the provider

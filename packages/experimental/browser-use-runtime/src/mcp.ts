@@ -146,6 +146,15 @@ export interface SessionMcpOptions {
    */
   refuseCall?: (call: BrowserToolCall) => Promise<string | undefined>
   /**
+   * Check what a browser tool call left behind, after the server answered, such as a file saved outside the Session's
+   * folder. A result it refuses is replaced by a failure with the returned text. It runs after failed calls too,
+   * because a call can write a file and still fail; its own failure is kept when it refuses nothing.
+   * @param call - the call, as given to {@link refuseCall}.
+   * @param startedAt - the time, in milliseconds since the epoch, taken just before the call was sent to the server.
+   * @returns the model-visible refusal, or `undefined` to keep the result.
+   */
+  checkResult?: (call: BrowserToolCall, startedAt: number) => Promise<string | undefined>
+  /**
    * `slot` (the default) registers the provider as the browser-use slot's one provider; `none` registers nothing, for a
    * second browser that sits beside the slot's provider, such as the person's own browser.
    */
@@ -351,10 +360,24 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
               if (ctx.tools.get(exec.name, exec.agent) !== ctx.tools.get(exec.name, agent)) return next()
               throw new Error(`${options.name}: browser tool belongs to another Session`)
             }
-            const refusal = await options.refuseCall?.({
+            const call: BrowserToolCall = {
               tool: exec.name.slice(toolPrefix.length), arguments: exec.arguments, directory: sessionDirectory,
-            })
-            return refusal === undefined ? next() : failure(refusal)
+            }
+            const refusal = await options.refuseCall?.(call)
+            if (refusal !== undefined) return failure(refusal)
+            if (options.checkResult === undefined) return next()
+            const startedAt = Date.now()
+            let result: ToolExecutionResult | undefined
+            let thrown: unknown
+            try {
+              result = await next()
+            } catch (error) {
+              thrown = error
+            }
+            const refused = await options.checkResult(call, startedAt)
+            if (refused !== undefined) return failure(refused)
+            if (result === undefined) throw thrown
+            return result
           })
           await scope.ctx.plugin(McpClient, McpClient.Config({
             transport: 'stdio',
