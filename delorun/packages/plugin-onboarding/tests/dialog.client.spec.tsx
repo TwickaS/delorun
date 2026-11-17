@@ -195,6 +195,13 @@ describe('the first run', () => {
     expect(complete).toHaveBeenCalled()
   })
 
+  it('acknowledges the owed preview notice on Finish later, so the separate notice step does not show it again', async () => {
+    const notice = noticeFace()
+    await mountEntry({ notice })
+    await act(async () => { fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' }) })
+    expect(notice.acknowledge).toHaveBeenCalledOnce()
+  })
+
   it('goes forward and back, saving the step reached, and starts the chat in the default workspace from Ready', async () => {
     const { progress, startChat, complete, completeStep } = await mountEntry()
     await forward(1)
