@@ -111,7 +111,7 @@ export function PinStep({ services, guide }: StepProps): ReactNode {
       </div>
       {mode !== undefined && enabled && (
         <div className={pinCss.on}>
-          <StateLine tone="success"><strong>{t('pin.on')}</strong> {kind === undefined ? '' : t(kind === 'pin' ? 'pin.on.pin' : 'pin.on.passcode')}</StateLine>
+          <StateLine tone="success"><strong>{t('pin.on')}</strong>. <span>{kind === undefined ? '' : t(kind === 'pin' ? 'pin.on.pin' : 'pin.on.passcode')}</span></StateLine>
           <Button variant="outline" size="sm" className={pinCss.link} onClick={pin.openSettings}>{t('pin.changeInSettings')}</Button>
         </div>
       )}
