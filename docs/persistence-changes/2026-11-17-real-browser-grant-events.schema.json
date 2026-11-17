@@ -1,0 +1,27 @@
+{
+  "formatVersion": 2,
+  "roots": [
+    {"key":"event:real-browser/away","kind":"event","event":"real-browser/away","surface":false,"digest":"a20ee5ade286773dec82ee1b5bfa0ca3bc7f5de8a9a5645b88589de5572347e0"},
+    {"key":"event:real-browser/ended","kind":"event","event":"real-browser/ended","surface":false,"digest":"8cc928f857619a6ecd26bb2e2ae08d84ba320b74ddae35c287d36afa65de61a5"},
+    {"key":"event:real-browser/granted","kind":"event","event":"real-browser/granted","surface":false,"digest":"23afe2b636b2258c47a86a1ec92709a9494737b1e99e61fdf62f4b0d37b3ccb1"}
+  ],
+  "types": [],
+  "nodes": {
+    "0657d3ca5ac4e7bf": {"kind":"primitive","type":"number"},
+    "0703d5d9f960171d": {"kind":"literal","value":"real-browser/ended"},
+    "0b19dfa092f699cb": {"kind":"object","properties":[{"name":"reason","type":"8759a561541fffb5","optional":false}],"indices":[]},
+    "15fb9e28d624c1d6": {"kind":"literal","value":"real-browser/granted"},
+    "1d849a5b337cee9d": {"kind":"object","properties":[{"name":"until","type":"3bd652ebfa8726b3","optional":false}],"indices":[]},
+    "23afe2b636b2258c": {"kind":"object","properties":[{"name":"data","type":"84733e6147348b2b","optional":false},{"name":"ignorable","type":"dacf3d5f3e4ff619","optional":true},{"name":"seq","type":"0657d3ca5ac4e7bf","optional":false},{"name":"time","type":"0657d3ca5ac4e7bf","optional":false},{"name":"type","type":"15fb9e28d624c1d6","optional":false}],"indices":[]},
+    "3bd652ebfa8726b3": {"kind":"union","types":["0657d3ca5ac4e7bf","938f7c7357bc403e"]},
+    "6db2226d1696010e": {"kind":"object","properties":[{"name":"askedSeq","type":"0657d3ca5ac4e7bf","optional":false},{"name":"kind","type":"c914163c995adf6f","optional":false}],"indices":[]},
+    "84733e6147348b2b": {"kind":"object","properties":[{"name":"source","type":"6db2226d1696010e","optional":false}],"indices":[]},
+    "8759a561541fffb5": {"kind":"literal","value":"person"},
+    "8cc928f857619a6e": {"kind":"object","properties":[{"name":"data","type":"0b19dfa092f699cb","optional":false},{"name":"ignorable","type":"dacf3d5f3e4ff619","optional":true},{"name":"seq","type":"0657d3ca5ac4e7bf","optional":false},{"name":"time","type":"0657d3ca5ac4e7bf","optional":false},{"name":"type","type":"0703d5d9f960171d","optional":false}],"indices":[]},
+    "938f7c7357bc403e": {"kind":"primitive","type":"null"},
+    "a20ee5ade286773d": {"kind":"object","properties":[{"name":"data","type":"1d849a5b337cee9d","optional":false},{"name":"ignorable","type":"dacf3d5f3e4ff619","optional":true},{"name":"seq","type":"0657d3ca5ac4e7bf","optional":false},{"name":"time","type":"0657d3ca5ac4e7bf","optional":false},{"name":"type","type":"e3f8749a97ac2bad","optional":false}],"indices":[]},
+    "c914163c995adf6f": {"kind":"literal","value":"approval"},
+    "dacf3d5f3e4ff619": {"kind":"literal","value":true},
+    "e3f8749a97ac2bad": {"kind":"literal","value":"real-browser/away"}
+  }
+}

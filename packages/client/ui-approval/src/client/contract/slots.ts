@@ -76,7 +76,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
  * What an `allowed-once` answer grants beyond an ordinary tool call; the values of `ApprovalGrant` in
  * `@deepseek-ai/dsh-user-approval`, which the `approval/request` consumer passes through unchanged.
  */
-export type ApprovalGrant = 'full-access' | 'workspace-management' | 'external-agent'
+export type ApprovalGrant = 'full-access' | 'workspace-management' | 'external-agent' | 'real-browser'
 
 /** The sandbox mode a sandbox escalation asks for; the values of `ApprovalEscalation` in `@deepseek-ai/dsh-user-approval`. */
 export type ApprovalEscalation = 'workspace-write' | 'danger-full-access'

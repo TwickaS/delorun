@@ -1553,8 +1553,8 @@
     {
       "path": "pnpm-workspace.yaml",
       "class": "security",
-      "reason": "Adds Delorun's workspace globs, the `!delorun/apps/docs` and `!delorun/apps/website` exclusions (each site installs as its own workspace), the `@simplewebauthn/server>@peculiar/asn1-schema` override that passkey signature checks need, and `allowBuilds: false` entries for Delorun's packages. Upstream's lines are unchanged. Lead verdict: kept; the allowBuilds additions are all false, so build scripts run no more than stock. Adds the `patchedDependencies` entry for the MCP SDK stdio `argv0` patch. Lead verdict (2026-11-13): approved after the lead review of the merged diff; the website exclusion only removes a package from the workspace and runs no code.",
-      "sha256": "bdddecdd5fc2341a20f47a3ffc89926dc6f672ce930d0f6b31ed6d746aada92a"
+      "reason": "Adds Delorun's workspace globs, the `!delorun/apps/docs` and `!delorun/apps/website` exclusions (each site installs as its own workspace), the `@simplewebauthn/server>@peculiar/asn1-schema` override that passkey signature checks need, and `allowBuilds: false` entries for Delorun's packages. Upstream's lines are unchanged. Lead verdict: kept; the allowBuilds additions are all false, so build scripts run no more than stock. Adds the `patchedDependencies` entry for the MCP SDK stdio `argv0` patch. Lead verdict (2026-11-13): approved after the lead review of the merged diff; the website exclusion only removes a package from the workspace and runs no code. Adds `minimumReleaseAgeExclude` entries for `@opencode/browse@0.1.1` and its seven platform packages, which `@delorun/browser-use-browse` pins (browse, MIT, npm provenance); 0.1.1 was published the day it was pinned. Awaiting the lead's review.",
+      "sha256": "9088227524e611f0b0422699afe0310c8345946c209b7420c539bcab80c8c27b"
     },
     {
       "path": "scripts/check-workspace-constraints.ts",
@@ -1949,8 +1949,8 @@
     {
       "path": "packages/interaction/user-approval/src/types.ts",
       "class": "security",
-      "reason": "An approval request can carry a `grants: 'full-access'` marker the remote answer guard reads; unset, behaviour is upstream's. The marker is the `ApprovalGrant` union, `'full-access'` or `'workspace-management'`; the remote answer guard refuses either when a remote device grants it. Lead verdict (2026-11-11): kept; `grants` comes only from a pre-execute decision or a direct approval request, never from model arguments. Adds `external-agent` to `ApprovalGrant`: the start of an external agent program, which runs outside the sandbox and the approval prompts; the remote answer guard treats it like the other reserved grants. Lead verdict (2026-11-13): approved after the lead review of the merged diff. The request also carries the presentation-only `escalatesTo` (the sandbox mode a sandbox escalation asks for), like `grants` and `displayReason` never copied into `approval/asked` or any logged event, so a card can offer to switch the chat to that mode. Lead verdict (2026-11-13): approved after an independent Opus review of the card answer path and the lead review; the choice answers the card through the same one-shot `answer()` as Allow once, only after the chat's permission projection shows the requested preset and while the card still accepts answers, and never lowers a chat raised meanwhile, and `escalatesTo` never reaches a logged event.",
-      "sha256": "6c1c3d18f474ff55fb1c056fd7771ce1efa0496a526b5f30c2b6e59bb9a794a6"
+      "reason": "An approval request can carry a `grants: 'full-access'` marker the remote answer guard reads; unset, behaviour is upstream's. The marker is the `ApprovalGrant` union, `'full-access'` or `'workspace-management'`; the remote answer guard refuses either when a remote device grants it. Lead verdict (2026-11-11): kept; `grants` comes only from a pre-execute decision or a direct approval request, never from model arguments. Adds `external-agent` to `ApprovalGrant`: the start of an external agent program, which runs outside the sandbox and the approval prompts; the remote answer guard treats it like the other reserved grants. Lead verdict (2026-11-13): approved after the lead review of the merged diff. The request also carries the presentation-only `escalatesTo` (the sandbox mode a sandbox escalation asks for), like `grants` and `displayReason` never copied into `approval/asked` or any logged event, so a card can offer to switch the chat to that mode. Lead verdict (2026-11-13): approved after an independent Opus review of the card answer path and the lead review; the choice answers the card through the same one-shot `answer()` as Allow once, only after the chat's permission projection shows the requested preset and while the card still accepts answers, and never lowers a chat raised meanwhile, and `escalatesTo` never reaches a logged event. Adds `real-browser` to `ApprovalGrant`: the person's own browser, with their sign-ins, for the rest of one chat; the remote answer guard refuses it to a device that holds no running unlock and lets an unlocked device give it (owner ruling 2026-11-17). Awaiting the lead's review.",
+      "sha256": "807417efa1ec6d5ecd5bd9a3947db79e48dc9120b5dbe73de72ce2237166c559"
     },
     {
       "path": "packages/api/gateway/src/client/index.ts",
@@ -2093,8 +2093,8 @@
     {
       "path": "packages/client/ui-approval/src/client/contract/slots.ts",
       "class": "security",
-      "reason": "Security entry, same feature and verdict as ApprovalCard.tsx: declares the `conversation.approval.action` list slot, the `ApprovalGrant` values of `@deepseek-ai/dsh-user-approval`, and carries `grants` on the pending request unchanged; the action's `allow` is documented as the Allow button's one-shot answer. `ApprovalGrant` gains `external-agent`; `ApprovalActionOwnerProps` gains `answered` and `canAnswer`. Lead verdict (2026-11-13): approved after the lead review of the merged diff. Declares the `conversation.approval.choice` slot and its owner props (`escalatesTo`, `toolName`, `callId`, `allow`, `answered`, `canAnswer`, `offer`). Lead verdict (2026-11-13): approved after an independent Opus review of the card answer path and the lead review; the choice answers the card through the same one-shot `answer()` as Allow once, only after the chat's permission projection shows the requested preset and while the card still accepts answers, and never lowers a chat raised meanwhile, and `escalatesTo` never reaches a logged event.",
-      "sha256": "76a7833467dcda5837583809ffdc1d1856ad106da39ee3742c0fc9f490ff306a"
+      "reason": "Security entry, same feature and verdict as ApprovalCard.tsx: declares the `conversation.approval.action` list slot, the `ApprovalGrant` values of `@deepseek-ai/dsh-user-approval`, and carries `grants` on the pending request unchanged; the action's `allow` is documented as the Allow button's one-shot answer. `ApprovalGrant` gains `external-agent`; `ApprovalActionOwnerProps` gains `answered` and `canAnswer`. Lead verdict (2026-11-13): approved after the lead review of the merged diff. Declares the `conversation.approval.choice` slot and its owner props (`escalatesTo`, `toolName`, `callId`, `allow`, `answered`, `canAnswer`, `offer`). Lead verdict (2026-11-13): approved after an independent Opus review of the card answer path and the lead review; the choice answers the card through the same one-shot `answer()` as Allow once, only after the chat's permission projection shows the requested preset and while the card still accepts answers, and never lowers a chat raised meanwhile, and `escalatesTo` never reaches a logged event. `ApprovalGrant` gains `real-browser`, mirroring `@deepseek-ai/dsh-user-approval`. Awaiting the lead's review.",
+      "sha256": "6832d14597d596551acaa3e704075126eff478ed8259f7f150ddbbbcf7a75913"
     },
     {
       "path": "packages/client/ui-approval/src/client/index.ts",
@@ -2821,6 +2821,18 @@
       "class": "delorun-feature",
       "feature": "plugin-packs",
       "reason": "Plugins shows no false 'Update available' for a plugin approved from a signed pack: when the profile's approved-plugin record (delorun.changes.plugins[name].source, written by Changes) names the folder an offered link target points to, readBundles reports that target as the row's source instead of the Changes review copy's link. Display only: it reads profile data and changes no install, load or trust decision."
+    },
+    {
+      "path": "packages/core/session/src/known-event-types.ts",
+      "class": "delorun-feature",
+      "feature": "real-browser",
+      "reason": "Generated by gen-persistence-catalog: lists the `real-browser/granted`, `real-browser/away` and `real-browser/ended` Session events that `browser-use-runtime/src/real-browser.ts` declares, so a reader admits a log that holds them. Acknowledged in docs/persistence-changes/2026-11-17-real-browser-grant-events.md."
+    },
+    {
+      "path": "packages/experimental/browser-use-runtime/src/index.ts",
+      "class": "delorun-feature",
+      "feature": "real-browser",
+      "reason": "Re-exports the types of the new `src/real-browser.ts`, which declares the `real-browser/*` Session events of a chat's grant to use the person's own browser, so the package's root entry carries the SessionEventMap merge. `@delorun/browser-use-browse` appends the events and folds them. No runtime change."
     }
   ],
   "retired": []

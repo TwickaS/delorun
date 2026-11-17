@@ -24,7 +24,8 @@ export const TAILNET_MEMBERSHIP_OPTIONS = ['tailscale-private'] as const satisfi
 
 /**
  * Actions the home refuses with `LOOPBACK_REQUIRED` to a session whose factor is `tailnet-membership`. Each is granted
- * only at the home's own computer: a loopback studio session or the person's own `delorun` command.
+ * only at the home's own computer: a loopback studio session or the person's own `delorun` command. `real-browser`, a
+ * chat's use of the person's own browser, is the one exception: a device that holds a running unlock grants it too.
  */
 export const LOOPBACK_REQUIRED_ACTIONS = [
   'full-access-escalation',
@@ -41,6 +42,7 @@ export const LOOPBACK_REQUIRED_ACTIONS = [
   'elevation-approve',
   'elevation-revoke',
   'pin-mode-change',
+  'real-browser',
 ] as const
 
 /** One action of {@link LOOPBACK_REQUIRED_ACTIONS}. */

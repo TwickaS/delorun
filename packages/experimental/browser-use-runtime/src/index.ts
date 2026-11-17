@@ -6,6 +6,8 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+// The real-browser grant's Session events; re-exported so the root entry carries the SessionEventMap merge.
+export type * from './real-browser.ts'
 
 /** One provider-owned browser or connection and its quiescent cleanup. */
 export interface OwnedSessionResource<T> {
