@@ -107,31 +107,39 @@ export function permissionResult(answer: ProgramApprovalAnswer, input: Record<st
 }
 
 /**
- * The plain description of a question for the person: the program's own sentence when it gives one.
+ * The plain description of a question for the person: Claude Code's own question sentence when it gives one,
+ * otherwise the tool and the exact call. The call's own `description` field is the program model's words, not a
+ * statement of what runs, so it is never the reason.
  * @param toolName - the program's tool name.
  * @param input - the call's input.
  * @param options - the question's details.
- * @param options.title - the program's full question sentence.
- * @param options.description - the program's subtitle.
- * @param options.displayName - the program's short name for the action.
+ * @param options.title - Claude Code's full question sentence.
+ * @param options.displayName - Claude Code's short name for the action.
  * @returns the reason.
  */
-export function questionReason(toolName: string, input: Record<string, unknown>, options: { title?: string; description?: string; displayName?: string }): string {
+export function questionReason(toolName: string, input: Record<string, unknown>, options: { title?: string; displayName?: string }): string {
   if (options.title !== undefined && options.title.length > 0) return options.title
-  if (options.description !== undefined && options.description.length > 0) return options.description
-  const detail = JSON.stringify(input)
+  const detail = typeof input.command === 'string' ? input.command : JSON.stringify(input)
   return `${options.displayName ?? toolName}: ${detail.length > 300 ? `${detail.slice(0, 300)}…` : detail}`
+}
+
+/** What the session does around a question. */
+export interface QuestionHooks {
+  /** Called before the question goes to the seat; the session ends the open program message there. */
+  beforeAsk(): void
+  /** Called when the answer stops the turn, so the session reports the turn as interrupted. */
+  onCancel(): void
 }
 
 /**
  * The SDK's `canUseTool` over the seat's question handler.
  * @param ask - the seat's handler.
- * @param beforeAsk - called before each question goes to the seat; the session ends the open program message there.
+ * @param hooks - the session's hooks around each question.
  * @returns the SDK callback.
  */
-export function canUseTool(ask: (request: ProgramApprovalRequest) => Promise<ProgramApprovalAnswer>, beforeAsk: () => void): CanUseTool {
+export function canUseTool(ask: (request: ProgramApprovalRequest) => Promise<ProgramApprovalAnswer>, hooks: QuestionHooks): CanUseTool {
   return async (toolName, input, options) => {
-    beforeAsk()
+    hooks.beforeAsk()
     const rules = suggestedAllowRules(options.suggestions)
     const runRule = runRuleFor(rules)
     let answer: ProgramApprovalAnswer
@@ -147,6 +155,7 @@ export function canUseTool(ask: (request: ProgramApprovalRequest) => Promise<Pro
       // The seat could not answer, so no one decided: the call does not run and the turn stops.
       answer = 'cancel'
     }
+    if (answer === 'cancel') hooks.onCancel()
     return permissionResult(answer, input, rules)
   }
 }

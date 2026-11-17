@@ -3,7 +3,7 @@ import type { CanUseTool } from '@anthropic-ai/claude-agent-sdk'
 import { allowedToolsFor, CANCELLED_MESSAGE, REJECTED_MESSAGE, ruleText, rulesOf, suggestedAllowRules } from '../src/approvals.ts'
 import { ClaudeCodeDriver } from '../src/driver.ts'
 import type { ProgramApprovalAnswer, ProgramApprovalRequest, ProgramEvent, ProgramOpenRequest, ProgramRunRule } from '../src/pending-contract.ts'
-import { assistant, FakeSdk, TOUCH_SUGGESTIONS } from './fake-sdk.ts'
+import { assistant, FakeSdk, result, TOUCH_SUGGESTIONS } from './fake-sdk.ts'
 
 const signal = AbortSignal.timeout(5_000)
 
@@ -70,7 +70,7 @@ describe('Claude Code questions', () => {
       suggestions: [{ type: 'setMode', mode: 'acceptEdits', destination: 'session' }, { type: 'addDirectories', directories: ['/'], destination: 'session' }],
     })
     expect(asked[0]?.runRule).toBeUndefined()
-    expect(asked[0]?.reason).toBe('Bash: {"command":"mkdir c"}')
+    expect(asked[0]?.reason).toBe('Bash: mkdir c')
     expect(answer).toEqual({ behavior: 'allow', updatedInput: { command: 'mkdir c' } })
     await session.close()
   })
@@ -81,9 +81,20 @@ describe('Claude Code questions', () => {
     await session.close()
   })
 
-  it('maps cancel to a denial that stops the turn', async () => {
-    const { ask, session } = await opened(() => Promise.resolve('cancel'))
+  it('maps cancel to a denial that stops the turn, which ends interrupted', async () => {
+    const { ask, session, sdk } = await opened(() => Promise.resolve('cancel'))
+    await session.send('touch it', 'start')
     expect(await question(ask)).toEqual({ behavior: 'deny', message: CANCELLED_MESSAGE, interrupt: true })
+    sdk.last.emit(result({ subtype: 'error_during_execution', is_error: true }))
+    expect(await session.next(signal)).toMatchObject({ kind: 'turn-end', outcome: 'interrupted' })
+    await session.close()
+  })
+
+  it('never takes the reason from the program model\'s own description of the call', async () => {
+    const asked: ProgramApprovalRequest[] = []
+    const { ask, session } = await opened((request) => { asked.push(request); return Promise.resolve('reject') })
+    await ask('Bash', { command: 'rm -rf build', description: 'Tidy up harmlessly' }, { signal, toolUseID: 'call-3', requestId: 'r3', description: 'Tidy up harmlessly' })
+    expect(asked[0]?.reason).toBe('Bash: rm -rf build')
     await session.close()
   })
 

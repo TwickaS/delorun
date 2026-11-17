@@ -325,6 +325,11 @@ export class ClaudeCodeSession implements ProgramSession {
     return Promise.resolve()
   }
 
+  /** Record that the person's answer to a question stopped the running turn, which then ends `interrupted`. */
+  stopping(): void {
+    if (this.#running) this.#interruptRequested = true
+  }
+
   /** Interrupt the running turn; its `turn-end` reports `interrupted`. The session stays usable. */
   async interrupt(): Promise<void> {
     if (!this.#running || this.#closed || this.#query === undefined) return

@@ -78,7 +78,7 @@ export class ClaudeCodeDriver implements ExternalAgentDriver {
       ...request.model === undefined ? {} : { model: request.model },
       ...allowedTools.length === 0 ? {} : { allowedTools },
       disallowedTools: ['AskUserQuestion'],
-      canUseTool: canUseTool(question => request.onApproval(question), () => { session.endMessage() }),
+      canUseTool: canUseTool(question => request.onApproval(question), { beforeAsk: () => { session.endMessage() }, onCancel: () => { session.stopping() } }),
       onElicitation: () => Promise.resolve({ action: 'decline' }),
       onUserDialog: () => Promise.resolve({ behavior: 'cancelled' }),
       supportedDialogKinds: SUPPORTED_DIALOG_KINDS,
