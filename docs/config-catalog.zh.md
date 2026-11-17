@@ -1030,12 +1030,34 @@ export type Config = BrowserMcpConfig
 ## `@deepseek-ai/dsh-experimental-browser-use-playwright-mcp`
 
 - `inject`: `browserUse` · `agents` · `tools` · `systemPrompt` · `workingDirectory`
-- `refs`: `BrowserMcpConfig` (`@deepseek-ai/dsh-experimental-browser-use-runtime/mcp`)
-- `source`: [`packages/experimental/browser-use-playwright-mcp/src/index.ts:16`](../packages/experimental/browser-use-playwright-mcp/src/index.ts)
+- `refs`: `BrowserChoice` (`@deepseek-ai/dsh-native-command/chrome-channel`) · `BrowserMcpAttachConfig` (`@deepseek-ai/dsh-experimental-browser-use-runtime/mcp`) · `BrowserMcpLaunchConfig` (`@deepseek-ai/dsh-experimental-browser-use-runtime/mcp`)
+- `source`: [`packages/experimental/browser-use-playwright-mcp/src/index.ts:51`](../packages/experimental/browser-use-playwright-mcp/src/index.ts)
 
 ```ts config-catalog
-/** Fixed Chromium launch or existing-browser attachment settings. */
-export type Config = BrowserMcpConfig
+/** Chrome or Chromium launch, or existing-browser attachment settings. */
+export type Config = LaunchConfig | AttachConfig
+
+/** Launch settings: the shared ones and which browser launches. */
+export interface LaunchConfig extends BrowserMcpLaunchConfig, DeniedToolsConfig {
+  /**
+   * Which browser launches: `auto` is the installed Google Chrome when Playwright's `chrome` channel finds one and
+   * Playwright's own Chromium build otherwise; `chrome` and `chromium` always launch that one. Chrome runs with a
+   * profile Playwright creates for the launch, never the person's own.
+   */
+  browser: BrowserChoice
+}
+
+/** Existing-browser attachment settings. */
+export interface AttachConfig extends BrowserMcpAttachConfig, DeniedToolsConfig {}
+
+/** Settings every mode has. */
+export interface DeniedToolsConfig {
+  /**
+   * The server's own tool names that are turned off: never offered to the model and refused when called. Defaults to
+   * {@link SERVER_CODE_TOOLS}; a list set here replaces the default.
+   */
+  deniedTools: string[]
+}
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-experimental-browser-use-playwright-mcp -->
 
@@ -2507,7 +2529,7 @@ export interface LspLocalServerConfig {
 ## `@deepseek-ai/dsh-mcp-client`
 
 - `inject`: `tools`
-- `source`: [`packages/mcp/mcp-client/src/index.ts:176`](../packages/mcp/mcp-client/src/index.ts)
+- `source`: [`packages/mcp/mcp-client/src/index.ts:188`](../packages/mcp/mcp-client/src/index.ts)
 
 ```ts config-catalog
 /** Configuration for one stdio or Streamable HTTP MCP server. */
@@ -2560,6 +2582,12 @@ export interface StdioConfig {
    * no access it does not already have. Omission or an empty list advertises no roots.
    */
   roots?: string[]
+  /**
+   * The server's own tool names that this client never registers: a denied tool is in no tool list, the model is not
+   * offered it, and a call to it never reaches the server. A name the server does not list has no effect. Omission
+   * denies nothing.
+   */
+  deniedTools?: string[]
 }
 
 /** Config for connecting to an MCP server over Streamable HTTP (SSE). */
@@ -2597,6 +2625,12 @@ export interface StreamableHttpConfig {
    * no access it does not already have. Omission or an empty list advertises no roots.
    */
   roots?: string[]
+  /**
+   * The server's own tool names that this client never registers: a denied tool is in no tool list, the model is not
+   * offered it, and a call to it never reaches the server. A name the server does not list has no effect. Omission
+   * denies nothing.
+   */
+  deniedTools?: string[]
 }
 
 /** Automatic reconnect policy for one MCP server connection. */

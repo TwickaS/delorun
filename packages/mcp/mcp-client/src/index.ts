@@ -133,6 +133,12 @@ export interface StdioConfig {
    * no access it does not already have. Omission or an empty list advertises no roots.
    */
   roots?: string[]
+  /**
+   * The server's own tool names that this client never registers: a denied tool is in no tool list, the model is not
+   * offered it, and a call to it never reaches the server. A name the server does not list has no effect. Omission
+   * denies nothing.
+   */
+  deniedTools?: string[]
 }
 
 /** Config for connecting to an MCP server over Streamable HTTP (SSE). */
@@ -170,6 +176,12 @@ export interface StreamableHttpConfig {
    * no access it does not already have. Omission or an empty list advertises no roots.
    */
   roots?: string[]
+  /**
+   * The server's own tool names that this client never registers: a denied tool is in no tool list, the model is not
+   * offered it, and a call to it never reaches the server. A name the server does not list has no effect. Omission
+   * denies nothing.
+   */
+  deniedTools?: string[]
 }
 
 /** Configuration for one stdio or Streamable HTTP MCP server. */
@@ -212,6 +224,7 @@ export const Config = z.union([
     maxInstructionBytes: z.number().step(1).min(1).default(DEFAULT_MAX_INSTRUCTION_BYTES),
     reconnect: ReconnectSchema,
     roots: z.array(z.string().pattern(ABSOLUTE_ROOT_PATTERN)),
+    deniedTools: z.array(z.string().pattern(/\S/u)),
   }),
   z.object({
     transport: z.const('streamable-http'),
@@ -226,6 +239,7 @@ export const Config = z.union([
     maxInstructionBytes: z.number().step(1).min(1).default(DEFAULT_MAX_INSTRUCTION_BYTES),
     reconnect: ReconnectSchema,
     roots: z.array(z.string().pattern(ABSOLUTE_ROOT_PATTERN)),
+    deniedTools: z.array(z.string().pattern(/\S/u)),
   }),
 ]) as z<ConfigInput, Config>
 /* jscpd:ignore-end */
