@@ -42,15 +42,18 @@
  *   wait refuses new turns.
  *
  * A Delorun bundle here is a bundle in the `@delorun/` scope that is not one of the running release's optional plugin packs
- * ([release packs](./release-packs.ts)). A pack bundle loads from its Changes review copy, so the rows it inserts, nested
- * ones included, are not required rows and it declares none; a pack that inserts or changes a required row is held to the
- * invariants like any other layer.
+ * ([release packs](./release-packs.ts)). A layer is a pack only when its real path is the folder the running release
+ * installs the pack in, or the profile's Changes review copy of the pack whose approved source is that folder; a layer
+ * that only has a pack's name is a Delorun bundle, which the stand-in rule refuses. A pack loads from outside this Delorun's
+ * packages, so the rows it inserts, nested ones included, are not required rows and it declares none; a pack that inserts
+ * or changes a required row is held to the invariants like any other layer.
  *
  * A violation stops the start with one refusal that names each row, the files that set the value, and the remedy.
  *
  * @module @delorun/cli/compose
  */
 import { readFileSync, realpathSync, rmSync } from 'node:fs'
+import { activeDirectory, readApproved, type ApprovedRecord } from '@delorun/changes'
 import { runDirectory, writeProtectedFile } from '@delorun/home'
 import { COMPUTER_ONLY_ROW_MODULES, protectedPluginsIn } from '@delorun/home-auth'
 import { stringify } from 'yaml'
@@ -168,7 +171,7 @@ export interface ComposedStart {
   readonly prompts: PromptsAnswer | undefined
   /** Where each required Delorun row's package resolves, real path, for the rows whose package resolves. */
   readonly rowPackages: readonly RowPackage[]
-  /** The running release's optional plugin pack bundles, without the runtime's own bundles; their rows are not required Delorun rows. */
+  /** The running release's optional plugin pack bundles that load from the release's pack folder or its approved review copy, without the runtime's own bundles; their rows are not required Delorun rows. */
   readonly packBundles: ReadonlySet<string>
   /** The directory this Delorun's own packages lie in ({@link delorunPackagesRoot}). */
   readonly packagesRoot: string
@@ -247,16 +250,18 @@ export const ROW_SERVICES: Readonly<Record<string, readonly string[]>> = {
  *   carries expressions on the row, the approved content step refuses, or the composed rows break an invariant.
  */
 export async function composeDelorunProfile(request: ComposeRequest, dependencies: ComposeDependencies): Promise<ComposedStart> {
-  const packBundles = new Set([...await dependencies.releasePacks(request)].filter(name => !RUNTIME_BUNDLES.has(name)))
+  const releasePacks = new Map([...await dependencies.releasePacks(request)].filter(([name]) => !RUNTIME_BUNDLES.has(name)))
+  const packNames = new Set(releasePacks.keys())
   let resolvedProfile: ResolvedProfileRuntime
   try {
     resolvedProfile = await dependencies.prepareProfile(request.profile)
-    refuseSkippedDelorunBundles(resolvedProfile.profile, packBundles)
+    refuseSkippedDelorunBundles(resolvedProfile.profile, packNames)
   } catch (error) {
     if (error instanceof CliError) throw error
     throw new CliError(EXIT.failed, `delorun: the profile ${request.profile} could not be loaded: ${error instanceof Error ? error.message : String(error)}`)
   }
-  for (const notice of skippedPackNotices(resolvedProfile.profile, packBundles)) request.output.stderr(notice)
+  for (const notice of skippedPackNotices(resolvedProfile.profile, packNames)) request.output.stderr(notice)
+  const packBundles = await installedPackBundles(request, resolvedProfile.profile, releasePacks)
   if (request.kind === 'headless') refuseHeadlessWithoutBundle(request.home, resolvedProfile)
   const delorunRows = delorunRowIds(resolvedProfile.profile, packBundles)
   // Safe mode boots the same profile with its third-party layers and rows left out, and edits none of its files.
@@ -303,6 +308,51 @@ export async function composeDelorunProfile(request: ComposeRequest, dependencie
   }
   assertComposedInvariants(composed)
   return composed
+}
+
+/**
+ * A path's real path.
+ * @param path - the path.
+ * @returns the real path, or `undefined` when the path does not resolve.
+ */
+function realPathOf(path: string): string | undefined {
+  try {
+    return realpathSync.native(path)
+  } catch (error) {
+    // A missing or unreadable path (`error`) is no pack's folder, so a layer there is held to the rules for Delorun's own bundles.
+    return undefined
+  }
+}
+
+/**
+ * The layers that are packs of the running release by where they load from: the folder the release installs the pack
+ * in, reached through any link, or the profile's Changes review copy of the pack whose approved source resolves to that
+ * folder. A layer that only carries a pack's name is not a pack.
+ * @param request - the home and the profile.
+ * @param profile - the loaded profile.
+ * @param releasePacks - the running release's packs and their folders, without the runtime's own bundles.
+ * @returns the names of the layers that are packs.
+ */
+async function installedPackBundles(request: ComposeRequest, profile: ResolvedProfileRuntime['profile'], releasePacks: ReadonlyMap<string, string>): Promise<Set<string>> {
+  const packs = new Set<string>()
+  if (releasePacks.size === 0) return packs
+  let approved: ApprovedRecord | undefined
+  try {
+    approved = await readApproved(profile.dir)
+  } catch (error) {
+    // A record Changes cannot read (`error`) approves no source, so only a layer in a pack's own folder is a pack.
+    approved = undefined
+  }
+  for (const layer of profile.layers) {
+    const folder = releasePacks.get(layer.packageName)
+    const pack = folder === undefined ? undefined : realPathOf(folder)
+    const real = realPathOf(layer.packageDir)
+    if (pack === undefined || real === undefined) continue
+    const source = approved?.plugins[layer.packageName]?.source
+    const reviewCopy = source !== undefined && realPathOf(source) === pack && real === realPathOf(activeDirectory(request.home, request.profile, layer.packageName))
+    if (real === pack || reviewCopy) packs.add(layer.packageName)
+  }
+  return packs
 }
 
 /**

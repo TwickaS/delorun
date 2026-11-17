@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { dirname, join, relative } from 'node:path'
@@ -507,7 +507,18 @@ describe('starting the home process', { timeout: 60_000 }, () => {
       { id: 'webhook-runtime', name: '@deepseek-ai/dsh-webhook', disabled: false, state: 'failed' },
       { id: 'github-webhook-server', name: '@delorun/bundle-webhooks/server', disabled: false, state: 'not-imported' },
     ]
-    const withPack: StartDependencies = { ...recording([], rows), releasePacks: () => Promise.resolve(new Set(['@delorun/bundle-webhooks'])) }
+    // A release's runtime does not carry the pack, so its layer loads from the folder the release installs the pack in.
+    const folder = join(delorunHome, 'packs', '0.1.0', '@delorun__bundle-webhooks', 'package')
+    cpSync(fileURLToPath(new URL('../../../packages/bundle-webhooks/', import.meta.url)), folder, { recursive: true, filter: source => !source.includes('node_modules') })
+    const prepare = upstreamDependencies().prepareProfile
+    const withPack: StartDependencies = {
+      ...recording([], rows),
+      prepareProfile: async (profile) => {
+        const prepared = await prepare(profile)
+        return { ...prepared, profile: { ...prepared.profile, layers: prepared.profile.layers.map(layer => layer.packageName === '@delorun/bundle-webhooks' ? { ...layer, packageDir: folder } : layer) } }
+      },
+      releasePacks: () => Promise.resolve(new Map([['@delorun/bundle-webhooks', folder]])),
+    }
     const lock = join(delorunHome, 'run', 'default', 'home.lock')
     const log = resolveSurface({ kind: 'home', home: delorunHome, profile: 'default' }).file
     const warning = 'The plugin pack @delorun/bundle-webhooks did not start in the CLI profile default (webhook-runtime (@deepseek-ai/dsh-webhook) failed to start, github-webhook-server (@delorun/bundle-webhooks/server) failed to import), so Delorun runs without it'
