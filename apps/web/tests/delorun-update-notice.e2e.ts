@@ -89,9 +89,9 @@ it.skipIf(webSnapshotMode() === 'record')('shows the Host\'s update notice in th
   const close = notice.getByRole('button', { name: 'Hide this notice until a newer release', exact: true })
   // A fresh profile opens Delorun's onboarding, whose dialog covers the sidebar until it is done or skipped.
   const onboarding = page.getByRole('dialog')
-  await onboarding.getByRole('button', { name: 'Continue', exact: true }).click()
+  await onboarding.getByRole('button', { name: 'Complete setup later', exact: true }).waitFor({ timeout: 30_000 })
   await expect(close.click({ trial: true, timeout: 2_000 })).rejects.toThrow()
-  await onboarding.getByRole('button', { name: 'Skip for now', exact: true }).click()
+  await onboarding.getByRole('button', { name: 'Complete setup later', exact: true }).click()
   await onboarding.waitFor({ state: 'detached' })
 
   await expect.poll(() => notice.textContent()).toBe([
