@@ -1692,6 +1692,11 @@ label.registryOption {
   color: var(--dsw-alias-label-secondary);
 }
 
+.rowStateLine {
+  /* Level with the row's text: the icon's width and the line's gap. */
+  padding-left: 56px;
+}
+
 .rowMain {
   display: flex;
   flex: 1;

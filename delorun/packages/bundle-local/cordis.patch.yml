@@ -252,6 +252,11 @@
     - id: delorun-profile-versions
       name: '@delorun/bundle-local/profile-versions'
 
+    # Needs setup: which rows of an optional bundle lack a program, a setting or a platform they need, read from each
+    # bundle's `delorun.requires`. Read-only; Plugins shows the answer beside the row.
+    - id: delorun-requirements
+      name: '@delorun/bundle-local/requirements'
+
     # Report a problem: the studio's details route (versions, system, redacted recent errors and the issue form's address). The row
     # makes no request; the person opens the pre-filled issue and sends it.
     - id: delorun-report

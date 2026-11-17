@@ -1,0 +1,40 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/packages/plugin-packs/README.md
+/:
+  en: b38af77bf15d7b1e
+  zh: e3fc83f936327152
+/delorun-plugin-packs:
+  en: fa6aefe8c010e947
+  zh: 8881c4c0778eabf5
+/delorun-plugin-packs/summary:
+  en: 1e19d521b687ba47
+  zh: 2c8f4e50dd1d13a1
+/delorun-plugin-packs/contents:
+  en: c8899db6f2569b40
+  zh: 3df73b44128b1db7
+/delorun-plugin-packs/how-an-install-runs:
+  en: cd929a54305ac791
+  zh: f6d57cfe24c0df54
+/delorun-plugin-packs/the-packs-remote:
+  en: 202abbdfe94f049d
+  zh: c2d5c9d040d90ec0
+/delorun-plugin-packs/reading-progress:
+  en: e6b648887f78ae34
+  zh: 710644070bd06d1b
+/delorun-plugin-packs/configuration:
+  en: 2e23f7d71e422fa8
+  zh: 76975d71a539f894
+/delorun-plugin-packs/phones:
+  en: 830cbbb05d324626
+  zh: 80706818891d7f29
+/delorun-plugin-packs/where-the-host-connects-it:
+  en: 5cb7897d2ac470d3
+  zh: 5591d3c9c4c9a4ed
+/delorun-plugin-packs/limits:
+  en: 79eed700689e950b
+  zh: 4cd4437edd92795b
+/delorun-plugin-packs/tests:
+  en: 0fb841d5b1ec053c
+  zh: 57580a1de73ad69c

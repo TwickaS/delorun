@@ -1,0 +1,16 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/packages/bundle-agent-hooks/README.md
+/:
+  en: dd303ae37d52f715
+  zh: ae4998e850465c7e
+/delorun-bundle-agent-hooks:
+  en: 7784127afbee5974
+  zh: 331f686eb71c5e58
+/delorun-bundle-agent-hooks/summary:
+  en: 264f7d6e13577cff
+  zh: c76651f4f4dd7864
+/delorun-bundle-agent-hooks/needs-setup:
+  en: a65a141c5e30fd68
+  zh: 8c4df2a5da0f4205

@@ -151,6 +151,7 @@ export function apply(ctx: ClientContext): void {
           'plugins.detail.actions': { kind: 'list', scope: 'root' },
           'plugins.detail.badge': { kind: 'list', scope: 'root' },
           'plugins.detail.section': { kind: 'list', scope: 'root' },
+          'plugins.row.state': { kind: 'list', scope: 'root' },
         },
       }, PluginManagerPage)
       yield ctx.layout.panelInfo.subscribe(() => {

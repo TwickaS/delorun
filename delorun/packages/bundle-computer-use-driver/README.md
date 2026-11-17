@@ -4,6 +4,8 @@ description: "Lets the agent see and operate desktop windows on Linux and Window
 
 # @delorun/bundle-computer-use-driver
 
+English | [中文](README.zh.md)
+
 ## Summary
 
 Switch on **Computer use (Cua Driver)** in Plugins to let the agent inspect and operate desktop windows through the Cua Driver SDK. Screenshots reach models that accept images.

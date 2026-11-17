@@ -214,6 +214,12 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     parity: { kind: 'disabled', reason: 'Stock offers no version page, and a disabled row mounts nothing: no route.' },
   },
   {
+    id: 'delorun-requirements',
+    kind: 'added',
+    reason: 'Needs setup in Plugins: one read-only route tells the studio which rows of an optional bundle need a program, a setting or a platform they lack, from the bundle\'s own declaration; it changes nothing and upstream has no such state.',
+    parity: { kind: 'disabled', reason: 'Stock Plugins has no needs-setup state, and a disabled row mounts nothing: no route.' },
+  },
+  {
     id: 'delorun-report',
     kind: 'added',
     reason: 'Report a problem: one read-only route gives the studio the versions, the system and a redacted excerpt of recent errors, and the address of the issue form, so the person can review a pre-filled GitHub issue and send it themselves; the row makes no request, and upstream has no such page.',
