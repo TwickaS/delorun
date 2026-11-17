@@ -2,7 +2,7 @@
  * Building a release's packs (contract C2's packs file): one archive per plugin package that a person turns on and the
  * default install does not carry, for each platform whose files differ. A pack holds the package and its production
  * dependencies, except (1) packages the closure already carries at the same version, which the install links
- * into the pack as peers, and (2) packages whose licence forbids redistribution (`closure.json`'s `packExternals`),
+ * into the pack as peers (a third-party package at another version stays in the pack; see `keepsOneCopy`), and (2) packages whose licence forbids redistribution (`closure.json`'s `packExternals`),
  * which the packs file pins by npm tarball URL and SHA-512 and the client fetches from the registry.
  *
  * @module @delorun/release/closure/packs
@@ -96,6 +96,31 @@ async function pinOf(name: string, platform: RuntimePlatform, sources: PackSourc
   return { name, version: brandString<SemanticVersion>(locked.version), url, sha512: brandString<Sha512Base64>(sha512), length: bytes.byteLength }
 }
 
+/** Third-party libraries that must exist once in a running Delorun: they hold module-level state or classes that plugins compare or pass across the plugin boundary. */
+export const SINGLETON_LIBRARIES: readonly string[] = ['react', 'react-dom', 'zod', '@modelcontextprotocol/sdk']
+
+/** Scopes of the workspace, Delorun and rescoped vendor packages (`vendor/*` are all `@deepseek-ai/*`). */
+const CORE_SCOPES: readonly string[] = ['@deepseek-ai/', '@delorun/']
+
+/**
+ * Whether a bundled package at another version than the closure's would be a second copy that breaks module identity.
+ * Workspace, Delorun and vendor packages, the singleton libraries, the recipe's externals and anything the pack lists in
+ * `peerDependencies` must exist once; any other third-party package may ship inside the pack at its own version, which
+ * Node resolves first from the pack's directory.
+ * @param name - the package name.
+ * @param packPeers - the pack package's `peerDependencies` names.
+ * @param externals - the recipe's `packExternals`.
+ * @returns true when a differing version is refused.
+ */
+export function keepsOneCopy(name: string, packPeers: ReadonlySet<string>, externals: readonly string[]): boolean {
+  return CORE_SCOPES.some(scope => name.startsWith(scope)) || SINGLETON_LIBRARIES.includes(name) || packPeers.has(name) || isExternal(name, externals)
+}
+
+async function peerDependencyNames(directory: string): Promise<Set<string>> {
+  const manifest = JSON.parse(await readFile(join(directory, 'package.json'), 'utf8')) as { peerDependencies?: Record<string, string> }
+  return new Set(Object.keys(manifest.peerDependencies ?? {}))
+}
+
 async function versionIn(directory: string): Promise<string | undefined> {
   try {
     return (JSON.parse(await readFile(join(directory, 'package.json'), 'utf8')) as { version?: string }).version
@@ -127,21 +152,23 @@ export async function buildPack(name: string, version: string, experimental: boo
     const external: PackExternal[] = []
     const dropped = new Set<string>()
     const peers = new Set<string>()
+    const kept = new Set<string>()
+    const packPeers = await peerDependencyNames(directory)
     const entries: ArchiveEntry[] = []
     for (const file of await listStagedTree(directory, platform)) {
       const nested = /^node_modules\/((?:@[^/]+\/)?[^/]+)\//u.exec(file.path)?.[1]
-      if (nested !== undefined && !dropped.has(nested)) {
+      if (nested !== undefined && !dropped.has(nested) && !kept.has(nested)) {
         if (isExternal(nested, externals)) {
           dropped.add(nested)
           external.push(await pinOf(nested, platform, sources))
         } else {
           const inClosure = await versionIn(join(sources.closureNodeModules(platform), nested))
           const bundled = await versionIn(join(directory, 'node_modules', nested))
-          if (inClosure !== undefined && inClosure !== bundled) throw new Error(`${name} bundles ${nested}@${bundled ?? 'unknown'} for ${platform}, but the closure carries ${nested}@${inClosure}; a pack never carries a second copy of a core package`)
-          if (inClosure !== undefined) {
+          if (inClosure !== undefined && inClosure !== bundled && keepsOneCopy(nested, packPeers, externals)) throw new Error(`${name} bundles ${nested}@${bundled ?? 'unknown'} for ${platform}, but the closure carries ${nested}@${inClosure}; ${nested} must exist once in a running Delorun, so a pack never carries a second copy of it`)
+          if (inClosure !== undefined && inClosure === bundled) {
             dropped.add(nested)
             peers.add(nested)
-          }
+          } else kept.add(nested)
         }
       }
       if (nested !== undefined && dropped.has(nested)) continue
