@@ -127,7 +127,7 @@ minimumReleaseAgeExclude:
   - electron@44.7.0
   # Stagehand 4.4.0 carries the reviewed zod 4.6.6 pin; install it without the release-age wait.
   - '@browserbasehq/stagehand@4.4.0'
-  # Owner ruling A443 (2026-11-17): the Your own browser pack pins browse 0.1.1 (MIT, npm provenance) and its seven
+  # Owner ruling A443 (2026-11-17): the Your own browser pack pins browse 0.1.1 (MIT) and its seven
   # platform binaries before they pass the release-age rule.
   # TODO: remove these eight lines after 2026-11-18 00:15Z, when 0.1.1 passes the rule by itself.
   - '@opencode/browse-darwin-arm64@0.1.1'
