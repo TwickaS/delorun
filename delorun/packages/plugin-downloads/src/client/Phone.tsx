@@ -69,7 +69,8 @@ export function DownloadsSheet({ model, source, t }: { readonly model: PanelMode
   const [open, setOpen] = useState(false)
   const trigger = useRef<HTMLButtonElement>(null)
   const closeButton = useRef<HTMLButtonElement>(null)
-  const count = model.active + model.failed
+  // The badge and the header count the same thing: what is left to install, or what failed once nothing is left.
+  const count = model.active > 0 ? model.active : model.failed
   const shown = model.phase !== 'hidden'
   useEffect(() => {
     if (open) closeButton.current?.focus()

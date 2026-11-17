@@ -2191,6 +2191,9 @@ importers:
       '@delorun/contract-home-layout':
         specifier: workspace:*
         version: link:../contract-home-layout
+      '@delorun/plugin-onboarding':
+        specifier: workspace:*
+        version: link:../plugin-onboarding
       '@types/react':
         specifier: ~18.3.1
         version: 18.3.31
@@ -2928,6 +2931,9 @@ importers:
       '@deepseek-ai/cordis':
         specifier: workspace:~
         version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-api-gateway':
+        specifier: workspace:*
+        version: link:../../../packages/api/gateway
       '@deepseek-ai/dsh-client-locale':
         specifier: workspace:*
         version: link:../../../packages/client/locale
@@ -2940,6 +2946,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-layout':
         specifier: workspace:*
         version: link:../../../packages/client/ui-layout
+      '@deepseek-ai/dsh-client-ui-plugin-manager':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-plugin-manager
       '@deepseek-ai/dsh-client-ui-primitives':
         specifier: workspace:*
         version: link:../../../packages/client/ui-primitives
@@ -3417,6 +3426,9 @@ importers:
       '@delorun/contract-release-manifest':
         specifier: workspace:*
         version: link:../contract-release-manifest
+      '@delorun/home-auth':
+        specifier: workspace:*
+        version: link:../home-auth
       '@delorun/home-process':
         specifier: workspace:*
         version: link:../home-process
@@ -3442,6 +3454,9 @@ importers:
       '@deepseek-ai/dsh-app-boot':
         specifier: workspace:*
         version: link:../../../packages/boot/app-boot
+      '@deepseek-ai/dsh-client-connection':
+        specifier: workspace:*
+        version: link:../../../packages/client/connection
       '@deepseek-ai/dsh-plugin-manager':
         specifier: workspace:*
         version: link:../../../packages/boot/plugin-manager

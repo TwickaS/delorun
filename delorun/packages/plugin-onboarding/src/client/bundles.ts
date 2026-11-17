@@ -8,6 +8,7 @@ import type { ClientRemote } from '@deepseek-ai/dsh-api-remotes/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { LocalizedText } from '@deepseek-ai/dsh-package-manifest'
 import { randomUUID } from '@deepseek-ai/dsh-util-crypto'
+import { createPacksClient } from '@delorun/plugin-packs/client'
 import { packView, type PackView, type PacksResult, type PacksSnapshot } from '@delorun/plugin-packs/wire'
 
 type PluginManager = ClientRemote['pluginManager']
@@ -214,10 +215,11 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
     views.set({ ...views.getSnapshot(), ...Object.fromEntries(names.map(name => [name, { state }])) })
   }
   const packViews = new Map<string, PackView>()
+  // The Host's packs routes; a Host without plugin packs answers 404, which reads as no packs.
+  const packsClient = createPacksClient()
   const readPacks = async (names: readonly string[]): Promise<void> => {
-    const remote: PacksRemote | undefined = ctx.get('remote.packs')
+    const remote: PacksRemote = packsClient
     packViews.clear()
-    if (remote === undefined) return
     try {
       const snapshot = await remote.list()
       for (const name of names) {
@@ -271,8 +273,7 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
       const before = views.getSnapshot()[name]
       const pack = packViews.get(name)
       if (before?.state === 'available' && pack?.kind === 'available') {
-        const packs: PacksRemote | undefined = ctx.get('remote.packs')
-        if (packs === undefined) return
+        const packs: PacksRemote = packsClient
         set(name, { ...before, state: 'installing' })
         try {
           const queued = await packs.enqueue({ names: [name] })

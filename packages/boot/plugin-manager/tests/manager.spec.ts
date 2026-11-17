@@ -3077,12 +3077,13 @@ it('refuses an update whose target does not match where the copy was installed f
 })
 
 describe('a package the release publishes as a signed pack', () => {
-  const targets = (listed: boolean, installed?: string) => (ctx: Context) => {
+  const targets = (listed: boolean, installed?: string, running = true) => (ctx: Context) => {
     ctx.provide('packInstallTargets', {
       resolve: (_name: string, version: string) => installed === undefined ? undefined : { spec: installed, version },
       linkSpec: () => 'link:/home/packs/current/pack/package',
       listed: () => listed,
       isPack: () => Promise.resolve(listed),
+      runsCurrentRelease: () => Promise.resolve(running),
     })
   }
 
@@ -3145,6 +3146,24 @@ describe('a package the release publishes as a signed pack', () => {
     expect(profileFiles(dir)).toEqual(before)
   })
 
+  it('refuses the pack\'s own folder once an update has switched away from this Host\'s release, before any install', async () => {
+    const { manager, dir } = await fixture('live', false, targets(true, undefined, false))
+    const calls: string[][] = []
+    const pnpm = vi.spyOn(operations, 'runProfilePnpm').mockImplementation(async (_context, args) => {
+      calls.push([...args])
+      const profile = readProfileManifest('test', dir)
+      profile.dependencies = { ...profile.dependencies, 'listed-pack': 'link:/home/packs/current/pack/package' }
+      writeFileSync(join(dir, 'package.json'), JSON.stringify(profile))
+      return { exitCode: 0, output: 'ok', truncated: false, logPath: join(dir, 'pnpm.log') }
+    })
+    onTestFinished(() => { pnpm.mockRestore() })
+    const before = profileFiles(dir)
+    const result = await manager.installBundle('link:/home/packs/current/pack/package', { enabled: false })
+    expect(calls.every(call => call.includes('--lockfile-only') && call.includes('--ignore-scripts'))).toBe(true)
+    expect(result).toMatchObject({ application: 'failed', changed: false, error: { code: 'operation-error', diagnostic: expect.stringMatching(/Restart Delorun to finish the update/u) } })
+    expect(profileFiles(dir)).toEqual(before)
+  })
+
   it('lets the pack\'s own folder through the same resolution', async () => {
     const { manager, dir, bundle } = await fixture('live', false, targets(true))
     const spec = 'link:/home/packs/current/pack/package'
@@ -3177,6 +3196,20 @@ describe('a package the release publishes as a signed pack', () => {
     expect(await manager.previewRestore(version)).toMatchObject({ ok: false, error: { code: 'operation-error', diagnostic: expect.stringMatching(/listed-pack.*remove the pack first/u) } })
     expect(await manager.restore(version)).toMatchObject({ application: 'failed', error: { code: 'operation-error', diagnostic: expect.stringMatching(/listed-pack/u) } })
     expect(pnpm).not.toHaveBeenCalled()
+    expect(profileFiles(dir)).toEqual(before)
+  })
+
+  it('refuses to restore the pack\'s own link once an update has switched away from this Host\'s release', async () => {
+    const { manager, dir } = await fixture('live', false, targets(true, undefined, false))
+    const manifest = readFileSync(join(dir, 'package.json'), 'utf8')
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ ...JSON.parse(manifest) as object, dependencies: { extra: '1.0.0', 'listed-pack': 'link:/home/packs/current/pack/package' } }))
+    const held = await manager.history(1) as { versions: Array<{ id: ProfileVersionId }> }
+    writeFileSync(join(dir, 'package.json'), manifest)
+    const version = held.versions[0]!.id
+    const before = profileFiles(dir)
+    const update = { ok: false, error: { diagnostic: expect.stringMatching(/Restart Delorun to finish the update/u) } }
+    expect(await manager.previewRestore(version)).toMatchObject(update)
+    expect(await manager.restore(version)).toMatchObject({ application: 'failed', error: { diagnostic: expect.stringMatching(/Restart Delorun/u) } })
     expect(profileFiles(dir)).toEqual(before)
   })
 

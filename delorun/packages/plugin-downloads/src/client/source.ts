@@ -43,6 +43,11 @@ export interface DownloadsSource {
    */
   subscribe(listener: () => void): () => void
   /**
+   * Add a plugin pack to the queue.
+   * @param key - the package name.
+   */
+  enqueue(key: string): void
+  /**
    * Stop a queued or running item.
    * @param key - the package name.
    */
@@ -119,6 +124,7 @@ export function createFakeDownloadsSource(initial: readonly DownloadItem[] = [])
     subscribe: (listener) => { listeners.add(listener); return () => { listeners.delete(listener) } },
     set,
     update: change,
+    enqueue: (key) => { calls.push(`enqueue:${key}`); set([...items.filter(item => item.key !== key), { key, state: 'queued', receivedBytes: 0 }]) },
     cancel: (key) => { calls.push(`cancel:${key}`); change(key, { state: 'cancelled' }) },
     retry: (key) => { calls.push(`retry:${key}`); change(key, { state: 'queued', receivedBytes: 0 }) },
     remove: (key) => { calls.push(`remove:${key}`); set(items.filter(item => item.key !== key)) },
@@ -137,7 +143,7 @@ const HUB_KEY = Symbol.for('delorun.plugin-downloads.hub')
 const NO_ITEMS: readonly DownloadItem[] = []
 
 /** A source with nothing in it; its snapshot is one constant array so React can compare it. */
-export const EMPTY_SOURCE: DownloadsSource = { snapshot: () => NO_ITEMS, subscribe: () => () => {}, cancel: () => {}, retry: () => {}, remove: () => {} }
+export const EMPTY_SOURCE: DownloadsSource = { snapshot: () => NO_ITEMS, subscribe: () => () => {}, enqueue: () => {}, cancel: () => {}, retry: () => {}, remove: () => {} }
 
 /**
  * The hub is shared through a global symbol, because the onboarding plugin's bundle and this one's are separate modules

@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 import { Context } from '@deepseek-ai/cordis'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createBundleInstaller, stateOf } from '../src/client/bundles.ts'
 
-afterEach(() => { vi.restoreAllMocks() })
+// The Host's packs routes answer that this studio has no plugin packs, so the bundles read as the plugin manager lists them.
+beforeEach(() => { vi.stubGlobal('fetch', () => Promise.resolve(Response.json({ supported: false, reason: 'no packs here', packs: [], queue: [] }))) })
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
 interface Row {
   name: string
@@ -17,7 +19,7 @@ interface Row {
 }
 
 const row = (change: Partial<Row> & { name: string }): Row => ({ availability: 'installation', enabled: false, ...change })
-const flush = async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve() }
+const flush = async () => { for (let tick = 0; tick < 12; tick += 1) await Promise.resolve() }
 
 /** A context with a scripted plugin manager. */
 function bench(rows: readonly Row[] | 'refused' | 'rejects' | 'no-remote', options: { readonly change?: unknown; readonly addWaitMs?: number } = {}) {

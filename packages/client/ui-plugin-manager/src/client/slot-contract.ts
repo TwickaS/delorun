@@ -177,6 +177,13 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      */
     'plugins.detail.actions': { kind: 'list'; scope: 'root'; owner: PluginDetailProps }
     /**
+     * The control that stands where a bundle's enable switch is, on its card in the list and at the head of its page,
+     * routed with the bundle as the subject. The first entry whose selector accepts the subject replaces the switch;
+     * when every selector declines, the page draws its switch. Delorun's plugin packs use it for "Add" on a pack that
+     * is not downloaded yet.
+     */
+    'plugins.bundle.action': { kind: 'chain'; scope: 'root'; owner: PluginDetailProps }
+    /**
      * Tags beside a detail page's title, after the version, beta, and problem
      * tags the page draws itself, rendered with the page's subject.
      */

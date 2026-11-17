@@ -190,6 +190,10 @@ function renderTab(
       stub.publish(forms[id]!.state as ConfigFormSnapshot<T>)
       return { ...stub.scope, mutate: forms[id]!.mutate }
     },
+    renderSlotChain: (name, owner, opts) => {
+      const body = bodies[`${name}:`]
+      return body === undefined ? opts?.fallback ?? null : body('detail', owner)
+    },
     renderSlot: (name, owner, opts) => {
       const body = bodies[`${name}:${opts?.only ?? opts?.entryKey ?? ''}`]
       if (body === undefined) return null
@@ -1635,6 +1639,22 @@ describe('PluginManagerPage', () => {
       expect(within(item).getByText('badge item bash')).toBeTruthy()
       expect(within(item).getByRole('region', { name: 'section item bash' })).toBeTruthy()
       expect(within(item).getByRole('form', { name: 'bash form' })).toBeTruthy()
+    })
+
+    it('lets a chain entry stand where the enable switch is, on the card and on the page, and leaves the switch when none does', () => {
+      const missing: PackageView = { name: 'dsh-pack', installed: false, official: true, availability: 'missing', optional: true, removable: false, enabled: false, rows: [] }
+      const withAction: SlotBodies = { 'plugins.bundle.action:': (_view, owner) => <button type="button">{`add ${label(owner)}`}</button> }
+      renderTab({ packages: [missing] }, {}, withAction)
+      const card = document.querySelector('[data-plugin-package="dsh-pack"]') as HTMLElement
+      expect(within(card).getByRole('button', { name: 'add bundle dsh-pack' })).toBeTruthy()
+      expect(within(card).queryByRole('switch')).toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: en.openDetail.replace('{name}', 'dsh-pack') }))
+      const detail = document.querySelector('[data-plugin-detail]') as HTMLElement
+      expect(within(detail).getByRole('button', { name: 'add bundle dsh-pack' })).toBeTruthy()
+      expect(within(detail).queryByRole('switch')).toBeNull()
+      cleanup()
+      renderTab({ packages: [missing] }, {}, {})
+      expect(within(document.querySelector('[data-plugin-package="dsh-pack"]') as HTMLElement).getByRole('switch')).toBeTruthy()
     })
 
     it('leaves the version out of a bundle the Host reports none for', () => {

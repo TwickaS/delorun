@@ -310,7 +310,7 @@ export class RuntimeStore {
       requireProtocol(this.paths, current, release.manifest, release.files, request.launcher)
       const check = await this.startCheck(current, release, request.fullCheckDays)
       // A switch that stopped after the pointers and before the link is finished here, offline; the link follows `current`.
-      if (await packsCurrentProblem(this.paths, current) !== undefined) await this.finishPacksSwitch(current)
+      if (await packsCurrentProblem(this.paths, current) !== undefined) await this.finishPacksSwitch()
       await this.requirePacksIntact(current, request.root)
       return { version: current, check, ...launchCommand(this.paths, current, request.profile, request.args) }
     } catch (error) {
@@ -482,11 +482,11 @@ export class RuntimeStore {
    * Finish a switch that stopped between the pointers and `packs/current`. A launch never waits for `store.lock`, so a
    * lock another process holds, or one that cannot be taken, leaves the link as it is and the pack check refuses with
    * `delorun recover packs`.
-   * @param version - the release `runtimes/current` names.
    */
-  private async finishPacksSwitch(version: RuntimeVersion): Promise<void> {
+  private async finishPacksSwitch(): Promise<void> {
     try {
-      await this.locked(() => ensurePacksCurrent(this.paths, version))
+      // `current` is read under the lock, so an update that switches meanwhile is not undone by this launch.
+      await this.locked(async () => { await ensurePacksCurrent(this.paths, (await readPointers(this.paths)).current) })
     } catch (error) {
       // The lock is busy or unusable; the pack check that follows reports the link and names the repair.
       this.options.logger.warn('the runtime store could not re-point packs/current at launch', { err: error })

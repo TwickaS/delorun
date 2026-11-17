@@ -665,7 +665,7 @@ describe('the plugin downloads row in the footer', () => {
     phone(true)
     const release = provideDownloadsSource(queue())
     await mountEntry()
-    expect(screen.getByRole('button', { name: /Installing 1 of 1/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /1 left to install/ })).toBeTruthy()
     release()
   })
 
@@ -673,13 +673,13 @@ describe('the plugin downloads row in the footer', () => {
     phone(false)
     const release = provideDownloadsSource(queue())
     await mountEntry()
-    expect(screen.queryByRole('button', { name: /Installing/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /left to install/ })).toBeNull()
     release()
   })
 
   it('shows nothing when the queue is empty', async () => {
     phone(true)
     await mountEntry()
-    expect(screen.queryByRole('button', { name: /Installing/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /left to install/ })).toBeNull()
   })
 })
