@@ -23,6 +23,10 @@
     "./types": {
       "types": "./lib/types/types.d.ts",
       "default": "./lib/types/types.js"
+    },
+    "./chrome-channel": {
+      "types": "./lib/types/chrome-channel.d.ts",
+      "default": "./lib/types/chrome-channel.js"
     }
   },
   "files": [

@@ -10,7 +10,8 @@ import { fileURLToPath } from 'node:url'
 import yaml from 'js-yaml'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { assertBundlePlatform, composeEntries, initProfile, loadProfileDirectory, UnsupportedBundlePlatformError } from '@deepseek-ai/dsh-app-boot'
-import { checkRequirements } from '../src/requirements.ts'
+import { chromeChannelCandidates } from '@deepseek-ai/dsh-native-command/chrome-channel'
+import { checkRequirements, hostEnvironment } from '../src/requirements.ts'
 import { DELORUN_PROFILE_BUNDLES, LOCAL_BUNDLE, STUDIO_BUNDLE } from '../src/profile.ts'
 import { createTestHome, INSTALL_ANCHOR, PACKAGE_DIR, STUDIO_PACKAGE_DIR, type TestHome } from './profiles.ts'
 
@@ -154,14 +155,25 @@ describe('what needs setup', () => {
     expect(states('bundle-webhooks', binDir(), 'a-long-random-secret')).toEqual({ 'github-webhook-ingress': 'ready' })
   })
 
-  it('says Browser needs its Chromium download until the exact build its Playwright expects is in Playwright\'s cache', () => {
+  it('says Browser is ready with Chrome installed, and otherwise needs the exact Chromium build its Playwright expects', () => {
     const cache = mkdtempSync(join(scratch, 'ms-playwright-'))
     vi.stubEnv('PLAYWRIGHT_BROWSERS_PATH', cache)
     try {
-      const rowIds = flat(patchRows('bundle-browser')).map(row => String(row.id))
-      const answer = checkRequirements([{ name: '@delorun/bundle-browser', dir: join(PACKAGES, 'bundle-browser'), rowIds }], 'en')
-      expect(answer).toMatchObject({ problems: [], rows: [{ rowId: 'browser-use-playwright-mcp', state: 'needs-setup', reason: 'Chromium download' }] })
-      const row = answer.rows[0]
+      const rows = flat(patchRows('bundle-browser'))
+      const rowIds = rows.map(row => String(row.id))
+      const rowConfigs = Object.fromEntries(rows.map(row => [String(row.id), (row as { config?: unknown }).config]))
+      // The bundle sets no `browser`, so the row launches Chrome when this computer has it: the spec decides whether it does.
+      const real = hostEnvironment()
+      const chrome = chromeChannelCandidates(real)
+      const answer = (installed: boolean) => checkRequirements(
+        [{ name: '@delorun/bundle-browser', dir: join(PACKAGES, 'bundle-browser'), rowIds, rowConfigs }], 'en',
+        { ...real, exists: path => chrome.includes(path) ? installed : real.exists(path) },
+      )
+      expect(chrome.length > 0 || !['linux', 'darwin', 'win32'].includes(process.platform)).toBe(true)
+      if (chrome.length > 0) expect(answer(true)).toEqual({ problems: [], rows: [{ packageName: '@delorun/bundle-browser', rowId: 'browser-use-playwright-mcp', state: 'ready' }] })
+      const without = answer(false)
+      expect(without).toMatchObject({ problems: [], rows: [{ rowId: 'browser-use-playwright-mcp', state: 'needs-setup', reason: 'Chromium download' }] })
+      const row = without.rows[0]
       const command = row?.state === 'needs-setup' && row.fix.kind === 'command' ? row.fix.command : ''
       expect(command).toMatch(/^npx -y @playwright\/mcp@\d+\.\d+\.\d+ install-browser chromium$/u)
     } finally {
