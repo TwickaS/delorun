@@ -277,6 +277,25 @@ describe('real @openai/codex 0.153.4 product', () => {
     await expectQuiescent(harness.handles)
   }, 60_000)
 
+  it.each(['careful', 'standard', 'own', 'unrestricted'] as const)('leaves the person\'s config.toml byte-identical at the %s level', async (level) => {
+    const sentinel = 'REAL_CODEX_LEVEL_SENTINEL'
+    const { harness } = await realHarness([{ kind: 'complete', text: sentinel }])
+    harness.ctx.provide('delegationConsent')
+    harness.ctx.set('delegationConsent', { review: () => Promise.resolve({ kind: 'allow' as const }), permissionLevel: () => level })
+    const configPath = join(harness.env.CODEX_HOME!, 'config.toml')
+    const configBefore = readFileSync(configPath)
+    const run = await startExternalActivation(harness.ctx, 'codex', {
+      prompt: [{ type: 'text', text: 'Return the fixture sentinel exactly.' }],
+      parent: harness.parent,
+      signal: new AbortController().signal,
+    })
+    await expect(run.result).resolves.toEqual({ output: [{ type: 'text', text: sentinel }], stopReason: 'completed' })
+    await run.dispose()
+    // A thread that starts writable or with full access makes Codex append a trusted-folder entry for the workspace.
+    expect(readFileSync(configPath).equals(configBefore)).toBe(true)
+    await expectQuiescent(harness.handles)
+  }, 60_000)
+
   it('fails a missing platform payload without falling back to a host codex', async () => {
     const root = mkdtempSync(join(tmpdir(), 'dsh-codex-missing-payload-'))
     roots.push(root)

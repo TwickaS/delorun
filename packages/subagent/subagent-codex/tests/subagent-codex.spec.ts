@@ -702,7 +702,7 @@ describe('task admission and package contracts', () => {
     ['careful', { approvalPolicy: 'never', sandbox: 'read-only' }],
     ['standard', { approvalPolicy: 'on-request', approvalsReviewer: 'auto_review', sandbox: 'read-only' }],
     ['own', {}],
-    ['unrestricted', { approvalPolicy: 'never', sandbox: 'danger-full-access' }],
+    ['unrestricted', { approvalPolicy: 'never', sandbox: 'read-only' }],
   ] as const)('maps %s to the official thread/start fields', async (permissionMode, expected) => {
     const child = fakeChild()
     const wire = new CodexAppServerWire(
@@ -2451,13 +2451,14 @@ describe('one-shot hand-off fixes', () => {
   it.each([
     ['careful', { type: 'workspaceWrite', writableRoots: ['/workspace'], networkAccess: false, excludeSlashTmp: true, excludeTmpdirEnvVar: true }],
     ['standard', { type: 'workspaceWrite', writableRoots: ['/workspace'], networkAccess: true }],
+    ['unrestricted', { type: 'dangerFullAccess' }],
   ] as const)('confines a %s turn to the task folder with the level\'s network and temporary folders', async (permissionMode, sandboxPolicy) => {
     const { turnStart, run } = await publishRun(fakeChild(), undefined, { permissionMode, cwd: '/workspace' })
     expect(turnStart.params).toMatchObject({ sandboxPolicy })
     await run.dispose()
   })
 
-  it.each(['own', 'unrestricted'] as const)('sends no turn sandbox policy for the %s level', async (permissionMode) => {
+  it.each(['own'] as const)('sends no turn sandbox policy for the %s level', async (permissionMode) => {
     const { turnStart, run } = await publishRun(fakeChild(), undefined, { permissionMode, cwd: '/workspace' })
     expect(turnStart.params).not.toHaveProperty('sandboxPolicy')
     await run.dispose()

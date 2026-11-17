@@ -57,7 +57,8 @@ const THREAD_PERMISSION_PARAMS: Readonly<Record<CodexRunPermissions, JsonObject>
   careful: { approvalPolicy: 'never', sandbox: 'read-only' },
   standard: { approvalPolicy: 'on-request', approvalsReviewer: 'auto_review', sandbox: 'read-only' },
   own: {},
-  unrestricted: { approvalPolicy: 'never', sandbox: 'danger-full-access' },
+  // A thread that starts with full access makes Codex append a trusted-folder entry to the person's `config.toml`.
+  unrestricted: { approvalPolicy: 'never', sandbox: 'read-only' },
   never: { approvalPolicy: 'never' },
   'approve-for-me': {
     approvalPolicy: 'on-request',
@@ -78,6 +79,8 @@ function turnSandboxPolicy(mode: CodexRunPermissions, cwd: string): JsonObject |
     case 'careful':
       // Only the task folder is writable and commands have no network; temporary folders stay read-only.
       return { sandboxPolicy: { type: 'workspaceWrite', writableRoots: [cwd], networkAccess: false, excludeSlashTmp: true, excludeTmpdirEnvVar: true } }
+    case 'unrestricted':
+      return { sandboxPolicy: { type: 'dangerFullAccess' } }
     case 'standard':
       return { sandboxPolicy: { type: 'workspaceWrite', writableRoots: [cwd], networkAccess: true } }
     default:
