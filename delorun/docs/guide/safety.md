@@ -178,6 +178,8 @@ Before you answer you see its command, arguments, folder and the names of its en
 
 Claude Code and Codex are optional plugins that let the model hand a task to another agent program, an [external agent](../reference/glossary.md#external-agent). That program runs outside Delorun's sandbox and approval prompts. It can read and change files in the workspace and anywhere else its own settings allow, your Delorun home included. It uses your own Claude Code or Codex sign-in, so any cost goes to that account.
 
+Each agent runs at a level you choose in Settings, Safety, External agents: Careful, Standard, Your own settings or Unrestricted. Standard is the default. An approved device can tighten a level, but loosening one, and Unrestricted in particular, needs you at the computer that runs Delorun, and dangerous mode does not lift that.
+
 Delorun asks before each run, at the computer that runs Delorun, whichever prompts answer you gave in setup. **Allow once** starts that run only. **Allow for this workspace** lets that agent start there without asking until you revoke it in Settings, Safety, External agents, or with `delorun workspace external-agents <folder> <agent> off`. Each run stops after 30 minutes.
 
 <details>
