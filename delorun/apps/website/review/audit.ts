@@ -12,11 +12,26 @@ import { throttleAsPhone } from './browser.ts'
 import { WIDTHS } from './naming.ts'
 import { headTags } from './head-tags.ts'
 import { open, url, wakeLazySections } from './page-tools.ts'
+import { readResources } from './resources.ts'
 import type { Finding } from './report.ts'
 import { failures, LIMITS, measure } from '../scripts/weight.ts'
 
 /** The widths the overflow and tap-target checks run at: the picture widths and the narrowest supported screen. */
 export const AUDIT_WIDTHS = [320, ...WIDTHS] as const
+
+/** How many times the phone-profile paint and scroll are measured; the median is judged. */
+export const PHONE_RUNS = 3
+
+/**
+ * The median of a list.
+ * @param numbers - the values.
+ * @returns the middle value, or the mean of the two middle values.
+ */
+export function median(numbers: readonly number[]): number {
+  const sorted = [...numbers].sort((a, b) => a - b)
+  const middle = Math.floor(sorted.length / 2)
+  return sorted.length % 2 === 1 ? (sorted[middle] ?? 0) : ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2
+}
 
 /** The largest-paint limit on the phone profile, in milliseconds (plan, "Weight limits"). */
 export const LCP_LIMIT_MS = 2500
@@ -75,22 +90,33 @@ export async function audit(browser: Browser, base: string, out: string): Promis
     await session.context.close()
   }
 
-  const vitals = await phoneVitals(browser, base)
-  findings.push(...vitals.findings)
-  measurements['phone'] = vitals.measurements
-
-  const scroll: Record<string, unknown> = {}
-  for (const width of [1440, 390]) {
-    const session = await open(browser, { width, scheme: 'light', phone: width <= 480 }, `scroll ${String(width)} px`)
-    if (width <= 480) await throttleAsPhone(session.context, session.page)
+  const vitalRuns = []
+  const rates: Array<{ fps: number; worstFrameMs: number }> = []
+  for (let run = 0; run < PHONE_RUNS; run++) {
+    vitalRuns.push(await phoneVitals(browser, base))
+    const session = await open(browser, { width: 390, scheme: 'light', phone: true }, 'phone scroll')
+    await throttleAsPhone(session.context, session.page)
     await session.page.goto(url(base, '/'), { waitUntil: 'load', timeout: 60000 })
     await session.page.waitForTimeout(1500)
-    const result = await frameRate(session.page)
-    scroll[`w${String(width)}${width <= 480 ? '-phone-profile' : ''}`] = result
-    if (result.fps < 30) findings.push(warn('scroll', `${String(width)} px`, `${String(result.fps)} frames per second while scrolling (worst frame ${String(result.worstFrameMs)} ms)`))
+    rates.push(await frameRate(session.page))
     await session.context.close()
   }
-  measurements['scrollSmoothness'] = { ...scroll, note: 'headless Chromium on a software renderer: a floor, not a measure of real hardware' }
+  const paints = vitalRuns.map(run => Number((run.measurements as { largestPaintMs: number | null }).largestPaintMs ?? 0))
+  const middle = vitalRuns[paints.indexOf(median(paints))] ?? vitalRuns[0]
+  const fps = rates.map(rate => rate.fps)
+  if (middle !== undefined) {
+    findings.push(...middle.findings)
+    measurements['phone'] = { ...middle.measurements, runs: { largestPaintMs: paints, medianLargestPaintMs: median(paints), scrollFps: fps, medianScrollFps: median(fps), worstFrameMs: rates.map(rate => rate.worstFrameMs), freeMemoryGbAfter: Math.round(readResources().memoryGb * 10) / 10 } }
+  }
+
+  const desktop = await open(browser, { width: 1440, scheme: 'light' }, 'scroll 1440 px')
+  await desktop.page.goto(url(base, '/'), { waitUntil: 'load' })
+  await desktop.page.waitForTimeout(1500)
+  const desktopRate = await frameRate(desktop.page)
+  await desktop.context.close()
+  if (median(fps) < 30) findings.push(warn('scroll', '390 px phone profile', `median ${String(median(fps))} frames per second over ${String(PHONE_RUNS)} runs (worst frames ${rates.map(rate => String(rate.worstFrameMs)).join(', ')} ms)`))
+  if (desktopRate.fps < 30) findings.push(warn('scroll', '1440 px', `${String(desktopRate.fps)} frames per second while scrolling (worst frame ${String(desktopRate.worstFrameMs)} ms)`))
+  measurements['scrollSmoothness'] = { w1440: desktopRate, 'w390-phone-profile': { medianFps: median(fps), runs: rates }, note: 'headless Chromium on a software renderer: a floor, not a measure of real hardware' }
 
   const head = await headTags(base)
   measurements['headTags'] = head.tags
@@ -236,7 +262,7 @@ async function keyboard(page: Page, width: number): Promise<{ findings: Finding[
   return { findings, stops }
 }
 
-async function phoneVitals(browser: Browser, base: string): Promise<{ findings: Finding[]; measurements: Record<string, unknown> }> {
+export async function phoneVitals(browser: Browser, base: string): Promise<{ findings: Finding[]; measurements: Record<string, unknown> }> {
   const session = await open(browser, { width: 390, scheme: 'light', phone: true }, 'phone profile')
   await session.context.addInitScript(() => {
     const store: NonNullable<Window['__v']> = { lcpMs: null, element: null, cls: 0 }
@@ -268,7 +294,7 @@ async function phoneVitals(browser: Browser, base: string): Promise<{ findings: 
   return { findings, measurements }
 }
 
-async function frameRate(page: Page): Promise<{ fps: number; worstFrameMs: number }> {
+export async function frameRate(page: Page): Promise<{ fps: number; worstFrameMs: number }> {
   return page.evaluate(() => new Promise<{ fps: number; worstFrameMs: number }>(done => {
     let frames = 0
     const start = performance.now()
