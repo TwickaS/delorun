@@ -18,7 +18,7 @@ import { TESTED_CODEX_VERSION, type ClientResult } from './protocol.ts'
 import { CodexRpc, CodexRpcError, type WireTap } from './rpc.ts'
 import { startHarnessServer } from './harness-server.ts'
 import { holdRunFolder } from './leftovers.ts'
-import { levelPolicy, ownApprovalPolicy, threadMatches, type CodexLevel, type SeatApprovalPolicy } from './levels.ts'
+import { levelPolicy, ownApprovalPolicy, threadMatches, type SeatApprovalPolicy } from './levels.ts'
 import { CodexSession, type CodexSessionOptions } from './session.ts'
 
 /** The driver's settings, from its row's validated configuration. */
@@ -36,8 +36,6 @@ export interface CodexDriverOptions {
    * @param tool - the tool's name.
    */
   readonly onLateHarnessResult: (tool: string) => void
-  /** The level a seat runs at when its open names none. */
-  readonly level: CodexLevel
   /** Sees every frame, for live diagnostics only. */
   readonly tap?: WireTap
 }
@@ -117,7 +115,7 @@ export class CodexDriver implements ExternalAgentDriver {
       await this.handshake(rpc, request.signal)
       const account = await rpc.request('account/read', { refreshToken: false }, this.timeout(request.signal))
       if (account.account === null && account.requiresOpenaiAuth) throw new ProgramOpenError({ category: 'signed-out' })
-      const level = request.level ?? this.options.level
+      const level = request.level
       const policy = levelPolicy(level, request.cwd, level === 'own' ? await this.ownApprovalPolicy(rpc, request) : 'on-request')
       const thread = {
         cwd: request.cwd,

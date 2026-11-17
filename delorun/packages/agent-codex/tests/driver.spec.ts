@@ -49,11 +49,11 @@ function setup(program: LocatedCodex = PINNED, configuredModel = 'gpt-5.6-luna')
     codex,
     spawned,
     limits,
-    driver: new CodexDriver({ locate: () => program, requestTimeoutMs: 2_000, closeWaitMs: 50, harnessToolTimeoutSeconds: 900, onLateHarnessResult: () => {}, level: 'standard' }),
+    driver: new CodexDriver({ locate: () => program, requestTimeoutMs: 2_000, closeWaitMs: 50, harnessToolTimeoutSeconds: 900, onLateHarnessResult: () => {} }),
     request: overrides => ({
       sessionId: SessionId('seat-child'),
       cwd: TASK,
-      runRules: [],
+      level: 'standard', runRules: [],
       harnessTools: [],
       sharesFolder: () => false,
       spawn,
@@ -193,7 +193,7 @@ describe('open', () => {
 
   it('fails without starting anything when the Codex pack has no program', async () => {
     const s = setup()
-    const driver = new CodexDriver({ locate: () => undefined, requestTimeoutMs: 2_000, closeWaitMs: 50, harnessToolTimeoutSeconds: 900, onLateHarnessResult: () => {}, level: 'standard' })
+    const driver = new CodexDriver({ locate: () => undefined, requestTimeoutMs: 2_000, closeWaitMs: 50, harnessToolTimeoutSeconds: 900, onLateHarnessResult: () => {} })
     expect((await failureOf(driver.open(s.request()))).failure).toMatchObject({ category: 'program' })
     expect(s.spawned).toEqual([])
   })
@@ -201,7 +201,7 @@ describe('open', () => {
   it('fails with a program failure when Codex does not answer in time, and ends the process', async () => {
     const s = setup()
     s.codex.answers.delete('thread/start')
-    const driver = new CodexDriver({ locate: () => PINNED, requestTimeoutMs: 100, closeWaitMs: 50, harnessToolTimeoutSeconds: 900, onLateHarnessResult: () => {}, level: 'standard' })
+    const driver = new CodexDriver({ locate: () => PINNED, requestTimeoutMs: 100, closeWaitMs: 50, harnessToolTimeoutSeconds: 900, onLateHarnessResult: () => {} })
     const error = await failureOf(driver.open(s.request()))
     expect(error.failure).toEqual({ category: 'program', detail: 'Codex did not answer in time during the open.' })
     expect(s.codex.exited).toBe(true)

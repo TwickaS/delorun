@@ -23,5 +23,5 @@ function pinned(): LocatedCodex {
 }
 
 process.exitCode = await runLimitsCheck(new CodexDriver({
-  locate: pinned, requestTimeoutMs: 120_000, closeWaitMs: 5_000, harnessToolTimeoutSeconds: 900, level: 'standard', onLateHarnessResult: () => {},
+  locate: pinned, requestTimeoutMs: 120_000, closeWaitMs: 5_000, harnessToolTimeoutSeconds: 900, onLateHarnessResult: () => {},
 }))

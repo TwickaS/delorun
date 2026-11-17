@@ -13,7 +13,7 @@ if (task === undefined || name === undefined) throw new Error('usage: host.ts <t
 const log = new Log(name)
 const rt = await runtime(task)
 const session = await driver().open({
-  sessionId: 'live-host' as SessionId, cwd: task, runRules: [], harnessTools: [], sharesFolder: () => false, spawn: rt.spawn,
+  sessionId: 'live-host' as SessionId, cwd: task, level: 'standard', runRules: [], harnessTools: [], sharesFolder: () => false, spawn: rt.spawn,
   onApproval: (request) => {
     log.line('question', `${request.toolName} ${request.reason}`)
     return Promise.resolve('allow-once')

@@ -136,7 +136,7 @@ class ScriptedConsent implements SeatConsent {
   readonly reviews: SeatReview[] = []
   verdict: (review: SeatReview) => SeatVerdict = () => ({ kind: 'allow', timeoutMs: 60_000, why: 'asked' })
   readonly leases = new Map<SessionId, SeatLease>()
-  /** The level each agent is set to; absent reads as no level. */
+  /** The level each agent is set to; absent reads as `careful`. */
   readonly levels = new Map<string, AgentLevel>()
   readonly rules = new Map<SessionId, ProgramRunRule[]>()
   private readonly listeners = new Set<(lease: SeatLease, reason: SeatLeaseEnd) => void>()
@@ -150,8 +150,8 @@ class ScriptedConsent implements SeatConsent {
     return Promise.resolve(verdict)
   }
 
-  permissionLevel(provider: string): AgentLevel | undefined {
-    return this.levels.get(provider)
+  permissionLevel(provider: string): AgentLevel {
+    return this.levels.get(provider) ?? 'careful'
   }
 
   leaseOf(child: SessionId): SeatLease | undefined {
@@ -197,7 +197,7 @@ interface World {
 
 interface WorldOptions {
   /** The consent row: absent, disabled, or with its saved `enabled`. */
-  readonly row?: 'absent' | 'disabled' | { readonly enabled: boolean }
+  readonly row?: 'absent' | 'disabled' | { readonly enabled: boolean, readonly [field: string]: unknown }
   /** The consent service: the scripted one, a service without `reviewSeat`, or none. */
   readonly consent?: 'seat' | 'one-shot-only' | 'none'
   readonly maxLivePrograms?: number
@@ -396,10 +396,22 @@ describe('the level a seat runs at (EA34)', () => {
     expect(w.driver.opens[1]?.level).toBe('unrestricted')
   })
 
-  it('hands no level when the consent is off, so the driver\'s own default applies', async () => {
+  it('hands the consent\'s default, standard, when the consent is off and no level is saved', async () => {
     const w = await world({ row: { enabled: false }, consent: 'none' })
     await w.gate.start(start(w))
-    expect(w.driver.opens[0]).not.toHaveProperty('level')
+    expect(w.driver.opens[0]?.level).toBe('standard')
+  })
+
+  it('keeps the saved level when the consent is turned off, so Careful stays Careful', async () => {
+    const w = await world({ row: { enabled: false, claudeCodeLevel: 'careful' }, consent: 'none' })
+    await w.gate.start(start(w))
+    expect(w.driver.opens[0]?.level).toBe('careful')
+  })
+
+  it('falls back to standard for a saved level it does not know', async () => {
+    const w = await world({ row: { enabled: false, claudeCodeLevel: 'relaxed' }, consent: 'none' })
+    await w.gate.start(start(w))
+    expect(w.driver.opens[0]?.level).toBe('standard')
   })
 })
 

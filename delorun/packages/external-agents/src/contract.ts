@@ -162,10 +162,10 @@ export interface ProgramOpenRequest {
   /** Harness tools offered to the program over MCP; empty until Stage 3. */
   readonly harnessTools: readonly ProgramHarnessTool[]
   /**
-   * The level the person set for this agent (EA34), read from the consent at the start; absent when the consent is
-   * off, and the driver then uses its own default.
+   * The level this seat runs at (EA34): the consent's level for the agent, or the one saved on the consent row while
+   * the consent is off.
    */
-  readonly level?: AgentLevel
+  readonly level: AgentLevel
   /**
    * Whether any other live program of the gate, of any agent, runs in this program's folder, in a folder inside it or
    * in one that contains it. Read when asked, so a clean-up sees the programs alive then.
@@ -600,7 +600,7 @@ export interface SeatConsent {
    * @param provider - the agent.
    * @returns the level.
    */
-  permissionLevel(provider: string): AgentLevel | undefined
+  permissionLevel(provider: string): AgentLevel
   /**
    * End the child's lease and its run rules.
    * @param child - the seat child.

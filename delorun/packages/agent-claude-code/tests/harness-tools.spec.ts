@@ -25,12 +25,12 @@ function echo(calls: Call[], finish: (signal: AbortSignal) => Promise<{ output: 
 async function opened(tools: readonly ProgramHarnessTool[], asked: ProgramApprovalRequest[] = []) {
   const sdk = new FakeSdk(() => {}, options => real.createSdkMcpServer(options))
   const request: ProgramOpenRequest = {
-    sessionId: 'child' as SessionId, cwd: '/tmp/task', runRules: [], harnessTools: tools, sharesFolder: () => false,
+    sessionId: 'child' as SessionId, cwd: '/tmp/task', level: 'standard', runRules: [], harnessTools: tools, sharesFolder: () => false,
     spawn: () => { throw new Error('a unit spec starts no process') },
     onApproval: (question) => { asked.push(question); return Promise.resolve('reject') },
     onLimits: () => {}, signal: new AbortController().signal,
   }
-  const session = await new ClaudeCodeDriver({ sdk: () => Promise.resolve(sdk), harnessToolTimeoutMs: () => 1, level: () => 'standard' }).open(request)
+  const session = await new ClaudeCodeDriver({ sdk: () => Promise.resolve(sdk), harnessToolTimeoutMs: () => 1 }).open(request)
   const servers = sdk.last.options.mcpServers ?? {}
   const [name] = Object.keys(servers)
   const canUse = sdk.last.options.canUseTool

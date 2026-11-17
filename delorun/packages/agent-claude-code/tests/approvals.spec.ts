@@ -15,10 +15,10 @@ async function opened(answer: (request: ProgramApprovalRequest) => Promise<Progr
   const sdk = new FakeSdk()
   const session = await new ClaudeCodeDriver({
     sdk: () => Promise.resolve(sdk),
-    harnessToolTimeoutMs: () => 1, level: () => 'standard',
+    harnessToolTimeoutMs: () => 1,
     spawnOption: () => () => { throw new Error('a unit spec starts no process') },
   }).open({
-    sessionId: 'child' as SessionId, cwd: '/tmp/task', runRules: [], harnessTools: [], sharesFolder: () => false,
+    sessionId: 'child' as SessionId, cwd: '/tmp/task', level: 'standard', runRules: [], harnessTools: [], sharesFolder: () => false,
     spawn: () => { throw new Error('a unit spec starts no process') },
     onApproval: answer, onLimits: () => {}, signal: new AbortController().signal, ...extra,
   })

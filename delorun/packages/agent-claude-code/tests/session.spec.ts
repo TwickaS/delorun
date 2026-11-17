@@ -14,7 +14,7 @@ const TOOLS_MISSING = { platform: 'linux', path: '/bin', exists: () => false } a
 function driver(sdk: FakeSdk, machine: () => typeof TOOLS_PRESENT | typeof TOOLS_MISSING = () => TOOLS_PRESENT): ClaudeCodeDriver {
   return new ClaudeCodeDriver({
     sdk: () => Promise.resolve(sdk),
-    harnessToolTimeoutMs: () => 900_000, level: () => 'standard', machine,
+    harnessToolTimeoutMs: () => 900_000, machine,
     spawnOption: () => () => { throw new Error('a unit spec starts no process') },
   })
 }
@@ -23,6 +23,7 @@ function request(overrides: Partial<ProgramOpenRequest> = {}): ProgramOpenReques
   return {
     sessionId: 'child-1' as SessionId,
     cwd: '/tmp/task',
+    level: 'standard',
     runRules: [],
     harnessTools: [],
     sharesFolder: () => false,
@@ -316,7 +317,7 @@ describe('a Claude Code session', () => {
   it('fails to open with the contract\'s typed failure, in words for the person, when the SDK cannot be used', async () => {
     const refusing = new ClaudeCodeDriver({
       sdk: () => Promise.reject(new ClaudeCodeDriverError('sdk-version', 'Update Delorun or the Claude Code pack.')),
-      harnessToolTimeoutMs: () => 1, level: () => 'standard',
+      harnessToolTimeoutMs: () => 1,
     })
     const opening = refusing.open(request())
     await expect(opening).rejects.toBeInstanceOf(ProgramOpenError)
@@ -329,7 +330,7 @@ describe('a Claude Code session', () => {
     const gateSpawn = vi.fn(() => { throw new Error('not started') })
     const opened = await new ClaudeCodeDriver({
       sdk: () => Promise.resolve(sdk),
-      harnessToolTimeoutMs: () => 1, level: () => 'standard',
+      harnessToolTimeoutMs: () => 1,
       spawnOption: spawn => (options): SpawnedProcess => {
         spawned.push(options.command)
         return new GateProcess(spawn({ argv: [options.command], env: {}, stdio: { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' } }))

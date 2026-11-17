@@ -11,7 +11,7 @@ import { ClaudeCodeDriverError } from './errors.ts'
 import { harnessToolServer } from './harness-tools.ts'
 import { claudeSeatLevel, SandboxUnavailableError, type LevelMachine } from './levels.ts'
 import { probeObservation } from './limits.ts'
-import { ProgramOpenError, type AccountObservation, type AgentLevel, type ExternalAgentDriver, type ProgramOpenRequest, type ProgramSession, type ProgramSpawn } from '@delorun/external-agents/contract'
+import { ProgramOpenError, type AccountObservation, type ExternalAgentDriver, type ProgramOpenRequest, type ProgramSession, type ProgramSpawn } from '@delorun/external-agents/contract'
 import { spawnThroughGate } from './process.ts'
 import type { ClaudeSdk } from './sdk.ts'
 import { ClaudeCodeSession } from './session.ts'
@@ -46,8 +46,6 @@ export interface ClaudeCodeDriverOptions {
   readonly sdk: () => Promise<ClaudeSdk>
   /** Claude Code's wait limit for one harness tool call, in milliseconds, set as `MCP_TOOL_TIMEOUT`. */
   readonly harnessToolTimeoutMs: () => number
-  /** The level a seat runs at when its open names none, read at each open. */
-  readonly level: () => AgentLevel
   /** Where the command sandbox's tools are looked for; the computer's own by default. */
   readonly machine?: () => LevelMachine
   /**
@@ -99,7 +97,7 @@ export class ClaudeCodeDriver implements ExternalAgentDriver {
     const server = await opening(Promise.resolve().then(() => harnessToolServer(sdk, request.harnessTools, session.ended)))
     const allowedTools = allowedToolsFor(request.runRules)
     const level = await opening(Promise.resolve().then(() => claudeSeatLevel(
-      request.level ?? this.#options.level(), request.cwd, this.#options.machine?.() ?? { platform: process.platform, path: process.env['PATH'] },
+      request.level, request.cwd, this.#options.machine?.() ?? { platform: process.platform, path: process.env['PATH'] },
     )))
     const options: Options = {
       cwd: request.cwd,

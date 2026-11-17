@@ -17,7 +17,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session'
 import { findDelegationConsent } from '@deepseek-ai/dsh-subagent'
 import { SENSITIVE_ENV_PATTERN, type SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
 import {
-  DELEGATION_CONSENT_ROW_ID, GateRefusedError, type AccountObservation, type ExternalAgentDriver, type ExternalAgentName,
+  DELEGATION_CONSENT_ROW_ID, GateRefusedError, type AgentLevel, type AccountObservation, type ExternalAgentDriver, type ExternalAgentName,
   type ExternalAgentsGate, type ProgramApprovalAnswer, type ProgramApprovalRequest, type ProgramEvent,
   type ProgramInterruptOutcome, type ProgramSession, type ProgramSpawn, type ProgramSpawnRequest, type SeatConsent, type SeatSession,
   type SeatRecord, type SeatReviewPhase, type SeatStartRequest,
@@ -50,7 +50,7 @@ export interface GateOptions {
 }
 
 /** The consent for one seat start: none composed by the person's choice, or the service that reviews it. */
-type ConsentMode = { readonly kind: 'off' } | { readonly kind: 'reviewed'; readonly consent: SeatConsent }
+type ConsentMode = { readonly kind: 'off'; readonly level: AgentLevel } | { readonly kind: 'reviewed'; readonly consent: SeatConsent }
 
 /** One program the gate holds. */
 interface Live {
@@ -271,8 +271,8 @@ export class ExternalAgentsService extends Service implements ExternalAgentsGate
     request.signal.addEventListener('abort', onAbort, { once: true })
     live.controller.signal.addEventListener('abort', () => { request.signal.removeEventListener('abort', onAbort) }, { once: true })
     const consent = mode.kind === 'reviewed' ? mode.consent : undefined
-    const level = consent?.permissionLevel(request.provider)
     try {
+      const level = mode.kind === 'off' ? mode.level : mode.consent.permissionLevel(request.provider)
       const session = await driver.open({
         sessionId: request.child,
         cwd: request.cwd,
@@ -280,7 +280,7 @@ export class ExternalAgentsService extends Service implements ExternalAgentsGate
         ...request.model === undefined ? {} : { model: request.model },
         runRules: consent?.runRules(request.child) ?? [],
         harnessTools: request.harnessTools,
-        ...level === undefined ? {} : { level },
+        level,
         sharesFolder: () => this.sharesFolder(live),
         spawn: this.spawnFor(live, request.cwd),
         onApproval: approval => this.relayApproval(request, consent, approval),
@@ -364,7 +364,7 @@ export class ExternalAgentsService extends Service implements ExternalAgentsGate
     }
     if (disabled) throw new GateRefusedError({ category: 'consent', reason: consentRowDisabledRefusal(provider) })
     const saved: unknown = row.options.config
-    if (typeof saved === 'object' && saved !== null && Reflect.get(saved, 'enabled') === false) return { kind: 'off' }
+    if (typeof saved === 'object' && saved !== null && Reflect.get(saved, 'enabled') === false) return { kind: 'off', level: savedLevel(provider, saved) }
     let consent: unknown
     try {
       consent = await findDelegationConsent(this.ctx, provider)
@@ -550,7 +550,28 @@ export class ExternalAgentsService extends Service implements ExternalAgentsGate
  * @returns true when it has the seat side.
  */
 function isSeatConsent(consent: unknown): consent is SeatConsent {
-  return typeof consent === 'object' && consent !== null && typeof Reflect.get(consent, 'reviewSeat') === 'function'
+  return typeof consent === 'object' && consent !== null
+    && typeof Reflect.get(consent, 'reviewSeat') === 'function' && typeof Reflect.get(consent, 'permissionLevel') === 'function'
+}
+
+const AGENT_LEVELS: readonly AgentLevel[] = ['careful', 'standard', 'own', 'unrestricted']
+
+/**
+ * The level a seat runs at while the consent is off: the one saved on the consent row, `standard` (the consent's own
+ * default) when none is saved or the saved value is unknown, and `careful` for a provider without a level field.
+ * @param provider - the agent to start.
+ * @param saved - the consent row's saved configuration.
+ * @returns the level.
+ */
+function savedLevel(provider: ExternalAgentName, saved: object): AgentLevel {
+  let field: string
+  switch (provider) {
+    case 'claude-code': field = 'claudeCodeLevel'; break
+    case 'codex': field = 'codexLevel'; break
+    default: return 'careful'
+  }
+  const value: unknown = Reflect.get(saved, field)
+  return AGENT_LEVELS.find(level => level === value) ?? 'standard'
 }
 
 /** What a gate session needs from the gate. */

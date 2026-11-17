@@ -95,17 +95,11 @@ describe('the agent-codex plugin', () => {
 
 describe('Config', () => {
   it('fills the shipped defaults', () => {
-    expect(plugin.Config({})).toEqual({ requestTimeoutSeconds: 300, closeWaitSeconds: 5, harnessToolTimeoutSeconds: 900, level: 'standard' })
+    expect(plugin.Config({})).toEqual({ requestTimeoutSeconds: 300, closeWaitSeconds: 5, harnessToolTimeoutSeconds: 900 })
   })
 
   it('refuses a zero or fractional wait at load', () => {
     expect(() => plugin.Config({ requestTimeoutSeconds: 0 })).toThrow()
     expect(() => plugin.Config({ closeWaitSeconds: 1.5 })).toThrow()
-  })
-
-  it('refuses an unknown level at load', () => {
-    expect(plugin.Config({ level: 'careful' }).level).toBe('careful')
-    // @ts-expect-error -- a level cordis.yml could name that the driver does not know.
-    expect(() => plugin.Config({ level: 'relaxed' })).toThrow()
   })
 })

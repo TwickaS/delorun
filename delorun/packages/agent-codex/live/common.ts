@@ -199,11 +199,12 @@ export async function live(name: string, task = taskFolder()): Promise<Live> {
     handles,
     questions,
     answers: [],
-    driver: new CodexDriver({ locate: pinnedCodex, requestTimeoutMs: 120_000, closeWaitMs: 5_000, harnessToolTimeoutSeconds: 900, level: 'standard', onLateHarnessResult: (tool) => { log.report('late harness result', tool) }, tap: (direction, frame) => { log.frame(direction, frame) } }),
+    driver: new CodexDriver({ locate: pinnedCodex, requestTimeoutMs: 120_000, closeWaitMs: 5_000, harnessToolTimeoutSeconds: 900, onLateHarnessResult: (tool) => { log.report('late harness result', tool) }, tap: (direction, frame) => { log.frame(direction, frame) } }),
     request: overrides => ({
       sessionId: SessionId(`live-${name}`),
       cwd: task,
       model: MODEL,
+      level: 'standard',
       runRules: [],
       harnessTools: [],
       sharesFolder: () => false,

@@ -71,7 +71,7 @@ async function harness(script: readonly MessagesStep[], signedIn = true, toolWai
   }
   const driver = new ClaudeCodeDriver({
     sdk: () => loadClaudeSdk(locateSdk()),
-    harnessToolTimeoutMs: () => toolWaitMs, level: () => 'standard',
+    harnessToolTimeoutMs: () => toolWaitMs,
     env: {
       ...signedIn ? { ANTHROPIC_API_KEY: 'ea1-fake-key' } : {},
       ANTHROPIC_BASE_URL: fixture.baseUrl,
@@ -93,7 +93,7 @@ async function harness(script: readonly MessagesStep[], signedIn = true, toolWai
 
 function openRequest(h: Harness, extra: Partial<ProgramOpenRequest> = {}): ProgramOpenRequest {
   return {
-    sessionId: 'child-1' as SessionId, cwd: h.task, runRules: [], harnessTools: [], sharesFolder: () => false, spawn: h.spawn,
+    sessionId: 'child-1' as SessionId, cwd: h.task, level: 'standard', runRules: [], harnessTools: [], sharesFolder: () => false, spawn: h.spawn,
     onApproval: () => Promise.resolve('reject'), onLimits: () => {}, signal: new AbortController().signal, ...extra,
   }
 }

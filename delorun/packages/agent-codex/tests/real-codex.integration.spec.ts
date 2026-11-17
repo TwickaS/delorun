@@ -111,7 +111,7 @@ async function real(script: readonly ResponsesStep[], person: PersonConfig = {})
     lateResults,
     sent,
     driver: new CodexDriver({
-      locate: pinnedCodex, requestTimeoutMs: 60_000, closeWaitMs: 3_000, harnessToolTimeoutSeconds: 5, level: 'standard',
+      locate: pinnedCodex, requestTimeoutMs: 60_000, closeWaitMs: 3_000, harnessToolTimeoutSeconds: 5,
       onLateHarnessResult: (tool) => { lateResults.push(tool) },
       tap: (direction, frame) => { if (direction === '>') sent.push(JSON.stringify(frame)) },
     }),
@@ -119,7 +119,7 @@ async function real(script: readonly ResponsesStep[], person: PersonConfig = {})
       sessionId: SessionId('seat-child'),
       cwd: workspace,
       model: 'fixture-model',
-      runRules: [],
+      level: 'standard', runRules: [],
       harnessTools: [],
       sharesFolder: () => false,
       spawn,
