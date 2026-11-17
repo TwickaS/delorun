@@ -148,7 +148,7 @@ export function SignupForm({ page, compact = false }: { page: string; compact?: 
         <TextField label={copy.emailLabel} name={FIELDS.email} type="email" required autoComplete="email" inputMode="email" maxLength={MAX_EMAIL_LENGTH} />
       </div>
       <div className="flex items-start gap-3">
-        <input id={`${id}-consent`} name={FIELDS.consent} type="checkbox" value="yes" required className="mt-1 size-5 shrink-0 accent-(--dl-text)" />
+        <input id={`${id}-consent`} name={FIELDS.consent} type="checkbox" value="yes" required className="size-6 shrink-0 accent-(--dl-text)" />
         <label htmlFor={`${id}-consent`} className="text-sm leading-6">{CONSENT_TEXT}</label>
       </div>
       <div ref={widgetRef} />

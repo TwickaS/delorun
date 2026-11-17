@@ -54,7 +54,7 @@ export const EN = {
   },
   blog: {
     title: 'Blog',
-    description: 'Articles on how Delorun is built, how to shape it, and what each release changes.',
+    description: 'Research, how Delorun is built, guides and releases.',
     intro: 'Research, how Delorun is built, guides and releases.',
     empty: 'No articles yet.',
     read: 'Read',

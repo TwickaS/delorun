@@ -52,7 +52,7 @@ export const SECTIONS_EN = {
     },
     replays: {
       heading: 'Watch it change',
-      lead: 'Four short replays: every change to Delorun listed, undoing one, the versions of your setup, and the same from the terminal.',
+      lead: 'Four chapters of one replay: every change to Delorun listed, undoing one, the versions of your setup, and the same from the terminal.',
       link: { text: 'How changes to Delorun are reviewed', href: `${DOCS_URL}/guide/changing-your-harness` },
     },
     phone: {

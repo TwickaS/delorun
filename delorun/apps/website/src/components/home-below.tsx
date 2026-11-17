@@ -37,6 +37,9 @@ function GuideLink({ link }: { link: { readonly text: string, readonly href: str
   return <p className="col-span-full mt-4"><Link href={link.href}>{link.text}</Link></p>
 }
 
+/** The responsive replica's frame is 960 px wide (`REPLICA_BOXES`); from 1200 px it sits in the middle of the grid with its caption and rail. */
+const CENTRED = 'min-[1200px]:mx-auto min-[1200px]:max-w-[960px]'
+
 /** The space between a section's heading and its content. */
 const CONTENT = 'col-span-full mt-8 lg:mt-10'
 
@@ -101,7 +104,7 @@ function Replays() {
       <SectionHeading id="replays" title={copy.heading} className="col-span-full lg:col-span-4" />
       <p className={`col-span-full mt-4 lg:col-start-5 lg:col-end-10 lg:mt-0 lg:self-end ${CLASSES.lead}`}>{copy.lead}</p>
       <div className={CONTENT}>
-        <ReplicaFrame session="changes-and-versions" width="responsive" />
+        <ReplicaFrame session="changes-and-versions" width="responsive" className={CENTRED} />
       </div>
       <GuideLink link={copy.link} />
     </Section>
