@@ -5,6 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
+  proxy-addr>ipaddr.js: 2.5.0
   extract-zip>yauzl: 3.4.0
   '@simplewebauthn/server>@peculiar/asn1-schema': 2.11.1
   '@deepseek-ai/cosmokit': link:vendor/cosmokit
@@ -27452,10 +27453,6 @@ packages:
     resolution: {integrity: sha512-4OUAqU9Z1i3vCnS05hzGiFnEMDpQ+62pAD/MVQOp83fYyNC8GleCqaS0QikQBmcWCrKFiUs/B8ztRRiYOAXuCA==}
     engines: {node: '>= 12'}
 
-  ipaddr.js@1.9.1:
-    resolution: {integrity: sha512-0KI/607xoxSToH7GjN1FfSbLoU0+btTicjsQSWQlh/hZykN8KpmMf7uYwPW3R+akZ6R/w18ZlXSHBYXiYUPO3g==}
-    engines: {node: '>= 0.10'}
-
   ipaddr.js@2.5.0:
     resolution: {integrity: sha512-aq+t5NAc+cS6rZQQVWC2x98CPqGtKKTMDd4Gaodv0wShnItdKg/51djkGJ1hqH+Oy0ivDftCbSLCQob8zso01w==}
     engines: {node: '>= 10'}
@@ -35584,8 +35581,6 @@ snapshots:
 
   ip-address@10.7.1: {}
 
-  ipaddr.js@1.9.1: {}
-
   ipaddr.js@2.5.0: {}
 
   is-core-module@2.16.2:
@@ -37031,7 +37026,7 @@ snapshots:
   proxy-addr@2.0.8:
     dependencies:
       forwarded: 0.2.0
-      ipaddr.js: 1.9.1
+      ipaddr.js: 2.5.0
 
   proxy-agent-negotiate@1.1.0: {}
 

@@ -23,6 +23,8 @@ packages:
   - python/sdk-runtime
 
 overrides:
+  # One ipaddr.js for the closure and the packs; proxy-addr calls only parse and isValid, which 2.x keeps.
+  'proxy-addr>ipaddr.js': '2.5.0'
   'extract-zip>yauzl': '3.4.0'
   # One copy for the passkey library and the ASN.1 schemas it parses signatures with: a second copy keeps its own
   # schema registry, and every ECDSA passkey check fails.
