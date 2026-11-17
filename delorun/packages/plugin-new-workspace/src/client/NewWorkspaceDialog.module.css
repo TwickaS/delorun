@@ -1,0 +1,142 @@
+/* The new-workspace dialog: a pinned header, the one scrolling body and a pinned footer, large enough for the folder
+   browser. Every screen fills it; there are no panels down either side. */
+.dialog {
+  display: flex;
+  width: min(1040px, 92vw);
+  height: min(720px, 88vh);
+  max-height: 100%;
+  padding: 0;
+  gap: 0;
+}
+
+.frame {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  color: var(--dsw-alias-label-primary);
+  --nw-gap-1: var(--delorun-space-4);
+  --nw-gap-2: var(--delorun-space-6);
+  --nw-gap-3: var(--delorun-space-8);
+  --nw-target: 44px;
+}
+
+.header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--nw-gap-2);
+  padding: var(--nw-gap-2) var(--nw-gap-3) var(--nw-gap-1);
+  padding-top: max(var(--nw-gap-2), var(--dsh-frame-overlay-top, 0px));
+  border-bottom: 0.5px solid var(--dsw-alias-border-l1);
+}
+
+.heading {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--dsw-font-l-20-font-size);
+  font-weight: 500;
+  line-height: var(--dsw-font-l-20-line-height);
+  outline: none;
+}
+
+.count {
+  flex: none;
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.close {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--nw-target);
+  height: var(--nw-target);
+  padding: 0;
+  border: 0;
+  border-radius: var(--dsw-radius-md);
+  background: none;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.close:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.scroll {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding: var(--nw-gap-2) var(--nw-gap-3);
+  overflow-y: auto;
+}
+
+.body {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.footer {
+  flex: none;
+  padding: var(--nw-gap-1) var(--nw-gap-3);
+  padding-bottom: max(var(--nw-gap-1), env(safe-area-inset-bottom));
+  border-top: 0.5px solid var(--dsw-alias-border-l1);
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--nw-gap-1);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.note {
+  margin: 0;
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.button {
+  min-height: var(--nw-target);
+}
+
+/* On a phone the dialog is the whole screen. The height follows the dynamic viewport, so the on-screen keyboard shrinks
+   the dialog instead of covering the footer. */
+@media (max-width: 640px) {
+  .dialog {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100dvh;
+    max-height: none;
+    border-radius: 0;
+  }
+
+  .header,
+  .scroll,
+  .footer {
+    padding-right: var(--nw-gap-2);
+    padding-left: var(--nw-gap-2);
+  }
+}
+
+@media (pointer: coarse) {
+  .frame button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}

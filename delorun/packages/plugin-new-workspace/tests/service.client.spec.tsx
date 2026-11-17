@@ -1,0 +1,193 @@
+// @vitest-environment jsdom
+import { Context } from '@deepseek-ai/cordis'
+import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { useSyncExternalStore, type ComponentType } from 'react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { apply, inject, NS, OVERLAY_ID, type DelorunNewWorkspace } from '../src/client/index.ts'
+import { en, zh } from '../src/client/locales.ts'
+import type { OpenFlow, OverlayInjected } from '../src/client/Overlay.tsx'
+import { ADD_WORKSPACE_PATH, PLACES_PATH } from '../src/wire.ts'
+import { HOME, listingOf, PLACES } from './fixtures.client.ts'
+
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
+})
+
+const settle = async () => { await act(async () => { for (let n = 0; n < 6; n++) await Promise.resolve() }) }
+const click = async (element: HTMLElement) => { await act(async () => { fireEvent.click(element) }); await settle() }
+
+interface Entry {
+  readonly options: { readonly name: string, readonly id?: string, readonly locale?: string, readonly inject?: () => unknown }
+  readonly component: ComponentType<Record<string, unknown>>
+}
+
+/** What the page's `fetch` answers: the places, and every add as a new workspace. */
+function stubHost(overrides: Readonly<Record<string, () => Response>> = {}) {
+  const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
+    const path = `/${String(input)}`
+    const custom = overrides[path]
+    if (custom !== undefined) return custom()
+    if (path === PLACES_PATH) return Response.json(PLACES)
+    if (path === ADD_WORKSPACE_PATH) return Response.json({ result: 'added', workspaceId: 'workspace-1', path: `${HOME}/src/delorun`, kind: 'code' })
+    return Response.json({}, { status: 404 })
+  })
+  vi.stubGlobal('fetch', fetch)
+  return fetch
+}
+
+/** The page as far as the plugin uses it, with the Delorun look on unless asked otherwise. */
+async function harness(options: { readonly studio?: boolean } = {}) {
+  const ctx = new Context()
+  const dictionaries = new Map<string, unknown>()
+  ctx.provide('locale', {
+    bind: () => makeTranslate(en),
+    register: (namespace: string, dictionary: unknown) => {
+      dictionaries.set(namespace, dictionary)
+      return () => { dictionaries.delete(namespace) }
+    },
+  })
+  const entries = new Map<string, Entry>()
+  ctx.provide('slots', {
+    inject: (_: string, register: () => () => void) => register(),
+    register: (registered: Entry['options'], component: Entry['component']) => {
+      const key = `${registered.name}#${registered.id ?? ''}`
+      entries.set(key, { options: registered, component })
+      return () => { entries.delete(key) }
+    },
+  })
+  const listDirectory = vi.fn(async (path?: string, _signal?: AbortSignal) => listingOf(path ?? HOME, ['src']))
+  ctx.provide('uiWorkspace', { listDirectory, createDirectory: vi.fn() })
+  if (options.studio !== false) ctx.provide('delorunStudio', {})
+  const denied: unknown[] = []
+  ctx.on('remote/call-denied', (denial) => { denied.push(denial) })
+  const fiber = ctx.plugin({ inject: [...inject], apply })
+  await fiber.await()
+  return { ctx, fiber, dictionaries, entries, listDirectory, denied }
+}
+
+/** Draw the overlay entry the way the slot machinery does: the hook bound to the injected store. */
+function mountOverlay(entries: Map<string, Entry>) {
+  const entry = entries.get(`shell.overlay#${OVERLAY_ID}`) as Entry
+  const { hooks, ...rest } = (entry.options.inject?.() ?? {}) as OverlayInjected
+  const Component = entry.component
+  const Host = () => {
+    const useOpen = <T,>(select: (flow: OpenFlow | null) => T): T => useSyncExternalStore(hooks.open.subscribe, () => select(hooks.open.getSnapshot()))
+    return <Component {...{ t: makeTranslate(en), useOpen, ...rest }} />
+  }
+  render(<Host />)
+}
+
+describe('the stock look', () => {
+  it('registers nothing until the Delorun look provides delorunStudio, and everything leaves with it', async () => {
+    const { ctx, dictionaries, entries } = await harness({ studio: false })
+    expect(inject).not.toContain('delorunStudio')
+    expect([dictionaries.size, entries.size, ctx.get('delorunNewWorkspace')]).toEqual([0, 0, undefined])
+    const studio = ctx.plugin({ apply: (scope: Context) => { scope.provide('delorunStudio', {}) } })
+    await studio.await()
+    expect(dictionaries.get(NS)).toEqual({ en, zh })
+    expect([...entries.keys()]).toEqual([`shell.overlay#${OVERLAY_ID}`])
+    expect(ctx.get('delorunNewWorkspace')).toBeDefined()
+    await studio.dispose()
+    expect([dictionaries.size, entries.size, ctx.get('delorunNewWorkspace')]).toEqual([0, 0, undefined])
+  })
+
+  it('draws nothing while the flow is closed', async () => {
+    const { entries } = await harness()
+    mountOverlay(entries)
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(entries.get(`shell.overlay#${OVERLAY_ID}`)?.options.locale).toBe(NS)
+  })
+})
+
+describe('the service', () => {
+  const service = (ctx: Context): DelorunNewWorkspace => ctx.get('delorunNewWorkspace') as DelorunNewWorkspace
+
+  it('opens the dialog and resolves cancelled when it closes', async () => {
+    stubHost()
+    const { ctx, entries } = await harness()
+    mountOverlay(entries)
+    const outcome = service(ctx).open()
+    await settle()
+    expect(screen.getByRole('dialog').getAttribute('aria-label')).toBe(en.title)
+    expect(document.querySelector('[data-from]')?.getAttribute('data-from')).toBe('sidebar')
+    await click(screen.getByRole('button', { name: en.close }))
+    expect(await outcome).toEqual({ kind: 'cancelled' })
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('resolves cancelled on Escape too, and keeps which surface opened it', async () => {
+    stubHost()
+    const { ctx, entries } = await harness()
+    mountOverlay(entries)
+    const outcome = service(ctx).open({ from: 'hero' })
+    await settle()
+    expect(document.querySelector('[data-from]')?.getAttribute('data-from')).toBe('hero')
+    await act(async () => { fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' }) })
+    expect(await outcome).toEqual({ kind: 'cancelled' })
+  })
+
+  it('resolves the first opening as cancelled when a second one opens, and starts the second afresh', async () => {
+    stubHost()
+    const { ctx, entries } = await harness()
+    mountOverlay(entries)
+    const first = service(ctx).open({ from: 'sidebar' })
+    await settle()
+    await click(screen.getByRole('button', { name: /^New folder/ }))
+    expect((screen.getByRole('button', { name: en.continue }) as HTMLButtonElement).disabled).toBe(false)
+    const second = service(ctx).open({ from: 'picker' })
+    await settle()
+    expect(await first).toEqual({ kind: 'cancelled' })
+    expect(screen.getAllByRole('dialog')).toHaveLength(1)
+    expect((screen.getByRole('button', { name: en.continue }) as HTMLButtonElement).disabled).toBe(true)
+    await click(screen.getByRole('button', { name: en.close }))
+    expect(await second).toEqual({ kind: 'cancelled' })
+  })
+
+  it('resolves created with the workspace, and closes the dialog', async () => {
+    const fetch = stubHost()
+    const { ctx, entries } = await harness()
+    mountOverlay(entries)
+    const outcome = service(ctx).open({ from: 'onboarding' })
+    await settle()
+    await click(screen.getByRole('button', { name: /^delorun/ }))
+    expect(await outcome).toEqual({ kind: 'created', workspaceId: 'workspace-1', path: `${HOME}/src/delorun` })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(fetch).toHaveBeenCalledWith(ADD_WORKSPACE_PATH.slice(1), expect.objectContaining({ body: JSON.stringify({ path: `${HOME}/src/delorun` }) }))
+  })
+
+  it('resolves cancelled when the plugin is disposed while the flow is open', async () => {
+    stubHost()
+    const { ctx, fiber, entries } = await harness()
+    mountOverlay(entries)
+    const outcome = service(ctx).open()
+    await settle()
+    await fiber.dispose()
+    expect(await outcome).toEqual({ kind: 'cancelled' })
+  })
+
+  it('lists folders through the studio\'s workspace navigation', async () => {
+    stubHost()
+    const { ctx, entries, listDirectory } = await harness()
+    mountOverlay(entries)
+    void service(ctx).open()
+    await settle()
+    await click(screen.getByRole('button', { name: /^Folder on this computer/ }))
+    await click(screen.getByRole('button', { name: en.continue }))
+    expect(listDirectory).toHaveBeenCalledWith(undefined, expect.any(AbortSignal))
+    expect(screen.getByRole('option', { name: 'src' })).toBeTruthy()
+  })
+
+  it('asks the studio for the unlock when the Host wants one, so its PIN prompt appears', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    stubHost({ [PLACES_PATH]: () => Response.json({ error: 'ELEVATION_REQUIRED' }, { status: 403 }) })
+    const { ctx, entries, denied } = await harness()
+    mountOverlay(entries)
+    void service(ctx).open()
+    await settle()
+    expect(denied).toEqual([{ endpoint: 'delorunNewWorkspace/places', reason: 'elevation-required: delorunNewWorkspace/places' }])
+    expect(screen.getByRole('alert').textContent).toBe(en['problem.locked'])
+  })
+})

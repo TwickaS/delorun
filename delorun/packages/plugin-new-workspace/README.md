@@ -6,7 +6,7 @@ description: "Delorun's new-workspace flow: add a folder, make a new one with Gi
 
 English | [中文](README.zh.md)
 
-Delorun's new-workspace flow. Its Host half serves the routes the flow's screens call: where to start looking, a bounded folder search, one folder's preview, adding an existing folder, making a new folder with an optional Git repository, cloning from Git with an optional branch, and each workspace's defaults. It also starts each new chat in a workspace on that workspace's model.
+Delorun's new-workspace flow. Its Host half serves the routes the flow's screens call: where to start looking, a bounded folder search, one folder's preview, adding an existing folder, making a new folder with an optional Git repository, cloning from Git with an optional branch, and each workspace's defaults. It also starts each new chat in a workspace on that workspace's model. Its studio half is the dialog that calls the routes.
 
 ## Routes
 
@@ -50,6 +50,14 @@ When a top-level chat starts in a workspace whose defaults hold a model, the plu
 | `searchTimeMs` | 2000 | The most time one search or one preview read takes. |
 | `cloneTimeoutMs` | 600000 | The most time one clone takes. |
 
+## The studio half
+
+It loads only while the Delorun look is on; the stock look keeps upstream's flow. `ctx.delorunNewWorkspace.open({ from })` opens one large dialog, `min(1040px, 92vw)` by `min(720px, 88vh)` and full screen on a phone, and resolves `created` with the workspace's id and folder, or `cancelled`. A second `open` while one is open resolves the first as `cancelled`. Closing the dialog never cancels a clone: it keeps running on the Host.
+
+Screen 1 asks how to start (New folder, Folder on this computer, Clone from Git) and lists the recent workspaces, one click from use. Screen 2 depends on the card. The folder browser searches folder names, offers the suggested places, shows the crumbs of the listed folder and previews the selected folder beside the list; it also picks the place for a new folder or a clone, and on a phone shows one column at a time. The new-folder screen takes a name, a place and whether Git starts, ticked by default. The clone screen takes an address, an optional branch, a place and a name, and starts the clone, whose progress shows in the footer. Screens 3 to 5 follow later; until then the second screen's primary button finishes the flow.
+
+Every screen opens with the safe choice already made. A route's answer is parsed with its wire schema, and a failure comes back as a value: `locked` asks the studio for the unlock prompt through `remote/call-denied`, `refused-arrival` says the step needs the computer, and each refusal shows in place as one sentence. Paths show the home folder as `~` and nothing else about the computer.
+
 ## Tests
 
-`tests/routes.spec.ts` mounts the plugin and checks, for each route, the refused arrivals, the locked device and the computer. `create.spec.ts`, `clone.spec.ts`, `places.spec.ts` and `search.spec.ts` cover the home folder, the Delorun home, a folder outside the roots and a link leaving them; `defaults.spec.ts` covers the store's mode and format and the seed's conditions.
+`tests/routes.spec.ts` mounts the plugin and checks, for each route, the refused arrivals, the locked device and the computer. `create.spec.ts`, `clone.spec.ts`, `places.spec.ts` and `search.spec.ts` cover the home folder, the Delorun home, a folder outside the roots and a link leaving them; `defaults.spec.ts` covers the store's mode and format and the seed's conditions. The studio half's specs are `tests/*.client.spec.tsx` (the dialog, the API client and the service), `finish-flow.client.spec.tsx` and `flow.spec.ts` (the flow's state machine).

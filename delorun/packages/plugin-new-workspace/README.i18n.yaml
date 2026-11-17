@@ -6,8 +6,8 @@
   en: 088013d548e34c69
   zh: d237a41b2381dbc7
 /delorun-plugin-new-workspace:
-  en: 775df3b4f8ff41ea
-  zh: d870ef2770730e1d
+  en: 1c6742be99db8c62
+  zh: dbc089c62756a556
 /delorun-plugin-new-workspace/routes:
   en: 33b16d6e860e4edb
   zh: 33e957ac76fab10e
@@ -23,6 +23,9 @@
 /delorun-plugin-new-workspace/configuration:
   en: cc93c2274b4c2403
   zh: 3560bb6bb801f1dd
+/delorun-plugin-new-workspace/the-studio-half:
+  en: e15a4766534d3104
+  zh: 249339ac512e984d
 /delorun-plugin-new-workspace/tests:
-  en: 5d6296cbad453f3a
-  zh: 962a5220676b2c94
+  en: ba59eed9aa8c0f9b
+  zh: 9bc5a1ccb3f07dfb
