@@ -535,6 +535,13 @@ export const REACH_ELEVATED_ACTIONS = {
 } as const satisfies Readonly<Record<RemoteAccessAction, string>>
 
 /**
+ * The elevated actions the approval grace does not open: every `terminal/*` action, a new one included. A terminal is a
+ * shell outside the sandbox, so it needs a code, a PIN page or the unlock the person chose, never the grace a phone
+ * starts with after its approval at the computer.
+ */
+export const GRACE_REFUSED_ACTIONS: ReadonlySet<string> = new Set(Object.keys(REACH_ELEVATED_ACTIONS).filter(action => action.startsWith('terminal/')))
+
+/**
  * Assert that no action is in two of the tables.
  * @param tables - the allowed, the elevated and the never tables, by name.
  * @throws {TypeError} naming every action two tables list.
@@ -1082,7 +1089,7 @@ function createsInKnownWorkspace(facts: Pick<ReachAccessFacts, 'workspaces'>, ar
  * an action of {@link REACH_ELEVATED_ACTIONS} with `elevation-required: <action>` unless the device holds a running
  * unlock on the principal's listener, for a call and for an event, a snapshot or a list filter alike, and logs each
  * call an unlock admits with the unlock's id. Every `terminal/*` action needs an unlock, always: no switch, workspace grant or
- * dangerous mode waives it.
+ * dangerous mode waives it, and the approval grace is not one ({@link GRACE_REFUSED_ACTIONS}).
  * It treats a `session/create` that starts a chat outside the known
  * workspaces (see {@link createsInKnownWorkspace}) the same way, with {@link CREATE_OUTSIDE_WORKSPACES}: a folder
  * decides where the chat's commands may write. It refuses a workspace-file call unless every path it names is one a
@@ -1107,9 +1114,10 @@ export function createCondition(
    * The running unlock this principal's Peer holds: its page's under PIN mode, otherwise the device's.
    * @returns the unlock's id, or undefined.
    */
-  const unlock = (): { readonly id: string } | undefined => unlockId === undefined ? facts.elevationOf(deviceId, listener) : facts.pageUnlockOf(unlockId)
+  const unlock = (): { readonly id: string; readonly grace?: true } | undefined => unlockId === undefined ? facts.elevationOf(deviceId, listener) : facts.pageUnlockOf(unlockId)
   /**
-   * Refuse without an unlock on the principal's listener, and log an admitted call.
+   * Refuse without an unlock on the principal's listener, and log an admitted call. The approval grace does not admit an
+   * action of {@link GRACE_REFUSED_ACTIONS}.
    * @param action - the action.
    * @param reason - the refusal.
    * @param call - whether a call's arguments came with the question.
@@ -1117,7 +1125,7 @@ export function createCondition(
    */
   const unlocked = (action: RemoteAccessAction, reason: string, call: boolean): RemoteAccessDecision | undefined => {
     const elevation = unlock()
-    if (elevation === undefined) return { kind: 'deny', reason }
+    if (elevation === undefined || (elevation.grace === true && GRACE_REFUSED_ACTIONS.has(action))) return { kind: 'deny', reason }
     if (call) {
       facts.logElevated(`home-auth: elevated action: device=${deviceId} listener=${listener} action=${action} elevation=${elevation.id}`)
       // Renewed below, once the whole condition allows the call.

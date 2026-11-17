@@ -62,6 +62,7 @@ export {
   type DefaultPermission,
   type PermissionLevel,
   CREATE_OUTSIDE_WORKSPACES,
+  GRACE_REFUSED_ACTIONS,
   assertDisjoint,
   createReachAccessPolicy,
   createCondition,
