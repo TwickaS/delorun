@@ -189,6 +189,27 @@ describe('a seat review at hand-off', () => {
     await expect(w.consent.reviewSeat(seat(w, 'turn'))).resolves.toMatchObject({ kind: 'allow', why: 'lease' })
   })
 
+  it.for(['child', 'grandchild'] as const)('reads Full access from the root alone: a seat a %s of an Ask root starts still needs a card or a grant', async (depth) => {
+    const w = await world()
+    w.fullAccess.add('root')
+    const child = chat('child', w.workspace, 'root')
+    const creator = depth === 'child' ? child : chat('grandchild', w.workspace, 'child')
+    // A local subagent is pinned to `never` and inherits its parent's danger-full-access sandbox.
+    for (const id of ['child', 'grandchild']) {
+      w.policies.set(id, 'never')
+      w.fullAccess.add(id)
+    }
+    w.agents.push(child, creator)
+    const review = seat(w, 'hand-off', { creator, child: chat('seat', w.workspace, creator.id) })
+    await expect(w.consent.reviewSeat(review)).resolves.toMatchObject({ kind: 'allow', why: 'asked' })
+    expect(w.asks).toHaveLength(1)
+    w.consent.endLease(SessionId('seat'), 'revoked')
+    w.openTurns.clear()
+    await expect(w.consent.reviewSeat(review)).resolves.toEqual({ kind: 'refuse', reason: noOpenTurnRefusal('claude-code', w.workspace) })
+    await grant(w.home, w.workspace)
+    await expect(w.consent.reviewSeat(review)).resolves.toMatchObject({ kind: 'allow', why: 'granted' })
+  })
+
   it('ends a Full access lease when the root\'s policy or the switch changes', async () => {
     for (const leave of ['policy', 'sandbox', 'switch'] as const) {
       const w = await world()
