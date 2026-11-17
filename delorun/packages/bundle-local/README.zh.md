@@ -99,6 +99,8 @@ setup 与其他界面通过 `ctx.settingsShell.openSection('delorun-privacy')` �
 
 同一行注册**设备**分区（`delorun-devices`，紧接在“隐私”之后，[`src/client/DevicesSection.tsx`](src/client/DevicesSection.tsx)，导航中通过 `settings.section.icon` 带有链接图标）：远程访问状态、已批准的设备（移除需确认）以及“添加设备”，后者打开 home 的批准窗口，并在窗口打开期间每两秒读取一次待处理的请求，这一切都通过同源请求完成（[`src/client/devices-api.ts`](src/client/devices-api.ts)，引导流程导入其 `readReachStatus`）。没有远程访问的 profile 改为显示一行文字；远程 studio 收到的每个 `LOOPBACK_REQUIRED` 拒绝，都会就地显示为“这需要你在自己的计算机上操作”以及对应的操作。在该计算机上，该分区还列出每台设备解锁敏感操作的请求，可用设备显示的代码批准或拒绝，并列出每个正在运行的解锁，附“结束”；在设备上，它显示设备自己的解锁，附“解锁”或“立即锁定”。远程 studio 的解锁是一个 `shell.overlay` 条目（[`src/client/UnlockOverlay.tsx`](src/client/UnlockOverlay.tsx)，存储在 [`src/client/unlock.ts`](src/client/unlock.ts)）：home 以 `elevation-required:` 拒绝的调用（上游的 Client Remote 服务将其报告为 `remote/call-denied`）会打开一个对话框，向计算机请求解锁并显示代码；解锁期间，横幅显示结束时间并附“立即锁定”。该行还注册一个 `shell.overlay` 提示（[`src/client/RemoteNotice.tsx`](src/client/RemoteNotice.tsx)），每当 home 以 `LOOPBACK_REQUIRED` 拒绝页面对转发提示的回答时显示，例如从远程 studio 回答的完全访问授权：上游的 Client Remote 服务将该拒绝报告为 `remote/answer-refused`，提示写明“这需要你在自己的计算机上操作”以及被拒绝的操作。
 
+设备分区最后是**手机权限**（[`src/client/PhonePowers.tsx`](src/client/PhonePowers.tsx)）：“谨慎”和“完全”两个选项，每个都写明它允许已解锁的手机做什么，通过 `GET /auth/phone-powers` 读取，通过 `POST /auth/phone-powers` 选择（[`@delorun/home-auth`](../home-auth/README.zh.md)）。只有计算机可以选择；设备以只读方式显示该级别，并附“请在你的电脑上更改”，路由会拒绝设备的选择。在 home 使用一个无人选择过的级别期间，计算机显示一条提示，附“保留‘谨慎’”或“保留‘完全’”，点击即记录选择并结束提示。没有该路由的 profile 不显示任何内容。
+
 <a id="the-pin-lock-screen"></a>
 ## PIN 锁屏
 
