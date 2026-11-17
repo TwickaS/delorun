@@ -91,7 +91,7 @@ describe('a live reload with protection off', () => {
     expect(await approvedVersion(fx, 'plug')).toBe(approved)
     expect(await holdsVersion(fx.home, activeDirectory(fx.home, PROFILE, 'plug'), approved)).toBe(true)
     expect(await activeOf(fx, 'plug')).toBe(approved)
-    expect((await history(fx)).slice(0, 2)).toEqual([expect.stringMatching(/^Went back: c[0-9a-f]{10} failed to load$/), `Loaded without review: plug: changes in ${source}`])
+    expect((await history(fx)).slice(0, 2)).toEqual([`Went back: Loaded without review: plug: changes in ${source} failed to load`, `Loaded without review: plug: changes in ${source}`])
     expect((await listChanges(ctx)).pending[0]).toMatchObject({ lastFailure: { failure: 'SyntaxError: nope' } })
     expect(await loadUnreviewed(ctx, 'plug', host.reload)).toEqual({ kind: 'unchanged', plugin: 'plug' })
     expect(host.calls()).toBe(2)

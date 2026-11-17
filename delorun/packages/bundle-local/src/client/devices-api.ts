@@ -5,7 +5,7 @@
  * @module @delorun/bundle-local/client/devices-api
  */
 import type { Branded } from '@deepseek-ai/dsh-brand'
-import { REQUEST_DISPLAYS, WINDOWLESS_MODES, type PairingView } from '@delorun/home-auth/wire'
+import { PHONE_POWERS_LEVELS, PHONE_POWERS_PATH, REQUEST_DISPLAYS, WINDOWLESS_MODES, type PairingView, type PhonePowersLevel, type PhonePowersView } from '@delorun/home-auth/wire'
 import {
   call, fields, hostFailureOf, isBoolean, isRefused, isString, isTime, listOf, optional, orNull, readServedRoute, type Check, type HostFetch,
 } from './host-api.ts'
@@ -397,4 +397,28 @@ export function approveElevation(fetch: HostFetch, requestId: ElevationRequestId
  */
 export async function revokeElevation(fetch: HostFetch, id: ElevationRequestId | ElevationId): Promise<boolean> {
   return (await call<{ revoked: boolean }>(fetch, ELEVATION_ROUTES.revoke, isRevoked, { id })).revoked
+}
+
+/** Whether an answer is the Phone powers route's. */
+const isPhonePowers = fields({ level: value => PHONE_POWERS_LEVELS.some(level => level === value), chosen: isBoolean })
+
+/**
+ * Read the Phone powers level: how much an unlocked phone may do.
+ * @param fetch - the request function.
+ * @returns the level and whether the person chose it, or undefined when this profile does not serve the route.
+ * @throws {HostRequestError} for any other refusal, an unreachable Host or an unreadable answer.
+ */
+export function readPhonePowers(fetch: HostFetch): Promise<PhonePowersView | undefined> {
+  return readServedRoute<PhonePowersView>(fetch, PHONE_POWERS_PATH, isPhonePowers)
+}
+
+/**
+ * Choose the Phone powers level, at the computer only: a device's request is refused with `LOOPBACK_REQUIRED`.
+ * @param fetch - the request function.
+ * @param level - the level.
+ * @returns the level now in force.
+ * @throws {HostRequestError} for a refusal, an unreachable Host or an unreadable answer.
+ */
+export function setPhonePowers(fetch: HostFetch, level: PhonePowersLevel): Promise<PhonePowersView> {
+  return call<PhonePowersView>(fetch, PHONE_POWERS_PATH, isPhonePowers, { level })
 }

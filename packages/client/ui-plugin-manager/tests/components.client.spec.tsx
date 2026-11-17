@@ -1603,8 +1603,10 @@ describe('PluginManagerPage', () => {
         { items: [{ id: 'bash', label: 'Shell' }], rows: new Set(['dsh-better-sidebar#sidebar']) },
         bodies,
       )
-      // The cards carry none of it.
+      // The cards carry none of the actions, badges and sections, but the row state, such as "Needs setup", shows on the card.
       expect(screen.queryByRole('button', { name: /^act / })).toBeNull()
+      const card = document.querySelector('[data-plugin-package="dsh-better-sidebar"]') as HTMLElement
+      expect(within(card).getByText('state row dsh-better-sidebar#sidebar')).toBeTruthy()
 
       fireEvent.click(screen.getByRole('button', { name: en.openDetail.replace('{name}', 'dsh-better-sidebar') }))
       const detail = document.querySelector('[data-plugin-detail]') as HTMLElement

@@ -18,6 +18,7 @@ description: "@delorun/home-process 包，供 delorun 与运行时仓库的维�
 - [更新通道](#the-update-channel)
 - [更新握手](#the-update-handshake)
 - [交接](#the-handover)
+- [重启](#the-restart)
 - [中断的更新](#interrupted-updates)
 - [停止](#stopping)
 - [监管器](#the-supervisor)
@@ -71,6 +72,11 @@ description: "@delorun/home-process 包，供 delorun 与运行时仓库的维�
 ## 交接
 
 前任进程使用运行时仓库的命令，从目标运行时启动后继进程，并将文件描述符 3 上继承的管道交给它；后继进程位于自己的进程组中，因此发给请求方终端的信号不会到达它。前任进程随后写入一行交接信息：home、profile、两个版本、它为后继进程分配的启动 id，以及报告所指明为停用的插件。令牌不随之传递。`HomeProcess.takeOver` 以 `standby` 启动后继进程的 Host，并按交接行的预期运行其 C3 健康检查：报告指明的插件与行、它预测的组合包列表、前任进程的 Host 无法加载的行，以及该 Host 在启动时拥有的每一行（在该 Host 停止之前读取）。它以 `ready` 或 `failed` 应答。收到 `ready` 时，前任进程以后继进程的进程 id 与启动 id 原子地重写锁（`HomeLock.handOver`），向请求方发送最终的 `committed` 行，关闭其通道，删除其令牌文件，并写入 `commit`；随后后继进程接管锁，写入新的启动令牌，开始监听，启动其监管器，进入 `running`，并处理记录：更新的记录被标记为 `committed`，只保留其副本（`SessionDataCopies.commit`），暂存文件删除；回滚的记录删除，暂存的记录移回。若前任进程在 `commit` 之前死亡，后继进程只有在锁已指明它时才接管。
+
+<a id="the-restart"></a>
+## 重启
+
+`Restart`（[`src/restart.ts`](src/restart.ts)）就是 C19 的重启（[C19](../../docs/contracts/c19-home-process.zh.md#the-restart)）：本进程所启动的 Host 以 `HomeControls.restart` 接收它，CLI 再把它作为 `changesRestart` 交给 studio。它会以 `RESTART_IN_PROGRESS`、`UPDATE_IN_PROGRESS`（更新或回滚正在运行、进程不处于 `running`，或存在不是 `committed` 的更新记录）或 `NO_RUNTIME_STORE`（没有 `RestartSupport`）拒绝；重启运行期间，每个更新与回滚都以 `RESTART_IN_PROGRESS` 被拒绝；`stop` 或 `update.cancel` 会结束仍在等待对话的重启，而一旦它开始启动新的 Host，`stop` 就被拒绝。它持有对话闸门并等待运行中的对话，或用 `stopChats` 取消它们，最多等待请求的 `drainTimeoutS`；然后停止 Host，并在同一版本上启动后继进程，交接行的 `type` 为 `restart`，其健康检查预期不会有超出运行中 Host 所停用的插件。接管的后继进程不结算任何更新记录。失败的后继进程被停止，`RestartSupport.leaveOut` 把最新的 harness 更改排除在外，本进程重新启动其 Host；此后 `view()` 给出 `failed` 及其原因和被排除的更改，直到 `clearFailure`。
 
 <a id="interrupted-updates"></a>
 ## 中断的更新

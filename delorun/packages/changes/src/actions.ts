@@ -517,8 +517,8 @@ export async function applyChange(ctx: ChangesContext, id: ChangeId, presence: A
     const steps = await contentSteps(ctx, state, change.plugin, { source: change.source, version: change.to, approvedAt: at })
     return carryOut(ctx, state.log, options.reload, {
       id,
-      summary: `Applied ${id}: ${summary}`,
-      wentBack: `Went back: ${id} failed to load`,
+      summary: `Applied: ${summary}`,
+      wentBack: `Went back: ${summary} failed to load`,
       ...steps,
       done: recorded => ({ ...pendingEntry, state: 'applied', ...decisionOf(at, presence), ...recorded }),
       failed: lastFailure => ({ ...pendingEntry, lastFailure }),
@@ -629,8 +629,8 @@ async function applyLeftOut(ctx: ChangesContext, state: State, entry: ChangeEntr
   const { leftOut: _leftOut, lastFailure: _lastFailure, ...applied } = entry
   return carryOut(ctx, state.log, reload, {
     id: entry.id,
-    summary: `Applied ${entry.id} again: ${entry.summary}`,
-    wentBack: `Went back: ${entry.id} failed to load again`,
+    summary: `Applied again: ${entry.summary}`,
+    wentBack: `Went back: ${entry.summary} failed to load again`,
     ...steps,
     done: recorded => ({ ...withoutDecision(applied), state: 'applied', ...decisionOf(at, presence), ...recorded }),
     failed: lastFailure => ({ ...entry, lastFailure }),
@@ -659,8 +659,8 @@ async function undoContent(ctx: ChangesContext, state: State, entry: ChangeEntry
   const steps = await contentSteps(ctx, state, plugin, entry.from === undefined ? undefined : { source: approval.source, version: entry.from, approvedAt: at })
   return carryOut(ctx, state.log, reload, {
     id: entry.id,
-    summary: `Undid ${entry.id}: ${entry.summary}`,
-    wentBack: `Went back: undoing ${entry.id} failed to load`,
+    summary: `Undid: ${entry.summary}`,
+    wentBack: `Went back: undoing ${entry.summary} failed to load`,
     ...steps,
     done: () => ({ ...withoutDecision(withoutFailure(entry)), state: 'undone', ...decisionOf(at, presence) }),
     failed: lastFailure => ({ ...entry, lastFailure }),
@@ -759,8 +759,8 @@ async function switchBundle(ctx: ChangesContext, state: State, plugin: string, e
   const pendingEntry: ChangeEntry = { id, kind, state: 'pending', subject: { plugin }, summary, createdAt: at }
   return carryOut(ctx, state.log, reload, {
     id,
-    summary: undoing === undefined ? `${summary} (${id})` : `Undid ${id}: ${undoing.summary}`,
-    wentBack: `Went back: ${id} failed to load`,
+    summary: undoing === undefined ? summary : `Undid: ${undoing.summary}`,
+    wentBack: `Went back: ${undoing === undefined ? summary : `undoing ${undoing.summary}`} failed to load`,
     write: () => writeBundles(ctx.profileDir, next),
     revert: () => writeBundles(ctx.profileDir, bundles),
     done: recorded => undoing === undefined

@@ -80,6 +80,8 @@ const REACHED: Readonly<Record<string, string>> = {
   'exact /delorun/changes/harness-undo': CHANGES_CONTROLS,
   'exact /delorun/changes/harness-discard': CHANGES_CONTROLS,
   'exact /delorun/changes/harness-copy': CHANGES_CONTROLS,
+  'exact /delorun/changes/restart': CHANGES_CONTROLS,
+  'exact /delorun/changes/restart-cancel': CHANGES_CONTROLS,
   'exact /delorun/changes/protection-off': CHANGES_CONTROLS,
   'exact /delorun/changes/protection-on': CHANGES_CONTROLS,
   'exact /delorun/changes/notice-seen': CHANGES_CONTROLS,

@@ -277,6 +277,8 @@ export interface StaticServices {
   readonly resolveText: (text: LocalizedText) => string
   /** The PIN mode step's requests and its link to Settings. */
   readonly pin: PinFace
+  /** The Phone access step's Phone powers choice: the Devices section's dictionary and the request function. */
+  readonly phonePowers: PhonePowersFace
   /** The Browser step's read of whether Browser is ready, its link to Settings and its way to turn Browser off. */
   readonly browser: BrowserFace
   /** The page's preview flags, which a step reads under a `PreviewFlagsProvider`. */
@@ -297,6 +299,14 @@ export interface BrowserFace {
    * @param section - the section's id.
    */
   readonly openSettings: (section: string) => void
+}
+
+/** What the Phone access step's Phone powers choice draws with and reaches the home with. */
+export interface PhonePowersFace {
+  /** The Devices section's copy, which holds the choice's words. */
+  readonly t: TranslateNS<'delorunDevices'>
+  /** Sends the choice's same-origin requests: the browser's `fetch`, or a spec's fake. */
+  readonly fetch: HostFetch
 }
 
 /** What the PIN step reaches the home with. */
@@ -360,6 +370,7 @@ export interface LaterStore {
   subscribe(listener: () => void): () => void
   /**
    * @param value - whether the guide is set aside.
+   * @param remember - whether to keep the pause in the home so a reload keeps the guide closed; default true. Escape sets it aside for this page only.
    */
-  set(value: boolean): void
+  set(value: boolean, remember?: boolean): void
 }

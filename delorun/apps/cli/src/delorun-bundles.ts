@@ -234,6 +234,15 @@ function insertedRowIds(layer: Pick<Profile['layers'][number], 'patches'>): Set<
 }
 
 /**
+ * The ids of the rows each layer of a profile inserts.
+ * @param profile - the loaded profile.
+ * @returns the ids by layer package name.
+ */
+export function insertedRowsByLayer(profile: Pick<Profile, 'layers'>): Record<string, string[]> {
+  return Object.fromEntries(profile.layers.map(layer => [layer.packageName, [...insertedRowIds(layer)]]))
+}
+
+/**
  * The ids of the rows that Delorun bundles insert into a profile. The running release's optional plugin packs are not
  * Delorun bundles here: they load from their Changes review copy, and their rows are optional.
  * @param profile - the loaded profile.

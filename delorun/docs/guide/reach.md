@@ -173,7 +173,7 @@ With an unlock, the phone can also:
 - change settings;
 - run the slash commands that change only the chat: `/compact`, `/export`, `/goal`, `/permission` and `/plan`; the phone runs no other slash command;
 - install, enable, update or remove plugins, and undo or restore a profile change. Delorun's own guard plugins and remote access cannot be turned off or changed this way, and an undo or restore that would change one is refused;
-- undo or discard a change in Changes, and turn protection on;
+- undo a plugin's change or discard any waiting change in Changes, and turn protection on;
 - browse folders with the folder picker, add a workspace, and start a chat in a folder that is not one of your workspaces;
 - run plugin code the model wrote;
 - grant full access, whether a command asks to run outside the sandbox or a workspace asks to be put on full access, and allow an external agent to work in a workspace. Without the unlock the phone says how many minutes the unlock lasts and offers **Unlock**, and the prompt keeps waiting;
@@ -231,12 +231,12 @@ A workspace that you already put on full access at your computer can still be dr
 
 Phone powers has two levels. You choose it at your computer, and a phone cannot change it, unlocked or not.
 
-- **Careful** is the default. An unlocked phone cannot open a terminal, turn protection off, apply changes to your plugins, change Delorun's own files, or do the other things [listed above](#what-an-approved-phone-can-and-cannot-do) as staying at your computer. It can still undo or discard a change and turn protection on. Careful does not cover the approvals an unlocked phone gives: accepting an MCP server, allowing an external agent and giving a workspace full access work at either level, and each can still start programs outside the sandbox.
+- **Careful** is the default. An unlocked phone cannot open a terminal, turn protection off, apply changes to your plugins, change Delorun's own files or undo a change to them, make your copy of Delorun, restart Delorun, or do the other things [listed above](#what-an-approved-phone-can-and-cannot-do) as staying at your computer. It can still undo a plugin's change, discard any waiting change and turn protection on. Careful does not cover the approvals an unlocked phone gives: accepting an MCP server, allowing an external agent and giving a workspace full access work at either level, and each can still start programs outside the sandbox.
 - **Full** lets an unlocked phone do everything your computer can, each time with an unlock you entered on the phone: a code from your computer, or your PIN. The 15 minutes after you approve a phone never count.
 
-`delorun setup` asks you to choose when you turn remote access on, with your home's current level selected, or Careful if it has none yet. Run `delorun devices powers` to see the level. Run `delorun devices powers careful` or `delorun devices powers full` to choose it; Full needs a terminal. The studio on your computer shows and sets it too. The choice applies at once, without a restart.
+`delorun setup` asks you to choose when you turn remote access on, with your home's current level selected, or Careful if it has none yet. Run `delorun devices powers` to see the level. Run `delorun devices powers careful` or `delorun devices powers full` to choose it; Full needs a terminal. Settings, Devices on your computer shows and sets it too, and on a phone shows it without letting you change it. The choice applies at once, without a restart.
 
-A home that existed before Phone powers starts at the level its `phonePowersOnUpgrade` setting names, Careful unless you changed it, and the studio tells you until you choose. If Delorun cannot read the saved choice, it applies Careful.
+A home that existed before Phone powers starts at the level its `phonePowersOnUpgrade` setting names, Careful unless you changed it, and Settings, Devices on your computer says so until you choose, with **Keep Careful** to choose the level it applies. If Delorun cannot read the saved choice, it applies Careful.
 
 When a phone turns protection on or off, your computer shows a notice, and `delorun changes list` prints it under "Changed from a phone:" and clears it when it reaches a terminal. Turning protection off from a phone asks twice, as it does at the computer; the second question stops a slip and does not stop someone who holds your unlocked phone and has chosen Full.
 

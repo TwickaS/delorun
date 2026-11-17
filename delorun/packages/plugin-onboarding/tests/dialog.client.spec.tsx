@@ -53,7 +53,10 @@ async function mountEntry(options: Options = {}) {
     status: options.status ?? 'ready', ...options.writeResult === undefined ? {} : { result: options.writeResult },
   })
   const extra = createSnapshotStore<readonly OnboardingStep[]>(options.extra ?? [])
-  const aside = createSnapshotStore(false)
+  const base = createSnapshotStore(false)
+  // Records what the pause was asked to keep in the home, as the plugin's store does.
+  const set = vi.fn((value: boolean, remember?: boolean) => { void remember; base.set(value) })
+  const aside = { ...base, set }
   const complete = vi.fn()
   const completeStep = vi.fn((_id: string) => {})
   const startChat = vi.fn((_workspaceId?: string, _keepCurrent?: boolean) => Promise.resolve())
@@ -186,19 +189,23 @@ describe('the first run', () => {
     expect(screen.getByRole('dialog')).toBeTruthy()
   })
 
-  it('treats Escape as Complete setup later: the place is kept and the guide sets aside for this visit', async () => {
-    const { progress, complete } = await mountEntry({ notice: noticeFace() })
+  it('closes the guide for this page only on Escape: nothing is kept in the home and the owed notice is not acknowledged', async () => {
+    const notice = noticeFace()
+    const { progress, complete, aside } = await mountEntry({ notice })
     await act(async () => { fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' }) })
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(progress.set).not.toHaveBeenCalled()
+    expect(aside.set).toHaveBeenCalledWith(true, false)
+    expect(notice.acknowledge).not.toHaveBeenCalled()
     expect(complete).toHaveBeenCalled()
   })
 
   it('acknowledges the owed preview notice on Complete setup later, so the separate notice step does not show it again', async () => {
     const notice = noticeFace()
-    await mountEntry({ notice })
-    await act(async () => { fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' }) })
+    const { aside } = await mountEntry({ notice })
+    await click(button(en.later))
     expect(notice.acknowledge).toHaveBeenCalledOnce()
+    expect(aside.set).toHaveBeenCalledWith(true)
   })
 
   it('goes forward and back, saving the step reached, and starts the chat in the default workspace from Ready', async () => {
@@ -567,7 +574,7 @@ describe('finishing later and the last step', () => {
   })
 
   describe.each<readonly [string, 'skip' | 'done', ReachState, string]>([
-    ['Not now', 'skip', 'off', 'Not set up'],
+    ['Skip step', 'skip', 'off', 'Not set up'],
     ['"I\'ve done this" while reach still reads off', 'done', 'off', en['ready.reach.check']],
     ['"I\'ve done this" once reach reads on', 'done', 'set-up', 'On'],
   ])('phone access with %s', (_, action, reachNow, summary) => {
@@ -577,7 +584,7 @@ describe('finishing later and the last step', () => {
       expect(heading().textContent).toBe(en['step.reach'])
       expect(screen.queryByRole('button', { name: en.continue })).toBeNull()
       host.reach.mockResolvedValue(reachNow)
-      await click(button(action === 'skip' ? en['reach.notNow'] : en['reach.done']))
+      await click(button(action === 'skip' ? en.skip : en['reach.done']))
       await settle()
       await forward(1)
       // A computer reached from the phone adds the PIN and Workspace steps before Ready.

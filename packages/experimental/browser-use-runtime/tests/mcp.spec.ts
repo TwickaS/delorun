@@ -86,9 +86,11 @@ class PresentationRuntime extends PtcRuntime {
 class RefuseBrowserConsent extends McpClient.McpAddConsent {
   static readonly providesMcpAddConsent = true
   readonly reviewed: string[] = []
+  /** Whether the browser fixture's start is now accepted. */
+  accepted = false
   review(command: McpServerCommand): Promise<McpConsentDecision> {
     this.reviewed.push(command.serverName)
-    return Promise.resolve(command.serverName === 'browser-fixture' ? { allow: false, reason: 'no server is accepted yet' } : { allow: true })
+    return Promise.resolve(command.serverName === 'browser-fixture' && !this.accepted ? { allow: false, reason: 'no server is accepted yet' } : { allow: true })
   }
 }
 
@@ -450,6 +452,52 @@ describe('Session MCP Loader composition', () => {
     await warm(ctx, second.agent)
     expect(consent.reviewed.filter(name => name === 'browser-fixture')).toHaveLength(2)
     expect(warnings).toHaveLength(2)
+  })
+
+  it('starts the browser server in a Session its refusal left without tools only once the consent accepts it', async () => {
+    const { ctx, root } = await load(false, undefined, undefined, undefined, true)
+    const consent = ctx.get('mcpAddConsent') as RefuseBrowserConsent
+    const created = await ctx.agents.create({ sessionId: SessionId('refused-then-accepted'), agentOptions: { provider: 'fixture', model: 'fixture' } })
+    await warm(ctx, created.agent)
+    const reviewed = (): number => consent.reviewed.filter(name => name === 'browser-fixture').length
+    expect(reviewed()).toBe(1)
+    // Still refused: the check runs again, nothing starts, and the Session keeps no browser tools.
+    await ctx.parallel('mcp-client/consent-accepted', 'browser-fixture')
+    expect(reviewed()).toBe(2)
+    await expect(readFile(join(root, 'events.ndjson'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+    expect((await warm(ctx, created.agent)).tools.some(tool => tool.name === TOOL)).toBe(false)
+    // Another server's acceptance asks nothing.
+    await ctx.parallel('mcp-client/consent-accepted', 'other-fixture')
+    expect(reviewed()).toBe(2)
+    consent.accepted = true
+    await ctx.parallel('mcp-client/consent-accepted', 'browser-fixture')
+    expect((await warm(ctx, created.agent)).tools.map(tool => tool.name)).toContain(TOOL)
+    expect((await execute(ctx, created.agent, TOOL)).isError).toBe(false)
+  })
+
+  it('starts no server after the consent is accepted in a Session whose admission has ended', async () => {
+    const admittedSessions = new Set<string>(['refused-session'])
+    const admission: NonNullable<SessionMcpOptions['admission']> = {
+      admitted: agent => admittedSessions.has(agent.id),
+      changed: () => () => {},
+    }
+    const { ctx, root } = await load({ consent: true, registration: 'none', admission })
+    const consent = ctx.get('mcpAddConsent') as RefuseBrowserConsent
+    const refused = await ctx.agents.create({ sessionId: SessionId('refused-session'), agentOptions: { provider: 'fixture', model: 'fixture' } })
+    const unadmitted = await ctx.agents.create({ sessionId: SessionId('no-browser'), agentOptions: { provider: 'fixture', model: 'fixture' } })
+    const reviewed = (): number => consent.reviewed.filter(name => name === 'browser-fixture').length
+    // Only the admitted Session asked the consent; the Session of a No browser workspace never did.
+    expect(reviewed()).toBe(1)
+    // The provider stops admitting the refused Session before it reports the change.
+    admittedSessions.delete('refused-session')
+    consent.accepted = true
+    await ctx.parallel('mcp-client/consent-accepted', 'browser-fixture')
+    expect(reviewed()).toBe(1)
+    await expect(readFile(join(root, 'events.ndjson'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+    for (const created of [refused, unadmitted]) {
+      expect((await warm(ctx, created.agent)).tools.some(tool => tool.name === TOOL)).toBe(false)
+      expect((await execute(ctx, created.agent, TOOL)).isError).toBe(true)
+    }
   })
 
   it('creates the Session without browser tools when a row declares the add-time consent and did not start', async () => {

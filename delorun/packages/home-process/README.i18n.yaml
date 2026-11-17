@@ -12,8 +12,8 @@
   en: 40072fb3d92da2de
   zh: 1265c8bacd7a8e6c
 /delorun-home-process/contents:
-  en: dd0fa61b8a0cede3
-  zh: 1ce48d2af8702cb5
+  en: a9b6ec3d04fb7395
+  zh: 65add68a088e833e
 /delorun-home-process/starting-a-home-process:
   en: 4cff4a7f7355ed10
   zh: 3b3f833936ddd56a
@@ -25,7 +25,10 @@
   zh: 74a2c3e28afe47e5
 /delorun-home-process/the-handover:
   en: bb2e30ca4182d89c
-  zh: b5fc199a308e6a2c
+  zh: eca4672df96ddf4d
+/delorun-home-process/the-restart:
+  en: b168148e86608fc7
+  zh: 5180dcd80a83f1f9
 /delorun-home-process/interrupted-updates:
   en: a4f07cf35beebbb0
   zh: 8818da728245b491
