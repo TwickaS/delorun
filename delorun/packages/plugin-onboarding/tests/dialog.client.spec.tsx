@@ -8,8 +8,9 @@ import { OnboardingStepEntry, UPSTREAM_KEY_STEP, type OnboardingStepEntryProps }
 import { en } from '../src/client/locales.ts'
 import type { FolderChoice, OnboardingStep, ReachState, StartTarget } from '../src/client/types.ts'
 import type { OnboardingSettings } from '../src/config.ts'
-import { NO_RECORD, type SetupRecord } from '../src/wire.ts'
-import { DEFAULT_PATH, DEFAULT_WORKSPACE, hostFake, liveForm, noticeFace, settings, startFace, stepServices, t } from './fixtures.client.ts'
+import { NO_RECORD, type Readiness, type SetupRecord } from '../src/wire.ts'
+import { DEFAULT_PATH, DEFAULT_WORKSPACE, hostFake, liveForm, noticeFace, READY, settings, startFace, stepServices, t, THEME } from './fixtures.client.ts'
+import type { ThemeSettings } from '@delorun/plugin-theme'
 
 afterEach(() => {
   cleanup()
@@ -29,6 +30,8 @@ const click = async (element: HTMLElement) => { await act(async () => { fireEven
 const button = (name: string) => screen.getByRole('button', { name })
 
 interface Options {
+  /** Tailscale as the guide reads it; the fixtures' ready one by default. */
+  readonly tailscale?: Readiness['tailscale']
   readonly settings?: OnboardingSettings | undefined
   readonly status?: 'loading' | 'ready' | 'unavailable'
   readonly explicit?: boolean
@@ -38,6 +41,11 @@ interface Options {
   readonly writeResult?: boolean | 'reject'
   readonly reach?: ReachState
   readonly start?: ReturnType<typeof startFace>
+  readonly useStockLook?: () => Promise<boolean>
+  /** The PIN state a phone reads; absent fails the read. */
+  readonly pinState?: object
+  /** Whether the Finish setup entry at the computer opened the dialog for the deferred steps only. */
+  readonly deferredOnly?: boolean
 }
 
 /** The step entry over fakes, as the Settings shell mounts it. */
@@ -51,17 +59,19 @@ async function mountEntry(options: Options = {}) {
   const completeStep = vi.fn((_id: string) => {})
   const startChat = vi.fn((_workspaceId?: string, _folder?: string, _keepCurrent?: boolean) => Promise.resolve())
   const loadRecord = vi.fn(() => Promise.resolve(options.record ?? NO_RECORD))
-  const host = hostFake({ reach: options.reach ?? 'absent' })
+  const host = hostFake({ reach: options.reach ?? 'absent', ...options.tailscale === undefined ? {} : { readiness: { ...READY, tailscale: options.tailscale } } })
   const start = options.start ?? startFace()
-  const services = stepServices({ notice: options.notice?.face, host: host.host, start: start.face })
+  const deferredOnly = createSnapshotStore(options.deferredOnly ?? false)
+  const pinFetch = vi.fn((_input: string) => options.pinState === undefined ? Promise.reject(new Error('no PIN request')) : Promise.resolve(new Response(JSON.stringify(options.pinState))))
+  const services = stepServices({ notice: options.notice?.face, host: host.host, pin: { fetch: pinFetch, openSettings: () => undefined }, start: start.face, ...options.useStockLook === undefined ? {} : { look: { settings: liveForm<ThemeSettings>(THEME).form, useStockLook: options.useStockLook } } })
   const props = {
     t, complete, completeStep, renderSection: (id: string) => `section ${id}`, ...options.explicit === undefined ? {} : { explicit: options.explicit },
-    progress: progress.form, extra, loadRecord, services, startChat, aside,
+    progress: progress.form, extra, loadRecord, services, startChat, aside, deferredOnly,
   } satisfies OnboardingStepEntryProps
   const view = render(<OnboardingStepEntry {...props} />)
   await settle()
   await settle()
-  return { ...view, aside, progress, extra, complete, completeStep, startChat, loadRecord, services, host, start }
+  return { ...view, aside, progress, extra, complete, completeStep, startChat, loadRecord, services, host, start, deferredOnly }
 }
 
 /** The steps a first run shows with nothing configured. */
@@ -206,6 +216,57 @@ describe('the first run', () => {
     expect(startChat).toHaveBeenCalledExactlyOnceWith(DEFAULT_WORKSPACE, undefined, false)
   })
 
+  describe('the original look', () => {
+    /** Go to the Look step and open the original-look screen. */
+    const openScreen = async () => {
+      await forward(2)
+      expect(heading().textContent).toBe(en['step.look'])
+      await click(button(en['look.stock.open']))
+    }
+
+    it('lands back on Look with nothing chosen when the screen is cancelled', async () => {
+      const useStockLook = vi.fn(() => Promise.resolve(true))
+      await mountEntry({ useStockLook })
+      await openScreen()
+      expect(screen.queryByRole('button', { name: en.continue })).toBeNull()
+      await click(button(en['look.stock.no']))
+      expect(heading().textContent).toBe(en['step.look'])
+      expect(screen.getByRole('button', { name: en['look.stock.open'] })).toBeTruthy()
+      expect(useStockLook).not.toHaveBeenCalled()
+    })
+
+    it('goes straight to the step after Look when confirmed, keeps the look until Finish, then applies it', async () => {
+      const useStockLook = vi.fn(() => Promise.resolve(true))
+      const { startChat } = await mountEntry({ useStockLook })
+      await openScreen()
+      await click(button(en['look.stock.yes']))
+      expect(heading().textContent).toBe(en['step.agents'])
+      expect(useStockLook).not.toHaveBeenCalled()
+      await forward(2)
+      expect(heading().textContent).toBe(en['step.ready'])
+      expect(screen.getByText(en['ready.stock'])).toBeTruthy()
+      expect(useStockLook).not.toHaveBeenCalled()
+      await click(button(en.start))
+      await settle()
+      expect(startChat).toHaveBeenCalledOnce()
+      expect(useStockLook).toHaveBeenCalledOnce()
+    })
+
+    it('does not apply it on Finish later, and says nothing about it on Ready when it was not chosen', async () => {
+      const useStockLook = vi.fn(() => Promise.resolve(true))
+      await mountEntry({ useStockLook })
+      await openScreen()
+      await click(button(en['look.stock.yes']))
+      await click(button(en.later))
+      await settle()
+      expect(useStockLook).not.toHaveBeenCalled()
+      cleanup()
+      await mountEntry({ useStockLook })
+      await forward(5)
+      expect(screen.queryByText(en['ready.stock'])).toBeNull()
+    })
+  })
+
   it('lists the steps with the current one marked and the earlier ones done', async () => {
     await mountEntry()
     await forward(1)
@@ -279,14 +340,14 @@ describe('which steps apply', () => {
     expect(titles().includes(en['step.reach'])).toBe(false)
   })
 
-  it('counts only the steps the person will see: one fewer on a phone and where the terminal covered some', async () => {
+  it('counts only the steps the person will see: a phone has the PIN step in place of phone access, and fewer where the terminal covered some', async () => {
     const { unmount } = await mountEntry({ reach: 'off', record: { reachSetUp: false } })
     const withPhone = titles().length
     expect(screen.getByText(`Step 1 of ${String(withPhone)}`)).toBeTruthy()
     unmount()
     await mountEntry({ reach: 'remote', record: { reachSetUp: false } })
-    expect(screen.getByText(`Step 1 of ${String(withPhone - 1)}`)).toBeTruthy()
-    expect(titles()).toHaveLength(withPhone - 1)
+    expect(screen.getByText(`Step 1 of ${String(withPhone)}`)).toBeTruthy()
+    expect(titles()).toHaveLength(withPhone)
   })
 
   it('counts phone access as on in Ready when the terminal setup set it up', async () => {
@@ -506,7 +567,7 @@ describe('finishing later and the last step', () => {
     ['"I\'ve done this" once reach reads on', 'done', 'set-up', 'On'],
   ])('phone access with %s', (_, action, reachNow, summary) => {
     it(`tells Ready: ${summary}`, async () => {
-      const { host } = await mountEntry({ reach: 'off', record: { reachSetUp: false } })
+      const { host } = await mountEntry({ reach: 'off', record: { reachSetUp: false }, tailscale: { state: 'signed-out' } })
       await forward(titles().indexOf(en['step.reach']))
       expect(heading().textContent).toBe(en['step.reach'])
       expect(screen.queryByRole('button', { name: en.continue })).toBeNull()
@@ -514,10 +575,84 @@ describe('finishing later and the last step', () => {
       await click(button(action === 'skip' ? en['reach.notNow'] : en['reach.done']))
       await settle()
       await forward(1)
+      // A computer reached from the phone adds the PIN and Workspace steps before Ready.
+      for (const between of [en['step.pin'], en['step.workspace']]) {
+        if (heading().textContent === between) await forward(1)
+      }
       expect(heading().textContent).toBe(en['step.ready'])
       const term = [...document.querySelectorAll('dt')].find(each => each.textContent === 'Phone access')
       expect(term?.nextElementSibling?.textContent).toBe(summary)
     })
+  })
+})
+
+describe('on a phone, the steps only the computer can do', () => {
+  const PIN_LEAD = en['computer.why.pin']
+
+  it('shows the PIN step as done on the computer, with the reason, before Workspace', async () => {
+    await mountEntry({ reach: 'remote', record: { reachSetUp: false } })
+    expect(titles().slice(-3)).toEqual([en['computer.title.pin'], en['step.workspace'], en['step.ready']])
+    await forward(titles().indexOf(en['computer.title.pin']))
+    expect(heading().textContent).toBe(en['computer.title.pin'])
+    expect(screen.getByText(PIN_LEAD)).toBeTruthy()
+    expect(screen.queryByLabelText(en['pin.label'])).toBeNull()
+  })
+
+  it('records the step as deferred and goes on when the person chooses Do it on my computer', async () => {
+    const view = await mountEntry({ reach: 'remote', record: { reachSetUp: false } })
+    await forward(titles().indexOf(en['computer.title.pin']))
+    await click(button(en['computer.defer']))
+    expect(view.host.defer).toHaveBeenCalledWith('pin', true)
+    expect(heading().textContent).toBe(en['step.workspace'])
+  })
+
+  it('leaves the step undone and unrecorded on Skip', async () => {
+    const view = await mountEntry({ reach: 'remote', record: { reachSetUp: false } })
+    await forward(titles().indexOf(en['computer.title.pin']))
+    await click(button(en.skip))
+    expect(view.host.defer).not.toHaveBeenCalled()
+    expect(heading().textContent).toBe(en['step.workspace'])
+  })
+
+  it.each<readonly [string, { readonly record?: SetupRecord; readonly pinState?: object }]>([
+    ['it was already deferred', { record: { reachSetUp: false, deferred: ['pin'] } }],
+    ['PIN mode is already on', { pinState: { kind: 'on', secret: 'pin', idleMinutes: 15, paused: false, unlock: null } }],
+  ])('leaves the step out when %s', async (_, options) => {
+    await mountEntry({ reach: 'remote', record: { reachSetUp: false }, ...options })
+    expect(titles().includes(en['computer.title.pin'])).toBe(false)
+  })
+
+  it('does not show the computer-only step at the computer', async () => {
+    await mountEntry({ reach: 'off', record: { reachSetUp: false } })
+    expect(document.querySelector('[data-computer-only]')).toBeNull()
+  })
+})
+
+describe('at the computer, opened from the Finish setup entry', () => {
+  it('shows only the deferred steps and no Welcome or Ready', async () => {
+    await mountEntry({ explicit: true, deferredOnly: true, settings: settings({ done: true }), reach: 'set-up', record: { reachSetUp: false, deferred: ['pin'] } })
+    expect(titles()).toEqual([en['step.pin']])
+  })
+
+  it('offers Finish later on its only step, since Skip has nothing after it', async () => {
+    const view = await mountEntry({ explicit: true, deferredOnly: true, settings: settings({ done: true }), reach: 'set-up', record: { reachSetUp: false, deferred: ['pin'] } })
+    await click(button(en.later))
+    expect(view.aside.getSnapshot()).toBe(true)
+    expect(view.deferredOnly.getSnapshot()).toBe(false)
+  })
+
+  it('closes after the last deferred step without starting a chat or saving the place', async () => {
+    const view = await mountEntry({ explicit: true, deferredOnly: true, settings: settings({ done: true }), reach: 'set-up', record: { reachSetUp: false, deferred: ['pin'] } })
+    await click(button(en.continue))
+    expect(view.startChat).not.toHaveBeenCalled()
+    expect(view.progress.set).not.toHaveBeenCalled()
+    expect(view.aside.getSnapshot()).toBe(true)
+    expect(view.deferredOnly.getSnapshot()).toBe(false)
+  })
+
+  it('lists phone access then the PIN step, in the guide\'s order', async () => {
+    await mountEntry({ explicit: true, deferredOnly: true, settings: settings({ done: true }), reach: 'off', record: { reachSetUp: false, deferred: ['pin', 'reach'] } })
+    expect(titles()).toEqual([en['step.reach'], en['step.pin']])
   })
 })
 
@@ -530,7 +665,7 @@ describe('the plugin downloads row in the footer', () => {
     phone(true)
     const release = provideDownloadsSource(queue())
     await mountEntry()
-    expect(screen.getByRole('button', { name: /Installing 1 of 1/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /1 left to install/ })).toBeTruthy()
     release()
   })
 
@@ -538,13 +673,13 @@ describe('the plugin downloads row in the footer', () => {
     phone(false)
     const release = provideDownloadsSource(queue())
     await mountEntry()
-    expect(screen.queryByRole('button', { name: /Installing/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /left to install/ })).toBeNull()
     release()
   })
 
   it('shows nothing when the queue is empty', async () => {
     phone(true)
     await mountEntry()
-    expect(screen.queryByRole('button', { name: /Installing/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /left to install/ })).toBeNull()
   })
 })

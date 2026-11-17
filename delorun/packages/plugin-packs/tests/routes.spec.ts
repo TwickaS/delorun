@@ -13,6 +13,7 @@ interface Registered {
 }
 
 function setup(home: { elevated?: boolean, page?: Record<string, boolean> } = {}) {
+  const touched: string[] = []
   const routes = new Map<string, Registered>()
   const result = { ok: true as const, value: { supported: true, packs: [], queue: [] } }
   const hub = {
@@ -25,39 +26,63 @@ function setup(home: { elevated?: boolean, page?: Record<string, boolean> } = {}
     get: (name: string) => (name === 'homeAuth' ? {
       elevationOf: () => (home.elevated === true ? { id: 'e1' } : undefined),
       pageUnlockOf: (id: string) => (home.page?.[id] === true ? { id: 'p1' } : undefined),
-      arrivalOf: () => ({ listener: 'reach' }), dangerousMode: () => false, pinEnabled: () => false,
+      arrivalOf: () => ({ listener: 'reach' }), dangerousMode: () => false, pinEnabled: () => false, touchUnlock: (id: string) => { touched.push(id) },
     } : undefined),
     connection: { fetch: { register: (route: Registered) => { routes.set(route.path, route); return () => Promise.resolve() } } },
   } as unknown as Context
   registerPackRoutes(ctx, hub as never)
-  return { routes, hub }
+  return { routes, hub, touched }
 }
 
 const device = (extra: object = {}) => ({ principal: { kind: REACH_DEVICE, deviceId: 'd1', listener: 'reach', ...extra } })
 const post = (body: unknown, raw?: string) => new Request('http://x/api/delorunPacks', { method: 'POST', headers: { 'content-type': 'application/json' }, body: raw ?? JSON.stringify(body) })
 
+/** Run one request through a route as the Connection does: admit the Peer, then answer it. */
+async function through(route: Registered, peer: { principal: { kind: string } }, body: unknown = { name: 'a', names: ['a'] }): Promise<number | 'refused'> {
+  const request = post(body)
+  if (!route.admitPeer(request, peer)) return 'refused'
+  return (await route.fetch(request)).status
+}
+
 describe('who may reach each route', () => {
-  it('lets a locked phone read, cancel and dismiss, and refuses it the routes that add, retry or remove', () => {
-    const { routes } = setup()
+  it('lets a locked phone read, cancel and dismiss, and answers it 403 ELEVATION_REQUIRED on the routes that add, retry or remove, before the hub is asked', async () => {
+    const { routes, hub } = setup()
     for (const path of Object.values(PACK_ROUTES)) {
-      const admitted = routes.get(path)!.admitPeer(post({}), device())
-      expect(admitted, path).toBe(!PACK_ELEVATED_ROUTES.includes(path))
+      const response = await through(routes.get(path)!, device())
+      expect(response, path).toBe(PACK_ELEVATED_ROUTES.includes(path) ? 403 : 200)
     }
+    expect(hub.enqueue).not.toHaveBeenCalled()
+    expect(hub.retry).not.toHaveBeenCalled()
+    expect(hub.remove).not.toHaveBeenCalled()
+    const request = post({ names: ['a'] })
+    const route = routes.get(PACK_ROUTES.enqueue)!
+    route.admitPeer(request, device())
+    const refusal = await route.fetch(request)
+    expect(await refusal.json()).toMatchObject({ error: 'ELEVATION_REQUIRED' })
   })
 
-  it('admits an unlocked phone to every route, and a page only while its own unlock runs', () => {
+  it('answers an unlocked phone on every route, and a page only while its own unlock runs', async () => {
     const unlocked = setup({ elevated: true })
-    for (const path of Object.values(PACK_ROUTES)) expect(unlocked.routes.get(path)!.admitPeer(post({}), device()), path).toBe(true)
+    for (const path of Object.values(PACK_ROUTES)) expect(await through(unlocked.routes.get(path)!, device()), path).toBe(200)
+    expect(unlocked.hub.enqueue).toHaveBeenCalled()
     const paged = setup({ page: { live: true, ended: false } })
     for (const path of PACK_ELEVATED_ROUTES) {
-      expect(paged.routes.get(path)!.admitPeer(post({}), device({ unlockId: 'live' })), path).toBe(true)
-      expect(paged.routes.get(path)!.admitPeer(post({}), device({ unlockId: 'ended' })), path).toBe(false)
+      expect(await through(paged.routes.get(path)!, device({ unlockId: 'live' })), path).toBe(200)
+      expect(await through(paged.routes.get(path)!, device({ unlockId: 'ended' })), path).toBe(403)
     }
   })
 
-  it('refuses any Peer that is not a reach device, on every route', () => {
+  it('renews the sliding unlock on a call that adds, retries or removes, and never on a read, a cancel or a dismiss', async () => {
+    const { routes, touched } = setup({ elevated: true })
+    for (const path of [PACK_ROUTES.list, PACK_ROUTES.cancel, PACK_ROUTES.dismiss]) await through(routes.get(path)!, device())
+    expect(touched).toEqual([])
+    for (const path of PACK_ELEVATED_ROUTES) await through(routes.get(path)!, device())
+    expect(touched).toEqual(['e1', 'e1', 'e1'])
+  })
+
+  it('refuses any Peer that is not a reach device, on every route', async () => {
     const { routes } = setup({ elevated: true })
-    for (const path of Object.values(PACK_ROUTES)) expect(routes.get(path)!.admitPeer(post({}), { principal: { kind: 'guest' } }), path).toBe(false)
+    for (const path of Object.values(PACK_ROUTES)) expect(await through(routes.get(path)!, { principal: { kind: 'guest' } }), path).toBe('refused')
   })
 })
 

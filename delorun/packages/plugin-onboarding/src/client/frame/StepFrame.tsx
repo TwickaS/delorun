@@ -68,7 +68,7 @@ export function StepFrame({ title, headingRef, count, place, total, steps, steps
           <div className={css.progress}>
             <span className={css.count}>{count}</span>
             <span className={css.bar} role="progressbar" aria-label={count} aria-valuemin={1} aria-valuemax={total} aria-valuenow={place}>
-              <span style={{ width: `${String((place / total) * 100)}%` }} />
+              <span style={{ transform: `scaleX(${String(place / total)})` }} />
             </span>
           </div>
           <nav className={css.visuallyHidden} aria-label={stepsLabel}>
@@ -79,8 +79,8 @@ export function StepFrame({ title, headingRef, count, place, total, steps, steps
             </ol>
           </nav>
         </header>
-        <div className={css.scroll}>
-          <div className={css.body} key={stepKey}>{children}</div>
+        <div className={css.scroll} key={stepKey}>
+          <div className={css.body}>{children}</div>
         </div>
         <footer className={css.footer}>{above}{footer ?? own}</footer>
       </div>

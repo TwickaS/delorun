@@ -21,7 +21,11 @@ export const PACKAGE_NAME = /^(?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*
 /** A Loader row id as a bundle's patch declares it: lower-case letters, digits, dots, underscores and hyphens. */
 export const ROW_ID = /^[a-z0-9][a-z0-9._-]{0,63}$/
 
-/** The most packages the recommended-plugins step offers: the curated plugins and the optional bundles. */
+/**
+ * The most packages (and, separately, bundled rows) the recommended-plugins step offers. The step's compact 48 px rows
+ * fit twelve on one screen; the studio bundle's curated list is the longest list a profile sets, and a longer list
+ * fails validation and stops the studio.
+ */
 export const RECOMMENDED_LIMIT = 12
 
 /** The id of a step, which `step` keeps: lower-case letters, digits, dots and hyphens. */
@@ -47,10 +51,12 @@ export interface OnboardingSettings {
   optionalRows: string[]
   /** What the first chat's folder holds, which picks its starting prompts; empty for the general prompts. */
   starterKind: string
+  /** How long adding a package may run before its card says it is still working, in seconds. */
+  addWaitSeconds: number
 }
 
 /** The settings of a profile that has not started onboarding. */
-export const DEFAULT_SETTINGS: OnboardingSettings = { done: false, step: '', starterSession: '', plugins: [], optionalRows: [], starterKind: '' }
+export const DEFAULT_SETTINGS: OnboardingSettings = { done: false, step: '', starterSession: '', plugins: [], optionalRows: [], starterKind: '', addWaitSeconds: 60 }
 
 /** The host half's live configuration: one field per setting. */
 export interface Config {
@@ -60,9 +66,11 @@ export interface Config {
   plugins: Volatile<string[]>
   optionalRows: Volatile<string[]>
   starterKind: Volatile<string>
+  addWaitSeconds: Volatile<number>
   registry: string
   registryTimeoutMs: number
   keyTestTimeoutMs: number
+  agentModelsTimeoutMs: number
   hiddenProviders: string[]
   cloneTimeoutMs: number
 }
@@ -79,10 +87,14 @@ export const Config = z.object({
     .description('Rows of the profile that a bundle inserts disabled, by row id, which the recommended-plugins step offers to turn on. Each must name a row of the profile, or the plugin does not load.')
     .default([...DEFAULT_SETTINGS.optionalRows]).volatile(),
   starterKind: z.union(['', ...FOLDER_KINDS] as const).default('').volatile(),
+  addWaitSeconds: z.natural().min(5).max(1800)
+    .description('How long adding a package in the guide may run before its card says it is still working, in seconds. The add itself is not stopped.')
+    .default(DEFAULT_SETTINGS.addWaitSeconds).volatile(),
   registry: z.string().pattern(/^https:\/\/[^\s/]+(?:\/[^\s]*)?$/u)
     .description('The npm registry the plugins step reads a package that is not installed from, only when the person asks.')
     .default('https://registry.npmjs.org'),
   registryTimeoutMs: z.natural().min(1000).max(60_000).description('The most time the registry requests may take together, in milliseconds.').default(10_000),
+  agentModelsTimeoutMs: z.natural().min(1000).max(120_000).description('The most time an installed agent may take to list its models, in milliseconds.').default(20_000),
   keyTestTimeoutMs: z.natural().min(1000).max(60_000).description('The most time one provider\'s key test may take, in milliseconds.').default(15_000),
   hiddenProviders: z.array(z.string().pattern(ROW_ID)).max(16)
     .description('Model provider routes the key test and the guide leave out, by route id, such as a route nobody can sign in to. Upstream\'s registry still lists them; they stay mounted.')

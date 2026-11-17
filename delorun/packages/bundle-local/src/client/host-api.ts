@@ -63,7 +63,8 @@ export const listOf = (check: Check): Check => value => Array.isArray(value) && 
 export const fields = (shape: Readonly<Record<string, Check>>): Check =>
   value => isRecord(value) && Object.entries(shape).every(([key, check]) => check(value[key]))
 
-const isRefusal = fields({ error: isString, message: isString })
+/** A refusal names its code as `error` (the profile routes) or as `code` (the Changes routes) and carries a sentence. */
+const isRefusal: Check = value => isRecord(value) && isString(value['message']) && (isString(value['error']) || isString(value['code']))
 
 /** What a request adds to the defaults: headers, and `keepalive` for a request sent while the page closes. */
 export interface RequestExtras {
@@ -115,8 +116,8 @@ export async function call<T>(fetch: HostFetch, path: string, check: Check, body
   const { status, ok, json } = await send(fetch, path, body, extra)
   if (!ok) {
     if (!isRefusal(json)) throw new HostRequestError(path, { kind: 'unreadable', status })
-    const refusal = json as { error: string; message: string } & Record<string, unknown>
-    throw new HostRequestError(path, { kind: 'refused', status, code: refusal.error, message: refusal.message, fields: refusal })
+    const refusal = json as { error?: string; code?: string; message: string } & Record<string, unknown>
+    throw new HostRequestError(path, { kind: 'refused', status, code: refusal.error ?? refusal.code!, message: refusal.message, fields: refusal })
   }
   if (!check(json)) throw new HostRequestError(path, { kind: 'unreadable', status })
   return json as T

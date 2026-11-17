@@ -28,7 +28,7 @@ export { PACK_ELEVATED_ROUTES, PACK_ROUTES, packRequestId, packView } from './wi
 export { hostPacksEnvironment, type PacksEnvironment } from './environment.ts'
 export { PacksHub } from './hub.ts'
 export { createPackRunner, failureOf } from './runner.ts'
-export { admitUnlockedPackDevice, registerPackRoutes } from './routes.ts'
+export { registerPackRoutes } from './routes.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {

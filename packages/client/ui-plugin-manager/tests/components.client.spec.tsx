@@ -200,7 +200,7 @@ function renderTab(
       if (name === 'plugins.bundle.activation') return body('activation', owner)
       if (name === 'plugins.add.actions') return body('add', owner)
       if (name === 'plugins.tab') return body('tab', owner)
-      if (name.startsWith('plugins.detail.')) return body('detail', owner)
+      if (name.startsWith('plugins.detail.') || name === 'plugins.row.state') return body('detail', owner)
       if (!('view' in owner) || (owner.view !== 'summary' && owner.view !== 'page')) {
         throw new Error('Plugin configuration fixture requires a summary or page view')
       }
@@ -1583,12 +1583,18 @@ describe('PluginManagerPage', () => {
       if (subject.kind === 'row') return `row ${subject.pkg.name}#${subject.row.rowId}`
       return `item ${subject.id}`
     }
+    /** The row state's label, which the page asks for once per row, apart from the page's own subject. */
+    const rowLabel = (owner: unknown): string => {
+      const subject = subjectOf(owner)
+      return subject?.kind === 'row' ? `row ${subject.pkg.name}#${subject.row.rowId}` : 'none'
+    }
     const bodies: SlotBodies = {
       'plugins.item:bash': view => view === 'summary' ? 'Limits every command.' : <form aria-label="bash form" />,
       'plugins.row.config:dsh-better-sidebar#sidebar': view => view === 'summary' ? 'The sidebar row.' : <form aria-label="row form" />,
       'plugins.detail.actions:': (_view, owner) => <button type="button">{`act ${label(owner)}`}</button>,
       'plugins.detail.badge:': (_view, owner) => <span>{`badge ${label(owner)}`}</span>,
       'plugins.detail.section:': (_view, owner) => <section aria-label={`section ${label(owner)}`} />,
+      'plugins.row.state:': (_view, owner) => <span>{`state ${rowLabel(owner)}`}</span>,
     }
 
     it('renders the contributed actions, badges, and sections on each page, told what the page is about', () => {
@@ -1609,6 +1615,8 @@ describe('PluginManagerPage', () => {
       const toggle = within(detail).getByRole('switch', { name: en.enableToggle.replace('{name}', 'dsh-better-sidebar') })
       expect(act.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
       const rows = detail.querySelector('[data-plugin-rows]') as HTMLElement
+      // The row state sits inside the row it is about, in the bundle's list of rows.
+      expect(within(rows.querySelector('[data-plugin-row]') as HTMLElement).getByText('state row dsh-better-sidebar#sidebar')).toBeTruthy()
       expect(rows.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
       // A contribution sees the bundle's facts, not the page's own state.
       expect(subjects.at(-1)).toEqual({

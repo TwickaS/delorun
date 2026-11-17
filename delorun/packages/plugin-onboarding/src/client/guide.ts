@@ -70,10 +70,24 @@ export interface Guide {
   readonly mode: Store<WorkspaceMode>
   /** The Workspace step's clone. */
   readonly clone: Store<CloneView>
+  /** The footer's primary label a step asks for in place of Continue, such as "Clone and continue"; undefined for the usual one. */
+  readonly continueLabel: Store<string | undefined>
   /** Where the providers step stands, which decides the dialog's own buttons. */
   readonly providersPhase: Store<ProvidersPhase>
   /** What the person did on Phone access, which Ready reports. */
   readonly phone: Store<PhoneOutcome>
+  /** Whether the person chose the original look; it applies when the guide finishes and is forgotten if the guide closes first. */
+  readonly stock: Store<boolean>
+  /** Whether the original-look screen is open in place of the Look step. */
+  readonly stockScreen: Store<boolean>
+  /**
+   * @param chosen - whether the original look applies when the guide finishes.
+   */
+  setStock(chosen: boolean): void
+  /**
+   * @param open - whether the original-look screen shows.
+   */
+  setStockScreen(open: boolean): void
   /**
    * @param outcome - what the person did on Phone access.
    */
@@ -88,6 +102,11 @@ export interface Guide {
    * @param gate - the hold, or undefined to release it.
    */
   setGate(key: string, gate: ContinueGate | undefined): void
+  /**
+   * Ask for another label on the footer's primary button.
+   * @param label - the label, or undefined for the usual one.
+   */
+  setContinueLabel(label: string | undefined): void
   /**
    * Ask every hold, in the order set, whether Continue may go on.
    * @returns whether the flow may go on; false as soon as one hold refuses.
@@ -142,8 +161,11 @@ export function createGuide(host: HostFace, pollMs: number = CLONE_POLL_MS): Gui
   const workspace = createSnapshotStore<WorkspaceChoice | undefined>(undefined)
   const mode = createSnapshotStore<WorkspaceMode>('default')
   const clone = createSnapshotStore<CloneView>({ state: 'idle' })
+  const continueLabel = createSnapshotStore<string | undefined>(undefined)
   const providersPhase = createSnapshotStore<ProvidersPhase>('landing')
   const phone = createSnapshotStore<PhoneOutcome>('untouched')
+  const stock = createSnapshotStore(false)
+  const stockScreen = createSnapshotStore(false)
   const gates = new Map<string, ContinueGate>()
   let disposed = false
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -176,8 +198,11 @@ export function createGuide(host: HostFace, pollMs: number = CLONE_POLL_MS): Gui
   fill(readiness, host.readiness)
   fill(keys, host.keyTest)
   return {
-    readiness, keys, recommendations, workspace, mode, clone, providersPhase, phone,
+    readiness, keys, recommendations, workspace, mode, clone, continueLabel, providersPhase, phone, stock, stockScreen,
+    setStock: (chosen) => { stock.set(chosen) },
+    setStockScreen: (open) => { stockScreen.set(open) },
     setPhone: (outcome) => { phone.set(outcome) },
+    setContinueLabel: (label) => { continueLabel.set(label) },
     setProvidersPhase: (phase) => { providersPhase.set(phase) },
     setGate: (key, gate) => { if (gate === undefined) gates.delete(key); else gates.set(key, gate) },
     passGates: async () => {

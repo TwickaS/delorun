@@ -7,7 +7,7 @@
  * to. The answer names each route and its result, never a key, an address or a provider's message.
  * @module @delorun/plugin-onboarding/key-test
  */
-import type { KeyResult, KeyTestAnswer } from './wire.ts'
+import type { KeyResult, KeySource, KeyTestAnswer } from './wire.ts'
 import { DEEPSEEK_ROUTE, MAX_PROVIDERS } from './wire.ts'
 
 export { DEEPSEEK_ROUTE }
@@ -34,6 +34,13 @@ export interface KeyTestDeps {
    * @throws the lookup's failure, such as a malformed reference.
    */
   readonly credentialConfigured: (provider: string) => Promise<boolean>
+  /**
+   * Where a route's configured key comes from. Reads no value.
+   * @param provider - the route.
+   * @returns the source, or undefined when the route names no credential reference or none is configured.
+   * @throws the lookup's failure.
+   */
+  readonly credentialSource?: (provider: string) => Promise<KeySource | undefined>
   /**
    * Ask a route's discovery for its models, with the stored key.
    * @param settingsNs - the namespace whose discovery serves the route.
@@ -128,5 +135,12 @@ async function testRoute(deps: KeyTestDeps, provider: string): Promise<KeyResult
 export async function testKeys(deps: KeyTestDeps): Promise<KeyTestAnswer> {
   const routes = deps.providers().filter(route => !deps.hidden.includes(route.id)).slice(0, MAX_PROVIDERS)
   const results = await Promise.all(routes.map(route => testRoute(deps, route.id).catch((): KeyResult => 'failed')))
-  return { hidden: [...deps.hidden], providers: routes.map((route, index) => ({ provider: route.id, name: route.name, result: results[index] as KeyResult })) }
+  const sources = await Promise.all(routes.map((route, index) => results[index] === 'no-key' ? undefined : deps.credentialSource?.(route.id).catch((): undefined => undefined)))
+  return {
+    hidden: [...deps.hidden],
+    providers: routes.map((route, index) => {
+      const source = sources[index]
+      return { provider: route.id, name: route.name, result: results[index] as KeyResult, ...(source === undefined ? {} : { source }) }
+    }),
+  }
 }

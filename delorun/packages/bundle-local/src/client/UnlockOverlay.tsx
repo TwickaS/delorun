@@ -47,25 +47,14 @@ const OUTCOME_KEYS = {
 } as const satisfies Record<UnlockOutcome, string>
 
 /**
- * Render the dialog, the banner and the locked-again notice for the store's view.
+ * Render the dialog and the locked-again notice (the time left shows in the device sheet only) for the store's view.
  * @param props - the store's view and actions, and the copy.
  * @returns the surfaces that show, or nothing.
  */
-export function UnlockOverlay({ useUnlock, request, cancel, lock, dismissEnded, t }: UnlockOverlayProps): ReactNode {
+export function UnlockOverlay({ useUnlock, request, cancel, dismissEnded, t }: UnlockOverlayProps): ReactNode {
   const view = useUnlock(current => current)
   return <>
     {view.dialog === null ? null : <UnlockDialogView t={t} view={view} request={request} cancel={cancel} />}
-    {view.state.kind === 'elevated'
-      ? <div className={css.banner} role="status" aria-live="polite" data-unlock="elevated">
-        <IconShieldOutlineRegular aria-hidden="true" />
-        {/* A failed Lock now takes the end time's place, so the banner fits a phone's width. */}
-        {view.lockFailed
-          ? <span className={`${css.bannerText} ${css.bannerFailed}`} role="alert">{t('unlock.lockFailed')}</span>
-          : <span className={css.bannerText}>{t('unlock.banner', { time: clockTime(t, view.state.endsAt) })}</span>}
-        <span aria-hidden="true">·</span>
-        <button type="button" className={css.bannerAction} onClick={() => { void lock() }}>{t('unlock.lockNow')}</button>
-      </div>
-      : null}
     {view.ended === 0 || view.state.kind === 'elevated'
       ? null
       : <Toast key={view.ended} text={t('unlock.ended')} icon={<IconShieldOutlineRegular />} onDone={dismissEnded} />}

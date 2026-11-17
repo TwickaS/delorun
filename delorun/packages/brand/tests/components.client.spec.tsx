@@ -2,7 +2,7 @@
 /** The Delorun components render upstream's behaviour with Delorun's variants, roles and names. */
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { Button, Card, ConfirmAction, Dialog, Keypad, Link, Mark, Notice, OutcomePanel, PinDots, Pill, StatusCard, TextField } from '../src/index.ts'
+import { Button, Card, ConfirmAction, Dialog, Keypad, Link, Mark, Notice, OutcomePanel, PinDots, Pill, SecretPair, StatusCard, TextField } from '../src/index.ts'
 
 afterEach(cleanup)
 
@@ -116,5 +116,22 @@ describe('Pill, ConfirmAction and Dialog', () => {
     expect(screen.getByRole('button', { name: 'Remove' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(onClose).toHaveBeenCalled()
+  })
+})
+
+describe('SecretPair', () => {
+  it('draws two masked fields the browser does not remember, passes edits up and shows the error under the second', () => {
+    const onSecret = vi.fn()
+    const onAgain = vi.fn()
+    render(<SecretPair label="PIN" confirmLabel="Again" help="At least 6 digits" error="No match" secret="" again="" onSecret={onSecret} onAgain={onAgain} />)
+    const first = screen.getByLabelText('PIN') as HTMLInputElement
+    const second = screen.getByLabelText('Again') as HTMLInputElement
+    expect([first.type, second.type, first.autocomplete, second.autocomplete]).toEqual(['password', 'password', 'new-password', 'new-password'])
+    fireEvent.change(first, { target: { value: '8246' } })
+    fireEvent.change(second, { target: { value: '8247' } })
+    expect(onSecret).toHaveBeenCalledWith('8246')
+    expect(onAgain).toHaveBeenCalledWith('8247')
+    expect(screen.getByRole('alert').textContent).toBe('No match')
+    expect(screen.getByText('At least 6 digits')).toBeTruthy()
   })
 })

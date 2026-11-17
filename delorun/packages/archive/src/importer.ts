@@ -24,13 +24,14 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { lstat, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { ARCHIVE_LIMITS, type ArchiveCustomisation, type ArchiveManifest } from '@delorun/contract-archive-and-trash'
+import { ARCHIVE_LIMITS, type ArchiveContentKind, type ArchiveCustomisation, type ArchiveManifest } from '@delorun/contract-archive-and-trash'
 import { ArchiveError, failureCode } from './errors.ts'
 import { customisationDiff, parseCustomisation, type CustomisationDiffRow } from './customisation.ts'
 import { checkContainerDeclarations, checkManifestDeclarations } from './limits.ts'
 import { CUSTOMISATION_PATH, MANIFEST_PATH, OBJECTS_DIRECTORY, parseManifest, SIGNATURE_PATH } from './manifest.ts'
 import { checkPathCollisions } from './paths.ts'
 import { keyFingerprint } from './fingerprint.ts'
+import { parseSetupDocument, type SetupDocument } from './setup.ts'
 import { checkArchiveSignature, parseSignature, type SignatureReason, type SignatureState } from './signature.ts'
 import { refuseLinkedDirectory, removeStaging, writeStaging, type StagedEntry } from './staging.ts'
 import type { ArchiveSizeLimits } from './limits.ts'
@@ -238,6 +239,46 @@ export interface ArchiveImporterConfig {
   readonly limits?: ArchiveSizeLimits | undefined
 }
 
+/** A setup archive that passed every validation step. */
+export interface OpenedSetup {
+  /** The setup document. */
+  readonly document: SetupDocument
+  /** Whether a key this home vouches for signed the archive. */
+  readonly state: SignatureState
+  /** Why the archive is unverified; absent when it is verified. */
+  readonly reason?: AcceptedReason | undefined
+  /** The archive's source: its file name, or the origin's key identifier. */
+  readonly source: string
+  /** Whether the archive carries a signature. */
+  readonly signed: boolean
+  /** The key the archive names as its signer. */
+  readonly signer: ArchiveSigner
+  /** The Delorun version that wrote the archive, as the archive states it. */
+  readonly createdBy: string
+  /** The time the export finished, as the archive states it. */
+  readonly exportedAt: string
+  /**
+   * Read one plugin file.
+   * @param sha256 - the digest the document names; the bytes are the entry's, whose digest the validation checked.
+   * @returns the file's bytes.
+   */
+  readonly readFile: (sha256: string) => Uint8Array
+}
+
+/**
+ * Refuse an archive of the other content kind.
+ * @param validated - the validated archive.
+ * @param wanted - the content kind the caller reads.
+ * @throws ArchiveError `ARCHIVE_WRONG_KIND` naming the command that reads the archive.
+ */
+function requireContent(validated: ValidatedArchive, wanted: ArchiveContentKind): void {
+  const has = validated.manifest.content ?? 'chats'
+  if (has === wanted) return
+  throw new ArchiveError('ARCHIVE_WRONG_KIND', has === 'setup'
+    ? 'this is a setup archive: import it with delorun setup import'
+    : 'this is an archive of chats: import it with delorun import')
+}
+
 /** One archive that passed every validation step. Entries are read again when staged, so no content is held. */
 interface ValidatedArchive {
   readonly archive: ZipArchive
@@ -287,6 +328,7 @@ export class ArchiveImporter {
    */
   async inspect(bytes: Uint8Array, options: { readonly source?: string } = {}): Promise<ArchivePreview> {
     const validated = this.validate(bytes)
+    requireContent(validated, 'chats')
     const { manifest } = validated
     const source = options.source ?? manifest.origin.homeKeyId
     return {
@@ -322,6 +364,7 @@ export class ArchiveImporter {
    */
   async import(bytes: Uint8Array, options: { readonly source?: string } = {}): Promise<ArchiveImportReport> {
     const validated = this.validate(bytes)
+    requireContent(validated, 'chats')
     this.requireAcceptedSigner(validated.reason)
     const source = options.source ?? validated.manifest.origin.homeKeyId
     const workspaces = await this.publish(validated.archive, validated.manifest)
@@ -332,6 +375,51 @@ export class ArchiveImporter {
       source,
       workspaces,
       customisation: customisationDiff(validated.customisation),
+    }
+  }
+
+  /**
+   * Validate one setup archive and describe it, writing nothing. Every check of {@link inspect} runs. The signer is
+   * not a gate: an unsigned archive and a signature by a key this home does not know are returned as unverified with
+   * the key's fingerprint, because a setup is reviewed by the person and applied only through the paths that review
+   * plugin code, and a signature that does not verify is still refused.
+   * @param bytes - the whole archive.
+   * @param options - `source` names the archive by its file name; the origin's key identifier is used when it is absent.
+   * @returns the setup document, the signer and a reader for the plugin files.
+   * @throws ArchiveError with the code of the first refusal the archive earns; `ARCHIVE_WRONG_KIND` for a chats archive; `ARCHIVE_SCHEMA_INVALID` when the customisation lists a row, when a plugin file the document names is not a `plugin-file` entry of the same size, or when a `plugin-file` entry is named by no plugin.
+   */
+  openSetup(bytes: Uint8Array, options: { readonly source?: string } = {}): OpenedSetup {
+    const validated = this.validate(bytes)
+    requireContent(validated, 'setup')
+    const { manifest, archive } = validated
+    if (validated.customisation.rows.length > 0) throw new ArchiveError('ARCHIVE_SCHEMA_INVALID', 'a setup archive lists customisation rows, which only a chats archive carries')
+    const entries = new Map(manifest.entries.map(entry => [entry.sha256, entry]))
+    const documentEntry = manifest.entries.find(entry => entry.kind === 'setup-document')!
+    const document = parseSetupDocument(archive.read(documentEntry.path))
+    const named = new Set<string>()
+    for (const plugin of document.plugins) {
+      if (plugin.source !== 'local') continue
+      for (const file of plugin.files) {
+        const entry = entries.get(file.sha256)
+        if (entry?.kind !== 'plugin-file' || entry.size !== file.size) {
+          throw new ArchiveError('ARCHIVE_SCHEMA_INVALID', `the file ${JSON.stringify(file.path)} of ${plugin.name} is not a plugin-file entry of the size the setup names`)
+        }
+        named.add(file.sha256)
+      }
+    }
+    const stray = manifest.entries.find(entry => entry.kind === 'plugin-file' && !named.has(entry.sha256))
+    if (stray !== undefined) throw new ArchiveError('ARCHIVE_SCHEMA_INVALID', `the plugin-file entry ${JSON.stringify(stray.path)} is named by no plugin of the setup`)
+    const source = options.source ?? manifest.origin.homeKeyId
+    return {
+      document,
+      state: validated.state,
+      reason: validated.reason,
+      source,
+      signed: validated.signed,
+      signer: { declaredKeyId: manifest.origin.homeKeyId, publicKey: manifest.origin.publicKey, fingerprint: keyFingerprint(manifest.origin.publicKey) },
+      createdBy: manifest.createdBy,
+      exportedAt: manifest.exportedAt,
+      readFile: (sha256: string) => archive.read(`${OBJECTS_DIRECTORY}/${sha256}`),
     }
   }
 

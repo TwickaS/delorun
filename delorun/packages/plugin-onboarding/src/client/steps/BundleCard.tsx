@@ -29,6 +29,8 @@ interface AddableProps {
   readonly services: StepServices
   /** Where the package stands. */
   readonly state: BundleState
+  /** Why the plugin manager reports `failed`, in its own words. */
+  readonly reason?: string | undefined
   /** The title. */
   readonly title: string
   /** The icon's address, if the package has artwork. */
@@ -46,8 +48,8 @@ interface AddableProps {
  * @param props - the package's state, text and Add handler.
  * @returns the card.
  */
-export function AddableCard({ services, state, title, icon, description, onAdd, children }: AddableProps): ReactNode {
-  const { t, bundles, remote } = services
+export function AddableCard({ services, state, reason, title, icon, description, onAdd, children }: AddableProps): ReactNode {
+  const { t } = services
   let action: ReactNode
   let line: ReactNode
   switch (state) {
@@ -55,11 +57,16 @@ export function AddableCard({ services, state, title, icon, description, onAdd, 
       line = <StateLine tone="loading">{t('bundle.checking')}</StateLine>
       break
     case 'available':
-      if (remote) { line = <StateLine tone="info">{t('bundle.atComputer')}</StateLine>; break }
-      action = <Button variant="outline" size="sm" aria-label={t('bundle.addNamed', { name: title })} onClick={onAdd}>{t('bundle.add')}</Button>
+      action = <Button variant="outline" size="sm" className={css.inline} aria-label={t('bundle.addNamed', { name: title })} onClick={onAdd}>{t('bundle.add')}</Button>
       break
     case 'installing':
       line = <StateLine tone="loading">{t('bundle.adding')}</StateLine>
+      break
+    case 'offline':
+      line = <StateLine tone="info">{t('bundle.offline')}</StateLine>
+      break
+    case 'slow':
+      line = <StateLine tone="loading">{t('bundle.slow')}</StateLine>
       break
     case 'installed':
       action = <span className={css.added}><span aria-hidden="true">✓</span> {t('bundle.added')}</span>
@@ -69,11 +76,10 @@ export function AddableCard({ services, state, title, icon, description, onAdd, 
       line = <StateLine tone="info">{t('bundle.restart')}</StateLine>
       break
     case 'unavailable':
-      line = <StateLine tone="warning" action={{ label: t('bundle.open'), onClick: () => { bundles.openPlugins() } }}>{t('bundle.unavailable')}</StateLine>
+      line = <StateLine tone="warning">{t('bundle.unavailable')}</StateLine>
       break
     case 'failed':
-      if (remote) { line = <StateLine tone="info">{t('bundle.atComputer')}</StateLine>; break }
-      line = <StateLine tone="error" action={{ label: t('bundle.retry'), onClick: onAdd }}>{t('bundle.failed')}</StateLine>
+      line = <StateLine tone="error" action={{ label: t('bundle.retry'), onClick: onAdd }}>{reason === undefined ? t('bundle.failed') : t('bundle.failedWhy', { reason })}</StateLine>
       break
     /* v8 ignore next 2 -- closed-union default only defends future widening of BundleState */
     default:
@@ -119,7 +125,7 @@ export function BundleCard({ name, title, description, services, onAdd, children
   const view = useBundle(services, name)
   if (title === undefined) return <SkeletonCard />
   return (
-    <AddableCard services={services} state={view?.state ?? 'checking'} title={title ?? ''} description={description}
+    <AddableCard services={services} state={view?.state ?? 'checking'} reason={view?.reason} title={title ?? ''} description={description}
       onAdd={onAdd ?? (() => { void services.bundles.install(name) })}>
       {children}
     </AddableCard>

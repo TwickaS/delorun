@@ -41,6 +41,7 @@ description: "Delorun 用户指南，按你想做的事组织成一张地图：�
 - **恢复已删除的 chat，或在不同 home 之间移动 chat：**[回收站、导出与导入](daily-use.zh.md#trash-export-and-import)。
 - **升级到新的发布版本，或回退：**[更新](updates.zh.md)和[回退](updates.zh.md#going-back)。
 - **我运行了很多第三方插件时如何更新：**[在有大量插件时更新 Delorun](updating-with-plugins.zh.md)。它涵盖先保存了什么、如何阅读报告中的 `disabled` 行、如何用版本豁免强行尝试某个插件，以及如何回退。
+- **把我的插件、模型选择与设置迁移到另一台电脑：**[迁移你的 setup](move-your-setup.zh.md)说明文件包含与绝不包含什么、导入会替换什么，以及如何撤销。
 - **找到我的数据在哪里、移动它，或使用两个 profile：**[你的 Delorun home](home.zh.md)。
 - **找出某件事为何失败：**[Delorun 的日志存放在哪里](logs.zh.md)。
 - **带上我在 DeepSeek 网站上的 chat：**[导入你的 DeepSeek 网站 chat](import-deepseek-chats.zh.md)。

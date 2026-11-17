@@ -25,6 +25,7 @@ import {
   CODEX_PERMISSION_MODES,
   DEFAULT_CODEX_PERMISSION_MODE,
   codexAppServerArgv,
+  listCodexModels,
   DEFAULT_DISPOSE_GRACE_MS,
   disposeCodexChild,
   startCodexRun,
@@ -597,6 +598,34 @@ describe('task admission and package contracts', () => {
     for (const permissionMode of ['on-request', 'untrusted', 'future-mode']) {
       expect(() => codex.Config({ permissionMode } as never)).toThrow()
     }
+  })
+
+  it('lists the models the app-server reports across its pages, leaving hidden ones out, and releases the child', async () => {
+    const child = fakeChild()
+    const listing = listCodexModels({
+      cwd: '/workspace',
+      permissionMode: DEFAULT_CODEX_PERMISSION_MODE,
+      env: {},
+      disposeGraceMs: 3_000,
+      spawn: () => child.handle,
+    }, new AbortController().signal)
+    const initialize = await child.peer.nextMethod('initialize')
+    child.peer.respond(initialize, { userAgent: 'codex-cli 0.153.4' })
+    await child.peer.nextMethod('initialized')
+    const first = await child.peer.nextMethod('model/list')
+    expect(first.params).toEqual({})
+    child.peer.respond(first, {
+      data: [{ id: 'a', model: 'gpt-codex', displayName: 'GPT Codex', hidden: false }, { id: 'b', model: 'old', displayName: 'Old', hidden: true }],
+      nextCursor: 'page-2',
+    })
+    const second = await child.peer.nextMethod('model/list')
+    expect(second.params).toEqual({ cursor: 'page-2' })
+    child.peer.respond(second, { data: [{ id: 'c', model: 'gpt-mini', displayName: '', hidden: false }], nextCursor: null })
+    await expect(listing).resolves.toEqual([
+      { model: 'gpt-codex', displayName: 'GPT Codex' },
+      { model: 'gpt-mini', displayName: 'gpt-mini' },
+    ])
+    expect(child.terminate).toHaveBeenCalled()
   })
 
   it('resolves the safe permission default when apply is called directly', async () => {
@@ -1637,7 +1666,6 @@ describe('run lifecycle and quiescence', () => {
     const scenarios = [
       ['contextWindowExceeded', 'limit', 'max-tokens', undefined],
       ['sessionBudgetExceeded', 'limit', 'error', undefined],
-      ['unauthorized', 'access-policy', 'error', undefined],
       ['internalServerError', 'service', 'error', undefined],
       [{ httpConnectionFailed: { httpStatusCode: 503 } }, 'transport', 'error', 503],
       [{ activeTurnNotSteerable: { turnKind: 'review' } }, 'product-error', 'error', undefined],
@@ -1666,6 +1694,50 @@ describe('run lifecycle and quiescence', () => {
       expect(result.diagnostic).not.toContain('turnKind')
       await run.dispose()
     }
+  })
+
+  it('tells the person to sign in again, and the model not to retry, for each sign-in failure', async () => {
+    const signInFailures = [
+      { message: 'SECRET_TOKEN rejected', codexErrorInfo: 'unauthorized' },
+      {
+        message: 'unexpected status 401 Unauthorized: Missing bearer or basic authentication in header',
+        codexErrorInfo: 'other',
+      },
+      {
+        message: 'Your access token could not be refreshed because your refresh token has expired.',
+        codexErrorInfo: 'other',
+      },
+      {
+        message: 'stream failed',
+        codexErrorInfo: { responseStreamDisconnected: { httpStatusCode: 401 } },
+      },
+    ]
+    for (const error of signInFailures) {
+      const { child, run, turnStart } = await publishRun()
+      child.peer.respond(turnStart, { turn: { id: 'turn-1' } })
+      child.peer.send(turnCompleted('failed', 'turn-1', 'thread-1', error))
+      const result = await run.result
+      expect(result.stopReason).toBe('error')
+      expect(result.diagnostic).toBe(
+        "Codex isn't signed in, or its sign-in has expired. Run `delorun agents login codex` on this computer, then try again.\n"
+        + 'Do not retry this task or start another run of this agent until the person has signed in again.',
+      )
+      expect(result.diagnostic).not.toContain('SECRET_TOKEN')
+      await run.dispose()
+    }
+  })
+
+  it('keeps the fixed product-error facts for a failure that is not a sign-in failure', async () => {
+    const { child, run, turnStart } = await publishRun()
+    child.peer.respond(turnStart, { turn: { id: 'turn-1' } })
+    child.peer.send(turnCompleted('failed', 'turn-1', 'thread-1', {
+      message: 'the model refused the request',
+      codexErrorInfo: 'other',
+    }))
+    const result = await run.result
+    expect(result.diagnostic).toBe(expectedFailureDiagnostic('turn', 'product-error'))
+    expect(result.diagnostic).not.toContain('delorun agents login')
+    await run.dispose()
   })
 
   it('includes a structured permission fact in a max-token result', async () => {

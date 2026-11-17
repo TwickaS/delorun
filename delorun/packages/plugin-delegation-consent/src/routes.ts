@@ -10,7 +10,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: the ctx.connection merge and its `connection/request` event.
 import type {} from '@deepseek-ai/dsh-client-connection'
-import { admitUnlockedDevice, requireComputerUnlessDangerous, routedPathname } from '@delorun/home-auth'
+import { admitApprovedDevice, gateByUnlock, requireComputerOrDevice, routedPathname } from '@delorun/home-auth'
 import { z } from 'zod'
 import { DelegationConsentError, type DelorunDelegationConsent } from './service.ts'
 import { DELEGATION_CONSENT_ROUTES, MAX_DELEGATION_REQUEST_BYTES, type DelegationRefusalCode } from './wire.ts'
@@ -86,22 +86,22 @@ async function run(call: () => Promise<object>): Promise<Response> {
 export function registerDelegationRoutes(ctx: Context, service: DelorunDelegationConsent): void {
   const paths: ReadonlySet<string> = new Set(Object.values(DELEGATION_CONSENT_ROUTES))
   ctx.on('connection/request', async (request, response, next) => {
-    if (paths.has(routedPathname(request.url)) && !requireComputerUnlessDangerous(request, response, ctx.get('homeAuth'), ACTION)) return
+    if (paths.has(routedPathname(request.url)) && !requireComputerOrDevice(request, response, ctx.get('homeAuth'), ACTION)) return
     await next()
   })
-  // The computer, or an unlocked device while dangerous mode holds.
-  const admitPeer = admitUnlockedDevice(() => ctx.get('homeAuth'))
+  // Reading the grants and revoking one need no unlock; allowing an agent into a workspace does.
+  const admitPeer = admitApprovedDevice()
   ctx.connection.fetch.register({
     path: DELEGATION_CONSENT_ROUTES.grants, methods: ['GET'], requestBody: 'buffered', admitPeer,
     fetch: () => run(() => service.grants()),
   })
   ctx.connection.fetch.register({
-    path: DELEGATION_CONSENT_ROUTES.allow, methods: ['POST'], requestBody: 'buffered', admitPeer,
-    fetch: async (request) => {
+    path: DELEGATION_CONSENT_ROUTES.allow, methods: ['POST'], requestBody: 'buffered',
+    ...gateByUnlock(() => ctx.get('homeAuth'), async (request) => {
       const body = await parsed(request, AllowBody)
       if (body === undefined) return json(400, { error: 'INVALID_REQUEST', message: 'the request must be JSON with the chat, the agent and confirmed' })
       return run(() => service.allowWorkspace(body))
-    },
+    }, { grace: false }),
   })
   ctx.connection.fetch.register({
     path: DELEGATION_CONSENT_ROUTES.revoke, methods: ['POST'], requestBody: 'buffered', admitPeer,

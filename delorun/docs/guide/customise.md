@@ -29,7 +29,7 @@ You can reshape Delorun at six levels, from a setting in the studio to the harne
 The quickest visible change is the studio's theme. It needs no file, no restart and no terminal.
 
 1. At the foot of the sidebar, choose Settings. In the list on the left, choose Appearance, under General.
-2. Under Theme you see Soft, Slate, Berry, Grove, Ocean, Ember and Iris. Soft is the theme Delorun starts with. Choose Ocean.
+2. Under Theme you see a row of small tiles: Soft, Slate, Berry, Grove, Ocean, Ember, Iris and Custom. Each tile shows the theme in its light and dark colours, and a short sample chat beside them previews the tile you point at. Soft is the theme Delorun starts with. Choose Ocean. A theme brings its own accent, so no accent picker shows while a theme is chosen; choose Custom to pick your own accent and contrast.
 
    ![Settings, Appearance, with the Soft theme chosen: the studio in the colours Delorun starts with and the seven themes listed under Theme.](pictures/theme-soft.webp)
 3. The studio's colours change at once. Delorun saved your choice in your profile: `cordis.patch.yml` under `~/.delorun/profiles/default/` now ends with a [row](../reference/glossary.md#row) for the theme, and Settings → Setup versions lists a version called Changed the settings of Theme.
@@ -44,7 +44,7 @@ The quickest visible change is the studio's theme. It needs no file, no restart 
 
    ![Settings, Appearance, after choosing Ocean: the studio's colours and the highlight on the chosen controls have turned blue.](pictures/theme-ocean.webp)
 
-4. To undo it, choose Soft under Theme. The colours return and the row says `palette: soft`.
+4. To undo it, choose the Soft tile under Theme. The colours return and the row says `palette: soft`.
 
 Every other settings page works the same way: you change a control, the studio shows it, and the opposite change puts it back. The levels below reach further, and each names its own way back.
 

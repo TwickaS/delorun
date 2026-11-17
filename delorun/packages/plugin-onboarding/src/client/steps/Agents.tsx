@@ -1,85 +1,62 @@
 /**
- * Agents: Claude Code and Codex, each with its sign-in on this computer, added only after the person reads what adding
- * one means and confirms.
+ * Agents: Claude Code and Codex, each with how a chat uses it, a use-at-your-own-risk warning and its sign-in on this
+ * computer. One Add takes the defaults.
  */
-import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
-import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { AgentSignIn } from '../../wire.ts'
 import { StateLine, type StateTone } from '../ui/StateLine.tsx'
+import { AgentAdvanced } from './AgentAdvanced.tsx'
+import { CommandRow } from '../ui/CommandRow.tsx'
 import { BundleCard } from './BundleCard.tsx'
 import { useBundle, useRefresh, useStore, type StepProps } from './shared.ts'
 import css from './steps.module.css'
 
-/** The delegation bundles the agents step offers, by package name, the key of their copy and their connection id. */
+/**
+ * The delegation bundles the agents step offers, by package name, the key of their copy, their connection id and the
+ * size of the pinned program Add downloads for this platform, in megabytes.
+ */
 export const AGENT_BUNDLES = [
-  { name: '@deepseek-ai/dsh-subagent-claude-code', key: 'claude', agent: 'claude-code' },
-  { name: '@deepseek-ai/dsh-subagent-codex', key: 'codex', agent: 'codex' },
+  { name: '@deepseek-ai/dsh-subagent-claude-code', key: 'claude', agent: 'claude-code', downloadMb: 206 },
+  { name: '@deepseek-ai/dsh-subagent-codex', key: 'codex', agent: 'codex', downloadMb: 320 },
 ] as const
 
 /** The state line of an agent's sign-in. */
-const SIGN_IN_TONES: Readonly<Record<AgentSignIn, StateTone>> = { found: 'success', missing: 'warning', unknown: 'info' }
+const SIGN_IN_TONES: Readonly<Record<AgentSignIn, StateTone>> = { found: 'info', missing: 'info', unknown: 'info' }
+
+/** Where the guide explains how a chat uses an agent. */
+export const AGENTS_GUIDE_URL = 'https://docs.delorun.com/guide/agents'
 
 /**
- * One coding agent: where its sign-in stands and, after Add, what adding it means, confirmed with a second press.
+ * One coding agent: how a chat uses it, the use-at-your-own-risk warning, where its sign-in stands and one Add that
+ * takes the defaults. The first hand-off in a workspace asks for its own consent at the computer.
  * @param props - the agent and the services.
  * @returns the card.
  */
 function AgentCard({ agent, services, guide }: { readonly agent: typeof AGENT_BUNDLES[number] } & StepProps): ReactNode {
-  const { t, bundles } = services
+  const { t } = services
   const readiness = useStore(guide.readiness)
-  const [confirming, setConfirming] = useState(false)
-  // Set when Continue is pressed with the confirmation open: the card asks before the flow goes on.
-  const [asking, setAsking] = useState(false)
-  const question = useRef<HTMLDivElement>(null)
   const title = t(`agents.${agent.key}.title`)
   const signIn = readiness.status === 'ready' ? readiness.value.agents[agent.agent] : undefined
   const loading = readiness.status === 'loading'
-  useEffect(() => {
-    if (!confirming) return undefined
-    guide.setGate(agent.name, () => { setAsking(true); return false })
-    return () => { guide.setGate(agent.name, undefined) }
-  }, [confirming, guide, agent.name])
-  useEffect(() => { if (asking) question.current?.focus() }, [asking])
-  const settle = (add: boolean): void => {
-    setConfirming(false)
-    setAsking(false)
-    if (add) void bundles.install(agent.name)
-  }
   const bundleState = useBundle(services, agent.name)?.state
-  // One state line at a time: the sign-in shows only once the package's own state (checking, adding, failed, not included) is settled.
-  const showSignIn = bundleState === 'available' || bundleState === 'installed' || bundleState === 'restart'
+  const added = bundleState === 'installed' || bundleState === 'restart'
+  // The sign-in stays visible while the package is added; it hides while the package's own state is checking, failed or not available.
+  const showSignIn = bundleState === 'available' || bundleState === 'installing' || bundleState === 'slow' || added
   return (
-    <BundleCard name={agent.name} title={title} description={t(`agents.${agent.key}.description`)} services={services} onAdd={() => { setConfirming(true) }}>
+    <BundleCard name={agent.name} title={title} description={t(`agents.${agent.key}.description`)} services={services}>
+      <p className={css.how}>
+        {t(`agents.${agent.key}.how`)}{' '}
+        <a href={AGENTS_GUIDE_URL} target="_blank" rel="noopener noreferrer">{t('agents.guide')}</a>
+      </p>
+      {bundleState !== undefined && bundleState !== 'checking' && bundleState !== 'unavailable' && !added && <p className={css.how}>{t('agents.download', { size: String(agent.downloadMb) })}</p>}
+      <StateLine tone="warning">{t(`agents.${agent.key}.risk`)}</StateLine>
       {showSignIn && (
         <StateLine tone={loading ? 'loading' : signIn === undefined ? 'info' : SIGN_IN_TONES[signIn]}>
           {loading ? t('agents.signIn.checking') : signIn === undefined ? t('agents.signIn.unread') : t(`agents.${agent.key}.signIn.${signIn}`)}
         </StateLine>
       )}
-      {asking && (
-        <div ref={question} tabIndex={-1} className={css.confirm} role="alertdialog" aria-label={t('agents.ask', { name: title })}>
-          <p className={css.lead}>{t('agents.ask', { name: title })}</p>
-          <div className={css.actions}>
-            <Button variant="primary" size="sm" className={css.target} onClick={() => { settle(true) }}>{t('agents.ask.add')}</Button>
-            <Button variant="ghost" size="sm" className={css.target} onClick={() => { settle(false) }}>{t('agents.ask.skip')}</Button>
-          </div>
-        </div>
-      )}
-      {confirming && !asking && (
-        <div className={css.confirm} role="group" data-confirming="" aria-label={t('agents.confirm.label', { name: title })}>
-          <ul className={css.facts}>
-            <li>{t('agents.confirm.handoff')}</li>
-            <li>{t('agents.confirm.limits')}</li>
-            <li>{t('agents.confirm.outside')}</li>
-            <li>{t('agents.confirm.files')}</li>
-            <li>{t('agents.confirm.billing')}</li>
-          </ul>
-          <div className={css.actions}>
-            <Button variant="primary" size="sm" className={css.target} onClick={() => { setConfirming(false); void bundles.install(agent.name) }}>{t('bundle.addNamed', { name: title })}</Button>
-            <Button variant="ghost" size="sm" className={css.target} onClick={() => { setConfirming(false) }}>{t('chooser.cancel')}</Button>
-          </div>
-        </div>
-      )}
+      {showSignIn && !loading && signIn === 'missing' && <CommandRow command={`delorun agents login ${agent.agent}`} t={t} />}
+      <AgentAdvanced agent={agent.agent} title={title} services={services} added={added} />
     </BundleCard>
   )
 }

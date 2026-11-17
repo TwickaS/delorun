@@ -239,6 +239,11 @@ export function apply(ctx: Context, config: Config): void {
       },
       workspaces: () => scope.get('workspaceRegistry')?.list().map(({ id, title, path }) => ({ id, title, path })) ?? [],
       reveal: showFolder,
+      delorunVersion: () => {
+        const version = getDelorunRuntimeVersion()
+        if (version === undefined) throw new Error('plugin-changes: this Host was not started by delorun, so it does not know the Delorun version a setup file names.')
+        return version
+      },
     })
     scope.effect(() => {
       const registered = routes.map(route => scope.webServer.register(route))
@@ -394,3 +399,5 @@ function realTarget(path: string): string | undefined {
     return undefined
   }
 }
+
+export { discardImportReviews } from '@delorun/changes/setup-transfer'

@@ -17,9 +17,11 @@ import type {} from '@deepseek-ai/dsh-client-connection'
 // Type-only: the ctx.settings merge.
 import type {} from '@deepseek-ai/dsh-settings'
 // The ctx.homeAuth merge, and the pathname the guard compares.
-import { admitApprovedDevice, admitKeyDevice, routedPathname } from '@delorun/home-auth'
+import { admitApprovedDevice, admitKeyDevice, gateByUnlock, routedPathname } from '@delorun/home-auth'
 // Type-only: the ctx.workspaceRegistry merge.
 import type {} from '@deepseek-ai/dsh-workspace'
+// Type-only: the ctx.subagents merge.
+import type {} from '@deepseek-ai/dsh-subagent'
 import { brandString } from '@deepseek-ai/dsh-brand'
 // The ctx.credentials merge and the credential reference's brand.
 import type { CredentialRef } from '@deepseek-ai/dsh-credentials'
@@ -30,24 +32,27 @@ import { systemTailscale } from '@delorun/reach'
 import { SETUP_DEFAULT_CREDENTIAL_VARIABLE } from '@delorun/contract-setup-answers'
 import { readSetupRecord } from './answers.ts'
 import { createCloneService, spawnGit } from './clone.ts'
+import { createDeferredStore } from './deferred.ts'
 import type { Config } from './config.ts'
 import { DEEPSEEK_ROUTE, listingResult, testKeys, type KeyTestDeps } from './key-test.ts'
+import { VARIABLE_NAME, type KeySource, type KeySourceKind } from './wire.ts'
 import { assertRowsExist, type RowSource } from './rows.ts'
 import { findLocalServers } from './local-models.ts'
 import { processReadinessEnvironment, readReadiness } from './readiness.ts'
 import { installedReader, recommend, registryReader } from './recommend.ts'
 import {
-  ADD_WORKSPACE_PATH, CLONE_PATH, CLONE_STATUS_PATH, KEY_TEST_PATH, LOCAL_MODELS_PATH, MAX_SET_ASIDE, READINESS_PATH, RECOMMEND_PATH, RecommendRequest, SETUP_RECORD_PATH, WORKSPACE_NOTICE_PATH,
+  ADD_WORKSPACE_PATH, AGENT_MODELS_PATH, AgentModelsRequest, CLONE_PATH, DEFER_STEP_PATH, DeferStepRequest, CLONE_STATUS_PATH, KEY_TEST_PATH, LOCAL_MODELS_PATH, MAX_SET_ASIDE, READINESS_PATH, RECOMMEND_PATH, RecommendRequest, SETUP_RECORD_PATH, WORKSPACE_NOTICE_PATH,
   type WorkspaceNoticeAnswer,
 } from './wire.ts'
-import { addWorkspace, arrivedOnLoopback } from './workspace-route.ts'
+import { listAgentModels } from './agent-models.ts'
+import { addWorkspace, arrivedAtComputerOrDevice } from './workspace-route.ts'
 
 export { SETUP_ANSWERS_FILENAME, MAX_ANSWERS_BYTES, readSetupRecord } from './answers.ts'
 export { Config, DEFAULT_SETTINGS, ONBOARDING_ROW_ID, PACKAGE_NAME, RECOMMENDED_LIMIT, ROW_ID, type OnboardingSettings } from './config.ts'
 export {
   ADD_WORKSPACE_PATH, AddWorkspaceAnswer, AddWorkspaceRequest, CLONE_FAILURES, CLONE_PATH, CLONE_PROBLEMS, CLONE_STATUS_PATH, CloneRequest, CloneStart, CloneStatus,
   CONNECTION_ID, FOLDER_KINDS, KEY_RESULTS, KEY_TEST_PATH, KeyTestAnswer, LOCAL_MODELS_PATH, LOCAL_SERVER_KINDS, LocalModelsAnswer, LocalServer, isLoopbackBaseURL, LOCATION_PROBLEMS, MAX_ADD_BODY_BYTES, MAX_PATH_LENGTH, MAX_SECTIONS, NO_RECORD, READINESS_PATH, Readiness,
-  MAX_SET_ASIDE, RECOMMEND_PATH, RecommendAnswer, SECTION_NAME, SETUP_RECORD_PATH, SetupRecord, WORKSPACE_NOTICE_PATH, WorkspaceNoticeAnswer,
+  DEFER_STEP_PATH, DEFERRABLE_STEPS, DeferStepAnswer, DeferStepRequest, DeferrableStep, MAX_SET_ASIDE, RECOMMEND_PATH, RecommendAnswer, SECTION_NAME, SETUP_RECORD_PATH, SetupRecord, WORKSPACE_NOTICE_PATH, WorkspaceNoticeAnswer,
   type CloneFailure, type CloneProblem, type FolderKind, type KeyResult, type LocationProblem,
 } from './wire.ts'
 export { cloneEnvironment, failureOf, type GitOutcome, type GitRunner } from './clone.ts'
@@ -89,32 +94,87 @@ export function apply(ctx: Context, config: Config): void {
     const deps = { registry: child.workspaceRegistry, env: process.env, warn }
     const clones = createCloneService({ ...deps, git: spawnGit, timeoutMs: config.cloneTimeoutMs })
     child.effect(() => () => { clones.dispose() }, 'delorun-onboarding: clones')
-    // Before the body is read: a reach or remote session never adds or clones a workspace.
-    const loopbackOnly = new Set<string>([ADD_WORKSPACE_PATH, CLONE_PATH, CLONE_STATUS_PATH])
+    // Before the body is read: only the computer or a reach device reaches these routes, and a device needs an unlock.
+    const gated = new Set<string>([ADD_WORKSPACE_PATH, CLONE_PATH, CLONE_STATUS_PATH, AGENT_MODELS_PATH])
     child.on('connection/request', async (request, response, next) => {
-      if (loopbackOnly.has(routedPathname(request.url)) && !arrivedOnLoopback(request, response, child.get('homeAuth'))) return
+      if (gated.has(routedPathname(request.url)) && !arrivedAtComputerOrDevice(request, response, child.get('homeAuth'))) return
       await next()
     })
     child.connection.fetch.register({
       path: WORKSPACE_NOTICE_PATH,
       methods: ['GET'],
       requestBody: 'buffered',
+      admitPeer: admitApprovedDevice(),
       fetch: () => Promise.resolve(json({ setAside: child.workspaceRegistry.quarantined.slice(-MAX_SET_ASIDE).map(file => basename(file)) } satisfies WorkspaceNoticeAnswer)),
     })
-    child.connection.fetch.register({ path: ADD_WORKSPACE_PATH, methods: ['POST'], requestBody: 'buffered', fetch: request => addWorkspace(request, deps) })
-    child.connection.fetch.register({ path: CLONE_PATH, methods: ['POST'], requestBody: 'buffered', fetch: request => clones.start(request) })
-    child.connection.fetch.register({ path: CLONE_STATUS_PATH, methods: ['POST'], requestBody: 'buffered', fetch: request => clones.status(request) })
+    const unlocked = (fetch: (request: Request) => Promise<Response>, options?: { readonly renews?: boolean }) => gateByUnlock(() => child.get('homeAuth'), fetch, options)
+    child.connection.fetch.register({ path: ADD_WORKSPACE_PATH, methods: ['POST'], requestBody: 'buffered', ...unlocked(request => addWorkspace(request, deps)) })
+    child.connection.fetch.register({
+      path: AGENT_MODELS_PATH,
+      methods: ['POST'],
+      requestBody: 'buffered',
+      ...unlocked(async (request) => {
+        let body: unknown
+        try {
+          body = await request.json()
+        } catch (_notJson) {
+          // The parser's message quotes the body, so the request is only refused.
+          body = undefined
+        }
+        const parsed = AgentModelsRequest.safeParse(body)
+        if (!parsed.success) return new Response(JSON.stringify({ error: 'the request must be JSON with agent' }), { status: 400, headers: { 'content-type': 'application/json' } })
+        return json(await listAgentModels(parsed.data.agent, {
+          provider: agent => ctx.get('subagents')?.getProvider(agent),
+          cwd: () => ctx.get('profileContext')?.dir ?? process.cwd(),
+          timeoutMs: config.agentModelsTimeoutMs,
+          warn,
+        }))
+      }),
+    })
+    child.connection.fetch.register({ path: CLONE_PATH, methods: ['POST'], requestBody: 'buffered', ...unlocked(request => clones.start(request)) })
+    child.connection.fetch.register({ path: CLONE_STATUS_PATH, methods: ['POST'], requestBody: 'buffered', ...unlocked(request => clones.status(request), { renews: false }) })
   })
+  const deferred = createDeferredStore(ctx.get('profileContext')?.dir, warn)
   ctx.connection.fetch.register({
     path: SETUP_RECORD_PATH,
     methods: ['GET'],
     requestBody: 'buffered',
-    fetch: async () => json(await readSetupRecord(ctx.get('profileContext')?.dir, warn)),
+    admitPeer: admitApprovedDevice(),
+    fetch: async () => {
+      const record = await readSetupRecord(ctx.get('profileContext')?.dir, warn)
+      const steps = await deferred.read()
+      return json(steps.length === 0 ? record : { ...record, deferred: steps })
+    },
+  })
+  ctx.connection.fetch.register({
+    path: DEFER_STEP_PATH,
+    methods: ['POST'],
+    requestBody: 'buffered',
+    // An approved phone may only note that a step waits for the computer; the note changes no setting.
+    admitPeer: admitApprovedDevice(),
+    fetch: async (request) => {
+      let body: unknown
+      try {
+        body = await request.json()
+      } catch (_notJson) {
+        // The parser's message quotes the body, so the request is only refused.
+        body = undefined
+      }
+      const parsed = DeferStepRequest.safeParse(body)
+      if (!parsed.success) return new Response(JSON.stringify({ error: 'the request must be JSON with a known step id and deferred' }), { status: 400, headers: { 'content-type': 'application/json' } })
+      try {
+        return json({ deferred: await deferred.set(parsed.data.id, parsed.data.deferred) })
+      } catch (error) {
+        warn(`a deferred step was not kept: ${error instanceof Error ? error.message : 'unknown failure'}`)
+        return new Response(JSON.stringify({ error: 'the deferred step could not be kept' }), { status: 500, headers: { 'content-type': 'application/json' } })
+      }
+    },
   })
   ctx.connection.fetch.register({
     path: READINESS_PATH,
     methods: ['GET'],
     requestBody: 'buffered',
+    admitPeer: admitApprovedDevice(),
     fetch: async () => json(await readReadiness(processReadinessEnvironment(systemTailscale()))),
   })
   ctx.connection.fetch.register({
@@ -129,6 +189,7 @@ export function apply(ctx: Context, config: Config): void {
     path: LOCAL_MODELS_PATH,
     methods: ['GET'],
     requestBody: 'buffered',
+    admitPeer: admitApprovedDevice(),
     fetch: async () => json(await findLocalServers(config.keyTestTimeoutMs)),
   })
   ctx.connection.fetch.register({
@@ -172,6 +233,9 @@ function credentialRef(ctx: Context, entry: { readonly settingsNs: string; reado
   return typeof ref === 'string' && ref !== '' ? ref : undefined
 }
 
+/** The credentials service's source layers, as the wire names them. */
+const SOURCE_KINDS: Readonly<Record<string, KeySourceKind>> = { 'file': 'saved', 'env': 'environment', 'project-env': 'project-file', 'user-env': 'home-file' }
+
 /**
  * The key test's parts in this harness: upstream's provider registry and discoveries, each configurable route's credential
  * as the credentials service describes its reference (`configured`, read without the value), and the official DeepSeek
@@ -204,6 +268,19 @@ export function keyTestDeps(ctx: Context, timeoutMs: number, hidden: readonly st
       // Without the credentials service the launch environment is the store, as for the DeepSeek route below.
       if (credentials === undefined) return (env[ref] ?? '') !== ''
       return (await credentials.describe(brandString<CredentialRef>(ref))).configured
+    },
+    credentialSource: async (provider): Promise<KeySource | undefined> => {
+      const entry = ctx.get('llm')?.listConfigurableProviders().find(each => each.provider === provider)
+      if (entry === undefined) return undefined
+      const variable = credentialRef(ctx, entry) ?? (provider === DEEPSEEK_ROUTE ? SETUP_DEFAULT_CREDENTIAL_VARIABLE : undefined)
+      if (variable === undefined) return undefined
+      // Only the variable's name travels; a reference that is not a plain name is left out rather than sent.
+      const name = VARIABLE_NAME.test(variable) ? variable : undefined
+      const credentials = ctx.get('credentials')
+      if (credentials === undefined) return (env[variable] ?? '') === '' ? undefined : { kind: 'environment', ...(name === undefined ? {} : { variable: name }) }
+      const info = await credentials.describe(brandString<CredentialRef>(variable))
+      if (!info.configured) return undefined
+      return { kind: (info.source === undefined ? undefined : SOURCE_KINDS[info.source]) ?? 'unknown', ...(name === undefined ? {} : { variable: name }) }
     },
     discover: async (settingsNs, provider, signal) => {
       const llm = ctx.get('llm')

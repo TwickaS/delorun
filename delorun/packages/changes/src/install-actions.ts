@@ -88,6 +88,11 @@ export interface InstallApplyOptions {
   readonly reload: ReloadHost
   /** Runs upstream's plugin operation. */
   readonly run: PluginOperation
+  /**
+   * Checks what the operation left, before the change is recorded and before anything reloads. A throw puts the
+   * profile's `package.json` and `pnpm-lock.yaml` back and leaves the request pending.
+   */
+  readonly verify?: () => Promise<void>
 }
 
 /** How the running Host took an applied plugin request. */
@@ -409,6 +414,14 @@ export async function applyInstallChange(ctx: ChangesContext, id: ChangeId, pres
       const failure = await failureOf(ctx.profileDir, ran)
       await writeChangeLog(ctx.home, ctx.profile, withEntry(log, { ...request, lastFailure: { at, failure } }))
       throw new ChangesError('OPERATION_FAILED', id, `Change ${id} was not applied: ${failure}`)
+    }
+    if (options.verify !== undefined) {
+      try {
+        await options.verify()
+      } catch (error: unknown) {
+        await restoreFiles(files)
+        throw error
+      }
     }
     await operation.after()
     const recorded = await recordVersion(ctx, `Applied ${id}: ${entry.summary}`)

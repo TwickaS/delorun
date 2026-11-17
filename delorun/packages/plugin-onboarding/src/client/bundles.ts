@@ -20,9 +20,11 @@ type InstallOptions = NonNullable<Parameters<PluginManager['installBundle']>[1]>
  * Where one offered bundle stands for this profile. `checking` is before the plugin manager answers; `available` is
  * the only state a button can add from; `unavailable` is a bundle this installation does not include or cannot
  * install, which is not an error; `failed` is a bundle the plugin manager cannot change, could not be asked, or failed
- * to add, which Plugins finishes.
+ * to add, which Plugins finishes. `slow` is an add still running after the wait the settings allow; it ends when the
+ * plugin manager reports the outcome. `offline` is a plugin pack that needs a connection to download; `unavailable`
+ * is one this kind of computer cannot run.
  */
-export type BundleState = 'checking' | 'available' | 'installing' | 'installed' | 'restart' | 'unavailable' | 'failed'
+export type BundleState = 'checking' | 'available' | 'installing' | 'slow' | 'installed' | 'restart' | 'unavailable' | 'offline' | 'failed'
 
 /** One offered bundle as the steps draw it. */
 export interface BundleView {
@@ -32,7 +34,7 @@ export interface BundleView {
   readonly title?: LocalizedText
   /** The package's own description, when the plugin manager lists one. */
   readonly description?: LocalizedText
-  /** Why the bundle is `unavailable` on this platform, when the plugin manager says so. */
+  /** Why the bundle is `failed` (the plugin manager's own words) or `unavailable` or `offline` (the platform or pack reason). */
   readonly reason?: string
 }
 
@@ -40,6 +42,14 @@ export interface BundleView {
 export interface RowView extends BundleView {
   /** The package's icon as an image data URL. */
   readonly icon?: string
+}
+
+/** What the installer needs besides the plugin manager. */
+export interface BundleInstallerOptions {
+  /** How long an add may run before the card says it is still working, in milliseconds; read when an add starts. */
+  readonly addWaitMs: () => number
+  /** How often a slow add re-reads the plugin manager's state, in milliseconds. */
+  readonly pollMs: number
 }
 
 /** What the steps use to offer bundles. */
@@ -76,6 +86,27 @@ export interface BundleInstaller {
 }
 
 /**
+ * The words of a refused remote call.
+ * @param error - the plugin manager's refusal or the remote's own failure.
+ * @returns the `reason` field: the diagnostic, else the code.
+ */
+function reasonOfFailure(error: { readonly code: string; readonly diagnostic?: string | undefined } | { readonly code: string }): { readonly reason: string } {
+  const diagnostic = 'diagnostic' in error ? error.diagnostic : undefined
+  return { reason: diagnostic ?? error.code }
+}
+
+/**
+ * The plugin manager's own words for why a bundle failed.
+ * @param bundle - the plugin manager's row.
+ * @returns its diagnostic, else its code or read-only reason; undefined when it reports none.
+ */
+export function reasonOf(bundle: BundleInfo | undefined): string | undefined {
+  const error = bundle?.error
+  if (error === undefined) return bundle?.readOnlyReason
+  return error.diagnostic ?? error.code
+}
+
+/**
  * Where a listed bundle stands. A catalog entry the installation cannot install (no install target, or a target error
  * such as an unbuilt checkout or an unsupported platform) is `unavailable`, a normal state; `failed` is only a bundle
  * the profile holds but cannot change or read.
@@ -91,7 +122,8 @@ export function stateOf(bundle: BundleInfo | undefined, pack?: PackView): Bundle
       case 'restart': return 'restart'
       case 'installed': return 'installed'
       case 'failed': return 'failed'
-      case 'offline': case 'unavailable': return 'unavailable'
+      case 'offline': return 'offline'
+      case 'unavailable': return 'unavailable'
     }
   }
   if (bundle === undefined) return 'unavailable'
@@ -137,9 +169,10 @@ function pluginManager(ctx: Context): ClientRemote['pluginManager'] | undefined 
 /**
  * Create the installer over the plugin manager's remote.
  * @param ctx - the studio context; `remote.pluginManager` and `pluginNavigation` are read when needed, so a profile without them shows `failed`.
+ * @param options - the wait and the poll.
  * @returns the installer.
  */
-export function createBundleInstaller(ctx: Context): BundleInstaller {
+export function createBundleInstaller(ctx: Context, options: BundleInstallerOptions): BundleInstaller {
   const views = createSnapshotStore<Readonly<Record<string, BundleView>>>({})
   const known = new Map<string, BundleInfo>()
   const rows = createSnapshotStore<Readonly<Record<string, RowView>>>({})
@@ -214,10 +247,11 @@ export function createBundleInstaller(ctx: Context): BundleInstaller {
       if (bundle === undefined) known.delete(name)
       else known.set(name, bundle)
       const pack = packViews.get(name)
-      const packWhy = packReason(pack)
+      const state = stateOf(bundle, pack)
+      const reason = state === 'failed' ? reasonOf(bundle) : packReason(pack)
       set(name, {
-        state: stateOf(bundle, pack),
-        ...packWhy === undefined ? {} : { reason: packWhy },
+        state,
+        ...reason === undefined ? {} : { reason },
         ...bundle?.meta?.title === undefined ? {} : { title: bundle.meta.title },
         ...bundle?.meta?.description === undefined ? {} : { description: bundle.meta.description },
         ...bundle?.error?.code === 'unsupported-platform' && bundle.error.diagnostic !== undefined ? { reason: bundle.error.diagnostic } : {},
@@ -252,6 +286,24 @@ export function createBundleInstaller(ctx: Context): BundleInstaller {
       }
       if (before?.state !== 'available' || bundle === undefined || remote === undefined) return
       set(name, { ...before, state: 'installing' })
+      let done = false
+      const finish = (view: BundleView): void => {
+        if (done) return
+        done = true
+        clearTimeout(slowTimer)
+        clearInterval(pollTimer)
+        set(name, view)
+      }
+      // After the wait the card says the add is still working, and the plugin manager's own state is read until it reports an outcome.
+      const slowTimer = setTimeout(() => { if (!done) set(name, { ...before, state: 'slow' }) }, options.addWaitMs())
+      const pollTimer = setInterval(() => {
+        if (done || views.getSnapshot()[name]?.state !== 'slow') return
+        void remote.listBundles().then((listed) => {
+          const now = listed.ok ? listed.value.find(each => each.name === name) : undefined
+          const state = stateOf(now)
+          if (state === 'installed') finish({ ...before, state })
+        }, () => undefined)
+      }, options.pollMs)
       try {
         const target = bundle.availability === 'missing' ? bundle.installTarget : undefined
         const result = target === undefined
@@ -262,12 +314,19 @@ export function createBundleInstaller(ctx: Context): BundleInstaller {
             registry: null,
             ...target.spec.startsWith('link:') ? {} : { saveExact: true },
           })
-        const application = result.ok ? result.value.application : 'failed'
-        set(name, { ...before, state: application === 'applied' ? 'installed' : application === 'restart-required' ? 'restart' : 'failed' })
+        if (!result.ok) {
+          // The plugin manager's refusal, in its own words, so the card says what happened.
+          finish({ ...before, state: 'failed', ...reasonOfFailure(result.error) })
+        } else if (result.value.application === 'applied' || result.value.application === 'restart-required') {
+          finish({ ...before, state: result.value.application === 'applied' ? 'installed' : 'restart' })
+        } else {
+          const error = result.value.error
+          finish({ ...before, state: 'failed', ...error === undefined ? {} : { reason: error.diagnostic ?? error.code } })
+        }
       } catch (error) {
         // The outcome is unknown here; Plugins shows what the profile holds and can finish it.
         console.warn('delorun onboarding: the plugin was not added', error)
-        set(name, { ...before, state: 'failed' })
+        finish({ ...before, state: 'failed' })
       }
     },
     rows,

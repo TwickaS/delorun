@@ -37,6 +37,7 @@ import { CliError, EXIT, type ExitCode } from '../exit.ts'
 import { parseCommandLine, type CliCommand, type CommandContext } from '../command.ts'
 import { selectProfile } from '../profile.ts'
 import { homeRuns } from '../reach/command.ts'
+import { requireTerminal } from '../needs-terminal.ts'
 import { printable } from '../terminal-text.ts'
 import { externalAgents } from './external-agents.ts'
 
@@ -115,9 +116,12 @@ export function createWorkspaceCommand(dependencies: WorkspaceDependencies): Cli
 /**
  * Ask a yes-or-no question in the terminal, defaulting to no.
  * @param message - the question.
+ * @param command - the command named in the failure when no terminal can answer.
  * @returns the answer, or undefined when the person cancels.
+ * @throws {CliError} `EXIT.failed` when standard input is not a terminal.
  */
-export async function confirmInTerminal(message: string): Promise<boolean | undefined> {
+export async function confirmInTerminal(message: string, command = 'delorun'): Promise<boolean | undefined> {
+  requireTerminal(command)
   const answer = await clack.confirm({ message, initialValue: false })
   return clack.isCancel(answer) ? undefined : answer
 }

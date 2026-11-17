@@ -180,21 +180,22 @@ async function importArchive(bytes: Uint8Array, source: string, io: ImportIo): P
  * Read an archive file whose size is within the terminal's ceiling. The file is opened once and its size is read
  * from the open descriptor before any byte is, so a file swapped after the check is not the one read.
  * @param file - the archive's path.
+ * @param command - the command whose name starts a refusal.
  * @returns its bytes.
  * @throws {CliError} when the path is not a regular file, is larger than {@link IMPORT_MAX_FILE_BYTES}, or cannot be read.
  */
-async function readArchiveFile(file: string): Promise<Uint8Array> {
+export async function readArchiveFile(file: string, command = 'delorun import'): Promise<Uint8Array> {
   let handle
   try {
     handle = await open(file, constants.O_RDONLY | constants.O_NONBLOCK)
   } catch (error: unknown) {
-    throw new CliError(EXIT.failed, `delorun import: the archive cannot be read: ${printable((error as Error).message)}`)
+    throw new CliError(EXIT.failed, `${command}: the archive cannot be read: ${printable((error as Error).message)}`)
   }
   try {
     const stats = await handle.stat()
-    if (!stats.isFile()) throw new CliError(EXIT.failed, `delorun import: ${quoted(file)} is not a regular file`)
+    if (!stats.isFile()) throw new CliError(EXIT.failed, `${command}: ${quoted(file)} is not a regular file`)
     if (stats.size > IMPORT_MAX_FILE_BYTES) {
-      throw new CliError(EXIT.failed, `delorun import: ${quoted(file)} holds ${String(stats.size)} bytes, more than the ${String(IMPORT_MAX_FILE_BYTES)} the terminal imports; nothing was read`)
+      throw new CliError(EXIT.failed, `${command}: ${quoted(file)} holds ${String(stats.size)} bytes, more than the ${String(IMPORT_MAX_FILE_BYTES)} the terminal imports; nothing was read`)
     }
     return await handle.readFile()
   } finally {

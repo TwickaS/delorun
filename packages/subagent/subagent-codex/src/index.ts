@@ -22,6 +22,7 @@ import {
   DEFAULT_CODEX_PERMISSION_MODE,
   DEFAULT_DISPOSE_GRACE_MS,
   codexStartupFailure,
+  listCodexModels,
   startCodexRun,
   type CodexPermissionMode,
   type CodexRunSpec,
@@ -69,6 +70,22 @@ class CodexProvider implements SubagentProvider {
     private readonly ctx: Context,
     private readonly config: ResolvedConfig,
   ) {}
+
+  /**
+   * Ask Codex which models it offers, in the delegating workspace's environment.
+   * @param cwd - a usable working directory for the app-server.
+   * @param signal - cancellation.
+   * @returns each model's configurable name and display name.
+   */
+  listModels(cwd: string, signal: AbortSignal): Promise<{ readonly model: string; readonly displayName: string }[]> {
+    return listCodexModels({
+      cwd,
+      permissionMode: this.config.permissionMode,
+      env: this.config.env,
+      disposeGraceMs: this.config.disposeGraceMs,
+      spawn: spawnSpec => this.ctx.subprocess.spawn(spawnSpec),
+    }, signal)
+  }
 
   start(request: ResolvedSubagentStartRequest) {
     let cwd: string

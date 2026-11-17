@@ -1807,6 +1807,9 @@ importers:
       fflate:
         specifier: ^0.8.2
         version: 0.8.3
+      playwright:
+        specifier: ^1.49.0
+        version: 1.61.1
 
   delorun/packages/archive:
     dependencies:
@@ -2095,6 +2098,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-permission-presets':
         specifier: workspace:*
         version: link:../../../packages/client/ui-permission-presets
+      '@deepseek-ai/dsh-client-ui-plugin-manager':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-plugin-manager
       '@deepseek-ai/dsh-client-ui-primitives':
         specifier: workspace:*
         version: link:../../../packages/client/ui-primitives
@@ -2258,9 +2264,15 @@ importers:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../../packages/util/brand
+      '@deepseek-ai/dsh-llm-pi-ai':
+        specifier: workspace:*
+        version: link:../../../packages/llm/llm-pi-ai
       '@deepseek-ai/dsh-plugin-manager':
         specifier: workspace:*
         version: link:../../../packages/boot/plugin-manager
+      '@delorun/archive':
+        specifier: workspace:*
+        version: link:../archive
       '@delorun/contract-home-layout':
         specifier: workspace:*
         version: link:../contract-home-layout
@@ -2564,6 +2576,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
+      '@delorun/archive':
+        specifier: workspace:*
+        version: link:../archive
       '@delorun/changes':
         specifier: workspace:*
         version: link:../changes
@@ -2691,6 +2706,9 @@ importers:
       '@delorun/contract-archive-and-trash':
         specifier: workspace:*
         version: link:../contract-archive-and-trash
+      '@delorun/home-auth':
+        specifier: workspace:*
+        version: link:../home-auth
       '@delorun/settings-controls':
         specifier: workspace:*
         version: link:../settings-controls
@@ -3096,6 +3114,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
+      '@delorun/home-auth':
+        specifier: workspace:*
+        version: link:../home-auth
       '@delorun/plugin-workspaces':
         specifier: workspace:*
         version: link:../plugin-workspaces
@@ -3257,6 +3278,9 @@ importers:
       '@delorun/home-auth':
         specifier: workspace:*
         version: link:../home-auth
+      '@delorun/plugin-delegation-consent':
+        specifier: workspace:*
+        version: link:../plugin-delegation-consent
       '@delorun/plugin-downloads':
         specifier: workspace:*
         version: link:../plugin-downloads
@@ -3324,6 +3348,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-settings-models':
         specifier: workspace:*
         version: link:../../../packages/client/ui-settings-models
+      '@deepseek-ai/dsh-client-ui-sidebar':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-sidebar
       '@deepseek-ai/dsh-client-ui-slots':
         specifier: workspace:*
         version: link:../../../packages/client/ui-slots
@@ -3354,6 +3381,9 @@ importers:
       '@deepseek-ai/dsh-settings':
         specifier: workspace:*
         version: link:../../../packages/settings/settings
+      '@deepseek-ai/dsh-subagent':
+        specifier: workspace:*
+        version: link:../../../packages/subagent/subagent
       '@deepseek-ai/dsh-util-crypto':
         specifier: workspace:*
         version: link:../../../packages/util/crypto
@@ -3828,6 +3858,9 @@ importers:
       '@delorun/contract-archive-and-trash':
         specifier: workspace:*
         version: link:../contract-archive-and-trash
+      '@delorun/home-auth':
+        specifier: workspace:*
+        version: link:../home-auth
       '@delorun/trash':
         specifier: workspace:*
         version: link:../trash

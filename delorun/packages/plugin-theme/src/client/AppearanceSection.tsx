@@ -3,16 +3,17 @@
  * the theme (Soft or one of Delorun's themes), the accent with a custom colour, and contrast on a slider. The choices
  * are the shared chips of `@delorun/brand`, which onboarding's Look step also renders.
  */
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties } from 'react'
+import { useCallback, useMemo, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { ACCENT_CHOICES, CONTRAST, DEFAULT_SETTINGS, PALETTES, type AccentChoice, type PaletteChoice, type ThemeSettings } from '../config.ts'
 import { formatRgb, fromOklch } from '../palette/color.ts'
 import { previewColors } from '../palette/layers.ts'
+import { customSeed, lookOf } from '../palette/migrate.ts'
 import { ACCENTS, parseHex } from '../palette/soft.ts'
 import css from './AppearanceSection.module.css'
 import { useFormWrites } from './form-writes.ts'
-import { AccentPicker, cardCss, ChipGroup, SettingHeading, SettingsCard, ThemePicker } from '@delorun/brand'
+import { cardCss, LookChooser, SettingHeading, SettingsCard } from '@delorun/brand'
 import { BrandingSection, type BrandingInjected } from './BrandingSection.tsx'
 
 /** The colour-scheme preference, as upstream's theme service keeps it. */
@@ -99,82 +100,64 @@ function ContrastSlider({ value, disabled, label, onCommit }: {
  * @returns the section.
  */
 export function AppearanceSection({ t, settings, scheme, brandingT, pickerT }: AppearanceSectionProps) {
-  const { snapshot, disabled, failed, save } = useFormWrites(settings)
+  const { snapshot, disabled, failed, track, save } = useFormWrites(settings)
   // A stable subscribe function: a new one per render would resubscribe on every render, including after the plugin is disposed.
   const subscribeScheme = useCallback((listener: () => void) => scheme.subscribe(listener), [scheme])
-  const current = snapshot.value ?? DEFAULT_SETTINGS
+  const stored = snapshot.value ?? DEFAULT_SETTINGS
+  // Settings stored before presets and the custom theme were separate read as the custom theme they drew.
+  const current = lookOf(stored)
   const preference = useSyncExternalStore(subscribeScheme, () => scheme.get())
-  const [hex, setHex] = useState(current.customAccent)
-  useEffect(() => { setHex(current.customAccent) }, [current.customAccent])
-  // The previews draw Delorun's look whatever the stored switch says.
-  const paletteColours = useMemo(
+  // The tiles draw Delorun's look whatever the stored switch says; the custom tile draws the custom values.
+  const colours = useMemo(
     () => Object.fromEntries(PALETTES.map(palette => [palette, previewColors({ ...current, palette, studioAdditions: true })])) as Record<PaletteChoice, ReturnType<typeof previewColors>>,
     [current],
   )
 
-  const saveCustom = (value: string): void => {
-    const color = parseHex(value)
-    if (color === undefined) return
-    const normalized = `#${value.trim().replace(/^#/, '').toUpperCase()}`
-    save('customAccent', normalized)
+  // One atomic write holds the whole custom theme, so a legacy preset-plus-accent pair becomes the custom palette it drew.
+  const writeCustom = (patch: Partial<Pick<ThemeSettings, 'accent' | 'customAccent' | 'contrast'>>): void => {
+    const next = { ...customSeed(current), ...patch }
+    track(settings.mutate([
+      { op: 'set', path: ['accent'], value: next.accent },
+      { op: 'set', path: ['customAccent'], value: next.customAccent },
+      { op: 'set', path: ['contrast'], value: next.contrast },
+      { op: 'set', path: ['palette'], value: 'custom' },
+    ]))
   }
-  const hexValid = parseHex(hex) !== undefined
+  // Choosing a preset leaves the custom values as they were; choosing Custom starts from the preset the person had.
+  const choosePalette = (palette: PaletteChoice): void => {
+    if (palette === 'custom') writeCustom({})
+    else save('palette', palette)
+  }
   const customColour = parseHex(current.customAccent) === undefined ? DEFAULT_SETTINGS.customAccent : current.customAccent
 
   return (
     <div className={cardCss.stack}>
     <SettingsCard id="delorun-appearance-colours" title={t('colours')} className={css.section}>
       <section className={cardCss.block}>
-        <SettingHeading id="delorun-appearance-mode" title={t('mode')} lead={t('mode.lead')} />
-        <ChipGroup label={t('mode')} hideLabel value={preference} onChange={(value) => { scheme.set(value) }}
-          options={SCHEMES.map(value => ({ value, label: t(`mode.${value}`) }))} />
-      </section>
-
-      <section className={cardCss.block}>
         <SettingHeading id="delorun-appearance-palette" title={t('palette')} lead={t('palette.lead')} />
-        <ThemePicker label={t('palette')} hideLabel value={current.palette} disabled={disabled} onChange={(value) => { save('palette', value) }}
-          themes={PALETTES.map(value => ({ value, label: t(`palette.${value}`), light: paletteColours[value].light, dark: paletteColours[value].dark }))} />
-      </section>
-
-      <section className={cardCss.block} data-muted={current.palette !== 'soft'}>
-        <SettingHeading id="delorun-appearance-accent" title={t('accent')} lead={t(current.palette === 'soft' ? 'accent.lead' : 'accent.byTheme')} />
-        <AccentPicker label={t('accent')} hideLabel value={current.accent} disabled={disabled || current.palette !== 'soft'} onChange={(value) => { save('accent', value) }}
-          {...current.palette === 'soft' ? {} : { themeAccent: { label: t('accent.theme'), light: paletteColours[current.palette].light.accent, dark: paletteColours[current.palette].dark.accent } }}
-          accents={ACCENT_CHOICES.map(choice => ({
-            value: choice,
-            label: t(`accent.${choice}`),
-            ...choice === 'custom' ? { light: customColour, dark: customColour } : presetFill(choice),
-          }))} />
-        {current.accent === 'custom' && (
-          <div className={css.customRow}>
-            <input
-              type="color"
-              className={css.picker}
-              aria-label={t('accent.customColor')}
-              value={hexValid ? `#${hex.replace(/^#/, '')}` : DEFAULT_SETTINGS.customAccent}
-              disabled={disabled}
-              onChange={(event) => { setHex(event.target.value.toUpperCase()); saveCustom(event.target.value) }}
-            />
-            <input
-              type="text"
-              className={css.hex}
-              aria-label={t('accent.hex')}
-              aria-invalid={!hexValid}
-              spellCheck={false}
-              value={hex}
-              disabled={disabled}
-              onChange={(event) => { setHex(event.target.value) }}
-              onBlur={() => { saveCustom(hex) }}
-              onKeyDown={(event) => { if (event.key === 'Enter') saveCustom(hex) }}
-            />
-            {!hexValid && <span className={css.error}>{t('accent.hexInvalid')}</span>}
-          </div>
-        )}
-      </section>
-
-      <section className={`${cardCss.block} ${cardCss.row}`} aria-labelledby="delorun-appearance-contrast">
-        <SettingHeading id="delorun-appearance-contrast" title={t('contrast')} lead={t('contrast.lead')} />
-        <ContrastSlider value={current.contrast} disabled={disabled} label={t('contrast')} onCommit={(value) => { save('contrast', value) }} />
+        <LookChooser
+          modeLabel={t('mode')} themeLabel={t('palette')} disabled={disabled}
+          modes={SCHEMES.map(value => ({ value, label: t(`mode.${value}`) }))} mode={preference} onMode={(value) => { scheme.set(value) }}
+          themes={PALETTES.map(value => ({ value, label: t(`palette.${value}`), light: colours[value].light, dark: colours[value].dark }))}
+          theme={current.palette} onTheme={choosePalette} customTheme="custom"
+          sample={{ label: t('preview'), ask: t('preview.ask'), answer: t('preview.answer'), box: t('preview.box') }}
+          custom={{
+            accentLabel: t('accent'), accent: current.accent, onAccent: (value) => { writeCustom({ accent: value }) },
+            accents: ACCENT_CHOICES.map(choice => ({
+              value: choice,
+              label: t(`accent.${choice}`),
+              ...choice === 'custom' ? { light: customColour, dark: customColour } : presetFill(choice),
+            })),
+            colourLabel: t('accent.customColor'), hexLabel: t('accent.hex'), hexInvalid: t('accent.hexInvalid'),
+            colour: customColour, onColour: (value) => { writeCustom({ accent: 'custom', customAccent: value.toUpperCase() }) },
+            isColour: text => parseHex(text) !== undefined,
+            more: (
+              <div className={css.contrastRow}>
+                <span className={css.contrastLabel}>{t('contrast')}</span>
+                <ContrastSlider value={current.contrast} disabled={disabled} label={t('contrast')} onCommit={(value) => { writeCustom({ contrast: value }) }} />
+              </div>
+            ),
+          }} />
       </section>
 
       {failed && <p className={cardCss.failure} role="alert">{t('saveFailed')}</p>}

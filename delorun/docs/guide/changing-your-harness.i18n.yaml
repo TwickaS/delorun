@@ -12,8 +12,8 @@
   en: d6fc85c7bdcc77ee
   zh: f00d4cdd189d6ccd
 /changing-your-harness/contents:
-  en: 85618ad20e973f27
-  zh: 248d59dd45641a8e
+  en: 77f819e80291a3be
+  zh: 1aca33036c7aa00c
 /changing-your-harness/plugins-you-link-from-a-folder:
   en: 8eb695f4ab01c88e
   zh: 1bebf12e0169eb24
@@ -25,7 +25,10 @@
   zh: 756bf519388b8488
 /changing-your-harness/the-second-confirmation:
   en: 9aad5ec8f7904d57
-  zh: 1bbfcc3761d1f0a7
+  zh: 2119a752f46824c9
+/changing-your-harness/plugin-code-from-an-imported-setup:
+  en: 25e15095109862c6
+  zh: 3e80afb5570434d1
 /changing-your-harness/working-on-a-plugin:
   en: ce4adac4f2b40b69
   zh: 0bd14b4496570bbd

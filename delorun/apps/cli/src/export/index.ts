@@ -193,17 +193,18 @@ function findingLines(findings: readonly SecretFinding[]): string {
 }
 
 /**
- * Write a new file at mode 0600, refusing an existing one.
+ * Write a new file at mode 0600, refusing an existing one. `delorun setup export` writes its archive the same way.
  * @param path - the file.
  * @param bytes - its contents.
+ * @param command - the command whose name starts the refusal.
  * @throws {CliError} when the file exists.
  */
-async function writeNewFile(path: string, bytes: Uint8Array): Promise<void> {
+export async function writeNewFile(path: string, bytes: Uint8Array, command = 'delorun export'): Promise<void> {
   let handle
   try {
     handle = await open(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600)
   } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new CliError(EXIT.failed, `delorun export: ${path} exists; choose another --out file`)
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new CliError(EXIT.failed, `${command}: ${path} exists; choose another --out file`)
     throw error
   }
   try {

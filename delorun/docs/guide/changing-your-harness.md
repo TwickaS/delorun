@@ -26,6 +26,7 @@ The studio's Changes section in Settings does the same at your computer.
 - [Seeing what waits for review](#seeing-what-waits-for-review)
 - [Applying, discarding and undoing](#applying-discarding-and-undoing)
 - [The second confirmation](#the-second-confirmation)
+- [Plugin code from an imported setup](#plugin-code-from-an-imported-setup)
 - [Working on a plugin](#working-on-a-plugin)
 - [When your agent changes a plugin](#when-your-agent-changes-a-plugin)
 - [Changing Delorun itself](#changing-delorun-itself)
@@ -75,6 +76,10 @@ When Delorun is running, the change takes effect at once. If the plugin then fai
 Before you apply a change, Delorun prints a summary of what the change can do: change a consent, a guard or the sandbox policy; add a tool the model can call; run commands; open network connections; read files under your Delorun home; or add a dependency or an install or build script. It also names content the diff does not show: a file Node can load that is not text, a file too large for the diff or past where it was cut short, and files of a package inside the plugin's folder. When the checks flag the change, `apply` asks a second time and names what they found, each file the diff did not show included.
 
 The summary helps you read the change; it is not a protection. A plugin's code can do anything Delorun can.
+
+## Plugin code from an imported setup
+
+`delorun setup import` ([Move your setup](move-your-setup.md)) writes the files of a plugin made on another computer to a folder under `archive/setup-plugins/` in your home and links the plugin from there, so the rules above apply to it: with protection on, its code waits in `delorun changes list` until you apply it; with protection off, it loads at the next start and is recorded as an unreviewed change.
 
 ## Working on a plugin
 

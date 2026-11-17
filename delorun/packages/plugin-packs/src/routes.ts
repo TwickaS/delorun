@@ -1,14 +1,15 @@
 /**
  * The studio's routes to the install list ({@link PACK_ROUTES}). Every route answers the computer; an approved device
  * reaches the read, cancel and dismiss routes freely, and the routes that add, retry or remove only while its unlock
- * runs (A408): a device without one is answered `403` before the body is read.
+ * runs (A408): home-auth's `gateByUnlock` answers a locked device `403 ELEVATION_REQUIRED` before the body is read, and
+ * each of those calls renews the sliding unlock; the reads never do.
  *
  * @module @delorun/plugin-packs/routes
  */
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: the ctx.connection merge.
 import type {} from '@deepseek-ai/dsh-client-connection'
-import { admitApprovedDevice, REACH_DEVICE, type DangerousModeHome, type ReachDevicePrincipal } from '@delorun/home-auth'
+import { admitApprovedDevice, gateByUnlock, type DangerousModeHome } from '@delorun/home-auth'
 import type { PacksHub } from './hub.ts'
 import { PACK_ROUTES, type PacksResult } from './wire.ts'
 
@@ -20,22 +21,6 @@ const MAX_NAME_LENGTH = 214
 
 /** The most names one add may carry. */
 const MAX_NAMES = 32
-
-/**
- * The `admitPeer` of the routes that need an unlock: it admits a reach device that holds a running unlock, or an
- * unlocked PIN page, and no other Peer; the owner's Peer never reaches it.
- * @param homeAuth - a way to the mounted `homeAuth` service, read when a request arrives.
- * @returns the function for `ConnectionFetchRoute.admitPeer`.
- */
-export function admitUnlockedPackDevice(homeAuth: () => DangerousModeHome | undefined): (request: Request, peer: { readonly principal: { readonly kind: string } }) => boolean {
-  return (_request, peer) => {
-    const home = homeAuth()
-    if (home === undefined || peer.principal.kind !== REACH_DEVICE) return false
-    const { deviceId, listener, unlockId } = peer.principal as ReachDevicePrincipal
-    if (unlockId !== undefined) return home.pageUnlockOf(unlockId) !== undefined
-    return home.elevationOf(deviceId, listener) !== undefined
-  }
-}
 
 function json(status: number, body: object): Response {
   return Response.json(body, { status, headers: { 'cache-control': 'no-store' } })
@@ -68,24 +53,25 @@ const nameOk = (value: unknown): value is string => typeof value === 'string' &&
  */
 export function registerPackRoutes(ctx: Context, hub: Pick<PacksHub, 'snapshot' | 'enqueue' | 'cancel' | 'dismiss' | 'retry' | 'remove'>): void {
   const homeAuth = (): DangerousModeHome | undefined => ctx.get('homeAuth')
-  const anyDevice = admitApprovedDevice()
-  const unlocked = admitUnlockedPackDevice(homeAuth)
-  const route = (path: string, admitPeer: typeof anyDevice, handle: (body: Readonly<Record<string, unknown>>) => Promise<PacksResult | object> | undefined): void => {
+  const anyDevice = { admitPeer: admitApprovedDevice() }
+  type Handle = (body: Readonly<Record<string, unknown>>) => Promise<PacksResult | object> | undefined
+  const route = (path: string, gate: 'read' | 'unlock', handle: Handle): void => {
+    const run = async (request: Request): Promise<Response> => {
+      const body = await bodyOf(request)
+      const answer = body === undefined ? undefined : handle(body)
+      if (answer === undefined) return json(400, { error: 'INVALID_REQUEST', message: 'the request must be a small JSON object with the package name' })
+      return json(200, await answer)
+    }
     ctx.effect(() => ctx.connection.fetch.register({
-      path, methods: ['POST'], requestBody: 'buffered', admitPeer,
-      fetch: async (request) => {
-        const body = await bodyOf(request)
-        const answer = body === undefined ? undefined : handle(body)
-        if (answer === undefined) return json(400, { error: 'INVALID_REQUEST', message: 'the request must be a small JSON object with the package name' })
-        return json(200, await answer)
-      },
+      path, methods: ['POST'], requestBody: 'buffered',
+      ...gate === 'read' ? { ...anyDevice, fetch: run } : gateByUnlock(homeAuth, run),
     }), `plugin-packs: ${path}`)
   }
   const named = (call: (name: string) => Promise<PacksResult>) => (body: Readonly<Record<string, unknown>>) => (nameOk(body.name) ? call(body.name) : undefined)
-  route(PACK_ROUTES.list, anyDevice, () => hub.snapshot())
-  route(PACK_ROUTES.enqueue, unlocked, body => (Array.isArray(body.names) && body.names.length > 0 && body.names.length <= MAX_NAMES && body.names.every(nameOk) ? hub.enqueue(body.names) : undefined))
-  route(PACK_ROUTES.cancel, anyDevice, named(name => hub.cancel(name)))
-  route(PACK_ROUTES.dismiss, anyDevice, named(name => hub.dismiss(name)))
-  route(PACK_ROUTES.retry, unlocked, named(name => hub.retry(name)))
-  route(PACK_ROUTES.remove, unlocked, named(name => hub.remove(name)))
+  route(PACK_ROUTES.list, 'read', () => hub.snapshot())
+  route(PACK_ROUTES.enqueue, 'unlock', body => (Array.isArray(body.names) && body.names.length > 0 && body.names.length <= MAX_NAMES && body.names.every(nameOk) ? hub.enqueue(body.names) : undefined))
+  route(PACK_ROUTES.cancel, 'read', named(name => hub.cancel(name)))
+  route(PACK_ROUTES.dismiss, 'read', named(name => hub.dismiss(name)))
+  route(PACK_ROUTES.retry, 'unlock', named(name => hub.retry(name)))
+  route(PACK_ROUTES.remove, 'unlock', named(name => hub.remove(name)))
 }

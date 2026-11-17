@@ -35,6 +35,7 @@ import type {} from '@deepseek-ai/dsh-session-query'
 import type {} from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-workspace'
 import schema from '@deepseek-ai/schemastery'
+import { admitApprovedDevice } from '@delorun/home-auth'
 import type { AccountLimits } from './account-tools.ts'
 import { guardOtherTools } from './guard.ts'
 import { mainChatReports, type ReportLimits } from './reports.ts'
@@ -136,7 +137,7 @@ export function apply(ctx: Context, config: Config): void {
   const lifetime = new AbortController()
   ctx.effect(() => () => { lifetime.abort(new Error(`${name}: the plugin is disposed`)) }, `${name}: the reports' waits`)
   ctx.connection.fetch.register({
-    path: MAIN_CHAT_PATHS.reports, methods: ['GET'], requestBody: 'buffered',
+    path: MAIN_CHAT_PATHS.reports, methods: ['GET'], requestBody: 'buffered', admitPeer: admitApprovedDevice(),
     fetch: async (request) => {
       const after = new URL(request.url).searchParams.get('after')
       const count = after === null || !/^\d{1,15}$/.test(after)
@@ -146,7 +147,7 @@ export function apply(ctx: Context, config: Config): void {
     },
   })
   ctx.connection.fetch.register({
-    path: MAIN_CHAT_PATHS.open, methods: ['POST'], requestBody: 'buffered',
+    path: MAIN_CHAT_PATHS.open, methods: ['POST'], requestBody: 'buffered', admitPeer: admitApprovedDevice(),
     fetch: async (request) => {
       try {
         await open(request.signal)

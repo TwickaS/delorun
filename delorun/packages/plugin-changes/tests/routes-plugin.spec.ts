@@ -6,7 +6,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { expect, it, onTestFinished } from 'vitest'
 import * as plugin from '../src/index.ts'
-import { ACTION_PATHS, CHANGES_ROUTE_PREFIX, SHOW_PATH, STATE_PATH, WORKSPACES_PATH, type ChangesRoute } from '../src/routes.ts'
+import { ACTION_PATHS, CHANGES_ROUTE_PREFIX, SETUP_PATHS, SHOW_PATH, STATE_PATH, WORKSPACES_PATH, type ChangesRoute } from '../src/routes.ts'
 
 it('registers the Changes routes with the web server and names them to the boot page, and removes them with the plugin', async () => {
   for (const enabled of [false, true]) {
@@ -23,7 +23,7 @@ it('registers the Changes routes with the web server and names them to the boot 
     } as never)
     ctx.provide('connection', { admit: () => ({ rejection: 401 }), isReachPeer: () => false } as never)
     const fiber = await ctx.plugin(plugin, { enabled, installationBundles: [] })
-    const paths = [STATE_PATH, SHOW_PATH, WORKSPACES_PATH, ...Object.values(ACTION_PATHS)]
+    const paths = [STATE_PATH, SHOW_PATH, WORKSPACES_PATH, ...Object.values(ACTION_PATHS), ...Object.values(SETUP_PATHS)]
     expect(registered.map(route => [route.kind, route.path])).toEqual(paths.map(path => ['exact', path]))
     const table: { kind: string, name?: string, value?: unknown }[] = []
     ctx.emit('webserver/index-inject', table as never, {} as never)

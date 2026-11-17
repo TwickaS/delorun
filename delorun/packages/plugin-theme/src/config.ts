@@ -34,11 +34,17 @@ export type Density = typeof DENSITIES[number]
 /** Each density's spacing scale, the value of `--dsh-density` that spacing rules multiply by. */
 export const DENSITY_SCALE: Readonly<Record<Density, number>> = { compact: 0.8, comfortable: 1, spacious: 1.2 }
 
-/** The palettes: Delorun's Soft, and T3 Code's six themes, each with its own accent. */
-export const PALETTES = ['soft', 't3-code', 't3-chat', 'grove', 'ocean', 'ember', 'iris'] as const
+/** The preset palettes: Delorun's Soft, and T3 Code's six themes. Each fixes its own accent and colours. */
+export const PRESET_PALETTES = ['soft', 't3-code', 't3-chat', 'grove', 'ocean', 'ember', 'iris'] as const
+
+/** The palettes: the presets, then `custom`, the only palette that reads {@link ThemeSettings.accent}, {@link ThemeSettings.customAccent} and {@link ThemeSettings.contrast}. */
+export const PALETTES = [...PRESET_PALETTES, 'custom'] as const
 
 /** One palette choice. */
 export type PaletteChoice = typeof PALETTES[number]
+
+/** One preset palette. */
+export type PresetPalette = typeof PRESET_PALETTES[number]
 
 /** How reasoning effort shows in the composer's model picker: its name, or T3 Code's bars. */
 export const EFFORT_DISPLAYS = ['label', 'bars'] as const
@@ -54,7 +60,7 @@ export const DEFAULT_CUSTOM_ACCENT = '#E5734A'
 
 /** The settings as the studio reads them. */
 export interface ThemeSettings {
-  /** The accent preset, or `custom` for {@link customAccent}. */
+  /** The accent preset, or `custom` for {@link customAccent}. Read only with the `custom` palette. */
   accent: AccentChoice
   /** The custom accent as `#RRGGBB`; used when {@link accent} is `custom`. */
   customAccent: string
@@ -64,9 +70,9 @@ export interface ThemeSettings {
   density: Density
   /** Whether Delorun's look and Delorun's studio plugins are on; off is upstream's stock look. */
   studioAdditions: boolean
-  /** The palette; a T3 Code theme brings its own accent in place of `accent`. */
+  /** The palette: a preset, which fixes its own accent and colours, or `custom`, which uses `accent`, `customAccent` and `contrast`. */
   palette: PaletteChoice
-  /** Contrast, `CONTRAST.min` to `CONTRAST.max`; 100 leaves the palette as generated. */
+  /** Contrast, `CONTRAST.min` to `CONTRAST.max`; 100 leaves the palette as generated. Read only with the `custom` palette. */
   contrast: number
   /** How reasoning effort shows in the model picker. */
   effort: EffortDisplay

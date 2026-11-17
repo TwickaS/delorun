@@ -48,6 +48,7 @@ describe('the webhook secret', () => {
 
   it('is named by the bundle as the credential reference the adapter reads', () => {
     expect(SECRET).toBe('DELORUN_GITHUB_WEBHOOK_SECRET')
-    expect(patch).toContain(`disabled: !!js "!process.env.${SECRET}"`)
+    // The adapter reads the secret from this variable; the bundle's `delorun.requires` makes Plugins say "Needs setup" until it is set.
+    expect(patch).toContain(`secretEnv: ${SECRET}`)
   })
 })

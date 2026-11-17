@@ -173,6 +173,7 @@ export async function serveRoutes(ctx: ChangesContext | undefined, options: Part
     scaffold: () => { throw new Error('this route fixture scaffolds nothing') },
     workspaces: () => [],
     reveal: () => {},
+    delorunVersion: () => '0.0.0',
     ...options,
   })
   const server = createServer((request, response) => {

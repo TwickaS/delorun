@@ -22,6 +22,7 @@ import {
   DEFAULT_CLAUDE_CODE_PERMISSION_MODE,
   DEFAULT_DISPOSE_GRACE_MS,
   claudeCodeStartupFailure,
+  listClaudeCodeModels,
   startClaudeCodeRun,
   type ClaudeCodePermissionMode,
   type ClaudeCodeRunSpec,
@@ -79,6 +80,22 @@ class ClaudeCodeProvider implements SubagentProvider {
     private readonly ctx: Context,
     private readonly config: ResolvedConfig,
   ) {}
+
+  /**
+   * Ask Claude Code which models it offers, in the delegating workspace's environment.
+   * @param cwd - a usable working directory for the process.
+   * @param signal - cancellation.
+   * @returns each model's configurable name and display name.
+   */
+  listModels(cwd: string, signal: AbortSignal): Promise<{ readonly model: string; readonly displayName: string }[]> {
+    return listClaudeCodeModels({
+      cwd,
+      permissionMode: this.config.permissionMode,
+      env: this.config.env,
+      disposeGraceMs: this.config.disposeGraceMs,
+      spawn: spawnSpec => this.ctx.subprocess.spawn(spawnSpec),
+    }, signal)
+  }
 
   async start(request: ResolvedSubagentStartRequest) {
     let cwd: string

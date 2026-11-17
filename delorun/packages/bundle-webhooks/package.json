@@ -26,6 +26,20 @@
   },
   "delorun": {
     "state": "experimental",
-    "pack": true
+    "pack": true,
+    "requires": {
+      "github-webhook-ingress": {
+        "needs": [
+          {
+            "kind": "env",
+            "name": "DELORUN_GITHUB_WEBHOOK_SECRET"
+          }
+        ],
+        "fix": {
+          "kind": "docs",
+          "url": "https://docs.delorun.com/guide/customise#optional-plugins"
+        }
+      }
+    }
   }
 }

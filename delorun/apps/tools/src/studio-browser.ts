@@ -1,5 +1,6 @@
 /**
- * Drive a real browser against a studio running on this computer, through a `StudioBrowser` adapter. Run from the
+ * Drive a browser against a studio running on this computer, through a `StudioBrowser` adapter: the repository's Playwright
+ * Chromium by default, the person's own Chrome through `browse` on request. Run from the
  * repository root: `node_modules/.bin/tsx delorun/apps/tools/src/studio-browser.ts check` reports whether the browser is
  * ready, and `... run --url <studio url> (--file <script.js> | --code '<js>') [--record <out.webm>] [--timeout-ms n]`
  * runs a script and prints what it returns. Exit codes: 0 done, 1 the script or browser failed, 2 usage error.
@@ -12,17 +13,20 @@ import { readFileSync } from 'node:fs'
 import { isAbsolute, resolve as resolvePath } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
+import { parseSteps, type Step } from './studio-browser/steps.ts'
 import { ADAPTERS, errorMessage, loopbackOrigin, realDeps, selectAdapter, type BrowseDeps, type RunSpec } from './studio-browser/index.ts'
 
 /** The adapter used when neither `--adapter` nor `DELORUN_STUDIO_BROWSER` names one. */
-export const DEFAULT_ADAPTER = 'browse'
+export const DEFAULT_ADAPTER = 'playwright'
 
 /** The script time limit used when `--timeout-ms` is absent. */
 export const DEFAULT_TIMEOUT_MS = 60_000
 
 const USAGE = [
   'usage: studio-browser.ts check [--adapter <id>]',
-  '       studio-browser.ts run --url <studio url> (--file <script.js> | --code <js>) [--record <out.webm>] [--timeout-ms <n>] [--adapter <id>]',
+  '       studio-browser.ts run --url <studio url> [--file <script.js> | --code <js>] [--steps <steps.json>] [--viewport <w>x<h>] [--scheme light|dark]',
+  '                             [--screenshot <out.png>] [--record <out.webm>] [--timeout-ms <n>] [--adapter <id>]',
+  'run needs at least one of --file, --code, --steps and --screenshot; --file and --code exclude each other.',
 ].join('\n')
 
 /** What the command line asked for, before defaults. */
@@ -37,6 +41,14 @@ export interface Request {
   readonly file?: string | undefined
   /** `--code`. */
   readonly code?: string | undefined
+  /** `--steps`. */
+  readonly steps?: string | undefined
+  /** `--viewport`. */
+  readonly viewport?: string | undefined
+  /** `--scheme`. */
+  readonly scheme?: string | undefined
+  /** `--screenshot`. */
+  readonly screenshot?: string | undefined
   /** `--record`. */
   readonly record?: string | undefined
   /** `--timeout-ms`. */
@@ -64,6 +76,7 @@ export function parseRequest(argv: readonly string[]): Request {
       options: {
         adapter: { type: 'string' }, url: { type: 'string' }, file: { type: 'string' }, code: { type: 'string' },
         record: { type: 'string' }, 'timeout-ms': { type: 'string' },
+        steps: { type: 'string' }, viewport: { type: 'string' }, scheme: { type: 'string' }, screenshot: { type: 'string' },
       },
       strict: true,
       allowPositionals: true,
@@ -72,6 +85,7 @@ export function parseRequest(argv: readonly string[]): Request {
     return {
       command: positionals[0], adapter: values.adapter, url: values.url, file: values.file, code: values.code,
       record: values.record, timeoutMs: values['timeout-ms'],
+      steps: values.steps, viewport: values.viewport, scheme: values.scheme, screenshot: values.screenshot,
     }
   } catch (error) {
     if (error instanceof UsageError) throw error
@@ -99,7 +113,14 @@ export function resolve(
   if (request.command === 'check') return { command: 'check', adapter }
   if (request.command !== 'run') throw new UsageError('expected the command check or run')
   if (request.url === undefined) throw new UsageError('run needs --url')
-  if ((request.file === undefined) === (request.code === undefined)) throw new UsageError('run needs exactly one of --file and --code')
+  if (request.file !== undefined && request.code !== undefined) throw new UsageError('--file and --code exclude each other')
+  if (request.file === undefined && request.code === undefined && request.steps === undefined && request.screenshot === undefined) {
+    throw new UsageError('run needs at least one of --file, --code, --steps and --screenshot')
+  }
+  const viewport = request.viewport === undefined ? undefined : parseViewport(request.viewport)
+  if (request.scheme !== undefined && request.scheme !== 'light' && request.scheme !== 'dark') throw new UsageError('--scheme must be light or dark')
+  if (request.screenshot !== undefined && !request.screenshot.endsWith('.png')) throw new UsageError('--screenshot must name a .png file')
+  const absolute = (path: string): string => (isAbsolute(path) ? path : resolvePath(cwd, path))
   if (request.record !== undefined && !request.record.endsWith('.webm')) throw new UsageError('--record must name a .webm file')
   const timeoutMs = request.timeoutMs === undefined ? DEFAULT_TIMEOUT_MS : Number(request.timeoutMs)
   if (!Number.isInteger(timeoutMs) || timeoutMs <= 0) throw new UsageError('--timeout-ms must be a positive integer')
@@ -110,15 +131,46 @@ export function resolve(
     throw new UsageError(errorMessage(error))
   }
   let code = request.code
-  if (code === undefined) {
+  if (request.file !== undefined) {
     try {
-      code = readScript(resolvePath(cwd, request.file ?? ''))
+      code = readScript(resolvePath(cwd, request.file))
     } catch (error) {
       throw new UsageError(`cannot read --file: ${errorMessage(error)}`)
     }
   }
-  const recordTo = request.record === undefined ? undefined : isAbsolute(request.record) ? request.record : resolvePath(cwd, request.record)
-  return { command: 'run', adapter, run: { origin, code, timeoutMs, ...(recordTo === undefined ? {} : { recordTo }) } }
+  let steps: readonly Step[] | undefined
+  if (request.steps !== undefined) {
+    try {
+      steps = parseSteps(readScript(resolvePath(cwd, request.steps)), cwd)
+    } catch (error) {
+      throw new UsageError(errorMessage(error))
+    }
+  }
+  return {
+    command: 'run',
+    adapter,
+    run: {
+      origin, startUrl: new URL(request.url).href, timeoutMs,
+      ...(code === undefined ? {} : { code }),
+      ...(viewport === undefined ? {} : { viewport }),
+      ...(request.scheme === undefined ? {} : { scheme: request.scheme }),
+      ...(steps === undefined ? {} : { steps }),
+      ...(request.screenshot === undefined ? {} : { screenshotTo: absolute(request.screenshot) }),
+      ...(request.record === undefined ? {} : { recordTo: absolute(request.record) }),
+    },
+  }
+}
+
+/**
+ * Parse `<width>x<height>`.
+ * @param text - the `--viewport` value, such as `1440x900`.
+ * @returns the viewport in CSS pixels.
+ * @throws UsageError when either side is not a positive integer.
+ */
+export function parseViewport(text: string): { readonly width: number, readonly height: number } {
+  const match = /^([1-9][0-9]*)x([1-9][0-9]*)$/.exec(text)
+  if (match === null) throw new UsageError('--viewport must look like 1440x900')
+  return { width: Number(match[1]), height: Number(match[2]) }
 }
 
 /** The command's outside world, replaceable in specs. */

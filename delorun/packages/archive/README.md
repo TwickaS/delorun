@@ -16,6 +16,7 @@ This package implements the archive half of [contract C8](../../docs/contracts/c
 - [The signer](#the-signer)
 - [Export](#export)
 - [The home key](#the-home-key)
+- [The setup archive](#the-setup-archive)
 - [The stock-home import](#the-stock-home-import)
 - [Tests](#tests)
 
@@ -34,6 +35,10 @@ This package implements the archive half of [contract C8](../../docs/contracts/c
 ## The home key
 
 `loadHomeKey` ([`home-key.ts`](src/home-key.ts)) reads the home key of [contract C5](../../docs/contracts/c05-device-approval.md), `secrets/home-auth/home-key.pem`, PKCS #8 at mode 0600, through C1's protected-file rules, and creates it on request when the home has none. A new key is written whole to a temporary file and linked into place, so two first uses at once keep one key.
+
+## The setup archive
+
+`exportSetupArchive` ([`setup.ts`](src/setup.ts)) writes a profile's plugins, model choices and settings as an archive with `content` `setup`: one `setup-document` entry, whose closed schema `parseSetupDocument` applies on both sides, and one `plugin-file` entry for each distinct file of a plugin the person made. `ArchiveImporter.openSetup` runs every validation step of `inspect`, refuses a chats archive with `ARCHIVE_WRONG_KIND` (and `inspect` and `import` refuse a setup archive), checks that every file the document names is a `plugin-file` entry of that size and that no `plugin-file` entry is unnamed, and returns the document with the signer's state. An unsigned archive or an unknown key comes back as unverified with the fingerprint instead of a refusal, because the caller shows and asks; a signature that does not verify is still refused. What a profile may take from a setup is the policy of [`@delorun/changes`](../changes/README.md), not of this format. See [the contract](../../docs/contracts/c08-archive-and-trash.md#the-setup-archive).
 
 ## The stock-home import
 

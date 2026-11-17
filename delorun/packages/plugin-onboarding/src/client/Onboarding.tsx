@@ -12,8 +12,10 @@ import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-cli
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import type { OnboardingSettings } from '../config.ts'
-import type { SetupRecord } from '../wire.ts'
-import { buildSteps, STEPS, type FlowStep } from './flow.tsx'
+import type { DeferrableStep, SetupRecord } from '../wire.ts'
+import type { HostFetch } from '@delorun/bundle-local/host-api'
+import { readPinState } from '@delorun/bundle-local/pin-api'
+import { buildSteps, STEPS, withSteps, type FlowStep } from './flow.tsx'
 import { landFocus } from './focus.ts'
 import { createGuide, folderOf, type Guide } from './guide.ts'
 import type { OnboardingInjected, ReachState, StepServices } from './types.ts'
@@ -32,7 +34,7 @@ export const UPSTREAM_KEY_STEP = 'deepseek-official'
  * @returns the dialog, or nothing.
  */
 export function OnboardingStepEntry(props: OnboardingStepEntryProps): ReactNode {
-  const { progress, complete, explicit = false, aside } = props
+  const { progress, complete, explicit = false, aside, deferredOnly } = props
   const snapshot = useSyncExternalStore(useCallback(listener => progress.subscribe(listener), [progress]), () => progress.getSnapshot())
   const settings = snapshot.status === 'ready' ? snapshot.value : undefined
   const show = settings !== undefined && (!settings.done || explicit)
@@ -41,7 +43,7 @@ export function OnboardingStepEntry(props: OnboardingStepEntryProps): ReactNode 
   useEffect(() => { if (decided && !show) complete() }, [decided, show, complete])
   // "Finish later" hides the dialog for this visit and leaves `done` unset, so it shows again on the next load.
   const later = useSyncExternalStore(aside.subscribe, aside.getSnapshot)
-  const leave = useCallback((): void => { aside.set(true); complete() }, [aside, complete])
+  const leave = useCallback((): void => { aside.set(true); deferredOnly.set(false); complete() }, [aside, deferredOnly, complete])
   return show && !later ? <Dialog {...props} settings={settings} explicit={explicit} later={leave} /> : null
 }
 
@@ -67,6 +69,23 @@ function useNoticeHold(start: OnboardingInjected['services']['start']): Told {
 interface Loaded {
   readonly record: SetupRecord
   readonly reach: ReachState
+  /** Whether PIN mode is on, read only on a phone, where the PIN step then leaves out. */
+  readonly pinOn: boolean
+}
+
+/**
+ * Read whether PIN mode is on, as a paired phone may.
+ * @param fetch - the request function.
+ * @returns true when the home says it is on; false when it is off or cannot be read.
+ */
+async function readPinOn(fetch: HostFetch): Promise<boolean> {
+  try {
+    return (await readPinState(fetch, null))?.kind === 'on'
+  } catch (error) {
+    // The PIN step then shows, which is safe: deferring it only leaves a reminder at the computer.
+    console.warn('delorun onboarding: PIN mode was not read', error)
+    return false
+  }
 }
 
 /** Load what the terminal setup recorded and whether reach is set up, start the guide's reads, then show the flow. */
@@ -78,9 +97,12 @@ function Dialog(props: OnboardingStepEntryProps & { readonly settings: Onboardin
   useEffect(() => () => { guide.dispose() }, [guide])
   useEffect(() => {
     let live = true
-    void Promise.all([loadRecord(), services.host.reach()]).then(([record, reach]) => { if (live) setLoaded({ record, reach }) })
+    void Promise.all([loadRecord(), services.host.reach()]).then(async ([record, reach]) => {
+      const pinOn = reach === 'remote' && await readPinOn(services.pin.fetch)
+      if (live) setLoaded({ record, reach, pinOn })
+    })
     return () => { live = false }
-  }, [loadRecord, services.host])
+  }, [loadRecord, services.host, services.pin])
   return loaded === undefined ? null : <Flow {...props} {...loaded} told={told} guide={guide} />
 }
 
@@ -108,12 +130,16 @@ function useInertRoot(): void {
 
 /** The steps, the current one and the buttons. */
 function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: OnboardingSettings; readonly explicit: boolean; readonly told: Told; readonly guide: Guide; readonly later: () => void }): ReactNode {
-  const { t, later, progress, extra, services: fixed, startChat, complete, completeStep, renderSection, settings, explicit, record, reach, told, guide } = props
+  const { t, later, progress, extra, services: fixed, startChat, complete, completeStep, renderSection, settings, explicit, record, reach, pinOn, told, guide, deferredOnly } = props
   const { start } = fixed
   useInertRoot()
   const addedSteps = useSyncExternalStore(useCallback(listener => extra.subscribe(listener), [extra]), () => extra.getSnapshot())
   const target = useSyncExternalStore(start.target.subscribe, start.target.getSnapshot)
+  const phone = useSyncExternalStore(useCallback(listener => guide.phone.subscribe(listener), [guide]), () => guide.phone.getSnapshot())
   const workspace = useSyncExternalStore(useCallback(listener => guide.workspace.subscribe(listener), [guide]), () => guide.workspace.getSnapshot())
+  const stepLabel = useSyncExternalStore(useCallback(listener => guide.continueLabel.subscribe(listener), [guide]), () => guide.continueLabel.getSnapshot())
+  // The phone step's button reads the Tailscale checks, so the flow follows them.
+  useSyncExternalStore(useCallback(listener => guide.readiness.subscribe(listener), [guide]), () => guide.readiness.getSnapshot())
   // The default workspace is looked up when the dialog opens, and chosen once it resolves unless the person chose another.
   useEffect(() => { start.resolve() }, [start])
   // A re-run keeps the workspace the studio already holds until the person chooses another; with none, as on a first run, Skip takes the default.
@@ -128,54 +154,67 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
   const save = useCallback((field: keyof OnboardingSettings, value: unknown): void => {
     progress.set(field, value).catch((error: unknown) => { console.warn('delorun onboarding: progress was not saved', error) })
   }, [progress])
-  const finish = useCallback((): void => {
-    save('done', true)
-    save('step', '')
+  const finish = useCallback((): Promise<unknown> => {
+    const saved = Promise.allSettled([progress.set('done', true), progress.set('step', '')])
     complete()
-  }, [save, complete])
+    return saved
+  }, [progress, complete])
 
   // The notice is decided once: acknowledging it must not remove it from under Back.
   const [notice] = useState(() => (!explicit && fixed.notice !== undefined && !fixed.notice.acknowledged() ? fixed.notice : undefined))
+  // The Finish setup entry at the computer shows only the steps a phone deferred; they are read once, so finishing one does not remove it from under the person.
+  const [only] = useState<readonly DeferrableStep[] | undefined>(() => (deferredOnly.getSnapshot() ? withSteps(record.deferred ?? []) : undefined))
   const steps = useMemo(
-    () => buildSteps({ services, guide, record, extra: addedSteps, reach, target, notice, keepCurrent }),
-    [services, guide, record, addedSteps, reach, target, notice, keepCurrent],
+    () => buildSteps({ services, guide, record, extra: addedSteps, reach, phone, target, notice, keepCurrent, pinOn, ...only === undefined ? {} : { only } }),
+    [services, guide, record, addedSteps, reach, phone, target, notice, keepCurrent, pinOn, only],
   )
   const [index, setIndex] = useState(() => (notice === undefined ? Math.max(0, steps.findIndex(each => each.id === settings.step)) : 0))
   const current = Math.min(index, steps.length - 1)
   // The list is never empty: Welcome, Workspace and Ready are always built.
   const step = steps[current] as FlowStep
   const providersPhase = useSyncExternalStore(useCallback(listener => guide.providersPhase.subscribe(listener), [guide]), () => guide.providersPhase.getSnapshot())
+  const stockScreen = useSyncExternalStore(useCallback(listener => guide.stockScreen.subscribe(listener), [guide]), () => guide.stockScreen.getSnapshot())
   // The providers step's landing and walk have their own buttons; its summary uses the dialog's Continue.
-  const ownButtons = step.id === STEPS.providers.id && providersPhase !== 'summary'
+  const ownButtons = (step.id === STEPS.providers.id && providersPhase !== 'summary') || (step.id === STEPS.look.id && stockScreen)
   const heading = useRef<HTMLHeadingElement>(null)
   useEffect(() => { heading.current?.focus({ preventScroll: true }) }, [step.id])
 
   const go = (to: number): void => {
     setIndex(to)
-    save('step', (steps[to] as FlowStep).id)
+    // The deferred steps are not the guide's saved place.
+    if (only === undefined) save('step', (steps[to] as FlowStep).id)
   }
   const last = current === steps.length - 1
   // With no workspace chosen and none to fall back on, the last button goes back to the Workspace step.
-  const needsFolder = last && workspace === undefined && target.kind !== 'other' && !(keepCurrent && target.kind === 'default')
+  const needsFolder = only === undefined && last && workspace === undefined && target.kind !== 'other' && !(keepCurrent && target.kind === 'default')
   const advance = (): void => {
     step.onContinue?.()
     if (!last) {
       go(current + 1)
       return
     }
+    // The last deferred step closes the dialog; no chat starts and the guide's progress stays as it was.
+    if (only !== undefined) {
+      later()
+      return
+    }
     if (needsFolder) {
       go(steps.findIndex(each => each.id === STEPS.workspace.id))
       return
     }
-    finish()
+    const saved = finish()
     completeStep(UPSTREAM_KEY_STEP)
-    void startChat(workspace?.workspaceId, folderOf(workspace), keepCurrent)
+    const started = startChat(workspace?.workspaceId, folderOf(workspace), keepCurrent)
+    // The original look unloads this dialog's plugin, so it is written last, after the progress and the first chat.
+    if (guide.stock.getSnapshot()) {
+      void Promise.allSettled([saved, started]).then(() => fixed.look.useStockLook()).then((ok) => { if (!ok) console.warn('delorun onboarding: the original look was not saved') }, (error: unknown) => { console.warn('delorun onboarding: the original look was not saved', error) })
+    }
   }
   // A step with something unfinished (a highlighted folder, an open Add question) holds Continue until it is settled.
   const next = (): void => {
     void guide.passGates().then((open) => { if (open) advance() })
   }
-  const phone = usePhone()
+  const onPhone = usePhone()
   const title = step.title()
   // The last step has nothing left to skip, and Welcome offers no Skip while the preview notice is owed.
   const showSkip = !last && (notice === undefined || step.id !== STEPS.welcome.id)
@@ -185,12 +224,12 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
       <StepFooter
         {...showSkip ? { skip: { label: step.skipLabel?.() ?? t('skip'), onClick: () => { step.onSkip?.(); go(current + 1) } } } : {}}
         {...current > 0 ? { back: { label: t('back'), onClick: () => { go(current - 1) } } } : {}}
-        next={{ label: needsFolder ? t('chooseFolder') : last ? t('start') : step.continueLabel?.() ?? t('continue'), onClick: next }} />
+        next={{ label: needsFolder ? t('chooseFolder') : last ? t(only === undefined ? 'start' : 'continue') : stepLabel ?? step.continueLabel?.() ?? t('continue'), onClick: next }} />
     )
   return (
     <Modal open title={title} onClose={later} headless className={DIALOG_CLASS}>
       <StepFrame title={title} headingRef={heading} count={t('count', { n: String(current + 1), total: String(steps.length) })}
-        place={current + 1} total={steps.length} steps={steps.map(each => each.title())} stepsLabel={t('steps')} stepKey={step.id} {...last ? {} : { later: { label: t('later'), onClick: later } }} footer={footer} above={phone ? <OnboardingDownloadsRow /> : undefined}>
+        place={current + 1} total={steps.length} steps={steps.map(each => each.title())} stepsLabel={t('steps')} stepKey={step.id} {...last && only === undefined ? {} : { later: { label: t('later'), onClick: later } }} footer={footer} above={onPhone ? <OnboardingDownloadsRow /> : undefined}>
         {step.render(next, () => { go(current - 1) })}
       </StepFrame>
     </Modal>

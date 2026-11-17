@@ -10,8 +10,10 @@ import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import {
+  agentSignInFailureText,
   assertPositiveFinite,
   assertUsableCwd,
+  isAgentSignInFailure,
   NO_START_CAPABILITIES,
   settleRunResult,
   subprocessRunHandle,
@@ -165,5 +167,35 @@ describe('subprocessRunHandle', () => {
     controller.abort()
     // dispose removed the abort listener before cancelling.
     expect(onAbort).not.toHaveBeenCalled()
+  })
+})
+
+describe('isAgentSignInFailure', () => {
+  it.each([
+    'unexpected status 401 Unauthorized: Missing bearer or basic authentication in header',
+    'Not logged in · Please run /login',
+    'Invalid API key',
+    'Your refresh token has expired',
+    'failed to refresh the access token',
+    'Please sign in again',
+  ])('recognises %s', (text) => {
+    expect(isAgentSignInFailure(text)).toBe(true)
+  })
+
+  it.each([
+    'the model refused the request',
+    'rate limit reached, try in 40 seconds',
+    'error 4010 in build step',
+  ])('does not take %s for a sign-in failure', (text) => {
+    expect(isAgentSignInFailure(text)).toBe(false)
+  })
+})
+
+describe('agentSignInFailureText', () => {
+  it('names the login command and tells the model not to retry', () => {
+    const text = agentSignInFailureText('Codex', 'codex')
+    expect(text).toContain("Codex isn't signed in, or its sign-in has expired.")
+    expect(text).toContain('`delorun agents login codex`')
+    expect(text).toContain('Do not retry this task')
   })
 })

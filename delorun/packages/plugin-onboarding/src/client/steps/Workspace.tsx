@@ -111,7 +111,7 @@ function FolderMode({ services, guide }: StepProps): ReactNode {
     <div className={css.stack}>
       <Chosen services={services} guide={guide} focus={added} />
       {view.kind !== 'browse' && (
-        <Button variant="outline" size="sm" className={css.alignStart} disabled={choosing} onClick={choose}>{t('workspace.folder.choose')}</Button>
+        <Button variant="outline" size="sm" className={`${css.alignStart} ${css.inline}`} disabled={choosing} onClick={choose}>{t('workspace.folder.choose')}</Button>
       )}
       {view.kind === 'problem' && <StateLine tone="error">{problemText(t, view.problem)}</StateLine>}
       {view.kind === 'unavailable' && <p className={css.hint}>{t('workspace.folder.unavailable')}</p>}
@@ -169,12 +169,37 @@ function CloneMode({ services, guide }: StepProps): ReactNode {
   const urlOk = isCloneAddress(url.trim())
   const folder = named ? name : suggestedName(url.trim())
   const nameOk = folder !== '' && isFolderName(folder)
+  /** Whether this form started a clone; a finished clone becomes the chosen workspace and the clone returns to idle. */
+  const started = useRef(false)
+  /** Validate and start the clone; whether one was started. */
+  const start = (): boolean => {
+    setChecked(true)
+    if (!urlOk || !nameOk || parent === undefined) return false
+    started.current = true
+    guide.startClone({ url: url.trim(), parent, name: folder })
+    return true
+  }
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault()
-    setChecked(true)
-    if (!urlOk || !nameOk || parent === undefined) return
-    guide.startClone({ url: url.trim(), parent, name: folder })
+    start()
   }
+  // Continue clones, and goes on once the clone has finished and become the chosen workspace.
+  const latest = useRef(start)
+  latest.current = start
+  const finished = started.current && clone.state === 'idle'
+  useEffect(() => {
+    guide.setGate('clone', () => {
+      const state = guide.clone.getSnapshot().state
+      if (started.current && state === 'idle') return true
+      if (state !== 'starting' && state !== 'running') latest.current()
+      return false
+    })
+    return () => { guide.setGate('clone', undefined) }
+  }, [guide])
+  useEffect(() => {
+    guide.setContinueLabel(finished ? undefined : t('clone.continue'))
+    return () => { guide.setContinueLabel(undefined) }
+  }, [guide, finished, t])
   return (
     <form className={css.stack} onSubmit={submit} noValidate>
       <Chosen services={services} guide={guide} />
@@ -189,7 +214,7 @@ function CloneMode({ services, guide }: StepProps): ReactNode {
         <span className={css.label}>{t('clone.parent')}</span>
         <span className={css.commandRow}>
           <span className={css.path}>{parent ?? t('clone.parent.none')}</span>
-          {!picking && <Button variant="outline" size="sm" disabled={busy} onClick={() => { setPicking(true) }}>{t('clone.parent.choose')}</Button>}
+          {!picking && <Button variant="outline" size="sm" className={css.inline} disabled={busy} onClick={() => { setPicking(true) }}>{t('clone.parent.choose')}</Button>}
         </span>
         {checked && parent === undefined && !picking && <span className={css.failure}>{t('clone.parent.missing')}</span>}
         {picking && (
@@ -204,7 +229,6 @@ function CloneMode({ services, guide }: StepProps): ReactNode {
       </div>
       <p className={css.hint}>{t('clone.signIn')}</p>
       <div aria-live="polite"><CloneProgress clone={clone} t={t} /></div>
-      <Button type="submit" variant="primary" size="sm" className={css.alignStart} disabled={busy}>{t('clone.start')}</Button>
     </form>
   )
 }
@@ -239,7 +263,7 @@ export function WorkspaceStep({ services, guide, target, keepCurrent }: StepProp
           {keepCurrent && workspace === undefined && (
             <>
               <p className={css.hint}>{t('workspace.keep')}</p>
-              <Button variant="outline" size="sm" className={css.alignStart}
+              <Button variant="outline" size="sm" className={`${css.alignStart} ${css.inline}`}
                 onClick={() => { guide.chooseWorkspace({ kind: 'default', workspaceId: target.workspaceId, path: target.path }) }}>{t('workspace.useDefault')}</Button>
             </>
           )}

@@ -208,9 +208,11 @@ describe('delorun workspace full-access', () => {
   })
 
   it('asks at the terminal, reading a cancel as no answer', async () => {
+    Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true })
     clackConfirm.mockResolvedValueOnce(true).mockResolvedValueOnce(Symbol('cancel'))
     await expect(confirmInTerminal('Turn on?')).resolves.toBe(true)
     await expect(confirmInTerminal('Turn on?')).resolves.toBeUndefined()
+    Reflect.deleteProperty(process.stdin, 'isTTY')
   })
 
   it('lists the profiles whose home process runs from their home locks, reading no token', () => {

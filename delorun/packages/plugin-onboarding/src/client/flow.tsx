@@ -3,10 +3,12 @@
  * between Phone access and Workspace.
  */
 import type { ReactNode } from 'react'
-import type { SetupRecord } from '../wire.ts'
-import type { Guide } from './guide.ts'
+import type { DeferrableStep, SetupRecord } from '../wire.ts'
+import type { Guide, PhoneOutcome } from './guide.ts'
 import { AgentsStep } from './steps/Agents.tsx'
 import { LookStep } from './steps/Look.tsx'
+import { ComputerOnlyStep } from './steps/ComputerOnly.tsx'
+import { PinStep } from './steps/Pin.tsx'
 import { ModelsStep } from './steps/Models.tsx'
 import { PluginsStep } from './steps/Plugins.tsx'
 import { ReachStep } from './steps/Reach.tsx'
@@ -48,6 +50,7 @@ export const STEPS = {
   agents: { id: 'agents', order: 300 },
   plugins: { id: 'plugins', order: 400 },
   reach: { id: 'reach', order: 500 },
+  pin: { id: 'pin', order: 550 },
   workspace: { id: 'workspace', order: 1000 },
   ready: { id: 'ready', order: 1100 },
 } as const
@@ -64,12 +67,18 @@ export interface FlowInput {
   readonly extra: readonly OnboardingStep[]
   /** Whether the home has reach and it is set up; the Phone access step shows only while it is `off`. */
   readonly reach: ReachState
+  /** What the person did on Phone access; `on` adds the PIN step when the Phone access step turned reach on. */
+  readonly phone: PhoneOutcome
   /** Where the chat opens without a choice. */
   readonly target: StartTarget
   /** The preview notice when it is owed: it exists, this browser has not acknowledged it and onboarding was not reopened. Continuing from Welcome acknowledges it. */
   readonly notice: NoticeFace | undefined
   /** Whether the guide was opened again: the workspace the chat is in stays unless the person chooses another. */
   readonly keepCurrent: boolean
+  /** Whether PIN mode is known to be on; a phone's PIN step is left out then. */
+  readonly pinOn?: boolean
+  /** The deferred steps to show alone, from the Finish setup entry at the computer; absent shows the whole guide. */
+  readonly only?: readonly DeferrableStep[]
 }
 
 /**
@@ -77,21 +86,61 @@ export interface FlowInput {
  * @param input - the services and what decides which steps apply.
  * @returns the steps, ascending by order.
  */
-export function buildSteps({ services, guide, record, extra, reach, target, notice, keepCurrent }: FlowInput): FlowStep[] {
+export function buildSteps({ services, guide, record, extra, reach, phone, target, notice, keepCurrent, pinOn = false, only }: FlowInput): FlowStep[] {
   const { t, plugins, optionalRows } = services
+  if (only !== undefined) return deferredSteps({ services, guide, only })
   const covered = (id: string): boolean => record.sections?.includes(id) === true
   const props = { services, guide }
   const built: FlowStep[] = [{ ...STEPS.welcome, title: () => t('step.welcome'), render: () => <WelcomeStep {...props} notice={notice} />, ...notice === undefined ? {} : { onContinue: notice.acknowledge } }]
   built.push({ ...STEPS.providers, title: () => t('step.providers'), render: (next, back) => <ModelsStep {...props} next={next} back={back} /> })
-  if (!covered(STEPS.look.id)) built.push({ ...STEPS.look, title: () => t('step.look'), render: () => <LookStep {...props} /> })
+  if (!covered(STEPS.look.id)) built.push({ ...STEPS.look, title: () => t('step.look'), render: next => <LookStep {...props} next={next} /> })
   if (!covered(STEPS.agents.id)) built.push({ ...STEPS.agents, title: () => t('step.agents'), render: () => <AgentsStep {...props} /> })
   if ((plugins.length > 0 || optionalRows.length > 0) && !covered(STEPS.plugins.id)) built.push({ ...STEPS.plugins, title: () => t('step.plugins'), render: () => <PluginsStep {...props} /> })
   // A studio opened from a phone is already on one, so it has no Phone access step.
-  if (reach === 'off' && !record.reachSetUp) built.push({ ...STEPS.reach, title: () => t('step.reach'), skipLabel: () => t('reach.notNow'), continueLabel: () => t('reach.done'), onSkip: () => { guide.setPhone('skipped') }, onContinue: () => { void services.host.reach().then((now) => { guide.setPhone(now === 'set-up' ? 'on' : 'done') }) }, render: () => <ReachStep {...props} /> })
+  if (reach === 'off' && !record.reachSetUp) built.push({ ...STEPS.reach, title: () => t('step.reach'), skipLabel: () => t('reach.notNow'), continueLabel: () => { const read = guide.readiness.getSnapshot(); return read.status === 'ready' && read.value.tailscale.state === 'ready' ? t('continue') : t('reach.done') }, onSkip: () => { guide.setPhone('skipped') }, onContinue: () => { void services.host.reach().then((now) => { guide.setPhone(now === 'set-up' ? 'on' : 'done') }) }, render: () => <ReachStep {...props} /> })
+  // The PIN step is for the home's own computer with phone access on: reach was already set up, or the Phone access step just found it on.
+  if (reach === 'set-up' || (reach === 'off' && phone === 'on')) built.push({ ...STEPS.pin, title: () => t('step.pin'), render: () => <PinStep {...props} /> })
+  // A phone cannot set the PIN, so it says so and offers to leave it for the computer; a step already deferred or already done is left out.
+  if (reach === 'remote' && !pinOn && record.deferred?.includes('pin') !== true) {
+    built.push({
+      ...STEPS.pin, title: () => t('computer.title.pin'), continueLabel: () => t('computer.defer'),
+      onContinue: () => { void services.host.defer('pin', true) },
+      render: () => <ComputerOnlyStep services={services} id="pin" />,
+    })
+  }
   built.push(
     { ...STEPS.workspace, title: () => t('step.workspace'), render: () => <WorkspaceStep {...props} target={target} keepCurrent={keepCurrent} /> },
     { ...STEPS.ready, title: () => t('step.ready'), render: () => <ReadyStep {...props} reach={record.reachSetUp || reach === 'remote' ? 'set-up' : reach} target={target} keepCurrent={keepCurrent} /> },
   )
   const added = extra.map((step): FlowStep => ({ id: step.id, order: step.order, title: step.title, render: next => { const Body = step.component; return <Body next={next} /> } }))
   return [...built, ...added].sort((a, b) => a.order - b.order)
+}
+
+/**
+ * The steps the Finish setup entry at the computer shows: only the deferred ones. The entry drops a step whose work is
+ * done when the dialog closes.
+ * @param input - the services, the guide and the deferred steps to show.
+ * @returns the steps, ascending by order.
+ */
+function deferredSteps({ services, guide, only }: Pick<FlowInput, 'services' | 'guide'> & { readonly only: readonly DeferrableStep[] }): FlowStep[] {
+  const { t } = services
+  const props = { services, guide }
+  const built: FlowStep[] = []
+  if (only.includes('reach')) {
+    built.push({
+      ...STEPS.reach, title: () => t('step.reach'), skipLabel: () => t('reach.notNow'), continueLabel: () => t('reach.done'),
+      render: () => <ReachStep {...props} />,
+    })
+  }
+  if (only.includes('pin')) built.push({ ...STEPS.pin, title: () => t('step.pin'), render: () => <PinStep {...props} /> })
+  return built
+}
+
+/**
+ * The deferred steps that have a screen: a deferred step the guide never draws has nothing to open.
+ * @param deferred - the deferred step ids.
+ * @returns those with a step, in the guide's order.
+ */
+export function withSteps(deferred: readonly DeferrableStep[]): DeferrableStep[] {
+  return (['reach', 'pin'] as const).filter(id => deferred.includes(id))
 }

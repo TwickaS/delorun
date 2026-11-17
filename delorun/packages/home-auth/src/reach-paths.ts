@@ -34,6 +34,7 @@ export const REACH_DEVICE_PATHS: readonly ReachDevicePath[] = [
   { path: '/manifest.webmanifest', match: 'exact', reason: INSTALL_FILE },
   { path: '/favicon.svg', match: 'exact', reason: INSTALL_FILE },
   { path: '/favicon-dark.svg', match: 'exact', reason: INSTALL_FILE },
+  { path: '/favicon.ico', match: 'exact', reason: INSTALL_FILE },
   { path: '/apple-touch-icon.png', match: 'exact', reason: INSTALL_FILE },
   { path: '/icon-192.png', match: 'exact', reason: INSTALL_FILE },
   { path: '/icon-512.png', match: 'exact', reason: INSTALL_FILE },
@@ -42,6 +43,8 @@ export const REACH_DEVICE_PATHS: readonly ReachDevicePath[] = [
   { path: '/plugins', match: 'prefix', reason: 'the client plugin bundles the client module loader imports, and the module graph updates it follows at `/plugins/events`' },
   { path: '/auth', match: 'prefix', reason: 'sign-in, session rotation and the device routes of this package, which decide their own arrival' },
   { path: '/delorun/reach/status', match: 'exact', reason: 'the reach status the studio shows, which `@delorun/reach` answers to a signed-in device' },
+  { path: '/delorun/changes', match: 'prefix', reason: 'the Changes reads a signed-in device shows; its actions and setup routes answer only the person at the computer, whose request they attest before any body is read' },
+  { path: '/delorun/branding/icon', match: 'exact', reason: 'the studio\'s custom icon, which the page and the installed app show' },
 ]
 
 /** Percent-escapes of `/` and `\`, which a route that decodes its path would read as a separator. */

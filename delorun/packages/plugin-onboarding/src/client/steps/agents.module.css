@@ -1,0 +1,84 @@
+/* The agents' Advanced options: the model list and the time limit. */
+/* The radio is the native control, laid over its visible row for keyboard and assistive technology. */
+.radio {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: inherit;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 28rem;
+}
+
+.fieldLabel {
+  font-size: var(--onb-small-size);
+  line-height: var(--onb-small-line);
+  font-weight: 500;
+}
+
+.hint {
+  font-size: var(--onb-small-size);
+  line-height: var(--onb-small-line);
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* The model choice: one row per model, scrolling when the list is long. */
+.models {
+  display: flex;
+  flex-direction: column;
+  max-height: 14rem;
+  overflow-y: auto;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.model {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: var(--onb-target);
+  padding: 0 var(--onb-gap-2);
+  font-size: var(--onb-small-size);
+  line-height: var(--onb-small-line);
+  cursor: pointer;
+}
+
+.model + .model {
+  border-top: 0.5px solid var(--dsw-alias-border-l1);
+}
+
+.model:hover {
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.model[data-selected] {
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--dsw-alias-brand-primary);
+}
+
+.model:has(.radio:focus-visible) {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: -2px;
+}
+
+.model:has(.radio:disabled) {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* Inline buttons are compact with a pointer; touch keeps its larger target. */
+@media (pointer: fine) {
+  .inline {
+    min-height: 32px;
+    padding: 0 12px;
+    font-size: 13px;
+  }
+}

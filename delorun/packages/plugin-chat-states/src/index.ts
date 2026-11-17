@@ -18,6 +18,7 @@ import type {} from '@deepseek-ai/dsh-client-connection'
 // Type-only: the ctx.sessionQuery merge, whose complete session list says which chats exist.
 import type {} from '@deepseek-ai/dsh-session-query'
 import { TRASH_RETENTION_DAYS } from '@delorun/contract-archive-and-trash'
+import { admitApprovedDevice } from '@delorun/home-auth'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 // Type-only: the ctx.settings merge.
 import type {} from '@deepseek-ai/dsh-settings'
@@ -308,11 +309,11 @@ export async function apply(ctx: Context, config: ChatStatesConfig): Promise<voi
   }
 
   ctx.connection.fetch.register({
-    path: CHAT_STATE_PATHS.list, methods: ['GET'], requestBody: 'buffered',
+    path: CHAT_STATE_PATHS.list, methods: ['GET'], requestBody: 'buffered', admitPeer: admitApprovedDevice(),
     fetch: answer(CHAT_STATE_PATHS.list, async () => json(await states.list())),
   })
   ctx.connection.fetch.register({
-    path: CHAT_STATE_PATHS.set, methods: ['POST'], requestBody: 'buffered',
+    path: CHAT_STATE_PATHS.set, methods: ['POST'], requestBody: 'buffered', admitPeer: admitApprovedDevice(),
     fetch: answer(CHAT_STATE_PATHS.set, async (request) => {
       const parsed = ChatStateRequest.safeParse(await request.json().catch(() => undefined))
       if (!parsed.success) return refusal('invalid-request')

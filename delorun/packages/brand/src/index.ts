@@ -22,12 +22,14 @@ export { PinDots, type PinDotsProps } from './components/PinDots.tsx'
 export { Pill, type PillProps } from './components/Pill.tsx'
 export { StatusCard, type StatusCardProps } from './components/StatusCard.tsx'
 export { TextField, type TextFieldProps } from './components/TextField.tsx'
+export { SecretPair, type SecretPairProps } from './components/SecretPair.tsx'
 export { ChoiceGroup, type Choice, type ChoiceGroupProps } from './settings/ChoiceGroup.tsx'
 export { cardCss, SettingHeading, SettingsCard, type SettingsCardProps } from './settings/SettingsCard.tsx'
 export { RadioList, type RadioListProps, type RadioRow } from './settings/RadioList.tsx'
 export { SettingRow, type SettingRowProps } from './settings/SettingRow.tsx'
 export { TileGroup, type Tile, type TileGroupProps } from './settings/TileGroup.tsx'
 export { ChipGroup, type ChipGroupProps, type ChipOption } from './settings/ChipGroup.tsx'
+export { LookChooser, type CustomPanelProps, type LookChooserProps, type LookSampleCopy, type LookTile } from './settings/LookChooser.tsx'
 export {
   AccentPicker, StudioLookSwitch, ThemePicker,
   type AccentChoice, type AccentPickerProps, type StudioLook, type StudioLookSwitchProps, type SwatchColours, type ThemeChoice, type ThemePickerProps,
