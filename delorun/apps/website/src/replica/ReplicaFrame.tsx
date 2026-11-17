@@ -23,6 +23,8 @@ export interface ReplicaFrameProps {
   readonly session: SessionId
   /** See `ReplicaLiveProps`: one width, `pair`, or `responsive`. */
   readonly width: ReplicaLiveProps['width']
+  /** See `ReplicaLiveProps`: the id of the chapter the replay opens on; the first when absent. */
+  readonly opens?: string | undefined
   /** Classes for the element that holds the replica. */
   readonly className?: string | undefined
 }
@@ -36,7 +38,8 @@ function serverStills(root: Element): Partial<Record<ReplicaWidth, string>> {
   const stills: Partial<Record<ReplicaWidth, string>> = {}
   for (const element of root.querySelectorAll(`[${STILL_ATTRIBUTE}]`)) {
     const width = element.getAttribute(STILL_ATTRIBUTE)
-    if (width === 'desktop' || width === 'phone') stills[width] = element.innerHTML
+    // The still's own element holds the studio's wrapper, whose markup is what the live replica keeps.
+    if ((width === 'desktop' || width === 'phone') && element.firstElementChild !== null) stills[width] = element.firstElementChild.innerHTML
   }
   return stills
 }
@@ -46,7 +49,7 @@ function serverStills(root: Element): Partial<Record<ReplicaWidth, string>> {
  * @param props - see {@link ReplicaFrameProps}.
  * @returns the replica.
  */
-export function ReplicaFrame({ session, width, className }: ReplicaFrameProps) {
+export function ReplicaFrame({ session, width, opens, className }: ReplicaFrameProps) {
   const box = useRef<HTMLDivElement>(null)
   const [live, setLive] = useState<{
     readonly Live: ComponentType<ReplicaLiveProps>
@@ -75,21 +78,22 @@ export function ReplicaFrame({ session, width, className }: ReplicaFrameProps) {
   // replica replaces it in one commit.
   return live === undefined
     ? <>
-        <div ref={box} className={className} dangerouslySetInnerHTML={{ __html: island({ session, width }) }} suppressHydrationWarning data-replay-failed={failed ? '' : undefined} />
+        <div ref={box} className={className} dangerouslySetInnerHTML={{ __html: island({ session, width, opens }) }} suppressHydrationWarning data-replay-failed={failed ? '' : undefined} />
         {failed ? <style>{'[data-replay-failed] [data-scripted]{display:none!important}'}</style> : null}
       </>
     : <div ref={box} className={className}>
         <ChunkBoundary fallback={<div dangerouslySetInnerHTML={{ __html: live.markup }} />}>
-          <live.Live session={session} width={width} stills={live.stills} />
+          <live.Live session={session} width={width} opens={opens} stills={live.stills} />
         </ChunkBoundary>
       </div>
 }
 
 /**
- * The phone section's replica: a session at the desktop width and the phone width side by side.
+ * The phone section's replica: a session at the desktop width and the phone width side by side, opening on the chapter
+ * where the agent asks first, so the section shows that question answered from the phone.
  * @param props - the session.
  * @returns the pair.
  */
 export function ReplicaPair({ session, className }: { readonly session: SessionId, readonly className?: string | undefined }) {
-  return <ReplicaFrame session={session} width="pair" className={className} />
+  return <ReplicaFrame session={session} width="pair" opens="asks-first" className={className} />
 }

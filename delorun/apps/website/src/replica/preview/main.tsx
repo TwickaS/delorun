@@ -1,6 +1,6 @@
 /**
  * The replica's local preview: the hero session at the width the query names (`?width=desktop|phone|pair|responsive`,
- * default desktop) and the session of changes and setup versions, in the look the query names (`?look=ocean&scheme=dark`, read
+ * default desktop, and `?opens=<chapter id>`) and the session of changes and setup versions, in the look the query names (`?look=ocean&scheme=dark`, read
  * by the sites' own head script). Run with `vite --config src/replica/preview/vite.config.ts` in `delorun/apps/website`;
  * it is not part of the site's build.
  * @module @delorun/website/replica/preview/main
@@ -22,6 +22,6 @@ document.head.append(head)
 
 createRoot(document.getElementById('root') as HTMLElement).render(
   <main style={{ boxSizing: 'border-box', maxWidth: 1200, margin: '0 auto', padding: 'clamp(16px, 3vw, 32px)' }}>
-    <ReplicaFrame session={session} width={width} />
+    <ReplicaFrame session={session} width={width} opens={params.get('opens') ?? undefined} />
   </main>,
 )

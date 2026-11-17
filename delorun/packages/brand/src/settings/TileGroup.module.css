@@ -102,3 +102,19 @@
     padding: var(--delorun-space-3, calc(6px * var(--dsh-density, 1))) var(--delorun-space-3, calc(6px * var(--dsh-density, 1))) var(--delorun-space-4, var(--dl-space-2));
   }
 }
+
+/* On the narrowest phones a tile is about 65 px wide: the name is set smaller in tighter padding and may wrap, so "Custom"
+   is read whole and not cut to "Cust…". */
+@media (max-width: 380px) {
+  .tile {
+    padding-inline: var(--delorun-space-2, var(--dl-space-1));
+  }
+
+  .label {
+    font-size: 11px;
+    line-height: 14px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+  }
+}

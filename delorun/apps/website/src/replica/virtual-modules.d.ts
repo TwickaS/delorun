@@ -22,8 +22,8 @@ declare module 'virtual:replica-island' {
   /**
    * The live replica's first render as static markup with its styles. On the server it renders `ReplicaLive`; in the
    * browser it is empty.
-   * @param props - the session and the width.
+   * @param props - the session, the width and the chapter it opens on.
    * @returns the markup; empty in the browser.
    */
-  export function island(props: Pick<import('./ReplicaLive.tsx').ReplicaLiveProps, 'session' | 'width'>): string
+  export function island(props: Pick<import('./ReplicaLive.tsx').ReplicaLiveProps, 'session' | 'width' | 'opens'>): string
 }

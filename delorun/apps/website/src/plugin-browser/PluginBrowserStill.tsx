@@ -35,9 +35,9 @@ export function KindFiles({ kind, words }: { readonly kind: Kind; readonly words
     <>
       <p className={css.kindSummary}>{words.kinds[kind].summary}</p>
       <h4 className={css.fileHeading}>{words.filesWritten(words.kinds[kind].name)}</h4>
-      <ul className={css.fileList}>
-        {data.scaffold[kind].map((path) => <li key={path}><code>{path}</code><span>{noteFor(path, words)}</span></li>)}
-      </ul>
+      <dl className={css.fileList}>
+        {data.scaffold[kind].map((path) => <div key={path} className={css.fileItem}><dt><code>{path}</code></dt><dd>{noteFor(path, words)}</dd></div>)}
+      </dl>
     </>
   )
 }
@@ -60,9 +60,9 @@ export function PluginBrowserStill({ words }: { readonly words: PluginBrowserWor
             <dl className={css.plainList}>
               {group.map((plugin) => (
                 <div key={plugin.name} className={css.plainItem}>
-                  <dt className={css.plainTitle}>{plugin.title}</dt>
+                  <dt className={css.plainTitle} data-plugin-term="">{plugin.title}</dt>
                   <dd className={css.plainSentence}>{plugin.sentence}</dd>
-                  {plugin.requires.length === 0 ? null : <dd className={css.plainNeeds}>{words.requiresHeading}: {plugin.requires.join(', ')}</dd>}
+                  {plugin.requires.length === 0 ? null : <dd className={css.plainNeeds}><span className={css.plainNeedsLabel}>{words.requiresHeading}</span> {plugin.requires.join(', ')}</dd>}
                 </div>
               ))}
             </dl>
@@ -72,7 +72,12 @@ export function PluginBrowserStill({ words }: { readonly words: PluginBrowserWor
       <section className={css.plainSection}>
         <h3 className={css.plainHeading}>{words.makeYourOwnTab}</h3>
         <p className={css.plainIntro}>{words.makeIntro}</p>
-        {KINDS.map((each) => <section key={each}><h4 className={css.fileHeading}>{words.kinds[each].name}</h4><KindFiles kind={each} words={words} /></section>)}
+        {KINDS.map((each) => (
+          <details key={each} className={css.plainKind}>
+            <summary>{words.kinds[each].name}</summary>
+            <KindFiles kind={each} words={words} />
+          </details>
+        ))}
         <p className={css.note}>{words.makeNote}</p>
       </section>
     </div>

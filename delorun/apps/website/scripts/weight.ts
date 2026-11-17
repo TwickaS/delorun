@@ -13,8 +13,12 @@ const KB = 1000
 
 /** The limits, in bytes. The names match the plan's table. */
 export const LIMITS = {
-  /** The page's HTML, styles and fonts needed for the first screen, before any section script. */
-  firstScreen: 120 * KB,
+  /**
+   * The whole prerendered HTML of the page (every section's still included, below the fold too, since a page with scripts
+   * off shows them), its linked stylesheets and the brand fonts, before any section script. 125 KB by L54; the plan's
+   * table said 120 KB for the first screen alone.
+   */
+  firstScreen: 125 * KB,
   /** Font files preloaded on the first screen. */
   preloadedFonts: 2,
   /** The script that makes the page interactive: the chunks the page loads at start. */

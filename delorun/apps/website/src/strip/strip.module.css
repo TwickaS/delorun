@@ -353,7 +353,8 @@
   font-family: var(--dl-font-mono);
   font-size: 15px;
   line-height: 1.5;
-  white-space: pre-wrap;
+  white-space: pre;
+  overflow-x: auto;
 }
 
 /* The spread: the new page is revealed by the clip the script animates, not cross-faded. */

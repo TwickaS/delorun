@@ -38,7 +38,7 @@ export function differenceName(look: Look, other: Look): string {
  * The line that says an entry stores its theme under an id other than the theme's name, so the entry and the marked tile
  * read as one choice.
  * @param entry - the entry's config.
- * @returns the line, such as "Berry is stored as t3-chat.", or undefined when the id is the name or no theme is stored.
+ * @returns the line, such as "Berry is written as t3-chat in the file.", or undefined when the id is the name or no theme is stored.
  */
 export function storedAsLine(entry: EntryConfig): string | undefined {
   const id = storedPalette(entry)

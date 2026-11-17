@@ -49,8 +49,9 @@ function Entry({ entry, changes }: { readonly entry: EntryConfig | undefined; re
   return (
     <>
       {/* A new key per change seats the new entry. */}
-      <CodeBlock key={changes} className={css.seat} code={entryYaml(held.config)} caption={held.bundle ? copy.bundleFile : copy.entryFile} copyLabel={copy.copyEntry} copiedLabel={copy.copied} failedLabel={copy.copyFailed} />
+      <CodeBlock key={changes} scroll codeLabel={copy.entry} className={css.seat} code={entryYaml(held.config)} caption={held.bundle ? copy.bundleFile : copy.entryFile} copyLabel={copy.copyEntry} copiedLabel={copy.copied} failedLabel={copy.copyFailed} />
       {line === undefined ? null : <p className={css.entryLine} data-strip-entry-line="">{line}</p>}
+      <p className={css.entryLine}>{copy.additionsNote}</p>
     </>
   )
 }
@@ -58,7 +59,7 @@ function Entry({ entry, changes }: { readonly entry: EntryConfig | undefined; re
 /** The setup versions, newest first, as the studio's Setup versions section titles and groups them; every change here has the same title, so they collapse into one row with a count. */
 function Versions({ state }: { readonly state: StripState }) {
   const rows = versionRows(state.versions)
-  if (rows.length === 0) return <p className={css.noVersions}>{versionsCopy.empty}</p>
+  if (rows.length === 0) return <><p className={css.noVersions}>{versionsCopy.empty}</p><p className={css.entryLine}>{copy.saveNote}</p></>
   const time = new Intl.DateTimeFormat(versionsCopy['time.locale'], { timeStyle: 'short' })
   const title = fill(versionsCopy['version.settings'], { name: editedName() })
   return (

@@ -28,4 +28,8 @@ describe('visible focus, hit areas and the chosen segment on the sites', () => {
     expect(tiles).toMatch(/\.radio\s*\{[^}]*display:\s*var\(--delorun-tile-mark, block\)/)
     expect(tiles).toMatch(/\.label\s*\{[^}]*text-align:\s*var\(--delorun-tile-label-align, start\)/)
   })
+
+  it('lets a tile\'s name shrink and wrap on the narrowest phones, so it is not cut to an ellipsis', () => {
+    expect(css('../src/settings/TileGroup.module.css')).toMatch(/@media \(max-width: 380px\)\s*\{[^@]*\.label\s*\{[^}]*font-size: 11px[^}]*white-space: normal/)
+  })
 })

@@ -35,6 +35,18 @@
   overflow-wrap: anywhere;
 }
 
+/* Code whose indentation matters keeps its lines and scrolls sideways; focus shows the ring so a keyboard user sees where it is. */
+.pre[data-scroll] {
+  white-space: pre;
+  overflow-x: auto;
+  overflow-wrap: normal;
+}
+
+.pre[data-scroll]:focus-visible {
+  outline: var(--dl-focus-ring);
+  outline-offset: var(--dl-focus-ring-offset);
+}
+
 .block[data-size='lg'] .pre {
   font-size: clamp(18px, 0.9rem + 1.6vw, 32px);
   line-height: 1.2;

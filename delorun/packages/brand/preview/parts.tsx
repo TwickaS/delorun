@@ -50,6 +50,7 @@ function Column({ scheme }: { scheme: 'light' | 'dark' }) {
         <ButtonLink unavailable aria-describedby="link-why">An unavailable link</ButtonLink>
       </p>
       <p id="link-why">The unavailable link has no address yet.</p>
+      <CodeBlock code={'palette: ocean\nstudioAdditions: true\ncontrast: 125 # a long line that scrolls sideways instead of wrapping, keeping its indentation'} caption="Code that scrolls" scroll codeLabel="Settings entry" {...COPY} />
       <CodeBlock code="npm install -g delorun" caption="The main button" emphasis="primary" {...COPY} />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <Frame width={480} height={300} label="The studio, still" still={still} />

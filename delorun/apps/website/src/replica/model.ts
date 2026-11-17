@@ -251,6 +251,20 @@ export function chapterStart(file: ChapterFile, chapter: number): StudioState {
 }
 
 /**
+ * The index of the chapter a replay opens on.
+ * @param file - the session's chapters.
+ * @param opens - the chapter's id; absent for the first chapter.
+ * @returns the chapter's index.
+ * @throws Error when no chapter has the id, so a misspelt id fails where the page places the replica.
+ */
+export function openingChapter(file: ChapterFile, opens?: string): number {
+  if (opens === undefined) return 0
+  const index = file.chapters.findIndex(chapter => chapter.id === opens)
+  if (index < 0) throw new Error(`replica: ${file.session} has no chapter "${opens}" to open on`)
+  return index
+}
+
+/**
  * What the studio shows a number of milliseconds into a chapter, and the presses the chapter has reached by then.
  * @param file - the session's chapters.
  * @param chapter - the chapter's index.

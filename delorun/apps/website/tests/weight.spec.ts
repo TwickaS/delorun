@@ -52,6 +52,11 @@ describe('the weight check', () => {
     expect(messages.some(message => message.startsWith('the first screen'))).toBe(true)
   })
 
+  it('holds the first screen at 125 KB, the whole prerendered HTML with its styles and fonts, and the entry script at 115 KB', () => {
+    expect(LIMITS.firstScreen).toBe(125_000)
+    expect(LIMITS.interactiveScript).toBe(115_000)
+  })
+
   it('classifies chunks by name', () => {
     expect(chunkKind('replica-x.js')).toBe('replica')
     expect(chunkKind('session-a.js')).toBe('session')
