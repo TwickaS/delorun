@@ -106,6 +106,15 @@ describe('the scripts a Node leader of a live agent runs', () => {
     ])
   })
 
+  it('finds the watcher through the bundle the profile installs, which depends on the driver', () => {
+    const dir = profileWith({
+      '@delorun/bundle-local/package.json': JSON.stringify({ name: '@delorun/bundle-local', version: '0.0.0', exports: { './package.json': './package.json' } }),
+      [`@delorun/bundle-local/node_modules/${WATCHER_PACKAGE}/package.json`]: WATCHER[`${WATCHER_PACKAGE}/package.json`],
+      [`@delorun/bundle-local/node_modules/${WATCHER_PACKAGE}/src/watcher.mjs`]: '\n',
+    })
+    expect(agentScripts(dir, [])).toEqual([realpathSync(join(dir, 'node_modules', '@delorun/bundle-local', 'node_modules', WATCHER_PACKAGE, 'src', 'watcher.mjs'))])
+  })
+
   it('names only what is installed', () => {
     const dir = profileWith(CODEX_ADDED)
     expect(agentScripts(dir, [])).toEqual([realpathSync(join(dir, 'node_modules', CODEX, 'bin', 'codex.js'))])

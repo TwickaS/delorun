@@ -243,17 +243,23 @@ export function agentExecutables(profileDirectory: string | undefined, machine: 
 /** The specifier of Claude Code's watcher script, which runs under Node as the leader of the program's process group. */
 const CLAUDE_WATCHER = '@delorun/agent-claude-code/watcher'
 
+/** The bundle whose dependencies bring the driver packages; the profile installs the bundle, not the driver, so the watcher is found from it. */
+const DRIVER_BUNDLE = '@delorun/bundle-local/package.json'
+
 /**
  * The scripts a live agent's Node leader runs, as real paths, for reaping only located programs: the Codex launcher
  * and Claude Code's watcher. The watcher belongs to a Delorun package that depends on this one, so it is found by name
- * from the profile's directory and from this module, and is absent where that package is not installed.
+ * from the profile's directory and from this module, and is absent where that package is not installed. The profile installs the bundle that depends on the driver, so
+ * resolution also starts from that bundle's manifest.
  * @param profileDirectory - the profile's directory, when known.
  * @param moduleFiles - the files besides the profile's `package.json` that resolution of the watcher starts from.
  * @returns the paths that exist.
  */
 export function agentScripts(profileDirectory: string | undefined, moduleFiles: readonly string[] = [fileURLToPath(import.meta.url)]): string[] {
   const codex = profileDirectory === undefined ? undefined : locateCodex(profileDirectory)
-  const starts = [...(profileDirectory === undefined ? [] : [join(profileDirectory, 'package.json')]), ...moduleFiles]
+  const profileManifest = profileDirectory === undefined ? undefined : join(profileDirectory, 'package.json')
+  const bundleManifest = profileManifest === undefined ? undefined : resolveFrom(profileManifest, DRIVER_BUNDLE)
+  const starts = [...[profileManifest, bundleManifest].filter((from): from is string => from !== undefined), ...moduleFiles]
   const watcher = starts.map(from => resolveFrom(from, CLAUDE_WATCHER)).find(path => path !== undefined)
   return [...new Set([codex?.script, watcher].filter((path): path is string => path !== undefined && existsSync(path)).map(path => realpathSync(path)))]
 }
