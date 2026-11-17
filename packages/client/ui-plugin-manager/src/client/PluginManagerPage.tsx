@@ -348,7 +348,7 @@ function RowsSection({ rows, t, resolveText, toggle, configure, state }: {
                 </div>
                 <MetadataError error={row.meta?.error} t={t} />
                 <RuntimeError error={row.diagnostic} t={t} />
-                {state?.(row)}
+                {state === undefined ? null : <div className={css.rowStateLine}>{state(row)}</div>}
               </li>
             ))}
           </ul>
