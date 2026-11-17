@@ -299,7 +299,7 @@ describe('the host routes', () => {
     await seat.resume('s1')
     await seat.chooseModel('s1', 'm')
     expect(fetch.mock.calls.map(([path, init]) => [path, init?.body])).toEqual([
-      [SEAT_ROUTES.resume, '{"sessionId":"s1"}'], [SEAT_ROUTES.chooseModel, '{"sessionId":"s1","modelId":"m"}'],
+      [SEAT_ROUTES.resume, '{"child":"s1"}'], [SEAT_ROUTES.chooseModel, '{"child":"s1","id":"m"}'],
     ])
   })
 

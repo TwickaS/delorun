@@ -28,7 +28,7 @@ async function post(fetch: SeatFetch, path: string, body: object): Promise<void>
  */
 export function createSeatClient(fetch: SeatFetch): SeatClient {
   return {
-    resume: sessionId => post(fetch, SEAT_ROUTES.resume, { sessionId }),
-    chooseModel: (sessionId, modelId) => post(fetch, SEAT_ROUTES.chooseModel, { sessionId, modelId }),
+    resume: sessionId => post(fetch, SEAT_ROUTES.resume, { child: sessionId }),
+    chooseModel: (sessionId, modelId) => post(fetch, SEAT_ROUTES.chooseModel, { child: sessionId, id: modelId }),
   }
 }
