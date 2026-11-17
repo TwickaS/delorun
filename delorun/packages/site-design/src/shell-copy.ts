@@ -23,6 +23,22 @@ export interface ThemeCopy {
   readonly back: string
   /** The name of each preset theme. */
   readonly names: Readonly<Record<LookId, string>>
+  /** The toast that follows a change from the control. */
+  readonly toast: ToastCopy
+}
+
+/** The text of the toast that says what a change did and names the way back. */
+export interface ToastCopy {
+  /** The name of the toast region, for assistive technology. */
+  readonly region: string
+  /** The sentence for a new theme; `name` is the theme's name. */
+  readonly theme: (name: string) => string
+  /** The sentence for a switch between light and dark; `name` is the scheme's word. */
+  readonly scheme: (name: string) => string
+  /** The action that undoes the change; `name` is the earlier theme's or scheme's word. */
+  readonly undo: (name: string) => string
+  /** The sentence after "Back to how it started". */
+  readonly reset: string
 }
 
 /** A link in the header or the footer. */
@@ -52,6 +68,6 @@ export interface FooterCopy {
   readonly licence: ShellLink
   /** The credit to the upstream project. */
   readonly upstream: ShellLink
-  /** The button that returns the page to how it started. */
-  readonly back: string
+  /** The theme control's text, whose button and toast the footer's "Back to how it started" shares. */
+  readonly theme: ThemeCopy
 }

@@ -3,10 +3,11 @@ import { createRootRoute, HeadContent, Outlet, Scripts, useRouterState } from '@
 import { i18nProvider, uiTranslations } from 'fumadocs-ui/i18n'
 import { RootProvider } from 'fumadocs-ui/provider/tanstack'
 import { LOOK_SCRIPT, LOOK_SCRIPT_ID } from '@design/head-script.ts'
+import { LookToaster } from '@design/look-toast.tsx'
 import { SiteFooter } from '@design/site-footer.tsx'
 import StaticSearchDialog from '@/components/search.tsx'
 import { htmlLangOf, localeOfPath } from '@/site/locale.ts'
-import { FOOTER_COPY, footerLinks } from '@/site/shell-copy.ts'
+import { FOOTER_COPY, footerLinks, THEME_COPY } from '@/site/shell-copy.ts'
 import { i18n } from '@/site/source.ts'
 import { OpenSearchFromLink } from '@/components/search.tsx'
 import appCss from '@/styles/app.css?url'
@@ -44,6 +45,7 @@ function RootDocument() {
           <OpenSearchFromLink />
           <Outlet />
           <SiteFooter copy={FOOTER_COPY[locale]} links={footerLinks(locale)} />
+          <LookToaster copy={THEME_COPY[locale]} />
         </RootProvider>
         <Scripts />
       </body>

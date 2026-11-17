@@ -20,6 +20,13 @@ export const THEME_COPY: ThemeCopy = {
   dark: 'Dark',
   back: 'Back to how it started',
   names: LOOK_NAMES,
+  toast: {
+    region: 'Notifications',
+    theme: name => `The page now looks like ${name}.`,
+    scheme: name => `The page is now ${name.toLowerCase()}.`,
+    undo: name => `Back to ${name}`,
+    reset: 'The page is back to how it started.',
+  },
 }
 
 /** The header's text. */
@@ -38,7 +45,7 @@ export const FOOTER_COPY: FooterCopy = {
   owner: COPY.footer.owner,
   licence: { label: COPY.footer.licence, href: `${GITHUB_URL}/blob/main/LICENSE` },
   upstream: { label: COPY.footer.upstream, href: UPSTREAM_URL },
-  back: THEME_COPY.back,
+  theme: THEME_COPY,
 }
 
 /** The footer's links, in order. */

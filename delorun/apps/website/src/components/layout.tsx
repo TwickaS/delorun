@@ -7,7 +7,8 @@
 import type { ReactNode } from 'react'
 import { SiteFooter } from '@design/site-footer.tsx'
 import { SiteHeader } from '@design/site-header.tsx'
-import { FOOTER_COPY, FOOTER_LINKS, HEADER_COPY, HEADER_LINKS } from '@/site/shell-copy.ts'
+import { LookToaster } from '@design/look-toast.tsx'
+import { FOOTER_COPY, FOOTER_LINKS, HEADER_COPY, HEADER_LINKS, THEME_COPY } from '@/site/shell-copy.ts'
 import { COPY } from '@/site/copy.ts'
 import { SignupForm } from '@/components/signup.tsx'
 
@@ -30,6 +31,7 @@ export function Frame({ children, signup = '/privacy' }: { children: ReactNode; 
             <SignupForm page={signup} compact />
           </section>
         )} />
+      <LookToaster copy={THEME_COPY} />
     </>
   )
 }

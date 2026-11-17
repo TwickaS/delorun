@@ -7,8 +7,9 @@
  */
 import { useEffect, useId, useState } from 'react'
 import { Button, ChoiceGroup, ThemePicker } from '../../brand/src/index.ts'
+import { announceLook, announceReset } from './look-toast.tsx'
 import { LOOK_SWATCHES } from './look-swatches.ts'
-import { getLook, resetLook, setLook, useLook } from './look-store.ts'
+import { resetLook, setLook, useLook } from './look-store.ts'
 import { KNOWN_LOOKS, type Look, type LookId } from './looks.ts'
 import type { ThemeCopy } from './shell-copy.ts'
 
@@ -27,31 +28,29 @@ export function useMounted(): boolean {
 
 /**
  * The button that returns the page to how it started.
- * @param props.label - its text.
- * @param props.onReset - called after the page is reset, with the look before and after.
+ * @param props.copy - the theme control's text; its toast follows the reset.
  * @param props.className - extra classes.
  * @returns the button, or nothing before scripts run.
  */
-export function BackToStart({ label, onReset, className }: { label: string; onReset?: ((previous: Look, next: Look) => void) | undefined; className?: string | undefined }) {
+export function BackToStart({ copy, className }: { copy: ThemeCopy; className?: string | undefined }) {
   const mounted = useMounted()
   if (!mounted) return null
-  return <Button variant="ghost" size="sm" className={className} onClick={() => { const previous = getLook(); resetLook(); onReset?.(previous, getLook()) }}>{label}</Button>
+  return <Button variant="ghost" size="sm" className={className} onClick={() => { resetLook(); announceReset(copy) }}>{copy.back}</Button>
 }
 
 /**
  * The theme control.
  * @param props.copy - its text.
- * @param props.onChange - called with the look before and after a change the visitor makes, for the toast.
  * @returns the control, or nothing before scripts run.
  */
-export function ThemeControl({ copy, onChange }: { copy: ThemeCopy; onChange?: ((previous: Look, next: Look) => void) | undefined }) {
+export function ThemeControl({ copy }: { copy: ThemeCopy }) {
   const look = useLook()
   const mounted = useMounted()
   const menu = useId()
   if (!mounted) return null
   const change = (next: Look): void => {
     setLook(next)
-    onChange?.(look, next)
+    announceLook(copy, look, next)
   }
   return (
     <>
@@ -68,7 +67,7 @@ export function ThemeControl({ copy, onChange }: { copy: ThemeCopy; onChange?: (
           <ChoiceGroup label={copy.scheme} value={look.scheme ?? 'light'} disabled={false} fill
             options={[{ value: 'light', label: copy.light }, { value: 'dark', label: copy.dark }]}
             onChange={scheme => change({ ...look, scheme })} />
-          <BackToStart label={copy.back} onReset={onChange} className="self-start" />
+          <BackToStart copy={copy} className="self-start" />
         </div>
       </div>
     </>
