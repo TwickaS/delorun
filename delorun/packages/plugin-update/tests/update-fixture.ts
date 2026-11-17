@@ -111,6 +111,7 @@ export async function serveUpdate(options: { readonly powers?: 'careful' | 'full
         gate: changesGate(dependencies),
         channel: () => options.noChannel === true ? undefined : channel,
         check: () => handle.check,
+        checkGapMs: 10_000,
         waitSeconds: 600,
         release: () => ({ delorun: '0.1.0', dsh: '1.0.0' }),
         logger: { info: (message) => { log.push(message) }, warn: (message) => { log.push(message) } },

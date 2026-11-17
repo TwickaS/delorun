@@ -49,11 +49,12 @@ An unlock is a code or a PIN the person entered; the approval grace does not cou
 
 ## What the Host keeps
 
-The report and the home process's report id stay in Host memory; the page holds a random handle, compared in constant time, and the report expires after 600 seconds. The channel token stays inside the `updateChannel` service that `delorun start` provides. `apply` needs every tick key the report asks for, from the rule `delorun update --yes` uses (`confirmationNeeds` in `@delorun/update`), and refuses a conflicted harness file or a failed release-log check whatever the page sends.
+The report and the home process's report id stay in Host memory; the page holds a random handle, compared in constant time, and the report expires after 600 seconds. The channel token stays inside the `updateChannel` service that `delorun start` provides. The service is a root Cordis service, so any plugin running in the Host can read it and send update, rollback and stop requests without the access table; Cordis offers no way to give one plugin a service name that another cannot read, and plugins in the Host are trusted code, as `changesRestart` is. A second `apply` while one starts is refused with `UPDATE_IN_PROGRESS`. `apply` needs every tick key the report asks for, from the rule `delorun update --yes` uses (`confirmationNeeds` in `@delorun/update`), and refuses a conflicted harness file or a failed release-log check whatever the page sends.
 
 ## Configuration
 
 - `waitSeconds`: how long an update or rollback waits for running chats, from 60 to 86,400 seconds, 1,800 by default.
+- `checkGapSeconds`: the shortest time between two release checks that reach the network, from 1 to 3,600 seconds, 10 by default. A request while one check runs joins it; a request inside the gap gets the last answer.
 
 ## Tests
 

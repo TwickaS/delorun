@@ -33,11 +33,14 @@ export interface Config {
    * running as it is, in seconds. New turns are refused while it waits.
    */
   readonly waitSeconds: number
+  /** The shortest time between two release checks that reach the network, in seconds. Requests inside it, and while one check runs, get that check's answer. */
+  readonly checkGapSeconds: number
 }
 
 /** Validated configuration. */
 export const Config: z<Config> = z.object({
   waitSeconds: z.natural().min(DRAIN_TIMEOUT_MIN_S).max(DRAIN_TIMEOUT_MAX_S).default(DRAIN_TIMEOUT_DEFAULT_S),
+  checkGapSeconds: z.natural().min(1).max(3600).default(10),
 })
 
 /**
@@ -53,6 +56,7 @@ export function apply(ctx: Context, config: Config): void {
       gate,
       channel: () => scope.get('updateChannel'),
       check: () => scope.get('delorunUpdateCheck'),
+      checkGapMs: config.checkGapSeconds * 1000,
       waitSeconds: config.waitSeconds,
       release: () => ({ delorun: getDelorunRuntimeVersion() ?? 'unknown', dsh: getDshRuntimeVersion() ?? 'unknown' }),
       logger: scope.logger,

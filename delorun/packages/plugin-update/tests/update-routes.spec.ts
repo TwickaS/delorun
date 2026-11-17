@@ -257,3 +257,37 @@ describe('rollback, cancel, stop and state', () => {
     expect(json(await get(update.server.port, UPDATE_PATHS.state)).rollback).toEqual({ available: false })
   })
 })
+
+describe('one update at a time, and one check at a time', () => {
+  it('update-apply-double-click: a second apply while the first starts is refused and sends nothing', async () => {
+    const update = await serveUpdate()
+    const handle = await prepared(update)
+    const body = { handle, chats: 'wait', dataCopy: true, acknowledged: [] }
+    const replies = await Promise.all([post(update.server.port, UPDATE_PATHS.apply, body), post(update.server.port, UPDATE_PATHS.apply, body)])
+    expect(replies.map(reply => reply.status).sort()).toEqual([200, 409])
+    const refused = replies.find(reply => reply.status === 409)
+    expect(['UPDATE_IN_PROGRESS', 'REPORT_EXPIRED']).toContain(json(refused as Reply).code)
+    expect(update.channel.ops().filter(op => op === 'update.apply')).toHaveLength(1)
+  })
+
+  it('an update or rollback that ends with the Host still running leaves no stale phase behind', async () => {
+    const update = await serveUpdate()
+    update.channel.answers.set('rollback', [{ ok: true, phase: 'reporting' }])
+    expect((await post(update.server.port, UPDATE_PATHS.rollback, { chats: 'wait', profileOnly: false })).status).toBe(200)
+    update.channel.answers.set('status', [{ ok: true, status: { state: 'waiting', pid: 1, startId: 's', runtime: { current: '0.1.0', running: '0.1.0' }, chats: 0, update: { phase: 'waiting', target: '0.1.1' } } }])
+    expect(json(await get(update.server.port, UPDATE_PATHS.state)).progress).toMatchObject({ kind: 'applying', phase: 'waiting' })
+  })
+
+  it('check now joins a running check and answers the last result inside the gap', async () => {
+    const update = await serveUpdate()
+    let runs = 0
+    update.check = { state: () => Promise.resolve(undefined), checkNow: () => { runs += 1; return new Promise(resolve => setTimeout(() => resolve({ checked: runs }), 20)) } }
+    const together = await Promise.all([post(update.server.port, UPDATE_PATHS.check), post(update.server.port, UPDATE_PATHS.check), post(update.server.port, UPDATE_PATHS.check)])
+    expect(together.map(reply => json(reply).checkedAt)).toEqual([1, 1, 1])
+    expect(json(await post(update.server.port, UPDATE_PATHS.check))).toMatchObject({ checkedAt: 1 })
+    expect(runs).toBe(1)
+    update.clock.now += 10_001
+    expect(json(await post(update.server.port, UPDATE_PATHS.check))).toMatchObject({ checkedAt: 2 })
+    expect(runs).toBe(2)
+  })
+})

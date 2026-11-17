@@ -32,6 +32,8 @@ export interface UpdateRouteDependencies {
    * @returns its state and a way to run it, or undefined while the check is off.
    */
   readonly check: () => UpdateCheckAccess | undefined
+  /** The shortest time between two release checks that reach the network, in milliseconds; a request inside it gets the last answer. */
+  readonly checkGapMs: number
   /** The longest wait for running chats before an update or a rollback gives up, in seconds. */
   readonly waitSeconds: number
   /** The release this Host runs. */
@@ -97,10 +99,14 @@ function ticksOf(value: unknown): readonly string[] {
  * @returns every route: `state` and the controls.
  */
 export function updateRoutes(dependencies: UpdateRouteDependencies): readonly UpdateRoute[] {
-  const { gate, channel, check, waitSeconds, release, logger, now } = dependencies
+  const { gate, channel, check, checkGapMs, waitSeconds, release, logger, now } = dependencies
   let held: HeldUpdate | undefined
   let preparing: { phase: UpdatePhaseView | undefined, readonly lines: string[] } | undefined
   let begun: 'update' | 'rollback' | undefined
+  let applying = false
+  let checking: Promise<UpdateCheckedView> | undefined
+  let checkedAtMs: number | undefined
+  let lastChecked: UpdateCheckedView | undefined
 
   const access = (): UpdateChannelAccess => {
     const found = channel()
@@ -112,6 +118,8 @@ export function updateRoutes(dependencies: UpdateRouteDependencies): readonly Up
   const actorOf = (presence: { readonly device?: { readonly id: string } }): string => presence.device === undefined ? 'the computer' : `device ${presence.device.id}`
   const watch = (what: string, done: Promise<ResponseLine[]>): void => {
     done.then((lines) => {
+      // The exchange ended with this Host still running: the update or rollback failed, was cancelled or went back.
+      if (what !== 'stop') begun = undefined
       const last = lines.at(-1)
       logger.info(`${what} ended: ${JSON.stringify({ outcome: last?.outcome, reason: last?.reason, criterion: last?.criterion })}`)
     }, () => { logger.info(`${what}: the channel closed before the home process's last line, as it does when the Host stops`) })
@@ -171,14 +179,20 @@ export function updateRoutes(dependencies: UpdateRouteDependencies): readonly Up
     onlyFields(body, [])
     const service = check()
     if (service === undefined) throw new RouteRefusal(409, 'UPDATE_UNAVAILABLE', 'The release check is off. Turn it on in Settings → General → Updates.')
-    const state = await service.checkNow()
-    const answer: UpdateCheckedView = {
-      enabled: true,
-      ...state?.checked === undefined ? {} : { checkedAt: state.checked },
-      ...state?.failed === undefined ? {} : { failed: state.failed },
-      ...state?.notice === undefined ? {} : { notice: state.notice },
-    }
-    return answer
+    if (checking !== undefined) return checking
+    if (lastChecked !== undefined && checkedAtMs !== undefined && now() - checkedAtMs < checkGapMs) return lastChecked
+    checkedAtMs = now()
+    checking = service.checkNow().then((state) => {
+      const answer: UpdateCheckedView = {
+        enabled: true,
+        ...state?.checked === undefined ? {} : { checkedAt: state.checked },
+        ...state?.failed === undefined ? {} : { failed: state.failed },
+        ...state?.notice === undefined ? {} : { notice: state.notice },
+      }
+      lastChecked = answer
+      return answer
+    }).finally(() => { checking = undefined })
+    return checking
   })
 
   const prepareRoute = gate.post('update-begin', async (body, _ctx, presence) => {
@@ -209,6 +223,7 @@ export function updateRoutes(dependencies: UpdateRouteDependencies): readonly Up
   const applyRoute = gate.post('update-begin', async (body, _ctx, presence): Promise<UpdateBegunView> => {
     onlyFields(body, ['handle', 'chats', 'dataCopy', 'acknowledged'])
     const home = access()
+    if (applying) throw new RouteRefusal(409, 'UPDATE_IN_PROGRESS', 'An update is already starting from another request.')
     const chats = chatsOf(body)
     const dataCopy = flag(body, 'dataCopy', true)
     const acknowledged = ticksOf(body.acknowledged ?? [])
@@ -217,9 +232,16 @@ export function updateRoutes(dependencies: UpdateRouteDependencies): readonly Up
     if (update.confirm.blocked !== undefined) throw new RouteRefusal(409, 'REPORT_BLOCKED', update.confirm.blocked === 'harness-conflict' ? 'A change you made to Delorun itself conflicts with the new release, so it cannot update here.' : 'The release log check failed, so Delorun does not update to this release.')
     const missing = missingTicks(update, acknowledged, dataCopy)
     if (missing.length > 0) throw new RouteRefusal(409, 'ACKNOWLEDGEMENT_MISSING', 'The report holds changes you have not accepted.', { missing })
-    const status = await statusOf().then(answer => answer, () => undefined)
-    logger.info(`update to ${update.report.to.delorun} begun from ${actorOf(presence)}`)
-    const started = await begin(home, { op: 'update.apply', args: { reportId: update.reportId, ...drainOf(chats), dataCopy } })
+    applying = true
+    let started: Awaited<ReturnType<typeof begin>>
+    let status: HomeStatus | undefined
+    try {
+      status = await statusOf().then(answer => answer, () => undefined)
+      logger.info(`update to ${update.report.to.delorun} begun from ${actorOf(presence)}`)
+      started = await begin(home, { op: 'update.apply', args: { reportId: update.reportId, ...drainOf(chats), dataCopy } })
+    } finally {
+      applying = false
+    }
     held = undefined
     begun = 'update'
     watch('update', started.done)
