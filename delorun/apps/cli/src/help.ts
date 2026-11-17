@@ -205,6 +205,19 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     ],
     options: [PROFILE],
   },
+  preview: {
+    usage: ['delorun preview list [--profile <name>]', 'delorun preview on <flag> [--profile <name>]', 'delorun preview off <flag> [--profile <name>]'],
+    about: [
+      'Shows the studio features that plugins mark as previews, and turns one on or off for a profile. A preview is off until you turn it on, and it changes what the studio shows, never what a model reads.',
+      'A change applies the next time Delorun starts.',
+    ],
+    actions: [
+      { name: 'list', text: 'Show each preview flag, whether it is on, and the plugin it belongs to.' },
+      { name: 'on <flag>', text: 'Turn a flag on. A flag no plugin of the profile declares is refused, with the known flags.' },
+      { name: 'off <flag>', text: 'Turn a flag off.' },
+    ],
+    options: [PROFILE],
+  },
   mcp: {
     usage: ['delorun mcp list | accept <server> | decline <server> | revoke <server> [--profile <name>]'],
     about: ['Answers, at this computer, the questions about tool servers that chats want to start.'],

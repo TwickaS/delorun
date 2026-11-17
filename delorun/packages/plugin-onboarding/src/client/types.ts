@@ -10,10 +10,13 @@ import type { LocalizedText } from '@deepseek-ai/dsh-package-manifest'
 import type { DelegationConsentSettings } from '@delorun/plugin-delegation-consent/wire'
 import type { HostFetch } from '@delorun/bundle-local/host-api'
 import type { ThemeSettings } from '@delorun/plugin-theme'
+import type { PreviewFlagsStore } from '@delorun/preview-flags/client'
 import type { ComponentType, ReactNode } from 'react'
 import type { OnboardingSettings } from '../config.ts'
 import type { DirectoryEntry, KeyProbe } from './providers.ts'
 import type { AgentModelsAnswer, CloneProblem, CloneRequest, CloneStatus, DeferrableStep, FolderKind, KeyTestAnswer, LocalServer, LocationProblem, Readiness, RecommendAnswer, SetupRecord } from '../wire.ts'
+import type { BrowserSetupStore } from '@delorun/browser-setup'
+import type { TurnOffOutcome } from './browser-pack.ts'
 import type { BundleInstaller } from './bundles.ts'
 
 /** What a step added by another plugin draws with. */
@@ -331,6 +334,26 @@ export interface StaticServices {
   readonly resolveText: (text: LocalizedText) => string
   /** The PIN mode step's requests and its link to Settings. */
   readonly pin: PinFace
+  /** The Browser step's read of whether Browser is ready, its link to Settings and its way to turn Browser off. */
+  readonly browser: BrowserFace
+  /** The page's preview flags, which a step reads under a `PreviewFlagsProvider`. */
+  readonly previewFlags: PreviewFlagsStore
+}
+
+/** What the Browser step reads, opens and turns off. */
+export interface BrowserFace {
+  /** Whether the Browser plugin pack is ready, from the Host's requirement check. */
+  readonly setup: BrowserSetupStore
+  /**
+   * Turn the Browser plugin pack off, for the No browser choice.
+   * @returns how it ended; it never rejects.
+   */
+  readonly turnOff: () => Promise<TurnOffOutcome>
+  /**
+   * Open a Settings section, where a need is met there.
+   * @param section - the section's id.
+   */
+  readonly openSettings: (section: string) => void
 }
 
 /** What the PIN step reaches the home with. */

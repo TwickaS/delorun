@@ -26,6 +26,7 @@
  * | `delorun agents login <claude-code \| codex>` | signs an added agent in with the provider's own program from the agent's package, at a terminal ([agents](./agents/command.ts)) |
  * | `delorun workspace external-agents [<folder> <agent> on \| off]` | the external agents, such as Claude Code, that start in a workspace without asking, allowed after a confirmation at this computer or revoked (contract C14; [external agents](./workspace/external-agents.ts)) |
  * | `delorun mcp list \| accept <server> \| decline <server> \| revoke <command>` | the stdio MCP servers the running studio holds stopped, answered at this computer, and the server commands it allows (contract C19; [mcp](./mcp/command.ts)) |
+ * | `delorun preview list \| on <flag> \| off <flag>` | the studio features a plugin declares as previews, and the profile row that turns one on ([preview](./preview/command.ts)) |
  * | `delorun --version [--json]` | Delorun's version and the DSH version it runs on (contract C17; [version](./version.ts)) |
  * | `delorun plugin …`, `delorun headless …` | upstream's profile commands for the CLI profile, with a build approval for `plugin` ([upstream](./upstream.ts)) |
  * | `delorun plugin new <name>`, `plugin dev <folder>`, `plugin check <directory>` | a new plugin package, the author's reload loop, and what a plugin's version ranges admit ([upstream](./upstream.ts)) |
@@ -93,6 +94,7 @@ export const COMMANDS: readonly CommandEntry[] = [
   { name: 'import', summary: 'Check an archive, show who signed it and what it holds, and import it after you confirm', load: async () => (await import('./import/command.ts')).importCommand },
   { name: 'import-home', summary: 'Copy a DeepSeek Harness home (~/.dsh) into this Delorun home after a preview; --dry-run only shows it', load: async () => (await import('./import-home/command.ts')).importHomeCommand },
   { name: 'verify', summary: 'Check the release against its signed manifest and the release log: --release <version>, --offline, --json', load: async () => (await import('./verify/index.ts')).verifyCommand },
+  { name: 'preview', summary: 'Turn a preview feature of the studio on or off: list, on <flag>, off <flag>', load: async () => (await import('./preview/command.ts')).previewCommand },
   { name: 'plugin', summary: 'Manage a profile\'s plugins, as dsh plugin does; check, new and dev help you write one; mirror on|off', load: async () => (await import('./upstream.ts')).pluginCommand },
   { name: 'headless', summary: 'Answer one task and exit, as dsh headless does, under Delorun\'s protections', load: async () => (await import('./upstream.ts')).headlessCommand },
 ]

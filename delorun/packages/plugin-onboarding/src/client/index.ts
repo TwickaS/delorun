@@ -2,7 +2,7 @@
  * Delorun's onboarding, studio half: the first minute of the studio as one flow ending in a chat. It is one step of
  * upstream's `settings.onboarding` flow, placed before every other step, so upstream's coordinator decides when it may
  * show. The steps are Welcome (language, the preview notice and the model providers with their key test), Look, Agents,
- * Recommended plugins, Phone access while reach is not set up, Workspace and Ready; Ready's button opens a new chat in
+ * Recommended plugins, Browser while its plugin pack is offered or added, Phone access while reach is not set up, Workspace and Ready; Ready's button opens a new chat in
  * the chosen workspace, whose empty state offers starter prompts that fit the folder and write into the message box.
  * A folder is added through the harness's route ({@link addWorkspaceFolder}), which refuses the folders Delorun never adds,
  * or cloned from Git through the harness's clone route.
@@ -48,6 +48,9 @@ import { DELEGATION_CONSENT_ROW, type DelegationConsentSettings } from '@delorun
 import type { ThemeSettings } from '@delorun/plugin-theme'
 import { DEFAULT_SETTINGS, ONBOARDING_ROW_ID, THEME_ROW_ID, type OnboardingSettings } from '../config.ts'
 import { ADD_WORKSPACE_PATH, AddWorkspaceAnswer, NO_RECORD, SETUP_RECORD_PATH, SetupRecord, type AddWorkspaceRequest } from '../wire.ts'
+import { createPreviewFlagsStore } from '@delorun/preview-flags/client'
+import { createBrowserSetup } from '@delorun/browser-setup'
+import { turnBrowserOff } from './browser-pack.ts'
 import { createBundleInstaller } from './bundles.ts'
 import { closeSidebarDrawer } from './focus.ts'
 import { hostApi, isLoopbackHostname, readStartId, readWorkspaceNotice } from './host-api.ts'
@@ -221,6 +224,10 @@ export function applyStudio(ctx: Context): void {
     progress.set(field, value).catch((error: unknown) => { console.warn('delorun onboarding: progress was not saved', error) })
   }
 
+  // One read of the preview flags and one copy of Browser's setup for the page, however often the dialog opens.
+  const previewFlags = createPreviewFlagsStore()
+  const browserSetup = createBrowserSetup((input, init) => globalThis.fetch(input, init), () => ctx.locale.getLocale().active)
+
   /** The preview notice, when bundle-local provides one. */
   const notice = (): NoticeFace | undefined => {
     const service = ctx.get('delorunNotice')
@@ -278,6 +285,13 @@ export function applyStudio(ctx: Context): void {
       // Looked up on click, as for the Models link above.
       openSettings: () => { ctx.get('settingsShell')?.openSection(PIN_MODE_SECTION_ID) },
     },
+    browser: {
+      setup: browserSetup,
+      turnOff: () => turnBrowserOff(ctx),
+      // Looked up on click, as for the PIN link above.
+      openSettings: (section) => { ctx.get('settingsShell')?.openSection(section) },
+    },
+    previewFlags,
   })
 
   /** Where the chat opens; the dialog starts resolving it when it opens, and the last button waits for it. */

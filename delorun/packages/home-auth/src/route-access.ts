@@ -99,6 +99,9 @@ export const PLUGIN_ROUTE_ACCESS: Readonly<Record<string, Readonly<Record<string
   'plugin-packs/src/routes.ts': {
     path: { level: 'R+U', reason: 'listing, cancelling an install and clearing a failed row change nothing installed and need no unlock; adding, retrying and removing a plugin pack write code the Host will run, so they need one' },
   },
+  'preview-flags/src/index.ts': {
+    'PREVIEW_FLAG_ROUTES.list': READ('names the declared preview flags and whether each is on, with no setting or data'),
+  },
   'plugin-onboarding/src/index.ts': {
     WORKSPACE_NOTICE_PATH: READ('names the files set aside, not their paths'),
     ADD_WORKSPACE_PATH: UNLOCKED('a workspace is what the model may write'),

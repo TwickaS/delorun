@@ -27,6 +27,7 @@ const STUDIO_ROWS = [
   { id: 'delorun-sidebar', name: '@delorun/plugin-sidebar' },
   { id: 'delorun-onboarding', name: '@delorun/plugin-onboarding' },
   { id: 'delorun-downloads', name: '@delorun/plugin-downloads' },
+  { id: 'delorun-preview-flags', name: '@delorun/preview-flags' },
 ] as const
 
 /** The optional studio plugins `@delorun/bundle-studio` inserts disabled, after the rows above. */
