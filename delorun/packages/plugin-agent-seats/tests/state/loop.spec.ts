@@ -13,7 +13,7 @@ import { pluginRecordOf, SessionId } from '@deepseek-ai/dsh-session'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import { SeatAdapter, type SeatHost } from '../../src/adapter/adapter.ts'
 import { mountSeatState, RESUME_PATH, SEAT_NOTICE_RECORD, SEAT_STATE_RECORD, SEAT_STATUS_RECORD } from '../../src/state/index.ts'
-import { ROUTE, ScriptedGate, ScriptedProgram, describeSeat, until } from './support.ts'
+import { ROUTE, ScriptedGate, describeSeat, until } from './support.ts'
 
 const say = (text: string) => createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } })
 
