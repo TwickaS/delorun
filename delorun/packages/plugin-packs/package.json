@@ -10,7 +10,8 @@
     "./wire": "./src/wire.ts",
     "./environment": "./src/environment.ts",
     "./client": "./src/client.ts",
-    "./routes": "./src/routes.ts"
+    "./routes": "./src/routes.ts",
+    "./locale/*.json": "./locale/*.json"
   },
   "dependencies": {
     "@delorun/changes": "workspace:*",

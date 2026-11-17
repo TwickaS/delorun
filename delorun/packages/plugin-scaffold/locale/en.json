@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Plugin scaffold",
+    "description": "Writes the starting files of a new plugin, in the four kinds that the plugin new command and Create a plugin offer"
+  }
+}

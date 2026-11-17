@@ -155,6 +155,12 @@ export function gatesFor(base: string): readonly GateCheck[] {
       inputs: ['delorun/packages/*/package.json', 'delorun/apps/*/package.json', `${GATE_DIR}/package-states.ts`],
     },
     {
+      id: 'gates:plugin-sentences',
+      title: 'Every plugin the site lists has a title and a sentence in its locale/en.json',
+      command: [TSX, `${GATE_DIR}/plugin-sentences.ts`],
+      inputs: ['delorun/packages/*/package.json', 'delorun/packages/*/cordis.patch.yml', 'delorun/packages/*/locale/en.json', 'delorun/apps/website/src/plugin-browser/list-plugins.ts', `${GATE_DIR}/plugin-sentences.ts`],
+    },
+    {
       id: 'gates:workspace-graph',
       title: 'Delorun packages have no dependency cycle and the runtime closure carries no release or developer tooling',
       command: [TSX, `${GATE_DIR}/workspace-graph.ts`],

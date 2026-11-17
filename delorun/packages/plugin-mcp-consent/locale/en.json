@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "MCP server consent",
+    "description": "Asks you before a new MCP server command can start, and remembers the ones you accepted"
+  }
+}
