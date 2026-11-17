@@ -72,6 +72,9 @@ describe('the plugin browser with scripts', () => {
     expect(rows()).toHaveLength(data.plugins.length)
     expect(showAll()).toBeUndefined()
     expect(document.activeElement?.id).toBe(`plugin-row-${data.plugins[8]!.name}`)
+    await press(document.activeElement!, 'ArrowDown')
+    expect(detailTitle()).toBe(data.plugins[9]!.title)
+    expect(document.activeElement?.id).toBe(`plugin-row-${data.plugins[9]!.name}`)
   })
 
   it('updates the detail for every row chosen, opens it under the row and keeps each full title', async () => {

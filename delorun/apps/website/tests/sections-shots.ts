@@ -5,7 +5,8 @@
  * prints each section's height, whether anything is wider than the window, the root's look attributes and what the
  * browser stored, which must be nothing.
  *
- * Usage: `node tests/sections-shots.ts <page url> <output directory> [strip|plugins]`; the last argument takes one section only.
+ * Usage: `node tests/sections-shots.ts <page url> <output directory> [strip|plugins|all] [widths]`; the third argument takes
+ * one section only, the fourth replaces the widths with a comma-separated list such as `1024,1180,1280`.
  *
  * @module website/tests/sections-shots
  */
@@ -14,20 +15,21 @@ import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import type { BrowserContextOptions, Page } from 'playwright'
 
-const [url, out, only] = process.argv.slice(2)
+const [url, out, only, widths] = process.argv.slice(2)
 if (url === undefined || out === undefined) throw new Error('usage: sections-shots.ts <page url> <output directory>')
 mkdirSync(out, { recursive: true })
 
 // The tools package owns the Playwright dependency.
 const { chromium } = createRequire(new URL('../../tools/package.json', import.meta.url))('playwright') as typeof import('playwright')
 
-const WIDTHS = [390, 768, 1440] as const
+const WIDTHS = widths === undefined ? [390, 768, 1440] : widths.split(',').map(Number)
 
 /** A strip picture's look: the default page in light, or Berry carried in the link in dark. */
 const LOOKS = [
   { name: 'soft-light', query: '', scheme: 'light', reducedMotion: 'no-preference' },
   { name: 'berry-dark', query: '?look=t3-chat&scheme=dark', scheme: 'dark', reducedMotion: 'no-preference' },
   { name: 'soft-light-reduced', query: '', scheme: 'light', reducedMotion: 'reduce' },
+  { name: 'soft-light-spacious', query: '?density=spacious', scheme: 'light', reducedMotion: 'no-preference' },
 ] as const
 
 /** The plugin browser's longest real entry, by its sentence. */
@@ -62,6 +64,8 @@ async function measure(page: Page, name: string, selector: string): Promise<void
       // How tall the section's drawn parts are, whatever room its box holds for them.
       content: element === null ? undefined : Math.max(...[...element.querySelectorAll('*')].map(each => each.getBoundingClientRect().bottom)) - element.getBoundingClientRect().top,
       sideways: document.documentElement.scrollWidth - innerWidth,
+      // Theme names drawn shorter than their text.
+      cut: [...document.querySelectorAll('[data-setup-strip] [role="radio"] span')].filter(each => each.children.length === 0 && each.scrollWidth > each.clientWidth).map(each => each.textContent),
       root: { ...document.documentElement.dataset },
       stored: [...Object.keys(localStorage), ...Object.keys(sessionStorage), document.cookie].filter(Boolean),
     }

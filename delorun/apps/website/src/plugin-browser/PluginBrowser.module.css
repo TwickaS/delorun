@@ -89,12 +89,12 @@
 
 /*
  * The chosen row stands apart from the page in every look: a rule in the text colour at its leading edge and a tone mixed
- * from the text into the ground, since some looks draw the sunken surface as the ground. On a phone a row is marked once
- * its detail is open beneath it; on a wide screen the chosen row is always marked.
+ * from the text into the ground, since some looks draw the sunken surface as the ground. On a phone no row is chosen
+ * until one is pressed.
  */
 .row { border-inline-start: 2px solid transparent; }
 
-.row[data-open="true"] {
+.row[aria-current="true"] {
   border-inline-start-color: var(--dl-text);
   border-start-start-radius: 0;
   border-end-start-radius: 0;
@@ -102,15 +102,6 @@
   font-weight: 600;
 }
 
-@media (min-width: 960px) {
-  .row[aria-current="true"] {
-    border-inline-start-color: var(--dl-text);
-    border-start-start-radius: 0;
-    border-end-start-radius: 0;
-    background: color-mix(in srgb, var(--dl-text) 7%, var(--dl-surface));
-    font-weight: 600;
-  }
-}
 .row:active { transform: scale(var(--dl-scale-pressed)); }
 .row:focus-visible { outline: var(--dl-focus-ring); outline-offset: calc(var(--dl-focus-ring-offset) * -1); }
 

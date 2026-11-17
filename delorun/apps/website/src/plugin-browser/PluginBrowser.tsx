@@ -65,7 +65,8 @@ const FIRST_ROWS = 8
  */
 function Plugins({ words }: { readonly words: PluginBrowserWords }) {
   const [selected, setSelected] = useState(PLUGINS[0]?.name)
-  const [opened, setOpened] = useState(false)
+  // A wide screen (960 px, as the stylesheet's split) shows the chosen plugin's detail from the start; a phone opens it under a row once chosen.
+  const [opened, setOpened] = useState(() => typeof matchMedia === 'function' && matchMedia('(min-width: 960px)').matches)
   const [all, setAll] = useState(false)
   const shown = all ? PLUGINS : PLUGINS.slice(0, FIRST_ROWS)
   const focusRow = useRef<string | undefined>(undefined)
@@ -75,8 +76,11 @@ function Plugins({ words }: { readonly words: PluginBrowserWords }) {
     if (PLUGINS.findIndex((plugin) => plugin.name === name) >= FIRST_ROWS) setAll(true)
     focusRow.current = focus ? name : undefined
   }
+  // The keys move from the focused row, which after "Show all plugins" is not the chosen one.
   const choose = (event: KeyboardEvent<HTMLUListElement>) => {
-    const at = PLUGINS.findIndex((plugin) => plugin.name === selected)
+    const target = event.target
+    const focused = target instanceof HTMLElement ? PLUGINS.findIndex((plugin) => `plugin-row-${plugin.name}` === target.id) : -1
+    const at = focused === -1 ? PLUGINS.findIndex((plugin) => plugin.name === selected) : focused
     const next = event.key === 'ArrowDown' ? Math.min(at + 1, PLUGINS.length - 1) : event.key === 'ArrowUp' ? Math.max(at - 1, 0) : event.key === 'Home' ? 0 : event.key === 'End' ? PLUGINS.length - 1 : undefined
     const plugin = next === undefined ? undefined : PLUGINS[next]
     if (plugin === undefined) return
@@ -94,8 +98,10 @@ function Plugins({ words }: { readonly words: PluginBrowserWords }) {
     focusRow.current = undefined
     document.getElementById(`plugin-row-${name}`)?.focus()
   })
-  // On a phone the detail opens under the row; the page scrolls just enough to show it whole.
+  // On a phone the detail opens under the row; the page scrolls just enough to show it whole. Arriving scrolls nothing.
+  const arrived = useRef(false)
   useEffect(() => {
+    if (!arrived.current) { arrived.current = true; return }
     if (opened) document.querySelector(`.${css.inline}`)?.scrollIntoView?.({ block: 'nearest' })
   }, [selected, opened])
   const current = PLUGINS.find((plugin) => plugin.name === selected) ?? PLUGINS[0]
@@ -113,7 +119,7 @@ function Plugins({ words }: { readonly words: PluginBrowserWords }) {
                     const on = plugin.name === current?.name
                     return (
                       <li key={plugin.name}>
-                        <button type="button" id={`plugin-row-${plugin.name}`} className={css.row} aria-current={on} data-open={on && opened} tabIndex={on ? 0 : -1} title={plugin.title}
+                        <button type="button" id={`plugin-row-${plugin.name}`} className={css.row} aria-current={on && opened} tabIndex={on ? 0 : -1} title={plugin.title}
                           onClick={() => { select(plugin.name, false) }}>
                           <span className={css.rowTitle}>{plugin.title}</span>
                         </button>

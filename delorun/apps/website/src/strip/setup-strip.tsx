@@ -109,7 +109,7 @@ function StripBody({ look, state, onLook, announcement }: {
   const onPointerDown = (event: PointerEvent<HTMLDivElement>): void => { pointer.current = { at: performance.now(), point: { x: event.clientX, y: event.clientY } } }
   return (
     <div className={`${css.body} grid grid-cols-4 gap-x-(--grid-gap) lg:grid-cols-12`}>
-      <div className={`${css.controls} col-span-full lg:col-span-4`} role="group" aria-label={copy.controls} onPointerDownCapture={onPointerDown}>
+      <div className={`${css.controls} col-span-full lg:col-span-5 min-[1440px]:col-span-4`} role="group" aria-label={copy.controls} onPointerDownCapture={onPointerDown}>
         <div className={css.group}>
           <h3 id={themesId} className={css.label}>{studio.palette}</h3>
           <TileGroup labelledBy={themesId} className={css.tiles} value={look.look} disabled={false}
@@ -138,7 +138,7 @@ function StripBody({ look, state, onLook, announcement }: {
             onChange={(density) => { press({ ...look, density }) }} />
         </div>
       </div>
-      <div className={`${css.record} col-span-full grid gap-x-(--grid-gap) lg:col-span-8 lg:grid-cols-2`}>
+      <div className={`${css.record} col-span-full grid gap-x-(--grid-gap) lg:col-span-7 min-[1440px]:col-span-8 min-[1440px]:grid-cols-2`}>
         <section className={css.group} aria-label={copy.entry}>
           <h3 className={css.label}>{copy.entry}</h3>
           <div className={css.entry}><Entry entry={state.entry} changes={state.versions.length} /></div>
