@@ -113,7 +113,8 @@ export function replicaPlugins(options: ReplicaBuildOptions): Plugin[] {
       if ((MODULES as readonly string[]).includes(source)) return `\0${source}`
       if (importer === undefined) return undefined
       if (SECTIONS.test(importer)) return SECTION_SHIMS[source]
-      if (PRIMITIVES.test(importer)) return PRIMITIVE_SHIMS[source]
+      // A config that aliases React to one copy hands this hook `react-dom` as a path; the portal shim takes it too.
+      if (PRIMITIVES.test(importer)) return PRIMITIVE_SHIMS[/(?:^|\/)react-dom(?:\/index\.js)?$/.test(source) ? 'react-dom' : source]
       return undefined
     },
     async load(id) {
