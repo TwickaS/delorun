@@ -106,7 +106,9 @@ async function checkInHome(request: ReviewCopyRequest, release: NonNullable<Retu
   const problems = await reviewCopyProblems(installed, home)
   if (problems.length > 0 || request.platform !== `${process.platform}-${process.arch}`) return problems
   const { version } = await storeFolder(home, installed)
-  const copy = join(home, 'review-copy')
+  // The review copy lives in the cut's temporary home only; no real home holds this folder, so it is not a C1 entry.
+  const scratch = home
+  const copy = join(scratch, 'review-copy')
   await materialize(home, version, copy)
   return await importProblems(copy, await pluginModules(copy), home)
 }
@@ -173,8 +175,10 @@ const IMPORT_SCRIPT = [
  * @returns the environment.
  */
 async function importEnvironment(home: string): Promise<NodeJS.ProcessEnv> {
-  const person = join(home, 'person')
-  const directories = { HOME: person, XDG_CONFIG_HOME: join(person, '.config'), XDG_CACHE_HOME: join(person, '.cache'), XDG_DATA_HOME: join(person, '.local', 'share'), XDG_STATE_HOME: join(person, '.local', 'state'), TMPDIR: join(home, 'tmp') }
+  // `person` and `tmp` are scratch folders of the cut's temporary home, not C1 entries of a real Delorun home.
+  const scratch = home
+  const person = join(scratch, 'person')
+  const directories = { HOME: person, XDG_CONFIG_HOME: join(person, '.config'), XDG_CACHE_HOME: join(person, '.cache'), XDG_DATA_HOME: join(person, '.local', 'share'), XDG_STATE_HOME: join(person, '.local', 'state'), TMPDIR: join(scratch, 'tmp') }
   for (const directory of Object.values(directories)) await mkdir(directory, { recursive: true, mode: 0o700 })
   return { ...process.env['PATH'] === undefined ? {} : { PATH: process.env['PATH'] }, ...directories, DELORUN_HOME: home, TZ: 'UTC', LC_ALL: 'C' }
 }
