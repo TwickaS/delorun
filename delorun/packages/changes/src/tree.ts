@@ -55,11 +55,12 @@
  */
 import { createHash } from 'node:crypto'
 import { constants, type Stats } from 'node:fs'
-import { lstat, mkdir, open, readdir, readFile, readlink, realpath, stat, type FileHandle } from 'node:fs/promises'
+import { lstat, mkdir, open, readdir, readlink, realpath, stat, type FileHandle } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { DELORUN_HOME_ENTRIES, PRIVATE_DIR_MODE, STORE_ENTRIES } from '@delorun/contract-home-layout'
 import { readProtectedFile, writeProtectedFile } from '@delorun/home'
+import { readPointerFile } from '@delorun/runtime-store'
 import { ChangesError } from './errors.ts'
 import { PACKAGE_NAME_PATTERN } from './paths.ts'
 import { VERSION_MANIFEST_SCHEMA, type ContentVersion, type ObjectDigest, type VersionEntry, type VersionManifest } from './types.ts'
@@ -610,9 +611,6 @@ async function addTarget(walk: Walk, real: string, path: string, dereference: bo
   }
 }
 
-/** A runtime version as `runtimes/current` names it: one path segment that is not `.` or `..`. */
-const RUNTIME_VERSION_PATTERN = /^[0-9A-Za-z][0-9A-Za-z.+-]*$/u
-
 /**
  * @param home - the Delorun home, or undefined.
  * @returns the real path of its active runtime's installed packages, or undefined without a home.
@@ -635,19 +633,14 @@ function addRuntimeLink(walk: Walk, path: string, real: string): void {
 /**
  * @param home - the Delorun home's real path.
  * @returns the real path of the active runtime's installed packages, `runtimes/<current>/app/node_modules`, or
- *   undefined when `runtimes/current` is missing, does not name one version, or that folder does not exist.
+ *   undefined when `runtimes/current` is missing or malformed as the runtime store reads it, or that folder does not
+ *   exist.
  * @throws the filesystem error other than a missing file.
  */
 export async function activeRuntimeModules(home: string): Promise<string | undefined> {
   const runtimes = join(home, DELORUN_HOME_ENTRIES.runtimes)
-  let version: string
-  try {
-    version = (await readFile(join(runtimes, STORE_ENTRIES.current), 'utf8')).trim()
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
-    throw error
-  }
-  if (!RUNTIME_VERSION_PATTERN.test(version)) return undefined
+  const version = await readPointerFile(join(runtimes, STORE_ENTRIES.current))
+  if (version === undefined || version === 'malformed') return undefined
   return await realTarget(join(runtimes, version, 'app', DEPENDENCY_DIRECTORY))
 }
 

@@ -22,6 +22,7 @@
     "@delorun/contract-home-layout": "workspace:*",
     "@delorun/home": "workspace:*",
     "@delorun/profile-safety": "workspace:*",
+    "@delorun/runtime-store": "workspace:*",
     "diff": "^9.0.0",
     "yaml": "^2.9.0"
   },
