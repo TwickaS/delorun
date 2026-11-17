@@ -245,7 +245,7 @@ it('lets through file arguments that stay inside the chat\'s folder, and calls w
 it('turns off the tool that runs code in the server process: never registered, and refused when called', async () => {
   const { chat } = await chatFolder()
   for (const config of [{ mode: 'launch' }, { mode: 'attach', endpoint: 'http://127.0.0.1:9222' }] as const) {
-    expect(Provider.Config(config).deniedTools).toEqual(['browser_run_code_unsafe'])
+    expect(Provider.Config(config).deniedTools).toEqual([])
     Provider.apply(new Context(), Provider.Config(config))
     const options = vi.mocked(mountSessionMcp).mock.calls.at(-1)![1]
     expect(options.deniedTools).toEqual(['browser_run_code_unsafe'])
@@ -258,13 +258,28 @@ it('turns off the tool that runs code in the server process: never registered, a
   expect(Provider.deniedToolMessage('browser_run_code_unsafe')).toContain('is turned off here because it runs code outside the page')
 })
 
-it('denies the configured tools in place of the default, keeps the folder guard for the rest, and rejects a name that is not a tool name', async () => {
+it('keeps the server-code tool off whatever the configuration lists: an empty or other list cannot turn it back on', async () => {
+  const { chat } = await chatFolder()
+  for (const deniedTools of [[], ['browser_evaluate'], ['browser_run_code_unsafe', 'browser_run_code_unsafe']]) {
+    for (const config of [{ mode: 'launch', deniedTools }, { mode: 'attach', endpoint: 'http://127.0.0.1:9222', deniedTools }] as const) {
+      Provider.apply(new Context(), Provider.Config(config))
+      const options = vi.mocked(mountSessionMcp).mock.calls.at(-1)![1]
+      expect(options.deniedTools).toContain('browser_run_code_unsafe')
+      expect(options.deniedTools!.filter(name => name === 'browser_run_code_unsafe')).toHaveLength(1)
+      expect(await options.refuseCall!({ tool: 'browser_run_code_unsafe', arguments: { code: 'async page => 1' }, directory: chat }))
+        .toBe(Provider.deniedToolMessage('browser_run_code_unsafe'))
+    }
+  }
+  expect(Provider.deniedToolsOf({ deniedTools: [] })).toEqual(['browser_run_code_unsafe'])
+})
+
+it('turns off the configured tools as well, keeps the folder guard for the rest, and rejects a name that is not a tool name', async () => {
   const { chat, outside } = await chatFolder()
   Provider.apply(new Context(), Provider.Config({ mode: 'launch', deniedTools: ['browser_evaluate', 'browser_file_upload'] }))
   const options = vi.mocked(mountSessionMcp).mock.calls[0]![1]
-  expect(options.deniedTools).toEqual(['browser_evaluate', 'browser_file_upload'])
+  expect(options.deniedTools).toEqual(['browser_run_code_unsafe', 'browser_evaluate', 'browser_file_upload'])
   expect(await options.refuseCall!({ tool: 'browser_evaluate', arguments: {}, directory: chat })).toBe(Provider.deniedToolMessage('browser_evaluate'))
-  expect(await options.refuseCall!({ tool: 'browser_run_code_unsafe', arguments: {}, directory: chat })).toBeUndefined()
+  expect(await options.refuseCall!({ tool: 'browser_click', arguments: { ref: 'e1' }, directory: chat })).toBeUndefined()
   expect(await options.refuseCall!({ tool: 'browser_take_screenshot', arguments: { filename: join(outside, 'shot.png') }, directory: chat }))
     .toBe(Provider.outsideFolderMessage(join(outside, 'shot.png')))
   expect(() => Provider.Config({ mode: 'launch', deniedTools: ['mcp__playwright-mcp__browser evaluate'] })).toThrow()
