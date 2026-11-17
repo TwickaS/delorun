@@ -116,9 +116,10 @@ describe('holders', () => {
   })
 
   it('are alive, whatever their process id and start identity, when recorded in another pid namespace than this process\'s', () => {
+    const sameBoot = readProcessStart(process.pid)?.replace(/:\d+$/u, ':1') ?? `linux:${BOOT_ID}:1`
     expect(holderAlive({ pid: deadPid(), pidNamespace: 'pid:[1]' })).toBe(true)
-    expect(holderAlive({ pid: deadPid(), processStart: `linux:${BOOT_ID}:1`, pidNamespace: 'pid:[1]' })).toBe(true)
-    expect(holderAlive({ pid: process.pid, processStart: `linux:${BOOT_ID}:1`, pidNamespace: 'pid:[1]' })).toBe(true)
+    expect(holderAlive({ pid: deadPid(), processStart: sameBoot, pidNamespace: 'pid:[1]' })).toBe(true)
+    expect(holderAlive({ pid: process.pid, processStart: sameBoot, pidNamespace: 'pid:[1]' })).toBe(true)
   })
 
   it.runIf(readPidNamespace() !== undefined)('are judged by process id and start identity when recorded in this process\'s pid namespace', () => {
@@ -142,6 +143,14 @@ describe('holders', () => {
     expect(checkHolder({ pid: 7, processStart: start, pidNamespace: 'pid:[1]' }, table('linux', start))).toEqual({ kind: 'unconfirmed', reason: 'other-namespace' })
     expect(checkHolder({ pid: 7, processStart: start }, table('win32', start))).toEqual({ kind: 'unconfirmed', reason: 'no-start-reader' })
     expect(checkHolder({ pid: 7 }, table('win32', undefined, false))).toEqual({ kind: 'exited' })
+  })
+
+  it('are exited, whatever their pid namespace or process id, when recorded in another boot than the running one', () => {
+    const table = (boot: string | undefined): ProcessTable => ({ platform: 'linux', exists: () => true, start: () => `linux:${BOOT_ID}:99`, pidNamespace: () => 'pid:[2]', bootId: () => boot })
+    const record = { pid: 7, processStart: `linux:${BOOT_ID}:99`, pidNamespace: 'pid:[1]' }
+    expect(checkHolder(record, table('11111111-1111-4111-8111-111111111111'))).toEqual({ kind: 'exited' })
+    expect(checkHolder(record, table(BOOT_ID))).toEqual({ kind: 'unconfirmed', reason: 'other-namespace' })
+    expect(checkHolder(record, table(undefined))).toEqual({ kind: 'unconfirmed', reason: 'other-namespace' })
   })
 
   it('are checked against this operating system\'s processes by default', () => {
