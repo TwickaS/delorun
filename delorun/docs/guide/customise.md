@@ -17,6 +17,7 @@ You can reshape Delorun at six levels, from a setting in the studio to the harne
 - [Change one thing, see it, undo it](#change-one-thing-see-it-undo-it)
 - [The levels](#the-levels)
 - [Change a plugin's settings](#change-a-plugins-settings)
+- [Optional plugins](#optional-plugins)
 - [Give the studio your own name and icon](#give-the-studio-your-own-name-and-icon)
 - [Make an agent preset](#make-an-agent-preset)
 - [Write a plugin](#write-a-plugin)
@@ -69,6 +70,20 @@ Most plugins have a settings page in the studio, which saves into your profile. 
 ```
 
 A patch you edit by hand loads at the next start: run `delorun stop`, then `delorun start`. A patch replaces the row's whole `config`, so restate every key the plugin needs; a row with a required key missing stops Delorun from starting and the error names the key. `disabled: true` turns a row off. To undo the change, delete the entry and restart. Delorun does not save a hand edit as a version, so keep a copy of the file if you want one. DeepSeek Harness's [loading order](../../../docs/user/develop/basic/publish.md#the-loading-order) explains which layer wins. Delorun refuses to start with a patch that turns off one of its protections, and names the file.
+
+## Optional plugins
+
+Some plugins do work most people never need, or need something set up first, so they ship switched off. Open Settings, Plugins, find one in the list of plugins that are off, and turn it on. The first time you turn one on, Delorun downloads it and checks it against the release's signed manifest, so that one step needs a connection; after that it works offline and updates together with Delorun. Turning it off again removes what it added.
+
+| Plugin | What it does | Needs from you | Status |
+| --- | --- | --- | --- |
+| Browser | The agent browses in a Chromium browser on your computer through Playwright. Chrome DevTools and Stagehand are in the same bundle, off, because only one browser provider runs at a time. | A Chromium browser it can start. Stagehand also needs a model of its own. | Experimental |
+| Code intelligence | A read-only `lsp` tool: go to definition, find references, find implementations, hover. | `typescript-language-server` on your PATH; without it the tool stays off. Other servers go in your profile patch. | Stable |
+| Claude Code and Codex hooks | Runs the hooks in `~/.claude/settings.json` and `~/.codex/hooks.json` at the same points of a turn, and loads Claude Code mods. | Your own hook files; a missing file registers no hooks. | Experimental |
+| Webhooks | A signed GitHub webhook can start a chat, on `127.0.0.1:3081` behind a proxy or tunnel you provide. | `DELORUN_GITHUB_WEBHOOK_SECRET` in the environment, and a rule of your own; the endpoint does not start without the secret. | Experimental |
+| External agents | The agent hands a task to the Codex or Claude Code program you already have installed, and runs Python in tool programs. | The program installed and signed in, and `python3` for Python; one that is missing is left out. Python is not available on Windows. | Experimental |
+
+Experimental plugins can change or break between releases. Webhooks and Browser open a network listener or a real browser, so read what each does before you turn it on. Claude Code and Codex as agents are separate plugins in the same list.
 
 ## Give the studio your own name and icon
 

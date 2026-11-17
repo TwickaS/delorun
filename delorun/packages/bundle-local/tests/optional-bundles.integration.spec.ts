@@ -35,6 +35,7 @@ const BUNDLES = [
   { dir: 'bundle-code-intelligence', rows: ['lsp', 'lsp-stdio', 'tool-lsp'], on: ['lsp'] },
   { dir: 'bundle-agent-hooks', rows: ['hooks-claude-code', 'hooks-codex', 'claude-code-mods', 'client-ui-claude-code-mods'], on: ['hooks-claude-code', 'hooks-codex', 'claude-code-mods', 'client-ui-claude-code-mods'] },
   { dir: 'bundle-webhooks', rows: ['webhook-runtime', 'github-webhook-ingress'], on: ['webhook-runtime'] },
+  { dir: 'bundle-external-agents', rows: ['experimental-subagent-oar-codex', 'experimental-subagent-oar-claude', 'tool-subagent-oar', 'ptc-runtime-python'], on: [] },
 ] as const
 
 const manifest = (dir: string): { name: string; dsh: { bundle: { patch: string; platforms?: string[] } }; delorun: { state: string; pack?: boolean }; dependencies: Record<string, string> } =>
@@ -137,6 +138,14 @@ describe('what needs setup', () => {
     expect(ids('bundle-webhooks', binDir())).toEqual(['webhook-runtime'])
     expect(ids('bundle-webhooks', binDir(), 'a-long-random-secret')).toEqual(['webhook-runtime', 'github-webhook-ingress'])
   })
+
+  it('mounts each external agent that is installed and lists only those in the tool', () => {
+    expect(ids('bundle-external-agents', binDir())).toEqual([])
+    const some = withEnv(binDir('claude'), undefined, () => patchRows('bundle-external-agents').find(row => row.id === 'tool-subagent-oar'))
+    expect(ids('bundle-external-agents', binDir('claude'))).toEqual(['experimental-subagent-oar-claude', 'tool-subagent-oar'])
+    expect(withEnv(binDir('claude'), undefined, () => interpolate({ process }, (some!.config as { providers: unknown }).providers))).toEqual({ claude: 'oar-claude' })
+    expect(ids('bundle-external-agents', binDir('codex', 'claude', 'python3'))).toContain('tool-subagent-oar')
+  })
 })
 
 describe('default configuration', () => {
@@ -146,6 +155,8 @@ describe('default configuration', () => {
     ['bundle-agent-hooks', 'hooks-codex', 'experimental/hooks-codex'],
     ['bundle-code-intelligence', 'lsp-stdio', 'lsp/lsp-stdio'],
     ['bundle-webhooks', 'github-webhook-adapter', 'experimental/webhook-github'],
+    ['bundle-external-agents', 'experimental-subagent-oar-codex', 'experimental/subagent-oar'],
+    ['bundle-external-agents', 'experimental-subagent-oar-claude', 'experimental/subagent-oar'],
   ] as const
 
   it.each(CHECKED)('%s: row %s passes its plugin schema', async (dir, id, plugin) => {
