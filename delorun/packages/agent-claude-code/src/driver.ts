@@ -9,15 +9,16 @@ import { scrubbedParentEnv } from '@deepseek-ai/dsh-subprocess'
 import { allowedToolsFor, canUseTool } from './approvals.ts'
 import { ClaudeCodeDriverError } from './errors.ts'
 import { harnessToolServer } from './harness-tools.ts'
+import { claudeSeatLevel, SandboxUnavailableError, type LevelMachine } from './levels.ts'
 import { probeObservation } from './limits.ts'
-import { ProgramOpenError, type AccountObservation, type ExternalAgentDriver, type ProgramOpenRequest, type ProgramSession, type ProgramSpawn } from '@delorun/external-agents/contract'
+import { ProgramOpenError, type AccountObservation, type AgentLevel, type ExternalAgentDriver, type ProgramOpenRequest, type ProgramSession, type ProgramSpawn } from '@delorun/external-agents/contract'
 import { spawnThroughGate } from './process.ts'
 import type { ClaudeSdk } from './sdk.ts'
 import { ClaudeCodeSession } from './session.ts'
 
 /**
- * The person's own Claude Code settings a seat loads: user, project and local, as the CLI does. No `permissionMode` is
- * passed, so the person's own default mode applies.
+ * The person's own Claude Code settings a seat loads: user, project and local, as the CLI does. At the `own` level no
+ * `permissionMode` is passed, so the person's own default mode applies.
  */
 const SEAT_SETTING_SOURCES: SettingSource[] = ['user', 'project', 'local']
 
@@ -34,7 +35,7 @@ async function opening<T>(work: Promise<T>): Promise<T> {
   try {
     return await work
   } catch (error: unknown) {
-    if (error instanceof ClaudeCodeDriverError) throw new ProgramOpenError({ category: 'program', detail: error.message }, { cause: error })
+    if (error instanceof ClaudeCodeDriverError || error instanceof SandboxUnavailableError) throw new ProgramOpenError({ category: 'program', detail: error.message }, { cause: error })
     throw error
   }
 }
@@ -45,6 +46,10 @@ export interface ClaudeCodeDriverOptions {
   readonly sdk: () => Promise<ClaudeSdk>
   /** Claude Code's wait limit for one harness tool call, in milliseconds, set as `MCP_TOOL_TIMEOUT`. */
   readonly harnessToolTimeoutMs: () => number
+  /** The level a seat runs at when its open names none, read at each open. */
+  readonly level: () => AgentLevel
+  /** Where the command sandbox's tools are looked for; the computer's own by default. */
+  readonly machine?: () => LevelMachine
   /**
    * Environment entries layered over the scrubbed base for every program process. Delorun's composition passes none;
    * the keyless real-program spec points Claude Code at a local Messages fixture with them.
@@ -93,15 +98,21 @@ export class ClaudeCodeDriver implements ExternalAgentDriver {
     })
     const server = await opening(Promise.resolve().then(() => harnessToolServer(sdk, request.harnessTools, session.ended)))
     const allowedTools = allowedToolsFor(request.runRules)
+    const level = await opening(Promise.resolve().then(() => claudeSeatLevel(
+      request.level ?? this.#options.level(), request.cwd, this.#options.machine?.() ?? { platform: process.platform, path: process.env['PATH'] },
+    )))
     const options: Options = {
       cwd: request.cwd,
       settingSources: SEAT_SETTING_SOURCES,
+      ...level.permissionMode === undefined ? {} : { permissionMode: level.permissionMode },
+      ...level.permissionMode === 'bypassPermissions' ? { allowDangerouslySkipPermissions: true } : {},
+      ...level.sandbox === undefined ? {} : { sandbox: level.sandbox },
       env: this.#env({ MCP_TOOL_TIMEOUT: String(this.#options.harnessToolTimeoutMs()) }),
       ...request.resume === undefined ? { sessionId: programSessionId } : { resume: request.resume },
       ...request.model === undefined ? {} : { model: request.model },
       ...allowedTools.length === 0 ? {} : { allowedTools },
       ...server === undefined ? {} : { mcpServers: { [server.name]: server.config } },
-      disallowedTools: ['AskUserQuestion'],
+      disallowedTools: ['AskUserQuestion', ...level.disallowedTools],
       canUseTool: canUseTool(
         question => request.onApproval(question),
         { beforeAsk: () => { session.endMessage() }, onCancel: () => { session.stopping() } },

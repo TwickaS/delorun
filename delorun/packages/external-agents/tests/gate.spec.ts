@@ -13,7 +13,7 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import type { SubprocessHandle, SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  DELEGATION_CONSENT_ROW_ID, ExternalAgentsService, GateRefusedError, spawnEnvironment, type AccountRecord, type ExternalAgentDriver,
+  DELEGATION_CONSENT_ROW_ID, ExternalAgentsService, GateRefusedError, spawnEnvironment, type AccountRecord, type AgentLevel, type ExternalAgentDriver,
   type ExternalAgentName, type ProgramApprovalAnswer, type ProgramApprovalRequest, type ProgramEvent, type ProgramOpenRequest,
   type ProgramRunRule, type ProgramSession, type SeatConsent, type SeatLease, type SeatLeaseEnd, type SeatReview,
   type SeatStartRequest, type SeatVerdict,
@@ -136,6 +136,8 @@ class ScriptedConsent implements SeatConsent {
   readonly reviews: SeatReview[] = []
   verdict: (review: SeatReview) => SeatVerdict = () => ({ kind: 'allow', timeoutMs: 60_000, why: 'asked' })
   readonly leases = new Map<SessionId, SeatLease>()
+  /** The level each agent is set to; absent reads as no level. */
+  readonly levels = new Map<string, AgentLevel>()
   readonly rules = new Map<SessionId, ProgramRunRule[]>()
   private readonly listeners = new Set<(lease: SeatLease, reason: SeatLeaseEnd) => void>()
 
@@ -146,6 +148,10 @@ class ScriptedConsent implements SeatConsent {
       this.leases.set(review.child.id, { child: review.child.id, root: review.root.id, workspace: review.cwd, cwd: review.cwd, provider: review.provider, workspaceListed: true, grantedAt: 1, why: verdict.why === 'lease' ? 'asked' : verdict.why })
     }
     return Promise.resolve(verdict)
+  }
+
+  permissionLevel(provider: string): AgentLevel | undefined {
+    return this.levels.get(provider)
   }
 
   leaseOf(child: SessionId): SeatLease | undefined {
@@ -375,6 +381,45 @@ describe('the consent a seat start needs (review D6)', () => {
     const w = await world()
     await expect(refusal(w.gate.start(start(w, { provider: 'codex' })))).resolves.toEqual({ category: 'not-installed' })
     await expect(refusal(w.gate.probe('codex', new AbortController().signal))).resolves.toEqual({ category: 'not-installed' })
+  })
+})
+
+describe('the level a seat runs at (EA34)', () => {
+  it('hands the driver the level the consent holds for the agent at each start', async () => {
+    const w = await world()
+    w.consent.levels.set('claude-code', 'careful')
+    const first = await w.gate.start(start(w))
+    expect(w.driver.opens[0]?.level).toBe('careful')
+    await first.close()
+    w.consent.levels.set('claude-code', 'unrestricted')
+    await w.gate.start(start(w))
+    expect(w.driver.opens[1]?.level).toBe('unrestricted')
+  })
+
+  it('hands no level when the consent is off, so the driver\'s own default applies', async () => {
+    const w = await world({ row: { enabled: false }, consent: 'none' })
+    await w.gate.start(start(w))
+    expect(w.driver.opens[0]).not.toHaveProperty('level')
+  })
+})
+
+describe('programs sharing a run folder', () => {
+  it('answers whether another live program, of any agent, runs in the same folder, inside it or around it', async () => {
+    const w = await world({ maxLivePrograms: 4 })
+    const inner = join(w.workspace, 'inner')
+    mkdirSync(inner)
+    const sibling = join(dirname(w.workspace), 'work-sibling')
+    mkdirSync(sibling)
+    await w.gate.start(start(w))
+    const mine = w.driver.opens[0]
+    expect(mine?.sharesFolder()).toBe(false)
+    const nested = await w.gate.start(start(w, { child: SessionId('root'), cwd: inner }))
+    expect(mine?.sharesFolder()).toBe(true)
+    expect(w.driver.opens[1]?.sharesFolder()).toBe(true)
+    await nested.close()
+    expect(mine?.sharesFolder()).toBe(false)
+    await w.gate.start(start(w, { child: SessionId('root'), cwd: sibling }))
+    expect(mine?.sharesFolder()).toBe(false)
   })
 })
 

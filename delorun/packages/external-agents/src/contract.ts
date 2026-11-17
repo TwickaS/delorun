@@ -144,6 +144,9 @@ export interface ProgramSpawnRequest {
  */
 export type ProgramSpawn = (request: ProgramSpawnRequest) => SubprocessHandle
 
+/** What an agent may do on its own (EA34), from the most to the least confined. */
+export type AgentLevel = 'careful' | 'standard' | 'own' | 'unrestricted'
+
 /** What the gate hands a driver to open or resume one program session for one seat child. */
 export interface ProgramOpenRequest {
   /** The seat child's harness Session id. */
@@ -158,6 +161,17 @@ export interface ProgramOpenRequest {
   readonly runRules: readonly ProgramRunRule[]
   /** Harness tools offered to the program over MCP; empty until Stage 3. */
   readonly harnessTools: readonly ProgramHarnessTool[]
+  /**
+   * The level the person set for this agent (EA34), read from the consent at the start; absent when the consent is
+   * off, and the driver then uses its own default.
+   */
+  readonly level?: AgentLevel
+  /**
+   * Whether any other live program of the gate, of any agent, runs in this program's folder, in a folder inside it or
+   * in one that contains it. Read when asked, so a clean-up sees the programs alive then.
+   * @returns true when another live program shares the folder.
+   */
+  sharesFolder(): boolean
   /** The only way to get a process. */
   readonly spawn: ProgramSpawn
   /**
@@ -581,6 +595,12 @@ export interface SeatConsent {
    * @returns the lease, or undefined.
    */
   leaseOf(child: SessionId): SeatLease | undefined
+  /**
+   * The level the person set for an agent, read at each seat start.
+   * @param provider - the agent.
+   * @returns the level.
+   */
+  permissionLevel(provider: string): AgentLevel | undefined
   /**
    * End the child's lease and its run rules.
    * @param child - the seat child.

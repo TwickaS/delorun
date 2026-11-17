@@ -206,6 +206,7 @@ export async function live(name: string, task = taskFolder()): Promise<Live> {
       model: MODEL,
       runRules: [],
       harnessTools: [],
+      sharesFolder: () => false,
       spawn,
       onApproval: (question) => {
         questions.push(question)

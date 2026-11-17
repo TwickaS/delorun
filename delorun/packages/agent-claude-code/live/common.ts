@@ -126,7 +126,7 @@ export async function runtime(cwd: string): Promise<Runtime> {
  * @returns the driver.
  */
 export function driver(): ClaudeCodeDriver {
-  return new ClaudeCodeDriver({ sdk: () => loadClaudeSdk(locateSdk()), harnessToolTimeoutMs: () => 900_000 })
+  return new ClaudeCodeDriver({ sdk: () => loadClaudeSdk(locateSdk()), harnessToolTimeoutMs: () => 900_000, level: () => 'standard' })
 }
 
 /**

@@ -8,8 +8,9 @@ import type { Context, Fiber } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-app-boot'
 import type {} from '@deepseek-ai/dsh-subagent'
 import z from '@deepseek-ai/schemastery'
-import type {} from '@delorun/external-agents/contract'
+import type { AgentLevel } from '@delorun/external-agents/contract'
 import { ClaudeCodeDriver } from './driver.ts'
+import { CLAUDE_LEVELS } from './levels.ts'
 import { loadPackSdk } from './sdk.ts'
 
 /** Upstream's provider name for Claude Code. */
@@ -19,12 +20,16 @@ const PROVIDER = 'claude-code'
 export interface Config {
   /** How long Claude Code waits for one harness tool call before it gives up, in whole seconds; at least 1. */
   readonly harnessToolTimeoutSeconds: number
+  /** The level a seat runs Claude Code at when its open names none (the consent is off). */
+  readonly level: AgentLevel
 }
 
 /** The configuration schema, with the shipped default. */
-export const Config: z<Config> = z.object({
+export const Config: z<Partial<Config>, Config> = z.object({
   harnessToolTimeoutSeconds: z.natural().min(1).default(900)
     .description('How long Claude Code waits for one harness tool call before it gives up, in seconds.'),
+  level: z.union([...CLAUDE_LEVELS]).default('standard')
+    .description('The level a seat runs Claude Code at when the consent names none.'),
 })
 
 /**
@@ -47,6 +52,7 @@ export function apply(ctx: Context, config: Config): void {
     const driver = new ClaudeCodeDriver({
       sdk: () => loadPackSdk(scope.get('profileContext')?.dir),
       harnessToolTimeoutMs: () => config.harnessToolTimeoutSeconds * 1000,
+      level: () => config.level,
     })
     let mounted: Fiber | undefined
     const follow = (): void => {

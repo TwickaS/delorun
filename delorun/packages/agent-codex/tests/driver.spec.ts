@@ -55,6 +55,7 @@ function setup(program: LocatedCodex = PINNED, configuredModel = 'gpt-5.6-luna')
       cwd: TASK,
       runRules: [],
       harnessTools: [],
+      sharesFolder: () => false,
       spawn,
       onApproval: () => Promise.resolve('reject'),
       onLimits: (observation) => { limits.push(observation) },

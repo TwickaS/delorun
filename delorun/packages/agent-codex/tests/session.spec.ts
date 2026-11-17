@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import type { AccountObservation, ProgramApprovalAnswer, ProgramApprovalRequest, ProgramEvent, ProgramRunRule } from '@delorun/external-agents/contract'
 import type { HarnessServer } from '../src/harness-server.ts'
-import { RunFolders } from '../src/leftovers.ts'
+import { holdRunFolder } from '../src/leftovers.ts'
 import { levelPolicy, type TurnSandbox } from '../src/levels.ts'
 import { CodexRpc } from '../src/rpc.ts'
 import { CodexSession, CodexSessionClosedError, CodexTurnRunningError } from '../src/session.ts'
@@ -291,7 +291,7 @@ describe('interrupt (L32)', () => {
     const root = mkdtempSync(join(tmpdir(), 'ea1-codex-leftovers-'))
     onTestFinished(() => { rmSync(root, { recursive: true, force: true }) })
     mkdirSync(join(root, '.git'))
-    const cleanUp = new RunFolders().hold(root)
+    const cleanUp = holdRunFolder(root, () => false)
     const h = harness({ cleanUp: () => { cleanUp() } })
     // The stand-in program's sandbox mounts over the two names that were missing.
     mkdirSync(join(root, '.agents'))

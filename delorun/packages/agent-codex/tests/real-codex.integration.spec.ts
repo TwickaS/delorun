@@ -121,6 +121,7 @@ async function real(script: readonly ResponsesStep[], person: PersonConfig = {})
       model: 'fixture-model',
       runRules: [],
       harnessTools: [],
+      sharesFolder: () => false,
       spawn,
       onApproval: (question) => {
         questions.push(question)

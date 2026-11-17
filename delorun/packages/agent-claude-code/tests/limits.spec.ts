@@ -49,7 +49,7 @@ describe('Claude Code limits', () => {
 
 describe('a limits check', () => {
   function driver(sdk: FakeSdk): ClaudeCodeDriver {
-    return new ClaudeCodeDriver({ sdk: () => Promise.resolve(sdk), harnessToolTimeoutMs: () => 1, spawnOption: () => () => { throw new Error('no process') } })
+    return new ClaudeCodeDriver({ sdk: () => Promise.resolve(sdk), harnessToolTimeoutMs: () => 1, level: () => 'standard', spawnOption: () => () => { throw new Error('no process') } })
   }
   const probe = { spawn: () => { throw new Error('no process') }, cwd: '/tmp/empty' }
 

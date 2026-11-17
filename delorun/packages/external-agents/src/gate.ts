@@ -9,6 +9,7 @@
  */
 import { rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
+import { resolve, sep } from 'node:path'
 import { Service, symbols, type Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-app-boot'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -54,6 +55,8 @@ type ConsentMode = { readonly kind: 'off' } | { readonly kind: 'reviewed'; reado
 /** One program the gate holds. */
 interface Live {
   readonly provider: ExternalAgentName
+  /** The folder the program runs in. */
+  readonly folder: string
   /** The seat, absent for a limits check. */
   readonly seat?: SeatRecord
   /** Whether the consent reviewed the start; a program started unreviewed stops once the consent appears. */
@@ -263,11 +266,12 @@ export class ExternalAgentsService extends Service implements ExternalAgentsGate
     // A second start for the child may have passed its own review while this one waited.
     if (this.seats.has(request.child)) throw new GateRefusedError({ category: 'seat-running' })
     const seat: SeatRecord = { child: request.child, root: agents.root.id, provider: request.provider }
-    const live = this.admit({ provider: request.provider, seat, reviewed: mode.kind === 'reviewed', controller: new AbortController(), handles: new Set() })
+    const live = this.admit({ provider: request.provider, folder: request.cwd, seat, reviewed: mode.kind === 'reviewed', controller: new AbortController(), handles: new Set() })
     const onAbort = (): void => { void this.end(live) }
     request.signal.addEventListener('abort', onAbort, { once: true })
     live.controller.signal.addEventListener('abort', () => { request.signal.removeEventListener('abort', onAbort) }, { once: true })
     const consent = mode.kind === 'reviewed' ? mode.consent : undefined
+    const level = consent?.permissionLevel(request.provider)
     try {
       const session = await driver.open({
         sessionId: request.child,
@@ -276,6 +280,8 @@ export class ExternalAgentsService extends Service implements ExternalAgentsGate
         ...request.model === undefined ? {} : { model: request.model },
         runRules: consent?.runRules(request.child) ?? [],
         harnessTools: request.harnessTools,
+        ...level === undefined ? {} : { level },
+        sharesFolder: () => this.sharesFolder(live),
         spawn: this.spawnFor(live, request.cwd),
         onApproval: approval => this.relayApproval(request, consent, approval),
         onLimits: observation => this.observe(observation),
@@ -302,7 +308,7 @@ export class ExternalAgentsService extends Service implements ExternalAgentsGate
     const driver = this.drivers.get(provider)
     if (driver === undefined) throw new GateRefusedError({ category: 'not-installed' })
     const folder = await this.options.probeFolder()
-    const live = this.admit({ provider, reviewed: false, controller: new AbortController(), handles: new Set() })
+    const live = this.admit({ provider, folder, reviewed: false, controller: new AbortController(), handles: new Set() })
     const onAbort = (): void => { live.controller.abort(signal.reason) }
     signal.addEventListener('abort', onAbort, { once: true })
     try {
@@ -396,6 +402,20 @@ export class ExternalAgentsService extends Service implements ExternalAgentsGate
   private async refuseReachedLimit(provider: ExternalAgentName): Promise<void> {
     const reached = await this.reachedLimit(provider)
     if (reached !== undefined) throw new GateRefusedError({ category: 'limit', ...reached })
+  }
+
+  /**
+   * Whether another live program, of any agent, runs in the same folder, inside it or in a folder that contains it.
+   * @param self - the program asking.
+   * @returns true when one does.
+   */
+  private sharesFolder(self: Live): boolean {
+    const mine = resolve(self.folder)
+    return [...this.live].some((other) => {
+      if (other === self) return false
+      const theirs = resolve(other.folder)
+      return theirs === mine || theirs.startsWith(mine + sep) || mine.startsWith(theirs + sep)
+    })
   }
 
   /**

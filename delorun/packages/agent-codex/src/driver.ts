@@ -17,7 +17,7 @@ import { observationOf, offeredModels } from './mapping.ts'
 import { TESTED_CODEX_VERSION, type ClientResult } from './protocol.ts'
 import { CodexRpc, CodexRpcError, type WireTap } from './rpc.ts'
 import { startHarnessServer } from './harness-server.ts'
-import { RunFolders } from './leftovers.ts'
+import { holdRunFolder } from './leftovers.ts'
 import { levelPolicy, ownApprovalPolicy, threadMatches, type CodexLevel, type SeatApprovalPolicy } from './levels.ts'
 import { CodexSession, type CodexSessionOptions } from './session.ts'
 
@@ -48,11 +48,8 @@ const MAX_MODEL_PAGES = 10
 /** The client name Codex records for threads the driver starts. */
 const CLIENT_INFO = { name: 'delorun', title: 'Delorun', version: '0.1.0' }
 
-/** A program open, with the level the seat runs at. */
-export type CodexOpenRequest = ProgramOpenRequest & {
-  /** The seat's level; the driver's `level` option when absent. */
-  readonly level?: CodexLevel
-}
+/** A program open; the seat's `level` is the driver's `level` option when absent. */
+export type CodexOpenRequest = ProgramOpenRequest
 
 /**
  * The locator for the pinned launcher in the Codex pack a profile installed. It runs on every open and limits check, so
@@ -87,7 +84,6 @@ export function appServerArgv(program: LocatedCodex): string[] {
 export class CodexDriver implements ExternalAgentDriver {
   readonly provider = 'codex'
   private readonly options: CodexDriverOptions
-  private readonly folders = new RunFolders()
 
   /** @param options - the locator, timeouts and an optional wire tap. */
   constructor(options: CodexDriverOptions) {
@@ -99,7 +95,7 @@ export class CodexDriver implements ExternalAgentDriver {
     const harness = request.harnessTools.length === 0
       ? undefined
       : await startHarnessServer({ tools: request.harnessTools, toolTimeoutSeconds: this.options.harnessToolTimeoutSeconds, onLateResult: this.options.onLateHarnessResult })
-    const cleanUp = this.folders.hold(request.cwd)
+    const cleanUp = holdRunFolder(request.cwd, request.sharesFolder)
     let session: ReturnType<CodexDriver['connect']>
     try {
       session = this.connect(request.spawn, {

@@ -19,7 +19,7 @@ const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(r
 
 function request(rt: Runtime, task: string, log: Log, extra: Partial<ProgramOpenRequest> = {}): ProgramOpenRequest {
   return {
-    sessionId: 'live' as SessionId, cwd: task, runRules: [], harnessTools: [], spawn: rt.spawn,
+    sessionId: 'live' as SessionId, cwd: task, runRules: [], harnessTools: [], sharesFolder: () => false, spawn: rt.spawn,
     onApproval: (question) => {
       log.line('question (answered allow-once)', `${question.toolName}: ${question.reason}`)
       return Promise.resolve('allow-once')

@@ -8,10 +8,13 @@ import { assistant, FakeSdk, init, rateLimit, result, toolResults } from './fake
 
 const signal = AbortSignal.timeout(5_000)
 
-function driver(sdk: FakeSdk): ClaudeCodeDriver {
+const TOOLS_PRESENT = { platform: 'linux', path: '/bin', exists: () => true } as const
+const TOOLS_MISSING = { platform: 'linux', path: '/bin', exists: () => false } as const
+
+function driver(sdk: FakeSdk, machine: () => typeof TOOLS_PRESENT | typeof TOOLS_MISSING = () => TOOLS_PRESENT): ClaudeCodeDriver {
   return new ClaudeCodeDriver({
     sdk: () => Promise.resolve(sdk),
-    harnessToolTimeoutMs: () => 900_000,
+    harnessToolTimeoutMs: () => 900_000, level: () => 'standard', machine,
     spawnOption: () => () => { throw new Error('a unit spec starts no process') },
   })
 }
@@ -22,6 +25,7 @@ function request(overrides: Partial<ProgramOpenRequest> = {}): ProgramOpenReques
     cwd: '/tmp/task',
     runRules: [],
     harnessTools: [],
+    sharesFolder: () => false,
     spawn: () => { throw new Error('a unit spec starts no process') },
     onApproval: () => Promise.resolve('reject'),
     onLimits: () => {},
@@ -247,20 +251,72 @@ describe('a Claude Code session', () => {
 
   it('loads the person\'s own settings and default mode, sets the harness tool wait limit and keeps AskUserQuestion away from the program', async () => {
     const sdk = new FakeSdk()
-    const session = await driver(sdk).open(request())
+    const session = await driver(sdk).open(request({ level: 'own' }))
     expect(sdk.last.options.env?.MCP_TOOL_TIMEOUT).toBe('900000')
     expect(sdk.last.options.disallowedTools).toEqual(['AskUserQuestion'])
     expect(sdk.last.options.settingSources).toEqual(['user', 'project', 'local'])
     expect(sdk.last.options.permissionMode).toBeUndefined()
+    expect(sdk.last.options.sandbox).toBeUndefined()
     expect(sdk.last.options.cwd).toBe('/tmp/task')
     expect(sdk.last.options.allowedTools).toBeUndefined()
+    await session.close()
+  })
+
+  it('runs Careful in the command sandbox with no network and no web tools, asking the person for the rest', async () => {
+    const sdk = new FakeSdk()
+    const session = await driver(sdk).open(request({ level: 'careful' }))
+    expect(sdk.last.options.permissionMode).toBe('default')
+    expect(sdk.last.options.sandbox).toMatchObject({
+      enabled: true, failIfUnavailable: true, allowUnsandboxedCommands: false, filesystem: { allowWrite: ['/tmp/task'] }, network: { allowedDomains: [] },
+    })
+    expect(sdk.last.options.disallowedTools).toEqual(['AskUserQuestion', 'WebFetch', 'WebSearch'])
+    expect(sdk.last.options.allowDangerouslySkipPermissions).toBeUndefined()
+    await session.close()
+  })
+
+  it('refuses to open Careful without the sandbox\'s tools, naming the install line', async () => {
+    const opening = driver(new FakeSdk(), () => TOOLS_MISSING).open(request({ level: 'careful' }))
+    await expect(opening).rejects.toBeInstanceOf(ProgramOpenError)
+    await expect(opening).rejects.toMatchObject({ failure: { category: 'program', detail: expect.stringContaining('sudo apt install bubblewrap socat') } })
+  })
+
+  it('runs Standard in the sandbox with the task folder and /tmp writable and the network open', async () => {
+    const sdk = new FakeSdk()
+    const session = await driver(sdk).open(request({ level: 'standard' }))
+    expect(sdk.last.options.permissionMode).toBe('auto')
+    expect(sdk.last.options.sandbox).toMatchObject({ enabled: true, filesystem: { allowWrite: ['/tmp/task', '/tmp'] }, network: { allowedDomains: ['*'] } })
+    expect(sdk.last.options.disallowedTools).toEqual(['AskUserQuestion'])
+    await session.close()
+  })
+
+  it('states that Standard has no sandbox when its tools are missing, instead of failing', async () => {
+    const sdk = new FakeSdk()
+    const session = await driver(sdk, () => TOOLS_MISSING).open(request({ level: 'standard' }))
+    expect(sdk.last.options.sandbox).toEqual({ enabled: false })
+    expect(sdk.last.options.permissionMode).toBe('default')
+    await session.close()
+  })
+
+  it('bypasses permissions with no sandbox at Unrestricted', async () => {
+    const sdk = new FakeSdk()
+    const session = await driver(sdk).open(request({ level: 'unrestricted' }))
+    expect(sdk.last.options.permissionMode).toBe('bypassPermissions')
+    expect(sdk.last.options.allowDangerouslySkipPermissions).toBe(true)
+    expect(sdk.last.options.sandbox).toEqual({ enabled: false })
+    await session.close()
+  })
+
+  it('uses the driver\'s own level when the open names none', async () => {
+    const sdk = new FakeSdk()
+    const session = await driver(sdk).open(request())
+    expect(sdk.last.options.permissionMode).toBe('auto')
     await session.close()
   })
 
   it('fails to open with the contract\'s typed failure, in words for the person, when the SDK cannot be used', async () => {
     const refusing = new ClaudeCodeDriver({
       sdk: () => Promise.reject(new ClaudeCodeDriverError('sdk-version', 'Update Delorun or the Claude Code pack.')),
-      harnessToolTimeoutMs: () => 1,
+      harnessToolTimeoutMs: () => 1, level: () => 'standard',
     })
     const opening = refusing.open(request())
     await expect(opening).rejects.toBeInstanceOf(ProgramOpenError)
@@ -273,7 +329,7 @@ describe('a Claude Code session', () => {
     const gateSpawn = vi.fn(() => { throw new Error('not started') })
     const opened = await new ClaudeCodeDriver({
       sdk: () => Promise.resolve(sdk),
-      harnessToolTimeoutMs: () => 1,
+      harnessToolTimeoutMs: () => 1, level: () => 'standard',
       spawnOption: spawn => (options): SpawnedProcess => {
         spawned.push(options.command)
         return new GateProcess(spawn({ argv: [options.command], env: {}, stdio: { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' } }))
