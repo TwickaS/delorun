@@ -197,7 +197,7 @@ export function McpServerReview({ useReview, confirm, cancel, t }: McpServerRevi
         <summary>{t('mcp.details')}</summary>
         <ServerStart t={t} start={server} />
       </details>
-      {review.failure === undefined ? null : <ConsentFailureLine t={t} failure={review.failure} action="action.answerServer" />}
+      {review.failure === undefined ? null : <ConsentFailureLine t={t} failure={review.failure} action="action.answerServer" retry={confirm} />}
     </div>
   </Modal>
 }
