@@ -5,7 +5,7 @@
  */
 import { CardIcon } from '@delorun/brand'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
-import { useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import css from './ListRow.module.css'
 
@@ -51,7 +51,19 @@ export function Monogram({ name, letters }: { readonly name: string; readonly le
 export function Card({ title, icon, monogram, description, labels, leading, action, children, selected = false }: CardProps): ReactNode {
   const [open, setOpen] = useState(false)
   const id = useId()
-  const long = description !== undefined && description.length > SUMMARY_LIMIT
+  const summary = useRef<HTMLParagraphElement>(null)
+  // A narrow row cuts a shorter description at two lines too, so the clamp itself is measured.
+  const [clipped, setClipped] = useState(false)
+  useEffect(() => {
+    const element = summary.current
+    if (element === null || open || typeof ResizeObserver === 'undefined') return
+    const measure = (): void => { setClipped(element.scrollHeight > element.clientHeight + 1) }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    return () => { observer.disconnect() }
+  }, [description, open])
+  const long = description !== undefined && (description.length > SUMMARY_LIMIT || clipped || open)
   return (
     <div className={css.card} data-selected={selected || undefined}>
       <div className={css.row}>
@@ -60,13 +72,15 @@ export function Card({ title, icon, monogram, description, labels, leading, acti
           {icon !== undefined ? <img className={css.image} src={icon} alt="" /> : <Monogram name={title} letters={monogram} />}
         </span>
         <div className={css.text}>
-          <h4 className={css.title}>{title}</h4>
-          {description !== undefined && <p id={id} className={css.summary} data-open={open || undefined}>{description}</p>}
-          {long && (
-            <Button variant="ghost" size="sm" className={css.more} aria-expanded={open} aria-controls={id} onClick={() => { setOpen(!open) }}>
-              {open ? labels.less : labels.more}
-            </Button>
-          )}
+          <div className={css.titleLine}>
+            <h4 className={css.title}>{title}</h4>
+            {long && (
+              <Button variant="ghost" size="sm" className={css.more} aria-expanded={open} aria-controls={id} onClick={() => { setOpen(!open) }}>
+                {open ? labels.less : labels.more}
+              </Button>
+            )}
+          </div>
+          {description !== undefined && <p id={id} ref={summary} className={css.summary} data-open={open || undefined}>{description}</p>}
         </div>
         {action !== undefined && <div className={css.action}>{action}</div>}
       </div>

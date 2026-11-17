@@ -75,7 +75,7 @@ describe('the card', () => {
 
   it('keeps an icon slot for every card: the plugin\'s image, or a tinted letter', () => {
     render(<><Card title="With" icon="data:image/png;base64,AA==" labels={LABELS} /><Card title="Without" labels={LABELS} /></>)
-    const slots = [...document.querySelectorAll('h4')].map(title => title.closest('div')?.parentElement?.firstElementChild as HTMLElement)
+    const slots = [...document.querySelectorAll('h4')].map(title => title.closest('div')?.parentElement?.parentElement?.firstElementChild as HTMLElement)
     expect(slots[0]?.querySelector('img')).not.toBeNull()
     expect(slots[1]?.textContent).toBe('W')
     expect(slots[1]?.firstElementChild?.getAttribute('data-tint')).not.toBeNull()
@@ -96,6 +96,17 @@ describe('the card', () => {
     const row = screen.getByRole('checkbox').closest('div') as HTMLElement
     expect(row.firstElementChild?.querySelector('input')).not.toBeNull()
     expect(row.children[1]?.textContent).toBe('T')
+  })
+
+  it('offers More for a short description that a narrow row still cuts at two lines', async () => {
+    vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} })
+    const height = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(80)
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(40)
+    await act(async () => { render(<Card title="Narrow" description="Short but cut." labels={LABELS} />) })
+    expect(screen.getByRole('button', { name: en.more })).toBeTruthy()
+    height.mockRestore()
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
   })
 
   it('offers no More for a description that fits on two lines', () => {
