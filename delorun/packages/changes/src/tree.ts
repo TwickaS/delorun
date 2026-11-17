@@ -762,8 +762,12 @@ async function addRuntimeModules(walk: Walk, root: string): Promise<void> {
       if (contains(root, real)) queue.push(...(await dependencyNames(real)).map((name) => ({ from: real, name })))
       continue
     }
-    walk.pruned.add(join(installed, DEPENDENCY_DIRECTORY))
-    await walkDirectory(walk, root, installed, path, true)
+    // A package installed below another directory of the folder, such as a workspace package's own install, is copied by
+    // the folder's walk of that directory; only its dependencies are followed here.
+    if (contains(join(root, DEPENDENCY_DIRECTORY), installed)) {
+      walk.pruned.add(join(installed, DEPENDENCY_DIRECTORY))
+      await walkDirectory(walk, root, installed, path, true)
+    }
     queue.push(...(await dependencyNames(installed)).map((name) => ({ from: installed, name })))
   }
   const left = (await installedNames(join(root, DEPENDENCY_DIRECTORY))).filter((name) => !reached.has(join(root, DEPENDENCY_DIRECTORY, ...name.split('/'))))
