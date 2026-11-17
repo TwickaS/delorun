@@ -18,7 +18,7 @@
  */
 import { resolve } from 'node:path'
 import { getDelorunRuntimeVersion } from '@deepseek-ai/dsh-app-boot'
-import { checkChangesInvariants, enforceApprovedContent, isChangesError, markShownAtUpgrade, PROFILE_LOCK_WAIT_MS, startNotice, workFinishedLine, writeBootRecord, type BootRow, type ReloadHost, type StartChanges } from '@delorun/changes'
+import { checkChangesInvariants, enforceApprovedContent, isChangesError, markShownAtUpgrade, PROFILE_LOCK_WAIT_MS, repointActiveCopies, startNotice, workFinishedLine, writeBootRecord, type BootRow, type ReloadHost, type StartChanges } from '@delorun/changes'
 import { finishWorkWithoutPerson } from '@delorun/changes/stop'
 import type { DelorunLogger } from '@delorun/logs'
 import { RuntimeStoreError } from '@delorun/runtime-store'
@@ -119,6 +119,24 @@ export async function startChanges(request: ChangesStartRequest, output: (text: 
   } catch (error) {
     // The record only stops the notice from repeating; the start goes on and the next one names the plugins again.
     output(`Delorun could not record that you saw this, so the next start says it again: ${printable(isChangesError(error) ? error.detail : String(error))}\n`)
+  }
+}
+
+/**
+ * An update's successor boots without the pre-start steps, so before its Host boots it re-points each recorded active
+ * copy's links into the runtime store to its own release ({@link repointActiveCopies}); otherwise a plugin pack copy
+ * written under the previous release fails the load check of the new one and the update rolls back.
+ * @param request - the home and the profile about to boot.
+ * @returns when the copies name this release's packages; immediately for a home without the profile.
+ * @throws {CliError} when a copy cannot be re-pointed: the successor does not boot, so the update rolls back.
+ */
+export async function repointForSuccessor(request: { readonly home: string, readonly profile: string }): Promise<void> {
+  const { home, profile } = request
+  if (!hasCliProfile(home, profile)) return
+  try {
+    await repointActiveCopies({ home, profile, profileDir: profileDirectory(home, profile), harnessLink: isCarriedPackage, ...runningRelease() })
+  } catch (error) {
+    throw new CliError(EXIT.failed, `delorun: the profile ${profile} was not started, because its plugin copies could not be pointed at this release: ${isChangesError(error) ? error.detail : String(error)}`)
   }
 }
 
