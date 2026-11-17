@@ -113,14 +113,45 @@ describe('the pack transport', () => {
       response.write('abc')
     })
     const files = createPackFiles({ channel, stallSeconds: 1 })
-    const failure = await files.fetchRelease('a.tar.gz', { exact: 10 }).catch((error: unknown) => error as Error)
+    const failure = await files.fetchRelease('a.tar.gz', { exact: 10 }).then(() => undefined, (error: unknown) => error)
     expect(failure).toMatchObject({ code: 'FETCH_REFUSED' })
-    expect(failure.message).toMatch(/a\.tar\.gz \(http:\/\/127\.0\.0\.1:\d+\/release\/a\.tar\.gz\) received no data for 1 seconds/u)
+    expect((failure as Error).message).toMatch(/a\.tar\.gz \(http:\/\/127\.0\.0\.1:\d+\/release\/a\.tar\.gz\) received no data for 1 seconds/u)
   })
 
-  it('fails a server that sends no response, naming the wait', async () => {
+  it('counts the stall limit from the request, so a download whose first byte never comes fails too', async () => {
     const channel = await serve(() => undefined)
-    const files = createPackFiles({ channel, stallSeconds: 1, timeoutSeconds: 1 })
-    await expect(files.fetchRelease('a.tar.gz', { exact: 10 })).rejects.toThrow(/sent no response for 1 seconds/u)
+    const files = createPackFiles({ channel, stallSeconds: 1 })
+    await expect(files.fetchRelease('a.tar.gz', { exact: 10 })).rejects.toThrow(/received no data for 1 seconds/u)
+  })
+
+  it('gives a metadata file one total limit that its pieces do not extend', async () => {
+    const channel = await serve((_request, response) => {
+      response.writeHead(200)
+      const timer = setInterval(() => { response.write('ab') }, 250)
+      response.on('close', () => { clearInterval(timer) })
+    })
+    const files = createPackFiles({ channel, stallSeconds: 60, timeoutSeconds: 1 })
+    await expect(files.fetchRelease('delorun-0.1.0.packs.json', { max: 1000 })).rejects.toThrow(/took more than 1 seconds in total/u)
+  })
+
+  it('refuses a body whose SHA-256 differs from the signed one, as it arrives', async () => {
+    const body = 'abcdef'
+    const channel = await serve((_request, response) => { response.end(body) })
+    const files = createPackFiles({ channel, stallSeconds: 30 })
+    const sha512 = createHash('sha512').update(body).digest('base64')
+    await expect(files.fetchRelease('a.tar.gz', { exact: body.length, sha512, sha256: '0'.repeat(64) })).rejects.toMatchObject({ code: 'DIGEST_MISMATCH' })
+    await expect(files.fetchRelease('a.tar.gz', { exact: body.length, sha512, sha256: createHash('sha256').update(body).digest('hex') })).resolves.toBeDefined()
+  })
+
+  it('stops reading as soon as the body passes the signed length', async () => {
+    let wrote = 0
+    const channel = await serve((_request, response) => {
+      response.writeHead(200)
+      const timer = setInterval(() => { wrote += 4; response.write('abcd') }, 20)
+      response.on('close', () => { clearInterval(timer) })
+    })
+    const files = createPackFiles({ channel, stallSeconds: 30 })
+    await expect(files.fetchRelease('a.tar.gz', { exact: 6 })).rejects.toMatchObject({ code: 'SIZE_MISMATCH' })
+    expect(wrote).toBeLessThan(40)
   })
 })
