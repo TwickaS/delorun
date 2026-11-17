@@ -2857,6 +2857,30 @@
       "class": "delorun-feature",
       "feature": "real-browser",
       "reason": "Declares, types only, the `real-browser/granted`, `real-browser/away` and `real-browser/ended` Session events of a chat's grant to use the person's own browser (lead decision L45: upstream's catalog scans only `packages/`). `@delorun/browser-use-browse` appends and folds them; no runtime code."
+    },
+    {
+      "path": "packages/subprocess/subprocess-local/src/linux-scope.ts",
+      "class": "security",
+      "reason": "Process identity for reaping (external agents, review D15, lead decision 8): the scope launch reports the unit it asked `systemd-run` for and the leader's `pid`, so a reaper stops the recorded unit instead of signalling a process group. No launch or teardown change.",
+      "sha256": "33601694694d095bab85bf20dc7f8008d25b9bd6f24bf9c72b7b5b7faaac2a57"
+    },
+    {
+      "path": "packages/subprocess/subprocess-local/src/managed-owner.ts",
+      "class": "security",
+      "reason": "Process identity for reaping (external agents, review D15, lead decision 8): `ManagedProcessLaunch` carries the leader's `pid` and the scope `unit` from each launch to the handle. Data only; no lifecycle change.",
+      "sha256": "e1d4ba558a8d64b07ed8b77adf37427f169ddffb7f7b98db45ea57c2ffda077a"
+    },
+    {
+      "path": "packages/subprocess/subprocess-local/src/spawn.ts",
+      "class": "security",
+      "reason": "Process identity for reaping (external agents, review D15, lead decision 8): the fallback launch passes the detached group leader's `pid` (none on Windows), and `bindManagedProcess` exposes `pid` and `unit` on the handle when the launch has them. No signalling or teardown change.",
+      "sha256": "86a8a29dfff42a15985ae7460b1b2416f7c126ea82149ceed52c9b570d26510f"
+    },
+    {
+      "path": "packages/subprocess/subprocess/src/types.ts",
+      "class": "security",
+      "reason": "Process identity for reaping (external agents, review D15, lead decision 8): `SubprocessHandle` gains the optional `pid` of the managed range's leader and the optional systemd scope `unit`, so Delorun's start gate can record a program's full identity (start time, boot id, executable, unit) and stop only that program after a Host died. Additive and read-only: no provider's behaviour changes, and a provider that cannot name a leader (Windows, remote) leaves both absent.",
+      "sha256": "682abba909a24311b630942999a3b273a975a09e6c5698525baf3240631b1bf4"
     }
   ],
   "retired": []

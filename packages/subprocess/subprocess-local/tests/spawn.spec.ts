@@ -221,6 +221,14 @@ describe('spawnSubprocess', () => {
     expect(result.stderr.text).toBe('')
   })
 
+  it.runIf(process.platform === 'linux')('exposes the leader\'s process id, which leads its own process group, and no unit', async () => {
+    const running = spawnSubprocess(spec('echo $$ $(cut -d" " -f5 /proc/$$/stat)'))
+    const result = await finish(running)
+    expect(running.pid).toEqual(expect.any(Number))
+    expect(result.stdout.text).toBe(`${String(running.pid)} ${String(running.pid)}\n`)
+    expect(running).not.toHaveProperty('unit')
+  })
+
   it('captures stderr separately', async () => {
     const result = await finish(spawnSubprocess(spec('echo oops >&2')))
     expect(result.exitCode).toBe(0)
@@ -831,20 +839,22 @@ describe('stdio dispositions', () => {
 describe('windows tree semantics (injected platform)', () => {
   it('hides the child window without changing output, exit, stdio, or tree-root options', async () => {
     let options: Parameters<typeof nodeSpawn>[2]
-    const result = await finish(spawnSubprocess(spec('echo hello'), {
+    const handle = spawnSubprocess(spec('echo hello'), {
       spillDir,
       platform: 'win32',
       spawn: (program, args, spawnOptions) => {
         options = spawnOptions
         return nodeSpawn(program, args, spawnOptions)
       },
-    }))
+    })
+    const result = await finish(handle)
 
     expect(options!).toMatchObject({
       windowsHide: true,
       detached: false,
       stdio: ['ignore', 'pipe', 'pipe'],
     })
+    expect(handle).not.toHaveProperty('pid')
     expect(result).toMatchObject({
       exitCode: 0,
       signal: null,

@@ -180,6 +180,14 @@ export interface SubprocessHandle {
   /** Resolves with spawned-command exit facts; rejects for spawn or provider failures. */
   readonly done: Promise<SubprocessOutcome>
   /**
+   * The process id of the managed range's leader, which leads its own process group, when the provider observes one on
+   * POSIX: the spawned command on the fallback, the scope's runner under a systemd scope. Absent on Windows and for
+   * remote providers. An id alone never identifies a process later, because the kernel reuses ids.
+   */
+  readonly pid?: number
+  /** The systemd user unit holding the managed range, when the provider placed it in a scope. */
+  readonly unit?: string
+  /**
    * Begin the provider's documented termination procedure on the managed range
    * — the seam's only termination verb. Idempotent, a no-op once that range is
    * gone, and also triggered by the spec's abort signal.
