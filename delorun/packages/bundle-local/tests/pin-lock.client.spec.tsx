@@ -497,14 +497,11 @@ describe('the unlock slides on the home', () => {
   it('reads the end again after an action that needed the unlock, and does not prompt while unlocked', async () => {
     // Fails without: noteUnlockedAction refreshing the store (the banner would keep the old end), or a prompt while unlocked.
     let endsAt = NOW + 15 * 60_000
-    const host = fakeHost({})
-    const reads = vi.fn(() => ({ status: 200, body: { kind: 'elevated', elevationId: 'e1', endsAt } }) as Answer)
-    const fetch = vi.fn(async (input: string, init?: RequestInit) => { void init; return new Response(JSON.stringify(reads().body), { status: 200 }) })
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ kind: 'elevated', elevationId: 'e1', endsAt }), { status: 200 }))
     const asked = vi.fn(() => false)
     const store = createUnlockSource(fetch as never, () => NOW, false, asked)
     await store.refresh()
     const dispose = installGateUnlock(store)
-    expect(host).toBeTruthy()
     endsAt += 5 * 60_000
     noteUnlockedAction()
     await act(async () => { await Promise.resolve(); await Promise.resolve() })
