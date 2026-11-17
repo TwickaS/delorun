@@ -52,9 +52,11 @@ const ROUTES: readonly (readonly [string, string])[] = [
   ['exact', PIN_PATHS.off],
   ['exact', PIN_PATHS.options],
   ['exact', PIN_PATHS.resume],
+  ['exact', PHONE_POWERS_PATH],
 ]
 import { ELEVATION_PATHS } from '../src/elevation-routes.ts'
 import { PIN_PATHS } from '../src/pin-routes.ts'
+import { PHONE_POWERS_PATH } from '../src/wire.ts'
 import { deviceIdOf } from '../src/records.ts'
 import { claimOf, keyOf } from './fixtures/home.ts'
 

@@ -1172,13 +1172,15 @@ const ACTION_CONTROLS: Readonly<Record<ChangesAction, ChangesControl>> = {
 }
 
 /**
- * Build one `POST` route that the {@link gate} decides before its body is read.
+ * Build one `POST` route that the {@link gate} decides before its body is read: the site, then the control's level for
+ * the requester, then the proof. Only then is the body read and `run` called; a device's unlock is renewed after `run`
+ * succeeds. The Restart route builds its handler with it, so it has Apply's fence and level.
  * @param control - the control the route is.
  * @param dependencies - what the routes reach.
  * @param run - the action, given the body, the profile and the proof.
  * @returns the handler.
  */
-function decidingRoute(control: ChangesControl, dependencies: RouteDependencies, run: (body: Readonly<Record<string, unknown>>, ctx: ChangesContext, presence: AtComputer) => Promise<object>): RouteHandler {
+export function decidingRoute(control: ChangesControl, dependencies: RouteDependencies, run: (body: Readonly<Record<string, unknown>>, ctx: ChangesContext, presence: AtComputer) => Promise<object>): RouteHandler {
   return async (request, response) => {
     const admission = admitted(request, response, dependencies.connection, dependencies.loopbackPort)
     if (admission === undefined) return

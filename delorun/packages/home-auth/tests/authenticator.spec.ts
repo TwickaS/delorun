@@ -81,7 +81,7 @@ beforeEach(async () => {
     },
     closeReachConnections: () => 0,
   } as never)
-  fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'secrets', 'home-auth') })
+  fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'secrets', 'home-auth'), phonePowersOnUpgrade: 'full' })
   await new Promise<void>((resolve) => { ctx.inject(['authenticator'], () => { resolve() }) })
 })
 
@@ -262,7 +262,7 @@ describe('the authenticator provider', () => {
     await fiber.dispose()
     vi.useFakeTimers({ toFake: ['Date'] })
     try {
-      fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'secrets', 'home-auth') })
+      fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'secrets', 'home-auth'), phonePowersOnUpgrade: 'full' })
       await new Promise<void>((resolve) => { ctx.inject(['authenticator'], () => { resolve() }) })
       ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
       const token = await session(2, SESSION_LIMITS.reach.absoluteMs)
@@ -291,7 +291,7 @@ describe('the authenticator provider', () => {
     await fiber.dispose()
     vi.useFakeTimers({ toFake: ['Date'] })
     try {
-      fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'secrets', 'home-auth') })
+      fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'secrets', 'home-auth'), phonePowersOnUpgrade: 'full' })
       await new Promise<void>((resolve) => { ctx.inject(['authenticator'], () => { resolve() }) })
       ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
       const cookie = { cookie: `__Host-delorun-session=${await session(2, SESSION_LIMITS.reach.absoluteMs)}` }
@@ -587,7 +587,7 @@ describe('the authenticator provider', () => {
       }
       await fiber.dispose()
       await writeFile(file, pinRecord, { mode: 0o600 })
-      fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'secrets', 'home-auth') })
+      fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'secrets', 'home-auth'), phonePowersOnUpgrade: 'full' })
       await new Promise<void>((resolve) => { ctx.inject(['authenticator'], () => { resolve() }) })
     }
 
