@@ -46,6 +46,7 @@
  */
 import { readFileSync, realpathSync, rmSync } from 'node:fs'
 import { runDirectory, writeProtectedFile } from '@delorun/home'
+import { COMPUTER_ONLY_ROW_MODULES, protectedPluginsIn } from '@delorun/home-auth'
 import { stringify } from 'yaml'
 import { createRuntimeResolution } from '@deepseek-ai/dsh-app-boot'
 import { homedir } from 'node:os'
@@ -468,6 +469,21 @@ export function composedRows(composed: ComposedStart): BootedRow[] {
 }
 
 /**
+ * Whether a row is one of the protections a start requires on whatever a bundle's manifest says: the sandbox, the plugin
+ * manager, the guard and consent rows whose values the start pins, and the rows of the computer-only and protected modules.
+ * @param composed - the composed start.
+ * @param id - the row's id.
+ * @returns true for a security row.
+ */
+function isSecurityRow(composed: ComposedStart, id: string): boolean {
+  if (id === SANDBOX_ROW || id === PLUGIN_MANAGER_ROW || composed.values.has(id) || Object.hasOwn(HEADLESS_ROW_VALUES, id)) return true
+  const module = composedRow(composed.layers, id)?.name
+  if (typeof module !== 'string') return false
+  const protectedModules = protectedPluginsIn(composedRow(composed.layers, PLUGIN_MANAGER_ROW)?.config) ?? new Set<string>()
+  return Object.hasOwn(COMPUTER_ONLY_ROW_MODULES, module) || protectedModules.has(module)
+}
+
+/**
  * Whether the Delorun bundle that declares a row lists it in `delorun.requires` of its own `package.json`: a "Needs setup" row,
  * which the bundle ships disabled until the person turns it on once its needs are met.
  * @param composed - the composed start.
@@ -475,6 +491,7 @@ export function composedRows(composed: ComposedStart): BootedRow[] {
  * @returns true when the declaring Delorun bundle's manifest names the row; false when it cannot be read.
  */
 function declaresNeeds(composed: ComposedStart, id: string): boolean {
+  if (isSecurityRow(composed, id)) return false
   const layer = composed.layers.find(each => each.packageDir !== undefined && declares(each, id) && rowInserts(each.patches, id).length > 0)
   if (layer?.packageDir === undefined) return false
   let manifest: unknown
