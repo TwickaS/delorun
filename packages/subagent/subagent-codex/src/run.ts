@@ -29,6 +29,7 @@ import type {
 } from '@deepseek-ai/dsh-subprocess'
 import {
   CodexAppServerWire,
+  type CodexModelOption,
   type CodexWireFailureFacts,
 } from './wire.ts'
 
@@ -214,6 +215,34 @@ export async function disposeCodexChild(
     }, thrown(error))
   }
   await child.done.catch(() => {})
+}
+
+/**
+ * Ask a fresh `codex app-server --stdio` child which models it offers, then release the child.
+ * @param spec - Workspace, environment and process service; the permission mode and model are not used.
+ * @param signal - cancellation; aborting releases the child and rejects.
+ * @returns the offered models.
+ */
+export async function listCodexModels(spec: CodexRunSpec, signal: AbortSignal): Promise<CodexModelOption[]> {
+  const child = spec.spawn({
+    argv: codexAppServerArgv(),
+    cwd: spec.cwd,
+    stdio: { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' },
+    graceMs: spec.disposeGraceMs,
+    env: spec.env,
+  })
+  const wire = new CodexAppServerWire(
+    child.stdout as NonNullable<SubprocessHandle['stdout']>,
+    child.stdin as NonNullable<SubprocessHandle['stdin']>,
+    spec.permissionMode,
+  )
+  try {
+    wire.start()
+    await wire.initialize(signal)
+    return await wire.listModels(signal)
+  } finally {
+    await disposeCodexChild(wire, child)
+  }
 }
 
 /**

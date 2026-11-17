@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AGENT_BUNDLES, AgentsStep } from '../src/client/steps/Agents.tsx'
+import { AGENT_BUNDLES, AGENTS_GUIDE_URL, AgentsStep } from '../src/client/steps/Agents.tsx'
 import { LookStep } from '../src/client/steps/Look.tsx'
 import { connectionName, PluginsStep, readableName } from '../src/client/steps/Plugins.tsx'
 import { APPROVE_COMMAND, REACH_COMMAND, ReachStep } from '../src/client/steps/Reach.tsx'
@@ -15,7 +15,7 @@ import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import { TAILSCALE_OPERATOR_COMMAND } from '@delorun/contract-reach-providers'
 import type { Readiness, TailscaleReadiness } from '../src/wire.ts'
-import { DEFAULT_PATH, DEFAULT_WORKSPACE, hostFake, installerFake, KEYS, languageFace, liveForm, LOCALES, noticeFace, READY, schemeFace, stepServices, THEME } from './fixtures.client.ts'
+import { agentsFake, DEFAULT_PATH, DEFAULT_WORKSPACE, hostFake, installerFake, KEYS, languageFace, liveForm, LOCALES, noticeFace, READY, schemeFace, stepServices, THEME } from './fixtures.client.ts'
 import type { HostFace, StartTarget, StepServices } from '../src/client/types.ts'
 import type { ThemeSettings } from '@delorun/plugin-theme'
 
@@ -223,50 +223,133 @@ describe('the agents step', () => {
     expect(within(card).queryByText(en['agents.signIn.checking'])).toBeNull()
   })
 
-  it('asks before Continue drops an open Add confirmation: Add installs it, Don\'t add leaves it', async () => {
+  it('shows the default path on each card: how a chat uses the agent, the risk warning and one Add, with no choice', () => {
     const [claude, codex] = AGENT_BUNDLES
     const fake = installerFake({ [claude.name]: { state: 'available' }, [codex.name]: { state: 'available' } })
-    const guide = guideOf()
-    render(<AgentsStep services={stepServices({ bundles: fake.installer })} guide={guide} />)
-    expect(await guide.passGates()).toBe(true)
-    await click(screen.getByRole('button', { name: 'Add Claude Code' }))
-    let go = true
-    await act(async () => { go = await guide.passGates() })
-    expect(go).toBe(false)
-    const ask = screen.getByRole('alertdialog', { name: 'Add Claude Code first?' })
-    expect(document.activeElement).toBe(ask)
-    await click(within(ask).getByRole('button', { name: en['agents.ask.skip'] }))
-    expect(screen.queryByRole('alertdialog')).toBeNull()
-    expect(fake.install).not.toHaveBeenCalled()
-    expect(await guide.passGates()).toBe(true)
-    await click(screen.getByRole('button', { name: 'Add Claude Code' }))
-    await act(async () => { await guide.passGates() })
-    await click(within(screen.getByRole('alertdialog')).getByRole('button', { name: en['agents.ask.add'] }))
-    expect(fake.install).toHaveBeenCalledExactlyOnceWith(claude.name)
+    render(<AgentsStep services={stepServices({ bundles: fake.installer })} guide={guideOf()} />)
+    const cardOf = (title: string): HTMLElement => screen.getByRole('heading', { level: 4, name: title }).closest('li') as HTMLElement
+    const claudeCard = cardOf('Claude Code')
+    const codexCard = cardOf('Codex')
+    expect(within(claudeCard).getByText(en['agents.claude.how'], { exact: false })).toBeTruthy()
+    expect(within(codexCard).getByText(en['agents.codex.how'], { exact: false })).toBeTruthy()
+    expect(within(claudeCard).getByText('Downloads about 206 MB when you add it.')).toBeTruthy()
+    expect(within(codexCard).getByText('Downloads about 320 MB when you add it.')).toBeTruthy()
+    expect(within(claudeCard).getByText(en['agents.claude.risk'])).toBeTruthy()
+    expect(within(codexCard).getByText(en['agents.codex.risk'])).toBeTruthy()
+    // Only Claude Code recommends a home connection.
+    expect(en['agents.claude.risk']).toContain('home internet connection, not a VPN, proxy or cloud server')
+    expect(within(codexCard).queryByText(/home internet/)).toBeNull()
+    for (const card of [claudeCard, codexCard]) {
+      expect(within(card).getAllByRole('button').map(each => each.textContent)).toEqual([en['bundle.add'], en['agents.advanced']])
+      expect(within(card).getByRole('button', { name: en['agents.advanced'] }).getAttribute('aria-expanded')).toBe('false')
+      expect(within(card).queryByRole('radio')).toBeNull()
+      expect(within(card).getByRole('link', { name: en['agents.guide'] }).getAttribute('href')).toBe(AGENTS_GUIDE_URL)
+    }
   })
 
-  it('shows what adding an agent means after Add, and installs only on the confirming press', async () => {
+  it('shows the sign-in command with a copy button, not a sentence to follow, when an agent is not signed in', async () => {
+    const [claude, codex] = AGENT_BUNDLES
+    const fake = installerFake({ [claude.name]: { state: 'available' }, [codex.name]: { state: 'installed' } })
+    render(<AgentsStep services={stepServices({ bundles: fake.installer })} guide={guideOf(hostFake({ readiness: { ...READY, agents: { 'claude-code': 'missing', 'codex': 'missing' } } }).host)} />)
+    await settle()
+    const cardOf = (title: string): HTMLElement => screen.getByRole('heading', { level: 4, name: title }).closest('li') as HTMLElement
+    expect(within(cardOf('Claude Code')).getByText('delorun agents login claude-code')).toBeTruthy()
+    expect(within(cardOf('Codex')).getByText('delorun agents login codex')).toBeTruthy()
+    expect(within(cardOf('Codex')).getByRole('button', { name: 'Copy delorun agents login codex' })).toBeTruthy()
+  })
+
+  it('shows no sign-in command when the agent is signed in', async () => {
+    const [claude] = AGENT_BUNDLES
+    const fake = installerFake({ [claude.name]: { state: 'installed' } })
+    render(<AgentsStep services={stepServices({ bundles: fake.installer })} guide={guideOf(hostFake({ readiness: READY }).host)} />)
+    await settle()
+    expect(screen.queryByText(/delorun agents login/)).toBeNull()
+  })
+
+  it('adds an agent with one press and asks nothing more', async () => {
     const [claude, codex] = AGENT_BUNDLES
     const fake = installerFake({ [claude.name]: { state: 'available' }, [codex.name]: { state: 'available' } })
     render(<AgentsStep services={stepServices({ bundles: fake.installer })} guide={guideOf()} />)
     const adds = screen.getAllByRole('button', { name: /^Add / })
     expect(adds.map(each => [each.getAttribute('aria-label'), each.textContent])).toEqual([['Add Claude Code', en['bundle.add']], ['Add Codex', en['bundle.add']]])
     await click(screen.getByRole('button', { name: 'Add Codex' }))
-    expect(fake.install).not.toHaveBeenCalled()
-    const confirm = screen.getByRole('group', { name: 'What adding Codex means' })
-    expect(within(confirm).getAllByRole('listitem').map(each => each.textContent)).toEqual([
-      en['agents.confirm.handoff'], en['agents.confirm.limits'], en['agents.confirm.outside'], en['agents.confirm.files'], en['agents.confirm.billing'],
-    ])
-    expect(confirm.textContent).toContain('Delorun asks here on this computer first')
-    // The frame's CSS demotes Continue while an element marked data-confirming is open.
-    expect(confirm.hasAttribute('data-confirming')).toBe(true)
-    await click(within(confirm).getByRole('button', { name: en['chooser.cancel'] }))
-    expect(screen.queryByRole('group')).toBeNull()
-    expect(fake.install).not.toHaveBeenCalled()
-    await click(screen.getByRole('button', { name: 'Add Codex' }))
-    await click(within(screen.getByRole('group')).getByRole('button', { name: 'Add Codex' }))
     expect(fake.install).toHaveBeenCalledExactlyOnceWith(codex.name)
     expect(screen.queryByRole('group')).toBeNull()
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+  })
+
+  it('does not hold Continue back for an agent: nothing is left to confirm', async () => {
+    const [claude] = AGENT_BUNDLES
+    const fake = installerFake({ [claude.name]: { state: 'available' } })
+    const guide = guideOf()
+    render(<AgentsStep services={stepServices({ bundles: fake.installer })} guide={guide} />)
+    await click(screen.getByRole('button', { name: 'Add Claude Code' }))
+    expect(await guide.passGates()).toBe(true)
+  })
+
+  describe('advanced options', () => {
+    const open = async (title: string): Promise<HTMLElement> => {
+      const card = screen.getByRole('heading', { level: 4, name: title }).closest('li') as HTMLElement
+      await click(within(card).getByRole('button', { name: en['agents.advanced'] }))
+      return card
+    }
+    const available = (): ReturnType<typeof installerFake> => installerFake({ [AGENT_BUNDLES[0].name]: { state: 'available' }, [AGENT_BUNDLES[1].name]: { state: 'available' } })
+
+    it('stays closed on the default path: no model list and no time limit until it is opened', () => {
+      render(<AgentsStep services={stepServices({ bundles: available().installer })} guide={guideOf()} />)
+      for (const button of screen.getAllByRole('button', { name: en['agents.advanced'] })) expect(button.getAttribute('aria-expanded')).toBe('false')
+      expect(screen.queryByRole('radio')).toBeNull()
+      expect(screen.queryByRole('spinbutton')).toBeNull()
+    })
+
+    it('offers only the agent\'s own default before the agent is added, with a line that the list comes later', async () => {
+      const agents = agentsFake({ rows: false })
+      const host = hostFake()
+      render(<AgentsStep services={stepServices({ bundles: available().installer, agents: agents.face, host: host.host })} guide={guideOf()} />)
+      const card = await open('Codex')
+      expect(within(card).getAllByRole('radio', { name: en['agents.model.default'] })).toHaveLength(1)
+      expect(within(card).getByText('The list of models appears once Codex is added.')).toBeTruthy()
+      expect(host.agentModels).not.toHaveBeenCalled()
+    })
+
+    it('lists the models the installed agent reports after the default and writes the one chosen', async () => {
+      const agents = agentsFake()
+      const host = hostFake({ agentModels: { state: 'listed', models: [{ model: 'gpt-codex', displayName: 'GPT Codex' }, { model: 'gpt-mini', displayName: 'GPT Mini' }] } })
+      render(<AgentsStep services={stepServices({ bundles: available().installer, agents: agents.face, host: host.host })} guide={guideOf()} />)
+      const card = await open('Codex')
+      await settle()
+      expect(host.agentModels).toHaveBeenCalledExactlyOnceWith('codex')
+      const radios = within(within(card).getByRole('radiogroup', { name: en['agents.model.label'] })).getAllByRole('radio')
+      expect(radios.map(each => each.parentElement?.textContent)).toEqual([en['agents.model.default'], 'GPT Codex', 'GPT Mini'])
+      await click(within(card).getByRole('radio', { name: 'GPT Mini' }))
+      expect(agents.codex.set).toHaveBeenCalledExactlyOnceWith('model', 'gpt-mini')
+      await click(within(card).getByRole('radio', { name: en['agents.model.default'] }))
+      expect(agents.codex.unset).toHaveBeenCalledExactlyOnceWith('model')
+    })
+
+    it('says so briefly, with the default still chosen, when the agent cannot list its models', async () => {
+      const agents = agentsFake()
+      const host = hostFake({ agentModels: { state: 'unavailable' } })
+      render(<AgentsStep services={stepServices({ bundles: available().installer, agents: agents.face, host: host.host })} guide={guideOf()} />)
+      const card = await open('Claude Code')
+      await settle()
+      expect(within(card).getByText(en['agents.model.unavailable'])).toBeTruthy()
+      expect(within(card).queryByRole('alert')).toBeNull()
+      expect((within(card).getByRole('radio', { name: en['agents.model.default'] }) as HTMLInputElement).checked).toBe(true)
+    })
+
+    it('writes the run time limit only as a whole number of minutes in range', async () => {
+      const agents = agentsFake()
+      render(<AgentsStep services={stepServices({ bundles: available().installer, agents: agents.face })} guide={guideOf()} />)
+      const card = await open('Claude Code')
+      const field = within(card).getByRole('spinbutton', { name: en['agents.limit.label'] })
+      fireEvent.change(field, { target: { value: '0' } })
+      fireEvent.keyDown(field, { key: 'Enter' })
+      expect(agents.limit.set).not.toHaveBeenCalled()
+      fireEvent.change(field, { target: { value: '45' } })
+      fireEvent.keyDown(field, { key: 'Enter' })
+      expect(agents.limit.set).toHaveBeenCalledExactlyOnceWith('runTimeoutMinutes', 45)
+    })
   })
 
   it.each<readonly [string, 'checking' | 'installing' | 'installed' | 'restart' | 'unavailable' | 'failed', string]>([
@@ -306,8 +389,7 @@ describe('the agents step', () => {
     render(<AgentsStep services={stepServices({ bundles: fake.installer })} guide={guideOf()} />)
     expect(within(screen.getByRole('alert')).getByText(en['bundle.failed'])).toBeTruthy()
     await click(screen.getByRole('button', { name: en['bundle.retry'] }))
-    expect(screen.getByRole('group', { name: 'What adding Claude Code means' })).toBeTruthy()
-    expect(fake.install).not.toHaveBeenCalled()
+    expect(fake.install).toHaveBeenCalledExactlyOnceWith(claude.name)
   })
 })
 

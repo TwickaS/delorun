@@ -29,6 +29,17 @@ export interface CodexWireFailureFacts {
   readonly httpStatus?: number | undefined
 }
 
+/** One model the app-server offers. */
+export interface CodexModelOption {
+  /** The name to configure as `model`. */
+  readonly model: string
+  /** The name a person knows it by. */
+  readonly displayName: string
+}
+
+/** The most `model/list` pages one listing follows. */
+const MAX_MODEL_PAGES = 10
+
 const THREAD_PERMISSION_PARAMS: Readonly<Record<CodexPermissionMode, JsonObject>> = {
   never: { approvalPolicy: 'never' },
   'approve-for-me': {
@@ -414,6 +425,35 @@ export class CodexAppServerWire {
    */
   collectFailure(): CodexWireFailureFacts {
     return this.failure as CodexWireFailureFacts
+  }
+
+  /**
+   * Ask the app-server for the models it offers, following its pages.
+   * @param signal - cancellation.
+   * @returns each visible model's name for `thread/start` and its display name.
+   */
+  async listModels(signal: AbortSignal): Promise<CodexModelOption[]> {
+    const models: CodexModelOption[] = []
+    let cursor: string | null = null
+    // The app-server pages its answer; a bound keeps a server that never ends from holding the caller.
+    for (let page = 0; page < MAX_MODEL_PAGES; page += 1) {
+      const response: JsonObject = object(await this.guarded(this.transport.request('model/list', {
+        ...cursor === null ? {} : { cursor },
+      }, signal), signal), 'model/list response')
+      const data = response.data
+      if (!Array.isArray(data)) throw new Error('subagent-codex: app-server returned invalid model/list data')
+      for (const entry of data) {
+        const model = object(entry, 'model/list entry')
+        if (model.hidden === true) continue
+        models.push({
+          model: string(model.model, 'model/list model'),
+          displayName: typeof model.displayName === 'string' && model.displayName !== '' ? model.displayName : string(model.model, 'model/list model'),
+        })
+      }
+      cursor = typeof response.nextCursor === 'string' ? response.nextCursor : null
+      if (cursor === null) break
+    }
+    return models
   }
 
   /** Detach JSON-RPC listeners and reject outstanding requests. Idempotent. */

@@ -275,24 +275,25 @@
   background: var(--dsw-alias-brand-primary);
 }
 
-/* Agents: what adding one means, confirmed in place. */
-.confirm {
-  display: flex;
-  flex-direction: column;
-  gap: var(--delorun-space-5);
-  padding-top: var(--delorun-space-5);
-  border-top: 0.5px solid var(--dsw-alias-border-l1);
-}
-
-.facts {
-  display: flex;
-  flex-direction: column;
-  gap: var(--delorun-space-3);
+/* Agents: how a chat uses one, with the guide link. */
+.how {
   margin: 0;
-  padding-left: var(--delorun-space-7);
   font-size: var(--dsw-font-xs-13-font-size);
   line-height: var(--dsw-font-xs-13-line-height);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.how a {
+  display: inline-block;
+  min-height: 24px;
   color: var(--dsw-alias-label-primary);
+  text-underline-offset: 2px;
+}
+
+.how a:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 /* A command with its Copy button. */

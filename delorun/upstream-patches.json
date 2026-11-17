@@ -2677,6 +2677,36 @@
       "class": "delorun-feature",
       "feature": "product-name",
       "reason": "The source manifest names the product Delorun, so a build without `DSH_CLIENT_TITLE` (such as `build:artifacts`) no longer installs as `DeepSeek Harness`; the build still renames it from the variable when set."
+    },
+    {
+      "path": "packages/subagent/subagent-codex/src/run.ts",
+      "class": "delorun-feature",
+      "feature": "agents-setup",
+      "reason": "Adds `listCodexModels`: starts a fresh app-server, asks `model/list` and releases the child, so the agents setup can offer the models Codex reports."
+    },
+    {
+      "path": "packages/subagent/subagent-codex/src/wire.ts",
+      "class": "delorun-feature",
+      "feature": "agents-setup",
+      "reason": "Adds `listModels` to the wire: pages through `model/list` and leaves hidden models out."
+    },
+    {
+      "path": "packages/subagent/subagent-claude-code/src/index.ts",
+      "class": "delorun-feature",
+      "feature": "agents-setup",
+      "reason": "Adds `listModels` to the provider, so the agents setup can offer the models Claude Code reports."
+    },
+    {
+      "path": "packages/subagent/subagent-claude-code/src/run.ts",
+      "class": "delorun-feature",
+      "feature": "agents-setup",
+      "reason": "Adds `listClaudeCodeModels`: asks a fresh Claude Code process for `supportedModels()` and releases it, leaving out the default row."
+    },
+    {
+      "path": "packages/subagent/subagent-codex/src/index.ts",
+      "class": "delorun-feature",
+      "feature": "agents-setup",
+      "reason": "Adds `listModels` to the provider, so the agents setup can offer the models Codex reports."
     }
   ],
   "retired": []

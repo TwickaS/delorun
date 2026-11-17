@@ -63,6 +63,7 @@ export interface Config {
   registry: string
   registryTimeoutMs: number
   keyTestTimeoutMs: number
+  agentModelsTimeoutMs: number
   hiddenProviders: string[]
   cloneTimeoutMs: number
 }
@@ -83,6 +84,7 @@ export const Config = z.object({
     .description('The npm registry the plugins step reads a package that is not installed from, only when the person asks.')
     .default('https://registry.npmjs.org'),
   registryTimeoutMs: z.natural().min(1000).max(60_000).description('The most time the registry requests may take together, in milliseconds.').default(10_000),
+  agentModelsTimeoutMs: z.natural().min(1000).max(120_000).description('The most time an installed agent may take to list its models, in milliseconds.').default(20_000),
   keyTestTimeoutMs: z.natural().min(1000).max(60_000).description('The most time one provider\'s key test may take, in milliseconds.').default(15_000),
   hiddenProviders: z.array(z.string().pattern(ROW_ID)).max(16)
     .description('Model provider routes the key test and the guide leave out, by route id, such as a route nobody can sign in to. Upstream\'s registry still lists them; they stay mounted.')

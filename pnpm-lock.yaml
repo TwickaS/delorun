@@ -3123,6 +3123,9 @@ importers:
       '@delorun/home-auth':
         specifier: workspace:*
         version: link:../home-auth
+      '@delorun/plugin-delegation-consent':
+        specifier: workspace:*
+        version: link:../plugin-delegation-consent
       '@delorun/plugin-theme':
         specifier: workspace:*
         version: link:../plugin-theme
@@ -3214,6 +3217,9 @@ importers:
       '@deepseek-ai/dsh-settings':
         specifier: workspace:*
         version: link:../../../packages/settings/settings
+      '@deepseek-ai/dsh-subagent':
+        specifier: workspace:*
+        version: link:../../../packages/subagent/subagent
       '@deepseek-ai/dsh-util-crypto':
         specifier: workspace:*
         version: link:../../../packages/util/crypto

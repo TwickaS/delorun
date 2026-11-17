@@ -197,6 +197,14 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     ],
     options: [PROFILE],
   },
+  agents: {
+    usage: ['delorun agents login <claude-code|codex> [--profile <name>]'],
+    about: ['Signs an agent you added in, using the provider\'s own sign-in from the copy Delorun brought, so you need no separately installed command. Run it in a terminal.'],
+    actions: [
+      { name: 'login', text: 'Run the agent\'s own sign-in, interactively. Add the agent first, in setup or in Plugins.' },
+    ],
+    options: [PROFILE],
+  },
   mcp: {
     usage: ['delorun mcp list | accept <server> | decline <server> | revoke <server> [--profile <name>]'],
     about: ['Answers, at this computer, the questions about tool servers that chats want to start.'],

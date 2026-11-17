@@ -5,7 +5,7 @@
  */
 import type { z } from 'zod'
 import {
-  CLONE_PATH, CLONE_STATUS_PATH, CloneStart, CloneStatus, KEY_TEST_PATH, KeyTestAnswer, LOCAL_MODELS_PATH, LocalModelsAnswer, READINESS_PATH, Readiness, RECOMMEND_PATH, RecommendAnswer, WORKSPACE_NOTICE_PATH, WorkspaceNoticeAnswer,
+  AGENT_MODELS_PATH, AgentModelsAnswer, CLONE_PATH, CLONE_STATUS_PATH, CloneStart, CloneStatus, KEY_TEST_PATH, KeyTestAnswer, LOCAL_MODELS_PATH, LocalModelsAnswer, READINESS_PATH, Readiness, RECOMMEND_PATH, RecommendAnswer, WORKSPACE_NOTICE_PATH, WorkspaceNoticeAnswer,
   type CloneRequest,
 } from '../wire.ts'
 import type { CloneStartOutcome, HostFace, ReachState } from './types.ts'
@@ -74,6 +74,7 @@ export const hostApi: HostFace = {
   readiness: () => ask(READINESS_PATH, Readiness),
   keyTest: () => ask(KEY_TEST_PATH, KeyTestAnswer, {}),
   localModels: async () => (await ask(LOCAL_MODELS_PATH, LocalModelsAnswer))?.servers,
+  agentModels: async agent => await ask(AGENT_MODELS_PATH, AgentModelsAnswer, { agent }) ?? { state: 'unavailable' },
   recommend: registry => ask(RECOMMEND_PATH, RecommendAnswer, { registry }),
   reach: readReach,
   cloneStart: async (request: CloneRequest): Promise<CloneStartOutcome> => {
