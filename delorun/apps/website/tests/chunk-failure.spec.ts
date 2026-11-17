@@ -11,7 +11,7 @@ vi.mock('../src/components/layout.tsx', () => ({
   Frame: ({ children, closing }: { children: ReactNode, closing?: ReactNode }) => createElement('div', null, children, closing),
 }))
 // The replica's frame needs the build's virtual modules; the hero keeps an empty stand-in for it.
-vi.mock('../src/replica/ReplicaFrame.tsx', () => ({ ReplicaFrame: () => null }))
+vi.mock('../src/replica/ReplicaFrame.tsx', () => ({ ReplicaFrame: () => null, ReplicaStyle: () => null }))
 // Each lazy chunk fails to load, as on a dropped connection or after a deploy removed the old file.
 vi.mock('../src/components/home-below.tsx', () => { throw new Error('chunk failed to load') })
 vi.mock('../src/components/signup-form.tsx', () => { throw new Error('chunk failed to load') })

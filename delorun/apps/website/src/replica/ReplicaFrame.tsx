@@ -11,7 +11,7 @@
  * @module @delorun/website/replica/ReplicaFrame
  */
 import { useEffect, useRef, useState, type ComponentType } from 'react'
-import { island } from 'virtual:replica-island'
+import { island, styles } from 'virtual:replica-island'
 import { ChunkBoundary } from '../components/chunk-boundary.tsx'
 import type { SessionId } from './model.ts'
 import type { ReplicaLiveProps } from './ReplicaLive.tsx'
@@ -42,6 +42,16 @@ function serverStills(root: Element): Partial<Record<ReplicaWidth, string>> {
     if ((width === 'desktop' || width === 'phone') && element.firstElementChild !== null) stills[width] = element.firstElementChild.innerHTML
   }
   return stills
+}
+
+/**
+ * The styles of every replica frame on the page, written once. Place it once, before the first frame: the frames' server
+ * markup carries none, so a page with three frames holds one copy of the styles and not three. In the browser it renders
+ * nothing and keeps the server's text.
+ * @returns the style element.
+ */
+export function ReplicaStyle() {
+  return <style dangerouslySetInnerHTML={{ __html: styles() }} suppressHydrationWarning />
 }
 
 /**
