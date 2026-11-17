@@ -28,7 +28,7 @@ import { resolveBundleDir } from '@deepseek-ai/dsh-app-boot'
 import type { ProfileContext } from '@deepseek-ai/dsh-app-boot'
 // Type-only: the ctx.pluginManager service.
 import type {} from '@deepseek-ai/dsh-plugin-manager'
-import { REACH_DEVICE } from '@delorun/home-auth'
+import { admitApprovedDevice } from '@delorun/home-auth'
 import { z } from 'zod'
 import { REQUIREMENT_ROUTES, type RequirementProblem, type RequirementRow, type RequirementsAnswer } from './client/requirements-api.ts'
 
@@ -238,7 +238,7 @@ export function apply(ctx: Context): void {
     scope.connection.fetch.register({
       path: REQUIREMENT_ROUTES.check, methods: ['GET'], requestBody: 'buffered',
       // A read of which programs and settings are present; a signed-in device may see it as the owner does.
-      admitPeer: (_request, peer) => peer.principal.kind === REACH_DEVICE,
+      admitPeer: admitApprovedDevice(),
       fetch: async (request) => {
         const asked = new URL(request.url).searchParams.get('language') ?? 'en'
         const answer = checkRequirements(await listedBundles(scope), LANGUAGES.has(asked) ? asked : 'en')

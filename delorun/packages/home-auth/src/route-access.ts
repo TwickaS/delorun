@@ -75,6 +75,9 @@ export const PLUGIN_ROUTE_ACCESS: Readonly<Record<string, Readonly<Record<string
   'bundle-local/src/report.ts': {
     REPORT_ROUTE: UNLOCKED('the report excerpt can hold paths of the home'),
   },
+  'bundle-local/src/requirements.ts': {
+    'REQUIREMENT_ROUTES.check': READ('a read of which programs and settings a bundle needs are present, as the owner sees it'),
+  },
   'bundle-local/src/update-check.ts': {
     UPDATE_CHANNEL_PATH: READ('names the release host alone'),
     UPDATE_NOTICE_PATH: READ('says whether a newer release exists'),
