@@ -10,7 +10,9 @@
  * @module @delorun/website/replica/ReplicaLive
  */
 import { useCallback, useEffect, useId, useRef, useState, type ComponentType, type RefObject } from 'react'
-import { Button, Frame, TabList, TabPanel } from '@brand'
+import { Button } from '@brand/components/Button.tsx'
+import { Frame } from '@brand/components/Frame.tsx'
+import { TabList, TabPanel } from '@brand/components/TabList.tsx'
 import { REPLICA_COPY } from './copy.ts'
 import type { PressTarget, SessionId } from './model.ts'
 import { usePlayer } from './player.ts'

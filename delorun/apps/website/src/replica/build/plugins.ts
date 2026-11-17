@@ -25,7 +25,7 @@ import { REPLICA_ICONS } from '../studio/icon-list.ts'
 import { STUDIO_COMPONENTS } from '../studio/components.ts'
 import { SESSION_IDS, type ReplicaFixture } from '../model.ts'
 import { pickStrings, STRING_SOURCES, type DictionaryModule, type StringSource } from '../strings.ts'
-import { sessionRefusals, type SessionPolicy } from './release.ts'
+import { ALLOW_STANDINS, sessionRefusals, type SessionPolicy } from './release.ts'
 import { buildTokens, tokenInputs } from './tokens.ts'
 
 /** The plugins' options. */
@@ -33,10 +33,11 @@ export interface ReplicaBuildOptions {
   /** The site's aliases, `#studio/` among them. */
   readonly aliases: readonly Alias[]
   /**
-   * What a production build accepts as sessions (`release.ts`). A production build without it, or with a session it
-   * does not accept, fails; a development server and tests need none.
+   * The release the site markets. A production build needs it, and fails when a session was recorded on another
+   * release or is a hand-made stand-in, unless `SITE_ALLOW_STANDINS=1` is set for a review build (`release.ts`).
+   * A development server and tests need neither.
    */
-  readonly sessions?: SessionPolicy | undefined
+  readonly release?: string | undefined
 }
 
 const here = (path: string): string => fileURLToPath(new URL(path, import.meta.url))
@@ -160,10 +161,10 @@ export function replicaPlugins(options: ReplicaBuildOptions): Plugin[] {
     },
     async buildStart() {
       if (!production) return
-      const policy = options.sessions
-      if (policy === undefined) this.error('replica: a production build needs `sessions` in `replicaPlugins`: the release the site markets, and whether the build is a preview.')
+      if (options.release === undefined) this.error('replica: a production build needs `release` in `replicaPlugins`: the release the site markets.')
+      const policy: SessionPolicy = { release: options.release, allowStandIns: process.env[ALLOW_STANDINS] === '1' }
       const refused = await checkSessions(policy)
-      if (refused.length > 0) this.error(`replica: a production build carries only sessions recorded on ${policy.release}. ${refused.join(' ')} Set \`sessions.preview\` only for a build that is not published as the site.`)
+      if (refused.length > 0) this.error(`replica: a production build carries only sessions recorded on ${policy.release}. ${refused.join(' ')} Set ${ALLOW_STANDINS}=1 only for a review build; a deploy never sets it.`)
     },
     resolveId(source, importer) {
       if ((MODULES as readonly string[]).includes(source)) return `\0${source}`
