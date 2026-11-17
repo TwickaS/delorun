@@ -6,7 +6,7 @@ import type { AccountObservation, ProgramApprovalAnswer, ProgramApprovalRequest,
 import type { HarnessServer } from '../src/harness-server.ts'
 import { recordAbsentNames, type AbsentNames } from '../src/leftovers.ts'
 import { CodexRpc } from '../src/rpc.ts'
-import { CodexSession, CodexSessionClosedError, CodexTurnRunningError } from '../src/session.ts'
+import { CodexSession, CodexSessionClosedError, CodexTurnRunningError, sandboxWritableRoots } from '../src/session.ts'
 import { FakeAppServer, settle, type Frame } from './fake-app-server.ts'
 import {
   COMMAND, EXEC, NEXT_TURN, TASK, THREAD, TURN, commandApproval, commandItem, itemFrame, rateLimits, tokenUsage,
@@ -80,7 +80,7 @@ describe('turns', () => {
     expect(h.codex.requests('turn/start')).toEqual([{
       threadId: THREAD,
       input: [{ type: 'text', text: 'Run this shell command exactly: touch made-by-codex.txt. Then say done.', text_elements: [] }],
-      sandboxPolicy: { type: 'workspaceWrite', writableRoots: [TASK], networkAccess: false, excludeTmpdirEnvVar: true, excludeSlashTmp: true },
+      sandboxPolicy: { type: 'workspaceWrite', writableRoots: [TASK], networkAccess: false, excludeTmpdirEnvVar: false, excludeSlashTmp: false },
     }])
     expect(h.session.turnRunning).toBe(true)
     h.codex.notify('item/started', itemFrame(commandItem('inProgress')))
@@ -478,6 +478,8 @@ describe('questions', () => {
     const form = await h.codex.ask(1, 'mcpServer/elicitation/request', { threadId: THREAD, turnId: TURN, serverName: 'docs', mode: 'form', message: 'Your name?', requestedSchema: {}, _meta: null })
     expect(h.questions).toHaveLength(1)
     expect(h.questions[0]).toMatchObject({ callId: 'mcp-1', toolName: 'mcp__docs__search', reason: 'Allow docs/search?' })
+    // Without a run rule the card does not offer "Allow for this run".
+    expect(h.questions[0]?.runRule).toBeUndefined()
     expect(tool.result).toEqual({ action: 'accept', content: {}, _meta: null })
     expect(form.result).toEqual({ action: 'decline', content: null, _meta: null })
   })
@@ -525,6 +527,11 @@ describe('questions', () => {
     it('does not answer for another thread', async () => {
       expect((await answer(OWN, elicitation(OWN, undefined, 'other-thread'))).reply.result).not.toMatchObject({ action: 'accept' })
     })
+  })
+
+  it('makes the workspace, /tmp and $TMPDIR writable, as Codex does by default, and cleans up after each', () => {
+    expect(sandboxWritableRoots(TASK, '/var/tmp/seat')).toEqual([TASK, '/tmp', '/var/tmp/seat'])
+    expect(sandboxWritableRoots(TASK, undefined)).toEqual([TASK, '/tmp'])
   })
 
   it('refuses a server request it does not answer', async () => {

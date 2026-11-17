@@ -1,8 +1,11 @@
+import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { recordAbsentNames, removeSandboxLeftovers } from '../src/leftovers.ts'
+import { mountPoints, parseMountPoints, recordAbsentNames, removeSandboxLeftovers } from '../src/leftovers.ts'
+
+const HAS_BWRAP = process.platform === 'linux' && spawnSync('bwrap', ['--version']).status === 0
 
 const roots: string[] = []
 
@@ -59,5 +62,50 @@ describe('sandbox leftovers (decision 5)', () => {
     mkdirSync(join(root, 'empty'))
     removeSandboxLeftovers(records)
     expect(existsSync(join(root, 'empty'))).toBe(true)
+  })
+
+  it('keeps a leftover that another running sandbox has mounted over, and removes it once that sandbox ends', { skip: !HAS_BWRAP, timeout: 30_000 }, async () => {
+    const root = scratch()
+    const records = recordAbsentNames([root])
+    const source = join(root, 'source')
+    mkdirSync(source)
+    mkdirSync(join(root, '.git'))
+    // A sandbox in its own mount namespace, as Codex's is, with a read-only mount over the shared root's .git.
+    const other = spawn('bwrap', ['--die-with-parent', '--dev-bind', '/', '/', '--ro-bind', source, join(root, '.git'), 'sleep', '30'], { stdio: 'ignore' })
+    const ended = new Promise<void>((resolve) => { other.once('exit', () => { resolve() }) })
+    const mounted = () => mountPoints().has(join(root, '.git'))
+    try {
+      await until(mounted)
+      expect(removeSandboxLeftovers(records)).toEqual([])
+      expect(existsSync(join(root, '.git'))).toBe(true)
+    } finally {
+      other.kill('SIGKILL')
+      await ended
+    }
+    await until(() => !mounted())
+    expect(removeSandboxLeftovers(records)).toEqual([join(root, '.git')])
+  })
+})
+
+/** Wait until a condition holds, for at most five seconds. */
+async function until(condition: () => boolean): Promise<void> {
+  for (let tries = 0; !condition(); tries += 1) {
+    if (tries > 100) throw new Error('the condition never held')
+    await new Promise(resolve => setTimeout(resolve, 50))
+  }
+}
+
+describe('mount points', () => {
+  it('reads the mount point field and decodes its octal escapes', () => {
+    const text = [
+      '36 35 98:0 /mnt1 /mnt/with\\040space rw,noatime master:1 - ext3 /dev/root rw',
+      '37 35 0:5 / /tmp/run/.git ro,relatime - tmpfs tmpfs rw',
+      '',
+    ].join('\n')
+    expect(parseMountPoints(text)).toEqual(['/mnt/with space', '/tmp/run/.git'])
+  })
+
+  it('finds none without a proc file system', () => {
+    expect(mountPoints(join(scratch(), 'no-proc'))).toEqual(new Set())
   })
 })

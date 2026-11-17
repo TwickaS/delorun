@@ -87,13 +87,13 @@ export interface WorkspaceSandbox {
 }
 
 /**
- * The sandbox every turn runs in: the workspace is the only writable root, with no network and neither `/tmp` nor
- * `$TMPDIR`.
+ * The sandbox every turn runs in, Codex's own default: the workspace, `/tmp` and `$TMPDIR` are writable, with no
+ * network, so builds and tests behave as in the person's terminal Codex.
  * @param workspace - the run folder.
  * @returns Codex's `workspaceWrite` sandbox policy.
  */
 export function workspaceSandbox(workspace: string): WorkspaceSandbox {
-  return { type: 'workspaceWrite', writableRoots: [workspace], networkAccess: false, excludeTmpdirEnvVar: true, excludeSlashTmp: true }
+  return { type: 'workspaceWrite', writableRoots: [workspace], networkAccess: false, excludeTmpdirEnvVar: false, excludeSlashTmp: false }
 }
 
 /**
