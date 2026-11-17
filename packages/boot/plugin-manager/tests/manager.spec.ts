@@ -3117,4 +3117,75 @@ describe('a package the release publishes as a signed pack', () => {
     expect(pnpm).not.toHaveBeenCalled()
     expect(readFileSync(join(dir, 'package.json'), 'utf8')).toBe(before)
   })
+  it.each([
+    ['a tarball', 'https://example.test/listed-pack-1.0.0.tgz'],
+    ['a Git repository', 'github:acme/listed-pack'],
+    ['an npm alias', 'npm:listed-pack@1.0.0'],
+    ['another folder', 'link:../elsewhere/listed-pack'],
+  ])('refuses %s that turns out to be a pack, after a resolution that runs no script', async (_kind, spec) => {
+    const { manager, dir } = await fixture('live', false, targets(true))
+    const calls: string[][] = []
+    const marker = join(dir, 'install-script-ran')
+    const pnpm = vi.spyOn(operations, 'runProfilePnpm').mockImplementation(async (_context, args) => {
+      calls.push([...args])
+      if (args[0] === 'add') {
+        const profile = readProfileManifest('test', dir)
+        profile.dependencies = { ...profile.dependencies, 'listed-pack': spec }
+        writeFileSync(join(dir, 'package.json'), JSON.stringify(profile))
+      } else writeFileSync(marker, 'ran')
+      return { exitCode: 0, output: 'ok', truncated: false, logPath: join(dir, 'pnpm.log') }
+    })
+    onTestFinished(() => { pnpm.mockRestore() })
+    const before = profileFiles(dir)
+    const result = await manager.installBundle(spec)
+    expect(result).toMatchObject({ application: 'failed', changed: false, error: { code: 'operation-error', diagnostic: expect.stringMatching(/signed plugin pack/u) } })
+    // Only a resolution may have run: the install, which runs scripts, never does.
+    expect(calls.every(call => call[0] === 'add' && call.includes('--lockfile-only') && call.includes('--ignore-scripts'))).toBe(true)
+    expect(existsSync(marker)).toBe(false)
+    expect(profileFiles(dir)).toEqual(before)
+  })
+
+  it('lets the pack\'s own folder through the same resolution', async () => {
+    const { manager, dir, bundle } = await fixture('live', false, targets(true))
+    const spec = 'link:/home/packs/current/pack/package'
+    const pnpm = vi.spyOn(operations, 'runProfilePnpm').mockImplementation(async (_context, args) => {
+      if (args[0] === 'add') {
+        const profile = readProfileManifest('test', dir)
+        profile.dependencies = { ...profile.dependencies, 'listed-pack': spec }
+        writeFileSync(join(dir, 'package.json'), JSON.stringify(profile))
+      } else bundle('listed-pack', [])
+      return { exitCode: 0, output: 'ok', truncated: false, logPath: join(dir, 'pnpm.log') }
+    })
+    onTestFinished(() => { pnpm.mockRestore() })
+    expect(await manager.installBundle(spec, { enabled: false })).toMatchObject({ application: 'applied' })
+    expect(pnpm.mock.calls.map(call => call[1].slice(0, 1))).toEqual([['add'], ['install']])
+  })
+
+  it.each([
+    ['a registry spec', '1.0.0'],
+    ['a pack folder of an older release', 'link:/home/packs/0.0.9/pack/package'],
+  ])('refuses to restore a version that holds a pack as %s, changing no file', async (_kind, recorded) => {
+    const { manager, dir } = await fixture('live', false, targets(true))
+    const manifest = readFileSync(join(dir, 'package.json'), 'utf8')
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ ...JSON.parse(manifest) as object, dependencies: { extra: '1.0.0', 'listed-pack': recorded } }))
+    const held = await manager.history(1) as { versions: Array<{ id: ProfileVersionId }> }
+    writeFileSync(join(dir, 'package.json'), manifest)
+    const version = held.versions[0]!.id
+    const pnpm = vi.spyOn(operations, 'runProfilePnpm')
+    onTestFinished(() => { pnpm.mockRestore() })
+    const before = profileFiles(dir)
+    expect(await manager.previewRestore(version)).toMatchObject({ ok: false, error: { code: 'operation-error', diagnostic: expect.stringMatching(/listed-pack.*remove the pack first/u) } })
+    expect(await manager.restore(version)).toMatchObject({ application: 'failed', error: { code: 'operation-error', diagnostic: expect.stringMatching(/listed-pack/u) } })
+    expect(pnpm).not.toHaveBeenCalled()
+    expect(profileFiles(dir)).toEqual(before)
+  })
+
+  it('restores a version whose pack is linked through its pack folder', async () => {
+    const { manager, dir } = await fixture('live', false, targets(true))
+    const manifest = readFileSync(join(dir, 'package.json'), 'utf8')
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ ...JSON.parse(manifest) as object, dependencies: { extra: '1.0.0', 'listed-pack': 'link:/home/packs/current/pack/package' } }))
+    const held = await manager.history(1) as { versions: Array<{ id: ProfileVersionId }> }
+    writeFileSync(join(dir, 'package.json'), manifest)
+    expect(await manager.previewRestore(held.versions[0]!.id)).toMatchObject({ ok: true })
+  })
 })
