@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { holdContent } from '../src/enforce.ts'
-import { holdsVersion, materialize, storeFolder } from '../src/store.ts'
+import { holdsVersion, holdsVersionUnder, materialize, storeFolder } from '../src/store.ts'
 import { scanFolder } from '../src/tree.ts'
 import { rejection, temporaryDirectory, writeFiles } from './support.ts'
 
@@ -227,6 +227,14 @@ describe('a plugin pack whose peers link into the runtime store', () => {
     expect(scanned.skipped).toContain('node_modules/elsewhere')
   })
 
+  it('leaves out a link to the active runtime\'s installed packages folder itself, which names no one package', async () => {
+    const { home, pack } = packHome()
+    symlinkSync(join(home, 'runtimes', '0.1.0', 'app', 'node_modules'), join(pack, 'node_modules', 'all'))
+    const { manifest, skipped } = await storeFolder(home, pack)
+    expect(skipped).toContain('node_modules/all')
+    expect(manifest.entries.some(entry => entry.path.startsWith('node_modules/all'))).toBe(false)
+  })
+
   it('keeps no runtime link at all while runtimes/current names no version', async () => {
     const { home, pack } = packHome()
     writeFiles(home, { 'runtimes/current': '../0.1.0\n' })
@@ -253,6 +261,10 @@ describe('a plugin pack whose peers link into the runtime store', () => {
     writeFiles(home, { 'runtimes/current': '0.2.0\n' })
     expect((await storeFolder(home, updated)).version).toBe(version)
     expect(await holdsVersion(home, copy, version)).toBe(false)
+    // A Host still running 0.1.0 holds the copy that names its packages; doctor holds it while they are there.
+    expect(await holdsVersionUnder(home, copy, version, { kind: 'release', release: '0.1.0' })).toBe(true)
+    expect(await holdsVersionUnder(home, copy, version, { kind: 'release', release: '0.2.0' })).toBe(false)
+    expect(await holdsVersionUnder(home, copy, version, { kind: 'installed' })).toBe(true)
     await holdContent(home, copy, version)
     expect(await holdsVersion(home, copy, version)).toBe(true)
     rmSync(join(home, 'runtimes', '0.1.0'), { recursive: true })

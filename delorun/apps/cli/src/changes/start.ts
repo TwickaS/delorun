@@ -17,6 +17,7 @@
  * @module @delorun/cli/changes/start
  */
 import { resolve } from 'node:path'
+import { getDelorunRuntimeVersion } from '@deepseek-ai/dsh-app-boot'
 import { checkChangesInvariants, enforceApprovedContent, isChangesError, markShownAtUpgrade, PROFILE_LOCK_WAIT_MS, startNotice, workFinishedLine, writeBootRecord, type BootRow, type ReloadHost, type StartChanges } from '@delorun/changes'
 import { finishWorkWithoutPerson } from '@delorun/changes/stop'
 import type { DelorunLogger } from '@delorun/logs'
@@ -50,6 +51,16 @@ export interface ChangesStartRequest {
    * the log only, so its start shows nothing.
    */
   readonly terminal?: boolean
+}
+
+/**
+ * The installed release this process runs from, for the Changes request: a link in an active directory into the
+ * runtime store holds only when it names this release's packages.
+ * @returns `{ runningRelease }` from `DELORUN_VERSION`, or nothing when this process runs from a source checkout.
+ */
+export function runningRelease(): { readonly runningRelease?: string } {
+  const release = getDelorunRuntimeVersion()
+  return release === undefined ? {} : { runningRelease: release }
 }
 
 /**
@@ -94,7 +105,7 @@ export async function startChanges(request: ChangesStartRequest, output: (text: 
   try {
     const ended = request.ownsHome === true ? await finishWorkWithoutPerson({ home, profile, profileDir }, 'stopped') : undefined
     if (ended !== undefined) notice = `Your work session on ${ended.plugin} ended when Delorun stopped. ${workFinishedLine(ended)}\n`
-    enforced = await enforceApprovedContent({ home, profile, profileDir, harnessLink: isCarriedPackage })
+    enforced = await enforceApprovedContent({ home, profile, profileDir, harnessLink: isCarriedPackage, ...runningRelease() })
   } catch (error) {
     const detail = isChangesError(error) ? error.detail : String(error)
     throw new CliError(EXIT.failed, `delorun: the profile ${profile} was not started, because the plugins it links from folders could not be prepared: ${detail}`)
@@ -146,7 +157,7 @@ export function changesPreStartStep(context: PreStartContext): Promise<void> {
 export async function changesApprovedContent(draft: Pick<CompositionDraft, 'request'>): Promise<readonly string[]> {
   const { home, profile } = draft.request
   if (!hasCliProfile(home, profile)) return []
-  const broken = await checkChangesInvariants({ home, profile, profileDir: profileDirectory(home, profile), harnessLink: isCarriedPackage })
+  const broken = await checkChangesInvariants({ home, profile, profileDir: profileDirectory(home, profile), harnessLink: isCarriedPackage, ...runningRelease() })
   if (broken.length === 0) return []
   throw new CliError(EXIT.failed, [
     `delorun: the profile ${profile} was not started, because what it would load is not what Changes keeps for it:`,

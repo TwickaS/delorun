@@ -368,7 +368,8 @@ export function routeConnection(connection: HostConnectionAdmission): RouteConne
  */
 async function checkReload(ctx: Context, profile: ProfileContext): Promise<void> {
   const harnessLink = loadedLinks(ctx.get('pluginPackages')?.resolution?.linkedRoots ?? [])
-  const changes = await prepareReload({ home: profile.home, profile: profile.name, profileDir: profile.dir, harnessLink })
+  const release = getDelorunRuntimeVersion()
+  const changes = await prepareReload({ home: profile.home, profile: profile.name, profileDir: profile.dir, harnessLink, ...release === undefined ? {} : { runningRelease: release } })
   const notice = startNotice(changes)
   if (notice !== '') ctx.logger.info(notice.trimEnd())
 }

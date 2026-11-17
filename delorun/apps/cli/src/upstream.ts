@@ -39,7 +39,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path'
 import { runDirectory } from '@delorun/home'
 import { isChangesError, prepareReload, readChangeLog, startNotice } from '@delorun/changes'
-import { isCarriedPackage } from './changes/start.ts'
+import { isCarriedPackage, runningRelease } from './changes/start.ts'
 import { prepareHome, type CliCommand, type CommandContext, type CommandResult } from './command.ts'
 import { CliError, EXIT, type ExitCode } from './exit.ts'
 import { HEADLESS_PROFILE, refuseLauncherOptions, runHeadless, type HeadlessDependencies } from './headless.ts'
@@ -221,7 +221,7 @@ async function keepPluginChanges(home: string, profile: string, context: Pick<Co
   if (!hasCliProfile(home, profile)) return true
   try {
     if ((await readChangeLog(home, profile)).migratedAt === undefined) return true
-    context.stderr(startNotice(await prepareReload({ home, profile, profileDir: profileDirectory(home, profile), harnessLink: isCarriedPackage })))
+    context.stderr(startNotice(await prepareReload({ home, profile, profileDir: profileDirectory(home, profile), harnessLink: isCarriedPackage, ...runningRelease() })))
     return true
   } catch (error) {
     context.stderr(`delorun: ${isChangesError(error) ? error.detail : String(error)}\n`)

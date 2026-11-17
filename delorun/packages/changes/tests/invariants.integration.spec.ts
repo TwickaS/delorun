@@ -1,12 +1,14 @@
-import { chmodSync, mkdirSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { checkChangesInvariants } from '../src/invariants.ts'
+import { checkChangesInvariants, checkLoadedContent } from '../src/invariants.ts'
+import { changesStatus } from '../src/status.ts'
 import { activeDirectory, objectsDirectory, profileChangesDirectory, protectionPath, versionsDirectory } from '../src/paths.ts'
 import { openWorkSession, writeActiveRecord } from '../src/records.ts'
 import { materialize, storeFolder } from '../src/store.ts'
 import { ACTIVE_RECORD_SCHEMA } from '../src/types.ts'
 import { fixture, folder, linkAs, migrated, PROFILE, start, terminal, type Fixture } from './profile-fixture.ts'
+import { writeFiles } from './support.ts'
 
 // Each case writes real git histories and scans folders; under a loaded host that takes longer than vitest's default.
 vi.setConfig({ testTimeout: 30_000 })
@@ -19,7 +21,79 @@ function check(fx: Fixture): Promise<readonly string[]> {
   return checkChangesInvariants({ home: fx.home, profile: PROFILE, profileDir: fx.profileDir })
 }
 
+/**
+ * Install one release with a pack whose peer links into it, as the runtime store does, and name it current.
+ * @param fx - the fixture.
+ * @param version - the release.
+ */
+function installRelease(fx: Fixture, version: string): void {
+  const pack = join(fx.home, 'packs', version, 'plug', 'package')
+  writeFiles(fx.home, {
+    [`runtimes/${version}/app/node_modules/@s/peer/package.json`]: JSON.stringify({ name: '@s/peer', version }),
+    [`runtimes/${version}/app/node_modules/@s/other/package.json`]: JSON.stringify({ name: '@s/other', version }),
+    [`packs/${version}/plug/package/package.json`]: JSON.stringify({ name: 'plug', dependencies: { '@s/peer': '1' } }),
+    'runtimes/current': `${version}\n`,
+  })
+  mkdirSync(join(pack, 'node_modules', '@s'), { recursive: true })
+  symlinkSync(join(fx.home, 'runtimes', version, 'app', 'node_modules', '@s', 'peer'), join(pack, 'node_modules', '@s', 'peer'))
+  rmSync(join(fx.home, 'packs', 'current'), { force: true })
+  symlinkSync(version, join(fx.home, 'packs', 'current'))
+}
+
 describe('checkChangesInvariants', () => {
+  describe('a pack copy whose peer links into the release it was written under', () => {
+    /**
+     * @param fx - the fixture.
+     * @param runningRelease - the release the checking process runs from.
+     * @returns what a start or a recomposition of that release finds broken.
+     */
+    const atLoad = (fx: Fixture, runningRelease: string) => checkLoadedContent({ home: fx.home, profile: PROFILE, profileDir: fx.profileDir, runningRelease })
+    /**
+     * @param fx - the fixture.
+     * @returns what `delorun doctor` and `delorun verify` report broken.
+     */
+    const atDoctor = async (fx: Fixture) => (await changesStatus({ home: fx.home, profile: PROFILE, profileDir: fx.profileDir })).invariants
+
+    /**
+     * A profile that started under 0.1.0 with a pack, then an update that installed 0.2.0 and switched to it.
+     * @returns the fixture and the copy's peer link.
+     */
+    async function updated(): Promise<{ readonly fx: Fixture, readonly peer: string }> {
+      const fx = fixture()
+      installRelease(fx, '0.1.0')
+      linkAs(fx, 'plug', join(fx.home, 'packs', 'current', 'plug', 'package'))
+      await start(fx, '0.1.0')
+      expect(await atLoad(fx, '0.1.0')).toEqual([])
+      installRelease(fx, '0.2.0')
+      return { fx, peer: join(activeDirectory(fx.home, PROFILE, 'plug'), 'node_modules', '@s', 'peer') }
+    }
+
+    it('is what a Host still running the old release loads, and what doctor accepts until the next start re-points it', async () => {
+      const { fx, peer } = await updated()
+      expect(await atLoad(fx, '0.1.0')).toEqual([])
+      expect(await atDoctor(fx)).toEqual([])
+      await start(fx, '0.2.0')
+      expect(realpathSync(peer)).toBe(realpathSync(join(fx.home, 'runtimes', '0.2.0', 'app', 'node_modules', '@s', 'peer')))
+      expect(await atLoad(fx, '0.2.0')).toEqual([])
+      expect(await atDoctor(fx)).toEqual([])
+    })
+
+    it('is refused at load by the new release when its re-point did not happen', async () => {
+      const { fx } = await updated()
+      expect(await atLoad(fx, '0.2.0')).toEqual([expect.stringContaining('The active directory of plug does not hold version')])
+      expect(await checkLoadedContent({ home: fx.home, profile: PROFILE, profileDir: fx.profileDir })).toEqual([expect.stringContaining('The active directory of plug does not hold version')])
+    })
+
+    it('is reported by doctor once the old release is removed, or when its link names another package', async () => {
+      const { fx, peer } = await updated()
+      rmSync(join(fx.home, 'runtimes', '0.1.0', 'app', 'node_modules', '@s', 'peer'), { recursive: true })
+      expect(await atDoctor(fx)).toEqual([expect.stringContaining('The active directory of plug does not hold version')])
+      rmSync(peer)
+      symlinkSync(join(fx.home, 'runtimes', '0.1.0', 'app', 'node_modules', '@s', 'other'), peer)
+      expect(await atDoctor(fx)).toEqual([expect.stringContaining('The active directory of plug does not hold version')])
+    })
+  })
+
   it('finds nothing broken after a start, links into the runtime store and to non-directories included', async () => {
     const { fx } = await migrated()
     const carried = join(fx.home, 'runtimes', '1.2.3', 'bundle')

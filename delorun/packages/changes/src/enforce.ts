@@ -72,6 +72,13 @@ export interface EnforceRequest {
    * @returns true for the harness's own package.
    */
   readonly harnessLink?: (name: string, target: string) => boolean
+  /**
+   * The installed release this process runs from (`DELORUN_VERSION`). A link in an active directory into the runtime
+   * store holds only when it names this release's installed packages, so a Host still running after an update switched
+   * `runtimes/current` loads its own release's packages and a start of the new release loads the new one's. When absent,
+   * as from a source checkout, no such link holds.
+   */
+  readonly runningRelease?: string
 }
 
 /** A plugin the first start under Changes approved as it was. */
