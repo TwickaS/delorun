@@ -29,6 +29,9 @@ const MISSING_BROWSER_PATTERN = new RegExp([
   'Executable doesn\'t exist', 'is not installed; expected executable at', 'is not installed\\. Run `npx @playwright/mcp install-browser',
 ].join('|'), 'u')
 
+/** The folder, in the folder its client names as the MCP root, that Playwright's MCP server saves screenshots, PDFs and snapshots to. */
+export const OUTPUT_FOLDER = '.playwright-mcp'
+
 /**
  * Replace Playwright's report of a browser executable that is not installed.
  * @param message - a failed browser tool call's error message.
@@ -67,6 +70,7 @@ export function apply(ctx: Context, config: Config): void {
     command: process.execPath,
     args,
     env,
+    outputFolder: OUTPUT_FOLDER,
     explainFailure: explainMissingBrowser,
     ...config.toolCallTimeoutMs === undefined ? {} : { toolCallTimeoutMs: config.toolCallTimeoutMs },
     ...directory === undefined ? {} : { directory },

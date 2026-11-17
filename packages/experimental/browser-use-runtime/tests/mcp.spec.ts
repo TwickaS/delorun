@@ -1,7 +1,7 @@
 import { executeToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import * as PtcToolExecutor from '@deepseek-ai/dsh-tool-executor-ptc'
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -97,7 +97,7 @@ const OTHER_TOOL = 'mcp__other-fixture__visit'
 
 async function load(
   exclusive = false, mode?: string, toolCallTimeoutMs?: number, toolOrder?: string[], consent = false,
-  explainFailure?: (message: string) => string | undefined, directory?: string,
+  explainFailure?: (message: string) => string | undefined, directory?: string, outputFolder?: string,
 ) {
   const root = await mkdtemp(join(tmpdir(), 'dsh-browser-mcp-'))
   roots.push(root)
@@ -113,7 +113,7 @@ async function load(
       mountSessionMcp(ctx, {
         name: 'browser-fixture', exclusive, command: process.execPath, args: [fixture, root, ...mode === undefined ? [] : [mode]],
         ...toolCallTimeoutMs === undefined ? {} : { toolCallTimeoutMs, env: {} }, ...explainFailure === undefined ? {} : { explainFailure },
-        ...directory === undefined ? {} : { directory },
+        ...directory === undefined ? {} : { directory }, ...outputFolder === undefined ? {} : { outputFolder },
       })
     } }],
     ...consent ? [['consent', RefuseBrowserConsent], ['other', McpClient]] as const : [],
@@ -407,6 +407,42 @@ describe('Session MCP Loader composition', () => {
       [{ uri: pathToFileURL(first).href, name: 'first' }],
       [{ uri: pathToFileURL(second).href, name: 'second' }],
     ]))
+  })
+
+  it('creates the output folder with a .gitignore of * when a Session\'s server starts, and leaves an existing folder alone', async () => {
+    const { ctx, root } = await load(false, undefined, undefined, undefined, false, undefined, undefined, '.fixture-output')
+    const fresh = join(root, 'fresh'), used = join(root, 'used')
+    await Promise.all([mkdir(fresh), mkdir(join(used, '.fixture-output'), { recursive: true })])
+    await writeFile(join(used, '.fixture-output', 'kept.png'), 'kept')
+    for (const [id, cwd] of [['output-fresh', fresh], ['output-used', used]] as const) {
+      const { agent } = await ctx.agents.create({ sessionId: SessionId(id), meta: { cwd } })
+      expect((await warm(ctx, agent)).tools.map(tool => tool.name)).toContain(TOOL)
+    }
+    expect(await readdir(fresh)).toEqual(['.fixture-output'])
+    expect(await readdir(join(fresh, '.fixture-output'))).toEqual(['.gitignore'])
+    expect(await readFile(join(fresh, '.fixture-output', '.gitignore'), 'utf8')).toBe('*\n')
+    expect(await readdir(used)).toEqual(['.fixture-output'])
+    expect(await readdir(join(used, '.fixture-output'))).toEqual(['kept.png'])
+  })
+
+  it('creates no output folder for a Session whose server the add-time consent refuses', async () => {
+    const { ctx, root } = await load(false, undefined, undefined, undefined, true, undefined, undefined, '.fixture-output')
+    const cwd = join(root, 'refused')
+    await mkdir(cwd)
+    const { agent } = await ctx.agents.create({ sessionId: SessionId('output-refused'), meta: { cwd } })
+    expect((await warm(ctx, agent)).tools.some(tool => tool.name === TOOL)).toBe(false)
+    expect(await readdir(cwd)).toEqual([])
+  })
+
+  it('keeps the browser tools and logs a warning when the output folder cannot be created', async () => {
+    const { ctx, root, warnings } = await load(false, undefined, undefined, undefined, false, undefined, undefined, join('absent', 'output'))
+    const cwd = join(root, 'unwritable')
+    await mkdir(cwd)
+    const { agent } = await ctx.agents.create({ sessionId: SessionId('output-failed'), meta: { cwd } })
+    expect((await warm(ctx, agent)).tools.map(tool => tool.name)).toContain(TOOL)
+    expect(await readdir(cwd)).toEqual([])
+    expect(warnings).toEqual([expect.stringContaining('with a .gitignore in Session output-failed\'s folder, so Git may pick up files')])
+    expect(warnings[0]).toMatch(/^browser-fixture: could not create absent[/\\]output .*ENOENT/u)
   })
 
   it('replaces a browser failure the provider explains and keeps every other failure and result', async () => {

@@ -1,6 +1,7 @@
 /** Session-owned MCP browser processes and provider catalog activation. @module */
 
-import { mkdir } from 'node:fs/promises'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -111,6 +112,13 @@ export interface SessionMcpOptions {
    * Session's working directory as its one MCP root, where a server such as Playwright's saves its output files.
    */
   directory?: string
+  /**
+   * The folder, relative to the Session's working directory, that the server saves its output files to. When a
+   * Session's server has started and that folder does not exist, it is created holding a `.gitignore` of `*`, so Git
+   * leaves the files out of commits. An existing folder and the project's own `.gitignore` are never changed, and a
+   * Session whose server did not start gets no folder.
+   */
+  outputFolder?: string
   /** Explicit overrides merged into the MCP client's scrubbed child environment. */
   env?: Record<string, string>
   /** Per-call timeout override; omission retains the MCP client default. */
@@ -147,6 +155,22 @@ async function fixedDirectory(directory: string): Promise<string> {
   return directory
 }
 
+/**
+ * Create a server's output folder so that Git ignores everything in it. An existing folder is left as it is.
+ * @param folder - the absolute folder.
+ * @throws when the folder or its `.gitignore` cannot be created for a reason other than the folder existing.
+ */
+async function ignoredOutputFolder(folder: string): Promise<void> {
+  try {
+    await mkdir(folder, { mode: 0o700 })
+  } catch (error) {
+    // The folder is the person's or an earlier Session's: its contents, ignore rules included, stay theirs.
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') return
+    throw error
+  }
+  await writeFile(join(folder, '.gitignore'), '*\n', { flag: 'wx' })
+}
+
 interface ClientState {
   /** `ready` holds a started client; `blocked` waits for a busy attachment; `refused` is a start the add-time consent did not allow. */
   status: 'ready' | 'blocked' | 'refused'
@@ -169,6 +193,8 @@ function isConsentStop(error: unknown): error is McpClient.McpConsentRefusedErro
  * add-time consent refuses, or a declared consent that did not start, also leaves that activation without browser
  * tools and logs a warning naming the server and the consent's reason; the Agent is still created, and the next
  * activation reviews the start again. Every other startup failure fails the Agent's creation.
+ * Once a Session's server has started, its output folder, when the provider names one, is created with a `.gitignore`
+ * of `*` unless the folder already exists; a failure to create it is logged as a warning and the Session keeps its tools.
  * Calls are serialized per Session; unload closes every server before releasing registration.
  * @param ctx - provider context supplying browser use, Agents, tools, prompt assembly, and working directories.
  * @param options - provider identity, attachment exclusivity, and executable configuration.
@@ -233,6 +259,14 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
             failOnStartupError: true,
             reconnect: { enabled: false },
           }))
+          if (options.outputFolder !== undefined) {
+            try {
+              await ignoredOutputFolder(join(sessionDirectory, options.outputFolder))
+            } catch (error) {
+              // The browser tools still work; only the Git protection of their saved files is missing, which the log names.
+              ctx.logger.warn(`${options.name}: could not create ${options.outputFolder} with a .gitignore in Session ${agent.id}'s folder, so Git may pick up files the browser saves there: ${(error as Error).message}`)
+            }
+          }
           signal.throwIfAborted()
           return {
             value: scope,

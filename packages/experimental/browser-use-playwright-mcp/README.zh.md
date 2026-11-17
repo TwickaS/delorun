@@ -82,7 +82,7 @@ kind: "package-reference"
 
 #### 模型可见内容
 
-工具以 `mcp__playwright-mcp__<tool>` 命名，保留上游描述和 JSON schema。文本与截图通过常规工具结果流程进入 Session 日志。服务器保存的文件（如截图和 PDF）位于 Session 工作目录（即它的 MCP root）下的 `.playwright-mcp` 中，工具结果以相对于该目录的路径链接每个文件。截图需要附件存储及支持图片输入的模型路由；其他路由会收到 MCP 图片诊断。MCP 客户端还提供资源工具和注明服务器来源的指导。只有当前 Session 拥有连接后才显示浏览器指导；针对该服务器的资源请求执行相同的所有权检查。
+工具以 `mcp__playwright-mcp__<tool>` 命名，保留上游描述和 JSON schema。文本与截图通过常规工具结果流程进入 Session 日志。服务器保存的文件（如截图和 PDF）位于 Session 工作目录（即它的 MCP root）下的 `.playwright-mcp` 中，工具结果以相对于该目录的路径链接每个文件。这些文件可能显示私密页面，而 Git 不会跳过隐藏目录，因此当某个 Session 的服务器启动且该目录尚不存在时，提供方会创建它并放入内容为 `*` 的 `.gitignore`；它从不改动已有的 `.playwright-mcp` 目录或项目自己的 `.gitignore`。截图需要附件存储及支持图片输入的模型路由；其他路由会收到 MCP 图片诊断。MCP 客户端还提供资源工具和注明服务器来源的指导。只有当前 Session 拥有连接后才显示浏览器指导；针对该服务器的资源请求执行相同的所有权检查。
 
 #### Token 影响
 
