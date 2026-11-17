@@ -116,6 +116,16 @@ export function keepsOneCopy(name: string, packPeers: ReadonlySet<string>, exter
   return CORE_SCOPES.some(scope => name.startsWith(scope)) || SINGLETON_LIBRARIES.includes(name) || packPeers.has(name) || isExternal(name, externals)
 }
 
+/** Delete every `.bin` directory under a deployed package, including those nested in its dependencies. */
+async function removeCommandLinks(directory: string): Promise<void> {
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    const path = join(directory, entry.name)
+    if (entry.name === '.bin') await rm(path, { recursive: true, force: true })
+    else await removeCommandLinks(path)
+  }
+}
+
 async function peerDependencyNames(directory: string): Promise<Set<string>> {
   const manifest = JSON.parse(await readFile(join(directory, 'package.json'), 'utf8')) as { peerDependencies?: Record<string, string> }
   return new Set(Object.keys(manifest.peerDependencies ?? {}))
@@ -290,7 +300,7 @@ export async function buildReleasePacks(request: ReleasePackRequest): Promise<nu
     deploy: (name, platform, directory) => {
       execFileSync('pnpm', ['--filter', name, 'deploy', '--prod', '--ignore-scripts', ...request.targets[platform], '--config.allow-unused-patches=true', '--config.node-linker=hoisted', '--config.package-import-method=copy', '--config.link-workspace-packages=true', '--config.hoist-workspace-packages=false', directory], { cwd: request.source, env: request.env, stdio: 'inherit' })
       // A pack carries no command links: the archive refuses symbolic links and a pack is never run through .bin.
-      return rm(join(directory, 'node_modules', '.bin'), { recursive: true, force: true })
+      return removeCommandLinks(directory)
     },
   }
   const entries: PackEntry[] = []
