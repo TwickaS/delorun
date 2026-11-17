@@ -76,6 +76,9 @@ describe('the replica frame when its live part fails', () => {
     const container = await hero()
     expectStillAndPage(container)
     expect(report).toHaveBeenCalledWith('The studio replay did not load.', expect.any(Error))
+    // The rail and Pause would do nothing, so a rule hides them inside the failed frame.
+    expect(container.querySelector('[data-replay-failed]')).not.toBeNull()
+    expect(document.querySelector('style')?.textContent ?? container.querySelector('style')?.textContent).toContain('[data-replay-failed] [data-scripted]{display:none!important}')
   })
 
   it('puts the server\'s still and caption back, and keeps the page, when the live replica throws', async () => {

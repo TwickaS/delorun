@@ -35,4 +35,12 @@ describe('the replica plugins\' committed options', () => {
       expect(assignments, file).toEqual([])
     }
   })
+
+  it('keeps the stand-in sessions on the marketed release, so the version rows and the terminal tell one story', () => {
+    for (const file of ['ordinary-work', 'changes-and-versions']) {
+      const text = readFileSync(resolve(import.meta.dirname, `../src/replica/sessions/${file}.session.ts`), 'utf8')
+      expect(text, file).toContain(`release: '${marketedRelease(ROOT)}'`)
+    }
+    expect(readFileSync(resolve(import.meta.dirname, '../src/replica/sessions/changes-and-versions.session.ts'), 'utf8')).toContain(`Before update to ${marketedRelease(ROOT)}`)
+  })
 })

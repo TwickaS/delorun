@@ -5,7 +5,8 @@
  * own, which takes the same place and plays, keeping the stills the server drew. So the page's start script carries
  * only this shell; the server's markup carries its own styles, so it is styled before any script runs.
  * The frame owns its failure: if the chunk fails to load, the server's markup stays; if the live replica throws while
- * rendering, the server's markup comes back in its place. Either way the still and its caption stay and the rest of the
+ * rendering, the server's markup comes back in its place. A chunk that fails to load leaves the still and its caption and
+ * hides the chapter rail and Pause, which would do nothing. Either way the still and its caption stay and the rest of the
  * page is untouched, so a page that places a frame needs no guard of its own for it.
  * @module @delorun/website/replica/ReplicaFrame
  */
@@ -53,6 +54,8 @@ export function ReplicaFrame({ session, width, className }: ReplicaFrameProps) {
     /** The server's markup, which comes back if the live replica throws. */
     readonly markup: string
   } | undefined>()
+  /** True when the live chunk failed to load: the rail and Pause then cannot work, so the frame hides them. */
+  const [failed, setFailed] = useState(false)
   useEffect(() => {
     const target = box.current
     if (target === null) return
@@ -61,8 +64,8 @@ export function ReplicaFrame({ session, width, className }: ReplicaFrameProps) {
       observer.disconnect()
       import('./ReplicaLive.tsx').then(
         (module) => { setLive({ Live: module.ReplicaLive, stills: serverStills(target), markup: target.innerHTML }) },
-        // The server's markup stays: the still, its caption and the rail, which no longer play.
-        (error: unknown) => { console.error('The studio replay did not load.', error) },
+        // The server's markup stays: the still and its caption. The rail and Pause, which would do nothing, are hidden.
+        (error: unknown) => { console.error('The studio replay did not load.', error); setFailed(true) },
       )
     }, { rootMargin: '100% 0px' })
     observer.observe(target)
@@ -71,7 +74,10 @@ export function ReplicaFrame({ session, width, className }: ReplicaFrameProps) {
   // The browser's `island` is empty: React keeps the server's markup, since the prop never changes until the live
   // replica replaces it in one commit.
   return live === undefined
-    ? <div ref={box} className={className} dangerouslySetInnerHTML={{ __html: island({ session, width }) }} suppressHydrationWarning />
+    ? <>
+        <div ref={box} className={className} dangerouslySetInnerHTML={{ __html: island({ session, width }) }} suppressHydrationWarning data-replay-failed={failed ? '' : undefined} />
+        {failed ? <style>{'[data-replay-failed] [data-scripted]{display:none!important}'}</style> : null}
+      </>
     : <div ref={box} className={className}>
         <ChunkBoundary fallback={<div dangerouslySetInnerHTML={{ __html: live.markup }} />}>
           <live.Live session={session} width={width} stills={live.stills} />

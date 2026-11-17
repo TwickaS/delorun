@@ -23,7 +23,7 @@ const BASE = { atComputer: true, profile: 'default', protection: 'off', leftOut:
 export const FIXTURE: ReplicaFixture = {
   id: 'changes-and-versions',
   standIn: true,
-  release: '0.1.0-preview.2',
+  release: '0.1.0-preview.1.6',
   clock: '2026-11-17T10:50:00Z',
   events: [],
   terminal,
@@ -39,7 +39,7 @@ export const FIXTURE: ReplicaFixture = {
         { id: 'v4', at: Date.UTC(2026, 10, 17, 10, 42), summary: 'Changed the settings of delorun-theme', origin: 'other', current: false },
         { id: 'v3', at: Date.UTC(2026, 10, 17, 9, 33), summary: 'Added the plugin word-count', origin: 'other', current: false },
         { id: 'v2', at: Date.UTC(2026, 10, 16, 18, 2), summary: 'saved', origin: 'saved', name: 'Before trying new plugins', current: false },
-        { id: 'v1', at: Date.UTC(2026, 10, 14, 9, 15), summary: 'Before update to 0.1.0-preview.2', origin: 'update', current: false },
+        { id: 'v1', at: Date.UTC(2026, 10, 14, 9, 15), summary: 'Before update to 0.1.0-preview.1.6', origin: 'update', current: false },
       ],
     },
   },
