@@ -268,6 +268,7 @@ export type ChangesControl =
   | 'make-copy' | 'restart'
   | 'plugin-apply' | 'plugin-undo' | 'plugin-discard' | 'plugin-other'
   | 'notice-seen'
+  | 'update-check' | 'update-begin' | 'update-cancel' | 'update-rollback' | 'update-dismiss' | 'stop'
 
 /** Whether a request may use a control now, and if not, what it needs: the computer, or an unlock entered on the device. */
 export type MayView =

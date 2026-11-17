@@ -195,6 +195,10 @@
           - '@delorun/bundle-local'
           - '@delorun/bundle-studio'
 
+    # The studio's update routes: check now, update now, go back and stop, each through the home process's update channel.
+    - id: delorun-plugin-update
+      name: '@delorun/plugin-update'
+
     # Plugin packs (A403, A404): the Host's install queue for plugins outside the default install, and the `packs`
     # remote that the downloads panel, Plugins and onboarding call.
     - id: delorun-packs

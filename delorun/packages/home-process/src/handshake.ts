@@ -32,6 +32,7 @@ import {
 import type { DelorunLogger } from '@delorun/logs'
 import { HomeProcessError, isRollbackRefusal } from './errors.ts'
 import type { HandoverLine, Successor } from './handover.ts'
+import { removeUpdateResult, updateResultPath, writeUpdateResult, type UpdateResultRecord } from './update-result.ts'
 import { endUpdateRecord, journalledUpdate, journalRecord, readJournal, removeJournal, stashCommitted, writeJournal, type JournalledUpdate } from './journal.ts'
 import type { BootRow, ChatGate, HarnessCarry, HealthExpectations, HostProtection, PreparedRuntime, ProfileSnapshots, RuntimePointers, RuntimeStore, SessionDataCopies } from './seams.ts'
 
@@ -178,6 +179,8 @@ export class UpdateHandshake {
   private settled: Promise<unknown> = Promise.resolve()
   private committedSuccessor: Successor | undefined
   private failedRollback = false
+  /** The update or rollback that runs, which the outcome record names. */
+  private attempt: { readonly kind: UpdateResultRecord['kind'], readonly from: RuntimeVersion, readonly to: RuntimeVersion } | undefined
 
   /** The home process. */
   private readonly subject: HandshakeSubject
@@ -416,11 +419,46 @@ export class UpdateHandshake {
    * End a handshake that may not run this process's Host again: the process stops once the final line is sent, and
    * the record stays for the next start.
    */
-  private stopServing(result: HandshakeResult, message: string, error: unknown, data: Readonly<Record<string, unknown>>): HandshakeResult {
+  private async stopServing(result: HandshakeResult, message: string, error: unknown, data: Readonly<Record<string, unknown>>): Promise<HandshakeResult> {
     this.failedRollback = true
     this.subject.setState('stopping')
     this.subject.logger.error(message, { err: error, data })
+    await this.saveResult(result)
     return result
+  }
+
+  /**
+   * Begin the outcome record of an update or a rollback: the previous record goes, so a record always names the latest attempt.
+   * @param kind - what runs.
+   * @param from - the version that runs.
+   * @param to - the version it moves to.
+   */
+  private async beginAttempt(kind: UpdateResultRecord['kind'], from: RuntimeVersion, to: RuntimeVersion): Promise<void> {
+    this.attempt = { kind, from, to }
+    try {
+      await removeUpdateResult(updateResultPath(this.subject.home, this.subject.profile))
+    } catch (error) {
+      this.subject.logger.warn('the previous outcome record could not be removed', { err: error })
+    }
+  }
+
+  /**
+   * Write the outcome record of the attempt that ended. A record that cannot be written is logged and changes nothing:
+   * the record only reports.
+   * @param result - how the attempt ended.
+   */
+  private async saveResult(result: HandshakeResult): Promise<void> {
+    const attempt = this.attempt
+    if (attempt === undefined) return
+    try {
+      await writeUpdateResult(updateResultPath(this.subject.home, this.subject.profile), {
+        v: 1, kind: attempt.kind, outcome: result.outcome, from: attempt.from, to: attempt.to, at: new Date().toISOString(),
+        ...result.reason === undefined ? {} : { reason: result.reason },
+        ...result.criterion === undefined ? {} : { criterion: result.criterion },
+      })
+    } catch (error) {
+      this.subject.logger.warn('the outcome record could not be written', { err: error })
+    }
   }
 
   private async run(prepared: PreparedRuntime, dataCopy: boolean, wait: DrainPolicy, drainTimeoutS: number, progress: Progress): Promise<HandshakeResult> {
@@ -436,6 +474,7 @@ export class UpdateHandshake {
     // `update.cancel` ends the update until the switch begins.
     const cancellation = new AbortController()
     this.waiting = cancellation
+    await this.beginAttempt('update', from, to)
     const end = async (result: HandshakeResult): Promise<HandshakeResult> => {
       release?.()
       // The copy goes before the record, so a kill between the two leaves a record that names the copy to remove.
@@ -443,6 +482,7 @@ export class UpdateHandshake {
       if (recorded) await endUpdateRecord(journal)
       this.subject.setState('running')
       this.subject.logger.info('update ended', { data: { from, to, outcome: result.outcome, reason: result.reason ?? '' } })
+      await this.saveResult(result)
       return result
     }
     try {
@@ -523,6 +563,7 @@ export class UpdateHandshake {
           this.committedSuccessor = successor
           this.current = { phase: 'committed', target: to }
           this.subject.logger.info('update committed', { data: { from, to, successor: successor.pid } })
+          await this.saveResult({ outcome: 'committed' })
           return { outcome: 'committed' }
         }
         this.subject.logger.warn('the successor failed its health check', { data: { to, reason: answer.reason, criterion: answer.criterion ?? '' } })
@@ -628,10 +669,12 @@ export class UpdateHandshake {
     let release: (() => void) | undefined
     const cancellation = new AbortController()
     this.waiting = cancellation
-    const end = (result: HandshakeResult): HandshakeResult => {
+    await this.beginAttempt('rollback', running, record.from)
+    const end = async (result: HandshakeResult): Promise<HandshakeResult> => {
       release?.()
       this.subject.setState('running')
       this.subject.logger.info('rollback ended', { data: { ...data, outcome: result.outcome, reason: result.reason ?? '' } })
+      await this.saveResult(result)
       return result
     }
     try {
@@ -654,7 +697,7 @@ export class UpdateHandshake {
         await this.subject.suspend(drainTimeoutS)
       } catch (error) {
         // No step of the rollback ran: the record stays as it was.
-        const result = end({ outcome: 'aborted', reason: 'HOST_STOP_FAILED' })
+        const result = await end({ outcome: 'aborted', reason: 'HOST_STOP_FAILED' })
         await this.resumeAfterStopFailed(error, data)
         return result
       }
@@ -670,7 +713,7 @@ export class UpdateHandshake {
         if (isRollbackRefusal(error)) {
           // Refused before any step: this Host runs again with nothing changed.
           await this.subject.resume()
-          end({ outcome: 'aborted' })
+          await end({ outcome: 'aborted' })
           throw error
         }
         return this.stopServing({ outcome: 'failed' }, 'the rollback stopped after a step may have run; the next start completes it', error, data)
@@ -691,6 +734,7 @@ export class UpdateHandshake {
         this.committedSuccessor = successor
         this.current = { phase: 'committed', target: record.from }
         this.subject.logger.info('rollback committed', { data: { from: record.to, to: record.from, successor: successor.pid } })
+        await this.saveResult({ outcome: 'rolled-back' })
         return { outcome: 'rolled-back', lines }
       }
       // The data and the profile are back for `from`, so `to` may not run on them: the pointers stay on `from`.
