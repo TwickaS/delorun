@@ -350,10 +350,10 @@ export interface ExternalAgentsGate {
   /**
    * Start a seat's program: consent, limits, capacity, then the driver's open with the gate's spawn.
    * @param request - the seat and its callbacks.
-   * @returns the open program session.
+   * @returns the open program session, with the reason it was allowed.
    * @throws {@link GateRefusedError} when the gate refuses; {@link ProgramOpenError} when the program cannot open.
    */
-  start(request: SeatStartRequest): Promise<ProgramSession>
+  start(request: SeatStartRequest): Promise<SeatSession>
   /**
    * Run a limits check through the driver's probe in a folder the gate picks, counted against `maxLivePrograms`. It
    * takes no folder, no child and no input.
@@ -507,9 +507,21 @@ export interface SeatReview {
   readonly signal: AbortSignal
 }
 
-/** A seat review's answer; `timeoutMs` bounds one seat turn. */
+/**
+ * Why a seat review allowed the seat: a lease that still holds, a workspace grant, the person's answer to the card,
+ * or the root chat's Full access (approval policy `never`), which starts a seat with no card and no grant.
+ */
+export type SeatAllowReason = 'lease' | 'granted' | 'asked' | 'full-access'
+
+/** A seat's program session as the gate hands it out. */
+export interface SeatSession extends ProgramSession {
+  /** Why the start was allowed, which the hand-off line shows; `consent-off` when the consent row's saved `enabled` is false. */
+  readonly allowedBy: SeatAllowReason | 'consent-off'
+}
+
+/** A seat review's answer; `timeoutMs` bounds one seat turn, and `why` names the reason the hand-off line shows. */
 export type SeatVerdict =
-  | { readonly kind: 'allow'; readonly timeoutMs: number }
+  | { readonly kind: 'allow'; readonly timeoutMs: number; readonly why: SeatAllowReason }
   | { readonly kind: 'refuse'; readonly reason: string }
 
 /** One approval of a seat, kept in memory only until an end event (T4, review D11). */

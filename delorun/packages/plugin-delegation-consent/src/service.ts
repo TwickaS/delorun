@@ -19,7 +19,9 @@
  * delegation tool's description, and lists, records and revokes the grants the studio and `delorun` show.
  *
  * A live agent seat is reviewed by `reviewSeat` over the same ordered rules, with read-only checked on the seat's root
- * chat and its creator and the workspace taken from the root. An allowed seat holds a lease in memory until the child,
+ * chat and its creator and the workspace taken from the root. Where a one-shot run asks, a seat whose root chat has
+ * Full access (approval policy `never`) is allowed with no card and no grant, and the verdict says so. An allowed seat
+ * holds a lease in memory until the child,
  * the root or an ancestor is archived, the person revokes it, the workspace grant is revoked, the consent stops, or a
  * later review refuses or finds the root, workspace, run folder or agent changed. While the lease holds, no card is
  * shown again; each seat turn is reviewed without a card.
@@ -38,7 +40,7 @@ import type { Session } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-workspace'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {
-  ProgramRunRule, SeatConsent, SeatLease, SeatLeaseEnd, SeatReview, SeatVerdict,
+  ProgramRunRule, SeatAllowReason, SeatConsent, SeatLease, SeatLeaseEnd, SeatReview, SeatVerdict,
 } from '@delorun/external-agents/contract'
 import { resolveDelorunHome, workspaceLocationHomes, workspaceLocationMessage, workspaceLocationProblem } from '@delorun/home'
 import { NO_WORKSPACE, workspaceKey } from '@delorun/plugin-permission-defaults/workspace'
@@ -236,31 +238,30 @@ export class DelorunDelegationConsent extends Service implements DelegationConse
     const rules = await this.rules({ provider, readOnlyOf: [root.session, review.creator.session], workspaceOf: root.session, cwd: review.cwd })
     if (rules.kind === 'refuse') return rules
     if (this.archivedAbove(child, root)) return { kind: 'refuse', reason: archivedRefusal(provider) }
-    const allowed = { kind: 'allow', timeoutMs: this.options.timeoutMs() } as const
+    const allowed = (why: SeatAllowReason): SeatVerdict => ({ kind: 'allow', timeoutMs: this.options.timeoutMs(), why })
     const listed = this.workspaceListed(rules.workspace)
     const lease = this.leases.leaseOf(child.id)
     if (lease !== undefined) {
       const same = lease.root === root.id && lease.workspace === rules.workspace && lease.cwd === rules.cwd && lease.provider === provider
-      if (same && (!lease.workspaceListed || listed !== false)) return allowed
+      if (same && (!lease.workspaceListed || listed !== false)) return allowed('lease')
       this.leases.end(child.id, 'refused')
     }
-    const record = (): SeatVerdict => {
+    const record = (why: SeatAllowReason): SeatVerdict => {
       this.leases.record({
         child: child.id, root: root.id, workspace: rules.workspace, cwd: rules.cwd, provider, workspaceListed: listed === true, grantedAt: this.options.now(),
       })
-      return allowed
+      return allowed(why)
     }
-    if (rules.granted) return record()
+    if (rules.granted) return record('granted')
     if (review.phase === 'turn') return { kind: 'refuse', reason: leaseEndedRefusal(provider) }
     const approval = this.ctx.get('approval')
     if (approval === undefined) return { kind: 'refuse', reason: notApprovedRefusal(provider, 'no-approval', rules.workspace) }
-    if ((approval.overrideOf(root.session) ?? approval.config.policy) === 'never') {
-      return { kind: 'refuse', reason: notApprovedRefusal(provider, 'never', rules.workspace) }
-    }
+    // Full access on the root starts the seat with no card and no grant (owner, EA28), after the rules above.
+    if ((approval.overrideOf(root.session) ?? approval.config.policy) === 'never') return record('full-access')
     const asked = this.hasOpenTurn(root) ? root : review.phase === 'resume' ? child : undefined
     if (asked === undefined) return { kind: 'refuse', reason: noOpenTurnRefusal(provider, rules.workspace) }
     const outcome = await this.ask(asked, { provider, workspace: rules.workspace, cwd: rules.cwd, label: review.label, signal: review.signal })
-    return outcome === 'allowed-once' ? record() : { kind: 'refuse', reason: notApprovedRefusal(provider, outcome, rules.workspace) }
+    return outcome === 'allowed-once' ? record('asked') : { kind: 'refuse', reason: notApprovedRefusal(provider, outcome, rules.workspace) }
   }
 
   /**
