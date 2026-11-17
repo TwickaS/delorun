@@ -43,26 +43,33 @@
 
 .count {
   flex: none;
+  font-variant-numeric: tabular-nums;
   font-size: var(--onb-small-size);
   line-height: var(--onb-small-line);
   color: var(--dsw-alias-label-secondary);
 }
 
+/* One short segment per step: the steps behind and the current one are filled, the rest are a faint track. */
 .bar {
+  display: flex;
   flex: 1;
-  height: 4px;
-  overflow: hidden;
-  border-radius: var(--dsw-radius-xs);
-  background: var(--dsw-alias-border-l2);
+  gap: 4px;
 }
 
 .bar > span {
-  display: block;
-  width: 100%;
-  height: 100%;
+  flex: 1;
+  height: 3px;
+  border-radius: var(--dsw-radius-xs);
+  background: var(--dsw-alias-border-l2);
+  transition: background-color 240ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.bar > [data-state='done'] {
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 55%, transparent);
+}
+
+.bar > [data-state='current'] {
   background: var(--dsw-alias-brand-primary);
-  transform-origin: left;
-  transition: transform 240ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 .scroll {
@@ -193,12 +200,14 @@
   background: none;
   font: inherit;
   font-size: var(--onb-small-size);
-  color: var(--dsw-alias-label-secondary);
+  color: var(--dsw-alias-label-tertiary);
   cursor: pointer;
+  text-underline-offset: 3px;
 }
 
 .later:hover {
   color: var(--dsw-alias-label-primary);
+  text-decoration: underline;
 }
 
 /* Every button and disclosure in a step is at least 44px each way for a finger. */
