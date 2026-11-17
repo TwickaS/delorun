@@ -288,7 +288,7 @@ studio 监听 `127.0.0.1`，只有你自己的电脑才能访问，除非你开�
 - 如果链接显示已过期，那么请再次运行 `delorun open`。每个链接只能在一分钟内使用一次。
 - 如果浏览器在 studio 地址显示 “unauthorized”（HTTP 401），那么你是在没有登录链接的情况下打开的地址。请运行 `delorun open`。 <!-- us-spelling: quoted output -->
 - 如果 `delorun status` 显示 `state: not running`，那么请用 `delorun start` 启动它；如果启动失败，请阅读 `delorun logs` 和[启动与停止](troubleshooting.zh.md#starting-and-stopping)。
-- 如果你的密钥没有设置，那么 `delorun doctor` 会显示 `warn key`，chat 会报告模型无法回答。请用 `delorun setup key` 修复。
+- 如果你的密钥没有设置，那么 `delorun doctor` 会显示一行以 `!` 开头的 `key`，chat 会报告模型无法回答。请用 `delorun setup key` 修复。
 
 </details>
 
