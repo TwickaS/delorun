@@ -3,6 +3,10 @@
  * load it through the plugin manager. The download aborts with the item; every refusal the pack code raises becomes
  * a failure the person can read, and a missing connection is its own failure, `offline`.
  *
+ * Downloads run as many at a time as the queue allows, but the plugin manager's install runs one pack at a time: it holds
+ * the profile write lock while pnpm runs and the Host reloads, which takes up to minutes for a large pack, so a second
+ * install would spend that time waiting for the lock and could run out of its wait.
+ *
  * @module @delorun/plugin-packs/runner
  */
 import { InstallRefusal, type InstallOutcome, type InstallProgress } from '@delorun/install-queue'
@@ -50,11 +54,42 @@ export async function packsOf(release: InstalledRelease, files: PackFiles): Retu
 }
 
 /**
+ * A turn that runs work one call at a time, in the order the calls came.
+ * @returns the function that runs one call's work in its turn; a call whose signal aborts while it waits leaves the line
+ *   with the signal's reason, and the next call still waits for the work before it.
+ */
+export function oneAtATime(): <T>(signal: AbortSignal, work: () => Promise<T>) => Promise<T> {
+  let last: Promise<void> = Promise.resolve()
+  return async (signal, work) => {
+    signal.throwIfAborted()
+    const before = last
+    let done!: () => void
+    last = new Promise((resolve) => { done = resolve })
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const leave = (): void => { reject(signal.reason) }
+        signal.addEventListener('abort', leave, { once: true })
+        void before.then(() => {
+          signal.removeEventListener('abort', leave)
+          resolve()
+        })
+      })
+      signal.throwIfAborted()
+      return await work()
+    } finally {
+      // After an abort the work before may still run, so the next turn starts when it ends.
+      void before.then(done)
+    }
+  }
+}
+
+/**
  * Create the queue's runner.
  * @param deps - the environment and the plugin manager's install.
  * @returns the function the install queue calls for each item.
  */
 export function createPackRunner(deps: RunnerDeps): (key: string, signal: AbortSignal, progress: InstallProgress) => Promise<InstallOutcome> {
+  const installs = oneAtATime()
   return async (key, signal, progress) => {
     try {
       progress.stage('downloading')
@@ -72,7 +107,7 @@ export function createPackRunner(deps: RunnerDeps): (key: string, signal: AbortS
       signal.throwIfAborted()
       // The pack is linked through `packs/current`; after an update switched, that names another release.
       await requireRunningRelease(release.paths, release.version)
-      const result = await deps.installBundle(`link:${release.paths.packLink(entry.name)}`, { enabled: true, requestId: deps.requestId(key), expected: { name: entry.name, version: entry.version } })
+      const result = await installs(signal, () => deps.installBundle(`link:${release.paths.packLink(entry.name)}`, { enabled: true, requestId: deps.requestId(key), expected: { name: entry.name, version: entry.version } }))
       if (result.application === 'cancelled') throw new Error('cancelled')
       if (result.application === 'failed') throw new InstallRefusal('failed', `The plugin manager could not load ${key}${result.error?.code === undefined ? '' : ` (${result.error.code})`}.`)
       return { reloadNeeded: result.application === 'restart-required' }

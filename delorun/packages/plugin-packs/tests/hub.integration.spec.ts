@@ -37,12 +37,13 @@ interface Setup {
   readonly failures: Array<readonly [string, unknown]>
 }
 
-async function setup(options: { application?: string, archive?: (signal?: AbortSignal) => Promise<Uint8Array>, tamper?: (bytes: Uint8Array) => Uint8Array } = {}): Promise<Setup> {
+async function setup(options: { application?: string, archive?: (signal?: AbortSignal) => Promise<Uint8Array>, tamper?: (bytes: Uint8Array) => Uint8Array, names?: readonly string[], install?: InstallBundle } = {}): Promise<Setup> {
   await fixture.install('0.1.0')
   const paths = new StorePaths(fixture.home, PLATFORM)
   const manifestBytes = readFileSync(paths.releaseFiles(V1).manifest)
-  const built = await Promise.all(['one', 'two'].map(name => buildPackArchive(`delorun-0.1.0-pack-${name}.any.tar.gz`, [text('package.json', `{"name":"${name}","version":"1.0.0","type":"module"}`)], 1_800_000_000)))
-  const entries = ['one', 'two'].map((name, index) => ({ name, version: '1.0.0', experimental: name === 'two', variants: { any: { ...built[index]!.variant, external: [], peers: [] } } }))
+  const names = options.names ?? ['one', 'two']
+  const built = await Promise.all(names.map(name => buildPackArchive(`delorun-0.1.0-pack-${name}.any.tar.gz`, [text('package.json', `{"name":"${name}","version":"1.0.0","type":"module"}`)], 1_800_000_000)))
+  const entries = names.map((name, index) => ({ name, version: '1.0.0', experimental: name === 'two', variants: { any: { ...built[index]!.variant, external: [], peers: [] } } }))
   const signed = { schema: RELEASE_SCHEMAS.packs, version: '0.1.0', manifest: createHash('sha256').update(manifestBytes).digest('hex'), packs: entries }
   const packsBytes = Buffer.from(`${JSON.stringify(signEnvelope({ signed: toJsonValue(signed), signatures: [] }, [fixture.keys.targets]), undefined, 2)}\n`)
   const served = new Map<string, Uint8Array>([['delorun-0.1.0.packs.json', packsBytes], ['delorun-0.1.0.packs.log.json', Buffer.from('{}')]])
@@ -58,7 +59,7 @@ async function setup(options: { application?: string, archive?: (signal?: AbortS
   const chats = { count: 0 }
   const installBundle: InstallBundle = (spec, opts) => {
     installs.push({ spec, requestId: opts.requestId, expected: opts.expected })
-    return Promise.resolve({ application: options.application ?? 'applied' })
+    return options.install === undefined ? Promise.resolve({ application: options.application ?? 'applied' }) : options.install(spec, opts)
   }
   const file = join(fixture.home, 'run', 'default', 'installs.json')
   const failures: Array<readonly [string, unknown]> = []
@@ -98,6 +99,33 @@ describe('the pack hub', () => {
     // The link names a pack that matched its signed list; a pack changed since the snapshot has no target after the next one.
     expect(hub.installedTarget('two', '0.1.0')).toBeUndefined()
     expect(hub.installedTarget('two', '0.1.0')).toBeUndefined()
+  })
+
+  it('installs eight packs one at a time through the plugin manager, so none waits out the profile lock', async () => {
+    let held: Promise<void> | undefined
+    let most = 0
+    let running = 0
+    // Each install holds the profile write lock for longer than another install waits for it, as a large pack does.
+    const install: InstallBundle = async () => {
+      if (held !== undefined && !await Promise.race([held.then(() => true), sleep(100).then(() => false)])) {
+        throw new Error('atomic-write: timed out waiting for the writer lock')
+      }
+      running += 1
+      most = Math.max(most, running)
+      const release = sleep(300)
+      held = release
+      await release
+      running -= 1
+      return { application: 'applied' }
+    }
+    const names = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight']
+    const { hub, installs, failures } = await setup({ names, install })
+    await hub.enqueue(names)
+    const snapshot = await until(hub, each => each.queue.length === names.length && each.queue.every(item => item.state === 'ready' || item.state === 'failed'))
+    expect(failures).toEqual([])
+    expect(snapshot.queue.filter(item => item.state !== 'ready')).toEqual([])
+    expect(installs.map(each => each.expected.name).sort()).toEqual([...names].sort())
+    expect(most).toBe(1)
   })
 
   it('refuses a pack whose archive differs from the signed packs file by one byte, installs nothing and asks the plugin manager nothing', async () => {
