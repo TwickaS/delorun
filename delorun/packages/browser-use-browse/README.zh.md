@@ -36,6 +36,7 @@ kind: "package-bundle"
 
 | 字段 | 默认值 | 含义 |
 | --- | --- | --- |
+| `enabled` | `false` | C16 开关 `use_my_browser`：关闭时，该行检查其字段，不挂载任何内容。Delorun 附带的每一行都会开启它。 |
 | `variant` | `auto` | 运行哪个平台的二进制文件；`auto` 选择本机的。在 Linux 上选 `windows-x64` 会通过 WSL 运行 Windows 二进制文件。 |
 | `command` | 未设置 | 替代该二进制文件的绝对路径程序，例如测试用的替身服务器。 |
 | `args` | `["mcp"]` | 程序的参数。 |
