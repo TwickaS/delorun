@@ -27,8 +27,13 @@
 
 .createHeading {
   composes: heading;
-  /* Create a plugin shares the Plugins page with the inventory, so the page title does not name it. */
+  /* Create a plugin shares the Plugins page with the inventory, so the page title does not name it; it takes the section heading, not the page title's type. */
   display: block;
+  padding: 0 4px;
+  font-size: var(--dsh-settings-card-heading-size, 15px);
+  font-weight: var(--dsh-settings-card-heading-weight, 500);
+  line-height: var(--dsh-settings-card-heading-line-height, 22px);
+  color: var(--dsh-settings-card-heading-color, var(--dsw-alias-label-primary));
 }
 
 .lead {

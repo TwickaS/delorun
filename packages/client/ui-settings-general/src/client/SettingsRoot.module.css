@@ -307,6 +307,11 @@
   gap: 2px;
 }
 
+/* The cells of one group; the phone list draws the group's card around them. */
+.navGroupCells {
+  display: contents;
+}
+
 .navGroupLabel {
   padding: 0 12px 4px;
   font-size: 12px;
@@ -642,23 +647,23 @@
   }
 
   :global(html:not([data-windows-titlebar]):not([data-platform='darwin'])) .panel[data-phone='list'] .navGroup {
+    flex: none;
     flex-direction: column;
     gap: 0;
-    border: 0.5px solid var(--dsw-alias-border-l1);
-    border-radius: var(--dsw-radius-lg);
-    background: var(--dsw-alias-bg-layer-1);
-    overflow: hidden;
   }
 
   :global(html:not([data-windows-titlebar]):not([data-platform='darwin'])) .panel[data-phone='list'] .navGroupLabel {
     display: block;
     padding: 0 16px 8px;
-    margin-top: 0;
   }
 
-  /* The label sits above the card, so the card is the group's second visual layer. */
-  :global(html:not([data-windows-titlebar]):not([data-platform='darwin'])) .panel[data-phone='list'] .navGroup {
-    position: relative;
+  :global(html:not([data-windows-titlebar]):not([data-platform='darwin'])) .panel[data-phone='list'] .navGroupCells {
+    display: flex;
+    flex-direction: column;
+    border: 0.5px solid var(--dsw-alias-border-l1);
+    border-radius: var(--dsw-radius-lg);
+    background: var(--dsw-alias-bg-layer-1);
+    overflow: hidden;
   }
 
   :global(html:not([data-windows-titlebar]):not([data-platform='darwin'])) .panel[data-phone='list'] .navGroups .navCell {

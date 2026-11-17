@@ -177,11 +177,13 @@ function SettingsPanel({ rows, nav, renderSlot, activeId, onSelect, onClose, bac
               {nav.groups.map(group => (
                 <div key={group.id} className={css.navGroup} role="group" aria-label={group.label}>
                   <div className={css.navGroupLabel} aria-hidden="true">{group.label}</div>
-                  {group.pages.map(page => (
-                    <NavCell key={page.id} id={page.id} label={page.label} icon={page.icon}
-                      active={!searching && page.id === active} renderSlot={renderSlot}
-                      onSelect={(id) => { setQuery(''); select(id) }} />
-                  ))}
+                  <div className={css.navGroupCells}>
+                    {group.pages.map(page => (
+                      <NavCell key={page.id} id={page.id} label={page.label} icon={page.icon}
+                        active={!searching && page.id === active} renderSlot={renderSlot}
+                        onSelect={(id) => { setQuery(''); select(id) }} />
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
