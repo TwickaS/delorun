@@ -32,9 +32,9 @@ export type PinLocaleKey = keyof typeof en
 export const zh: typeof en = {
   'title': 'Delorun 已锁定',
   'lead.pin': '输入 PIN，在这台设备上打开 studio。',
-  'lead.passcode': '输入密码短语，在这台设备上打开 studio。',
+  'lead.passcode': '输入口令，在这台设备上打开 studio。',
   'label.pin': 'PIN',
-  'label.passcode': '密码短语',
+  'label.passcode': '口令',
   'unlock': '解锁',
   'unlocking': '正在解锁…',
   'key.delete': '删除最后一位数字',
