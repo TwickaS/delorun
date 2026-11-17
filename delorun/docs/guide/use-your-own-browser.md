@@ -37,7 +37,7 @@ Pairing is done at the computer itself. A paired phone can see the row, but cann
 
 When a task needs your browser, the agent asks to use it. An approval card shows in the chat, with the task the agent wants it for, and says that the agent will use your own browser with your sign-ins. Allow it, or refuse to keep it out.
 
-You can allow it at the computer, or from a phone you paired and unlocked. A phone that is only signed in cannot allow it.
+You can allow it at the computer, or from an unlocked phone: a phone you paired, unlocked for this answer. A recent unlock for something else does not count, and a phone that is only signed in cannot allow it. The same goes for the permission for while you are away.
 
 Once you allow it, it lasts until you turn it off or the chat ends, also after Delorun restarts. Runs of that chat that you did not start, such as scheduled ones, use it only if you also allowed it for while you are away; that permission lasts seven days unless the row's settings change it, and you can give it again. A run nobody can answer, such as `delorun headless`, cannot use it, and says so.
 
