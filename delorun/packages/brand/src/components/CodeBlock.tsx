@@ -62,6 +62,13 @@ export interface CodeBlockProps {
   readonly size?: 'md' | 'lg'
   /** `primary` gives the copy button the accent fill, for the page's one main button. */
   readonly emphasis?: 'primary' | undefined
+  /**
+   * Keep the code's lines as written and scroll sideways when they are too long, for code whose indentation matters, such
+   * as a settings file. The scrolling code can take focus, so a keyboard reaches it, and it needs `codeLabel` to be named.
+   */
+  readonly scroll?: boolean | undefined
+  /** The accessible name of the scrolling code, such as "Settings entry"; used when `scroll` is set. */
+  readonly codeLabel?: string | undefined
   readonly className?: string | undefined
 }
 
@@ -74,7 +81,7 @@ const TICK = 'M20 6 9 17l-5-5'
  * @param props - see {@link CodeBlockProps}.
  * @returns the block.
  */
-export function CodeBlock({ code, copyLabel, copiedLabel, failedLabel, caption, size = 'md', emphasis, className }: CodeBlockProps) {
+export function CodeBlock({ code, copyLabel, copiedLabel, failedLabel, caption, size = 'md', emphasis, scroll = false, codeLabel, className }: CodeBlockProps) {
   const [ready, setReady] = useState(false)
   const [answer, setAnswer] = useState<Answer>('idle')
   const [presses, setPresses] = useState(0)
@@ -97,7 +104,7 @@ export function CodeBlock({ code, copyLabel, copiedLabel, failedLabel, caption, 
     <figure className={`${css.block} ${className ?? ''}`.trim()} data-size={size}>
       {caption === undefined ? null : <figcaption className={css.caption}>{caption}</figcaption>}
       <div className={css.row}>
-        <pre className={css.pre}><code ref={codeRef}>{code}</code></pre>
+        <pre className={css.pre} data-scroll={scroll ? '' : undefined} {...scroll ? { tabIndex: 0, role: 'region', 'aria-label': codeLabel } : {}}><code ref={codeRef}>{code}</code></pre>
         <button type="button" className={css.copy} data-answer={answer} data-ready={ready} data-emphasis={emphasis} aria-label={copyLabel} title={copyLabel} onClick={() => { void copy() }} tabIndex={ready ? 0 : -1}>
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             {answer === 'copied'
