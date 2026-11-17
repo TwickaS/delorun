@@ -25,6 +25,21 @@ import type { JsonSchemaNode } from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import { describeError, McpLocalError } from './diagnostic.ts'
 
+declare module '@deepseek-ai/cordis' {
+  interface Events {
+    /**
+     * Before a tool call is sent to an MCP server: a listener may replace the arguments the server receives, such as
+     * a path the server would open, by a Host-made copy. The call's logged arguments stay what the model sent.
+     * @mode bail
+     * @param serverName - the server's configured namespace.
+     * @param args - the arguments the model sent.
+     * @param execution - the call, whose `agent` identifies the Session.
+     * @returns the arguments to send, or `undefined` to leave the next listener, and then the model's arguments.
+     */
+    'mcp-client/call-arguments'(serverName: string, args: Record<string, unknown>, execution: ToolExecution): Record<string, unknown> | undefined | Promise<Record<string, unknown> | undefined>
+  }
+}
+
 /** Resolved options relevant to tool bridging. */
 export interface ToolBridgeOptions {
   serverName: string
@@ -154,8 +169,9 @@ export async function syncTools(
       taskRequired: tool.execution?.taskSupport === 'required',
       call: async (args, execution) => {
         try {
+          const sent = await ctx.bail('mcp-client/call-arguments', opts.serverName, args, execution) ?? args
           const result = await client.callTool(
-            { name: tool.name, arguments: args },
+            { name: tool.name, arguments: sent },
             { signal: AbortSignal.any([execution.signal, opts.signal]),
               timeout: opts.toolCallTimeoutMs, toolDefinition: tool },
           )

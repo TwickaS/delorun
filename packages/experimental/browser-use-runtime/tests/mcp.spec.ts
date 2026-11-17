@@ -116,6 +116,7 @@ interface LoadOptions {
   outputRoot?: string
   refuseCall?: SessionMcpOptions['refuseCall']
   checkResult?: SessionMcpOptions['checkResult']
+  prepareCall?: SessionMcpOptions['prepareCall']
   registration?: SessionMcpOptions['registration']
   admission?: SessionMcpOptions['admission']
   deniedTools?: string[]
@@ -123,7 +124,8 @@ interface LoadOptions {
 
 async function load(options: LoadOptions = {}) {
   const { exclusive = false, mode, toolCallTimeoutMs, toolOrder, consent = false } = options
-  const { explainFailure, directory, outputFolder, outputRoot, refuseCall, checkResult, registration, admission, deniedTools } = options
+  const { explainFailure, directory, outputFolder, outputRoot, refuseCall, checkResult, prepareCall } = options
+  const { registration, admission, deniedTools } = options
   const root = await mkdtemp(join(tmpdir(), 'dsh-browser-mcp-'))
   roots.push(root)
   const model = new FixtureModel()
@@ -140,6 +142,7 @@ async function load(options: LoadOptions = {}) {
         ...toolCallTimeoutMs === undefined ? {} : { toolCallTimeoutMs, env: {} }, ...explainFailure === undefined ? {} : { explainFailure },
         ...directory === undefined ? {} : { directory }, ...outputFolder === undefined ? {} : { outputFolder },
         ...outputRoot === undefined ? {} : { outputRoot },
+        ...prepareCall === undefined ? {} : { prepareCall },
         ...refuseCall === undefined ? {} : { refuseCall }, ...checkResult === undefined ? {} : { checkResult },
         ...deniedTools === undefined ? {} : { deniedTools },
         ...registration === undefined ? {} : { registration }, ...admission === undefined ? {} : { admission },
@@ -694,6 +697,19 @@ describe('Session MCP Loader composition', () => {
       { tool: 'visit', arguments: { label: 'refused' }, directory: cwd },
       { tool: 'visit', arguments: { label: 'allowed' }, directory: cwd },
     ])
+  })
+
+  it('lets the provider replace a call\'s arguments before the server sees them, or refuse the call', async () => {
+    const { ctx, root } = await load({ prepareCall: async (call) => {
+      const label = (call.arguments as { label: string }).label
+      return label === 'refused' ? 'Not readable.' : label === 'copy' ? { arguments: { label: 'copied' } } : undefined
+    } })
+    const { agent } = await ctx.agents.create({ sessionId: SessionId('prepared') })
+    await warm(ctx, agent)
+    expect(await visit(ctx, agent, 'refused')).toMatchObject({ isError: true, error: { message: 'Not readable.' } })
+    expect((await visit(ctx, agent, 'copy')).isError).toBe(false)
+    expect((await visit(ctx, agent, 'same')).isError).toBe(false)
+    expect((await events(root)).filter(event => event.event === 'call').map(event => (event.arguments as { label: string }).label)).toEqual(['copied', 'same'])
   })
 
   it('replaces a call\'s result with the provider\'s refusal after the server answered, and keeps it otherwise', async () => {

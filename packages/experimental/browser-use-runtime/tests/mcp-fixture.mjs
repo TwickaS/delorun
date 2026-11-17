@@ -55,7 +55,7 @@ lines.on('line', line => {
       ] })
       break
     case 'tools/call':
-      record('call', { name: request.params.name, cwd: process.cwd() })
+      record('call', { name: request.params.name, cwd: process.cwd(), arguments: request.params.arguments })
       if (request.params.name === 'disconnect') process.exit(0)
       counter += 1
       if (request.params.arguments.label === 'missing-browser') {

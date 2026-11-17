@@ -391,6 +391,19 @@ describe('tool execution', () => {
     )
   })
 
+  it('sends the arguments a call-arguments listener returns, and the model\'s own when none does', async () => {
+    const client = createMockClient(
+      [{ name: 'echo', inputSchema: { type: 'object' } }],
+      { content: [{ type: 'text', text: 'ok' }] },
+    )
+    await syncTools(client as never, ctx, defaultOpts, new Map())
+    ctx.on('mcp-client/call-arguments', (serverName, args) => serverName === 'srv' && args.msg === 'swap' ? { msg: 'swapped' } : undefined)
+    await executeToolFixture(ctx, { signal: testToolSignal, callId: ToolCallId('c1'), name: 'mcp__srv__echo', arguments: { msg: 'swap' } })
+    await executeToolFixture(ctx, { signal: testToolSignal, callId: ToolCallId('c2'), name: 'mcp__srv__echo', arguments: { msg: 'keep' } })
+    expect(client.callTool).toHaveBeenNthCalledWith(1, { name: 'echo', arguments: { msg: 'swapped' } }, expect.anything())
+    expect(client.callTool).toHaveBeenNthCalledWith(2, { name: 'echo', arguments: { msg: 'keep' } }, expect.anything())
+  })
+
   it('sends the raw name for normalized public names', async () => {
     const client = createMockClient(
       [{ name: 'admin.reset', inputSchema: { type: 'object' } }],

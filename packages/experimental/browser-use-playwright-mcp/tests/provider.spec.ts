@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import { mkdir, mkdtemp, readdir, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { createRequire } from 'node:module'
@@ -298,9 +298,10 @@ it('reports a file it cannot remove, and accepts a screenshot and a download tha
   expect(existsSync(join(chat, 'download.zip'))).toBe(true)
 })
 
-it('gives mountSessionMcp the after-call check', () => {
+it('gives mountSessionMcp the read copy and the after-call check', () => {
   Provider.apply(new Context(), Provider.Config({ mode: 'launch' }))
   expect(vi.mocked(mountSessionMcp).mock.calls.at(-1)![1].checkResult).toBeTypeOf('function')
+  expect(vi.mocked(mountSessionMcp).mock.calls.at(-1)![1].prepareCall).toBe(Provider.copyReadArguments)
 })
 
 it('puts the output folders in the per-user cache folder, outside the chat\'s folder and the Delorun home', () => {
@@ -315,20 +316,65 @@ it('puts the output folders in the per-user cache folder, outside the chat\'s fo
   expect(root).toBe(Provider.outputRoot(process.platform, process.env, homedir()))
 })
 
-it('with an output folder, accepts names in it and in the chat\'s folder, refuses others, and ignores .playwright-mcp', async () => {
+it('with an output folder, writes only inside it: a path into the chat\'s folder or elsewhere is refused before the call', async () => {
   const { chat, outside } = await chatFolder()
   const outputDirectory = join(outside, 'cache')
   await mkdir(outputDirectory)
-  await symlink(outside, join(chat, Provider.OUTPUT_FOLDER))
-  const refuse = (args: unknown) =>
-    Provider.refuseOutsideFolder({ tool: 'browser_take_screenshot', arguments: args, directory: chat, outputDirectory })
-  expect(await refuse({ filename: 'page.png' })).toBeUndefined()
-  expect(await refuse({ filename: join(chat, 'page.png') })).toBeUndefined()
-  expect(await refuse({ filename: join(outputDirectory, 'page.png') })).toBeUndefined()
-  expect(await refuse({ filename: join(outside, 'page.png') })).toBe(Provider.outsideFolderMessage(join(outside, 'page.png')))
-  expect(await refuse({ filename: '../../escape.png' })).toContain('leads outside it')
   await symlink(outside, join(chat, 'link'))
-  expect(await refuse({ filename: join(chat, 'link', 'x.png') })).toContain('leads outside it')
+  const refuse = (filename: string, tool = 'browser_take_screenshot') =>
+    Provider.refuseOutsideFolder({ tool, arguments: { filename }, directory: chat, outputDirectory })
+  expect(await refuse('page.png')).toBeUndefined()
+  expect(await refuse(join(outputDirectory, 'page.png'))).toBeUndefined()
+  expect(await refuse('sub/page.png')).toBeUndefined()
+  for (const filename of [join(chat, 'page.png'), join(chat, 'link', 'x.png'), join(outside, 'page.png'), '../../escape.png']) {
+    expect(await refuse(filename)).toBe(Provider.writeOutsideOutputMessage(outputDirectory))
+  }
+  expect(Provider.writeOutsideOutputMessage(outputDirectory)).toContain(`Browser saves to its own folder: ${outputDirectory}`)
+  // A tool that reads its filename is not a write.
+  expect(await refuse(join(chat, 'state.json'), 'browser_set_storage_state')).toBeUndefined()
+})
+
+it('copies a file the server would read from the chat\'s folder into the output folder, and the server never gets the chat\'s path', async () => {
+  const { chat, outside } = await chatFolder()
+  const outputDirectory = join(outside, 'cache')
+  await mkdir(outputDirectory)
+  await writeFile(join(chat, 'photo.png'), 'photo')
+  await writeFile(join(outputDirectory, 'earlier.png'), 'earlier')
+  const prepare = (tool: string, args: unknown) => Provider.copyReadArguments({ tool, arguments: args, directory: chat, outputDirectory })
+  const prepared = await prepare('browser_file_upload', { paths: ['photo.png', join(chat, 'photo.png'), join(outputDirectory, 'earlier.png')] })
+  const paths = (prepared as { arguments: { paths: string[] } }).arguments.paths
+  expect(paths).toHaveLength(3)
+  for (const copy of paths.slice(0, 2)) {
+    expect(copy.startsWith(outputDirectory)).toBe(true)
+    expect(readFileSync(copy, 'utf8')).toBe('photo')
+    expect(statSync(copy).mode & 0o777).toBe(0o600)
+  }
+  expect(paths[0]).not.toBe(paths[1])
+  expect(paths[2]).toBe(join(outputDirectory, 'earlier.png'))
+  // A link swapped in after the copy changes nothing the server reads.
+  await rm(join(chat, 'photo.png'))
+  await writeFile(join(outside, 'secret.txt'), 'secret')
+  await symlink(join(outside, 'secret.txt'), join(chat, 'photo.png'))
+  expect(readFileSync(paths[0]!, 'utf8')).toBe('photo')
+  const state = await prepare('browser_set_storage_state', { filename: 'state.json' })
+  expect(state).toBe(Provider.unreadableMessage('state.json'))
+  expect(await prepare('browser_navigate', { url: 'https://example.com' })).toBeUndefined()
+  expect(await prepare('browser_take_screenshot', { filename: 'x.png' })).toBeUndefined()
+})
+
+it('refuses a read through a link that leads outside the chat\'s folder, a missing file, a folder, and reads nothing outside', async () => {
+  const { chat, outside } = await chatFolder()
+  const outputDirectory = join(outside, 'cache')
+  await mkdir(outputDirectory)
+  await writeFile(join(outside, 'secret.txt'), 'secret')
+  await symlink(join(outside, 'secret.txt'), join(chat, 'notes.txt'))
+  await symlink(outside, join(chat, 'link'))
+  await mkdir(join(chat, 'folder'))
+  for (const name of ['notes.txt', 'link/secret.txt', join(outside, 'secret.txt'), 'missing.txt', 'folder', '../outside/secret.txt']) {
+    const prepared = await Provider.copyReadArguments({ tool: 'browser_file_upload', arguments: { paths: [name] }, directory: chat, outputDirectory })
+    expect(prepared).toBe(Provider.unreadableMessage(name))
+  }
+  expect(await readdir(outputDirectory)).toEqual([])
 })
 
 it('with an output folder, still catches a file that landed through a link inside it', async () => {

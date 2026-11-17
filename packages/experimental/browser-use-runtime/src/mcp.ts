@@ -155,6 +155,15 @@ export interface SessionMcpOptions {
    */
   refuseCall?: (call: BrowserToolCall) => Promise<string | undefined>
   /**
+   * Replace the arguments of a browser tool call before it reaches the server, after {@link refuseCall} let it through,
+   * such as a path the server would read replaced by a copy the Host made, so the server never opens a path a confined
+   * command can swap.
+   * @param call - the call, as given to {@link refuseCall}.
+   * @returns the model-visible refusal; or `arguments`, whose entries replace the same-named entries of the call's
+   * arguments; or `undefined` to send the call as it is.
+   */
+  prepareCall?: (call: BrowserToolCall) => Promise<string | { arguments: Record<string, unknown> } | undefined>
+  /**
    * Check what a browser tool call left behind, after the server answered, such as a file saved outside the Session's
    * folder. A result it refuses is replaced by a failure with the returned text. It runs after failed calls too,
    * because a call can write a file and still fail; its own failure is kept when it refuses nothing.
@@ -376,6 +385,10 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
         try {
           signal.throwIfAborted()
           const sessionDirectory = await workingDirectory.ensure(agent, signal)
+          // The call's logged arguments stay as the model sent them; the server gets the replacement.
+          const replacements = new WeakMap<object, Record<string, unknown>>()
+          scope.ctx.on('mcp-client/call-arguments', (serverName, _args, exec) =>
+            serverName === options.name && exec.agent === agent ? replacements.get(exec) : undefined)
           const outputDirectory = options.outputRoot === undefined ? undefined : await sessionOutputDirectory(options.outputRoot, agent.id)
           scope.ctx.on('tools/execute', async (exec, next) => {
             if (!exec.name.startsWith(toolPrefix)) return next()
@@ -389,6 +402,9 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
             }
             const refusal = await options.refuseCall?.(call)
             if (refusal !== undefined) return failure(refusal)
+            const prepared = await options.prepareCall?.(call)
+            if (typeof prepared === 'string') return failure(prepared)
+            if (prepared !== undefined) replacements.set(exec, { ...exec.arguments as Record<string, unknown>, ...prepared.arguments })
             if (options.checkResult === undefined) return next()
             const startedAt = Date.now()
             let result: ToolExecutionResult | undefined

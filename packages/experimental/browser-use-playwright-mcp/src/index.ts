@@ -1,6 +1,9 @@
 /** Chrome or Chromium browser tools from the pinned Playwright MCP server. @module */
 
-import { lstat, readdir, realpath, unlink } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
+import { createWriteStream } from 'node:fs'
+import { lstat, open, readdir, realpath, stat, unlink } from 'node:fs/promises'
+import { pipeline } from 'node:stream/promises'
 import { homedir } from 'node:os'
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -282,25 +285,123 @@ async function realLocation(path: string): Promise<string | undefined> {
  */
 export async function refuseOutsideFolder(call: BrowserToolCall): Promise<string | undefined> {
   const folder = await realpath(call.directory)
-  const roots = [folder]
-  const bases = [call.directory]
-  if (call.outputDirectory === undefined) {
-    if (!inside(folder, await realLocation(join(call.directory, OUTPUT_FOLDER)))) return LINKED_OUTPUT_FOLDER_MESSAGE
-    bases.push(join(call.directory, OUTPUT_FOLDER))
-  } else {
-    roots.push(await realpath(call.outputDirectory))
-    bases.push(call.outputDirectory)
-  }
+  if (call.outputDirectory !== undefined) return refuseWriteOutsideOutput(call, call.outputDirectory)
+  if (!inside(folder, await realLocation(join(call.directory, OUTPUT_FOLDER)))) return LINKED_OUTPUT_FOLDER_MESSAGE
   if (typeof call.arguments !== 'object' || call.arguments === null) return undefined
   const { filename, paths } = call.arguments as { filename?: unknown; paths?: unknown }
   const names = [filename, ...Array.isArray(paths) ? paths as unknown[] : []].filter(name => typeof name === 'string')
   for (const name of names) {
-    for (const base of bases) {
-      const real = await realLocation(resolve(base, name))
-      if (!roots.some(root => inside(root, real))) return outsideFolderMessage(name)
+    for (const base of [call.directory, join(call.directory, OUTPUT_FOLDER)]) {
+      if (!inside(folder, await realLocation(resolve(base, name)))) return outsideFolderMessage(name)
     }
   }
   return undefined
+}
+
+/**
+ * The refusal of a browser tool call that would write a file anywhere but the Session's output folder.
+ * @param directory - the Session's output folder.
+ * @returns the model-visible text.
+ */
+export function writeOutsideOutputMessage(directory: string): string {
+  return `Browser saves to its own folder: ${directory}. Give a file name without a path, or a path inside that folder.`
+}
+
+/** The tools that read the file a `filename` argument names, which the other tools write. */
+const FILENAME_READ_TOOLS: readonly string[] = ['browser_set_storage_state']
+
+/**
+ * The names a call asks the server to read, resolved against the Session's folder.
+ * @param call - the call.
+ * @returns the argument key and the names it holds, or `undefined` when the call reads no file.
+ */
+function readNames(call: BrowserToolCall): { key: 'paths' | 'filename'; names: string[] } | undefined {
+  if (typeof call.arguments !== 'object' || call.arguments === null) return undefined
+  const { filename, paths } = call.arguments as { filename?: unknown; paths?: unknown }
+  if (Array.isArray(paths)) return { key: 'paths', names: (paths as unknown[]).filter(name => typeof name === 'string') }
+  if (FILENAME_READ_TOOLS.includes(call.tool) && typeof filename === 'string') return { key: 'filename', names: [filename] }
+  return undefined
+}
+
+/**
+ * Refuse a call whose `filename` would be written outside the Session's output folder. The chat's own folder is not a
+ * write base: a link the chat planted there could lead the server's write anywhere.
+ * @param call - the call.
+ * @param output - the Session's output folder.
+ * @returns the refusal, or `undefined`.
+ */
+async function refuseWriteOutsideOutput(call: BrowserToolCall, output: string): Promise<string | undefined> {
+  if (readNames(call)?.key === 'filename' || typeof call.arguments !== 'object' || call.arguments === null) return undefined
+  const { filename } = call.arguments as { filename?: unknown }
+  if (typeof filename !== 'string') return undefined
+  const real = await realLocation(resolve(output, filename))
+  return inside(await realpath(output), real) ? undefined : writeOutsideOutputMessage(output)
+}
+
+/**
+ * The refusal of a browser tool call that reads a file the Host could not show to be inside the Session's folder.
+ * @param name - the argument as the model wrote it.
+ * @returns the model-visible text.
+ */
+export function unreadableMessage(name: string): string {
+  return `Browser can only read files that are inside this chat's folder or its own output folder, and "${name}" is not one it could open there.`
+}
+
+/**
+ * Copy a file the server would read into the Session's output folder, so the server, which runs outside the sandbox,
+ * never opens a path a confined command can swap. The Host opens the file, takes its identity from the open
+ * descriptor, resolves the path again, and copies from the descriptor only when the resolved path is inside the
+ * Session's folder and names the same file.
+ * @param name - the argument as the model wrote it.
+ * @param call - the call.
+ * @param folder - the Session's real folder.
+ * @param output - the Session's output folder.
+ * @returns the path the server reads: the copy, or the file itself when it is already in the output folder, which a
+ * confined command cannot write; or `undefined` when the file is not inside the Session's folder or changed during the
+ * check.
+ */
+async function readableCopy(name: string, call: BrowserToolCall, folder: string, output: string): Promise<string | undefined> {
+  const path = resolve(call.directory, name)
+  const outputReal = await realpath(output)
+  if (inside(outputReal, await realLocation(path))) return path
+  let handle
+  try {
+    handle = await open(path, 'r')
+  } catch {
+    // The file is missing or unreadable; the refusal names it.
+    return undefined
+  }
+  try {
+    const opened = await handle.stat({ bigint: true })
+    const real = await realpath(path).catch(() => undefined)
+    if (real === undefined || !inside(folder, real) || !opened.isFile()) return undefined
+    const resolved = await stat(real, { bigint: true })
+    if (resolved.dev !== opened.dev || resolved.ino !== opened.ino) return undefined
+    const copy = join(output, `upload-${randomUUID()}-${basename(real)}`)
+    await pipeline(handle.createReadStream({ autoClose: false }), createWriteStream(copy, { flags: 'wx', mode: 0o600 }))
+    return copy
+  } finally {
+    await handle.close()
+  }
+}
+
+/**
+ * Replace each path a call asks the server to read with a Host-made copy ({@link readableCopy}), so a link the chat
+ * swaps in after the check is never followed by the server.
+ * @param call - the call.
+ * @returns the refusal, the replacement arguments, or `undefined` when the call reads no file or has no output folder.
+ */
+export async function copyReadArguments(call: BrowserToolCall): Promise<string | { arguments: Record<string, unknown> } | undefined> {
+  const reads = readNames(call)
+  if (call.outputDirectory === undefined || reads === undefined) return undefined
+  const folder = await realpath(call.directory)
+  const copies: string[] = []
+  for (const name of reads.names) {
+    const copy = await readableCopy(name, call, folder, call.outputDirectory).catch(() => undefined)
+    if (copy === undefined) return unreadableMessage(name)
+    copies.push(copy)
+  }
+  return { arguments: { [reads.key]: reads.key === 'paths' ? copies : copies[0] } }
 }
 
 /** The deepest folder level of the output folder's tree that {@link refuseWrittenOutside} looks through. */
@@ -438,6 +539,7 @@ export function apply(ctx: Context, config: Config): void {
     admission: providedAdmission(ctx),
     // The client never registers a denied tool; this refusal holds even if a call to one is routed here.
     refuseCall: call => denied.includes(call.tool) ? Promise.resolve(deniedToolMessage(call.tool)) : refuseOutsideFolder(call),
+    prepareCall: copyReadArguments,
     checkResult: (call, startedAt) => refuseWrittenOutside(call, startedAt, (line) => { ctx.logger.warn(line) }),
     ...config.toolCallTimeoutMs === undefined ? {} : { toolCallTimeoutMs: config.toolCallTimeoutMs },
     ...directory === undefined ? {} : { directory },
