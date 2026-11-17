@@ -50,7 +50,7 @@ export function apply(ctx: Context, config: Config): void {
     })
     let mounted: Fiber | undefined
     const follow = (): void => {
-      const present = scope.subagents.getProvider(PROVIDER) !== undefined
+      const present = scope.subagents.getProvider('claude-code') !== undefined
       if (present === (mounted !== undefined)) return
       if (mounted === undefined) {
         mounted = scope.plugin({ name: 'delorun-agent-claude-code-registered', apply: registerDriver }, driver)
