@@ -16,7 +16,7 @@ import {
   ProgramOpenError, type AccountObservation, type ExternalAgentDriver, type OfferedModel, type ProgramFailure,
   type ProgramOpenRequest, type ProgramSpawn,
 } from '@delorun/external-agents/contract'
-import type { LocatedCodex } from '@delorun/external-agents/locate'
+import { locateCodex, type LocatedCodex } from '@delorun/external-agents/locate'
 import { observationOf, offeredModels } from './mapping.ts'
 import { TESTED_CODEX_VERSION, type ClientResult } from './protocol.ts'
 import { CodexRpc, CodexRpcError, type WireTap } from './rpc.ts'
@@ -45,6 +45,16 @@ const CLIENT_INFO = { name: 'delorun', title: 'Delorun', version: '0.1.0' }
  * thread's own sandbox is read-only; each turn widens it to the workspace ({@link CodexSession}).
  */
 const THREAD_POLICY = { approvalPolicy: 'untrusted', sandbox: 'read-only' } as const
+
+/**
+ * The locator for the pinned launcher in the Codex pack a profile installed. It runs on every open and limits check, so
+ * a pack added or removed after load is seen.
+ * @param profileDirectory - the profile's directory, where its packages are installed.
+ * @returns the driver's `locate` option.
+ */
+export function codexLocator(profileDirectory: string): () => LocatedCodex | undefined {
+  return () => locateCodex(profileDirectory)
+}
 
 /**
  * The argv for the pinned app-server.
