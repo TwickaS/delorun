@@ -51,7 +51,7 @@ import { createBundleInstaller } from './bundles.ts'
 import { closeSidebarDrawer } from './focus.ts'
 import { hostApi, readWorkspaceNotice } from './host-api.ts'
 import { createKeyStatus } from './key-status.ts'
-import { en, zh, type OnboardingLocaleKey } from './locales.ts'
+import { DICTIONARIES, type OnboardingLocaleKey } from './locales.ts'
 import { createProvidersFace } from './providers-face.ts'
 import { OnboardingStepEntry } from './Onboarding.tsx'
 import { ShowAgainRow, type ShowAgainInjected } from './ShowAgainRow.tsx'
@@ -209,7 +209,7 @@ export function apply(ctx: Context): void {
  * @param ctx - the browser plugin context, holding `delorunStudio`.
  */
 export function applyStudio(ctx: Context): void {
-  ctx.effect(() => ctx.locale.register(NS, { en, zh }), 'delorun-onboarding: dictionaries')
+  ctx.effect(() => ctx.locale.register(NS, DICTIONARIES), 'delorun-onboarding: dictionaries')
   const progress = ctx.configForms.get<OnboardingSettings>(ONBOARDING_ROW_ID)
   const keyT = ctx.locale.bind(NS)
   const keyStatus = createKeyStatus(() => hostApi.keyTest(), () => ({ failed: keyT('keyStatus.failed'), unverified: keyT('keyStatus.unverified'), retry: keyT('keyStatus.retry'), test: keyT('keyStatus.test'), testing: keyT('keyStatus.testing') }))

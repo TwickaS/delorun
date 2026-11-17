@@ -114,6 +114,9 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
   const target = useSyncExternalStore(start.target.subscribe, start.target.getSnapshot)
   const phone = useSyncExternalStore(useCallback(listener => guide.phone.subscribe(listener), [guide]), () => guide.phone.getSnapshot())
   const workspace = useSyncExternalStore(useCallback(listener => guide.workspace.subscribe(listener), [guide]), () => guide.workspace.getSnapshot())
+  const stepLabel = useSyncExternalStore(useCallback(listener => guide.continueLabel.subscribe(listener), [guide]), () => guide.continueLabel.getSnapshot())
+  // The phone step's button reads the Tailscale checks, so the flow follows them.
+  useSyncExternalStore(useCallback(listener => guide.readiness.subscribe(listener), [guide]), () => guide.readiness.getSnapshot())
   // The default workspace is looked up when the dialog opens, and chosen once it resolves unless the person chose another.
   useEffect(() => { start.resolve() }, [start])
   // A re-run keeps the workspace the studio already holds until the person chooses another; with none, as on a first run, Skip takes the default.
@@ -189,7 +192,7 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
       <StepFooter
         {...showSkip ? { skip: { label: step.skipLabel?.() ?? t('skip'), onClick: () => { step.onSkip?.(); go(current + 1) } } } : {}}
         {...current > 0 ? { back: { label: t('back'), onClick: () => { go(current - 1) } } } : {}}
-        next={{ label: needsFolder ? t('chooseFolder') : last ? t('start') : step.continueLabel?.() ?? t('continue'), onClick: next }} />
+        next={{ label: needsFolder ? t('chooseFolder') : last ? t('start') : stepLabel ?? step.continueLabel?.() ?? t('continue'), onClick: next }} />
     )
   return (
     <Modal open title={title} onClose={later} headless className={DIALOG_CLASS}>
