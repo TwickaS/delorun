@@ -35,7 +35,7 @@ export interface StatusChange {
   readonly version?: string
   /** A short name for the program's own settings. */
   readonly ownSettings?: string
-  /** Whether the program started without the command sandbox its level wanted; stays as it was when absent. */
+  /** Set when the program started without the command sandbox its level wanted; a `starting` record clears it. */
   readonly sandboxUnavailable?: boolean
   /** While `limit`: when the limit lifts, epoch milliseconds. */
   readonly resetAt?: number

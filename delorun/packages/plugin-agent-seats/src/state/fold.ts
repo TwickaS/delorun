@@ -126,7 +126,7 @@ function foldStatus(shown: SeatShown, data: Partial<SeatStatusRecordData>): Seat
     state,
     version: text(data.version) ?? shown.version,
     ownSettings: text(data.ownSettings) ?? shown.ownSettings,
-    sandboxUnavailable: typeof data.sandboxUnavailable === 'boolean' ? data.sandboxUnavailable : shown.sandboxUnavailable,
+    sandboxUnavailable: data.sandboxUnavailable === true || (state !== 'starting' && shown.sandboxUnavailable),
     resetAt: count(data.resetAt),
     endedReason: text(data.endedReason),
     modelPicker: pickerOf(data.modelPicker),
