@@ -605,10 +605,13 @@
   z-index: 1;
 }
 
+/* The workspace chip and the mode chip wrap onto a second line on a narrow screen instead of clipping the mode chip. */
 .heroWorkspaceRow {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 2px;
+  row-gap: 4px;
   min-width: 0;
   margin-top: 4px;
   /* figma drew px 8; left nudged +12 so the chip's folder glyph lines up

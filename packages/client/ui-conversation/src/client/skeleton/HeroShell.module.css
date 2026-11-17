@@ -153,7 +153,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  max-width: min(100%, 360px);
+  max-width: min(60%, 360px);
   min-height: 28px;
   padding: 0 8px;
   border: none;

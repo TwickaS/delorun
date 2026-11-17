@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { DelorunNotice, type DelorunNoticeProps, NOTICE_STORAGE_KEY, NOTICE_VERSION, acknowledgeNotice, noticeAcknowledged } from '../src/client/DelorunNotice.tsx'
-import { en } from '../src/client/locales.ts'
+import { en, zh } from '../src/client/locales.ts'
 
 afterEach(() => {
   cleanup()
@@ -47,6 +47,12 @@ describe('the Delorun preview notice', () => {
   it('treats another stored version as unacknowledged', () => {
     globalThis.localStorage.setItem(NOTICE_STORAGE_KEY, 'older')
     expect(noticeAcknowledged()).toBe(false)
+  })
+
+  it('states the account and telemetry facts in both languages without a release-timing phrase', () => {
+    expect(en['notice.body']).toContain('Delorun has no DeepSeek account sign-in and no telemetry of its own.')
+    expect(en['notice.body']).not.toContain('first release')
+    expect(zh['notice.body']).toContain('Delorun 没有 DeepSeek 账户登录，也没有自己的遥测。')
   })
 
   it('has a Chinese entry for every English key', () => {

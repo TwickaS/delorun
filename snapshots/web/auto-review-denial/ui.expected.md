@@ -23,7 +23,7 @@
 - 'button "Access mode, current: Auto review"': Auto review
 - button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash
 - button "Send message" [disabled]
-- button "1 turns 2 steps"
+- button "1 turn 2 steps"
 
 ## Expanded
 
@@ -54,7 +54,7 @@
 - 'button "Access mode, current: Auto review"': Auto review
 - button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash
 - button "Send message" [disabled]
-- button "1 turns 2 steps"
+- button "1 turn 2 steps"
 
 ## Trajectory
 
@@ -119,4 +119,4 @@
 - 'button "Access mode, current: Auto review"': Auto review
 - button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash
 - button "Send message" [disabled]
-- button "1 turns 2 steps"
+- button "1 turn 2 steps"
