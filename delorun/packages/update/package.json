@@ -8,7 +8,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./data-formats": "./src/data-formats.ts",
-    "./home-data": "./src/home-data.ts"
+    "./home-data": "./src/home-data.ts",
+    "./messages": "./src/messages.ts",
+    "./confirm": "./src/confirm.ts"
   },
   "dependencies": {
     "@deepseek-ai/dsh-app-boot": "workspace:*",

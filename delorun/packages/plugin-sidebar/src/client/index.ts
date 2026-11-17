@@ -34,6 +34,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { DelorunChatStates } from '@delorun/plugin-chat-states/client'
+// Type-only: the 'delorun-update/open' event the notice's Update now… emits.
+import type {} from '@delorun/plugin-update/client'
 // Type-only: the ctx.delorunStudio merge.
 import type {} from '@delorun/plugin-theme/client'
 import { DEFAULT_SIDEBAR_SETTINGS, SIDEBAR_ROW_ID, type SidebarSettings } from '../config.ts'
@@ -296,7 +298,7 @@ export function applyStudio(ctx: Context): void {
   }, 'delorun-sidebar: update notice reads')
   // A page a reach listener served, a remote session, shows the notice's text only, with no control.
   const remote = (ctx.get('connection') as ConnectionHandle | undefined)?.remoteMedia === 'placeholder'
-  const updateNotice: UpdateNoticeFace = { notice: updates.visible, notes: fetchUpdateNotes, dismiss: remote ? null : (release) => { updates.dismiss(release) } }
+  const updateNotice: UpdateNoticeFace = { notice: updates.visible, notes: fetchUpdateNotes, open: remote ? null : () => { ctx.emit('delorun-update/open') }, dismiss: remote ? null : (release) => { updates.dismiss(release) } }
   let actionsFor: DelorunChatStates | undefined
   let actions: RowStateActions | null = null
   const chatStatesSource = <T,>(pick: (service: DelorunChatStates) => HostObservable<T>, fallback: T) =>

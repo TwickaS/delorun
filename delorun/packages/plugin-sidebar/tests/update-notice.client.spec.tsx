@@ -52,7 +52,7 @@ function memoryStorage(initial: Record<string, string> = {}): DismissalStorage &
 
 /** Render the notice over a fixed notice. */
 function show(notice: UpdateNotice | null, dismiss: UpdateNoticeFace['dismiss'] = vi.fn(), notes: UpdateNoticeFace['notes'] = async () => null) {
-  const face: UpdateNoticeFace = { notice: createSnapshotStore(notice), notes, dismiss }
+  const face: UpdateNoticeFace = { notice: createSnapshotStore(notice), notes, open: null, dismiss }
   return render(<UpdateNoticeCard face={face} t={t} />)
 }
 
@@ -88,7 +88,7 @@ describe('what\'s new', () => {
     fireEvent.click(screen.getByText('What\'s new'))
     expect(await screen.findByText('The release notes could not be shown.')).toBeTruthy()
     cleanup()
-    const face: UpdateNoticeFace = { notice: createSnapshotStore<UpdateNotice | null>(noticeOf({ notes: true })), notes: async () => ({ version: v('0.1.3'), notes: '- 更新' }), dismiss: null }
+    const face: UpdateNoticeFace = { notice: createSnapshotStore<UpdateNotice | null>(noticeOf({ notes: true })), notes: async () => ({ version: v('0.1.3'), notes: '- 更新' }), open: null, dismiss: null }
     render(<UpdateNoticeCard face={face} t={makeTranslate(zh)} />)
     fireEvent.click(screen.getByText('新功能'))
     expect((await screen.findByText(/更新/u)).closest('pre')?.textContent).toBe('- 更新')
@@ -161,6 +161,15 @@ describe('the notice', () => {
     expect(screen.queryByText(en['update.kind.patch'])).toBeNull()
   })
 
+  it('offers Update now… in place of the terminal command where the studio has an update dialog, and opens it', () => {
+    const open = vi.fn()
+    const face: UpdateNoticeFace = { notice: createSnapshotStore(noticeOf()), notes: async () => null, open, dismiss: vi.fn() }
+    const { container } = render(<UpdateNoticeCard face={face} t={t} />)
+    expect(container.textContent).not.toContain(UPDATE_COMMAND)
+    fireEvent.click(screen.getByText(en['update.now']))
+    expect(open).toHaveBeenCalledTimes(1)
+  })
+
   it('announces the title and the kind and plugin line in a live region that holds no control', () => {
     const { container } = show(noticeOf({ security: true, summary: 'Fixes the reach listener' }))
     const status = screen.getByRole('status')
@@ -186,7 +195,7 @@ describe('the notice', () => {
   })
 
   it('marks the summary with the Chinese label in Chinese', () => {
-    const face: UpdateNoticeFace = { notice: createSnapshotStore<UpdateNotice | null>(noticeOf({ summary: '修复远程访问' })), notes: async () => null, dismiss: null }
+    const face: UpdateNoticeFace = { notice: createSnapshotStore<UpdateNotice | null>(noticeOf({ summary: '修复远程访问' })), notes: async () => null, open: null, dismiss: null }
     render(<UpdateNoticeCard face={face} t={makeTranslate(zh)} />)
     const summary = screen.getByText(/修复远程访问/)
     expect(summary.tagName).toBe('P')
