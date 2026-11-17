@@ -38,7 +38,7 @@ export function describeAgent(provider: string): string {
   return `Delegate a self-contained task to ${name}, a separate coding agent program installed on this computer. `
     + `Use it only when the person asks for ${name} or when a second, independent agent clearly helps; do the work yourself otherwise. `
     + `${name} runs outside Delorun's sandbox and approval prompts with its own settings, and it uses the person's own ${name} sign-in and account, so every run may cost them money. `
-    + `Every run waits until the person approves it at their computer, unless they allowed ${name} for this workspace; in a full-access chat or a headless run, where no one is asked, it is refused unless allowed for the workspace. `
+    + `Every run waits until the person approves it at their computer, unless they allowed ${name} for this workspace; a full-access chat, where the person chose to run without prompts, starts it without asking unless they turned that off in Settings, and where no one can be asked it is refused unless allowed for the workspace. `
     + `${name} does not share this conversation's context, so the prompt must include everything it needs; it returns its final answer, not its intermediate steps.`
 }
 
@@ -146,7 +146,9 @@ export function notApprovedRefusal(provider: string, outcome: NotApprovedOutcome
     case 'rejected':
       return `${name} was not started: the person declined. Do not retry unless the person asks for ${name} again.${allow}`
     case 'never':
-      return `${name} was not started: this chat's approval policy is never, which refuses every approval without asking anyone (the full-access preset sets it), so ${name} starts here only once the person allows it for this workspace.${allow}`
+      return `${name} was not started: this chat's approval policy is never, which refuses every approval without asking anyone, and ${name} starts without asking only in a Full access chat while the person has "Full access chats start agents without asking" on. `
+        + `So it starts here only once the person allows it for this workspace or, in a Full access chat, turns that switch on. `
+        + `Tell the person: "Allow for this workspace" in Settings → Safety → External agents, or the switch "Full access chats start agents without asking" there.${allow}`
     case 'cancelled':
       return `${name} was not started: the approval was withdrawn before anyone answered.`
     case 'unavailable':

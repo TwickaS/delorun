@@ -96,6 +96,10 @@ export function registerDelegationRoutes(ctx: Context, service: DelorunDelegatio
     fetch: () => run(() => service.grants()),
   })
   ctx.connection.fetch.register({
+    path: DELEGATION_CONSENT_ROUTES.levels, methods: ['GET'], requestBody: 'buffered', admitPeer,
+    fetch: () => run(() => Promise.resolve(service.levels())),
+  })
+  ctx.connection.fetch.register({
     path: DELEGATION_CONSENT_ROUTES.allow, methods: ['POST'], requestBody: 'buffered',
     ...gateByUnlock(() => ctx.get('homeAuth'), async (request) => {
       const body = await parsed(request, AllowBody)

@@ -601,6 +601,33 @@ describe('task admission and package contracts', () => {
     }
   })
 
+  it('reads the safety level from the delegation consent at each start and keeps the configured mode when it names none', async () => {
+    for (const [level, expected] of [['careful', { approvalPolicy: 'never', sandbox: 'read-only' }], [undefined, { approvalPolicy: 'never' }]] as const) {
+      const ctx = new Context()
+      await ctx.plugin(SessionProjectionRegistry)
+      await mountWorkingDirectoryFixture(ctx)
+      await ctx.plugin(SubagentRuntime)
+      await ctx.plugin(LocalSubprocessRuntime)
+      ctx.provide('delegationConsent')
+      ctx.set('delegationConsent', {
+        review: () => Promise.resolve({ kind: 'allow' as const }),
+        permissionLevel: () => level,
+      })
+      const child = fakeChild()
+      vi.spyOn(ctx.subprocess, 'spawn').mockReturnValue(child.handle)
+      codex.apply(ctx, { env: {}, disposeGraceMs: 3_000 })
+      const starting = startExternalActivation(ctx, 'codex', request())
+      const initialize = await child.peer.nextMethod('initialize')
+      child.peer.respond(initialize, { userAgent: 'codex-cli 0.153.4' })
+      await child.peer.nextMethod('initialized')
+      const threadStart = await child.peer.nextMethod('thread/start')
+      expect(threadStart.params).toMatchObject(expected)
+      child.peer.respond(threadStart, { thread: { id: 'thread-1', ephemeral: true } })
+      await (await starting).dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('lists the models the app-server reports across its pages, leaving hidden ones out, and releases the child', async () => {
     const child = fakeChild()
     const listing = listCodexModels({
@@ -672,6 +699,10 @@ describe('task admission and package contracts', () => {
       approvalPolicy: 'never',
       sandbox: 'danger-full-access',
     }],
+    ['careful', { approvalPolicy: 'never', sandbox: 'read-only' }],
+    ['standard', { approvalPolicy: 'on-request', approvalsReviewer: 'auto_review', sandbox: 'read-only' }],
+    ['own', {}],
+    ['unrestricted', { approvalPolicy: 'never', sandbox: 'read-only' }],
   ] as const)('maps %s to the official thread/start fields', async (permissionMode, expected) => {
     const child = fakeChild()
     const wire = new CodexAppServerWire(
@@ -2414,6 +2445,22 @@ describe('one-shot hand-off fixes', () => {
     expect(turnStart.params).toMatchObject({
       sandboxPolicy: { type: 'workspaceWrite', writableRoots: ['/workspace'] },
     })
+    await run.dispose()
+  })
+
+  it.each([
+    ['careful', { type: 'workspaceWrite', writableRoots: ['/workspace'], networkAccess: false, excludeSlashTmp: true, excludeTmpdirEnvVar: true }],
+    ['standard', { type: 'workspaceWrite', writableRoots: ['/workspace'], networkAccess: true }],
+    ['unrestricted', { type: 'dangerFullAccess' }],
+  ] as const)('confines a %s turn to the task folder with the level\'s network and temporary folders', async (permissionMode, sandboxPolicy) => {
+    const { turnStart, run } = await publishRun(fakeChild(), undefined, { permissionMode, cwd: '/workspace' })
+    expect(turnStart.params).toMatchObject({ sandboxPolicy })
+    await run.dispose()
+  })
+
+  it.each(['own'] as const)('sends no turn sandbox policy for the %s level', async (permissionMode) => {
+    const { turnStart, run } = await publishRun(fakeChild(), undefined, { permissionMode, cwd: '/workspace' })
+    expect(turnStart.params).not.toHaveProperty('sandboxPolicy')
     await run.dispose()
   })
 
