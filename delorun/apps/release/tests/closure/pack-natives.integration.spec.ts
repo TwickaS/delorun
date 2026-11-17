@@ -3,6 +3,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync 
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { parse } from 'yaml'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { RuntimePlatform } from '@delorun/contract-release-manifest'
 import { buildPackArchive } from '@delorun/release-formats/packs/archive'
@@ -185,6 +186,18 @@ describe('the Your own browser pack in the workspace', () => {
       const own = locked.filter(([, pin]) => pin?.system?.os?.includes(OWN[platform].os) === true && pin.system.cpu?.includes(OWN[platform].cpu) === true && pin.system.libc?.includes('musl') !== true)
       expect(own.map(([name]) => name), platform).toHaveLength(1)
     }
+  })
+
+  // The pack carries its own copies of dsh-browser-use and the browse runtime beside the Browser pack's. That is safe only
+  // while neither copy holds state the other needs: no dsh-browser-use row of its own (the browser-use registry and its
+  // exclusive slot stay the Browser pack's), the driver mounting with `registration: 'none'` (it never touches that
+  // slot), and dsh-mcp-client and dsh-scope linked from the Host (one consent-error class, one server-name reservation).
+  it('shares the Browser pack\'s browser-use state: no browser-use row of its own, no slot registration, one consent and scope copy', () => {
+    const patch = parse(readFileSync(join(ROOT, 'delorun/packages/bundle-real-browser/cordis.patch.yml'), 'utf8')) as { insert: { name: string }[] }[]
+    expect(patch.flatMap(step => step.insert.map(row => row.name))).toEqual(['@delorun/browser-use-browse', '@delorun/skill-real-browser'])
+    const driver = readFileSync(join(ROOT, 'delorun/packages/browser-use-browse/src/index.ts'), 'utf8')
+    expect(driver.slice(driver.indexOf('mountSessionMcp(ctx, {'))).toMatch(/^mountSessionMcp\(ctx, \{[^}]*registration: 'none',/u)
+    for (const shared of ['@deepseek-ai/dsh-mcp-client', '@deepseek-ai/dsh-scope']) expect(Object.keys(bundle.dependencies)).not.toContain(shared)
   })
 
   it('also carries the Windows program in the linux-x64 variant, for WSL with Chrome on Windows', () => {
