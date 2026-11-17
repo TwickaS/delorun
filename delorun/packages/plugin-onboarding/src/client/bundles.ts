@@ -8,6 +8,7 @@ import type { ClientRemote } from '@deepseek-ai/dsh-api-remotes/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { LocalizedText } from '@deepseek-ai/dsh-package-manifest'
 import { randomUUID } from '@deepseek-ai/dsh-util-crypto'
+import { packView, type PackView, type PacksResult, type PacksSnapshot } from '@delorun/plugin-packs/wire'
 
 type PluginManager = ClientRemote['pluginManager']
 type BundleInfo = Extract<Awaited<ReturnType<PluginManager['listBundles']>>, { ok: true }>['value'][number]
@@ -19,20 +20,21 @@ type InstallOptions = NonNullable<Parameters<PluginManager['installBundle']>[1]>
  * the only state a button can add from; `unavailable` is a bundle this installation does not include or cannot
  * install, which is not an error; `failed` is a bundle the plugin manager cannot change, could not be asked, or failed
  * to add, which Plugins finishes. `slow` is an add still running after the wait the settings allow; it ends when the
- * plugin manager reports the outcome.
+ * plugin manager reports the outcome. `offline` is a plugin pack that needs a connection to download; `unavailable`
+ * is one this kind of computer cannot run.
  */
-export type BundleState = 'checking' | 'available' | 'installing' | 'slow' | 'installed' | 'restart' | 'unavailable' | 'failed'
+export type BundleState = 'checking' | 'available' | 'installing' | 'slow' | 'installed' | 'restart' | 'unavailable' | 'offline' | 'failed'
 
 /** One offered bundle as the steps draw it. */
 export interface BundleView {
   /** Where it stands. */
   readonly state: BundleState
-  /** Why the plugin manager reports `failed`, in its own words (its diagnostic, else its code). */
-  readonly reason?: string
   /** The package's own title, when the plugin manager lists one. */
   readonly title?: LocalizedText
   /** The package's own description, when the plugin manager lists one. */
   readonly description?: LocalizedText
+  /** Why the bundle is `failed` (the plugin manager's own words) or `unavailable` or `offline` (the platform or pack reason). */
+  readonly reason?: string
 }
 
 /** One offered bundled row as the steps draw it: a bundle view with the row's icon, when its package has one. */
@@ -47,12 +49,6 @@ export interface BundleInstallerOptions {
   readonly addWaitMs: () => number
   /** How often a slow add re-reads the plugin manager's state, in milliseconds. */
   readonly pollMs: number
-  /**
-   * Runs once after a bundle is added, without holding up the card.
-   * @param name - the package name.
-   * @returns when it is done; it never rejects.
-   */
-  readonly afterAdd: (name: string) => Promise<void>
 }
 
 /** What the steps use to offer bundles. */
@@ -116,15 +112,45 @@ export function reasonOf(bundle: BundleInfo | undefined): string | undefined {
  * @param bundle - the plugin manager's row, or undefined when it lists none by that name.
  * @returns the state before any action.
  */
-export function stateOf(bundle: BundleInfo | undefined): BundleState {
+export function stateOf(bundle: BundleInfo | undefined, pack?: PackView): BundleState {
+  // A plugin pack the release publishes is offered while the profile does not hold it; the install list says how far it is.
+  if (pack !== undefined && (bundle === undefined || (bundle.availability === 'missing' && !bundle.installed))) {
+    switch (pack.kind) {
+      case 'available': return 'available'
+      case 'working': return 'installing'
+      case 'restart': return 'restart'
+      case 'installed': return 'installed'
+      case 'failed': return 'failed'
+      case 'offline': return 'offline'
+      case 'unavailable': return 'unavailable'
+    }
+  }
   if (bundle === undefined) return 'unavailable'
   if (bundle.availability === 'missing') {
     // A profile that records the dependency but lost its files is broken, not absent from the installation.
     if (bundle.installed) return 'failed'
     return bundle.installTarget === undefined || bundle.error !== undefined ? 'unavailable' : 'available'
   }
+  // A shipped bundle that cannot run on this platform is not an error: it is unavailable here, with the manager's reason.
+  if (bundle.error?.code === 'unsupported-platform') return 'unavailable'
   if (bundle.error !== undefined || bundle.readOnlyReason !== undefined) return 'failed'
   return bundle.enabled ? 'installed' : 'available'
+}
+
+/** The part of the `packs` remote the guide uses. */
+interface PacksRemote {
+  list(): Promise<PacksSnapshot>
+  enqueue(request: { readonly names: readonly string[] }): Promise<PacksResult>
+}
+
+/**
+ * The words that say why a pack is not available to add.
+ * @param pack - the pack's view.
+ * @returns the reason, for an offline or unavailable pack.
+ */
+export function packReason(pack: PackView | undefined): string | undefined {
+  if (pack?.kind === 'offline') return pack.message
+  return pack?.kind === 'unavailable' ? pack.reason : undefined
 }
 
 /**
@@ -142,7 +168,7 @@ function pluginManager(ctx: Context): ClientRemote['pluginManager'] | undefined 
 /**
  * Create the installer over the plugin manager's remote.
  * @param ctx - the studio context; `remote.pluginManager` and `pluginNavigation` are read when needed, so a profile without them shows `failed`.
- * @param options - the wait, the poll and the after-add hook.
+ * @param options - the wait and the poll.
  * @returns the installer.
  */
 export function createBundleInstaller(ctx: Context, options: BundleInstallerOptions): BundleInstaller {
@@ -187,7 +213,23 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
   const setAll = (names: readonly string[], state: BundleState): void => {
     views.set({ ...views.getSnapshot(), ...Object.fromEntries(names.map(name => [name, { state }])) })
   }
+  const packViews = new Map<string, PackView>()
+  const readPacks = async (names: readonly string[]): Promise<void> => {
+    const remote: PacksRemote | undefined = ctx.get('remote.packs')
+    packViews.clear()
+    if (remote === undefined) return
+    try {
+      const snapshot = await remote.list()
+      for (const name of names) {
+        const pack = snapshot.packs.find(each => each.name === name)
+        if (pack !== undefined) packViews.set(name, packView(pack, snapshot.queue.find(item => item.key === name)))
+      }
+    } catch (error) {
+      console.warn('delorun onboarding: the plugin packs were not read', error)
+    }
+  }
   const read = async (names: readonly string[]): Promise<void> => {
+    await readPacks(names)
     const remote = pluginManager(ctx)
     if (remote === undefined) {
       setAll(names, 'failed')
@@ -202,13 +244,15 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
       const bundle = listed.value.find(each => each.name === name)
       if (bundle === undefined) known.delete(name)
       else known.set(name, bundle)
-      const state = stateOf(bundle)
-      const reason = state === 'failed' ? reasonOf(bundle) : undefined
+      const pack = packViews.get(name)
+      const state = stateOf(bundle, pack)
+      const reason = state === 'failed' ? reasonOf(bundle) : packReason(pack)
       set(name, {
         state,
         ...reason === undefined ? {} : { reason },
         ...bundle?.meta?.title === undefined ? {} : { title: bundle.meta.title },
         ...bundle?.meta?.description === undefined ? {} : { description: bundle.meta.description },
+        ...bundle?.error?.code === 'unsupported-platform' && bundle.error.diagnostic !== undefined ? { reason: bundle.error.diagnostic } : {},
       })
     }
   }
@@ -225,6 +269,20 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
       const bundle = known.get(name)
       const remote = pluginManager(ctx)
       const before = views.getSnapshot()[name]
+      const pack = packViews.get(name)
+      if (before?.state === 'available' && pack?.kind === 'available') {
+        const packs: PacksRemote | undefined = ctx.get('remote.packs')
+        if (packs === undefined) return
+        set(name, { ...before, state: 'installing' })
+        try {
+          const queued = await packs.enqueue({ names: [name] })
+          set(name, { ...before, state: queued.ok ? 'installing' : 'failed' })
+        } catch (error) {
+          console.warn('delorun onboarding: the plugin pack was not queued', error)
+          set(name, { ...before, state: 'failed' })
+        }
+        return
+      }
       if (before?.state !== 'available' || bundle === undefined || remote === undefined) return
       set(name, { ...before, state: 'installing' })
       let done = false
@@ -234,7 +292,6 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
         clearTimeout(slowTimer)
         clearInterval(pollTimer)
         set(name, view)
-        if (view.state === 'installed' || view.state === 'restart') void options.afterAdd(name)
       }
       // After the wait the card says the add is still working, and the plugin manager's own state is read until it reports an outcome.
       const slowTimer = setTimeout(() => { if (!done) set(name, { ...before, state: 'slow' }) }, options.addWaitMs())

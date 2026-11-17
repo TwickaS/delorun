@@ -44,10 +44,10 @@ function registryFake(quarantined: readonly string[] = []) {
 /** The plugin over a stub Connection and, unless `null`, a registry, reached as the studio reaches the route. */
 async function mount(registry: ReturnType<typeof registryFake> | null = registryFake(), homeAuth: Pick<HomeAuthService, 'arrivalOf'> | null = null) {
   const ctx = new Context()
-  const routes = new Map<string, { readonly methods: readonly string[]; readonly requestBody: string; readonly fetch: (request: Request) => Promise<Response> }>()
+  const routes = new Map<string, { readonly methods: readonly string[]; readonly requestBody: string; readonly fetch: (request: Request) => Promise<Response>; readonly admitPeer?: (request: Request, peer: object) => boolean }>()
   ctx.provide('connection', {
     fetch: {
-      register: (route: { path: string; methods: readonly string[]; requestBody: string; fetch: (request: Request) => Promise<Response> }) => {
+      register: (route: { path: string; methods: readonly string[]; requestBody: string; fetch: (request: Request) => Promise<Response>; admitPeer?: (request: Request, peer: object) => boolean }) => {
         routes.set(route.path, route)
         return () => { routes.delete(route.path) }
       },
@@ -175,8 +175,8 @@ describe('the add-workspace route on a remote session', () => {
 type ListenerId = NonNullable<ReturnType<HomeAuthService['arrivalOf']>['listener']>
 
 /** The `homeAuth` service's answer for a request: the listener it says admitted it, as the mounted service reads its stamp. */
-  function homeAuthOn(listener: ListenerId | undefined): Pick<HomeAuthService, 'arrivalOf'> {
-    return { arrivalOf: request => ({ listener, host: request.headers.host, source: 'test' }) }
+  function homeAuthOn(listener: ListenerId | undefined): Pick<HomeAuthService, 'arrivalOf' | 'elevationOf' | 'pageUnlockOf'> {
+    return { arrivalOf: request => ({ listener, host: request.headers.host, source: 'test' }), elevationOf: deviceId => (deviceId === 'unlocked-phone' ? { id: 'e' } as never : undefined), pageUnlockOf: () => undefined }
   }
 
   /** A request as the Connection's `connection/request` waterfall receives it, and the response it is answered with. */
@@ -190,24 +190,33 @@ type ListenerId = NonNullable<ReturnType<HomeAuthService['arrivalOf']>['listener
     return { request, response, writeHead, end }
   }
 
-  it.each([ADD_WORKSPACE_PATH, CLONE_PATH, CLONE_STATUS_PATH])('refuses a request to %s that a reach listener admitted with 403 LOOPBACK_ONLY, and goes no further', async (path) => {
-    const { ctx } = await mount(registryFake(), homeAuthOn('reach-tailscale-private'))
-    const { request, response, writeHead, end } = arrival(path, '127.0.0.1:3080')
+  it.each([ADD_WORKSPACE_PATH, CLONE_PATH, CLONE_STATUS_PATH])('lets a request to %s that a reach listener admitted go on to the unlock check, which refuses a locked device and admits an unlocked one', async (path) => {
+    const { ctx, routes } = await mount(registryFake(), homeAuthOn('reach-tailscale-private'))
+    const { request, response, writeHead } = arrival(path, 'home.example.ts.net')
     const next = vi.fn(async () => {})
     await ctx.waterfall('connection/request', request, response, next)
-    expect(next).not.toHaveBeenCalled()
-    expect(writeHead).toHaveBeenCalledWith(403, expect.objectContaining({ 'content-type': 'application/json' }))
-    expect(JSON.parse(end.mock.calls[0]?.[0] as string)).toMatchObject({ error: 'LOOPBACK_ONLY' })
+    expect([next.mock.calls.length, writeHead.mock.calls.length]).toEqual([1, 0])
+    const route = routes.get(path)!
+    const asDevice = async (deviceId: string) => {
+      const call = new Request(`http://harness.test${path}`, { method: 'POST', body: '{}' })
+      expect(route.admitPeer?.(call, { principal: { kind: 'reach-device', deviceId, listener: 'reach-tailscale-private' } })).toBe(true)
+      return route.fetch(call)
+    }
+    const locked = await asDevice('locked-phone')
+    expect([locked.status, await locked.json()]).toEqual([403, expect.objectContaining({ error: 'ELEVATION_REQUIRED' })])
+    expect((await asDevice('unlocked-phone')).status).not.toBe(403)
+    expect(route.admitPeer?.(new Request(`http://harness.test${path}`), { principal: { kind: 'sdk' } })).toBe(false)
   })
 
-  it('refuses every spelling of the path that the Connection routes to it', async () => {
+  it('refuses every spelling of the path that the Connection routes to it under a foreign Host', async () => {
     const tail = ADD_WORKSPACE_PATH.slice('/api/'.length)
     for (const url of [`/api/x/../${tail}`, `/api/x/%2e%2e/${tail}`, `/api\\x\\..\\${tail}`]) {
-      const { ctx } = await mount(registryFake(), homeAuthOn('reach-tailscale-private'))
-      const { request, response, writeHead } = arrival(url, '127.0.0.1:3080')
+      const { ctx } = await mount(registryFake(), homeAuthOn('loopback'))
+      const { request, response, writeHead, end } = arrival(url, 'studio.example')
       const next = vi.fn(async () => {})
       await ctx.waterfall('connection/request', request, response, next)
       expect({ url, calls: next.mock.calls.length, status: writeHead.mock.calls[0]?.[0] }).toEqual({ url, calls: 0, status: 403 })
+      expect(JSON.parse(end.mock.calls[0]?.[0] as string)).toMatchObject({ error: 'LOOPBACK_ONLY' })
     }
   })
 

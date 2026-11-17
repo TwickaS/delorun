@@ -426,10 +426,22 @@ interface Walk {
   readonly folder: string
   /** The limits it stops at. */
   readonly limits: ScanLimits
+  /** The `node_modules` directories of runtime packages whose own installed packages the walk leaves to the dependency closure. */
+  readonly pruned: Set<string>
   /** The files, links and directories counted so far. */
   count: number
   /** The bytes of the files counted so far. */
   bytes: number
+}
+
+/**
+ * What a person can do about a plugin folder over the limits.
+ * @param walk - the scan.
+ * @returns the sentence to append to the refusal; empty for an active directory, which a person does not edit.
+ */
+function tooLargeAdvice(walk: Walk): string {
+  if (walk.dependencies === 'active') return ''
+  return ` Remove its development packages with \`npm prune --omit=dev\` in ${walk.folder}, or link a folder that holds only the built plugin, then start again.`
 }
 
 /**
@@ -442,10 +454,10 @@ function admit(walk: Walk, bytes: number): void {
   walk.count += 1
   walk.bytes += bytes
   if (walk.count > walk.limits.entries) {
-    throw new ChangesError('CONTENT_TOO_LARGE', walk.folder, `${walk.folder}, with the installed packages it links, holds more than ${String(walk.limits.entries)} files, links and directories, so Delorun does not copy it.`)
+    throw new ChangesError('CONTENT_TOO_LARGE', walk.folder, `${walk.folder}, with the installed packages it links, holds more than ${String(walk.limits.entries)} files, links and directories, so Delorun does not copy it.${tooLargeAdvice(walk)}`)
   }
   if (walk.bytes > walk.limits.bytes) {
-    throw new ChangesError('CONTENT_TOO_LARGE', walk.folder, `${walk.folder}, with the installed packages it links, holds more than ${byteLimitWords(walk.limits.bytes)}, so Delorun does not copy it.`)
+    throw new ChangesError('CONTENT_TOO_LARGE', walk.folder, `${walk.folder}, with the installed packages it links, holds more than ${byteLimitWords(walk.limits.bytes)}, so Delorun does not copy it.${tooLargeAdvice(walk)}`)
   }
 }
 
@@ -648,18 +660,17 @@ async function addInstalledDependencies(walk: Walk, real: string, path: string):
 }
 
 /**
- * The dependency names a package's `package.json` lists.
- * @param directory - the package's directory.
- * @returns the valid package names of {@link DEPENDENCY_FIELDS}, without the package's own, sorted in code-unit order;
- *   empty when it has no readable manifest.
+ * @param directory - a package's directory.
+ * @returns the fields of its `package.json`; undefined when it has none a scan can read: a missing file, a link or another
+ *   kind of file, one over {@link MANIFEST_BYTE_LIMIT}, one that grew while it was read, or text that is not a JSON object.
  */
-async function dependencyNames(directory: string): Promise<readonly string[]> {
+async function readManifest(directory: string): Promise<Record<string, unknown> | undefined> {
   let manifest: unknown
   try {
     const path = join(directory, 'package.json')
     const { handle, stats } = await openRegularFile(path)
     try {
-      if (stats.size > MANIFEST_BYTE_LIMIT) return []
+      if (stats.size > MANIFEST_BYTE_LIMIT) return undefined
       const chunks: Buffer[] = []
       await readChunks(handle, { size: stats.size, path }, (chunk) => { chunks.push(Buffer.from(chunk)) })
       manifest = JSON.parse(Buffer.concat(chunks).toString('utf8'))
@@ -667,21 +678,121 @@ async function dependencyNames(directory: string): Promise<readonly string[]> {
       await handle.close()
     }
   } catch {
-    // ENOENT, a link or another kind of file, a file that grew while it was read, or text that is not JSON: the package
-    // names no dependency Delorun can include.
-    return []
+    // The reasons are listed above; the package names no dependency Delorun can include.
+    return undefined
   }
-  if (typeof manifest !== 'object' || manifest === null) return []
-  const fields = manifest as Record<string, unknown>
+  return typeof manifest === 'object' && manifest !== null ? manifest as Record<string, unknown> : undefined
+}
+
+/**
+ * The dependency names a package's `package.json` lists.
+ * @param directory - the package's directory.
+ * @param listed - the `package.json` fields to read; {@link DEPENDENCY_FIELDS} by default.
+ * @returns the valid package names of those fields, without the package's own, sorted in code-unit order;
+ *   empty when it has no readable manifest.
+ */
+async function dependencyNames(directory: string, listed: readonly string[] = DEPENDENCY_FIELDS): Promise<readonly string[]> {
+  const fields = await readManifest(directory)
+  if (fields === undefined) return []
   const names = new Set<string>()
-  for (const field of DEPENDENCY_FIELDS) {
-    const listed = fields[field]
-    if (typeof listed !== 'object' || listed === null) continue
-    for (const name of Object.keys(listed)) {
+  for (const field of listed) {
+    const listing = fields[field]
+    if (typeof listing !== 'object' || listing === null) continue
+    for (const name of Object.keys(listing)) {
       if (name !== fields.name && PACKAGE_NAME_PATTERN.test(name)) names.add(name)
     }
   }
   return [...names].sort(compareCodeUnits)
+}
+
+/**
+ * @param modules - a folder's top-level `node_modules` directory.
+ * @returns whether it holds an installed package as a real directory, as npm and yarn lay out, rather than only links
+ *   into a store, as pnpm does; its dot-named entries, such as `.bin` and pnpm's `.pnpm`, and a scope directory
+ *   that holds only links do not count.
+ */
+async function holdsInstalledPackages(modules: string): Promise<boolean> {
+  for (const dirent of await readdir(modules, { withFileTypes: true })) {
+    if (!dirent.isDirectory() || dirent.name.startsWith('.')) continue
+    if (!dirent.name.startsWith('@')) return true
+    if ((await readdir(join(modules, dirent.name), { withFileTypes: true })).some((scoped) => scoped.isDirectory())) return true
+  }
+  return false
+}
+
+/**
+ * Find the directory Node resolves a dependency name to from a package, below the folder's top-level `node_modules`:
+ * the `node_modules` of the package, then of each directory above it, up to the folder.
+ * @param root - the folder's real path.
+ * @param from - the package directory, or the folder itself, that names the dependency.
+ * @param name - the package name.
+ * @returns the path of the installed entry, which can be a link; undefined when no directory in reach holds it.
+ */
+async function installedAt(root: string, from: string, name: string): Promise<string | undefined> {
+  for (let directory = from; contains(root, directory); directory = dirname(directory)) {
+    const candidate = join(directory, DEPENDENCY_DIRECTORY, ...name.split('/'))
+    if (await realTarget(candidate) !== undefined) return candidate
+  }
+  return undefined
+}
+
+/**
+ * Add the top-level `node_modules` of an npm-style folder as the plugin can load it at run time: the packages that
+ * the folder's `package.json` names in {@link DEPENDENCY_FIELDS} and, repeatedly, those each of them names, each found
+ * where Node finds it, including npm's hoisted layout. A folder without a readable `package.json` keeps every package.
+ * Development packages and the packages only they need stay out, as does each included package's own `node_modules`
+ * directory, whose packages the closure reaches by name. The top-level installed packages not reached are listed among
+ * the skipped paths, the first 25 by name and the rest as a count, so the review shows what the copy leaves out.
+ * @param walk - the scan.
+ * @param root - the folder's real path.
+ */
+async function addRuntimeModules(walk: Walk, root: string): Promise<void> {
+  admit(walk, 0)
+  const reached = new Set<string>()
+  const queue: { readonly from: string, readonly name: string }[] = (await dependencyNames(root)).map((name) => ({ from: root, name }))
+  for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
+    const installed = await installedAt(root, next.from, next.name)
+    if (installed === undefined || reached.has(installed)) continue
+    reached.add(installed)
+    const path = relative(root, installed).split(sep).join('/')
+    if ((await lstat(installed)).isSymbolicLink()) {
+      const real = (await realTarget(installed))!
+      await addTarget(walk, real, path, true)
+      // A package linked from inside the folder, as an npm workspace does, resolves its own dependencies from there.
+      if (contains(root, real)) queue.push(...(await dependencyNames(real)).map((name) => ({ from: real, name })))
+      continue
+    }
+    // A package installed below another directory of the folder, such as a workspace package's own install, is copied by
+    // the folder's walk of that directory; only its dependencies are followed here.
+    if (contains(join(root, DEPENDENCY_DIRECTORY), installed)) {
+      walk.pruned.add(join(installed, DEPENDENCY_DIRECTORY))
+      await walkDirectory(walk, root, installed, path, true)
+    }
+    queue.push(...(await dependencyNames(installed)).map((name) => ({ from: installed, name })))
+  }
+  const left = (await installedNames(join(root, DEPENDENCY_DIRECTORY))).filter((name) => !reached.has(join(root, DEPENDENCY_DIRECTORY, ...name.split('/'))))
+  for (const name of left.slice(0, LEFT_OUT_LISTED)) walk.skipped.push(`${DEPENDENCY_DIRECTORY}/${name}`)
+  if (left.length > LEFT_OUT_LISTED) walk.skipped.push(`${DEPENDENCY_DIRECTORY} (and ${String(left.length - LEFT_OUT_LISTED)} more packages left out)`)
+}
+
+/** The most left-out installed packages a scan names one by one; the rest are counted in one entry. */
+const LEFT_OUT_LISTED = 25
+
+/**
+ * @param modules - a folder's top-level `node_modules` directory.
+ * @returns the names of the packages installed in it, scoped ones as `@scope/name`, without dot-named entries.
+ */
+async function installedNames(modules: string): Promise<readonly string[]> {
+  const names: string[] = []
+  for (const dirent of await readdir(modules, { withFileTypes: true })) {
+    if (dirent.name.startsWith('.')) continue
+    if (!dirent.name.startsWith('@')) {
+      names.push(dirent.name)
+      continue
+    }
+    for (const scoped of await readdir(join(modules, dirent.name))) names.push(`${dirent.name}/${scoped}`)
+  }
+  return names
 }
 
 /**
@@ -707,7 +818,12 @@ async function walkDirectory(walk: Walk, root: string, absolute: string, directo
       walk.skipped.push(path)
     } else if (dirent.isDirectory()) {
       const nested = dependencies || (dirent.name === DEPENDENCY_DIRECTORY && directory !== '')
-      if (dirent.name !== EXCLUDED_DIRECTORY) await walkDirectory(walk, root, join(absolute, dirent.name), path, nested)
+      if (walk.pruned.has(join(absolute, dirent.name))) continue
+      if (directory === '' && dirent.name === DEPENDENCY_DIRECTORY && walk.dependencies === 'include' && await readManifest(root) !== undefined && await holdsInstalledPackages(join(absolute, dirent.name))) {
+        await addRuntimeModules(walk, root)
+      } else if (dirent.name !== EXCLUDED_DIRECTORY) {
+        await walkDirectory(walk, root, join(absolute, dirent.name), path, nested)
+      }
     } else if (dirent.isFile()) {
       await addFile(walk, join(absolute, dirent.name), path)
     } else if (dirent.isSymbolicLink()) {
@@ -744,6 +860,7 @@ export async function scanFolder(folder: string, options: ScanOptions): Promise<
     home,
     folder,
     limits: options.limits ?? CONTENT_LIMITS,
+    pruned: new Set(),
     count: 0,
     bytes: 0,
   }

@@ -24,6 +24,7 @@ import type {} from '@deepseek-ai/dsh-session-query'
 import type {} from '@deepseek-ai/dsh-spill'
 import type {} from '@deepseek-ai/dsh-workspace'
 import schema from '@deepseek-ai/schemastery'
+import { admitApprovedDevice, gateByUnlock } from '@delorun/home-auth'
 import { TrashError, type ProjectionCachePurge, type SessionIndexPurge, type TrashStores } from '@delorun/trash'
 import { TrashOperationError, TrashOperations } from './operations.ts'
 import { TRASH_PATHS, type TrashRefusal, type TrashRefusalCode } from './wire.ts'
@@ -135,35 +136,37 @@ export function apply(ctx: Context, config: Config): void {
     ctx.logger.warn(`${name}: the trash's start pass failed, so expired items stay until the next start: ${String(error)}`)
   })
 
-  const route = (path: string, handle: (body: Readonly<Record<string, unknown>>) => Promise<unknown>): void => {
+  // Listing, deleting to the trash and restoring need no unlock; deleting forever does.
+  const route = (path: string, handle: (body: Readonly<Record<string, unknown>>) => Promise<unknown>, needsUnlock = false): void => {
+    const answerTo = async (request: Request): Promise<Response> => {
+      let body: unknown
+      try {
+        body = await request.json()
+      } catch (error: unknown) {
+        return refusal('BAD_REQUEST', `the request body is not JSON: ${String(error)}`)
+      }
+      if (typeof body !== 'object' || body === null || Array.isArray(body)) return refusal('BAD_REQUEST', 'the request body is not a JSON object')
+      try {
+        return Response.json(await handle(body as Readonly<Record<string, unknown>>), { headers: NO_STORE })
+      } catch (error: unknown) {
+        if (error instanceof RequestError) return refusal('BAD_REQUEST', error.message)
+        if (error instanceof TrashOperationError) return refusal(error.code, error.message)
+        if (error instanceof TrashError && (error.code === 'TRASH_ITEM_NOT_FOUND' || error.code === 'TRASH_RESTORE_CONFLICT')) return refusal(error.code, error.message)
+        ctx.logger.warn(`${name}: ${path} failed: ${String(error)}`)
+        return refusal('TRASH_FAILED', 'the trash operation failed; the harness log names the cause')
+      }
+    }
     ctx.effect(() => ctx.connection.fetch.register({
       path, methods: ['POST'], requestBody: 'buffered',
-      fetch: async (request) => {
-        let body: unknown
-        try {
-          body = await request.json()
-        } catch (error: unknown) {
-          return refusal('BAD_REQUEST', `the request body is not JSON: ${String(error)}`)
-        }
-        if (typeof body !== 'object' || body === null || Array.isArray(body)) return refusal('BAD_REQUEST', 'the request body is not a JSON object')
-        try {
-          return Response.json(await handle(body as Readonly<Record<string, unknown>>), { headers: NO_STORE })
-        } catch (error: unknown) {
-          if (error instanceof RequestError) return refusal('BAD_REQUEST', error.message)
-          if (error instanceof TrashOperationError) return refusal(error.code, error.message)
-          if (error instanceof TrashError && (error.code === 'TRASH_ITEM_NOT_FOUND' || error.code === 'TRASH_RESTORE_CONFLICT')) return refusal(error.code, error.message)
-          ctx.logger.warn(`${name}: ${path} failed: ${String(error)}`)
-          return refusal('TRASH_FAILED', 'the trash operation failed; the harness log names the cause')
-        }
-      },
+      ...needsUnlock ? gateByUnlock(() => ctx.get('homeAuth'), answerTo) : { admitPeer: admitApprovedDevice(), fetch: answerTo },
     }), `${name}: ${path}`)
   }
   route(TRASH_PATHS.list, () => operations.list())
   route(TRASH_PATHS.deleteChat, body => operations.deleteChat(SessionId(id(body, 'sessionId')), label(body)))
   route(TRASH_PATHS.deleteWorkspace, body => operations.deleteWorkspace(id(body, 'workspaceId')))
   route(TRASH_PATHS.restore, body => operations.restore(id(body, 'itemId')))
-  route(TRASH_PATHS.purge, body => operations.purge(id(body, 'itemId'), flag(body, 'clearLogs')))
-  route(TRASH_PATHS.empty, body => operations.empty(flag(body, 'clearLogs')))
+  route(TRASH_PATHS.purge, body => operations.purge(id(body, 'itemId'), flag(body, 'clearLogs')), true)
+  route(TRASH_PATHS.empty, body => operations.empty(flag(body, 'clearLogs')), true)
 }
 
 /** The cache header every answer carries. */

@@ -63,13 +63,21 @@ const field = (name: string) => screen.getByLabelText(name) as HTMLInputElement
 const type = (name: string, value: string) => { fireEvent.change(field(name), { target: { value } }) }
 
 describe('the PIN mode section', () => {
-  it('shows a device one read-only line and sends no request', () => {
+  it('shows a device the state read-only, with the reason it is changed at the computer', async () => {
     const host = fakeHost({ [MODE]: ON })
     renderSection(host, false)
-    expect(screen.getByText(en.atComputer)).toBeTruthy()
+    expect(await screen.findByText(en['state.pin'])).toBeTruthy()
+    expect(screen.getByText(en.computerReason, { exact: false }).textContent).toBe(en['gate.computer'].replace('{reason}', en.computerReason))
     expect(screen.queryByLabelText(en['secret.label'])).toBeNull()
     expect(screen.queryByRole('button')).toBeNull()
-    expect(host.received).toEqual([])
+  })
+
+  it('shows a device only the computer reason when the home keeps the state at the computer', async () => {
+    const host = fakeHost({ [MODE]: { status: 403, body: { error: 'LOOPBACK_REQUIRED', message: 'Computer only' } } })
+    renderSection(host, false)
+    expect(await screen.findByText(en['gate.computer'].replace('{reason}', en.computerReason))).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.queryByRole('button')).toBeNull()
   })
 
   it('shows the computer the state and the entry form, with fields that do not zoom a phone', async () => {

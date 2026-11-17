@@ -13,7 +13,7 @@ import type { ThemeSettings } from '@delorun/plugin-theme'
 import type { ComponentType, ReactNode } from 'react'
 import type { OnboardingSettings } from '../config.ts'
 import type { DirectoryEntry, KeyProbe } from './providers.ts'
-import type { AgentModelsAnswer, CloneProblem, CloneRequest, CloneStatus, FolderKind, KeyTestAnswer, LocalServer, LocationProblem, Readiness, RecommendAnswer, SetupRecord } from '../wire.ts'
+import type { AgentModelsAnswer, CloneProblem, CloneRequest, CloneStatus, DeferrableStep, FolderKind, KeyTestAnswer, LocalServer, LocationProblem, Readiness, RecommendAnswer, SetupRecord } from '../wire.ts'
 import type { BundleInstaller } from './bundles.ts'
 
 /** What a step added by another plugin draws with. */
@@ -226,6 +226,13 @@ export interface HostFace {
   /** @returns whether the reach step applies. */
   readonly reach: () => Promise<ReachState>
   /**
+   * Note that a step waits for the computer, or that it is done.
+   * @param id - the step.
+   * @param deferred - true to defer it, false to clear it.
+   * @returns every step deferred now; undefined when the route cannot be asked.
+   */
+  readonly defer: (id: DeferrableStep, deferred: boolean) => Promise<readonly DeferrableStep[] | undefined>
+  /**
    * Start cloning a repository into a new folder.
    * @param request - the address, the folder to clone into and the new folder's name.
    * @returns the job, or why it did not start.
@@ -288,8 +295,6 @@ export interface CustomEndpoint {
 export interface AgentRowSettings {
   /** The model the agent runs, or absent for the agent's own default. */
   readonly model?: string | undefined
-  /** How Claude Code treats a tool it would ask about; Delorun sets `acceptEdits` when it adds the agent. */
-  readonly permissionMode?: string | undefined
 }
 
 /** The settings the agents step reads and writes, by the agent's connection id. */
@@ -374,6 +379,8 @@ export interface OnboardingInjected {
   readonly startChat: (workspaceId?: WorkspaceId, keepCurrent?: boolean) => Promise<void>
   /** Whether the person chose Finish later since Delorun started; the Finish setup chip reads it and the dialog sets it. */
   readonly aside: LaterStore
+  /** Whether the dialog shows only the steps a phone deferred to this computer; the sidebar's Finish setup entry sets it, and the dialog clears it when it closes. */
+  readonly deferredOnly: LaterStore
 }
 
 /** The flag that the guide was set aside in this visit. */

@@ -19,6 +19,8 @@ import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import {
+  agentSignInFailureText,
+  isAgentSignInFailure,
   settleRunResult,
   subprocessRunHandle,
   type SubagentResult,
@@ -67,6 +69,7 @@ type ClaudeCodeFailureStage =
 
 type ClaudeCodeFailureCategory =
   | 'limit'
+  | 'sign-in'
   | 'product-error'
   | 'invalid-result'
   | 'process'
@@ -93,6 +96,26 @@ function failureDiagnostic(facts: ClaudeCodeFailureFacts): string {
     fields.push(`signal: ${signal}`)
   }
   return `Product subagent failure (${fields.join('; ')})`
+}
+
+/** The text the chat shows for a failed run: a sign-in instruction, or the fixed facts. */
+function failureText(facts: ClaudeCodeFailureFacts): string {
+  return facts.category === 'sign-in'
+    ? agentSignInFailureText('Claude Code', 'claude-code')
+    : failureDiagnostic(facts)
+}
+
+/**
+ * Classify the agent's own error text: a sign-in failure, or the given fixed category.
+ * @param category - the category already derived from the SDK result.
+ * @param text - the agent's error text.
+ * @returns the facts for a failed query run.
+ */
+function agentFailureFacts(category: ClaudeCodeFailureCategory, text: string): ClaudeCodeFailureFacts {
+  return {
+    stage: 'query-run',
+    category: isAgentSignInFailure(text) ? 'sign-in' : category,
+  }
 }
 
 class ClaudeCodeFailure extends Error {
@@ -210,17 +233,16 @@ export function successfulResult(message: SDKResultMessage): string {
       ? undefined
       : message.errors.join('; ')
     throw new ClaudeCodeFailure(
-      { stage: 'query-run', category },
+      agentFailureFacts(category, detail ?? ''),
       detail === undefined || detail.length === 0
         ? undefined
         : new Error(detail),
     )
   }
   if (message.is_error || message.result.trim().length === 0) {
-    throw new ClaudeCodeFailure({
-      stage: 'query-run',
-      category: 'invalid-result',
-    })
+    throw new ClaudeCodeFailure(
+      agentFailureFacts('invalid-result', message.is_error ? message.result : ''),
+    )
   }
   return message.result
 }
@@ -465,7 +487,7 @@ export async function startClaudeCodeRun(
     diagnostic = value
   }
   const prependFailureDiagnostic = (facts: ClaudeCodeFailureFacts): void => {
-    const failure = failureDiagnostic(facts)
+    const failure = failureText(facts)
     diagnostic = diagnostic === undefined
       ? failure
       : `${failure}\n${diagnostic}`
@@ -588,7 +610,11 @@ export async function startClaudeCodeRun(
         let facts: ClaudeCodeFailureFacts
         if (error instanceof ClaudeCodeFailure) {
           facts = { ...error.facts, outcome: processOutcome }
-        } else if (processOutcome !== undefined && !receivedResult) {
+        } else if (
+          processOutcome !== undefined
+          && !receivedResult
+          && !isAgentSignInFailure(thrown(error).message)
+        ) {
           facts = {
             stage: 'process',
             category: 'process',
@@ -596,8 +622,7 @@ export async function startClaudeCodeRun(
           }
         } else {
           facts = {
-            stage: 'query-run',
-            category: 'unknown',
+            ...agentFailureFacts('unknown', thrown(error).message),
             outcome: processOutcome,
           }
         }

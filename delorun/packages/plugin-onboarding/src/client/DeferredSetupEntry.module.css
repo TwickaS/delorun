@@ -1,0 +1,47 @@
+/* A quiet text row at the sidebar's foot, in the voice of the foot's other actions. */
+.entry,
+.rail {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--delorun-space-4);
+  min-height: 32px;
+  box-sizing: border-box;
+  padding: var(--delorun-space-2) var(--delorun-space-4);
+  border: 0;
+  border-radius: var(--delorun-radius-md, 8px);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+  cursor: pointer;
+}
+
+
+.text {
+  white-space: nowrap;
+}
+
+.count {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (hover: hover) {
+  .entry:hover,
+  .rail:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+    color: var(--dsw-alias-label-primary);
+  }
+}
+
+@media (pointer: coarse) {
+  .entry,
+  .rail {
+    min-height: 44px;
+  }
+}
+
+.entry:focus-visible,
+.rail:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+}

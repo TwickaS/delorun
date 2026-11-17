@@ -43,6 +43,9 @@ import {
 } from '../src/reach-access.ts'
 import { keyRefsOf } from '../src/authenticator.ts'
 
+/** The entry id of a row that only the computer changes. */
+const COMPUTER_ONLY_ROW = 'include:delorun-home-auth'
+
 const session = (id: string): SessionId => id as SessionId
 const workspace = (id: string): WorkspaceId => id as WorkspaceId
 const LISTENER = 'reach-tailscale-private'
@@ -80,7 +83,7 @@ function facts(overrides: Partial<ReachAccessFacts> = {}): ReachAccessFacts {
     keyRefs: () => new Set(['DEEPSEEK_API_KEY', 'OPENAI_API_KEY']),
     logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
     computerOnlySwitches: () => [CONSENT],
-    protectedEntryIds: () => new Set([PROTECTED_ROW]),
+    protectedEntryIds: () => new Set([PROTECTED_ROW]), computerOnlyEntryIds: () => new Set([COMPUTER_ONLY_ROW]),
     defaultPermission: () => PERMISSION,
     dangerousMode: () => false,
     ...overrides,
@@ -550,6 +553,38 @@ describe('an elevated action', () => {
   })
 })
 
+describe('the plugin pack actions (A408)', () => {
+  const UNLOCK = { id: 'elevation-1' }
+
+  it('lets a paired phone clear a failed or cancelled row without an unlock, while removing a row stays elevated', () => {
+    const call = { action: 'packs/dismiss', resource: GLOBAL, args: { name: 'x' } } as const
+    expect(createCondition(facts(), DEVICE)(call)).toEqual({ kind: 'allow' })
+    expect(Object.keys(REACH_ELEVATED_ACTIONS)).toContain('packs/remove')
+    expect(createCondition(facts(), DEVICE)({ action: 'packs/remove', resource: GLOBAL, args: { name: 'x' } })).toEqual({ kind: 'deny', reason: 'elevation-required: packs/remove' })
+  })
+
+  it('lets a paired phone cancel a queued or downloading pack without an unlock, which only stops an install', () => {
+    const call = { action: 'packs/cancel', resource: GLOBAL, args: { name: 'x' } } as const
+    expect(createCondition(facts(), DEVICE)(call)).toEqual({ kind: 'allow' })
+    expect(Object.keys(REACH_ELEVATED_ACTIONS)).not.toContain('packs/cancel')
+  })
+  const CHANGING = ['packs/enqueue', 'packs/remove', 'packs/retry'] as const
+
+  it('lets a paired phone read the packs and the install list without an unlock', () => {
+    const condition = createCondition(facts(), DEVICE)
+    expect(condition({ action: 'packs/list', resource: GLOBAL, args: {} })).toEqual({ kind: 'allow' })
+    expect(Object.keys(REACH_ALLOWED_ACTIONS)).toContain('packs/list')
+  })
+
+  it('refuses every action that changes the install list without an unlock, and accepts it after one', () => {
+    for (const action of CHANGING) {
+      expect(Object.keys(REACH_ELEVATED_ACTIONS)).toContain(action)
+      expect(createCondition(facts(), DEVICE)({ action, resource: GLOBAL, args: { names: ['x'], name: 'x' } })).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
+      expect(createCondition(facts({ elevationOf: () => UNLOCK }), DEVICE)({ action, resource: GLOBAL, args: { names: ['x'], name: 'x' } })).toEqual({ kind: 'allow' })
+    }
+  })
+})
+
 describe('the model key actions', () => {
   const locked = reachDevicePrincipal('device-1', LISTENER)
   const unlockedPage = { ...locked, unlockId: 'page-1' }
@@ -633,7 +668,7 @@ const NEVER = [/^account\//, /^event:deepseek-account\//, /^settings\/openSettin
 const KEYS = [/^credentials\//, /^event:credentials\//]
 const UNLOCK = [
   /^settings\/(mutate|replace|update)$/, /^commands\/execute$/,
-  /^pluginManager\/(installBundle|removeBundle|setBundleEnabled|setPluginEnabled|setVersionExemption|updateBundle|cancelInstall|undo|restore)$/,
+  /^pluginManager\/(installBundle|removeBundle|setBundleEnabled|setPluginEnabled|setVersionExemption|updateBundle|cancelInstall|undo|restore)$/, /^packs\/(enqueue|remove|retry)$/,
   /^terminal\//, /^mcpManager\//, /^directoryPicker\//, /^workspace\/create$/, /^dynamicCordisRunner\//, /^event:cordis\//,
 ]
 

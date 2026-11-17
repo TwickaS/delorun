@@ -166,6 +166,11 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      */
     'plugins.row.config': { kind: 'keyed'; scope: 'root'; owner: PluginConfigViewProps }
     /**
+     * One line under a row in a bundle's list of rows, rendered with the row's subject (`kind: 'row'`). An entry renders
+     * null for a row it has nothing to say about, such as the "Needs setup" state of a row whose program is missing.
+     */
+    'plugins.row.state': { kind: 'list'; scope: 'root'; owner: PluginDetailProps }
+    /**
      * Controls at the head of a detail page, before the page's own switch and
      * uninstall, rendered with the page's subject. An entry renders null for a
      * subject it has no control for.

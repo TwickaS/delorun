@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "外部智能体",
+    "description": "让智能体把任务交给你已安装的 Codex 或 Claude Code 程序，并在工具程序中运行 Python 代码"
+  }
+}

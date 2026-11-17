@@ -1,0 +1,32 @@
+# Each external agent mounts only when its program is on PATH; delegating needs the person to be signed in to it. The
+# delegation tool mounts when either is present and lists only those present. The Python runtime needs a POSIX
+# platform and python3 (CPython 3.10 or newer) on PATH.
+- insert:
+    - id: experimental-subagent-oar-codex
+      name: '@deepseek-ai/dsh-experimental-subagent-oar'
+      disabled: !!js "(() => { const fs = process.getBuiltinModule('node:fs'), path = process.getBuiltinModule('node:path'); const ext = process.platform === 'win32' ? ['.exe', '.cmd', ''] : ['']; return !(process.env.PATH ?? '').split(path.delimiter).some(dir => ext.some(e => fs.existsSync(path.join(dir, 'codex' + e)))) })()"
+      config:
+        runtime: codex
+        providerName: oar-codex
+        launchArgs:
+          - -c
+          - sandbox_mode="workspace-write"
+    - id: experimental-subagent-oar-claude
+      name: '@deepseek-ai/dsh-experimental-subagent-oar'
+      disabled: !!js "(() => { const fs = process.getBuiltinModule('node:fs'), path = process.getBuiltinModule('node:path'); const ext = process.platform === 'win32' ? ['.exe', '.cmd', ''] : ['']; return !(process.env.PATH ?? '').split(path.delimiter).some(dir => ext.some(e => fs.existsSync(path.join(dir, 'claude' + e)))) })()"
+      config:
+        runtime: claude
+        providerName: oar-claude
+        launchArgs:
+          - --permission-mode
+          - dontAsk
+          - --permission-prompts
+          - none
+    - id: tool-subagent-oar
+      name: '@deepseek-ai/dsh-experimental-tool-subagent-oar'
+      disabled: !!js "!['codex', 'claude'].some(name => { const fs = process.getBuiltinModule('node:fs'), path = process.getBuiltinModule('node:path'); const ext = process.platform === 'win32' ? ['.exe', '.cmd', ''] : ['']; return (process.env.PATH ?? '').split(path.delimiter).some(dir => ext.some(e => fs.existsSync(path.join(dir, name + e)))) })"
+      config:
+        providers: !!js "Object.fromEntries(['codex', 'claude'].filter(name => { const fs = process.getBuiltinModule('node:fs'), path = process.getBuiltinModule('node:path'); const ext = process.platform === 'win32' ? ['.exe', '.cmd', ''] : ['']; return (process.env.PATH ?? '').split(path.delimiter).some(dir => ext.some(e => fs.existsSync(path.join(dir, name + e)))) }).map(name => [name, 'oar-' + name]))"
+    - id: ptc-runtime-python
+      name: '@deepseek-ai/dsh-experimental-ptc-runtime-python'
+      disabled: !!js "process.platform === 'win32' || (() => { const fs = process.getBuiltinModule('node:fs'), path = process.getBuiltinModule('node:path'); return !(process.env.PATH ?? '').split(path.delimiter).some(dir => fs.existsSync(path.join(dir, 'python3'))) })()"

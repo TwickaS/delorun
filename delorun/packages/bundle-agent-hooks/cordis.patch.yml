@@ -1,0 +1,15 @@
+# The hook files are the person's own: ~/.claude/settings.json and ~/.codex/hooks.json. A missing file registers no hooks
+# and logs one warning, so turning the bundle on without them changes nothing. The mods bridge loads no mod by itself.
+- insert:
+    - id: hooks-claude-code
+      name: '@deepseek-ai/dsh-hooks-claude-code'
+      config:
+        configPath: !!js "(process.env.HOME ?? process.env.USERPROFILE ?? '') + '/.claude/settings.json'"
+    - id: hooks-codex
+      name: '@deepseek-ai/dsh-hooks-codex'
+      config:
+        configPath: !!js "(process.env.HOME ?? process.env.USERPROFILE ?? '') + '/.codex/hooks.json'"
+    - id: claude-code-mods
+      name: '@deepseek-ai/dsh-experimental-claude-code-mods'
+    - id: client-ui-claude-code-mods
+      name: '@deepseek-ai/dsh-experimental-client-ui-claude-code-mods'
