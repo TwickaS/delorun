@@ -32,7 +32,7 @@ const out = resolve(site, 'out')
 
 await waitForResources()
 if (values.build === true) {
-  const built = spawnSync('nice', ['-n', '19', join(site, 'node_modules/.bin/vite'), 'build'], { cwd: site, stdio: 'inherit', timeout: 900000 })
+  const built = spawnSync('nice', ['-n', '19', join(site, 'node_modules/.bin/vite'), 'build'], { cwd: site, stdio: 'inherit', timeout: 900000, env: { ...process.env, SITE_ALLOW_STANDINS: '1' } })
   if (built.status !== 0) throw new Error('the website build failed')
 }
 

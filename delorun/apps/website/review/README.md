@@ -9,7 +9,7 @@ cd delorun/apps/website
 node review/run-pass.ts --pass 1 --build
 ```
 
-`--build` runs `vite build` under `nice -n 19` first; without it the existing `out/` is served. The command waits until 4 GB of memory and 5 GB of disk are free, serves `out/` on port 18680 (`--port` changes it), and writes `~/delorun-rc-release/site-pass-<n>/` (`--release-dir` changes the parent). It prints the summary counts. A second run of the same build writes the same file names; the folder's earlier pictures and reports are removed first.
+`--build` runs `vite build` under `nice -n 19` first, with `SITE_ALLOW_STANDINS=1` so stand-in replica sessions do not stop a review build (never set it for a build that deploys); without it the existing `out/` is served. The command waits until 4 GB of memory and 5 GB of disk are free, serves `out/` on port 18680 (`--port` changes it), and writes `~/delorun-rc-release/site-pass-<n>/` (`--release-dir` changes the parent). It prints the summary counts. A second run of the same build writes the same file names; the folder's earlier pictures and reports are removed first.
 
 ## What the folder holds
 
