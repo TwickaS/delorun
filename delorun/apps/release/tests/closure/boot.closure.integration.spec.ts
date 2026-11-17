@@ -225,9 +225,11 @@ describe.runIf(ARCHIVE !== undefined)('an extracted runtime closure', { timeout:
       devices: ['devices', 'list'],
       mcp: ['mcp', 'list'],
       workspace: ['workspace', 'full-access'],
+      agents: ['agents', '--help'],
     }
     const help = run(['--help']).output
-    const listed = help.slice(help.indexOf('Commands:')).split('\n\n')[0]!.split('\n').slice(1).map(line => /^ {2}(\S+)/u.exec(line)?.[1]).filter(name => name !== undefined)
+    // The help lists the commands in groups, each command at a two-space indent; the words and exit codes follow them.
+    const listed = help.slice(0, help.indexOf('Words used here')).split('\n').map(line => /^ {2}(\S+) /u.exec(line)?.[1]).filter(name => name !== undefined)
     expect(listed.sort()).toEqual(Object.keys(invocations).sort())
     const crashed = /ERR_MODULE_NOT_FOUND|Cannot find (?:module|package)|^\s+at .+:\d+:\d+\)?$/mu
     const failures = Object.entries(invocations).flatMap(([command, args]) => {
