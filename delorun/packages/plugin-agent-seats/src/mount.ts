@@ -3,16 +3,13 @@
  * presets and the two Host routes the chat's buttons call. The question relay is the one part supplied from outside.
  * @module @delorun/plugin-agent-seats/mount
  */
-import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: the ctx.profileContext merge.
 import type {} from '@deepseek-ai/dsh-app-boot'
-import { brandString } from '@deepseek-ai/dsh-brand'
 // Type-only: the ctx.connection merge.
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { SessionId } from '@deepseek-ai/dsh-session'
-import type { SubagentPromptRequestId } from '@deepseek-ai/dsh-subagent'
 // Type-only: the ctx.workspaceRegistry merge.
 import type {} from '@deepseek-ai/dsh-workspace'
 import { agentTitle } from '@delorun/external-agents/copy'
@@ -90,14 +87,6 @@ export async function mountSeats(ctx: Context, config: Config, options: SeatMoun
     },
     workspaceOf,
     dir,
-    prompt: async (child, text, signal) => {
-      await ctx.subagents.prompt({
-        requestId: brandString<SubagentPromptRequestId>(randomUUID()),
-        childSessionId: child,
-        delivery: 'queue',
-        content: [{ type: 'text', text }],
-      }, signal)
-    },
     warn: (message) => { logger.warn(message) },
   })
   const seatProviders = new Set(config.seats.map(seat => seatProviderName(seat.provider)))

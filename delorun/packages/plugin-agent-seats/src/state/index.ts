@@ -7,7 +7,7 @@ export {
   agentOfProvider, DEFAULT_OWN_SETTINGS, foldSeat, LAST_ANSWER_LIMIT, NO_LOGGED, NO_SHOWN, SEAT_FOLD_VERSION, viewOf,
   type SeatLogged, type SeatProjectionState, type SeatShown,
 } from './fold.ts'
-export { DEFAULT_RESUME_TEXT, mountSeatState, type SeatStateMount, type SeatStateOptions } from './mount.ts'
+export { mountSeatState, type SeatStateMount, type SeatStateOptions } from './mount.ts'
 export { partingNotice, unresumableNotice, type PartingNotice, type ProgramTail, type ProgramTailReader } from './parting.ts'
 export { seatPrograms } from './programs.ts'
 export { AGENT_SEAT_KEY, agentSeatProjection, seatStateSchema } from './projection.ts'

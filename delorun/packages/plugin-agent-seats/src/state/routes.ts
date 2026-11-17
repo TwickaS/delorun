@@ -40,15 +40,6 @@ export interface SeatRouteOptions {
    * @returns the key, or undefined.
    */
   workspaceOf(child: SessionId): string | undefined
-  /**
-   * Deliver a message from the person to the child as a queued prompt.
-   * @param child - the seat child.
-   * @param text - the message.
-   * @param signal - aborts the delivery.
-   */
-  prompt(child: SessionId, text: string, signal: AbortSignal): Promise<void>
-  /** The message the Resume button sends. */
-  readonly resumeText: string
   /** The clock, in epoch milliseconds. */
   now(): number
 }
@@ -90,7 +81,8 @@ export function resumeRoute(options: SeatRouteOptions): SeatRoute {
       if (view === null) return answer(404, { error: 'that chat has no live agent' })
       if (view.state !== 'limit') return answer(409, { error: 'the agent is not at a plan limit' })
       if (view.resetAt !== undefined && view.resetAt > options.now()) return answer(409, { error: 'the limit has not lifted yet', resetAt: view.resetAt })
-      await options.prompt(child, options.resumeText, request.signal)
+      // Nothing is written into the agent's conversation: the person's next message reopens the program on its saved session.
+      options.records.setStatus(child, 'idle')
       return answer(200, { ok: true })
     },
   }

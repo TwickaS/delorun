@@ -27,7 +27,6 @@ export interface StateWorld {
   readonly gate: ScriptedGate
   readonly mount: SeatStateMount
   /** The messages the Resume button sent. */
-  readonly prompts: Array<{ readonly child: SessionId, readonly text: string }>
   /** What the mount could not report to the person. */
   readonly warnings: string[]
   /** The folder the model picks are kept in. */
@@ -72,7 +71,6 @@ export async function stateWorld(options: Partial<SeatStateOptions> = {}): Promi
   const dir = await mkdtemp(join(tmpdir(), 'ea2-seat-state-'))
   const gate = new ScriptedGate()
   gate.seats.set(child, { child, root: SessionId('root'), provider: 'claude-code' })
-  const prompts: Array<{ child: SessionId, text: string }> = []
   const warnings: string[] = []
   let adapter: SeatAdapter | undefined
   const mount = await mountSeatState(ctx, {
@@ -80,7 +78,6 @@ export async function stateWorld(options: Partial<SeatStateOptions> = {}): Promi
     runOf: id => adapter?.runOf(id),
     workspaceOf: () => 'workspace-1',
     dir,
-    prompt: (id, text) => { prompts.push({ child: id, text }); return Promise.resolve() },
     warn: message => { warnings.push(message) },
     ...options,
   })
@@ -100,7 +97,7 @@ export async function stateWorld(options: Partial<SeatStateOptions> = {}): Promi
     gate, host, states: mount.store, models: mount.choices, events: mount.events,
   })
   return {
-    ctx, session, child, adapter, gate, mount, prompts, warnings, dir,
+    ctx, session, child, adapter, gate, mount, warnings, dir,
     say: (text) => {
       const message = createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } })
       session.append('user/message', message, { surfaceOp: 'append' })

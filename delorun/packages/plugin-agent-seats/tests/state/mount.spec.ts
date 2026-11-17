@@ -87,18 +87,16 @@ describe('a reached plan limit', () => {
     const chunks = await collect(w.adapter.stream(w.request([w.say('task')])))
     expect(finishOf(chunks)).toMatchObject({ kind: 'error', failure: { code: 'EXTERNAL_AGENT_LIMIT' } })
     expect(view(w)).toMatchObject({ state: 'limit', resetAt: 2000 })
-    expect(w.prompts).toEqual([])
 
     const resume = routeOf(w, RESUME_PATH)
     const early = await post(resume, { child: w.child })
     expect(early.status).toBe(409)
     expect(await early.json()).toMatchObject({ resetAt: 2000 })
-    expect(w.prompts).toEqual([])
 
     clock = 3000
     const answered = await post(resume, { child: w.child })
     expect(answered.status).toBe(200)
-    expect(w.prompts).toEqual([{ child: w.child, text: 'Continue.' }])
+    expect(view(w)?.state).toBe('idle')
   })
 
   it('shows a limit the program reports mid-turn, and a signed-out program', async () => {
@@ -115,13 +113,14 @@ describe('a reached plan limit', () => {
     expect(view(other)?.state).toBe('not-signed-in')
   })
 
-  it('sends the Resume message the mount was given, and refuses a chat that is not at a limit', async () => {
-    const w = await stateWorld({ resumeText: 'Carry on.', now: () => 9000 })
+  it('reopens nothing and writes nothing into the conversation on Resume, and refuses a chat that is not at a limit', async () => {
+    const w = await stateWorld({ now: () => 9000 })
     const resume = routeOf(w, RESUME_PATH)
     expect((await post(resume, { child: w.child })).status).toBe(409)
     appendPluginRecord(w.session, SEAT_STATUS_RECORD, { state: 'limit', resetAt: 5000 })
     expect((await post(resume, { child: w.child })).status).toBe(200)
-    expect(w.prompts).toEqual([{ child: w.child, text: 'Carry on.' }])
+    expect(view(w)?.state).toBe('idle')
+    expect(w.session.ownEvents().some(event => event.type === 'user/message')).toBe(false)
   })
 
   it('refuses a malformed request and a chat that is not a live agent', async () => {
@@ -132,7 +131,6 @@ describe('a reached plan limit', () => {
     expect((await post(resume, [])).status).toBe(400)
     const plain = w.ctx.sessions.create()
     expect((await post(resume, { child: plain.header.id })).status).toBe(404)
-    expect(w.prompts).toEqual([])
   })
 })
 

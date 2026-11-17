@@ -20,9 +20,6 @@ import { SeatRecords, type SeatSessions } from './store.ts'
 import { seatPrograms } from './programs.ts'
 import type { SeatAgent } from './view.ts'
 
-/** The default text of the Resume button's message. */
-export const DEFAULT_RESUME_TEXT = 'Continue.'
-
 const NAMES: Readonly<Record<SeatAgent, string>> = { 'claude-code': 'Claude Code', codex: 'Codex' }
 
 /** What {@link mountSeatState} takes from the rest of the plugin. */
@@ -43,13 +40,6 @@ export interface SeatStateOptions {
   workspaceOf(child: SessionId): string | undefined
   /** Delorun's own folder; the model picks are kept in a file in it. */
   readonly dir: string
-  /**
-   * Deliver a message from the person to a child as a queued prompt (the Resume button).
-   * @param child - the seat child.
-   * @param text - the message.
-   * @param signal - aborts the delivery.
-   */
-  prompt(child: SessionId, text: string, signal: AbortSignal): Promise<void>
   /** Reads a program session's newest message id for parting detection; absent switches the comparison off. */
   readonly tail?: ProgramTailReader
   /**
@@ -58,8 +48,6 @@ export interface SeatStateOptions {
    * @returns the program's version and a short name for its own settings, when known.
    */
   info?(agent: SeatAgent): { readonly version?: string, readonly ownSettings?: string }
-  /** The message the Resume button sends; defaults to {@link DEFAULT_RESUME_TEXT}. */
-  readonly resumeText?: string
   /** The clock, in epoch milliseconds; defaults to `Date.now`. */
   readonly now?: () => number
   /** Where a failure that cannot reach the person is reported. */
@@ -196,7 +184,7 @@ export async function mountSeatState(ctx: Context, options: SeatStateOptions): P
   })
 
   const routeOptions = {
-    records: store, choices, workspaceOf: options.workspaceOf, prompt: options.prompt, resumeText: options.resumeText ?? DEFAULT_RESUME_TEXT, now,
+    records: store, choices, workspaceOf: options.workspaceOf, now,
   }
   return {
     store,

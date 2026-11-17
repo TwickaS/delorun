@@ -32,10 +32,6 @@ async function setup(tail?: () => Promise<{ lastMessageId?: string }>) {
     runOf: id => adapter?.runOf(id),
     workspaceOf: () => 'workspace-1',
     dir,
-    prompt: (_child, text) => {
-      agent?.followup(say(text))
-      return Promise.resolve()
-    },
     ...tail === undefined ? {} : { tail },
     now: () => 10_000,
     warn: (message) => { throw new Error(message) },
@@ -101,12 +97,16 @@ describe('the seat state on the production loop', () => {
     await done
     expect(mount.store.viewOf(agent.id)).toMatchObject({ state: 'limit', resetAt: 5000 })
 
-    done = idle()
     const resume = mount.routes.find(route => route.path === RESUME_PATH)
     const answer = await resume?.fetch(new Request('http://delorun.test/', { method: 'POST', body: JSON.stringify({ child: agent.id }) }))
     expect(answer?.status).toBe(200)
+    // Resume writes nothing to the program: the person's next message starts the turn.
+    expect(mount.store.viewOf(agent.id)?.state).toBe('idle')
+    expect(gate.latest.sent).toHaveLength(1)
+    done = idle()
+    agent.followup(say('go on'))
     await until(() => gate.latest.sent.length === 2, 'the resumed turn')
-    expect(gate.latest.sent[1]).toEqual({ text: 'Continue.', mode: 'start' })
+    expect(gate.latest.sent[1]).toEqual({ text: 'go on', mode: 'start' })
     expect(mount.store.viewOf(agent.id)?.state).toBe('working')
     gate.latest.emit({ kind: 'turn-end', outcome: 'completed' })
     await done
