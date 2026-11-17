@@ -248,7 +248,7 @@ Tailscale 报告为以你所允许的用户登录的手机，可以在批准窗�
 2. 在电脑上，打开 studio 中的“设置”→“设备”，请求会带着代码输入框在那里等待；或者运行 `delorun devices elevate`，它会列出提出请求的手机。输入请求的编号和手机显示的代码。在 studio 中，输入代码并选择 **Approve**。
 3. 手机会显示 “Sensitive actions unlocked until” 和解锁结束的时间，以及 **Lock now**。在你的电脑上，命令会打印 “Unlocked sensitive actions on <device name> until <time>.”
 
-一次解锁在最后一个需要它的操作之后持续 15 分钟，且自开始起最长不超过 8 小时：结束后请再次解锁。它只对提出请求的那部手机、在它提出请求的那个地址上、并且只在批准它的那个 profile 中有效。Delorun 会记录每次开始和结束，以及在解锁状态下进行的每个操作。
+一次解锁默认在最后一个需要它的操作之后持续 15 分钟，且自开始起最长不超过 8 小时：结束后请再次解锁。它只对提出请求的那部手机、在它提出请求的那个地址上、并且只在批准它的那个 profile 中有效。Delorun 会记录每次开始和结束，以及在解锁状态下进行的每个操作。
 
 <details>
 <summary>边界情况</summary>
@@ -266,7 +266,7 @@ Tailscale 报告为以你所允许的用户登录的手机，可以在批准窗�
 <details>
 <summary>进一步了解</summary>
 
-- profile 的 reach 行中的 `elevationMinutes` 可以更改一次解锁持续多久，范围为 1 到 60 分钟。
+- profile 的 reach 行中的 `elevationMinutes` 可以更改一次解锁在最后一个需要它的操作之后持续多久，范围为 1 到 60 分钟。`delorun-home-auth` 行的 `unlockCapMinutes` 设置可以更改一次解锁自开始起最长能持续多久，默认为 480 分钟（8 小时）。两者都没有命令或“设置”页面。
 - 在开始需要它的工作之前，先在手机上的“设置”→“设备”中提前解锁。
 
 </details>

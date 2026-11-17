@@ -232,7 +232,7 @@ A code unlock stays on while you keep using it: each action that changes somethi
 2. On your computer, open Settings, Devices in the studio, where the request waits with a code field, or run `delorun devices elevate`, which lists the phones that ask. Type the number of the request and the code the phone shows. In the studio, type the code and choose **Approve**.
 3. The phone shows "Sensitive actions unlocked until" and the time the unlock ends, with **Lock now**. At your computer, the command prints "Unlocked sensitive actions on <device name> until <time>."
 
-An unlock lasts 15 minutes after the last action that needed it, and never more than 8 hours from its start: when it ends, unlock again. It works only for the phone that asked, on the address it asked on, and only in the profile that approved it. Delorun logs each start and end, and each action taken under an unlock.
+An unlock lasts 15 minutes by default after the last action that needed it, and never more than 8 hours from its start: when it ends, unlock again. It works only for the phone that asked, on the address it asked on, and only in the profile that approved it. Delorun logs each start and end, and each action taken under an unlock.
 
 <details>
 <summary>Edge cases</summary>
@@ -250,7 +250,7 @@ An unlock lasts 15 minutes after the last action that needed it, and never more 
 <details>
 <summary>Go further</summary>
 
-- `elevationMinutes` in the profile's reach row changes how long an unlock lasts, from 1 to 60 minutes.
+- `elevationMinutes` in the profile's reach row changes how long an unlock lasts after the last action that needed it, from 1 to 60 minutes. The `unlockCapMinutes` setting of the `delorun-home-auth` row changes the most one unlock can last from its start, 480 minutes (8 hours) by default. Neither has a command or a Settings page.
 - Unlock ahead of time from Settings, Devices on the phone before you start work that needs it.
 
 </details>
