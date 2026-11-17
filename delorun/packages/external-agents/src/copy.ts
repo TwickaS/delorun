@@ -11,14 +11,24 @@ const AGENT_TITLES: Readonly<Record<ExternalAgentName, string>> = { 'claude-code
 /** The plan each agent's limits belong to. */
 const PLAN_NAMES: Readonly<Record<ExternalAgentName, string>> = { 'claude-code': 'Claude', 'codex': 'ChatGPT' }
 
-/** Plain names of the limit windows the programs report, by the program's own name. */
+/** Plain names of the limit windows, by the kind the drivers normalise them to. */
 const WINDOW_NAMES: Readonly<Record<string, string>> = {
-  five_hour: '5-hour',
-  seven_day: 'weekly',
-  seven_day_opus: 'weekly Opus',
-  seven_day_sonnet: 'weekly Sonnet',
-  primary: '5-hour',
-  secondary: 'weekly',
+  'five-hour': '5-hour',
+  'seven-day': 'weekly',
+  'seven-day-opus': 'weekly Opus',
+  'seven-day-sonnet': 'weekly Sonnet',
+  'thirty-day': '30-day',
+}
+
+/**
+ * The plain name of a limit window.
+ * @param kind - the window's normalised kind.
+ * @returns a name such as `5-hour` or `90-minute`, or the kind in quotes when it is not one Delorun knows.
+ */
+function windowName(kind: string): string {
+  const minutes = /^(\d+)-minute$/u.exec(kind)
+  if (minutes !== null) return `${minutes[1]}-minute`
+  return WINDOW_NAMES[kind] ?? `"${kind}"`
 }
 
 /**
@@ -81,7 +91,7 @@ function remaining(ms: number): string {
  */
 export function limitRefusal(facts: { readonly provider: ExternalAgentName, readonly window: string, readonly resetsAt: number, readonly now: number, readonly timeZone?: string }): string {
   const name = agentTitle(facts.provider)
-  const window = WINDOW_NAMES[facts.window] ?? `"${facts.window}"`
+  const window = windowName(facts.window)
   const zone = facts.timeZone === undefined ? {} : { timeZone: facts.timeZone }
   const time = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', ...zone }).format(facts.resetsAt)
   const day = facts.resetsAt - facts.now > 86_400_000
