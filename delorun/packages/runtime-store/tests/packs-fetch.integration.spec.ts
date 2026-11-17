@@ -155,12 +155,17 @@ describe('the pack transport', () => {
     expect(wrote).toBeLessThan(40)
   })
 
-  it('shows an address without its user name and password in a refusal', async () => {
-    const fetcher: typeof fetch = vi.fn(() => Promise.reject(new Error('refused')))
-    const files = createPackFiles({ channel: 'https://person:secret@releases.example/x/', stallSeconds: 30, fetch: fetcher })
-    const failure = await files.fetchRelease('a.tar.gz', { exact: 3 }).then(() => undefined, (error: unknown) => error)
-    expect((failure as Error).message).toContain('https://releases.example/x/a.tar.gz')
+  it('refuses a channel address with a user name or password before any request, without repeating it', () => {
+    const fetcher: typeof fetch = vi.fn(() => Promise.reject(new Error('Request cannot be constructed from a URL that includes credentials: https://person:secret@releases.example/x/a.tar.gz')))
+    let failure: unknown
+    try {
+      createPackFiles({ channel: 'https://person:secret@releases.example/x/', stallSeconds: 30, fetch: fetcher })
+    } catch (error) {
+      failure = error
+    }
+    expect(failure).toMatchObject({ code: 'FETCH_REFUSED' })
     expect((failure as Error).message).not.toMatch(/person|secret/u)
+    expect(fetcher).not.toHaveBeenCalled()
   })
 
   it('cuts a metadata file at the release files\' 30 seconds in total, however steadily its pieces arrive', async () => {

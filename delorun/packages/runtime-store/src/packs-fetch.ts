@@ -113,6 +113,8 @@ export function createPackFiles(options: PackTransportOptions): PackFiles {
   const base = new URL(options.channel.endsWith('/') ? options.channel : `${options.channel}/`)
   const secure = base.protocol === 'https:' || (base.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(base.hostname))
   if (!secure) throw new PackRefusal(`the pack channel ${options.channel} is not an https address`, 'FETCH_REFUSED')
+  // Node's fetch puts the whole address, password included, in its error text, which every device would then read.
+  if (base.username !== '' || base.password !== '') throw new PackRefusal('the pack channel address carries a user name or password, which a release channel does not need', 'FETCH_REFUSED')
   const requestSeconds = options.timeoutSeconds ?? METADATA_REQUEST_TIMEOUT_SECONDS
 
   async function get(url: URL, size: PackSize, label: string, missingIsUndefined: boolean, transfer: PackTransfer = {}): Promise<Uint8Array | undefined> {
