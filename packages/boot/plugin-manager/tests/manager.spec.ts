@@ -3091,7 +3091,7 @@ describe('a package the release publishes as a signed pack', () => {
     const name = OFFICIAL_ON_DEMAND_CATALOG[0]!.packageName
     const listed = (await manager.listBundles()).find(item => item.name === name)
     expect(listed?.installTarget).toBeUndefined()
-    expect(listed?.error).toMatchObject({ code: 'pack-only' })
+    expect(listed?.error).toMatchObject({ code: 'operation-error', diagnostic: expect.stringMatching(/signed plugin pack/u) })
   })
 
   it('offers the link to the installed pack and nothing else', async () => {
@@ -3103,7 +3103,7 @@ describe('a package the release publishes as a signed pack', () => {
   it('keeps the usual target for a package the release does not publish as a pack', async () => {
     const { manager } = await fixture('live', false, targets(false), {}, undefined, undefined, true)
     const name = OFFICIAL_ON_DEMAND_CATALOG[0]!.packageName
-    expect((await manager.listBundles()).find(item => item.name === name)?.error?.code).not.toBe('pack-only')
+    expect((await manager.listBundles()).find(item => item.name === name)?.error?.diagnostic ?? '').not.toMatch(/signed plugin pack/u)
   })
 
   it('refuses a registry install of a pack, whoever asks, before pnpm runs', async () => {
@@ -3113,7 +3113,7 @@ describe('a package the release publishes as a signed pack', () => {
     const before = readFileSync(join(dir, 'package.json'), 'utf8')
     const result = await manager.installBundle('@delorun/bundle-browser@0.1.0')
     expect(result).toMatchObject({ application: 'failed', changed: false })
-    expect(result.error).toMatchObject({ code: 'pack-only' })
+    expect(result.error).toMatchObject({ code: 'operation-error', diagnostic: expect.stringMatching(/signed plugin pack/u) })
     expect(pnpm).not.toHaveBeenCalled()
     expect(readFileSync(join(dir, 'package.json'), 'utf8')).toBe(before)
   })

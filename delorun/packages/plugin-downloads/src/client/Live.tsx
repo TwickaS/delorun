@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import css from './Live.module.css'
 import { pluralKey, type Translate } from './locales.ts'
 import type { PanelModel } from './model.ts'
+import { nameOf } from './names.ts'
 
 /**
  * @param props - the announcement and the copy.
@@ -11,6 +12,6 @@ import type { PanelModel } from './model.ts'
 export function Live({ announcement, t }: { readonly announcement: PanelModel['announcement']; readonly t: Translate }): ReactNode {
   const text = announcement === undefined ? ''
     : announcement.kind === 'summary' ? t(pluralKey('summary', announcement.count), { n: announcement.count })
-      : t('announce.failed', { name: announcement.name })
+      : t('announce.failed', { name: nameOf({ key: announcement.name }, t) })
   return <div className={css.live} role="status" aria-live="polite">{text}</div>
 }

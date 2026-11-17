@@ -34,6 +34,14 @@ export const en = {
   'sheet.open': 'Downloads, {n} in progress',
   'sheet.close': 'Close',
   'row.failed': 'Something could not be installed',
+  'pack.browser': 'Browser',
+  'pack.codeIntelligence': 'Code intelligence',
+  'pack.agentHooks': 'Claude Code and Codex hooks',
+  'pack.webhooks': 'Webhooks',
+  'pack.externalAgents': 'External agents',
+  'pack.computerUseDriver': 'Computer use (Cua Driver)',
+  'pack.claudeCode': 'Claude Code',
+  'pack.codex': 'Codex',
 }
 
 /** A key of the dictionary. */
@@ -70,6 +78,14 @@ export const zh: typeof en = {
   'sheet.open': '下载，{n} 个进行中',
   'sheet.close': '关闭',
   'row.failed': '有插件未能安装',
+  'pack.browser': '浏览器',
+  'pack.codeIntelligence': '代码智能',
+  'pack.agentHooks': 'Claude Code 与 Codex 钩子',
+  'pack.webhooks': 'Webhook',
+  'pack.externalAgents': '外部智能体',
+  'pack.computerUseDriver': '计算机使用（Cua Driver）',
+  'pack.claudeCode': 'Claude Code',
+  'pack.codex': 'Codex',
 }
 
 /** The translate function the components take: the slot machinery's, or a stand-in. */

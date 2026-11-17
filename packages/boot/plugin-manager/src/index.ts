@@ -299,6 +299,9 @@ export function specPackageName(spec: string, dependencies: Readonly<Record<stri
   return Object.entries(dependencies).find(([dependency, saved]) => specs.includes(dependencySpec(dependency, saved, profileDir)))?.[0]
 }
 
+/** The diagnostic for a package the release publishes as a signed plugin pack and a registry or another source offers. */
+const PACK_ONLY = 'This plugin is a signed plugin pack of this release; add it from Plugins or the setup guide, which downloads it from the release.'
+
 /** The package name a local directory declares, or `undefined` without a readable manifest. */
 function packageName(dir: string): string | undefined {
   try {
@@ -868,7 +871,7 @@ export class PluginManager extends TypertRemoteService {
           // A package the release publishes as a signed pack never has a registry target, installed or not.
           const packs = this.ownerContext.get('packInstallTargets')
           const pack = packs?.resolve(name, runtimeVersion)
-          if (pack === undefined && packs?.listed(name) === true) throw new ManagementFailure('pack-only')
+          if (pack === undefined && packs?.listed(name) === true) throw new ManagementFailure('operation-error', undefined, PACK_ONLY)
           target = { installTarget: pack ?? officialBundleInstallTarget(name, this.profile.installAnchor, runtimeVersion) }
         }
         catch (error) { targetError = managementError(error) }
@@ -1331,7 +1334,7 @@ export class PluginManager extends TypertRemoteService {
       const known = specPackageName(spec, before, this.profile.dir)
       // A package the release publishes as a signed pack installs only from its pack folder, never from a registry or another source.
       const packs = this.ownerContext.get('packInstallTargets')
-      if (known !== undefined && packs !== undefined && await packs.isPack(known) && packs.linkSpec(known) !== spec) throw new ManagementFailure('pack-only')
+      if (known !== undefined && packs !== undefined && await packs.isPack(known) && packs.linkSpec(known) !== spec) throw new ManagementFailure('operation-error', undefined, PACK_ONLY)
       const provided = known === undefined ? [] : this.providedProtected(known)
       if (provided.length > 0) throw this.protectionFailure(provided)
       if (this.ownerContext.get('hmr') !== undefined && known !== undefined && Object.hasOwn(before, known)) {

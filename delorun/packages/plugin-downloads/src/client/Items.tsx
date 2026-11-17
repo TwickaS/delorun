@@ -3,6 +3,7 @@ import { IconCheckOutlineRegular, IconCloseOutlineRegular, IconWarningOutlineReg
 import type { ReactNode } from 'react'
 import css from './Items.module.css'
 import { itemFraction } from './model.ts'
+import { nameOf } from './names.ts'
 import type { DownloadItem, DownloadsSource } from './source.ts'
 import type { Translate } from './locales.ts'
 
@@ -40,22 +41,22 @@ export function statusText(item: DownloadItem, t: Translate): string {
   }
 }
 
-function Icon({ item }: { readonly item: DownloadItem }): ReactNode {
-  const name = item.title ?? item.key
+function Icon({ item, t }: { readonly item: DownloadItem, readonly t: Translate }): ReactNode {
+  const name = nameOf(item, t)
   return item.iconUrl === undefined
     ? <span className={css.icon} aria-hidden="true">{[...name.replace(/^@[^/]*\//, '').replace(/^(plugin-)/, '')][0]?.toUpperCase() ?? ''}</span>
     : <img className={css.icon} src={item.iconUrl} alt="" />
 }
 
 function Row({ item, source, t, tone }: Omit<ItemListProps, 'items' | 'label'> & { readonly item: DownloadItem }): ReactNode {
-  const name = item.title ?? item.key
+  const name = nameOf(item, t)
   const running = item.state === 'downloading' || item.state === 'verifying' || item.state === 'installing'
   const done = item.state === 'ready' || item.state === 'needs-reload'
   const failed = item.state === 'failed'
   const text = statusText(item, t)
   return (
     <li className={css.row} data-state={item.state} data-tone={tone}>
-      <Icon item={item} />
+      <Icon item={item} t={t} />
       <div className={css.main}>
         <span className={css.name}>{name}</span>
         {failed || done

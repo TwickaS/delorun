@@ -22,7 +22,7 @@ function fake(initial: InstallItem[]) {
   const remote: PacksPanelRemote = {
     list: () => { calls.push('list'); return Promise.resolve(snapshot(queue)) },
     cancel: guarded('cancel', key => { queue = queue.map(item => (item.key === key ? { ...item, state: 'cancelled' } : item)) }),
-    retry: guarded('retry', key => { queue = queue.map(item => (item.key === key ? { ...item, state: 'queued', failure: undefined } : item)) }),
+    retry: guarded('retry', key => { queue = queue.map(item => { if (item.key !== key) return item; const { failure: _failure, ...rest } = item; return { ...rest, state: 'queued' as const } }) }),
     remove: guarded('remove', key => { queue = queue.filter(item => item.key !== key) }),
     dismiss: guarded('dismiss', key => { queue = queue.filter(item => item.key !== key) }),
   }
@@ -128,5 +128,20 @@ describe('the downloads source over the packs remote', () => {
     expect(needsUnlock({ details: { reason: 'loopback-required: x' } })).toBe(false)
     expect(needsUnlock('elevation-required')).toBe(false)
     expect(needsUnlock(undefined)).toBe(false)
+  })
+})
+
+describe('the names a row shows', () => {
+  it('gives Delorun\'s own packs words in both languages and falls back to the signed name', async () => {
+    const { nameOf, PACK_TITLE_KEYS } = await import('../src/client/names.ts')
+    const { en, zh } = await import('../src/client/locales.ts')
+    const english = (key: keyof typeof en) => en[key]
+    const chinese = (key: keyof typeof zh) => zh[key]
+    expect(nameOf({ key: '@delorun/bundle-browser' }, english)).toBe('Browser')
+    expect(nameOf({ key: '@delorun/bundle-browser' }, chinese)).toBe('浏览器')
+    expect(nameOf({ key: '@delorun/bundle-browser', title: 'Own title' }, english)).toBe('Own title')
+    expect(nameOf({ key: 'some-pack' }, english)).toBe('some-pack')
+    expect(nameOf({ key: 'toString' }, english)).toBe('toString')
+    for (const key of Object.values(PACK_TITLE_KEYS)) expect(zh[key], key).toBeTruthy()
   })
 })
