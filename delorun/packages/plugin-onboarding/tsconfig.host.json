@@ -17,7 +17,8 @@
     "src/local-models.ts",
     "src/readiness.ts",
     "src/recommend.ts",
-    "src/rows.ts"
+    "src/rows.ts",
+    "src/preview-flags.ts"
   ],
   "references": [
     {

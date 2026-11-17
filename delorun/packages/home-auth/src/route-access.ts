@@ -110,6 +110,9 @@ export const PLUGIN_ROUTE_ACCESS: Readonly<Record<string, Readonly<Record<string
     DEFAULTS_PATH: UNLOCKED('reads a workspace\'s model and browser defaults by its path'),
     SET_DEFAULTS_PATH: UNLOCKED('sets the model and browser every new chat in a workspace starts with'),
   },
+  'preview-flags/src/index.ts': {
+    'PREVIEW_FLAG_ROUTES.list': READ('names the declared preview flags and whether each is on, with no setting or data'),
+  },
   'plugin-onboarding/src/index.ts': {
     WORKSPACE_NOTICE_PATH: READ('names the files set aside, not their paths'),
     SETUP_RECORD_PATH: READ('reads which setup steps are done'),

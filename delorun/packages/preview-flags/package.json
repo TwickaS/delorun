@@ -1,0 +1,42 @@
+{
+  "name": "@delorun/preview-flags",
+  "description": "Delorun's preview flags: a plugin declares a studio feature that is not ready for everyone, one profile row turns it on, and the Host, the studio and delorun preview read the same state",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./flags": "./src/flags.ts",
+    "./manifest": "./src/manifest.ts",
+    "./wire": "./src/wire.ts",
+    "./client": "./src/client/index.ts",
+    "./locales": "./src/client/locales.ts",
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-brand": "workspace:*",
+    "@deepseek-ai/dsh-client-ui-primitives": "workspace:*",
+    "@delorun/home-auth": "workspace:*",
+    "zod": "4.6.6"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-app-boot": "workspace:*",
+    "@deepseek-ai/dsh-client-connection": "workspace:*",
+    "@deepseek-ai/schemastery": "workspace:~",
+    "react": "^18.2.0"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-app-boot": "workspace:*",
+    "@deepseek-ai/dsh-client-connection": "workspace:*",
+    "@deepseek-ai/schemastery": "workspace:~",
+    "@testing-library/react": "^16.3.3",
+    "@types/react": "~18.3.1",
+    "react": "^18.2.0"
+  },
+  "delorun": {
+    "state": "shipped"
+  }
+}

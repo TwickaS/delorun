@@ -3,6 +3,7 @@
  * @module @delorun/plugin-onboarding/client/locales
  */
 
+import { browserEn, browserZh } from './browser-locales.ts'
 import { pinEn, pinZh } from './pin-locales.ts'
 
 /** English dictionary. */
@@ -389,6 +390,7 @@ export const en = {
   'row.description': 'Go through the first-run steps again. Each step starts on your current choices, and a choice changes only when you change it.',
   'row.show': 'Run setup again',
   ...pinEn,
+  ...browserEn,
 } as const satisfies Record<string, string>
 
 /** A key of the dictionary. */
@@ -778,6 +780,7 @@ export const zh: Record<OnboardingLocaleKey, string> = {
   'row.description': '重新走一遍首次使用步骤。每一步都从你当前的选择开始，只有你更改时才会改变。',
   'row.show': '再次运行设置',
   ...pinZh,
+  ...browserZh,
 }
 
 /** The dictionaries this plugin registers, by locale id. */

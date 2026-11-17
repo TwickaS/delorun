@@ -1,0 +1,31 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/packages/preview-flags/README.md
+/:
+  en: 121bdde34af91360
+  zh: a0a8fc66d62e43ea
+/delorun-preview-flags:
+  en: 31a4549e9da441d4
+  zh: f1ec06c790d3bafa
+/delorun-preview-flags/summary:
+  en: 6ecbfd6cee6a1a2c
+  zh: 0339e089adde18de
+/delorun-preview-flags/contents:
+  en: e194162bc282a481
+  zh: b97e3c85a22ae1b4
+/delorun-preview-flags/declare-a-flag:
+  en: 1716f88f61f30bc2
+  zh: c530dbdc3ccc05f9
+/delorun-preview-flags/turn-a-flag-on:
+  en: 2bcfc192a3e844a4
+  zh: c98a090813344d4c
+/delorun-preview-flags/read-a-flag:
+  en: e030897f0f0e91e9
+  zh: 6a6327e3af6bc4bf
+/delorun-preview-flags/contract:
+  en: 56874e571cf26b58
+  zh: d124278dc8996a05
+/delorun-preview-flags/tests:
+  en: 3eae048c5da43385
+  zh: 847feee37d32005c

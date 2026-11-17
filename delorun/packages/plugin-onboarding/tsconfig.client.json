@@ -9,6 +9,7 @@
     "src/client",
     "src/config.ts",
     "src/wire.ts",
+    "src/preview-flags.ts",
     "src/css-modules.d.ts"
   ],
   "references": [

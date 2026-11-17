@@ -27,6 +27,7 @@
     "./full-access": "./src/client/full-access.ts",
     "./profile-versions": "./src/profile-versions.ts",
     "./requirements": "./src/requirements.ts",
+    "./requirements-api": "./src/client/requirements-api.ts",
     "./report": "./src/report.ts",
     "./statements": "./src/client/locales.ts",
     "./trust-bill": "./src/client/trust-bill.ts",

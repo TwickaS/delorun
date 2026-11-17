@@ -1,0 +1,198 @@
+/* The Browser choice: one row per choice, then whether Browser is ready. The values are the studio's own tokens, so the
+   group looks the same in the setup guide and in any other dialog. */
+.choices,
+.readiness,
+.fix {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delorun-space-4, 8px);
+}
+
+.heading {
+  margin: 0;
+  font-size: var(--dsw-font-xs-13-font-size);
+  font-weight: 500;
+  line-height: var(--dsw-font-xs-13-line-height);
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-layer-1);
+  overflow: hidden;
+}
+
+.option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-height: 44px;
+  padding: var(--delorun-space-4, 8px) var(--delorun-space-6, 16px);
+  cursor: pointer;
+}
+
+.option + .option {
+  border-top: 0.5px solid var(--dsw-alias-border-l1);
+}
+
+.option:hover:not([data-disabled]) {
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.option[data-selected] {
+  box-shadow: inset 3px 0 0 var(--dsw-alias-brand-primary);
+}
+
+.option[data-disabled] {
+  cursor: default;
+}
+
+/* The radio is the native control, laid over its visible row for keyboard and assistive technology. */
+.radio {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: inherit;
+}
+
+.option:has(.radio:focus-visible) {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: -2px;
+}
+
+.optionTitle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--delorun-space-4, 8px);
+  font-size: var(--dsw-font-xs-13-font-size);
+  font-weight: 500;
+  line-height: var(--dsw-font-xs-13-line-height);
+}
+
+.optionText,
+.hint {
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* The planned choice's words are dimmed; its chip keeps its own ink so the reason stays readable. */
+.dimmed {
+  opacity: 0.55;
+}
+
+/* Above the radio's overlay, so the chip takes its own hover, focus and tap for the tooltip. */
+.chip {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  font-weight: 400;
+}
+
+.line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--delorun-space-4, 8px);
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.line[data-tone='success'] {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.line[data-tone='warning'] {
+  color: var(--dsw-alias-state-warn-primary);
+}
+
+.line[data-tone='error'] {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.mark {
+  flex: none;
+  width: 16px;
+  text-align: center;
+  font-weight: 500;
+}
+
+.lineText {
+  flex: 1 1 12rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.commandRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: var(--delorun-space-4, 8px);
+}
+
+.command {
+  display: flex;
+  align-items: center;
+  flex: 1 1 14rem;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: var(--delorun-space-3, 6px) var(--delorun-space-5, 12px);
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-2);
+  font-family: var(--dsw-font-mono, ui-monospace, monospace);
+  font-size: var(--dsw-font-xs-13-font-size);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.copied {
+  align-self: center;
+  font-size: var(--dsw-font-xs-13-font-size);
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* The empty live region takes no room beside the Copy button. */
+.copied:empty {
+  display: none;
+}
+
+.button {
+  min-height: 44px;
+}
+
+.alignStart,
+.link {
+  align-self: flex-start;
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--dsw-alias-link);
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+}
+
+/* Inline buttons are compact with a pointer; touch keeps its larger target. */
+@media (pointer: fine) {
+  .button {
+    min-height: 32px;
+    padding: 0 12px;
+    font-size: 13px;
+  }
+
+  .link {
+    min-height: 32px;
+  }
+}
