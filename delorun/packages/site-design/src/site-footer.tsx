@@ -17,6 +17,9 @@ const LIST = 'flex flex-wrap items-center gap-x-6 gap-y-2' // us-spelling: quote
 /** Where focus goes after the page is reset: the footer's first link. */
 const FOOTER_FOCUS = (): HTMLElement | null => document.querySelector<HTMLElement>('footer nav a')
 
+/** A footer link in small type: a box at least 24 px tall, by padding and not by font size. */
+const SMALL_HIT = 'inline-flex min-h-6 items-center' // us-spelling: quoted output (Tailwind class names)
+
 /** The owner line's layout. */
 const OWNER = 'flex items-center gap-2' // us-spelling: quoted output (Tailwind class names)
 
@@ -51,8 +54,8 @@ export function SiteFooter({ copy, links, top, closing, inner = DEFAULT_INNER }:
         </nav>
         {closing === undefined ? <BackToStart copy={copy.theme} className="self-start" after={FOOTER_FOCUS} /> : null}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
-          <p className={OWNER}><ProductMark size={18} />{copy.owner} &middot; <SiteLink link={copy.licence} /></p>
-          <p className="self-end text-xs sm:self-auto"><SiteLink link={copy.upstream} /></p>
+          <p className={OWNER}><ProductMark size={18} />{copy.owner} &middot; <SiteLink link={copy.licence} className={SMALL_HIT} /></p>
+          <p className="self-end text-xs sm:self-auto"><SiteLink link={copy.upstream} className={SMALL_HIT} /></p>
         </div>
       </div>
     </footer>
