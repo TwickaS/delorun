@@ -8,7 +8,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import { SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
+import { SessionId, SessionLogOffset, type SessionEvent } from '@deepseek-ai/dsh-session'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import ApprovalService, { type ApprovalOutcome, type ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
 import { describe, expect, it } from 'vitest'
@@ -160,6 +160,24 @@ describe('the grant in later runs', () => {
     expect(grantEvents(agent).filter(type => type.startsWith('real-browser/'))).toEqual(['real-browser/granted', 'real-browser/away', 'real-browser/ended'])
     expect(h.grants.end(agent.session)).toBe(false)
     expect(h.grants.setAway(agent.session, 9_000)).toBe(false)
+  })
+})
+
+describe('the grant across a restart', () => {
+  it('stays live in a chat restored from its log, and stays ended once turned off', async () => {
+    const h = await harness(new MockAdapter([ASK, textResponse('allowed')]), () => 'allowed-once')
+    const agent = await h.ctx.agentLoop.create(SessionId('restart'), { provider: 'mock', model: 'mock' })
+    await run(h.ctx, agent, 'check my order')
+    const restore = async (events: readonly SessionEvent[]): Promise<boolean> => {
+      const next = new Context()
+      await mountAgentLoopTestDependencies(next)
+      const grants = await registerGrants(next, () => 1_000)
+      const session = next.sessions.prepare(SessionId('restart'), { seed: structuredClone([...events]), meta: structuredClone(agent.session.header), inheritedEventCount: SessionLogOffset(0), eventState: 'detached' })
+      return grants.live(session)
+    }
+    expect(await restore(agent.session.snapshotEvents())).toBe(true)
+    h.grants.end(agent.session)
+    expect(await restore(agent.session.snapshotEvents())).toBe(false)
   })
 })
 
