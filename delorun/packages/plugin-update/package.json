@@ -1,0 +1,19 @@
+{
+  "name": "@delorun/plugin-update",
+  "description": "The studio's update: check now, prepare and apply an update with C3's report, go back, and stop Delorun, as Host routes that hand every step to the home process over its update channel",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./wire": "./src/wire.ts",
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@delorun/contract-update-report": "workspace:*"
+  },
+  "delorun": {
+    "state": "shipped"
+  }
+}
