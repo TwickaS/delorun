@@ -24,8 +24,11 @@
   en: 1855f11eebe7f79e
   zh: e9ddbd799cb736cd
 /c21-changes/harness-edits:
-  en: 343a1851757992ae
-  zh: 80a2423f1302269a
+  en: 40acbd5654d01b57
+  zh: eec4d67bd0372ca6
+/c21-changes/harness-edits/live-changes-and-restart:
+  en: 71a0937929f24f6c
+  zh: a13dafbdea80d044
 /c21-changes/reloads-and-restores:
   en: aefca49cc311cf15
   zh: ed75b1273a203a59
@@ -57,8 +60,8 @@
   en: 3dc541edaa68532c
   zh: 4ac6ff046ab7be4c
 /c21-changes/routes-and-the-recovery-screen:
-  en: aeb030374e39a065
-  zh: 9acdc2d241c0cc20
+  en: 315531462f1a745b
+  zh: aa9dbb4311c241e7
 /c21-changes/the-studio-s-changes-section:
   en: 81e830e898977769
   zh: 887435144ebeb4c0
@@ -81,8 +84,8 @@
   en: 3788cd32d14b3786
   zh: cd171a57491b00c5
 /c21-changes/security/denial-tests:
-  en: 6b2dfe13235698ee
-  zh: f185a1baa7775159
+  en: 850da874c1f6bb99
+  zh: 9a2c529e54c7d20a
 /c21-changes/security/what-this-does-not-prove:
   en: 385e9419e8c5b306
   zh: e1f213e4292ccf86
