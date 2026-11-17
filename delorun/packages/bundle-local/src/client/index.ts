@@ -56,6 +56,7 @@ import { DevicesSection, type DevicesSectionInjected } from './DevicesSection.ts
 import { en, zh, type PrivacyLocaleKey } from './locales.ts'
 import { en as requirementsEn, zh as requirementsZh, type RequirementsLocaleKey } from './requirements-locales.ts'
 import { NeedsSetup, type NeedsSetupInjected } from './NeedsSetup.tsx'
+import { startBrowsePair } from './browse-pair-api.ts'
 import { documentLanguage, RequirementsStore } from './requirements-store.ts'
 import { en as versionsEn, zh as versionsZh, type VersionsLocaleKey } from './versions-locales.ts'
 import { saveBrowserFile } from './save-file.ts'
@@ -601,6 +602,7 @@ export function applyNeedsSetup(ctx: Context, fetch: HostFetch): void {
       store,
       openSettings: (section) => { shelled.settingsShell.openSection(section) },
       copy: (text) => navigator.clipboard.writeText(text),
+      pairBrowse: (request, signal) => startBrowsePair(fetch, request, signal),
     })
     const register = (name: 'plugins.row.state' | 'plugins.detail.section') => shelled.slots.inject(name, () => shelled.slots.register({
       name, id: 'delorun-requirements', order: 10, locale: REQUIREMENTS_NS, inject: face,

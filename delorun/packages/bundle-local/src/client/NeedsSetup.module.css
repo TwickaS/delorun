@@ -45,3 +45,39 @@
   font-size: 13px;
   overflow-wrap: anywhere;
 }
+
+/* The pairing steps take the full width under the reason: numbered, with the code large enough to copy by eye. */
+.steps {
+  flex-basis: 100%;
+  margin: 2px 0 0;
+  padding-inline-start: 20px;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.steps > li + li {
+  margin-top: 6px;
+}
+
+.pairing {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  min-width: 0;
+}
+
+.code {
+  padding: 2px 10px;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.waiting {
+  color: var(--dsw-alias-label-secondary);
+}

@@ -7,7 +7,8 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { REQUIREMENT_ROUTES } from '../src/client/requirements-api.ts'
-import { apply, checkRequirements, hostEnvironment, isMet, type BundleToCheck, type CheckEnvironment, type Need } from '../src/requirements.ts'
+import { BROWSE_PAIR_ROUTE } from '../src/client/browse-pair-api.ts'
+import { apply, browseDataDir, browseProgram, checkRequirements, hostEnvironment, isMet, type BundleToCheck, type CheckEnvironment, type Need } from '../src/requirements.ts'
 
 const roots: string[] = []
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }) })
@@ -15,7 +16,7 @@ afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: 
 /** A computer with these files, variables and platform. */
 function computer(files: readonly string[], env: Record<string, string> = {}, platform: NodeJS.Platform = 'linux'): CheckEnvironment {
   return {
-    platform, env: { PATH: '/usr/bin:/opt/bin', ...env }, home: '/home/person', isExecutable: path => files.includes(path),
+    platform, arch: 'x64', libc: 'glibc', env: { PATH: '/usr/bin:/opt/bin', ...env }, home: '/home/person', isExecutable: path => files.includes(path),
     exists: path => files.includes(path),
     readJson: (path) => { throw new Error(`unexpected read of ${path}`) },
     resolvePackage: (_from, name) => { throw new Error(`unexpected resolution of ${name}`) },
@@ -178,6 +179,92 @@ describe('a Playwright browser build', () => {
   })
 })
 
+describe('a browse pairing', () => {
+  const need: Need = { kind: 'browse-paired', via: ['@test/driver', '@opencode/browse'] }
+  const fix = { kind: 'browse-pair', extension: 'https://chromewebstore.google.com/detail/browse', guide: 'https://docs.delorun.com/guide/use-your-own-browser' }
+  const data = '/home/person/.local/share/browse'
+  /** A computer whose packages lead from the bundle to browse's launcher and its platform packages, recording every file read. */
+  function browseComputer(files: string[], options: { readonly env?: Record<string, string>, readonly platform?: NodeJS.Platform, readonly arch?: string, readonly libc?: 'glibc' | 'musl', readonly browsers?: unknown } = {}): CheckEnvironment & { readonly touched: string[] } {
+    const touched: string[] = []
+    const manifests: Record<string, string> = {
+      '@test/driver': '/bundle/node_modules/@test/driver/package.json',
+      '@opencode/browse': '/bundle/node_modules/@opencode/browse/package.json',
+    }
+    for (const build of ['linux-x64', 'linux-x64-musl', 'linux-arm64', 'darwin-arm64', 'windows-x64']) manifests[`@opencode/browse-${build}`] = `/bundle/node_modules/@opencode/browse-${build}/package.json`
+    return {
+      ...computer(files, options.env, options.platform), arch: options.arch ?? 'x64', libc: options.libc ?? 'glibc', touched,
+      exists: (path) => { touched.push(path); return files.includes(path) },
+      isExecutable: path => files.includes(path),
+      resolvePackage: (_from, name) => manifests[name] ?? (() => { throw new Error(`cannot resolve ${name}`) })(),
+      readJson: (path) => { touched.push(path); return options.browsers },
+    }
+  }
+  const program = '/bundle/node_modules/@opencode/browse-linux-x64/bin/browse'
+  const paired = { 'profile-1': { id: 'chrome-home', name: 'Chrome on this computer' } }
+
+  it('needs setup with the pairing steps until browse lists a browser, then is ready', () => {
+    const target = bundle({ row: { needs: [need], fix } })
+    expect(checkRequirements([target], 'en', browseComputer([program]))).toEqual({
+      rows: [{ packageName: target.name, rowId: 'row', state: 'needs-setup', reason: 'Connect Chrome', fix: { kind: 'browse-pair', extension: fix.extension } }],
+      problems: [],
+    })
+    expect(checkRequirements([target], 'zh', browseComputer([program])).rows[0]).toMatchObject({ reason: '需要连接 Chrome' })
+    expect(checkRequirements([target], 'en', browseComputer([program, `${data}/browsers.json`], { browsers: paired })).rows).toEqual([{ packageName: target.name, rowId: 'row', state: 'ready' }])
+  })
+
+  it('reads an empty list, or a file it cannot understand, as not paired', () => {
+    expect(isMet(need, browseComputer([program, `${data}/browsers.json`], { browsers: {} }), '/bundle')).toBe(false)
+    expect(isMet(need, browseComputer([program, `${data}/browsers.json`], { browsers: ['not', 'a', 'map'] }), '/bundle')).toBe(false)
+    expect(isMet(need, browseComputer([program, `${data}/browsers.json`], { browsers: { a: { name: 'no id' } } }), '/bundle')).toBe(false)
+  })
+
+  it('never reads browse\'s token files, whatever lies in its data folder', () => {
+    const host = browseComputer([program, `${data}/browsers.json`, `${data}/relay-token`, `${data}/browser-tokens.json`], { browsers: paired })
+    expect(checkRequirements([bundle({ row: { needs: [need], fix } })], 'en', host).rows[0]?.state).toBe('ready')
+    expect(host.touched).toEqual([`${data}/browsers.json`, `${data}/browsers.json`])
+    expect(host.touched.some(path => /token/u.test(path))).toBe(false)
+  })
+
+  it('reads browse\'s data folder where browse does', () => {
+    const at = (env: Record<string, string>, platform: NodeJS.Platform = 'linux') => browseDataDir(browseComputer([], { env, platform }))
+    expect(at({})).toBe(data)
+    expect(at({ XDG_DATA_HOME: '/data' })).toBe('/data/browse')
+    expect(at({ XDG_DATA_HOME: 'relative' })).toBe(data)
+    // Delorun starts browse without OPENCODE_BROWSER_HOME, so the person's setting does not move the folder it reads.
+    expect(at({ OPENCODE_BROWSER_HOME: '/opt/browse', XDG_DATA_HOME: '/data' })).toBe('/data/browse')
+    expect(at({ HOME: '/other' })).toBe('/other/.local/share/browse')
+    expect(at({ USERPROFILE: 'C:\\Users\\person' }, 'win32')).toBe(join('C:\\Users\\person', '.local', 'share', 'browse'))
+  })
+
+  it('runs browse\'s program for this computer from the bundle\'s packages, and refuses a pack that lacks it', () => {
+    const at = (options: Parameters<typeof browseComputer>[1], files: string[]) => browseProgram(need as Extract<Need, { kind: 'browse-paired' }>, '/bundle', browseComputer(files, options))
+    expect(at({}, [program])).toBe(program)
+    const musl = '/bundle/node_modules/@opencode/browse-linux-x64-musl/bin/browse'
+    expect(at({ libc: 'musl' }, [musl])).toBe(musl)
+    const windows = join('/bundle/node_modules/@opencode/browse-windows-x64', 'bin', 'browse.exe')
+    expect(at({ platform: 'win32' }, [windows])).toBe(windows)
+    expect(() => at({}, [])).toThrow('is missing or not executable')
+    const target = bundle({ row: { needs: [need], fix } })
+    expect(checkRequirements([target], 'en', browseComputer([])).problems[0]).toMatchObject({ packageName: target.name, message: expect.stringContaining('browse-linux-x64') })
+  })
+
+  it('says Windows on Arm has no browse, and links the guide instead of pairing steps', () => {
+    const target = bundle({ row: { needs: [need], fix } })
+    const host = { ...browseComputer([], { platform: 'win32', arch: 'arm64' }), resolvePackage: () => { throw new Error('nothing to resolve on Windows on Arm') } }
+    expect(checkRequirements([target], 'en', host).rows).toEqual([{ packageName: target.name, rowId: 'row', state: 'needs-setup', reason: 'Not available on Windows on Arm', fix: { kind: 'docs', url: fix.guide } }])
+    expect(checkRequirements([target], 'zh', host).rows[0]).toMatchObject({ reason: 'Windows on Arm 不支持' })
+    expect(checkRequirements([target], 'en', { ...host, platform: 'freebsd', arch: 'x64' }).rows[0]).toMatchObject({ reason: 'Not available on this kind of computer' })
+  })
+
+  it.each([
+    ['a pairing fix without a pairing need', { row: { needs: [{ kind: 'program', names: ['tool'] }], fix } }],
+    ['a pairing fix with an http link', { row: { needs: [need], fix: { ...fix, extension: 'http://example.com' } } }],
+    ['a pairing need without packages', { row: { needs: [{ kind: 'browse-paired', via: [] }], fix } }],
+  ])('reports %s as that bundle\'s problem', (_label, declaration) => {
+    expect(checkRequirements([bundle(declaration)], 'en', browseComputer(['/usr/bin/tool', program])).problems).toHaveLength(1)
+  })
+})
+
 describe('the real computer', () => {
   it('resolves a Playwright browser build through the bundle\'s installed packages', () => {
     const root = mkdtempSync(join(tmpdir(), 'requirements-playwright-'))
@@ -213,10 +300,11 @@ describe('the real computer', () => {
 })
 
 describe('the route', () => {
-  it('registers one read-only route and answers the check in the asked language', async () => {
+  it('registers the read-only check and the pairing start, and answers the check in the asked language', async () => {
     const target = bundle({ row: { needs: [{ kind: 'env', name: 'REQUIREMENTS_SPEC_UNSET' }], fix: command } })
     const registered: Array<{ path: string, methods: string[], fetch: (request: Request) => Promise<Response> }> = []
     const scope = {
+      effect: vi.fn(),
       connection: { fetch: { register: (route: (typeof registered)[number]) => { registered.push(route) } } },
       get: (name: string) => name === 'pluginManager'
         ? { listBundles: async () => [{ name: target.name, availability: 'profile', rows: [{ rowId: 'row' }] }] }
@@ -224,10 +312,9 @@ describe('the route', () => {
       logger: () => ({ warn: vi.fn() }),
     }
     apply({ inject: (_names: string[], callback: (scope: unknown) => void) => { callback(scope) } } as never)
-    expect(registered).toHaveLength(1)
-    expect(registered[0]).toMatchObject({ path: REQUIREMENT_ROUTES.check, methods: ['GET'] })
+    expect(registered.map(route => [route.path, route.methods])).toEqual([[BROWSE_PAIR_ROUTE, ['POST']], [REQUIREMENT_ROUTES.check, ['GET']]])
     // The bundle directory cannot be resolved from the scratch profile, so the route answers an empty check.
-    const response = await registered[0]!.fetch(new Request(`http://localhost${REQUIREMENT_ROUTES.check}?language=zh`))
+    const response = await registered[1]!.fetch(new Request(`http://localhost${REQUIREMENT_ROUTES.check}?language=zh`))
     expect(response.status).toBe(200)
     expect(response.headers.get('cache-control')).toBe('no-store')
     expect(await response.json()).toEqual({ rows: [], problems: [] })
