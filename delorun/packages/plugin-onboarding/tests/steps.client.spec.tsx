@@ -167,7 +167,6 @@ describe('the look step', () => {
     look(stepServices())
     const preview = screen.getByRole('img', { name: en['look.preview'] })
     expect(preview.textContent).toContain(en['look.preview.ask'])
-    expect(preview.textContent).toContain(en['look.preview.tool'])
     expect(preview.textContent).toContain(en['look.preview.box'])
   })
 

@@ -1,7 +1,7 @@
 /**
- * The Look chooser both Settings → Appearance and onboarding's Look step render: the colour scheme as one segmented row,
- * the themes as a grid of small rendered tiles ending in Custom, the custom panel (shown only while Custom is chosen)
- * and a compact live sample that follows the tile under the pointer or focus. It owns no copy and no storage; callers pass
+ * The Look chooser both Settings → Appearance and onboarding's Look step render, in one column: a slim live strip of two
+ * chat bubbles and the message box that follows the tile under the pointer or focus, then the colour scheme as one
+ * segmented row, the themes as a grid of small rendered tiles ending in Custom, and the custom panel (shown only while Custom is chosen). It owns no copy and no storage; callers pass
  * their own text and write the choices.
  * @module @delorun/brand/settings/LookChooser
  */
@@ -25,8 +25,6 @@ export interface LookSampleCopy {
   readonly label: string
   /** The person's message. */
   readonly ask: string
-  /** The tool chip. */
-  readonly tool: string
   /** The agent's answer. */
   readonly answer: string
   /** The input's placeholder. */
@@ -98,13 +96,12 @@ function TileSwatch({ light, dark }: { readonly light: SwatchColours; readonly d
   )
 }
 
-/** The compact live sample: a message, a tool chip, and the input with its accent button, in the given colours. */
+/** The slim live strip: the person's bubble, the agent's bubble and the input with its accent button, in the given colours. */
 function Sample({ copy, light, dark }: { readonly copy: LookSampleCopy; readonly light: SwatchColours; readonly dark: SwatchColours }) {
   const style = { '--l-page': light.page, '--l-text': light.text, '--l-accent': light.accent, '--d-page': dark.page, '--d-text': dark.text, '--d-accent': dark.accent } as CSSProperties
   return (
     <div className={css.sample} style={style} role="img" aria-label={copy.label}>
       <span className={css.mine}>{copy.ask}</span>
-      <span className={css.toolChip}>{copy.tool}</span>
       <span className={css.answer}>{copy.answer}</span>
       <span className={css.input}><span>{copy.box}</span><span className={css.send} /></span>
     </div>
