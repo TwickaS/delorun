@@ -1,4 +1,10 @@
+---
+description: "The studio's downloads panel: every plugin the install queue is working on, with progress and place in the line, and buttons to cancel, retry or remove."
+---
+
 # @delorun/plugin-downloads
+
+English | [中文](README.zh.md)
 
 The studio's downloads panel. It lists every plugin the install queue is working on, with its icon, name, progress and place in the line, and lets the person cancel a queued or running install, or retry or remove one that failed.
 

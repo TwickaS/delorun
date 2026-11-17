@@ -10,7 +10,7 @@ description: "让智能体通过 Playwright，在这台电脑上的 Chromium 浏
 
 ## 摘要
 
-在“插件”中开启 **Browser**，即可让智能体在这台电脑上的真实 Chromium 浏览器中浏览。它使用 Playwright 提供方，并启动由它自己管理的无头浏览器。
+在“插件”中开启 **浏览器**，即可让智能体在这台电脑上的真实 Chromium 浏览器中浏览。它使用 Playwright 提供方，并启动由它自己管理的无头浏览器。
 
 同一时间只能开启一个浏览器提供方。若要改用 Chrome DevTools，请关闭 `browser-use-playwright-mcp` 行，并在你 profile 的 `cordis.patch.yml` 中开启 `browser-use-chrome-devtools-mcp` 行。Stagehand 需要它自己的模型（`model.modelName` 和 `model.apiKey`），所以在你配置之前它的行保持关闭。
 
