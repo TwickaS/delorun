@@ -12,7 +12,7 @@ description: "收到已签名的 GitHub webhook 时开始一次对话。需要�
 
 在“插件”中开启 **Webhook**，即可让已签名的 GitHub webhook 开始一次对话。端点 `POST /github` 只监听 `127.0.0.1:3081`；要接收 GitHub 的调用，你需要自己在它前面放一个 TLS 反向代理或隧道。
 
-有两样东西需要你自己提供。启动 Delorun 之前先设置 `DELORUN_GITHUB_WEBHOOK_SECRET`（一个高熵密钥，与 GitHub webhook 设置中的相同）。GitHub 端点行起初是关闭的；设置好密钥后再开启它（在此之前“插件”会显示“需要设置”）。另外要在你的 profile 中添加一条规则，说明哪种投递创建哪个对话；此 bundle 不附带任何规则，所以仅有一次通过验证的投递不会产生任何效果。设置 `DELORUN_GITHUB_WEBHOOK_PORT` 可更改端口。它是实验性的，并且会打开一个网络监听端口，请先阅读 GitHub 审查指南。
+有两样东西需要你自己提供。启动 Delorun 之前先设置 `DELORUN_GITHUB_WEBHOOK_SECRET`（一个高熵密钥，与 GitHub webhook 设置中的相同）。GitHub 端点行起初是关闭的；设置好密钥后再开启它（在此之前“插件”会显示“需要设置”）。另外要在你的 profile 中添加一条规则，说明哪种投递创建哪个对话；此 bundle 不附带任何规则，所以仅有一次通过验证的投递不会产生任何效果。设置 `DELORUN_GITHUB_WEBHOOK_PORT` 可更改端口。端点的服务器是此 bundle 自己的本机回环 Web 服务器 `@delorun/bundle-webhooks/server`，即使用此 bundle 模块名的上游 Web 服务器；只有电脑可以更改它的地址或端口，已配对的手机不能。它是实验性的，并且会打开一个网络监听端口，请先阅读 GitHub 审查指南。
 
 ## 需要设置
 
