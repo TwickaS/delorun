@@ -283,7 +283,7 @@
 }
 
 .skeletonRow {
-  height: 28px;
+  height: var(--list-icon-button);
   border-radius: var(--dsw-radius-sm);
   background-color: var(--dsw-alias-interactive-bg-hover);
 }

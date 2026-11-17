@@ -30,6 +30,12 @@ describe('gates:package-states rules', () => {
     expect([...reachable(healthy(), ROOTS)].sort()).toEqual(['leaf', 'root'])
   })
 
+  it('reaches a plugin pack and what it depends on, though no root names it', () => {
+    const packages = [...healthy(), { ...pkg('bundle-a', 'experimental', ['packed-leaf']), pack: true }, pkg('packed-leaf', 'experimental')]
+    expect(stateErrors(packages, ROOTS)).toEqual([])
+    expect(reachable(packages, ROOTS).has('packed-leaf')).toBe(true)
+  })
+
   it('refuses a shipped package that nothing reaches', () => {
     expect(stateErrors([...healthy(), pkg('orphan', 'shipped')], ROOTS)).toEqual([
       'orphan: is shipped but no root reaches it; wire it, or mark it unreached with the lane that wires it, or park it',
