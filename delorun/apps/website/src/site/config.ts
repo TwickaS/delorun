@@ -60,3 +60,10 @@ export const DESKTOP_DOWNLOAD_PLACES = [
   { host: 'releases.delorun.com', path: '/' },
   { host: 'github.com', path: `${new URL(GITHUB_URL).pathname}/releases/download/` },
 ] as const
+
+/**
+ * Chunks the prerender renders in full but the browser loads on demand, by page file. The build links each chunk's
+ * stylesheet from the page, so the page is styled with scripts off. `scripts/check-styles.ts` fails the build for a class
+ * with no rule.
+ */
+export const RENDERED_CHUNK_STYLES: Readonly<Record<string, readonly string[]>> = {}
