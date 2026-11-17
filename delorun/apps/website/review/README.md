@@ -29,4 +29,6 @@ Sections are found by landmark (the id, label or first heading), not by a fixed 
 - `naming.ts`, `report.ts`: picture names and the report format, with their specs in `tests/review-format.spec.ts`.
 - `serve.ts`, `browser.ts`, `resources.ts`: the static server, the browser (Playwright from `apps/tools`) and the wait for free memory and disk.
 
+Every browser context refuses any request that is not to the local server and records it as "blocked, would have left the machine" (the sign-up field would otherwise load Turnstile from Cloudflare). The refused sign-up case runs without Turnstile.
+
 The accessibility run needs `axe-core` in the website's dev dependencies; without it the audit records one warning and skips that run. Headless Chromium has no real GPU, so the frame rates are a floor.

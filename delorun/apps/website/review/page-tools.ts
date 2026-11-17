@@ -34,6 +34,34 @@ export function viewportHeight(width: number): number {
   return width <= 480 ? 844 : width >= 1920 ? 1080 : 900
 }
 
+/** Whether a request address stays on this machine: the local server, or an inline `data:` or `blob:` address. */
+export function isLocal(address: string): boolean {
+  if (/^(data|blob|about):/.test(address)) return true
+  try {
+    const { hostname } = new URL(address)
+    return hostname === '127.0.0.1' || hostname === 'localhost'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Refuses every request that is not to this machine, so a pass never reaches a public address (the sign-up field loads
+ * Turnstile from Cloudflare). Each refusal is recorded as an `info` finding. Routes added later (the worst cases) must
+ * call `route.fallback()` for requests they do not handle, so this route still sees them.
+ * @param context - the context to guard.
+ * @param tag - the label recorded in findings.
+ * @param findings - the list the refusals are added to.
+ */
+export async function keepOnThisMachine(context: BrowserContext, tag: string, findings: Finding[]): Promise<void> {
+  await context.route('**/*', route => {
+    const address = route.request().url()
+    if (isLocal(address)) return route.fallback()
+    findings.push({ severity: 'info', check: 'blocked-request', where: tag, message: `blocked, would have left the machine: ${address}` })
+    return route.abort('blockedbyclient')
+  })
+}
+
 /**
  * Opens a page in a fresh context.
  * @param browser - the browser.
@@ -50,8 +78,9 @@ export async function open(browser: Browser, options: ContextOptions, tag: strin
     javaScriptEnabled: options.scriptsOff !== true,
     ...(options.phone === true ? { deviceScaleFactor: 2, isMobile: true, hasTouch: true } : {}),
   })
-  const page = await context.newPage()
   const findings: Finding[] = []
+  await keepOnThisMachine(context, tag, findings)
+  const page = await context.newPage()
   const add = (check: string, message: string): void => {
     // The static server has no Worker, so its /api routes answer 404; that is the server, not the page. With scripts off
     // the browser refuses script files on purpose.
@@ -60,9 +89,12 @@ export async function open(browser: Browser, options: ContextOptions, tag: strin
     if (blockedScript) return
     findings.push({ severity: apiOnStatic ? 'info' : 'fail', check, where: tag, message })
   }
-  page.on('console', message => { if (message.type() === 'error' && !(expect404 && /status of 404/.test(message.text()))) add('console', message.text()) })
+  page.on('console', message => { if (message.type() === 'error' && !/ERR_BLOCKED_BY_CLIENT/.test(message.text()) && !(expect404 && /status of 404/.test(message.text()))) add('console', message.text()) })
   page.on('pageerror', error => { add('console', `page error: ${error.message}`) })
-  page.on('requestfailed', request => { add('request', `${request.url()} ${request.failure()?.errorText ?? 'failed'}`) })
+  page.on('requestfailed', request => {
+    if (!isLocal(request.url())) return
+    add('request', `${request.url()} ${request.failure()?.errorText ?? 'failed'}`)
+  })
   page.on('response', response => {
     if (response.status() < 400) return
     if (expect404 && response.status() === 404 && response.request().resourceType() === 'document') return

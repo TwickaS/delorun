@@ -99,7 +99,7 @@ export async function worstCases(browser: Browser, base: string, shooter: Shoote
     // A refused sign-up: every write request is refused.
     const refused = await open(browser, { width, scheme: 'light', phone: width <= 480 }, `worst refused sign-up ${String(width)}`)
     await refused.context.route('**/*', route => {
-      if (route.request().method() === 'GET' || route.request().method() === 'HEAD') return route.continue()
+      if (route.request().method() === 'GET' || route.request().method() === 'HEAD') return route.fallback()
       return route.fulfill({ status: 403, contentType: 'application/json', body: '{"error":"refused"}' })
     })
     await refused.page.goto(url(base, '/'), { waitUntil: 'load' })
