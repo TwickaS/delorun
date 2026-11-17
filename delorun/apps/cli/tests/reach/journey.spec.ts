@@ -164,7 +164,9 @@ describe('remote access from a second device', () => {
       .toThrow(/needs you at your computer/)
     expect(json(await phone.send('POST', '/auth/devices/window')).error).toBe('LOOPBACK_REQUIRED')
     expect(json(await phone.send('GET', '/delorun/reach/status')).options).toEqual([{ option: 'tailscale-private', state: 'ready', address: ADDRESS }])
-    expect(json(await phone.send('POST', '/auth/devices/remove', { v: 1, deviceId })).error).toBe('LOOPBACK_REQUIRED')
+    // A session may not remove another device from the tailnet route; naming its own device is a malformed call and ends nothing.
+    const another = `${deviceId.slice(0, -1)}${deviceId.endsWith('a') ? 'b' : 'a'}`
+    expect(json(await phone.send('POST', '/auth/devices/remove', { v: 1, deviceId: another })).error).toBe('LOOPBACK_REQUIRED')
 
     // `delorun devices remove` over the home socket ends the session at once; the Host's own channel token cannot.
     await expect(removeDevice({ v: 1, token: newStartToken(), op: 'devices.remove', args: { deviceId } }, 'host', devices)).rejects.toMatchObject({ code: 'LOOPBACK_REQUIRED' })

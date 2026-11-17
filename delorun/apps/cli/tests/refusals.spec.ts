@@ -37,6 +37,10 @@ const BENCHMARKS = 'the wait-time benchmark under delorun/apps/benchmarks, which
 
 /** The exported error classes that never reach `delorun`'s entry point, each with the reason. */
 const OUTSIDE_DELORUN: Readonly<Record<string, string>> = {
+  InstallRefusal: 'raised by the install queue inside the home process and reported to the studio\'s downloads panel',
+  SetupRefusal: 'raised by the setup routes of the changes plugin and answered to the studio with a status and code',
+  PacksRequestError: 'raised by the studio\'s packs client in the browser for a route answer',
+  PackRefusal: 'raised by the pack download and verification inside the home process and reported to the studio\'s downloads panel',
   ChangesRequestError: 'the studio\'s Changes section raises it in the browser for a route answer; delorun never calls the routes',
   FullAccessConsentRefusedError: PLUGIN,
   FullAccessChangeError: PLUGIN,
