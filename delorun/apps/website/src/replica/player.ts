@@ -61,6 +61,33 @@ function useReducedMotion(): boolean {
   )
 }
 
+/** How long a press keeps looking for its control, in milliseconds: the drawn studio may need a few frames to draw it. */
+const PRESS_RETRY_MS = 300
+
+/**
+ * Hand a press to the drawn studio when its control is there. The press waits a frame, then looks for the control again
+ * each frame for {@link PRESS_RETRY_MS}. A press whose chapter run has ended meanwhile (a slow frame, a throttled tab, or a
+ * choice on the rail) is dropped without a word, since the control it names is no longer drawn; one whose control never
+ * appears in its own chapter run is reported.
+ * @param target - the control.
+ * @param queuedEpoch - the chapter run the press belongs to.
+ * @param currentEpoch - the chapter run now.
+ * @param press - shows the press on the drawn studio and presses; false when the control is not drawn.
+ * @param chapter - the chapter's index, for the report.
+ */
+async function pressWhenDrawn(target: PressTarget, queuedEpoch: number, currentEpoch: RefObject<number>, press: (target: PressTarget) => Promise<boolean>, chapter: number): Promise<void> {
+  const deadline = performance.now() + PRESS_RETRY_MS
+  for (;;) {
+    await new Promise(requestAnimationFrame)
+    if (currentEpoch.current !== queuedEpoch) return
+    if (await press(target)) return
+    if (performance.now() >= deadline) {
+      console.error(`replica: no control "${target.key}" to press in chapter ${String(chapter)}`)
+      return
+    }
+  }
+}
+
 /**
  * Whether an element is at least partly on screen and the tab is visible.
  * @param frame - the element.
@@ -126,6 +153,9 @@ export function usePlayer({ file, ready, frame, press, opening = 0 }: PlayerOpti
   // Each press of a chapter run is handed over once, in order, after the drawn studio has drawn the state before it. A
   // still under reduced motion already shows the chapter's last state, so it presses nothing.
   const pressed = useRef({ epoch: -1, count: 0, queue: Promise.resolve() })
+  // The chapter run now, read when a queued press gets its frame: a press for a chapter that has moved on is dropped.
+  const currentEpoch = useRef(epoch)
+  currentEpoch.current = epoch
   useEffect(() => {
     if (!ready || reduced) return
     const record = pressed.current
@@ -135,10 +165,9 @@ export function usePlayer({ file, ready, frame, press, opening = 0 }: PlayerOpti
     }
     const due = presses.slice(record.count)
     record.count = presses.length
+    const queuedEpoch = epoch
     for (const reached of due) {
-      record.queue = record.queue.then(() => new Promise(requestAnimationFrame)).then(() => press(reached.target)).then((found) => {
-        if (!found) console.error(`replica: no control "${reached.target.key}" to press in chapter ${String(chapter)}`)
-      })
+      record.queue = record.queue.then(() => pressWhenDrawn(reached.target, queuedEpoch, currentEpoch, press, chapter))
     }
   }, [ready, reduced, epoch, presses, press, chapter])
 

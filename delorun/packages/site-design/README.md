@@ -44,4 +44,4 @@ The product site's first screen must stay within 120 KB compressed. `scripts/chu
 
 ## Tests and tools
 
-`tests/` checks that the stylesheet is current, that the themes and their names equal the studio's, that text reaches AA on every surface in every look, that the head script agrees with `src/looks.ts`, and that the mark stays peach. `scripts/shots.ts` takes a screenshot of a locally served page and prints what the page keeps in storage and cookies.
+`tests/` checks that the stylesheet is current, that the themes and their names equal the studio's, that text reaches AA on every surface in every look, that the head script agrees with `src/looks.ts`, and that the mark stays peach. `scripts/shots.ts` takes a screenshot of a locally served page and prints what the page keeps in storage and cookies. `scripts/lcp.ts` measures a locally served page's largest contentful paint on a phone-like profile (390 px wide, 4x CPU slowdown, 1.6 Mbit/s and 150 ms latency), several times, and refuses any address that is not on this computer.

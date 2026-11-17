@@ -124,23 +124,25 @@ function cssModules(dir: string): string[] {
 
 /**
  * The `virtual:replica-island` module. On the server it renders `ReplicaLive` to static markup with each slot's still
- * drawn from the session's fixture (`StillScene.tsx`), led by a `<style>` with every style the markup uses (the
+ * drawn from the session's fixture (`StillScene.tsx`). `styles()` is every style the markup uses (the
  * replica's CSS modules, the brand components' and the real section's it draws, compiled with the same class names, and
- * Soft's scoped tokens, which the real section reads), so the markup is styled before any script runs. In the browser it is
+ * Soft's scoped tokens, which the real section reads); the page writes it once, with `ReplicaStyle`, not once per frame,
+ * so the markup is styled before any script runs. In the browser it is
  * empty: the live replica's chunk brings its own styles before it replaces the markup.
  * @param server - whether the module is for the server's render.
  * @param tokens - Soft's scoped tokens.
  * @returns the module's source.
  */
 function island(server: boolean, tokens: string): string {
-  if (!server) return "export function island() { return '' }\n"
+  if (!server) return "export function island() { return '' }\nexport function styles() { return '' }\n"
   const styles = [...cssModules(here('../')), ...cssModules(`${ROOT}delorun/packages/brand/src/replica`), ...BRAND_STILL_COMPONENTS.map(name => `${ROOT}delorun/packages/brand/src/components/${name}.module.css`), ...STILL_SECTION_STYLES.map(file => `${ROOT}${file}`)]
   const approval = STILL_APPROVAL_STYLES.map(file => `${ROOT}${file}`)
   return `import { createElement } from 'react'\nimport { renderToStaticMarkup } from 'react-dom/server'\nimport { ReplicaLive } from ${JSON.stringify(here('../ReplicaLive.tsx'))}\nimport { stillMarkup } from ${JSON.stringify(here('../StillScene.tsx'))}\n`
     + [...styles, ...approval].map((file, index) => `import style${String(index)} from ${JSON.stringify(`${file}?inline`)}\n`).join('')
     + `const STYLE = [${JSON.stringify(tokens)}, ${styles.map((_, index) => `style${String(index)}`).join(', ')}].join('')\n`
     + `const APPROVAL = [${approval.map((_, index) => `style${String(styles.length + index)}`).join(', ')}].join('')\n`
-    + 'export function island(props) { return `<style>${STYLE}${props.opens === undefined ? \'\' : APPROVAL}</style>` + renderToStaticMarkup(createElement(ReplicaLive, { ...props, stills: stillMarkup(props) })) }\n'
+    + 'export function styles() { return STYLE + APPROVAL }\n'
+    + 'export function island(props) { return renderToStaticMarkup(createElement(ReplicaLive, { ...props, stills: stillMarkup(props) })) }\n'
 }
 
 /**

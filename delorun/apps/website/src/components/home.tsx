@@ -13,7 +13,7 @@ import { usePackageManager } from './package-manager.tsx'
 import { DesktopButton } from './desktop-button.tsx'
 import { CommandBlock, Install, ScriptsOff } from './install.tsx'
 import { Frame } from './layout.tsx'
-import { ReplicaFrame } from '../replica/ReplicaFrame.tsx'
+import { ReplicaFrame, ReplicaStyle } from '../replica/ReplicaFrame.tsx'
 import { GRID } from './grid.ts'
 import { ChunkBoundary } from './chunk-boundary.tsx'
 
@@ -48,6 +48,7 @@ function Hero({ install }: { install: ReactNode }) {
         </p>
       </div>
       <div className="col-span-full lg:col-start-6 lg:col-end-13">
+        <ReplicaStyle />
         <ReplicaFrame session="ordinary-work" width="responsive" />
       </div>
     </section>

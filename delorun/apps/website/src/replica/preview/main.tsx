@@ -8,7 +8,7 @@
 import '../../styles/app.css'
 import { createRoot } from 'react-dom/client'
 import { LOOK_SCRIPT } from '@design/head-script.ts'
-import { ReplicaFrame } from '../ReplicaFrame.tsx'
+import { ReplicaFrame, ReplicaStyle } from '../ReplicaFrame.tsx'
 import type { SessionId } from '../model.ts'
 
 // The head script removes the look's parameters from the address, so the preview reads its own first.
@@ -22,6 +22,9 @@ document.head.append(head)
 
 createRoot(document.getElementById('root') as HTMLElement).render(
   <main style={{ boxSizing: 'border-box', maxWidth: 1200, margin: '0 auto', padding: 'clamp(16px, 3vw, 32px)' }}>
-    <ReplicaFrame session={session} width={width} opens={params.get('opens') ?? undefined} />
+    <>
+      <ReplicaStyle />
+      <ReplicaFrame session={session} width={width} opens={params.get('opens') ?? undefined} />
+    </>
   </main>,
 )
