@@ -11,6 +11,7 @@ import { ToolCallId } from '@deepseek-ai/dsh-llm/brand'
 import { appendPluginRecord, type SessionId, type SessionSeq } from '@deepseek-ai/dsh-session'
 import { setApprovalPolicy, type ApprovalOutcome, type ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
 import type { ProgramApprovalAnswer, ProgramApprovalRequest, ProgramRunRule, SeatConsent } from '@delorun/external-agents/contract'
+import { programSays } from './copy.ts'
 import { SEAT_RUN_ALLOWED_RECORD } from '../state/record.ts'
 import { RunScope, RUN_SCOPE } from './run-scope.ts'
 
@@ -37,6 +38,12 @@ export interface SeatRelayOptions {
    * @param signal - aborts the wait.
    */
   recorded(child: Agent, callId: string, signal: AbortSignal): Promise<void>
+  /**
+   * The name a person knows the seat's agent by, which the card puts before the program's own words.
+   * @param child - the seat child.
+   * @returns the product name, such as `Claude Code`.
+   */
+  agentName(child: Agent): string
   /**
    * The name the seat's record gives the program's tool, shown on the card.
    * @param child - the seat child.
@@ -208,13 +215,21 @@ export class SeatRelay {
       // The hold can outlast the seat or the turn.
       if (!this.isSeat(child)) return { answer: 'cancel' }
       if (this.ctx.get('agents')?.turnBoundaryOf(child.session).openTurnStartSeq === null) return { answer: 'cancel' }
+      const toolName = this.options.recordName(child, request.toolName)
+      const recordedAs = recordedNameOf(child, request.callId)
+      if (recordedAs !== toolName) {
+        // The card names the call by the record the person can read in the transcript; a record that says otherwise is not that call.
+        this.ctx.logger('agent-seats').warn('a program question was rejected: call %s is recorded as %s, not %s', request.callId, recordedAs ?? 'nothing', toolName)
+        return { answer: 'reject' }
+      }
       const full = this.rootIsFullAccess(child)
+      const says = programSays(this.options.agentName(child), request.reason)
       const built: ApprovalRequest = {
         agent: child,
-        toolName: this.options.recordName(child, request.toolName),
+        toolName,
         callId: ToolCallId(request.callId),
-        reason: request.reason,
-        displayReason: { en: request.reason },
+        reason: says.en,
+        displayReason: says,
         grants: EXTERNAL_AGENT_GRANT,
         // A Full access root allows with no card, so it offers no run rule either.
         ...request.runRule !== undefined && full === undefined ? { runScope: RUN_SCOPE } : {},
@@ -301,6 +316,17 @@ export class SeatRelay {
  */
 function keepsRunRules(consent: unknown): consent is Pick<SeatConsent, 'runRules'> {
   return typeof consent === 'object' && consent !== null && typeof Reflect.get(consent, 'runRules') === 'function'
+}
+
+/**
+ * The tool name the seat's record gives a call.
+ * @param child - the seat child.
+ * @param callId - the program's call id.
+ * @returns the name, or undefined when the log holds no record of the call.
+ */
+function recordedNameOf(child: Agent, callId: string): string | undefined {
+  const call = child.session.snapshotEvents().findLast(event => event.type === 'tool/call' && event.data.callId === callId)
+  return call?.type === 'tool/call' ? call.data.name : undefined
 }
 
 /**

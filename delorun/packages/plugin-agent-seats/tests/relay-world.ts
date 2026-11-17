@@ -5,7 +5,7 @@
  */
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
 import SessionStore, { type SessionId } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import ApprovalService, { setApprovalPolicy, type ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
@@ -108,8 +108,16 @@ export async function world(rootPolicy: 'ask' | 'never' = 'ask', mountListener =
   const options: SeatRelayOptions = {
     seatProviders: new Set(['agent-seat']),
     descriptorOf: agent => descriptors.get(agent.id),
-    recorded: (_agent, callId) => new Promise<void>((resolve) => { recorded.set(callId, resolve); resolve() }),
+    // The seat's executor writes the call before the ledger reports it; the stand-in writes the same record.
+    recorded: (agent, callId) => new Promise<void>((resolve) => {
+      if (agent.session.snapshotEvents().every(event => event.type !== 'tool/call' || event.data.callId !== callId)) {
+        agent.session.append('tool/call', { turn: 1, step: 1, callId: ToolCallId(callId), name: 'claude_code.Bash', arguments: '{}' })
+      }
+      recorded.set(callId, resolve)
+      resolve()
+    }),
     recordName: (_agent, toolName) => `claude_code.${toolName}`,
+    agentName: () => 'Claude Code',
   }
   let relay: SeatRelay | undefined
   await ctx.plugin(class { constructor(scope: Context) { relay = new SeatRelay(scope, options, mountListener ? new RunScope() : new UnmountedRunScope()) } })

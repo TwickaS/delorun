@@ -6,7 +6,10 @@
 import { foldSubagentDescriptor } from '@deepseek-ai/dsh-subagent'
 import type { SeatApprover, SeatRelayHook } from '../mount.ts'
 import { recordPrefixOf } from '../executor/index.ts'
-import { seatProviderName } from '../provider/index.ts'
+import { isExternalAgentName, seatProviderName } from '../provider/index.ts'
+import type { SeatConfig } from '../config.ts'
+import { agentTitle } from '@delorun/external-agents/copy'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import { SeatRelay } from './relay.ts'
 
 /**
@@ -16,6 +19,13 @@ import { SeatRelay } from './relay.ts'
  * @returns the approver for `SeatStartRequest.onApproval`; it lifts the child's delegation pin before its first question.
  */
 export const seatRelay: SeatRelayHook = ({ ctx, state, seatProviders, seats }) => {
+  const seatOf = (child: Agent): SeatConfig => {
+    const provider = foldSubagentDescriptor(child.session.snapshotEvents())?.provider
+    const seat = seats.find(candidate => seatProviderName(candidate.provider) === provider)
+    /* v8 ignore next -- seatProviders is built from the same seats, so a child the relay serves always has one */
+    if (seat === undefined) throw new Error(`delorun-agent-seats: ${child.id} is no configured seat, so its calls have no record name`)
+    return seat
+  }
   const relay = new SeatRelay(ctx, {
     seatProviders,
     descriptorOf: child => foldSubagentDescriptor(child.session.snapshotEvents())?.provider,
@@ -23,12 +33,10 @@ export const seatRelay: SeatRelayHook = ({ ctx, state, seatProviders, seats }) =
     recorded: (child, callId, signal) => state.records.recorded(child.id, callId, signal).catch((error: unknown) => {
       if (!signal.aborted) throw error
     }),
-    recordName: (child, toolName) => {
-      const provider = foldSubagentDescriptor(child.session.snapshotEvents())?.provider
-      const seat = seats.find(candidate => seatProviderName(candidate.provider) === provider)
-      /* v8 ignore next -- seatProviders is built from the same seats, so a child the relay serves always has one */
-      if (seat === undefined) throw new Error(`delorun-agent-seats: ${child.id} is no configured seat, so its calls have no record name`)
-      return `${recordPrefixOf(seat)}${toolName}`
+    recordName: (child, toolName) => `${recordPrefixOf(seatOf(child))}${toolName}`,
+    agentName: (child) => {
+      const { provider } = seatOf(child)
+      return isExternalAgentName(provider) ? agentTitle(provider) : provider
     },
   })
   const logger = ctx.logger('agent-seats')

@@ -4,7 +4,7 @@
  */
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
 import SessionStore, { type SessionId } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import ApprovalService, { setApprovalPolicy } from '@deepseek-ai/dsh-user-approval'
@@ -29,6 +29,7 @@ async function hooked(state: Partial<{ recorded: () => Promise<void>, setPending
   describeSeat(session)
   session.append('turn/start', { turn: 1 })
   session.append('user/message', createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'go' }] }), { surfaceOp: 'append' })
+  session.append('tool/call', { turn: 1, step: 1, callId: ToolCallId('call-1'), name: 'claude_code.Bash', arguments: '{}' })
   const child = { id: session.id, session } as Agent
   setApprovalPolicy(session, 'ask')
   ctx.provide('externalAgents', { seat: (id: SessionId) => id === child.id ? { child: id, root: id, provider: 'claude-code' } : undefined } as never)
