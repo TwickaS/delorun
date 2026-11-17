@@ -44,7 +44,7 @@
  *
  * @module @delorun/cli/compose
  */
-import { realpathSync, rmSync } from 'node:fs'
+import { readFileSync, realpathSync, rmSync } from 'node:fs'
 import { runDirectory, writeProtectedFile } from '@delorun/home'
 import { stringify } from 'yaml'
 import { createRuntimeResolution } from '@deepseek-ai/dsh-app-boot'
@@ -468,6 +468,27 @@ export function composedRows(composed: ComposedStart): BootedRow[] {
 }
 
 /**
+ * Whether the Delorun bundle that declares a row lists it in `delorun.requires` of its own `package.json`: a "Needs setup" row,
+ * which the bundle ships disabled until the person turns it on once its needs are met.
+ * @param composed - the composed start.
+ * @param id - the row's id.
+ * @returns true when the declaring Delorun bundle's manifest names the row; false when it cannot be read.
+ */
+function declaresNeeds(composed: ComposedStart, id: string): boolean {
+  const layer = composed.layers.find(each => each.packageDir !== undefined && declares(each, id) && rowInserts(each.patches, id).length > 0)
+  if (layer?.packageDir === undefined) return false
+  let manifest: unknown
+  try {
+    manifest = JSON.parse(readFileSync(join(layer.packageDir, 'package.json'), 'utf8'))
+  } catch (error) {
+    // An unreadable or malformed manifest (`error`) declares nothing: the row is held to the rule for every other required row.
+    return false
+  }
+  const requires = isRecord(manifest) && isRecord(manifest.delorun) ? manifest.delorun.requires : undefined
+  return isRecord(requires) && Object.hasOwn(requires, id)
+}
+
+/**
  * The violations of a set of rows.
  * @param composed - the composed start.
  * @param rows - the rows, composed or booted.
@@ -490,7 +511,7 @@ function violationsOf(composed: ComposedStart, rows: readonly BootedRow[]): Viol
       violations.push({ subject: id, problem: `runs the plugin ${JSON.stringify(row.name)}, not ${required.name}`, sources: sourcesSetting(composed.layers, id, patch => patch.name !== undefined && patch.name !== required.name) })
     }
     if (row.disabled) {
-      if (OPT_IN_ROWS.has(id)) continue
+      if (OPT_IN_ROWS.has(id) || declaresNeeds(composed, id)) continue
       violations.push({ subject: id, problem: 'is disabled', sources: sourcesSetting(composed.layers, id, patch => patch.disabled !== undefined && patch.disabled !== false) })
       continue
     }

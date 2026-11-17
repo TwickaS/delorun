@@ -8,10 +8,11 @@
  * approved plugin content slot applies before the sandbox overlay.
  */
 import { CLI_PROFILE } from '@delorun/contract-home-layout'
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { parse, stringify } from 'yaml'
 import { prepareHome, type CommandContext } from '../src/command.ts'
@@ -336,12 +337,40 @@ describe('safe mode', { timeout: 60_000 }, () => {
 
   it('lets an opt-in Delorun row stay disabled, and still refuses a disabled row that is not opt-in', async () => {
     const composed = await compose()
-    const optIn = [...OPT_IN_ROWS]
-    expect(optIn.length).toBeGreaterThan(0)
-    for (const id of optIn) expect(composed.required.map(row => row.id)).toContain(id)
+    const optIn = [...OPT_IN_ROWS].filter(id => composed.required.some(row => row.id === id))
+    expect(optIn).toEqual(['delorun-cost-meter', 'delorun-thinking-rsvp'])
     const rowOf = (id: string): BootedRow => ({ id, name: composed.required.find(row => row.id === id)?.name ?? '', disabled: true, state: 'active' })
     expect(() => { assertDelorunInvariants(composed, booted(composed, optIn.map(rowOf))) }).not.toThrow()
     expect(await refused(() => { assertDelorunInvariants(composed, booted(composed, [rowOf('delorun-trash')])) })).toContain('delorun-trash is disabled')
+  })
+
+  describe('with an optional pack added to the profile', () => {
+    const PACKAGES = fileURLToPath(new URL('../../../packages/', import.meta.url))
+    const PACKS = ['bundle-code-intelligence', 'bundle-webhooks', 'bundle-external-agents', 'bundle-browser', 'bundle-agent-hooks', 'bundle-computer-use-driver']
+    /** Add a pack to the CLI profile the way a source checkout links a bundle. */
+    function addPack(dir: string): void {
+      const profileDir = join(delorunHome, 'profiles', 'default')
+      const file = join(profileDir, 'package.json')
+      const manifest = JSON.parse(readFileSync(file, 'utf8')) as { dsh: { profile: { bundles: string[] } } }
+      manifest.dsh.profile.bundles.push(`@delorun/${dir}`)
+      writeFileSync(file, JSON.stringify(manifest))
+      const link = join(profileDir, 'node_modules', '@delorun', dir)
+      mkdirSync(join(profileDir, 'node_modules', '@delorun'), { recursive: true })
+      symlinkSync(join(PACKAGES, dir), link, 'junction')
+    }
+
+    it.each(PACKS)('%s: the profile composes and passes the start guard', async (dir) => {
+      addPack(dir)
+      const composed = await compose()
+      expect(composed.required.length).toBeGreaterThan(0)
+    })
+
+    it('still refuses a disabled row that its pack does not list under Needs setup', async () => {
+      addPack('bundle-webhooks')
+      const composed = await compose()
+      const row: BootedRow = { id: 'webhook-runtime', name: '@deepseek-ai/dsh-webhook', disabled: true, state: 'active' }
+      expect(await refused(() => { assertDelorunInvariants(composed, booted(composed, [row])) })).toContain('webhook-runtime is disabled')
+    })
   })
 
   it('composes the safe-mode overlay before the sandbox overlay', async () => {
