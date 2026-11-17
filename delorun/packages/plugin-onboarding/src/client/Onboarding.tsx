@@ -162,6 +162,8 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
 
   // The notice is decided once: acknowledging it must not remove it from under Back.
   const [notice] = useState(() => (!explicit && fixed.notice !== undefined && !fixed.notice.acknowledged() ? fixed.notice : undefined))
+  // The notice is on screen in the Welcome step, so setting the guide aside has shown it; the separate notice step must not show it again.
+  const finishLater = (): void => { notice?.acknowledge(); later() }
   // The Finish setup entry at the computer shows only the steps a phone deferred; they are read once, so finishing one does not remove it from under the person.
   const [only] = useState<readonly DeferrableStep[] | undefined>(() => (deferredOnly.getSnapshot() ? withSteps(record.deferred ?? []) : undefined))
   const steps = useMemo(
@@ -227,9 +229,9 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
         next={{ label: needsFolder ? t('chooseFolder') : last ? t(only === undefined ? 'start' : 'continue') : stepLabel ?? step.continueLabel?.() ?? t('continue'), onClick: next }} />
     )
   return (
-    <Modal open title={title} onClose={later} headless className={DIALOG_CLASS}>
+    <Modal open title={title} onClose={finishLater} headless className={DIALOG_CLASS}>
       <StepFrame title={title} headingRef={heading} count={t('count', { n: String(current + 1), total: String(steps.length) })}
-        place={current + 1} total={steps.length} steps={steps.map(each => each.title())} stepsLabel={t('steps')} stepKey={step.id} {...last && only === undefined ? {} : { later: { label: t('later'), onClick: later } }} footer={footer} above={onPhone ? <OnboardingDownloadsRow /> : undefined}>
+        place={current + 1} total={steps.length} steps={steps.map(each => each.title())} stepsLabel={t('steps')} stepKey={step.id} {...last && only === undefined ? {} : { later: { label: t('later'), onClick: finishLater } }} footer={footer} above={onPhone ? <OnboardingDownloadsRow /> : undefined}>
         {step.render(next, () => { go(current - 1) })}
       </StepFrame>
     </Modal>
