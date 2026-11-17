@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
 import { REACH_DEVICE } from '@delorun/home-auth'
 import { registerPackRoutes } from '../src/routes.ts'
+import { createPacksClient } from '../src/client.ts'
 import { PACK_ELEVATED_ROUTES, PACK_ROUTES } from '../src/wire.ts'
 
 interface Registered {
@@ -87,5 +88,32 @@ describe('what a request may hold', () => {
     }
     expect(hub.cancel).not.toHaveBeenCalled()
     expect(hub.enqueue).not.toHaveBeenCalled()
+  })
+})
+
+describe('the studio client and the Host agree on the routes', () => {
+  it('asks only routes the Host registers, and every route it registers is one the client asks', async () => {
+    const { routes } = setup()
+    const asked: string[] = []
+    const client = createPacksClient((input) => {
+      asked.push(`/${input}`)
+      return Promise.resolve(Response.json({ ok: true, value: { supported: true, packs: [], queue: [] } }))
+    })
+    await client.list()
+    await client.enqueue({ names: ['a'] })
+    await client.cancel({ name: 'a' })
+    await client.dismiss({ name: 'a' })
+    await client.retry({ name: 'a' })
+    await client.remove({ name: 'a' })
+    expect(asked.sort()).toEqual([...routes.keys()].sort())
+  })
+
+  it('turns a 403 on an unlock route into the unlock dialog\'s refusal, and any other refusal into a plain failure', async () => {
+    const refusing = (status: number) => createPacksClient(() => Promise.resolve(new Response('forbidden', { status })))
+    await expect(refusing(403).enqueue({ names: ['a'] })).rejects.toMatchObject({ status: 403, details: { reason: 'elevation-required: packs/enqueue' } })
+    await expect(refusing(403).retry({ name: 'a' })).rejects.toMatchObject({ details: { reason: 'elevation-required: packs/retry' } })
+    await expect(refusing(403).cancel({ name: 'a' })).rejects.toMatchObject({ status: 403, details: undefined })
+    await expect(refusing(500).list()).rejects.toMatchObject({ status: 500 })
+    await expect(createPacksClient(() => Promise.reject(new Error('offline'))).list()).rejects.toMatchObject({ status: 0 })
   })
 })

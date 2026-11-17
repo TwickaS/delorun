@@ -85,17 +85,11 @@ export const PACK_ROUTES = {
 /** The routes a device reaches only while it holds an unlock. */
 export const PACK_ELEVATED_ROUTES: readonly string[] = [PACK_ROUTES.enqueue, PACK_ROUTES.retry, PACK_ROUTES.remove]
 
-/** The error codes of the `packs` remote. */
+/** The error codes of the packs routes. */
 export type PacksErrorCode = 'unsupported' | 'unknown-pack' | 'unavailable-pack'
 
-/** A remote result: the new snapshot, or why nothing happened. */
+/** A route's result: the new snapshot, or why nothing happened. */
 export type PacksResult = { readonly ok: true, readonly value: PacksSnapshot } | { readonly ok: false, readonly error: { readonly code: PacksErrorCode, readonly message: string } }
-
-/** The remote's actions that a phone may take only while unlocked (contract C14, "Elevation"). */
-export const PACKS_ELEVATED_ACTIONS = ['packs/enqueue', 'packs/remove', 'packs/retry'] as const
-
-/** The remote's actions a locked phone may take: reading, cancelling an install, which only stops one, and clearing a failed or cancelled row, which only clears a record (A408). */
-export const PACKS_READ_ACTIONS = ['packs/list', 'packs/cancel', 'packs/dismiss'] as const
 
 /** How a surface draws one pack. */
 export type PackView =

@@ -3,12 +3,11 @@
  * methods and the install-state announcements, and the concurrency field's validation.
  */
 import { Context } from '@deepseek-ai/cordis'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import * as plugin from '../src/index.ts'
-import { PacksService } from '../src/service.ts'
 import { PACK_ROUTES } from '../src/wire.ts'
 
 describe('the configuration', () => {
@@ -40,6 +39,27 @@ describe('the plugin with the services it needs', () => {
   })
 })
 
+describe('the install-state announcements', () => {
+  it('announces each listed item under its request id when the list changes', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'delorun-packs-announce-'))
+    try {
+      mkdirSync(join(home, 'run', 'default'), { recursive: true })
+      writeFileSync(join(home, 'run', 'default', 'installs.json'), JSON.stringify({ v: 1, items: [{ key: 'one', state: 'queued', receivedBytes: 0, reloadNeeded: false }] }))
+      const ctx = new Context()
+      const announced: { requestId: string, phase: string }[] = []
+      ctx.on('plugin-manager/install-state', (progress: { requestId: string, phase: string }) => { announced.push(progress) })
+      ctx.provide('pluginManager', { installBundle: () => Promise.resolve({ application: 'applied' }) } as never)
+      ctx.provide('profileContext', { home, name: 'default' } as never)
+      ctx.provide('connection', { fetch: { register: () => () => Promise.resolve() } } as never)
+      ctx.provide('packsEnvironment', { unsupported: 'a source checkout has no installed release' } as never)
+      await ctx.plugin(plugin, {} as plugin.Config)
+      await vi.waitFor(() => { expect(announced.some(each => each.requestId === 'pack:one')).toBe(true) })
+    } finally {
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
+})
+
 describe('the mounted plugin', () => {
   it('provides the chat-gate slot, which counts the attached gate\'s chats and tells listeners a chat ended', async () => {
     const ctx = new Context()
@@ -54,27 +74,5 @@ describe('the mounted plugin', () => {
     expect(ended).toBe(1)
     detach()
     expect(slot.running()).toBe(0)
-  })
-
-  it('answers the remote\'s methods from the hub and announces each listed item on install-state', async () => {
-    const ctx = new Context()
-    const announced: { requestId: string, phase: string }[] = []
-    ctx.on('plugin-manager/install-state', (progress: { requestId: string, phase: string }) => { announced.push(progress) })
-    type Snapshot = { supported: boolean, packs: never[], queue: { key: string, state: string }[] }
-    const empty: Snapshot = { supported: true, packs: [], queue: [] }
-    const calls: string[] = []
-    const result = { ok: true, value: empty } as const
-    let publish: (snapshot: Snapshot) => void = () => {}
-    await ctx.plugin(PacksService, {
-      subscribe: (listener: (snapshot: Snapshot) => void) => { publish = listener; return () => {} },
-      snapshot: () => Promise.resolve(empty),
-      enqueue: (names: readonly string[]) => { calls.push(`enqueue ${names.join(',')}`); return Promise.resolve(result) },
-      cancel: (name: string) => { calls.push(`cancel ${name}`); return Promise.resolve(result) },
-      remove: (name: string) => { calls.push(`remove ${name}`); return Promise.resolve(result) },
-      retry: (name: string) => { calls.push(`retry ${name}`); return Promise.resolve(result) },
-    } as never)
-    publish({ ...empty, queue: [{ key: 'one', state: 'downloading' }, { key: 'two', state: 'needs-reload' }] })
-    expect(announced).toEqual([{ requestId: 'pack:one', phase: 'installing' }, { requestId: 'pack:two', phase: 'applying' }])
-    expect(calls).toEqual([])
   })
 })
