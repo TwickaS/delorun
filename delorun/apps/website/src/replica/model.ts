@@ -56,10 +56,21 @@ export interface ReplicaFixture {
   readonly versions: Readonly<Record<string, VersionsAnswer>>
   /** What switching to a listed version changes. */
   readonly versionChanges?: VersionChanges | undefined
+  /**
+   * What the terminal window shows: the command and the lines it printed, made by the product (see
+   * `tests/product/replica-terminal.spec.ts`). Only a session with a terminal chapter has one.
+   */
+  readonly terminal?: { readonly command: string, readonly output: readonly string[] } | undefined
 }
 
-/** The screens the drawn studio shows. */
-export type Screen = 'chat' | 'changes' | 'versions'
+/** The screens of the drawn studio's navigation. */
+export type StudioScreen = 'chat' | 'changes' | 'versions'
+
+/**
+ * What the frame shows. `terminal` is a terminal window drawn in place of the studio, with no sidebar: the studio has no
+ * terminal page.
+ */
+export type Screen = StudioScreen | 'terminal'
 
 /**
  * A group of the real Changes section, by the key of its heading in the section's dictionary. A chapter shows only the
@@ -87,7 +98,8 @@ export type PressTarget = { readonly [D in keyof SectionDictionaries]: {
 
 /**
  * One step of a chapter. Every step takes `hold` milliseconds of the chapter's time before the next one starts, except
- * `type`, which takes `perChar` milliseconds for each character and then `hold`.
+ * `type` and `command`, which take `perChar` milliseconds for each character and then `hold`. `command` types its text
+ * into the terminal window; the fixture's terminal output appears once the last character is typed.
  */
 export type Step =
   | { readonly kind: 'screen', readonly screen: Screen, readonly hold: number }
@@ -97,6 +109,7 @@ export type Step =
   | { readonly kind: 'press', readonly target: PressTarget, readonly hold: number }
   | { readonly kind: 'changes', readonly state: string, readonly groups: readonly ChangesGroup[], readonly hold: number }
   | { readonly kind: 'versions', readonly state: string, readonly hold: number }
+  | { readonly kind: 'command', readonly command: string, readonly perChar: number, readonly hold: number }
   | { readonly kind: 'wait', readonly hold: number }
 
 /** One chapter: a tab on the rail, the caption that is its text alternative, and its steps. */
@@ -117,7 +130,7 @@ export interface ChapterFile {
   /** The chat's title, and the titles of the older chats the sidebar lists under it. */
   readonly chats: readonly string[]
   /** The first state the studio shows, before the first chapter's steps. */
-  readonly start: Pick<StudioState, 'screen' | 'shown' | 'changes' | 'groups' | 'versions'>
+  readonly start: Pick<StudioState, 'shown' | 'changes' | 'groups' | 'versions'> & { readonly screen: StudioScreen }
   readonly chapters: readonly Chapter[]
 }
 
@@ -135,6 +148,8 @@ export interface StudioState {
   readonly groups: readonly ChangesGroup[]
   /** The Setup versions list's name. */
   readonly versions: string
+  /** The terminal window: the command typed so far, and whether it has been typed in full so its output shows. */
+  readonly terminal: { readonly typed: string, readonly ran: boolean }
 }
 
 /** A press the timeline reached: which step and what it presses. */
@@ -145,7 +160,8 @@ export interface Press {
 }
 
 /**
- * The next moment after `at` at which a chapter's state changes: a step's start, or the next character of a `type` step.
+ * The next moment after `at` at which a chapter's state changes: a step's start, or the next character of a `type` or
+ * `command` step.
  * @param chapter - the chapter.
  * @param at - milliseconds since the chapter started.
  * @returns the moment, or undefined when nothing changes after `at` (the chapter's end is then {@link chapterLength}).
@@ -154,8 +170,8 @@ export function nextChange(chapter: Chapter, at: number): number | undefined {
   let start = 0
   for (const step of chapter.steps) {
     if (start > at) return start
-    if (step.kind === 'type') {
-      const typedBy = start + step.text.length * step.perChar
+    if (step.kind === 'type' || step.kind === 'command') {
+      const typedBy = start + typedLength(step) * step.perChar
       if (at < typedBy) return start + (Math.floor((at - start) / step.perChar) + 1) * step.perChar
     }
     start += stepLength(step)
@@ -169,7 +185,16 @@ export function nextChange(chapter: Chapter, at: number): number | undefined {
  * @returns its length in milliseconds.
  */
 export function stepLength(step: Step): number {
-  return step.kind === 'type' ? step.text.length * step.perChar + step.hold : step.hold
+  return step.kind === 'type' || step.kind === 'command' ? typedLength(step) * step.perChar + step.hold : step.hold
+}
+
+/**
+ * The number of characters a typing step types.
+ * @param step - a `type` or `command` step.
+ * @returns its character count.
+ */
+function typedLength(step: Extract<Step, { readonly kind: 'type' | 'command' }>): number {
+  return step.kind === 'type' ? step.text.length : step.command.length
 }
 
 /**
@@ -185,7 +210,7 @@ export function chapterLength(chapter: Chapter): number {
  * A state after one step, or part of a `type` step.
  * @param state - the state before the step.
  * @param step - the step.
- * @param into - for a `type` step, the milliseconds since it started; any other step applies in full.
+ * @param into - for a `type` or `command` step, the milliseconds since it started; any other step applies in full.
  * @returns the state after it.
  */
 function apply(state: StudioState, step: Step, into = Number.POSITIVE_INFINITY): StudioState {
@@ -194,6 +219,10 @@ function apply(state: StudioState, step: Step, into = Number.POSITIVE_INFINITY):
     case 'type': {
       const typed = Math.min(step.text.length, Math.floor(into / step.perChar))
       return { ...state, draft: step.text.slice(0, typed), typing: typed < step.text.length }
+    }
+    case 'command': {
+      const typed = Math.min(step.command.length, Math.floor(into / step.perChar))
+      return { ...state, terminal: { typed: step.command.slice(0, typed), ran: typed === step.command.length } }
     }
     case 'send': return { ...state, draft: '', typing: false }
     case 'show': return { ...state, shown: step.through + 1 }
@@ -211,7 +240,7 @@ function apply(state: StudioState, step: Step, into = Number.POSITIVE_INFINITY):
  * @returns the state.
  */
 export function chapterStart(file: ChapterFile, chapter: number): StudioState {
-  let state: StudioState = { ...file.start, draft: '', typing: false }
+  let state: StudioState = { ...file.start, draft: '', typing: false, terminal: { typed: '', ran: false } }
   for (const earlier of file.chapters.slice(0, chapter)) for (const step of earlier.steps) state = apply(state, step)
   return state
 }

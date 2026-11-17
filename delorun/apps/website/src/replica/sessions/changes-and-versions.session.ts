@@ -6,6 +6,7 @@
  * @module @delorun/website/replica/sessions/changes-and-versions.session
  */
 import type { ReplicaFixture } from '../model.ts'
+import terminal from './changes-and-versions.terminal.json'
 import type { EntryView } from '../../../../../packages/plugin-changes/src/wire.ts'
 
 const THEME: EntryView = {
@@ -25,6 +26,7 @@ export const FIXTURE: ReplicaFixture = {
   release: '0.1.0-preview.2',
   clock: '2026-11-17T10:50:00Z',
   events: [],
+  terminal,
   changes: {
     two: { ...BASE, recent: [THEME, WORD_COUNT] },
     undone: { ...BASE, recent: [{ ...THEME, state: 'undone', decidedAt: '2026-11-17T10:50:00Z', undoable: false }, WORD_COUNT] },

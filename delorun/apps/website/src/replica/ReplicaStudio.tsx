@@ -3,6 +3,7 @@
  * wrapper that carries the scoped studio tokens. It is inert: it takes no focus and no press, and assistive technology
  * reads the chapter's caption instead (`ReplicaLive.tsx`). It loads in the browser only, as a chunk of its own, with
  * the session's fixture as another; the player in `ReplicaLive.tsx` tells it what to show and which control to press.
+ * In a terminal chapter it draws the terminal window in the studio's place.
  * @module @delorun/website/replica/ReplicaStudio
  */
 import 'virtual:replica-tokens.css'
@@ -12,6 +13,7 @@ import { shiftClock, type ChapterFile, type PressTarget, type ReplicaFixture, ty
 import { ChatScreen } from './screens/ChatScreen.tsx'
 import { RealApproval, RealChanges, RealVersions, SECTION_DICTIONARIES } from './screens/real.tsx'
 import { StudioLayout, type ReplicaWidth } from './screens/StudioLayout.tsx'
+import { TerminalWindow } from './screens/TerminalWindow.tsx'
 import { loadFixture } from './sessions/index.ts'
 import { IconSprite } from './studio/icons.tsx'
 import css from './screens/studio.module.css'
@@ -92,13 +94,16 @@ export default function Studio({ file, width, state, epoch, handle, onReady }: S
   if (fixture === undefined) return null
   const changes = fixture.changes[state.changes]
   const versions = fixture.versions[state.versions]
+  const { screen } = state
   return <div ref={root} className={`${WRAPPER} ${css.root}`} inert>
     <IconSprite />
-    <StudioLayout file={file} width={width} screen={state.screen} strings={strings} screens={{
-      chat: <ChatScreen events={fixture.events} shown={state.shown} draft={state.draft} typing={state.typing} strings={strings}
-        approval={pending => <RealApproval key={`${String(epoch)} ${pending.id}`} pending={pending} />} />,
-      changes: changes === undefined ? null : <RealChanges key={epoch} state={changes} groups={state.groups} />,
-      versions: versions === undefined ? null : <RealVersions key={epoch} versions={versions} changes={fixture.versionChanges} />,
-    }} />
+    {screen === 'terminal'
+      ? <TerminalWindow terminal={state.terminal} output={fixture.terminal?.output ?? []} />
+      : <StudioLayout file={file} width={width} screen={screen} strings={strings} screens={{
+          chat: <ChatScreen events={fixture.events} shown={state.shown} draft={state.draft} typing={state.typing} strings={strings}
+            approval={pending => <RealApproval key={`${String(epoch)} ${pending.id}`} pending={pending} />} />,
+          changes: changes === undefined ? null : <RealChanges key={epoch} state={changes} groups={state.groups} />,
+          versions: versions === undefined ? null : <RealVersions key={epoch} versions={versions} changes={fixture.versionChanges} />,
+        }} />}
   </div>
 }

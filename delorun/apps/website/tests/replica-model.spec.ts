@@ -12,6 +12,7 @@ const FILE: ChapterFile = {
   chapters: [
     { id: 'a', title: 'A', caption: 'A.', steps: [{ kind: 'type', text: 'abc', perChar: 10, hold: 5 }, { kind: 'send', hold: 0 }, { kind: 'show', through: 1, hold: 20 }] },
     { id: 'b', title: 'B', caption: 'B.', steps: [{ kind: 'press', target: { dictionary: 'approval', key: 'allowOnce' }, hold: 10 }, { kind: 'screen', screen: 'changes', hold: 10 }] },
+    { id: 'c', title: 'C', caption: 'C.', steps: [{ kind: 'screen', screen: 'terminal', hold: 10 }, { kind: 'command', command: 'ls', perChar: 10, hold: 30 }] },
   ],
 }
 
@@ -34,6 +35,23 @@ describe('stateAt', () => {
   it('lists the presses the timeline has reached, in order', () => {
     expect(stateAt(FILE, 1, 0).presses).toEqual([{ step: 0, target: { dictionary: 'approval', key: 'allowOnce' } }])
     expect(stateAt(FILE, 0, Number.POSITIVE_INFINITY).presses).toEqual([])
+  })
+})
+
+describe('the command step', () => {
+  it('types the command into the terminal one character per step of its pace, and shows the output once it is typed', () => {
+    expect(stateAt(FILE, 2, 5).state).toMatchObject({ screen: 'terminal', terminal: { typed: '', ran: false } })
+    expect(stateAt(FILE, 2, 20).state.terminal).toEqual({ typed: 'l', ran: false })
+    expect(stateAt(FILE, 2, 30).state.terminal).toEqual({ typed: 'ls', ran: true })
+    expect(stateAt(FILE, 2, Number.POSITIVE_INFINITY).state.terminal).toEqual({ typed: 'ls', ran: true })
+  })
+
+  it('starts every other chapter with an empty terminal and paces its characters like a typed message', () => {
+    expect(chapterStart(FILE, 2).terminal).toEqual({ typed: '', ran: false })
+    const chapter = FILE.chapters[2]!
+    expect([0, 10, 20].map(at => nextChange(chapter, at))).toEqual([10, 20, 30])
+    expect(nextChange(chapter, 30)).toBeUndefined()
+    expect(chapterLength(chapter)).toBe(60)
   })
 })
 
@@ -96,6 +114,7 @@ describe('the sessions', () => {
         for (const step of chapter.steps) {
           if (step.kind === 'changes') expect(fixture.changes).toHaveProperty([step.state])
           if (step.kind === 'versions') expect(fixture.versions).toHaveProperty([step.state])
+          if (step.kind === 'command') expect(fixture.terminal?.command).toBe(step.command)
         }
       }
     })

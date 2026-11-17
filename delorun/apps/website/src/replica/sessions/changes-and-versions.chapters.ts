@@ -37,5 +37,14 @@ export const CHAPTERS: ChapterFile = {
         { kind: 'screen', screen: 'versions', hold: 5200 },
       ],
     },
+    {
+      id: 'terminal',
+      title: 'From the terminal',
+      caption: 'In a terminal, delorun logs shows where Delorun keeps its logs, then the latest records.',
+      steps: [
+        { kind: 'screen', screen: 'terminal', hold: 700 },
+        { kind: 'command', command: 'delorun logs', perChar: 70, hold: 5600 },
+      ],
+    },
   ],
 }
