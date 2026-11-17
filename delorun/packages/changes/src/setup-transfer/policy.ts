@@ -283,7 +283,7 @@ const DEFAULT_HOSTS: Readonly<Record<string, string>> = { deepseek: 'api.deepsee
 
 /**
  * @param provider - a provider's name.
- * @returns the environment variables a setup may name as that provider's key: those the installed pi-ai catalog lists for it (`GEMINI_API_KEY` for `google`); none for a provider the catalog does not know.
+ * @returns the environment variables a setup may name as that provider's key: those the installed pi-ai catalogue lists for it (`GEMINI_API_KEY` for `google`); none for a provider the catalogue does not know.
  */
 export function defaultKeyVariables(provider: string): readonly string[] {
   return (PROVIDER_DATA as Partial<Record<string, { readonly env: readonly string[] }>>)[provider]?.env ?? []
@@ -344,7 +344,7 @@ export function offDefaultEndpoints(row: PatchEntry): { readonly provider: strin
 function keyVariableProblems(row: PatchEntry): string[] {
   return routeFields(row)
     .filter(({ kind, provider, value }) => kind === 'key' && !defaultKeyVariables(provider).includes(value))
-    .map(({ field, provider }) => `has ${field}, which names a variable other than ${defaultKeyVariables(provider).join(', ') || 'one the catalog lists'}, so a setup does not carry it`)
+    .map(({ field, provider }) => `has ${field}, which names a variable other than ${defaultKeyVariables(provider).join(', ') || 'one the catalogue lists'}, so a setup does not carry it`)
 }
 
 /**
