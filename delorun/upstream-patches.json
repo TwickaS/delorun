@@ -2797,6 +2797,12 @@
       "class": "delorun-feature",
       "feature": "setup-transfer",
       "reason": "Exports `PROVIDER_DATA` from the package entry, so the setup transfer policy reads provider environment names without importing upstream source."
+    },
+    {
+      "path": "packages/experimental/browser-use-runtime/src/mcp.ts",
+      "class": "delorun-feature",
+      "feature": "mcp-add-consent",
+      "reason": "A browser MCP server start that the mounted add-time consent refuses (`McpConsentRefusedError`), or a declared consent that did not start (`McpConsentUnavailableError`), leaves that Agent activation without the server's tools and instructions and logs a warning, instead of failing the Agent's creation; the next activation reviews the start again. Every other startup failure still rejects creation as upstream does. Without a mounted consent nothing changes."
     }
   ],
   "retired": []

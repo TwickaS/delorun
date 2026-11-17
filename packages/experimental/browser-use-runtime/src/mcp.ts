@@ -87,13 +87,27 @@ export interface SessionMcpOptions {
 }
 
 interface ClientState {
-  status: 'ready' | 'blocked'
+  /** `ready` holds a started client; `blocked` waits for a busy attachment; `refused` is a start the add-time consent did not allow. */
+  status: 'ready' | 'blocked' | 'refused'
   mask?: Scope
 }
 
 /**
+ * Whether a failed acquisition is the add-time consent keeping the server stopped, which leaves one Session without
+ * browser tools rather than failing its creation.
+ * @param error - the acquisition's failure.
+ * @returns true for a refused start or a declared consent that did not start.
+ */
+function isConsentStop(error: unknown): error is McpClient.McpConsentRefusedError | McpClient.McpConsentUnavailableError {
+  return error instanceof McpClient.McpConsentRefusedError || error instanceof McpClient.McpConsentUnavailableError
+}
+
+/**
  * Await one MCP client during each future Agent's creation.
- * A busy attachment leaves that activation without browser tools; its other turns continue.
+ * A busy attachment leaves that activation without browser tools; its other turns continue. A start the mounted
+ * add-time consent refuses, or a declared consent that did not start, also leaves that activation without browser
+ * tools and logs a warning naming the server and the consent's reason; the Agent is still created, and the next
+ * activation reviews the start again. Every other startup failure fails the Agent's creation.
  * Calls are serialized per Session; unload closes every server before releasing registration.
  * @param ctx - provider context supplying browser use, Agents, tools, prompt assembly, and working directories.
  * @param options - provider identity, attachment exclusivity, and executable configuration.
@@ -114,7 +128,7 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
     refreshingMasks = true
     try {
       for (const [agent, state] of clients) {
-        if (state.status !== 'blocked') continue
+        if (state.status === 'ready') continue
         const inherited = ctx.tools.schemas(agent).filter(tool => tool.name.startsWith(toolPrefix))
         if (inherited.length === 0) continue
         state.mask ??= createScope(ctx, agent)
@@ -189,7 +203,17 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
       refreshBlockedMasks()
       return
     }
-    await resources.get(agent, signal)
+    try {
+      await resources.get(agent, signal)
+    } catch (error) {
+      if (!isConsentStop(error)) throw error
+      // The consent keeps the server stopped and lists it for the person's answer; this Session runs without its tools.
+      ctx.logger.warn(`${options.name}: the browser tools are off in Session ${agent.id} until the server's start is allowed: ${error.message}`)
+      state.status = 'refused'
+      clients.set(agent, state)
+      refreshBlockedMasks()
+      return
+    }
     clients.set(agent, state)
   }, { prepend: true })
   ctx.on('tools/change', refreshBlockedMasks)
