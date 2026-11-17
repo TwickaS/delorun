@@ -397,6 +397,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
   const registerConversationSession = () => slots.register({
     name: 'conversation.session',
     children: {
+      'conversation.session.banner': { kind: 'list', scope: 'session' },
       'conversation.view': { kind: 'list', scope: 'session' },
     },
     store: conversationStore,

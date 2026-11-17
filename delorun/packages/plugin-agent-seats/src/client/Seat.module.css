@@ -1,0 +1,64 @@
+/* Look B: a coloured rule across the view, an opening card with chips, a rule beside the agent's turns. The agent's own
+   colour is set once on each root through data-agent. */
+.root[data-agent='claude-code'], .rule[data-agent='claude-code'], .note[data-agent='claude-code'] { --seat-accent: #7c3aed; --seat-tint: #f1ebfd; }
+.root[data-agent='codex'], .rule[data-agent='codex'], .note[data-agent='codex'] { --seat-accent: #0f8a6f; --seat-tint: #e5f5f0; }
+
+.rule { height: 3px; flex: none; background: var(--seat-accent); }
+
+.root { display: flex; flex-direction: column; gap: var(--delorun-space-4, 8px); padding: 12px 16px 0; box-sizing: border-box; width: 100%; max-width: 780px; margin: 0 auto; }
+
+.card { border: 1.5px solid var(--seat-accent); border-radius: 12px; padding: 14px 16px; display: flex; gap: 12px; align-items: flex-start; background: var(--dsw-alias-bg-primary, transparent); }
+.mono { flex: none; width: 32px; height: 32px; border-radius: 8px; background: var(--seat-accent); color: #fff; font-weight: 600; font-size: 12px; display: grid; place-items: center; }
+.cardBody { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.title { font-weight: 600; font-size: 14px; color: var(--dsw-alias-label-primary); }
+.text { margin: 0; font-size: 13px; line-height: 1.45; color: var(--dsw-alias-label-secondary); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 4px 0 0; list-style: none; }
+.chip { font-size: 12px; padding: 2px 10px; border-radius: 999px; background: var(--dsw-alias-interactive-bg-hover, rgba(0, 0, 0, .06)); color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
+.chipWarn { color: #9a5b00; background: #fdf0d6; }
+
+.state { border: 1.5px solid #c27a00; border-radius: 12px; padding: 12px 16px; display: flex; flex-direction: column; gap: 6px; }
+.stateError { border-color: #c0392b; }
+.stateTitle { font-weight: 600; font-size: 14px; color: var(--dsw-alias-label-primary); }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.code { font-family: var(--dsw-font-mono, ui-monospace, monospace); font-size: 12.5px; padding: 4px 8px; border-radius: 6px; background: var(--dsw-alias-interactive-bg-hover, rgba(0, 0, 0, .06)); }
+.models { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.tag { font-size: 11px; color: var(--seat-accent); margin-inline-start: 6px; }
+
+.note { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--dsw-alias-label-secondary); padding: 0 4px 6px; max-width: 780px; margin: 0 auto; width: 100%; box-sizing: border-box; }
+.noteMono { width: 20px; height: 20px; border-radius: 5px; background: var(--seat-accent); color: #fff; font-size: 9px; font-weight: 600; display: grid; place-items: center; flex: none; }
+
+/* Tool and approval cards */
+.tool { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--dsw-alias-label-secondary); padding: 3px 0; }
+.toolRow { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.verb { color: var(--dsw-alias-label-secondary); flex: none; }
+.dot { color: var(--dsw-alias-label-tertiary); flex: none; }
+.subject { font-family: var(--dsw-font-mono, ui-monospace, monospace); font-size: 12.5px; color: var(--dsw-alias-label-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.spacer { flex: 1; }
+.badge { font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--dsw-alias-interactive-bg-hover, rgba(0, 0, 0, .06)); flex: none; }
+.badgeFailed { color: #a3281b; background: #fde8e5; }
+.badgeOk { color: #1f7a45; background: #e2f4ea; }
+.time { font-size: 12px; font-variant-numeric: tabular-nums; flex: none; }
+.diffAdd { color: #1f7a45; font-variant-numeric: tabular-nums; }
+.diffDel { color: #a3281b; font-variant-numeric: tabular-nums; }
+.editCard { border: 1px solid var(--dsw-alias-border-secondary, rgba(0, 0, 0, .12)); border-radius: 10px; padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; }
+.output { margin: 0; max-height: 240px; overflow: auto; font-family: var(--dsw-font-mono, ui-monospace, monospace); font-size: 12px; white-space: pre-wrap; padding: 6px 8px; border-radius: 6px; background: var(--dsw-alias-interactive-bg-hover, rgba(0, 0, 0, .05)); }
+.toggle { all: unset; cursor: pointer; font-size: 12px; color: var(--dsw-alias-label-tertiary); }
+
+.approval { border: 1.5px solid #c27a00; border-radius: 12px; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; max-width: 780px; margin: 0 auto 8px; width: 100%; box-sizing: border-box; }
+.waiting { font-size: 12.5px; color: #9a5b00; }
+.approvalTitle { font-weight: 600; font-size: 14px; color: var(--dsw-alias-label-primary); }
+.command { font-family: var(--dsw-font-mono, ui-monospace, monospace); font-size: 12.5px; padding: 8px 10px; border-radius: 8px; background: var(--dsw-alias-interactive-bg-hover, rgba(0, 0, 0, .05)); overflow-wrap: anywhere; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+@media (max-width: 520px) {
+  .actions { flex-direction: row-reverse; }
+  .root { padding-inline: 12px; }
+}
+
+/* The collapsed opening card: one line that keeps the name, the 5-hour meter and the sandbox chip. */
+.line { all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 6px 12px; border: 1.5px solid var(--seat-accent); border-radius: 10px; font-size: 12.5px; color: var(--dsw-alias-label-secondary); min-width: 0; }
+.line:focus-visible { outline: 2px solid var(--seat-accent); outline-offset: 2px; }
+.lineName { font-weight: 600; color: var(--dsw-alias-label-primary); white-space: nowrap; }
+.lineText { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.meter { width: 56px; height: 5px; border-radius: 3px; background: var(--dsw-alias-interactive-bg-hover, rgba(0, 0, 0, .08)); flex: none; overflow: hidden; }
+.meterFill { display: block; height: 100%; background: var(--seat-accent); }
+.card .toggle { margin-inline-start: auto; flex: none; }
