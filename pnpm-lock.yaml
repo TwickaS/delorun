@@ -1397,6 +1397,9 @@ importers:
       '@delorun/plugin-scaffold':
         specifier: workspace:*
         version: link:../../packages/plugin-scaffold
+      '@delorun/preview-flags':
+        specifier: workspace:*
+        version: link:../../packages/preview-flags
       '@delorun/profile-safety':
         specifier: workspace:*
         version: link:../../packages/profile-safety
@@ -2245,6 +2248,9 @@ importers:
       '@delorun/plugin-thinking-rsvp':
         specifier: workspace:*
         version: link:../plugin-thinking-rsvp
+      '@delorun/preview-flags':
+        specifier: workspace:*
+        version: link:../preview-flags
     devDependencies:
       '@delorun/contract-parity-composition':
         specifier: workspace:*
@@ -3308,6 +3314,9 @@ importers:
       '@delorun/plugin-theme':
         specifier: workspace:*
         version: link:../plugin-theme
+      '@delorun/preview-flags':
+        specifier: workspace:*
+        version: link:../preview-flags
       '@delorun/reach':
         specifier: workspace:*
         version: link:../reach
@@ -3983,6 +3992,43 @@ importers:
       '@deepseek-ai/dsh-workspace':
         specifier: workspace:*
         version: link:../../../packages/workspace/workspace
+
+  delorun/packages/preview-flags:
+    dependencies:
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../../packages/util/brand
+      '@deepseek-ai/dsh-client-ui-primitives':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-primitives
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+      '@delorun/home-auth':
+        specifier: workspace:*
+        version: link:../home-auth
+      zod:
+        specifier: 4.6.6
+        version: 4.6.6
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:*
+        version: link:../../../packages/boot/app-boot
+      '@deepseek-ai/dsh-client-connection':
+        specifier: workspace:*
+        version: link:../../../packages/client/connection
+      '@testing-library/react':
+        specifier: ^16.3.3
+        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@types/react':
+        specifier: ~18.3.1
+        version: 18.3.31
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
 
   delorun/packages/profile-safety:
     dependencies:

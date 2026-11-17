@@ -65,6 +65,12 @@
     - id: delorun-downloads
       name: '@delorun/plugin-downloads'
 
+    # Preview flags: a plugin of this profile declares a studio feature that is not ready for everyone, and `flags` here
+    # turns it on (`delorun preview on <flag>` writes the row in the profile's own patch). With no flag set, every preview
+    # is off. The row has no browser half; the studio reads the flags through its route.
+    - id: delorun-preview-flags
+      name: '@delorun/preview-flags'
+
 # Upstream's first-run "Add an API key" dialog is off: the studio's no-key banner above the message box (in
 # @delorun/plugin-onboarding) is the only nudge. A patch replaces the row's whole config, so this restates
 # @delorun/bundle-local's `welcomeNotice: false`. The stock look keeps this row too, so upstream's dialog does not return

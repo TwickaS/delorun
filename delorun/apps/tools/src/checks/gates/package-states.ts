@@ -53,6 +53,8 @@ const stateField = z.strictObject({
   // (`@delorun/bundle-local`'s `requirements.ts` owns the form of `requires`).
   pack: z.boolean().optional(),
   requires: z.record(z.string(), z.unknown()).optional(),
+  // The preview flags each row of a bundle declares (`@delorun/preview-flags`'s `manifest.ts` owns the form).
+  previewFlags: z.record(z.string(), z.array(z.string())).optional(),
 })
 
 const manifestFields = z.looseObject({

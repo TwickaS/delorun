@@ -53,6 +53,7 @@
     "@delorun/plugin-packs": "workspace:*",
     "@delorun/plugin-downloads": "workspace:*",
     "@delorun/plugin-theme": "workspace:*",
+    "@delorun/preview-flags": "workspace:*",
     "@delorun/reach": "workspace:*",
     "zod": "4.6.6"
   },

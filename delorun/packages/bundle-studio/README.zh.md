@@ -41,6 +41,7 @@ kind: "package-bundle"
 | `delorun-chat-states` | [`@delorun/plugin-chat-states`](../plugin-chat-states/README.zh.md) | 暂缓和搁置 chat，以及对应的搁架 |
 | `delorun-sidebar` | [`@delorun/plugin-sidebar`](../plugin-sidebar/README.zh.md) | 以卡片形式显示的 chat 列表、工作区图标和页眉图案 |
 | `delorun-onboarding` | [`@delorun/plugin-onboarding`](../plugin-onboarding/README.zh.md) | 以新 chat 结束的首次运行引导；此 bundle 把它的 `plugins` 设为随 DeepSeek Harness 一起发布的五个实验性插件：会话搜索、终端 bundle、worktree 工具、会话标题和 DeepSeek 网站 chat 导入（可选 bundle，开启前保持关闭），并把它的 `optionalRows` 设为下面两行，引导会提议开启它们 |
+| `delorun-preview-flags` | [`@delorun/preview-flags`](../preview-flags/README.zh.md) | 预览开关：插件声明为尚未面向所有人的工作室功能，在本行的 `flags` 打开之前均为关闭（`delorun preview on <flag>`）；本 bundle 的 `package.json` 在 `delorun.previewFlags` 下列出其各行声明的开关 |
 | `delorun-cost-meter` | [`@delorun/plugin-cost-meter`](../plugin-cost-meter/README.zh.md) | 输入框下方的 chat 估算费用；以 `disabled: true` 插入，所以只有在本人于侧栏「插件」的 Delorun studio 页面中「组件」下开启后才会挂载 |
 | `delorun-thinking-rsvp` | [`@delorun/plugin-thinking-rsvp`](../plugin-thinking-rsvp/README.zh.md) | 「思考」标签页，在右侧栏逐词显示模型的推理和回复；与费用计量器一样以 `disabled: true` 插入 |
 

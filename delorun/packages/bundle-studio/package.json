@@ -27,7 +27,8 @@
     "@delorun/plugin-settings-layout": "workspace:*",
     "@delorun/plugin-sidebar": "workspace:*",
     "@delorun/plugin-theme": "workspace:*",
-    "@delorun/plugin-thinking-rsvp": "workspace:*"
+    "@delorun/plugin-thinking-rsvp": "workspace:*",
+    "@delorun/preview-flags": "workspace:*"
   },
   "devDependencies": {
     "@delorun/contract-parity-composition": "workspace:*",

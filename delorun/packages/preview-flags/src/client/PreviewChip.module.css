@@ -1,0 +1,24 @@
+/* A quiet label: the muted ink on a hairline, at the smallest size of the studio's scale. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  padding: 0 6px;
+  border: 1px solid var(--dl-border);
+  border-radius: var(--dl-radius-xs);
+  color: var(--dl-text-muted);
+  font-family: var(--dl-font-sans);
+  font-size: var(--dsw-font-xxxs-11-font-size, 11px);
+  font-weight: 400;
+  line-height: 16px;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  cursor: default;
+  user-select: none;
+  vertical-align: middle;
+}
+
+.chip:focus-visible {
+  outline: var(--dl-focus-ring);
+  outline-offset: 2px;
+}
