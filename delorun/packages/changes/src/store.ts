@@ -384,18 +384,18 @@ async function removeEmptyParents(root: string, path: string): Promise<void> {
  * @returns the real path of the active runtime's installed packages, which a `runtime` link entry names.
  * @throws {ChangesError} `RUNTIME_CHANGED` when `runtimes/current` names no installed runtime.
  */
-async function requireRuntimeModules(home: string): Promise<string> {
-  const modules = await activeRuntimeModules(await realpath(home))
+async function requireRuntimeModules(home: string, release: string | undefined): Promise<string> {
+  const modules = await activeRuntimeModules(await realpath(home), release)
   if (modules === undefined) throw new ChangesError('RUNTIME_CHANGED', home, `${home} runs no installed release, so a link to a package the release carries cannot be written`)
   return modules
 }
 
-async function writeEntry(home: string, target: string, entry: VersionEntry): Promise<void> {
+async function writeEntry(home: string, target: string, entry: VersionEntry, release: string | undefined): Promise<void> {
   const path = join(target, ...entry.path.split('/'))
   await mkdir(dirname(path), { recursive: true, mode: PRIVATE_DIR_MODE })
   if (entry.type === 'link') {
     const temporary = temporaryPath(path)
-    await symlink(entry.runtime === true ? join(await requireRuntimeModules(home), ...entry.target.split('/')) : entry.target, temporary)
+    await symlink(entry.runtime === true ? join(await requireRuntimeModules(home, release), ...entry.target.split('/')) : entry.target, temporary)
     await rename(temporary, path)
     return
   }
@@ -428,17 +428,18 @@ async function writeEntry(home: string, target: string, entry: VersionEntry): Pr
  * @param version - the version to hold.
  * @param target - the directory; created when missing.
  * @param previous - the manifest the directory holds, when the caller knows it; otherwise the directory is scanned.
+ * @param release - the release whose installed packages its `runtime` links name; `runtimes/current` when omitted.
  * @returns the version's manifest.
  * @throws {ChangesError} `STORE_CORRUPT` when the store does not hold the version or its objects, or the directory does
  * not hold the version afterwards.
  */
-export async function materialize(home: string, version: ContentVersion, target: string, previous?: VersionManifest): Promise<VersionManifest> {
+export async function materialize(home: string, version: ContentVersion, target: string, previous?: VersionManifest, release?: string): Promise<VersionManifest> {
   const manifest = await readVersion(home, version)
   await mkdir(target, { recursive: true, mode: PRIVATE_DIR_MODE })
   let current: readonly VersionEntry[]
   let strays: readonly string[] = []
   if (previous === undefined) {
-    const scanned = await scanFolder(target, { ...ACTIVE_SCAN, runtimeHome: home })
+    const scanned = await scanFolder(target, { ...ACTIVE_SCAN, runtimeHome: home, ...release === undefined ? {} : { runtimeRelease: release } })
     current = scanned.entries
     strays = scanned.skipped
   } else {
@@ -453,9 +454,9 @@ export async function materialize(home: string, version: ContentVersion, target:
   const held = new Map(current.map((entry) => [entry.path, entry]))
   for (const entry of manifest.entries) {
     const before = held.get(entry.path)
-    if (before === undefined || !sameEntry(before, entry)) await writeEntry(home, target, entry)
+    if (before === undefined || !sameEntry(before, entry)) await writeEntry(home, target, entry, release)
   }
-  if (!await holdsVersion(home, target, version)) throw new ChangesError('STORE_CORRUPT', target, `${target} does not hold version ${version} after it was written`)
+  if (!await holdsVersion(home, target, version, release)) throw new ChangesError('STORE_CORRUPT', target, `${target} does not hold version ${version} after it was written`)
   return manifest
 }
 
@@ -523,11 +524,12 @@ async function isInstalledDirectory(path: string): Promise<boolean> {
  * @param home - the Delorun home, whose active runtime a `runtime` link must name.
  * @param target - the directory.
  * @param version - the version id.
+ * @param release - the release whose installed packages its `runtime` links must name; `runtimes/current` when omitted.
  * @returns whether a scan of it gives the version; false when it does not exist.
  */
-export async function holdsVersion(home: string, target: string, version: ContentVersion): Promise<boolean> {
+export async function holdsVersion(home: string, target: string, version: ContentVersion, release?: string): Promise<boolean> {
   try {
-    return versionOf((await scanFolder(target, { ...ACTIVE_SCAN, runtimeHome: home })).entries) === version
+    return versionOf((await scanFolder(target, { ...ACTIVE_SCAN, runtimeHome: home, ...release === undefined ? {} : { runtimeRelease: release } })).entries) === version
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
     throw error

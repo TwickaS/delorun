@@ -60,7 +60,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'nod
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { DELORUN_HOME_ENTRIES, PRIVATE_DIR_MODE, STORE_ENTRIES } from '@delorun/contract-home-layout'
 import { readProtectedFile, writeProtectedFile } from '@delorun/home'
-import { readPointerFile } from '@delorun/runtime-store'
+import { parseRuntimeVersion, readPointerFile } from '@delorun/runtime-store'
 import { ChangesError } from './errors.ts'
 import { PACKAGE_NAME_PATTERN } from './paths.ts'
 import { VERSION_MANIFEST_SCHEMA, type ContentVersion, type ObjectDigest, type VersionEntry, type VersionManifest } from './types.ts'
@@ -153,8 +153,10 @@ export interface FolderScanOptions extends ScanCacheOptions {
 /** The scan of an active directory, whose links Delorun wrote: it follows none ({@link ScanOptions}). */
 export interface ActiveScanOptions extends ScanCacheOptions {
   readonly active: true
-  /** The Delorun home, whose active runtime's installed packages a `runtime` link entry names; none when omitted. */
+  /** The Delorun home, whose runtime store a `runtime` link entry names a package in; none when omitted. */
   readonly runtimeHome?: string
+  /** The release whose installed packages a `runtime` link entry names; `runtimes/current` when omitted. */
+  readonly runtimeRelease?: string
 }
 
 /** The scan cache and clock both scans take. */
@@ -613,10 +615,11 @@ async function addTarget(walk: Walk, real: string, path: string, dereference: bo
 
 /**
  * @param home - the Delorun home, or undefined.
- * @returns the real path of its active runtime's installed packages, or undefined without a home.
+ * @param release - the release, or undefined for `runtimes/current`.
+ * @returns the real path of that release's installed packages, or undefined without a home.
  */
-async function runtimeModulesOf(home: string | undefined): Promise<string | undefined> {
-  return home === undefined ? undefined : await activeRuntimeModules(await realTarget(resolve(home)) ?? resolve(home))
+async function runtimeModulesOf(home: string | undefined, release: string | undefined): Promise<string | undefined> {
+  return home === undefined ? undefined : await activeRuntimeModules(await realTarget(resolve(home)) ?? resolve(home), release)
 }
 
 /**
@@ -638,17 +641,31 @@ function addRuntimeLink(walk: Walk, path: string, real: string): void {
 }
 
 /**
+ * The release a process's active directories link packages from: the one it runs from, or `runtimes/current` when it
+ * runs from no installed release, as from a source checkout. A start re-points copies to it and the load check holds
+ * them to it, so both use the same release.
+ * @param home - the Delorun home.
+ * @param runningRelease - the release this process runs from (`DELORUN_VERSION`), when it runs from one.
+ * @returns the release, or undefined when neither names one.
+ * @throws the filesystem error reading `runtimes/current` other than a missing file.
+ */
+export async function referenceRelease(home: string, runningRelease: string | undefined): Promise<string | undefined> {
+  if (runningRelease !== undefined) return runningRelease
+  const current = await readPointerFile(join(home, DELORUN_HOME_ENTRIES.runtimes, STORE_ENTRIES.current))
+  return current === undefined || current === 'malformed' ? undefined : current
+}
+
+/**
  * @param home - the Delorun home's real path.
- * @returns the real path of the active runtime's installed packages, `runtimes/<current>/app/node_modules`, or
- *   undefined when `runtimes/current` is missing or malformed as the runtime store reads it, or that folder does not
- *   exist.
+ * @param release - the release, or undefined for the one `runtimes/current` names ({@link referenceRelease}).
+ * @returns the real path of its installed packages, `runtimes/<release>/app/node_modules`, or undefined when no release
+ *   is named, its name is no runtime version, or that folder does not exist.
  * @throws the filesystem error other than a missing file.
  */
-export async function activeRuntimeModules(home: string): Promise<string | undefined> {
-  const runtimes = join(home, DELORUN_HOME_ENTRIES.runtimes)
-  const version = await readPointerFile(join(runtimes, STORE_ENTRIES.current))
-  if (version === undefined || version === 'malformed') return undefined
-  return await realTarget(join(runtimes, version, 'app', DEPENDENCY_DIRECTORY))
+export async function activeRuntimeModules(home: string, release?: string): Promise<string | undefined> {
+  const version = await referenceRelease(home, release)
+  if (version === undefined || parseRuntimeVersion(version) === undefined) return undefined
+  return await realTarget(join(home, DELORUN_HOME_ENTRIES.runtimes, version, 'app', DEPENDENCY_DIRECTORY))
 }
 
 /**
@@ -925,7 +942,7 @@ export async function scanFolder(folder: string, options: ScanOptions): Promise<
     included: new Map([[root, '']]),
     dependencies: 'home' in options ? options.dependencies ?? 'include' : 'active',
     home,
-    runtimeModules: await runtimeModulesOf(home ?? ('active' in options ? options.runtimeHome : undefined)),
+    runtimeModules: 'active' in options ? await runtimeModulesOf(options.runtimeHome, options.runtimeRelease) : await runtimeModulesOf(home, undefined),
     folder,
     limits: options.limits ?? CONTENT_LIMITS,
     pruned: new Set(),

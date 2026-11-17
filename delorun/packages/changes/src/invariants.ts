@@ -27,7 +27,8 @@ import { readLinks, type ProfileLink } from './link.ts'
 import { activeDirectory } from './paths.ts'
 import { leftOutContent, leftOutOf } from './left-out.ts'
 import { approvedOf, readActiveRecord, readApproved, readChangeLog, readProtection, readWorkSession } from './records.ts'
-import { holdsVersionUnder, readObject, readVersion } from './store.ts'
+import { holdsVersionUnder, readObject, readVersion, type RuntimeLinkRule } from './store.ts'
+import { referenceRelease } from './tree.ts'
 import { ACTIVE_RECORD_SCHEMA, APPROVED_RECORD_SCHEMA, CHANGE_LOG_SCHEMA, type ActiveRecord, type ApprovedRecord, type ChangeLog } from './types.ts'
 
 /** The profile whose invariants are checked, and the harness's own links ({@link EnforceRequest.harnessLink}). */
@@ -40,7 +41,7 @@ export interface InvariantRequest extends Pick<EnforceRequest, 'harnessLink' | '
   readonly profileDir: string
   /**
    * Which releases a link in an active directory into the runtime store may name: `running`, only
-   * {@link EnforceRequest.runningRelease}, for what a start or a recomposition loads; `installed`, any release whose
+   * {@link EnforceRequest.runningRelease}, or `runtimes/current` without one, for what a start or a recomposition loads; `installed`, any release whose
    * package is still there, for `delorun doctor` and `delorun verify` between an update and the start that re-points
    * the copies. `running` when absent.
    */
@@ -82,6 +83,7 @@ export async function checkLoadedContent(request: InvariantRequest): Promise<rea
  */
 async function checkLoaded(request: InvariantRequest): Promise<{ readonly broken: string[], readonly approved: ApprovedRecord }> {
   const { home, profile, profileDir } = request
+  const rule: RuntimeLinkRule = request.runtimeLinks === 'installed' ? { kind: 'installed' } : { kind: 'release', release: await referenceRelease(home, request.runningRelease) }
   const broken: string[] = []
   const protection = await attempt(broken, 'The protection setting cannot be read', () => readProtection(home))
   const links: readonly ProfileLink[] = await attempt(broken, 'The profile\'s links cannot be read', () => readLinks(profileDir)) ?? []
@@ -102,7 +104,7 @@ async function checkLoaded(request: InvariantRequest): Promise<{ readonly broken
     }
     const content = Object.hasOwn(active.plugins, link.name) ? active.plugins[link.name] : undefined
     const expected = content?.version ?? EMPTY_CONTENT_VERSION
-    if (await attempt(broken, `The active directory of ${link.name} cannot be read`, () => holdsVersionUnder(home, directory, expected, request.runtimeLinks === 'installed' ? { kind: 'installed' } : { kind: 'release', release: request.runningRelease })) === false) {
+    if (await attempt(broken, `The active directory of ${link.name} cannot be read`, () => holdsVersionUnder(home, directory, expected, rule)) === false) {
       broken.push(content === undefined
         ? `The active directory of ${link.name} holds content, and active.json records none: ${directory}.`
         : `The active directory of ${link.name} does not hold version ${content.version}, which active.json records: ${directory}.`)
