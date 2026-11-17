@@ -241,11 +241,12 @@ export async function leaveOutHarnessChange(home: string, runtime: string, id: C
  * The runtime's harness change in state `applied` decided last.
  * @param home - the Delorun home.
  * @param runtime - the runtime version.
+ * @param include - which applied entries count; all by default.
  * @returns the entry, or undefined when the harness's log holds none for the runtime.
  * @throws {ChangesError} `RECORD_UNREADABLE` when the harness's log is not one Delorun wrote.
  */
-export async function newestAppliedHarnessChange(home: string, runtime: string): Promise<ChangeEntry | undefined> {
-  return newestDecided((await readHarnessLog(home)).entries, entry => entry.kind === 'harness-edit' && entry.subject.runtime === runtime && entry.state === 'applied')
+export async function newestAppliedHarnessChange(home: string, runtime: string, include: (entry: ChangeEntry) => boolean = () => true): Promise<ChangeEntry | undefined> {
+  return newestDecided((await readHarnessLog(home)).entries, entry => entry.kind === 'harness-edit' && entry.subject.runtime === runtime && entry.state === 'applied' && include(entry))
 }
 
 /**

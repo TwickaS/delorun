@@ -294,7 +294,8 @@ export class Restart implements RestartControl {
       const gate = this.subject.chats()
       release = gate?.hold()
       const ended = gate === undefined ? undefined : await this.drain(gate, request, cancellation)
-      if (ended === 'cancelled') {
+      // A cancel that came once the wait had ended still counts: nothing has stopped yet.
+      if (ended === 'cancelled' || cancellation.aborted) {
         this.end('running', { kind: 'idle' }, release)
         logger.info('restart: cancelled while it waited')
         return { outcome: 'cancelled' }

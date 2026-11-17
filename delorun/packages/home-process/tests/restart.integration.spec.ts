@@ -189,7 +189,7 @@ describe('a restart\'s wait for running chats', TIMEOUT, () => {
     let end: () => void = () => {}
     end = running.hosts.latest.chats.begin(() => { end() })
     const waiting = await running.process.restart.begin({ stopChats: false, drainTimeoutS: 600 })
-    await sendHomeRequest(home, PROFILE, { op: 'update.cancel' })
+    expect((await sendHomeRequest(home, PROFILE, { op: 'update.cancel' })).at(-1)).toMatchObject({ ok: true, restartCancelled: true })
     expect(await waiting.done).toEqual({ outcome: 'cancelled' })
     expect(running.process.restart.view()).toEqual({ kind: 'idle' })
     expect(running.hosts.latest.chats.held).toBe(false)

@@ -6,7 +6,7 @@
  * @module @delorun/cli/changes/restart-service
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { leaveOutHarnessChange, newestAppliedHarnessChange, type ChangesRestartHost, type RunningComposition } from '@delorun/changes'
+import { isLiveHarnessFile, leaveOutHarnessChange, newestAppliedHarnessChange, type ChangesRestartHost, type RunningComposition } from '@delorun/changes'
 import type { RestartControl, RestartSupport } from '@delorun/home-process'
 
 /** The composition this process runs, read at its first Host's boot; a Host it boots again runs the same files. */
@@ -50,7 +50,8 @@ export function provideChangesRestart(root: Context, control: RestartControl | u
 export function restartSupport(home: string, runtime: string, running: RunningHolder): RestartSupport {
   return {
     async leaveOut(failure) {
-      const newest = await newestAppliedHarnessChange(home, runtime)
+      // A studio asset is served live and cannot have stopped the new Host, so it is never the one left out.
+      const newest = await newestAppliedHarnessChange(home, runtime, entry => !isLiveHarnessFile(entry.subject.file ?? ''))
       const file = newest?.subject.file
       if (newest === undefined || file === undefined) return undefined
       const booted = running.current

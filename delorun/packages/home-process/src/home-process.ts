@@ -628,9 +628,9 @@ export class HomeProcess implements HandshakeSubject {
         return this.handshake.apply(request.args.reportId, request.args.wait, request.args.drainTimeoutS, request.args.dataCopy, progress)
       case 'update.cancel':
         // New turns refused for a restart that waits read as a waiting update, so its cancel ends that wait too.
-        await this.restarter.cancel()
+        const restartCancelled = await this.restarter.cancel()
         await this.handshake?.cancel()
-        return { status: await this.status() }
+        return { status: await this.status(), ...restartCancelled ? { restartCancelled } : {} }
       case 'rollback':
         this.refuseOutsideRunning()
         if (this.handshake === undefined) throw new HomeProcessError('NO_UPDATE_RECORD', 'this build has no runtime store')

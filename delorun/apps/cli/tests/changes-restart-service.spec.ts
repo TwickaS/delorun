@@ -15,6 +15,7 @@ import { provideChangesRestart, restartSupport } from '../src/changes/restart-se
 
 const RUNTIME = '1.2.3'
 const START_FILE = 'app/node_modules/@delorun/cli/src/start.js'
+const ASSET_FILE = 'app/node_modules/@deepseek-ai/dsh-web-frontend/dist/assets/index-1a2b.js'
 const OTHER_FILE = 'app/node_modules/@delorun/cli/src/other.js'
 const FAILURE = 'H2-host-ready: the new Host did not answer'
 
@@ -38,7 +39,7 @@ async function appliedChange(): Promise<{ readonly home: string, readonly id: st
   await ensureHomeTree(home, 'default')
   const directory = join(home, 'runtimes', RUNTIME)
   const files: SignedFile[] = []
-  for (const [path, text] of Object.entries({ 'app/package.json': '{}\n', [START_FILE]: 'export const start = 1\n', [OTHER_FILE]: 'export const other = 1\n' })) {
+  for (const [path, text] of Object.entries({ 'app/package.json': '{}\n', [START_FILE]: 'export const start = 1\n', [OTHER_FILE]: 'export const other = 1\n', [ASSET_FILE]: 'console.log(1)\n' })) {
     mkdirSync(dirname(join(directory, path)), { recursive: true })
     writeFileSync(join(directory, path), text)
     files.push({ path, length: Buffer.byteLength(text), sha256: createHash('sha256').update(text).digest('hex'), executable: false })
@@ -100,6 +101,15 @@ describe('the leave-out after a failed restart', () => {
     const entries = (await readHarnessLog(home)).entries
     expect(entries.find(entry => entry.id === id)).toMatchObject({ state: 'left-out-at-start' })
     expect(entries.find(entry => entry.id === other.id)).toMatchObject({ state: 'discarded' })
+  })
+
+  it('never leaves out a studio asset, which is served live and cannot stop the new Host', async () => {
+    const { home, id, harness } = await appliedChange()
+    writeFileSync(join(harnessCopyDirectory(home, RUNTIME), ...ASSET_FILE.split('/')), 'console.log(2)\n')
+    const asset = (await harnessChanges(harness)).changes.find(change => change.file === ASSET_FILE)!
+    await applyHarnessChange(harness, asset.id, attestTerminal({ stdin: { isTTY: true }, stdout: { isTTY: true } }))
+    expect(await restartSupport(home, RUNTIME, { current: { kind: 'known', files: {} }, read: true }).leaveOut(FAILURE)).toEqual({ id, file: START_FILE })
+    expect((await readHarnessLog(home)).entries.find(entry => entry.id === asset.id)).toMatchObject({ state: 'applied' })
   })
 
   it('leaves nothing out when the running Host runs that change, or when none is applied', async () => {
