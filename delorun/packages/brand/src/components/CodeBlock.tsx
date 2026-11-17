@@ -60,6 +60,8 @@ export interface CodeBlockProps {
   readonly caption?: string | undefined
   /** `md` (the default) for body text; `lg` sets the code at headline size, as the closing footer does. */
   readonly size?: 'md' | 'lg'
+  /** `primary` gives the copy button the accent fill, for the page's one main button. */
+  readonly emphasis?: 'primary' | undefined
   readonly className?: string | undefined
 }
 
@@ -73,7 +75,7 @@ const CROSS = 'M18 6 6 18M6 6l12 12'
  * @param props - see {@link CodeBlockProps}.
  * @returns the block.
  */
-export function CodeBlock({ code, copyLabel, copiedLabel, failedLabel, caption, size = 'md', className }: CodeBlockProps) {
+export function CodeBlock({ code, copyLabel, copiedLabel, failedLabel, caption, size = 'md', emphasis, className }: CodeBlockProps) {
   const [ready, setReady] = useState(false)
   const [answer, setAnswer] = useState<Answer>('idle')
   const [presses, setPresses] = useState(0)
@@ -97,7 +99,7 @@ export function CodeBlock({ code, copyLabel, copiedLabel, failedLabel, caption, 
       {caption === undefined ? null : <figcaption className={css.caption}>{caption}</figcaption>}
       <div className={css.row}>
         <pre className={css.pre}><code ref={codeRef}>{code}</code></pre>
-        <button type="button" className={css.copy} data-answer={answer} data-ready={ready} aria-label={copyLabel} title={copyLabel} onClick={() => { void copy() }} tabIndex={ready ? 0 : -1}>
+        <button type="button" className={css.copy} data-answer={answer} data-ready={ready} data-emphasis={emphasis} aria-label={copyLabel} title={copyLabel} onClick={() => { void copy() }} tabIndex={ready ? 0 : -1}>
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             {answer === 'idle'
               ? <><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" /></>
