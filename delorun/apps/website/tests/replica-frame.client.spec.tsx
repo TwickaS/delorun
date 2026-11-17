@@ -355,6 +355,8 @@ describe('the studio between chapters', () => {
     expect(copy!.hasAttribute('inert')).toBe(true)
     expect(copy!.textContent).toContain(before!.slice(0, 20))
     expect(copy!.querySelector('[id]')).toBeNull()
+    // Only the live studio matches the selector specs and probes use for it.
+    expect(view.container.querySelectorAll('[data-studio-replica][inert]')).toHaveLength(1)
     await until(() => { expect(view.container.querySelector('[data-outgoing]')).toBeNull() }, 5_000)
   })
 })

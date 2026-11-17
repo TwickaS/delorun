@@ -162,7 +162,7 @@ export default function Studio({ file, width, state, epoch, handle, onReady }: S
   // A new chapter draws its sections from their first state; the chapter before stays painted over it until then.
   if (seenEpoch !== epoch) {
     setSeenEpoch(epoch)
-    setOutgoing(root.current === null ? undefined : root.current.outerHTML.replace(/\sid="[^"]*"/g, ''))
+    setOutgoing(root.current === null ? undefined : root.current.outerHTML.replace(/\sid="[^"]*"/g, '').replace(' inert=""', ''))
   }
   const dropOutgoing = useCallback(() => { setOutgoing(undefined) }, [])
   if (fixture === undefined) return null
