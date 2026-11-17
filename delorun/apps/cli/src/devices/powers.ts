@@ -18,7 +18,7 @@ export const POWERS_USAGE = 'Usage: delorun devices powers [careful | full]'
 
 /** What each level lets an unlocked phone do, as the command prints it. */
 const LEVEL_LINES = {
-  careful: 'Careful: an unlocked phone can do what this computer can except open a terminal, turn protection off, apply or switch plugin changes and change Delorun\'s own files; it can still undo or discard a change and turn protection on.',
+  careful: 'Careful: an unlocked phone cannot open a terminal, turn protection off, apply or switch plugin changes or change Delorun\'s own files; it can still undo or discard a change and turn protection on. Approvals it gives, such as accepting an MCP server, allowing an external agent or giving a workspace full access, can still start programs outside the sandbox.',
   full: 'Full: an unlocked phone can do everything this computer can, the terminal included, each time with an unlock you entered on the phone. The 15 minutes after you approve a phone never count.',
 } as const
 

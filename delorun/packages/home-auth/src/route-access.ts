@@ -18,9 +18,12 @@ import { COMPUTER_ONLY_ROW_MODULES } from './reach-access.ts'
  * - `U`: an unlocked device only; a locked one is answered `403 ELEVATION_REQUIRED` (`gateByUnlock`);
  * - `C`: only the computer; a device is refused (`403 LOOPBACK_REQUIRED`) whatever its unlock;
  * - `K`: a device that holds no PIN lock (`admitKeyDevice`): model keys are tested, never shown;
+ * - `F`: an unlocked device only while Phone powers is Full, and only with a code or a PIN unlock (`gateByUnlock` with
+ *   `phonePowers: 'full'`); under Careful a device is refused (`403 LOOPBACK_REQUIRED`). Moving a `U` route to Full is its
+ *   row here and that option at its gate, which `tests/route-access.spec.ts` keeps in step;
  * - `R+U`: one registration serves both levels, by route (see the reason).
  */
-export type RouteLevel = 'R' | 'U' | 'C' | 'K' | 'R+U'
+export type RouteLevel = 'R' | 'U' | 'F' | 'C' | 'K' | 'R+U'
 
 /** One route's level and the reason for it. */
 export interface RouteAccess {
@@ -28,10 +31,17 @@ export interface RouteAccess {
   readonly reason: string
 }
 
-const READ = (reason: string): RouteAccess => ({ level: 'R', reason })
+/**
+ * @param level - a level.
+ * @returns the row builder for that level.
+ */
+const at = <L extends RouteLevel>(level: L) => (reason: string): RouteAccess & { readonly level: L } => ({ level, reason })
+const READ = at('R')
 /** Level `R` for a write that changes only an everyday setting or the person's own organising, so it needs no unlock. */
-const EVERYDAY = (reason: string): RouteAccess => ({ level: 'R', reason })
-const UNLOCKED = (reason: string): RouteAccess => ({ level: 'U', reason })
+const EVERYDAY = at('R')
+const UNLOCKED = at('U')
+const FULL = at('F')
+const COMPUTER = at('C')
 
 /**
  * Every registered plugin Fetch route, by source file (relative to `delorun/packages`) and the expression its `path`
@@ -166,21 +176,18 @@ export const COMPUTER_ONLY: readonly ComputerOnlyRow[] = [
   { kind: 'changes-route', id: '/delorun/changes actions, harness, protection off and setup under Phone powers Careful', reason: 'applying, turning off, setup and changes to Delorun itself change what runs; Careful keeps them at the computer and lets a phone only take back or tighten' },
 ]
 
-/**
- * How a Changes route answers a paired device. `R`, `U` and `C` as {@link RouteLevel}; `Full`: an unlocked device while
- * Phone powers is Full, and only the computer while it is Careful. Every `U` and `Full` route refuses the approval grace.
- */
-export type ChangesRouteLevel = 'R' | 'U' | 'Full' | 'C'
+/** How a Changes route answers a paired device, as {@link RouteLevel} says. Every `U` and `F` route of Changes refuses the approval grace. */
+export type ChangesRouteLevel = Extract<RouteLevel, 'R' | 'U' | 'F' | 'C'>
 
 /**
  * The web-server routes of Changes (`plugin-changes`' `access.ts` holds the decision for each control): `state`, `show`
  * and `workspaces` are read by any admitted session; every `POST` is decided before its body is read, and a device's
  * proof names the device in the log as decided in the studio.
  */
-export const CHANGES_ROUTE_ACCESS: Readonly<Record<'reads' | 'tightening' | 'decisions' | 'setup' | 'notice', { readonly level: ChangesRouteLevel, readonly reason: string }>> = {
-  reads: { level: 'R', reason: 'what failed, the recent changes and the waiting ones, without file contents beyond a shown change' },
-  tightening: { level: 'U', reason: 'undo of a plugin\'s change, discard of a plugin\'s or a harness change and protection on only take back or tighten' },
-  decisions: { level: 'Full', reason: 'apply, turning plugins off or on, work sessions, safe mode, create, request, reveal, harness apply, undo and Make my copy, protection off and restart change what runs' },
-  setup: { level: 'Full', reason: 'a setup file leaves the computer and changes what the profile runs' },
-  notice: { level: 'C', reason: 'the notice of a change a phone made is for the person at the computer' },
+export const CHANGES_ROUTE_ACCESS: Readonly<Record<'reads' | 'tightening' | 'decisions' | 'setup' | 'notice', RouteAccess & { readonly level: ChangesRouteLevel }>> = {
+  reads: READ('what failed, the recent changes and the waiting ones, without file contents beyond a shown change'),
+  tightening: UNLOCKED('undo of a plugin\'s change, discard of a plugin\'s or a harness change and protection on only take back or tighten'),
+  decisions: FULL('apply, turning plugins off or on, work sessions, safe mode, create, request, reveal, harness apply, undo and Make my copy, protection off and restart change what runs'),
+  setup: FULL('a setup file leaves the computer and changes what the profile runs'),
+  notice: COMPUTER('the notice of a change a phone made is for the person at the computer'),
 }

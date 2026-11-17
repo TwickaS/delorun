@@ -7,6 +7,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { PhonePowersReader, phonePowersPath, readPhonePowers, recordUpgradePhonePowers, UNCHOSEN_PHONE_POWERS, writePhonePowers } from '../src/phone-powers.ts'
+import { gateByUnlock } from '../src/computer-only.ts'
+import { reachDevicePrincipal } from '../src/reach-access.ts'
 
 let directory: string
 
@@ -65,5 +67,44 @@ describe('Phone powers', () => {
     await writeFile(phonePowersPath(directory), 'not json', { mode: 0o600 })
     expect(await recordUpgradePhonePowers(directory, 'full')).toBeUndefined()
     expect(new PhonePowersReader(directory).current()).toMatchObject({ level: 'careful', chosen: false })
+  })
+})
+
+describe('a route at level F', () => {
+  /**
+   * A home whose device `device-1` holds an unlock on its listener.
+   * @param level - the Phone powers level, or undefined for a home that cannot say it.
+   * @param grace - whether the unlock is the approval grace.
+   * @returns the part of the service the gate reads.
+   */
+  const home = (level: 'careful' | 'full' | undefined, grace = false) => ({
+    pinEnabled: () => false, pageUnlockOf: () => undefined, dangerousMode: () => false,
+    elevationOf: () => (grace ? { id: 'unlock-1', grace: true as const } : { id: 'unlock-1' }),
+    ...level === undefined ? {} : { phonePowers: () => ({ level, chosen: true }) },
+  }) as never
+  const peer = { principal: reachDevicePrincipal('device-1', 'reach-tailscale-private') }
+
+  /**
+   * @param gated - the home the gate reads.
+   * @returns the status and body a device's request gets.
+   */
+  async function answer(gated: never): Promise<readonly [number, string]> {
+    const route = gateByUnlock(() => gated, () => Promise.resolve(new Response('ran')), { renews: true, phonePowers: 'full' })
+    const request = new Request('http://localhost/x', { method: 'POST' })
+    expect(route.admitPeer(request, peer)).toBe(true)
+    const reply = await route.fetch(request)
+    return [reply.status, await reply.text()]
+  }
+
+  it('runs for an unlocked phone only under Full, and never on the approval grace', async () => {
+    expect(await answer(home('full'))).toEqual([200, 'ran'])
+    // Pins the level: under Careful, or in a home that cannot say its level, the unlock does not open the route.
+    for (const gated of [home('careful'), home(undefined)]) {
+      const [status, body] = await answer(gated)
+      expect([status, JSON.parse(body)]).toEqual([403, expect.objectContaining({ error: 'LOOPBACK_REQUIRED' })])
+    }
+    // Pins the fresh unlock: under Full the grace does not open it.
+    const [status, body] = await answer(home('full', true))
+    expect([status, JSON.parse(body)]).toEqual([403, expect.objectContaining({ error: 'ELEVATION_REQUIRED' })])
   })
 })
