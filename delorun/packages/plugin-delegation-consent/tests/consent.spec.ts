@@ -17,7 +17,8 @@ import SubagentRuntime, { DELEGATION_CONSENT_PROVIDER_EXPORT } from '@deepseek-a
 import type { ExternalDelegationVerdict, SubagentResult } from '@deepseek-ai/dsh-subagent'
 import ApprovalService, { setApprovalPolicy, type ApprovalOutcome, type ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { apply, Config, DelorunDelegationConsent, EXTERNAL_AGENT_CONSENT_SWITCH, DelegationConsentError, PLUGIN_MANAGER_REFUSAL, pluginManagerVerdict } from '../src/index.ts'
+import { createCondition, type ComputerOnlySwitch } from '@delorun/home-auth'
+import { apply, Config, DelorunDelegationConsent, EXTERNAL_AGENT_CONSENT_SWITCH, FULL_ACCESS_STARTS_AGENTS_SWITCH, DelegationConsentError, PLUGIN_MANAGER_REFUSAL, pluginManagerVerdict } from '../src/index.ts'
 import { guardProfile, isExternalAgentPackage, modulePackage, targetPackageNames, type GuardProfile } from '../src/guard.ts'
 import { agentName, askText, askTextZh, describeAgent, noSandboxPolicyRefusal, notApprovedRefusal, noWorkspaceRefusal } from '../src/copy.ts'
 import { registerDelegationRoutes } from '../src/routes.ts'
@@ -59,10 +60,14 @@ interface Mounted {
  *   for no approval service), and the agents and providers.
  */
 async function mounted(options: {
-  mode?: 'read-only' | 'workspace-write' | null
+  mode?: 'read-only' | 'workspace-write' | 'danger-full-access' | null
   answer?: (() => ApprovalOutcome) | null
   agents?: readonly Agent[]
   providers?: Record<string, { prepareContinuable?: () => void }>
+  /** The approval policy of the configured approval service. */
+  policy?: 'ask' | 'never'
+  /** The `fullAccessStartsAgents` switch; on by default, as the schema defaults it. */
+  fullAccess?: boolean
 } = {}): Promise<Mounted> {
   const paths = folders()
   const ctx = new Context()
@@ -70,12 +75,12 @@ async function mounted(options: {
   if (options.mode !== null) ctx.provide('sandboxPolicy', { resolve: () => ({ mode: options.mode ?? 'workspace-write' }) } as never)
   if (options.answer !== null) {
     const answer = options.answer ?? (() => 'allowed-once')
-    ctx.provide('approval', { request: (request: ApprovalRequest) => { asks.push(request); return Promise.resolve(answer()) }, config: {}, overrideOf: () => undefined } as never)
+    ctx.provide('approval', { request: (request: ApprovalRequest) => { asks.push(request); return Promise.resolve(answer()) }, config: { policy: options.policy ?? 'ask' }, overrideOf: () => undefined } as never)
   }
   const agents = options.agents ?? []
   ctx.provide('agents', { get: (id: string) => agents.find(agent => agent.id === id) } as never)
   ctx.provide('subagents', { getProvider: (name: string) => options.providers?.[name] } as never)
-  await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 1_800_000, env: { DELORUN_HOME: paths.home }, now: () => 1_000, levelOf: () => 'standard', missingSandboxTools: () => [] })
+  await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 1_800_000, fullAccessStartsAgents: () => options.fullAccess ?? true, env: { DELORUN_HOME: paths.home }, now: () => 1_000, levelOf: () => 'standard', missingSandboxTools: () => [] })
   return { ctx, consent: ctx.get('delegationConsent') as DelorunDelegationConsent, asks, ...paths }
 }
 
@@ -135,6 +140,59 @@ describe('the review', () => {
     await consent.review(review(chat(other), other))
     await consent.review(review(chat(workspace), workspace, 'codex'))
     expect(asks).toHaveLength(2)
+  })
+
+  describe('in a chat whose approval policy is never', () => {
+    it('allows with the switch on, without an approval request or a grant', async () => {
+      const { consent, asks, home, workspace } = await mounted({ policy: 'never', mode: 'danger-full-access', fullAccess: true })
+      await expect(consent.review(review(chat(workspace), workspace))).resolves.toEqual({ kind: 'allow', timeoutMs: 1_800_000 })
+      await expect(consent.review(review(chat(workspace), workspace, 'codex'))).resolves.toMatchObject({ kind: 'allow' })
+      expect(asks).toEqual([])
+      expect(await readGrantStore(grantStorePath(home))).toEqual({ kind: 'readable', grants: [] })
+    })
+
+    it('refuses with the switch off, naming the workspace allowance and the switch', async () => {
+      const { consent, asks, workspace } = await mounted({ policy: 'never', mode: 'danger-full-access', fullAccess: false, answer: () => 'rejected' })
+      const verdict = await consent.review(review(chat(workspace), workspace))
+      expect(verdict).toEqual({ kind: 'refuse', reason: notApprovedRefusal('claude-code', 'never', workspace) })
+      expect(verdict).toMatchObject({ reason: expect.stringContaining('"Allow for this workspace" in Settings') })
+      expect(verdict).toMatchObject({ reason: expect.stringContaining('"Full access chats start agents without asking"') })
+      expect(asks).toHaveLength(1)
+    })
+
+    it('keeps today\'s refusal for a never policy on a sandboxed preset, with the switch on', async () => {
+      const { consent, asks, workspace } = await mounted({ policy: 'never', mode: 'workspace-write', fullAccess: true, answer: () => 'rejected' })
+      await expect(consent.review(review(chat(workspace), workspace))).resolves.toEqual({ kind: 'refuse', reason: notApprovedRefusal('claude-code', 'never', workspace) })
+      expect(asks).toHaveLength(1)
+    })
+
+    it('still refuses a read-only chat, a chat without a workspace and a folder outside it, and a grants file that cannot be read', async () => {
+      const readOnly = await mounted({ policy: 'never', mode: 'read-only' })
+      await expect(readOnly.consent.review(review(chat(readOnly.workspace), readOnly.workspace))).resolves.toMatchObject({ kind: 'refuse', reason: expect.stringContaining('this chat runs read-only') })
+      const noPolicy = await mounted({ policy: 'never', mode: null })
+      await expect(noPolicy.consent.review(review(chat(noPolicy.workspace), noPolicy.workspace))).resolves.toEqual({ kind: 'refuse', reason: noSandboxPolicyRefusal('claude-code') })
+      const open = await mounted({ policy: 'never', mode: 'danger-full-access' })
+      await expect(open.consent.review(review(chat(undefined), open.workspace))).resolves.toEqual({ kind: 'refuse', reason: noWorkspaceRefusal('claude-code') })
+      await expect(open.consent.review(review(chat(open.workspace), open.other))).resolves.toMatchObject({ kind: 'refuse', reason: expect.stringContaining('is outside it') })
+      await grant(open.home, open.workspace)
+      writeFileSync(grantStorePath(open.home), '{ not json')
+      await expect(open.consent.review(review(chat(open.workspace), open.workspace))).resolves.toMatchObject({ kind: 'refuse', reason: expect.stringContaining('cannot be read') })
+      for (const mounted of [readOnly, noPolicy, open]) expect(mounted.asks).toEqual([])
+    })
+
+    it('still starts a granted agent in both policies, and still asks in a chat whose policy asks', async () => {
+      const never = await mounted({ policy: 'never', mode: 'danger-full-access', fullAccess: false })
+      await grant(never.home, never.workspace)
+      await expect(never.consent.review(review(chat(never.workspace), never.workspace))).resolves.toMatchObject({ kind: 'allow' })
+      expect(never.asks).toEqual([])
+      const ask = await mounted({ policy: 'ask', mode: 'danger-full-access', fullAccess: true })
+      await expect(ask.consent.review(review(chat(ask.workspace), ask.workspace))).resolves.toMatchObject({ kind: 'allow' })
+      expect(ask.asks).toHaveLength(1)
+      expect(ask.asks[0]).toMatchObject({ grants: 'external-agent' })
+      await grant(ask.home, ask.workspace)
+      await ask.consent.review(review(chat(ask.workspace), ask.workspace))
+      expect(ask.asks).toHaveLength(1)
+    })
   })
 
   it.each(['rejected', 'cancelled', 'unavailable'] as const)('refuses when the ask ends %s', async (outcome) => {
@@ -251,7 +309,7 @@ describe('the safety levels', () => {
   it('lists both levels and says what Claude Code\'s sandbox lacks only where its level needs it', async () => {
     const lacking = async (level: AgentLevel, tools: readonly string[]) => {
       const ctx = new Context()
-      await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 1, env: {}, now: () => 1, levelOf: () => level, missingSandboxTools: () => tools })
+      await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 1, fullAccessStartsAgents: () => true, env: {}, now: () => 1, levelOf: () => level, missingSandboxTools: () => tools })
       return (ctx.get('delegationConsent') as DelorunDelegationConsent).levels().levels
     }
     expect((await lacking('standard', ['socat']))[0]).toEqual({
@@ -444,6 +502,27 @@ describe('mounting', () => {
     }
   })
 
+  it('turns the full-access start on by default and reads it live at each review', async () => {
+    expect(configOf({}).fullAccessStartsAgents.get()).toBe(true)
+    expect(configOf({ fullAccessStartsAgents: false }).fullAccessStartsAgents.get()).toBe(false)
+    const paths = folders()
+    vi.stubEnv('DELORUN_HOME', paths.home)
+    try {
+      const saved = { enabled: true, runTimeoutMinutes: 5, fullAccessStartsAgents: true }
+      const ctx = new Context()
+      ctx.provide('sandboxPolicy', { resolve: () => ({ mode: 'danger-full-access' }) } as never)
+      ctx.provide('approval', { request: () => Promise.resolve('rejected'), config: { policy: 'never' }, overrideOf: () => undefined } as never)
+      apply(ctx, { enabled: { get: () => saved.enabled }, runTimeoutMinutes: { get: () => saved.runTimeoutMinutes }, fullAccessStartsAgents: { get: () => saved.fullAccessStartsAgents }, claudeCodeLevel: { get: () => 'standard' }, codexLevel: { get: () => 'standard' } })
+      await vi.waitFor(() => { expect(ctx.get('delegationConsent')).toBeDefined() })
+      await expect(ctx.delegationConsent.review(review(chat(paths.workspace), paths.workspace))).resolves.toMatchObject({ kind: 'allow' })
+      saved.fullAccessStartsAgents = false
+      await expect(ctx.delegationConsent.review(review(chat(paths.workspace), paths.workspace))).resolves.toMatchObject({ kind: 'refuse' })
+      await ctx.fiber.dispose()
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
   it('registers its switch as one only the home\'s computer turns off while it is mounted with the switch on', async () => {
     const ctx = new Context()
     const registered: object[] = []
@@ -451,10 +530,33 @@ describe('mounting', () => {
     ctx.provide('homeAuth', { registerComputerOnlySwitch: (target: object) => { registered.push(target); return () => { removed += 1 } } } as never)
     // Pins the registration the reach policy reads: without it an unlocked device could turn the consent off.
     apply(ctx, configOf({ enabled: true }))
-    await vi.waitFor(() => { expect(registered).toHaveLength(3) })
+    await vi.waitFor(() => { expect(registered).toHaveLength(4) })
     expect(registered[0]).toBe(EXTERNAL_AGENT_CONSENT_SWITCH)
+    expect(registered[0]).toEqual({ ns: 'delorun-delegation-consent', field: 'enabled', label: 'the external-agent consent' })
+    // The full-access start loosens when it is on, so a device may only write it false.
+    expect(registered[1]).toBe(FULL_ACCESS_STARTS_AGENTS_SWITCH)
+    expect(registered[1]).toEqual({ ns: 'delorun-delegation-consent', field: 'fullAccessStartsAgents', label: 'external agents starting without asking in Full access chats', safeValue: false })
     await ctx.fiber.dispose()
-    expect(removed).toBe(3)
+    expect(removed).toBe(4)
+  })
+
+  it('has a phone\'s write that turns the full-access start on refused, and one that turns it off taken', async () => {
+    const ctx = new Context()
+    const registered: ComputerOnlySwitch[] = []
+    ctx.provide('homeAuth', { registerComputerOnlySwitch: (target: ComputerOnlySwitch) => { registered.push(target); return () => undefined } } as never)
+    apply(ctx, configOf({ enabled: true }))
+    await vi.waitFor(() => { expect(registered).toHaveLength(4) })
+    const device = createCondition({
+      workspaces: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere', elevationOf: () => ({ id: 'elevation-1' }), pageUnlockOf: () => undefined,
+      pinEnabled: () => false, keyRefs: () => new Set(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
+      computerOnlySwitches: () => registered, protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set(),
+      defaultPermission: () => undefined, phonePowers: () => 'full', dangerousMode: () => false, touchUnlock: () => {},
+    } as never, { kind: 'reach-device', deviceId: 'phone', listener: 'reach-tailscale-private' } as never)
+    const ns = 'delorun-delegation-consent'
+    const patch = (value: boolean) => device({ action: 'settings/update', resource: { kind: 'global' }, args: { ns, patch: { fullAccessStartsAgents: value } } } as never)
+    expect(patch(true)).toEqual({ kind: 'deny', reason: 'loopback-required: turning external agents starting without asking in Full access chats on' })
+    expect(patch(false)).toEqual({ kind: 'allow' })
+    await ctx.fiber.dispose()
   })
 
   it('registers each agent\'s level as a ranked switch that reads the saved level at each settings write', async () => {
@@ -463,8 +565,8 @@ describe('mounting', () => {
     ctx.provide('homeAuth', { registerComputerOnlySwitch: (target: never) => { registered.push(target); return () => {} } } as never)
     const saved = { claudeCodeLevel: 'standard', codexLevel: 'own' }
     apply(ctx, { ...configOf({ enabled: true }), claudeCodeLevel: { get: () => saved.claudeCodeLevel }, codexLevel: { get: () => saved.codexLevel } } as never)
-    await vi.waitFor(() => { expect(registered).toHaveLength(3) })
-    const [, claude, codex] = registered
+    await vi.waitFor(() => { expect(registered).toHaveLength(4) })
+    const [, , claude, codex] = registered
     expect([claude?.field, claude?.label, codex?.field, codex?.label]).toEqual(['claudeCodeLevel', 'the Claude Code level', 'codexLevel', 'the Codex level'])
     expect(claude?.ranked.order).toEqual(['careful', 'standard', 'own', 'unrestricted'])
     saved.codexLevel = 'careful'
@@ -486,7 +588,7 @@ describe('mounting', () => {
       const saved = { enabled: false, runTimeoutMinutes: 5 }
       const ctx = new Context()
       ctx.provide('sandboxPolicy', { resolve: () => ({ mode: 'workspace-write' }) } as never)
-      apply(ctx, { enabled: { get: () => saved.enabled }, runTimeoutMinutes: { get: () => saved.runTimeoutMinutes }, claudeCodeLevel: { get: () => 'standard' }, codexLevel: { get: () => 'standard' } })
+      apply(ctx, { enabled: { get: () => saved.enabled }, runTimeoutMinutes: { get: () => saved.runTimeoutMinutes }, fullAccessStartsAgents: { get: () => true }, claudeCodeLevel: { get: () => 'standard' }, codexLevel: { get: () => 'standard' } })
       expect(ctx.get('delegationConsent')).toBeUndefined()
 
       saved.enabled = true
@@ -679,7 +781,7 @@ describe('through the subagent runtime', () => {
     let answer: ApprovalOutcome = 'rejected'
     ctx.provide('approval', { request: () => Promise.resolve(answer), config: {}, overrideOf: () => undefined } as never)
     ctx.provide('sandboxPolicy', { resolve: () => ({ mode: 'workspace-write' }) } as never)
-    await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 60_000, env: { DELORUN_HOME: paths.home }, now: () => 1, levelOf: () => 'standard', missingSandboxTools: () => [] })
+    await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 60_000, fullAccessStartsAgents: () => true, env: { DELORUN_HOME: paths.home }, now: () => 1, levelOf: () => 'standard', missingSandboxTools: () => [] })
     const parent = await parentChat(ctx, paths.workspace)
     const result = Promise.withResolvers<SubagentResult>()
     const start = vi.fn(() => Promise.resolve({ id: SessionId('run'), result: result.promise, dispose: () => Promise.resolve() }))
@@ -704,9 +806,10 @@ describe('through the approval service', () => {
   /**
    * The real approval service over a chat with an open turn, with an answerer that would allow the start.
    * @param policy - the service's configured approval policy.
+   * @param fullAccess - the `fullAccessStartsAgents` switch.
    * @returns the composition, the consent, the chat, the answerer and the folders.
    */
-  async function approving(policy: 'ask' | 'never') {
+  async function approving(policy: 'ask' | 'never', fullAccess = false) {
     const paths = folders()
     const ctx = new Context()
     await ctx.plugin(SessionStore)
@@ -715,29 +818,49 @@ describe('through the approval service', () => {
     ctx.provide('sandboxPolicy', { resolve: () => ({ mode: 'danger-full-access' }) } as never)
     const answerer = vi.fn(() => Promise.resolve<ApprovalOutcome>('allowed-once'))
     ctx.on('approval/request', answerer)
-    await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 60_000, env: { DELORUN_HOME: paths.home }, now: () => 1, levelOf: () => 'standard', missingSandboxTools: () => [] })
+    await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 60_000, fullAccessStartsAgents: () => fullAccess, env: { DELORUN_HOME: paths.home }, now: () => 1, levelOf: () => 'standard', missingSandboxTools: () => [] })
     const session = ctx.sessions.create(SessionId(randomUUID()), { meta: { cwd: paths.workspace } })
     session.append('turn/start', { turn: 1 })
     const parent: Agent = { id: session.id, session } as never
     return { ctx, consent: ctx.delegationConsent, parent, answerer, ...paths }
   }
 
-  it('refuses a full-access chat, whose policy is never, without asking anyone, unless the workspace allows the agent', async () => {
+  it('with the switch off, refuses a full-access chat, whose policy is never, without asking anyone, unless the workspace allows the agent', async () => {
     const { ctx, consent, parent, answerer, home, workspace } = await approving('never')
     const refused = await consent.review(review(parent, workspace))
     expect(refused).toEqual({ kind: 'refuse', reason: notApprovedRefusal('claude-code', 'never', workspace) })
     expect(notApprovedRefusal('claude-code', 'never', workspace)).toContain('approval policy is never')
+    expect(notApprovedRefusal('claude-code', 'never', workspace)).toContain('"Allow for this workspace" in Settings')
+    expect(notApprovedRefusal('claude-code', 'never', workspace)).toContain('"Full access chats start agents without asking"')
     expect(answerer).not.toHaveBeenCalled()
     await grant(home, workspace)
     await expect(consent.review(review(parent, workspace))).resolves.toEqual({ kind: 'allow', timeoutMs: 60_000 })
     await ctx.fiber.dispose()
   })
 
-  it('reads a chat\'s own never policy over the configured one', async () => {
+  it('with the switch off, reads a chat\'s own never policy over the configured one', async () => {
     const { ctx, consent, parent, answerer, workspace } = await approving('ask')
     setApprovalPolicy(parent.session, 'never')
     await expect(consent.review(review(parent, workspace))).resolves.toEqual({ kind: 'refuse', reason: notApprovedRefusal('claude-code', 'never', workspace) })
     expect(answerer).not.toHaveBeenCalled()
+    await ctx.fiber.dispose()
+  })
+
+  it('with the switch on, starts a full-access chat without asking anyone and records nothing', async () => {
+    const { ctx, consent, parent, answerer, home, workspace } = await approving('never', true)
+    await expect(consent.review(review(parent, workspace))).resolves.toEqual({ kind: 'allow', timeoutMs: 60_000 })
+    expect(answerer).not.toHaveBeenCalled()
+    expect(await readGrantStore(grantStorePath(home))).toEqual({ kind: 'readable', grants: [] })
+    await ctx.fiber.dispose()
+  })
+
+  it('with the switch on, reads a chat\'s own never policy over the configured one, and an ask policy still asks', async () => {
+    const { ctx, consent, parent, answerer, workspace } = await approving('ask', true)
+    await consent.review(review(parent, workspace))
+    expect(answerer).toHaveBeenCalledOnce()
+    setApprovalPolicy(parent.session, 'never')
+    await expect(consent.review(review(parent, workspace))).resolves.toMatchObject({ kind: 'allow' })
+    expect(answerer).toHaveBeenCalledOnce()
     await ctx.fiber.dispose()
   })
 

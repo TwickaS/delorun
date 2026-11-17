@@ -29,6 +29,8 @@ export interface DelegationConsentSettings {
   readonly claudeCodeLevel: AgentLevel
   /** What Codex may do on its own ({@link AgentLevel}); read at each start. */
   readonly codexLevel: AgentLevel
+  /** Whether a chat in Full access (approval policy `never` and sandbox mode `danger-full-access`) starts an external agent without asking ([`Config`](./index.ts)). */
+  readonly fullAccessStartsAgents: boolean
 }
 
 /**

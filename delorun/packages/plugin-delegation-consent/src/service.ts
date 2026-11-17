@@ -8,10 +8,12 @@
  * 2. A chat without a workspace folder is refused, and so is a run directory outside the chat's workspace.
  * 3. A grants file that cannot be read refuses, so no grant counts.
  * 4. A grant for the provider in the chat's workspace allows the start.
- * 5. Otherwise the person is asked through the composed approval service, with the `external-agent` grant marker,
+ * 5. A chat in Full access, whose approval policy is `never` and whose sandbox mode is `danger-full-access` together,
+ *    allows the start without anyone being asked while the `fullAccessStartsAgents` switch is on. Any other chat whose
+ *    policy is `never` is refused without anyone being asked.
+ * 6. Otherwise the person is asked through the composed approval service, with the `external-agent` grant marker,
  *    so a reach device cannot give the answer, naming the folder the agent runs in; only `allowed-once` allows the
- *    start, and it records nothing. A chat whose approval policy is `never`, the full-access preset's, is refused
- *    without anyone being asked.
+ *    start, and it records nothing.
  *
  * Every allowed start carries the configured run time limit. The service also names an external provider in its
  * delegation tool's description, and lists, records and revokes the grants the studio and `delorun` show.
@@ -56,6 +58,8 @@ export class DelegationConsentError extends Error {
 export interface ConsentOptions {
   /** The run time limit an allowed start carries, in milliseconds, read at each review. */
   readonly timeoutMs: () => number
+  /** Whether a chat in Full access starts an external agent without asking, read at each review. */
+  readonly fullAccessStartsAgents: () => boolean
   /** The environment the Delorun home is resolved from. */
   readonly env: Readonly<Record<string, string | undefined>>
   /** The clock a new grant records. */
@@ -125,7 +129,8 @@ export class DelorunDelegationConsent extends Service implements DelegationConse
     const session = parent.session
     const sandbox = this.ctx.get('sandboxPolicy')
     if (sandbox === undefined) return { kind: 'refuse', reason: noSandboxPolicyRefusal(provider) }
-    if (sandbox.resolve({ session }).mode === 'read-only') return { kind: 'refuse', reason: readOnlyRefusal(provider) }
+    const mode = sandbox.resolve({ session }).mode
+    if (mode === 'read-only') return { kind: 'refuse', reason: readOnlyRefusal(provider) }
     const workspace = workspaceKey(session.header.cwd ?? '')
     if (workspace === NO_WORKSPACE) return { kind: 'refuse', reason: noWorkspaceRefusal(provider) }
     const cwd = workspaceKey(review.cwd)
@@ -139,6 +144,8 @@ export class DelorunDelegationConsent extends Service implements DelegationConse
     const facts = { provider, workspace, cwd, label: review.label }
     // The approval service answers `rejected` without asking anyone while the chat's policy is `never`.
     const policy = approval.overrideOf(session) ?? approval.config.policy
+    // Full access is both together: a `never` policy on a sandboxed preset, such as a custom one, is not the person's choice to run unprompted.
+    if (policy === 'never' && mode === 'danger-full-access' && this.options.fullAccessStartsAgents()) return allowed
     const outcome = await approval.request({
       agent: parent,
       toolName: provider,

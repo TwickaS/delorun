@@ -1344,7 +1344,7 @@ describe('the External agents section', () => {
   })
 
   it('shows each agent\'s level, writes a chosen one, and names the sandbox Claude Code lacks', async () => {
-    const settings = agentSettingsForm({ enabled: true, runTimeoutMinutes: 30, claudeCodeLevel: 'standard', codexLevel: 'careful' })
+    const settings = agentSettingsForm({ enabled: true, runTimeoutMinutes: 30, fullAccessStartsAgents: true, claudeCodeLevel: 'standard', codexLevel: 'careful' })
     const levels: LevelsAnswer = { levels: [
       { provider: 'claude-code', agent: 'Claude Code', level: 'standard', sandboxMissing: { tools: ['socat'], installCommand: 'sudo apt install bubblewrap socat' } },
       { provider: 'codex', agent: 'Codex', level: 'careful' },
@@ -1362,7 +1362,7 @@ describe('the External agents section', () => {
   })
 
   it('lets a remote studio only tighten a level', async () => {
-    const settings = agentSettingsForm({ enabled: true, runTimeoutMinutes: 30, claudeCodeLevel: 'own', codexLevel: 'own' })
+    const settings = agentSettingsForm({ enabled: true, runTimeoutMinutes: 30, fullAccessStartsAgents: true, claudeCodeLevel: 'own', codexLevel: 'own' })
     renderExternalAgents(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: REMOTE }), settings)
     await settle()
     const claude = screen.getByRole('group', { name: 'Claude Code' })
@@ -1379,7 +1379,7 @@ describe('the External agents section', () => {
   })
 
   it('turns the external-agent consent off and on, and writes a whole run time limit within its bounds', async () => {
-    const settings = agentSettingsForm({ enabled: true, runTimeoutMinutes: 30, claudeCodeLevel: 'standard', codexLevel: 'standard' })
+    const settings = agentSettingsForm({ enabled: true, runTimeoutMinutes: 30, fullAccessStartsAgents: true, claudeCodeLevel: 'standard', codexLevel: 'standard' })
     renderExternalAgents(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]) }), settings)
     await settle()
     const ask = screen.getByRole('switch', { name: en['agents.ask.title'] })
@@ -1408,8 +1408,30 @@ describe('the External agents section', () => {
     expect((limit as HTMLInputElement).value).toBe('90')
   })
 
+  it('turns Full access chats starting agents without asking off and on, and on a remote studio says turning it on needs the computer', async () => {
+    const settings = agentSettingsForm({ enabled: true, runTimeoutMinutes: 30, fullAccessStartsAgents: true, claudeCodeLevel: 'standard', codexLevel: 'standard' })
+    const view = renderExternalAgents(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]) }), settings)
+    await settle()
+    const full = screen.getByRole('switch', { name: en['agents.fullAccess.title'] })
+    expect(full.getAttribute('aria-checked')).toBe('true')
+    expect(screen.queryByText(en['agents.fullAccess.computerOnly'])).toBeNull()
+    fireEvent.click(full)
+    await settle()
+    expect(settings.set).toHaveBeenLastCalledWith('fullAccessStartsAgents', false)
+    fireEvent.click(screen.getByRole('switch', { name: en['agents.fullAccess.title'] }))
+    await settle()
+    expect(settings.set).toHaveBeenLastCalledWith('fullAccessStartsAgents', true)
+    view.unmount()
+    const off = agentSettingsForm({ enabled: true, runTimeoutMinutes: 30, fullAccessStartsAgents: false, claudeCodeLevel: 'standard', codexLevel: 'standard' })
+    renderExternalAgents(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: REMOTE }), off)
+    await settle()
+    const remote = screen.getByRole('switch', { name: en['agents.fullAccess.title'] })
+    expect(remote.hasAttribute('disabled') || remote.getAttribute('aria-disabled') === 'true').toBe(true)
+    expect(screen.getByText(en['agents.fullAccess.computerOnly'])).toBeTruthy()
+  })
+
   it('says a refused settings write was not saved and keeps the value the Host holds', async () => {
-    const settings = agentSettingsForm({ enabled: true, runTimeoutMinutes: 30, claudeCodeLevel: 'standard', codexLevel: 'standard' })
+    const settings = agentSettingsForm({ enabled: true, runTimeoutMinutes: 30, fullAccessStartsAgents: true, claudeCodeLevel: 'standard', codexLevel: 'standard' })
     settings.set.mockResolvedValueOnce(false)
     renderExternalAgents(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]) }), settings)
     await settle()
@@ -1420,7 +1442,7 @@ describe('the External agents section', () => {
   })
 
   it('on a remote studio, disables the external-agent settings and says turning the consent off needs the computer', async () => {
-    const settings = agentSettingsForm({ enabled: true, runTimeoutMinutes: 30, claudeCodeLevel: 'standard', codexLevel: 'standard' })
+    const settings = agentSettingsForm({ enabled: true, runTimeoutMinutes: 30, fullAccessStartsAgents: true, claudeCodeLevel: 'standard', codexLevel: 'standard' })
     renderExternalAgents(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: REMOTE }), settings)
     await settle()
     const ask = screen.getByRole('switch', { name: en['agents.ask.title'] })

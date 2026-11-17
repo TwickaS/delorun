@@ -724,9 +724,10 @@ type ReachCondition = (request: {
 }) => RemoteAccessDecision
 
 /**
- * A boolean setting only the home's own computer turns off, such as the external-agent consent: a device's
- * settings write to its namespace is refused, unlocked or not, unless it leaves the field a literal `true`. The plugin
- * that owns the field registers it with `HomeAuthService.registerComputerOnlySwitch` while it is mounted.
+ * A boolean setting only the home's own computer moves away from its safe value, such as the external-agent consent:
+ * a device's settings write to its namespace is refused, unlocked or not, unless it leaves the field a literal
+ * {@link ComputerOnlySwitch.safeValue}. The plugin that owns the field registers it with
+ * `HomeAuthService.registerComputerOnlySwitch` while it is mounted.
  */
 export interface ComputerOnlySwitch {
   /** The settings namespace, the id of the plugin's profile row. */
@@ -735,6 +736,12 @@ export interface ComputerOnlySwitch {
   readonly field: string
   /** What the field turns on, as the refusal names it, such as `the external-agent consent`. */
   readonly label: string
+  /**
+   * The one value a device may write, `true` when omitted. A field whose `true` loosens a restriction, such as the
+   * external-agent consent's `fullAccessStartsAgents`, names `false`, so a device can tighten it and only the computer
+   * can turn it on.
+   */
+  readonly safeValue?: boolean
   /**
    * For a field holding one of an ordered list of values, such as an external agent's safety level, instead of a
    * boolean: a device may write a value of equal or lower rank than the field's current value, and a looser value or a
@@ -759,12 +766,14 @@ export const EVERY_FIELD = '*'
 export const DANGEROUS_LIFTABLE_SWITCHES: ReadonlySet<string> = new Set(['delorun-delegation-consent'])
 
 /**
- * The reason a settings write that would turn a computer-only switch off is refused to a device, unlocked or not.
+ * The reason a settings write that would move a computer-only switch off its safe value is refused to a device,
+ * unlocked or not.
  * @param label - the switch's {@link ComputerOnlySwitch.label}.
- * @returns `loopback-required: turning <label> off`.
+ * @param safeValue - the switch's {@link ComputerOnlySwitch.safeValue}; the refusal names the other direction.
+ * @returns `loopback-required: turning <label> off`, or `on` for a switch whose safe value is `false`.
  */
-export function switchOffRefusal(label: string): string {
-  return `loopback-required: turning ${label} off`
+export function switchOffRefusal(label: string, safeValue = true): string {
+  return `loopback-required: turning ${label} ${safeValue ? 'off' : 'on'}`
 }
 
 /** The settings writes whose arguments the condition reads for a field only the computer lowers. */
@@ -780,18 +789,19 @@ function isObject(value: unknown): value is Readonly<Record<string, unknown>> {
 }
 
 /**
- * Whether one `settings/mutate` operation leaves a switch's field on: an operation on another field, or a `set` that
- * writes a literal `true` to it, directly or in the whole section.
+ * Whether one `settings/mutate` operation leaves a switch's field safe: an operation on another field, or a `set` that
+ * writes the literal safe value to it, directly or in the whole section.
  * @param field - the switch's field.
+ * @param safe - the switch's safe value.
  * @param op - the operation, as the call sent it.
- * @returns whether it keeps the switch on.
+ * @returns whether it keeps the switch safe.
  */
-function opKeepsSwitch(field: string, op: unknown): boolean {
+function opKeepsSwitch(field: string, safe: boolean, op: unknown): boolean {
   if (!isObject(op) || !Array.isArray(op.path)) return false
   const [head, ...rest] = op.path as unknown[]
-  if (head === undefined) return op.op === 'set' && isObject(op.value) && op.value[field] === true
+  if (head === undefined) return op.op === 'set' && isObject(op.value) && op.value[field] === safe
   if (head !== field) return true
-  return rest.length === 0 && op.op === 'set' && op.value === true
+  return rest.length === 0 && op.op === 'set' && op.value === safe
 }
 
 /**
@@ -811,9 +821,9 @@ function loosensRanked(action: RemoteAccessAction, args: Readonly<Record<string,
 }
 
 /**
- * Whether a settings write could turn a computer-only switch off. A write to another namespace never does; a write to
- * its namespace does unless its arguments name the field only as a literal `true`, and a `replace`, which rebuilds the
- * section, must name it so. Arguments the condition cannot read count as turning it off.
+ * Whether a settings write could move a computer-only switch off its safe value. A write to another namespace never
+ * does; a write to its namespace does unless its arguments name the field only as the literal safe value, and a
+ * `replace`, which rebuilds the section, must name it so. Arguments the condition cannot read count as moving it.
  * @param action - the settings write.
  * @param args - the call's arguments.
  * @param target - the switch.
@@ -822,16 +832,17 @@ function loosensRanked(action: RemoteAccessAction, args: Readonly<Record<string,
 function turnsSwitchOff(action: RemoteAccessAction, args: Readonly<Record<string, unknown>>, target: ComputerOnlySwitch): boolean {
   if (args.ns !== target.ns) return false
   const { field } = target
+  const safe = target.safeValue ?? true
   if (field === EVERY_FIELD) return true
   if (target.ranked !== undefined) return loosensRanked(action, args, field, target.ranked)
   switch (action) {
     case 'settings/mutate':
-      return !Array.isArray(args.ops) || !args.ops.every(op => opKeepsSwitch(field, op))
+      return !Array.isArray(args.ops) || !args.ops.every(op => opKeepsSwitch(field, safe, op))
     case 'settings/update':
-      return !isObject(args.patch) || (field in args.patch && args.patch[field] !== true)
+      return !isObject(args.patch) || (field in args.patch && args.patch[field] !== safe)
     default:
       // `settings/replace`, the only other member of SETTINGS_WRITES.
-      return !isObject(args.section) || args.section[field] !== true
+      return !isObject(args.section) || args.section[field] !== safe
   }
 }
 
@@ -1197,7 +1208,7 @@ export function createCondition(
       // when DANGEROUS_LIFTABLE_SWITCHES lists it: the remote-access settings stay at the computer.
       if (SETTINGS_WRITES.has(action)) {
         const off = facts.computerOnlySwitches().find(target => !(lifted && DANGEROUS_LIFTABLE_SWITCHES.has(target.ns) && target.ranked === undefined) && turnsSwitchOff(action, args, target))
-        if (off !== undefined) return { kind: 'deny', reason: off.ranked === undefined ? switchOffRefusal(off.label) : `loopback-required: loosening ${off.label}` }
+        if (off !== undefined) return { kind: 'deny', reason: off.ranked === undefined ? switchOffRefusal(off.label, off.safeValue) : `loopback-required: loosening ${off.label}` }
         // The settings of the gate, reach and sandbox rows stay as the computer set them: a write there replaces the row in effect.
         if (settingsOfComputerOnlyRow(facts, args)) return { kind: 'deny', reason: PROTECTED_ROW_REFUSAL }
         // The approval grace never covers a consent or guard row's settings: those need a code or a PIN page.

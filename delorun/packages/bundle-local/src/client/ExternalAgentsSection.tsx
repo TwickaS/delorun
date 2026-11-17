@@ -1,6 +1,6 @@
 /**
- * The External agents settings section: the switch that asks before an external agent such as Claude Code runs and its
- * run time limit, both written to the consent plugin's row through its Host settings form, then each agent allowed to
+ * The External agents settings section: the switch that asks before an external agent such as Claude Code runs, the
+ * switch that lets a Full access chat start one without asking, and the run time limit, each written to the consent plugin's row through its Host settings form, then each agent allowed to
  * start in a workspace without asking, with a one-click revoke that makes it ask again at its next start there. The
  * list and the revoke go to the home through the injected `fetch`; the home answers only its own computer, and the
  * section says in place on a remote studio that the answer is given at the computer. Each answer's outcome is one line
@@ -131,8 +131,8 @@ function AgentsGroup({ t, listing, busy, revoke }: GroupProps<GrantsAnswer> & { 
 }
 
 /**
- * The external-agent consent's switch and run time limit, written to the plugin's row. A remote studio cannot write
- * settings, so both are disabled there and the switch says that turning it off needs the home's own computer. The time
+ * The external-agent consent's two switches and run time limit, written to the plugin's row. A remote studio cannot write
+ * settings, so all are disabled there and each switch says which direction needs the home's own computer. The time
  * limit is written once the field loses focus or Enter is pressed, and only as a whole number of minutes within
  * {@link RUN_TIMEOUT_MINUTES}; any other entry goes back to the saved value.
  * @param props - the copy, the row's form and write state, whether the studio is remote, and the writer.
@@ -167,6 +167,15 @@ function AgentSettings({ t, form, mutation, remote, set }: {
         </div>
         <Switch checked={form.value.enabled} label={t('agents.ask.title')} disabled={disabled}
           onChange={(enabled) => { void set('enabled', enabled) }} />
+      </li>
+      <li className={css.row}>
+        <div className={css.details}>
+          <div className={css.title}>{t('agents.fullAccess.title')}</div>
+          <div className={css.description}>{t('agents.fullAccess.description')}</div>
+          {remote && !form.value.fullAccessStartsAgents ? <div className={css.description}>{t('agents.fullAccess.computerOnly')}</div> : null}
+        </div>
+        <Switch checked={form.value.fullAccessStartsAgents} label={t('agents.fullAccess.title')} disabled={disabled}
+          onChange={(fullAccessStartsAgents) => { void set('fullAccessStartsAgents', fullAccessStartsAgents) }} />
       </li>
       <li className={css.row}>
         <div className={css.details}>
