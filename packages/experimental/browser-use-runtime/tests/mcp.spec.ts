@@ -702,12 +702,16 @@ describe('Session MCP Loader composition', () => {
   it('lets the provider replace a call\'s arguments before the server sees them, or refuse the call', async () => {
     const { ctx, root } = await load({ prepareCall: async (call) => {
       const label = (call.arguments as { label: string }).label
-      return label === 'refused' ? 'Not readable.' : label === 'copy' ? { arguments: { label: 'copied' } } : undefined
+      if (label === 'throws') throw new Error('copy failed')
+      return label === 'refused' ? 'Not readable.' : label === 'copy' ? { arguments: { label: 'copied' }, note: 'Uploaded a copy.' } : undefined
     } })
     const { agent } = await ctx.agents.create({ sessionId: SessionId('prepared') })
     await warm(ctx, agent)
     expect(await visit(ctx, agent, 'refused')).toMatchObject({ isError: true, error: { message: 'Not readable.' } })
-    expect((await visit(ctx, agent, 'copy')).isError).toBe(false)
+    const copied = await visit(ctx, agent, 'copy')
+    expect(copied.isError).toBe(false)
+    expect(copied.content.at(-1)).toMatchObject({ type: 'text', text: 'Uploaded a copy.' })
+    expect((await visit(ctx, agent, 'throws')).isError).toBe(true)
     expect((await visit(ctx, agent, 'same')).isError).toBe(false)
     expect((await events(root)).filter(event => event.event === 'call').map(event => (event.arguments as { label: string }).label)).toEqual(['copied', 'same'])
   })

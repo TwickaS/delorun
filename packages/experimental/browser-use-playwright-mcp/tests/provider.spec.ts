@@ -342,7 +342,9 @@ it('copies a file the server would read from the chat\'s folder into the output 
   await writeFile(join(outputDirectory, 'earlier.png'), 'earlier')
   const prepare = (tool: string, args: unknown) => Provider.copyReadArguments({ tool, arguments: args, directory: chat, outputDirectory })
   const prepared = await prepare('browser_file_upload', { paths: ['photo.png', join(chat, 'photo.png'), join(outputDirectory, 'earlier.png')] })
-  const paths = (prepared as { arguments: { paths: string[] } }).arguments.paths
+  const { arguments: { paths }, note } = prepared as { arguments: { paths: string[] }; note: string }
+  expect(note).toContain('Delorun uploaded a copy of "photo.png" as')
+  expect(note).not.toContain('earlier.png')
   expect(paths).toHaveLength(3)
   for (const copy of paths.slice(0, 2)) {
     expect(copy.startsWith(outputDirectory)).toBe(true)

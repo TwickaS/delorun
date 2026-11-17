@@ -160,9 +160,10 @@ export interface SessionMcpOptions {
    * command can swap.
    * @param call - the call, as given to {@link refuseCall}.
    * @returns the model-visible refusal; or `arguments`, whose entries replace the same-named entries of the call's
-   * arguments; or `undefined` to send the call as it is.
+   * arguments, and the `note` that is added to the call's result so the model and the log show what the server got; or
+   * `undefined` to send the call as it is. A throw fails the call.
    */
-  prepareCall?: (call: BrowserToolCall) => Promise<string | { arguments: Record<string, unknown> } | undefined>
+  prepareCall?: (call: BrowserToolCall) => Promise<string | { arguments: Record<string, unknown>; note?: string } | undefined>
   /**
    * Check what a browser tool call left behind, after the server answered, such as a file saved outside the Session's
    * folder. A result it refuses is replaced by a failure with the returned text. It runs after failed calls too,
@@ -387,6 +388,19 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
           const sessionDirectory = await workingDirectory.ensure(agent, signal)
           // The call's logged arguments stay as the model sent them; the server gets the replacement.
           const replacements = new WeakMap<object, Record<string, unknown>>()
+          const notes = new WeakMap<object, string>()
+          // The registry rebuilds a wrapper's result from the tool body's own output, so the note joins the content
+          // the model sees at the post-execute step.
+          scope.ctx.on('tools/post-execute', async (exec, result, next) => {
+            const decision = await next()
+            const note = exec.agent === agent ? notes.get(exec) : undefined
+            if (note === undefined || decision.kind !== 'accept' || decision.content !== undefined) return decision
+            return {
+              kind: 'accept',
+              content: [...result.content, { type: 'text', text: note }],
+              ...decision.additionalContexts === undefined ? {} : { additionalContexts: decision.additionalContexts },
+            }
+          })
           scope.ctx.on('mcp-client/call-arguments', (serverName, _args, exec) =>
             serverName === options.name && exec.agent === agent ? replacements.get(exec) : undefined)
           const outputDirectory = options.outputRoot === undefined ? undefined : await sessionOutputDirectory(options.outputRoot, agent.id)
@@ -405,6 +419,7 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
             const prepared = await options.prepareCall?.(call)
             if (typeof prepared === 'string') return failure(prepared)
             if (prepared !== undefined) replacements.set(exec, { ...exec.arguments as Record<string, unknown>, ...prepared.arguments })
+            if (typeof prepared === 'object' && prepared.note !== undefined) notes.set(exec, prepared.note)
             if (options.checkResult === undefined) return next()
             const startedAt = Date.now()
             let result: ToolExecutionResult | undefined

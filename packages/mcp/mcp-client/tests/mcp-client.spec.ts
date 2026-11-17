@@ -402,6 +402,10 @@ describe('tool execution', () => {
     await executeToolFixture(ctx, { signal: testToolSignal, callId: ToolCallId('c2'), name: 'mcp__srv__echo', arguments: { msg: 'keep' } })
     expect(client.callTool).toHaveBeenNthCalledWith(1, { name: 'echo', arguments: { msg: 'swapped' } }, expect.anything())
     expect(client.callTool).toHaveBeenNthCalledWith(2, { name: 'echo', arguments: { msg: 'keep' } }, expect.anything())
+    ctx.on('mcp-client/call-arguments', (_serverName, args) => { if (args.msg === 'boom') throw new Error('no copy') })
+    const failed = await executeToolFixture(ctx, { signal: testToolSignal, callId: ToolCallId('c3'), name: 'mcp__srv__echo', arguments: { msg: 'boom' } })
+    expect(failed.isError).toBe(true)
+    expect(client.callTool).toHaveBeenCalledTimes(2)
   })
 
   it('sends the raw name for normalized public names', async () => {

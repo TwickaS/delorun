@@ -389,9 +389,12 @@ async function readableCopy(name: string, call: BrowserToolCall, folder: string,
  * Replace each path a call asks the server to read with a Host-made copy ({@link readableCopy}), so a link the chat
  * swaps in after the check is never followed by the server.
  * @param call - the call.
- * @returns the refusal, the replacement arguments, or `undefined` when the call reads no file or has no output folder.
+ * @returns the refusal, the replacement arguments with a note that names each original path, or `undefined` when
+ * the call reads no file or has no output folder.
  */
-export async function copyReadArguments(call: BrowserToolCall): Promise<string | { arguments: Record<string, unknown> } | undefined> {
+export async function copyReadArguments(
+  call: BrowserToolCall,
+): Promise<string | { arguments: Record<string, unknown>; note?: string } | undefined> {
   const reads = readNames(call)
   if (call.outputDirectory === undefined || reads === undefined) return undefined
   const folder = await realpath(call.directory)
@@ -401,7 +404,12 @@ export async function copyReadArguments(call: BrowserToolCall): Promise<string |
     if (copy === undefined) return unreadableMessage(name)
     copies.push(copy)
   }
-  return { arguments: { [reads.key]: reads.key === 'paths' ? copies : copies[0] } }
+  const originals = reads.names.map(name => resolve(call.directory, name))
+  const sent = reads.names.flatMap((name, index) => copies[index] === originals[index] ? [] : [`"${name}" as "${copies[index] ?? ''}"`])
+  const note = sent.length === 0
+    ? undefined
+    : `Delorun uploaded a copy of ${sent.join(', ')}, because Browser reads only its own copy of a file from this chat's folder.`
+  return { arguments: { [reads.key]: reads.key === 'paths' ? copies : copies[0] }, ...note === undefined ? {} : { note } }
 }
 
 /** The deepest folder level of the output folder's tree that {@link refuseWrittenOutside} looks through. */
