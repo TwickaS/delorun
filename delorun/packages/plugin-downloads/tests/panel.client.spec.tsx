@@ -85,6 +85,18 @@ describe('the desktop card', () => {
     expect(container.querySelector('section')).toBeNull()
   })
 
+  it('stays hidden for items the Host lists as finished when the page opens, after a reload or a restart', () => {
+    const source = createFakeDownloadsSource([item('a', { state: 'ready' }), item('b', { state: 'ready' })])
+    const { container } = render(<Card source={source} />)
+    expect(container.querySelector('section')).toBeNull()
+    act(() => { source.set([item('a', { state: 'ready' }), item('b', { state: 'ready' }), item('c', { state: 'installing' })]) })
+    expect(screen.getByRole('button', { name: /1 left to install/ })).toBeTruthy()
+    act(() => { source.set([item('a', { state: 'ready' }), item('b', { state: 'ready' }), item('c', { state: 'ready' })]) })
+    expect(screen.getByRole('button', { name: /3 plugins added/ })).toBeTruthy()
+    act(() => { vi.advanceTimersByTime(4001) })
+    expect(container.querySelector('section')).toBeNull()
+  })
+
   it('keeps a failure open until dismissed, with Retry and Remove', () => {
     const source = createFakeDownloadsSource([item('a', { state: 'failed', failure: { code: 'offline', message: 'No connection.' } }), item('b', { state: 'ready' })])
     const { container } = render(<Card source={source} />)

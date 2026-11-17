@@ -4,7 +4,8 @@
  */
 import { setTimeout as sleep } from 'node:timers/promises'
 import { describe, expect, it } from 'vitest'
-import { oneAtATime } from '../src/runner.ts'
+import { RuntimeStoreError } from '@delorun/runtime-store'
+import { failureOf, oneAtATime } from '../src/runner.ts'
 
 describe('the install turn', () => {
   it('runs calls one at a time, in the order they came', async () => {
@@ -47,5 +48,15 @@ describe('the install turn', () => {
     let ran = false
     await expect(turn(aborted.signal, async () => { ran = true })).rejects.toThrow('cancelled')
     expect(ran).toBe(false)
+  })
+})
+
+describe('the words of a failed install', () => {
+  it('says a busy store is a wait, and shows no path or process id for any other failure', () => {
+    const busy = new RuntimeStoreError('STORE_BUSY', '/home/x/runtimes/store.lock', 'process 39710 has held /home/x/runtimes/store.lock for longer than 30 seconds')
+    expect(failureOf(busy).message).toBe('Another plugin is being added. Try again in a moment.')
+    const other = failureOf(new Error('ENOENT: no such file /home/x/packs/current/y, pid 39710'))
+    expect(other.code).toBe('failed')
+    expect(other.message).not.toMatch(/\/home|39710/u)
   })
 })

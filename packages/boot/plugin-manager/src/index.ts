@@ -305,6 +305,7 @@ export function specPackageName(spec: string, dependencies: Readonly<Record<stri
 const PACK_RESTORE = 'this version holds the plugin pack from a registry or another folder, not from its pack folder; remove the pack first, then add it again from Plugins.'
 
 /** Why a pack is not installed into a Host an update has switched away from. */
+const PACK_CHANGED = 'The files of this plugin pack are missing or differ from the release\'s signed list. Add it again from Plugins or the setup guide.'
 const PACK_UPDATE_PENDING = 'Restart Delorun to finish the update before adding plugins: this Host runs the release before it.'
 
 const PACK_ONLY = 'This plugin is a signed plugin pack of this release; add it from Plugins or the setup guide, which downloads it from the release.'
@@ -707,6 +708,7 @@ export class PluginManager extends TypertRemoteService {
     if (!await packs.isPack(name)) return
     if (packs.linkSpec(name) !== spec) throw new ManagementFailure('operation-error', undefined, PACK_ONLY)
     if (!await packs.runsCurrentRelease()) throw new ManagementFailure('operation-error', undefined, PACK_UPDATE_PENDING)
+    if (packs.intact !== undefined && !await packs.intact(name)) throw new ManagementFailure('operation-error', undefined, PACK_CHANGED)
   }
 
   /**
