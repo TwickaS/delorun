@@ -24,8 +24,9 @@ import type {} from '@deepseek-ai/dsh-agent'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import type {} from '@deepseek-ai/dsh-user-approval'
+import { CLAUDE_SANDBOX_INSTALL_COMMAND } from '@deepseek-ai/dsh-subagent'
 import type {
-  DelegationConsentService, ExternalDelegationReview, ExternalDelegationVerdict,
+  DelegationConsentService, ExternalDelegationReview, ExternalDelegationVerdict, SubagentSafetyLevel,
 } from '@deepseek-ai/dsh-subagent'
 import { resolveDelorunHome, workspaceLocationHomes, workspaceLocationMessage, workspaceLocationProblem } from '@delorun/home'
 import { NO_WORKSPACE, workspaceKey } from '@delorun/plugin-permission-defaults/workspace'
@@ -34,8 +35,9 @@ import {
   readOnlyRefusal, storeRefusal,
 } from './copy.ts'
 import { changeGrantStore, grantOf, grantStorePath, problemOf, readGrantStore, withGrant, withoutGrant, type ExternalAgentGrant } from './store.ts'
-import type {
-  AllowWorkspaceAnswer, AllowWorkspaceRequest, DelegationRefusalCode, GrantsAnswer, GrantView, RevokeAnswer, RevokeRequest,
+import {
+  AGENT_LEVEL_FIELDS, type AgentLevel, type AgentLevelView, type AllowWorkspaceAnswer, type AllowWorkspaceRequest, type DelegationRefusalCode,
+  type GrantsAnswer, type GrantView, type LevelsAnswer, type RevokeAnswer, type RevokeRequest,
 } from './wire.ts'
 
 /** A surface call that recorded nothing, with the code its route answers. */
@@ -58,6 +60,10 @@ export interface ConsentOptions {
   readonly env: Readonly<Record<string, string | undefined>>
   /** The clock a new grant records. */
   readonly now: () => number
+  /** The level saved for a provider, read at each start and each listing so a saved change applies from the next run. */
+  readonly levelOf: (provider: keyof typeof AGENT_LEVEL_FIELDS) => AgentLevel
+  /** The tools Claude Code's command sandbox lacks on this computer, none when it can run. */
+  readonly missingSandboxTools: () => readonly string[]
 }
 
 /**
@@ -91,6 +97,27 @@ export class DelorunDelegationConsent extends Service implements DelegationConse
 
   describe(provider: string): string {
     return describeAgent(provider)
+  }
+
+  permissionLevel(provider: string): SubagentSafetyLevel | undefined {
+    return provider in AGENT_LEVEL_FIELDS ? this.options.levelOf(provider as keyof typeof AGENT_LEVEL_FIELDS) : undefined
+  }
+
+  /**
+   * Each external agent's level and, for Claude Code at a level that confines commands, what its sandbox lacks.
+   * @returns the agents, Claude Code first.
+   */
+  levels(): LevelsAnswer {
+    const missing = this.options.missingSandboxTools()
+    const view = (provider: keyof typeof AGENT_LEVEL_FIELDS): AgentLevelView => {
+      const level = this.options.levelOf(provider)
+      const confines = provider === 'claude-code' && (level === 'careful' || level === 'standard')
+      return {
+        provider, agent: agentName(provider), level,
+        ...confines && missing.length > 0 ? { sandboxMissing: { tools: missing, installCommand: CLAUDE_SANDBOX_INSTALL_COMMAND } } : {},
+      }
+    }
+    return { levels: [view('claude-code'), view('codex')] }
   }
 
   async review(review: ExternalDelegationReview): Promise<ExternalDelegationVerdict> {

@@ -423,6 +423,48 @@ describe('the external-agent consent\'s settings row', () => {
   })
 })
 
+describe('a ranked switch such as an external agent\'s safety level', () => {
+  const ns = 'delorun-delegation-consent'
+  const ORDER = ['careful', 'standard', 'own', 'unrestricted']
+  const LOOSER = { kind: 'deny', reason: 'loopback-required: loosening the Codex level' }
+  const ALLOW = { kind: 'allow' }
+  const at = (current: string, elevation = true) => {
+    const ranked: ComputerOnlySwitch = { ns, field: 'codexLevel', label: 'the Codex level', ranked: { order: ORDER, current: () => current } }
+    return createCondition(facts({ ...elevation ? { elevationOf: () => ({ id: 'elevation-1' }) } : {}, computerOnlySwitches: () => [ranked] }), DEVICE)
+  }
+  const write = (condition: ReturnType<typeof at>, action: string, args: Record<string, unknown>) =>
+    condition({ action: action as RemoteAccessAction, resource: GLOBAL, args: { ns, ...args } })
+
+  it('takes a device\'s write of an equal or lower rank and refuses a looser one, whatever the unlock', () => {
+    const now = at('own')
+    for (const level of ['careful', 'standard', 'own']) {
+      expect(write(now, 'settings/update', { patch: { codexLevel: level } }), level).toEqual(ALLOW)
+      expect(write(now, 'settings/mutate', { ops: [{ op: 'set', path: ['codexLevel'], value: level }] }), level).toEqual(ALLOW)
+      expect(write(now, 'settings/replace', { section: { codexLevel: level } }), level).toEqual(ALLOW)
+    }
+    expect(write(now, 'settings/update', { patch: { codexLevel: 'unrestricted' } })).toEqual(LOOSER)
+    expect(write(at('careful'), 'settings/update', { patch: { codexLevel: 'standard' } })).toEqual(LOOSER)
+    expect(write(at('careful', false), 'settings/update', { patch: { codexLevel: 'standard' } })).toEqual(LOOSER)
+    expect(write(at('unrestricted'), 'settings/update', { patch: { codexLevel: 'standard' } })).toEqual(ALLOW)
+  })
+
+  it('refuses a removal, an unlisted value, a value that is not text and arguments it cannot read', () => {
+    const now = at('own')
+    expect(write(now, 'settings/mutate', { ops: [{ op: 'unset', path: ['codexLevel'] }] })).toEqual(LOOSER)
+    expect(write(now, 'settings/replace', { section: { claudeCodeLevel: 'careful' } })).toEqual(LOOSER)
+    expect(write(now, 'settings/update', { patch: { codexLevel: 'anything' } })).toEqual(LOOSER)
+    expect(write(now, 'settings/update', { patch: { codexLevel: 3 } })).toEqual(LOOSER)
+    expect(write(now, 'settings/mutate', {})).toEqual(LOOSER)
+    expect(write(now, 'settings/update', { patch: { runTimeoutMinutes: 45 } })).toEqual(ALLOW)
+  })
+
+  it('is not lifted by dangerous mode', () => {
+    const ranked: ComputerOnlySwitch = { ns, field: 'codexLevel', label: 'the Codex level', ranked: { order: ORDER, current: () => 'careful' } }
+    const condition = createCondition(facts({ dangerousMode: () => true, computerOnlySwitches: () => [ranked] }), DEVICE)
+    expect(write(condition, 'settings/update', { patch: { codexLevel: 'unrestricted' } })).toEqual(LOOSER)
+  })
+})
+
 describe('a plugin-manager call that names a protected row', () => {
   const NEVER = { kind: 'deny', reason: PROTECTED_ROW_REFUSAL }
   const unlocked = (overrides: Partial<ReachAccessFacts> = {}) => createCondition(facts({ elevationOf: () => ({ id: 'elevation-1' }), ...overrides }), DEVICE)

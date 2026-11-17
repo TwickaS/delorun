@@ -730,7 +730,7 @@ export function applyConsents(ctx: Context, fetch: HostFetch): void {
     name: 'conversation.approval.action',
     id: EXTERNAL_AGENT_ACTION_ID,
     locale: CONSENTS_NS,
-    inject: (sessionId): ExternalAgentActionInjected => ({ sessionId, fetch }),
+    inject: (sessionId): ExternalAgentActionInjected => ({ sessionId, fetch, openLevels: () => { ctx.get('settingsShell')?.openSection(EXTERNAL_AGENTS_SECTION_ID) } }),
   }, ExternalAgentAction))
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({
     name: 'shell.overlay',

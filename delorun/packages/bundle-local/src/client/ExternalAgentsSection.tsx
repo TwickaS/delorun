@@ -8,13 +8,14 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { RUN_TIMEOUT_MINUTES, type DelegationConsentSettings } from '@delorun/plugin-delegation-consent/wire'
+import { RUN_TIMEOUT_MINUTES, type AgentLevelView, type DelegationConsentSettings } from '@delorun/plugin-delegation-consent/wire'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import { Button, Input, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { SettingsCard } from '@delorun/settings-controls'
-import { readAgentGrants, revokeAgentGrant, type GrantsAnswer, type GrantView } from './consents-api.ts'
+import { readAgentGrants, readAgentLevels, revokeAgentGrant, type GrantsAnswer, type GrantView } from './consents-api.ts'
+import { AgentLevels } from './AgentLevels.tsx'
 import { formatTime, listLine, readListing, type GroupProps, type Listing, type Translate } from './ConsentListing.tsx'
 import { consentFailureOf, consentFailureText } from './FullAccessConsent.tsx'
 import { useDangerousMode } from './dangerous-mode.ts'
@@ -59,10 +60,17 @@ export function ExternalAgentsSection({ t, fetch, useAgentSettings, useAgentSett
   const [busy, setBusy] = useState(false)
   const [outcome, setOutcome] = useState<{ readonly text: string; readonly failed: boolean } | undefined>()
 
+  const [levels, setLevels] = useState<readonly AgentLevelView[]>([])
+
   const refresh = useCallback(async (): Promise<void> => {
     setAgents(await readListing(t, () => readAgentGrants(fetch)))
   }, [fetch, t])
   useEffect(() => { void refresh() }, [refresh])
+  // The levels' sandbox facts come from the home; the saved levels come from the form, which updates at once.
+  const savedLevels = agentSettings.value === undefined ? '' : `${agentSettings.value.claudeCodeLevel}/${agentSettings.value.codexLevel}`
+  useEffect(() => {
+    void readAgentLevels(fetch).then(answer => { setLevels(answer?.levels ?? []) }, () => { setLevels([]) })
+  }, [fetch, savedLevels])
 
   const revokeAgent = async (grant: GrantView): Promise<void> => {
     setBusy(true)
@@ -88,6 +96,8 @@ export function ExternalAgentsSection({ t, fetch, useAgentSettings, useAgentSett
     {remote
       ? <p className={css.line} role="status">{t('agents.remote')} <code className={css.command}>{AGENTS_COMMAND}</code></p>
       : agents.kind === 'remote' ? <p className={css.line} role="status">{t('unlockHere')}</p> : null}
+    {agentSettings.value === undefined || agentSettings.status === 'unavailable' ? null : <AgentLevels t={t} saved={agentSettings.value} views={levels} remote={agents.kind === 'remote'}
+      disabled={agentSettingsMutation.busy || agentSettings.status !== 'ready' || !agentSettings.writable} set={(field, level) => setAgentSetting(field, level)} />}
     <AgentSettings t={t} form={agentSettings} mutation={agentSettingsMutation} remote={remote} set={setAgentSetting} />
     <SettingsCard title={t('agents.allowed.heading')} description={t('agents.allowed.description')} group="external-agents">
       <AgentsGroup t={t} listing={agents} busy={busy} revoke={revokeAgent} />

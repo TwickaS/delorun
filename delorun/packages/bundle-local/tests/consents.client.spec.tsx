@@ -14,7 +14,7 @@ import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { ConfigForm, ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { MCP_CONSENT_ROUTES } from '@delorun/plugin-mcp-consent/wire'
 import { PERMISSION_ROUTES } from '@delorun/plugin-permission-defaults/wire'
-import { DELEGATION_CONSENT_ROUTES, type DelegationConsentSettings, type GrantView } from '@delorun/plugin-delegation-consent/wire'
+import { DELEGATION_CONSENT_ROUTES, type DelegationConsentSettings, type GrantView, type LevelsAnswer } from '@delorun/plugin-delegation-consent/wire'
 import { en, zh } from '../src/client/consents-locales.ts'
 import { HostRequestError, type HostFetch } from '../src/client/host-api.ts'
 import { readServers, type WorkspaceAccess } from '../src/client/consents-api.ts'
@@ -27,6 +27,7 @@ import { FullAccessAction, type FullAccessActionProps } from '../src/client/Full
 import { agentOfferFor, ExternalAgentAction, type ExternalAgentActionProps } from '../src/client/ExternalAgentAction.tsx'
 import { createMcpReviewSource, McpServerReview, serverChangeText, type McpReviewSource, type McpServerReviewProps } from '../src/client/McpServerReview.tsx'
 import { McpWaitingNotice, type McpWaitingNoticeProps } from '../src/client/McpWaitingNotice.tsx'
+import { levelChipText } from '../src/client/AgentLevels.tsx'
 import { AGENTS_COMMAND, ExternalAgentsSection, type ExternalAgentsSectionProps } from '../src/client/ExternalAgentsSection.tsx'
 import { MCP_COMMAND, PermissionsSection, type PermissionsSectionProps } from '../src/client/PermissionsSection.tsx'
 import { OptIn } from '../src/client/opt-in.ts'
@@ -370,7 +371,7 @@ const SERVERS = (servers: readonly object[], accepted: readonly object[] = []): 
 function actionProps(host: ReturnType<typeof fakeHost>, overrides: Partial<FullAccessActionProps> = {}): FullAccessActionProps {
   return {
     t: makeTranslate(en), grants: 'full-access', toolName: 'bash', callId: undefined, allow: vi.fn(async () => {}),
-    answered: false, canAnswer: () => true, sessionId: 'chat-1', fetch: host.fetch, ...overrides,
+    answered: false, canAnswer: () => true, sessionId: 'chat-1', fetch: host.fetch, openLevels: vi.fn(), ...overrides,
   } as FullAccessActionProps
 }
 
@@ -686,7 +687,7 @@ describe('the approval card\'s external-agent action', () => {
       expect(button.disabled).toBe(true)
       fireEvent.click(button)
       await settle()
-      expect(host.received.map(request => request.key)).toEqual([`GET ${DELEGATION_CONSENT_ROUTES.grants}`])
+      expect(host.received.map(request => request.key)).toEqual([`GET ${DELEGATION_CONSENT_ROUTES.grants}`, `GET ${DELEGATION_CONSENT_ROUTES.levels}`])
       expect(props.allow).not.toHaveBeenCalled()
       unmount()
     }
@@ -705,7 +706,7 @@ describe('the approval card\'s external-agent action', () => {
     answerable = false
     fireEvent.click(screen.getByRole('button', { name: en['action.allowAgent'] }))
     await settle()
-    expect(host.received.map(request => request.key)).toEqual([`GET ${DELEGATION_CONSENT_ROUTES.grants}`])
+    expect(host.received.map(request => request.key)).toEqual([`GET ${DELEGATION_CONSENT_ROUTES.grants}`, `GET ${DELEGATION_CONSENT_ROUTES.levels}`])
     expect(props.allow).not.toHaveBeenCalled()
   })
 
@@ -726,7 +727,7 @@ describe('the approval card\'s external-agent action', () => {
     await settle()
     fireEvent.click(screen.getByRole('button', { name: en['action.allowAgent'] }))
     await settle()
-    expect(host.received.map(request => request.key)).toEqual([`GET ${DELEGATION_CONSENT_ROUTES.grants}`, `POST ${DELEGATION_CONSENT_ROUTES.allow}`])
+    expect(host.received.map(request => request.key)).toEqual([`GET ${DELEGATION_CONSENT_ROUTES.grants}`, `GET ${DELEGATION_CONSENT_ROUTES.levels}`, `POST ${DELEGATION_CONSENT_ROUTES.allow}`])
     expect(props.allow).not.toHaveBeenCalled()
   })
 
@@ -1342,8 +1343,43 @@ describe('the External agents section', () => {
     expect(rowOf('Claude Code')).toBeTruthy()
   })
 
+  it('shows each agent\'s level, writes a chosen one, and names the sandbox Claude Code lacks', async () => {
+    const settings = agentSettingsForm({ enabled: true, runTimeoutMinutes: 30, claudeCodeLevel: 'standard', codexLevel: 'careful' })
+    const levels: LevelsAnswer = { levels: [
+      { provider: 'claude-code', agent: 'Claude Code', level: 'standard', sandboxMissing: { tools: ['socat'], installCommand: 'sudo apt install bubblewrap socat' } },
+      { provider: 'codex', agent: 'Codex', level: 'careful' },
+    ] }
+    renderExternalAgents(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]), [`GET ${DELEGATION_CONSENT_ROUTES.levels}`]: { status: 200, body: levels } }), settings)
+    await settle()
+    const claude = screen.getByRole('group', { name: 'Claude Code' })
+    expect((within(claude).getByRole('radio', { name: /Standard/ }) as HTMLInputElement).checked).toBe(true)
+    expect((within(screen.getByRole('group', { name: 'Codex' })).getByRole('radio', { name: /Careful/ }) as HTMLInputElement).checked).toBe(true)
+    expect(claude.querySelector('[data-sandbox-missing]')?.textContent).toContain('sudo apt install bubblewrap socat')
+    fireEvent.click(within(claude).getByRole('radio', { name: /Careful/ }))
+    await settle()
+    expect(settings.set).toHaveBeenLastCalledWith('claudeCodeLevel', 'careful')
+    expect(en['levels.mcp']).toContain('MCP')
+  })
+
+  it('lets a remote studio only tighten a level', async () => {
+    const settings = agentSettingsForm({ enabled: true, runTimeoutMinutes: 30, claudeCodeLevel: 'own', codexLevel: 'own' })
+    renderExternalAgents(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: REMOTE }), settings)
+    await settle()
+    const claude = screen.getByRole('group', { name: 'Claude Code' })
+    expect((within(claude).getByRole('radio', { name: /Unrestricted/ }) as HTMLInputElement).disabled).toBe(true)
+    expect((within(claude).getByRole('radio', { name: /Careful/ }) as HTMLInputElement).disabled).toBe(false)
+    expect((within(claude).getByRole('radio', { name: /Your own settings/ }) as HTMLInputElement).disabled).toBe(false)
+  })
+
+  it('words the chip for a level, with the missing sandbox', () => {
+    const t = makeTranslate(en)
+    expect(levelChipText(t, { level: 'standard' })).toBe('Standard')
+    expect(levelChipText(t, { level: 'standard', sandboxMissing: { tools: ['socat'], installCommand: 'x' } })).toBe('Standard · no sandbox')
+    expect(levelChipText(t, { level: 'own' })).toBe('Your own settings')
+  })
+
   it('turns the external-agent consent off and on, and writes a whole run time limit within its bounds', async () => {
-    const settings = agentSettingsForm({ enabled: true, runTimeoutMinutes: 30 })
+    const settings = agentSettingsForm({ enabled: true, runTimeoutMinutes: 30, claudeCodeLevel: 'standard', codexLevel: 'standard' })
     renderExternalAgents(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]) }), settings)
     await settle()
     const ask = screen.getByRole('switch', { name: en['agents.ask.title'] })
@@ -1373,7 +1409,7 @@ describe('the External agents section', () => {
   })
 
   it('says a refused settings write was not saved and keeps the value the Host holds', async () => {
-    const settings = agentSettingsForm({ enabled: true, runTimeoutMinutes: 30 })
+    const settings = agentSettingsForm({ enabled: true, runTimeoutMinutes: 30, claudeCodeLevel: 'standard', codexLevel: 'standard' })
     settings.set.mockResolvedValueOnce(false)
     renderExternalAgents(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]) }), settings)
     await settle()
@@ -1384,7 +1420,7 @@ describe('the External agents section', () => {
   })
 
   it('on a remote studio, disables the external-agent settings and says turning the consent off needs the computer', async () => {
-    const settings = agentSettingsForm({ enabled: true, runTimeoutMinutes: 30 })
+    const settings = agentSettingsForm({ enabled: true, runTimeoutMinutes: 30, claudeCodeLevel: 'standard', codexLevel: 'standard' })
     renderExternalAgents(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: REMOTE }), settings)
     await settle()
     const ask = screen.getByRole('switch', { name: en['agents.ask.title'] })

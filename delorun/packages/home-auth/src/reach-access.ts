@@ -735,6 +735,17 @@ export interface ComputerOnlySwitch {
   readonly field: string
   /** What the field turns on, as the refusal names it, such as `the external-agent consent`. */
   readonly label: string
+  /**
+   * For a field holding one of an ordered list of values, such as an external agent's safety level, instead of a
+   * boolean: a device may write a value of equal or lower rank than the field's current value, and a looser value or a
+   * removal stays at the computer. Dangerous mode never lifts such a switch.
+   */
+  readonly ranked?: {
+    /** The values from the most to the least restricted; a value not listed counts as looser than all of them. */
+    readonly order: readonly string[]
+    /** The value the field holds now, read at each settings write. */
+    readonly current: () => string
+  }
 }
 
 /** The {@link ComputerOnlySwitch.field} that makes the whole namespace computer-only: a device writes none of its fields. */
@@ -784,6 +795,22 @@ function opKeepsSwitch(field: string, op: unknown): boolean {
 }
 
 /**
+ * Whether a settings write could loosen a ranked field: it removes the field, writes a value that is not a string or
+ * ranks above the current value, or has arguments the condition cannot read.
+ * @param action - the settings write.
+ * @param args - the call's arguments.
+ * @param field - the field.
+ * @param ranked - the switch's order and current value.
+ * @returns whether the write is refused to a device.
+ */
+function loosensRanked(action: RemoteAccessAction, args: Readonly<Record<string, unknown>>, field: string, ranked: NonNullable<ComputerOnlySwitch['ranked']>): boolean {
+  const rank = (value: string): number => ranked.order.includes(value) ? ranked.order.indexOf(value) : ranked.order.length
+  const current = rank(ranked.current())
+  return removesField(action, args, field)
+    || fieldWritten(action, args, field).some(value => typeof value !== 'string' || rank(value) > current)
+}
+
+/**
  * Whether a settings write could turn a computer-only switch off. A write to another namespace never does; a write to
  * its namespace does unless its arguments name the field only as a literal `true`, and a `replace`, which rebuilds the
  * section, must name it so. Arguments the condition cannot read count as turning it off.
@@ -796,6 +823,7 @@ function turnsSwitchOff(action: RemoteAccessAction, args: Readonly<Record<string
   if (args.ns !== target.ns) return false
   const { field } = target
   if (field === EVERY_FIELD) return true
+  if (target.ranked !== undefined) return loosensRanked(action, args, field, target.ranked)
   switch (action) {
     case 'settings/mutate':
       return !Array.isArray(args.ops) || !args.ops.every(op => opKeepsSwitch(field, op))
@@ -821,7 +849,7 @@ function liftsOf(facts: Pick<ReachAccessFacts, 'computerOnlySwitches'>, action: 
   const lifted = (field: string): SettingsLift => ({
     ns, field, written: fieldWritten(action, args, field).at(-1), ...removesField(action, args, field) ? { unset: true } : {},
   })
-  const switches = facts.computerOnlySwitches().filter(target => DANGEROUS_LIFTABLE_SWITCHES.has(target.ns) && turnsSwitchOff(action, args, target))
+  const switches = facts.computerOnlySwitches().filter(target => DANGEROUS_LIFTABLE_SWITCHES.has(target.ns) && target.ranked === undefined && turnsSwitchOff(action, args, target))
   return [...switches.map(target => lifted(target.field)), ...loosens ? [lifted('defaultPreset')] : []]
 }
 
@@ -1168,8 +1196,8 @@ export function createCondition(
       // and a command a device does not run stays unrun, so no unlock admits any of them. The mode lifts a switch only
       // when DANGEROUS_LIFTABLE_SWITCHES lists it: the remote-access settings stay at the computer.
       if (SETTINGS_WRITES.has(action)) {
-        const off = facts.computerOnlySwitches().find(target => !(lifted && DANGEROUS_LIFTABLE_SWITCHES.has(target.ns)) && turnsSwitchOff(action, args, target))
-        if (off !== undefined) return { kind: 'deny', reason: switchOffRefusal(off.label) }
+        const off = facts.computerOnlySwitches().find(target => !(lifted && DANGEROUS_LIFTABLE_SWITCHES.has(target.ns) && target.ranked === undefined) && turnsSwitchOff(action, args, target))
+        if (off !== undefined) return { kind: 'deny', reason: off.ranked === undefined ? switchOffRefusal(off.label) : `loopback-required: loosening ${off.label}` }
         // The settings of the gate, reach and sandbox rows stay as the computer set them: a write there replaces the row in effect.
         if (settingsOfComputerOnlyRow(facts, args)) return { kind: 'deny', reason: PROTECTED_ROW_REFUSAL }
         // The approval grace never covers a consent or guard row's settings: those need a code or a PIN page.

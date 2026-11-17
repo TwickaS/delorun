@@ -22,7 +22,7 @@ import { guardProfile, isExternalAgentPackage, modulePackage, targetPackageNames
 import { agentName, askText, askTextZh, describeAgent, noSandboxPolicyRefusal, notApprovedRefusal, noWorkspaceRefusal } from '../src/copy.ts'
 import { registerDelegationRoutes } from '../src/routes.ts'
 import { changeGrantStore, grantStorePath, parseGrantStore, problemOf, readGrantStore } from '../src/store.ts'
-import { DELEGATION_CONSENT_ROUTES, type DelegationConsentSettings } from '../src/wire.ts'
+import { DELEGATION_CONSENT_ROUTES, type AgentLevel, type DelegationConsentSettings } from '../src/wire.ts'
 
 const roots: string[] = []
 afterEach(() => {
@@ -75,7 +75,7 @@ async function mounted(options: {
   const agents = options.agents ?? []
   ctx.provide('agents', { get: (id: string) => agents.find(agent => agent.id === id) } as never)
   ctx.provide('subagents', { getProvider: (name: string) => options.providers?.[name] } as never)
-  await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 1_800_000, env: { DELORUN_HOME: paths.home }, now: () => 1_000 })
+  await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 1_800_000, env: { DELORUN_HOME: paths.home }, now: () => 1_000, levelOf: () => 'standard', missingSandboxTools: () => [] })
   return { ctx, consent: ctx.get('delegationConsent') as DelorunDelegationConsent, asks, ...paths }
 }
 
@@ -242,6 +242,28 @@ describe('the workspace grant', () => {
   })
 })
 
+describe('the safety levels', () => {
+  it('names the saved level of Claude Code and Codex at each start, and none for another provider', async () => {
+    const { consent } = await mounted()
+    expect([consent.permissionLevel('claude-code'), consent.permissionLevel('codex'), consent.permissionLevel('other')]).toEqual(['standard', 'standard', undefined])
+  })
+
+  it('lists both levels and says what Claude Code\'s sandbox lacks only where its level needs it', async () => {
+    const lacking = async (level: AgentLevel, tools: readonly string[]) => {
+      const ctx = new Context()
+      await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 1, env: {}, now: () => 1, levelOf: () => level, missingSandboxTools: () => tools })
+      return (ctx.get('delegationConsent') as DelorunDelegationConsent).levels().levels
+    }
+    expect((await lacking('standard', ['socat']))[0]).toEqual({
+      provider: 'claude-code', agent: 'Claude Code', level: 'standard', sandboxMissing: { tools: ['socat'], installCommand: 'sudo apt install bubblewrap socat' },
+    })
+    expect((await lacking('careful', ['bwrap']))[0]?.sandboxMissing?.tools).toEqual(['bwrap'])
+    expect((await lacking('own', ['socat']))[0]).not.toHaveProperty('sandboxMissing')
+    expect((await lacking('standard', []))[0]).not.toHaveProperty('sandboxMissing')
+    expect((await lacking('standard', ['socat']))[1]).toEqual({ provider: 'codex', agent: 'Codex', level: 'standard' })
+  })
+})
+
 describe('the grants file', () => {
   it.each([
     ['not an object', '[]'],
@@ -396,7 +418,7 @@ describe('mounting', () => {
     ctx.provide('loader', { entries: () => [{ id: 'e1', options: { id: 'subagent-codex', name: '@deepseek-ai/dsh-subagent-codex' } }] } as never)
     apply(ctx, configOf({ enabled: true, runTimeoutMinutes: 5 }))
     await vi.waitFor(() => { expect(ctx.get('delegationConsent')).toBeDefined() })
-    await vi.waitFor(() => { expect(routes).toHaveLength(3) })
+    await vi.waitFor(() => { expect(routes).toHaveLength(4) })
     expect(guards[0]?.({ name: 'plugin_manager', arguments: { action: 'set_plugin', target: 'e1', enabled: true } })).toBe(PLUGIN_MANAGER_REFUSAL)
     // The guard reads the running profile's saved dependencies.
     const { workspace: dir } = folders()
@@ -429,10 +451,31 @@ describe('mounting', () => {
     ctx.provide('homeAuth', { registerComputerOnlySwitch: (target: object) => { registered.push(target); return () => { removed += 1 } } } as never)
     // Pins the registration the reach policy reads: without it an unlocked device could turn the consent off.
     apply(ctx, configOf({ enabled: true }))
-    await vi.waitFor(() => { expect(registered).toEqual([{ ns: 'delorun-delegation-consent', field: 'enabled', label: 'the external-agent consent' }]) })
+    await vi.waitFor(() => { expect(registered).toHaveLength(3) })
     expect(registered[0]).toBe(EXTERNAL_AGENT_CONSENT_SWITCH)
     await ctx.fiber.dispose()
-    expect(removed).toBe(1)
+    expect(removed).toBe(3)
+  })
+
+  it('registers each agent\'s level as a ranked switch that reads the saved level at each settings write', async () => {
+    const ctx = new Context()
+    const registered: Array<{ field: string, label: string, ranked: { order: readonly string[], current: () => string } }> = []
+    ctx.provide('homeAuth', { registerComputerOnlySwitch: (target: never) => { registered.push(target); return () => {} } } as never)
+    const saved = { claudeCodeLevel: 'standard', codexLevel: 'own' }
+    apply(ctx, { ...configOf({ enabled: true }), claudeCodeLevel: { get: () => saved.claudeCodeLevel }, codexLevel: { get: () => saved.codexLevel } } as never)
+    await vi.waitFor(() => { expect(registered).toHaveLength(3) })
+    const [, claude, codex] = registered
+    expect([claude?.field, claude?.label, codex?.field, codex?.label]).toEqual(['claudeCodeLevel', 'the Claude Code level', 'codexLevel', 'the Codex level'])
+    expect(claude?.ranked.order).toEqual(['careful', 'standard', 'own', 'unrestricted'])
+    saved.codexLevel = 'careful'
+    expect([claude?.ranked.current(), codex?.ranked.current()]).toEqual(['standard', 'careful'])
+    await ctx.fiber.dispose()
+  })
+
+  it('defaults both levels to Standard and refuses an unknown level', () => {
+    const value = configOf({})
+    expect([value.claudeCodeLevel.get(), value.codexLevel.get()]).toEqual(['standard', 'standard'])
+    expect(() => configOf({ codexLevel: 'reckless' as never })).toThrow()
   })
 
   it('follows a saved change of either field without a restart', async () => {
@@ -443,7 +486,7 @@ describe('mounting', () => {
       const saved = { enabled: false, runTimeoutMinutes: 5 }
       const ctx = new Context()
       ctx.provide('sandboxPolicy', { resolve: () => ({ mode: 'workspace-write' }) } as never)
-      apply(ctx, { enabled: { get: () => saved.enabled }, runTimeoutMinutes: { get: () => saved.runTimeoutMinutes } })
+      apply(ctx, { enabled: { get: () => saved.enabled }, runTimeoutMinutes: { get: () => saved.runTimeoutMinutes }, claudeCodeLevel: { get: () => 'standard' }, codexLevel: { get: () => 'standard' } })
       expect(ctx.get('delegationConsent')).toBeUndefined()
 
       saved.enabled = true
@@ -636,7 +679,7 @@ describe('through the subagent runtime', () => {
     let answer: ApprovalOutcome = 'rejected'
     ctx.provide('approval', { request: () => Promise.resolve(answer), config: {}, overrideOf: () => undefined } as never)
     ctx.provide('sandboxPolicy', { resolve: () => ({ mode: 'workspace-write' }) } as never)
-    await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 60_000, env: { DELORUN_HOME: paths.home }, now: () => 1 })
+    await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 60_000, env: { DELORUN_HOME: paths.home }, now: () => 1, levelOf: () => 'standard', missingSandboxTools: () => [] })
     const parent = await parentChat(ctx, paths.workspace)
     const result = Promise.withResolvers<SubagentResult>()
     const start = vi.fn(() => Promise.resolve({ id: SessionId('run'), result: result.promise, dispose: () => Promise.resolve() }))
@@ -672,7 +715,7 @@ describe('through the approval service', () => {
     ctx.provide('sandboxPolicy', { resolve: () => ({ mode: 'danger-full-access' }) } as never)
     const answerer = vi.fn(() => Promise.resolve<ApprovalOutcome>('allowed-once'))
     ctx.on('approval/request', answerer)
-    await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 60_000, env: { DELORUN_HOME: paths.home }, now: () => 1 })
+    await ctx.plugin(DelorunDelegationConsent, { timeoutMs: () => 60_000, env: { DELORUN_HOME: paths.home }, now: () => 1, levelOf: () => 'standard', missingSandboxTools: () => [] })
     const session = ctx.sessions.create(SessionId(randomUUID()), { meta: { cwd: paths.workspace } })
     session.append('turn/start', { turn: 1 })
     const parent: Agent = { id: session.id, session } as never
