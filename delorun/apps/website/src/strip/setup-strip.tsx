@@ -1,6 +1,6 @@
 /**
  * The setup strip in "Make it yours": the page is a setup. The visitor changes the page's look with the studio's own
- * controls, sees the `delorun-theme` entry Delorun would write, sees the change listed as a setup version, and can go back
+ * controls, sees the `delorun-theme` entry that applies (the studio bundle's row until a change writes the profile's own), sees the change listed as a setup version, and can go back
  * by name. The look lives in the root element's attributes through the same store the header's control uses, so the two
  * never disagree; a change made with either one writes the entry and adds a version, as it would in the studio. Nothing
  * is stored. The page loads this module only as the section nears the screen and shows `still.tsx` until then, and with
@@ -15,8 +15,8 @@ import { KNOWN_ACCENTS, KNOWN_CONTRASTS, KNOWN_DENSITIES, KNOWN_LOOKS, type Acce
 import { en as studio } from '../../../../packages/plugin-theme/src/client/locales.ts'
 import { en as versionsCopy } from '../../../../packages/bundle-local/src/client/versions-locales.ts'
 import { STRIP_COPY } from './copy.ts'
-import { arrive, earlierLook, editedName, entryYaml, pressesTo, record, STOP_CONTRAST, versionRows, type EntryConfig, type StripState } from './model.ts'
-import { differenceName } from './names.ts'
+import { arrive, earlierLook, editedName, entryYaml, heldEntry, pressesTo, record, STOP_CONTRAST, versionRows, type EntryConfig, type StripState } from './model.ts'
+import { differenceName, storedAsLine } from './names.ts'
 import { centreOf, spread, type Point } from './spread.ts'
 import { Swatch } from './still.tsx'
 import css from './strip.module.css'
@@ -39,17 +39,26 @@ export function fill(template: string, fields: Readonly<Record<string, string>>)
   return template.replaceAll(/\{(\w+)\}/g, (whole, key: string) => fields[key] ?? whole)
 }
 
-/** The entry Delorun would write, or the sentence that stands in for it before the first change. */
+/**
+ * The entry that applies, with one line under it: the profile's own entry, or the studio bundle's row while the profile
+ * holds none; the line says which, or that the entry stores the theme under an id other than its name.
+ */
 function Entry({ entry, changes }: { readonly entry: EntryConfig | undefined; readonly changes: number }) {
-  if (entry === undefined) return <p className={css.empty}>{copy.entryEmpty}</p>
-  // A new key per change seats the new entry.
-  return <CodeBlock key={changes} className={css.seat} code={entryYaml(entry)} caption={copy.entryFile} copyLabel={copy.copyEntry} copiedLabel={copy.copied} failedLabel={copy.copyFailed} />
+  const held = heldEntry(entry)
+  const line = held.bundle ? copy.bundleNote : storedAsLine(held.config)
+  return (
+    <>
+      {/* A new key per change seats the new entry. */}
+      <CodeBlock key={changes} className={css.seat} code={entryYaml(held.config)} caption={held.bundle ? copy.bundleFile : copy.entryFile} copyLabel={copy.copyEntry} copiedLabel={copy.copied} failedLabel={copy.copyFailed} />
+      {line === undefined ? null : <p className={css.entryLine} data-strip-entry-line="">{line}</p>}
+    </>
+  )
 }
 
 /** The setup versions, newest first, as the studio's Setup versions section titles and groups them; every change here has the same title, so they collapse into one row with a count. */
 function Versions({ state }: { readonly state: StripState }) {
   const rows = versionRows(state.versions)
-  if (rows.length === 0) return <p className={css.empty}>{copy.versionsEmpty}</p>
+  if (rows.length === 0) return <p className={css.noVersions}>{versionsCopy.empty}</p>
   const time = new Intl.DateTimeFormat(versionsCopy['time.locale'], { timeStyle: 'short' })
   const title = fill(versionsCopy['version.settings'], { name: editedName() })
   return (
@@ -134,18 +143,20 @@ function StripBody({ look, state, onLook, announcement }: {
           <h3 className={css.label}>{copy.entry}</h3>
           <div className={css.entry}><Entry entry={state.entry} changes={state.versions.length} /></div>
         </section>
-        <section className={css.group} aria-label={versionsCopy.title}>
-          <div className={css.head}>
-            <h3 className={css.label}>{versionsCopy.title}</h3>
-            {earlier === undefined
-              ? null
-              : <Button variant="secondary" size="sm" onClick={() => { press({ ...earlier, scheme: look.scheme }) }}>{copy.back(differenceName(earlier, look))}</Button>}
+        <div className={css.side}>
+          <section className={css.group} aria-label={versionsCopy.title}>
+            <div className={css.head}>
+              <h3 className={css.label}>{versionsCopy.title}</h3>
+              {earlier === undefined
+                ? null
+                : <Button variant="secondary" size="sm" onClick={() => { press({ ...earlier, scheme: look.scheme }) }}>{copy.back(differenceName(earlier, look))}</Button>}
+            </div>
+            <div className={css.list}><Versions state={state} /></div>
+          </section>
+          <div className={css.notes}>
+            <p className={css.note}>{copy.backStudio}</p>
+            <p className={css.note}>{copy.backCovers}</p>
           </div>
-          <div className={css.list}><Versions state={state} /></div>
-        </section>
-        <div className={css.notes}>
-          <p className={css.note}>{copy.backStudio}</p>
-          <p className={css.note}>{copy.backCovers}</p>
         </div>
       </div>
       {/* A new key per change replaces the text, so the same sentence twice is announced twice. */}

@@ -93,20 +93,22 @@ export function SetupStripStill() {
               </figure>
             </div>
           </section>
-          <section className={css.group} aria-label={words.versions}>
-            <div className={css.head}><h3 className={css.label}>{words.versions}</h3></div>
-            <div className={css.list}>
-              <ol className={css.versions}>
-                <li className={css.version}>
-                  <span className={css.versionTitle}>{words.version}<span className={css.current}>{words.current}</span></span>
-                  <span className={css.versionLine}>{words.line}</span>
-                </li>
-              </ol>
+          <div className={css.side}>
+            <section className={css.group} aria-label={words.versions}>
+              <div className={css.head}><h3 className={css.label}>{words.versions}</h3></div>
+              <div className={css.list}>
+                <ol className={css.versions}>
+                  <li className={css.version}>
+                    <span className={css.versionTitle}>{words.version}<span className={css.current}>{words.current}</span></span>
+                    <span className={css.versionLine}>{words.line}</span>
+                  </li>
+                </ol>
+              </div>
+            </section>
+            <div className={css.notes}>
+              <p className={css.note}>{copy.backStudio}</p>
+              <p className={css.note}>{copy.backCovers}</p>
             </div>
-          </section>
-          <div className={css.notes}>
-            <p className={css.note}>{copy.backStudio}</p>
-            <p className={css.note}>{copy.backCovers}</p>
           </div>
         </div>
       </div>

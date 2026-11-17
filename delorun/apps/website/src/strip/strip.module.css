@@ -35,7 +35,7 @@
   min-width: 0;
 }
 
-/* The entry and the versions side by side on a wide screen, the notes under both. */
+/* The entry and the versions side by side on a wide screen, the notes under the versions. */
 .record {
   align-content: start;
   row-gap: var(--dl-space-5);
@@ -50,11 +50,17 @@
   min-height: 2rem;
 }
 
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dl-space-5);
+  min-width: 0;
+}
+
 .notes {
   display: flex;
   flex-direction: column;
   gap: var(--dl-space-2);
-  grid-column: 1 / -1;
 }
 
 .group {
@@ -75,27 +81,9 @@
   color: var(--dl-text);
 }
 
-/* The theme tiles: four to a row on a wide screen, one sideways row that snaps on a phone. */
+/* The theme tiles: all eight at once, four to a row at every width; on a phone the tiles are smaller. */
 .tiles {
   grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-@media (max-width: 1023px) {
-  .tiles {
-    grid-template-columns: none;
-    grid-auto-flow: column;
-    grid-auto-columns: 7.5rem;
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
-    scroll-snap-type: x mandatory;
-    scroll-padding-inline: var(--dl-space-1);
-    padding: var(--dl-space-1);
-    margin: calc(-1 * var(--dl-space-1));
-  }
-
-  .tiles > * {
-    scroll-snap-align: start;
-  }
 }
 
 .swatch {
@@ -143,21 +131,32 @@
   background: var(--look-accent);
 }
 
-/* The entry and the versions keep their room as they change, so nothing around them moves. */
+/* The entry grows downwards as keys are written; on a wide screen nothing sits under it. */
 .entry {
-  min-height: 15.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--dl-space-2);
+}
+
+.entryLine {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--dl-text-muted);
 }
 
 /* Every change of the Theme entry has the same title, so the studio's list collapses them into one row. */
 .list {
-  min-height: 5rem;
+  min-height: 4.5rem;
 }
 
-.empty {
+/* The studio's sentence for a profile with no versions, in the frame the list draws. */
+.noVersions {
   margin: 0;
-  padding: var(--dl-space-4);
-  border: 1px dashed var(--dl-border);
+  padding: var(--dl-space-3) var(--dl-space-4);
+  border: 1px solid var(--dl-border);
   border-radius: var(--dl-radius-md);
+  background: var(--dl-surface-raised);
   font-size: 14px;
   line-height: 1.5;
   color: var(--dl-text-muted);

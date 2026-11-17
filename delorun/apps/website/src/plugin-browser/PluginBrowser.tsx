@@ -1,12 +1,13 @@
 /**
  * The plugin browser: what a Delorun install holds, from the repository at build time, and the files a new plugin
- * starts with. Without scripts it is the full list as text; with scripts it is a list on the left, the chosen plugin's
- * detail on the right (beneath the chosen row on a phone), and a second tab for making your own.
+ * starts with. Without scripts it is the full list as a definition list; with scripts it is a list on the left that shows
+ * its first rows and a control for the rest, the chosen plugin's detail on the right (beneath the chosen row on a phone),
+ * and a second tab for making your own.
  *
  * @module @delorun/website/plugin-browser/PluginBrowser
  */
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
-import { Card, Link, Pill, TabList, TabPanel } from '@brand'
+import { Button, Card, Link, Pill, TabList, TabPanel } from '@brand'
 import { GITHUB_URL, DOCS_URL } from '../site/config.ts'
 import type { PluginEntry } from './list-plugins.ts'
 import css from './PluginBrowser.module.css'
@@ -54,47 +55,79 @@ function Make({ words }: { readonly words: PluginBrowserWords }) {
   )
 }
 
+/** How many rows the list shows before "Show all plugins". */
+const FIRST_ROWS = 8
+
+/**
+ * The list and the chosen plugin's detail. The list shows its first rows and a control for the rest; it never scrolls
+ * inside a box, so no row is cut. On a wide screen the detail stands beside the list from the start; on a phone it
+ * opens beneath a row once the row is chosen.
+ */
 function Plugins({ words }: { readonly words: PluginBrowserWords }) {
   const [selected, setSelected] = useState(PLUGINS[0]?.name)
+  const [opened, setOpened] = useState(false)
+  const [all, setAll] = useState(false)
+  const shown = all ? PLUGINS : PLUGINS.slice(0, FIRST_ROWS)
+  const focusRow = useRef<string | undefined>(undefined)
+  const select = (name: string, focus: boolean): void => {
+    setSelected(name)
+    setOpened(true)
+    if (PLUGINS.findIndex((plugin) => plugin.name === name) >= FIRST_ROWS) setAll(true)
+    focusRow.current = focus ? name : undefined
+  }
   const choose = (event: KeyboardEvent<HTMLUListElement>) => {
     const at = PLUGINS.findIndex((plugin) => plugin.name === selected)
     const next = event.key === 'ArrowDown' ? Math.min(at + 1, PLUGINS.length - 1) : event.key === 'ArrowUp' ? Math.max(at - 1, 0) : event.key === 'Home' ? 0 : event.key === 'End' ? PLUGINS.length - 1 : undefined
     const plugin = next === undefined ? undefined : PLUGINS[next]
     if (plugin === undefined) return
     event.preventDefault()
-    setSelected(plugin.name)
-    document.getElementById(`plugin-row-${plugin.name}`)?.focus()
+    select(plugin.name, true)
   }
-  // On a phone the detail opens under the row; a list that scrolls inside its box shows it whole.
-  const first = useRef(true)
+  const showAll = (): void => {
+    setAll(true)
+    focusRow.current = PLUGINS[FIRST_ROWS]?.name
+  }
+  // A row chosen by key, or the first row "Show all plugins" revealed, takes the focus once it is drawn.
   useEffect(() => {
-    if (first.current) { first.current = false; return }
-    document.querySelector(`.${css.inline}`)?.scrollIntoView?.({ block: 'nearest' })
-  }, [selected])
+    const name = focusRow.current
+    if (name === undefined) return
+    focusRow.current = undefined
+    document.getElementById(`plugin-row-${name}`)?.focus()
+  })
+  // On a phone the detail opens under the row; the page scrolls just enough to show it whole.
+  useEffect(() => {
+    if (opened) document.querySelector(`.${css.inline}`)?.scrollIntoView?.({ block: 'nearest' })
+  }, [selected, opened])
   const current = PLUGINS.find((plugin) => plugin.name === selected) ?? PLUGINS[0]
   return (
     <div className={css.split}>
-      <ul className={css.list} aria-label={words.listLabel} onKeyDown={choose}>
-        {STANDINGS.map((standing) => {
-          const group = PLUGINS.filter((plugin) => plugin.standing === standing)
-          return group.length === 0 ? null : (
-            <li key={standing}>
-              <h3 className={css.groupName}>{words.groups[standing]}</h3>
-              <ul className={css.group}>
-                {group.map((plugin) => {
-                  const on = plugin.name === current?.name
-                  return (
-                    <li key={plugin.name}>
-                      <button type="button" id={`plugin-row-${plugin.name}`} className={css.row} aria-current={on} data-selected={on} tabIndex={on ? 0 : -1} onClick={() => { setSelected(plugin.name) }}>{plugin.title}</button>
-                      {on ? <div className={css.inline}><Detail plugin={plugin} words={words} /></div> : null}
-                    </li>
-                  )
-                })}
-              </ul>
-            </li>
-          )
-        })}
-      </ul>
+      <div className={css.side}>
+        <ul className={css.list} aria-label={words.listLabel} onKeyDown={choose}>
+          {STANDINGS.map((standing) => {
+            const group = shown.filter((plugin) => plugin.standing === standing)
+            return group.length === 0 ? null : (
+              <li key={standing}>
+                <h3 className={css.groupName}>{words.groups[standing]}</h3>
+                <ul className={css.group}>
+                  {group.map((plugin) => {
+                    const on = plugin.name === current?.name
+                    return (
+                      <li key={plugin.name}>
+                        <button type="button" id={`plugin-row-${plugin.name}`} className={css.row} aria-current={on} data-open={on && opened} tabIndex={on ? 0 : -1} title={plugin.title}
+                          onClick={() => { select(plugin.name, false) }}>
+                          <span className={css.rowTitle}>{plugin.title}</span>
+                        </button>
+                        {on && opened ? <div className={css.inline}><Detail plugin={plugin} words={words} /></div> : null}
+                      </li>
+                    )
+                  })}
+                </ul>
+              </li>
+            )
+          })}
+        </ul>
+        {all ? null : <Button variant="secondary" size="sm" className={css.showAll} onClick={showAll}>{words.showAll(PLUGINS.length)}</Button>}
+      </div>
       <div className={`${css.detail} ${css.aside}`} aria-live="polite">{current === undefined ? null : <Detail plugin={current} words={words} />}</div>
     </div>
   )

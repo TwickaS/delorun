@@ -26,6 +26,8 @@ export interface PluginBrowserWords {
   /** The heading above what a pack needs. */
   readonly requiresHeading: string
   readonly requiresNothing: string
+  /** The control under the first rows that shows the rest of the list. */
+  readonly showAll: (count: number) => string
   /** The disclosure for plugin authors. */
   readonly filesSummary: string
   readonly filesCount: (count: number) => string
@@ -62,6 +64,7 @@ export const ENGLISH_WORDS: PluginBrowserWords = {
   experimental: 'Experimental',
   requiresHeading: 'What it needs from you',
   requiresNothing: 'Nothing to set up first.',
+  showAll: (count) => `Show all ${String(count)} plugins`,
   filesSummary: 'Files, for plugin authors',
   filesCount: (count) => `${String(count)} ${count === 1 ? 'file' : 'files'} in the repository.`,
   folderLink: 'Open the folder',

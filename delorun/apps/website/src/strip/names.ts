@@ -4,10 +4,10 @@
  *
  * @module website/strip/names
  */
-import type { Look } from '@design/looks.ts'
+import { KNOWN_LOOKS, type Look } from '@design/looks.ts'
 import { en as studio } from '../../../../packages/plugin-theme/src/client/locales.ts'
 import { STRIP_COPY } from './copy.ts'
-import { STOP_CONTRAST } from './model.ts'
+import { STOP_CONTRAST, storedPalette, type EntryConfig } from './model.ts'
 
 const copy = STRIP_COPY.en
 
@@ -32,4 +32,18 @@ export function differenceName(look: Look, other: Look): string {
   if (look.look === 'custom' && look.contrast !== other.contrast) return copy.contrastName(STOP_CONTRAST[look.contrast])
   if (look.density !== other.density) return copy.densityName(studio[`density.${look.density}`])
   return themeName(look)
+}
+
+/**
+ * The line that says an entry stores its theme under an id other than the theme's name, so the entry and the marked tile
+ * read as one choice.
+ * @param entry - the entry's config.
+ * @returns the line, such as "Berry is stored as t3-chat.", or undefined when the id is the name or no theme is stored.
+ */
+export function storedAsLine(entry: EntryConfig): string | undefined {
+  const id = storedPalette(entry)
+  const look = KNOWN_LOOKS.find(each => each === id)
+  if (look === undefined) return undefined
+  const name = studio[`palette.${look}`]
+  return name.toLowerCase() === look ? undefined : copy.storedAs(name, look)
 }
