@@ -55,13 +55,22 @@ describe('ring and words', () => {
     expect(screen.getByText('82%')).toBeTruthy()
   })
 
+  it('marks the ring near only from 80 percent', () => {
+    const { container } = render(<RowTrail {...row({ agentSeat: { ...seat, fiveHourPercent: 40 } })} />)
+    expect(container.querySelector('[data-near]')).toBeNull()
+  })
+
   it('says "Waiting for you" in words and offers Answer, which opens the chat', () => {
     const open = vi.fn()
     const values = { agentSeat: seat }
     render(<RowWords {...row(values)} awaitingApproval />)
     expect(screen.getByText('Claude Code · Waiting for you')).toBeTruthy()
-    render(<RowTrail {...row(values, open)} awaitingApproval />)
-    fireEvent.click(screen.getByRole('button', { name: 'Answer Fix export file date, Claude Code' }))
+    const keys = vi.fn()
+    render(<div onKeyDown={keys}><RowTrail {...row(values, open)} awaitingApproval /></div>)
+    const answer = screen.getByRole('button', { name: 'Answer Fix export file date, Claude Code' })
+    fireEvent.keyDown(answer, { key: 'Enter' })
+    expect(keys).not.toHaveBeenCalled()
+    fireEvent.click(answer)
     expect(open).toHaveBeenCalledOnce()
   })
 
@@ -72,6 +81,22 @@ describe('ring and words', () => {
       expect(wordsOf({ ...seat, state }, false, clock)).toEqual({ key })
     }
     expect(wordsOf({ ...seat, state: 'limit' }, true, clock)).toEqual({ key: 'row.waiting' })
+  })
+
+  it('says the limit with its reset time, or without one, and rings a reached limit', () => {
+    const limit = { ...noFigure, state: 'limit' } as const
+    const { unmount } = render(<RowWords {...row({ agentSeat: { ...limit, resetAt: 7 } })} />)
+    expect(screen.getByText(/Claude Code · .*T7/)).toBeTruthy()
+    unmount()
+    const bare = render(<RowWords {...row({ agentSeat: limit })} />)
+    expect(bare.container.querySelector('[data-limit]')).not.toBeNull()
+    bare.unmount()
+    render(<RowTrail {...row({ agentSeat: limit })} />)
+    expect(screen.getByRole('img', { name: 'Claude Code has reached its 5-hour limit' })).toBeTruthy()
+  })
+
+  it('fails loudly for a state the dictionary does not know', () => {
+    expect(() => wordsOf({ ...seat, state: 'gone' as never }, false, clock)).toThrow('unhandled seat state: gone')
   })
 
   it('renders nothing for an ordinary subagent', () => {

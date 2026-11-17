@@ -100,6 +100,7 @@ function StateCard({ seat, sessionId, t, client, copy, clock }: { readonly seat:
         <div className={css.row}>
           <Button variant="primary" size="sm" disabled={client === undefined || busy}
             onClick={() => {
+              /* v8 ignore next -- the button is disabled without a client; the guard narrows the type. */
               if (client === undefined) return
               setBusy(true)
               void client.resume(sessionId).finally(() => { setBusy(false) })
@@ -130,6 +131,7 @@ function StateCard({ seat, sessionId, t, client, copy, clock }: { readonly seat:
             <li key={model.id}>
               <Button variant={model.id === picker.planDefault ? 'primary' : 'outline'} size="sm" disabled={client === undefined || busy}
                 onClick={() => {
+                  /* v8 ignore next -- the button is disabled without a client; the guard narrows the type. */
                   if (client === undefined) return
                   setBusy(true)
                   void client.chooseModel(sessionId, model.id).finally(() => { setBusy(false) })

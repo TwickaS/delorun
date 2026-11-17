@@ -7,15 +7,18 @@ describe('registerLists', () => {
   it('registers a dictionary, the four menu positions and one line per hand-off tool', () => {
     const registered: { name: string; key?: string; id?: string }[] = []
     const openSession = vi.fn()
+    const clocks: string[] = []
     const ctx = {
       effect: (fn: () => unknown) => fn(),
       locale: { register: vi.fn() },
       uiWorkspace: { openSession },
       slots: {
         inject: (_name: string, fn: () => unknown) => fn(),
-        register: (options: { name: string; key?: string; id?: string; inject?: () => { openChild?: (p: string, c: string) => void } }) => {
+        register: (options: { name: string; key?: string; id?: string; inject?: () => { openChild?: (p: string, c: string) => void; clock?: (ms: number) => string } }) => {
           registered.push(options)
-          options.inject?.().openChild?.('lead', 'c1')
+          const injected = options.inject?.()
+          injected?.openChild?.('lead', 'c1')
+          if (injected?.clock !== undefined) clocks.push(injected.clock(0))
           return () => undefined
         },
       },
@@ -30,6 +33,8 @@ describe('registerLists', () => {
       'tool.call.toolview',
     ])
     expect(registered.filter(entry => entry.key !== undefined).map(entry => entry.key)).toEqual(Object.keys(HAND_OFF_TOOLS))
+    expect(clocks).toHaveLength(3)
+    expect(clocks.every(text => text !== '')).toBe(true)
     expect(openSession).toHaveBeenCalledWith({ parentSessionId: 'lead', childSessionId: 'c1', mode: 'continuable' })
   })
 })

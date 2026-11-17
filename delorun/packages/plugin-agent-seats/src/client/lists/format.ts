@@ -48,10 +48,10 @@ export interface RingSpec {
  * @returns the ring, or undefined when the program reported no 5-hour figure and has not hit its limit.
  */
 export function ringOf(seat: AgentSeatView): RingSpec | undefined {
-  const reached = seat.state === 'limit'
-  if (seat.fiveHourPercent === undefined && !reached) return undefined
-  const percent = reached ? 100 : Math.min(100, Math.max(0, Math.round(seat.fiveHourPercent ?? 0)))
-  return { percent, reached, near: percent >= 80 }
+  if (seat.state === 'limit') return { percent: 100, reached: true, near: true }
+  if (seat.fiveHourPercent === undefined) return undefined
+  const percent = Math.min(100, Math.max(0, Math.round(seat.fiveHourPercent)))
+  return { percent, reached: false, near: percent >= 80 }
 }
 
 /** The state words of a seat row, as dictionary keys with their values. */

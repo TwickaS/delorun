@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 /** The banner, composer line and approval card read what the Host's `agentSeat` projection says. */
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { UseProjection } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { SessionProjectionMap } from '@deepseek-ai/dsh-session-projection/types'
-import { allowedForRunDecision, createSeatClient, SEAT_ROUTES, Banner, ComposerNote, en, SeatApproval, selectSeatApproval, type AgentSeatView, type SeatClient } from '../src/client/index.ts'
+import { agentOfTool, allowedForRunDecision, createSeatClient, SEAT_ROUTES, Banner, ComposerNote, en, SeatApproval, selectSeatApproval, type AgentSeatView, type SeatClient } from '../src/client/index.ts'
 
 afterEach(cleanup)
 
@@ -20,6 +20,8 @@ function hooks(seat: AgentSeatView | undefined) {
 }
 
 const base: AgentSeatView = { agent: 'claude-code', version: '2.3.14', ownSettings: 'accept edits', sandbox: 'off', state: 'working', plan: 'Max', fiveHourPercent: 82, fiveHourResetAt: 1410, weeklyPercent: 46 }
+const { fiveHourResetAt: _reset, ...noReset } = base
+const { fiveHourPercent: _figure, fiveHourResetAt: _resetAt, ...noFigures } = base
 const copy = vi.fn(() => Promise.resolve())
 const client = (): SeatClient => ({
   resume: vi.fn(() => Promise.resolve()), chooseModel: vi.fn(() => Promise.resolve()),
@@ -116,6 +118,83 @@ describe('states', () => {
   })
 })
 
+describe('the opening card chips', () => {
+  it('leaves out the facts the program did not report', () => {
+    banner({ agent: 'codex', ownSettings: 'default', sandbox: 'off', state: 'working' })
+    expect(screen.queryByText(/Plan:/)).toBeNull()
+    expect(screen.queryByText(/5-hour/)).toBeNull()
+    expect(screen.queryByText(/Weekly/)).toBeNull()
+    expect(screen.queryByText(/Codex 1/)).toBeNull()
+    expect(screen.getByText('Own settings: default')).toBeTruthy()
+  })
+
+  it('says the 5-hour figure without a reset time and warns at 80 percent and above', () => {
+    const { container } = banner({ ...noReset, fiveHourPercent: 40, weeklyPercent: 90 })
+    expect(screen.getByText('5-hour limit 40%')).toBeTruthy()
+    const warned = [...container.querySelectorAll('li')].filter(item => item.className.includes('chipWarn')).map(item => item.textContent)
+    expect(warned).toEqual(['Delorun sandbox: off', 'Weekly 90%'])
+  })
+
+  it('shows the meter and the figure on the collapsed line only when a 5-hour figure exists', () => {
+    const { container, unmount } = banner({ ...base, turns: 1, fiveHourPercent: 150 })
+    expect(container.querySelector('[role="img"]')?.querySelector('span')?.getAttribute('style')).toContain('100%')
+    unmount()
+    const other = banner({ ...noFigures, turns: 2, sandboxUnavailable: true })
+    expect(other.container.querySelector('[role="img"]')).toBeNull()
+    expect(screen.getByText('Standard · no sandbox')).toBeTruthy()
+  })
+})
+
+describe('state cards without actions to press', () => {
+  it('shows a limit without a reset time and keeps Resume disabled while the request runs', async () => {
+    let finish: () => void = () => undefined
+    const c: SeatClient = { resume: vi.fn(() => new Promise<void>((resolve) => { finish = resolve })), chooseModel: vi.fn(() => Promise.resolve()) }
+    banner({ ...base, state: 'limit' }, c)
+    const resume = screen.getByText('Resume').closest('button') as HTMLButtonElement
+    fireEvent.click(resume)
+    await waitFor(() => { expect(resume.disabled).toBe(true) })
+    finish()
+    await waitFor(() => { expect(resume.disabled).toBe(false) })
+    expect(c.resume).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows no model picker without offers, and no card while the agent works', () => {
+    const { container } = banner({ ...base, state: 'model-needed' })
+    expect(container.querySelector('[data-state]')).toBeNull()
+    cleanup()
+    const working = banner({ ...base, state: 'idle' })
+    expect(working.container.querySelector('[data-state]')).toBeNull()
+  })
+
+  it('disables the model buttons without actions and while a choice is sent', async () => {
+    const picker = { offered: [{ id: 'a', label: 'Model A' }, { id: 'b', label: 'Model B' }], planDefault: 'a' }
+    banner({ ...base, state: 'model-needed', modelPicker: picker }, undefined)
+    expect((screen.getByText('Use Model A').closest('button') as HTMLButtonElement).disabled).toBe(true)
+    cleanup()
+    let finish: () => void = () => undefined
+    const c: SeatClient = { resume: vi.fn(() => Promise.resolve()), chooseModel: vi.fn(() => new Promise<void>((resolve) => { finish = resolve })) }
+    banner({ ...base, state: 'model-needed', modelPicker: picker }, c)
+    const choose = screen.getByText('Use Model B').closest('button') as HTMLButtonElement
+    fireEvent.click(choose)
+    await waitFor(() => { expect(choose.disabled).toBe(true) })
+    finish()
+    await waitFor(() => { expect(choose.disabled).toBe(false) })
+  })
+
+  it('shows the parting notice without a reason', () => {
+    banner({ ...base, state: 'ended' })
+    expect(screen.getByText('Claude Code has left this chat')).toBeTruthy()
+  })
+
+  it('shows Copy again when the clipboard refuses', async () => {
+    const refusing = vi.fn(() => Promise.reject(new Error('denied')))
+    render(<Banner sessionId="s1" useProjection={hooks({ ...base, state: 'not-signed-in' })} t={t} client={client()} copy={refusing} clock={clock} />)
+    fireEvent.click(screen.getByText('Copy command'))
+    await waitFor(() => { expect(refusing).toHaveBeenCalled() })
+    expect(screen.getByText('Copy command')).toBeTruthy()
+  })
+})
+
 describe('the approval card', () => {
   const pending = (answer = vi.fn(() => Promise.resolve())) => ({ kind: 'approval', grants: 'external-agent', toolName: 'claude_code.Bash', runScope: 'external-agent-run', reason: 'git push origin fix', answerable: true, answer }) as never
   const reach = (kind: 'computer' | 'locked-phone' | 'unlocked-phone') => {
@@ -171,6 +250,38 @@ describe('the approval card', () => {
     expect(screen.getByText('Reject')).toBeTruthy()
     fireEvent.click(screen.getByText('Unlock to answer'))
     expect(source.openUnlock).toHaveBeenCalled()
+  })
+
+  it('counts the page as the computer without a reach source, and names Codex records', () => {
+    const answer = vi.fn(() => Promise.resolve())
+    const codex = { ...(pending(answer) as object), toolName: 'codex.commandExecution', reason: undefined } as never
+    const { unmount } = render(<SeatApproval matched={codex} t={t} reach={undefined} clock={clock} />)
+    expect(screen.getByText('Allow once')).toBeTruthy()
+    expect(screen.queryByText('git push origin fix')).toBeNull()
+    expect(agentOfTool('codex.commandExecution')).toBe('codex')
+    expect(agentOfTool('claude_code.Bash')).toBe('claude-code')
+    unmount()
+  })
+
+  it('lets a person answer again when the answer fails, and sends nothing for an unanswerable card', async () => {
+    const failing = vi.fn(() => Promise.reject(new Error('gone')))
+    const { unmount } = render(<SeatApproval matched={pending(failing)} t={t} reach={reach('computer')} clock={clock} />)
+    fireEvent.click(screen.getByText('Allow once'))
+    await waitFor(() => { expect((screen.getByText('Allow once').closest('button') as HTMLButtonElement).disabled).toBe(false) })
+    fireEvent.click(screen.getByText('Allow once'))
+    expect(failing).toHaveBeenCalledTimes(2)
+    unmount()
+    const quiet = vi.fn(() => Promise.resolve())
+    render(<SeatApproval matched={{ ...(pending(quiet) as object), answerable: false } as never} t={t} reach={reach('computer')} clock={clock} />)
+    fireEvent.click(screen.getByText('Reject'))
+    expect(quiet).not.toHaveBeenCalled()
+  })
+
+  it('says nothing about the end of an unlock that has none', () => {
+    const standing = { kind: 'unlocked-phone' } as const
+    const open = { get: () => standing, subscribe: () => () => undefined, openUnlock: vi.fn() }
+    render(<SeatApproval matched={pending()} t={t} reach={open} clock={clock} />)
+    expect(screen.queryByText(/unlocked until/)).toBeNull()
   })
 
   it('tells an unlocked phone when its unlock ends and offers every answer', () => {

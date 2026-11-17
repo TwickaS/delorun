@@ -39,4 +39,31 @@ describe('seat record cards', () => {
   it('marks a tool error as failed without an exit code', () => {
     expect(toolCard({ name: 'codex.mcpToolCall', argsRaw: '{}', result: done('boom', true) }).state).toBe('failed')
   })
+
+  it('reads the other argument names and program spellings of each look', () => {
+    expect(toolCard({ name: 'codex.shell', argsRaw: '{"cmd":"ls -a"}', result: null })).toMatchObject({ kind: 'ran', subject: 'ls -a' })
+    expect(toolCard({ name: 'claude_code.Bash', argsRaw: '{}', result: null }).subject).toBe('Bash')
+    expect(toolCard({ name: 'claude_code.Glob', argsRaw: '{"query":"*.ts","glob":"src"}', result: null })).toMatchObject({ kind: 'searched', subject: '*.ts', where: 'src', matches: null })
+    expect(toolCard({ name: 'codex.webSearch', argsRaw: '{"term":"vitest"}', result: null })).toMatchObject({ kind: 'searched', subject: 'vitest' })
+    expect(toolCard({ name: 'codex.search', argsRaw: '{}', result: null })).toMatchObject({ kind: 'searched', subject: 'search', where: null })
+    expect(toolCard({ name: 'claude_code.Write', argsRaw: '{"path":"b.ts","content":"one"}', result: null })).toMatchObject({ kind: 'edited', subject: 'b.ts', diff: { added: 1, removed: 0 } })
+    expect(toolCard({ name: 'claude_code.MultiEdit', argsRaw: '{}', result: null })).toMatchObject({ kind: 'edited', subject: 'MultiEdit', diff: { added: 0, removed: 0 } })
+    expect(toolCard({ name: 'codex.fileChange', argsRaw: '{"file_path":"c.ts","new_string":"","old_string":"a\\nb"}', result: null })).toMatchObject({ kind: 'edited', diff: { added: 0, removed: 2 } })
+  })
+
+  it('counts a search\'s non-empty output lines, and none for an empty output', () => {
+    expect(toolCard({ name: 'claude_code.Grep', argsRaw: '{}', result: done('a\n\nb\n') }).matches).toBe(2)
+    expect(toolCard({ name: 'claude_code.Grep', argsRaw: '{}', result: done('') }).matches).toBe(0)
+  })
+
+  it('reads an exit line in either spelling and fails only on a non-zero code', () => {
+    expect(toolCard({ name: 'claude_code.Bash', argsRaw: '{}', result: done('ok\nexit code: 0') })).toMatchObject({ state: 'ok', exitCode: 0 })
+    expect(toolCard({ name: 'claude_code.Bash', argsRaw: '{}', result: done('exit -2') })).toMatchObject({ state: 'failed', exitCode: -2 })
+    expect(toolCard({ name: 'claude_code.Bash', argsRaw: '{}', result: done('no code') })).toMatchObject({ state: 'ok', exitCode: null })
+  })
+
+  it('keeps an unrecorded duration null and treats non-object JSON as no arguments', () => {
+    expect(toolCard({ name: 'claude_code.Bash', argsRaw: '{}', result: done('x', false, null) }).seconds).toBeNull()
+    expect(toolCard({ name: 'claude_code.Bash', argsRaw: 'null', result: null }).subject).toBe('Bash')
+  })
 })
