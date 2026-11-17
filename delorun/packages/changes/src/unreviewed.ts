@@ -23,7 +23,7 @@ import { isPluginRequest } from './install-actions.ts'
 import { leftOutOf, newestDecided } from './left-out.ts'
 import { readLinks } from './link.ts'
 import { activeDirectory, CHANGES_ENTRIES, profileChangesDirectory } from './paths.ts'
-import { approvedOf, findEntry, readActiveRecord, readApproved, readChangeLog, readProtection, readWorkSession, withEntry, writeActiveRecord, writeApproved, writeChangeLog } from './records.ts'
+import { approvedOf, findEntry, readActiveRecord, readApproved, readChangeLog, readProtection, readWorkSession, withEntry, withoutDecision, writeActiveRecord, writeApproved, writeChangeLog } from './records.ts'
 import type { ActiveRecord, ApprovedRecord, ChangeEntry, ChangeId, ChangeLog, ContentVersion, LeftOut } from './types.ts'
 import { referenceRelease } from './tree.ts'
 
@@ -252,7 +252,7 @@ async function commitUnreviewed(ctx: ChangesContext, plugin: string, reload: Rel
   await writeActiveRecord(ctx.home, ctx.profile, activeBefore)
   await recordVersion(ctx, `Went back: ${entry.id} failed to load`)
   const lastFailure: LeftOut = { at: timeOf(ctx), failure: outcome.error }
-  const { decidedAt: _decidedAt, decidedFrom: _decidedFrom, historyVersion: _historyVersion, ...undecided } = applied
+  const { historyVersion: _historyVersion, ...undecided } = withoutDecision(applied)
   const failed: ChangeEntry = { ...undecided, state: 'pending', lastFailure }
   await writeChangeLog(ctx.home, ctx.profile, withEntry(log, failed))
   const again = await reload()

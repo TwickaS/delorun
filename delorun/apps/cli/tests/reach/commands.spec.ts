@@ -12,7 +12,7 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import type { DeviceId, StudioAddress } from '@delorun/contract-admission'
 import type { RuntimeVersion } from '@delorun/contract-home-layout'
 import type { Base64Url } from '@delorun/contract-device-approval'
-import { HomeAuth, readPhonePowers, type DeviceSummary } from '@delorun/home-auth'
+import { HomeAuth, readPhonePowers, recordUpgradePhonePowers, writePhonePowers, type DeviceSummary } from '@delorun/home-auth'
 import { acquireHomeLock, newStartId, runDirectory } from '@delorun/home'
 import type { ResponseLine, UnsignedRequest } from '@delorun/home-process'
 import { chooseListenerPort, type TailscaleResult, type TailscaleRunner } from '@delorun/reach'
@@ -740,6 +740,32 @@ describe('setup\'s reach section', () => {
     // Applying again keeps the port chosen once.
     await section.apply({ home: delorunHome, env: {}, directory, secret: undefined }, answers)
     expect(readReachRow(delorunHome, 'default').listenerPort).toBe(row.listenerPort)
+  })
+
+  it('starts the Phone powers question on the home\'s recorded level, so Enter keeps it; Careful only without one', async () => {
+    const secrets = join(delorunHome, 'secrets', 'home-auth')
+    mkdirSync(secrets, { recursive: true, mode: 0o700 })
+    const ask = async (powersDraft: unknown = draft): Promise<string[]> => {
+      const initials: string[] = []
+      // Enter takes the selected level: the stand-in answers with it.
+      const enter = { ...io([true, false], [], initials) as object, select: (_message: string, _options: unknown, initial: string) => { initials.push(initial); return Promise.resolve(initial) } } as never
+      const answered = await reachSection(tailscale(), () => false).ask(enter, powersDraft as never, { home: delorunHome, profile: 'new' } as never)
+      expect(answered).toMatchObject({ answers: { phonePowers: initials[0] } })
+      return initials
+    }
+    // A new profile in a home whose person chose Full, or whose first start recorded Full, starts on Full.
+    await writePhonePowers(secrets, 'full')
+    expect(await ask()).toEqual(['full'])
+    rmSync(join(secrets, 'phone-powers.json'))
+    await recordUpgradePhonePowers(secrets, 'full')
+    expect(await ask()).toEqual(['full'])
+    // An earlier answer still comes first.
+    expect(await ask({ ...draft as object, answers: { reach: { option: 'none', identityFactor: null }, phonePowers: 'careful' } })).toEqual(['careful'])
+    // A record that cannot be read never starts above Careful, and neither does a home with none.
+    writeFileSync(join(secrets, 'phone-powers.json'), 'not json', { mode: 0o600 })
+    expect(await ask()).toEqual(['careful'])
+    rmSync(join(secrets, 'phone-powers.json'))
+    expect(await ask()).toEqual(['careful'])
   })
 
   it('leaves remote access off when the person says no, goes back, or a check fails', async () => {

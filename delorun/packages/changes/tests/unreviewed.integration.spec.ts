@@ -84,6 +84,9 @@ describe('a live reload with protection off', () => {
     const host = reloads({ ok: false, error: 'SyntaxError: nope' }, { ok: true })
     const sync = await loadUnreviewed(ctx, 'plug', host.reload)
     expect(sync).toMatchObject({ kind: 'went-back', plugin: 'plug', failure: 'SyntaxError: nope', again: { ok: true }, entry: { state: 'pending', lastFailure: { at: NOW.toISOString(), failure: 'SyntaxError: nope' } } })
+    // The entry goes back to pending with no decision: neither when, where nor on which device, nor a history version.
+    if (sync.kind !== 'went-back') throw new Error(`expected went-back, got ${sync.kind}`)
+    for (const field of ['decidedAt', 'decidedFrom', 'decidedOn', 'historyVersion']) expect(sync.entry, field).not.toHaveProperty(field)
     expect(host.calls()).toBe(2)
     expect(await approvedVersion(fx, 'plug')).toBe(approved)
     expect(await holdsVersion(fx.home, activeDirectory(fx.home, PROFILE, 'plug'), approved)).toBe(true)
