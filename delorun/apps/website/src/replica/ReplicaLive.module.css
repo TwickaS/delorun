@@ -1,0 +1,51 @@
+/* The replica's frame, caption and rail. Brand tokens only. */
+.replica { display: grid; gap: var(--dl-space-3); min-width: 0; }
+
+.panel { display: grid; gap: var(--dl-space-3); min-width: 0; border-radius: var(--dl-radius-md); }
+
+/* No child may widen the replica past its column; a wide slot scrolls inside it instead. */
+.replica > *, .panel > *, .frames > * { min-width: 0; }
+
+.panel:focus-visible { outline: var(--dl-focus-ring); outline-offset: var(--dl-focus-ring-offset); }
+
+/* Two lines are reserved, so a longer caption never moves what follows. */
+.caption {
+  min-height: 3em;
+  margin: 0;
+  color: var(--dl-text-muted);
+  font-size: 14px;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.replica[data-width='phone'] .caption { min-height: 4.5em; }
+
+.controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--dl-space-2); }
+
+.rail { min-width: 0; max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
+
+.toggle { flex: none; }
+
+.captions { display: grid; gap: var(--dl-space-2); margin: 0; padding-inline-start: 1.25em; color: var(--dl-text-muted); font-size: 14px; line-height: 1.5; }
+
+.frames { display: grid; min-width: 0; }
+
+/* The pair: the desktop width on eight parts and the phone width on three, the phone set lower. */
+.replica[data-width='pair'] .frames { grid-template-columns: minmax(0, 8fr) minmax(0, 3fr); align-items: start; gap: var(--dl-space-5); }
+
+.replica[data-width='pair'] [data-slot='phone'] { margin-top: var(--dl-space-6); }
+
+@media (max-width: 640px) {
+  .replica[data-width='pair'] .frames { grid-template-columns: minmax(0, 1fr); }
+  .replica[data-width='pair'] [data-slot='phone'] { order: -1; margin-top: 0; }
+  .replica[data-width='pair'] [data-slot='desktop'] { overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; }
+  .replica[data-width='pair'] [data-slot='desktop'] > * { min-width: 600px; scroll-snap-align: start; }
+}
+
+/* Responsive: the desktop width when the replica's column is 700 px or wider, the phone width below; `WIDE` in ReplicaLive.tsx is the same width. */
+.replica[data-width='responsive'] { container: replica / inline-size; }
+.frames[data-width='responsive'] > [data-slot='phone'] { display: none; }
+@container replica (max-width: 699.98px) {
+  .frames[data-width='responsive'] > [data-slot='desktop'] { display: none; }
+  .frames[data-width='responsive'] > [data-slot='phone'] { display: block; }
+}
