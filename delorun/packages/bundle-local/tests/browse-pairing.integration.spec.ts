@@ -7,26 +7,30 @@
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { answerBrowsePair, browsePairEnvironment, registerBrowsePairing, type FindPairProgram } from '../src/browse-pairing.ts'
 import { BROWSE_PAIR_ROUTE, startBrowsePair, type BrowsePairEvent } from '../src/client/browse-pair-api.ts'
 
 const roots: string[] = []
-afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }) })
+afterEach(() => {
+  vi.unstubAllEnvs()
+  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
+})
 
 /**
- * A stand-in for browse's program: a shell script that records its arguments and browse variables, then runs `body`.
+ * A stand-in for browse's program: a shell script that records its arguments, its browse variables and the names of
+ * its whole environment, then runs `body`.
  * @param body - the script's commands after the recording.
  * @returns the script's path and the files it writes.
  */
-function fakeBrowse(body: string): { readonly program: string, readonly ran: string, readonly env: string } {
+function fakeBrowse(body: string): { readonly program: string, readonly ran: string, readonly env: string, readonly names: string } {
   const dir = mkdtempSync(join(tmpdir(), 'browse-pair-'))
   roots.push(dir)
   const program = join(dir, 'browse')
-  const ran = join(dir, 'ran'), env = join(dir, 'env')
-  writeFileSync(program, `#!/bin/sh\necho "$@" > '${ran}'\nenv | grep '^OPENCODE_BROWSER_' | sort > '${env}'\n${body}\n`)
+  const ran = join(dir, 'ran'), env = join(dir, 'env'), names = join(dir, 'names')
+  writeFileSync(program, `#!/bin/sh\necho "$@" > '${ran}'\nenv | grep '^OPENCODE_BROWSER_' | sort > '${env}'\nenv | cut -d= -f1 | sort > '${names}'\n${body}\n`)
   chmodSync(program, 0o755)
-  return { program, ran, env }
+  return { program, ran, env, names }
 }
 
 const PAIRS = 'echo "Pairing code: AB12-CD34"\necho "Open the Extensions menu → browse → Options, enter AB12-CD34, then click Connect."\nsleep 0.2\necho "Paired Chrome on this computer."\nexit 0'
@@ -72,6 +76,40 @@ describe.skipIf(process.platform === 'win32')('pairing the browse extension', ()
     })
     expect(readFileSync(browse.env, 'utf8').trim().split('\n')).toEqual(['OPENCODE_BROWSER_AUTO_UPDATE=off', 'OPENCODE_BROWSER_UPDATE_CHECK=0'])
     expect(browsePairEnvironment({ OPENCODE_BROWSER_PORT: '1', opencode_browser_tools: 'all', XDG_DATA_HOME: '/data' })).toEqual({ XDG_DATA_HOME: '/data', OPENCODE_BROWSER_AUTO_UPDATE: 'off', OPENCODE_BROWSER_UPDATE_CHECK: '0' })
+  })
+
+  it('starts browse through the route with the scrubbed environment of a harness child, so no credential reaches it', async () => {
+    const browse = fakeBrowse(PAIRS)
+    vi.stubEnv('DEEPSEEK_API_KEY', 'sk-0123456789abcdef0123456789abcdef')
+    vi.stubEnv('OPENCODE_BROWSER_ALLOW_ALL_COOKIES', '1')
+    const routes: { fetch: (request: Request) => Promise<Response> }[] = []
+    const scope = { effect: () => undefined, connection: { fetch: { register: (route: (typeof routes)[number]) => { routes.push(route) } } } }
+    registerBrowsePairing(scope as never, found(browse.program))
+    expect(await (await routes[0]!.fetch(request('127.0.0.1:19010'))).text()).toContain('"paired"')
+    const names = readFileSync(browse.names, 'utf8').trim().split('\n')
+    expect(names).toContain('PATH')
+    expect(names).not.toContain('DEEPSEEK_API_KEY')
+    expect(readFileSync(browse.env, 'utf8').trim().split('\n')).toEqual(['OPENCODE_BROWSER_AUTO_UPDATE=off', 'OPENCODE_BROWSER_UPDATE_CHECK=0'])
+  })
+
+  it('drops a line browse prints after the studio stopped reading, without an error in the Host', async () => {
+    // browse answers the stop by printing the outcome line before it exits.
+    const late = fakeBrowse('echo "Pairing code: AB12-CD34"\ntrap \'echo "Paired Chrome on this computer."; exit 0\' TERM\nsleep 30 &\nwait')
+    const errors: unknown[] = []
+    const record = (error: unknown): void => { errors.push(error) }
+    process.on('uncaughtException', record).on('unhandledRejection', record)
+    try {
+      const running: { current?: AbortController } = {}
+      const answer = await answerBrowsePair(request('127.0.0.1'), found(late.program), {}, running)
+      const reader = answer.body!.getReader()
+      expect(new TextDecoder().decode((await reader.read()).value)).toBe('{"kind":"code","code":"AB12-CD34"}\n')
+      await reader.cancel()
+      await vi.waitFor(() => { expect(running.current).toBeUndefined() }, { timeout: 5000 })
+      await new Promise(resolve => setTimeout(resolve, 50))
+      expect(errors).toEqual([])
+    } finally {
+      process.off('uncaughtException', record).off('unhandledRejection', record)
+    }
   })
 
   it('refuses a request whose Host is not the computer\'s loopback, before running anything', async () => {

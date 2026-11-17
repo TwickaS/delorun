@@ -5,11 +5,12 @@
  * failure. Only the computer's own studio may start it: the route admits no paired device, and it also refuses a
  * request whose `Host` is not a loopback name. It never reads browse's token files; browse writes them itself.
  *
- * The program runs with Delorun's environment less every `OPENCODE_BROWSER_*` variable, as the browse driver starts
- * browse by default, and with updates off (`OPENCODE_BROWSER_AUTO_UPDATE=off`, `OPENCODE_BROWSER_UPDATE_CHECK=0`):
- * `browse pair` starts browse's relay when none runs, and the relay keeps the environment it starts with, so none of
- * browse's access switches reaches it from Delorun's, and pairing writes to the data folder the driver's browse reads. It waits the code's
- * whole lifetime, ten minutes. One pairing runs at a time: a new start ends the one before, and so does the request
+ * The program runs with the environment every harness child starts from (`scrubbedParentEnv`, which drops credentials
+ * such as model provider keys), less every `OPENCODE_BROWSER_*` variable, as the browse driver starts browse by
+ * default, and with updates off (`OPENCODE_BROWSER_AUTO_UPDATE=off`, `OPENCODE_BROWSER_UPDATE_CHECK=0`): `browse pair`
+ * starts browse's relay when none runs, and the relay keeps the environment it starts with, so none of browse's access
+ * switches reaches it from Delorun's, and pairing writes to the data folder the driver's browse reads. It waits the
+ * code's whole lifetime, ten minutes. One pairing runs at a time: a new start ends the one before, and so does the request
  * closing or the plugin stopping.
  *
  * @module @delorun/bundle-local/browse-pairing
@@ -18,6 +19,7 @@ import { spawn } from 'node:child_process'
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: the ctx.connection service.
 import type {} from '@deepseek-ai/dsh-client-connection'
+import { scrubbedParentEnv } from '@deepseek-ai/dsh-subprocess'
 import { isLoopbackHost } from '@delorun/home-auth'
 import { BROWSE_PAIR_ROUTE, type BrowsePairEvent, type BrowsePairRequest } from './client/browse-pair-api.ts'
 
@@ -42,8 +44,8 @@ export type PairProgram =
 export type FindPairProgram = (request: BrowsePairRequest) => Promise<PairProgram>
 
 /**
- * The environment `browse pair` runs with: Delorun's, less every browse variable, with updates off.
- * @param env - Delorun's environment.
+ * The environment `browse pair` runs with: the scrubbed environment, less every browse variable, with updates off.
+ * @param env - the scrubbed environment of a harness child.
  * @returns the child's environment.
  */
 export function browsePairEnvironment(env: Readonly<Record<string, string | undefined>>): Record<string, string> {
@@ -57,7 +59,7 @@ const PAIRED_LINE = /^Paired (.+?)\.?\s*$/u
 /**
  * Run `browse pair` and report its steps.
  * @param program - browse's program.
- * @param env - Delorun's environment.
+ * @param env - the scrubbed environment of a harness child.
  * @param signal - stops the program.
  * @param emit - receives each step; the last is `paired`, `expired` or `failed`.
  * @returns when the program has exited and the last step is emitted.
@@ -113,7 +115,7 @@ export function runBrowsePair(program: string, env: Readonly<Record<string, stri
  * Answer one pairing request.
  * @param request - the request.
  * @param find - finds the row's program.
- * @param env - Delorun's environment.
+ * @param env - the scrubbed environment of a harness child.
  * @param running - the pairing running now, which a new start ends.
  * @returns the event stream, or a refusal.
  */
@@ -137,13 +139,18 @@ export async function answerBrowsePair(request: Request, find: FindPairProgram, 
   running.current = stop
   request.signal.addEventListener('abort', () => { stop.abort() }, { once: true })
   const encoder = new TextEncoder()
+  // A cancelled stream has no reader: a line the child prints before it exits, and the close, would throw there.
+  let cancelled = false
   const stream = new ReadableStream<Uint8Array>({
     start: async (controller) => {
-      await runBrowsePair(program.path, env, stop.signal, (event) => { controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`)) })
+      await runBrowsePair(program.path, env, stop.signal, (event) => { if (!cancelled) controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`)) })
       if (running.current === stop) delete running.current
-      controller.close()
+      if (!cancelled) controller.close()
     },
-    cancel: () => { stop.abort() },
+    cancel: () => {
+      cancelled = true
+      stop.abort()
+    },
   })
   return new Response(stream, { status: 200, headers: { 'content-type': 'application/x-ndjson', 'cache-control': 'no-store' } })
 }
@@ -159,6 +166,6 @@ export function registerBrowsePairing(scope: Context, find: FindPairProgram): vo
   scope.connection.fetch.register({
     path: BROWSE_PAIR_ROUTE, methods: ['POST'], requestBody: 'buffered', requestMediaType: 'application/json',
     // Admits no paired device: only the owner's own studio reaches the route; `answerBrowsePair` also refuses a non-loopback Host.
-    fetch: request => answerBrowsePair(request, find, process.env, running),
+    fetch: request => answerBrowsePair(request, find, scrubbedParentEnv(), running),
   })
 }
