@@ -9,7 +9,8 @@ import { ReadyStep } from '../src/client/steps/Ready.tsx'
 import { WelcomeStep } from '../src/client/steps/Welcome.tsx'
 import { CommandRow as Command } from '../src/client/ui/CommandRow.tsx'
 import { createGuide, type Guide } from '../src/client/guide.ts'
-import { en } from '../src/client/locales.ts'
+import { en, zh } from '../src/client/locales.ts'
+import { STOCK_OFF } from '../src/client/steps/StockLook.tsx'
 import { ACCENT_PRESETS, PALETTE_CHOICES } from '../src/client/previews.ts'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
@@ -29,7 +30,7 @@ const settle = async () => { await act(async () => { await Promise.resolve(); aw
 const guideOf = (host: HostFace = hostFake().host): Guide => createGuide(host)
 
 /** Render the look step, whose guide is unused. */
-const look = (services: StepServices) => render(<LookStep services={services} guide={guideOf()} />)
+const look = (services: StepServices, guide: Guide = guideOf(), next: () => void = () => {}) => render(<LookStep services={services} guide={guide} next={next} />)
 
 describe('the look step', () => {
   it('offers light, dark and system and sets the colour scheme', async () => {
@@ -46,8 +47,8 @@ describe('the look step', () => {
     look(services)
     const group = screen.getByRole('radiogroup', { name: 'Theme' })
     const chips = within(group).getAllByRole('radio')
-    expect(chips.map(each => each.textContent)).toEqual(['Soft', 'T3 Code', 'T3 Chat', 'Grove', 'Ocean', 'Ember', 'Iris'])
-    expect(PALETTE_CHOICES).toHaveLength(chips.length)
+    expect(chips.map(each => each.textContent)).toEqual(['Soft', 'T3 Code', 'T3 Chat', 'Grove', 'Ocean', 'Ember', 'Iris', 'Custom'])
+    expect(PALETTE_CHOICES).toHaveLength(chips.length - 1)
     expect(chips.every(each => each.querySelector('[aria-hidden="true"]') !== null)).toBe(true)
     expect(radio('Soft').getAttribute('aria-checked')).toBe('true')
     await click(radio('Soft'))
@@ -67,46 +68,102 @@ describe('the look step', () => {
     expect(radio('Dark').getAttribute('aria-checked')).toBe('true')
   })
 
-  it('offers the accent presets with the Soft palette, writes the one chosen, and locks them with a note for a theme that brings its own', async () => {
+  it('shows no accent picker for a preset, and reveals it with the custom values written together when Custom is chosen', async () => {
     const services = stepServices()
     look(services)
-    const group = screen.getByRole('radiogroup', { name: 'Accent' })
-    expect(within(group).getAllByRole('radio').map(each => each.textContent)).toEqual(['Peach', 'Cobalt', 'Moss', 'Mono'])
-    expect(ACCENT_PRESETS).toHaveLength(4)
-    await click(radio('Peach'))
-    await click(radio('Cobalt'))
-    expect(services.look.settings.getSnapshot().value?.accent).toBe('cobalt')
+    expect(screen.queryByRole('radiogroup', { name: 'Accent' })).toBeNull()
     await click(radio('Grove'))
-    expect((radio('Cobalt') as HTMLButtonElement).disabled).toBe(true)
-    expect(screen.getByText(/Set by the theme/)).toBeTruthy()
+    expect(screen.queryByRole('radiogroup', { name: 'Accent' })).toBeNull()
+    await click(radio('Custom'))
+    const group = screen.getByRole('radiogroup', { name: 'Accent' })
+    expect(within(group).getAllByRole('radio').map(each => each.textContent)).toEqual(['Peach', 'Cobalt', 'Moss', 'Mono', 'Custom'])
+    expect(ACCENT_PRESETS).toHaveLength(4)
+    // Grove's accent seeds the free colour.
+    expect(services.look.settings.getSnapshot().value).toMatchObject({ palette: 'custom', accent: 'custom', customAccent: '#1B7D50', contrast: 100 })
+    await click(radio('Cobalt'))
+    expect(services.look.settings.getSnapshot().value).toMatchObject({ palette: 'custom', accent: 'cobalt' })
+    const hex = screen.getByLabelText<HTMLInputElement>('Hex colour')
+    fireEvent.change(hex, { target: { value: '#12ab34' } })
+    await act(async () => { fireEvent.blur(hex) })
+    expect(services.look.settings.getSnapshot().value).toMatchObject({ palette: 'custom', accent: 'custom', customAccent: '#12AB34' })
+    await click(radio('Iris'))
+    expect(screen.queryByRole('radiogroup', { name: 'Accent' })).toBeNull()
+  })
+
+  it('reads a preset stored beside a changed accent as Custom', () => {
+    look(stepServices({ look: { settings: liveForm<ThemeSettings>({ ...THEME, accent: 'moss' }).form, useStockLook: () => Promise.resolve(true) } }))
+    expect(within(screen.getByRole('radiogroup', { name: 'Theme' })).getByRole('radio', { name: 'Custom' }).getAttribute('aria-checked')).toBe('true')
+    expect(radio('Moss').getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('moves between the theme tiles with the arrow keys', async () => {
+    const services = stepServices()
+    look(services)
+    radio('Soft').focus()
+    await act(async () => { fireEvent.keyDown(radio('Soft'), { key: 'ArrowRight' }) })
+    expect(document.activeElement).toBe(radio('T3 Code'))
+    expect(services.look.settings.getSnapshot().value?.palette).toBe('t3-code')
   })
 
   it('starts from Soft and Peach until the theme settings arrive, and disables the choices it cannot save', () => {
     const waiting = liveForm<ThemeSettings>(undefined, { writable: false })
     look(stepServices({ look: { settings: waiting.form, useStockLook: () => Promise.resolve(true) } }))
     expect(radio('Soft').getAttribute('aria-checked')).toBe('true')
-    expect(radio('Peach').getAttribute('aria-checked')).toBe('true')
-    expect([radio('Iris'), radio('Cobalt'), screen.getByRole('button', { name: 'Stock' })].every(each => (each as HTMLButtonElement).disabled)).toBe(true)
+    expect(radio('Iris').hasAttribute('disabled')).toBe(true)
     expect((radio('Dark') as HTMLButtonElement).disabled).toBe(false)
   })
 
-  it('offers the stock look as a quiet line, and switches only after the confirmation that says it closes the guide', async () => {
+  it('offers the original look as one quiet link, and opens its screen in place of the step without changing anything', async () => {
     const useStockLook = vi.fn(() => Promise.resolve(true))
-    look(stepServices({ look: { settings: liveForm<ThemeSettings>(THEME).form, useStockLook } }))
-    expect(screen.queryByRole('radiogroup', { name: en['look.studio'] })).toBeNull()
+    const guide = guideOf()
+    look(stepServices({ look: { settings: liveForm<ThemeSettings>(THEME).form, useStockLook } }), guide)
     expect(screen.getByText(en['look.stock.ask'], { exact: false })).toBeTruthy()
-    await click(screen.getByRole('button', { name: 'Stock' }))
-    expect(screen.getByText(/turns Delorun's studio additions off and closes this guide/)).toBeTruthy()
+    expect(screen.queryByText(en['look.stock.sure'])).toBeNull()
+    await click(screen.getByRole('button', { name: en['look.stock.open'] }))
+    expect(screen.getByText(en['look.stock.sure'])).toBeTruthy()
+    expect(screen.queryByRole('radiogroup', { name: 'Theme' })).toBeNull()
+    expect(screen.getAllByRole('listitem')).toHaveLength(STOCK_OFF.length)
     expect(useStockLook).not.toHaveBeenCalled()
-    await click(screen.getByRole('button', { name: en['look.stock.no'] }))
-    expect(useStockLook).not.toHaveBeenCalled()
-    await click(screen.getByRole('button', { name: 'Stock' }))
-    await click(screen.getByRole('button', { name: en['look.stock.yes'] }))
-    expect(useStockLook).toHaveBeenCalledOnce()
-    expect(screen.queryByRole('alert')).toBeNull()
+    expect(guide.stock.getSnapshot()).toBe(false)
   })
 
-  it('shows a small chat drawn in the chosen look beside the choices', () => {
+  it('returns to the Look step with nothing chosen when the screen is cancelled, by Keep or by Back', async () => {
+    const guide = guideOf()
+    const next = vi.fn()
+    look(stepServices(), guide, next)
+    await click(screen.getByRole('button', { name: en['look.stock.open'] }))
+    await click(screen.getByRole('button', { name: en['look.stock.no'] }))
+    expect(screen.getByRole('radiogroup', { name: 'Theme' })).toBeTruthy()
+    expect(guide.stock.getSnapshot()).toBe(false)
+    await click(screen.getByRole('button', { name: en['look.stock.open'] }))
+    await click(screen.getByRole('button', { name: en['look.stock.back'] }))
+    expect(screen.getByRole('radiogroup', { name: 'Theme' })).toBeTruthy()
+    expect(next).not.toHaveBeenCalled()
+  })
+
+  it('records the choice and goes on to the next step when the screen is confirmed, without changing the look', async () => {
+    const useStockLook = vi.fn(() => Promise.resolve(true))
+    const guide = guideOf()
+    const next = vi.fn()
+    look(stepServices({ look: { settings: liveForm<ThemeSettings>(THEME).form, useStockLook } }), guide, next)
+    await click(screen.getByRole('button', { name: en['look.stock.open'] }))
+    await click(screen.getByRole('button', { name: en['look.stock.yes'] }))
+    expect(guide.stock.getSnapshot()).toBe(true)
+    expect(next).toHaveBeenCalledOnce()
+    expect(useStockLook).not.toHaveBeenCalled()
+    expect(screen.getByText(en['look.stock.chosen'], { exact: false })).toBeTruthy()
+    await click(screen.getByRole('button', { name: en['look.stock.change'] }))
+    await click(screen.getByRole('button', { name: en['look.stock.no'] }))
+    expect(guide.stock.getSnapshot()).toBe(false)
+  })
+
+  it('has the screen\'s copy in English and Chinese', () => {
+    const keys = Object.keys(en).filter(key => key.startsWith('look.stock.') || key === 'ready.stock')
+    expect(keys.length).toBeGreaterThan(20)
+    for (const key of keys) expect(zh[key as keyof typeof zh], key).toBeTruthy()
+  })
+
+  it('shows a compact sample drawn in the chosen look beside the choices', () => {
     look(stepServices())
     const preview = screen.getByRole('img', { name: en['look.preview'] })
     expect(preview.textContent).toContain(en['look.preview.ask'])
@@ -114,21 +171,11 @@ describe('the look step', () => {
     expect(preview.textContent).toContain(en['look.preview.box'])
   })
 
-  it.each<readonly [string, () => Promise<boolean>]>([
-    ['refuses the write', () => Promise.resolve(false)],
-    ['cannot be reached', () => Promise.reject(new Error('transport'))],
-  ])('shows a failure and keeps the choice open when the host %s', async (_, write) => {
-    look(stepServices({ look: { settings: liveForm<ThemeSettings>(THEME).form, useStockLook: write } }))
-    await click(screen.getByRole('button', { name: 'Stock' }))
-    await click(screen.getByRole('button', { name: en['look.stock.yes'] }))
-    expect(screen.getByRole('alert').textContent).toBe(en.saveFailed)
-  })
-
   it.each<readonly [string, boolean | 'reject', string]>([
     ['refuses a palette', false, 'Iris'],
     ['cannot be reached for a palette', 'reject', 'Iris'],
-    ['refuses an accent', false, 'Cobalt'],
-    ['cannot be reached for an accent', 'reject', 'Cobalt'],
+    ['refuses Custom', false, 'Custom'],
+    ['cannot be reached for Custom', 'reject', 'Custom'],
   ])('shows a failure when the host %s', async (_, result, choice) => {
     const form = liveForm<ThemeSettings>(THEME, { result })
     look(stepServices({ look: { settings: form.form, useStockLook: () => Promise.resolve(true) } }))
@@ -139,10 +186,10 @@ describe('the look step', () => {
   it('clears a failure on the next attempt', async () => {
     const form = liveForm<ThemeSettings>(THEME, { result: false })
     look(stepServices({ look: { settings: form.form, useStockLook: () => Promise.resolve(true) } }))
-    await click(radio('Cobalt'))
+    await click(radio('Iris'))
     expect(screen.getByRole('alert')).toBeTruthy()
     form.set.mockImplementationOnce(() => Promise.resolve(true))
-    await click(radio('Moss'))
+    await click(radio('Ocean'))
     expect(screen.queryByRole('alert')).toBeNull()
   })
 })
@@ -680,7 +727,7 @@ describe('a set of chips', () => {
 
   it('is one tab stop, on the chosen chip', () => {
     look(stepServices())
-    for (const name of ['Mode', 'Theme', 'Accent']) {
+    for (const name of ['Mode', 'Theme']) {
       const stops = radios(name).filter(each => each.tabIndex === 0)
       expect(stops).toHaveLength(1)
       expect(stops[0]?.getAttribute('aria-checked')).toBe('true')
@@ -732,7 +779,7 @@ describe('a set of chips', () => {
   it('disables a set whose chips cannot be chosen', () => {
     const waiting = liveForm<ThemeSettings>(undefined, { writable: false })
     look(stepServices({ look: { settings: waiting.form, useStockLook: () => Promise.resolve(true) } }))
-    for (const name of ['Theme', 'Accent']) expect(radios(name).every(each => (each as HTMLButtonElement).disabled)).toBe(true)
+    for (const name of ['Theme']) expect(radios(name).every(each => (each as HTMLButtonElement).disabled)).toBe(true)
     expect(radios('Mode').map(each => each.tabIndex)).toEqual([-1, -1, 0])
   })
 

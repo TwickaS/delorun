@@ -26,9 +26,9 @@ export const t: StepServices['t'] = makeTranslate(en)
 export const appearance: StepServices['appearance'] = makeTranslate({
   'mode': 'Mode', 'mode.light': 'Light', 'mode.dark': 'Dark', 'mode.system': 'System',
   'palette': 'Theme', 'palette.soft': 'Soft', 'palette.t3-code': 'T3 Code', 'palette.t3-chat': 'T3 Chat', 'palette.grove': 'Grove',
-  'palette.ocean': 'Ocean', 'palette.ember': 'Ember', 'palette.iris': 'Iris',
-  'accent': 'Accent', 'accent.peach': 'Peach', 'accent.cobalt': 'Cobalt', 'accent.moss': 'Moss', 'accent.mono': 'Mono',
-  'accent.byTheme': 'Set by the theme. Choose Soft to pick your own.',
+  'palette.ocean': 'Ocean', 'palette.ember': 'Ember', 'palette.iris': 'Iris', 'palette.custom': 'Custom',
+  'accent': 'Accent', 'accent.peach': 'Peach', 'accent.cobalt': 'Cobalt', 'accent.moss': 'Moss', 'accent.mono': 'Mono', 'accent.custom': 'Custom',
+  'accent.customColor': 'Custom accent colour', 'accent.hex': 'Hex colour', 'accent.hexInvalid': 'Use six hex digits.',
   'look.delorun': 'Delorun', 'look.stock': 'Stock',
 })
 
@@ -60,7 +60,13 @@ export function liveForm<T extends object>(initial: T | undefined, options: { re
       listeners.add(listener)
       return () => { listeners.delete(listener) }
     },
-    set, unset, mutate: () => Promise.resolve(true),
+    set, unset: () => Promise.resolve(true),
+    mutate: (ops) => {
+      if (options.result === 'reject') return Promise.reject(new Error('transport'))
+      if (options.result === false) return Promise.resolve(false)
+      publish({ value: { ...snapshot.value, ...Object.fromEntries(ops.flatMap(op => op.op === 'set' ? [[op.path[0], op.value]] : [])) } as T })
+      return Promise.resolve(true)
+    },
   }
   return { form, set, unset, publish, listeners, value: () => snapshot.value }
 }

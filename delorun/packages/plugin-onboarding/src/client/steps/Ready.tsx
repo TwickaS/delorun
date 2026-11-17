@@ -27,6 +27,7 @@ export function ReadyStep({ services, guide, reach, target, keepCurrent }: StepP
   const { t, appearance, look, scheme, plugins, optionalRows, bundles } = services
   const mode = useSyncExternalStore(useCallback(listener => scheme.subscribe(listener), [scheme]), () => scheme.get())
   const keys = useStore(guide.keys)
+  const stock = useStore(guide.stock)
   const workspace = useStore(guide.workspace)
   const phone = useStore(guide.phone)
   const settings = useSyncExternalStore(useCallback(listener => look.settings.subscribe(listener), [look]), () => look.settings.getSnapshot())
@@ -72,6 +73,7 @@ export function ReadyStep({ services, guide, reach, target, keepCurrent }: StepP
           </ul>
         </div>
       )}
+      {stock && <p className={css.hint} role="status">{t('ready.stock')}</p>}
       <p className={css.hint}>{t('start.later')}</p>
     </div>
   )

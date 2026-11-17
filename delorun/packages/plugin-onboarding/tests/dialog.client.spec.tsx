@@ -8,7 +8,8 @@ import { en } from '../src/client/locales.ts'
 import type { FolderChoice, OnboardingStep, ReachState, StartTarget } from '../src/client/types.ts'
 import type { OnboardingSettings } from '../src/config.ts'
 import { NO_RECORD, type SetupRecord } from '../src/wire.ts'
-import { DEFAULT_PATH, DEFAULT_WORKSPACE, hostFake, liveForm, noticeFace, settings, startFace, stepServices, t } from './fixtures.client.ts'
+import { DEFAULT_PATH, DEFAULT_WORKSPACE, hostFake, liveForm, noticeFace, settings, startFace, stepServices, t, THEME } from './fixtures.client.ts'
+import type { ThemeSettings } from '@delorun/plugin-theme'
 
 afterEach(() => {
   cleanup()
@@ -37,6 +38,7 @@ interface Options {
   readonly writeResult?: boolean | 'reject'
   readonly reach?: ReachState
   readonly start?: ReturnType<typeof startFace>
+  readonly useStockLook?: () => Promise<boolean>
 }
 
 /** The step entry over fakes, as the Settings shell mounts it. */
@@ -52,7 +54,7 @@ async function mountEntry(options: Options = {}) {
   const loadRecord = vi.fn(() => Promise.resolve(options.record ?? NO_RECORD))
   const host = hostFake({ reach: options.reach ?? 'absent' })
   const start = options.start ?? startFace()
-  const services = stepServices({ notice: options.notice?.face, host: host.host, start: start.face })
+  const services = stepServices({ notice: options.notice?.face, host: host.host, start: start.face, ...options.useStockLook === undefined ? {} : { look: { settings: liveForm<ThemeSettings>(THEME).form, useStockLook: options.useStockLook } } })
   const props = {
     t, complete, completeStep, renderSection: (id: string) => `section ${id}`, ...options.explicit === undefined ? {} : { explicit: options.explicit },
     progress: progress.form, extra, loadRecord, services, startChat, aside,
@@ -203,6 +205,57 @@ describe('the first run', () => {
     expect(completeStep).toHaveBeenCalledExactlyOnceWith(UPSTREAM_KEY_STEP)
     expect(UPSTREAM_KEY_STEP).toBe('deepseek-official')
     expect(startChat).toHaveBeenCalledExactlyOnceWith(DEFAULT_WORKSPACE, undefined, false)
+  })
+
+  describe('the original look', () => {
+    /** Go to the Look step and open the original-look screen. */
+    const openScreen = async () => {
+      await forward(2)
+      expect(heading().textContent).toBe(en['step.look'])
+      await click(button(en['look.stock.open']))
+    }
+
+    it('lands back on Look with nothing chosen when the screen is cancelled', async () => {
+      const useStockLook = vi.fn(() => Promise.resolve(true))
+      await mountEntry({ useStockLook })
+      await openScreen()
+      expect(screen.queryByRole('button', { name: en.continue })).toBeNull()
+      await click(button(en['look.stock.no']))
+      expect(heading().textContent).toBe(en['step.look'])
+      expect(screen.getByRole('button', { name: en['look.stock.open'] })).toBeTruthy()
+      expect(useStockLook).not.toHaveBeenCalled()
+    })
+
+    it('goes straight to the step after Look when confirmed, keeps the look until Finish, then applies it', async () => {
+      const useStockLook = vi.fn(() => Promise.resolve(true))
+      const { startChat } = await mountEntry({ useStockLook })
+      await openScreen()
+      await click(button(en['look.stock.yes']))
+      expect(heading().textContent).toBe(en['step.agents'])
+      expect(useStockLook).not.toHaveBeenCalled()
+      await forward(2)
+      expect(heading().textContent).toBe(en['step.ready'])
+      expect(screen.getByText(en['ready.stock'])).toBeTruthy()
+      expect(useStockLook).not.toHaveBeenCalled()
+      await click(button(en.start))
+      await settle()
+      expect(startChat).toHaveBeenCalledOnce()
+      expect(useStockLook).toHaveBeenCalledOnce()
+    })
+
+    it('does not apply it on Finish later, and says nothing about it on Ready when it was not chosen', async () => {
+      const useStockLook = vi.fn(() => Promise.resolve(true))
+      await mountEntry({ useStockLook })
+      await openScreen()
+      await click(button(en['look.stock.yes']))
+      await click(button(en.later))
+      await settle()
+      expect(useStockLook).not.toHaveBeenCalled()
+      cleanup()
+      await mountEntry({ useStockLook })
+      await forward(5)
+      expect(screen.queryByText(en['ready.stock'])).toBeNull()
+    })
   })
 
   it('lists the steps with the current one marked and the earlier ones done', async () => {

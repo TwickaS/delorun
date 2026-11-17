@@ -6,7 +6,10 @@
  */
 
 /** The theme's palette ids; a test compares the list with the theme's own. */
-export type PaletteChoice = 'soft' | 't3-code' | 't3-chat' | 'grove' | 'ocean' | 'ember' | 'iris'
+export type PaletteChoice = 'soft' | 't3-code' | 't3-chat' | 'grove' | 'ocean' | 'ember' | 'iris' | 'custom'
+
+/** A preset palette: one that fixes its own accent and colours. */
+export type PresetChoice = Exclude<PaletteChoice, 'custom'>
 
 /** One colour scheme of a palette: the page, primary text and the accent. */
 export interface SchemeColours {
@@ -24,11 +27,11 @@ export interface PalettePreview {
   readonly dark: SchemeColours
 }
 
-/** The palettes the look step offers, in the order of Settings → Appearance. */
-export const PALETTE_CHOICES: readonly PaletteChoice[] = ['soft', 't3-code', 't3-chat', 'grove', 'ocean', 'ember', 'iris']
+/** The preset palettes the look step offers, in the order of Settings → Appearance; the Custom tile follows them. */
+export const PALETTE_CHOICES: readonly PresetChoice[] = ['soft', 't3-code', 't3-chat', 'grove', 'ocean', 'ember', 'iris']
 
-/** Each palette's preview colours. */
-export const PALETTE_PREVIEWS: Readonly<Record<PaletteChoice, PalettePreview>> = {
+/** Each preset palette's preview colours. */
+export const PALETTE_PREVIEWS: Readonly<Record<PresetChoice, PalettePreview>> = {
   'soft': {
     light: { page: 'rgb(253 253 251)', text: 'rgb(19 17 13)', accent: 'rgb(229 115 74)' },
     dark: { page: 'rgb(23 21 17)', text: 'rgb(251 250 248)', accent: 'rgb(229 115 74)' },
@@ -71,4 +74,46 @@ export const ACCENT_PREVIEWS: Readonly<Record<AccentPreset, { readonly light: st
   cobalt: { light: 'rgb(58 94 232)', dark: 'rgb(58 94 232)' },
   moss: { light: 'rgb(63 122 79)', dark: 'rgb(63 122 79)' },
   mono: { light: 'rgb(27 26 24)', dark: 'rgb(230 228 226)' },
+}
+
+/** The stored values the look step reads and seeds. */
+export interface LookValues {
+  readonly palette: PaletteChoice
+  readonly accent: AccentPreset | 'custom'
+  readonly customAccent: string
+  readonly contrast: number
+}
+
+/**
+ * The palette a stored pair reads as: a preset beside a changed accent or contrast is the custom theme it drew, as the
+ * theme reads it; a test compares this with the theme's own reading.
+ * @param values - the stored values.
+ * @returns the values as the custom-or-preset model has them.
+ */
+export function lookView(values: LookValues): LookValues {
+  if (values.palette === 'custom') return values
+  const changed = values.contrast !== 100
+  if (values.palette === 'soft') return values.accent === 'peach' && !changed ? values : { ...values, palette: 'custom' }
+  return changed ? { ...values, palette: 'custom', accent: 'custom', customAccent: rgbHex(PALETTE_PREVIEWS[values.palette].light.accent) } : values
+}
+
+/**
+ * The values to start the custom theme from, taken from the preset the person had last.
+ * @param values - the values as {@link lookView} reads them.
+ * @returns the accent, colour and contrast to write with the custom palette.
+ */
+export function customStart(values: LookValues): Pick<LookValues, 'accent' | 'customAccent' | 'contrast'> {
+  if (values.palette === 'custom') return { accent: values.accent, customAccent: values.customAccent, contrast: values.contrast }
+  if (values.palette === 'soft') return { accent: 'peach', customAccent: values.customAccent, contrast: 100 }
+  return { accent: 'custom', customAccent: rgbHex(PALETTE_PREVIEWS[values.palette].light.accent), contrast: 100 }
+}
+
+/**
+ * A colour as `#RRGGBB`.
+ * @param rgb - a colour as `rgb(r g b)`.
+ * @returns the hex colour.
+ */
+export function rgbHex(rgb: string): string {
+  const [r = 0, g = 0, b = 0] = rgb.match(/\d+/g)?.map(Number) ?? []
+  return `#${[r, g, b].map(channel => channel.toString(16).padStart(2, '0')).join('').toUpperCase()}`
 }

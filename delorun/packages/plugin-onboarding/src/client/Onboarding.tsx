@@ -128,11 +128,11 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
   const save = useCallback((field: keyof OnboardingSettings, value: unknown): void => {
     progress.set(field, value).catch((error: unknown) => { console.warn('delorun onboarding: progress was not saved', error) })
   }, [progress])
-  const finish = useCallback((): void => {
-    save('done', true)
-    save('step', '')
+  const finish = useCallback((): Promise<unknown> => {
+    const saved = Promise.allSettled([progress.set('done', true), progress.set('step', '')])
     complete()
-  }, [save, complete])
+    return saved
+  }, [progress, complete])
 
   // The notice is decided once: acknowledging it must not remove it from under Back.
   const [notice] = useState(() => (!explicit && fixed.notice !== undefined && !fixed.notice.acknowledged() ? fixed.notice : undefined))
@@ -145,8 +145,9 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
   // The list is never empty: Welcome, Workspace and Ready are always built.
   const step = steps[current] as FlowStep
   const providersPhase = useSyncExternalStore(useCallback(listener => guide.providersPhase.subscribe(listener), [guide]), () => guide.providersPhase.getSnapshot())
+  const stockScreen = useSyncExternalStore(useCallback(listener => guide.stockScreen.subscribe(listener), [guide]), () => guide.stockScreen.getSnapshot())
   // The providers step's landing and walk have their own buttons; its summary uses the dialog's Continue.
-  const ownButtons = step.id === STEPS.providers.id && providersPhase !== 'summary'
+  const ownButtons = (step.id === STEPS.providers.id && providersPhase !== 'summary') || (step.id === STEPS.look.id && stockScreen)
   const heading = useRef<HTMLHeadingElement>(null)
   useEffect(() => { heading.current?.focus({ preventScroll: true }) }, [step.id])
 
@@ -167,9 +168,13 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
       go(steps.findIndex(each => each.id === STEPS.workspace.id))
       return
     }
-    finish()
+    const saved = finish()
     completeStep(UPSTREAM_KEY_STEP)
-    void startChat(workspace?.workspaceId, folderOf(workspace), keepCurrent)
+    const started = startChat(workspace?.workspaceId, folderOf(workspace), keepCurrent)
+    // The original look unloads this dialog's plugin, so it is written last, after the progress and the first chat.
+    if (guide.stock.getSnapshot()) {
+      void Promise.allSettled([saved, started]).then(() => fixed.look.useStockLook()).then((ok) => { if (!ok) console.warn('delorun onboarding: the original look was not saved') }, (error: unknown) => { console.warn('delorun onboarding: the original look was not saved', error) })
+    }
   }
   // A step with something unfinished (a highlighted folder, an open Add question) holds Continue until it is settled.
   const next = (): void => {
