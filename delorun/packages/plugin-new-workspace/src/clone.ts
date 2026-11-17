@@ -1,24 +1,28 @@
 /**
- * The host half of the guide's Clone from Git choice: the {@link CLONE_PATH} and {@link CLONE_STATUS_PATH} routes. The
+ * The flow's Clone from Git choice: the {@link CLONE_PATH} and {@link CLONE_STATUS_PATH} routes. The
  * clone runs in the harness's process as the person, never inside a chat, and never asks for anything: Git's terminal
  * prompt, askpass programs, the Git Credential Manager's windows and SSH's interactive prompts are all off, and stdin is
  * closed, so a repository that needs a sign-in fails at once with `sign-in` instead of waiting. Only `https://`,
  * `ssh://` and `user@host:path` addresses are taken, and Git may speak only HTTPS and SSH, so a redirect cannot switch it
- * to another transport. The new folder must not exist or be empty, and it is held against the locations Delorun never adds
- * before Git runs; a failed clone removes only what its own Git created. One clone runs at a time, claimed before any wait.
+ * to another transport. A branch, when asked for, is checked out alone (`--branch <name> --single-branch`). The new folder
+ * must not exist or be empty, and it is held against the configured roots and the locations Delorun never adds before Git
+ * runs; its parent is created when missing. A failed clone removes only what its own Git created. One clone runs at a
+ * time, claimed before any wait.
  * Git runs with `core.hooksPath` off, the LFS filters off, `GIT_LFS_SKIP_SMUDGE` and a template that unsets every
  * `filter` attribute for the checkout, so no hook or filter from the person's Git configuration runs during it. An address with a sign-in in it is refused. Submodules are not cloned. No log line names the
  * address or Git's output, which can carry a token.
- * @module @delorun/plugin-onboarding/clone
+ * @module @delorun/plugin-new-workspace/clone
  */
 import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
-import { hasUrlCredentials, isCloneAddress, isFolderName } from './clone-address.ts'
-import { locationProblem, registerFolder, type AddWorkspaceDeps } from './workspace-route.ts'
-import { CloneRequest, CloneStatusRequest, MAX_CLONE_BODY_BYTES, type CloneFailure, type CloneProblem, type CloneStart, type CloneStatus } from './wire.ts'
+import { hasUrlCredentials, isBranchName, isCloneAddress, isFolderName } from './clone-address.ts'
+import { codeOf, placeProblem } from './location.ts'
+import { registerFolder, type AddWorkspaceDeps } from './workspace-route.ts'
+import { readBody, reply } from './http.ts'
+import { CloneRequest, CloneStatusRequest, type CloneFailure, type CloneProblem, type CloneStart, type CloneStatus, type PlaceProblem } from './wire.ts'
 
 /** What one Git run came to: its exit code (`null` when it was killed), or that `git` could not be started. */
 export type GitOutcome = { readonly kind: 'exited'; readonly code: number | null; readonly stderr: string } | { readonly kind: 'missing' }
@@ -114,17 +118,24 @@ export async function createCloneTemplate(): Promise<string> {
   return template
 }
 
+/** The configuration every Git run of this package passes: hooks off and the LFS filters off. */
+export const HARDENED_CONFIG: readonly string[] = ['-c', 'core.hooksPath=/dev/null', '-c', 'filter.lfs.smudge=', '-c', 'filter.lfs.process=', '-c', 'filter.lfs.required=false']
+
 /**
- * The arguments of the clone: hooks off, the LFS filters off, filters unset by the template, no submodules.
+ * The arguments of the clone: hooks off, the LFS filters off, filters unset by the template, no submodules, and only the
+ * asked-for branch when there is one.
  * @param url - the repository address.
  * @param destination - the new folder.
  * @param template - the directory {@link createCloneTemplate} made.
+ * @param branch - the branch to check out, which {@link isBranchName} takes; the remote's default branch without one.
  * @returns the arguments after `git`.
  */
-export function cloneArguments(url: string, destination: string, template: string): string[] {
+export function cloneArguments(url: string, destination: string, template: string, branch?: string): string[] {
   return [
-    '-c', 'core.hooksPath=/dev/null', '-c', 'filter.lfs.smudge=', '-c', 'filter.lfs.process=', '-c', 'filter.lfs.required=false',
-    'clone', '--progress', '--no-recurse-submodules', `--template=${template}`, '--', url, destination,
+    ...HARDENED_CONFIG,
+    'clone', '--progress', '--no-recurse-submodules', `--template=${template}`,
+    ...(branch === undefined ? [] : ['--branch', branch, '--single-branch']),
+    '--', url, destination,
   ]
 }
 
@@ -136,7 +147,7 @@ export function cloneArguments(url: string, destination: string, template: strin
 export function failureOf(stderr: string): CloneFailure {
   if (/Host key verification failed/iu.test(stderr)) return 'host-key'
   if (/terminal prompts disabled|could not read (?:Username|Password)|Authentication failed|Permission denied \(|returned error: 40[13]|Invalid username or password/iu.test(stderr)) return 'sign-in'
-  if (/Repository not found|returned error: 404|does not appear to be a git repository|not found/iu.test(stderr)) return 'not-found'
+  if (/Repository not found|returned error: 404|does not appear to be a git repository|not found|Remote branch .* not found/iu.test(stderr)) return 'not-found'
   if (/Could not resolve host|Connection refused|Connection timed out|Network is unreachable|Could not connect|unable to access|Operation timed out/iu.test(stderr)) return 'network'
   return 'failed'
 }
@@ -157,10 +168,17 @@ async function destinationState(path: string): Promise<'absent' | 'empty' | 'use
 
 /** What the clone routes need from the harness. */
 export interface CloneDeps extends AddWorkspaceDeps {
+  /** The folders a clone may be made in, as the row configures them. */
+  readonly roots: readonly string[]
   /** Runs Git. */
   readonly git: GitRunner
   /** The most time a clone may take, in milliseconds. */
   readonly timeoutMs: number
+  /**
+   * Record the folder a clone went in, so the next one starts there; it never rejects.
+   * @param parent - the folder.
+   */
+  readonly remember: (parent: string) => Promise<void>
 }
 
 /** One clone the harness knows. */
@@ -194,33 +212,6 @@ export interface CloneService {
 }
 
 /**
- * Answer one JSON message.
- * @param status - the HTTP status.
- * @param answer - the message.
- * @returns the response, never cached.
- */
-function reply(status: number, answer: CloneStart | CloneStatus | { readonly error: string }): Response {
-  return new Response(JSON.stringify(answer), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } })
-}
-
-/**
- * Read a request's JSON body, refusing one over {@link MAX_CLONE_BODY_BYTES}.
- * @param request - the request.
- * @returns the parsed body, or undefined when it cannot be read.
- */
-async function bodyOf(request: Request): Promise<unknown> {
-  const bytes = await request.arrayBuffer()
-  if (bytes.byteLength > MAX_CLONE_BODY_BYTES) return undefined
-  try {
-    const parsed: unknown = JSON.parse(new TextDecoder().decode(bytes))
-    return parsed
-  } catch (_notJson) {
-    // The parser's message quotes the body, so the request is only refused.
-    return undefined
-  }
-}
-
-/**
  * Create the clone routes' service.
  * @param deps - Git, the timeout, the registry, the environment and the log.
  * @returns the service.
@@ -238,12 +229,12 @@ export function createCloneService(deps: CloneDeps): CloneService {
       jobs.delete(id)
     }
   }
-  const run = async (job: Job, url: string, destination: string): Promise<void> => {
+  const run = async (job: Job, url: string, destination: string, branch: string | undefined): Promise<void> => {
     const timer = setTimeout(() => { job.abort.abort('timeout') }, deps.timeoutMs)
     let outcome: GitOutcome
     const template = await createCloneTemplate()
     try {
-      outcome = await deps.git(cloneArguments(url, destination, template), cloneEnvironment(deps.env), job.abort.signal, (text) => {
+      outcome = await deps.git(cloneArguments(url, destination, template, branch), cloneEnvironment(deps.env), job.abort.signal, (text) => {
         const percents = [...text.matchAll(/Receiving objects:\s+(\d{1,3})%/gu)]
         const last = percents.at(-1)
         if (last !== undefined) job.status = { state: 'running', percent: Math.min(100, Number(last[1])) }
@@ -256,7 +247,7 @@ export function createCloneService(deps: CloneDeps): CloneService {
       // The template's attributes were for the checkout only; filters the person sets up later must apply.
       await rm(join(destination, '.git', 'info', 'attributes'), { force: true })
       const added = await registerFolder(destination, deps)
-      finish(job, added.result === 'added' ? { state: 'done', workspaceId: added.workspaceId, path: destination, kind: added.kind } : { state: 'failed', failure: 'add-failed' })
+      finish(job, added.result === 'added' ? { state: 'done', workspaceId: added.workspaceId, path: added.path, kind: added.kind } : { state: 'failed', failure: 'add-failed' })
       return
     }
     const failure: CloneFailure = outcome.kind === 'missing' ? 'no-git' : job.abort.signal.aborted ? 'timeout' : failureOf(outcome.stderr)
@@ -267,13 +258,14 @@ export function createCloneService(deps: CloneDeps): CloneService {
   }
   return {
     async start(request) {
-      const parsed = CloneRequest.safeParse(await bodyOf(request))
-      if (!parsed.success) return reply(400, { error: 'the request must be JSON with url, parent and name' })
-      const { url, parent, name } = parsed.data
-      const refuse = (problem: CloneProblem): Response => reply(422, { result: 'refused', problem })
+      const parsed = await readBody(request, CloneRequest)
+      if (parsed === undefined) return reply(400, { error: 'the request must be JSON with url, parent and name, and optionally branch' })
+      const { url, parent, name, branch } = parsed
+      const refuse = (problem: CloneProblem): Response => reply(422, { result: 'refused', problem } satisfies CloneStart)
       if (!isCloneAddress(url)) return refuse('url-form')
       if (hasUrlCredentials(url)) return refuse('url-credentials')
       if (!isFolderName(name)) return refuse('name-form')
+      if (branch !== undefined && !isBranchName(branch)) return refuse('branch-form')
       if (!isAbsolute(parent)) return refuse('not-absolute')
       if (running !== undefined) return refuse('busy')
       // The claim comes before the first await, so a second start sees it.
@@ -281,10 +273,10 @@ export function createCloneService(deps: CloneDeps): CloneService {
       running = job
       const destination = join(parent, name)
       const release = (): void => { running = undefined }
-      const problem = await locationProblem(destination, deps)
+      const problem = await preparedParent(parent, destination, deps)
       if (problem === 'unresolved') {
         release()
-        return reply(500, { error: 'the Delorun home could not be resolved, so nothing is cloned' })
+        return reply(500, { error: 'the folder could not be checked, so nothing is cloned' })
       }
       if (problem !== undefined) {
         release()
@@ -298,16 +290,17 @@ export function createCloneService(deps: CloneDeps): CloneService {
       job.existed = state === 'empty'
       const id = randomUUID()
       jobs.set(id, job)
-      void run(job, url, destination).catch((error: unknown) => {
+      await deps.remember(parent)
+      void run(job, url, destination, branch).catch((error: unknown) => {
         deps.warn(`a clone stopped unexpectedly: ${error instanceof Error ? error.name : 'unexpected failure'}`)
         finish(job, { state: 'failed', failure: 'failed' })
       })
-      return reply(200, { result: 'started', job: id })
+      return reply(200, { result: 'started', job: id } satisfies CloneStart)
     },
     async status(request) {
-      const parsed = CloneStatusRequest.safeParse(await bodyOf(request))
-      if (!parsed.success) return reply(400, { error: 'the request must be JSON with a job' })
-      return reply(200, jobs.get(parsed.data.job)?.status ?? { state: 'unknown' })
+      const parsed = await readBody(request, CloneStatusRequest)
+      if (parsed === undefined) return reply(400, { error: 'the request must be JSON with a job' })
+      return reply(200, jobs.get(parsed.job)?.status ?? { state: 'unknown' } satisfies CloneStatus)
     },
     dispose() {
       for (const job of jobs.values()) job.abort.abort('stopped')
@@ -315,6 +308,26 @@ export function createCloneService(deps: CloneDeps): CloneService {
       running = undefined
     },
   }
+}
+
+/**
+ * Hold a new folder against the roots and the locations Delorun never adds, create its parent when missing, and hold it
+ * again, so a parent that a symbolic link moved elsewhere in the meantime is refused.
+ * @param parent - the folder the new folder goes in.
+ * @param destination - the new folder.
+ * @param deps - the roots, the environment and the log.
+ * @returns the problem, `undefined` when the folder may be made, or `unresolved` when it cannot be checked or the parent cannot be made.
+ */
+export async function preparedParent(parent: string, destination: string, deps: Pick<CloneDeps, 'roots' | 'env' | 'warn'>): Promise<PlaceProblem | 'unresolved' | undefined> {
+  const before = await placeProblem(destination, deps.roots, deps)
+  if (before !== undefined) return before
+  try {
+    await mkdir(parent, { recursive: true })
+  } catch (error) {
+    deps.warn(`a parent folder could not be made: ${codeOf(error)}`)
+    return 'unresolved'
+  }
+  return await placeProblem(destination, deps.roots, deps)
 }
 
 /**

@@ -6,17 +6,52 @@ import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import {
   browserMcpAttachFields, browserMcpLaunchFields, browserServerDirectory, mountSessionMcp, validateBrowserMcpConfig,
-  type BrowserMcpAttachConfig, type BrowserMcpLaunchConfig, type BrowserToolCall,
+  type BrowserMcpAttachConfig, type BrowserMcpLaunchConfig, type BrowserToolCall, type SessionMcpAdmission,
 } from '@deepseek-ai/dsh-experimental-browser-use-runtime/mcp'
 import { BROWSER_CHOICES, launchedBrowser, UNSET_BROWSER_CHOICE, type BrowserChoice, type LaunchedBrowser } from '@deepseek-ai/dsh-native-command/chrome-channel'
 import Schema from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-working-directory'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 
 /** Cordis identity for the Playwright MCP browser provider. */
 export const name = 'experimental-browser-use-playwright-mcp'
 
 /** Services required for scoped MCP startup and prompt readiness checks. */
 export const inject = ['browserUse', 'agents', 'tools', 'systemPrompt', 'workingDirectory']
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /**
+     * An optional rule for which Sessions the browser serves, such as one that keeps the browser from chats in a folder
+     * whose owner chose none. Absent, every Session is served.
+     */
+    browserUseAdmission: Pick<SessionMcpAdmission, 'admitted'>
+  }
+
+  interface Events {
+    /**
+     * A Session's answer from `browserUseAdmission` may have changed; the browser server starts or stops to match.
+     * @mode parallel
+     * @param session - the Session.
+     * @returns settles once the Session's server has started or stopped to match.
+     */
+    'browser-use/admission-changed'(session: Agent['session']): Promise<void>
+  }
+}
+
+/**
+ * The admission the mount gets: the `browserUseAdmission` service's answer at each ask, or every Session while no
+ * service is provided, and the `browser-use/admission-changed` event as its change reports, so a service provided
+ * after the mount is heard too.
+ * @param ctx - the provider context.
+ * @returns the admission.
+ */
+export function providedAdmission(ctx: Context): SessionMcpAdmission {
+  return {
+    admitted: agent => ctx.get('browserUseAdmission')?.admitted(agent) ?? true,
+    changed: listener => ctx.on('browser-use/admission-changed', listener),
+  }
+}
 
 /**
  * The tools of the pinned Playwright MCP server that run model-written code in the server process, outside the page
@@ -265,6 +300,7 @@ export function apply(ctx: Context, config: Config): void {
     ...config.browserAdditions ? { outputFolder: OUTPUT_FOLDER, explainFailure: explainMissingBrowser } : {},
     // The denial and the folder guard are security invariants, which C16's `browser_additions` switch never turns off.
     deniedTools: denied,
+    admission: providedAdmission(ctx),
     // The client never registers a denied tool; this refusal holds even if a call to one is routed here.
     refuseCall: call => denied.includes(call.tool) ? Promise.resolve(deniedToolMessage(call.tool)) : refuseOutsideFolder(call),
     ...config.toolCallTimeoutMs === undefined ? {} : { toolCallTimeoutMs: config.toolCallTimeoutMs },

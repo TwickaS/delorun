@@ -1,7 +1,7 @@
 /**
  * Which repository addresses and folder names the clone route takes. Browser-safe, so the studio checks an address as
  * the person types it with the same rule the harness enforces.
- * @module @delorun/plugin-onboarding/clone-address
+ * @module @delorun/plugin-new-workspace/clone-address
  */
 
 /** A host name, which may not begin with `-`. */
@@ -54,6 +54,19 @@ export function hasUrlCredentials(url: string): boolean {
  */
 export function isFolderName(name: string): boolean {
   return name !== '.' && name !== '..' && !name.startsWith('-') && !/[/\\\u0000-\u001f\u007f]/u.test(name) && name.trim() === name
+}
+
+/**
+ * Whether a name is a branch the clone route checks out: Git's own rules for a branch name, kept strict.
+ * @param branch - the branch as typed.
+ * @returns whether it is a plain branch name: not `-`-led, no whitespace or control character, none of `~^:?*[\\`, no
+ * `..`, `@{` or `//`, not `@`, and not starting or ending with `/` or `.`, nor ending with `.lock`.
+ */
+export function isBranchName(branch: string): boolean {
+  if (branch === '@' || branch.startsWith('-') || branch.startsWith('/') || branch.startsWith('.')) return false
+  if (branch.endsWith('/') || branch.endsWith('.') || branch.endsWith('.lock')) return false
+  if (/[\s\u0000-\u001f\u007f~^:?*[\\]/u.test(branch)) return false
+  return !branch.includes('..') && !branch.includes('@{') && !branch.includes('//') && !branch.includes('/.')
 }
 
 /**
