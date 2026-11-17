@@ -1,0 +1,23 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../../..",
+    "noEmit": true,
+    "composite": false,
+    "incremental": false,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": ["src", "tests", "live"],
+  "references": [
+    { "path": "../../../vendor/cordis" },
+    { "path": "../../../vendor/schemastery" },
+    { "path": "../../../packages/boot/app-boot" },
+    { "path": "../../../packages/core/session" },
+    { "path": "../../../packages/llm/llm" },
+    { "path": "../../../packages/subagent/subagent" },
+    { "path": "../../../packages/subprocess/subprocess" },
+    { "path": "../../../packages/subprocess/subprocess-local" },
+    { "path": "../../../packages/util/values" }
+  ]
+}
