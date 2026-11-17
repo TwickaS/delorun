@@ -379,11 +379,12 @@ export class HomeProcess implements HandshakeSubject {
    * @param mode - how running chats are treated.
    * @param progress - writes progress lines.
    * @returns the final line's fields, with `status` when it could be read; the process ends once the line is sent.
-   * @throws {HomeProcessError} `UPDATE_IN_PROGRESS` while an update or rollback runs.
+   * @throws {HomeProcessError} `UPDATE_IN_PROGRESS` while an update or rollback runs; `RESTART_IN_PROGRESS` while a restart is starting a new Host (a restart that still waits for chats is cancelled first).
    */
   async requestStop(mode: StopMode, progress: (fields: Readonly<Record<string, unknown>>) => void): Promise<Readonly<Record<string, unknown>>> {
     if (this.handshake?.running() === true) throw new HomeProcessError('UPDATE_IN_PROGRESS', 'an update or rollback is running; cancel it or wait for it to end')
-    if (this.restarter.running) throw new HomeProcessError('RESTART_IN_PROGRESS', 'Delorun is restarting; wait for it to end')
+    // A restart that still waits for chats ends first, as the studio's cancel ends it; one that is starting is waited for.
+    if (this.restarter.running && !await this.restarter.cancel()) throw new HomeProcessError('RESTART_IN_PROGRESS', 'Delorun is restarting; wait for it to end')
     if (this.stopped) return this.stopLine()
     if (this.stopping !== undefined) {
       if (mode === 'cancel') await this.cancelChats()
@@ -626,6 +627,8 @@ export class HomeProcess implements HandshakeSubject {
         if (this.handshake === undefined) throw new HomeProcessError('REPORT_EXPIRED', 'no update was prepared')
         return this.handshake.apply(request.args.reportId, request.args.wait, request.args.drainTimeoutS, request.args.dataCopy, progress)
       case 'update.cancel':
+        // New turns refused for a restart that waits read as a waiting update, so its cancel ends that wait too.
+        await this.restarter.cancel()
         await this.handshake?.cancel()
         return { status: await this.status() }
       case 'rollback':

@@ -183,6 +183,23 @@ describe('a restart\'s wait for running chats', TIMEOUT, () => {
     end()
   })
 
+  it('ends at an update cancel or a stop, so the person is never kept from stopping Delorun by a restart that waits', async () => {
+    const home = await setUp()
+    const running = await start(home)
+    let end: () => void = () => {}
+    end = running.hosts.latest.chats.begin(() => { end() })
+    const waiting = await running.process.restart.begin({ stopChats: false, drainTimeoutS: 600 })
+    await sendHomeRequest(home, PROFILE, { op: 'update.cancel' })
+    expect(await waiting.done).toEqual({ outcome: 'cancelled' })
+    expect(running.process.restart.view()).toEqual({ kind: 'idle' })
+    expect(running.hosts.latest.chats.held).toBe(false)
+
+    const again = await running.process.restart.begin({ stopChats: false, drainTimeoutS: 600 })
+    expect((await sendHomeRequest(home, PROFILE, { op: 'stop', args: { mode: 'cancel' } })).at(-1)).toMatchObject({ ok: true })
+    expect(await again.done).toEqual({ outcome: 'cancelled' })
+    expect(running.store?.commands).toEqual([])
+  })
+
   it('refuses without what a restart needs beyond the home process', async () => {
     const home = await setUp()
     const running = await startHome(home)

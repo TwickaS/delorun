@@ -243,7 +243,18 @@ export function apply(ctx: Context, config: Config): void {
     const harness = (): ReturnType<ChangesHarnessHost['context']> => scope.get('changesHarness')?.context()
     // Only a Host a home process runs serves live files: elsewhere every change waits for the next start.
     const live = restart() === undefined ? undefined : new LiveAssets(scope.webServer, request => scope.connection.requestRejection(request))
-    if (live !== undefined) scope.effect(() => () => { live.dispose() }, 'plugin-changes: live studio files')
+    if (live !== undefined) {
+      scope.effect(() => () => { live.dispose() }, 'plugin-changes: live studio files')
+      // A Host booted again in the same process, after a failed restart or a reload, serves the live files the records
+      // compose at once; one that cannot be read leaves the running tree's file served.
+      const running = restart()
+      const context = harness()
+      if (running !== undefined && context !== undefined) {
+        live.refresh(context, running.running).catch((error: unknown) => {
+          scope.logger.warn(`Delorun serves the studio's own files as this start ran them: ${error instanceof Error ? error.message : String(error)}`)
+        })
+      }
+    }
     const dependencies = {
       connection: routeConnection(scope.connection),
       profile: () => {

@@ -301,10 +301,11 @@ export class Restart implements RestartControl {
       }
       if (ended === 'timeout') return this.fail('chats', FAILURE_WORDS.chats, undefined, release)
 
+      // Read while the Host still runs and the state is `waiting`, so a failure here ends the restart with nothing stopped.
+      const health = this.expectations()
       this.waiting = undefined
       this.current = { ...this.current as Extract<RestartView, { kind: 'restarting' }>, phase: 'starting' }
       this.subject.setState('switching')
-      const health = this.expectations()
       try {
         await this.subject.suspend(request.drainTimeoutS)
       } catch (error) {

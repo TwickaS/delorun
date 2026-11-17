@@ -16,7 +16,7 @@
  */
 import { createHash } from 'node:crypto'
 import { extname } from 'node:path'
-import { harnessDrift, isLiveHarnessFile, leaveOutNewestHarnessChange, liveAssetPath, liveFileBytes, type ChangeEntry, type ChangesRestartHost, type ContentVersion, type HarnessContext, type RunningComposition } from '@delorun/changes'
+import { harnessDrift, isLiveHarnessFile, leaveOutHarnessChange, liveAssetPath, liveFileBytes, type ChangeEntry, type ChangesRestartHost, type ContentVersion, type HarnessContext, type RunningComposition } from '@delorun/changes'
 import type { HarnessEffectView } from './wire.ts'
 
 /** The content types of the studio's built assets; anything else is served as bytes. */
@@ -65,6 +65,7 @@ export class LiveAssets {
   private files = new Map<string, ServedFile>()
   private readonly routes = new Map<string, () => void>()
   private queue: Promise<unknown> = Promise.resolve()
+  private disposed = false
 
   private readonly server: LiveRouteServer
   private readonly fence: LiveFence
@@ -85,8 +86,8 @@ export class LiveAssets {
 
   /**
    * Serve what the records compose now for every live file that differs from what this Host runs. Every new content
-   * is read and checked before any route changes, so a failure keeps every file served as it was. One refresh runs at
-   * a time.
+   * is read and checked and every new route registered before the served files change, so a failure keeps every file
+   * served as it was. One refresh runs at a time, and none changes anything once the routes are disposed.
    * @param harness - the running runtime's harness.
    * @param running - what this Host booted with; an unknown composition serves nothing.
    * @returns when the routes serve the new content.
@@ -98,15 +99,16 @@ export class LiveAssets {
     return next
   }
 
-  /** Remove every route. */
+  /** Remove every route; a refresh still running then changes nothing. */
   dispose(): void {
+    this.disposed = true
     for (const off of this.routes.values()) off()
     this.routes.clear()
     this.files = new Map()
   }
 
   private async refreshNow(harness: HarnessContext, running: RunningComposition): Promise<void> {
-    if (running.kind === 'unknown') return
+    if (running.kind === 'unknown' || this.disposed) return
     const drift = await harnessDrift(harness.home, harness.runtime, running)
     const next = new Map<string, ServedFile>()
     for (const [file, content] of drift.live) {
@@ -118,15 +120,23 @@ export class LiveAssets {
       const bytes = await liveFileBytes(harness.home, await harness.signed(), file, content)
       next.set(file, { content, bytes, etag: `W/"${createHash('sha1').update(bytes ?? '').digest('base64url')}"` })
     }
+    if (this.disposed) return
+    const added = new Map<string, () => void>()
+    try {
+      for (const file of next.keys()) {
+        if (this.routes.has(file)) continue
+        added.set(file, this.server.register({ kind: 'exact', path: liveAssetPath(file), resource: (request, peer) => Promise.resolve(this.answer(file, request, peer)) }))
+      }
+    } catch (error) {
+      for (const off of added.values()) off()
+      throw error
+    }
     this.files = next
+    for (const [file, off] of added) this.routes.set(file, off)
     for (const [file, off] of this.routes) {
       if (next.has(file)) continue
       off()
       this.routes.delete(file)
-    }
-    for (const file of next.keys()) {
-      if (this.routes.has(file)) continue
-      this.routes.set(file, this.server.register({ kind: 'exact', path: liveAssetPath(file), resource: (request, peer) => Promise.resolve(this.answer(file, request, peer)) }))
     }
   }
 
@@ -140,7 +150,7 @@ export class LiveAssets {
   private answer(file: string, request: Request, peer: unknown): Response {
     if (peer === undefined) {
       const rejection = this.fence(request)
-      if (rejection !== undefined) return new Response(rejection === 401 ? 'unauthorized' : 'forbidden', { status: rejection })
+      if (rejection !== undefined) return new Response(null, { status: rejection })
     }
     const served = this.files.get(file)
     if (served?.bytes === undefined) return new Response(null, { status: 404 })
@@ -185,7 +195,7 @@ export function harnessEffectOf(dependencies: HarnessEffectDependencies): (entry
       const failure = `the studio could not serve ${file}: ${error instanceof Error ? error.message : String(error)}`.replaceAll(harness.home, '<Delorun home>')
       dependencies.logger.warn(`Delorun kept serving the previous ${file}: ${failure}`)
       if (entry.state !== 'applied') return { kind: 'restart' }
-      const left = await leaveOutNewestHarnessChange(harness.home, harness.runtime, failure).catch((leaveOutError: unknown) => {
+      const left = await leaveOutHarnessChange(harness.home, harness.runtime, entry.id, failure).catch((leaveOutError: unknown) => {
         dependencies.logger.warn(`Delorun could not leave the change ${entry.id} out: ${leaveOutError instanceof Error ? leaveOutError.message : String(leaveOutError)}`)
         return undefined
       })

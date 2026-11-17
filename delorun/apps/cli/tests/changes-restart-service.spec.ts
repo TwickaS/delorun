@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
-import { applyHarnessChange, attestTerminal, createHarnessCopy, harnessChanges, harnessCopyDirectory, readHarnessLog, type ChangesRestartHost, type HarnessContext, type SignedFile } from '@delorun/changes'
+import { applyHarnessChange, attestTerminal, createHarnessCopy, discardHarnessChange, harnessChanges, harnessCopyDirectory, readHarnessLog, type ChangesRestartHost, type HarnessContext, type SignedFile } from '@delorun/changes'
 import { ensureHomeTree } from '@delorun/home'
 import type { RestartControl } from '@delorun/home-process'
 import { describe, expect, it, onTestFinished } from 'vitest'
@@ -15,6 +15,7 @@ import { provideChangesRestart, restartSupport } from '../src/changes/restart-se
 
 const RUNTIME = '1.2.3'
 const START_FILE = 'app/node_modules/@delorun/cli/src/start.js'
+const OTHER_FILE = 'app/node_modules/@delorun/cli/src/other.js'
 const FAILURE = 'H2-host-ready: the new Host did not answer'
 
 /**
@@ -29,7 +30,7 @@ function serviceOf(root: Context): ChangesRestartHost | undefined {
  * A home with runtime {@link RUNTIME} installed and the start file changed and applied.
  * @returns the home and the applied change's id and content version.
  */
-async function appliedChange(): Promise<{ readonly home: string, readonly id: string, readonly to: string }> {
+async function appliedChange(): Promise<{ readonly home: string, readonly id: string, readonly to: string, readonly harness: HarnessContext }> {
   const base = realpathSync(mkdtempSync(join(tmpdir(), 'delorun-restart-service-')))
   onTestFinished(() => { rmSync(base, { recursive: true, force: true }) })
   const home = join(base, '.delorun')
@@ -37,7 +38,7 @@ async function appliedChange(): Promise<{ readonly home: string, readonly id: st
   await ensureHomeTree(home, 'default')
   const directory = join(home, 'runtimes', RUNTIME)
   const files: SignedFile[] = []
-  for (const [path, text] of Object.entries({ 'app/package.json': '{}\n', [START_FILE]: 'export const start = 1\n' })) {
+  for (const [path, text] of Object.entries({ 'app/package.json': '{}\n', [START_FILE]: 'export const start = 1\n', [OTHER_FILE]: 'export const other = 1\n' })) {
     mkdirSync(dirname(join(directory, path)), { recursive: true })
     writeFileSync(join(directory, path), text)
     files.push({ path, length: Buffer.byteLength(text), sha256: createHash('sha256').update(text).digest('hex'), executable: false })
@@ -49,7 +50,7 @@ async function appliedChange(): Promise<{ readonly home: string, readonly id: st
   const id = (await harnessChanges(harness)).changes[0]!.id
   await applyHarnessChange(harness, id, terminal)
   const entry = (await readHarnessLog(home)).entries.find(candidate => candidate.id === id)!
-  return { home, id, to: entry.to! }
+  return { home, id, to: entry.to!, harness }
 }
 
 describe('the changesRestart service', () => {
@@ -85,20 +86,31 @@ describe('the leave-out after a failed restart', () => {
   it('leaves the newest applied change out when the running Host does not run it', async () => {
     for (const running of [{ kind: 'known', files: {} }, { kind: 'unknown' }] as const) {
       const { home, id } = await appliedChange()
-      expect(await restartSupport(home, RUNTIME, { current: running }).leaveOut(FAILURE)).toEqual({ id, file: START_FILE })
+      expect(await restartSupport(home, RUNTIME, { current: running, read: true }).leaveOut(FAILURE)).toEqual({ id, file: START_FILE })
       expect((await readHarnessLog(home)).entries.find(entry => entry.id === id)).toMatchObject({ state: 'left-out-at-start' })
     }
+  })
+
+  it('leaves out the change that was newest applied even when another decision came after it', async () => {
+    const { home, id, harness } = await appliedChange()
+    writeFileSync(join(harnessCopyDirectory(home, RUNTIME), ...OTHER_FILE.split('/')), 'export const other = 2\n')
+    const other = (await harnessChanges(harness)).changes.find(change => change.file === OTHER_FILE)!
+    await discardHarnessChange(harness, other.id, attestTerminal({ stdin: { isTTY: true }, stdout: { isTTY: true } }))
+    expect(await restartSupport(home, RUNTIME, { current: { kind: 'known', files: {} }, read: true }).leaveOut(FAILURE)).toEqual({ id, file: START_FILE })
+    const entries = (await readHarnessLog(home)).entries
+    expect(entries.find(entry => entry.id === id)).toMatchObject({ state: 'left-out-at-start' })
+    expect(entries.find(entry => entry.id === other.id)).toMatchObject({ state: 'discarded' })
   })
 
   it('leaves nothing out when the running Host runs that change, or when none is applied', async () => {
     const { home, id, to } = await appliedChange()
     const before = await readHarnessLog(home)
-    expect(await restartSupport(home, RUNTIME, { current: { kind: 'known', files: { [START_FILE]: to as never } } }).leaveOut(FAILURE)).toBeUndefined()
+    expect(await restartSupport(home, RUNTIME, { current: { kind: 'known', files: { [START_FILE]: to as never } }, read: true }).leaveOut(FAILURE)).toBeUndefined()
     expect(await readHarnessLog(home)).toEqual(before)
     expect(before.entries.find(entry => entry.id === id)).toMatchObject({ state: 'applied' })
     const other = await appliedChange()
-    await restartSupport(other.home, RUNTIME, { current: { kind: 'known', files: {} } }).leaveOut(FAILURE)
+    await restartSupport(other.home, RUNTIME, { current: { kind: 'known', files: {} }, read: true }).leaveOut(FAILURE)
     // Its one applied change is now left out, so nothing applied remains to leave out.
-    expect(await restartSupport(other.home, RUNTIME, { current: { kind: 'known', files: {} } }).leaveOut(FAILURE)).toBeUndefined()
+    expect(await restartSupport(other.home, RUNTIME, { current: { kind: 'known', files: {} }, read: true }).leaveOut(FAILURE)).toBeUndefined()
   })
 })

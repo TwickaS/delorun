@@ -616,7 +616,7 @@ async function startHomeProcess(request: StartRequest, dependencies: StartDepend
   const unregisterRelease = dependencies.fatalRelease(async () => { await current?.dispose() })
   const tracked: StartDependencies = { ...dependencies, runProfile: async options => (current = await dependencies.runProfile(options)) }
   const retry = startRetry({ home: request.home, profile: request.profile, env: request.env, successor: handover !== undefined, output: request.output, logger: homeLog.logger, ...runtime.store ? { runtime: runtime.version } : {} })
-  const booted: RunningHolder = { current: { kind: 'unknown' } }
+  const booted: RunningHolder = { current: { kind: 'unknown' }, read: false }
   try {
     const running = handover?.handover.to ?? runtime.version
     // A successor that fails its own start check does not boot, so the predecessor's health check fails and it rolls back.
@@ -750,11 +750,15 @@ export function runHost(dependencies: Pick<StartDependencies, 'loadEnvironment' 
  */
 async function bootProfile(request: StartRequest, dependencies: StartDependencies, stored: { readonly version: RuntimeVersion, readonly composed: string | undefined } | undefined, homeLog: HomeLog, retry: StartRetry, restart: { readonly control: RestartControl, readonly running: RunningHolder }): Promise<RunningHost> {
   const logger = homeLog.logger
-  // What this Host runs, read before it boots: a record that cannot be read leaves it unknown, so every change waits for a restart.
-  restart.running.current = stored === undefined ? { kind: 'unknown' } : await runningComposition(request.home, stored.version, stored.composed).catch((error: unknown) => {
-    logger.warn(`Delorun could not read which changes to Delorun itself this start runs; the studio counts each as waiting for a restart: ${error instanceof Error ? error.message : String(error)}`)
-    return { kind: 'unknown' } as const
-  })
+  // What this process runs, read before its first Host boots: its tree never changes, so a Host it boots again after a
+  // failed restart runs the same files. A record that cannot be read leaves it unknown, so every change waits for a restart.
+  if (!restart.running.read) {
+    restart.running.read = true
+    restart.running.current = stored === undefined ? { kind: 'unknown' } : await runningComposition(request.home, stored.version, stored.composed).catch((error: unknown) => {
+      logger.warn(`Delorun could not read which changes to Delorun itself this start runs; the studio counts each as waiting for a restart: ${error instanceof Error ? error.message : String(error)}`)
+      return { kind: 'unknown' } as const
+    })
+  }
   const composed = await composeDelorunProfile({ home: request.home, profile: request.profile, kind: 'cli', output: request.output, env: request.env, ...request.patchFiles === undefined ? {} : { patchFiles: request.patchFiles } }, {
     prepareProfile: dependencies.prepareProfile,
     approvedPluginContent: dependencies.approvedPluginContent,

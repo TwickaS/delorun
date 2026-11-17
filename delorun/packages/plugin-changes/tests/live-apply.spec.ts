@@ -177,6 +177,31 @@ describe('live changes to the studio\'s assets', () => {
     expect(entries.find(entry => entry.id === first.id)).toMatchObject({ state: 'applied' })
   })
 
+  it('a Host booted again serves the live files the records compose, and a route that cannot be registered changes nothing', async () => {
+    const { harness, server, edit, restart } = await liveStudio()
+    const change = await edit(ASSET, 'console.log("changed")\n')
+    await post(server.port, HARNESS_PATHS.apply, { id: change.id, to: change.to })
+
+    const again = new FakeWebServer()
+    const live = new LiveAssets(again, fence)
+    await live.refresh(harness, restart.running)
+    expect(await (await again.routes.get(ASSET_PATH)?.(new Request(`http://127.0.0.1${ASSET_PATH}`, { headers: { cookie: 'studio=valid' } })))?.text()).toBe('console.log("changed")\n')
+
+    const refusing: LiveRouteServer = { register: () => { throw new Error('the path is taken') } }
+    const refused = new LiveAssets(refusing, fence)
+    await expect(refused.refresh(harness, restart.running)).rejects.toThrow('the path is taken')
+    expect(refused.paths).toEqual([])
+
+    // A refresh that ends after the routes were removed registers none.
+    const late = new FakeWebServer()
+    const disposed = new LiveAssets(late, fence)
+    const pending = disposed.refresh(harness, restart.running)
+    disposed.dispose()
+    await pending
+    expect(late.routes.size).toBe(0)
+    expect(disposed.paths).toEqual([])
+  })
+
   it('a Host no home process runs takes every change at its next start', async () => {
     const effect = harnessEffectOf({ restart: () => undefined, harness: () => undefined, live: undefined, logger: { warn: () => {} } })
     expect(await effect({ subject: { file: ASSET } } as Parameters<typeof effect>[0])).toEqual({ kind: 'not-running' })
