@@ -11,21 +11,13 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { ProfileContext } from '@deepseek-ai/dsh-app-boot'
 import type {} from '@deepseek-ai/dsh-subagent'
 import z from '@deepseek-ai/schemastery'
-import type { ExternalAgentsGate } from '@delorun/external-agents'
+import type {} from '@delorun/external-agents'
 import { CodexDriver, codexLocator } from './driver.ts'
 
 export { CodexDriver, appServerArgv, codexLocator, type CodexDriverOptions } from './driver.ts'
 export { CodexSession, CodexSessionClosedError, CodexTurnRunningError, type CodexClosedReason } from './session.ts'
 export { TESTED_CODEX_VERSION } from './protocol.ts'
 export type { WireTap } from './rpc.ts'
-
-// XXX: the gate's own `declare module` lands with its next contract commit; this identical declaration goes then.
-declare module '@deepseek-ai/cordis' {
-  interface Context {
-    /** The start gate for external agents' programs, provided by `@delorun/external-agents`. */
-    externalAgents: ExternalAgentsGate
-  }
-}
 
 /** The driver's configuration. */
 export interface Config {
