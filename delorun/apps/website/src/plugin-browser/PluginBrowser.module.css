@@ -124,13 +124,13 @@
 .kinds { display: flex; flex-wrap: wrap; gap: var(--dl-space-2); margin: var(--dl-space-3) 0 0; padding: 0; list-style: none; }
 .make { height: 100%; overflow-y: auto; padding: var(--dl-space-3) 0; }
 .make p { margin: 0; max-width: 62ch; font-size: 16px; line-height: 24px; }
-.kindSummary { margin-top: var(--dl-space-3); color: var(--dl-text-muted); }
+.make .kindSummary { margin-top: var(--dl-space-3); color: var(--dl-text-muted); }
 .fileList { margin: var(--dl-space-3) 0 0; padding: 0; list-style: none; }
 .fileList li { display: grid; grid-template-columns: minmax(0, 18rem) minmax(0, 1fr); gap: var(--dl-space-1) var(--dl-space-4); padding: var(--dl-space-2) 0; border-bottom: 1px solid var(--dl-border); font-size: 15px; line-height: 24px; }
 .fileList code { font-family: var(--dl-font-mono); font-size: 14px; overflow-wrap: anywhere; }
 .fileHeading { margin: var(--dl-space-4) 0 0; font-size: 14px; font-weight: 600; line-height: 20px; }
 .guide { display: inline-block; margin-top: var(--dl-space-4); color: var(--dl-accent-text); font-size: 15px; }
-.note { margin-top: var(--dl-space-3); color: var(--dl-text-muted); font-size: 14px; }
+.make .note { margin-top: var(--dl-space-3); color: var(--dl-text-muted); font-size: 14px; }
 
 @media (max-width: 599px) {
   .fileList li { grid-template-columns: minmax(0, 1fr); }

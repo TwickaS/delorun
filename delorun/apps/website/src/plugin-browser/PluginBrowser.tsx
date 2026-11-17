@@ -33,10 +33,7 @@ function Detail({ plugin, words }: { readonly plugin: PluginEntry; readonly word
     <Card className={css.card}>
       <h3 className={css.title}>{plugin.title}</h3>
       <p className={css.sentence}>{plugin.sentence}</p>
-      <ul className={css.facts}>
-        <li><Pill tone={plugin.standing === 'on' ? 'success' : 'neutral'}>{words.groups[plugin.standing]}</Pill></li>
-        {plugin.state === 'experimental' ? <li><Pill tone="warning">{words.experimental}</Pill></li> : null}
-      </ul>
+      {plugin.state === 'experimental' ? <ul className={css.facts}><li><Pill tone="warning">{words.experimental}</Pill></li></ul> : null}
       <p className={css.standing}>{words.standings[plugin.standing]}</p>
       {plugin.standing === 'pack' ? (
         <>
@@ -121,6 +118,8 @@ function Plugins({ words }: { readonly words: PluginBrowserWords }) {
     setSelected(plugin.name)
     document.getElementById(`plugin-row-${plugin.name}`)?.focus()
   }
+  // On a phone the detail opens under the row; a list that scrolls inside its box shows it whole.
+  useEffect(() => { document.querySelector(`.${css.inline}`)?.scrollIntoView?.({ block: 'nearest' }) }, [selected])
   const current = PLUGINS.find((plugin) => plugin.name === selected) ?? PLUGINS[0]
   return (
     <div className={css.split}>
