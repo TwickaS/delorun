@@ -204,16 +204,16 @@ export function resolveCommand(config: Config, host: HostFacts = hostFacts(), lo
 }
 
 /**
- * The environment entries the provider merges over the MCP client's scrubbed environment: every inherited browse
- * variable outside `inheritEnv` blanked, and {@link FIXED_ENV}.
+ * The environment entries the provider merges over the MCP client's scrubbed environment: every browse variable in
+ * `env` outside `inheritEnv` blanked, every {@link NEVER_INHERITED} name blanked whether or not it is set yet (the
+ * client reads the Host's environment again at each start), and {@link FIXED_ENV}.
  * @param config - the validated row configuration.
  * @param env - the process environment.
  * @returns the entries.
  */
 export function childEnv(config: Pick<Config, 'inheritEnv'>, env: NodeJS.ProcessEnv = process.env): Record<string, string> {
   const allowed = new Set(config.inheritEnv.filter(name => !NEVER.has(name)).map(name => BROWSE_ENV_PREFIX + name))
-  const blanked = Object.keys(env)
-    .filter(key => key.toUpperCase().startsWith(BROWSE_ENV_PREFIX) && !allowed.has(key))
-    .map(key => [key, ''] as const)
+  const present = Object.keys(env).filter(key => key.toUpperCase().startsWith(BROWSE_ENV_PREFIX) && !allowed.has(key))
+  const blanked = [...NEVER_INHERITED.map(name => BROWSE_ENV_PREFIX + name), ...present].map(key => [key, ''] as const)
   return { ...Object.fromEntries(blanked), ...FIXED_ENV }
 }

@@ -34,7 +34,8 @@
  * the Playwright provider builds its launch arguments with, `launchedBrowser`, answers Chrome or Chromium. When Chrome
  * launches, the need is met by Google Chrome installed where Playwright's `chrome` channel looks, with no download, and
  * an unmet one reads "Needs Google Chrome installed" with the installer's `chrome` command; when Chromium launches, the
- * exact build is needed as above. A `browser` that is none of the three is the bundle's problem.
+ * exact build is needed as above. A row whose configuration names its own `executablePath` launches that executable,
+ * so its need is met with neither. A `browser` that is none of the three is the bundle's problem.
  *
  * Playwright resolves a relative browser cache, such as a relative `PLAYWRIGHT_BROWSERS_PATH`, in `INIT_CWD` or else in
  * the folder its server runs in. The need's optional `server` names the MCP server; when the row's configuration sets
@@ -160,7 +161,7 @@ export function hostEnvironment(): CheckEnvironment {
     env: process.env,
     home: homedir(),
     exists: existsSync,
-    readJson: path => JSON.parse(readFileSync(path, 'utf8')) as unknown,
+    readJson: (path): unknown => JSON.parse(readFileSync(path, 'utf8')),
     resolvePackage: (from, name) => {
       for (let dir = dirname(from); ; dir = dirname(dir)) {
         const manifest = join(dir, 'node_modules', name, 'package.json')
@@ -347,7 +348,17 @@ export function pairedBrowsers(host: CheckEnvironment): number {
   }
 }
 
-const RowBrowser = z.looseObject({ browser: z.unknown().optional() })
+const RowBrowser = z.looseObject({ browser: z.unknown().optional(), executablePath: z.unknown().optional() })
+
+/**
+ * The browser executable a row's configuration names for its launch.
+ * @param rowConfig - the row's Loader entry configuration.
+ * @returns the path, or `undefined` when the row names none.
+ */
+function rowExecutable(rowConfig: unknown): string | undefined {
+  const config = RowBrowser.safeParse(rowConfig)
+  return config.success && typeof config.data.executablePath === 'string' && config.data.executablePath !== '' ? config.data.executablePath : undefined
+}
 
 /**
  * Whether a `playwright-browser` need tests the installed Chrome instead of a downloaded build: a `chromium` need whose
@@ -361,7 +372,7 @@ const RowBrowser = z.looseObject({ browser: z.unknown().optional() })
 export function launchesChrome(need: Extract<Need, { kind: 'playwright-browser' }>, rowConfig: unknown, host: CheckEnvironment): boolean {
   if (need.browser !== 'chromium') return false
   const config = RowBrowser.safeParse(rowConfig)
-  return launchedBrowser(parseBrowserChoice(config.success ? config.data.browser : undefined), host) === 'chrome'
+  return launchedBrowser(parseBrowserChoice(config.success ? config.data.browser : undefined), host, rowExecutable(rowConfig)) === 'chrome'
 }
 
 /**
@@ -379,6 +390,8 @@ export function isMet(need: Need, host: CheckEnvironment, bundleDir: string, row
     case 'env': return (host.env[need.name] ?? '') !== ''
     case 'platform': return need.os.includes(host.platform)
     case 'playwright-browser':
+      // A row that names its own executable launches that one: nothing is looked for and nothing is downloaded.
+      if (need.browser === 'chromium' && rowExecutable(rowConfig) !== undefined) return true
       if (launchesChrome(need, rowConfig, host)) return chromeChannelExecutable(host) !== undefined
       return playwrightBuild(need, bundleDir, host, rowConfig).folders.every(folder => host.exists(join(folder, 'INSTALLATION_COMPLETE')))
     case 'browse-paired':

@@ -8,7 +8,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import { SessionId, SessionLogOffset, type SessionEvent } from '@deepseek-ai/dsh-session'
+import { SessionId, SessionLogOffset, type SessionEvent, type SessionHeader } from '@deepseek-ai/dsh-session'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import ApprovalService, { type ApprovalOutcome, type ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
 import { describe, expect, it } from 'vitest'
@@ -127,6 +127,17 @@ describe('use_my_browser', () => {
     const h = await harness(new MockAdapter([ASK, textResponse('ok')]), () => 'allowed-once')
     const agent = await h.ctx.agentLoop.create(SessionId('scheduled-ask'), { provider: 'mock', model: 'mock' })
     await run(h.ctx, agent, 'nightly check', 'schedule')
+    expect(h.asks).toEqual([])
+    expect(grantEvents(agent)).toEqual([])
+    expect(results(agent)[0]).toContain(AWAY_REFUSAL)
+  })
+
+  it('asks nobody in a delegated Session, whose prompts come from the Agent that delegated it', async () => {
+    const h = await harness(new MockAdapter([ASK, textResponse('ok')]), () => 'allowed-once')
+    // A subagent's prompt carries kind `user`; the header's delegation depth tells it apart.
+    const delegated: Pick<SessionHeader, 'cwd' | 'delegationDepth'> = { delegationDepth: 1 }
+    const agent = await h.ctx.agentLoop.create(SessionId('delegated'), { provider: 'mock', model: 'mock' }, delegated)
+    await run(h.ctx, agent, 'open the order page')
     expect(h.asks).toEqual([])
     expect(grantEvents(agent)).toEqual([])
     expect(results(agent)[0]).toContain(AWAY_REFUSAL)

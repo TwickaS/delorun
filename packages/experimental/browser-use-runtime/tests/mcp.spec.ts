@@ -114,11 +114,12 @@ interface LoadOptions {
   refuseCall?: SessionMcpOptions['refuseCall']
   registration?: SessionMcpOptions['registration']
   admission?: SessionMcpOptions['admission']
+  deniedTools?: string[]
 }
 
 async function load(options: LoadOptions = {}) {
   const { exclusive = false, mode, toolCallTimeoutMs, toolOrder, consent = false } = options
-  const { explainFailure, directory, outputFolder, refuseCall, registration, admission } = options
+  const { explainFailure, directory, outputFolder, refuseCall, registration, admission, deniedTools } = options
   const root = await mkdtemp(join(tmpdir(), 'dsh-browser-mcp-'))
   roots.push(root)
   const model = new FixtureModel()
@@ -134,7 +135,7 @@ async function load(options: LoadOptions = {}) {
         name: 'browser-fixture', exclusive, command: process.execPath, args: [fixture, root, ...mode === undefined ? [] : [mode]],
         ...toolCallTimeoutMs === undefined ? {} : { toolCallTimeoutMs, env: {} }, ...explainFailure === undefined ? {} : { explainFailure },
         ...directory === undefined ? {} : { directory }, ...outputFolder === undefined ? {} : { outputFolder },
-        ...refuseCall === undefined ? {} : { refuseCall },
+        ...refuseCall === undefined ? {} : { refuseCall }, ...deniedTools === undefined ? {} : { deniedTools },
         ...registration === undefined ? {} : { registration }, ...admission === undefined ? {} : { admission },
       })
     } }],
@@ -400,6 +401,12 @@ describe('Session MCP Loader composition', () => {
     expect(JSON.stringify(refused)).toContain('this Session may not use this browser')
     expect((await events(root)).filter(event => event.event === 'call')).toHaveLength(0)
     expect((await visit(ctx, granted.agent, 'first')).isError).toBe(false)
+    // Pins the call-time check: once the provider stops admitting a Session, its calls are refused before the change is
+    // reported and its server stopped.
+    admittedSessions.delete('granted')
+    expect((await visit(ctx, granted.agent, 'early')).isError).toBe(true)
+    expect((await events(root)).filter(event => event.event === 'call')).toHaveLength(1)
+    admittedSessions.add('granted')
     // A change of admission starts the newly admitted Session's server and stops the one no longer admitted.
     admittedSessions.add('other')
     admittedSessions.delete('granted')
@@ -563,6 +570,33 @@ describe('Session MCP Loader composition', () => {
     expect(await readdir(cwd)).toEqual([])
     expect(warnings).toEqual([expect.stringContaining('with a .gitignore in Session output-failed\'s folder, so Git may pick up files')])
     expect(warnings[0]).toMatch(/^browser-fixture: could not create absent[/\\]output .*ENOENT/u)
+  })
+
+  it('never offers a denied server tool to a Session or its model, and a call to it never reaches the server', async () => {
+    const UNSAFE = 'mcp__browser-fixture__unsafe'
+    const open = await load({ mode: 'unsafe-tool' })
+    const offered = await open.ctx.agents.create({ sessionId: SessionId('undenied') })
+    expect((await warm(open.ctx, offered.agent)).tools.map(tool => tool.name)).toContain(UNSAFE)
+
+    const { ctx, root, model } = await load({ mode: 'unsafe-tool', deniedTools: ['unsafe'] })
+    const { agent } = await ctx.agents.create({ sessionId: SessionId('denied'), agentOptions: { provider: 'fixture', model: 'fixture' } })
+    const assembled = await warm(ctx, agent)
+    expect(assembled.tools.map(tool => tool.name)).toContain(TOOL)
+    expect(assembled.tools.some(tool => tool.name === UNSAFE)).toBe(false)
+    expect(ctx.tools.schemas(agent).some(tool => tool.name === UNSAFE)).toBe(false)
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'Use the browser.' }], source: { kind: 'user' } }))
+    await agent.whenIdle()
+    const sent = model.requests.at(-1)?.tools?.map(tool => tool.name) ?? []
+    expect(sent).toContain(TOOL)
+    expect(sent).not.toContain(UNSAFE)
+    const refused = await executeToolFixture(ctx, {
+      agent, name: UNSAFE, arguments: {}, callId: ToolCallId('unsafe'), signal: new AbortController().signal,
+    }).then(result => result.isError, () => true)
+    expect(refused).toBe(true)
+    expect((await visit(ctx, agent, 'allowed')).isError).toBe(false)
+    const reached = (await events(root)).filter(event => event.event === 'call').map(event => event.name)
+    expect(reached).toContain('visit')
+    expect(reached).not.toContain('unsafe')
   })
 
   it('fails a call the provider refuses without sending it to the server, and sends every other call', async () => {

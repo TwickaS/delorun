@@ -25,7 +25,7 @@ const config = Config({
   toolCallTimeoutMs: 60_000, startupTimeoutMs: 30_000, failOnStartupError: true,
 })
 
-async function connect(server: McpServer, options?: { resources: true }): Promise<Context> {
+async function connect(server: McpServer, options?: { resources?: true; deniedTools?: string[] }): Promise<Context> {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
@@ -33,7 +33,8 @@ async function connect(server: McpServer, options?: { resources: true }): Promis
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
   const serving = serveStdio(() => server, { transport: serverTransport })
   mockTransport.mockReturnValue(clientTransport)
-  const connection = startConnection(ctx, config, resolveReconnectPolicy({ enabled: false }, 'fixture'), new McpStatusCell(() => {}))
+  const connected = options?.deniedTools === undefined ? config : { ...config, deniedTools: options.deniedTools }
+  const connection = startConnection(ctx, connected, resolveReconnectPolicy({ enabled: false }, 'fixture'), new McpStatusCell(() => {}))
   onTestFinished(async () => {
     await connection.dispose()
     await serving.close()
@@ -192,6 +193,40 @@ describe('modern MCP connections', () => {
     expect(ctx.tools.get('mcp__fixture__first')).toBeDefined()
     server.registerTool('second', { inputSchema: z.object({}) }, async () => ({ content: [] }))
     await vi.waitFor(() => { expect(ctx.tools.get('mcp__fixture__second')).toBeDefined() })
+  })
+
+  it('never registers a denied tool, at the first sync or after a list change, and a call to it never reaches the server', async () => {
+    const reached: string[] = []
+    const server = new McpServer({ name: 'denied', version: '1' })
+    for (const name of ['safe', 'unsafe']) {
+      server.registerTool(name, { inputSchema: z.object({}) }, async () => {
+        reached.push(name)
+        return { content: [{ type: 'text', text: name }] }
+      })
+    }
+    const ctx = await connect(server, { deniedTools: ['unsafe', 'not-listed-by-the-server'] })
+    expect(ctx.tools.schemas().map(tool => tool.name)).toEqual(['mcp__fixture__safe'])
+    expect(ctx.tools.get('mcp__fixture__unsafe')).toBeUndefined()
+    const call = (name: string) => executeToolFixture(ctx, {
+      name, arguments: {}, callId: ToolCallId(name), signal: new AbortController().signal,
+    }).then(result => result.isError, () => true)
+    expect(await call('mcp__fixture__unsafe')).toBe(true)
+    expect(await call('mcp__fixture__safe')).toBe(false)
+    expect(reached).toEqual(['safe'])
+    server.registerTool('later', { inputSchema: z.object({}) }, async () => ({ content: [] }))
+    await vi.waitFor(() => { expect(ctx.tools.get('mcp__fixture__later')).toBeDefined() })
+    expect(ctx.tools.schemas().map(tool => tool.name).toSorted()).toEqual(['mcp__fixture__later', 'mcp__fixture__safe'])
+    expect(await call('mcp__fixture__unsafe')).toBe(true)
+    expect(reached).toEqual(['safe'])
+  })
+
+  it('registers every listed tool when none is denied, and rejects an empty denied name in the config', async () => {
+    const server = new McpServer({ name: 'undenied', version: '1' })
+    server.registerTool('unsafe', { inputSchema: z.object({}) }, async () => ({ content: [] }))
+    const ctx = await connect(server)
+    expect(ctx.tools.get('mcp__fixture__unsafe')).toBeDefined()
+    expect(() => Config({ transport: 'stdio', serverName: 'fixture', command: 'fixture', deniedTools: [' '] })).toThrow()
+    expect(Config({ transport: 'stdio', serverName: 'fixture', command: 'fixture', deniedTools: ['unsafe'] }).deniedTools).toEqual(['unsafe'])
   })
 
   it('delivers caller cancellation to an executing modern tool', async () => {
