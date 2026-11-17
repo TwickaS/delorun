@@ -77,15 +77,18 @@ function sitemapFile(): Plugin {
 }
 
 // With no assembled version there is no record: the What's new section is left out.
-const changelog = loadView(resolve(process.cwd(), '../../..'))
+/** The repository's root, from this file's place, whichever directory the build starts in. */
+const REPOSITORY_ROOT = fileURLToPath(new URL('../../../', import.meta.url))
 
-const notices = readNotices({ packages: resolve(process.cwd(), '../../packages'), sonnerLicence: resolve(process.cwd(), 'node_modules/sonner/LICENSE.md') })
+const changelog = loadView(REPOSITORY_ROOT)
+
+const notices = readNotices({ packages: fileURLToPath(new URL('../../packages', import.meta.url)), sonnerLicence: fileURLToPath(new URL('./node_modules/sonner/LICENSE.md', import.meta.url)) })
 
 export default defineConfig({
   build: { outDir: '.build' },
   environments: { client: { build: { outDir: OUT_DIR } } },
   plugins: [
-    ...replicaPlugins(replicaOptions(resolve(process.cwd(), '../../..'))),
+    ...replicaPlugins(replicaOptions(REPOSITORY_ROOT)),
     changelogModule(headlinesOnly(changelog)),
     noticesModule(notices),
     sitemapFile(),
