@@ -143,6 +143,12 @@ export function gatesFor(base: string): readonly GateCheck[] {
       inputs: ['delorun/packages/*/src/**', 'delorun/apps/*/src/**', `${GATE_DIR}/upstream-src-imports.ts`],
     },
     {
+      id: 'gates:external-agent-spawns',
+      title: 'No Delorun source starts Claude Code or Codex outside the start gate, upstream\'s one-shot path and `delorun agents login`',
+      command: [TSX, `${GATE_DIR}/external-agent-spawns.ts`],
+      inputs: ['delorun/packages/*/src/**', 'delorun/apps/*/src/**', `${GATE_DIR}/external-agent-spawns.ts`],
+    },
+    {
       id: 'gates:no-unknown-casts',
       title: 'No assertion to `unknown` beyond upstream\'s recorded baseline, in upstream\'s sources and Delorun\'s',
       command: [TSX, 'scripts/verify-no-unknown-casts.ts'],
