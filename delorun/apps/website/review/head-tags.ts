@@ -7,7 +7,7 @@
 import type { Finding } from './report.ts'
 
 /** The tags checked, in report order. */
-export const TAGS = ['title', 'description', 'canonical', 'og:title', 'og:description', 'og:image', 'og:url', 'og:type', 'twitter:card', 'twitter:title', 'twitter:description', 'twitter:image', 'structured-data'] as const
+export const TAGS = ['title', 'description', 'canonical', 'og:title', 'og:description', 'og:image', 'og:image:alt', 'og:url', 'og:type', 'og:site_name', 'twitter:card', 'twitter:title', 'twitter:description', 'twitter:image', 'twitter:image:alt', 'structured-data'] as const
 
 /** A tag's name. */
 export type TagName = (typeof TAGS)[number]
@@ -50,10 +50,23 @@ export function readHeadTags(html: string): HeadTags {
     'title': title === undefined || title === '' ? null : title,
     'description': meta('description'),
     'canonical': canonical === undefined ? null : attribute(canonical, 'href'),
-    'og:title': meta('og:title'), 'og:description': meta('og:description'), 'og:image': meta('og:image'), 'og:url': meta('og:url'), 'og:type': meta('og:type'),
-    'twitter:card': meta('twitter:card'), 'twitter:title': meta('twitter:title'), 'twitter:description': meta('twitter:description'), 'twitter:image': meta('twitter:image'),
+    'og:title': meta('og:title'), 'og:description': meta('og:description'), 'og:image': meta('og:image'), 'og:image:alt': meta('og:image:alt'), 'og:url': meta('og:url'), 'og:type': meta('og:type'), 'og:site_name': meta('og:site_name'),
+    'twitter:card': meta('twitter:card'), 'twitter:title': meta('twitter:title'), 'twitter:description': meta('twitter:description'), 'twitter:image': meta('twitter:image'), 'twitter:image:alt': meta('twitter:image:alt'),
     'structured-data': structured,
   }
+}
+
+/**
+ * Whether a page is meant to carry a tag: the 404 page is `noindex` with no canonical address or `og:url`, and structured
+ * data sits on the home page only.
+ * @param page - the page's name.
+ * @param name - the tag.
+ * @returns true when a missing tag is a finding.
+ */
+export function expected(page: string, name: TagName): boolean {
+  if (page === '404' && (name === 'canonical' || name === 'og:url')) return false
+  if (name === 'structured-data') return page === 'home'
+  return true
 }
 
 /**
@@ -64,6 +77,7 @@ export function readHeadTags(html: string): HeadTags {
  */
 export function headFindings(page: string, tags: HeadTags): Finding[] {
   return TAGS.flatMap((name): Finding[] => {
+    if (!expected(page, name)) return []
     const value = tags[name]
     if (value === null) return [{ severity: 'warn', check: 'head-tags', where: page, message: `${name} is missing` }]
     if (name === 'structured-data' && value === 'invalid JSON') return [{ severity: 'fail', check: 'head-tags', where: page, message: 'structured data is not valid JSON' }]
@@ -72,14 +86,14 @@ export function headFindings(page: string, tags: HeadTags): Finding[] {
 }
 
 /**
- * Fetches the four pages and reads their head tags.
+ * Fetches the five pages and reads their head tags.
  * @param base - the server's origin.
  * @returns the tags by page name and the findings.
  */
 export async function headTags(base: string): Promise<{ tags: Record<string, HeadTags>; findings: Finding[] }> {
   const tags: Record<string, HeadTags> = {}
   const findings: Finding[] = []
-  for (const [name, path] of [['home', '/'], ['privacy', '/privacy'], ['notices', '/notices'], ['404', '/__qa-missing']] as const) {
+  for (const [name, path] of [['home', '/'], ['privacy', '/privacy'], ['notices', '/notices'], ['blog', '/blog'], ['404', '/__qa-missing']] as const) {
     tags[name] = readHeadTags(await (await fetch(new URL(path, base))).text())
     findings.push(...headFindings(name, tags[name]))
   }

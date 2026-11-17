@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { headFindings, readHeadTags } from '../review/head-tags.ts'
+import { expected, headFindings, readHeadTags } from '../review/head-tags.ts'
 import { parsePictureName, passFolder, pictureName } from '../review/naming.ts'
 import { auditMarkdown, indexMarkdown, reportJson, summarise, summaryLines, type Report } from '../review/report.ts'
 
@@ -78,6 +78,16 @@ describe('report', () => {
   })
 })
 
+describe('head tag expectations', () => {
+  it('does not require canonical or og:url on the noindex 404 page, nor structured data off the home page', () => {
+    expect(expected('404', 'canonical')).toBe(false)
+    expect(expected('404', 'og:url')).toBe(false)
+    expect(expected('privacy', 'structured-data')).toBe(false)
+    expect(expected('home', 'structured-data')).toBe(true)
+    expect(expected('privacy', 'canonical')).toBe(true)
+  })
+})
+
 describe('head tags', () => {
   const html = `<html><head><title>Delorun</title><meta name="description" content="A harness."><link rel="canonical" href="https://delorun.com/"><meta property="og:title" content="Delorun"><meta property="og:image" content=""><meta name="twitter:card" content="summary_large_image"><script type="application/ld+json">{"@type":"SoftwareApplication"}</script></head><body></body></html>`
 
@@ -95,6 +105,7 @@ describe('head tags', () => {
     const findings = headFindings('home', readHeadTags(html))
     expect(findings.some(finding => finding.message === 'og:image is missing')).toBe(true)
     expect(findings.every(finding => finding.severity === 'warn')).toBe(true)
+    expect(headFindings('404', readHeadTags('<head></head>')).some(finding => finding.message.startsWith('canonical'))).toBe(false)
     const broken = headFindings('home', readHeadTags('<head><script type="application/ld+json">{</script></head>'))
     expect(broken.some(finding => finding.severity === 'fail')).toBe(true)
   })
