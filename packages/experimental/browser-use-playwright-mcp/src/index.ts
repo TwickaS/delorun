@@ -20,16 +20,16 @@ export const inject = ['browserUse', 'agents', 'tools', 'systemPrompt', 'working
 
 /**
  * The tools of the pinned Playwright MCP server that run model-written code in the server process, outside the page
- * and outside the agent's sandbox: the default of `deniedTools`. In @playwright/mcp 0.0.80 that is one tool; every
- * other offered tool acts on the page or on files the folder guard checks.
+ * and outside the agent's sandbox. They are always turned off; no configuration turns one back on. In @playwright/mcp
+ * 0.0.80 that is one tool; every other offered tool acts on the page or on files the folder guard checks.
  */
 export const SERVER_CODE_TOOLS: readonly string[] = ['browser_run_code_unsafe']
 
 /** Settings every mode has. */
 export interface DeniedToolsConfig {
   /**
-   * The server's own tool names that are turned off: never offered to the model and refused when called. Defaults to
-   * {@link SERVER_CODE_TOOLS}; a list set here replaces the default.
+   * More of the server's own tool names to turn off, beside {@link SERVER_CODE_TOOLS}, which are always off: a tool
+   * that is off is never offered to the model and is refused when called. Defaults to none.
    */
   deniedTools: string[]
 }
@@ -50,7 +50,16 @@ export interface AttachConfig extends BrowserMcpAttachConfig, DeniedToolsConfig 
 /** Chrome or Chromium launch, or existing-browser attachment settings. */
 export type Config = LaunchConfig | AttachConfig
 
-const deniedTools = Schema.array(Schema.string().pattern(/^[\w-]+$/u)).default([...SERVER_CODE_TOOLS])
+const deniedTools = Schema.array(Schema.string().pattern(/^[\w-]+$/u)).default([])
+
+/**
+ * Every tool that is turned off for a configuration.
+ * @param config - the validated configuration.
+ * @returns {@link SERVER_CODE_TOOLS} and the configuration's `deniedTools`, each name once.
+ */
+export function deniedToolsOf(config: DeniedToolsConfig): string[] {
+  return [...new Set([...SERVER_CODE_TOOLS, ...config.deniedTools])]
+}
 
 /** Validate the launch or attachment configuration before activation. */
 export const Config: Schema<
@@ -227,6 +236,7 @@ export function apply(ctx: Context, config: Config): void {
     if (config.executablePath !== undefined) args.push('--executable-path', config.executablePath)
   }
   const directory = browserServerDirectory(config, 'playwright-mcp')
+  const denied = deniedToolsOf(config)
   mountSessionMcp(ctx, {
     name: 'playwright-mcp',
     exclusive: config.mode === 'attach',
@@ -235,9 +245,9 @@ export function apply(ctx: Context, config: Config): void {
     env,
     outputFolder: OUTPUT_FOLDER,
     explainFailure: explainMissingBrowser,
-    deniedTools: config.deniedTools,
+    deniedTools: denied,
     // The client never registers a denied tool; this refusal holds even if a call to one is routed here.
-    refuseCall: call => config.deniedTools.includes(call.tool) ? Promise.resolve(deniedToolMessage(call.tool)) : refuseOutsideFolder(call),
+    refuseCall: call => denied.includes(call.tool) ? Promise.resolve(deniedToolMessage(call.tool)) : refuseOutsideFolder(call),
     ...config.toolCallTimeoutMs === undefined ? {} : { toolCallTimeoutMs: config.toolCallTimeoutMs },
     ...directory === undefined ? {} : { directory },
   })

@@ -1053,8 +1053,8 @@ export interface AttachConfig extends BrowserMcpAttachConfig, DeniedToolsConfig 
 /** Settings every mode has. */
 export interface DeniedToolsConfig {
   /**
-   * The server's own tool names that are turned off: never offered to the model and refused when called. Defaults to
-   * {@link SERVER_CODE_TOOLS}; a list set here replaces the default.
+   * More of the server's own tool names to turn off, beside {@link SERVER_CODE_TOOLS}, which are always off: a tool
+   * that is off is never offered to the model and is refused when called. Defaults to none.
    */
   deniedTools: string[]
 }
