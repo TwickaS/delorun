@@ -85,7 +85,11 @@ async function expectRefused(endpoint: string, args: Record<string, unknown>): P
 }
 
 /** The exact Fetch routes whose `admitPeer` admits an approved device. */
-const ADMITTED_ROUTES: ReadonlySet<string> = new Set(['/api/delorunOnboarding.keyTest', '/api/delorunOnboarding.recommend', '/api/delorunMcpConsent.waiting', '/api/delorunBranding.icon'])
+const ADMITTED_ROUTES: ReadonlySet<string> = new Set([
+  '/api/delorunOnboarding.keyTest', '/api/delorunOnboarding.recommend', '/api/delorunOnboarding.setupRecord', '/api/delorunOnboarding.deferStep',
+  '/api/delorunOnboarding.readiness', '/api/delorunOnboarding.start', '/api/delorunOnboarding.localModels', '/api/delorunOnboarding.workspaceNotice',
+  '/api/delorunMcpConsent.waiting', '/api/delorunBranding.icon', '/api/delorunChatStates.list', '/api/delorunChatStates.set',
+])
 
 /**
  * Assert that one call is refused by remote access until the device holds an elevation, naming its action.
@@ -553,7 +557,7 @@ describe('a reach device and the exact Fetch routes', () => {
     // The routes this rule is about: a file read by path, deliverable actions and change reads.
     expect([...routes.keys()]).toEqual(expect.arrayContaining(['/api/file', '/api/present.open', '/api/changes.summary', '/api/changes.diff', UPLOAD]))
     for (const [path, methods] of routes) {
-      // The upload route, the key test, the recommended plugins' purposes and the branding icon upload admit an approved device.
+      // The upload route, the guide's read routes and key test, the recommended plugins' purposes, the chat states' list and set and the branding icon upload admit an approved device.
       if (path === UPLOAD || ADMITTED_ROUTES.has(path)) continue
       for (const method of methods) {
         // Pins Connection's owner rule for exact routes: a route that declares no `admitPeer` refuses every other Peer.
