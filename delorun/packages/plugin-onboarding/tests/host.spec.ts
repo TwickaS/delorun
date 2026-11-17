@@ -233,6 +233,14 @@ describe('the route', () => {
     expect(two).not.toBe(one)
   })
 
+  it('lets an approved device read the start id and no other peer, so Finish later holds on a phone', async () => {
+    const { routes } = await mount(undefined)
+    const route = routes.get(START_PATH) as { methods: readonly string[]; admitPeer?: (request: Request, peer: { readonly principal: { readonly kind: string } }) => boolean } | undefined
+    const asks = (kind: string): boolean | undefined => route?.admitPeer?.(new Request('http://harness.test/api'), { principal: { kind } })
+    expect(route?.methods).toEqual(['GET'])
+    expect([asks('reach-device'), asks('guest')]).toEqual([true, false])
+  })
+
   it('serves a record that covers nothing without a profile directory', async () => {
     const { get, warn } = await mount(undefined)
     expect(await (await get()).json()).toEqual({ reachSetUp: false })
