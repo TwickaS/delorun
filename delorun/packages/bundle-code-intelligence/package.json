@@ -26,6 +26,36 @@
   },
   "delorun": {
     "state": "shipped",
-    "pack": true
+    "pack": true,
+    "requires": {
+      "lsp-stdio": {
+        "needs": [
+          {
+            "kind": "program",
+            "names": [
+              "typescript-language-server"
+            ]
+          }
+        ],
+        "fix": {
+          "kind": "command",
+          "command": "npm install -g typescript-language-server typescript"
+        }
+      },
+      "tool-lsp": {
+        "needs": [
+          {
+            "kind": "program",
+            "names": [
+              "typescript-language-server"
+            ]
+          }
+        ],
+        "fix": {
+          "kind": "command",
+          "command": "npm install -g typescript-language-server typescript"
+        }
+      }
+    }
   }
 }

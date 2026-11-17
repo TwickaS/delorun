@@ -9,7 +9,8 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import yaml from 'js-yaml'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { composeEntries, initProfile, loadProfileDirectory } from '@deepseek-ai/dsh-app-boot'
+import { assertBundlePlatform, composeEntries, initProfile, loadProfileDirectory, UnsupportedBundlePlatformError } from '@deepseek-ai/dsh-app-boot'
+import { checkRequirements } from '../src/requirements.ts'
 import { DELORUN_PROFILE_BUNDLES, LOCAL_BUNDLE, STUDIO_BUNDLE } from '../src/profile.ts'
 import { createTestHome, INSTALL_ANCHOR, PACKAGE_DIR, STUDIO_PACKAGE_DIR, type TestHome } from './profiles.ts'
 
@@ -129,16 +130,39 @@ describe('what needs setup', () => {
     return dir
   }
   const ids = (dir: string, path: string, secret?: string) => withEnv(path, secret, () => patchRows(dir).filter(row => !isDisabled(row)).map(row => row.id))
-
-  it('mounts the language server only when typescript-language-server is on PATH', () => {
-    expect(ids('bundle-code-intelligence', binDir())).toEqual(['lsp'])
-    expect(ids('bundle-code-intelligence', binDir('typescript-language-server'))).toEqual(['lsp', 'lsp-stdio', 'tool-lsp'])
+  const flat = (rows: Row[]): Row[] => rows.flatMap(row => row.group ? [row, ...flat((row.config as Row[]) ?? [])] : [row])
+  /** The rows of a bundle that declare needs, and the state the check reports for each on a computer with the given PATH and secret. */
+  const states = (dir: string, path: string, secret?: string) => withEnv(path, secret, () => {
+    const answer = checkRequirements([{ name: dir, dir: join(PACKAGES, dir), rowIds: flat(patchRows(dir)).map(row => String(row.id)) }], 'en')
+    expect(answer.problems).toEqual([])
+    return Object.fromEntries(answer.rows.map(row => [row.rowId, row.state]))
   })
 
-  it('mounts the GitHub endpoint only when the webhook secret is set', () => {
-    expect(ids('bundle-webhooks', binDir())).toEqual(['webhook-runtime'])
-    expect(ids('bundle-webhooks', binDir(), 'a-long-random-secret')).toEqual(['webhook-runtime', 'github-webhook-ingress'])
+  it('ships the language-server rows off, and says Needs setup until typescript-language-server is on PATH', () => {
+    expect(ids('bundle-code-intelligence', binDir('typescript-language-server'))).toEqual(['lsp'])
+    expect(states('bundle-code-intelligence', binDir())).toEqual({ 'lsp-stdio': 'needs-setup', 'tool-lsp': 'needs-setup' })
+    expect(states('bundle-code-intelligence', binDir('typescript-language-server'))).toEqual({ 'lsp-stdio': 'ready', 'tool-lsp': 'ready' })
   })
+
+  it('ships the GitHub endpoint off, and says Needs setup until the webhook secret is set', () => {
+    expect(ids('bundle-webhooks', binDir(), 'a-long-random-secret')).toEqual(['webhook-runtime'])
+    expect(states('bundle-webhooks', binDir())).toEqual({ 'github-webhook-ingress': 'needs-setup' })
+    expect(states('bundle-webhooks', binDir(), 'a-long-random-secret')).toEqual({ 'github-webhook-ingress': 'ready' })
+  })
+
+  it.each([['bundle-code-intelligence', ['lsp-stdio', 'tool-lsp']], ['bundle-webhooks', ['github-webhook-ingress']]] as const)(
+    '%s: turning each guarded row on with its needs unmet composes and evaluates without throwing, so start is not stopped',
+    (dir, guarded) => {
+      withEnv(binDir(), undefined, () => {
+        const rows = flat(patchRows(dir))
+        for (const id of guarded) {
+          const row = rows.find(each => each.id === id)!
+          expect(() => interpolate({ process }, { ...row, disabled: false })).not.toThrow()
+        }
+        expect(profileWith([manifest(dir).name])).toEqual(expect.arrayContaining([...guarded]))
+      })
+    },
+  )
 
   it('mounts each external agent that is installed and lists only those in the tool', () => {
     expect(ids('bundle-external-agents', binDir())).toEqual([])
