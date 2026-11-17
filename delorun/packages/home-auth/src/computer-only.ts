@@ -35,32 +35,74 @@ export function requireComputer(request: ComputerRequest, response: ServerRespon
   return false
 }
 
-/** What {@link requireComputerUnlessDangerous} and {@link admitUnlockedDevice} read of the home. */
+/** What {@link requireComputerOrDevice}, {@link unlockOf} and {@link gateByUnlock} read of the home. */
 export type DangerousModeHome = Pick<HomeAuthService, 'arrivalOf' | 'dangerousMode' | 'elevationOf' | 'pageUnlockOf' | 'pinEnabled'>
 
 /**
- * {@link requireComputer} for a route that an unlocked device may also use while dangerous mode holds, or an unlocked
- * PIN page while PIN mode is on: a request that arrived on a reach listener passes the hook then, and the route's `admitPeer` ({@link admitUnlockedDevice}) decides
- * whether its device holds an unlock. Every other request is decided as {@link requireComputer} decides it, so a request
- * the home cannot place, or that names a foreign `Host` on the loopback listener, is refused in both modes. A route that
- * approves a device or signs one in keeps {@link requireComputer}.
+ * The running unlock a reach device's Peer holds: its page's unlock when the Peer carries one (PIN mode), otherwise the
+ * unlock the device holds on its listener (a code the person typed at the computer, or a grace after approval). Every
+ * route and policy check that asks "is this device unlocked" asks here.
+ * @param home - the mounted `homeAuth` service.
+ * @param principal - the device Peer's principal.
+ * @returns the unlock, or undefined while the device is locked.
+ */
+export function unlockOf(home: Pick<DangerousModeHome, 'elevationOf' | 'pageUnlockOf'>, principal: ReachDevicePrincipal): { readonly id: string } | undefined {
+  return principal.unlockId === undefined ? home.elevationOf(principal.deviceId, principal.listener) : home.pageUnlockOf(principal.unlockId)
+}
+
+/**
+ * {@link requireComputer} for a route a reach device may also use: a request that arrived on a reach listener passes the
+ * hook, and the route's `admitPeer` ({@link admitApprovedDevice} for a route any approved device reads,
+ * {@link gateByUnlock} for one that needs an unlock) decides which device. Every other request is decided as
+ * {@link requireComputer} decides it, so a request the home cannot place, or that names a foreign `Host` on the
+ * loopback listener, is refused. A computer-only route keeps {@link requireComputer}.
  * @param request - the request the Connection received.
  * @param response - the response, answered with the refusal when the request is refused.
  * @param homeAuth - the mounted `homeAuth` service, or `undefined` while none is mounted.
  * @param action - the action's name as the refusal states it, in sentence case, such as `Turning on full access`.
  * @returns whether the request may go on to the route.
  */
-export function requireComputerUnlessDangerous(request: ComputerRequest, response: ServerResponse, homeAuth: DangerousModeHome | undefined, action: string): boolean {
+export function requireComputerOrDevice(request: ComputerRequest, response: ServerResponse, homeAuth: Pick<HomeAuthService, 'arrivalOf'> | undefined, action: string): boolean {
   const listener = homeAuth?.arrivalOf(request).listener
-  if (listener !== undefined && listener !== 'loopback' && (homeAuth?.dangerousMode() === true || homeAuth?.pinEnabled() === true)) return true
+  if (listener !== undefined && listener !== 'loopback') return true
   return requireComputer(request, response, homeAuth, action)
 }
 
+/** The sentence a locked device reads when a route needs an unlock. */
+const ELEVATION_REQUIRED_SENTENCE = 'Unlock this device first: it needs a code from your computer, or your PIN where PIN mode is on'
+
 /**
- * The `admitPeer` of a route that uses {@link requireComputerUnlessDangerous}: it admits a reach device that holds a
- * running unlock while dangerous mode holds, an unlocked PIN page without it (the page can do what the computer can,
- * minus the step-up routes, which keep {@link requireComputer}), and no other Peer; the owner's Peer never reaches
- * `admitPeer`.
+ * The reach-device half of a route that needs an unlock (level U): its `admitPeer` admits a reach device and records
+ * whether it holds a running unlock ({@link unlockOf}); its `fetch` answers `403 ELEVATION_REQUIRED` to a locked device
+ * and otherwise runs the route. Without a recorded decision the Peer is the owner, who the hook
+ * ({@link requireComputerOrDevice}) already placed at the computer.
+ * @param homeAuth - a way to the mounted `homeAuth` service, read when a request arrives.
+ * @param fetch - the route's own handler.
+ * @returns the `admitPeer` and `fetch` for `ConnectionFetchRoute`.
+ */
+export function gateByUnlock(homeAuth: () => DangerousModeHome | undefined, fetch: (request: Request) => Promise<Response>): {
+  readonly admitPeer: (request: Request, peer: { readonly principal: { readonly kind: string } }) => boolean
+  readonly fetch: (request: Request) => Promise<Response>
+} {
+  const locked = new WeakSet<Request>()
+  return {
+    admitPeer: (request, peer) => {
+      const home = homeAuth()
+      if (home === undefined || peer.principal.kind !== REACH_DEVICE) return false
+      if (unlockOf(home, peer.principal as ReachDevicePrincipal) === undefined) locked.add(request)
+      return true
+    },
+    fetch: (request) => {
+      if (!locked.has(request)) return fetch(request)
+      return Promise.resolve(new Response(refusalBody('ELEVATION_REQUIRED', ELEVATION_REQUIRED_SENTENCE), { status: 403, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } }))
+    },
+  }
+}
+
+/**
+ * The `admitPeer` of a route that only an unlocked device may use and that decides nothing else itself: a reach device
+ * that holds a running unlock ({@link unlockOf}), and no other Peer. Prefer {@link gateByUnlock}, which answers a locked
+ * device with a typed refusal.
  * @param homeAuth - a way to the mounted `homeAuth` service, read when a request arrives.
  * @returns the function for `ConnectionFetchRoute.admitPeer`.
  */
@@ -68,10 +110,7 @@ export function admitUnlockedDevice(homeAuth: () => DangerousModeHome | undefine
   return (_request, peer) => {
     const home = homeAuth()
     if (home === undefined || peer.principal.kind !== REACH_DEVICE) return false
-    const { deviceId, listener, unlockId } = peer.principal as ReachDevicePrincipal
-    // A page's Peer holds only its own page unlock, never the device's; the unlock exists only while PIN mode is on.
-    if (unlockId !== undefined) return home.pageUnlockOf(unlockId) !== undefined
-    return home.dangerousMode() && home.elevationOf(deviceId, listener) !== undefined
+    return unlockOf(home, peer.principal as ReachDevicePrincipal) !== undefined
   }
 }
 

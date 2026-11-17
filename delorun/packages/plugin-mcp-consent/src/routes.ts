@@ -12,7 +12,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: the ctx.connection merge and its `connection/request` event.
 import type {} from '@deepseek-ai/dsh-client-connection'
-import { REACH_DEVICE, admitUnlockedDevice, requireComputerUnlessDangerous, routedPathname } from '@delorun/home-auth'
+import { REACH_DEVICE, admitApprovedDevice, gateByUnlock, requireComputerOrDevice, routedPathname } from '@delorun/home-auth'
 import { z } from 'zod'
 import { MCP_REVIEW_ID_PATTERN, McpReviewError, type McpReviews } from './review.ts'
 import { ACCEPTANCE_ID_PATTERN } from './store.ts'
@@ -88,16 +88,17 @@ async function answered(call: () => object | Promise<object>): Promise<Response>
 export function registerMcpConsentRoutes(ctx: Context, reviews: McpReviews): void {
   const paths: ReadonlySet<string> = new Set(Object.values(MCP_CONSENT_ROUTES).filter(path => path !== MCP_CONSENT_ROUTES.waiting))
   ctx.on('connection/request', async (request, response, next) => {
-    if (paths.has(routedPathname(request.url)) && !requireComputerUnlessDangerous(request, response, ctx.get('homeAuth'), ACTION)) return
+    if (paths.has(routedPathname(request.url)) && !requireComputerOrDevice(request, response, ctx.get('homeAuth'), ACTION)) return
     await next()
   })
-  // Pending, accept, decline and revoke: the computer, or an unlocked device while dangerous mode holds.
-  const dangerousDevice = admitUnlockedDevice(() => ctx.get('homeAuth'))
+  // Pending, decline and revoke are read or tighten only, so any approved device uses them; accepting a server lets its
+  // command run, so it needs an unlock.
+  const anyDevice = admitApprovedDevice()
   ctx.connection.fetch.register({
     path: MCP_CONSENT_ROUTES.pending,
     methods: ['GET'],
     requestBody: 'buffered',
-    admitPeer: dangerousDevice,
+    admitPeer: anyDevice,
     fetch: () => answered(async () => ({ servers: reviews.pending(), accepted: await reviews.accepted() })),
   })
   ctx.connection.fetch.register({
@@ -111,18 +112,17 @@ export function registerMcpConsentRoutes(ctx: Context, reviews: McpReviews): voi
     path: MCP_CONSENT_ROUTES.accept,
     methods: ['POST'],
     requestBody: 'buffered',
-    admitPeer: dangerousDevice,
-    fetch: async (request) => {
+    ...gateByUnlock(() => ctx.get('homeAuth'), async (request) => {
       const body = await bodyOf(request, AcceptBody)
       if (body === undefined) return answer(400, { error: 'INVALID_REQUEST', message: 'the request must be JSON with the server name, the review id and confirmed' })
       return answered(() => reviews.acceptReview(body.serverName, body.reviewId, body.confirmed))
-    },
+    }),
   })
   ctx.connection.fetch.register({
     path: MCP_CONSENT_ROUTES.decline,
     methods: ['POST'],
     requestBody: 'buffered',
-    admitPeer: dangerousDevice,
+    admitPeer: anyDevice,
     fetch: async (request) => {
       const body = await bodyOf(request, DeclineBody)
       if (body === undefined) return answer(400, { error: 'INVALID_REQUEST', message: 'the request must be JSON with the server name and the review id' })
@@ -136,7 +136,7 @@ export function registerMcpConsentRoutes(ctx: Context, reviews: McpReviews): voi
     path: MCP_CONSENT_ROUTES.revoke,
     methods: ['POST'],
     requestBody: 'buffered',
-    admitPeer: dangerousDevice,
+    admitPeer: anyDevice,
     fetch: async (request) => {
       const body = await bodyOf(request, RevokeBody)
       if (body === undefined) return answer(400, { error: 'INVALID_REQUEST', message: 'the request must be JSON with the acceptance id and confirmed' })
