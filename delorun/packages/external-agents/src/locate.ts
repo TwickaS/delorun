@@ -5,7 +5,7 @@
  * drivers share it.
  * @module @delorun/external-agents/locate
  */
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join, parse } from 'node:path'
 import type { ExternalAgentName } from './contract.ts'
@@ -194,6 +194,21 @@ export function locateCodex(profileDirectory: string): LocatedCodex | undefined 
   if (typeof relative !== 'string') return undefined
   const script = join(codex.directory, relative)
   return existsSync(script) ? { ...codex, script } : undefined
+}
+
+/**
+ * The executables a live agent's process-group leader runs, as real paths, for reaping only located programs: the Node
+ * binary that runs the subprocess runner, the Codex launcher and Claude Code's watcher, and Claude Code's native
+ * program when the added pack brings one.
+ * @param profileDirectory - the profile's directory, when known.
+ * @param machine - the platform and architecture.
+ * @param nodePath - the Node binary the Host runs, `process.execPath`.
+ * @returns the paths that exist.
+ */
+export function agentExecutables(profileDirectory: string | undefined, machine: Machine, nodePath: string): string[] {
+  const sdk = profileDirectory === undefined ? undefined : locateClaudeSdk(profileDirectory)
+  const claude = sdk === undefined ? undefined : locateClaudeProgram(sdk, machine)
+  return [...new Set([nodePath, claude].filter((path): path is string => path !== undefined && existsSync(path)).map(path => realpathSync(path)))]
 }
 
 /**

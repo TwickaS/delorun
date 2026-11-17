@@ -107,7 +107,7 @@ export function sameProcess(recorded: ProcessIdentity, current: ProcessIdentity)
 }
 
 /** What a reap did with one record. */
-export type ReapOutcome = 'stopped-unit' | 'stopped-group' | 'gone' | 'not-the-program'
+export type ReapOutcome = 'stopped-unit' | 'stopped-group' | 'gone' | 'not-the-program' | 'not-located'
 
 /** Options of {@link ProgramRecords}. */
 export interface ProgramRecordsOptions {
@@ -119,6 +119,8 @@ export interface ProgramRecordsOptions {
   readonly graceMs: number
   /** How long a process started in a systemd scope has to enter it before it goes unrecorded, in milliseconds. */
   readonly settleMs: number
+  /** The real paths of the executables a live agent's leader runs; a record naming another executable is never stopped. */
+  readonly located: () => ReadonlySet<string>
   /** Report a problem the reaper contained. */
   readonly warn: (message: string) => void
 }
@@ -181,8 +183,9 @@ export class ProgramRecords {
   }
 
   /**
-   * Stop every recorded program whose identity still matches in full, and clear the records. A record whose process
-   * is gone or whose id now names another process is dropped without a signal. An unreadable record file stops
+   * Stop every recorded program whose identity still matches in full and whose executable is a located one, and clear
+   * the records. A record whose process is gone, whose id now names another process or whose executable is not a
+   * located agent program is dropped without a signal. An unreadable record file stops
    * nothing and is left in place, with a warning.
    * @returns each record with what was done.
    */
@@ -206,6 +209,7 @@ export class ProgramRecords {
     const current = await table.identify(record.identity.pid)
     if (current === undefined) return 'gone'
     if (!sameProcess(record.identity, current)) return 'not-the-program'
+    if (!this.options.located().has(record.identity.exe)) return 'not-located'
     if (record.identity.unit !== undefined) {
       await table.stopUnit(record.identity.unit)
       return 'stopped-unit'

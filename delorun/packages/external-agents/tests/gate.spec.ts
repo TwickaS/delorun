@@ -251,6 +251,7 @@ async function world(options: WorldOptions = {}): Promise<World> {
     },
     programRecords: options.records === undefined ? undefined : () => Promise.resolve(options.records!.path),
     processTable: options.records?.table,
+    programExecutables: () => ['/opt/claude/claude'],
   })
   await fiber
   const gate = ctx.get('externalAgents') as ExternalAgentsService
@@ -651,7 +652,7 @@ describe('programs a dead Host left (T11, review D15)', () => {
     const path = programRecordPath(realpathSync(mkdtempSync(join(tmpdir(), 'delorun-gate-home-'))))
     roots.push(dirname(dirname(dirname(path))))
     const before = table()
-    const left = new ProgramRecords({ path, table: before, graceMs: 5, settleMs: 5, warn: () => {} })
+    const left = new ProgramRecords({ path, table: before, graceMs: 5, settleMs: 5, located: () => new Set(['/opt/claude/claude']), warn: () => {} })
     await left.started('claude-code', identity.pid)
     await left.started('codex', 77)
     const after = table()

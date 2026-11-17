@@ -43,12 +43,12 @@ const claude: ProcessIdentity = { pid: 4242, startTime: '81234', bootId: 'b-1', 
  * @param table - the process table.
  * @returns the records, the warnings and the record file's path.
  */
-function records(test: { onTestFinished: (fn: () => void) => void }, table: ProcessTable, settleMs = 2_000): { readonly records: ProgramRecords, readonly warnings: string[], readonly path: string } {
+function records(test: { onTestFinished: (fn: () => void) => void }, table: ProcessTable, settleMs = 2_000, located: readonly string[] = [claude.exe]): { readonly records: ProgramRecords, readonly warnings: string[], readonly path: string } {
   const home = mkdtempSync(join(tmpdir(), 'ea1-gate-reap-'))
   test.onTestFinished(() => rmSync(home, { recursive: true, force: true }))
   const warnings: string[] = []
   const path = programRecordPath(home)
-  return { records: new ProgramRecords({ path, table, graceMs: 5, settleMs, warn: message => warnings.push(message) }), warnings, path }
+  return { records: new ProgramRecords({ path, table, graceMs: 5, settleMs, located: () => new Set(located), warn: message => warnings.push(message) }), warnings, path }
 }
 
 const run = promisify(execFile)
@@ -70,6 +70,20 @@ async function userSystemd(): Promise<boolean> {
 }
 
 const hasUserSystemd = await userSystemd()
+
+describe('reaping only located programs (review P3)', () => {
+  it('never stops a matching record whose executable is not a located agent program', async (test) => {
+    const table = new FakeTable()
+    const vim = { ...claude, exe: '/usr/bin/vim' }
+    table.processes.set(vim.pid, vim)
+    const { records: one, path } = records(test, table)
+    await one.started('claude-code', vim.pid)
+    const after = new ProgramRecords({ path, table, graceMs: 5, settleMs: 5, located: () => new Set([claude.exe]), warn: () => {} })
+    expect((await after.reap()).map(done => done.outcome)).toEqual(['not-located'])
+    expect(table.calls).toEqual([])
+    expect(table.processes.has(vim.pid)).toBe(true)
+  })
+})
 
 describe('a program the subprocess owner starts in a systemd scope (review P2)', () => {
   const scoped = { ...claude, unit: 'dsh-subprocess-ab12.scope' }
@@ -102,11 +116,11 @@ describe('a program the subprocess owner starts in a systemd scope (review P2)',
       child.kill('SIGKILL')
     })
     const table = systemProcessTable('linux', async argv => (await run(argv[0]!, argv.slice(1))).stdout)
-    const { records: one, path } = records(test, table)
-    const identity = await one.started('claude-code', child.pid!, unit)
     const sleep = realpathSync((await run('sh', ['-c', 'command -v sleep'])).stdout.trim())
+    const { records: one, path } = records(test, table, 2_000, [sleep])
+    const identity = await one.started('claude-code', child.pid!, unit)
     expect(identity).toMatchObject({ pid: child.pid, unit, exe: sleep })
-    const after = new ProgramRecords({ path, table, graceMs: 5, settleMs: 5, warn: () => {} })
+    const after = new ProgramRecords({ path, table, graceMs: 5, settleMs: 5, located: () => new Set([sleep]), warn: () => {} })
     expect((await after.reap()).map(done => done.outcome)).toEqual(['stopped-unit'])
     await expect.poll(async () => (await table.identify(child.pid!)) === undefined, { timeout: 5_000 }).toBe(true)
   })
@@ -121,7 +135,7 @@ describe('reaping programs a dead Host left behind', () => {
     expect((readFileSync(path).length)).toBeGreaterThan(0)
 
     table.honoursTerm = false
-    const after = new ProgramRecords({ path, table, graceMs: 5, settleMs: 5, warn: () => {} })
+    const after = new ProgramRecords({ path, table, graceMs: 5, settleMs: 5, located: () => new Set([claude.exe]), warn: () => {} })
     expect((await after.reap()).map(done => done.outcome)).toEqual(['stopped-group'])
     expect(table.calls).toEqual(['kill -4242 SIGTERM', 'kill -4242 SIGKILL'])
     expect(await after.reap()).toEqual([])

@@ -42,6 +42,8 @@ export interface GateOptions {
   readonly programRecords: (() => Promise<string>) | undefined
   /** The process table the records read; absent, the computer's own. */
   readonly processTable: ProcessTable | undefined
+  /** The real paths of the executables a live agent's leader runs, read at each reap; only these are ever stopped. */
+  readonly programExecutables: () => readonly string[]
 }
 
 /** The consent for one seat start: none composed by the person's choice, or the service that reviews it. */
@@ -149,12 +151,16 @@ export class ExternalAgentsService extends Service implements ExternalAgentsGate
       table: this.options.processTable ?? systemProcessTable(process.platform, argv => this.runCommand(argv)),
       graceMs: this.options.graceMs,
       settleMs: this.options.graceMs,
+      located: () => new Set(this.options.programExecutables()),
       warn: message => this.ctx.logger.warn(message),
     })
     const reaped = await records.reap()
     for (const { record, outcome } of reaped) {
       if (outcome === 'stopped-group' || outcome === 'stopped-unit') {
         this.ctx.logger.warn(`external agents: stopped ${record.provider}'s process ${String(record.identity.pid)}, which a Host that ended left running`)
+      }
+      if (outcome === 'not-located') {
+        this.ctx.logger.warn(`external agents: left ${record.provider}'s recorded process ${String(record.identity.pid)} running, because ${record.identity.exe} is not a program Delorun locates`)
       }
     }
     return records

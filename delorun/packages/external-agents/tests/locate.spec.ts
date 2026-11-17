@@ -1,9 +1,9 @@
 import { Module } from 'node:module'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { locateClaudeProgram, locateClaudeSdk, locateCodex, locatePack, locatePackage, loginProgramFor } from '../src/locate.ts'
+import { agentExecutables, locateClaudeProgram, locateClaudeSdk, locateCodex, locatePack, locatePackage, loginProgramFor } from '../src/locate.ts'
 
 const roots: string[] = []
 const nodePath = process.env.NODE_PATH
@@ -89,6 +89,14 @@ describe('finding the Claude Agent SDK and its program', () => {
     const dir = profileWith(CLAUDE_ADDED)
     const sdk = locateClaudeSdk(dir)
     expect(sdk).toEqual({ directory: join(dir, 'node_modules', SDK), version: '0.3.263', entry: join(dir, 'node_modules', SDK, 'sdk.mjs') })
+  })
+
+  it('names Node and the located native program as the executables a reap may stop, as real paths', () => {
+    const dir = profileWith(CLAUDE_ADDED)
+    const node = realpathSync(process.execPath)
+    expect(agentExecutables(dir, LINUX, process.execPath)).toEqual([node, realpathSync(join(dir, 'node_modules', PLATFORM, 'claude'))])
+    expect(agentExecutables(undefined, LINUX, process.execPath)).toEqual([node])
+    expect(agentExecutables(dir, { platform: 'linux', arch: 'arm64' }, process.execPath)).toEqual([node])
   })
 
   it('finds the native program in the platform package for this machine only', () => {
