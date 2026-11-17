@@ -33,6 +33,7 @@ import {
   attestTerminal,
   changeProtection,
   discardChange,
+  dismissNotice,
   isChangesError,
   isPluginRequest,
   leftOutFact,
@@ -43,6 +44,7 @@ import {
   parseChangeId,
   PROFILE_LOCK_WAIT_MS,
   PROTECTION_LEVELS,
+  readNotices,
   readProtection,
   riskKindPhrase,
   riskLines,
@@ -62,6 +64,7 @@ import {
   type ListedChange,
   type PluginOperation,
   type ProtectionLevel,
+  type ProtectionNotice,
   type ReloadHost,
   type ReloadOutcome,
   type ShownChange,
@@ -375,10 +378,41 @@ async function list(ctx: ChangesContext, json: boolean, context: CommandContext,
   lines.push(...harnessLines.others)
   for (const { plugin, source } of listing.missing) lines.push('', `The folder of ${plugin}, ${source}, is gone; its approved copy still runs.`)
   lines.push('', `Protection: ${listing.protection}: ${PROTECTION_MEANING[listing.protection]}.`)
+  const notices = await readNotices(ctx.home)
+  if (notices.length > 0) lines.push('Changed from a phone:', ...notices.map(noticeLine))
   if (listing.workSession !== undefined) lines.push(`Working on ${listing.workSession.plugin} since ${readableTime(listing.workSession.startedAt)}, until ${readableTime(listing.workSession.endsAt)} at the latest: edits in its folder load live.`)
   print(context.stdout, lines)
   if (unshown.length > 0 && dependencies.streams.stdout.isTTY === true) await markShown(ctx, unshown)
+  await dismissShown(ctx, notices, dependencies)
   return EXIT.ok
+}
+
+/**
+ * @param notice - a protection change a paired device made.
+ * @returns its line in the list.
+ */
+function noticeLine(notice: ProtectionNotice): string {
+  return `  ${readableTime(notice.at)}  ${notice.device} turned protection ${notice.level}`
+}
+
+/**
+ * Dismiss the notices a list showed at a terminal, as the studio at the computer dismisses one; a list piped elsewhere
+ * keeps them.
+ * @param ctx - the profile.
+ * @param notices - the notices the list showed.
+ * @param dependencies - the streams.
+ */
+async function dismissShown(ctx: ChangesContext, notices: readonly ProtectionNotice[], dependencies: ChangesCommandDependencies): Promise<void> {
+  if (notices.length === 0) return
+  let presence: AtComputer
+  try {
+    presence = attestTerminal(dependencies.streams)
+  } catch (error) {
+    // Not a terminal: the person has not read them, so they stay for the studio or the next list.
+    if (!isChangesError(error)) throw error
+    return
+  }
+  for (const notice of notices) await dismissNotice(ctx.home, notice.id, presence)
 }
 
 /**
@@ -606,9 +640,45 @@ async function protection(ctx: ChangesContext, level: ProtectionLevel | undefine
     ? `Changes will load without your review. With protection off, ${PROTECTION_MEANING.off}.\n`
     : `Changes will wait for your review. With protection on, ${PROTECTION_MEANING.on}.\n`)
   if (!await confirmed(dependencies, `Turn protection ${level}?`)) return declined(context)
+  if (level === 'off') {
+    // The second ask guards against a slip of the keyboard, not against someone at this computer.
+    context.stdout(willLoadText(await willLoad(ctx, dependencies.harness(ctx.home, context))))
+    if (!await confirmed(dependencies, 'Turn protection off now?')) return declined(context)
+  }
   const changed = await changeProtection(ctx, level, presence!)
   context.stdout(`Protection is ${changed.level} (it was ${changed.before}). Delorun uses it from its next decision, without a restart.\n`)
   return EXIT.ok
+}
+
+/** What turning protection off lets load without review. */
+interface WillLoad {
+  /** The plugins whose folders hold changes waiting for review. */
+  readonly plugins: readonly string[]
+  /** How many files of the person's copy of Delorun wait for review. */
+  readonly harnessFiles: number
+}
+
+/**
+ * @param ctx - the profile.
+ * @param harness - the running runtime's harness, or undefined outside the store.
+ * @returns what would load without review once protection is off.
+ * @throws {ChangesError} `RECORD_UNREADABLE` when a log is not one Delorun wrote.
+ */
+async function willLoad(ctx: ChangesContext, harness: HarnessContext | undefined): Promise<WillLoad> {
+  const plugins = [...new Set((await listChanges(ctx)).pending.map(change => change.plugin))].sort()
+  return { plugins, harnessFiles: (await readHarnessListing(harness, ctx.home)).listing.changes.length }
+}
+
+/**
+ * @param load - what would load without review.
+ * @returns the text the second ask follows.
+ */
+function willLoadText(load: WillLoad): string {
+  const parts = [
+    ...load.plugins.length === 0 ? [] : [`the waiting changes of ${load.plugins.map(printable).join(', ')} load at once`],
+    ...load.harnessFiles === 0 ? [] : [`${String(load.harnessFiles)} ${load.harnessFiles === 1 ? 'file' : 'files'} of your copy of Delorun ${load.harnessFiles === 1 ? 'applies' : 'apply'} at the next start`],
+  ]
+  return parts.length === 0 ? 'Nothing waits for review now; what changes from here on loads without it.\n' : `Once protection is off, ${parts.join(', and ')}.\n`
 }
 
 /**

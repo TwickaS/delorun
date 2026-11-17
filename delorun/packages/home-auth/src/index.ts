@@ -90,6 +90,7 @@ export {
   isPhonePowersLevel,
   phonePowersPath,
   readPhonePowers,
+  recordUpgradePhonePowers,
   writePhonePowers,
   type PhonePowers,
 } from './phone-powers.ts'

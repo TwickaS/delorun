@@ -9,11 +9,15 @@
  * on every check through {@link PhonePowersReader}, which re-reads the file only when it changed on disk, so a command
  * that writes it while the home runs takes effect at once.
  *
- * A home with no record has made no choice: {@link UNCHOSEN_PHONE_POWERS} applies. A record that exists but cannot be
+ * A home with no record has made no choice: {@link UNCHOSEN_PHONE_POWERS} applies. The Host's first start in a home
+ * with no record writes the level the home-auth `phonePowersOnUpgrade` setting names, marked as not chosen
+ * ({@link recordUpgradePhonePowers}), so a later change of that setting does not change the level of a home that
+ * already started; the studio at the computer tells the person until they choose. A record that exists but cannot be
  * read applies Careful and says why, so a damaged file never widens what a phone may do.
  *
  * @module @delorun/home-auth/phone-powers
  */
+import { lstat } from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { checkProtectedFileSync } from '@delorun/home'
@@ -29,21 +33,23 @@ export const PHONE_POWERS_FILE = 'phone-powers.json'
 /** The version of the record's fields. */
 export const PHONE_POWERS_VERSION = 1 as const
 
-/** The level a home applies while the person has chosen none. */
+/** The level a home with no record applies, before the Host's first start records one. */
 export const UNCHOSEN_PHONE_POWERS: PhonePowersLevel = 'careful'
 
 /** The record as the file holds it. */
 interface PhonePowersRecord {
   readonly v: typeof PHONE_POWERS_VERSION
   readonly level: PhonePowersLevel
-  /** When it was chosen, in milliseconds since the epoch. */
+  /** When it was written, in milliseconds since the epoch. */
   readonly setAt: number
+  /** Whether the person chose it; false for the level the Host's first start recorded in an existing home. */
+  readonly chosen: boolean
 }
 
 /** The level in force and where it comes from. */
 export interface PhonePowers {
   readonly level: PhonePowersLevel
-  /** Whether the person chose it; false while no record exists, or while the record cannot be read. */
+  /** Whether the person chose it; false while no record exists, while the record cannot be read, or for the level a first start recorded. */
   readonly chosen: boolean
   /** Why the record cannot be read, when it cannot; the level is then Careful. */
   readonly problem?: string
@@ -71,10 +77,10 @@ export function phonePowersPath(directory: string): string {
  * @throws {HomeAuthError} `STORE_INVALID` for anything that is not this record.
  */
 function recordOf(value: unknown): PhonePowersRecord {
-  if (!isRecord(value) || value.v !== PHONE_POWERS_VERSION || !isPhonePowersLevel(value.level) || !isTime(value.setAt) || Object.keys(value).length !== 3) {
+  if (!isRecord(value) || value.v !== PHONE_POWERS_VERSION || !isPhonePowersLevel(value.level) || !isTime(value.setAt) || typeof value.chosen !== 'boolean' || Object.keys(value).length !== 4) {
     throw new HomeAuthError('STORE_INVALID', `${PHONE_POWERS_FILE} is not a Phone powers record`)
   }
-  return { v: PHONE_POWERS_VERSION, level: value.level, setAt: value.setAt }
+  return { v: PHONE_POWERS_VERSION, level: value.level, setAt: value.setAt, chosen: value.chosen }
 }
 
 /**
@@ -82,7 +88,7 @@ function recordOf(value: unknown): PhonePowersRecord {
  * @returns the level in force.
  */
 function powersOf(record: PhonePowersRecord | undefined): PhonePowers {
-  return record === undefined ? { level: UNCHOSEN_PHONE_POWERS, chosen: false } : { level: record.level, chosen: true }
+  return record === undefined ? { level: UNCHOSEN_PHONE_POWERS, chosen: false } : { level: record.level, chosen: record.chosen }
 }
 
 /**
@@ -105,7 +111,35 @@ export async function readPhonePowers(directory: string): Promise<PhonePowers> {
  * @throws the failure of the protected write.
  */
 export async function writePhonePowers(directory: string, level: PhonePowersLevel, now: () => number = Date.now): Promise<PhonePowers> {
-  const record: PhonePowersRecord = { v: PHONE_POWERS_VERSION, level, setAt: now() }
+  return writeRecord(directory, { v: PHONE_POWERS_VERSION, level, setAt: now(), chosen: true })
+}
+
+/**
+ * Record, in a home that has no record, the level an existing home gets, marked as not chosen. The Host's first start
+ * calls it; a home whose record exists, readable or not, keeps it.
+ * @param directory - `~/.delorun/secrets/home-auth/`, which must exist.
+ * @param level - the level the home-auth `phonePowersOnUpgrade` setting names.
+ * @param now - the clock, in milliseconds.
+ * @returns the level it recorded, or undefined when a record existed.
+ * @throws the failure of the protected write, or of reading the directory.
+ */
+export async function recordUpgradePhonePowers(directory: string, level: PhonePowersLevel, now: () => number = Date.now): Promise<PhonePowers | undefined> {
+  try {
+    await lstat(phonePowersPath(directory))
+    return undefined
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+  }
+  return writeRecord(directory, { v: PHONE_POWERS_VERSION, level, setAt: now(), chosen: false })
+}
+
+/**
+ * @param directory - `~/.delorun/secrets/home-auth/`.
+ * @param record - the record.
+ * @returns the level it puts in force.
+ * @throws the failure of the protected write.
+ */
+async function writeRecord(directory: string, record: PhonePowersRecord): Promise<PhonePowers> {
   await writeStoreFile(phonePowersPath(directory), record)
   return powersOf(record)
 }
