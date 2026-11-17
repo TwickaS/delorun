@@ -1,0 +1,259 @@
+/**
+ * The plugin entry on a real subagent runtime, tool runtime, session store and model registry, with stand-ins for the
+ * services the profile supplies: with the preview flag off nothing a model or a person meets is registered, and with it
+ * on the hand-off tools, providers, model routes, presets and Host routes are.
+ */
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { Context, Service } from '@deepseek-ai/cordis'
+import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
+import type { PresetDefinition } from '@deepseek-ai/dsh-agent-preset-registry'
+import type { ConnectionFetchRoute } from '@deepseek-ai/dsh-client-connection'
+import { SessionId } from '@deepseek-ai/dsh-session'
+import SubagentRuntime from '@deepseek-ai/dsh-subagent'
+import { onTestFinished } from 'vitest'
+import { describe, expect, it } from 'vitest'
+import type { PreviewFlagDeclaration, PreviewFlagId, PreviewFlags } from '@delorun/preview-flags'
+import type { SeatLease, SeatLeaseEnd } from '@delorun/external-agents/contract'
+import * as Plugin from '../src/index.ts'
+import { Config, LIVE_AGENTS, mountSeats, type SeatRelayHook } from '../src/index.ts'
+import { LEASE_END_TEXT } from '../src/lease.ts'
+import { CHOOSE_MODEL_PATH, RESUME_PATH } from '../src/state/index.ts'
+import { FakeGate, FixtureWorkingDirectory } from './provider/harness.ts'
+
+/** The stand-in for the preview-flags row: it records declarations and reports one flag as on or off. */
+class FakeFlags extends Service implements PreviewFlags {
+  static on = false
+  readonly declared: PreviewFlagDeclaration[] = []
+
+  constructor(ctx: Context) {
+    super(ctx, 'previewFlags')
+  }
+
+  declare(flag: PreviewFlagDeclaration): () => void {
+    this.declared.push(flag)
+    return () => { this.declared.splice(this.declared.indexOf(flag), 1) }
+  }
+
+  isOn(id: PreviewFlagId): boolean {
+    return id === LIVE_AGENTS.id && FakeFlags.on
+  }
+
+  list(): never[] {
+    return []
+  }
+}
+
+/** The stand-in for the Connection: it records the Fetch routes and the request listeners. */
+class FakeConnection extends Service {
+  readonly routes: ConnectionFetchRoute[] = []
+  readonly fetch = {
+    register: (route: ConnectionFetchRoute): (() => Promise<void>) => {
+      this.routes.push(route)
+      return () => { this.routes.splice(this.routes.indexOf(route), 1); return Promise.resolve() }
+    },
+  }
+
+  constructor(ctx: Context) {
+    super(ctx, 'connection')
+  }
+}
+
+/** The stand-in for the preset registry: it records the definitions. */
+class FakePresets extends Service {
+  readonly definitions: PresetDefinition[] = []
+
+  constructor(ctx: Context) {
+    super(ctx, 'agentPresets')
+  }
+
+  register(definition: PresetDefinition): Promise<() => Promise<void>> {
+    this.definitions.push(definition)
+    return Promise.resolve(() => { this.definitions.splice(this.definitions.indexOf(definition), 1); return Promise.resolve() })
+  }
+}
+
+/** The stand-in for the profile's folder. */
+class FakeProfile extends Service {
+  readonly dir: string
+
+  constructor(ctx: Context, dir: string) {
+    super(ctx, 'profileContext')
+    this.dir = dir
+  }
+}
+
+/** A consent service that tells when a lease ends. */
+class FakeConsent extends Service {
+  readonly listeners = new Set<(lease: SeatLease, reason: SeatLeaseEnd) => void>()
+
+  constructor(ctx: Context) {
+    super(ctx, 'delegationConsent')
+  }
+
+  onLeaseEnded(listener: (lease: SeatLease, reason: SeatLeaseEnd) => void): () => void {
+    this.listeners.add(listener)
+    return () => { this.listeners.delete(listener) }
+  }
+}
+
+interface World {
+  readonly ctx: Context
+  readonly flags: FakeFlags
+  readonly connection: FakeConnection
+  readonly presets: FakePresets
+  readonly dir: string
+}
+
+/**
+ * The services the profile supplies, without the plugin.
+ * @param on - whether the preview flag is on.
+ * @returns the context and the stand-ins.
+ */
+async function world(on: boolean): Promise<World> {
+  FakeFlags.on = on
+  const ctx = new Context()
+  onTestFinished(() => ctx.fiber.dispose())
+  const dir = await mkdtemp(join(tmpdir(), 'ea2-seat-wiring-'))
+  onTestFinished(() => rm(dir, { recursive: true, force: true }))
+  await mountAgentLoopTestDependencies(ctx)
+  await ctx.plugin(FixtureWorkingDirectory)
+  await ctx.plugin(SubagentRuntime)
+  await ctx.plugin(FakeGate)
+  await ctx.plugin(FakeFlags)
+  await ctx.plugin(FakePresets)
+  await ctx.plugin(FakeProfile, dir)
+  await ctx.plugin(FakeConnection)
+  return { ctx, flags: ctx.previewFlags as FakeFlags, connection: ctx.connection as unknown as FakeConnection, presets: ctx.agentPresets as unknown as FakePresets, dir }
+}
+
+/** What a chat's model and a person can meet: tool names, subagent providers and model providers. */
+function surface(ctx: Context): { readonly tools: (string | undefined)[], readonly providers: (string | undefined)[], readonly models: string[] } {
+  return {
+    tools: ['claude_code', 'codex'].map(name => ctx.tools.get(name)?.name),
+    providers: ['claude-code-seat', 'codex-seat'].map(name => ctx.subagents.getProvider(name)?.name),
+    models: ctx.llm.listProviders().map(provider => provider.id).sort(),
+  }
+}
+
+describe('the plugin with the preview flag off', () => {
+  it('declares the flag and registers nothing else', async () => {
+    const { ctx, flags, connection, presets } = await world(false)
+    const baseline = surface(ctx)
+    await ctx.plugin(Plugin, Config(null))
+    expect(flags.declared.map(flag => flag.id)).toEqual([LIVE_AGENTS.id])
+    expect(surface(ctx)).toEqual(baseline)
+    expect(baseline.tools).toEqual([undefined, undefined])
+    expect(baseline.providers).toEqual([undefined, undefined])
+    expect(presets.definitions).toEqual([])
+    expect(connection.routes).toEqual([])
+    expect(ctx.get('seatPrograms')).toBeUndefined()
+  })
+})
+
+describe('the plugin with the preview flag on', () => {
+  it('registers the hand-off tools, providers, model routes, presets and Host routes', async () => {
+    const { ctx, connection, presets } = await world(true)
+    const baseline = surface(ctx)
+    await ctx.plugin(Plugin, Config(null))
+    expect(surface(ctx).tools).toEqual(['claude_code', 'codex'])
+    expect(surface(ctx).providers).toEqual(['claude-code-seat', 'codex-seat'])
+    expect(surface(ctx).models).toEqual([...baseline.models, 'claude-code-seat', 'codex-seat'].sort())
+    expect(presets.definitions.map(definition => definition.id)).toEqual(['claude-code-seat', 'codex-seat'])
+    expect(connection.routes.map(route => [route.path, route.methods])).toEqual([[RESUME_PATH, ['POST']], [CHOOSE_MODEL_PATH, ['POST']]])
+    expect(ctx.get('seatPrograms')).toBeDefined()
+  })
+
+  it('lists no model for a seat route, so no picker shows it', async () => {
+    const { ctx } = await world(true)
+    await ctx.plugin(Plugin, Config(null))
+    await expect(ctx.llm.listModels('claude-code-seat')).resolves.toEqual([])
+    await expect(ctx.llm.listModels('codex-seat')).resolves.toEqual([])
+  })
+
+  it('admits no reach device to a Host route while the home is not mounted', async () => {
+    const { ctx, connection } = await world(true)
+    await ctx.plugin(Plugin, Config(null))
+        const route = connection.routes.find(candidate => candidate.path === RESUME_PATH)!
+    // No home-auth service is mounted, so no device is admitted; the owner's Peer never reaches admitPeer.
+    const peer = { principal: { kind: 'reach-device' } } as Parameters<NonNullable<typeof route.admitPeer>>[1]
+    expect(route.admitPeer?.(new Request('http://127.0.0.1/api/agentSeat.resume', { method: 'POST' }), peer)).toBe(false)
+  })
+
+  it('withdraws everything when the plugin stops', async () => {
+    const { ctx, connection, presets } = await world(true)
+    const fiber = ctx.plugin(Plugin, Config(null))
+    await fiber.await()
+    await fiber.dispose()
+    expect(surface(ctx).tools).toEqual([undefined, undefined])
+    expect(surface(ctx).providers).toEqual([undefined, undefined])
+    expect(presets.definitions).toEqual([])
+    expect(connection.routes).toEqual([])
+  })
+
+  it('fails loud on a seat list the provider side cannot serve, before registering a route', async () => {
+    const { ctx, connection } = await world(true)
+    const [first] = Config(null).seats
+    await expect(mountSeats(ctx, { seats: [{ ...first!, provider: 'gemini' }] })).rejects.toThrow(/not an external agent/)
+    expect(connection.routes).toEqual([])
+  })
+})
+
+describe('the relay seam', () => {
+  it('rejects a program\'s question while no relay is supplied', async () => {
+    const { ctx } = await world(true)
+    const mounted = await mountSeats(ctx, Config(null))
+    expect(mounted.routes.map(route => route.path)).toEqual([RESUME_PATH, CHOOSE_MODEL_PATH])
+  })
+
+  it('builds the relay from the mounted state and the exact seat provider names', async () => {
+    const { ctx } = await world(true)
+    const seen: { providers?: ReadonlySet<string>, state?: object } = {}
+    const relay: SeatRelayHook = (wiring) => {
+      seen.providers = wiring.seatProviders
+      seen.state = wiring.state
+      return () => Promise.resolve('reject')
+    }
+    const mounted = await mountSeats(ctx, Config(null), { relay })
+    expect([...seen.providers ?? []]).toEqual(['claude-code-seat', 'codex-seat'])
+    expect(seen.state).toBe(mounted)
+  })
+})
+
+describe('the end of a lease', () => {
+  it('tells the seat\'s chat why its agent stopped', async () => {
+    const { ctx } = await world(true)
+    await ctx.plugin(FakeConsent)
+    const mounted = await mountSeats(ctx, Config(null))
+    const session = ctx.sessions.create()
+    session.append('subagent/descriptor', { version: 3, mode: 'continuable', provider: 'claude-code-seat', label: 'task' })
+    const child = session.header.id
+    mounted.events.onStarting?.(child, 'claude-code')
+    const consent = ctx.get('delegationConsent') as unknown as FakeConsent
+    const lease: SeatLease = { child, root: child, workspace: 'w', cwd: '/work', provider: 'claude-code', workspaceListed: false, grantedAt: 0 }
+    for (const listener of consent.listeners) listener(lease, 'archived')
+    expect(mounted.store.viewOf(child)).toMatchObject({ state: 'ended', endedReason: LEASE_END_TEXT.archived })
+  })
+
+  it('says nothing about a lease whose child never ran as a seat', async () => {
+    const { ctx } = await world(true)
+    await ctx.plugin(FakeConsent)
+    const mounted = await mountSeats(ctx, Config(null))
+    const consent = ctx.get('delegationConsent') as unknown as FakeConsent
+    const session = ctx.sessions.create()
+    const lease: SeatLease = { child: session.header.id, root: session.header.id, workspace: 'w', cwd: '/work', provider: 'codex', workspaceListed: false, grantedAt: 0 }
+    for (const listener of consent.listeners) listener(lease, 'revoked')
+    expect(mounted.store.viewOf(session.header.id)).toBeNull()
+  })
+
+  it('does not touch a chat whose Session is not loaded', async () => {
+    const { ctx } = await world(true)
+    await ctx.plugin(FakeConsent)
+    await mountSeats(ctx, Config(null))
+    const consent = ctx.get('delegationConsent') as unknown as FakeConsent
+    const gone = SessionId('archived-away')
+    const lease: SeatLease = { child: gone, root: gone, workspace: 'w', cwd: '/work', provider: 'codex', workspaceListed: false, grantedAt: 0 }
+    expect(() => { for (const listener of consent.listeners) listener(lease, 'archived') }).not.toThrow()
+  })
+})

@@ -87,7 +87,8 @@
     "tsdown": "^0.22.2"
   },
   "delorun": {
-    "state": "preview",
+    "state": "shipped",
+    "unreached": "ea2-seat",
     "previewFlags": [
       "externalAgents.liveAgents"
     ]

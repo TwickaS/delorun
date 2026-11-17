@@ -61,10 +61,12 @@ interface Segment {
 
 /** Records program tool calls for seat children and runs the harness tools the program calls. */
 export class SeatToolExecutor implements ToolExecutor {
+  private readonly options: SeatToolExecutorOptions
   private readonly pipeline: ToolExecutionPipeline
 
   /** @param options - the scope, programs, record prefix, output cap and harness-tool concurrency. */
-  constructor(private readonly options: SeatToolExecutorOptions) {
+  constructor(options: SeatToolExecutorOptions) {
+    this.options = options
     this.pipeline = new ToolExecutionPipeline(options.ctx)
   }
 

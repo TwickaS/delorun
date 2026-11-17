@@ -116,7 +116,8 @@ export async function mountSeats(ctx: Context, config: Config, options: SeatMoun
     for (const adapter of adapters.values()) {
       adapter.release(child).catch((error: unknown) => { logger.warn(`the program of ${child} did not close: ${String(error)}`) })
     }
-    if (state.store.viewOf(child) !== null) state.end(child, text)
+    // An archived chat's Session may not be loaded, and then there is no live chat to tell.
+    if (ctx.sessions.get(child) !== undefined && state.store.viewOf(child) !== null) state.end(child, text)
   })
   const paths = new Set(state.routes.map(route => route.path))
   // Before the body is read: only the computer or a reach device reaches these routes, and a device needs an unlock.

@@ -46,7 +46,7 @@ export class FakeGate extends Service {
 }
 
 /** Directory selection for an orchestration run. */
-class FixtureWorkingDirectory extends Service {
+export class FixtureWorkingDirectory extends Service {
   constructor(ctx: Context) {
     super(ctx, 'workingDirectory')
   }
