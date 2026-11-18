@@ -38,9 +38,13 @@ function folders(): { home: string, workspace: string, other: string } {
  * @param cwd - its folder.
  * @param parent - the chat that created it, for a subagent.
  */
+/** Chats whose delegation pin a review lifted by appending `approval/policy: ask`. */
+const lifted = new Set<string>()
+
 function chat(id: string, cwd: string | undefined, parent?: string): Agent {
   const header = parent === undefined ? { cwd } : { cwd, origin: 'subagent', parentSession: SessionId(parent) }
-  return { id: SessionId(id), session: { id: SessionId(id), header } } as never
+  const append = (type: string, data: { policy?: string }): void => { if (type === 'approval/policy' && data.policy === 'ask') lifted.add(id) }
+  return { id: SessionId(id), session: { id: SessionId(id), header, append } } as never
 }
 
 interface World {
@@ -69,6 +73,7 @@ interface World {
  * `fullAccessStartsAgents` is set only when given.
  */
 async function world(mount?: { fullAccessStartsAgents?: boolean }): Promise<World> {
+  lifted.clear()
   const paths = folders()
   const ctx = new Context()
   const state = {
@@ -88,10 +93,10 @@ async function world(mount?: { fullAccessStartsAgents?: boolean }): Promise<Worl
   ctx.provide('approval', {
     request: (request: ApprovalRequest) => {
       state.asks.push(request)
-      return Promise.resolve(state.policies.get(request.agent.id) === 'never' ? 'rejected' : state.answer)
+      return Promise.resolve(!lifted.has(request.agent.id) && state.policies.get(request.agent.id) === 'never' ? 'rejected' : state.answer)
     },
     config: { policy: 'ask' },
-    overrideOf: (session: { id: string }) => state.policies.get(session.id),
+    overrideOf: (session: { id: string }) => lifted.has(session.id) ? 'ask' : state.policies.get(session.id),
   } as never)
   ctx.provide('agents', {
     get: (id: string) => state.agents.find(agent => agent.id === id),
@@ -277,6 +282,22 @@ describe('a seat review at hand-off', () => {
     await expect(w.consent.reviewSeat(seat(w, 'hand-off'))).resolves.toMatchObject({ kind: 'allow', why: 'asked' })
     expect(w.asks.map(ask => ask.agent.id)).toEqual(['seat'])
     expect(w.asks[0]).toMatchObject({ grants: 'external-agent' })
+  })
+
+  it('lifts the child\'s delegation pin before it asks there, so the card is not refused by the pin', async () => {
+    const w = await world()
+    w.openTurns.clear()
+    w.openTurns.add('seat')
+    w.policies.set('seat', 'never')
+    await expect(w.consent.reviewSeat(seat(w, 'hand-off'))).resolves.toMatchObject({ kind: 'allow', why: 'asked' })
+    expect(lifted.has('seat')).toBe(true)
+  })
+
+  it('does not lift a pin when the card is asked on the root', async () => {
+    const w = await world()
+    w.policies.set('seat', 'never')
+    await w.consent.reviewSeat(seat(w, 'hand-off'))
+    expect(lifted.has('seat')).toBe(false)
   })
 
   it('refuses at hand-off when neither the root nor the seat child has an open turn, naming the fixed way forward', async () => {

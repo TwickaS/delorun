@@ -36,7 +36,7 @@ import { sep } from 'node:path'
 import { Service, type Context } from '@deepseek-ai/cordis'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import type { SandboxPolicyService } from '@deepseek-ai/dsh-sandbox-policy'
-import type { ApprovalService } from '@deepseek-ai/dsh-user-approval'
+import { setApprovalPolicy, type ApprovalService } from '@deepseek-ai/dsh-user-approval'
 import { CLAUDE_SANDBOX_INSTALL_COMMAND } from '@deepseek-ai/dsh-subagent'
 import type {
   DelegationConsentService, ExternalDelegationReview, ExternalDelegationVerdict, SubagentSafetyLevel,
@@ -310,6 +310,9 @@ export class DelorunDelegationConsent extends Service implements DelegationConse
     const askOnChild = review.phase === 'resume' || (review.creator.id === root.id && this.hasOpenTurn(child))
     const asked = this.hasOpenTurn(root) ? root : askOnChild ? child : undefined
     if (asked === undefined) return { kind: 'refuse', reason: noOpenTurnRefusal(provider, rules.workspace) }
+    // The child carries the delegation pin (`never`) until the relay lifts it at the program's first question; the start card
+    // is the person's own decision, so the pin is lifted here, for a seat child only (D10, T5).
+    if (asked === child && (approval.overrideOf(child.session) ?? approval.config.policy) === 'never') setApprovalPolicy(child.session, 'ask')
     const outcome = await this.ask(asked, { provider, workspace: rules.workspace, cwd: rules.cwd, label: review.label, signal: review.signal })
     return outcome === 'allowed-once' ? record('asked') : { kind: 'refuse', reason: notApprovedRefusal(provider, outcome, rules.workspace) }
   }

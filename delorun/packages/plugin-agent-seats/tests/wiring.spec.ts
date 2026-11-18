@@ -176,6 +176,26 @@ describe('the relay seam', () => {
   })
 })
 
+describe('a pick for a child whose Session is not loaded', () => {
+  const pick = async (mounted: Awaited<ReturnType<typeof mountSeats>>) => mounted.routes.find(route => route.path === CHOOSE_MODEL_PATH)!
+    .fetch(new Request('http://delorun.test/', { method: 'POST', body: JSON.stringify({ child: 'cold-child', id: 'gpt-5.6-terra' }) }))
+
+  it('finds the child\'s workspace from its stored header', async () => {
+    const { ctx } = await world(true)
+    ctx.provide('sessionQuery', { inspectSession: (_id: string, read: (session: { header: { cwd: string } }) => string) => Promise.resolve(read({ header: { cwd: '/stored/workspace' } })) } as never)
+    const mounted = await mountSeats(ctx, Config(null))
+    expect((await pick(mounted)).status).toBe(200)
+    expect(mounted.choices.get('/stored/workspace')).toBe('gpt-5.6-terra')
+    await mounted.settled()
+  })
+
+  it('refuses the pick when no stored Session names a workspace', async () => {
+    const { ctx } = await world(true)
+    const mounted = await mountSeats(ctx, Config(null))
+    expect((await pick(mounted)).status).toBe(409)
+  })
+})
+
 describe('the end of a lease', () => {
   it('tells the seat\'s chat why its agent stopped', async () => {
     const { ctx } = await world(true)

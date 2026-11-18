@@ -10,6 +10,8 @@ import type {} from '@deepseek-ai/dsh-app-boot'
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { SessionId } from '@deepseek-ai/dsh-session'
+// Type-only: the ctx.sessionQuery merge.
+import type {} from '@deepseek-ai/dsh-session-query'
 // Type-only: the ctx.workspaceRegistry merge.
 import type {} from '@deepseek-ai/dsh-workspace'
 import { agentTitle } from '@delorun/external-agents/copy'
@@ -89,6 +91,7 @@ export async function mountSeats(ctx: Context, config: Config, options: SeatMoun
       return undefined
     },
     workspaceOf,
+    coldWorkspaceOf: async child => workspaceOf(child) ?? await ctx.get('sessionQuery')?.inspectSession(child, session => session.header.cwd),
     dir,
     info: agent => programInfo(programVersion(agent, dir)),
     account: agent => accountOf(ctx.get('agentAccounts'), agent, Date.now()),

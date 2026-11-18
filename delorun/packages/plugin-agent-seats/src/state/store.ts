@@ -92,6 +92,16 @@ export class SeatRecords implements SeatStateStore {
   }
 
   /**
+   * Whether a child's Session is live, so its state can be read and logged. A finished or failed child is cold until the
+   * person's next message resumes it.
+   * @param child - the seat child.
+   * @returns true while the Session is loaded.
+   */
+  isLoaded(child: SessionId): boolean {
+    return this.sessions.get(child) !== undefined
+  }
+
+  /**
    * The fold's state of a seat child.
    * @param child - the seat child.
    * @returns the state.

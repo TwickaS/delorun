@@ -568,3 +568,37 @@ describe('what the adapter reports about a program that cannot start', () => {
     expect(view(w)).toMatchObject({ state: 'model-needed', modelPicker: picker, pending: { since: 5 }, resetAt: 9, endedReason: 'why', plan: 'Max' })
   })
 })
+
+describe('a seat child whose Session is cold', () => {
+  it('keeps the model pick for the workspace without logging anything in the chat', async () => {
+    const w = await stateWorld()
+    const answered = await post(routeOf(w, CHOOSE_MODEL_PATH), { child: 'cold-child', id: 'gpt-5.6-terra' })
+    expect(answered.status).toBe(200)
+    expect(await answered.json()).toEqual({ ok: true, cold: true })
+    expect(w.mount.choices.get('workspace-1')).toBe('gpt-5.6-terra')
+  })
+
+  it('refuses a model id that is not shaped like one', async () => {
+    const w = await stateWorld()
+    expect((await post(routeOf(w, CHOOSE_MODEL_PATH), { child: 'cold-child', id: 'not a model!' })).status).toBe(409)
+    expect(w.mount.choices.get('workspace-1')).toBeUndefined()
+  })
+
+  it('answers Resume without changing anything', async () => {
+    const w = await stateWorld()
+    const answered = await post(routeOf(w, RESUME_PATH), { child: 'cold-child' })
+    expect(answered.status).toBe(200)
+    expect(await answered.json()).toEqual({ ok: true, cold: true })
+  })
+
+  it('refuses a pick when the child\'s workspace is unknown', async () => {
+    const w = await stateWorld({ workspaceOf: () => undefined, coldWorkspaceOf: () => Promise.resolve(undefined) })
+    expect((await post(routeOf(w, CHOOSE_MODEL_PATH), { child: 'cold-child', id: 'gpt-5.6-terra' })).status).toBe(409)
+  })
+
+  it('finds the workspace of a cold child from its stored header', async () => {
+    const w = await stateWorld({ workspaceOf: () => undefined, coldWorkspaceOf: () => Promise.resolve('workspace-cold') })
+    expect((await post(routeOf(w, CHOOSE_MODEL_PATH), { child: 'cold-child', id: 'gpt-5.6-terra' })).status).toBe(200)
+    expect(w.mount.choices.get('workspace-cold')).toBe('gpt-5.6-terra')
+  })
+})

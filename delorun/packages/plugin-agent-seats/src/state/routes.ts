@@ -40,6 +40,12 @@ export interface SeatRouteOptions {
    * @returns the key, or undefined.
    */
   workspaceOf(child: SessionId): string | undefined
+  /**
+   * The workspace key of a child whose Session is not loaded.
+   * @param child - the seat child.
+   * @returns the key, or undefined.
+   */
+  coldWorkspaceOf(child: SessionId): Promise<string | undefined>
   /** The clock, in epoch milliseconds. */
   now(): number
 }
@@ -77,6 +83,8 @@ export function resumeRoute(options: SeatRouteOptions): SeatRoute {
       const body = await bodyOf(request)
       if (typeof body?.child !== 'string' || body.child === '') return answer(400, { error: 'the request must be JSON with child' })
       const child = SessionId(body.child)
+      // A cold child has nothing to log: its card stays until the person's next message resumes it, which starts the program.
+      if (!options.records.isLoaded(child)) return answer(200, { ok: true, cold: true })
       const view = options.records.viewOf(child)
       if (view === null) return answer(404, { error: 'that chat has no live agent' })
       if (view.state !== 'limit') return answer(409, { error: 'the agent is not at a plan limit' })
@@ -86,6 +94,25 @@ export function resumeRoute(options: SeatRouteOptions): SeatRoute {
       return answer(200, { ok: true })
     },
   }
+}
+
+/** The characters a model id may have, as the accounts store allows them. */
+const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/u
+
+/**
+ * Keep a pick for a child whose Session is cold: the offered list is in the child's log, which is not open, so only the id's
+ * form is checked here; the program refuses a model its plan does not offer. Nothing is logged in the child's chat.
+ * @param options - what the route needs.
+ * @param child - the seat child.
+ * @param id - the model id the person picked.
+ * @returns the answer.
+ */
+async function chooseCold(options: SeatRouteOptions, child: SessionId, id: string): Promise<Response> {
+  if (!MODEL_ID.test(id)) return answer(409, { error: 'that model is not offered to pick' })
+  const workspace = await options.coldWorkspaceOf(child)
+  if (workspace === undefined) return answer(409, { error: 'the agent has no workspace to keep the pick for' })
+  options.choices.set(workspace, id)
+  return answer(200, { ok: true, cold: true })
 }
 
 /**
@@ -103,6 +130,7 @@ export function chooseModelRoute(options: SeatRouteOptions): SeatRoute {
         return answer(400, { error: 'the request must be JSON with child and id' })
       }
       const child = SessionId(body.child)
+      if (!options.records.isLoaded(child)) return chooseCold(options, child, body.id)
       const view = options.records.viewOf(child)
       if (view === null) return answer(404, { error: 'that chat has no live agent' })
       const offered = view.modelPicker?.offered.find(model => model.id === body.id)

@@ -2978,6 +2978,9 @@ importers:
       '@deepseek-ai/dsh-session-projection':
         specifier: workspace:*
         version: link:../../../packages/session/session-projection
+      '@deepseek-ai/dsh-session-query':
+        specifier: workspace:*
+        version: link:../../../packages/session-query/session-query
       '@deepseek-ai/dsh-spill':
         specifier: workspace:*
         version: link:../../../packages/spill/spill

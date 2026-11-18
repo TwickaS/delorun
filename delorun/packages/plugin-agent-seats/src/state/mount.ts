@@ -38,6 +38,12 @@ export interface SeatStateOptions {
    * @returns the key, or undefined.
    */
   workspaceOf(child: SessionId): string | undefined
+  /**
+   * The workspace key of a child whose Session is not loaded, read from its stored header without loading it.
+   * @param child - the seat child.
+   * @returns the key, or undefined when the child has no stored Session.
+   */
+  coldWorkspaceOf?(child: SessionId): Promise<string | undefined>
   /** Delorun's own folder; the model picks are kept in a file in it. */
   readonly dir: string
   /** Reads a program session's newest message id for parting detection; absent switches the comparison off. */
@@ -228,7 +234,7 @@ export async function mountSeatState(ctx: Context, options: SeatStateOptions): P
   })
 
   const routeOptions = {
-    records: store, choices, workspaceOf: options.workspaceOf, now,
+    records: store, choices, workspaceOf: options.workspaceOf, coldWorkspaceOf: options.coldWorkspaceOf ?? (child => Promise.resolve(options.workspaceOf(child))), now,
   }
   return {
     store,
