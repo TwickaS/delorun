@@ -6,8 +6,6 @@ description: "Changing what Delorun runs: why a plugin you link from a folder ru
 
 English | [中文](changing-your-harness.zh.md)
 
-This page describes how Delorun works today.
-
 ## Summary
 
 You can change what your Delorun runs: plugins you link from a folder, and Delorun's own files. The [protection](../reference/glossary.md#changes-protection) setting decides whether a change loads at once or waits for your review.

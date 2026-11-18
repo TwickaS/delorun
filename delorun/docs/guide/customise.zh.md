@@ -145,4 +145,4 @@ Delorun 自己的插件，以及它的保护所需要的行（例如沙箱），
 
 ## 编辑 harness 本身
 
-对插件循环、组合或 Delorun 的保护的更改，要放在你自己的已安装 Delorun 程序文件的副本中：`delorun changes edit-harness` 制作该副本并打印它的文件夹，你在那里保存的每个文件都是对 Delorun 本身的一项更改，`delorun changes list` 会显示它，`delorun changes undo` 会撤销它。已安装的发布版本从不被编辑，但 Delorun 的签名和发布日志不再描述你所运行的代码，`delorun verify` 会列出你改动过的文件。[修改你的 harness](https://docs.delorun.com/guide/changing-your-harness)涵盖保护（它在更改加载之前等待你的审阅）以及 studio 的 Changes 部分。凡是插件能实现的更改，都应优先使用插件。
+对插件循环、组合或 Delorun 的保护的更改，要放在你自己的已安装 Delorun 程序文件的副本中：`delorun changes edit-harness` 制作该副本并打印它的文件夹，你在那里保存的每个文件都是对 Delorun 本身的一项更改，`delorun changes list` 会显示它，`delorun changes undo` 会撤销它。已安装的发布版本从不被编辑，但 Delorun 的签名和发布日志不再描述你所运行的代码，`delorun verify` 会列出你改动过的文件。[修改你的 harness](changing-your-harness.md)涵盖保护（它在更改加载之前等待你的审阅）以及 studio 的 Changes 部分。凡是插件能实现的更改，都应优先使用插件。

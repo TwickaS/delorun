@@ -131,7 +131,25 @@ Setup's prompts question decides how Delorun asks before risky changes. `delorun
 
 With Never ask, an unlocked phone has the computer's authority, so treat it as the computer.
 
-A phone or browser signed in over remote access, with its unlock running, can then do everything the computer can: it changes settings and plugin rows the computer alone changes with the other answers, runs any slash command, loosens the permission new chats start in, answers the questions for MCP servers, external agents and a workspace's network, gives the approvals that reserve full access, uses terminals only when [Phone powers](reach.md#choose-how-much-an-unlocked-phone-may-do) is Full (each terminal needs the unlock, and no switch or full-access workspace waives it), saves or removes provider keys (it never reads a saved key back), opens a chat's folder in an application on the computer, and reads files outside the chat's workspace (never inside the Delorun home). A preset or consent a phone loosened this way (the permission new chats start in, or the external-agent consent turned off) is set back when the mode ends, unless you changed it at your computer since. Remote access never extends itself: only the computer, through `delorun setup`, turns the mode on, approves a new device, approves an unlock or removes a device, changes the remote-access settings and resets the home, and a device signs in as before. Nothing a device does while the mode is on outlives it: a terminal switch or a workspace's full access that a device turned on is turned off when the mode ends, and chats in those workspaces go back to Workspace Write, while what you set at the computer stays. Reading files outside the chat's workspace is the same reach that full access gives the chat in this mode. A phone that has a terminal, or that prompts a chat in a full-access workspace, has the computer's authority: a shell on the computer can run `delorun devices approve`, `elevate` and `code`, so treat an unlocked phone as the computer. A device whose unlock has ended keeps every refusal it has with the other answers, and it opens no terminal. [`@delorun/home-auth`](../../packages/home-auth/README.md#dangerous-mode) lists each refusal the mode lifts.
+### What an unlocked phone can do with Never ask
+
+A phone or browser signed in over remote access, with its unlock running, can then do everything the computer can:
+
+- It changes settings and plugin rows the computer alone changes with the other answers.
+- It runs any slash command.
+- It loosens the permission new chats start in.
+- It answers the questions for MCP servers, external agents and a workspace's network.
+- It gives the approvals that reserve full access.
+- It uses terminals only when [Phone powers](reach.md#choose-how-much-an-unlocked-phone-may-do) is Full (each terminal needs the unlock, and no switch or full-access workspace waives it).
+- It saves or removes provider keys (it never reads a saved key back).
+- It opens a chat's folder in an application on the computer.
+- It reads files outside the chat's workspace (never inside the Delorun home). This is the same reach that full access gives the chat in this mode.
+
+A preset or consent a phone loosened this way (the permission new chats start in, or the external-agent consent turned off) is set back when the mode ends, unless you changed it at your computer since. Nothing a device does while the mode is on outlives it: a terminal switch or a workspace's full access that a device turned on is turned off when the mode ends, and chats in those workspaces go back to Workspace Write, while what you set at the computer stays.
+
+Remote access never extends itself: only the computer, through `delorun setup`, turns the mode on, approves a new device, approves an unlock or removes a device, changes the remote-access settings and resets the home, and a device signs in as before.
+
+A phone that has a terminal, or that prompts a chat in a full-access workspace, has the computer's authority: a shell on the computer can run `delorun devices approve`, `elevate` and `code`, so treat an unlocked phone as the computer. A device whose unlock has ended keeps every refusal it has with the other answers, and it opens no terminal. [`@delorun/home-auth`](../../packages/home-auth/README.md#dangerous-mode) lists each refusal the mode lifts.
 
 The `web_fetch` [guard](../reference/glossary.md#fetch-guard), the update protections and the [external-agent](#external-agents) consent stay as they are with either answer. Plugin management cannot turn off, remove or change Delorun's consent and guard plugins or the sandbox, in any mode.
 
@@ -278,7 +296,7 @@ They prove that you run the release Delorun's keys signed and logged publicly. T
 - **The studio's sign-in.** A browser that signed in stays signed in for 30 days, across restarts, and the sign-in cannot be revoked.
 - **Your logs.** A secret in a form Delorun does not recognise can reach an operational log ([Where Delorun keeps its logs](logs.md)).
 
-With [Changes protection](https://docs.delorun.com/guide/changing-your-harness) off, the default, anything that can write a plugin folder you linked can change what Delorun runs before you see the change. The change is recorded and can be undone. [What you trust when you use Delorun](trust.md) states what each party, the maintainer included, can and cannot do.
+With [Changes protection](changing-your-harness.md) off, the default, anything that can write a plugin folder you linked can change what Delorun runs before you see the change. The change is recorded and can be undone. [What you trust when you use Delorun](trust.md) states what each party, the maintainer included, can and cannot do.
 
 ## Next
 
