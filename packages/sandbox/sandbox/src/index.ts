@@ -18,6 +18,7 @@ export {
   denialMarkers,
   environmentDenialMarker,
   escalationHintMarker,
+  noteSandboxFault,
   sandboxDenialMarker,
   sandboxPermissionsDescription,
   validateEscalationArgs,
@@ -213,17 +214,31 @@ export const SANDBOX_UNAVAILABLE = 'SANDBOX_UNAVAILABLE'
  * channel.
  */
 export class SandboxUnavailableError extends HarnessError {
-  constructor(mode: ConfinedSandboxMode, detail?: string) {
+  /** True when a backend is installed but its check failed or timed out, so the same command may work on a retry. */
+  readonly transient: boolean
+
+  /**
+   * @param mode - the confined mode that was requested.
+   * @param detail - the runner's own failure text, when it gave one.
+   * @param options - `transient`: the backend is installed and its check failed, so retrying can succeed.
+   */
+  constructor(mode: ConfinedSandboxMode, detail?: string, options: { transient?: boolean } = {}) {
+    const transient = options.transient === true
     super(
-      `sandbox mode "${mode}" is requested but no sandbox backend is usable on this host; `
-      + 'refusing to run the command unconfined. Install bubblewrap or run a Landlock-enforcing '
-      + 'kernel (Linux), ensure sandbox-exec is usable (macOS), or ensure the ACL '
-      + 'restricted-token runner can start (Windows) — otherwise switch the consumer to '
-      + 'danger-full-access.'
-      + (detail === undefined ? '' : ` Runner failure: ${detail}`),
+      transient
+        ? `sandbox mode "${mode}" is requested but the sandbox had a temporary fault (its start-up check failed, as can `
+          + 'happen while the computer is busy); refusing to run the command unconfined. Retry the command, or use a tool '
+          + 'that needs no shell, such as web search or file reads. Do not ask for danger-full-access because of this.'
+        : `sandbox mode "${mode}" is requested but no sandbox backend is usable on this host; `
+          + 'refusing to run the command unconfined. Install bubblewrap or run a Landlock-enforcing '
+          + 'kernel (Linux), ensure sandbox-exec is usable (macOS), or ensure the ACL '
+          + 'restricted-token runner can start (Windows) — otherwise switch the consumer to '
+          + 'danger-full-access.',
       SANDBOX_UNAVAILABLE,
     )
     this.name = 'SandboxUnavailableError'
+    this.transient = transient
+    if (detail !== undefined) this.message += ` Runner failure: ${detail}`
   }
 }
 

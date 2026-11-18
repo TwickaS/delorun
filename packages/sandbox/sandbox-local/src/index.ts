@@ -102,6 +102,13 @@ export interface Config {
   /** Positive timeout for each functional probe; zero would mean unbounded to Node. */
   probeTimeoutMs?: number
   /**
+   * How many times a confined command walks the runner chain before it is refused as unavailable; at least one.
+   * A failed walk is never remembered past the command that ran it.
+   */
+  probeAttempts?: number
+  /** Wait in milliseconds before the second walk; each further wait doubles. Zero retries at once. */
+  probeBackoffMs?: number
+  /**
    * Absolute path of an existing directory, such as the harness home, that confined commands can neither write nor
    * read, as far as the selected runner expresses each rule ({@link RUNNER_PROTECTION}). A `workspace-write` call
    * whose workspace root or extra root equals, lies inside or contains it is refused with `HOME_IN_WRITABLE_ROOT`.
@@ -502,6 +509,8 @@ export class LocalSandboxProvider extends SandboxProvider {
     runnerCommand: z.array(z.string()).default([]),
     runnerFailureSignatures: z.array(z.string()).default([]),
     probeTimeoutMs: z.natural().default(5_000),
+    probeAttempts: z.natural().default(3),
+    probeBackoffMs: z.natural().default(250),
     protectedHome: z.string(),
     protectedHomeReadable: z.array(z.string()).default([]),
     protectedHomeToolReadable: z.array(z.string()).default([]),
@@ -519,6 +528,8 @@ export class LocalSandboxProvider extends SandboxProvider {
   private readonly runnerCommand: string[] | undefined
   private readonly configuredRunnerFailureSignatures: string[]
   private readonly probeTimeoutMs: number
+  private readonly probeAttempts: number
+  private readonly probeBackoffMs: number
   private readonly protection: ProtectionSettings
   /** {@link protection} with the sockets and directories denied to a command whose network is restricted. */
   private readonly networkProtection: ProtectionSettings
@@ -528,8 +539,8 @@ export class LocalSandboxProvider extends SandboxProvider {
   private readonly escapeSocketDirectories: readonly string[]
   /** The last accepted abstract-socket finding that was logged. */
   private lastAcceptedSockets: string | undefined
-  /** Cached chain verdict; undefined until the first confined wrap needs it. */
-  private selectedRunner: SelectedRunner | 'unavailable' | undefined
+  /** Cached usable runner; undefined until a confined wrap finds one. A failed walk is never cached. */
+  private selectedRunner: SelectedRunner | undefined
   /** The chain walk's `bwrap` probe verdict, which the Landlock escape refusal's advice names; undefined when unprobed. */
   private bwrapProbe: BwrapProbe | undefined
   /**
@@ -562,6 +573,9 @@ export class LocalSandboxProvider extends SandboxProvider {
     this.configuredRunnerFailureSignatures = runnerFailureSignatures
     this.probeTimeoutMs = config.probeTimeoutMs as number
     assertPositiveFinite('probeTimeoutMs', this.probeTimeoutMs)
+    this.probeAttempts = config.probeAttempts as number
+    assertPositiveFinite('probeAttempts', this.probeAttempts)
+    this.probeBackoffMs = config.probeBackoffMs as number
     this.protection = protectionSettings(config)
     this.networkProtection = networkProtectionSettings(config, this.protection)
     this.toolReadable = toolReadableEntries(config, this.protection.home)
@@ -896,16 +910,25 @@ export class LocalSandboxProvider extends SandboxProvider {
   }
 
   /**
-   * Resolve which runner confines commands, once, for the provider's
-   * lifetime: this platform's chain ({@link PLATFORM_CHAINS}), its sole
-   * candidate selected directly, multiple candidates arbitrated by
-   * functional probes in chain order. Fail closed when the platform has no
-   * chain or no candidate passes — the command never runs.
+   * Resolve which runner confines commands: this platform's chain ({@link PLATFORM_CHAINS}), its sole
+   * candidate selected directly, multiple candidates arbitrated by functional probes in chain order.
+   * A usable runner is remembered for the provider's lifetime. A walk that finds none is retried up to
+   * `probeAttempts` times with doubling backoff and then refused fail-closed without being remembered, so the
+   * next command probes again. The refusal is `transient` when `bwrap` is installed, since its check
+   * failing or timing out then says nothing about the host lacking it.
    */
   private selectRunner(mode: ConfinedSandboxMode): SelectedRunner {
-    this.selectedRunner ??= this.chainVerdict()
-    if (this.selectedRunner === 'unavailable') throw new SandboxUnavailableError(mode)
-    return this.selectedRunner
+    if (this.selectedRunner !== undefined) return this.selectedRunner
+    let wait = this.probeBackoffMs
+    for (let attempt = 1; ; attempt++) {
+      const verdict = this.chainVerdict()
+      if (verdict !== 'unavailable') return (this.selectedRunner = verdict)
+      if (attempt >= this.probeAttempts) break
+      if (wait > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, wait)
+      wait *= 2
+    }
+    const transient = this.bwrapProbe !== undefined && (this.internals.bwrapInstalled ?? bwrapOnPath)()
+    throw new SandboxUnavailableError(mode, undefined, { transient })
   }
 
   /** Walk this platform's chain: sole candidate unprobed, several probed in order, none usable → unavailable. */

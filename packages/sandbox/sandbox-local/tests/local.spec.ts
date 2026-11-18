@@ -183,9 +183,9 @@ describe('runnerCommand config', () => {
 
   it('an EMPTY runnerCommand means unconfigured: the platform chain still gates the wrap', async () => {
     const probeBwrap = vi.fn(() => false)
-    const { sandbox } = await setup({ runnerCommand: [] }, { platform: 'linux', probeBwrap, probeLandlock: () => 'unusable' })
+    const { sandbox } = await setup({ runnerCommand: [], probeBackoffMs: 1 }, { platform: 'linux', probeBwrap, probeLandlock: () => 'unusable' })
     await expect(sandbox.confine(['true'], RO)).rejects.toThrow(SandboxUnavailableError)
-    expect(probeBwrap).toHaveBeenCalledTimes(1)
+    expect(probeBwrap).toHaveBeenCalledTimes(3)
   })
 
   it('requires an operator-owned failure dialect for every configured runner', async () => {
@@ -294,14 +294,42 @@ describe('the platform chains', () => {
     expect(probeBwrap).toHaveBeenCalledTimes(1)
   })
 
-  it('the unavailable verdict is cached too, and the error is structured', async () => {
+  it('an unavailable verdict is refused fail-closed, structured, and never cached', async () => {
     const probeBwrap = vi.fn(() => false)
     const probeLandlock = vi.fn(() => 'unusable' as const)
-    const { sandbox } = await setup({}, { platform: 'linux', probeBwrap, probeLandlock })
-    await expect(sandbox.confine(['true'], RO)).rejects.toThrow(expect.objectContaining({ name: 'SandboxUnavailableError', code: SANDBOX_UNAVAILABLE }))
+    const { sandbox } = await setup({ probeAttempts: 2, probeBackoffMs: 1 }, { platform: 'linux', probeBwrap, probeLandlock, bwrapInstalled: () => false })
+    await expect(sandbox.confine(['true'], RO)).rejects.toThrow(expect.objectContaining({ name: 'SandboxUnavailableError', code: SANDBOX_UNAVAILABLE, transient: false }))
+    expect(probeBwrap).toHaveBeenCalledTimes(2)
     await expect(sandbox.confine(['true'], RO)).rejects.toThrow(SandboxUnavailableError)
-    expect(probeBwrap).toHaveBeenCalledTimes(1)
-    expect(probeLandlock).toHaveBeenCalledTimes(1)
+    expect(probeBwrap).toHaveBeenCalledTimes(4)
+  })
+
+  it('a probe that fails once and then passes retries within the command and confines it', async () => {
+    const probeBwrap = vi.fn<() => boolean>().mockReturnValueOnce(false).mockReturnValue(true)
+    const { sandbox } = await setup({ probeBackoffMs: 1 }, { platform: 'linux', probeBwrap, probeLandlock: () => 'unusable' })
+    const confined = await sandbox.confine(['true'], RO)
+    expect(confined.enforcement).toBe('full')
+    expect(probeBwrap).toHaveBeenCalledTimes(2)
+    await sandbox.confine(['true'], RO)
+    expect(probeBwrap).toHaveBeenCalledTimes(2)
+  })
+
+  it('a failed command does not poison the next one: the next command probes again and can succeed', async () => {
+    let usable = false
+    const probeBwrap = vi.fn(() => usable)
+    const { sandbox } = await setup({ probeAttempts: 1 }, { platform: 'linux', probeBwrap, probeLandlock: () => 'unusable', bwrapInstalled: () => true })
+    await expect(sandbox.confine(['true'], RO)).rejects.toThrow(expect.objectContaining({ transient: true }))
+    usable = true
+    await expect(sandbox.confine(['true'], RO)).resolves.toMatchObject({ enforcement: 'full' })
+  })
+
+  it('an installed bwrap whose check fails is a temporary fault that points away from full access', async () => {
+    const { sandbox } = await setup({ probeAttempts: 1 }, { platform: 'linux', probeBwrap: () => 'timed-out', probeLandlock: () => 'unusable', bwrapInstalled: () => true })
+    const error = await sandbox.confine(['true'], RO).catch((caught: unknown) => caught)
+    expect(error).toBeInstanceOf(SandboxUnavailableError)
+    expect((error as SandboxUnavailableError).transient).toBe(true)
+    expect((error as Error).message).toContain('temporary fault')
+    expect((error as Error).message).toContain('web search')
   })
 
   it('a multi-rung chain probes a seatbelt rung like any other (the walk, not the platform table, decides)', async () => {

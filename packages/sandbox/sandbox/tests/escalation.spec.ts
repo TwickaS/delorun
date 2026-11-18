@@ -15,6 +15,7 @@ import {
   WIDER_MODES,
   approveEscalation,
   escalationHintMarker,
+  noteSandboxFault,
   sandboxDenialMarker,
   sandboxPermissionsDescription,
   validateEscalationArgs,
@@ -121,6 +122,17 @@ describe('approveEscalation', () => {
         ja: 'workspace-write 権限でこの操作を許可します：the user asked to write in the workspace',
       },
     })
+  })
+
+  it('after a temporary sandbox fault, says so once on the card and tells the model to retry inside the sandbox on rejection', async () => {
+    const agent = {}
+    const seen: { displayReason?: { en: string; zh: string } }[] = []
+    noteSandboxFault(agent)
+    await expect(approveEscalation(req(), ingredients({ agent, approver: approver('rejected', r => seen.push(r as never)) }))).rejects.toThrow(/without sandbox_permissions/)
+    expect(seen[0]?.displayReason?.en).toMatch(/^Delorun's sandbox had a problem; this asks to run without it\. Allow this operation/)
+    expect(seen[0]?.displayReason?.zh).toContain('Delorun 的沙盒出了问题')
+    await approveEscalation(req(), ingredients({ agent, approver: approver('allowed-once', r => seen.push(r as never)) }))
+    expect(seen[1]?.displayReason?.en).toMatch(/^Allow this operation/)
   })
 
   it('marks only an escalation to full access as a full-access grant', async () => {
