@@ -14,15 +14,15 @@
  * Then run `lod.ts tiles`, `shot-colours.ts`, `mosaic-plans.ts` and `lod.ts atlases`, in that
  * order.
  *
- * With an owner inbox folder as the second argument, the vetted entries of its `manifest.json` (vetted, with a screen, a
+ * With `--owner <inbox folder>`, the vetted entries of its `manifest.json` (vetted, with a screen, a
  * theme and a caption) join the candidates; every other entry is ignored. Every picked picture, captured or owner's, is written as WebP into the folder `SITE_PICTURES_DIR` names.
  *
- * Usage: `node scripts/wall-shots.ts <source folder> [owner inbox folder]`
+ * Usage: `node scripts/wall-shots.ts [--owner <inbox folder>] <capture folder>...`; a picture in several folders comes from the first.
  *
  * @module @delorun/website/scripts/wall-shots
  */
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { measure, type Colour } from './colour.ts'
 import { picturesDir } from './pictures-dir.ts'
@@ -116,13 +116,19 @@ const KIND: Readonly<Record<string, string>> = {
   'settings-models': 'settings',
 }
 
-const [source, inbox] = process.argv.slice(2)
-if (source === undefined) throw new Error('Usage: node scripts/wall-shots.ts <source folder> [owner inbox folder]')
+const argv = process.argv.slice(2)
+const at = argv.indexOf('--owner')
+const inbox = at < 0 ? undefined : argv[at + 1]
+const folders = argv.filter((_, index) => at < 0 || (index !== at && index !== at + 1))
+if (folders.length === 0 || (at >= 0 && inbox === undefined)) throw new Error('Usage: node scripts/wall-shots.ts [--owner <inbox folder>] <capture folder>...')
 const sources = picturesDir(process.env, false)
 
-const captured: Entry[] = readdirSync(source)
+// A picture that appears in more than one folder comes from the first folder that has it, so a sharper set can go first
+// and a set with screens the sharper one lacks can follow.
+const captured: Entry[] = [...new Map(folders.flatMap(folder => readdirSync(folder)
   .filter(name => /^manifest.*\.json$/.test(name))
-  .flatMap(name => JSON.parse(readFileSync(join(source, name), 'utf8')) as Entry[])
+  .flatMap(name => (JSON.parse(readFileSync(join(folder, name), 'utf8')) as Entry[]).map(entry => ({ ...entry, path: join(folder, entry.file) })))
+  .filter(entry => existsSync(entry.path ?? ''))).reverse().map(entry => [entry.file, entry] as const)).values()].reverse()
 
 /**
  * Reads an owner inbox's manifest and keeps the entries a person has vetted and described.
@@ -145,7 +151,7 @@ const candidates: Candidate[] = entries
   .sort((p, q) => p.file.localeCompare(q.file))
   .map(entry => {
     const device = entry.width < 1000 ? 'phone' : 'computer'
-    return { ...entry, id: entry.id ?? entry.file.replace(/\.png$/, ''), device, colour: measure(entry.path ?? join(source, entry.file), device === 'phone') }
+    return { ...entry, id: entry.id ?? entry.file.replace(/\.png$/, ''), device, colour: measure(entry.path ?? '', device === 'phone') }
   })
 console.log(`measured ${candidates.length} candidates`)
 
@@ -208,7 +214,7 @@ while (rest.length > 0) {
 // which keeps the repository's copy a fraction of the PNG's.
 mkdirSync(sources, { recursive: true })
 for (const each of order) {
-  execFileSync('ffmpeg', ['-loglevel', 'error', '-y', '-i', each.path ?? join(source, each.file), '-c:v', 'libwebp', '-quality', String(SOURCE_QUALITY), '-compression_level', '6', join(sources, `${each.id}.webp`)])
+  execFileSync('ffmpeg', ['-loglevel', 'error', '-y', '-i', each.path ?? '', '-c:v', 'libwebp', '-quality', String(SOURCE_QUALITY), '-compression_level', '6', join(sources, `${each.id}.webp`)])
 }
 
 /**

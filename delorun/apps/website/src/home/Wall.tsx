@@ -4,7 +4,7 @@
  * @module @delorun/website/home/wall
  */
 import { useState, type CSSProperties, type ReactNode } from 'react'
-import { LEVEL_WIDTHS, lodUrl, type Format } from './pictures.ts'
+import { fullWidth, LEVEL_WIDTHS, lodUrl, type Format } from './pictures.ts'
 import { useOpenShot } from './Lightbox.tsx'
 import { SHOTS, type Shot } from './shots.ts'
 import s from './home.module.css'
@@ -71,7 +71,7 @@ const WALL_SIZES = { tile: '(max-width: 639px) 50vw, (max-width: 1023px) 25vw, 1
  */
 function srcSet(shot: Shot, format: Format): string {
   const widths = LEVEL_WIDTHS[shot.device]
-  return `${lodUrl(shot.id, 2, format)} ${widths[1]}w, ${lodUrl(shot.id, 3, format)} ${widths[2]}w`
+  return `${lodUrl(shot.id, 2, format)} ${widths[1]}w, ${lodUrl(shot.id, 3, format)} ${fullWidth(shot.id)}w`
 }
 
 /** How many tiles a phone shows before the visitor asks for all of them. */

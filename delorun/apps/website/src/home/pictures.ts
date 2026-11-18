@@ -33,6 +33,17 @@ export function levelFor(needed: number, device: Device): Level {
 }
 
 /**
+ * The width in pixels of a picture's full-size copy, which is the capture's own: a retina capture is twice the CSS width.
+ * @param id - the picture.
+ * @returns the width.
+ */
+export function fullWidth(id: string): number {
+  const width = LOD_TILES[id]?.[3]
+  if (width === undefined) throw new Error(`The picture ${id} has no full-size copy; run scripts/lod.ts`)
+  return width
+}
+
+/**
  * The address of one level of a picture.
  * @param id - the picture.
  * @param level - the level.
