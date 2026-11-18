@@ -38,3 +38,10 @@
 .quote[data-colour='teal'] { --quote-colour: var(--delorun-badge-teal); }
 .quoteTitle { font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-secondary); }
 .quoteText { margin: 0; font-size: 13px; line-height: 1.45; color: var(--dsw-alias-label-primary); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* At phone width the row's right side keeps the words and the percent; the ring's drawing goes, so the title keeps a line of its own. */
+@media (max-width: 520px) {
+  .trail { margin-inline-start: 4px; gap: 6px; }
+  .ring svg { display: none; }
+  .answer { padding: 2px 8px; }
+}
