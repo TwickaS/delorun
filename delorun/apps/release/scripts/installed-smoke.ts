@@ -14,7 +14,7 @@
  * runs with the same environment.
  *
  * Steps, each named on failure: 1 install and start, 2 add the offered packs, 3 wait for the installs and check each
- * pack's plugins are loaded, 4 stop and start twice with a clean home log, 5 create a chat, 6 clean up. The scratch
+ * pack's plugins are loaded, 4 stop and start twice with a clean home log, 5 create a chat, 6 upgrade the previous release, installed with the Claude Code and Codex packs, to this one with `delorun update --yes --data-copy` and check both packs still load (skipped, with its reason, for a channel origin or a channel with no older release), 7 clean up. The scratch
  * directory `/var/tmp/itest-*` (outside `/tmp`, which a sandboxed command may write, as a real home is) is removed and every process the run started is stopped, whether it passes or not. The run
  * stops at the first failure; `--keep-going` records a failed check (a refused home-log line, a pack that is not loaded)
  * and goes on, so one run names every failing step. Exit codes: 0 passed, 1 a step or check failed, 2 a wrong command
@@ -37,6 +37,7 @@ import { repositoryRoot } from '@delorun/tools/src/git.ts'
 import { serveChannel } from './local-channel.ts'
 import { logProblems } from '../src/installed-smoke/home-log.ts'
 import { channelSource, offeredPacks, type ChannelSource } from '../src/installed-smoke/offered-packs.ts'
+import { previousRelease } from '../src/installed-smoke/previous-release.ts'
 import { signIn, type StudioClient } from '../src/installed-smoke/studio.ts'
 import type { QueueItem} from '../src/installed-smoke/wire.ts';
 import { BundleView, PacksResult, PacksSnapshot, PluginView, readAnswer } from '../src/installed-smoke/wire.ts'
@@ -120,6 +121,7 @@ export const SMOKE_STEPS = [
   'wait for the installs; check each pack is installed and its plugins are loaded',
   'stop and start twice; check the home log',
   'create a chat',
+  'upgrade the previous release with the agent packs to this one',
   'clean up',
 ] as const
 
@@ -208,7 +210,7 @@ export async function runSmoke(request: SmokeRequest, say: (line: string) => voi
   const scratch = mkdtempSync(join('/var/tmp', 'itest-'))
   const paths = { home: join(scratch, 'home'), delorun: join(scratch, 'home', '.delorun'), tmp: join(scratch, 'tmp'), npm: join(scratch, 'npm-cache'), project: join(scratch, 'home', 'project') }
   for (const directory of [paths.home, paths.tmp, paths.npm, paths.project]) mkdirSync(directory, { recursive: true, mode: 0o700 })
-  const homeLog = join(paths.delorun, 'logs', `home-${PROFILE}`, 'home.log')
+  let homeLog = join(paths.delorun, 'logs', `home-${PROFILE}`, 'home.log')
   let server: Server | undefined
   let launcher = request.launcher
   let started = false
@@ -228,7 +230,9 @@ export async function runSmoke(request: SmokeRequest, say: (line: string) => voi
     return remaining
   }
 
-  const environment = smokeEnvironment(paths)
+  let environment = smokeEnvironment(paths)
+  /** The release `delorun status` must report running. */
+  let expected = request.version
   /** Run a command, with its output appended to the run's log. */
   const command = (executable: string, args: readonly string[], timeoutMs: number, env: NodeJS.ProcessEnv = environment, cwd = paths.home): Promise<Finished> => new Promise((settle) => {
     appendFileSync(request.log, `$ ${executable} ${args.join(' ')}\n`)
@@ -285,7 +289,7 @@ export async function runSmoke(request: SmokeRequest, say: (line: string) => voi
   const status = async (): Promise<{ readonly running: string, readonly studio: string | undefined }> => {
     const answer = JSON.parse((await required(['status', '--json'], 60_000)).stdout) as { status?: { state?: string, runtime?: { running?: string }, studio?: string } }
     const running = answer.status?.runtime?.running
-    if (answer.status?.state !== 'running' || running !== request.version) throw new StepFailure(`delorun status --json says ${String(answer.status?.state)} with release ${String(running)}, not running ${request.version}`)
+    if (answer.status?.state !== 'running' || running !== expected) throw new StepFailure(`delorun status --json says ${String(answer.status?.state)} with release ${String(running)}, not running ${expected}`)
     return { running, studio: answer.status.studio }
   }
   const studio = async (): Promise<StudioClient> => {
@@ -343,7 +347,33 @@ export async function runSmoke(request: SmokeRequest, say: (line: string) => voi
     }
   }
 
+  /** Wait for the installs of the packs to end, then check none failed; returns a client signed in after the Host's reload. */
+  const awaitInstalls = async (first: StudioClient, packs: readonly string[]): Promise<StudioClient> => {
+    let client = first
+    let lastNote = Date.now()
+    let polled = await installList(client)
+    let installs = installsState(packs, polled.queue)
+    while (installs.kind === 'working') {
+      const states = installs.items.map(item => `${item.key} ${item.state}`).join(', ')
+      if (Date.now() + 2000 > deadline) throw new StepFailure(`the installs did not finish within the budget: ${states}`)
+      if (Date.now() - lastNote >= 30_000) {
+        say(`      after ${took(Date.now() - stepBegan)}: ${states}`)
+        lastNote = Date.now()
+      }
+      await new Promise(wait => setTimeout(wait, 2000))
+      polled = await installList(polled.client)
+      installs = installsState(packs, polled.queue)
+    }
+    const unfinished = installs.items
+    if (unfinished.length > 0) throw new StepFailure(`${String(unfinished.length)} pack install(s) did not finish:\n${unfinished.map(item => `${item.key}: ${item.state}${item.failure === undefined ? '' : ` (${item.failure.code}: ${item.failure.message})`}`).join('\n')}`)
+    // The single Host reload after the installs signs the page out of nothing, but a new link is cheap and certain.
+    client = await studio()
+    return client
+  }
+
   let code: 0 | 1 = 0
+  /** The scratch homes besides the first, for clean-up. */
+  const extraHomes: string[] = []
   try {
     begin(1)
     const source = channelSource(request.channel)
@@ -379,24 +409,7 @@ export async function runSmoke(request: SmokeRequest, say: (line: string) => voi
     done(packs.length === 0 ? ' (the release offers no packs)' : ` (${String(packs.length)} queued)`)
 
     begin(3)
-    let lastNote = Date.now()
-    let polled = await installList(client)
-    let installs = installsState(packs, polled.queue)
-    while (installs.kind === 'working') {
-      const states = installs.items.map(item => `${item.key} ${item.state}`).join(', ')
-      if (Date.now() + 2000 > deadline) throw new StepFailure(`the installs did not finish within the budget: ${states}`)
-      if (Date.now() - lastNote >= 30_000) {
-        say(`      after ${took(Date.now() - stepBegan)}: ${states}`)
-        lastNote = Date.now()
-      }
-      await new Promise(wait => setTimeout(wait, 2000))
-      polled = await installList(polled.client)
-      installs = installsState(packs, polled.queue)
-    }
-    const unfinished = installs.items
-    if (unfinished.length > 0) throw new StepFailure(`${String(unfinished.length)} pack install(s) did not finish:\n${unfinished.map(item => `${item.key}: ${item.state}${item.failure === undefined ? '' : ` (${item.failure.code}: ${item.failure.message})`}`).join('\n')}`)
-    // The single Host reload after the installs signs the page out of nothing, but a new link is cheap and certain.
-    client = await studio()
+    client = await awaitInstalls(client, packs)
     await loaded(client, packs)
     checkLog(installOffset, 'the installs')
     done(` (${String(packs.length)} installed and loaded)`)
@@ -418,6 +431,47 @@ export async function runSmoke(request: SmokeRequest, say: (line: string) => voi
     }) as { sessionId?: unknown }
     if (typeof created.sessionId !== 'string' || created.sessionId === '') throw new StepFailure(`session/create answered no session id: ${JSON.stringify(created)}`)
     done(` (chat ${created.sessionId})`)
+
+    begin(6)
+    const previous = /^https?:\/\//u.test(request.channel) ? undefined : await previousRelease(request.channel, request.version)
+    if (previous === undefined) {
+      done(/^https?:\/\//u.test(request.channel) ? ' (skipped: a channel origin lists no releases to start from)' : ` (skipped: the channel holds no release older than ${request.version})`)
+    } else {
+      const agentPacks = (await offeredPacks(source, previous, platform as RuntimePlatform, Math.floor(Date.now() / 1000))).filter(name => /subagent-(?:claude-code|codex)$/u.test(name))
+      if (agentPacks.length !== 2) {
+        done(` (skipped: ${previous} offers ${String(agentPacks.length)} of the Claude Code and Codex packs for ${platform})`)
+      } else {
+        await required(['stop'], 120_000)
+        started = false
+        const upgrade = join(scratch, 'upgrade')
+        const upgradePaths = { home: join(upgrade, 'home'), delorun: join(upgrade, 'home', '.delorun'), tmp: join(upgrade, 'tmp'), npm: join(upgrade, 'npm-cache'), project: join(upgrade, 'home', 'project') }
+        for (const directory of [upgradePaths.home, upgradePaths.tmp, upgradePaths.npm, upgradePaths.project]) mkdirSync(directory, { recursive: true, mode: 0o700 })
+        extraHomes.push(upgradePaths.delorun)
+        const oldLauncher = join(scratch, 'launcher-previous')
+        const roots = await channelRoots(source, join(scratch, 'roots-previous'))
+        const built = await command(join(repository, 'node_modules/.bin/tsx'), ['delorun/apps/npm-launcher/src/build.ts', ...roots.flatMap(file => ['--root', file]), '--out', oldLauncher, '--channel-origin', origin, '--package-version', previous], 300_000, environment, repository)
+        if (built.status !== 0) throw new StepFailure(`the launcher build for ${previous} failed:\n${built.output.trim().split('\n').slice(-15).join('\n')}`)
+        // From here every command runs in the upgrade home, with the previous release's launcher.
+        launcher = join(oldLauncher, `delorun-${previous}.tgz`)
+        environment = smokeEnvironment(upgradePaths)
+        homeLog = join(upgradePaths.delorun, 'logs', `home-${PROFILE}`, 'home.log')
+        expected = previous
+        await required(['setup', '--config', answers], 900_000)
+        await start(`the first start of ${previous}`)
+        let old = await studio()
+        await packsView(old, 'enqueue', { names: agentPacks })
+        old = await awaitInstalls(old, agentPacks)
+        await loaded(old, agentPacks)
+        say(`      ${previous} runs with ${agentPacks.join(' and ')} loaded`)
+        const updateOffset = logOffset()
+        await required(['update', '--yes', '--data-copy'], 900_000)
+        expected = request.version
+        await status()
+        await loaded(await studio(), agentPacks)
+        checkLog(updateOffset, `the update from ${previous}`)
+        done(` (${previous} updated to ${request.version}, both agent packs loaded)`)
+      }
+    }
   } catch (error) {
     code = 1
     const reason = error instanceof Error ? error.message : String(error)
@@ -429,20 +483,20 @@ export async function runSmoke(request: SmokeRequest, say: (line: string) => voi
   }
   if (code !== 0) say(`installed smoke: every command's output is in ${request.log}`)
 
-  begin(6)
+  begin(7)
   try {
     if (started && launcher !== undefined) {
       const stopped = await command(npx, ['--yes', `--package=${launcher}`, '--', 'delorun', 'stop'], 120_000)
       if (stopped.status !== 0) say(`      delorun stop exited ${String(stopped.status)}`)
     }
-    stopLeftover(paths.delorun, say)
+    for (const delorunHome of [paths.delorun, ...extraHomes]) stopLeftover(delorunHome, say)
     await new Promise<void>(closed => (server === undefined ? closed() : server.close(() => closed())))
     await command('chmod', ['-R', 'u+w', scratch], 120_000, { PATH: '/usr/bin:/bin' }, '/')
     await rm(scratch, { recursive: true, force: true })
     done(` (removed ${scratch})`)
   } catch (error) {
     code = 1
-    say(`installed smoke: FAILED at step 6 (clean up): ${error instanceof Error ? error.message : String(error)}; remove ${scratch} by hand`)
+    say(`installed smoke: FAILED at step 7 (clean up): ${error instanceof Error ? error.message : String(error)}; remove ${scratch} by hand`)
   }
   say(`installed smoke of ${request.version}: ${code === 0 ? 'PASSED' : 'FAILED'} in ${took(Date.now() - began)}`)
   return code

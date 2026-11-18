@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 import { activeDirectory, attestTerminal, ChangesError, readChangeLog, setProtection } from '@delorun/changes'
 import { RuntimeStoreError } from '@delorun/runtime-store'
-import { changesApprovedContent, isCarriedPackage, repointForSuccessor, startChanges } from '../src/changes/start.ts'
+import { changesApprovedContent, isCarriedPackage, repointForSuccessor, repointsBeforeBoot, startChanges } from '../src/changes/start.ts'
 import { carriedPackageDirectory } from '../src/delorun-bundles.ts'
 import { prepareHome, type CommandContext } from '../src/command.ts'
 import { NO_APPROVED_CONTENT } from '../src/compose.ts'
@@ -311,6 +311,14 @@ describe('the approved plugin content step', () => {
     const refusal = changesApprovedContent(draft('default'))
     await expect(refusal).rejects.toBeInstanceOf(CliError)
     await expect(refusal).rejects.toThrow(/^delorun: the profile default was not started, because what it would load is not what Changes keeps for it:\n {2}.*plug/)
+  })
+})
+
+describe('repointsBeforeBoot', () => {
+  it('re-points for a successor and for any Host booted after the first, never for a fresh start\'s first', () => {
+    expect(repointsBeforeBoot(false, 0)).toBe(false)
+    expect(repointsBeforeBoot(true, 0)).toBe(true)
+    expect(repointsBeforeBoot(false, 1)).toBe(true)
   })
 })
 

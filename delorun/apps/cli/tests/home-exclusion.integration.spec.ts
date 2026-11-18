@@ -299,6 +299,23 @@ describe('registerHomeProcess', () => {
     expect(readdirSync(join(root, 'run', DATA_USERS_DIRECTORY))).toEqual([String(pid)])
   })
 
+  it('drops a registration from an earlier boot even when it records another pid namespace, and keeps one of this boot', async () => {
+    const root = newHome()
+    const directory = join(root, 'run', DATA_USERS_DIRECTORY)
+    mkdirSync(directory, { recursive: true })
+    const bootId = readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim()
+    const otherBoot = bootId === '00000000-0000-4000-8000-000000000000' ? '00000000-0000-4000-8000-000000000001' : '00000000-0000-4000-8000-000000000000'
+    writeFileSync(join(directory, '37721'), JSON.stringify({ mode: 'shared', command: 'start', profile: 'default', processStart: `linux:${otherBoot}:12022538`, pidNamespace: 'pid:[1]' }))
+    const sleeper = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)'], { stdio: 'ignore' })
+    try {
+      writeFileSync(join(directory, String(sleeper.pid)), JSON.stringify({ mode: 'shared', command: 'start', profile: 'default', processStart: `linux:${bootId}:1`, pidNamespace: 'pid:[1]' }))
+      expect(otherDataUsers(root).map(user => user.pid)).toEqual([sleeper.pid])
+      expect(readdirSync(directory)).toEqual([String(sleeper.pid)])
+    } finally {
+      sleeper.kill()
+    }
+  })
+
   it('reads a registration whose start identity is malformed as an exclusive use judged by its process id', () => {
     const root = newHome()
     const pid = liveProcess()

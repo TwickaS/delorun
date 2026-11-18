@@ -123,6 +123,18 @@ export async function startChanges(request: ChangesStartRequest, output: (text: 
 }
 
 /**
+ * Whether a Host boot first re-points the recorded active copies to this process's release: a successor's first boot,
+ * whose copies name its predecessor's release, and every boot after a process's first, which follows a failed switch
+ * that left the copies naming the release that failed. A fresh start's first boot has the pre-start steps instead.
+ * @param successor - whether this process is an update's successor.
+ * @param bootsBefore - how many Hosts this process has booted already.
+ * @returns true when the copies are re-pointed first.
+ */
+export function repointsBeforeBoot(successor: boolean, bootsBefore: number): boolean {
+  return successor || bootsBefore > 0
+}
+
+/**
  * An update's successor boots without the pre-start steps, so before its Host boots it re-points each recorded active
  * copy's links into the runtime store to its own release ({@link repointActiveCopies}); otherwise a plugin pack copy
  * written under the previous release fails the load check of the new one and the update rolls back.

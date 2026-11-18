@@ -52,7 +52,7 @@ import { CountingChatGate, HomeProcess, HostNotStoppedError, listenProcessSignal
 import { appliedReachConfig, localReach, reachRowsOf } from './reach/host.ts'
 import { readReachRow, REACH_ROW_ID, type TailscalePrivateRow } from './reach/row.ts'
 import { resolveSurface, type DelorunLogger } from '@delorun/logs'
-import { afterChangesBoot, changesApprovedContent, recordChangesBoot, repointForSuccessor } from './changes/start.ts'
+import { afterChangesBoot, changesApprovedContent, recordChangesBoot, repointForSuccessor, repointsBeforeBoot } from './changes/start.ts'
 import { reloadProfile } from './changes/reload.ts'
 import { runningComposition, type HarnessContext, type RunningComposition } from '@delorun/changes'
 import { checkRunningRuntime, handOffToComposedTree, handsOff, harnessContextOf, processHandOff, startEntry, type HandOff } from './changes/harness-start.ts'
@@ -618,6 +618,9 @@ async function startHomeProcess(request: StartRequest, dependencies: StartDepend
   const tracked: StartDependencies = { ...dependencies, runProfile: async options => (current = await dependencies.runProfile(options)) }
   const retry = startRetry({ home: request.home, profile: request.profile, env: request.env, successor: handover !== undefined, output: request.output, logger: homeLog.logger, ...runtime.store ? { runtime: runtime.version } : {} })
   const booted: RunningHolder = { current: { kind: 'unknown' }, read: false }
+  // A Host booted again after the first, as after a failed switch, finds its active copies pointed at the release that
+  // failed; a successor's first boot finds them pointed at its predecessor's.
+  let hostsBooted = 0
   try {
     const running = handover?.handover.to ?? runtime.version
     // A successor that fails its own start check does not boot, so the predecessor's health check fails and it rolls back.
@@ -629,7 +632,7 @@ async function startHomeProcess(request: StartRequest, dependencies: StartDepend
       startId,
       host: {
         boot: async (access, controls) => {
-          if (handover !== undefined) await repointForSuccessor(request)
+          if (repointsBeforeBoot(handover !== undefined, hostsBooted++)) await repointForSuccessor(request)
           return bootProfile(handover === undefined ? startRequest : { ...startRequest, open: false }, tracked, runtime.store ? { version: running, composed: runtime.composed } : undefined, homeLog, retry, { control: controls.restart, running: booted, channel: access })
         },
       },
