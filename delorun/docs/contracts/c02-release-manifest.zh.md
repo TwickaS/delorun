@@ -331,9 +331,9 @@ acceptances:
 
 ## 消费方
 
-- `delorun/apps/release/`（WP3.1）：构建、比较、检查安全公告并签名。
-- `delorun/apps/install/` 与 `delorun/apps/npm-launcher/`（WP3.2）：验证并安装。
-- `delorun/packages/runtime-store/`（WP3.3）：启动检查、切换与回滚。
+- `delorun/apps/release/`：构建、比较、检查安全公告并签名。
+- `delorun/apps/install/` 与 `delorun/apps/npm-launcher/`：验证并安装。
+- `delorun/packages/runtime-store/`：启动检查、切换与回滚。
 - `delorun verify`（[C15](c15-verification-checks.zh.md)）、Docker 监管器（Docker supervisor）的镜像检查（[C9](c09-runtime-supervisor.zh.md)），以及插件索引的密钥（[C13](c13-catalogue-revocation.zh.md)）。
 
 <a id="compatibility"></a>
@@ -368,24 +368,24 @@ acceptances:
 
 ### 拒绝测试
 
-| 测试 | 负责方 | 它展示的行为 |
+| 测试 | 组件 | 它展示的行为 |
 | --- | --- | --- |
-| `c02-start-stops-on-changed-byte` | WP3.3 | 已安装运行时文件中一个字节被改动，会停止 CLI 启动，并提供重新安装或回滚。 |
-| `c02-start-stops-on-extra-file` | WP3.3 | 在安装目录下新增一个常规文件会停止启动。 |
-| `c02-start-catches-in-place-change` | WP3.3 | 一个字节被改动、而文件的大小、mode 与修改时间被 `utimes` 恢复时，在身份记录存在的情况下停止启动。 |
-| `c02-start-catches-renamed-replacement` | WP3.3 | 以相同大小、mode 与修改时间的文件重命名覆盖原文件会停止启动。 |
-| `c02-start-missing-record-hashes-every-file` | WP3.3 | 缺失、被截断、无法解析、权限更宽、是链接、属于他人或被重新绑定的记录，会使启动哈希每个文件。 |
-| `c02-start-periodic-full-hash` | WP3.3 | 最近一次完整检查早于间隔或晚于时钟，或间隔为 0，会使启动哈希每个文件。 |
-| `c02-verify-always-hashes` | WP3.3 | 即使每个身份都与记录相符，`delorun verify` 背后的完整检查也会哈希每个文件。 |
-| `c02-start-record-forgery-out-of-scope` | WP3.3 | 被改写为某个已改动文件身份的记录会让启动通过，这是文档所述的限制，而完整检查仍会阻止它。 |
-| `c02-update-start-check-catches-in-place-change` | WP3.3 | 更新对运行中发布及其目标所执行的启动检查，即使在文件大小、权限模式与修改时间已恢复、且身份记录存在的情况下，也会在被改动的字节处停止。 |
-| `c02-install-refuses-bad-signature` | WP3.2 | 由 targets 角色之外的密钥签名的 manifest 被拒绝，且 `~/.delorun/runtimes/` 下不出现任何文件。 |
-| `c02-install-refuses-tampered-archive` | WP3.2 | SHA-256 与 manifest 不同的归档在解压之前被拒绝。 |
-| `c02-refuses-expired-timestamp` | WP3.1, WP3.2 | 超过 `expires` 一秒的时间戳会阻止更新，并写明过期时间。 |
-| `c02-refuses-replayed-timestamp` | WP3.2 | 签名有效、但 `version` 低于已存储版本的时间戳被拒绝。 |
-| `c02-refuses-replayed-manifest` | WP3.1, WP3.2 | 签名有效、但新鲜时间戳未指明的较旧 manifest 不会被提供或安装。 |
-| `c02-root-rotation-needs-both-thresholds` | WP3.2 | 只由自身密钥、或只由上一版本密钥签名的新根版本被拒绝。 |
-| `c02-revoked-targets-key-verifies-nothing` | WP3.2, WP3.3 | 在某个根吊销一个 targets 密钥之后，只由该密钥签名的 manifest 在安装与启动检查中都失败。 |
+| `c02-start-stops-on-changed-byte` | `runtime-store` | 已安装运行时文件中一个字节被改动，会停止 CLI 启动，并提供重新安装或回滚。 |
+| `c02-start-stops-on-extra-file` | `runtime-store` | 在安装目录下新增一个常规文件会停止启动。 |
+| `c02-start-catches-in-place-change` | `runtime-store` | 一个字节被改动、而文件的大小、mode 与修改时间被 `utimes` 恢复时，在身份记录存在的情况下停止启动。 |
+| `c02-start-catches-renamed-replacement` | `runtime-store` | 以相同大小、mode 与修改时间的文件重命名覆盖原文件会停止启动。 |
+| `c02-start-missing-record-hashes-every-file` | `runtime-store` | 缺失、被截断、无法解析、权限更宽、是链接、属于他人或被重新绑定的记录，会使启动哈希每个文件。 |
+| `c02-start-periodic-full-hash` | `runtime-store` | 最近一次完整检查早于间隔或晚于时钟，或间隔为 0，会使启动哈希每个文件。 |
+| `c02-verify-always-hashes` | `runtime-store` | 即使每个身份都与记录相符，`delorun verify` 背后的完整检查也会哈希每个文件。 |
+| `c02-start-record-forgery-out-of-scope` | `runtime-store` | 被改写为某个已改动文件身份的记录会让启动通过，这是文档所述的限制，而完整检查仍会阻止它。 |
+| `c02-update-start-check-catches-in-place-change` | `runtime-store` | 更新对运行中发布及其目标所执行的启动检查，即使在文件大小、权限模式与修改时间已恢复、且身份记录存在的情况下，也会在被改动的字节处停止。 |
+| `c02-install-refuses-bad-signature` | `install` | 由 targets 角色之外的密钥签名的 manifest 被拒绝，且 `~/.delorun/runtimes/` 下不出现任何文件。 |
+| `c02-install-refuses-tampered-archive` | `install` | SHA-256 与 manifest 不同的归档在解压之前被拒绝。 |
+| `c02-refuses-expired-timestamp` | `release`, `install` | 超过 `expires` 一秒的时间戳会阻止更新，并写明过期时间。 |
+| `c02-refuses-replayed-timestamp` | `install` | 签名有效、但 `version` 低于已存储版本的时间戳被拒绝。 |
+| `c02-refuses-replayed-manifest` | `release`, `install` | 签名有效、但新鲜时间戳未指明的较旧 manifest 不会被提供或安装。 |
+| `c02-root-rotation-needs-both-thresholds` | `install` | 只由自身密钥、或只由上一版本密钥签名的新根版本被拒绝。 |
+| `c02-revoked-targets-key-verifies-nothing` | `install`, `runtime-store` | 在某个根吊销一个 targets 密钥之后，只由该密钥签名的 manifest 在安装与启动检查中都失败。 |
 | `sign-release-refuses-unsigned-tag` | release-chain | 签名拒绝轻量或未签名的发布标签、由 `allowed-signers` 未列出的密钥签名的标签、其标签对象指明另一个标签的标签，并在 allowed-signers 文件不列出任何密钥时拒绝任何标签。 |
 | `sign-release-refuses-commit-off-release-branch` | release-chain | 签名拒绝不是发布分支祖先的发布提交，并在分支包含它之后签名。 |
 | `sign-release-refuses-install-script` | release-chain | 签名拒绝 `install.sh` 或 `install.ps1` 不是零长度占位文件的草稿。 |
@@ -397,15 +397,15 @@ acceptances:
 | `c02-start-anchors-on-newest-shipped-root` | release-chain | 由携带的最新根所撤销的 targets 密钥签名的运行时无法通过启动检查，即使已存储的根是列出该密钥的较旧根，且不会启动任何进程。 |
 | `c02-production-refuses-local-release` | release-chain | 从生产发布位置获取内容的通道，在安装与更新检查中都会拒绝构建者为 `local release (no independent rebuild)` 的 manifest；它自己的通道会安装它。 |
 | `c02-setup-installs-pinned-launcher` | release-chain | Setup 按启动器在 `DELORUN_LAUNCHER_VERSION` 中指定的版本安装 `delorun@<version>`，启动器未指定版本时不提供安装。 |
-| `c02-rebuild-difference-blocks-signing` | WP3.1 | `compare-rebuild.ts` 在出现 `rebuild-exceptions.json` 之外的差异时以 1 退出，签名步骤停止。 |
-| `c02-signing-refuses-without-rebuild` | WP3.1 | 没有重建记录的签名会被拒绝，并给出指明所需来源的消息。 |
-| `c02-signing-covers-release-platforms` | WP3.1 | 签名拒绝 `runtime` 指明 `closure.json` 未列出的平台或遗漏其所列平台的草稿；读取 `closure.json` 列出 `unbuilt` 平台的配方会失败；构建拒绝未列出的平台。 |
-| `c02-install-refuses-unreleased-platform` | WP3.2 | 在已验证 manifest 未列出的平台上进行的安装或更新，会在日志检查与任何运行时下载之前以 `PLATFORM_NOT_RELEASED` 拒绝，并指明该平台。 |
-| `c02-signing-refuses-ci-rebuild` | WP3.1 | 带 `ci: true` 的记录、在设置了 `GITHUB_ACTIONS` 时进行的签名运行，或本地输出目录无法复现其摘要的记录，都会以同一消息被拒绝。 |
-| `c02-advisory-fails-release` | WP3.1 | 植入了安全公告 id 的 fixture（测试前置数据）锁文件会使检查失败。 |
-| `c02-advisory-acceptance-passes-and-shows` | WP3.1 | 同一锁文件在有匹配的接受记录时通过，组装出的发布说明显示该安全公告及其包、范围、原因、批准者、失效版本与日期。 |
-| `c02-advisory-lapsed-acceptance-fails` | WP3.1 | 版本高于接受记录 `lapsesAfter` 的发布会使检查失败。 |
-| `c02-advisory-feed-unreachable-fails` | WP3.1 | 拒绝连接的公告源替身会使检查失败。 |
+| `c02-rebuild-difference-blocks-signing` | `release` | `compare-rebuild.ts` 在出现 `rebuild-exceptions.json` 之外的差异时以 1 退出，签名步骤停止。 |
+| `c02-signing-refuses-without-rebuild` | `release` | 没有重建记录的签名会被拒绝，并给出指明所需来源的消息。 |
+| `c02-signing-covers-release-platforms` | `release` | 签名拒绝 `runtime` 指明 `closure.json` 未列出的平台或遗漏其所列平台的草稿；读取 `closure.json` 列出 `unbuilt` 平台的配方会失败；构建拒绝未列出的平台。 |
+| `c02-install-refuses-unreleased-platform` | `install` | 在已验证 manifest 未列出的平台上进行的安装或更新，会在日志检查与任何运行时下载之前以 `PLATFORM_NOT_RELEASED` 拒绝，并指明该平台。 |
+| `c02-signing-refuses-ci-rebuild` | `release` | 带 `ci: true` 的记录、在设置了 `GITHUB_ACTIONS` 时进行的签名运行，或本地输出目录无法复现其摘要的记录，都会以同一消息被拒绝。 |
+| `c02-advisory-fails-release` | `release` | 植入了安全公告 id 的 fixture（测试前置数据）锁文件会使检查失败。 |
+| `c02-advisory-acceptance-passes-and-shows` | `release` | 同一锁文件在有匹配的接受记录时通过，组装出的发布说明显示该安全公告及其包、范围、原因、批准者、失效版本与日期。 |
+| `c02-advisory-lapsed-acceptance-fails` | `release` | 版本高于接受记录 `lapsesAfter` 的发布会使检查失败。 |
+| `c02-advisory-feed-unreachable-fails` | `release` | 拒绝连接的公告源替身会使检查失败。 |
 | `c02-summary-control-characters-refused` | update-notice | 含有 ESC（`\u001b`）、换行符或 U+202E 从右到左覆盖字符的摘要，会被 manifest 读取方与签名拒绝。 |
 | `c02-summary-too-long-refused` | update-notice | 201 个码位的摘要会被读取方与签名拒绝；200 个码位可以读取。 |
 | `c02-security-not-boolean-refused` | update-notice | 为字符串、数字或 `null` 的 `security` 会被读取方与签名拒绝。 |

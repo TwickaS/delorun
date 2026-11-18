@@ -122,7 +122,7 @@ kind: "package-library"
 
 - CLI 的读取器不读取任何撤销列表，因为没有任何发布公布撤销列表；报告在 `notChecked` 中列出 `revocations`，健康检查的 H3 会捕获目标停用而报告未列出的插件。
 - 已保存报告的读取器不校验任何内容：保存在某个 profile 历史版本中的报告，由其读取器按约定类型读回，报告格式自身没有校验器。
-- studio 的更新界面（WP6.3）会显示这份报告。其文案在落地时经由 Web UI 的语言字典；本包的句子属于 CLI。
+- studio 的更新界面会显示这份报告。其文案在落地时经由 Web UI 的语言字典；本包的句子属于 CLI。
 - 健康检查自身的标准（H1 至 H5）运行在 CLI 的 Host（`delorun/apps/cli/src/update/host.ts`）中，回滚触发条件运行在 home 进程 的握手中，都不在本包；`health` 正是它们比对的依据。
 
 <a id="tests"></a>

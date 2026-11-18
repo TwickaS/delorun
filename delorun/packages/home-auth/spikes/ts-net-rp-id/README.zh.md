@@ -1,5 +1,5 @@
 ---
-description: "WP1.19 的 spike 报告：ts.net 是否在 Public Suffix List 中，tailscale serve 地址与 Funnel 地址上的页面可以使用的 WebAuthn 依赖方 ID，Chromium 中在这些地址上的通行密钥注册与断言，以及 Firefox 的依赖方 ID 检查；未覆盖的浏览器另行说明。"
+description: "spike 报告：ts.net 是否在 Public Suffix List 中，tailscale serve 地址与 Funnel 地址上的页面可以使用的 WebAuthn 依赖方 ID，Chromium 中在这些地址上的通行密钥注册与断言，以及 Firefox 的依赖方 ID 检查；未覆盖的浏览器另行说明。"
 ---
 
 # Spike：`ts.net` 上的通行密钥依赖方 ID
@@ -8,7 +8,7 @@ description: "WP1.19 的 spike 报告：ts.net 是否在 Public Suffix List 中�
 
 ## 摘要
 
-本报告记录工作包 WP1.19，对应[约定 C14](../../../../docs/contracts/c14-oidc-passkeys.zh.md#relying-party-ids)。`ts.net` 位于 Public Suffix List（公共后缀列表）的私有区段中，由 Tailscale Inc. 提交，因此 `<tailnet>.ts.net` 是可注册域名。`tailscale serve` 地址 `https://<node>.<tailnet>.ts.net` 与 Funnel 地址 `https://<node>.<tailnet>.ts.net:8443` 上的页面，均可使用 `<node>.<tailnet>.ts.net` 或 `<tailnet>.ts.net` 作为依赖方（relying party）ID，浏览器会拒绝 `ts.net` 与 `net`。在 Chromium 149 中，依赖方 ID 为 `<node>.<tailnet>.ts.net` 的通行密钥在两个地址上均完成了注册与断言，所用认证器分别为平台型与安全密钥型虚拟认证器；在 serve 地址上注册的通行密钥，也可以在 Funnel 地址上断言。Firefox 151 对相同的依赖方 ID 做出了接受与拒绝的判断，但没有可用于完成注册或断言流程的认证器；WebKit 与 Safari 未运行。因此约定 C14 缺少 Firefox 与 Safari 的证据，其现行约定保持不变：`ts.net` 地址上不提供通行密钥，OpenID Connect 登录作为这些地址的身份因子。
+本报告支持[约定 C14](../../../../docs/contracts/c14-oidc-passkeys.zh.md#relying-party-ids)。`ts.net` 位于 Public Suffix List（公共后缀列表）的私有区段中，由 Tailscale Inc. 提交，因此 `<tailnet>.ts.net` 是可注册域名。`tailscale serve` 地址 `https://<node>.<tailnet>.ts.net` 与 Funnel 地址 `https://<node>.<tailnet>.ts.net:8443` 上的页面，均可使用 `<node>.<tailnet>.ts.net` 或 `<tailnet>.ts.net` 作为依赖方（relying party）ID，浏览器会拒绝 `ts.net` 与 `net`。在 Chromium 149 中，依赖方 ID 为 `<node>.<tailnet>.ts.net` 的通行密钥在两个地址上均完成了注册与断言，所用认证器分别为平台型与安全密钥型虚拟认证器；在 serve 地址上注册的通行密钥，也可以在 Funnel 地址上断言。Firefox 151 对相同的依赖方 ID 做出了接受与拒绝的判断，但没有可用于完成注册或断言流程的认证器；WebKit 与 Safari 未运行。因此约定 C14 缺少 Firefox 与 Safari 的证据，其现行约定保持不变：`ts.net` 地址上不提供通行密钥，OpenID Connect 登录作为这些地址的身份因子。
 
 ## 答案
 
@@ -33,7 +33,7 @@ description: "WP1.19 的 spike 报告：ts.net 是否在 Public Suffix List 中�
 
 ## 浏览器结果
 
-测试页面由 `test-page-server.ts` 在 `127.0.0.1` 上提供，并通过 `tailscale serve --bg --https=443` 与 `tailscale funnel --bg --https=8443` 发布。在 userspace networking 模式下，节点自身的进程不经由 tailnet 路由，因此浏览器经由 [WP1.18 spike 报告](../../../reach/spikes/serve-socket/README.zh.md)中的 `tailnet-connect-proxy.ts` 访问 serve 地址，该代理通过 `tailscale nc` 转发每个连接。浏览器通过公网访问 Funnel 地址，未使用代理。每次加载页面时，`isSecureContext: true` 且 `PublicKeyCredential` 已定义。
+测试页面由 `test-page-server.ts` 在 `127.0.0.1` 上提供，并通过 `tailscale serve --bg --https=443` 与 `tailscale funnel --bg --https=8443` 发布。在 userspace networking 模式下，节点自身的进程不经由 tailnet 路由，因此浏览器经由 [serve-socket spike 报告](../../../reach/spikes/serve-socket/README.zh.md)中的 `tailnet-connect-proxy.ts` 访问 serve 地址，该代理通过 `tailscale nc` 转发每个连接。浏览器通过公网访问 Funnel 地址，未使用代理。每次加载页面时，`isSecureContext: true` 且 `PublicKeyCredential` 已定义。
 
 `rp-id-probe.ts` 对每个候选依赖方 ID 调用一次 `navigator.credentials.create`，所用注册选项为约定 C14 中的选项（`residentKey: "required"`、`userVerification: "required"`、`attestation: "none"`，算法 -8、-7 与 -257）；随后以依赖方 ID `<node>.<tailnet>.ts.net` 与 `userVerification: "required"` 调用 `navigator.credentials.get`。它检查断言的 `rpIdHash` 是否等于该 ID 的 SHA-256 哈希，以及用户在场（UP）与用户已验证（UV）标志是否均已设置。
 

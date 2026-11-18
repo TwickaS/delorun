@@ -96,7 +96,7 @@ One report is built at a time and a second request for the version and purpose a
 
 - The CLI's readers read no revocation list, because no release publishes one; the report names `revocations` in `notChecked`, and the health check's H3 catches a plugin the target disables that the report did not name.
 - A stored report's reader validates nothing: a report kept in a profile history version is read back against the contract's types by its reader, and the report format has no validator of its own.
-- The studio's update screens (WP6.3) show this report. Their copy goes through the Web UI's locale dictionaries when they land; this package's sentences are the CLI's.
+- The studio's update screens show this report. Their copy goes through the Web UI's locale dictionaries when they land; this package's sentences are the CLI's.
 - The health check's own criteria (H1 to H5) run in the CLI's Host (`delorun/apps/cli/src/update/host.ts`) and the rollback triggers in the home process's handshake, not here; `health` is what they compare against.
 
 ## Tests
