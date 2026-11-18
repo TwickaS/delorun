@@ -20,7 +20,9 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type FocusEvent } from 'react'
 import { getLook } from '@design/look-store.ts'
 import { livingFrames, type Layout } from './mosaic.ts'
-import { MOSAIC_PLANS, PLAN_IDS, PLAN_LOOKS } from './mosaic-plans.ts'
+import { MOSAIC_PLANS, PLAN_IDS } from './mosaic-plans.ts'
+import { planCells, planLook, type LayoutName, type PlanLook, type PlanMode } from './plans.ts'
+import { MS } from './motion.ts'
 import { onRetile } from './retile.ts'
 import { LOD_ATLASES } from './lod-atlases.ts'
 import { atlasUrl, imageSet, lodUrl, preferredFormat, shotSrc, useArmed } from './pictures.ts'
@@ -29,36 +31,31 @@ import { clearStale, upgradeTile } from './tile-lod.ts'
 import { Tile } from './Wall.tsx'
 import s from './home.module.css'
 
-/** A look the plans cover. */
-type PlanLook = (typeof PLAN_LOOKS)[number]
-
-/** The layouts' names. */
-export type LayoutName = keyof typeof MOSAIC_PLANS
-
 /** The film's first chapter, whose picture the zoom hands over to. */
 const HANDOVER = FILM[0]
 
 /** How far apart the re-tile's rings are, in pixels, and how long each waits after the last, in milliseconds. */
 const RING = 110
-const RING_STEP = 55
+const RING_STEP = MS.press / 2
 
 /** How long one tile takes to turn, in milliseconds; the stylesheet's `tileTurn` animation lasts as long. */
-const TURN = 320
+const TURN = MS.explain
 
 /**
  * The style that shows one cell of an atlas, for a tile turning to a new look.
  * @param name - the layout.
  * @param look - the look.
+ * @param mode - the colour scheme.
  * @param index - the cell.
  * @param cols - the layout's columns.
  * @returns the style.
  */
-function spriteStyle(name: LayoutName, look: PlanLook, index: number, cols: number) {
+function spriteStyle(name: LayoutName, look: PlanLook, mode: PlanMode, index: number, cols: number) {
   const { cell: [cw, ch], gap, width, height } = LOD_ATLASES[name]
   const x = (index % cols) * (cw + gap)
   const y = Math.floor(index / cols) * (ch + gap)
   return {
-    backgroundImage: imageSet(atlasUrl(name, look, 'avif'), atlasUrl(name, look, 'webp')),
+    backgroundImage: imageSet(atlasUrl(name, look, mode, 'avif'), atlasUrl(name, look, mode, 'webp')),
     backgroundSize: `${(width / cw) * 100}% ${(height / ch) * 100}%`,
     backgroundPosition: `${(x / (width - cw)) * 100}% ${(y / (height - ch)) * 100}%`,
   }
@@ -72,31 +69,40 @@ const parts = new Map<LayoutName, readonly string[]>()
 const cache = new Map<string, readonly Shot[]>()
 
 /**
- * The plan's look for a page look: the page's own when a plan covers it, otherwise Soft.
- * @param look - the page's look id.
- * @returns the plan's look.
- */
-function planLook(look: string): PlanLook {
-  return (PLAN_LOOKS as readonly string[]).includes(look) ? look as PlanLook : 'soft'
-}
-
-/**
- * A layout's pictures in a look, cell by cell.
+ * A layout's pictures in a look and colour scheme, cell by cell.
  * @param name - the layout.
  * @param look - the look.
+ * @param mode - the colour scheme.
  * @returns the pictures, by row.
  */
-function cellsFor(name: LayoutName, look: PlanLook): readonly Shot[] {
-  const key = `${name}:${look}`
+function cellsFor(name: LayoutName, look: PlanLook, mode: PlanMode): readonly Shot[] {
+  const key = `${name}:${look}:${mode}`
   const known = cache.get(key)
   if (known !== undefined) return known
-  const shots = MOSAIC_PLANS[name].looks[look].cells.map(index => {
+  const shots = planCells(name, look, mode).map(index => {
     const shot = BY_ID.get(PLAN_IDS[index] ?? '')
     if (shot === undefined) throw new Error(`The mosaic plan names a picture that is not one of the shots: ${PLAN_IDS[index] ?? index}`)
     return shot
   })
   cache.set(key, shots)
   return shots
+}
+
+/**
+ * The page's colour scheme, kept current: `dark` until the page has mounted, since the prerendered page cannot know it.
+ * @returns the scheme.
+ */
+function useMode(): PlanMode {
+  const [mode, setMode] = useState<PlanMode>('dark')
+  useEffect(() => {
+    const root = document.documentElement
+    const read = () => setMode(root.classList.contains('dark') ? 'dark' : 'light')
+    read()
+    const observer = new MutationObserver(read)
+    observer.observe(root, { attributes: true, attributeFilter: ['class'] })
+    return () => observer.disconnect()
+  }, [])
+  return mode
 }
 
 /**
@@ -193,6 +199,7 @@ export function MosaicWall({ name, layout }: { name: LayoutName; layout: Layout 
   const [turning, setTurning] = useState<Turning>({ look: 'soft', ring: 0 })
   const current = useRef(turning)
   current.current = turning
+  const mode = useMode()
   const pinIndex = pin.row * cols + pin.col
   const [active, setActive] = useState(pinIndex)
 
@@ -211,10 +218,10 @@ export function MosaicWall({ name, layout }: { name: LayoutName; layout: Layout 
       return
     }
     const from = current.current.to ?? current.current.look
-    const after = cellsFor(name, to)
+    const after = cellsFor(name, to, mode)
     // The new look's atlas is ready before the first tile turns, so no tile turns to a gap.
     const loader = new Image()
-    loader.src = atlasUrl(name, to, await preferredFormat())
+    loader.src = atlasUrl(name, to, mode, await preferredFormat())
     await loader.decode().catch((error: unknown) => {
       // The tiles still turn; each shows its cell's colour until the browser has the atlas.
       console.warn('The mosaic atlas could not load before the re-tile', to, error)
@@ -238,7 +245,7 @@ export function MosaicWall({ name, layout }: { name: LayoutName; layout: Layout 
     }
     await wait(TURN / run.speed())
     setTurning({ look: to, ring: 0 })
-  }), [name])
+  }), [name, mode])
 
   const shownLook = (index: number): PlanLook => {
     const { look, to, rings, ring } = turning
@@ -279,7 +286,7 @@ export function MosaicWall({ name, layout }: { name: LayoutName; layout: Layout 
   const partList = partsFor(name)
   const rect = (index: number) => <rect key={index} x={index % cols} y={Math.floor(index / cols)} width={1} height={1} />
   const indexes = partList.map((_, index) => index)
-  const live = MOSAIC_PLANS[name].looks[turning.look].live
+  const live = MOSAIC_PLANS[name].looks[turning.look][mode].live
   const base = turning.look
   return (
     <div
@@ -304,19 +311,24 @@ export function MosaicWall({ name, layout }: { name: LayoutName; layout: Layout 
       onPointerOver={lift}
       onFocus={lift}
     >
-      <div className={s.mosaicTiny} aria-hidden="true" style={{ backgroundImage: `url("${atlas.tiny[base]}")` }} />
-      <div className={s.mosaicAtlas} aria-hidden="true" style={{ backgroundImage: imageSet(atlasUrl(name, base, 'avif'), atlasUrl(name, base, 'webp')) }} />
+      {/* The prerendered page cannot know the colour scheme, so both atlases are in it and the stylesheet shows one. */}
+      {(['dark', 'light'] as const).map(each => (
+        <div key={each} className={s.mosaicLayers} data-mode={each} aria-hidden="true">
+          <div className={s.mosaicTiny} style={{ backgroundImage: `url("${atlas.tiny[base][each]}")` }} />
+          <div className={s.mosaicAtlas} style={{ backgroundImage: imageSet(atlasUrl(name, base, each, 'avif'), atlasUrl(name, base, each, 'webp')) }} />
+        </div>
+      ))}
       {indexes.map(index => {
         const look = shownLook(index)
         const tabIndex = index === active ? 0 : -1
         const focus = () => setActive(index)
         const frames = index === live ? livingFrames(look) : []
         if (frames.length > 0) return <LivingTile key={index} frames={frames} cell={index} tabIndex={tabIndex} onFocus={focus} />
-        const shot = cellsFor(name, look)[index]
+        const shot = cellsFor(name, look, mode)[index]
         if (shot === undefined) return null
         return (
           <Tile key={index} shot={shot} bare className={s.mosaicTile} pinned={index === pinIndex} cell={index} tabIndex={tabIndex} onFocus={focus} label={tileLabel(shot)}>
-            {look === base ? null : <span key={look} className={s.tileSprite} style={spriteStyle(name, look, index, cols)} />}
+            {look === base ? null : <span key={look} className={s.tileSprite} style={spriteStyle(name, look, mode, index, cols)} />}
           </Tile>
         )
       })}

@@ -99,9 +99,7 @@ export function Wall({ heading, lead, id }: { heading: string; lead: string; id:
         </div>
       </div>
       <div className={s.wallGrid} data-collapsed={collapsed}>
-        <div className={s.wallGroup}>
-          {SHOTS.map((shot, index) => <Tile key={shot.id} shot={shot} feature={shot.feature === true} extra={index >= PHONE_FIRST} beyond={index >= WIDE_FIRST} />)}
-        </div>
+        {SHOTS.map((shot, index) => <Tile key={shot.id} shot={shot} feature={shot.feature === true} extra={index >= PHONE_FIRST} beyond={index >= WIDE_FIRST} />)}
       </div>
       {collapsed ? <button type="button" className={s.showAll} data-wide={SHOTS.length > WIDE_FIRST} onClick={() => setCollapsed(false)}>Show all {SHOTS.length}</button> : null}
     </section>

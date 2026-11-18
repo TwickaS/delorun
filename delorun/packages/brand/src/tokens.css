@@ -47,6 +47,21 @@
   --dl-space-5: calc(24px * var(--dsh-density, 1));
   --dl-space-6: calc(32px * var(--dsh-density, 1));
 
+  /* The stage: the ground the product's screenshots hang on, its text and lines, the paper caption plate over them, and
+   * the black a screenshot sits on while it loads. The stage is deeper than the page in both schemes. */
+  --dl-stage: light-dark(#EFECE7, #0C0B0A);
+  --dl-stage-text: light-dark(#141210, #F4F0EA);
+  --dl-stage-muted: light-dark(#5B554E, #A69F96);
+  --dl-stage-line: light-dark(rgb(20 18 16 / 0.14), rgb(244 240 234 / 0.12));
+  --dl-stage-scrim: rgb(20 18 16 / 0.94);
+  --dl-stage-scrim-text: #F4F0EA;
+  --dl-plate: #F4F0EA;
+  --dl-plate-text: #141210;
+  --dl-plate-muted: #6B645C;
+  --dl-plate-accent: #B4532F;
+  --dl-plate-line: rgb(20 18 16 / 0.14);
+  --dl-screen-ground: #000;
+
   --dl-focus-ring: 2px solid var(--dl-accent-text);
   --dl-focus-ring-offset: 2px;
 
@@ -61,12 +76,14 @@
   --dl-duration-quick: 180ms;
   --dl-duration-move: 260ms;
   --dl-duration-explain: 360ms;
+  --dl-duration-scene: 760ms;
   --dl-duration-leave: 100ms;
 
   --dl-motion-press: var(--dl-duration-press);
   --dl-motion-quick: var(--dl-duration-quick);
   --dl-motion-move: var(--dl-duration-move);
   --dl-motion-explain: var(--dl-duration-explain);
+  --dl-motion-scene: var(--dl-duration-scene);
   --dl-motion-leave: var(--dl-duration-leave);
 
   --dl-scale-pressed: 0.97;
@@ -79,6 +96,7 @@
     --dl-motion-quick: 0ms;
     --dl-motion-move: 0ms;
     --dl-motion-explain: 0ms;
+    --dl-motion-scene: 0ms;
     --dl-motion-leave: 0ms;
     --dl-scale-pressed: 1;
     --dl-scale-enter: 1;

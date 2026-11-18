@@ -9,6 +9,7 @@
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react'
 import { note } from './effects.ts'
+import { EASE, MS } from './motion.ts'
 import { SHOT_COLOURS } from './shot-colours.ts'
 import { currentFormat, lodUrl, preferredFormat } from './pictures.ts'
 import { SCREEN_LABELS, SHOTS, SIZES, type Shot } from './shots.ts'
@@ -26,8 +27,6 @@ const LightboxContext = createContext<Open>(() => undefined)
 export function useOpenShot(): Open {
   return useContext(LightboxContext)
 }
-
-const EASE = 'cubic-bezier(0.23, 1, 0.32, 1)'
 
 /** The credit on the plate. */
 const CREDIT = 'A real Delorun screenshot, scaled, not retouched.'
@@ -146,9 +145,9 @@ export function LightboxProvider({ children }: { children: ReactNode }) {
     Object.assign(pic.style, { left: `${to.left}px`, top: `${to.top}px`, width: `${to.width}px`, height: `${to.height}px`, transform: '' })
     if (pans(shot) && strip.current !== null) strip.current.scrollLeft = (to.width - innerWidth) * 0.45
     if (from !== undefined && from.width > 0 && !still() && !pans(shot)) {
-      pic.animate([{ transform: fromTransform(from, to), borderRadius: '12px' }, { transform: 'none' }], { duration: 520, easing: EASE })
+      pic.animate([{ transform: fromTransform(from, to), borderRadius: '12px' }, { transform: 'none' }], { duration: MS.scene, easing: EASE })
     }
-    if (shown < 1) d.animate([{ opacity: shown }, { opacity: 1 }], { duration: 260, easing: EASE })
+    if (shown < 1) d.animate([{ opacity: shown }, { opacity: 1 }], { duration: MS.move, easing: EASE })
   }, [session])
 
   // The full picture fades in once it has decoded.
@@ -184,11 +183,11 @@ export function LightboxProvider({ children }: { children: ReactNode }) {
       tile?.focus({ preventScroll: true })
     }
     if (from === undefined || still() || pans(shot) || from.bottom < 0 || from.top > innerHeight || from.right < 0 || from.left > innerWidth) {
-      d.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: EASE }).onfinish = finish
+      d.animate([{ opacity: 1 }, { opacity: 0 }], { duration: MS.quick, easing: EASE }).onfinish = finish
       return
     }
-    img.animate([{ transform: 'none' }, { transform: fromTransform(from, to) }], { duration: 300, easing: EASE, fill: 'forwards' })
-    d.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 300, easing: EASE, fill: 'forwards' }).onfinish = finish
+    img.animate([{ transform: 'none' }, { transform: fromTransform(from, to) }], { duration: MS.move, easing: EASE, fill: 'forwards' })
+    d.animate([{ opacity: 1 }, { opacity: 0 }], { duration: MS.move, easing: EASE, fill: 'forwards' }).onfinish = finish
   }, [shot])
 
   const step = useCallback((by: number) => {

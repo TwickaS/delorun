@@ -1,28 +1,33 @@
 /**
- * Builds the home page's level-of-detail pyramid as static files in `public/lod/`, each as AVIF with a WebP
- * fallback and a content hash in its name, so they can be cached for good:
+ * Builds the home page's level-of-detail pyramid as static files in `public/lod/` (git-ignored; Cloudflare serves them
+ * as static assets with immutable caching, see `public/_headers`), each as AVIF with a WebP fallback:
  *
- * - `tiles`: for every picture in `shots.ts` and the film, L1 (96 px wide, a mosaic tile), L2 (480 px, or 300 for a phone capture:
- *   the zoom and the wall) and L3 (the capture's own width: the lightbox). Writes `src/home/lod-tiles.ts`.
- * - `atlases`: for every layout and look in `mosaic-plans.ts`, L0, the whole mosaic as one picture: the first paint, and
- *   the sprite a re-tile turns each tile to. Writes `src/home/lod-atlases.ts`.
+ * - `tiles`: for every picture in `src/home/shots.ts` and the film, L1 (96 px wide, a mosaic tile), L2 (480 px, or 300
+ *   for a phone capture: the zoom and the wall) and L3 (the capture's own width: the lightbox). Manifest:
+ *   `src/home/lod-tiles.ts`.
+ * - `atlases`: for every layout, look and mode in `src/home/mosaic-plans.ts`, L0, the whole mosaic as one picture: the
+ *   first paint, and the sprite a re-tile turns each tile to. Manifest: `src/home/lod-atlases.ts`.
  *
- * Sources are the capture lane's PNGs where the folder has one, otherwise the hand-picked pictures and vetted owner
- * pictures in `pictures/`.
- * Nothing is drawn or retouched; each file is the screenshot, scaled. Files no longer named are removed. A cache in
- * `node_modules/.cache/lod/` skips pictures whose source has not changed. Run `tiles`, then `shot-colours.ts`
- * and `mosaic-plans.ts`, then `atlases`. needs `ffmpeg` with libaom-av1 and
- * libwebp on the PATH.
+ * Sources are the pictures in `pictures/` (written by `wall-shots.ts` and `ingest-owner-shots.ts`). Nothing is drawn or
+ * retouched; each file is the screenshot, scaled. A file's name carries a hash of what it is made from (the source's
+ * bytes, the level and the encoder settings), so the names are the same on every machine and a changed picture gets a
+ * new name. Files no longer named are removed. A cache in `node_modules/.cache/lod/` skips what exists.
  *
- * Usage: `node scripts/lod.ts tiles|atlases <capture folder>`
+ * With no argument the script runs `tiles`, then `atlases`, in verify mode, which is what `pnpm build` runs: it encodes
+ * the files the committed manifests name and fails when a manifest is stale. `--write` rewrites the manifests; run
+ * `shot-colours.ts` and `mosaic-plans.ts` between the two modes when the pictures change. Needs `ffmpeg` with libaom-av1
+ * and libwebp on the PATH.
+ *
+ * Usage: `node scripts/lod.ts [tiles|atlases] [--write]`
  *
  * @module @delorun/website/scripts/lod
  */
 import { execFile, execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
+import { LOD_TILES } from '../src/home/lod-tiles.ts'
 import { FILM, SHOTS, type Device } from '../src/home/shots.ts'
 
 /** A picture the pyramid covers. */
@@ -40,8 +45,11 @@ const PICTURES: readonly Picture[] = [...new Map<string, Picture>([
 
 const run = promisify(execFile)
 
-const [mode, captures] = process.argv.slice(2)
-if ((mode !== 'tiles' && mode !== 'atlases') || captures === undefined) throw new Error('Usage: node scripts/lod.ts tiles|atlases <capture folder>')
+const args = process.argv.slice(2)
+const write = args.includes('--write')
+const requested = args.filter(arg => !arg.startsWith('--'))
+const modes = requested.length === 0 ? ['tiles', 'atlases'] : requested
+if (modes.some(mode => mode !== 'tiles' && mode !== 'atlases')) throw new Error('Usage: node scripts/lod.ts [tiles|atlases] [--write]')
 
 const out = new URL('../public/lod/', import.meta.url).pathname
 const cacheDir = new URL('../node_modules/.cache/lod/', import.meta.url).pathname
@@ -51,8 +59,29 @@ mkdirSync(cacheDir, { recursive: true })
 /** Each level's width by device; L3 keeps the source's width. */
 const WIDTHS = { 1: { computer: 96, phone: 96 }, 2: { computer: 480, phone: 300 } } as const
 
+/** The encoder settings by level. They are part of every file's hash, so changing them renames the files. */
+const QUALITY = { tile: { crf: 34, webp: 74 }, full: { crf: 30, webp: 80 }, atlas: { crf: 40, webp: 62 } } as const
+
+/** Bumped when the encoder's command line changes in a way the settings above do not show. */
+const ENCODER = 'ffmpeg-libaom-cpu6-libwebp-v1'
+
 /** How many encodes run at once; the machine is shared. */
 const PARALLEL = 2
+
+const hashes = new Map<string, string>()
+
+/**
+ * The hash of a picture file's bytes.
+ * @param source - the path.
+ * @returns the first ten hex digits of its SHA-256.
+ */
+function sourceHash(source: string): string {
+  const known = hashes.get(source)
+  if (known !== undefined) return known
+  const hash = createHash('sha256').update(readFileSync(source)).digest('hex').slice(0, 10)
+  hashes.set(source, hash)
+  return hash
+}
 
 /**
  * The source picture of a shot.
@@ -60,25 +89,35 @@ const PARALLEL = 2
  * @returns its path.
  */
 function sourceOf(shot: Picture): string {
-  const capture = join(captures ?? '', `${shot.id}.png`)
-  if (existsSync(capture)) return capture
-  for (const name of [`${shot.id}.png`, `${shot.id}.jpg`, `${shot.id}.jpeg`, `${shot.id}.webp`]) {
-    const copy = new URL(`../pictures/${name}`, import.meta.url).pathname
-    if (existsSync(copy)) return copy
-  }
-  throw new Error(`No source picture for ${shot.id}`)
+  const path = new URL(`../pictures/${shot.id}.webp`, import.meta.url).pathname
+  if (!existsSync(path)) throw new Error(`No source picture for ${shot.id}: run scripts/wall-shots.ts or ingest-owner-shots.ts`)
+  return path
 }
 
 /**
- * Encodes one picture, or raw RGB on standard input, as AVIF and WebP, names both by their content and returns the hash.
+ * The name hash of a file: what it is made from.
+ * @param parts - the strings that make it, such as the source's hash and the level.
+ * @returns ten hex digits.
+ */
+function nameHash(...parts: readonly string[]): string {
+  return createHash('sha256').update([ENCODER, ...parts].join('|')).digest('hex').slice(0, 10)
+}
+
+const keep = new Set<string>()
+
+/**
+ * Encodes one picture, or raw RGB on standard input, as AVIF and WebP into `public/lod/` unless both files exist.
  * @param input - ffmpeg input arguments.
  * @param filter - the video filter, or undefined for none.
  * @param name - the file name before the hash.
+ * @param hash - the hash in both files' names.
  * @param quality - AVIF crf and WebP quality.
- * @param raw - raw RGB to pipe in, when the input is standard input.
- * @returns the hash in both files' names.
+ * @param raw - makes the raw RGB to pipe in, when the input is standard input; called only when a file is missing.
  */
-async function encode(input: readonly string[], filter: string | undefined, name: string, quality: { readonly crf: number; readonly webp: number }, raw?: Buffer): Promise<string> {
+async function encode(input: readonly string[], filter: string | undefined, name: string, hash: string, quality: { readonly crf: number; readonly webp: number }, raw?: () => Buffer): Promise<void> {
+  keep.add(`${name}.${hash}.avif`)
+  keep.add(`${name}.${hash}.webp`)
+  if (existsSync(join(out, `${name}.${hash}.avif`)) && existsSync(join(out, `${name}.${hash}.webp`))) return
   const tmpAvif = join(cacheDir, `${name}.tmp.avif`)
   const tmpWebp = join(cacheDir, `${name}.tmp.webp`)
   const vf = filter === undefined ? [] : ['-vf', filter]
@@ -88,17 +127,14 @@ async function encode(input: readonly string[], filter: string | undefined, name
     await run('nice', ['-n', '10', 'ffmpeg', ...avifArgs])
     await run('nice', ['-n', '10', 'ffmpeg', ...webpArgs])
   } else {
-    execFileSync('nice', ['-n', '10', 'ffmpeg', ...avifArgs], { input: raw })
-    execFileSync('nice', ['-n', '10', 'ffmpeg', ...webpArgs], { input: raw })
+    const pixels = raw()
+    execFileSync('nice', ['-n', '10', 'ffmpeg', ...avifArgs], { input: pixels })
+    execFileSync('nice', ['-n', '10', 'ffmpeg', ...webpArgs], { input: pixels })
   }
-  const avif = readFileSync(tmpAvif)
-  const webp = readFileSync(tmpWebp)
-  const hash = createHash('sha256').update(avif).update(webp).digest('hex').slice(0, 10)
-  writeFileSync(join(out, `${name}.${hash}.avif`), avif)
-  writeFileSync(join(out, `${name}.${hash}.webp`), webp)
+  writeFileSync(join(out, `${name}.${hash}.avif`), readFileSync(tmpAvif))
+  writeFileSync(join(out, `${name}.${hash}.webp`), readFileSync(tmpWebp))
   rmSync(tmpAvif)
   rmSync(tmpWebp)
-  return hash
 }
 
 /**
@@ -112,27 +148,6 @@ async function pool(jobs: readonly (() => Promise<void>)[]): Promise<void> {
   }))
 }
 
-/** The cache: a source's identity and level, to the hash of its files. */
-const cacheFile = join(cacheDir, 'hashes.json')
-const cache = new Map<string, string>(existsSync(cacheFile) ? Object.entries(JSON.parse(readFileSync(cacheFile, 'utf8')) as Record<string, string>) : [])
-const keep = new Set<string>()
-
-/**
- * Encodes one picture at one level unless the cache has it.
- * @param key - the cache key.
- * @param name - the file name before the hash.
- * @param make - encodes it and returns the hash.
- * @returns the hash.
- */
-async function cached(key: string, name: string, make: () => Promise<string>): Promise<string> {
-  const known = cache.get(key)
-  const hash = known !== undefined && existsSync(join(out, `${name}.${known}.avif`)) && existsSync(join(out, `${name}.${known}.webp`)) ? known : await make()
-  cache.set(key, hash)
-  keep.add(`${name}.${hash}.avif`)
-  keep.add(`${name}.${hash}.webp`)
-  return hash
-}
-
 /**
  * Removes files of a kind this run did not name.
  * @param prefix - true for the files of this kind.
@@ -141,40 +156,67 @@ function prune(prefix: (file: string) => boolean): void {
   for (const file of readdirSync(out)) if (prefix(file) && !keep.has(file)) rmSync(join(out, file))
 }
 
-if (mode === 'tiles') {
-  const hashes = new Map<string, string[]>()
+/**
+ * Fails when a hash the run computed differs from the committed manifest's, unless `--write` rewrites the manifest.
+ * @param what - what the hash names, for the message.
+ * @param computed - the hash this run computed.
+ * @param committed - the hash in the committed manifest.
+ * @throws Error when they differ and `--write` is not given.
+ */
+function expect(what: string, computed: string, committed: string | undefined): void {
+  if (!write && computed !== committed) throw new Error(`${what} is stale in the committed manifest: run node scripts/lod.ts --write (after shot-colours.ts and mosaic-plans.ts when the pictures changed)`)
+}
+
+/**
+ * Writes a manifest under `--write`.
+ * @param file - the manifest's path under `src/home/`.
+ * @param text - what the run computed.
+ */
+function settle(file: string, text: string): void {
+  if (write) writeFileSync(new URL(`../src/home/${file}`, import.meta.url), text)
+}
+
+if (modes.includes('tiles')) {
+  const table = new Map<string, string[]>()
   const jobs = PICTURES.flatMap(shot => {
     const source = sourceOf(shot)
-    const stamp = `${statSync(source).size}:${statSync(source).mtimeMs}`
     const list: string[] = ['', '', '']
-    hashes.set(shot.id, list)
+    table.set(shot.id, list)
     return ([1, 2, 3] as const).map(level => async () => {
       const width = level === 3 ? undefined : WIDTHS[level][shot.device]
       const filter = width === undefined ? 'scale=trunc(iw/2)*2:trunc(ih/2)*2' : `scale=${width}:-2:flags=lanczos`
-      const quality = level === 3 ? { crf: 30, webp: 80 } : { crf: 34, webp: 74 }
-      list[level - 1] = await cached(`${shot.id}|${level}|${stamp}`, `${shot.id}.${level}`, () => encode(['-i', source], filter, `${shot.id}.${level}`, quality))
+      const quality = level === 3 ? QUALITY.full : QUALITY.tile
+      const hash = nameHash(sourceHash(source), String(level), filter, String(quality.crf), String(quality.webp))
+      list[level - 1] = hash
+      expect(`${shot.id} level ${String(level)}`, hash, LOD_TILES[shot.id]?.[level - 1])
+      await encode(['-i', source], filter, `${shot.id}.${level}`, hash, quality)
     })
   })
   await pool(jobs)
   prune(file => !file.startsWith('atlas-'))
-  writeFileSync(new URL('../src/home/lod-tiles.ts', import.meta.url), `/**
+  settle('lod-tiles.ts', `/**
  * The content hashes of each picture's level-of-detail files in \`public/lod/\`: L1, L2 and L3, each as AVIF and
- * WebP. Generated by \`scripts/lod.ts tiles\`; do not edit by hand.
+ * WebP. Generated by \`scripts/lod.ts tiles --write\`; do not edit by hand.
  *
  * @module @delorun/website/home/lod-tiles
  */
 
 /** The hashes of L1, L2 and L3, by picture id. */
 export const LOD_TILES: Readonly<Record<string, readonly [string, string, string]>> = {
-${[...hashes].map(([id, list]) => `  '${id}': [${list.map(hash => `'${hash}'`).join(', ')}],`).join('\n')}
+${[...table].map(([id, list]) => `  '${id}': [${list.map(hash => `'${hash}'`).join(', ')}],`).join('\n')}
 }
 `)
-  console.log(`tiles: ${PICTURES.length} pictures, ${keep.size} files`)
-} else {
-  const { MOSAIC_PLANS, PLAN_IDS, PLAN_LOOKS } = await import('../src/home/mosaic-plans.ts')
-  const { WIDE, NARROW } = await import('../src/home/mosaic.ts')
+  console.log(`tiles: ${PICTURES.length} pictures`)
+}
+
+if (modes.includes('atlases')) {
+  // Loaded here because a stale manifest from before a plan change must not stop the `tiles` run.
+  const { LOD_ATLASES } = await import('../src/home/lod-atlases.ts')
+  const { PLAN_IDS, PLAN_LOOKS, PLAN_MODES } = await import('../src/home/mosaic-plans.ts')
+  const { planCells } = await import('../src/home/plans.ts')
+  const { NARROW, WIDE } = await import('../src/home/mosaic.ts')
   /** Each layout's cell and gap in atlas pixels: about twice a tile's size on a typical screen of that width. */
-  const GEOMETRY = { wide: { cell: [112, 70], gap: 3, layout: WIDE }, narrow: { cell: [96, 60], gap: 2, layout: NARROW } } as const
+  const GEOMETRY = { wide: { cell: [72, 45], gap: 2, layout: WIDE }, narrow: { cell: [64, 40], gap: 2, layout: NARROW } } as const
   const byId = new Map(SHOTS.map(shot => [shot.id, shot]))
   const rows: string[] = []
   for (const name of ['wide', 'narrow'] as const) {
@@ -192,35 +234,44 @@ ${[...hashes].map(([id, list]) => `  '${id}': [${list.map(hash => `'${hash}'`).j
       tiles.set(id, raw)
       return raw
     }
-    const looks: string[] = []
-    const tinies: string[] = []
-    for (const look of PLAN_LOOKS) {
-      const plan = MOSAIC_PLANS[name].looks[look]
+    const canvasOf = (cells: readonly number[]): Buffer => {
       const canvas = Buffer.alloc(width * height * 3)
       for (let i = 0; i < canvas.length; i += 3) { canvas[i] = 0x0c; canvas[i + 1] = 0x0b; canvas[i + 2] = 0x0a }
-      plan.cells.forEach((index, at) => {
+      cells.forEach((index, at) => {
         const tile = tileOf(PLAN_IDS[index] ?? '')
         const x0 = (at % layout.cols) * (cw + gap)
         const y0 = Math.floor(at / layout.cols) * (ch + gap)
         for (let y = 0; y < ch; y++) tile.copy(canvas, ((y0 + y) * width + x0) * 3, y * cw * 3, (y + 1) * cw * 3)
       })
-      const key = `atlas-${name}-${look}|${createHash('sha256').update(canvas).digest('hex')}`
-      const file = `atlas-${name}-${look}`
-      const hash = await cached(key, file, () => encode(['-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', `${width}x${height}`, '-i', '-'], undefined, file, { crf: 40, webp: 62 }, canvas))
-      // The first paint's placeholder: one pixel per cell, inlined, drawn blocky under the atlas until it loads.
-      const tiny = execFileSync('ffmpeg', ['-loglevel', 'error', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', `${width}x${height}`, '-i', '-', '-vf', `scale=${layout.cols}:${layout.rows}:flags=area`, '-c:v', 'libwebp', '-lossless', '1', '-f', 'webp', '-'], { input: canvas })
-      looks.push(`      '${look}': '${hash}',`)
-      tinies.push(`      '${look}': 'data:image/webp;base64,${tiny.toString('base64')}',`)
-      const size = statSync(join(out, `${file}.${hash}.avif`)).size
-      console.log(`${file}: ${width}x${height}, AVIF ${(size / 1024).toFixed(0)} KB, WebP ${(statSync(join(out, `${file}.${hash}.webp`)).size / 1024).toFixed(0)} KB`)
+      return canvas
     }
-    rows.push(`  ${name}: {\n    cell: [${cw}, ${ch}],\n    gap: ${gap},\n    width: ${width},\n    height: ${height},\n    looks: {\n${looks.join('\n')}\n    },\n    tiny: {\n${tinies.join('\n')}\n    },\n  },`)
+    const looks: string[] = []
+    const tinies: string[] = []
+    for (const look of PLAN_LOOKS) {
+      const entries: string[] = []
+      const tinyEntries: string[] = []
+      for (const mode of PLAN_MODES) {
+        const cells = planCells(name, look, mode)
+        const file = `atlas-${name}-${look}-${mode}`
+        const hash = nameHash(name, look, mode, `${String(width)}x${String(height)}`, ...cells.map(index => sourceHash(sourceOf({ id: PLAN_IDS[index] ?? '', device: 'computer' }))))
+        await encode(['-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', `${String(width)}x${String(height)}`, '-i', '-'], undefined, file, hash, QUALITY.atlas, () => canvasOf(cells))
+        expect(file, hash, LOD_ATLASES[name].looks[look][mode])
+        entries.push(`        '${mode}': '${hash}',`)
+        if (!write) continue
+        // The first paint's placeholder: one pixel per cell, inlined, drawn blocky under the atlas until it loads.
+        const tiny = execFileSync('ffmpeg', ['-loglevel', 'error', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', `${String(width)}x${String(height)}`, '-i', '-', '-vf', `scale=${String(layout.cols)}:${String(layout.rows)}:flags=area`, '-c:v', 'libwebp', '-lossless', '1', '-f', 'webp', '-'], { input: canvasOf(cells) })
+        tinyEntries.push(`        '${mode}': 'data:image/webp;base64,${tiny.toString('base64')}',`)
+      }
+      looks.push(`      '${look}': {\n${entries.join('\n')}\n      },`)
+      tinies.push(`      '${look}': {\n${tinyEntries.join('\n')}\n      },`)
+    }
+    rows.push(`  ${name}: {\n    cell: [${String(cw)}, ${String(ch)}],\n    gap: ${String(gap)},\n    width: ${String(width)},\n    height: ${String(height)},\n    looks: {\n${looks.join('\n')}\n    },\n    tiny: {\n${tinies.join('\n')}\n    },\n  },`)
   }
   prune(file => file.startsWith('atlas-'))
-  writeFileSync(new URL('../src/home/lod-atlases.ts', import.meta.url), `/**
- * The home page's mosaic atlases (L0): each layout's whole mosaic in each look as one picture in \`public/lod/\`,
- * with the cell and gap sizes it was laid out with, in atlas pixels, and a one-pixel-per-cell placeholder. Generated by \`scripts/lod.ts atlases\`; do
- * not edit by hand.
+  settle('lod-atlases.ts', `/**
+ * The home page's mosaic atlases (L0): each layout's whole mosaic in each look and mode as one picture in
+ * \`public/lod/\`, with the cell and gap sizes it was laid out with, in atlas pixels, and a one-pixel-per-cell
+ * placeholder. Generated by \`scripts/lod.ts atlases --write\`; do not edit by hand.
  *
  * @module @delorun/website/home/lod-atlases
  */
@@ -230,5 +281,5 @@ export const LOD_ATLASES = {
 ${rows.join('\n')}
 } as const
 `)
+  console.log('atlases: written')
 }
-writeFileSync(cacheFile, JSON.stringify(Object.fromEntries(cache)))

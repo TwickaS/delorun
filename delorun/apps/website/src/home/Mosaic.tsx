@@ -10,7 +10,8 @@
  */
 import { useEffect, useRef, type ReactNode } from 'react'
 import { NARROW, WIDE, type Layout } from './mosaic.ts'
-import { MosaicWall, type LayoutName } from './MosaicWall.tsx'
+import { MosaicWall } from './MosaicWall.tsx'
+import type { LayoutName } from './plans.ts'
 import { note } from './effects.ts'
 import { LOD_ATLASES } from './lod-atlases.ts'
 import { arm, shotSrc, useArmed } from './pictures.ts'
@@ -189,6 +190,7 @@ export function MosaicHero({ children, next }: { children: ReactNode; next: stri
       frame.toggleAttribute('data-zooming', p > 0.02)
       if (p < 0.02) logged = false
       else if (p > 0.12 && !logged) { logged = true; note('zoom → chat') }
+      frame.style.setProperty('--lit', String(progress(p, 0.01, 0.08) * (1 - progress(p, 0.14, 0.3))))
       frame.style.setProperty('--swap', String(progress(p, 0.12, 0.28)))
       frame.style.setProperty('--field-in', String(progress(p, 0.7, 0.84)))
       frame.style.setProperty('--hero-out', String(progress(p, 0.9, 0.99)))

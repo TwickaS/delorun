@@ -8,6 +8,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { useOpenShot } from './Lightbox.tsx'
+import { MS } from './motion.ts'
 import { lodUrl } from './pictures.ts'
 import { FILM, SIZES, type Chapter } from './shots.ts'
 import s from './home.module.css'
@@ -84,7 +85,7 @@ export function Film({ id, heading }: { id: string; heading: string }) {
   useEffect(() => {
     setPushed(false)
     if (!arrived || matchMedia('(prefers-reduced-motion: reduce)').matches) return
-    const timer = window.setTimeout(() => setPushed(true), 420)
+    const timer = window.setTimeout(() => setPushed(true), MS.scene / 2)
     return () => window.clearTimeout(timer)
   }, [active, arrived])
 

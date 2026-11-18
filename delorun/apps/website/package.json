@@ -6,8 +6,9 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "build": "node ../../packages/site-design/scripts/write-looks.ts --check && vite build && tsc --noEmit && node scripts/link-chunk-styles.ts out && node scripts/check-styles.ts out && node ../docs/scripts/check-links.mjs out && node scripts/check-weight.ts out",
+    "build": "node ../../packages/site-design/scripts/write-looks.ts --check && node scripts/lod.ts && vite build && tsc --noEmit && node scripts/link-chunk-styles.ts out && node scripts/check-styles.ts out && node ../docs/scripts/check-links.mjs out && node scripts/check-weight.ts out",
     "dev": "vite dev",
+    "pictures": "node scripts/lod.ts",
     "preview": "node ../docs/scripts/serve-static.mjs out",
     "typecheck:deploy": "tsc --noEmit -p tsconfig.deploy.json",
     "generate": "node ../../packages/site-design/scripts/write-looks.ts"

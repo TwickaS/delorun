@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { failures, LIMITS, measure } from '../scripts/weight.ts'
+import { failures, LIMITS, measure, pictureBytes } from '../scripts/weight.ts'
 
 const dirs: string[] = []
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }) })
@@ -52,6 +52,18 @@ describe('the weight check', () => {
   it('holds the first screen at 125 KB, the whole prerendered HTML with its styles and fonts, and the entry script at 115 KB', () => {
     expect(LIMITS.firstScreen).toBe(125_000)
     expect(LIMITS.interactiveScript).toBe(115_000)
+  })
+
+  it('reports the picture files and those the home page names, without limiting them', () => {
+    const out = site({})
+    mkdirSync(join(out, 'lod'))
+    writeFileSync(join(out, 'lod', 'atlas-wide-soft-dark.aaaaaaaaaa.avif'), 'x'.repeat(1000))
+    writeFileSync(join(out, 'lod', 'atlas-wide-soft-dark.aaaaaaaaaa.webp'), 'x'.repeat(3000))
+    writeFileSync(join(out, 'lod', 'chat.2.bbbbbbbbbb.avif'), 'x'.repeat(500))
+    writeFileSync(join(out, 'index.html'), '<div style="background-image:url(/lod/atlas-wide-soft-dark.aaaaaaaaaa.avif)"></div>')
+    expect(pictureBytes(out)).toEqual({ total: 4500, named: 1000, files: 3 })
+    expect(failures(measure(out))).toEqual([])
+    expect(pictureBytes(join(tmpdir(), 'no-such-site-out'))).toEqual({ total: 0, named: 0, files: 0 })
   })
 
   it('refuses a site that was not built', () => {

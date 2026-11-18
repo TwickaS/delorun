@@ -4,11 +4,6 @@
  */
 
 .page {
-  --field: light-dark(#efece7, #0c0b0a);
-  --field-ink: light-dark(#141210, #f4f0ea);
-  --field-muted: light-dark(#5b554e, #a69f96);
-  --field-line: light-dark(rgb(20 18 16 / 0.14), rgb(244 240 234 / 0.12));
-  --ease: cubic-bezier(0.23, 1, 0.32, 1);
   --margin: 24px;
   --inner: min(100vw - 2 * var(--margin), 1392px);
   overflow-x: clip;
@@ -64,7 +59,7 @@
   position: absolute;
   inset-inline: 0;
   top: 0;
-  color: var(--field-ink);
+  color: var(--dl-stage-text);
 }
 .brand {
   display: inline-flex;
@@ -90,7 +85,7 @@
   color: inherit;
   opacity: 0.72;
   text-decoration: none;
-  transition: opacity 150ms var(--ease);
+  transition: opacity var(--dl-duration-quick) var(--dl-ease-out);
 }
 @media (hover: hover) and (pointer: fine) {
   .navLink:hover { opacity: 1; }
@@ -99,9 +94,9 @@
 .navLink:focus-visible,
 .dotWrap:focus-visible,
 .starButton:focus-visible,
-.chip:focus-visible,
 .tile:focus-visible,
 .filmShot:focus-visible,
+.showAll:focus-visible,
 .lightboxButton:focus-visible {
   outline: 3px solid var(--dl-accent);
   outline-offset: 3px;
@@ -118,7 +113,7 @@
   background: none;
   color: inherit;
   cursor: pointer;
-  transition: transform 160ms var(--ease), background-color 150ms var(--ease), border-color 150ms var(--ease);
+  transition: transform var(--dl-motion-quick) var(--dl-ease-out), background-color var(--dl-duration-quick) var(--dl-ease-out), border-color var(--dl-duration-quick) var(--dl-ease-out);
 }
 .dot {
   display: grid;
@@ -132,7 +127,7 @@
   border-radius: 999px;
   background: var(--dl-accent);
   box-shadow: 0 0 0 4px color-mix(in oklab, var(--dl-accent) 26%, transparent);
-  transition: box-shadow 200ms var(--ease);
+  transition: box-shadow var(--dl-duration-quick) var(--dl-ease-out);
 }
 @media (hover: hover) and (pointer: fine) {
   .dotWrap:hover .dot span { box-shadow: 0 0 0 6px color-mix(in oklab, var(--dl-accent) 30%, transparent); }
@@ -157,7 +152,7 @@
   white-space: nowrap;
   text-overflow: ellipsis;
   opacity: 0.72;
-  transition: opacity 300ms var(--ease);
+  transition: opacity var(--dl-duration-move) var(--dl-ease-out);
 }
 .status[data-state='idle'] .statusLine { opacity: 0; }
 .status[data-state='busy'] .statusLine { opacity: 1; }
@@ -177,12 +172,12 @@
     max-width: calc(100vw - 32px);
     padding: 9px 14px;
     border-radius: 999px;
-    background: rgb(20 18 16 / 0.92);
-    color: #f4f0ea;
-    box-shadow: 0 6px 20px rgb(0 0 0 / 0.3);
+    background: var(--dl-stage-scrim);
+    color: var(--dl-stage-scrim-text);
+    box-shadow: 0 6px 20px color-mix(in oklab, var(--dl-screen-ground) 30%, transparent);
     opacity: 0;
     translate: -50% 10px;
-    transition: opacity 200ms var(--ease), translate 200ms var(--ease);
+    transition: opacity var(--dl-duration-quick) var(--dl-ease-out), translate var(--dl-motion-quick) var(--dl-ease-out);
     pointer-events: none;
   }
   .status[data-state='busy'] .statusLine,
@@ -197,7 +192,7 @@
 .starButton {
   min-height: 38px;
   border: 1px solid color-mix(in oklab, currentColor 26%, transparent);
-  background: color-mix(in oklab, var(--field) 70%, transparent);
+  background: color-mix(in oklab, var(--dl-stage) 70%, transparent);
   backdrop-filter: blur(10px);
 }
 .header[data-star='true'] .dotWrap { gap: 6px; padding: 0 5px 0 14px; }
@@ -213,13 +208,13 @@
   color: inherit;
   font: 600 14px/1 var(--dl-font-sans);
   text-decoration: none;
-  transition: transform 160ms var(--ease), background-color 150ms var(--ease), border-color 150ms var(--ease);
+  transition: transform var(--dl-motion-quick) var(--dl-ease-out), background-color var(--dl-duration-quick) var(--dl-ease-out), border-color var(--dl-duration-quick) var(--dl-ease-out);
 }
 .starButton svg { flex: none; }
 .starButton:active { transform: scale(0.97); }
 @media (hover: hover) and (pointer: fine) {
   .header[data-star='true'] .dotWrap:hover,
-  .starButton:hover { border-color: color-mix(in oklab, currentColor 55%, transparent); background: color-mix(in oklab, currentColor 8%, var(--field)); }
+  .starButton:hover { border-color: color-mix(in oklab, currentColor 55%, transparent); background: color-mix(in oklab, currentColor 8%, var(--dl-stage)); }
 }
 @media (max-width: 639px) {
   .header[data-star='true'] .nav { gap: 8px; }
@@ -301,8 +296,8 @@
 .film {
   position: relative;
   height: calc(var(--chapters) * 100svh);
-  background: var(--field);
-  color: var(--field-ink);
+  background: var(--dl-stage);
+  color: var(--dl-stage-text);
 }
 .filmSticky {
   position: sticky;
@@ -322,8 +317,8 @@
   aspect-ratio: 16 / 10;
   overflow: hidden;
   border-radius: 12px;
-  background: #000;
-  box-shadow: 0 50px 120px -50px rgb(0 0 0 / 0.65), 0 0 0 1px var(--field-line);
+  background: var(--dl-screen-ground);
+  box-shadow: 0 50px 120px -50px color-mix(in oklab, var(--dl-screen-ground) 65%, transparent), 0 0 0 1px var(--dl-stage-line);
 }
 .film .filmFrame { width: min(var(--inner), (100svh - 270px) * 1.6, 1120px); }
 .filmShot {
@@ -332,17 +327,17 @@
   z-index: 1;
   padding: 0;
   border: 0;
-  background: #000;
+  background: var(--dl-screen-ground);
   cursor: zoom-in;
   opacity: 0;
   clip-path: inset(0 0 0 100%);
-  transition: opacity 0s 760ms, clip-path 0s 760ms;
+  transition: opacity 0s var(--dl-motion-scene), clip-path 0s var(--dl-motion-scene);
 }
 .filmShot[data-active='true'] {
   z-index: 2;
   opacity: 1;
   clip-path: inset(0 0 0 0);
-  transition: clip-path 760ms var(--ease), opacity 0s;
+  transition: clip-path var(--dl-motion-scene) var(--dl-ease-out), opacity 0s;
 }
 .filmShot img {
   position: absolute;
@@ -354,7 +349,7 @@
   object-fit: cover;
   object-position: top left;
   transform-origin: 0 0;
-  transition: transform 1500ms var(--ease);
+  transition: transform calc(var(--dl-motion-scene) * 2) var(--dl-ease-out);
 }
 .filmMeta {
   display: grid;
@@ -366,16 +361,16 @@
   font: 500 13px/1 var(--dl-font-mono);
   font-variant-numeric: tabular-nums;
 }
-.filmClock { display: inline-flex; align-items: center; gap: 8px; color: var(--field-ink); }
+.filmClock { display: inline-flex; align-items: center; gap: 8px; color: var(--dl-stage-text); }
 .filmRec {
   width: 8px;
   height: 8px;
   border-radius: 999px;
   background: var(--dl-accent);
-  animation: rec 1.6s ease-in-out infinite;
+  animation: rec calc(var(--dl-motion-scene) * 2) var(--dl-ease-in-out) infinite;
 }
 @keyframes rec { 50% { opacity: 0.35; } }
-.filmCount { color: var(--field-muted); }
+.filmCount { color: var(--dl-stage-muted); }
 :global(.dark) .lightOnly { display: none; }
 :global(html:not(.dark)) .darkOnly { display: none; }
 .filmCaption {
@@ -395,15 +390,15 @@
   font-weight: 800;
   line-height: 0.95;
   letter-spacing: -0.045em;
-  animation: caption-in 700ms var(--ease) both;
+  animation: caption-in var(--dl-motion-scene) var(--dl-ease-out) both;
 }
 .filmDetail {
   margin: 0;
   max-width: 40ch;
   font-size: 17px;
   line-height: 1.45;
-  color: var(--field-muted);
-  animation: caption-in 700ms 80ms var(--ease) both;
+  color: var(--dl-stage-muted);
+  animation: caption-in var(--dl-motion-scene) var(--dl-duration-leave) var(--dl-ease-out) both;
 }
 @keyframes caption-in {
   from { opacity: 0; transform: translateY(0.4em); }
@@ -421,8 +416,8 @@
   width: 22px;
   height: 3px;
   border-radius: 2px;
-  background: var(--field-line);
-  transition: background 300ms var(--ease);
+  background: var(--dl-stage-line);
+  transition: background var(--dl-duration-move) var(--dl-ease-out);
 }
 .filmTicks li[data-on='true'] { background: var(--dl-accent); }
 .filmMarkers {
@@ -457,8 +452,8 @@
 
 .wallSection {
   padding: 140px var(--margin) 160px;
-  background: var(--field);
-  color: var(--field-ink);
+  background: var(--dl-stage);
+  color: var(--dl-stage-text);
 }
 .wallHead {
   display: grid;
@@ -474,81 +469,56 @@
   margin: 0;
   font-size: 17px;
   line-height: 1.5;
-  color: var(--field-muted);
+  color: var(--dl-stage-muted);
 }
 .wallControls {
   grid-column: 1 / -1;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
 }
-.chip {
-  min-height: 42px;
-  padding: 0 18px;
-  border: 1px solid var(--field-line);
-  border-radius: 999px;
-  background: transparent;
-  color: inherit;
-  font: 500 15px/1 var(--dl-font-sans);
-  cursor: pointer;
-  transition: background-color 150ms var(--ease), color 150ms var(--ease), transform 160ms var(--ease);
-}
-.chip[aria-pressed='true'] { background: var(--field-ink); color: var(--field); border-color: var(--field-ink); }
-@media (hover: hover) and (pointer: fine) {
-  .chip[aria-pressed='false']:hover { background: var(--field-line); }
-}
-.chip:active { transform: scale(0.97); }
 .wallCount {
-  margin-left: auto;
   font-size: 15px;
   line-height: 1;
-  color: var(--field-muted);
+  color: var(--dl-stage-muted);
 }
 .wallCount strong { margin-right: 4px; font-size: 22px; font-weight: 700; color: var(--dl-accent); }
 
+/*
+ * The wall: many small tiles, wider than the text column. Spans keep each tile near its picture's proportions, and every
+ * tile is a whole number of computer rows tall, so the dense flow leaves few holes.
+ */
 .wallGrid {
+  --wall: min(100vw - 2 * var(--margin), 1760px);
+  --gap: 10px;
+  --col: calc((var(--wall) - 23 * var(--gap)) / 24);
   display: grid;
-  gap: 72px;
-  width: var(--inner);
-  margin: 0 auto;
-}
-.wallGroup {
-  --gap: 16px;
-  --col: calc((var(--inner) - 11 * var(--gap)) / 12);
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  grid-auto-rows: calc(var(--col) / 2);
+  grid-template-columns: repeat(24, minmax(0, 1fr));
+  grid-auto-rows: calc(var(--col) * 0.57);
   grid-auto-flow: dense;
   gap: var(--gap);
+  width: var(--wall);
+  margin: 0 auto;
 }
 .showAll {
   display: none;
   justify-self: center;
   min-height: 48px;
-  margin-top: 28px;
+  margin: 28px auto 0;
   padding: 0 24px;
-  border: 1px solid var(--field-line);
+  border: 1px solid var(--dl-stage-line);
   border-radius: 999px;
   background: transparent;
   color: inherit;
   font: 600 16px/1 var(--dl-font-sans);
+  cursor: pointer;
+  transition: transform var(--dl-motion-quick) var(--dl-ease-out);
 }
-.showAll:active { transform: scale(0.97); }
+.showAll:active { transform: scale(var(--dl-scale-pressed)); }
 .showAll[data-wide='true'] { display: block; }
 .wallGrid[data-collapsed='true'] .tile[data-beyond='true'] { display: none; }
 @media (max-width: 639px) {
   .showAll { display: block; }
 }
-.groupLabel {
-  grid-column: 1 / -1;
-  align-self: end;
-  margin: 0;
-  font-size: clamp(28px, 2.6vw, 40px);
-  font-weight: 800;
-  letter-spacing: -0.035em;
-}
-.groupLabel span { margin-left: 6px; font-size: 15px; font-weight: 600; line-height: 1; color: var(--dl-accent); vertical-align: 0.6em; }
 
 .tile {
   position: relative;
@@ -556,11 +526,11 @@
   padding: 0;
   overflow: hidden;
   border: 0;
-  border-radius: 10px;
-  background: #000;
-  box-shadow: 0 0 0 1px var(--field-line);
+  border-radius: 6px;
+  background: var(--dl-screen-ground);
+  box-shadow: 0 0 0 1px var(--dl-stage-line);
   cursor: zoom-in;
-  transition: transform 160ms var(--ease);
+  transition: transform var(--dl-motion-quick) var(--dl-ease-out);
 }
 .tile img {
   display: block;
@@ -568,65 +538,28 @@
   height: 100%;
   object-fit: cover;
   object-position: top center;
-  transition: transform 500ms var(--ease);
+  transition: transform var(--dl-motion-scene) var(--dl-ease-out);
 }
-.tile:active { transform: scale(0.97); }
+.tile:active { transform: scale(var(--dl-scale-pressed)); }
 @media (hover: hover) and (pointer: fine) {
-  .tile:hover img { transform: scale(1.035); }
+  .tile:hover img { transform: scale(1.06); }
 }
-.wallGroup .tile[data-device='computer'] { grid-column: span 3; grid-row: span 4; }
-.wallGroup .tile[data-device='phone'] { grid-column: span 2; grid-row: span 8; border-radius: 16px; }
-.wallGroup .tile[data-feature='true'] { grid-column: span 6; grid-row: span 7; }
-
+.wallGrid .tile[data-device='computer'] { grid-column: span 4; grid-row: span 4; }
+.wallGrid .tile[data-device='phone'] { grid-column: span 3; grid-row: span 8; border-radius: 10px; }
+.wallGrid .tile[data-feature='true'] { grid-column: span 8; grid-row: span 8; }
 @media (max-width: 1023px) {
-  .wallGroup { --col: calc((var(--inner) - 7 * var(--gap)) / 8); grid-template-columns: repeat(8, minmax(0, 1fr)); }
-  .wallGroup .tile[data-device='computer'] { grid-column: span 4; grid-row: span 5; }
-  .wallGroup .tile[data-feature='true'] { grid-column: span 8; grid-row: span 10; }
+  .wallGrid { grid-template-columns: repeat(16, minmax(0, 1fr)); --col: calc((var(--wall) - 15 * var(--gap)) / 16); }
   .wallHead .sectionTitle,
   .wallLead { grid-column: 1 / -1; }
 }
 @media (max-width: 639px) {
   .wallSection { padding-block: 96px 112px; }
-  .wallGroup { --gap: 10px; --col: calc((var(--inner) - 3 * var(--gap)) / 4); grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .wallGroup .tile[data-device='computer'] { grid-column: span 2; grid-row: span 2; border-radius: 8px; }
-  .wallGroup .tile[data-device='phone'] { grid-column: span 2; grid-row: span 8; }
-  .wallGroup .tile[data-feature='true'] { grid-column: span 4; grid-row: span 5; }
+  .wallGrid { --gap: 6px; --col: calc((var(--wall) - 5 * var(--gap)) / 6); grid-template-columns: repeat(6, minmax(0, 1fr)); grid-auto-rows: calc(var(--col) * 0.6); }
   .wallGrid[data-collapsed='true'] .tile[data-extra='true'] { display: none; }
-  .wallGrid { gap: 48px; }
-  .wallCount { margin-left: 0; width: 100%; padding-top: 8px; }
-  .chip { min-height: 40px; padding-inline: 14px; font-size: 14px; }
-}
-
-/*
- * The dense wall (B): many small tiles, wider than the text column. Spans keep each tile near its picture's proportions,
- * and every tile is a whole number of computer rows tall, so the dense flow leaves few holes.
- */
-
-.wallGrid[data-dense='true'] { width: min(100vw - 2 * var(--margin), 1760px); gap: 56px; }
-.wallGrid[data-dense='true'] .wallGroup {
-  --inner: min(100vw - 2 * var(--margin), 1760px);
-  --gap: 10px;
-  --col: calc((var(--inner) - 23 * var(--gap)) / 24);
-  grid-template-columns: repeat(24, minmax(0, 1fr));
-  grid-auto-rows: calc(var(--col) * 0.57);
-}
-.wallGrid[data-dense='true'] .tile { border-radius: 6px; }
-.wallGrid[data-dense='true'] .tile[data-device='computer'] { grid-column: span 4; grid-row: span 4; }
-.wallGrid[data-dense='true'] .tile[data-device='phone'] { grid-column: span 3; grid-row: span 8; border-radius: 10px; }
-.wallGrid[data-dense='true'] .tile[data-feature='true'] { grid-column: span 8; grid-row: span 8; }
-@media (hover: hover) and (pointer: fine) {
-  .wallGrid[data-dense='true'] .tile:hover img { transform: scale(1.06); }
-}
-@media (max-width: 1023px) {
-  .wallGrid[data-dense='true'] .wallGroup { --col: calc((var(--inner) - 15 * var(--gap)) / 16); grid-template-columns: repeat(16, minmax(0, 1fr)); }
-}
-@media (max-width: 639px) {
-  .wallGrid[data-dense='true'] { gap: 40px; }
-  .wallGrid[data-dense='true'] .wallGroup { --gap: 6px; --col: calc((var(--inner) - 5 * var(--gap)) / 6); grid-template-columns: repeat(6, minmax(0, 1fr)); grid-auto-rows: calc(var(--col) * 0.6); }
-  .wallGrid[data-dense='true'] .tile { border-radius: 4px; }
-  .wallGrid[data-dense='true'] .tile[data-device='computer'] { grid-column: span 2; grid-row: span 2; }
-  .wallGrid[data-dense='true'] .tile[data-device='phone'] { grid-column: span 2; grid-row: span 6; border-radius: 7px; }
-  .wallGrid[data-dense='true'] .tile[data-feature='true'] { grid-column: span 4; grid-row: span 4; }
+  .tile { border-radius: 4px; }
+  .wallGrid .tile[data-device='computer'] { grid-column: span 2; grid-row: span 2; }
+  .wallGrid .tile[data-device='phone'] { grid-column: span 2; grid-row: span 6; border-radius: 7px; }
+  .wallGrid .tile[data-feature='true'] { grid-column: span 4; grid-row: span 4; }
 }
 
 /*
@@ -639,7 +572,7 @@
   position: relative;
   z-index: 2;
   height: 260svh;
-  color: var(--field-ink);
+  color: var(--dl-stage-text);
 }
 .revealStage {
   --words: 1;
@@ -656,7 +589,7 @@
 .revealField {
   position: absolute;
   inset: 0;
-  background: var(--field);
+  background: var(--dl-stage);
   opacity: var(--field-in);
   pointer-events: none;
 }
@@ -666,8 +599,8 @@
   top: 0;
   overflow: hidden;
   border-radius: 12px;
-  background: #000;
-  box-shadow: 0 50px 120px -50px rgb(0 0 0 / 0.65), 0 0 0 1px var(--field-line);
+  background: var(--dl-screen-ground);
+  box-shadow: 0 50px 120px -50px color-mix(in oklab, var(--dl-screen-ground) 65%, transparent), 0 0 0 1px var(--dl-stage-line);
   opacity: 0;
   transform-origin: 0 0;
   pointer-events: none;
@@ -686,7 +619,7 @@
   display: grid;
   place-items: center;
   overflow: hidden;
-  background: #0c0b0a;
+  background: var(--dl-stage);
 }
 .mosaic {
   position: relative;
@@ -706,6 +639,11 @@
   pointer-events: none;
 }
 .mosaicTiny { image-rendering: pixelated; }
+/* Both colour schemes' atlases are in the page, since the prerendered page cannot know the scheme; one shows. */
+.mosaicLayers { position: absolute; inset: 0; pointer-events: none; }
+.mosaicLayers[data-mode='light'] { display: none; }
+:global(html:not(.dark)) .mosaicLayers[data-mode='light'] { display: block; }
+:global(html:not(.dark)) .mosaicLayers[data-mode='dark'] { display: none; }
 .mosaic[data-layout='narrow'] { display: none; }
 .mosaicTile {
   width: 100%;
@@ -724,13 +662,13 @@
   border-radius: inherit;
   pointer-events: none;
 }
-.tileLayer { object-fit: cover; object-position: top center; opacity: 0; transition: opacity 220ms var(--ease); }
+.tileLayer { object-fit: cover; object-position: top center; opacity: 0; transition: opacity var(--dl-duration-quick) var(--dl-ease-out); }
 .tileLayer[data-shown] { opacity: 1; }
 .tileSprite { background-repeat: no-repeat; }
 .pictureContents,
 .tile picture { display: contents; }
 /* A mosaic tile lifts on hover and focus and names its screen and look above itself; not while the page zooms. */
-.mosaicTile { overflow: visible; transition: transform 180ms var(--ease), box-shadow 180ms var(--ease); }
+.mosaicTile { overflow: visible; transition: transform var(--dl-motion-quick) var(--dl-ease-out), box-shadow var(--dl-duration-quick) var(--dl-ease-out); }
 .mosaicTile img { border-radius: inherit; }
 .mosaicTile:focus-visible { outline: 2px solid var(--dl-accent); outline-offset: 1px; }
 .tileLabel {
@@ -740,25 +678,36 @@
   z-index: 3;
   padding: 4px 7px;
   border-radius: 5px;
-  background: rgb(20 18 16 / 0.94);
-  color: #f4f0ea;
+  background: var(--dl-stage-scrim);
+  color: var(--dl-stage-scrim-text);
   font-size: 11px;
   font-weight: 600;
   line-height: 1.2;
   white-space: nowrap;
   opacity: 0;
   translate: -50% 4px;
-  transition: opacity 150ms var(--ease), translate 150ms var(--ease);
+  transition: opacity var(--dl-duration-quick) var(--dl-ease-out), translate var(--dl-motion-quick) var(--dl-ease-out);
   pointer-events: none;
 }
-.mosaicTile:focus-visible { z-index: 2; transform: translateY(-2px) scale(1.08); box-shadow: 0 8px 22px rgb(0 0 0 / 0.5); }
+.mosaicTile:focus-visible { z-index: 2; transform: translateY(-2px) scale(1.08); box-shadow: 0 8px 22px color-mix(in oklab, var(--dl-screen-ground) 50%, transparent); }
 .mosaicTile:focus-visible .tileLabel { opacity: 1; translate: -50% 0; }
 @media (hover: hover) and (pointer: fine) {
   .mosaicTile:hover img { transform: none; }
-  .mosaicTile:hover { z-index: 2; transform: translateY(-2px) scale(1.08); box-shadow: 0 8px 22px rgb(0 0 0 / 0.5); }
+  .mosaicTile:hover { z-index: 2; transform: translateY(-2px) scale(1.08); box-shadow: 0 8px 22px color-mix(in oklab, var(--dl-screen-ground) 50%, transparent); }
   .mosaicTile:hover .tileLabel { opacity: 1; translate: -50% 0; }
 }
 .revealStage[data-zooming] .mosaicTile { transform: none; box-shadow: none; }
+/* The tile the zoom enters is lit while the zoom begins, so the eye knows where the page is going. */
+.mosaicTile[data-pinned]::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border: 2px solid var(--dl-accent);
+  border-radius: 4px;
+  box-shadow: 0 0 18px color-mix(in oklab, var(--dl-accent) 70%, transparent);
+  opacity: var(--lit, 0);
+  pointer-events: none;
+}
 .revealStage[data-zooming] .tileLabel { display: none; }
 
 /* The re-tile: each new picture turns in as its ring reaches it. The living tile fades between its frames. */
@@ -768,8 +717,8 @@
 @keyframes tileFade {
   from { opacity: 0; }
 }
-.mosaic[data-retiling] .tileSprite { animation: tileTurn 320ms cubic-bezier(0.23, 1, 0.32, 1) both; }
-.livingTile img { animation: tileFade 1200ms ease both; }
+.mosaic[data-retiling] .tileSprite { animation: tileTurn var(--dl-duration-explain) var(--dl-ease-out) both; }
+.livingTile img { animation: tileFade calc(var(--dl-motion-scene) * 1.5) var(--dl-ease) both; }
 @media (prefers-reduced-motion: reduce) {
   .mosaic[data-retiling] .tileSprite,
   .livingTile img { animation: none; }
@@ -796,10 +745,9 @@
   height: 100%;
   pointer-events: none;
 }
-.mosaicShade { fill: #0c0b0a; fill-opacity: 0.5; }
+.mosaicShade { fill: var(--dl-stage); fill-opacity: 0.5; }
 /* In the light look the mark stands on the page's cream: the tiles around it and in its hole wash out to it. */
-:global(html:not(.dark)) .mosaicFrame { background: var(--field); }
-:global(html:not(.dark)) .mosaicShade { fill: var(--field); fill-opacity: 0.84; }
+:global(html:not(.dark)) .mosaicShade { fill: var(--dl-stage); fill-opacity: 0.7; }
 
 .mosaicPeach { fill: var(--dl-accent); fill-opacity: 0.5; mix-blend-mode: multiply; }
 
@@ -809,7 +757,7 @@
   inset: 0 0 auto;
   z-index: 1;
   height: 120px;
-  background: linear-gradient(to bottom, color-mix(in oklab, var(--field) 85%, transparent), transparent);
+  background: linear-gradient(to bottom, color-mix(in oklab, var(--dl-stage) 85%, transparent), transparent);
   opacity: var(--words);
   pointer-events: none;
 }
@@ -818,7 +766,7 @@
   inset: 0;
   pointer-events: none;
   opacity: var(--words);
-  background: linear-gradient(to right, var(--field) 0%, color-mix(in oklab, var(--field) 92%, transparent) 36%, color-mix(in oklab, var(--field) 40%, transparent) 50%, transparent 60%);
+  background: linear-gradient(to right, var(--dl-stage) 0%, color-mix(in oklab, var(--dl-stage) 92%, transparent) 36%, color-mix(in oklab, var(--dl-stage) 40%, transparent) 50%, transparent 60%);
 }
 .revealWords {
   position: absolute;
@@ -853,7 +801,7 @@
 
 @media (max-width: 639px) {
   .reveal { height: 220svh; }
-  .header[data-over='true'] { width: 100%; padding-block: 10px; padding-inline: var(--margin); background: var(--field); }
+  .header[data-over='true'] { width: 100%; padding-block: 10px; padding-inline: var(--margin); background: var(--dl-stage); }
   .revealStage { min-height: 0; }
   .mosaicFrame { place-items: start center; padding-top: 64px; }
   .mosaic[data-layout='wide'] { display: none; }
@@ -865,7 +813,7 @@
     gap: 16px;
     width: auto;
     padding: 20px var(--margin) 0;
-    background: var(--field);
+    background: var(--dl-stage);
   }
   .displayB { font-size: 50px; }
   .leadB { font-size: 16px; line-height: 1.4; }
@@ -986,8 +934,8 @@
   margin: 0;
   padding: 0;
   border: 0;
-  background: rgb(10 9 8 / 0.985);
-  color: #f4f0ea;
+  background: color-mix(in oklab, var(--dl-screen-ground) 98%, transparent);
+  color: var(--dl-stage-scrim-text);
   overscroll-behavior: contain;
 }
 .lightbox::backdrop { background: transparent; backdrop-filter: blur(10px); }
@@ -1004,7 +952,7 @@
   position: fixed;
   max-width: none;
   border-radius: 10px;
-  box-shadow: 0 40px 120px -30px rgb(0 0 0 / 0.8);
+  box-shadow: 0 40px 120px -30px color-mix(in oklab, var(--dl-screen-ground) 80%, transparent);
   transform-origin: top left;
   touch-action: none;
   user-select: none;
@@ -1013,7 +961,7 @@
 .lightboxImage[data-device='phone'] { border-radius: 22px; }
 .lightboxImage { overflow: hidden; }
 .lightboxLayer { position: absolute; inset: 0; display: block; width: 100%; height: 100%; max-width: none; pointer-events: none; }
-.lightboxLayer[data-full] { opacity: 0; transition: opacity 220ms var(--ease); }
+.lightboxLayer[data-full] { opacity: 0; transition: opacity var(--dl-duration-quick) var(--dl-ease-out); }
 .lightboxLayer[data-full][data-ready] { opacity: 1; }
 .lightboxBar {
   position: fixed;
@@ -1032,16 +980,16 @@
   place-items: center;
   width: 44px;
   height: 44px;
-  border: 1px solid rgb(244 240 234 / 0.22);
+  border: 1px solid color-mix(in oklab, var(--dl-stage-scrim-text) 22%, transparent);
   border-radius: 999px;
   background: transparent;
   color: inherit;
   font-size: 17px;
   cursor: pointer;
-  transition: background-color 150ms var(--ease), transform 160ms var(--ease);
+  transition: background-color var(--dl-duration-quick) var(--dl-ease-out), transform var(--dl-motion-quick) var(--dl-ease-out);
 }
 @media (hover: hover) and (pointer: fine) {
-  .lightboxButton:hover { background: rgb(244 240 234 / 0.1); }
+  .lightboxButton:hover { background: color-mix(in oklab, var(--dl-stage-scrim-text) 10%, transparent); }
 }
 .lightboxButton:active { transform: scale(0.97); }
 @media (max-width: 639px) {
@@ -1064,16 +1012,16 @@
   gap: 10px;
   padding: 14px 18px 14px 20px;
   border-radius: 4px;
-  background: #f4f0ea;
-  color: #141210;
-  box-shadow: 0 24px 60px -24px rgb(0 0 0 / 0.7);
+  background: var(--dl-plate);
+  color: var(--dl-plate-text);
+  box-shadow: 0 24px 60px -24px color-mix(in oklab, var(--dl-screen-ground) 70%, transparent);
 }
 .plateTop { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.plateNumber { font-size: 13px; font-weight: 600; line-height: 1; color: #b4532f; font-variant-numeric: tabular-nums; }
+.plateNumber { font-size: 13px; font-weight: 600; line-height: 1; color: var(--dl-plate-accent); font-variant-numeric: tabular-nums; }
 .plateButtons { display: flex; gap: 6px; }
-.lightboxButton[data-paper] { width: 36px; height: 36px; border-color: rgb(20 18 16 / 0.2); font-size: 15px; }
+.lightboxButton[data-paper] { width: 36px; height: 36px; border-color: color-mix(in oklab, var(--dl-plate-text) 20%, transparent); font-size: 15px; }
 @media (hover: hover) and (pointer: fine) {
-  .lightboxButton[data-paper]:hover { background: rgb(20 18 16 / 0.07); }
+  .lightboxButton[data-paper]:hover { background: color-mix(in oklab, var(--dl-plate-text) 7%, transparent); }
 }
 .plateTitle { margin: -4px 0 0; font-size: 19px; font-weight: 700; line-height: 1.25; letter-spacing: -0.01em; }
 .plateFacts {
@@ -1082,11 +1030,11 @@
   gap: 8px 28px;
   margin: 0;
   padding-top: 10px;
-  border-top: 1px solid rgb(20 18 16 / 0.14);
+  border-top: 1px solid color-mix(in oklab, var(--dl-plate-text) 14%, transparent);
 }
-.plateFacts dt { font-size: 12.5px; font-weight: 500; line-height: 1; color: #6b645c; }
+.plateFacts dt { font-size: 12.5px; font-weight: 500; line-height: 1; color: var(--dl-plate-muted); }
 .plateFacts dd { margin: 5px 0 0; font-size: 14px; font-weight: 500; }
-.plateCredit { margin: 0; font-size: 13px; line-height: 1.35; color: #6b645c; }
+.plateCredit { margin: 0; font-size: 13px; line-height: 1.35; color: var(--dl-plate-muted); }
 /* On a wide screen the facts sit beside the title, so the plate takes less height from the picture. */
 @media (min-width: 1024px) {
   .plate { grid-template-columns: minmax(0, 1fr) auto; column-gap: 32px; row-gap: 8px; }
@@ -1106,7 +1054,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .filmShot,
-  .filmShot[data-active='true'] { clip-path: none; transition: opacity 200ms; }
+  .filmShot[data-active='true'] { clip-path: none; transition: opacity var(--dl-duration-quick); }
   .filmShot img { transition: none; }
   .filmLine,
   .filmDetail { animation-name: fade-in; }

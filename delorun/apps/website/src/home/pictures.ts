@@ -9,6 +9,7 @@
 import { useSyncExternalStore } from 'react'
 import { LOD_ATLASES } from './lod-atlases.ts'
 import { LOD_TILES } from './lod-tiles.ts'
+import type { PlanLook, PlanMode } from './plans.ts'
 import { SHOTS, type Device } from './shots.ts'
 
 /** A picture's level of detail: L1 tile, L2 zoom and wall, L3 full size. */
@@ -19,6 +20,17 @@ export type Format = 'avif' | 'webp'
 
 /** Each level's width in pixels, by device; L3 is the capture's own width. */
 export const LEVEL_WIDTHS: Readonly<Record<Device, readonly [number, number, number]>> = { computer: [96, 480, 1440], phone: [96, 300, 390] }
+
+/**
+ * The level a picture needs to look sharp at a size on screen.
+ * @param needed - the picture's width on screen, in device pixels.
+ * @param device - the kind of capture, which sets the level widths.
+ * @returns the smallest level that is at least as wide as `needed`, or the full size when none is.
+ */
+export function levelFor(needed: number, device: Device): Level {
+  const widths = LEVEL_WIDTHS[device]
+  return needed <= widths[0] ? 1 : needed <= widths[1] ? 2 : 3
+}
 
 /**
  * The address of one level of a picture.
@@ -50,11 +62,12 @@ export type AtlasLayout = keyof typeof LOD_ATLASES
  * The address of a mosaic atlas.
  * @param layout - the layout.
  * @param look - the look.
+ * @param mode - the colour scheme.
  * @param format - the format.
  * @returns the address.
  */
-export function atlasUrl(layout: AtlasLayout, look: keyof (typeof LOD_ATLASES)[AtlasLayout]['looks'], format: Format): string {
-  return `/lod/atlas-${layout}-${look}.${LOD_ATLASES[layout].looks[look]}.${format}`
+export function atlasUrl(layout: AtlasLayout, look: PlanLook, mode: PlanMode, format: Format): string {
+  return `/lod/atlas-${layout}-${look}-${mode}.${LOD_ATLASES[layout].looks[look][mode]}.${format}`
 }
 
 /**

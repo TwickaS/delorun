@@ -41,13 +41,13 @@ export interface Layout {
 }
 
 /** The computer layout: the mark on the right, the words on the left; the pinned chat sits in the hole beside the plug. */
-export const WIDE: Layout = { cols: 28, rows: 26, centre: [19.5, 13], height: 19, pin: { col: 17, row: 12, id: 'handoff-dark' } }
+export const WIDE: Layout = { cols: 40, rows: 36, centre: [27.5, 18], height: 26, pin: { col: 24, row: 17, id: 'handoff-dark' } }
 
 /**
- * The phone layout: fewer, larger cells, the mark centred in the top 15 rows. The rows below sit under the words once the
+ * The phone layout: the mark centred in the top 24 rows. The rows below sit under the words once the
  * mark has formed, and keep the screen filled while the wall pulls back.
  */
-export const NARROW: Layout = { cols: 10, rows: 34, centre: [5, 7.5], height: 12, pin: { col: 3, row: 7, id: 'handoff-dark' } }
+export const NARROW: Layout = { cols: 16, rows: 54, centre: [8, 12], height: 19, pin: { col: 5, row: 11, id: 'handoff-dark' } }
 
 /** The nut's corners in the mark's 32-unit box, read from the brand path, and the hole's and plug's radii. */
 const HEX: readonly (readonly [number, number])[] = [[16, 2.5], [27.7, 9.25], [27.7, 22.75], [16, 29.5], [4.3, 22.75], [4.3, 9.25]]
@@ -107,16 +107,27 @@ export function livingFrames(look: string): readonly Shot[] {
   return frames[0] === undefined ? [] : frames.filter((shot): shot is Shot => shot !== undefined)
 }
 
-/** How a cell's share of each part sets the lightness the cell should have. */
-const LIGHTNESS: Readonly<Record<Part, number>> = { nut: 96, plug: 90, hole: 6, out: 6 }
+/** The colour scheme a plan is made for: the page's `light` or `dark` look. */
+export type Mode = 'light' | 'dark'
+
+/**
+ * How a cell's share of each part sets the lightness the cell should have. In the dark look the nut is light on a dark
+ * ground; in the light look it is dark on the cream ground, with the hole and the ground washed light, so the hexagon
+ * reads in both. A cell that straddles an edge takes the share-weighted mix, which grades the outline.
+ */
+const LIGHTNESS: Readonly<Record<Mode, Readonly<Record<Part, number>>>> = {
+  dark: { nut: 96, plug: 90, hole: 6, out: 6 },
+  light: { nut: 8, plug: 90, hole: 96, out: 96 },
+}
 
 /**
  * Lays out the mosaic.
  * @param layout - the grid and where the mark sits.
  * @param look - the page's look, whose pictures the match prefers outside the plug.
+ * @param mode - the colour scheme the plan is for.
  * @returns the cells, row by row, and the living tile's cell.
  */
-export function mosaic(layout: Layout, look: string): Plan {
+export function mosaic(layout: Layout, look: string, mode: Mode): Plan {
   const { cols, rows, centre, height, pin } = layout
   // A cell is 16:10; the mark's units are square on screen, so a row is `height / NUT_HEIGHT` of the nut per unit.
   const unitsPerRow = NUT_HEIGHT / height
@@ -136,7 +147,7 @@ export function mosaic(layout: Layout, look: string): Plan {
         }
       }
       const part = (Object.keys(share) as Part[]).reduce((best, each) => share[each] > share[best] ? each : best, 'out')
-      const lightness = (Object.keys(share) as Part[]).reduce((sum, each) => sum + share[each] * LIGHTNESS[each], 0)
+      const lightness = (Object.keys(share) as Part[]).reduce((sum, each) => sum + share[each] * LIGHTNESS[mode][each], 0)
       // Scarce pictures go first: the plug, then the nut, then the dark cells.
       const order = part === 'plug' ? 0 : part === 'nut' ? 1 : 2
       targets.push({ col, row, part, lightness, order })

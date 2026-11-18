@@ -11,6 +11,7 @@ import { useEffect, useRef } from 'react'
 import { getLook, setLook, useLook } from '@design/look-store.ts'
 import { KNOWN_LOOKS, lookName, type LookId } from '@design/looks.ts'
 import { enqueue, lastQueued, useEffects, type EffectRun } from './effects.ts'
+import { EASE, MS } from './motion.ts'
 import { canRetile, retile } from './retile.ts'
 import s from './home.module.css'
 
@@ -18,7 +19,7 @@ import s from './home.module.css'
 const CYCLE: readonly LookId[] = KNOWN_LOOKS.filter(id => id !== 'custom')
 
 /** How long one look change spreads at normal speed, in milliseconds. */
-const SPREAD = 700
+const SPREAD = MS.scene
 
 /** A document that may offer view transitions. */
 type TransitionDocument = Document & { startViewTransition?: (update: () => void) => { ready: Promise<void>; finished: Promise<void>; skipTransition: () => void } }
@@ -51,7 +52,7 @@ async function spread(look: LookId, from: HTMLElement | null, run: EffectRun): P
   await transition.ready
   run.track(document.documentElement.animate(
     still ? { opacity: [0, 1] } : { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
-    { duration: still ? 200 : SPREAD, easing: 'cubic-bezier(0.23, 1, 0.32, 1)', pseudoElement: '::view-transition-new(root)' },
+    { duration: still ? MS.quick : SPREAD, easing: EASE, pseudoElement: '::view-transition-new(root)' },
   ))
   await transition.finished
 }

@@ -5,7 +5,7 @@
  * @module @delorun/website/scripts/weight
  */
 import { brotliCompressSync } from 'node:zlib'
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
 /** One kilobyte, as the plan counts it. */
@@ -43,6 +43,30 @@ export interface Weights {
 const FONT_FILES = /(?:schibsted-grotesk|jetbrains-mono)[^/]*\.woff2$/
 
 const brotli = (path: string): number => brotliCompressSync(readFileSync(path)).length
+
+/** The picture files of a built site, in bytes: all of them, and those the prerendered home page names itself. */
+export interface PictureBytes {
+  /** Every file in `lod/`. */
+  readonly total: number
+  /** The files `index.html` names: the first screen's atlases and placeholders, as the visitor's browser would pick one format. */
+  readonly named: number
+  readonly files: number
+}
+
+/**
+ * Measures the pictures of a built site. They are reported, not limited: a picture's weight is a design choice, and the
+ * phone's largest paint is what the speed rule bounds.
+ * @param out - the built `out/` directory.
+ * @returns the sizes, uncompressed (the files are already compressed images).
+ */
+export function pictureBytes(out: string): PictureBytes {
+  const dir = join(out, 'lod')
+  const files = existsSync(dir) ? readdirSync(dir) : []
+  const size = (file: string): number => statSync(join(dir, file)).size
+  const html = existsSync(join(out, 'index.html')) ? readFileSync(join(out, 'index.html'), 'utf8') : ''
+  const named = new Set([...html.matchAll(/\/lod\/([\w.-]+\.(?:avif|webp))/g)].map(match => match[1] ?? ''))
+  return { total: files.reduce((sum, file) => sum + size(file), 0), named: [...named].filter(file => files.includes(file)).reduce((sum, file) => sum + size(file), 0), files: files.length }
+}
 
 /**
  * Measures a built site.

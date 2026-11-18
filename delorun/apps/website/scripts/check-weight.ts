@@ -5,7 +5,7 @@
  *
  * @module @delorun/website/scripts/check-weight
  */
-import { failures, LIMITS, measure } from './weight.ts'
+import { failures, LIMITS, measure, pictureBytes } from './weight.ts'
 
 const weights = measure(process.argv[2] ?? 'out')
 const kb = (bytes: number): string => `${(bytes / 1000).toFixed(1)} KB`
@@ -13,6 +13,8 @@ console.log(`weight: first screen ${kb(weights.firstScreen)} of ${kb(LIMITS.firs
 console.log(`weight: interactive script ${kb(weights.interactiveScript)} of ${kb(LIMITS.interactiveScript)}`)
 for (const chunk of weights.lazy) console.log(`weight: ${chunk.kind} chunk ${chunk.file} ${kb(chunk.bytes)}`)
 console.log(`weight: whole page ${kb(weights.wholePage)} of ${kb(LIMITS.wholePage)}`)
+const pictures = pictureBytes(process.argv[2] ?? 'out')
+console.log(`weight: pictures ${String(pictures.files)} files, ${kb(pictures.total)} in all, ${kb(pictures.named)} named by the home page (reported, not limited)`)
 const broken = failures(weights)
 for (const message of broken) console.error(`weight: ${message}`)
 process.exitCode = broken.length === 0 ? 0 : 1

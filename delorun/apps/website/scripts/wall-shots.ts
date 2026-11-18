@@ -15,14 +15,15 @@
  * order.
  *
  * With an owner inbox folder as the second argument, the vetted entries of its `manifest.json` (vetted, with a screen, a
- * theme and a caption) join the candidates; every other entry is ignored. Their pictures are copied into `pictures/`.
+ * theme and a caption) join the candidates; every other entry is ignored. Every picked picture, captured or owner's, is written into `pictures/` as WebP.
  *
  * Usage: `node scripts/wall-shots.ts <source folder> [owner inbox folder]`
  *
  * @module @delorun/website/scripts/wall-shots
  */
-import { copyFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { extname, join } from 'node:path'
+import { execFileSync } from 'node:child_process'
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { measure, type Colour } from './colour.ts'
 
 /** One manifest entry, as the capture lane writes it. */
@@ -61,6 +62,9 @@ interface Candidate extends Entry {
 
 /** Screens left out: an empty list, and a first-run step that shows a warning only a source build gives. */
 const LEFT_OUT = new Set(['settings-changes', 'onboarding-step-4'])
+
+/** The WebP quality of a source picture in `pictures/`. */
+const SOURCE_QUALITY = 95
 
 /** How many pictures each screen gets on the wall, besides the plug's peach pictures. */
 const QUOTA: Readonly<Record<string, number>> = {
@@ -139,7 +143,7 @@ const candidates: Candidate[] = entries
   .filter(entry => !LEFT_OUT.has(entry.screen))
   .sort((p, q) => p.file.localeCompare(q.file))
   .map(entry => {
-    const device = entry.width < 800 ? 'phone' : 'computer'
+    const device = entry.width < 1000 ? 'phone' : 'computer'
     return { ...entry, id: entry.id ?? entry.file.replace(/\.png$/, ''), device, colour: measure(entry.path ?? join(source, entry.file), device === 'phone') }
   })
 console.log(`measured ${candidates.length} candidates`)
@@ -199,9 +203,12 @@ while (rest.length > 0) {
   rest.splice(rest.indexOf(next), 1)
 }
 
-// Vetted owner pictures join the sources `lod.ts` reads.
+// Each picked picture becomes a source `lod.ts` reads: the capture re-encoded as WebP at high quality, at its own size,
+// which keeps the repository's copy a fraction of the PNG's.
 mkdirSync(sources, { recursive: true })
-for (const each of order) if (each.path !== undefined) copyFileSync(each.path, join(sources, `${each.id}${extname(each.path)}`))
+for (const each of order) {
+  execFileSync('ffmpeg', ['-loglevel', 'error', '-y', '-i', each.path ?? join(source, each.file), '-c:v', 'libwebp', '-quality', String(SOURCE_QUALITY), '-compression_level', '6', join(sources, `${each.id}.webp`)])
+}
 
 /**
  * The look's name as the lightbox's plate shows it.

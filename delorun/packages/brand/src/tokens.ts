@@ -42,8 +42,8 @@ export const BRAND_SPACE = [4, 8, 12, 16, 24, 32] as const
 export const BRAND_MOTION = {
   /** The easing curves: `out` for arrivals, `inOut` for movement across the screen, `plain` for colour. There is no ease-in. */
   easing: { out: 'cubic-bezier(0.23, 1, 0.32, 1)', inOut: 'cubic-bezier(0.77, 0, 0.175, 1)', plain: 'ease' },
-  /** The durations: a press, a tab or tile change, a movement across the screen, the one explanatory movement, and leaving. */
-  durations: { press: 120, quick: 180, move: 260, explain: 360, leave: 100 },
+  /** The durations: a press, a tab or tile change, a movement across the screen, the theme change, a scene (an explanatory zoom or re-tile on a marketing page), and leaving. */
+  durations: { press: 120, quick: 180, move: 260, explain: 360, scene: 760, leave: 100 },
   /** The scale of a pressed control, and the scale things arrive from. */
   scale: { pressed: 0.97, enter: 0.95 },
 } as const

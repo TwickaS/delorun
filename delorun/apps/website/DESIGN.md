@@ -1,86 +1,50 @@
 # Design direction
 
-The site's design brief, copied from the marketing site plan (rulings MS1 to MS21, 2026-11-17) so every lane and every review works from the same page. The plan holds the rulings and the reasons; a change to the direction is made there first and copied here.
+The home page is prototype B, chosen by the owner (L71): a wall of real studio screenshots that forms the Delorun mark, a zoom into one real job, and the case for people who take their tools apart. The decisions are L57 to L80 in the plan's decisions file; this page records what the code draws and keeps.
 
 ## The idea
 
-Three ideas were weighed, each taken from a different part of what Delorun is, and the owner chose the first (MS11).
+The first thing a visitor sees is the product, in many looks, laid out as the hexagon of the mark with the promise beside it: "Bring your own everything." Scrolling zooms into one chat in the mark's hole; that chat is the first picture of the film, which tells one real job in five screenshots. Below it are the reasons, a wall of every screenshot, and the install command again.
 
-| | A. The page is a setup | B. Everything is a change under review | C. Socket and plug |
-| --- | --- | --- | --- |
-| Idea | The page behaves as Delorun does: the visitor changes it, each change is written as the entry Delorun would write and listed as a version, and the visitor can go back. | The page reads as a change being reviewed: sections arrive as added lines, and the visitor applies or discards them. | The hex mark is the page's structure: sections plug into a rail. |
-| Depends on | Delorun writes every settings change into `cordis.patch.yml` and keeps a version you can switch back to. | `delorun changes` shows a change as files and a diff. | The mark is a hex socket with a plug, and the harness is made of plugins. |
-
-From C the page takes its motion (things seat like a plug and come out the same way) and the 404 (the mark with its plug out). From B it takes the way a replay's chapters are captioned.
-
-| | |
-| --- | --- |
-| Idea | This page is a setup. Change it, see what Delorun would write, go back. |
-| Borrowed rules | Delorun's own: a settings change writes an entry, an entry makes a version, and going back is one more change. |
-| Signature | The setup strip in "Make it yours". |
-| First three seconds | "I can touch this, and nothing breaks." |
-| How things move | They seat, like a plug going in: a short travel and a settle. Going back is the same movement backwards. |
-| The frame people share | The page in Ocean beside the `delorun-theme` entry reading `palette: ocean`, and a list reading "Changed the settings of Theme". |
-
-The idea holds beyond the strip. In the header the theme control is the strip's control. In the footer the last line offers "Back to how it started". The docs open in the look the visitor chose (MS19). The 404 is the mark with nothing plugged in.
+Every picture is a real screenshot of the Delorun studio, scaled and never retouched. The only treatment is a tint over mosaic tiles at wall level; the lightbox always shows the untouched picture.
 
 ## Look
 
-The brand is settled (A374) and is not redesigned here. The roles the page uses:
-
-| Role | Value | Used for |
+| Role | Token | Used for |
 | --- | --- | --- |
-| Ground | the theme's surface (Soft: warm stone, near white in light and `#111110` in dark) | The page |
-| Ink | the theme's text colour | Headlines and body |
-| Muted | the theme's quiet text, AA on ground | Captions, notes, the platform line |
-| Line | the theme's border colour | Hairlines between sections, frames around the replica |
-| Accent | the chosen theme's accent | Three things only: the main button, the focus ring, and the marker on the current version |
-| Text-safe accent | computed per theme at build time | Links, and text on an accent fill |
-| The mark | peach `#E5734A`, always | Header, footer, 404, favicon. It does not change with the theme (A374). |
+| Page | `--dl-surface` | The header and the sections around the stage |
+| Stage | `--dl-stage`, `--dl-stage-text`, `--dl-stage-muted`, `--dl-stage-line` | The ground the screenshots hang on: near black in dark, warm paper in light |
+| Plate | `--dl-plate`, `--dl-plate-text`, `--dl-plate-muted`, `--dl-plate-accent` | The lightbox's caption plate, a paper label in both schemes |
+| Accent | `--dl-accent` | The main button, the focus ring, the lit target of the zoom, and the mark's peach plug |
+| Type | `--dl-font-sans`, `--dl-font-mono` | Schibsted Grotesk at weight 800 for the headline, JetBrains Mono only for data (commands, the status readout, times) |
 
-Warm stone with a peach accent sits close to a look that generated sites reach for by habit. Three things keep the page out of it: the type is a grotesk with no serif anywhere, the accent appears in three places, and the palette is not fixed, since changing it is the point of the page.
+The page draws only with `@delorun/brand` tokens and components. The stage and plate tokens and the `scene` duration were added to the library for this page.
 
-- **Type.** Schibsted Grotesk carries headlines and text. JetBrains Mono is used only for real data: commands, the entry, file names. It is not used for labels. Headline sizes are fluid with a large step between headline and body, tracking between -0.02 and -0.04em set per size, leading 0.95 to 1.05, lines balanced, the first glyph aligned to the grid by eye. Body is 16 to 18 px with 1.5 leading and a measure of 45 to 70 characters. Small text is 13 to 14 px. Numbers are tabular; quotes and apostrophes are typographic.
-- **Grid.** Twelve columns on a wide screen, four on a phone, with the outer margin equal to the gutter. Text hangs from three lines (columns 1, 5 and 9) down the whole page. Section spacing has three sizes, chosen per section.
-- **Shape.** One rule: frames and cards use the 12 px radius, controls 8 px, small marks 4 px.
-- **States.** Every control has hover, focus-visible and pressed states that belong to the system. Selection colour, focus ring, favicon and the link-preview image are designed, not defaults.
+## The mark
 
-## Layout of each section
+The hexagon is a photomosaic: a grid of 16:10 screenshot tiles in which each cell takes the picture whose measured lightness is closest to what the cell needs. A cell that straddles the hexagon's edge takes the share-weighted mix, so the outline is graded and reads at any size. In the dark scheme the nut is light on a dark ground; in the light scheme it is dark on the cream ground, so the hexagon reads in both. The plug takes the pictures with the most peach in them. No picture sits next to itself, diagonals included.
 
-Each section uses a different arrangement. Every section must look finished with scripts off.
+`scripts/mosaic-plans.ts` runs the match once for each look, scheme and layout; `scripts/lod.ts` composes each plan into one atlas picture, which is the first paint. The tiles are transparent buttons over it.
 
-| Section | Arrangement | Phone (390 px) |
-| --- | --- | --- |
-| Hero | A split: the statement, the install command and the disabled desktop button on columns 1 to 5, the studio replica on 6 to 12 | The statement, the command, the desktop button, then the replica at phone width |
-| Five claims | Full-width rows, a number and one sentence, each row a link | The same rows |
-| Make it yours | The signature: controls on the left third, the entry and the versions on the right | Theme tiles in a row that scrolls sideways and snaps; the entry beneath |
-| Plugin browser | A list on columns 1 to 4 and the chosen plugin's detail on 5 to 12 | The list; the detail opens beneath the chosen row |
-| Replays | The replica edge to edge with a rail of chapters under it | The replica at phone width; chapters as a snapping row |
-| Phone beside desktop | The replica at desktop width on eight columns and at phone width on three, offset vertically | The phone-width one first, the wide one in a sideways-scrolling frame |
-| What's new | Dates and headlines as a plain list set large | The same |
-| Footer | A closing composition: the install command again at headline size, "Back to how it started", then the links | The same, stacked |
+## Pictures
 
-Phone layouts are composed, not shrunk. Nothing on a phone depends on hover, nothing overflows sideways, tap targets are at least 24 px and 44 px for the main actions.
+Pictures are built, not served from a resizer. `pictures/` holds the sources (written by `scripts/wall-shots.ts` from the capture folder, and by `scripts/ingest-owner-shots.ts` for the owner's own, which join only when vetted). `scripts/lod.ts` makes four levels of each, as AVIF with a WebP fallback, into `public/lod/`: L0 the mosaic atlas, L1 about 96 px for a mosaic tile, L2 about 480 px for the zoom and the wall, L3 the capture's own size for the lightbox. File names carry a hash of what they are made from, and `public/_headers` caches them as immutable. The page picks a level from each tile's size on screen times the device pixel ratio and loads only what is near the viewport or the zoom's target. Picture bytes are reported by `scripts/page-weight.ts`, not budgeted; the first screen's code, fonts and HTML are, by `scripts/weight.ts`.
 
-## Motion and feedback
+## Motion
 
-The page has no loader, no WebGL, no smooth-scroll library, no scroll-jacking and no custom cursor.
+- The zoom, the re-tile and the lightbox's grow are scenes: explanatory moments that may run longer than a control (`--dl-motion-scene`, 760 ms). Everything in the interface stays inside the brand's other durations.
+- Presses shrink to 0.97. Hover effects apply only with a real pointer. Only transform, opacity and clip-path move.
+- Theme changes and other page effects go through one queue (`src/home/effects.ts`): each plays in full and in order, the queue holds five, later ones replace the last waiting one and everything plays faster while some wait. The header's readout shows what runs and what waits.
+- Reduced motion: the page opens on the formed mark, the film shows each chapter's wide shot with no push, and the zoom does not run. Nothing hides text.
 
-- **Animate only for a reason.** Each movement explains something, confirms a press, or stops a jarring change. Controls pressed many times in a visit (theme tiles, tabs, chapters) respond almost at once; rare moments may take longer.
-- **Timing.** Presses 100 to 160 ms. Tabs, tiles and menus 150 to 250 ms. Nothing in the interface over 300 ms. The theme change is the one explanatory movement and may run 300 to 400 ms. Leaving is quicker than arriving.
-- **Easing.** One family. Things arriving use a strong ease-out; things moving across the screen use ease-in-out; colour changes use ease. Nothing uses ease-in.
-- **What moves.** Only transform, opacity and clip-path. Transitions, not keyframes, for anything a visitor can interrupt.
-- **The signature movement.** The new colours spread from the tile that was pressed (the View Transitions interface, in current Chrome, Safari and Firefox); elsewhere, and under reduced motion, the colours change in place. The entry and the version seat with a short travel and a settle, 30 to 80 ms apart.
-- **Presses.** Buttons shrink to 0.97 while pressed. Things arrive from 0.95 scale with opacity, never from nothing. Hover effects apply only where there is a real pointer.
-- **Reduced motion.** Fewer and gentler: colour and opacity changes stay, movement goes, replays show their chapters as still states with captions, and no text is ever hidden.
-- **Unseen details.** A replay pauses when it leaves the screen or the tab is hidden. The copy button answers in place ("Copied"). The sign-up form answers in place and announces errors. Movements are reviewed in slow motion, on a later day, and on a real phone.
+## Without scripts
 
-**Toasts.** One toast, for one case: the look was changed away from the strip (the header's control, on either site). It says what changed ("Theme changed to Ocean") and offers the way back by name ("Back to Soft"). A change made in the strip is announced by the strip's own live region, because the way back is already beside it. A new change replaces the last toast; the toast stays while it has focus or the pointer, is reachable by keyboard, and leaves by swipe on a phone. It is a `Toast` in the design library with the library's look, drawn through Sonner (9.4 KB compressed, MIT) on the two sites, since the sites' stand-in for upstream has no toast.
+The prerendered page holds the atlas still in the hero, the headline, the paragraph and every install command; the film shows its first picture; the wall and the sign-up form are present. The scripted parts of the install block are replaced by plain commands.
 
 ## What the page avoids
 
-A centred hero over a gradient; three equal feature cards; purple or blue glows; glass effects; a small capital label over every heading; mono type for every label; an arrow after every link; fade-up on every section; a second idea competing with the signature. The five claims keep their numbers because the owner chose that form (MS1); nothing else is numbered unless it is a real sequence.
+A centred hero over a gradient; three equal feature cards; purple or blue glows; glass effects; a small capital label over every heading; mono type for every label; an arrow after every link; fade-up on every section; a count that is not shown on the page.
 
 ## Words
 
-Agents draft; the owner rewrites (ST54). Sentence case. Concrete nouns and verbs. No sentence appears twice on the page. One name for each action everywhere. No em or en dashes in the page's visible text. Words fit the device ("press", not "hover", on a phone). Numbers only when true, and no count of providers.
+English only, British spelling, sentence case. Concrete nouns and verbs. No dashes in visible text. No invented numbers, users or quotes: a count appears only where the page shows what it counts.

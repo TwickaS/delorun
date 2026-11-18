@@ -6,7 +6,7 @@
  *
  * @module @delorun/website/home/tile-lod
  */
-import { LEVEL_WIDTHS, load, lodUrl, preferredFormat, type Level } from './pictures.ts'
+import { levelFor, load, lodUrl, preferredFormat } from './pictures.ts'
 import s from './home.module.css'
 
 /** How long a new layer takes to fade in, in milliseconds; matches `.tileLayer`'s transition. */
@@ -21,8 +21,7 @@ const FADE = 220
 export function upgradeTile(button: HTMLElement, needed: number, atlasCell: number): void {
   const id = button.dataset['shot']
   if (id === undefined || needed <= atlasCell) return
-  const widths = LEVEL_WIDTHS[button.dataset['device'] === 'phone' ? 'phone' : 'computer']
-  const level: Level = needed <= widths[0] ? 1 : needed <= widths[1] ? 2 : 3
+  const level = levelFor(needed, button.dataset['device'] === 'phone' ? 'phone' : 'computer')
   const shown = button.dataset['levelFor'] === id ? Number(button.dataset['level'] ?? 0) : 0
   const asked = button.dataset['askedFor'] === id ? Number(button.dataset['asked'] ?? 0) : 0
   if (level <= Math.max(shown, asked)) return

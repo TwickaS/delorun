@@ -77,7 +77,6 @@ export const forkUnitProject = {
 
 /** The client component project: `*.spec.tsx` specs in jsdom, upstream packages resolved to their sources. */
 export const forkClientProject = {
-  resolve: { alias: [...STUDIO_ALIASES] },
   plugins: [tsconfigPaths({ projects: [fileURLToPath(new URL('../tsconfig.base.json', import.meta.url))] })],
   test: {
     name: 'fork-client',
