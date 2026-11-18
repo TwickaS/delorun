@@ -9,7 +9,8 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button, IconWarningOutlineRegular, Input, Modal, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconWarningOutlineRegular, Modal, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
+import { CodeCells } from '@delorun/brand'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { PAIRING_WRONG_CODES } from '@delorun/home-auth/wire'
 import type { PendingDevice } from './devices-api.ts'
@@ -20,6 +21,9 @@ import css from './PairingNotice.module.css'
 
 /** Full-opacity hold of the notice: a sentence and two actions to read. */
 const NOTICE_HOLD_MS = 20000
+
+/** The digits of a pairing code. */
+const CODE_LENGTH = 8
 
 /** The error code of a wrong match code. */
 const CODE_MISMATCH = 'APPROVAL_CODE_MISMATCH'
@@ -138,18 +142,17 @@ export function CodeBox({ t, request, onClose, onDecline, onApprove }: {
     if (sentence !== undefined) { setFailure(sentence); setTyped('') }
   }
   const change = (value: string): void => {
-    const digits = codeDigits(value).replace(/\D/g, '').slice(0, 8)
+    const digits = codeDigits(value).replace(/\D/g, '').slice(0, CODE_LENGTH)
     setTyped(digits)
-    if (digits.length === 8 && !busy) void submit(digits)
+    if (digits.length === CODE_LENGTH && !busy) void submit(digits)
   }
   return <Modal open onClose={onClose} title={t('pairing.box.title')} closeLabel={t('pairing.box.close')}
     footer={<Button variant="outline" disabled={busy} onClick={() => { void onDecline() }}>{t('pairing.box.decline')}</Button>}>
     <p className={css.who}>{t('pairing.box.user', { user: userOf(t, request) })}</p>
     <p className={css.device}>{t('pairing.box.device', { label: request.label, platform: request.platform })}</p>
     <p className={css.explain}>{t('pairing.box.explain', { label: request.label })}</p>
-    <Input className={css.code as string} value={typed} inputMode="numeric" autoComplete="off" data-modal-autofocus
-      aria-label={t('pairing.box.code')} placeholder={t('pairing.box.placeholder')} readOnly={busy}
-      onChange={(event) => { change(event.target.value) }} />
+    <CodeCells label={t('pairing.box.code')} length={CODE_LENGTH} value={typed} onChange={change} autoComplete="one-time-code" disabled={busy}
+      inputProps={{ 'data-modal-autofocus': true }} />
     {busy ? <p className={css.line} role="status">{t('pairing.box.checking')}</p> : null}
     {request.wrongCodes > 0
       ? <p className={css.failed} role="alert">{t('pairing.box.wrong', { count: String(request.wrongCodes), max: String(PAIRING_WRONG_CODES) })}</p>

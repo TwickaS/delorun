@@ -5,17 +5,20 @@
  * this component's state until it is sent and is cleared whatever the answer; it is never stored or logged.
  */
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
-import { TextField } from '@delorun/brand'
+import { CodeCells, TextField } from '@delorun/brand'
 import { failureSentence, LOOPBACK_REQUIRED } from '@delorun/bundle-local/host-api'
 import { readPinMode, setPinMode, type PinMode } from '@delorun/bundle-local/pin-api'
 import { secretPairProblem, secretProblem } from '@delorun/bundle-local/pin-rules'
-import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent, ReactNode } from 'react'
 import type { StepServices } from '../types.ts'
 import { StateLine } from '../ui/StateLine.tsx'
 import type { StepProps } from './shared.ts'
 import css from './steps.module.css'
 import pinCss from './pin.module.css'
+
+/** The fewest digits of a PIN, which is how many cells the entry always shows. */
+const MIN_PIN_DIGITS = 6
 
 /** Where the read of PIN mode stands. */
 type Reading = { readonly kind: 'loading' } | { readonly kind: 'ready'; readonly mode: PinMode | undefined } | { readonly kind: 'failed'; readonly text: string }
@@ -103,38 +106,6 @@ function Choices({ t, choice, onChoice }: { readonly t: StepServices['t']; reado
           </span>
         </button>
       ))}
-    </div>
-  )
-}
-
-/** How many digits the segmented entry always shows, the fewest a PIN has. */
-const MIN_CELLS = 6
-
-/**
- * A PIN as segmented digits over one masked field, so the browser, keyboard and screen readers see one input.
- * @param props - the label, the value and its handler.
- * @returns the entry.
- */
-function Segmented({ label, value, onChange, disabled, invalid }: {
-  readonly label: string
-  readonly value: string
-  readonly onChange: (next: string) => void
-  readonly disabled: boolean
-  readonly invalid: boolean
-}): ReactNode {
-  const id = useId()
-  const digits = [...value].length
-  return (
-    <div className={pinCss.entry}>
-      <label htmlFor={id} className={pinCss.entryLabel}>{label}</label>
-      <div className={pinCss.segments} data-invalid={invalid ? '' : undefined}>
-        {Array.from({ length: Math.max(MIN_CELLS, digits) }, (_, index) => (
-          <span key={index} className={pinCss.cell} data-filled={index < digits ? '' : undefined} data-next={index === digits ? '' : undefined} aria-hidden="true" />
-        ))}
-        <input id={id} className={pinCss.field} type="password" inputMode="numeric" autoComplete="new-password" spellCheck={false}
-          autoCapitalize="off" disabled={disabled} aria-invalid={invalid ? true : undefined} value={value}
-          onChange={(event) => { onChange(event.target.value.replace(/\D/gu, '')) }} />
-      </div>
     </div>
   )
 }
@@ -298,8 +269,8 @@ export function PinStep({ services, guide }: StepProps): ReactNode {
                 </>
               ) : (
                 <>
-                  <Segmented label={t('pin.setup.pinLabel')} value={secret} onChange={setSecret} disabled={busy} invalid={false} />
-                  <Segmented label={t('pin.setup.confirm')} value={again} onChange={setAgain} disabled={busy} invalid={invalid} />
+                  <CodeCells showLabel label={t('pin.setup.pinLabel')} length={MIN_PIN_DIGITS} open mask value={secret} onChange={setSecret} disabled={busy} autoComplete="new-password" />
+                  <CodeCells showLabel label={t('pin.setup.confirm')} length={MIN_PIN_DIGITS} open mask value={again} onChange={setAgain} disabled={busy} error={invalid} autoComplete="new-password" />
                   {problem !== undefined && <p className={pinCss.problem} role="alert">{problem}</p>}
                 </>
               )}

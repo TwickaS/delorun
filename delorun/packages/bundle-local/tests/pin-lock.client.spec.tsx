@@ -229,38 +229,38 @@ describe('the lock screen on a device', () => {
     expect(field.value).toBe('1234')
   })
 
-  it('fills one dot per digit typed and never writes a digit into the dots', async () => {
+  it('fills one cell per digit typed and never writes a digit into the masked cells', async () => {
     // Fails without: the dots, which count digits and must not carry their value in text or attributes.
     const { source } = await open({ [key(PIN_ROUTES.state, 'GET')]: stateOn() })
     source.ask()
     const { container } = render(<PinLock t={t} usePin={bindSnapshotSelector(source.hooks.pin)} unlock={async () => {}} dismiss={() => {}} />)
-    const dots = container.querySelector('[data-dots]') as HTMLElement
+    const dots = container.querySelector('[data-cells]') as HTMLElement
     expect(dots.children).toHaveLength(6)
-    expect(dots.getAttribute('data-dots')).toBe('0')
+    expect(dots.getAttribute('data-cells')).toBe('0')
     for (const digit of '8420') fireEvent.click(screen.getByRole('button', { name: digit }))
-    expect(dots.getAttribute('data-dots')).toBe('4')
+    expect(dots.getAttribute('data-cells')).toBe('4')
     expect(dots.textContent).toBe('')
     expect(dots.outerHTML).not.toContain('8420')
     expect(dots.getAttribute('aria-hidden')).toBe('true')
     for (const digit of '17935') fireEvent.click(screen.getByRole('button', { name: digit }))
     expect(dots.children).toHaveLength(9)
     fireEvent.click(screen.getByRole('button', { name: 'Delete the last digit' }))
-    expect(dots.getAttribute('data-dots')).toBe('8')
+    expect(dots.getAttribute('data-cells')).toBe('8')
   })
 
-  it('shakes the dots on a wrong PIN and says the tries left, unless the person asked for less motion', () => {
+  it('shakes the cells on a wrong PIN and says the tries left, unless the person asked for less motion', () => {
     // Fails without: the shake on a wrong answer, or its removal under prefers-reduced-motion.
     const view = { phase: 'locked', secret: 'pin', busy: false, outcome: { kind: 'wrong', triesLeft: 3 }, paused: false, asked: true } as const
     const usePin = ((select: (current: typeof view) => unknown) => select(view)) as never
     const matchMedia = (reduce: boolean) => vi.fn((query: string) => ({ matches: query.includes('reduce') ? reduce : false }))
     vi.stubGlobal('matchMedia', matchMedia(false))
     const first = render(<PinLock t={t} usePin={usePin} unlock={async () => {}} dismiss={() => {}} />)
-    expect(first.container.querySelector('[data-dots]')?.hasAttribute('data-shake')).toBe(true)
+    expect(first.container.querySelector('[data-cells]')?.hasAttribute('data-shake')).toBe(true)
     expect(screen.getByRole('alert').textContent).toBe(en['wrong.other'].replace('{count}', '3'))
     first.unmount()
     vi.stubGlobal('matchMedia', matchMedia(true))
     const second = render(<PinLock t={t} usePin={usePin} unlock={async () => {}} dismiss={() => {}} />)
-    expect(second.container.querySelector('[data-dots]')?.hasAttribute('data-shake')).toBe(false)
+    expect(second.container.querySelector('[data-cells]')?.hasAttribute('data-shake')).toBe(false)
     expect(screen.getByRole('alert').textContent).toContain('3 tries left')
     vi.unstubAllGlobals()
   })

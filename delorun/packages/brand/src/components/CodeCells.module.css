@@ -1,0 +1,103 @@
+/* The entry measures its own width: the cells, the digits and the gaps scale with it, up to a width a desktop page can hold. */
+.root {
+  container-type: inline-size;
+  width: 100%;
+  max-width: 40rem;
+  margin-inline: auto;
+  font-family: var(--dl-font-sans);
+}
+
+.label { display: block; margin-bottom: var(--dl-space-2); color: var(--dl-text); font-size: 13px; font-weight: 500; line-height: 20px; }
+
+.group { position: relative; }
+
+.cells {
+  display: grid;
+  grid-template-columns: repeat(var(--cells), minmax(0, 1fr));
+  gap: clamp(6px, 2.4cqw, 16px);
+}
+
+.cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  aspect-ratio: 1 / 1.15;
+  max-height: 7.5rem;
+  border: 1px solid var(--dl-border);
+  border-radius: var(--dl-radius-md);
+  background: var(--dl-surface-raised);
+  color: var(--dl-text);
+  font-family: var(--dl-font-mono);
+  font-size: clamp(22px, calc(100cqw / var(--cells) * 0.46), 52px);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  transition: border-color var(--dl-motion), background-color var(--dl-motion), box-shadow var(--dl-motion);
+}
+
+.dot {
+  width: 0.42em;
+  height: 0.42em;
+  border-radius: 50%;
+  corner-shape: round;
+  background: var(--dl-text);
+}
+
+.cell[data-filled] { background: var(--dl-surface-sunken); }
+.cell[data-selected] { background: color-mix(in srgb, var(--dl-accent) 18%, var(--dl-surface-sunken)); }
+
+.cell[data-active] {
+  border-color: var(--dl-accent-text);
+  box-shadow: 0 0 0 1px var(--dl-accent-text);
+}
+
+/* The caret of the cell that takes the next character. */
+.cell[data-active]:not([data-filled])::after {
+  content: '';
+  width: 2px;
+  height: 46%;
+  border-radius: 1px;
+  background: var(--dl-accent-text);
+  animation: blink 1.1s steps(1) infinite;
+}
+
+.root[data-error] .cell { border-color: var(--dl-error); }
+.root[data-error] .cell[data-active] { box-shadow: 0 0 0 1px var(--dl-error); }
+.root[data-error] .dot { background: var(--dl-error); }
+.cells[data-shake] { animation: shake 360ms cubic-bezier(0.36, 0.07, 0.19, 0.97); }
+.root[data-disabled] .cell { opacity: 0.6; }
+
+/* The real input covers the cells: it takes the typing, the focus and the selection and draws nothing. Its text is
+   16px so iOS Safari does not zoom the page when it takes focus. */
+.input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: transparent;
+  caret-color: transparent;
+  font-size: 16px;
+  opacity: 0.01;
+  outline: none;
+  cursor: text;
+}
+
+@keyframes blink { 50% { opacity: 0; } }
+
+@keyframes shake {
+  10%, 90% { transform: translateX(-2px); }
+  20%, 80% { transform: translateX(4px); }
+  30%, 50%, 70% { transform: translateX(-7px); }
+  40%, 60% { transform: translateX(7px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cells[data-shake] { animation: none; }
+  .cell[data-active]:not([data-filled])::after { animation: none; }
+  .cell { transition: none; }
+}

@@ -15,8 +15,8 @@ describe('circular shapes', () => {
     expect(missing).toEqual([])
   })
 
-  it('covers the PIN dots and keypad', () => {
-    for (const file of ['PinDots.module.css', 'Keypad.module.css']) {
+  it('covers the PIN dots and the code cells mask dot', () => {
+    for (const file of ['PinDots.module.css', 'CodeCells.module.css']) {
       expect(readFileSync(new URL(file, directory), 'utf8')).toContain('corner-shape: round')
     }
   })

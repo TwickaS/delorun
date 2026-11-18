@@ -9,7 +9,8 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button, Input, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { CodeCells } from '@delorun/brand'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import {
   approveDevice, approveElevation, cancelPendingDevice, ELEVATION_POLL_MS, hostFailureOf, LOOPBACK_REQUIRED, openApprovalWindow,
@@ -102,6 +103,8 @@ export function approvalCode(typed: string): string {
 }
 
 /** Whether a typed code is the eight digits a device shows. */
+/** The digits of an approval code. */
+const CODE_LENGTH = 8
 const isCompleteCode = (typed: string): boolean => /^\d{8}$/.test(approvalCode(typed))
 
 /**
@@ -382,9 +385,7 @@ function PendingRow({ t, request, failure, onApprove, onCancel }: {
       {failure === undefined ? null : <div className={css.failed} role="alert">{failure}</div>}
     </div>
     <form className={css.approve} onSubmit={(event) => { event.preventDefault(); void submit() }}>
-      <Input className={css.code as string} value={typed} inputMode="numeric" autoComplete="off"
-        aria-label={t('pending.code', { label: request.label })} placeholder={t('pending.codePlaceholder')}
-        onChange={(event) => { setTyped(event.target.value) }} />
+      <div className={css.code}><CodeCells label={t('pending.code', { label: request.label })} length={CODE_LENGTH} value={typed} onChange={setTyped} autoComplete="one-time-code" disabled={busy} /></div>
       <Button variant="primary" size="sm" type="submit" disabled={busy || !isCompleteCode(typed)}>{t('pending.approve')}</Button>
       <Button size="sm" type="button" disabled={busy} onClick={() => { void run(onCancel) }}>{t('pending.cancel')}</Button>
     </form>
@@ -506,9 +507,7 @@ function UnlockRequestRow({ t, label, request, failure, onApprove, onDecline }: 
       {failure === undefined ? null : <div className={css.failed} role="alert">{failure}</div>}
     </div>
     <form className={css.approve} onSubmit={(event) => { event.preventDefault(); void run(() => onApprove(typed)) }}>
-      <Input className={css.code as string} value={typed} inputMode="numeric" autoComplete="off"
-        aria-label={t('unlock.requests.code', { label })} placeholder={t('pending.codePlaceholder')}
-        onChange={(event) => { setTyped(event.target.value) }} />
+      <div className={css.code}><CodeCells label={t('unlock.requests.code', { label })} length={CODE_LENGTH} value={typed} onChange={setTyped} autoComplete="one-time-code" disabled={busy} /></div>
       <Button variant="primary" size="sm" type="submit" disabled={busy || !isCompleteCode(typed)}>{t('unlock.requests.approve')}</Button>
       <Button size="sm" type="button" disabled={busy} onClick={() => { void run(onDecline) }}>{t('unlock.requests.decline')}</Button>
     </form>
