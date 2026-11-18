@@ -3,4 +3,4 @@ area: Studio
 section: Changed
 ---
 
-- In the sidebar, the Working group now sits at the bottom, below the chat list and the Snoozed and Settled groups. Keyboard and screen-reader order, and the Alt number jump, follow the same order.
+- In the sidebar, the Working group is pinned to the bottom edge, just above the footer, and is always in view while chats run. The chat list, Snoozed and Settled scroll above it; Working takes up to 40% of the sidebar, scrolls by itself when long and takes no space when nothing is running. Keyboard, screen-reader and Alt number-jump order follow the same order.

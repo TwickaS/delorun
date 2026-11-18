@@ -416,7 +416,9 @@ export function Sidebar(props: SidebarProps) {
   const newChatWorkspace = scopedWorkspaces.length === 1 ? scopedWorkspaces[0] : undefined
   const newChatLabel = newChatWorkspace === undefined ? t('chat.new') : t('chat.newIn', { name: newChatWorkspace.title })
 
-  const shelfOrder = (['snoozed', 'settled', 'working'] as const).filter(shelf => sections[shelf].length > 0)
+  // Working is not part of the scrolling list: it is pinned below it, so only these two shelves sit in the list.
+  const shelfOrder = (['snoozed', 'settled'] as const).filter(shelf => sections[shelf].length > 0)
+  const workingChats = sections.working
   const shelfRows = (shelf: Shelf): readonly SidebarChat[] => {
     const rows = sections[shelf]
     return shelf === 'settled' ? rows.slice(0, settledShown) : rows
@@ -427,6 +429,7 @@ export function Sidebar(props: SidebarProps) {
       ? folderList.flatMap(folder => (folderOpen(folder) ? folder.chats : []))
       : [...sections.pinned, ...sections.active],
     ...shelfOrder.flatMap(shelf => (shelves[shelf] ? shelfRows(shelf) : [])),
+    ...shelves.working ? workingChats : [],
   ], [folders, folderList, openFolders, sections, shelves, settledShown])
   const jumpTo = useRef(visible)
   jumpTo.current = visible
@@ -514,7 +517,7 @@ export function Sidebar(props: SidebarProps) {
       menuOpen: menuFor === chat.id,
       jumpLabel: jumpLabels.get(chat.id) ?? null,
       inFolder,
-      drag: canDrag && !inFolder
+      drag: canDrag && !inFolder && section !== 'working'
         ? {
           onPointerDown: drag.press(chat.id, section),
           dragging: dragged?.id === chat.id,
@@ -694,6 +697,15 @@ export function Sidebar(props: SidebarProps) {
               </HoverCardGroup>
             )}
         </div>
+        {workingChats.length > 0 && (
+          <HoverCardGroup className={css.workingPane}>
+            <ul className={css.workingList} role="presentation" data-testid="sidebar-working">
+              <ShelfHeader shelf="working" label={t('shelf.working')} count={workingChats.length} expanded={shelves.working}
+                onToggle={() => { toggleShelf('working') }} first={false} over={false} dropTarget={false} />
+              {shelves.working && workingChats.map(chat => row(chat, 'working', false))}
+            </ul>
+          </HoverCardGroup>
+        )}
         <UpdateNoticeCard face={updateNotice} t={t} />
         {iconWorkspace !== undefined && (
           <IconPicker
