@@ -97,13 +97,17 @@
 
 .approve {
   display: flex;
+  flex: 1 1 22rem;
+  flex-wrap: wrap;
   align-items: center;
-  flex-shrink: 0;
+  min-width: 0;
   gap: 8px;
 }
 
+/* The eight digits take a line of their own, as wide as the row allows. */
 .code {
-  width: 140px;
+  flex: 1 0 100%;
+  min-width: 0;
 }
 
 .unlock {

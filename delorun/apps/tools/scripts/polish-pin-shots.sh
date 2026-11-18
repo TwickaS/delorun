@@ -28,6 +28,10 @@ await page.getByRole('textbox', { name: 'PIN', exact: true }).fill('824619')
 await page.getByRole('textbox', { name: 'Type it again' }).fill('824619')
 await page.waitForTimeout(300)
 await page.screenshot({ path: '$3-3-typed.png' })
+await page.getByRole('textbox', { name: 'Type it again' }).fill('824611')
+await page.click("button:has-text('Continue')")
+await page.waitForTimeout(500)
+await page.screenshot({ path: '$3-4-error.png' })
 JS
 nice -n 19 node_modules/.bin/tsx delorun/apps/tools/src/studio-browser.ts run --url "$URL" --viewport "$1" --scheme "$2" --file "$SCRIPT"
 rm -f "$SCRIPT"

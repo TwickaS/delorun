@@ -12,7 +12,7 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PinOutcome, PinSource } from './pin-lock.ts'
-import { Keypad, Notice, PinDots } from '@delorun/brand'
+import { CodeCells, Keypad, Notice } from '@delorun/brand'
 import { BRAND_NAME, DelorunBrandMark } from './brand.tsx'
 import css from './PinLock.module.css'
 
@@ -109,11 +109,11 @@ export function PinLock({ usePin, unlock, dismiss, t }: PinLockProps): ReactNode
         ? <p className={css.text} role="alert">{t('removed.body')}</p>
         : <>
           <p className={css.text}>{t(isPin ? 'lead.pin' : 'lead.passcode')}</p>
-          {isPin ? <PinDots count={value.length} minimum={MIN_PIN_DIGITS} tone={wrong ? 'error' : 'neutral'} shake={shake} /> : null}
-          <input ref={inputRef} className={isPin ? css.hiddenField : css.field} type="password" name="delorun-pin" aria-label={t(isPin ? 'label.pin' : 'label.passcode')}
-            inputMode={isPin ? 'numeric' : 'text'} pattern={isPin ? '[0-9]*' : undefined} autoComplete="off" autoCorrect="off"
-            autoCapitalize="off" spellCheck={false} enterKeyHint="go" disabled={view.busy} value={value}
-            onChange={event => { setValue(isPin ? event.target.value.replace(/\D/g, '') : event.target.value) }} />
+          {isPin
+            ? <CodeCells label={t('label.pin')} length={MIN_PIN_DIGITS} open mask value={value} onChange={setValue} error={wrong} shake={shake} shakeKey={outcome}
+              disabled={view.busy} autoComplete="off" name="delorun-pin" autoFocus={globalThis.matchMedia?.('(pointer: fine)').matches === true} inputProps={{ 'data-pin-entry': true }} />
+            : <input ref={inputRef} className={css.field} type="password" name="delorun-pin"  aria-label={t('label.passcode')} inputMode="text" autoComplete="off" autoCorrect="off"
+              autoCapitalize="off" spellCheck={false} enterKeyHint="go" disabled={view.busy} value={value} onChange={(event) => { setValue(event.target.value) }} />}
           {wrong ? <p className={css.failed} role="alert">{outcomeText(t, outcome)}</p> : null}
           {notice === undefined || outcome === undefined || outcome.kind === 'wrong' || outcome.kind === 'removed' ? null
             : <Notice tone="warning" Icon={notice.Icon} title={t(notice.title)} role="alert" outcome={outcome.kind}>{outcomeText(t, outcome)}</Notice>}

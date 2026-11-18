@@ -1,17 +1,17 @@
-.keypad { display: grid; grid-template-columns: repeat(3, 72px); justify-content: center; gap: 14px 20px; margin: var(--dl-space-2) 0 var(--dl-space-1); }
+.keypad { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(8px, 2.5cqw, 14px); width: 100%; max-width: 26rem; margin: var(--dl-space-2) auto var(--dl-space-1); container-type: inline-size; }
 
 .key {
   box-sizing: border-box;
-  width: 72px;
-  height: 72px;
+  width: 100%;
+  min-height: 56px;
+  aspect-ratio: 5 / 3;
   border: 0.5px solid var(--dl-border);
-  border-radius: 50%;
-  corner-shape: round;
+  border-radius: var(--dl-radius-lg);
   background: var(--dl-surface-sunken);
   color: var(--dl-text);
   font: inherit;
   font-family: var(--dl-font-sans);
-  font-size: 26px;
+  font-size: clamp(24px, 9cqw, 34px);
   font-variant-numeric: tabular-nums;
   line-height: 1;
   cursor: pointer;
