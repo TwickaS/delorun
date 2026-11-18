@@ -30,6 +30,15 @@ describe('edgeColours', () => {
 })
 
 describe('the edge controller', () => {
+  it('lets the body paint only where the top and bottom colours differ, so the strips stay visible', () => {
+    tokens('rgb(250 250 248)', 'rgb(240 240 238)')
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1200 })
+    const edges = new EdgeController(document, window)
+    expect(document.documentElement.style.background).toContain('rgb(240, 240, 238)')
+    expect(document.body.style.background).toContain('rgb(250, 250, 248)')
+    edges.dispose()
+  })
+
   it('adds two aria-hidden, non-interactive fixed strips sized to the safe areas, and one theme-color tag', () => {
     tokens('rgb(250 250 248)', 'rgb(240 240 238)')
     const edges = new EdgeController(document, window)
@@ -54,7 +63,7 @@ describe('the edge controller', () => {
     expect(document.documentElement.style.getPropertyValue('--edge-top-background')).toBe('rgb(20 22 28)')
     expect(document.documentElement.style.getPropertyValue('--edge-bottom-background')).toBe('rgb(20 22 28)')
     expect(document.documentElement.style.background).toContain('rgb(20, 22, 28)')
-    expect(document.body.style.background).toContain('rgb(20, 22, 28)')
+    expect(document.body.style.background).toBe('')
     expect(document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.content).toBe('rgb(20 22 28)')
     edges.dispose()
   })

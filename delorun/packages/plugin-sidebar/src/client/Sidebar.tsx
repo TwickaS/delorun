@@ -416,7 +416,7 @@ export function Sidebar(props: SidebarProps) {
   const newChatWorkspace = scopedWorkspaces.length === 1 ? scopedWorkspaces[0] : undefined
   const newChatLabel = newChatWorkspace === undefined ? t('chat.new') : t('chat.newIn', { name: newChatWorkspace.title })
 
-  const shelfOrder = (['working', 'snoozed', 'settled'] as const).filter(shelf => sections[shelf].length > 0)
+  const shelfOrder = (['snoozed', 'settled', 'working'] as const).filter(shelf => sections[shelf].length > 0)
   const shelfRows = (shelf: Shelf): readonly SidebarChat[] => {
     const rows = sections[shelf]
     return shelf === 'settled' ? rows.slice(0, settledShown) : rows

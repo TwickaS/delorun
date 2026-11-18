@@ -66,10 +66,12 @@ export function StepFrame({ title, headingRef, count, place, total, steps, steps
             {later !== undefined && <button type="button" className={css.later} onClick={later.onClick}>{later.label}</button>}
           </div>
           <div className={css.progress}>
-            <span className={css.count}>{count}</span>
             <span className={css.bar} role="progressbar" aria-label={count} aria-valuemin={1} aria-valuemax={total} aria-valuenow={place}>
-              <span style={{ transform: `scaleX(${String(place / total)})` }} />
+              {Array.from({ length: total }, (_, position) => (
+                <span key={position} data-state={position + 1 < place ? 'done' : position + 1 === place ? 'current' : 'next'} />
+              ))}
             </span>
+            <span className={css.count}>{count}</span>
           </div>
           <nav className={css.visuallyHidden} aria-label={stepsLabel}>
             <ol>

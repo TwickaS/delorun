@@ -14,7 +14,7 @@ import type { LocalServer } from '../../wire.ts'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import { Card, Monogram } from '../ui/Card.tsx'
 import { StateLine } from '../ui/StateLine.tsx'
-import { FoundKey, connectedLine } from './FoundKey.tsx'
+import { FoundKey, sourceLine } from './FoundKey.tsx'
 import { useStore } from './shared.ts'
 import chevron from '../ui/Chevron.module.css'
 import css from './models.module.css'
@@ -157,34 +157,46 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
   }
   // Every ticked provider already has a key that passed: there is nothing to walk through, so the primary goes straight on.
   const keysAllFound = walk.length > 0 && walk.every(card => card.found && !didNotPass(card.result))
-  const present = (card: ProviderCard): ReactNode => (
-    <li key={card.provider}>
-      <Card title={card.name} monogram={monogramOf(card)} labels={labels} selected={ticked.has(card.provider)} description={card.custom === true ? t('providers.custom.hint') : undefined}
-        leading={(
-          <label className={css.tickLabel}>
-            <input type="checkbox" className={css.tick} checked={ticked.has(card.provider)} aria-label={t('providers.use', { name: card.name })} onChange={(event) => {
-              const on = event.currentTarget.checked
-              setTicked((held) => { const copy = new Set(held); if (on) copy.add(card.provider); else copy.delete(card.provider); return copy })
-              // Ticking a provider again asks for its key again, even where it ended earlier.
-              setOutcomes((held) => Object.fromEntries(Object.entries(held).filter(([provider]) => provider !== card.provider)))
-            }} />
-          </label>
-        )}>
-        {card.found && (didNotPass(card.result)
-          ? <StateLine tone="warning">{t('providers.foundFailed')}</StateLine>
-          : couldNotTest(card.result)
-            ? <StateLine tone="info">{t('keyStatus.unverified')}</StateLine>
-            : <StateLine tone="success">{connectedLine(t, card.source)}</StateLine>)}
-        {card.found && (
-          <Button variant="outline" size="sm" className={`${css.replace} ${shared.inline}`} onClick={() => {
-            setTicked(held => new Set(held).add(card.provider))
-            setOutcomes(held => Object.fromEntries(Object.entries(held).filter(([provider]) => provider !== card.provider)))
-            setOnly(card.provider); setReplacingOnly(true); setIndex(0); guide.setProvidersPhase('walk')
-          }}>{t('providers.replace')}</Button>
-        )}
-      </Card>
-    </li>
-  )
+  const firstExplained = cards.find(card => card.found && !didNotPass(card.result))?.provider
+  const present = (card: ProviderCard): ReactNode => {
+    const works = card.found && !didNotPass(card.result) && !couldNotTest(card.result)
+    return (
+      <li key={card.provider}>
+        <Card title={card.name} monogram={monogramOf(card)} labels={labels} selected={ticked.has(card.provider)} description={card.custom === true ? t('providers.custom.hint') : undefined}
+          action={(
+            <span className={css.trail}>
+              {works && <span className={css.status} role="status"><span className={css.dot} aria-hidden="true" />{t('providers.connected')}</span>}
+              <label className={css.tickLabel}>
+                <input type="checkbox" className={css.tick} checked={ticked.has(card.provider)} aria-label={t('providers.use', { name: card.name })} onChange={(event) => {
+                  const on = event.currentTarget.checked
+                  setTicked((held) => { const copy = new Set(held); if (on) copy.add(card.provider); else copy.delete(card.provider); return copy })
+                  // Ticking a provider again asks for its key again, even where it ended earlier.
+                  setOutcomes((held) => Object.fromEntries(Object.entries(held).filter(([provider]) => provider !== card.provider)))
+                }} />
+              </label>
+            </span>
+          )}>
+          {card.found && (didNotPass(card.result)
+            ? <StateLine tone="warning">{t('providers.foundFailed')}</StateLine>
+            : couldNotTest(card.result) && <StateLine tone="info">{t('keyStatus.unverified')}</StateLine>)}
+          {card.found && (
+            <div className={css.meta}>
+              <p className={css.source}>{sourceLine(t, card.source)}</p>
+              <div className={css.actions}>
+                <Button variant="ghost" size="sm" className={css.quiet} onClick={() => {
+                  setTicked(held => new Set(held).add(card.provider))
+                  setOutcomes(held => Object.fromEntries(Object.entries(held).filter(([provider]) => provider !== card.provider)))
+                  setOnly(card.provider); setReplacingOnly(true); setIndex(0); guide.setProvidersPhase('walk')
+                }}>{t('providers.replace')}</Button>
+                {/* The explanation is the same for every key Delorun found, so it hangs off the first one only. */}
+                {card.provider === firstExplained && <FoundKey t={t} source={undefined} compact />}
+              </div>
+            </div>
+          )}
+        </Card>
+      </li>
+    )
+  }
   const foundCards = cards.filter(card => card.found)
   const addable = cards.filter(card => !card.found)
   const shown = expanded ? addable : addable.filter((card, place) => place < ADDABLE_SHOWN || card.custom === true || ticked.has(card.provider))
@@ -194,8 +206,6 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
       {cards.length === 0 ? <StateLine tone="warning">{t('providers.none')}</StateLine> : (
         <>
           {foundCards.length > 0 && <ul className={shared.cards}>{foundCards.map(present)}</ul>}
-          {/* The explanation is the same for every key Delorun found, so the step says it once. */}
-          {foundCards.some(card => !didNotPass(card.result)) && <FoundKey t={t} source={undefined} compact />}
           {addable.length > 0 && (
             <section className={shared.stack} aria-labelledby={`${headingId}-add`}>
               <h3 id={`${headingId}-add`} className={css.addHeading}>{t(foundCards.length > 0 ? 'providers.add.heading' : 'providers.add.headingFirst')}</h3>
