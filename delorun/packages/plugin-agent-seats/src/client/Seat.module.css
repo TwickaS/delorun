@@ -55,7 +55,7 @@
 }
 
 /* The collapsed opening card: one line that keeps the name, the 5-hour meter and the sandbox chip. */
-.line { all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 6px 12px; border: 1.5px solid var(--seat-accent); border-radius: 10px; font-size: 12.5px; color: var(--dsw-alias-label-secondary); min-width: 0; }
+.line { all: unset; box-sizing: border-box; cursor: pointer; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; width: 100%; padding: 6px 12px; border: 1.5px solid var(--seat-accent); border-radius: 10px; font-size: 12.5px; color: var(--dsw-alias-label-secondary); min-width: 0; }
 .line:focus-visible { outline: 2px solid var(--seat-accent); outline-offset: 2px; }
 .lineName { font-weight: 600; color: var(--dsw-alias-label-primary); white-space: nowrap; }
 .lineText { font-variant-numeric: tabular-nums; white-space: nowrap; }
