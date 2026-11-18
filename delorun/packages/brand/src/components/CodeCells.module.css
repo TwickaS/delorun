@@ -3,7 +3,6 @@
   container-type: inline-size;
   width: 100%;
   max-width: 40rem;
-  margin-inline: auto;
   font-family: var(--dl-font-sans);
 }
 

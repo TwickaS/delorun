@@ -91,6 +91,17 @@ describe('the PIN step', () => {
     expect(h.calls.some(call => call.path.endsWith('/auth/pin/set'))).toBe(false)
   })
 
+  it('clears a refusal once an entry changes: a valid matching PIN shows no error', async () => {
+    const h = home(OFF)
+    await mountAtEntry(h)
+    await submit()
+    expect(screen.getByRole('alert')).toBeTruthy()
+    type(en['pin.setup.pinLabel'], '824619')
+    type(en['pin.setup.confirm'], '824619')
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByLabelText(en['pin.setup.confirm']).getAttribute('aria-invalid')).toBeNull()
+  })
+
   it('blocks a PIN that is too short with an actionable sentence', async () => {
     const h = home(OFF)
     await mountAtEntry(h)
