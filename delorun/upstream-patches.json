@@ -2154,7 +2154,7 @@
       "path": "packages/subagent/subagent/src/index.ts",
       "class": "security",
       "reason": "`startExternal` finds the consent, has it review the start (provider, parent, cwd, label, signal) before `provider.start`, and bounds the run with the consent's time limit; exports the consent names. Local providers are never checked. Lead verdict (2026-11-13): approved after the lead review of the merged diff.",
-      "sha256": "bcf05128d6b43b03b7fb7704fa6a4e483fa9029f9637b97b5e3128e174a4f7a1"
+      "sha256": "2d909728b346b85321bcb988d721236d48fbf5dc1a415292a3c42c84ffdd4bed"
     },
     {
       "path": "packages/subagent/tool-subagent/src/index.ts",
