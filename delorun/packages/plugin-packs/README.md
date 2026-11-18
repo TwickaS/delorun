@@ -55,7 +55,7 @@ The plugin announces every item of the list on the plugin manager's `plugin-mana
 
 ## Phones
 
-The `list`, `cancel` (stops a queued or downloading install) and `dismiss` (clears a failed or cancelled row, a queue record only) routes answer any approved phone; neither touches an installed pack (A408). The `enqueue`, `retry` and `remove` routes answer a phone only while it holds an unlock, and a phone without one is answered `403`, which the client turns into the unlock dialog's `elevation-required: packs/<route>` (A408).
+The `list`, `cancel` (stops a queued or downloading install) and `dismiss` (clears a failed or cancelled row, a queue record only) routes answer any approved phone; neither touches an installed pack. The `enqueue`, `retry` and `remove` routes answer a phone only while it holds an unlock, and a phone without one is answered `403`, which the client turns into the unlock dialog's `elevation-required: packs/<route>`.
 
 ## Where the Host connects it
 

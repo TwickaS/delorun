@@ -6,8 +6,6 @@ description: "Move your plugins, model choices and settings to another computer 
 
 English | [中文](move-your-setup.zh.md)
 
-This page describes how Delorun works today.
-
 ## Summary
 
 `delorun setup export` writes the plugins you added, your model choices and your settings into one signed file. `delorun setup import` on another computer, or into another [profile](../reference/glossary.md#profile), replaces that profile's setup with the file's, after it shows you everything that changes and asks. The file never holds a key, a chat, a paired device or an answer you gave setup. You need Delorun on both computers and a terminal on the one that imports.

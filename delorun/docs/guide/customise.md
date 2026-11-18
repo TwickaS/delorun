@@ -6,8 +6,6 @@ description: "Where to customise Delorun: settings, the profile patch, agent pre
 
 English | [中文](customise.zh.md)
 
-This page describes how Delorun works today.
-
 ## Summary
 
 You can reshape Delorun at six levels, from a setting in the studio to the harness's own source. Each level reaches further than the one before it and costs more at each update, so choose the first one that can make your change. None of them edits Delorun's signed release, though the last runs files you changed, and an update shows what it would turn off before it does ([updates never take your work away](trust.md)).
@@ -125,4 +123,4 @@ Delorun's own plugins and the rows its protections need, such as the sandbox, ca
 
 ## Edit the harness itself
 
-A change to the plugin loop, the composition or Delorun's protections goes in your own copy of the installed Delorun's program files: `delorun changes edit-harness` makes the copy and prints its folder, and each file you save there is a change to Delorun itself that `delorun changes list` shows and `delorun changes undo` takes back. The installed release is never edited, but Delorun's signature and release log no longer describe the code you run, and `delorun verify` lists the files you changed. [Changing your harness](https://docs.delorun.com/guide/changing-your-harness) covers protection, which waits for your review before a change loads, and the studio's Changes section. Prefer a plugin wherever one can make the change.
+A change to the plugin loop, the composition or Delorun's protections goes in your own copy of the installed Delorun's program files: `delorun changes edit-harness` makes the copy and prints its folder, and each file you save there is a change to Delorun itself that `delorun changes list` shows and `delorun changes undo` takes back. The installed release is never edited, but Delorun's signature and release log no longer describe the code you run, and `delorun verify` lists the files you changed. [Changing your harness](changing-your-harness.md) covers protection, which waits for your review before a change loads, and the studio's Changes section. Prefer a plugin wherever one can make the change.

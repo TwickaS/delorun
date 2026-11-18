@@ -138,10 +138,10 @@ The first start of a desktop app installed from a downloaded installer has no st
 
 ## Consumers
 
-- `delorun/apps/release/` (WP3.1): writes the entry, waits for a witnessed checkpoint and publishes the bundle.
-- `delorun/apps/install/` and `delorun/apps/npm-launcher/` (WP3.2): require the bundle and the online check before installing.
-- The CLI launcher and the home process (WP2.11, WP3.9): the start check, the warning and the retries.
-- The desktop updater (WP6.3).
+- `delorun/apps/release/`: writes the entry, waits for a witnessed checkpoint and publishes the bundle.
+- `delorun/apps/install/` and `delorun/apps/npm-launcher/`: require the bundle and the online check before installing.
+- The CLI launcher and the home process: the start check, the warning and the retries.
+- The desktop updater.
 - `delorun verify` and the Verification panel ([C15](c15-verification-checks.md)).
 
 ## Compatibility
@@ -162,23 +162,23 @@ The bundle's `schema` names its major version. The log's origin and key and the 
 
 ### Denial tests
 
-| Test | Owner | Behaviour it shows |
+| Test | Component | Behaviour it shows |
 | --- | --- | --- |
-| `c18-missing-witness-fails-verify` | WP3.1, WP3.2 | A release whose bundle's checkpoint carries no witness cosignature fails `delorun verify` and is not installed. |
+| `c18-missing-witness-fails-verify` | `release`, `install` | A release whose bundle's checkpoint carries no witness cosignature fails `delorun verify` and is not installed. |
 | `c18-store-install-missing-bundle-fails` | release-chain | A release the runtime store installed whose stored bundle is missing records `failed` (`bundle-malformed`) and stops the start in every mode; a client that fetches its bundle after installing records `unchecked`. |
-| `c18-unlisted-witness-refused` | WP3.2 | A cosignature from a key outside `witnesses.keys` does not count, and the bundle fails. |
-| `c18-wrong-inclusion-proof-refused` | WP3.2 | A bundle whose proof does not reproduce `rootHash` is refused before installation. |
-| `c18-entry-for-other-manifest-refused` | WP3.2 | A valid entry for a different manifest digest is refused. |
-| `c18-pure-ed25519-entry-refused` | WP3.1, WP3.2 | An entry with a pure Ed25519 signature or `PKIX_ED25519` key details is refused; the same manifest's Ed25519ph entry verifies. |
-| `c18-offline-start-warns` | WP2.11, WP3.9 | A start with the log stand-in unreachable starts, prints the warning with the release's version and records `unchecked`. |
-| `c18-offline-recheck-on-connect` | WP3.9 | After the stand-ins become reachable, the home process's next retry records `verified`. |
-| `c18-offline-install-continues` | WP3.2, WP3.9, WP6.3 | An install or update attempted while the log is unreachable or its newest witnessed checkpoint is stale prints the reason and the warning, installs, and records `unchecked` with the reason. |
-| `c18-missing-cosignature-install-continues` | WP3.2, WP3.9, WP6.3 | An install or update whose latest checkpoint carries no cosignature from a listed witness warns, installs, and records `unchecked` with the reason. |
-| `c18-invalid-cosignature-refuses-install` | WP3.2, WP3.9, WP6.3 | A cosignature from a listed witness that is present and does not verify installs nothing and records no check state. |
-| `c18-contradicting-log-refuses-install` | WP3.2, WP3.9, WP6.3 | An install or update attempted while the log answers with a checkpoint whose signature does not verify, that is smaller than the stored one, or whose consistency proof from the stored or bundle checkpoint does not verify installs nothing, records no check state, and the running version stays. |
-| `c18-inconsistent-log-fails-start` | WP2.11 | A latest checkpoint whose consistency proof from the stored checkpoint does not verify records `failed` and stops the start in every verification mode. |
-| `c18-checkpoint-rollback-refused` | WP2.11 | A witnessed checkpoint with a smaller tree size than the stored one records `failed`. |
-| `c18-desktop-refuses-unlogged-update` | WP6.3 | A desktop update whose bundle fails is refused before `quitAndInstall`. |
+| `c18-unlisted-witness-refused` | `install` | A cosignature from a key outside `witnesses.keys` does not count, and the bundle fails. |
+| `c18-wrong-inclusion-proof-refused` | `install` | A bundle whose proof does not reproduce `rootHash` is refused before installation. |
+| `c18-entry-for-other-manifest-refused` | `install` | A valid entry for a different manifest digest is refused. |
+| `c18-pure-ed25519-entry-refused` | `release`, `install` | An entry with a pure Ed25519 signature or `PKIX_ED25519` key details is refused; the same manifest's Ed25519ph entry verifies. |
+| `c18-offline-start-warns` | CLI launcher, home process | A start with the log stand-in unreachable starts, prints the warning with the release's version and records `unchecked`. |
+| `c18-offline-recheck-on-connect` | home process | After the stand-ins become reachable, the home process's next retry records `verified`. |
+| `c18-offline-install-continues` | `install`, home process, desktop updater | An install or update attempted while the log is unreachable or its newest witnessed checkpoint is stale prints the reason and the warning, installs, and records `unchecked` with the reason. |
+| `c18-missing-cosignature-install-continues` | `install`, home process, desktop updater | An install or update whose latest checkpoint carries no cosignature from a listed witness warns, installs, and records `unchecked` with the reason. |
+| `c18-invalid-cosignature-refuses-install` | `install`, home process, desktop updater | A cosignature from a listed witness that is present and does not verify installs nothing and records no check state. |
+| `c18-contradicting-log-refuses-install` | `install`, home process, desktop updater | An install or update attempted while the log answers with a checkpoint whose signature does not verify, that is smaller than the stored one, or whose consistency proof from the stored or bundle checkpoint does not verify installs nothing, records no check state, and the running version stays. |
+| `c18-inconsistent-log-fails-start` | CLI launcher | A latest checkpoint whose consistency proof from the stored checkpoint does not verify records `failed` and stops the start in every verification mode. |
+| `c18-checkpoint-rollback-refused` | CLI launcher | A witnessed checkpoint with a smaller tree size than the stored one records `failed`. |
+| `c18-desktop-refuses-unlogged-update` | desktop updater | A desktop update whose bundle fails is refused before `quitAndInstall`. |
 
 ### What this does not prove
 

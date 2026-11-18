@@ -160,10 +160,10 @@ bundle 发布到 GitHub Releases，与 manifest 放在一起。`log-release` 命
 
 ## 消费方
 
-- `delorun/apps/release/`（WP3.1）：写入条目，等待经见证的检查点，并发布 bundle。
-- `delorun/apps/install/` 与 `delorun/apps/npm-launcher/`（WP3.2）：在安装之前要求 bundle 与在线检查。
-- CLI 启动器与 home 进程（WP2.11、WP3.9）：启动检查、警告与重试。
-- 桌面更新器（WP6.3）。
+- `delorun/apps/release/`：写入条目，等待经见证的检查点，并发布 bundle。
+- `delorun/apps/install/` 与 `delorun/apps/npm-launcher/`：在安装之前要求 bundle 与在线检查。
+- CLI 启动器与 home 进程：启动检查、警告与重试。
+- 桌面更新器。
 - `delorun verify` 与验证面板（[C15](c15-verification-checks.zh.md)）。
 
 <a id="compatibility"></a>
@@ -192,23 +192,23 @@ bundle 的 `schema` 指明其主版本。日志的 origin 与密钥以及见证�
 
 ### 拒绝测试
 
-| 测试 | 负责方 | 所表明的行为 |
+| 测试 | 组件 | 所表明的行为 |
 | --- | --- | --- |
-| `c18-missing-witness-fails-verify` | WP3.1, WP3.2 | bundle 的检查点不带任何见证者共同签名的发布版本会使 `delorun verify` 失败，且不会被安装。 |
+| `c18-missing-witness-fails-verify` | `release`, `install` | bundle 的检查点不带任何见证者共同签名的发布版本会使 `delorun verify` 失败，且不会被安装。 |
 | `c18-store-install-missing-bundle-fails` | release-chain | 运行时仓库安装的发布版本若缺少已存储的 bundle，记录 `failed`（`bundle-malformed`），并在每种模式下停止启动；安装之后才获取 bundle 的客户端记录 `unchecked`。 |
-| `c18-unlisted-witness-refused` | WP3.2 | 来自 `witnesses.keys` 之外密钥的共同签名不计入，bundle 验证失败。 |
-| `c18-wrong-inclusion-proof-refused` | WP3.2 | 证明无法复算出 `rootHash` 的 bundle 在安装之前被拒绝。 |
-| `c18-entry-for-other-manifest-refused` | WP3.2 | 针对另一个 manifest 摘要的有效条目被拒绝。 |
-| `c18-pure-ed25519-entry-refused` | WP3.1, WP3.2 | 带纯 Ed25519 签名或 `PKIX_ED25519` 密钥详情的条目被拒绝；同一 manifest 的 Ed25519ph 条目通过验证。 |
-| `c18-offline-start-warns` | WP2.11, WP3.9 | 在日志替身无法访问时启动，仍会启动，打印带有该发布版本号的警告，并记录 `unchecked`。 |
-| `c18-offline-recheck-on-connect` | WP3.9 | 替身变为可访问后，home 进程的下一次重试记录 `verified`。 |
-| `c18-offline-install-continues` | WP3.2, WP3.9, WP6.3 | 在日志无法访问或其最新经见证检查点已过时时尝试的安装或更新，会打印原因与警告，进行安装，并记录带原因的 `unchecked`。 |
-| `c18-missing-cosignature-install-continues` | WP3.2, WP3.9, WP6.3 | 最新检查点不带任何所列见证者共同签名的安装或更新会发出警告，进行安装，并记录带原因的 `unchecked`。 |
-| `c18-invalid-cosignature-refuses-install` | WP3.2, WP3.9, WP6.3 | 所列见证者的共同签名存在但无法通过验证时，不安装任何内容，也不记录检查状态。 |
-| `c18-contradicting-log-refuses-install` | WP3.2, WP3.9, WP6.3 | 当日志应答的检查点签名无法通过验证、小于已存储的检查点，或从已存储或 bundle 检查点出发的一致性证明无法通过验证时尝试的安装或更新，不安装任何内容，不记录检查状态，正在运行的版本保持不变。 |
-| `c18-inconsistent-log-fails-start` | WP2.11 | 最新检查点从已存储检查点出发的一致性证明无法通过验证时，记录 `failed`，并在每种验证模式下停止启动。 |
-| `c18-checkpoint-rollback-refused` | WP2.11 | 树大小小于已存储检查点的经见证检查点记录 `failed`。 |
-| `c18-desktop-refuses-unlogged-update` | WP6.3 | bundle 验证失败的桌面更新在 `quitAndInstall` 之前被拒绝。 |
+| `c18-unlisted-witness-refused` | `install` | 来自 `witnesses.keys` 之外密钥的共同签名不计入，bundle 验证失败。 |
+| `c18-wrong-inclusion-proof-refused` | `install` | 证明无法复算出 `rootHash` 的 bundle 在安装之前被拒绝。 |
+| `c18-entry-for-other-manifest-refused` | `install` | 针对另一个 manifest 摘要的有效条目被拒绝。 |
+| `c18-pure-ed25519-entry-refused` | `release`, `install` | 带纯 Ed25519 签名或 `PKIX_ED25519` 密钥详情的条目被拒绝；同一 manifest 的 Ed25519ph 条目通过验证。 |
+| `c18-offline-start-warns` | CLI 启动器, home 进程 | 在日志替身无法访问时启动，仍会启动，打印带有该发布版本号的警告，并记录 `unchecked`。 |
+| `c18-offline-recheck-on-connect` | home 进程 | 替身变为可访问后，home 进程的下一次重试记录 `verified`。 |
+| `c18-offline-install-continues` | `install`, home 进程, 桌面更新器 | 在日志无法访问或其最新经见证检查点已过时时尝试的安装或更新，会打印原因与警告，进行安装，并记录带原因的 `unchecked`。 |
+| `c18-missing-cosignature-install-continues` | `install`, home 进程, 桌面更新器 | 最新检查点不带任何所列见证者共同签名的安装或更新会发出警告，进行安装，并记录带原因的 `unchecked`。 |
+| `c18-invalid-cosignature-refuses-install` | `install`, home 进程, 桌面更新器 | 所列见证者的共同签名存在但无法通过验证时，不安装任何内容，也不记录检查状态。 |
+| `c18-contradicting-log-refuses-install` | `install`, home 进程, 桌面更新器 | 当日志应答的检查点签名无法通过验证、小于已存储的检查点，或从已存储或 bundle 检查点出发的一致性证明无法通过验证时尝试的安装或更新，不安装任何内容，不记录检查状态，正在运行的版本保持不变。 |
+| `c18-inconsistent-log-fails-start` | CLI 启动器 | 最新检查点从已存储检查点出发的一致性证明无法通过验证时，记录 `failed`，并在每种验证模式下停止启动。 |
+| `c18-checkpoint-rollback-refused` | CLI 启动器 | 树大小小于已存储检查点的经见证检查点记录 `failed`。 |
+| `c18-desktop-refuses-unlogged-update` | 桌面更新器 | bundle 验证失败的桌面更新在 `quitAndInstall` 之前被拒绝。 |
 
 <a id="what-this-does-not-prove"></a>
 

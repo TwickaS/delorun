@@ -32,7 +32,7 @@
 - `src/checks/` 包含检查目录（`plan.ts`）、调度器（`run.ts`）、机器预算（`machine.ts`）、通过缓存（`cache.ts`）、全机通过存储（`shared-cache.ts`）及其决定哪些通过可被共享的规则（`sharing.ts`），以及预算（`budgets.json`）。
 - `src/pairing-staged.ts` 是提交前与合并提交前的双语配对检查。它对暂存的记录，以及 `HEAD` 所持有的同一批配对，运行上游的 `verify-translation-pairing.ts --cached`（暂存的重命名会追溯到旧路径），仅在出现 `HEAD` 中没有的违规时失败。已有的偏差会以简短的“existing drift, not blocking”列表打印出来；新记录则被严格检查。`delorun/lefthook.yml` 覆盖了上游同名的作业来运行它。
 - `src/setup-worktree.ts` 用一条命令完成检出或工作树的设置：钩子文件（缺失时写入；已有但未扩展 `delorun/lefthook.yml` 的会被拒绝）、安装、文档站点自己的安装、钩子、台账合并驱动，以及在 Node 与 `.nvmrc` 不一致时给出警告。检查运行器拒绝在其他 Node 主版本上运行门禁；只有提交前层级和只读列表照常运行。
-- `src/build-web.ts` 以 Delorun 的产品名称构建 web studio 的客户端：除非调用方已设置，否则将 `DSH_CLIENT_TITLE` 设为 `Delorun`，通过上游的 `build:web` 并重建 `@deepseek-ai/dsh-client-ui-layout` 的客户端 bundle（它内嵌该标题）。发布发行包（WP3.1）设置同一变量。
+- `src/build-web.ts` 以 Delorun 的产品名称构建 web studio 的客户端：除非调用方已设置，否则将 `DSH_CLIENT_TITLE` 设为 `Delorun`，通过上游的 `build:web` 并重建 `@deepseek-ai/dsh-client-ui-layout` 的客户端 bundle（它内嵌该标题）。发布发行包设置同一变量。
 - `src/network-log.mjs` 是网络 fixture 用的 Node preload：设置 `NODE_OPTIONS="--import <path>"` 与 `DELORUN_NETWORK_LOG` 后，它把进程及其子进程打开的每个 TCP 连接的主机与端口追加写入该文件。
 - `src/git.ts` 为各模块运行 git，并报告退出状态。
 - `src/parity/composition/` 包含约定 C16 的对等覆盖层、`parity-switches` 检查（`check-parity-switches.ts`，以及 `switches.ts`、`contributions.ts`、`overlay.ts` 与 `sweep.ts`）和暂存的开关开启场景；下文的对等组合一节描述它们。

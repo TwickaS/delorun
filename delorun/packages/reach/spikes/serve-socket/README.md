@@ -1,5 +1,5 @@
 ---
-description: "Spike report for WP1.18: whether tailscale serve forwards to a mode-0600 Unix socket and which local processes reach that socket, measured with Tailscale 1.104.5 on Linux, with the fallback path's commands, identity header removal and forwarded Host values."
+description: "Spike report: whether tailscale serve forwards to a mode-0600 Unix socket and which local processes reach that socket, measured with Tailscale 1.104.5 on Linux, with the fallback path's commands, identity header removal and forwarded Host values."
 ---
 
 # Spike: `tailscale serve` to a mode-0600 Unix socket
@@ -8,7 +8,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This report records work package WP1.18 for [contract C7](../../../../docs/contracts/c07-reach-providers.md#tailscale-serve-target). On Linux with Tailscale 1.104.5, `tailscale serve` refused to configure a Unix socket target for a caller that is not root and cannot run `sudo tailscale` without a password, so forwarding to the socket was not observed. A mode-0600 socket was reachable by every unconfined process of the person's user, by a `bwrap`-confined process that could see the socket's path, and by a root process in a Docker container with the socket's directory mounted; only a process of another user was refused. Both conditions in C7 select the fallback, which is already the current contract: the TCP target on `127.0.0.1`, identity headers trusted on no listener, and an identity factor for tailnet-private reach. The fallback's commands worked, and `tailscaled` removed forged `Tailscale-*` headers from requests it forwarded.
+This report supports [contract C7](../../../../docs/contracts/c07-reach-providers.md#tailscale-serve-target). On Linux with Tailscale 1.104.5, `tailscale serve` refused to configure a Unix socket target for a caller that is not root and cannot run `sudo tailscale` without a password, so forwarding to the socket was not observed. A mode-0600 socket was reachable by every unconfined process of the person's user, by a `bwrap`-confined process that could see the socket's path, and by a root process in a Docker container with the socket's directory mounted; only a process of another user was refused. Both conditions in C7 select the fallback, which is already the current contract: the TCP target on `127.0.0.1`, identity headers trusted on no listener, and an identity factor for tailnet-private reach. The fallback's commands worked, and `tailscaled` removed forged `Tailscale-*` headers from requests it forwarded.
 
 ## Answers
 
@@ -68,7 +68,7 @@ For the variant's peer-credential check, these logs show:
 
 The forwarded `Host` matches C4's rule for Tailscale listeners, the configured address with its port when it is not 443. `tailscaled` does not restrict `Host` to the certificate's name, so the listener's `Host` check is the only check on it. `tailscaled` added no identity headers because the source was a tagged node; identity headers for a user-owned device were not measured. The first request on port 443 took about 35 seconds while `tailscaled` obtained the certificate.
 
-C7's fallback commands worked as written: `tailscale serve --bg --https=443 http://127.0.0.1:<port>` and `tailscale serve --https=443 off`, and on port 8443 the same pair. The Funnel pair `tailscale funnel --bg --https=8443 http://127.0.0.1:<port>` and `tailscale funnel --https=8443 off` worked in the [WP1.19 spike](../../../home-auth/spikes/ts-net-rp-id/README.md).
+C7's fallback commands worked as written: `tailscale serve --bg --https=443 http://127.0.0.1:<port>` and `tailscale serve --https=443 off`, and on port 8443 the same pair. The Funnel pair `tailscale funnel --bg --https=8443 http://127.0.0.1:<port>` and `tailscale funnel --https=8443 off` worked in the [ts-net-rp-id spike](../../../home-auth/spikes/ts-net-rp-id/README.md).
 
 ## Not covered
 

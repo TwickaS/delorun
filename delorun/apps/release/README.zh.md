@@ -283,5 +283,5 @@ openssl rand -out ~/.config/delorun/rebuild-attestation.key 32
 
 - SBOM 不描述桌面安装程序，Delorun 不构建它，因为它没有桌面应用（[路线图](../../docs/guide/roadmap.zh.md)）。
 - 配方没有用于上游原生系统插件 macOS 二进制文件的固定工具链，所以 `darwin-x64` 与 `darwin-arm64` 不是发布平台（[原生代码](#native-code)）。
-- S2 镜像不携带 S2 辅助程序或出口代理（WP4.4），S3 镜像不在 `/usr/local/bin/delorun-egress-proxy`（C9 指定的路径）携带出口代理（WP4.3）。
+- S2 镜像不携带 S2 辅助程序或出口代理，S3 镜像不在 `/usr/local/bin/delorun-egress-proxy`（C9 指定的路径）携带出口代理。
 - 发布日志规格使用本地替身；首次提交到实时日志（`log2025-1.rekor.sigstore.dev`）是所有者的操作，因为那会公开发布。对该日志的只读请求可以显示其布局：`GET https://log2025-1.rekor.sigstore.dev/api/v2/checkpoint` 返回一个 C2SP 签名注记，其来源行是 `log2025-1.rekor.sigstore.dev`，由该日志签名，并由多个见证者共同签名；`GET https://log2025-1.rekor.sigstore.dev/api/v2/tile/<L>/<N>` 返回 8,192 字节的哈希分块（`/api/v2/tile/entries/<N>` 返回条目 bundle），而主机根路径下的 `/checkpoint` 与 `/proof/consistency` 返回 `404`。启动器在根的 `log.origin` 中从该主机读取这一布局。因此，实时日志的 `--submit`、`--checkpoint` 与 `--tiles` 值分别是 `https://log2025-1.rekor.sigstore.dev/api/v2/log/entries`、`https://log2025-1.rekor.sigstore.dev/api/v2/checkpoint` 与 `https://log2025-1.rekor.sigstore.dev/api/v2/`；提交路径由 C18 定义，尚未实际运行过。
