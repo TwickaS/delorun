@@ -283,7 +283,7 @@
   gap: 16px;
   max-width: 560px;
 }
-.install[data-big='true'] { max-width: none; }
+.install[data-big='true'] { max-width: min(100%, 640px); }
 
 /* Film */
 
