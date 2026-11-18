@@ -231,6 +231,9 @@ export function PinStep({ services, guide }: StepProps): ReactNode {
     { text: t('pin.check.match'), met: secret !== '' && secret === again },
   ]
   const invalid = problem !== undefined
+  // An entry that changed answers the last refusal, so a stale sentence never sits beside a valid pair.
+  const editSecret = (next: string): void => { setSecret(next); setProblem(undefined) }
+  const editAgain = (next: string): void => { setAgain(next); setProblem(undefined) }
 
   return (
     <div className={`${css.stack} ${pinCss.root}`}>
@@ -263,14 +266,14 @@ export function PinStep({ services, guide }: StepProps): ReactNode {
               {passcode ? (
                 <>
                   <TextField type="password" inputMode="text" autoComplete="new-password" autoCapitalize="off" spellCheck={false} disabled={busy}
-                    label={t('pin.setup.passLabel')} value={secret} onChange={(event) => { setSecret(event.target.value) }} />
+                    label={t('pin.setup.passLabel')} value={secret} onChange={(event) => { editSecret(event.target.value) }} />
                   <TextField type="password" inputMode="text" autoComplete="new-password" autoCapitalize="off" spellCheck={false} disabled={busy}
-                    label={t('pin.setup.confirm')} error={problem} value={again} onChange={(event) => { setAgain(event.target.value) }} />
+                    label={t('pin.setup.confirm')} error={problem} value={again} onChange={(event) => { editAgain(event.target.value) }} />
                 </>
               ) : (
                 <>
-                  <CodeCells showLabel label={t('pin.setup.pinLabel')} length={MIN_PIN_DIGITS} open mask value={secret} onChange={setSecret} disabled={busy} autoComplete="new-password" />
-                  <CodeCells showLabel label={t('pin.setup.confirm')} length={MIN_PIN_DIGITS} open mask value={again} onChange={setAgain} disabled={busy} error={invalid} autoComplete="new-password" />
+                  <CodeCells showLabel label={t('pin.setup.pinLabel')} length={MIN_PIN_DIGITS} open mask value={secret} onChange={editSecret} disabled={busy} autoComplete="new-password" />
+                  <CodeCells showLabel label={t('pin.setup.confirm')} length={MIN_PIN_DIGITS} open mask value={again} onChange={editAgain} disabled={busy} error={invalid} autoComplete="new-password" />
                   {problem !== undefined && <p className={pinCss.problem} role="alert">{problem}</p>}
                 </>
               )}
