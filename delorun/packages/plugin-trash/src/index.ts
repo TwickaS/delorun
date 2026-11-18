@@ -185,9 +185,12 @@ export function apply(ctx: Context, config: Config): void {
   route(TRASH_PATHS.removeSetAside, async (body) => {
     const { home, name: profile } = profileOf()
     const path = id(body, 'path')
-    const records = [await readJournal(journalPath(home, profile)), await readJournal(stashPath(journalPath(home, profile)))]
+    const readRecords = async () => [await readJournal(journalPath(home, profile)), await readJournal(stashPath(journalPath(home, profile)))]
     const kept = (await listKeptData(home)).find(entry => entry.path === path && entry.kind !== 'runtimes')
     if (kept === undefined) throw new TrashOperationError('NOT_KEPT_DATA', `${path} is not a set-aside or copy directory of this home`)
+    // Read after listing, so a record an update wrote meanwhile is seen. A record in any phase but `committed` is an update or rollback under way.
+    const records = await readRecords()
+    if (records.some(record => record !== undefined && record.phase !== 'committed')) throw new TrashOperationError('DATA_IN_USE', 'an update or a rollback is under way; set-aside data stays until it ends')
     try {
       await discardKeptData(home, path, { referenced: records.flatMap(record => record?.copy === true ? [record.to] : []), rollingBack: records.some(record => record?.phase === 'rolling-back') })
     } catch (error: unknown) {

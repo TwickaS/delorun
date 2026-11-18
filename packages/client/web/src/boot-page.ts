@@ -365,7 +365,7 @@ class RecoveryScreen {
    * @returns the section with Roll back, or with the settings-only choice when no copy of the chats exists.
    */
   private rollbackSection(offer: RollbackState, base: string): HTMLElement {
-    const fill = (template: string): string => template.replace('{0}', offer.to).replace('{1}', offer.to)
+    const fill = (template: string): string => template.replace('{0}', offer.to)
     return this.section(this.words.rollback, [
       div(css.hint, this.words.rollbackHint.replace('{0}', offer.from).replace('{1}', offer.to)),
       ...offer.dataCopyMissing ? [div(css.hint, this.words.rollbackNoCopy)] : [],

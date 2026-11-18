@@ -498,6 +498,20 @@ describe('the data a rollback set aside and an update copied', () => {
     expect(existsSync(aside)).toBe(true)
   })
 
+  it('keeps set-aside data while an update is under way', async () => {
+    await mount()
+    provideProfile()
+    const aside = plantKept('data-set-aside', '0.1.2-20261101T101010Z')
+    const update = { from: '0.1.2', to: '0.1.3', previous: undefined, startedAt: new Date().toISOString(), dataDiffers: false, copy: false, targetStarted: false } as JournalledUpdate
+    mkdirSync(join(home, 'run', 'work'), { recursive: true, mode: 0o700 })
+    await writeJournal(journalPath(home, 'work'), update, 'switching')
+
+    const refused = await post<TrashRefusal>(TRASH_PATHS.removeSetAside, { path: 'data-set-aside/0.1.2-20261101T101010Z' })
+
+    expect([refused.status, refused.json.code]).toEqual([409, 'DATA_IN_USE'])
+    expect(existsSync(aside)).toBe(true)
+  })
+
   it('answers 503 on a harness that runs no profile', async () => {
     await mount()
 
