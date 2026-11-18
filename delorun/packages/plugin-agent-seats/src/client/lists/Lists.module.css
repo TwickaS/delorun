@@ -21,7 +21,7 @@
 .ring[data-reached] .ringValue { stroke: var(--delorun-badge-red); }
 .ringText { min-width: 2.4em; text-align: end; }
 
-.outside { color: var(--dsw-alias-label-secondary); white-space: nowrap; }
+.outside { color: var(--dsw-alias-label-secondary); white-space: nowrap; flex: none; }
 
 /* Hand-off line in the lead chat */
 .handoff { display: flex; flex-direction: column; gap: 6px; margin: 2px 0; }
@@ -44,4 +44,6 @@
   .trail { margin-inline-start: 4px; gap: 6px; }
   .ring svg { display: none; }
   .answer { padding: 2px 8px; }
+  /* Below the header's icon-only width the trigger would clip the chip; it grows to hold the chip whole and the title gives way. */
+  :global(button):has(.outside) { width: auto; min-width: 28px; flex: none; padding-inline: 4px; gap: 2px; }
 }
