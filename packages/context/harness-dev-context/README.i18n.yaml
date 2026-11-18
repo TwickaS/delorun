@@ -16,7 +16,7 @@
   zh: 09388d293f9be9cb
 /deepseek-ai-dsh-harness-dev-context/use-this-package:
   en: d3192709a416f7fb
-  zh: 479253a5ae1adcb2
+  zh: 41b9b9ad141f5972
 /deepseek-ai-dsh-harness-dev-context/use-this-package/what-the-model-gets:
   en: d9f5b11af33b3eb8
   zh: fc96b972503a0b99
@@ -53,6 +53,9 @@
 /deepseek-ai-dsh-harness-dev-context/model-experience/harness-checkout-and-web-gui/what-the-model-sees/runtime-context-lines:
   en: 37680cbe3eaabef5
   zh: 8c1b432ddf7d20b5
+/deepseek-ai-dsh-harness-dev-context/model-experience/harness-checkout-and-web-gui/what-the-model-sees/on-an-installation:
+  en: cb25b415f5ebf0ca
+  zh: ad2f2aa75d392a0e
 /deepseek-ai-dsh-harness-dev-context/model-experience/harness-checkout-and-web-gui/token-effect:
   en: 2c629df08d801b36
   zh: 437d43a9c5fdc68a

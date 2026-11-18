@@ -12,7 +12,11 @@ import type { PromptContextOrderName, PromptSectionOrderName } from '@deepseek-a
  * their own sections; the built-ins' behavior is pinned by its own describe.
  */
 const BUILT_IN = ['harness:identity', 'deployment:persona-prefix', 'deployment:persona-suffix']
-const IDENTITY = 'You are an AI agent powered by DeepSeek Harness.'
+/** The fixed opener; the model sentence appears only when a `model` variable is registered. */
+const identityFor = (model?: string): string => 'You are Delorun, an agent studio. '
+  + (model === undefined ? '' : `The model answering right now is ${model}. `)
+  + 'Delorun is built on DeepSeek Harness; mention that only when the person asks how Delorun is built or how to extend it.'
+const IDENTITY = identityFor()
 const SECTION_ORDER_NAMES = [
   'HARNESS_IDENTITY', 'DEPLOYMENT_PERSONA_PREFIX',
   'PLAN_POLICY', 'TEAM_POLICY', 'PTC_ONLY', 'FILE_REFERENCE', 'TOOL_BASH',
@@ -180,12 +184,12 @@ describe('SystemPrompt', () => {
       const first = renderPrompt(await ctx.systemPrompt.assemble())
       environment = { model: 'model-a', cwd: 'C:/bob/project', platform: 'win32', source: 'C:/bob/dsh', url: 'http://127.0.0.1:4080' }
       const second = renderPrompt(await ctx.systemPrompt.assemble())
-      const prefix = [IDENTITY, 'Model model-a.', ...reusable].join('\n\n') + '\n\n'
+      const prefix = [identityFor('model-a'), 'Model model-a.', ...reusable].join('\n\n') + '\n\n'
       expect(first).toBe(prefix + '/alice/dsh\n\nhttp://127.0.0.1:3080\n\nIn /alice/project on darwin.')
       expect(second).toBe(prefix + 'C:/bob/dsh\n\nhttp://127.0.0.1:4080\n\nIn C:/bob/project on win32.')
       environment.model = 'model-b'
       expect(renderPrompt(await ctx.systemPrompt.assemble()))
-        .toBe(second.replace('Model model-a.', 'Model model-b.'))
+        .toBe(second.replaceAll('model-a', 'model-b'))
     } finally {
       await ctx.fiber.dispose()
     }
@@ -211,7 +215,7 @@ describe('SystemPrompt', () => {
           .toThrow('unknown prompt variable "{{cwd}}" in section "deployment:persona-suffix"')
         ctx.systemPrompt.variable('cwd', () => '/work')
         expect(renderPrompt(await ctx.systemPrompt.assemble()))
-          .toBe(`${IDENTITY}\n\nModel m.\n\nUse tools.\n\nWorkspace /work.`)
+          .toBe(`${identityFor('m')}\n\nModel m.\n\nUse tools.\n\nWorkspace /work.`)
       } finally {
         await ctx.fiber.dispose()
       }
@@ -693,7 +697,7 @@ describe('SystemPrompt', () => {
       ctx.systemPrompt.variable('model', () => 'deepseek-v4')
       ctx.systemPrompt.variable('cwd', () => '/work')
 
-      expect(renderPrompt(await ctx.systemPrompt.assemble())).toBe(`${IDENTITY}\n\nYou run on deepseek-v4 in /work.`)
+      expect(renderPrompt(await ctx.systemPrompt.assemble())).toBe(`${identityFor('deepseek-v4')}\n\nYou run on deepseek-v4 in /work.`)
     })
 
     it.each([

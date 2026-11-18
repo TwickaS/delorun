@@ -25,7 +25,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-随附的 Web bundle 以 `harness-dev-context` 行挂载此插件。不希望 agent 得知 harness checkout 或 GUI URL 时，在 profile patch 中禁用该行。插件不接受配置，只在每个注入服务都存在时激活：`systemPrompt`、`sessionProjections`，以及 Web 运行时的 `webApp` 服务，因此 `--help` 与非 Web 组合永远不会挂载它。
+随附的 Web bundle 以 `harness-dev-context` 行挂载此插件。不希望 agent 得知 harness checkout 或 GUI URL 时，在 profile patch 中禁用该行。插件唯一的选项是测试接口 `sourceRoot`，只在每个注入服务都存在时激活：`systemPrompt`、`sessionProjections`，以及 Web 运行时的 `webApp` 服务，因此 `--help` 与非 Web 组合永远不会挂载它。
 
 ### 模型得到什么
 
@@ -87,18 +87,30 @@ kind: "package-reference"
 ##### 系统提示词段落
 
 ```markdown
-The runtime context names the DeepSeek Harness implementation checkout. The checkout location and current working directory are separate values and may differ; never infer the working directory from the checkout path. Use pwd to determine the current working directory. Use this checkout only to inspect or extend DSH itself.
+The runtime context names the Delorun implementation checkout. The checkout location and current working directory are separate values and may differ; never infer the working directory from the checkout path. Use pwd to determine the current working directory. Use this checkout only to inspect or extend Delorun itself.
 
-You are interacting with the user through the DeepSeek Harness Web GUI whose URL the runtime context names. When the user refers to "this page", "this GUI", or "this app" without naming another target, they mean this GUI. The browser provides no implicit DOM, route, or screenshot context. The client-plugin HMR receiver is active, but client-plugin changes reload without a refresh only while `pnpm run dev:web` is also running from this same checkout to rebuild their bundles; verify that watcher before promising automatic updates. Every other change — the apps/web shell and plain packages — requires rebuilding the affected Web artifacts and verifying this existing URL after a page refresh. Starting another server does not update this GUI. The apps/web Vite entry builds the shell but is not a standalone application because only dsh web injects window.__DSH_BOOT__. Do not start a replacement server unless the user asks; if one is needed, use a managed background job and verify its exact URL.
+You are interacting with the user through the Delorun studio whose URL the runtime context names. When the user refers to "this page", "this GUI", or "this app" without naming another target, they mean this GUI. The browser provides no implicit DOM, route, or screenshot context. The client-plugin HMR receiver is active, but client-plugin changes reload without a refresh only while `pnpm run dev:web` is also running from this same checkout to rebuild their bundles; verify that watcher before promising automatic updates. Every other change — the apps/web shell and plain packages — requires rebuilding the affected Web artifacts and verifying this existing URL after a page refresh. Starting another server does not update this GUI. The apps/web Vite entry builds the shell but is not a standalone application because only dsh web injects window.__DSH_BOOT__. Do not start a replacement server unless the user asks; if one is needed, use a managed background job and verify its exact URL.
 ```
 
 ##### 运行时上下文行
 
 ```markdown
-Current DeepSeek Harness implementation checkout: "<installation root>".
+Current Delorun implementation checkout: "<installation root>".
 
-Current DeepSeek Harness Web GUI URL: "<advertised URL>".
+Current Delorun studio URL: "<advertised URL>".
 ```
+
+##### 在已安装的程序上
+
+以上段落只在真正的 checkout 中出现：安装根目录是 git 工作树且含 pnpm workspace，插件加载时一次性判定。已安装的副本里，模型改为收到两个更短的段落，既不含运行时路径，也不含 studio URL：
+
+```markdown
+Make or change plugins with the delorun-plugin-authoring skill and review them in Changes (Apply or Undo). Never edit the installed program.
+
+You are interacting with the user through the Delorun studio. When the user refers to "this page", "this GUI", or "this app" without naming another target, they mean the studio. The browser provides no implicit DOM, route, or screenshot context. Do not start a replacement server unless the user asks.
+```
+
+可选的 `sourceRoot` 选项指定要判定的目录，测试借此覆盖两种情况。
 
 #### Token 影响
 

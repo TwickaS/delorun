@@ -1284,7 +1284,7 @@
       "path": "packages/sandbox/sandbox-policy/src/index.ts",
       "class": "security",
       "reason": "Container denial marker: the validated Config field `containerDenialMarker` (Delorun's C16 switch `container_denial_marker`, off by default and in the parity composition) and `environmentDenialSignatures(confined)`, which the shell and PTC consumers read to pick the environment signatures a run classifies against; off, they get none and classify exactly as upstream does. The policy context the model reads is unchanged. Lead verdict: required by the lead's WP1.6c switch decision; with the switch off the output is byte-identical to stock, and on it only withholds the escalation hint for a denial no mode lifts, which is stricter. Network: `resolve()` asks an optional `ctx.sandboxNetwork` resolver (`network.ts`) for each call's network and carries it on the policy; with none mounted the policy carries no network and runners share the host's. Lead verdict (2026-11-13): approved; stricter only, and the host network is unchanged while no resolver is mounted.",
-      "sha256": "9cd93b129b7e9815f78d18cb5577d17541ddc443743c09e7a31d19f394b4ca50"
+      "sha256": "6587320493a84021f8cba2edbb401ce24f730059d46a622fd939e036d2eddaa5"
     },
     {
       "path": "packages/sandbox/sandbox-policy/src/session-mode.ts",
@@ -2160,7 +2160,7 @@
       "path": "packages/subagent/tool-subagent/src/index.ts",
       "class": "security",
       "reason": "An external provider's tool description opens with the consent's `describe` text when one is composed, and the tool remounts when the `delegationConsent` service appears or leaves; without it the wording is upstream's. Lead verdict (2026-11-13): approved after the lead review of the merged diff.",
-      "sha256": "bb7621e436bcb8e22ec0cbca8607656167ffced4d9761bcbbdf2ad2c0a8497a3"
+      "sha256": "ca16e9f93992fd6c208797395d0e94bd7142f8355b23c0c5e1c13ecf53fb9d54"
     },
     {
       "path": "packages/client/ui-permission-presets/src/client/PermissionSelect.tsx",
@@ -2965,6 +2965,48 @@
       "class": "delorun-feature",
       "feature": "fork-gates",
       "reason": "Treats Delorun package and app tests as test files."
+    },
+    {
+      "path": "packages/bundle/web-app/cordis.patch.yml",
+      "class": "delorun-feature",
+      "feature": "model-prompt",
+      "reason": "Standard persona no longer repeats the model name or calls the product by the upstream name; the identity line carries both."
+    },
+    {
+      "path": "packages/context/harness-dev-context/src/index.ts",
+      "class": "delorun-feature",
+      "feature": "model-prompt",
+      "reason": "Checkout text, runtime path and studio URL reach the model only in a real git checkout with a pnpm workspace; an install gets one plugin-authoring line; Delorun naming."
+    },
+    {
+      "path": "packages/core/system-prompt/src/index.ts",
+      "class": "delorun-feature",
+      "feature": "model-prompt",
+      "reason": "Identity line names Delorun and the answering model and mentions DeepSeek Harness only when asked."
+    },
+    {
+      "path": "packages/deliverables/deliverable-file-references/src/index.ts",
+      "class": "delorun-feature",
+      "feature": "model-prompt",
+      "reason": "File-link rules cut from about 330 tokens to four plain rules."
+    },
+    {
+      "path": "packages/experimental/tool-terminal/src/index.ts",
+      "class": "delorun-feature",
+      "feature": "model-prompt",
+      "reason": "The terminal paragraph is sent only when terminal_open is offered to the agent in that step."
+    },
+    {
+      "path": "packages/preset/agent-preset/skills/dsh-doc/SKILL.md",
+      "class": "delorun-feature",
+      "feature": "model-prompt",
+      "reason": "Description narrowed to DeepSeek Harness internals; plugin work on an install points to delorun-plugin-authoring."
+    },
+    {
+      "path": "packages/workflow/tool-workflow/src/index.ts",
+      "class": "delorun-feature",
+      "feature": "model-prompt",
+      "reason": "The workflow paragraph is sent only when the workflow tool is offered to the agent in that step."
     }
   ],
   "retired": []

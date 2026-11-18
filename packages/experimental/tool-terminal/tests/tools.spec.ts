@@ -8,8 +8,9 @@ import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
+import SystemPrompt, { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
+import type { ResolvedToolSet } from '@deepseek-ai/dsh-tools'
 import { renderToolsSdk } from '@deepseek-ai/dsh-tool-executor-ptc'
 import type { ToolSdkSchema } from '@deepseek-ai/dsh-tool-executor-ptc/src/ts-types.ts'
 import TerminalSessionService, { TerminalSessionId } from '@deepseek-ai/dsh-terminal'
@@ -158,6 +159,17 @@ function backgroundJobId(result: Awaited<ReturnType<typeof call>>): string {
 }
 
 describe('tool-terminal foreground API', () => {
+  it('sends the terminal paragraph only while the step offers terminal_open', async () => {
+    const { ctx, agent } = await setup(false)
+    const paragraph = 'Use a terminal session only when'
+    const rendered = async (toolSet: ResolvedToolSet) => renderPrompt(await ctx.systemPrompt.assemble({ scope: agent, toolSet }))
+    const offered = await ctx.tools.resolve({ agent, modelSelection: { provider: 'mock', model: 'mock' }, signal: testToolSignal })
+    expect(await rendered(offered)).toContain(paragraph)
+    offered.dispose()
+    const withheld: ResolvedToolSet = { dispose() {}, view: () => new Map() }
+    expect(await rendered(withheld)).not.toContain(paragraph)
+  })
+
   it('registers exactly six schemas and drives the full owner-scoped lifecycle', async () => {
     const { ctx, agent } = await setup(false)
     expect(TOOL_NAMES.every(name => ctx.tools.get(name) !== undefined)).toBe(true)

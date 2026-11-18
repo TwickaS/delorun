@@ -43,7 +43,7 @@ The config owns the fixed opener, runtime context, deployment persona prefix and
 
 | Field | Default | Meaning |
 |---|---|---|
-| `includeHarnessIdentity` | `true` | Include the fixed `You are an AI agent powered by DeepSeek Harness.` first-party opener at order −1000. Set false only when a compatibility deployment owns the complete system prompt. |
+| `includeHarnessIdentity` | `true` | Include the fixed first-party opener at order −1000 (see Harness identity). Set false only when a compatibility deployment owns the complete system prompt. |
 | `includeRuntimeContext` | `true` | Include optional ordered dynamic runtime context in assembly |
 | `personaPrefix` | `''` | Global persona prefix template at order `0`, before first-party guidance |
 | `personaSuffix` | `''` | Global `deployment:persona-suffix` template at order `10200`, after first-party guidance |
@@ -144,8 +144,10 @@ First-party sections render the harness identity, deployment persona prefix (inc
 ##### Harness identity
 
 ```markdown
-You are an AI agent powered by DeepSeek Harness.
+You are Delorun, an agent studio. The model answering right now is {model}. Delorun is built on DeepSeek Harness; mention that only when the person asks how Delorun is built or how to extend it.
 ```
+
+The model sentence appears only when a `model` prompt variable has a value in that assembly; the opener is rendered literally, so the model name is never read as a template.
 
 #### Token effect
 

@@ -174,7 +174,7 @@ preset 提供一条目录项。没有其他 skill 的会话还会收到目录的
 
 #### 模型看到什么
 
-创造模式预设在共享的编码 Agent 描述句之后添加“You help the user customize DeepSeek Harness itself.”。插件实现和授权规则仍保留在按需加载的 `dsh-doc` skill 中。
+标准预设在共享的身份行之后写“You help the person with coding and knowledge work in their workspace.”；创造模式预设改写为“You help the person extend Delorun with plugins.”。在已安装的程序上，插件工作走 `delorun-plugin-authoring` skill；`dsh-doc` 只覆盖 DeepSeek Harness 内部实现。
 
 #### Token 影响
 
