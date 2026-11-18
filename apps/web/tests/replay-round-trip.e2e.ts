@@ -239,8 +239,8 @@ describe('web e2e: fresh round trip through the real assembly', () => {
     if (system === undefined) throw new Error('the settled Web request has no system prompt')
     const paragraphs = system.split('\n\n')
     expect(paragraphs.slice(0, 2)).toEqual([
-      'You are an AI agent powered by DeepSeek Harness.',
-      'You are a coding agent powered by the deepseek-v4-flash model.',
+      'You are Delorun, an agent studio. The model answering right now is deepseek-v4-flash. Delorun is built on DeepSeek Harness; mention that only when the person asks how Delorun is built or how to extend it.',
+      'You help the person with coding and knowledge work in their workspace.',
     ])
     const cwd = agent.session.header.cwd
     if (cwd === undefined) throw new Error('the Web session has no working directory')
