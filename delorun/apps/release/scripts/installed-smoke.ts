@@ -4,7 +4,7 @@
  * with no model key and no model request. `cut-rc.ts` runs it as its last step.
  *
  * `tsx delorun/apps/release/scripts/installed-smoke.ts --channel <dir|origin> --version <v> [--launcher <tgz>]
- * [--channel-port <n>] [--studio-port <n>] [--budget-minutes <n>] [--log <file>] [--keep-going]`
+ * [--upgrade] [--channel-port <n>] [--studio-port <n>] [--budget-minutes <n>] [--log <file>] [--keep-going]`
  *
  * A channel directory is served read-only on `127.0.0.1:<channel-port>` for the run, and the launcher is built from
  * this checkout for that origin (`npm-launcher/src/build.ts`). An origin is used as it is, with a launcher built for it
@@ -66,6 +66,8 @@ export interface SmokeRequest {
   readonly log: string
   /** Record a failed check and go on to the next step, instead of stopping at it. */
   readonly keepGoing: boolean
+  /** Run step 6, which installs the previous release; the launcher installs an older release only after a person confirms it, so it is off unless asked for. */
+  readonly upgrade: boolean
 }
 
 /**
@@ -87,6 +89,7 @@ export function parseSmokeArgs(argv: readonly string[]): SmokeRequest {
       'budget-minutes': { type: 'string', default: '30' },
       'log': { type: 'string' },
       'keep-going': { type: 'boolean', default: false },
+      'upgrade': { type: 'boolean', default: false },
     },
   })
   if (values.channel === undefined || values.channel === '') throw new Error('pass --channel <dir|origin>')
@@ -108,6 +111,7 @@ export function parseSmokeArgs(argv: readonly string[]): SmokeRequest {
     budgetMinutes: budget,
     log: resolve(values.log ?? join(tmpdir(), `installed-smoke-${values.version}.log`)),
     keepGoing: values['keep-going'],
+    upgrade: values.upgrade,
   }
 }
 
@@ -434,7 +438,9 @@ export async function runSmoke(request: SmokeRequest, say: (line: string) => voi
 
     begin(6)
     const previous = /^https?:\/\//u.test(request.channel) ? undefined : await previousRelease(request.channel, request.version)
-    if (previous === undefined) {
+    if (!request.upgrade) {
+      done(' (skipped: pass --upgrade to run it; the launcher installs an older release only after a person confirms it)')
+    } else if (previous === undefined) {
       done(/^https?:\/\//u.test(request.channel) ? ' (skipped: a channel origin lists no releases to start from)' : ` (skipped: the channel holds no release older than ${request.version})`)
     } else {
       const agentPacks = (await offeredPacks(source, previous, platform as RuntimePlatform, Math.floor(Date.now() / 1000))).filter(name => /subagent-(?:claude-code|codex)$/u.test(name))

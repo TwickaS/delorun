@@ -242,7 +242,7 @@ describe('the leftover home process', () => {
 describe('the command line', () => {
   it('reads a channel directory or origin and the version, with the scratch ports by default', () => {
     const request = parseSmokeArgs(['--channel', 'http://127.0.0.1:18431/', '--version', '0.1.0-preview.1.6'])
-    expect(request).toMatchObject({ channel: 'http://127.0.0.1:18431', version: '0.1.0-preview.1.6', launcher: undefined, channelPort: 18981, studioPort: 18982, budgetMinutes: 30, keepGoing: false })
+    expect(request).toMatchObject({ channel: 'http://127.0.0.1:18431', version: '0.1.0-preview.1.6', launcher: undefined, channelPort: 18981, studioPort: 18982, budgetMinutes: 30, keepGoing: false, upgrade: false })
   })
 
   it('refuses a missing channel, a missing version and a port or budget out of range', () => {
