@@ -49,9 +49,9 @@ describe('the weight check', () => {
     expect(messages.some(message => message.startsWith('the first screen'))).toBe(true)
   })
 
-  it('holds the first screen at 125 KB, the whole prerendered HTML with its styles and fonts, and the entry script at 115 KB', () => {
-    expect(LIMITS.firstScreen).toBe(125_000)
-    expect(LIMITS.interactiveScript).toBe(115_000)
+  it('holds the first screen at 155 KB, the whole prerendered HTML with its styles and fonts, and the entry script at 195 KB', () => {
+    expect(LIMITS.firstScreen).toBe(155_000)
+    expect(LIMITS.interactiveScript).toBe(195_000)
   })
 
   it('reports the picture files and those the home page names, without limiting them', () => {

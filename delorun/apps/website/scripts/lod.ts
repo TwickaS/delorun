@@ -206,7 +206,7 @@ export const LOD_TILES: Readonly<Record<string, readonly [string, string, string
 ${[...table].map(([id, list]) => `  '${id}': [${list.map(hash => `'${hash}'`).join(', ')}],`).join('\n')}
 }
 `)
-  console.log(`tiles: ${PICTURES.length} pictures`)
+  console.log(`tiles: ${String(PICTURES.length)} pictures ${write ? 'written' : 'verified'}`)
 }
 
 if (modes.includes('atlases')) {
@@ -281,5 +281,5 @@ export const LOD_ATLASES = {
 ${rows.join('\n')}
 } as const
 `)
-  console.log('atlases: written')
+  console.log(write ? 'atlases: written' : 'atlases: verified')
 }
