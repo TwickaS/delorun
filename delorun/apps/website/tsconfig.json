@@ -31,9 +31,6 @@
       "@brand": [
         "../../packages/brand/src/index.ts"
       ],
-      "#studio/*": [
-        "../../../packages/client/*"
-      ],
       "#upstream": [
         "../../packages/brand/src/upstream.web.tsx"
       ],

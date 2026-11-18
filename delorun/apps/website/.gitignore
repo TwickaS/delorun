@@ -6,3 +6,6 @@ out/
 routeTree.gen.ts
 *.tsbuildinfo
 .alchemy/
+
+# The picture pyramid is built by scripts/lod.ts.
+public/lod/

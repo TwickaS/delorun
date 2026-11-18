@@ -25,10 +25,6 @@ export const LIMITS = {
   interactiveScript: 115 * KB,
   /** A living section's own script and data, loaded on first use. */
   section: 40 * KB,
-  /** The studio replica: its script, styles and one session's fixture. */
-  replica: 120 * KB,
-  /** Each further session's fixture. */
-  session: 15 * KB,
   /** The whole page after every section has loaded, without pictures. */
   wholePage: 450 * KB,
 } as const
@@ -39,7 +35,7 @@ export interface Weights {
   readonly preloadedFonts: number
   readonly interactiveScript: number
   /** Every lazy chunk (script or style) with its size, by file name. */
-  readonly lazy: ReadonlyArray<{ readonly file: string; readonly bytes: number; readonly kind: 'section' | 'replica' | 'session' }>
+  readonly lazy: ReadonlyArray<{ readonly file: string; readonly bytes: number; readonly kind: 'section' }>
   readonly wholePage: number
 }
 
@@ -47,18 +43,6 @@ export interface Weights {
 const FONT_FILES = /(?:schibsted-grotesk|jetbrains-mono)[^/]*\.woff2$/
 
 const brotli = (path: string): number => brotliCompressSync(readFileSync(path)).length
-
-/**
- * What kind of lazy chunk a file is, by name: `replica` chunks hold the studio replica, `session` chunks a replayed
- * session's fixture, everything else a section.
- * @param file - the chunk's file name.
- * @returns the kind.
- */
-export function chunkKind(file: string): 'section' | 'replica' | 'session' {
-  if (/session/i.test(file)) return 'session'
-  if (/replica/i.test(file)) return 'replica'
-  return 'section'
-}
 
 /**
  * Measures a built site.
@@ -80,7 +64,7 @@ export function measure(out: string): Weights {
   const preloadedFonts = [...html.matchAll(/<link[^>]*rel="preload"[^>]*as="font"/g)].length
   const lazy = files
     .filter(file => /\.(?:js|css)$/.test(file) && !startSet.has(`assets/${file}`) && !styles.includes(`assets/${file}`))
-    .map(file => ({ file, bytes: brotli(join(assets, file)), kind: chunkKind(file) }))
+    .map(file => ({ file, bytes: brotli(join(assets, file)), kind: 'section' as const }))
   const sum = (paths: readonly string[]): number => paths.reduce((total, path) => total + brotli(join(out, path)), 0)
   const firstScreen = brotli(indexPath) + sum(styles) + sum(fonts)
   const interactiveScript = sum([...startSet])
@@ -101,8 +85,6 @@ export function failures(weights: Weights, limits: typeof LIMITS = LIMITS): stri
   if (weights.preloadedFonts > limits.preloadedFonts) out.push(`${String(weights.preloadedFonts)} fonts are preloaded, over the limit of ${String(limits.preloadedFonts)}`)
   over('the interactive script', weights.interactiveScript, limits.interactiveScript)
   for (const chunk of weights.lazy) over(`the ${chunk.kind} chunk ${chunk.file}`, chunk.bytes, limits[chunk.kind])
-  const replica = weights.lazy.filter(chunk => chunk.kind === 'replica').reduce((total, chunk) => total + chunk.bytes, 0)
-  over('the replica', replica, limits.replica)
   over('the whole page', weights.wholePage, limits.wholePage)
   return out
 }

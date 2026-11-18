@@ -3,9 +3,6 @@ import { fileURLToPath } from 'node:url'
 import tsconfigPaths from 'vite-tsconfig-paths'
 import { defineConfig } from 'vitest/config'
 import { standardDecoratorPlugin } from '../vitest.shared.ts'
-import { replicaPlugins } from './apps/website/src/replica/build/plugins.ts'
-import { replicaOptions } from './apps/website/replica-options.ts'
-import { STUDIO_ALIASES } from './apps/website/studio-aliases.ts'
 
 /**
  * Vitest for Delorun's own workspaces: the specs under `delorun/apps/*` and `delorun/packages/*`, in three projects.
@@ -18,7 +15,7 @@ import { STUDIO_ALIASES } from './apps/website/studio-aliases.ts'
  *   {@link INTEGRATION_TIMEOUT_MS} budget and their hooks {@link INTEGRATION_HOOK_TIMEOUT_MS}, which a contended machine needs for process start-up. The check runner runs
  *   this project in its own phase with a bounded worker count (`--maxWorkers`), so the children of many workers do not
  *   compete for the CPUs at once.
- * - `fork-client-website`: the product website's component specs, with the replica's build plugins and the website's React.
+ * - `fork-client-website`: the product website's component specs, with the website's React.
  * - `fork-client`: the client component specs, `*.spec.tsx`, at {@link CLIENT_TIMEOUT_MS}. They resolve upstream packages to
  *   their sources through `tsconfig.base.json`'s paths, as upstream's own client specs do, because the built client
  *   modules load React's CommonJS shims that the jsdom lane cannot import.
@@ -93,20 +90,18 @@ export const forkClientProject = {
 }
 
 /**
- * The product website's component specs, `apps/website/tests/*.spec.tsx`: the studio replica renders upstream's and
- * Delorun's real components, so this project has the replica's build plugins. It resolves `react` and `react-dom` to the website's copy, the aliases the
+ * The product website's component specs, `apps/website/tests/*.spec.tsx`: the home page's component specs. It resolves `react` and `react-dom` to the website's copy, the aliases the
  * unit project has, and `#upstream`, `@design` and `@brand` as the site does.
  */
 export const forkClientWebsiteProject = {
-  plugins: [replicaPlugins(replicaOptions(fileURLToPath(new URL('..', import.meta.url)))), tsconfigPaths({ projects: [fileURLToPath(new URL('../tsconfig.base.json', import.meta.url))] })],
+  plugins: [tsconfigPaths({ projects: [fileURLToPath(new URL('../tsconfig.base.json', import.meta.url))] })],
   resolve: {
     alias: [
-      ...STUDIO_ALIASES,
       { find: '#upstream', replacement: fileURLToPath(new URL('./packages/brand/src/upstream.web.tsx', import.meta.url)) },
       { find: '@design', replacement: fileURLToPath(new URL('./packages/site-design/src', import.meta.url)) },
       { find: /^@brand\//, replacement: fileURLToPath(new URL('./packages/brand/src/', import.meta.url)) },
       { find: '@brand', replacement: fileURLToPath(new URL('./packages/brand/src/index.ts', import.meta.url)) },
-      // The site's own React 19 for every import, as in the unit project: the replica's JSX and the components it renders share it.
+      // The site's own React 19 for every import, as in the unit project: the page's JSX and its components share it.
       ...existsSync(WEBSITE_MODULES) ? [{ find: /^(react|react-dom)(\/.*)?$/, replacement: `${WEBSITE_MODULES}/$1$2` }] : [],
     ],
   },
