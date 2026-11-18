@@ -171,6 +171,16 @@ describe('the chat list', () => {
     expect(within(row(container, 'b')).getAllByText(en['status.approval']).length).toBeGreaterThan(0)
   })
 
+  it('puts the Working shelf last, below the cards and the other shelves, in the same order for the keyboard and the Alt jump', () => {
+    const { container } = show({ stored: { 'shelf.settled': 'open', 'shelf.snoozed': 'open' } })
+    const order = [...container.querySelectorAll('[data-sidebar-row], button[aria-expanded]')]
+      .map(each => each.getAttribute('data-sidebar-row') ?? `shelf:${each.textContent?.replace(/\d+$/, '') ?? ''}`)
+    expect(order.indexOf('w')).toBe(order.indexOf('shelf:Working') + 1)
+    expect(order.indexOf('d')).toBeLessThan(order.indexOf('shelf:Working'))
+    expect(order.indexOf('shelf:Settled')).toBeLessThan(order.indexOf('shelf:Working'))
+    expect(order.indexOf('a')).toBeLessThan(order.indexOf('shelf:Settled'))
+  })
+
   it('shows the update notice below the list, outside the region that scrolls, and nothing without one', () => {
     const { container } = show()
     expect(container.querySelector('[data-update-notice]')).toBeNull()
@@ -926,7 +936,7 @@ describe('dragging a chat', () => {
     expect(within(row(container, 'd')).getByRole('status').textContent).toBe(en['drop.unsettle'])
     act(() => { fireEvent.pointerUp(window) })
     act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Alt', altKey: true })) })
-    expect(within(row(container, 'd')).getByText('5')).toBeTruthy()
+    expect(within(row(container, 'd')).getByText('4')).toBeTruthy()
   })
 })
 
