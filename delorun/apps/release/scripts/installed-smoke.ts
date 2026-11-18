@@ -15,7 +15,7 @@
  *
  * Steps, each named on failure: 1 install and start, 2 add the offered packs, 3 wait for the installs and check each
  * pack's plugins are loaded, 4 stop and start twice with a clean home log, 5 create a chat, 6 clean up. The scratch
- * directory `/tmp/itest-*` is removed and every process the run started is stopped, whether it passes or not. The run
+ * directory `/var/tmp/itest-*` (outside `/tmp`, which a sandboxed command may write, as a real home is) is removed and every process the run started is stopped, whether it passes or not. The run
  * stops at the first failure; `--keep-going` records a failed check (a refused home-log line, a pack that is not loaded)
  * and goes on, so one run names every failing step. Exit codes: 0 passed, 1 a step or check failed, 2 a wrong command
  * line.
@@ -205,7 +205,7 @@ export async function runSmoke(request: SmokeRequest, say: (line: string) => voi
   }
   mkdirSync(dirname(request.log), { recursive: true })
   writeFileSync(request.log, `installed smoke of ${request.version} from ${request.channel}\n`)
-  const scratch = mkdtempSync(join('/tmp', 'itest-'))
+  const scratch = mkdtempSync(join('/var/tmp', 'itest-'))
   const paths = { home: join(scratch, 'home'), delorun: join(scratch, 'home', '.delorun'), tmp: join(scratch, 'tmp'), npm: join(scratch, 'npm-cache'), project: join(scratch, 'home', 'project') }
   for (const directory of [paths.home, paths.tmp, paths.npm, paths.project]) mkdirSync(directory, { recursive: true, mode: 0o700 })
   const homeLog = join(paths.delorun, 'logs', `home-${PROFILE}`, 'home.log')
