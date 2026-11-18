@@ -123,6 +123,34 @@ export async function startChanges(request: ChangesStartRequest, output: (text: 
 }
 
 /**
+ * Whether a Host boot first re-points the recorded active copies to this process's release: a successor's first boot,
+ * whose copies name its predecessor's release, and every boot after a process's first, which follows a failed switch
+ * that left the copies naming the release that failed. A fresh start's first boot has the pre-start steps instead.
+ * @param successor - whether this process is an update's successor.
+ * @param bootsBefore - how many Hosts this process has booted already.
+ * @returns true when the copies are re-pointed first.
+ */
+export function repointsBeforeBoot(successor: boolean, bootsBefore: number): boolean {
+  return successor || bootsBefore > 0
+}
+
+/**
+ * Wrap a profile's Host boot so that it re-points the active copies first when {@link repointsBeforeBoot} says so.
+ * @param request - the home and the profile.
+ * @param successor - whether this process is an update's successor.
+ * @param boot - boots the Host.
+ * @param repoint - re-points the copies; {@link repointForSuccessor} by default.
+ * @returns the wrapped boot, which counts the boots it has run.
+ */
+export function repointingBoot<A extends unknown[], T>(request: { readonly home: string, readonly profile: string }, successor: boolean, boot: (...args: A) => Promise<T>, repoint: (request: { readonly home: string, readonly profile: string }) => Promise<void> = repointForSuccessor): (...args: A) => Promise<T> {
+  let booted = 0
+  return async (...args) => {
+    if (repointsBeforeBoot(successor, booted++)) await repoint(request)
+    return boot(...args)
+  }
+}
+
+/**
  * An update's successor boots without the pre-start steps, so before its Host boots it re-points each recorded active
  * copy's links into the runtime store to its own release ({@link repointActiveCopies}); otherwise a plugin pack copy
  * written under the previous release fails the load check of the new one and the update rolls back.

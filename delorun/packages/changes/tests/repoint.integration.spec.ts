@@ -72,6 +72,14 @@ describe('repointActiveCopies', () => {
     expect(await repointActiveCopies(request(fx, '0.2.0'))).toEqual([])
   })
 
+  it('points the copy back at the previous release after a failed switch, so that release loads it again', async () => {
+    const fx = await updatedWithoutReview()
+    await repointActiveCopies(request(fx, '0.2.0'))
+    expect(await atLoad(fx, '0.1.0')).toEqual([expect.stringContaining('The active directory of plug does not hold version')])
+    expect(await repointActiveCopies(request(fx, '0.1.0'))).toEqual(['plug'])
+    expect(await atLoad(fx, '0.1.0')).toEqual([])
+  })
+
   it('leaves a copy that already names the running release as it is', async () => {
     const fx = await updatedWithoutReview()
     expect(await repointActiveCopies(request(fx, '0.1.0'))).toEqual([])
