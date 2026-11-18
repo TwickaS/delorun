@@ -55,12 +55,6 @@
   margin: 0 auto;
   padding-block: 18px;
 }
-.header[data-over='true'] {
-  position: absolute;
-  inset-inline: 0;
-  top: 0;
-  color: var(--dl-stage-text);
-}
 .brand {
   display: inline-flex;
   align-items: center;
@@ -187,18 +181,18 @@
 
 /* B's header: the theme control and the Star button are outlined pills of one size, so both read as controls. */
 
-.header[data-star='true'] .nav { gap: clamp(12px, 1.6vw, 22px); }
-.header[data-star='true'] .dotWrap,
+.header .nav { gap: clamp(12px, 1.6vw, 22px); }
+.header .dotWrap,
 .starButton {
   min-height: 38px;
   border: 1px solid color-mix(in oklab, currentColor 26%, transparent);
   background: color-mix(in oklab, var(--dl-stage) 70%, transparent);
   backdrop-filter: blur(10px);
 }
-.header[data-star='true'] .dotWrap { gap: 6px; padding: 0 5px 0 14px; }
-.header[data-star='true'] .dotName { opacity: 0.85; }
-.header[data-star='true'] .dot { width: 26px; height: 26px; }
-.header[data-star='true'] .dot span { width: 14px; height: 14px; box-shadow: 0 0 0 3px color-mix(in oklab, var(--dl-accent) 26%, transparent); }
+.header .dotWrap { gap: 6px; padding: 0 5px 0 14px; }
+.header .dotName { opacity: 0.85; }
+.header .dot { width: 26px; height: 26px; }
+.header .dot span { width: 14px; height: 14px; box-shadow: 0 0 0 3px color-mix(in oklab, var(--dl-accent) 26%, transparent); }
 .starButton {
   display: inline-flex;
   align-items: center;
@@ -213,12 +207,12 @@
 .starButton svg { flex: none; }
 .starButton:active { transform: scale(0.97); }
 @media (hover: hover) and (pointer: fine) {
-  .header[data-star='true'] .dotWrap:hover,
+  .header .dotWrap:hover,
   .starButton:hover { border-color: color-mix(in oklab, currentColor 55%, transparent); background: color-mix(in oklab, currentColor 8%, var(--dl-stage)); }
 }
 @media (max-width: 639px) {
-  .header[data-star='true'] .nav { gap: 8px; }
-  .header[data-star='true'] .dotWrap { gap: 5px; padding: 0 5px 0 11px; }
+  .header .nav { gap: 8px; }
+  .header .dotWrap { gap: 5px; padding: 0 5px 0 11px; }
   .starButton { width: 38px; padding: 0; justify-content: center; }
   .starLabel { display: none; }
 }
@@ -801,7 +795,6 @@
 
 @media (max-width: 639px) {
   .reveal { height: 220svh; }
-  .header[data-over='true'] { width: 100%; padding-block: 10px; padding-inline: var(--margin); background: var(--dl-stage); }
   .revealStage { min-height: 0; }
   .mosaicFrame { place-items: start center; padding-top: 64px; }
   .mosaic[data-layout='wide'] { display: none; }
