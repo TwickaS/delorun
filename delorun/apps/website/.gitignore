@@ -9,3 +9,4 @@ routeTree.gen.ts
 
 # The picture pyramid is built by scripts/lod.ts.
 public/lod/
+pictures/

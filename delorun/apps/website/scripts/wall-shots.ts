@@ -15,7 +15,7 @@
  * order.
  *
  * With an owner inbox folder as the second argument, the vetted entries of its `manifest.json` (vetted, with a screen, a
- * theme and a caption) join the candidates; every other entry is ignored. Every picked picture, captured or owner's, is written into `pictures/` as WebP.
+ * theme and a caption) join the candidates; every other entry is ignored. Every picked picture, captured or owner's, is written as WebP into the folder `SITE_PICTURES_DIR` names.
  *
  * Usage: `node scripts/wall-shots.ts <source folder> [owner inbox folder]`
  *
@@ -25,6 +25,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { measure, type Colour } from './colour.ts'
+import { picturesDir } from './pictures-dir.ts'
 
 /** One manifest entry, as the capture lane writes it. */
 interface Entry {
@@ -63,7 +64,7 @@ interface Candidate extends Entry {
 /** Screens left out: an empty list, and a first-run step that shows a warning only a source build gives. */
 const LEFT_OUT = new Set(['settings-changes', 'onboarding-step-4'])
 
-/** The WebP quality of a source picture in `pictures/`. */
+/** The WebP quality of a source picture. */
 const SOURCE_QUALITY = 95
 
 /** How many pictures each screen gets on the wall, besides the plug's peach pictures. */
@@ -117,7 +118,7 @@ const KIND: Readonly<Record<string, string>> = {
 
 const [source, inbox] = process.argv.slice(2)
 if (source === undefined) throw new Error('Usage: node scripts/wall-shots.ts <source folder> [owner inbox folder]')
-const sources = new URL('../pictures/', import.meta.url).pathname
+const sources = picturesDir(process.env, false)
 
 const captured: Entry[] = readdirSync(source)
   .filter(name => /^manifest.*\.json$/.test(name))

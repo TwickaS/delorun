@@ -8,7 +8,7 @@
  * - `atlases`: for every layout, look and mode in `src/home/mosaic-plans.ts`, L0, the whole mosaic as one picture: the
  *   first paint, and the sprite a re-tile turns each tile to. Manifest: `src/home/lod-atlases.ts`.
  *
- * Sources are the pictures in `pictures/` (written by `wall-shots.ts` and `ingest-owner-shots.ts`). Nothing is drawn or
+ * Sources are the pictures in the folder `SITE_PICTURES_DIR` names (written by `wall-shots.ts` and `ingest-owner-shots.ts`). Nothing is drawn or
  * retouched; each file is the screenshot, scaled. A file's name carries a hash of what it is made from (the source's
  * bytes, the level and the encoder settings), so the names are the same on every machine and a changed picture gets a
  * new name. Files no longer named are removed. A cache in `node_modules/.cache/lod/` skips what exists.
@@ -29,6 +29,7 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { LOD_TILES } from '../src/home/lod-tiles.ts'
 import { FILM, SHOTS, type Device } from '../src/home/shots.ts'
+import { picturesDir } from './pictures-dir.ts'
 
 /** A picture the pyramid covers. */
 interface Picture {
@@ -89,8 +90,8 @@ function sourceHash(source: string): string {
  * @returns its path.
  */
 function sourceOf(shot: Picture): string {
-  const path = new URL(`../pictures/${shot.id}.webp`, import.meta.url).pathname
-  if (!existsSync(path)) throw new Error(`No source picture for ${shot.id}: run scripts/wall-shots.ts or ingest-owner-shots.ts`)
+  const path = join(picturesDir(), `${shot.id}.webp`)
+  if (!existsSync(path)) throw new Error(`No source picture for ${shot.id} in ${picturesDir()}: run scripts/wall-shots.ts or ingest-owner-shots.ts`)
   return path
 }
 
