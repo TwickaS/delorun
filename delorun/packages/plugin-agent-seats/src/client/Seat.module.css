@@ -50,7 +50,9 @@
 .command { font-family: var(--dsw-font-mono, ui-monospace, monospace); font-size: 12.5px; padding: 8px 10px; border-radius: 8px; background: var(--dsw-alias-interactive-bg-hover, rgba(0, 0, 0, .05)); overflow-wrap: anywhere; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 @media (max-width: 520px) {
-  .actions { flex-direction: row-reverse; }
+  /* The three answers stack full width in the desktop order, so Allow once ends at the bottom. */
+  .actions { flex-direction: column; align-items: stretch; }
+  .actions > * { width: 100%; }
   /* The composer's own inset at phone width, so the banner, the hint and the approval card line up with it. */
   .approval { width: calc(100% - 32px); padding: 14px 16px; }
   .card { padding: 14px 16px; }
