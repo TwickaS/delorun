@@ -57,6 +57,20 @@ export interface StatusChange extends AccountFigures {
   readonly modelPicker?: SeatModelPicker
 }
 
+/**
+ * The status fields that belong to the state a view is in, which a status record that only changes another field repeats.
+ * @param view - the view shown.
+ * @returns the state and its own fields.
+ */
+function stateFields(view: AgentSeatView): StatusChange & { readonly state: SeatViewState } {
+  return {
+    state: view.state,
+    ...view.resetAt === undefined ? {} : { resetAt: view.resetAt },
+    ...view.endedReason === undefined ? {} : { endedReason: view.endedReason },
+    ...view.modelPicker === undefined ? {} : { modelPicker: view.modelPicker },
+  }
+}
+
 /** The seat children's logged state. */
 export class SeatRecords implements SeatStateStore {
   private readonly sessions: SeatSessions
@@ -178,13 +192,7 @@ export class SeatRecords implements SeatStateStore {
   setPending(child: SessionId, since: number | undefined): void {
     const view = this.viewOf(child)
     if (view === null) throw new Error(`the chat ${child} is not a seat child`)
-    appendPluginRecord(this.sessionOf(child), SEAT_STATUS_RECORD, {
-      state: view.state,
-      ...view.resetAt === undefined ? {} : { resetAt: view.resetAt },
-      ...view.endedReason === undefined ? {} : { endedReason: view.endedReason },
-      ...view.modelPicker === undefined ? {} : { modelPicker: view.modelPicker },
-      ...since === undefined ? {} : { pending: since },
-    })
+    appendPluginRecord(this.sessionOf(child), SEAT_STATUS_RECORD, { ...stateFields(view), ...since === undefined ? {} : { pending: since } })
   }
 
   /**
@@ -198,10 +206,7 @@ export class SeatRecords implements SeatStateStore {
     const changed = (Object.keys(figures) as (keyof AccountFigures)[]).some(key => figures[key] !== view[key])
     if (!changed) return
     appendPluginRecord(this.sessionOf(child), SEAT_STATUS_RECORD, {
-      state: view.state,
-      ...view.resetAt === undefined ? {} : { resetAt: view.resetAt },
-      ...view.endedReason === undefined ? {} : { endedReason: view.endedReason },
-      ...view.modelPicker === undefined ? {} : { modelPicker: view.modelPicker },
+      ...stateFields(view),
       ...view.pending === undefined ? {} : { pending: view.pending.since },
       ...figures,
     })

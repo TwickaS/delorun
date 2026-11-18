@@ -1,13 +1,7 @@
-/** The figures and the program version the chat shows from the accounts store and the added pack. */
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { describe, expect, it, onTestFinished, vi } from 'vitest'
+/** The figures the chat shows from the accounts store. */
+import { describe, expect, it } from 'vitest'
 import type { AccountRecord } from '@delorun/external-agents/contract'
-import { accountFigures, programVersion } from '../src/account.ts'
-
-const locate = vi.hoisted(() => ({ claude: vi.fn(), codex: vi.fn() }))
-vi.mock('@delorun/external-agents/locate', () => ({ locateClaudeSdk: locate.claude, locateCodex: locate.codex }))
+import { accountFigures, accountOf, programInfo } from '../src/account.ts'
 
 const NOW = 1_000_000
 const record = (extra: Partial<AccountRecord>): AccountRecord => ({ provider: 'claude-code', signedIn: 'yes', windows: [], installed: true, ...extra })
@@ -38,33 +32,20 @@ describe('accountFigures', () => {
   })
 })
 
-describe('programVersion', () => {
-  const sdkAt = async (manifest: string): Promise<string> => {
-    const dir = await mkdtemp(join(tmpdir(), 'ea2-sdk-'))
-    onTestFinished(() => rm(dir, { recursive: true, force: true }))
-    await writeFile(join(dir, 'package.json'), manifest)
-    return dir
-  }
-
-  it('is unknown when the pack is not added', () => {
-    locate.claude.mockReturnValue(undefined)
-    locate.codex.mockReturnValue(undefined)
-    expect(programVersion('claude-code', '/profile')).toBeUndefined()
-    expect(programVersion('codex', '/profile')).toBeUndefined()
+describe('accountOf', () => {
+  it('reads the store\'s record for the agent', async () => {
+    const read = (agent: string) => Promise.resolve(record({ provider: agent === 'codex' ? 'codex' : 'claude-code', plan: 'Pro' }))
+    expect(await accountOf({ read }, 'codex', NOW)).toEqual({ plan: 'Pro' })
   })
 
-  it('reads Codex\'s version from its package', () => {
-    locate.codex.mockReturnValue({ directory: '/codex', version: '0.130.0' })
-    expect(programVersion('codex', '/profile')).toBe('0.130.0')
+  it('has no figures without a store', async () => {
+    expect(await accountOf(undefined, 'codex', NOW)).toEqual({})
   })
+})
 
-  it('reads Claude Code\'s version from the SDK manifest', async () => {
-    locate.claude.mockReturnValue({ directory: await sdkAt('{"claudeCodeVersion":"2.1.263"}'), version: '0.3.263', entry: '/x' })
-    expect(programVersion('claude-code', '/profile')).toBe('2.1.263')
-  })
-
-  it.each([['names no program version', '{}'], ['cannot be read as JSON', 'not json']])('falls back to the SDK\'s own version when the manifest %s', async (_name, manifest) => {
-    locate.claude.mockReturnValue({ directory: await sdkAt(manifest), version: '0.3.263', entry: '/x' })
-    expect(programVersion('claude-code', '/profile')).toBe('0.3.263')
+describe('programInfo', () => {
+  it('names the version when known and nothing otherwise', () => {
+    expect(programInfo('2.1.263')).toEqual({ version: '2.1.263' })
+    expect(programInfo(undefined)).toEqual({})
   })
 })

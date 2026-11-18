@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { agentExecutables, agentScripts, locateClaudeProgram, locateCodexProgram, locateClaudeSdk, locateCodex, locatePack, locatePackage, loginProgramFor } from '../src/locate.ts'
+import { agentExecutables, agentScripts, locateClaudeProgram, locateCodexProgram, locateClaudeSdk, locateCodex, locatePack, locatePackage, loginProgramFor, programVersion } from '../src/locate.ts'
 
 const roots: string[] = []
 const nodePath = process.env.NODE_PATH
@@ -204,5 +204,27 @@ describe('finding an added agent\'s sign-in program', () => {
     expect(loginProgramFor('codex', profileWith({}), LINUX)).toBeUndefined()
     expect(loginProgramFor('claude-code', profileWith({ [`${CLAUDE_PACK}/package.json`]: manifest('x') }), LINUX)).toBeUndefined()
     expect(loginProgramFor('claude-code', profileWith(CLAUDE_ADDED), { platform: 'linux', arch: 'arm64' })).toBeUndefined()
+  })
+})
+
+describe('the version of an agent\'s program', () => {
+  const sdkManifest = (extra: object): string => JSON.stringify({ name: '@anthropic-ai/claude-agent-sdk', version: '0.3.263', type: 'module', exports: { '.': './sdk.mjs' }, ...extra })
+
+  it('is unknown while the pack is not added', () => {
+    expect(programVersion('claude-code', profileWith({}))).toBeUndefined()
+    expect(programVersion('codex', profileWith({}))).toBeUndefined()
+  })
+
+  it('is Claude Code\'s own version from the SDK manifest', () => {
+    const dir = profileWith({ ...CLAUDE_ADDED, [`${SDK}/package.json`]: sdkManifest({ claudeCodeVersion: '2.1.263' }) })
+    expect(programVersion('claude-code', dir)).toBe('2.1.263')
+  })
+
+  it('falls back to the SDK\'s version when the manifest names no program version', () => {
+    expect(programVersion('claude-code', profileWith(CLAUDE_ADDED))).toBe('0.3.263')
+  })
+
+  it('is Codex\'s package version', () => {
+    expect(programVersion('codex', profileWith(CODEX_ADDED))).toBe('0.153.4')
   })
 })

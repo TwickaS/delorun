@@ -553,4 +553,18 @@ describe('what the adapter reports about a program that cannot start', () => {
     expect(JSON.stringify(records(w, SEAT_NOTICE_RECORD))).not.toContain('secret')
     expect(w.warnings.join('\n')).not.toContain('secret')
   })
+
+  it('refuses account figures for a chat that is not a live agent', async () => {
+    const w = await stateWorld()
+    const plain = w.ctx.sessions.create()
+    expect(() => { w.mount.store.setAccount(plain.header.id, { plan: 'Max' }) }).toThrow(/not a seat child/)
+  })
+
+  it('keeps the state\'s own fields when it logs account figures', async () => {
+    const w = await stateWorld()
+    const picker = { offered: [{ id: 'm', label: 'M' }], planDefault: 'm' }
+    appendPluginRecord(w.session, SEAT_STATUS_RECORD, { state: 'model-needed', modelPicker: picker, pending: 5, resetAt: 9, endedReason: 'why' })
+    w.mount.store.setAccount(w.child, { plan: 'Max' })
+    expect(view(w)).toMatchObject({ state: 'model-needed', modelPicker: picker, pending: { since: 5 }, resetAt: 9, endedReason: 'why', plan: 'Max' })
+  })
 })

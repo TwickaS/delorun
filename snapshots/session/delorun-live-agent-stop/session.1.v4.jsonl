@@ -13,7 +13,7 @@
 {"type":"request/header","data":{"header":{"config":{"provider":"claude-code-seat","model":"program"},"tools":"{{tools}}"},"reason":"initial"}}
 {"type":"request/context","data":{"provider":"claude-code-seat","model":"program","contextWindow":200000}}
 {"type":"session/title","data":{"title":"Run npm test in the","messageSeqs":[9],"source":{"kind":"fallback"}}}
-{"type":"plugin:delorun/agent-seat/status","data":{"state":"starting"},"ignorable":true}
+{"type":"plugin:delorun/agent-seat/status","data":{"state":"starting","version":"2.1.263"},"ignorable":true}
 {"type":"plugin:delorun/agent-seat/status","data":{"state":"working"},"ignorable":true}
 {"type":"plugin:delorun/agent-seat/state","data":{"programSessionId":"program-claude-code-1"},"ignorable":true}
 {"type":"plugin:delorun/agent-seat/state","data":{"programSessionId":"program-claude-code-1","cursor":"{{message:10}}"},"ignorable":true}

@@ -1,12 +1,8 @@
 /**
- * What the chat shows about an agent's account and program: the plan and limit figures the accounts store holds, and the
- * version of the program a pack brings.
+ * What the chat shows about an agent's account: the plan and limit figures the accounts store holds.
  * @module @delorun/plugin-agent-seats/account
  */
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
-import type { AccountRecord, ExternalAgentName } from '@delorun/external-agents/contract'
-import { locateClaudeSdk, locateCodex } from '@delorun/external-agents/locate'
+import type { AccountRecord, AgentAccounts, ExternalAgentName } from '@delorun/external-agents/contract'
 import type { AccountFigures } from './state/store.ts'
 
 /** The kinds that name a weekly window: Claude's `seven_day` and Codex's 10080-minute window. */
@@ -31,23 +27,21 @@ export function accountFigures(record: AccountRecord, now: number): AccountFigur
 }
 
 /**
- * The version of an agent's program as its pack brings it: Claude Code's from the Agent SDK's manifest, Codex's from
- * its package.
+ * The figures of an agent's stored account.
+ * @param accounts - the accounts store, when the gate package is mounted.
  * @param agent - the agent.
- * @param profileDirectory - the profile's directory, where the pack is looked for.
- * @returns the version, or undefined when the pack is not installed or its manifest does not say.
+ * @param now - the time the figures are read at, epoch milliseconds.
+ * @returns the figures; none without a store.
  */
-export function programVersion(agent: ExternalAgentName, profileDirectory: string): string | undefined {
-  if (agent === 'codex') return locateCodex(profileDirectory)?.version
-  const sdk = locateClaudeSdk(profileDirectory)
-  if (sdk === undefined) return undefined
-  let manifest: unknown
-  try {
-    manifest = JSON.parse(readFileSync(join(sdk.directory, 'package.json'), 'utf8'))
-  } catch (error: unknown) {
-    // The manifest was readable when the SDK was located; without its program version the SDK's own is shown.
-    manifest = error
-  }
-  const program = typeof manifest === 'object' && manifest !== null ? Reflect.get(manifest, 'claudeCodeVersion') : undefined
-  return typeof program === 'string' ? program : sdk.version
+export async function accountOf(accounts: Pick<AgentAccounts, 'read'> | undefined, agent: ExternalAgentName, now: number): Promise<AccountFigures> {
+  return accounts === undefined ? {} : accountFigures(await accounts.read(agent), now)
+}
+
+/**
+ * The status fields that name the program.
+ * @param version - the program's version, when its pack is added.
+ * @returns the fields to log with the status.
+ */
+export function programInfo(version: string | undefined): { readonly version?: string } {
+  return version === undefined ? {} : { version }
 }
