@@ -68,6 +68,22 @@ describe('the theme control while a look change runs', () => {
     expect(pressed).toHaveBeenCalledOnce()
   })
 
+  it('does not overlap changes when a press skips the transition before it is ready', async () => {
+    const { control, effects } = await render()
+    Object.assign(document, {
+      startViewTransition: (update: () => void) => {
+        update()
+        return { ready: Promise.reject(new Error('AbortError')), finished: new Promise<void>(resolve => { finish = resolve }), skipTransition: skip }
+      },
+    })
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    await act(async () => { control.click() })
+    await act(async () => { finish(); await Promise.resolve(); await Promise.resolve() })
+    expect(error).not.toHaveBeenCalled()
+    // The change ended without failing, so the queue is free for the next one.
+    expect(effects.lastQueued()).toBeUndefined()
+  })
+
   it('offers the look it will change to in its name, and the next look from the last one asked for', async () => {
     const { control } = await render()
     const before = control.getAttribute('aria-label')

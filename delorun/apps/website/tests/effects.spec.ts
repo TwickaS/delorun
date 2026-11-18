@@ -116,6 +116,17 @@ describe('the effects queue', () => {
     expect(error).toHaveBeenCalled()
   })
 
+  it('goes on to the next effect when an effect throws before it returns a promise', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const log: string[] = []
+    queue.enqueue({ label: 'bad', done: 'bad', value: 'bad', run: () => { throw new Error('broken at once') } })
+    queue.enqueue(controlled('B', log).effect)
+    await settle()
+    await settle()
+    expect(log).toEqual(['start B'])
+    expect(error).toHaveBeenCalled()
+  })
+
   it('shows a note only while no effect runs', () => {
     const log: string[] = []
     queue.note('✓ copied')

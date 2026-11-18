@@ -94,6 +94,16 @@ describe('the lightbox', () => {
     expect(shown(dialog).length).toBeGreaterThan(0)
   })
 
+  it('ignores stepping while it closes, so it never shuts on a picture the visitor has just stepped to', async () => {
+    const { tiles, dialog } = await page()
+    await act(async () => { tiles[0]!.click() })
+    animations.length = 0
+    const closeButton = [...dialog.querySelectorAll('button')].find(button => button.getAttribute('aria-label') === 'Close')!
+    await act(async () => { closeButton.click() })
+    await act(async () => { dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })) })
+    expect(dialog.textContent).toContain(SHOTS[0]!.caption)
+  })
+
   it('closes when its close animation ends, and gives focus back to the tile it grew from', async () => {
     const { tiles, dialog } = await page()
     await act(async () => { tiles[1]!.click() })

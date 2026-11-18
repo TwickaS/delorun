@@ -20,7 +20,7 @@ export const PICTURES_VARIABLE = 'SITE_PICTURES_DIR'
  */
 export function picturesDir(env: Readonly<Record<string, string | undefined>> = process.env, mustExist = true): string {
   const value = env[PICTURES_VARIABLE]
-  if (value === undefined || value === '') throw new Error(`${PICTURES_VARIABLE} is not set. Set it to the folder of source pictures (for example ~/delorun-rc-release/site-pictures); the screenshots are not in the repository.`)
+  if (value === undefined || value === '') throw new Error(`${PICTURES_VARIABLE} is not set. Set it to the folder of source pictures (for example ~/site-pictures); the screenshots are not in the repository.`)
   const path = resolve(value)
   if (mustExist && !existsSync(path)) throw new Error(`${PICTURES_VARIABLE} names ${path}, which does not exist. Set it to the folder of source pictures.`)
   return path

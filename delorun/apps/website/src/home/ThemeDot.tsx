@@ -49,7 +49,13 @@ async function spread(look: LookId, from: HTMLElement | null, run: EffectRun): P
   const transition = doc.startViewTransition(apply)
   active = transition
   void transition.finished.then(() => { if (active === transition) active = undefined })
-  await transition.ready
+  try {
+    await transition.ready
+  } catch {
+    // A press skipped the transition before it started: the look is already applied and there is nothing to animate.
+    await transition.finished.catch(() => undefined)
+    return
+  }
   run.track(document.documentElement.animate(
     still ? { opacity: [0, 1] } : { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
     { duration: still ? MS.quick : SPREAD, easing: EASE, pseudoElement: '::view-transition-new(root)' },
@@ -76,7 +82,11 @@ export function ThemeDot() {
       label: tiles ? `theme → ${name} · retiling` : `theme → ${name}`,
       done: `✓ ${name}`,
       value: next,
-      run: async run => { await Promise.all([spread(next, dot.current, run), tiles ? retile(next, run) : undefined]) },
+      run: async run => {
+        // Both parts end before the queue moves on, so two changes never overlap, even when one of them fails.
+        const results = await Promise.allSettled([spread(next, dot.current, run), tiles ? retile(next, run) : undefined])
+        for (const result of results) if (result.status === 'rejected') throw result.reason
+      },
     })
   }
   const pressed = useRef(press)

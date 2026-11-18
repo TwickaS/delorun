@@ -191,6 +191,8 @@ export function LightboxProvider({ children }: { children: ReactNode }) {
   }, [shot])
 
   const step = useCallback((by: number) => {
+    // A step while the close runs would change the picture under a lightbox that is about to shut.
+    if (closing.current) return
     setPlaceholder(undefined)
     setIndex(at => at === undefined ? at : (at + by + SHOTS.length) % SHOTS.length)
   }, [])
@@ -201,6 +203,18 @@ export function LightboxProvider({ children }: { children: ReactNode }) {
     const to = openRect(shot)
     Object.assign(picture.current.style, { left: `${to.left}px`, top: `${to.top}px`, width: `${to.width}px`, height: `${to.height}px` })
     if (pans(shot) && strip.current !== null) strip.current.scrollLeft = (to.width - innerWidth) * 0.45
+  }, [shot])
+
+  // A resize or a turn of the phone while open re-places the picture.
+  useEffect(() => {
+    if (shot === undefined) return
+    const place = () => {
+      if (picture.current === null || dialog.current?.open !== true) return
+      const to = openRect(shot)
+      Object.assign(picture.current.style, { left: `${to.left}px`, top: `${to.top}px`, width: `${to.width}px`, height: `${to.height}px` })
+    }
+    addEventListener('resize', place)
+    return () => removeEventListener('resize', place)
   }, [shot])
 
   const drag = useRef<{ x: number; y: number; t: number } | undefined>(undefined)

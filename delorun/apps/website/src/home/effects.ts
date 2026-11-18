@@ -81,7 +81,8 @@ function next(): void {
     publish({ waiting: waiting.length, done: effect.done })
     next()
   }
-  effect.run({ speed, track: animation => { tracked = animation; animation.playbackRate = speed() } }).then(finish, (error: unknown) => {
+  // Wrapped so that a synchronous throw from `run` ends the effect's turn like a rejection.
+  void (async () => effect.run({ speed, track: animation => { tracked = animation; animation.playbackRate = speed() } }))().then(finish, (error: unknown) => {
     // An effect that fails still ends its turn; the page keeps working and the readout moves on.
     console.error('A page effect failed', error)
     finish()
@@ -108,8 +109,7 @@ export function enqueue(effect: Effect): void {
 
 /**
  * Shows one line about something the visitor did, such as `✓ copied pnpm dlx delorun`, then returns to idle. The line
- * gives way to running effects: while one runs, or one finished a moment ago, the note is dropped, so the readout shows
- * one line at a time.
+ * gives way to running effects: while one runs the note is dropped, so the readout shows one line at a time.
  * @param text - the line.
  */
 export function note(text: string): void {
