@@ -53,6 +53,10 @@
     "./diagnostic": {
       "types": "./lib/types/diagnostic.d.ts",
       "default": "./lib/types/diagnostic.js"
+    },
+    "./package-name": {
+      "types": "./lib/types/package-name.d.ts",
+      "default": "./lib/types/package-name.js"
     }
   },
   "files": [

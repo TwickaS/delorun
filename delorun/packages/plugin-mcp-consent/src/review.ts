@@ -10,7 +10,8 @@
  * @module @delorun/plugin-mcp-consent/review
  */
 import { createHash } from 'node:crypto'
-import { isRunAffectingEnv, sortedEnvEntries } from '@deepseek-ai/dsh-mcp-client'
+import { sortedEnvEntries } from '@deepseek-ai/dsh-mcp-client/consent'
+import { isRunAffectingEnv } from '@deepseek-ai/dsh-mcp-client/templates'
 import type { PinnedStart } from './pins.ts'
 import { envDigests } from './store.ts'
 import type { AcceptedServer, EnvVariable, McpConsentRefusalCode, PendingServer, ServerChange, ServerState } from './wire.ts'

@@ -6,7 +6,8 @@ import { once } from 'node:events'
 import { connect } from 'node:net'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
-import { REACH_REFUSAL_STATUS, type Admission as UpstreamAdmission, type ListenerPolicy as UpstreamPolicy, type MintedCredential, type PeerScope, type ReachListener } from '@deepseek-ai/dsh-client-connection'
+import { REACH_REFUSAL_STATUS } from '@deepseek-ai/dsh-client-connection/reach'
+import type { Admission as UpstreamAdmission, ListenerPolicy as UpstreamPolicy, MintedCredential, PeerScope, ReachListener } from '@deepseek-ai/dsh-client-connection'
 import { ADMISSION_REFUSAL_STATUS, type Admission, type ListenerPolicy, type LoopbackCredentialMint } from '@delorun/contract-admission'
 import {
   ADDRESSES, REACH_LISTENERS, SESSION_COOKIE, StandInHomeAuth, mountFixturePlugin, relayEndpoint, relayTls, tcpEndpoint,

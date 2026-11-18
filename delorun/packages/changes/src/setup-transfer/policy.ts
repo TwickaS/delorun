@@ -9,7 +9,7 @@
  *
  * @module @delorun/changes/setup-transfer/policy
  */
-import { PROVIDER_DATA } from '@deepseek-ai/dsh-llm-pi-ai'
+import { PROVIDER_DATA } from '@deepseek-ai/dsh-llm-pi-ai/provider-data'
 import { SECRET_PATTERNS } from '@delorun/archive'
 
 /** The scopes of the packages that make up Delorun and upstream's harness. A setup neither carries nor removes them. */

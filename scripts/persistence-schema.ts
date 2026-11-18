@@ -149,7 +149,7 @@ function hostSourceFiles(root: string, configPath: string, seen = new Set<string
   const errors = parsed.errors.filter(error => error.code !== 18003)
   if (errors.length > 0) throw new PersistenceSchemaError(errors.map(diagnosticText).join('\n'))
   return [
-    ...parsed.fileNames.filter(file => /^packages\/[^/]+\/[^/]+\/src\//.test(slash(relative(root, file)))),
+    ...parsed.fileNames.filter(file => /^(?:packages\/[^/]+\/[^/]+|delorun\/packages\/[^/]+)\/src\//.test(slash(relative(root, file)))),
     ...(parsed.projectReferences ?? []).flatMap(reference =>
       hostSourceFiles(root, extname(reference.path) === '.json' ? reference.path : resolve(reference.path, 'tsconfig.json'), seen)),
   ]
@@ -215,7 +215,7 @@ function reservedPropertyAnnotations(root: string, program: ts.Program): Readonl
   const reserved = new Set<ts.Declaration>()
   for (const file of program.getSourceFiles()) {
     const path = slash(relative(root, file.fileName))
-    if (!path.startsWith('packages/') || path.includes('/node_modules/')) continue
+    if (!(path.startsWith('packages/') || path.startsWith('delorun/packages/')) || path.includes('/node_modules/')) continue
     const visit = (node: ts.Node): void => {
       const tags = ts.getJSDocTags(node).filter(tag => tag.tagName.text === 'persistenceReserved')
       if (tags.length > 0) {
@@ -508,5 +508,5 @@ function slash(path: string): string {
 }
 
 function trackedSource(file: string): boolean {
-  return (file.startsWith('packages/') || file.startsWith('vendor/')) && !file.includes('/node_modules/')
+  return (file.startsWith('packages/') || file.startsWith('delorun/packages/') || file.startsWith('vendor/')) && !file.includes('/node_modules/')
 }

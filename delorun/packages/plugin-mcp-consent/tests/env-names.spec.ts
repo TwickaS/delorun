@@ -1,5 +1,5 @@
 /** The environment names the consent shows are the names the mcp-client refuses to fill from a credential. */
-import { isRunAffectingEnv } from '@deepseek-ai/dsh-mcp-client'
+import { isRunAffectingEnv } from '@deepseek-ai/dsh-mcp-client/templates'
 import { describe, expect, it } from 'vitest'
 import { showsEnvValue } from '../src/review.ts'
 

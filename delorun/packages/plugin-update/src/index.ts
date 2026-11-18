@@ -12,6 +12,7 @@ import type {} from '@deepseek-ai/dsh-host-webserver'
 import z from '@deepseek-ai/schemastery'
 import { DRAIN_TIMEOUT_DEFAULT_S, DRAIN_TIMEOUT_MAX_S, DRAIN_TIMEOUT_MIN_S } from '@delorun/contract-home-process'
 import type { UpdateChannelAccess } from '@delorun/home-process'
+// Types only, resolved through the workspace paths: a declared dependency would close a cycle, since bundle-local depends on this package.
 import type {} from '@delorun/bundle-local/update-check'
 import type {} from '@delorun/plugin-changes'
 import { updateRoutes } from './routes.ts'

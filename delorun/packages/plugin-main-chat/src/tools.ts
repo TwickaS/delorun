@@ -14,11 +14,11 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { SessionRequestId, SessionSummary } from '@deepseek-ai/dsh-api-session-controller'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { HarnessError } from '@deepseek-ai/dsh-llm'
-import { appendPluginRecord, isAppendSurfaceEvent, SessionId } from '@deepseek-ai/dsh-session'
+import { isAppendSurfaceEvent, SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-query'
 import { defineTool, type ToolDefinition, type ToolRunContext } from '@deepseek-ai/dsh-tools'
 import type { Workspace } from '@deepseek-ai/dsh-workspace'
-import { accountTools, READ_RECORD, type AccountLimits } from './account-tools.ts'
+import { accountTools, READ_EVENT, type AccountLimits } from './account-tools.ts'
 import { chatLines, newestWithin } from './chat-text.ts'
 import { folders, OUTSIDE } from './folders.ts'
 import type { Reports } from './reports.ts'
@@ -175,7 +175,7 @@ export function mainChatTools(ctx: Context, root: string, limits: ToolLimits, re
         const main = mainChatOnly(exec)
         if (args.query.trim() === '') throw new MainChatToolError('MAIN_CHAT_INVALID', 'The query is empty.')
         // The snippets are other chats' text, which can carry instructions, so the rest of the turn asks before an account change.
-        appendPluginRecord(main.session, READ_RECORD, { query: args.query })
+        main.session.append(READ_EVENT, { query: args.query })
         const [found, chats] = await Promise.all([ctx.sessionController.search({ query: args.query }, exec.signal), visibleChats(exec.signal)])
         const visible = new Map(chats.map(chat => [chat.sessionId, chat]))
         const hits = found.items.filter(item => visible.has(item.sessionId))
@@ -197,7 +197,7 @@ export function mainChatTools(ctx: Context, root: string, limits: ToolLimits, re
         const chat = await listedChat(args.chat, exec.signal)
         const id = chat.sessionId
         // The chat's text can carry instructions, so the rest of the turn asks before an account change.
-        appendPluginRecord(main.session, READ_RECORD, { chat: id })
+        main.session.append(READ_EVENT, { chat: id })
         // Append-origin events are the conversation as the person saw it; compaction's replacements are the model's alone.
         const { events } = await ctx.sessionQuery.readSession(id)
         const title = (await titles([id], exec.signal)).get(id)

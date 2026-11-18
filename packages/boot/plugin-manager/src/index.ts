@@ -37,6 +37,7 @@ import { approvedFromTarget } from './approved-source.ts'
 import { dependencySpec, InvalidInstallSpecError, parseInstallSpec, pinnedGitOrigin, type ParsedInstallSpec } from './install-spec.ts'
 import { attributeFailure, normalizeRegistry, NPMMIRROR_REGISTRY, registryPlan } from './registry.ts'
 import { flatten, writePluginEnabled } from './patch.ts'
+import { parsedForRegistry, specPackageName } from './package-name.ts'
 import { incompatiblePlugin, ManagementFailure } from './failure.ts'
 import { approveBuilds, recordPendingBuilds } from './build-approval.ts'
 import { checkGitConnection, checkGithubConnection, type GithubConnectionFailure } from './github-connection.ts'
@@ -44,7 +45,7 @@ import { assertNever } from '@deepseek-ai/dsh-util-values'
 import { acceptAudit, acceptedAudits } from './audit.ts'
 import { PROFILE_FILES, ProfileHistory, VersionRefusedError, writeProfileVersion } from './history.ts'
 import { broughtBack, profileVersionChanges } from './version-changes.ts'
-import { chooseGitTransport, sshGitSpec } from './git-transport.ts'
+import { chooseGitTransport } from './git-transport.ts'
 import { newerVersions, VERSION_FIELDS, VERSION_LIST_FIELDS, versionFacts } from './versions.ts'
 import type {
   BundleDetail, BundleInfo, BundleRowInfo, ChangeResult, InspectOptions, InstallBundleOptions, ListVersionsOptions, ManagementError,
@@ -56,7 +57,6 @@ import type {
 } from './types.ts'
 export type * from './types.ts'
 export { classifyInstallFailure, type InstallFailureFacts } from './install-failure.ts'
-export { recordPendingBuilds } from './build-approval.ts'
 export { InvalidInstallSpecError, parseInstallSpec, pinnedGitOrigin, type ParsedInstallSpec } from './install-spec.ts'
 
 /** The pnpm executable, registries, and limits for diagnostics, lookups and connection checks. */
@@ -283,23 +283,6 @@ function bundleSelection(manifest: ProfileManifest): readonly string[] {
   return manifest.dsh?.profile?.bundles ?? []
 }
 
-/**
- * The package an installation spec names before pnpm runs: a registry name, a local directory's manifest name, or the
- * dependency saved with this git or tarball spec or the SSH form of its Git URL, compared as the plugin list shows saved specs.
- * @param spec The installation spec.
- * @param dependencies The profile's saved dependencies.
- * @param profileDir The profile directory saved local paths are relative to.
- * @returns The package name, or `undefined` when only the installation tells it.
- */
-export function specPackageName(spec: string, dependencies: Readonly<Record<string, string>>, profileDir: string): string | undefined {
-  const parsed = parsedForRegistry(spec)
-  if (parsed.kind === 'registry') return parsed.name
-  if (parsed.kind === 'path') return packageName(parsed.path)
-  const alternative = parsed.kind === 'tarball' && parsed.path !== undefined ? `file:${parsed.path}` : sshGitSpec(parsed)
-  const specs = alternative === undefined ? [spec] : [spec, alternative]
-  return Object.entries(dependencies).find(([dependency, saved]) => specs.includes(dependencySpec(dependency, saved, profileDir)))?.[0]
-}
-
 /** The diagnostic for a package the release publishes as a signed plugin pack and a registry or another source offers. */
 /** Why a version that holds a pack from another source is not restored. */
 const PACK_RESTORE = 'this version holds the plugin pack from a registry or another folder, not from its pack folder; remove the pack first, then add it again from Plugins.'
@@ -310,16 +293,6 @@ const PACK_UPDATE_PENDING = 'Restart Delorun to finish the update before adding 
 
 const PACK_ONLY = 'This plugin is a signed plugin pack of this release; add it from Plugins or the setup guide, which downloads it from the release.'
 
-/** The package name a local directory declares, or `undefined` without a readable manifest. */
-function packageName(dir: string): string | undefined {
-  try {
-    return readProfileManifest('dsh', dir).name
-  } catch (_error) {
-    // pnpm reports the unreadable directory itself.
-    return undefined
-  }
-}
-
 /**
  * The package a plugin module name is loaded from: its scope and name, without a subpath.
  * @param moduleName - a row's module name, such as `@delorun/bundle-local/update-gate`.
@@ -328,17 +301,6 @@ function packageName(dir: string): string | undefined {
 function packageOf(moduleName: string): string {
   const parts = moduleName.split('/')
   return parts.slice(0, moduleName.startsWith('@') ? 2 : 1).join('/')
-}
-
-/** The spec's form, for deciding whether a failed attempt was the registry's; a form the parser refuses has no host of its own. */
-function parsedForRegistry(spec: string): ParsedInstallSpec {
-  try {
-    return parseInstallSpec(spec)
-  } catch (error) {
-    /* v8 ignore next -- parseInstallSpec throws nothing but its own refusal */
-    if (!(error instanceof InvalidInstallSpecError)) throw error
-    return { kind: 'registry', spec, name: spec }
-  }
 }
 
 /** Only registry package names are retained before installation resolves its target. */
