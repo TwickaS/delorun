@@ -270,12 +270,35 @@ describe('a seat review at hand-off', () => {
     expect(w.asks).toEqual([])
   })
 
-  it('refuses at hand-off when the root has no open turn, naming the fixed way forward', async () => {
+  it('asks on the seat child when the root has no open turn and the person\'s own message in that chat starts it', async () => {
     const w = await world()
     w.openTurns.clear()
     w.openTurns.add('seat')
+    await expect(w.consent.reviewSeat(seat(w, 'hand-off'))).resolves.toMatchObject({ kind: 'allow', why: 'asked' })
+    expect(w.asks.map(ask => ask.agent.id)).toEqual(['seat'])
+    expect(w.asks[0]).toMatchObject({ grants: 'external-agent' })
+  })
+
+  it('refuses at hand-off when neither the root nor the seat child has an open turn, naming the fixed way forward', async () => {
+    const w = await world()
+    w.openTurns.clear()
     await expect(w.consent.reviewSeat(seat(w, 'hand-off'))).resolves.toEqual({ kind: 'refuse', reason: noOpenTurnRefusal('claude-code', w.workspace) })
     expect(w.asks).toEqual([])
+  })
+
+  it('still refuses a root that is read-only or on `never` when the card would be asked on the seat child', async () => {
+    const readOnly = await world()
+    readOnly.openTurns.clear()
+    readOnly.openTurns.add('seat')
+    readOnly.readOnly.add('root')
+    await expect(readOnly.consent.reviewSeat(seat(readOnly, 'hand-off'))).resolves.toMatchObject({ kind: 'refuse' })
+    expect(readOnly.asks).toEqual([])
+    const never = await world()
+    never.openTurns.clear()
+    never.openTurns.add('seat')
+    never.policies.set('root', 'never')
+    await expect(never.consent.reviewSeat(seat(never, 'hand-off'))).resolves.toMatchObject({ kind: 'refuse' })
+    expect(never.asks).toEqual([])
   })
 
   it('asks a grandchild\'s seat on the root\'s open turn, and refuses it when the root has none', async () => {
@@ -288,6 +311,7 @@ describe('a seat review at hand-off', () => {
     w.consent.endLease(SessionId('seat'), 'revoked')
     w.openTurns.clear()
     w.openTurns.add('lead')
+    w.openTurns.add('seat')
     await expect(w.consent.reviewSeat(seat(w, 'hand-off', grandchild))).resolves.toEqual({ kind: 'refuse', reason: noOpenTurnRefusal('claude-code', w.workspace) })
     expect(w.asks).toHaveLength(1)
   })

@@ -305,7 +305,10 @@ export class DelorunDelegationConsent extends Service implements DelegationConse
       if (this.fullAccessRoot(root)) return record('full-access')
       return { kind: 'refuse', reason: notApprovedRefusal(provider, 'never', rules.workspace) }
     }
-    const asked = this.hasOpenTurn(root) ? root : review.phase === 'resume' ? child : undefined
+    // With no open turn on the root the card goes to the seat child (D10): a resume, or a start the person's own message in
+    // that chat made. A seat started by another child never asks there, so a grandchild refuses.
+    const askOnChild = review.phase === 'resume' || (review.creator.id === root.id && this.hasOpenTurn(child))
+    const asked = this.hasOpenTurn(root) ? root : askOnChild ? child : undefined
     if (asked === undefined) return { kind: 'refuse', reason: noOpenTurnRefusal(provider, rules.workspace) }
     const outcome = await this.ask(asked, { provider, workspace: rules.workspace, cwd: rules.cwd, label: review.label, signal: review.signal })
     return outcome === 'allowed-once' ? record('asked') : { kind: 'refuse', reason: notApprovedRefusal(provider, outcome, rules.workspace) }
