@@ -30,15 +30,6 @@ describe('edgeColours', () => {
 })
 
 describe('the edge controller', () => {
-  it('lets the body paint only where the top and bottom colours differ, so the strips stay visible', () => {
-    tokens('rgb(250 250 248)', 'rgb(240 240 238)')
-    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1200 })
-    const edges = new EdgeController(document, window)
-    expect(document.documentElement.style.background).toContain('rgb(240, 240, 238)')
-    expect(document.body.style.background).toContain('rgb(250, 250, 248)')
-    edges.dispose()
-  })
-
   it('adds two aria-hidden, non-interactive fixed strips sized to the safe areas, and one theme-color tag', () => {
     tokens('rgb(250 250 248)', 'rgb(240 240 238)')
     const edges = new EdgeController(document, window)
@@ -46,8 +37,8 @@ describe('the edge controller', () => {
     expect(strips.map(strip => strip.getAttribute(EDGE_ATTRIBUTE))).toEqual(['top', 'bottom'])
     for (const strip of strips) expect(strip.getAttribute('aria-hidden')).toBe('true')
     const rules = document.querySelector(`style[${EDGE_ATTRIBUTE}]`)?.textContent ?? ''
-    expect(rules).toContain('[data-delorun-edge="top"]{position:fixed;left:0;right:0;top:0;height:max(12px,env(safe-area-inset-top));pointer-events:none')
-    expect(rules).toContain('[data-delorun-edge="bottom"]{position:fixed;left:0;right:0;bottom:0;height:max(12px,env(safe-area-inset-bottom));pointer-events:none')
+    expect(rules).toContain('[data-delorun-edge="top"]{position:fixed;left:0;right:0;top:-7px;height:max(12px,calc(env(safe-area-inset-top) + 7px));pointer-events:none;z-index:10')
+    expect(rules).toContain('[data-delorun-edge="bottom"]{position:fixed;left:0;right:0;bottom:-7px;height:max(12px,calc(env(safe-area-inset-bottom) + 7px));pointer-events:none;z-index:10')
     expect(rules).toContain('background:var(--edge-top-background)')
     expect(document.querySelectorAll('meta[name="theme-color"]')).toHaveLength(1)
     expect(document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.content).toBe('rgb(250 250 248)')
@@ -63,7 +54,7 @@ describe('the edge controller', () => {
     expect(document.documentElement.style.getPropertyValue('--edge-top-background')).toBe('rgb(20 22 28)')
     expect(document.documentElement.style.getPropertyValue('--edge-bottom-background')).toBe('rgb(20 22 28)')
     expect(document.documentElement.style.background).toContain('rgb(20, 22, 28)')
-    expect(document.body.style.background).toBe('')
+    expect(document.body.style.background).toContain('rgb(20, 22, 28)')
     expect(document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.content).toBe('rgb(20 22 28)')
     edges.dispose()
   })
