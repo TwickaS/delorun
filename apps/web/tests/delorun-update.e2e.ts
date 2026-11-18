@@ -38,6 +38,8 @@ interface Script {
   progress: object
   result?: object | undefined
   prepared?: object | undefined
+  /** Whether the state route lets this page begin an update; true when absent. */
+  begin?: boolean
 }
 
 /**
@@ -48,7 +50,7 @@ interface Script {
 function stateView(script: Script): object {
   return {
     release: { delorun: script.release, dsh: '0.2.2' }, available: true,
-    access: { actor: 'computer', phonePowers: 'careful', may: Object.fromEntries(CONTROLS.map(control => [control, OK])) },
+    access: { actor: 'computer', phonePowers: 'careful', may: Object.fromEntries(CONTROLS.map(control => [control, control === 'update-begin' && script.begin === false ? { ok: false, needs: 'unlock' } : OK])) },
     check: { enabled: true, checkedAt: Date.now(), notice: NOTICE },
     progress: script.progress, rollback: { available: false },
     ...script.prepared === undefined ? {} : { prepared: script.prepared },
@@ -103,10 +105,12 @@ async function shoot(page: Page, name: string): Promise<void> {
  * @param url - the studio's authenticated address.
  * @param script - the Host's state.
  * @param onApply - what the apply route does to the script.
+ * @param remote - whether a reach listener served the page; such a page opens after the first one put the onboarding off.
  * @returns the page.
  */
-async function openStudio(browser: Browser, url: string, script: Script, onApply: (script: Script) => void): Promise<Page> {
+async function openStudio(browser: Browser, url: string, script: Script, onApply: (script: Script) => void, remote = false): Promise<Page> {
   const page = await newEnglishPage(browser)
+  if (remote) await page.addInitScript(() => { Reflect.set(globalThis, '__DSH_REMOTE_MEDIA__', 'placeholder') })
   if (PHONE_DARK) {
     await page.setViewportSize({ width: 390, height: 844 })
     await page.emulateMedia({ colorScheme: 'dark' })
@@ -114,9 +118,12 @@ async function openStudio(browser: Browser, url: string, script: Script, onApply
   await serveUpdateRoutes(page, script, onApply)
   await page.goto(url)
   // A fresh profile opens Delorun's onboarding, whose dialog covers the sidebar until it is put off.
-  const onboarding = page.getByRole('dialog')
-  await onboarding.getByRole('button', { name: 'Complete setup later', exact: true }).click({ timeout: 30_000 })
-  await onboarding.waitFor({ state: 'detached' })
+  // A later page of the same profile finds it already put off.
+  if (!remote) {
+    const onboarding = page.getByRole('dialog')
+    await onboarding.getByRole('button', { name: 'Complete setup later', exact: true }).click({ timeout: 30_000 })
+    await onboarding.waitFor({ state: 'detached' })
+  }
   return page
 }
 
@@ -179,4 +186,14 @@ it.skipIf(webSnapshotMode() === 'record')('updates from the sidebar notice throu
   const back = page.getByText('The update to Delorun 0.1.3 did not work, so Delorun went back to 0.1.2')
   await back.waitFor({ timeout: 30_000 })
   await shoot(page, 'went-back')
+
+  // A page a reach listener served follows the state route's `update-begin`: no button while it is refused, the button once allowed.
+  const refused = await openStudio(browser, scaffold.authenticatedUrl, { release: '0.1.2', progress: { kind: 'idle' }, begin: false }, () => {}, true)
+  if (PHONE_DARK) await revealNavigationDrawer(refused, 'en')
+  await refused.locator('[data-update-notice="0.1.3"]').waitFor()
+  expect(await refused.getByRole('button', { name: 'Update now…', exact: true }).count()).toBe(0)
+  const allowed = await openStudio(browser, scaffold.authenticatedUrl, { release: '0.1.2', progress: { kind: 'idle' } }, () => {}, true)
+  if (PHONE_DARK) await revealNavigationDrawer(allowed, 'en')
+  await allowed.locator('[data-update-notice="0.1.3"]').getByRole('button', { name: 'Update now…', exact: true }).waitFor()
+  await shoot(allowed, 'notice-remote-allowed')
 }, 300_000)
