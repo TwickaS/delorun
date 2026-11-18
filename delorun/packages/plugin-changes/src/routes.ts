@@ -1082,6 +1082,19 @@ async function act(action: ChangesAction, body: Readonly<Record<string, unknown>
       })
       return { lines: report.lines, skipped: report.skipped }
     }
+    case 'exit-safe-mode': {
+      onlyFields(body, [])
+      const report = await recover({
+        profileDir: ctx.profileDir,
+        homeDir: ctx.home,
+        profile: ctx.profile,
+        action: { kind: 'exit-safe-mode' },
+        installationBundles: dependencies.installationBundles,
+        changedBy: { kind: 'person' },
+      })
+      // The safe-mode overlay file the last start left is read only by a start in safe mode, which rewrites or removes it.
+      return { lines: report.lines, skipped: [] }
+    }
   }
 }
 
@@ -1179,6 +1192,7 @@ const ACTION_CONTROLS: Readonly<Record<ChangesAction, ChangesControl>> = {
   work: 'plugin-other',
   done: 'plugin-other',
   'safe-mode': 'plugin-other',
+  'exit-safe-mode': 'plugin-other',
   create: 'plugin-other',
   request: 'plugin-other',
   reveal: 'plugin-other',

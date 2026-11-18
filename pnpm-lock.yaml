@@ -4195,6 +4195,9 @@ importers:
 
   delorun/packages/plugin-trash:
     dependencies:
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:*
+        version: link:../../../packages/boot/app-boot
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
@@ -4204,9 +4207,15 @@ importers:
       '@delorun/home-auth':
         specifier: workspace:*
         version: link:../home-auth
+      '@delorun/home-process':
+        specifier: workspace:*
+        version: link:../home-process
       '@delorun/trash':
         specifier: workspace:*
         version: link:../trash
+      '@delorun/update':
+        specifier: workspace:*
+        version: link:../update
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~

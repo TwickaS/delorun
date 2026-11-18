@@ -9,7 +9,7 @@ import type { FunctionComponent } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apply, inject, NS, SESSION_MENU_ORDER, TRASH_ICON_KEY, TRASH_SECTION_ID, TRASH_SECTION_ORDER, WORKSPACE_MENU_ORDER } from '../src/client/index.ts'
 import { en, zh } from '../src/client/locales.ts'
-import { TRASH_PATHS, type TrashEntry } from '../src/wire.ts'
+import { TRASH_PATHS, type SetAsideEntry, type TrashEntry } from '../src/wire.ts'
 
 const DAY = 86_400_000
 const HOST = '0b6f2c6e-4f4a-4d6a-9a52-3d1f0f5c7a11'
@@ -25,7 +25,7 @@ function entry(fields: Partial<TrashEntry> & Pick<TrashEntry, 'id'>): TrashEntry
 type Route = (body: Record<string, unknown>) => Response | Promise<Response>
 
 /** A stand-in harness: every route answers from its list, a route can be replaced to fail. */
-function harness(initial: readonly TrashEntry[] = []) {
+function harness(initial: readonly TrashEntry[] = [], kept: SetAsideEntry[] = []) {
   const items = [...initial]
   const calls: Array<{ path: string; body: Record<string, unknown> }> = []
   const replaced = new Map<string, Route>()
@@ -47,6 +47,11 @@ function harness(initial: readonly TrashEntry[] = []) {
     },
     [TRASH_PATHS.restore]: body => Response.json(gone(body.itemId)),
     [TRASH_PATHS.purge]: body => Response.json({ item: gone(body.itemId), removedFrom: [], logsCleared: body.clearLogs === true, residueMaxDays: 0 }),
+    [TRASH_PATHS.setAside]: () => Response.json({ entries: kept }),
+    [TRASH_PATHS.removeSetAside]: (body) => {
+      kept.splice(kept.findIndex(item => item.path === body.path), 1)
+      return Response.json({ path: body.path })
+    },
     [TRASH_PATHS.empty]: body => Response.json({ items: items.splice(0), logsCleared: body.clearLogs === true, residueMaxDays: 0 }),
   }
   const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
@@ -377,6 +382,50 @@ describe('the Trash section', () => {
     page.mount('settings.section')
     expect((await screen.findByText(en['empty.other'].replace('{days}', '30'))).tagName).toBe('P')
     expect(screen.getByRole('button', { name: en.emptyAll }).hasAttribute('disabled')).toBe(true)
+  })
+
+  it('lists what a rollback set aside, asks before removing one forever, and says so', async () => {
+    const fake = harness([], [
+      { path: 'data-set-aside/0.1.2-20261101T101010Z', kind: 'set-aside', bytes: 3 * 1024 * 1024 },
+      { path: 'data-copies/0.1.3', kind: 'copy', bytes: 900 },
+    ])
+    const page = await load()
+    page.mount('shell.overlay')
+    page.mount('settings.section')
+    await screen.findByRole('heading', { name: en['setAside.heading'] })
+    expect(screen.getByText(en['setAside.kind.set-aside'])).toBeTruthy()
+    expect(screen.getByText(en['setAside.kind.copy'])).toBeTruthy()
+    expect(screen.getByText('3.0 MB')).toBeTruthy()
+    expect(screen.getByText('1 KB')).toBeTruthy()
+    fireEvent.click(screen.getAllByRole('button', { name: en['setAside.remove'] })[0] as HTMLElement)
+    expect(fake.callsTo(TRASH_PATHS.removeSetAside)).toEqual([])
+    const dialog = screen.getByRole('dialog', { name: en['setAside.title'] })
+    fireEvent.click(within(dialog).getByRole('button', { name: en['setAside.remove'] }))
+    await waitFor(() => { expect(fake.callsTo(TRASH_PATHS.removeSetAside)).toEqual([{ path: 'data-set-aside/0.1.2-20261101T101010Z' }]) })
+    await waitFor(() => { expect(screen.queryByText(en['setAside.kind.set-aside'])).toBeNull() })
+    expect(screen.getAllByRole('alert').map(alert => alert.textContent)).toContain(en['toast.setAsideRemoved'])
+  })
+
+  it('words a refused removal: a copy a rollback still needs stays', async () => {
+    const fake = harness([], [{ path: 'data-copies/0.1.3', kind: 'copy', bytes: 900 }])
+    fake.replace(TRASH_PATHS.removeSetAside, () => Response.json({ code: 'DATA_IN_USE', message: 'needed' }, { status: 409 }))
+    const page = await load()
+    page.mount('shell.overlay')
+    page.mount('settings.section')
+    await screen.findByRole('heading', { name: en['setAside.heading'] })
+    fireEvent.click(screen.getByRole('button', { name: en['setAside.remove'] }))
+    fireEvent.click(within(screen.getByRole('dialog', { name: en['setAside.title'] })).getByRole('button', { name: en['setAside.remove'] }))
+    await waitFor(() => { expect(screen.getAllByRole('alert').map(alert => alert.textContent)).toContain(en['toast.setAsideInUse']) })
+    expect(screen.getByText(en['setAside.kind.copy'])).toBeTruthy()
+  })
+
+  it('shows no set-aside list when the harness cannot list it', async () => {
+    const fake = harness()
+    fake.replace(TRASH_PATHS.setAside, () => Response.json({ code: 'KEPT_DATA_UNAVAILABLE', message: 'x' }, { status: 503 }))
+    const page = await load()
+    page.mount('settings.section')
+    await screen.findByText(en['empty.other'].replace('{days}', '30'))
+    expect(screen.queryByRole('heading', { name: en['setAside.heading'] })).toBeNull()
   })
 
   it('restores an item, returns its chats to the sidebar and says so', async () => {
