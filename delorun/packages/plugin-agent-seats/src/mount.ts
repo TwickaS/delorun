@@ -151,6 +151,8 @@ export async function mountSeats(ctx: Context, config: Config, options: SeatMoun
       path: route.path,
       methods: route.methods,
       requestBody: 'buffered',
+      // The studio posts JSON; the gateway's default media type refuses it before the route reads a body.
+      requestMediaType: 'application/json',
       ...gateByUnlock(() => ctx.get('homeAuth'), route.fetch, { renews: true }),
     }), `delorun-agent-seats: route ${route.path}`)
   }

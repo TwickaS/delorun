@@ -105,6 +105,12 @@ describe('the plugin with the preview flag on', () => {
     expect(ctx.get('seatPrograms')).toBeDefined()
   })
 
+  it('declares the JSON media type the studio posts, so the gateway reads the body of each Host route', async () => {
+    const { ctx, connection } = await world(true)
+    await ctx.plugin(Plugin, Config(null))
+    expect(connection.routes.map(route => route.requestMediaType)).toEqual(['application/json', 'application/json'])
+  })
+
   it('lists no model for a seat route, so no picker shows it', async () => {
     const { ctx } = await world(true)
     await ctx.plugin(Plugin, Config(null))
