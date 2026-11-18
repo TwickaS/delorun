@@ -30,7 +30,8 @@ import { isAbsolute } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 // The ctx.loader merge, read to start a server row again, and the type of its rows.
 import type { Entry as LoaderEntry } from '@deepseek-ai/cordis-plugin-loader'
-import { McpAddConsent, resolveServerStart } from '@deepseek-ai/dsh-mcp-client'
+import { McpAddConsent } from '@deepseek-ai/dsh-mcp-client'
+import { resolveServerStart } from '@deepseek-ai/dsh-mcp-client/server-start'
 import type { McpConsentDecision, McpServerCommand, StdioConfig } from '@deepseek-ai/dsh-mcp-client'
 import schema from '@deepseek-ai/schemastery'
 // Type-only: the ctx.workspaceRegistry merge, read for the places a chat can write.

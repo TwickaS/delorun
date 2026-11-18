@@ -23,7 +23,7 @@ import { privateRoot, privateRootFallbackCause, saveTextFile, sessionDir } from 
 
 export { discoverDefaultRoots, sweepSpillRoots } from './cleanup.ts'
 export type { SweepOptions, SweepRoot, WarnFn } from './cleanup.ts'
-export { DEFAULT_ROOT_DIR_NAME, DEFAULT_ROOT_PREFIX, encodeSegment, isErrno, privateRoot, privateRootFallbackCause, saveTextFile, sessionDir } from './store.ts'
+export { DEFAULT_ROOT_PREFIX, encodeSegment, isErrno, privateRoot, saveTextFile, sessionDir } from './store.ts'
 export type { SavedText, SaveTextOptions } from './store.ts'
 
 /**

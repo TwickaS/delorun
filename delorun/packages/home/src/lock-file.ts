@@ -217,14 +217,16 @@ export class LockFile<R extends ProcessHolder> {
    * takeover guard. A contender that found the record dead calls this however late it runs: a lock created since, by
    * any process, is left as it is.
    * @param id - the id of the record found dead.
+   * @param provenDead - evidence, besides {@link holderAlive}, that the holder is dead, judged against the record as
+   *   read now: a holder `holderAlive` reads as alive is removed when this returns true for its record.
    * @returns `done` when that record is gone, by this call or another, or its holder lives; `busy` when a live
    *   contender holds its guard.
    * @throws {Error} when the lock or a takeover guard is not a record of this lock, or after too many nested guards of
    *   contenders that died.
    */
-  async removeDead(id: string): Promise<'done' | 'busy'> {
+  async removeDead(id: string, provenDead?: (record: R) => boolean): Promise<'done' | 'busy'> {
     const found = this.read()
-    if (found === undefined || this.kind.id(found) !== id || holderAlive(found)) return 'done'
+    if (found === undefined || this.kind.id(found) !== id || (holderAlive(found) && provenDead?.(found) !== true)) return 'done'
     return this.removeUnderGuard(this.path, 'record', id, 0)
   }
 

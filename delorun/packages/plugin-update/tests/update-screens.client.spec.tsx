@@ -42,7 +42,7 @@ function preparedOf(fields: Partial<PreparedUpdateView> = {}): PreparedUpdateVie
       schema: 'delorun.update-report/3', installation: 'cli-home', from, to,
       release: { manifest: brandString<Sha256Hex>('a'.repeat(64)), signature: 'passed', freshness: 'passed', log: 'passed' }, generated: brandString<UtcTimestamp>('2026-11-17T00:00:00Z'), installations: [],
       items: [
-        { kind: 'plugin', subject: { name: 'old-plugin', version: '1.0.0' }, reason: 'dsh-requirement-unmet', effect: 'disabled', verification: 'verified', detail: { axis: 'dsh', requirement: '^0.2.2' }, actions: [] },
+        { kind: 'plugin', subject: { name: 'old-plugin', version: version('1.0.0') }, reason: 'dsh-requirement-unmet', effect: 'disabled', verification: 'verified', detail: { axis: 'dsh', requirement: '^0.2.2' }, actions: [] },
         { kind: 'data', subject: { directories: ['sessions', 'storages'] }, reason: 'data-format-changed', effect: 'changed', verification: 'verified', detail: { differs: ['dsh'], copy: { files: 12, bytes: 4096, free: 5 * 1024 ** 3 } }, actions: ['copy-session-data'] },
       ],
       notChecked: [], counts: { disabled: 1, removed: 0, changed: 1, unverified: 0, data: 1, harness: 0 },
