@@ -1,6 +1,6 @@
 ---
 name: dsh-doc
-description: Use when a task needs facts about DeepSeek Harness (DSH) internals, such as how a setting, tool, agent preset, or Cordis API of the running installation works, or when upgrading a plugin or profile to a newer DSH release. For making or changing a plugin on a Delorun install, use delorun-plugin-authoring instead. Loading it grants no permission to change files or the profile.
+description: Use when a task needs facts about DeepSeek Harness (DSH) internals, such as how a setting, tool, agent preset, or Cordis API of the running installation works, or when upgrading a plugin or profile to a newer DSH release. On a Delorun install, use delorun-plugin-authoring to make or change a plugin and delorun-harness-copy to change Delorun itself. Loading it grants no permission to change files or the profile.
 ---
 
 # DeepSeek Harness documentation

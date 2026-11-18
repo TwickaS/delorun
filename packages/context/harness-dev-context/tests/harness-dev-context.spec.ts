@@ -266,6 +266,10 @@ describe('harness-dev-context', () => {
         expect(prompt).not.toContain(developerText)
       }
       expect(renderContextSnapshot(assembly)).toBe('')
+      // A subagent assembles in its own scope and gets the same, path-free text.
+      const child = await ctx.systemPrompt.assemble({ scope: {} })
+      expect(renderContextSnapshot(child)).toBe('')
+      expect(renderPrompt(child)).toContain('Never edit the installed program.')
     })
   })
 })
