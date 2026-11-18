@@ -8,6 +8,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: the ctx.locale Context merge.
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 // Type-only: the ctx.slots Context merge.
@@ -36,6 +37,19 @@ declare module '@deepseek-ai/cordis' {
      */
     'delorun-update/open'(): void
   }
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** What the update screens tell other plugins; the sidebar's notice follows `canUpdate`. */
+    delorunUpdate: DelorunUpdate
+  }
+}
+
+/** What `ctx.delorunUpdate` shares. */
+export interface DelorunUpdate {
+  /** Whether the Host's state says this page may begin an update (`may['update-begin']`); false until the first read. */
+  readonly canUpdate: HostObservable<boolean>
 }
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -76,6 +90,13 @@ export function apply(ctx: Context): void {
     reload: () => { location.reload() },
   })
   ctx.effect(() => controller.poll(), 'delorun-update: the update state the screens show')
+  const mayBegin = (): boolean => {
+    const load = controller.state.getSnapshot()
+    return load.status === 'ready' && load.state.access.may['update-begin'].ok
+  }
+  const canUpdate = createSnapshotStore(mayBegin())
+  ctx.effect(() => controller.state.subscribe(() => { canUpdate.set(mayBegin()) }), 'delorun-update: whether this page may update')
+  ctx.provide('delorunUpdate', { canUpdate })
   ctx.effect(() => ctx.on('delorun-update/open', () => { dialog.set(true) }), 'delorun-update: the sidebar opens the dialog')
   const panel: UpdatePanelInjected = {
     hooks: { load: controller.state },
