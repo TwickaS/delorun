@@ -266,10 +266,10 @@ Host 还以 `{ "host": <字符串或 null> }` 回答 `GET /api/delorunUpdateChec
 
 ## 使用方
 
-- `delorun/packages/update/`（WP3.4）：生成报告。
-- 上游的 `compatibility-preflight.ts`、`profile.ts`、`profile-sanitize.ts` 与插件管理器的恢复功能（WP3.5）：不静默停用，在规范化与清理之前写入历史版本，事务性恢复。
-- `delorun/packages/profile-safety/`（WP3.6）：撤销、恢复、安全模式与 `delorun recover`。
-- studio 的更新界面与桌面更新程序（WP6.3）。
+- `delorun/packages/update/`：生成报告。
+- 上游的 `compatibility-preflight.ts`、`profile.ts`、`profile-sanitize.ts` 与插件管理器的恢复功能：不静默停用，在规范化与清理之前写入历史版本，事务性恢复。
+- `delorun/packages/profile-safety/`：撤销、恢复、安全模式与 `delorun recover`。
+- studio 的更新界面与桌面更新程序。
 
 <a id="compatibility"></a>
 
@@ -299,20 +299,20 @@ Host 还以 `{ "host": <字符串或 null> }` 回答 `GET /api/delorunUpdateChec
 
 ### 拒绝测试
 
-| 测试 | 负责方 | 所示行为 |
+| 测试 | 组件 | 所示行为 |
 | --- | --- | --- |
-| `c03-unnamed-disable-rolls-back` | WP3.4, WP3.5 | 停用了报告未列出插件的目标未通过 H3，并回滚到上一个发布与快照。 |
-| `c03-health-timeout-rolls-back` | WP3.4 | Host 在启动 120 秒后仍未就绪的目标会回滚。 |
-| `c03-unverified-metadata-shown` | WP3.4 | `package.json` 无法解析的插件显示为 `manifest-unreadable` 与 `unverified`，且 `--yes` 不会确认该报告。 |
+| `c03-unnamed-disable-rolls-back` | `update`, 插件管理器 | 停用了报告未列出插件的目标未通过 H3，并回滚到上一个发布与快照。 |
+| `c03-health-timeout-rolls-back` | `update` | Host 在启动 120 秒后仍未就绪的目标会回滚。 |
+| `c03-unverified-metadata-shown` | `update` | `package.json` 无法解析的插件显示为 `manifest-unreadable` 与 `unverified`，且 `--yes` 不会确认该报告。 |
 | `c03-yes-refuses-unchecked-log` | release-chain | `log` 为安装所记录的 `unchecked` 的报告会显示该状态以及未能访问日志的那一行；`--yes` 拒绝它，不应用任何内容。 |
-| `c03-delorun-requirement-excludes-target` | WP3.4 | `engines.delorun` 排除目标的插件显示为 `delorun-requirement-unmet`，并附有两个目标版本。 |
-| `c03-no-report-for-unverified-target` | WP3.4 | manifest 签名验证失败的目标不产生报告，更新停止。 |
-| `c03-no-silent-disable-at-start` | WP3.5 | 启动时不兼容的插件以 Update、Keep disabled 与 Roll back 报告。 |
-| `c03-sanitize-writes-history` | WP3.5 | 桌面致命错误恢复在停用第三方插件之前写入一个历史版本。 |
-| `c03-restore-lists-changes` | WP3.6 | 恢复一个会带回插件、构建批准与豁免的版本时，在任何文件改变之前，批准提示中显示全部三项。 |
-| `c03-restore-revoked-stays-disabled` | WP3.6 | 恢复一个含有已撤销插件版本的版本时，该插件版本以停用状态恢复，并附上原因。 |
-| `c03-failed-restore-reverts` | WP3.5 | 安装步骤失败的恢复让每个 profile 文件保持原样。 |
-| `c03-desktop-update-leaves-cli` | WP3.4, WP6.3 | 更新桌面 Host 不改变 CLI home 的版本与状态，且两者都出现在报告中。 |
+| `c03-delorun-requirement-excludes-target` | `update` | `engines.delorun` 排除目标的插件显示为 `delorun-requirement-unmet`，并附有两个目标版本。 |
+| `c03-no-report-for-unverified-target` | `update` | manifest 签名验证失败的目标不产生报告，更新停止。 |
+| `c03-no-silent-disable-at-start` | 插件管理器 | 启动时不兼容的插件以 Update、Keep disabled 与 Roll back 报告。 |
+| `c03-sanitize-writes-history` | 插件管理器 | 桌面致命错误恢复在停用第三方插件之前写入一个历史版本。 |
+| `c03-restore-lists-changes` | `profile-safety` | 恢复一个会带回插件、构建批准与豁免的版本时，在任何文件改变之前，批准提示中显示全部三项。 |
+| `c03-restore-revoked-stays-disabled` | `profile-safety` | 恢复一个含有已撤销插件版本的版本时，该插件版本以停用状态恢复，并附上原因。 |
+| `c03-failed-restore-reverts` | 插件管理器 | 安装步骤失败的恢复让每个 profile 文件保持原样。 |
+| `c03-desktop-update-leaves-cli` | `update`, 桌面更新器 | 更新桌面 Host 不改变 CLI home 的版本与状态，且两者都出现在报告中。 |
 | `c03-data-change-named` | update | 数据事实不同的两个发布产生一个 `data-format-changed` 条目，附带副本大小与可用空间。 |
 | `c03-unknown-data-format-is-unverified` | update | 没有 `data-formats.json` 的发布产生 `data-format-unknown`，即 `unverified`，且 `--yes` 不会确认该报告。 |
 | `c03-yes-takes-the-copy` | update | 对带有 `data` 条目的报告执行 `delorun update --yes` 会取得会话数据副本。 |

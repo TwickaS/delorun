@@ -264,6 +264,7 @@
     "tests/delorun-full-access-consent.e2e.ts",
     "tests/delorun-allow-for-chat.e2e.ts",
     "tests/delorun-update-notice.e2e.ts",
+    "tests/delorun-update.e2e.ts",
     "tests/delorun-studio-connected.e2e.ts",
     "tests/delorun-reach.ts",
     "tests/delorun-reach-listener.e2e.ts",

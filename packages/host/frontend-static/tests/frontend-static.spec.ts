@@ -19,6 +19,7 @@ import * as Connection from '@deepseek-ai/dsh-client-connection'
 import LocalCredentials from '@deepseek-ai/dsh-credentials-local'
 import HttpServer from '@deepseek-ai/dsh-host-webserver'
 import * as FrontendStatic from '../src/index.ts'
+import { RECOVERY_ROUTES_GLOBAL } from '../src/recovery.ts'
 
 /** How many times the plugin read the dist manifest's bytes. */
 const manifestReads = vi.hoisted(() => ({ count: 0 }))
@@ -365,7 +366,7 @@ describe('real Loader composition', () => {
     expect(await request(port, '/recovery')).toMatchObject({ status: 401 })
     // A distribution that names its recovery routes, as `@delorun/plugin-changes` does, gets the page behind the index fence.
     const offRecovery = loaded.on('webserver/index-inject', (rows) => {
-      rows.push({ kind: 'global', name: FrontendStatic.RECOVERY_ROUTES_GLOBAL, value: '/delorun/changes' })
+      rows.push({ kind: 'global', name: RECOVERY_ROUTES_GLOBAL, value: '/delorun/changes' })
     })
     expect(await request(port, '/recovery')).toMatchObject({ status: 401 })
     const page = await request(port, '/recovery', authenticated())

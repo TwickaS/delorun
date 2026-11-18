@@ -51,7 +51,7 @@
   en: f594eedfcb4d0e7b
   zh: 29cf67280ad048b9
 /c3-update-report/rollback-triggers:
-  en: 8c4901d7f1de4e4b
+  en: 5b05111c6ba4c723
   zh: 4b99b53aae09da4a
 /c3-update-report/rollback:
   en: b69a67d07a2bd5b0
@@ -63,8 +63,8 @@
   en: 5010cc2fbe04b39a
   zh: 3c468a261ce85eff
 /c3-update-report/consumers:
-  en: cb2e8a9d4192b518
-  zh: c72d85618152e179
+  en: 0495b2e932a7ae6d
+  zh: df36bcc97cc9b52c
 /c3-update-report/compatibility:
   en: 8774c8aad351a7b9
   zh: edb1e6ecfc1140ae
@@ -75,5 +75,5 @@
   en: 7da641cf934f911a
   zh: 32c016c156fe0997
 /c3-update-report/security/denial-tests:
-  en: ba8ed85c63830a53
-  zh: 4c811bbc98be0932
+  en: 3430a691c643b1ed
+  zh: c1408e2713ec972b

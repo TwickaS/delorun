@@ -129,7 +129,7 @@ description: "约定 C22：Delorun 版本对插件作出的承诺：该承诺涵
 
 ### 拒绝测试
 
-| 测试 | 负责方 | 所示行为 |
+| 测试 | 组件 | 所示行为 |
 | --- | --- | --- |
 | `plugin-check-imports-no-code` | update-notice | 入口文件和安装脚本会写入 canary 的插件，在检查之后不留下 canary。 |
 | `patch-rule-refuses-base-move` | update-notice | 上游版本与更早发布不同的补丁拒绝签名。 |

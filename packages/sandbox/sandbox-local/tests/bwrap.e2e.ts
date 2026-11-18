@@ -6,9 +6,9 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
-import { LocalSandboxProvider, RUNNER_PROTECTION } from '@deepseek-ai/dsh-sandbox-local'
+import { LocalSandboxProvider } from '@deepseek-ai/dsh-sandbox-local'
 import type { Config } from '@deepseek-ai/dsh-sandbox-local'
-import { bwrapProfileArgs } from '../src/profiles.ts'
+import { RUNNER_PROTECTION, bwrapProfileArgs } from '../src/profiles.ts'
 import { checkExtraWrites, checkRedirectedRoot } from './extra-roots.ts'
 import {
   TEMP_BASE,

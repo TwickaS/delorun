@@ -3,14 +3,14 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/packages/home-auth/spikes/ts-net-rp-id/README.md
 /:
-  en: 8734657b6f57bce9
-  zh: 9c65f02bae2968b3
+  en: 1bb842c9290f04b1
+  zh: 431cca0b1365d62d
 /spike-passkey-relying-party-ids-on-ts-net:
   en: 94d311e74602e615
   zh: d99eae59c3284ea6
 /spike-passkey-relying-party-ids-on-ts-net/summary:
-  en: bc112aabc124862c
-  zh: 2cfa5179f8a4079f
+  en: 11149e3c00b661a3
+  zh: 3a1eb32e90426c07
 /spike-passkey-relying-party-ids-on-ts-net/answers:
   en: c23c014306f42624
   zh: 53d2df0753091837
@@ -18,8 +18,8 @@
   en: 178a7fd5de1d0865
   zh: e6665ab58fa9d743
 /spike-passkey-relying-party-ids-on-ts-net/browser-results:
-  en: 661bf0aa08171c98
-  zh: c200b2d2aa2f6d00
+  en: 9cadd05af2972729
+  zh: 68899a6c2e859502
 /spike-passkey-relying-party-ids-on-ts-net/not-covered:
   en: 743aacdddfe13814
   zh: 442b167c3b33fc87

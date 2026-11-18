@@ -6,8 +6,6 @@ description: "Writing a Delorun plugin from nothing to running: delorun plugin n
 
 English | [中文](plugins.zh.md)
 
-This page describes how Delorun works today.
-
 ## Summary
 
 Everything Delorun does is a plugin, and you can add your own: a tool the agent calls, an agent preset, a panel in the studio, or a bundle that changes how other plugins are set up. `delorun plugin new` writes a working package, `delorun plugin dev` loads it into your running studio and reloads it each time you save, `delorun plugin check` says which Delorun and DeepSeek Harness versions it runs on, and `delorun plugin add` installs it for good. A plugin runs inside Delorun with your access, outside the sandbox Delorun runs the agent's commands in, so install only plugins whose code you trust. To decide whether a plugin is the right tool for your change, see [Where to customise what](customise.md).

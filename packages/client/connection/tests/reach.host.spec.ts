@@ -15,9 +15,7 @@ import WebServer from '@deepseek-ai/dsh-host-webserver'
 import {
   API_PATH,
   Authenticator,
-  REACH_REFUSAL_STATUS,
   apply,
-  reachContentSecurityPolicy,
   inject,
   type Admission,
   type ConnectionConfig,
@@ -27,6 +25,7 @@ import {
   type PeerScope,
   type ReachListener,
 } from '../src/index.ts'
+import { REACH_REFUSAL_STATUS, reachContentSecurityPolicy } from '../src/reach.ts'
 import { provideBrowserCredentials } from './browser-credentials.ts'
 
 const LISTENER = 'reach-tailscale-private'

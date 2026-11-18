@@ -397,6 +397,21 @@ it.each(['read-only', 'workspace-write'] as const)('plugin_manager write actions
   expect(reads.map(method => method.mock.calls.length)).toEqual([1, 1, 1, 1])
 })
 
+it.each(['read-only', 'workspace-write'] as const)('plugin_manager stock write actions keep the escalation with only the read exemption on, as the Web presets ship it, in %s', async (mode) => {
+  const { call, manager } = await fixture(mode, undefined, { readActionsExempt: true })
+  for (const action of STOCK_ACTIONS.filter(action => !READ_ACTIONS.includes(action))) {
+    const result = await call({ action, target: 'delorun-agent-context', enabled: true, runtimeVersion: '0.1.0' })
+    expect(result.isError).toBe(true)
+    expect(JSON.stringify(result.content)).toContain('requires approval, but no approval service is composed')
+  }
+  for (const method of Object.values(manager)) expect(method).not.toHaveBeenCalled()
+  for (const action of ['list_plugins', 'list_bundles', 'list_version_exemptions']) {
+    expect((await call({ action })).isError).toBe(false)
+  }
+  const reads = [manager.listPlugins, manager.listBundles, manager.listVersionExemptions]
+  expect(reads.map(method => method.mock.calls.length)).toEqual([1, 1, 1])
+})
+
 it('escalates the history and settings reads with only the profile_history switch on', async () => {
   const { ctx, call, history } = await fixture('workspace-write', undefined, { profileHistory: true })
   ctx.provide('configEditor', editor({ enabled: true }, {}, {}) as never)

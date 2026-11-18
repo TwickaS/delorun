@@ -175,7 +175,7 @@ const UNREACHED_DEFAULTS: Readonly<Record<string, string>> = {
   main_chat: 'the main chat is an experimental plugin that no row of the default composition mounts, and the plugin default is false',
   preset_inspect: 'the module is mounted only inside the agent presets\' plugin lists, which no patch reaches, and the plugin default is false',
   doctor: 'no row of the default composition mounts the module, and the plugin default is false',
-  plugin_manager_read_exemption: 'the top-level tool-plugin-manager row is disabled and sets no key',
+  plugin_manager_read_exemption: 'the top-level tool-plugin-manager row is disabled and sets no key; the Standard and Creator preset rows set it, which no top-level row reads',
   profile_history: 'the top-level tool-plugin-manager row is disabled and sets no key',
   container_denial_marker: 'the sandbox-policy row sets no containerDenialMarker, and the plugin default is false',
   browser_additions: 'only @delorun/bundle-browser, a pack no default profile lists, mounts the Playwright provider, and its row sets the switch on; the plugin default is false',

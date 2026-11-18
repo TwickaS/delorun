@@ -159,9 +159,9 @@ DSH 0.2.2
 
 ## 消费方
 
-- 上游 app-boot 中 `plugin-compatibility.ts` 的差异块，以及 `delorun/apps/cli/src/version.ts`（WP3.8）。
-- 更新前报告（WP3.4，[C3](c03-update-report.zh.md)）。
-- 插件索引语料库与徽章（WP7.2，[C13](c13-catalogue-revocation.zh.md)）。
+- 上游 app-boot 中 `plugin-compatibility.ts` 的差异块，以及 `delorun/apps/cli/src/version.ts`。
+- 更新前报告（[C3](c03-update-report.zh.md)）。
+- 插件索引语料库与徽章（[C13](c13-catalogue-revocation.zh.md)）。
 - 更新检查的插件数量（[C3](c03-update-report.zh.md#update-check)）以及 `delorun plugin check`（[C22](c22-delorun-plugin-interface.zh.md)）。
 
 <a id="compatibility"></a>
@@ -187,15 +187,15 @@ DSH 0.2.2
 
 ### 拒绝测试
 
-| 测试 | 负责方 | 所表明的行为 |
+| 测试 | 组件 | 所表明的行为 |
 | --- | --- | --- |
-| `c17-newer-delorun-required-refused` | WP3.8 | `engines.delorun` 为 `>=2.0.0` 的插件在 Delorun 1.x 上安装时被拒绝，消息写明两个版本。 |
-| `c17-unmet-delorun-disabled-at-start` | WP3.8 | 已安装插件的 `engines.delorun` 不被正在运行的 Delorun 满足时，该插件在导入之前被停用，并在 studio 中报告。 |
-| `c17-unreadable-delorun-refused` | WP3.8 | `engines.delorun` 为数字的插件作为不可读被拒绝。 |
-| `c17-exemption-one-axis-only` | WP3.8 | Delorun 轴的豁免不会放行上游要求同样未满足的插件。 |
-| `c17-exemption-needs-accept-risk` | WP3.8 | 未带 `--accept-risk`、或写明的 Delorun 版本不是正在运行版本的授予被拒绝。 |
-| `c17-stock-plugin-unaffected` | WP3.8 | 没有 `engines.delorun` 的插件的安装与加载与在 stock DSH 上完全相同。 |
+| `c17-newer-delorun-required-refused` | 插件版本 | `engines.delorun` 为 `>=2.0.0` 的插件在 Delorun 1.x 上安装时被拒绝，消息写明两个版本。 |
+| `c17-unmet-delorun-disabled-at-start` | 插件版本 | 已安装插件的 `engines.delorun` 不被正在运行的 Delorun 满足时，该插件在导入之前被停用，并在 studio 中报告。 |
+| `c17-unreadable-delorun-refused` | 插件版本 | `engines.delorun` 为数字的插件作为不可读被拒绝。 |
+| `c17-exemption-one-axis-only` | 插件版本 | Delorun 轴的豁免不会放行上游要求同样未满足的插件。 |
+| `c17-exemption-needs-accept-risk` | 插件版本 | 未带 `--accept-risk`、或写明的 Delorun 版本不是正在运行版本的授予被拒绝。 |
+| `c17-stock-plugin-unaffected` | 插件版本 | 没有 `engines.delorun` 的插件的安装与加载与在 stock DSH 上完全相同。 |
 | `plugin-check-imports-no-code` | update-notice | `delorun plugin check` 读取 manifest，且不运行插件的任何文件。 |
 | `plugin-check-refuses-special-files` | update-notice | 作为 FIFO 或符号链接的 manifest 被拒绝，既不等待也不跟随它。 |
 | `plugin-check-escapes-manifest-text` | update-notice | manifest 的名称和范围在打印时转义终端控制字符。 |
-| `c17-version-output` | WP3.8 | `delorun --version` 打印包含 Delorun 版本与 DSH 版本的两行。 |
+| `c17-version-output` | 插件版本 | `delorun --version` 打印包含 Delorun 版本与 DSH 版本的两行。 |

@@ -139,9 +139,9 @@ DSH 0.2.2
 
 ## Consumers
 
-- Upstream's app-boot hunk in `plugin-compatibility.ts` and `delorun/apps/cli/src/version.ts` (WP3.8).
-- The pre-update report (WP3.4, [C3](c03-update-report.md)).
-- The catalogue corpus and badges (WP7.2, [C13](c13-catalogue-revocation.md)).
+- Upstream's app-boot hunk in `plugin-compatibility.ts` and `delorun/apps/cli/src/version.ts`.
+- The pre-update report ([C3](c03-update-report.md)).
+- The catalogue corpus and badges ([C13](c13-catalogue-revocation.md)).
 - The update check's plugin count ([C3](c03-update-report.md#update-check)) and `delorun plugin check` ([C22](c22-delorun-plugin-interface.md)).
 
 ## Compatibility
@@ -159,15 +159,15 @@ Upstream's axis, its peer rule, `compatibility.json` and `dsh plugin allow-versi
 
 ### Denial tests
 
-| Test | Owner | Behaviour it shows |
+| Test | Component | Behaviour it shows |
 | --- | --- | --- |
-| `c17-newer-delorun-required-refused` | WP3.8 | A plugin with `engines.delorun` `>=2.0.0` is refused at install on Delorun 1.x with the message naming both versions. |
-| `c17-unmet-delorun-disabled-at-start` | WP3.8 | An installed plugin whose `engines.delorun` the running Delorun does not satisfy is disabled before import and reported in the studio. |
-| `c17-unreadable-delorun-refused` | WP3.8 | A plugin whose `engines.delorun` is a number is refused as unreadable. |
-| `c17-exemption-one-axis-only` | WP3.8 | A Delorun-axis exemption does not admit a plugin whose upstream requirement is also unmet. |
-| `c17-exemption-needs-accept-risk` | WP3.8 | A grant without `--accept-risk`, or naming a Delorun version other than the running one, is refused. |
-| `c17-stock-plugin-unaffected` | WP3.8 | A plugin without `engines.delorun` installs and loads exactly as on stock DSH. |
+| `c17-newer-delorun-required-refused` | plugin versions | A plugin with `engines.delorun` `>=2.0.0` is refused at install on Delorun 1.x with the message naming both versions. |
+| `c17-unmet-delorun-disabled-at-start` | plugin versions | An installed plugin whose `engines.delorun` the running Delorun does not satisfy is disabled before import and reported in the studio. |
+| `c17-unreadable-delorun-refused` | plugin versions | A plugin whose `engines.delorun` is a number is refused as unreadable. |
+| `c17-exemption-one-axis-only` | plugin versions | A Delorun-axis exemption does not admit a plugin whose upstream requirement is also unmet. |
+| `c17-exemption-needs-accept-risk` | plugin versions | A grant without `--accept-risk`, or naming a Delorun version other than the running one, is refused. |
+| `c17-stock-plugin-unaffected` | plugin versions | A plugin without `engines.delorun` installs and loads exactly as on stock DSH. |
 | `plugin-check-imports-no-code` | update-notice | `delorun plugin check` reads the manifest and runs none of the plugin's files. |
 | `plugin-check-refuses-special-files` | update-notice | A manifest that is a FIFO or a symbolic link is refused without waiting or following it. |
 | `plugin-check-escapes-manifest-text` | update-notice | The manifest's name and ranges print with terminal control characters escaped. |
-| `c17-version-output` | WP3.8 | `delorun --version` prints the two lines with the Delorun and the DSH version. |
+| `c17-version-output` | plugin versions | `delorun --version` prints the two lines with the Delorun and the DSH version. |

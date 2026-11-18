@@ -70,7 +70,7 @@ Each `delorun-feature` and `generic-fix` entry names one feature by a kebab-case
 | `profile-history` | Profile history, safe mode and the plugin audit on install | shipped `cli` (`delorun recover`) and `profile-safety` |
 | `scheduled-task-consent` | The consent asked before a scheduled task wakes its Session | shipped `plugin-schedule-consent` |
 | `session-created-at` | Session list rows carry `createdAt` | shipped `plugin-sidebar` (sort by created) |
-| `studio-seams` | Settings layout, onboarding, theme, sidebar and one-list workspace seams (WP1.6) | the studio lane; `bundle-local` sets `welcomeNotice` |
+| `studio-seams` | Settings layout, onboarding, theme, sidebar and one-list workspace seams | the studio lane; `bundle-local` sets `welcomeNotice` |
 | `terminal-card-controls` | The terminal card's copy-command control, duration and open start | the studio lane |
 | `trash-purge` | Forgetting purged Sessions in the search index and projection cache (C8) | shipped `trash` |
 | `vendor-rescope` | The vendor rescope script's postcondition and skip list | repository tooling |

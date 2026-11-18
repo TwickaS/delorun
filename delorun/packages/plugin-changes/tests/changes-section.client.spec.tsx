@@ -33,6 +33,7 @@ const ACCESS_COMPUTER: AccessView = {
     'make-copy': { ok: true }, 'restart': { ok: true },
     'plugin-apply': { ok: true }, 'plugin-undo': { ok: true }, 'plugin-discard': { ok: true }, 'plugin-other': { ok: true },
     'notice-seen': { ok: true },
+    'update-check': { ok: true }, 'update-begin': { ok: true }, 'update-cancel': { ok: true }, 'update-rollback': { ok: true }, 'update-dismiss': { ok: true }, 'stop': { ok: true },
   },
 }
 
@@ -59,6 +60,7 @@ function phoneAccess(actor: ActorView, level: 'careful' | 'full'): AccessView {
       'make-copy': kept, 'restart': kept,
       'plugin-apply': kept, 'plugin-undo': fresh, 'plugin-discard': fresh, 'plugin-other': kept,
       'notice-seen': COMPUTER,
+      'update-check': { ok: true }, 'update-begin': kept, 'update-cancel': fresh, 'update-rollback': kept, 'update-dismiss': fresh, 'stop': fresh,
     },
   }
 }
@@ -733,6 +735,38 @@ describe('the Changes section', () => {
     await waitFor(() => { expect(fake.callsTo(ACTION_PATHS.done)).toEqual([{ plugin: 'hello-plugin', version: VERSION }]) })
     await waitFor(() => { expect(toasts()).toContain(en['toast.workEnded']) })
     expect(await screen.findByText(en['work.idle'])).toBeTruthy()
+  })
+
+  it('starts safe mode after a confirmation, and leaves it after a confirmation while it is on', async () => {
+    const { fake } = await openSection(emptyState())
+    fake.replace(ACTION_PATHS['safe-mode'], () => Response.json({ lines: ['Safe mode is on.'], skipped: ['x'] }))
+    fake.replace(ACTION_PATHS['exit-safe-mode'], () => Response.json({ lines: ['Safe mode is off.'], skipped: [] }))
+    fireEvent.click(screen.getByRole('button', { name: en['safeMode.start'] }))
+    expect(fake.callsTo(ACTION_PATHS['safe-mode'])).toEqual([])
+    const dialog = screen.getByRole('dialog', { name: en['confirm.safeModeOn.title'] })
+    expect(within(dialog).getByText(en['confirm.safeModeOn.body'])).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: en['safeMode.start'] }))
+    await waitFor(() => { expect(fake.callsTo(ACTION_PATHS['safe-mode'])).toEqual([{}]) })
+    await waitFor(() => { expect(toasts()).toContain(en['toast.safeMode.on']) })
+  })
+
+  it('leaves safe mode after a confirmation', async () => {
+    const { fake } = await openSection(emptyState({ safeMode: { since: new Date().toISOString(), reason: 'asked', skipped: ['x'] } }))
+    fake.replace(ACTION_PATHS['exit-safe-mode'], () => Response.json({ lines: ['Safe mode is off.'], skipped: [] }))
+    expect(screen.getByText(en['safeMode.onBody'])).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: en['safeMode.leave'] }))
+    const dialog = screen.getByRole('dialog', { name: en['confirm.safeModeOff.title'] })
+    fireEvent.click(within(dialog).getByRole('button', { name: en['safeMode.leave'] }))
+    await waitFor(() => { expect(fake.callsTo(ACTION_PATHS['exit-safe-mode'])).toEqual([{}]) })
+    await waitFor(() => { expect(toasts()).toContain(en['toast.safeMode.off']) })
+  })
+
+  it('keeps the safe-mode button at the computer for a phone on Careful, and enabled for an unlocked phone on Full', async () => {
+    await openSection(emptyState({ atComputer: false, access: phoneAccess('device-unlocked', 'careful') }))
+    expect((screen.getByRole('button', { name: en['safeMode.start'] }) as HTMLButtonElement).disabled).toBe(true)
+    cleanup()
+    await openSection(emptyState({ atComputer: false, access: phoneAccess('device-unlocked', 'full') }))
+    expect((screen.getByRole('button', { name: en['safeMode.start'] }) as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('asks a second confirmation before Done approves a flagged version', async () => {

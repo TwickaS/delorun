@@ -293,9 +293,9 @@ The desktop app is upstream's, unchanged, and Delorun builds none. Its updater (
 
 ## Consumers
 
-- `delorun/apps/release/` (WP3.1): builds, compares, checks advisories and signs.
-- `delorun/apps/install/` and `delorun/apps/npm-launcher/` (WP3.2): verify and install.
-- `delorun/packages/runtime-store/` (WP3.3): the start check, switching and rollback.
+- `delorun/apps/release/`: builds, compares, checks advisories and signs.
+- `delorun/apps/install/` and `delorun/apps/npm-launcher/`: verify and install.
+- `delorun/packages/runtime-store/`: the start check, switching and rollback.
 - `delorun verify` ([C15](c15-verification-checks.md)), the Docker supervisor's image check ([C9](c09-runtime-supervisor.md)) and the catalogue's key ([C13](c13-catalogue-revocation.md)).
 
 ## Compatibility
@@ -324,24 +324,24 @@ Three places stay open so that a reader of today's release survives growth of th
 
 ### Denial tests
 
-| Test | Owner | Behaviour it shows |
+| Test | Component | Behaviour it shows |
 | --- | --- | --- |
-| `c02-start-stops-on-changed-byte` | WP3.3 | One changed byte in an installed runtime file stops the CLI start and offers reinstall or rollback. |
-| `c02-start-stops-on-extra-file` | WP3.3 | An added regular file under the installation stops the start. |
-| `c02-start-catches-in-place-change` | WP3.3 | A changed byte with the file's size, mode and modification time restored by `utimes` stops the start with the identity record present. |
-| `c02-start-catches-renamed-replacement` | WP3.3 | A file renamed over the original with the same size, mode and modification time stops the start. |
-| `c02-start-missing-record-hashes-every-file` | WP3.3 | A missing, truncated, unparsable, laxer, linked, foreign or rebound record makes the start hash every file. |
-| `c02-start-periodic-full-hash` | WP3.3 | A last full pass older than the interval or later than the clock, or an interval of 0, makes the start hash every file. |
-| `c02-verify-always-hashes` | WP3.3 | The full check behind `delorun verify` hashes every file even when every identity matches the record. |
-| `c02-start-record-forgery-out-of-scope` | WP3.3 | A record rewritten to a changed file's identity lets the start pass, the documented limit, and the full check still stops it. |
-| `c02-update-start-check-catches-in-place-change` | WP3.3 | The start check an update runs on the running release and its target stops at a changed byte with the file's size, mode and modification time restored, with the identity record present. |
-| `c02-install-refuses-bad-signature` | WP3.2 | A manifest signed by a key outside the targets role is refused, and no file appears under `~/.delorun/runtimes/`. |
-| `c02-install-refuses-tampered-archive` | WP3.2 | An archive whose SHA-256 differs from the manifest is refused before extraction. |
-| `c02-refuses-expired-timestamp` | WP3.1, WP3.2 | A timestamp one second past `expires` blocks the update and names the expiry. |
-| `c02-refuses-replayed-timestamp` | WP3.2 | A validly signed timestamp with a lower `version` than the stored one is refused. |
-| `c02-refuses-replayed-manifest` | WP3.1, WP3.2 | A validly signed older manifest that the fresh timestamp does not name is not offered or installed. |
-| `c02-root-rotation-needs-both-thresholds` | WP3.2 | A new root version signed only by its own keys, or only by the previous ones, is refused. |
-| `c02-revoked-targets-key-verifies-nothing` | WP3.2, WP3.3 | After a root revokes a targets key, a manifest signed only by it fails install and the start check. |
+| `c02-start-stops-on-changed-byte` | `runtime-store` | One changed byte in an installed runtime file stops the CLI start and offers reinstall or rollback. |
+| `c02-start-stops-on-extra-file` | `runtime-store` | An added regular file under the installation stops the start. |
+| `c02-start-catches-in-place-change` | `runtime-store` | A changed byte with the file's size, mode and modification time restored by `utimes` stops the start with the identity record present. |
+| `c02-start-catches-renamed-replacement` | `runtime-store` | A file renamed over the original with the same size, mode and modification time stops the start. |
+| `c02-start-missing-record-hashes-every-file` | `runtime-store` | A missing, truncated, unparsable, laxer, linked, foreign or rebound record makes the start hash every file. |
+| `c02-start-periodic-full-hash` | `runtime-store` | A last full pass older than the interval or later than the clock, or an interval of 0, makes the start hash every file. |
+| `c02-verify-always-hashes` | `runtime-store` | The full check behind `delorun verify` hashes every file even when every identity matches the record. |
+| `c02-start-record-forgery-out-of-scope` | `runtime-store` | A record rewritten to a changed file's identity lets the start pass, the documented limit, and the full check still stops it. |
+| `c02-update-start-check-catches-in-place-change` | `runtime-store` | The start check an update runs on the running release and its target stops at a changed byte with the file's size, mode and modification time restored, with the identity record present. |
+| `c02-install-refuses-bad-signature` | `install` | A manifest signed by a key outside the targets role is refused, and no file appears under `~/.delorun/runtimes/`. |
+| `c02-install-refuses-tampered-archive` | `install` | An archive whose SHA-256 differs from the manifest is refused before extraction. |
+| `c02-refuses-expired-timestamp` | `release`, `install` | A timestamp one second past `expires` blocks the update and names the expiry. |
+| `c02-refuses-replayed-timestamp` | `install` | A validly signed timestamp with a lower `version` than the stored one is refused. |
+| `c02-refuses-replayed-manifest` | `release`, `install` | A validly signed older manifest that the fresh timestamp does not name is not offered or installed. |
+| `c02-root-rotation-needs-both-thresholds` | `install` | A new root version signed only by its own keys, or only by the previous ones, is refused. |
+| `c02-revoked-targets-key-verifies-nothing` | `install`, `runtime-store` | After a root revokes a targets key, a manifest signed only by it fails install and the start check. |
 | `sign-release-refuses-unsigned-tag` | release-chain | Signing refuses a lightweight or unsigned release tag, one signed by a key `allowed-signers` does not list, one whose tag object names another tag, and any tag while the allowed-signers file lists no key. |
 | `sign-release-refuses-commit-off-release-branch` | release-chain | Signing refuses a release commit that is not an ancestor of the release branch, and signs once the branch holds it. |
 | `sign-release-refuses-install-script` | release-chain | Signing refuses a draft whose `install.sh` or `install.ps1` is not a zero-length placeholder. |
@@ -353,15 +353,15 @@ Three places stay open so that a reader of today's release survives growth of th
 | `c02-start-anchors-on-newest-shipped-root` | release-chain | A runtime signed by a targets key that the newest shipped root revoked fails the start check though the stored root is the older one that lists the key, and nothing is spawned. |
 | `c02-production-refuses-local-release` | release-chain | A channel that fetches from the production publication refuses a manifest whose builder is `local release (no independent rebuild)`, on install and on the update check; a channel of its own installs it. |
 | `c02-setup-installs-pinned-launcher` | release-chain | Setup installs `delorun@<version>` at the version the launcher named in `DELORUN_LAUNCHER_VERSION`, and offers no install when the launcher named none. |
-| `c02-rebuild-difference-blocks-signing` | WP3.1 | `compare-rebuild.ts` exits 1 on a difference outside `rebuild-exceptions.json`, and the signing step stops. |
-| `c02-signing-refuses-without-rebuild` | WP3.1 | Signing without a rebuild record refuses with the message naming the required source. |
-| `c02-signing-covers-release-platforms` | WP3.1 | Signing refuses a draft whose `runtime` names a platform `closure.json` does not list or misses one it lists; reading a recipe whose `closure.json` lists an `unbuilt` platform fails; the build refuses an unlisted platform. |
-| `c02-install-refuses-unreleased-platform` | WP3.2 | An install or update on a platform the verified manifest does not list refuses with `PLATFORM_NOT_RELEASED`, naming the platform, before the log check and any runtime download. |
-| `c02-signing-refuses-ci-rebuild` | WP3.1 | A record with `ci: true`, a signing run with `GITHUB_ACTIONS` set, or a record whose digests the local output directory does not reproduce, refuses with the same message. |
-| `c02-advisory-fails-release` | WP3.1 | A fixture lockfile with a planted advisory id fails the check. |
-| `c02-advisory-acceptance-passes-and-shows` | WP3.1 | The same lockfile passes with a matching acceptance, and the assembled release notes show the advisory, its package, range, reason, approver, lapse release and date. |
-| `c02-advisory-lapsed-acceptance-fails` | WP3.1 | A release whose version is above the acceptance's `lapsesAfter` fails the check. |
-| `c02-advisory-feed-unreachable-fails` | WP3.1 | A feed stand-in that refuses connections fails the check. |
+| `c02-rebuild-difference-blocks-signing` | `release` | `compare-rebuild.ts` exits 1 on a difference outside `rebuild-exceptions.json`, and the signing step stops. |
+| `c02-signing-refuses-without-rebuild` | `release` | Signing without a rebuild record refuses with the message naming the required source. |
+| `c02-signing-covers-release-platforms` | `release` | Signing refuses a draft whose `runtime` names a platform `closure.json` does not list or misses one it lists; reading a recipe whose `closure.json` lists an `unbuilt` platform fails; the build refuses an unlisted platform. |
+| `c02-install-refuses-unreleased-platform` | `install` | An install or update on a platform the verified manifest does not list refuses with `PLATFORM_NOT_RELEASED`, naming the platform, before the log check and any runtime download. |
+| `c02-signing-refuses-ci-rebuild` | `release` | A record with `ci: true`, a signing run with `GITHUB_ACTIONS` set, or a record whose digests the local output directory does not reproduce, refuses with the same message. |
+| `c02-advisory-fails-release` | `release` | A fixture lockfile with a planted advisory id fails the check. |
+| `c02-advisory-acceptance-passes-and-shows` | `release` | The same lockfile passes with a matching acceptance, and the assembled release notes show the advisory, its package, range, reason, approver, lapse release and date. |
+| `c02-advisory-lapsed-acceptance-fails` | `release` | A release whose version is above the acceptance's `lapsesAfter` fails the check. |
+| `c02-advisory-feed-unreachable-fails` | `release` | A feed stand-in that refuses connections fails the check. |
 | `c02-summary-control-characters-refused` | update-notice | A summary holding an ESC (`\u001b`), a newline or a U+202E right-to-left override is refused by the manifest reader and by signing. |
 | `c02-summary-too-long-refused` | update-notice | A summary of 201 code points is refused by the reader and by signing; 200 reads. |
 | `c02-security-not-boolean-refused` | update-notice | A `security` that is a string, a number or `null` is refused by the reader and by signing. |

@@ -1,0 +1,28 @@
+# Bilingual-pair consistency record for 2026-11-17-main-chat-events.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/persistence-changes/2026-11-17-main-chat-events.md
+/:
+  en: 3d5a424ae7d7e46b
+  zh: c22a8e4a62d8cc1a
+/2026-11-17-main-chat-events:
+  en: a019c859d6425fd0
+  zh: 85620e4c2b5d468d
+/2026-11-17-main-chat-events/summary:
+  en: 7e24bdbac8bddb12
+  zh: 6d4a341da2d94b79
+/2026-11-17-main-chat-events/table-of-contents:
+  en: 6cf314a069ceb451
+  zh: 9adff678e9ecab3b
+/2026-11-17-main-chat-events/declaration:
+  en: 6907136f28e48c90
+  zh: 02f8298485f3d8e7
+/2026-11-17-main-chat-events/compatibility:
+  en: e43eedb76a9a30eb
+  zh: d7266734b2bfca34
+/2026-11-17-main-chat-events/verification:
+  en: 0e91567a79b69722
+  zh: c3ce3aa807a69eac
+/2026-11-17-main-chat-events/dev-note:
+  en: b75c8458928b72b9
+  zh: 003ba4e17b4b5269

@@ -7,6 +7,9 @@ import { parseJsDoc, pointer, rawJsDoc, reportViolations } from './jsdoc.ts'
 
 const root = resolve(import.meta.dirname, '..')
 
+/** Source files that may declare Session events: the upstream packages and Delorun's own plugin packages. */
+const EVENT_SOURCE_GLOBS = ['packages/*/*/src/**/*.{ts,tsx}', 'delorun/packages/*/src/**/*.{ts,tsx}']
+
 /** The package that owns the durable event vocabulary. */
 const SESSION_PACKAGE = '@deepseek-ai/dsh-session'
 
@@ -113,7 +116,7 @@ function sessionEventMapDecls(sf: ts.SourceFile): { decl: ts.InterfaceDeclaratio
 }
 
 /**
- * The npm package name owning a `packages/<group>/<pkg>/…` source file, read
+ * The npm package name owning a `packages/<group>/<pkg>/…` or `delorun/packages/<pkg>/…` source file, read
  * from that package's manifest — or null when the manifest is missing or
  * unparseable (the caller treats null as "ownership unverifiable").
  */
@@ -139,7 +142,7 @@ export function collectLogEvents(scanRoot: string = root): LogEventEntry[] {
   const violations: string[] = []
   const seen = new Map<string, string>()
   let owningDecl: string | null = null
-  for (const rel of globSync('packages/*/*/src/**/*.{ts,tsx}', { cwd: scanRoot }).map(s => s.split(sep).join('/')).sort()) {
+  for (const rel of globSync(EVENT_SOURCE_GLOBS, { cwd: scanRoot }).map(s => s.split(sep).join('/')).sort()) {
     const abs = resolve(scanRoot, rel)
     const text = readFileSync(abs, 'utf8')
     if (!text.includes('SessionEventMap')) continue
@@ -221,7 +224,7 @@ export function collectEventEnvelopeTypes(scanRoot: string = root): EventEnvelop
   const found = new Map<EventEnvelopeTypeName, EventEnvelopeTypeEntry>()
   const violations: string[] = []
   const wanted = new Set<string>(EVENT_ENVELOPE_TYPE_NAMES)
-  for (const rel of globSync('packages/*/*/src/**/*.{ts,tsx}', { cwd: scanRoot }).map(s => s.split(sep).join('/')).sort()) {
+  for (const rel of globSync(EVENT_SOURCE_GLOBS, { cwd: scanRoot }).map(s => s.split(sep).join('/')).sort()) {
     const abs = resolve(scanRoot, rel)
     const text = readFileSync(abs, 'utf8')
     if (!EVENT_ENVELOPE_TYPE_NAMES.some(name => text.includes(name))) continue
@@ -267,7 +270,7 @@ export function collectEventEnvelopeTypes(scanRoot: string = root): EventEnvelop
  */
 export function collectSurfaceEventTypes(scanRoot: string = root): string[] {
   const found: { names: string[]; source: string }[] = []
-  for (const rel of globSync('packages/*/*/src/**/*.{ts,tsx}', { cwd: scanRoot }).map(s => s.split(sep).join('/')).sort()) {
+  for (const rel of globSync(EVENT_SOURCE_GLOBS, { cwd: scanRoot }).map(s => s.split(sep).join('/')).sort()) {
     const abs = resolve(scanRoot, rel)
     const text = readFileSync(abs, 'utf8')
     if (!text.includes('SurfaceEventType')) continue
@@ -285,7 +288,7 @@ export function collectSurfaceEventTypes(scanRoot: string = root): string[] {
     }
   }
   const only = found[0]
-  if (!only) throw new Error('gen-persistence-catalog: no SurfaceEventType union found under packages/*/*/src.')
+  if (!only) throw new Error('gen-persistence-catalog: no SurfaceEventType union found under packages/*/*/src or delorun/packages/*/src.')
   if (found.length > 1) throw new Error(`gen-persistence-catalog: SurfaceEventType is declared more than once (${found.map(f => f.source).join(', ')}); the surface subset has exactly one owner.`)
   return only.names
 }

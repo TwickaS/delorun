@@ -23,7 +23,8 @@
  *   users that start together at least one refuses.
  * - **Liveness.** A registration is live while its holder is ([holder](../../../packages/home/src/holder.ts)): its
  *   process exists and, where the registration records the process's start identity, is still that process. A
- *   registration that records another pid namespace than the reader's counts as live.
+ *   registration that records another Linux boot than the running one is not live, whatever pid namespace it records;
+ *   one of this boot that records another pid namespace than the reader's counts as live.
  *
  * @module @delorun/cli/home-exclusion
  */
@@ -127,8 +128,8 @@ function readUser(path: string, pid: number): { readonly user: DataUser, readonl
 
 /**
  * The live registered users other than one process. A registration is live while its holder is alive by
- * `holderAlive`: its process exists and, where it records a start identity, is still the process that registered, or
- * it records another pid namespace than this process's.
+ * `holderAlive`: it does not record an earlier Linux boot, and its process exists and, where it records a start
+ * identity, is still the process that registered, or it records another pid namespace than this process's.
  * @param home - the resolved Delorun home.
  * @param except - the process id to leave out; this process's by default.
  * @returns the users, in directory order; registrations of dead processes are removed.

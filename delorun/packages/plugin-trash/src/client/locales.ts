@@ -49,6 +49,16 @@ export const en = {
   'toast.notFound': 'That item is no longer in the trash.',
   'toast.restoreConflict': 'It was not restored because a chat with the same id already exists.',
   'toast.workspaceMissing': 'That workspace no longer exists.',
+  'setAside.heading': 'Set aside by a rollback',
+  'setAside.intro': 'Chats a rollback moved out of use, and the copies an update took, stay here until you remove them. Nothing here is deleted for you.',
+  'setAside.kind.set-aside': 'Chats set aside by a rollback',
+  'setAside.kind.copy': 'Copy of the chats taken by an update',
+  'setAside.remove': 'Remove',
+  'setAside.title': 'Remove for good?',
+  'setAside.body': '"{name}" will be deleted from this computer. This cannot be undone.',
+  'toast.setAsideRemoved': 'Removed',
+  'toast.setAsideFailed': 'It was not removed and is still on this computer.',
+  'toast.setAsideInUse': 'A rollback or an update still needs it, so it was not removed.',
 }
 
 /** A key of the dictionary. */
@@ -106,4 +116,14 @@ export const zh: typeof en = {
   'toast.notFound': '该项已不在废纸篓中',
   'toast.restoreConflict': '未能恢复，因为已存在相同 ID 的对话',
   'toast.workspaceMissing': '该工作区已不存在',
+  'setAside.heading': '回滚后搁置的数据',
+  'setAside.intro': '回滚搁置的对话，以及更新时做的副本，会保留在这里，直到你移除。这里的任何内容都不会被自动删除。',
+  'setAside.kind.set-aside': '回滚搁置的对话',
+  'setAside.kind.copy': '更新时做的对话副本',
+  'setAside.remove': '移除',
+  'setAside.title': '永久移除？',
+  'setAside.body': '“{name}”将从这台电脑上删除，且无法撤销。',
+  'toast.setAsideRemoved': '已移除',
+  'toast.setAsideFailed': '未能移除，仍在这台电脑上',
+  'toast.setAsideInUse': '回滚或更新仍需要它，因此未移除',
 }

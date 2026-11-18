@@ -80,6 +80,8 @@ import { assertExternalDelegationConsent, findDelegationConsent, limitExternalRu
 
 export type {} from './catalog.ts'
 export type {} from './projection.ts'
+// Installed external-agent packs built for an earlier release import these from the package root, so the root keeps
+// every name it exported then; the `./out-of-process`, `./safety-level` and `./consent` subpaths are the current imports.
 export * from './out-of-process.ts'
 export { assertExternalDelegationConsent, DELEGATION_CONSENT_PROVIDER_EXPORT, findDelegationConsent, limitExternalRunTime } from './consent.ts'
 export { CLAUDE_SANDBOX_INSTALL_COMMAND, missingClaudeSandboxTools, SUBAGENT_SAFETY_LEVELS } from './safety-level.ts'

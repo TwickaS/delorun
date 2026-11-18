@@ -67,7 +67,7 @@ description: "Delorun 在 Host 上的插件包：安装队列、packs 路由，�
 
 ## 手机
 
-`list`、`cancel`（停止排队中或下载中的安装）和 `dismiss`（清除失败或已取消的行，只是队列记录）这几条路由对任何已批准的手机应答；两者都不会触及已安装的插件包（A408）。`enqueue`、`retry` 和 `remove` 路由只在手机持有解锁时才对它应答，没有解锁的手机会得到 `403`，客户端会把它变成解锁对话框的 `elevation-required: packs/<route>`（A408）。
+`list`、`cancel`（停止排队中或下载中的安装）和 `dismiss`（清除失败或已取消的行，只是队列记录）这几条路由对任何已批准的手机应答；两者都不会触及已安装的插件包。`enqueue`、`retry` 和 `remove` 路由只在手机持有解锁时才对它应答，没有解锁的手机会得到 `403`，客户端会把它变成解锁对话框的 `elevation-required: packs/<route>`。
 
 <a id="where-the-host-connects-it"></a>
 

@@ -6,8 +6,6 @@ description: "用 delorun setup export 与 delorun setup import 把你的插件�
 
 [English](move-your-setup.md) | 中文
 
-本页描述 Delorun 目前的工作方式。
-
 ## 摘要
 
 `delorun setup export` 把你添加的插件、模型选择与设置写成一个已签名的文件。在另一台电脑或另一个 [profile](../reference/glossary.zh.md#profile) 上运行 `delorun setup import`，会在向你展示全部更改并征得同意之后，用文件中的 setup 替换该 profile 的 setup。文件从不包含密钥、chat、已配对的设备或你对 setup 的回答。两台电脑上都需要 Delorun，导入的那台还需要终端。

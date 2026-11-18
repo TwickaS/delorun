@@ -222,9 +222,9 @@ studio 仅对 `passed` 显示徽章，并且只显示为「Tested with Delorun <
 
 ## 消费方
 
-- `Delo-Run/delo-plugins`（WP7.1、WP7.2）：索引文件、其 schema 检查、语料库与发布任务。
-- `delorun/packages/catalogue/src/revocation/`（WP7.3）：获取、陈旧状态与加载时停用。
-- Discover 的配置与 studio 插件（WP7.4）：列出条目、徽章、发现与安装。
+- `Delo-Run/delo-plugins`：索引文件、其 schema 检查、语料库与发布任务。
+- `delorun/packages/catalogue/src/revocation/`：获取、陈旧状态与加载时停用。
+- Discover 的配置与 studio 插件：列出条目、徽章、发现与安装。
 - `delorun verify`（[C15](c15-verification-checks.zh.md)）与更新报告（[C3](c03-update-report.zh.md)）。
 
 <a id="compatibility"></a>
@@ -254,21 +254,21 @@ studio 仅对 `passed` 显示徽章，并且只显示为「Tested with Delorun <
 
 ### 拒绝测试
 
-| 测试 | 负责方 | 它展示的行为 |
+| 测试 | 组件 | 它展示的行为 |
 | --- | --- | --- |
-| `c13-replayed-list-refused` | WP7.3 | 一份有效签名、但 `sequence` 低于已存储值的撤销列表会被拒绝，已存储的列表保持不变。 |
-| `c13-foreign-key-list-refused` | WP7.3 | 由插件索引角色之外的密钥签名的列表会被拒绝。 |
-| `c13-malformed-revocation-refuses-list` | WP7.3 | 一份有效签名、但含有一个格式错误撤销项的列表会被整体拒绝。 |
-| `c13-stale-after-24-hours` | WP7.3 | 当替身服务器不可达、且上一次获取发生在 24 小时 1 秒之前时，studio 显示陈旧通知，插件索引安装被拒绝，已安装的插件正常加载，上一份列表所撤销的版本保持停用。 |
-| `c13-expired-list-is-stale` | WP7.3 | 已超过其 `expires` 的列表即使在 24 小时内获取过，也会进入陈旧状态。 |
-| `c13-revoked-disabled-at-next-load` | WP7.3 | 新被撤销的已安装版本会持续运行直到重启，重启提示显示其原因，重启后其所在的行被停用，并产生一个历史版本。 |
-| `c13-revoked-install-refused` | WP7.4 | 安装被撤销的版本会被拒绝，并给出列表中的原因。 |
-| `c13-integrity-mismatch-refused` | WP7.4 | 完整性与索引条目不符的 tarball 会被拒绝。 |
-| `c13-plugin-cannot-write-badge` | WP7.2 | 语料库任务中试图写入徽章或推送的 fixture（测试前置数据）插件会因没有 token 而失败，其尝试不会留下任何徽章记录。 |
-| `c13-no-pull-request-target` | WP7.2 | 对任何使用 `pull_request_target` 的插件索引工作流，工作流 lint 都会失败。 |
-| `c13-no-audited-wording` | WP7.4 | 安装一个 fixture 插件时，不渲染任何「audited」、「safe」或「no findings」字样，不称该插件已经核实，并说明 Delorun 不审计插件。 |
-| `c13-findings-labelled-as-claims` | WP7.4 | fixture 条目的发现在渲染时带有其作者的角色与姓名，以及「not verified by Delorun」标签。 |
-| `c13-missing-ledger-asks-again` | WP7.4 | 当接受台账缺失或格式错误时，这些发现会在安装前再次征询。 |
+| `c13-replayed-list-refused` | `catalogue` | 一份有效签名、但 `sequence` 低于已存储值的撤销列表会被拒绝，已存储的列表保持不变。 |
+| `c13-foreign-key-list-refused` | `catalogue` | 由插件索引角色之外的密钥签名的列表会被拒绝。 |
+| `c13-malformed-revocation-refuses-list` | `catalogue` | 一份有效签名、但含有一个格式错误撤销项的列表会被整体拒绝。 |
+| `c13-stale-after-24-hours` | `catalogue` | 当替身服务器不可达、且上一次获取发生在 24 小时 1 秒之前时，studio 显示陈旧通知，插件索引安装被拒绝，已安装的插件正常加载，上一份列表所撤销的版本保持停用。 |
+| `c13-expired-list-is-stale` | `catalogue` | 已超过其 `expires` 的列表即使在 24 小时内获取过，也会进入陈旧状态。 |
+| `c13-revoked-disabled-at-next-load` | `catalogue` | 新被撤销的已安装版本会持续运行直到重启，重启提示显示其原因，重启后其所在的行被停用，并产生一个历史版本。 |
+| `c13-revoked-install-refused` | Discover 插件 | 安装被撤销的版本会被拒绝，并给出列表中的原因。 |
+| `c13-integrity-mismatch-refused` | Discover 插件 | 完整性与索引条目不符的 tarball 会被拒绝。 |
+| `c13-plugin-cannot-write-badge` | `delo-plugins` | 语料库任务中试图写入徽章或推送的 fixture（测试前置数据）插件会因没有 token 而失败，其尝试不会留下任何徽章记录。 |
+| `c13-no-pull-request-target` | `delo-plugins` | 对任何使用 `pull_request_target` 的插件索引工作流，工作流 lint 都会失败。 |
+| `c13-no-audited-wording` | Discover 插件 | 安装一个 fixture 插件时，不渲染任何「audited」、「safe」或「no findings」字样，不称该插件已经核实，并说明 Delorun 不审计插件。 |
+| `c13-findings-labelled-as-claims` | Discover 插件 | fixture 条目的发现在渲染时带有其作者的角色与姓名，以及「not verified by Delorun」标签。 |
+| `c13-missing-ledger-asks-again` | Discover 插件 | 当接受台账缺失或格式错误时，这些发现会在安装前再次征询。 |
 
 <a id="what-this-does-not-prove"></a>
 

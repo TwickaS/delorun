@@ -194,9 +194,9 @@ Installing a plugin from a file or directly from npm does not use the catalogue,
 
 ## Consumers
 
-- `Delo-Run/delo-plugins` (WP7.1, WP7.2): the index, its schema check, the corpus and the publish job.
-- `delorun/packages/catalogue/src/revocation/` (WP7.3): fetching, the stale state and disabling at load.
-- Discover's configuration and studio plugin (WP7.4): listing, badges, findings and installs.
+- `Delo-Run/delo-plugins`: the index, its schema check, the corpus and the publish job.
+- `delorun/packages/catalogue/src/revocation/`: fetching, the stale state and disabling at load.
+- Discover's configuration and studio plugin: listing, badges, findings and installs.
 - `delorun verify` ([C15](c15-verification-checks.md)) and the update report ([C3](c03-update-report.md)).
 
 ## Compatibility
@@ -218,21 +218,21 @@ Each file's `schema` names its major version, and readers refuse unknown fields,
 
 ### Denial tests
 
-| Test | Owner | Behaviour it shows |
+| Test | Component | Behaviour it shows |
 | --- | --- | --- |
-| `c13-replayed-list-refused` | WP7.3 | A validly signed revocation list with a lower `sequence` than the stored one is refused, and the stored list stays. |
-| `c13-foreign-key-list-refused` | WP7.3 | A list signed by a key outside the catalogue role is refused. |
-| `c13-malformed-revocation-refuses-list` | WP7.3 | A validly signed list with one malformed revocation is refused as a whole. |
-| `c13-stale-after-24-hours` | WP7.3 | With the stand-in unreachable and the last fetch 24 hours and 1 second ago, the studio shows the stale notice, a catalogue install is refused, an installed plugin loads, and a version the last list revoked stays disabled. |
-| `c13-expired-list-is-stale` | WP7.3 | A list past its `expires` enters the stale state even when fetched within 24 hours. |
-| `c13-revoked-disabled-at-next-load` | WP7.3 | A newly revoked installed version keeps running until restart, the restart prompt shows its reason, and after restart its row is disabled with a history version. |
-| `c13-revoked-install-refused` | WP7.4 | Installing a revoked version is refused with the list's reason. |
-| `c13-integrity-mismatch-refused` | WP7.4 | A tarball whose integrity differs from the index entry is refused. |
-| `c13-plugin-cannot-write-badge` | WP7.2 | A fixture plugin in the corpus job that tries to write a badge or push fails for lack of a token, and its attempt leaves no badge record. |
-| `c13-no-pull-request-target` | WP7.2 | A workflow lint fails on any catalogue workflow that uses `pull_request_target`. |
-| `c13-no-audited-wording` | WP7.4 | Installing a fixture plugin renders no "audited", "safe" or "no findings" wording and does not call the plugin verified, and says that Delorun does not audit plugins. |
-| `c13-findings-labelled-as-claims` | WP7.4 | A fixture entry's findings render with their author's role and name and the "not verified by Delorun" label. |
-| `c13-missing-ledger-asks-again` | WP7.4 | With the acceptance ledger missing or malformed, the findings ask again before install. |
+| `c13-replayed-list-refused` | `catalogue` | A validly signed revocation list with a lower `sequence` than the stored one is refused, and the stored list stays. |
+| `c13-foreign-key-list-refused` | `catalogue` | A list signed by a key outside the catalogue role is refused. |
+| `c13-malformed-revocation-refuses-list` | `catalogue` | A validly signed list with one malformed revocation is refused as a whole. |
+| `c13-stale-after-24-hours` | `catalogue` | With the stand-in unreachable and the last fetch 24 hours and 1 second ago, the studio shows the stale notice, a catalogue install is refused, an installed plugin loads, and a version the last list revoked stays disabled. |
+| `c13-expired-list-is-stale` | `catalogue` | A list past its `expires` enters the stale state even when fetched within 24 hours. |
+| `c13-revoked-disabled-at-next-load` | `catalogue` | A newly revoked installed version keeps running until restart, the restart prompt shows its reason, and after restart its row is disabled with a history version. |
+| `c13-revoked-install-refused` | Discover | Installing a revoked version is refused with the list's reason. |
+| `c13-integrity-mismatch-refused` | Discover | A tarball whose integrity differs from the index entry is refused. |
+| `c13-plugin-cannot-write-badge` | `delo-plugins` | A fixture plugin in the corpus job that tries to write a badge or push fails for lack of a token, and its attempt leaves no badge record. |
+| `c13-no-pull-request-target` | `delo-plugins` | A workflow lint fails on any catalogue workflow that uses `pull_request_target`. |
+| `c13-no-audited-wording` | Discover | Installing a fixture plugin renders no "audited", "safe" or "no findings" wording and does not call the plugin verified, and says that Delorun does not audit plugins. |
+| `c13-findings-labelled-as-claims` | Discover | A fixture entry's findings render with their author's role and name and the "not verified by Delorun" label. |
+| `c13-missing-ledger-asks-again` | Discover | With the acceptance ledger missing or malformed, the findings ask again before install. |
 
 ### What this does not prove
 

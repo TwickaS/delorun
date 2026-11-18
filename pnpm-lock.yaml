@@ -1397,6 +1397,9 @@ importers:
       '@delorun/plugin-scaffold':
         specifier: workspace:*
         version: link:../../packages/plugin-scaffold
+      '@delorun/plugin-update':
+        specifier: workspace:*
+        version: link:../../packages/plugin-update
       '@delorun/preview-flags':
         specifier: workspace:*
         version: link:../../packages/preview-flags
@@ -2159,6 +2162,9 @@ importers:
       '@delorun/plugin-trash':
         specifier: workspace:*
         version: link:../plugin-trash
+      '@delorun/plugin-update':
+        specifier: workspace:*
+        version: link:../plugin-update
       '@delorun/profile-safety':
         specifier: workspace:*
         version: link:../profile-safety
@@ -3898,6 +3904,9 @@ importers:
       '@delorun/contract-update-report':
         specifier: workspace:*
         version: link:../contract-update-report
+      '@delorun/plugin-update':
+        specifier: workspace:*
+        version: link:../plugin-update
       '@delorun/settings-controls':
         specifier: workspace:*
         version: link:../settings-controls
@@ -4186,6 +4195,9 @@ importers:
 
   delorun/packages/plugin-trash:
     dependencies:
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:*
+        version: link:../../../packages/boot/app-boot
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
@@ -4195,9 +4207,15 @@ importers:
       '@delorun/home-auth':
         specifier: workspace:*
         version: link:../home-auth
+      '@delorun/home-process':
+        specifier: workspace:*
+        version: link:../home-process
       '@delorun/trash':
         specifier: workspace:*
         version: link:../trash
+      '@delorun/update':
+        specifier: workspace:*
+        version: link:../update
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -4256,6 +4274,97 @@ importers:
       '@types/react':
         specifier: ~18.3.1
         version: 18.3.31
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
+      tsdown:
+        specifier: ^0.22.2
+        version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
+
+  delorun/packages/plugin-update:
+    dependencies:
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:*
+        version: link:../../../packages/boot/app-boot
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+      '@delorun/contract-home-process':
+        specifier: workspace:*
+        version: link:../contract-home-process
+      '@delorun/contract-update-report':
+        specifier: workspace:*
+        version: link:../contract-update-report
+      '@delorun/home-process':
+        specifier: workspace:*
+        version: link:../home-process
+      '@delorun/plugin-changes':
+        specifier: workspace:*
+        version: link:../plugin-changes
+      '@delorun/update':
+        specifier: workspace:*
+        version: link:../update
+      semver:
+        specifier: ^7.8.5
+        version: 7.8.5
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-api-gateway':
+        specifier: workspace:*
+        version: link:../../../packages/api/gateway
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../../packages/util/brand
+      '@deepseek-ai/dsh-client-connection':
+        specifier: workspace:*
+        version: link:../../../packages/client/connection
+      '@deepseek-ai/dsh-client-locale':
+        specifier: workspace:*
+        version: link:../../../packages/client/locale
+      '@deepseek-ai/dsh-client-store':
+        specifier: workspace:*
+        version: link:../../../packages/client/store
+      '@deepseek-ai/dsh-client-test-runtime':
+        specifier: workspace:*
+        version: link:../../../packages/test-support/client-runtime
+      '@deepseek-ai/dsh-client-ui-layout':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-layout
+      '@deepseek-ai/dsh-client-ui-primitives':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-primitives
+      '@deepseek-ai/dsh-client-ui-renderer':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-renderer
+      '@deepseek-ai/dsh-client-ui-settings':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-settings
+      '@deepseek-ai/dsh-client-ui-sidebar':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-sidebar
+      '@deepseek-ai/dsh-client-ui-slots':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-slots
+      '@deepseek-ai/dsh-host-webserver':
+        specifier: workspace:*
+        version: link:../../../packages/host/webserver
+      '@delorun/bundle-local':
+        specifier: workspace:*
+        version: link:../bundle-local
+      '@delorun/contract-release-manifest':
+        specifier: workspace:*
+        version: link:../contract-release-manifest
+      '@testing-library/react':
+        specifier: ^16.3.3
+        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@types/react':
+        specifier: ~18.3.1
+        version: 18.3.31
+      '@types/semver':
+        specifier: ^7.8.0
+        version: 7.8.0
       react:
         specifier: ^18.2.0
         version: 18.3.1
@@ -12310,6 +12419,12 @@ importers:
       '@deepseek-ai/dsh-ptc-runtime':
         specifier: workspace:*
         version: link:../../ptc-runtime/ptc-runtime
+      '@deepseek-ai/dsh-sandbox':
+        specifier: workspace:*
+        version: link:../../sandbox/sandbox
+      '@deepseek-ai/dsh-sandbox-policy':
+        specifier: workspace:*
+        version: link:../../sandbox/sandbox-policy
       '@deepseek-ai/dsh-scope':
         specifier: workspace:*
         version: link:../../core/scope

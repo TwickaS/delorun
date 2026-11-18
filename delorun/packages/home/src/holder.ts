@@ -14,6 +14,11 @@
  * one, written by an older Delorun or on a platform without a reader, is judged by its process id alone, as is a record
  * whose process's start identity cannot be read now.
  *
+ * A Linux record whose boot id differs from the running system's names a process of an earlier boot, which has exited
+ * whatever its process id or pid namespace now names: a restart gives every container and sandbox a new pid namespace
+ * too, so the namespace rule below must not keep that record alive. The boot id is the kernel's, so every pid
+ * namespace of one boot reads the same value and a holder of this boot is never judged by it.
+ *
  * On Linux a record also names the pid namespace its process id is numbered in, `pid:[<inode>]` as `/proc/self/ns/pid`
  * links to it: the writer's own, which numbers both its own process id and a successor's it hands a lock to. A process
  * id from another pid namespace, such as a container's or a sandbox's that shares the home, names nothing in the
@@ -50,6 +55,9 @@ const PID_NAMESPACE = /^pid:\[\d{1,20}\]$/u
 
 /** The longest pid namespace a record may carry. */
 const MAX_NAMESPACE_LENGTH = 'pid:[]'.length + 20
+
+/** The boot id of a Linux start identity. */
+const LINUX_BOOT = /^linux:([0-9a-f-]{36}):/u
 
 const BOOT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u
 
@@ -171,6 +179,18 @@ export function readPidNamespace(platform: NodeJS.Platform = process.platform): 
   return PID_NAMESPACE.test(link) ? link : undefined
 }
 
+/**
+ * The running system's boot id, read once.
+ * @returns the boot id, or `undefined` off Linux or where `/proc/sys/kernel/random/boot_id` cannot be read.
+ */
+function ownBootId(): string | undefined {
+  if (process.platform !== 'linux') return undefined
+  ownBoot ??= { value: readText('/proc/sys/kernel/random/boot_id')?.trim() }
+  return ownBoot.value
+}
+
+let ownBoot: { readonly value: string | undefined } | undefined
+
 let ownNamespace: { readonly value: string | undefined } | undefined
 
 /**
@@ -237,6 +257,12 @@ export interface ProcessTable {
    * @returns `pid:[<inode>]`, or `undefined` where it cannot be read.
    */
   pidNamespace(): string | undefined
+  /**
+   * The boot id of the running system, which every pid namespace on one kernel shares. Absent in a table that has no
+   * boot id to compare, which then never judges a record by its boot.
+   * @returns the boot id, or `undefined` where it cannot be read or the platform has none.
+   */
+  bootId?(): string | undefined
 }
 
 /** This operating system's processes, read through {@link processExists}, {@link readProcessStart} and this process's pid namespace. */
@@ -245,6 +271,7 @@ export const SYSTEM_PROCESS_TABLE: ProcessTable = {
   exists: processExists,
   start: pid => readProcessStart(pid),
   pidNamespace: ownPidNamespace,
+  bootId: ownBootId,
 }
 
 /** The platforms {@link readProcessStart} reads a start identity on. */
@@ -276,6 +303,19 @@ export type HolderCheck =
   | { readonly kind: 'unconfirmed', readonly reason: UnconfirmedHolder }
 
 /**
+ * Whether a record names a Linux boot other than the running one. No process outlives its boot, so such a holder has
+ * exited, whatever its process id or pid namespace now names.
+ * @param holder - the recorded holder.
+ * @param table - the processes to check against.
+ * @returns true when the record's boot id and the table's both exist and differ.
+ */
+function fromEarlierBoot(holder: ProcessHolder, table: ProcessTable): boolean {
+  const recorded = holder.processStart === undefined ? undefined : LINUX_BOOT.exec(holder.processStart)?.[1]
+  const running = table.bootId?.()
+  return recorded !== undefined && running !== undefined && recorded !== running
+}
+
+/**
  * Check a recorded holder against the live processes. Only `confirmed` permits acting on the process, such as
  * signalling it: every other outcome may name a process other than the one that wrote the record.
  * @param holder - the recorded holder.
@@ -283,6 +323,7 @@ export type HolderCheck =
  * @returns what the record names now.
  */
 export function checkHolder(holder: ProcessHolder, table: ProcessTable = SYSTEM_PROCESS_TABLE): HolderCheck {
+  if (fromEarlierBoot(holder, table)) return { kind: 'exited' }
   if (holder.pidNamespace !== undefined && holder.pidNamespace !== table.pidNamespace()) return { kind: 'unconfirmed', reason: 'other-namespace' }
   if (!table.exists(holder.pid)) return { kind: 'exited' }
   if (!START_IDENTITY_PLATFORMS.has(table.platform)) return { kind: 'unconfirmed', reason: 'no-start-reader' }

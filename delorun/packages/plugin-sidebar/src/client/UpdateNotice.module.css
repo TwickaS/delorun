@@ -166,3 +166,7 @@
     opacity: 0;
   }
 }
+
+.updateNow {
+  align-self: flex-start;
+}

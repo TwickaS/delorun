@@ -39,8 +39,8 @@
   en: 311a429bc776c254
   zh: 7d818e5f8423532e
 /c17-plugin-version-requirements/consumers:
-  en: 96eab7fe72f916c0
-  zh: e074530ebe06aa3e
+  en: b6d0bcd4c128c7f2
+  zh: e4da4c0cc4286206
 /c17-plugin-version-requirements/compatibility:
   en: eaf2937523a6d02b
   zh: f34801fa6809e1fd
@@ -51,5 +51,5 @@
   en: b74d77212629f075
   zh: 663c70f79fe2b477
 /c17-plugin-version-requirements/security/denial-tests:
-  en: e5183295df5c4aeb
-  zh: bf05d2aed7728a1e
+  en: 830d2b209cc41772
+  zh: 5a1e7260cf939099

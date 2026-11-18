@@ -7,7 +7,8 @@ import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
 import { JsonStorageBackend } from '../../../storage/storage-json/src/index.ts'
 import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
-import WorkspaceRegistry, { inspectRegistryText } from '../src/index.ts'
+import WorkspaceRegistry from '../src/index.ts'
+import { inspectRegistryText } from '../src/inspect.ts'
 import type { StorageBackend } from '@deepseek-ai/dsh-storage'
 
 interface Document {

@@ -9,15 +9,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { SessionId } from '@deepseek-ai/dsh-session'
-import {
-  agentSignInFailureText,
-  assertPositiveFinite,
-  assertUsableCwd,
-  isAgentSignInFailure,
-  NO_START_CAPABILITIES,
-  settleRunResult,
-  subprocessRunHandle,
-} from '../src/index.ts'
+import { assertPositiveFinite, assertUsableCwd, NO_START_CAPABILITIES, settleRunResult, subprocessRunHandle } from '../src/index.ts'
+import { agentSignInFailureText, isAgentSignInFailure } from '../src/out-of-process.ts'
 
 describe('NO_START_CAPABILITIES', () => {
   it('advertises nothing and is frozen (shared by every out-of-process backend)', () => {

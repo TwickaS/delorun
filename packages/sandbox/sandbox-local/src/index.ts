@@ -48,7 +48,6 @@ import type { ConfinedArgv, ConfinedSandboxMode, ProtectedReads, RunnerFailureRu
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { AclWriteGrant, isTempRootInsideWorkspace, registerAclDiagnosisSkill, tempWriteSid, workspaceWriteSid } from '@deepseek-ai/dsh-sandbox-windows-acl'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
-import { aliasCoverage, readMountTable } from './mounts.ts'
 import type { AliasCoverage } from './mounts.ts'
 import { RUNNER_PROTECTION, bwrapProfileArgs, landlockProfileArgs, resolveProtection, seatbeltProfileArgs } from './profiles.ts'
 import { vsockOffered, withSeccompFilter } from './seccomp.ts'
@@ -56,24 +55,11 @@ import { checkAbstractSockets, refuseAbstractSockets } from './abstract-sockets.
 import type { AbstractSocketCheck } from './abstract-sockets.ts'
 import { BRIDGE_DIAGNOSTIC, RUNNER_NETWORK, bridgedArgv, networkRefusal } from './network.ts'
 import type { LocalSandboxRunner, Protection, ProtectionSettings } from './profiles.ts'
+import { NETWORK_DENIED_SOCKETS, NETWORK_DENIED_SOCKET_DIRECTORIES } from './network-defaults.ts'
 
-export { RUNNER_PROTECTION } from './profiles.ts'
-export { checkAbstractSockets, refuseAbstractSockets, type AbstractSocketCheck } from './abstract-sockets.ts'
-export { BRIDGE_DIAGNOSTIC, PROXY_ENVIRONMENT, RUNNER_NETWORK, SANDBOX_PROXY_PORT } from './network.ts'
+export type { AbstractSocketCheck } from './abstract-sockets.ts'
 export type { LocalSandboxRunner, RunnerProtection } from './profiles.ts'
-export { ALIAS_UNRELIABLE_FILESYSTEMS } from './mounts.ts'
 export type { AliasCoverage } from './mounts.ts'
-
-/**
- * Whether every other mount that reaches `path` can be found on this host, read from this process's mount table.
- * Setup and verification use it to report a rule that depends on aliases as unknown rather than enforced.
- * @param path - the path, resolved before it is checked.
- * @returns `complete`, or `unknown` when the path's filesystem hides its aliases from the mount table.
- * @throws {SandboxUnsupportedPolicyError} when the Linux mount table cannot be read.
- */
-export function pathAliasCoverage(path: string): AliasCoverage {
-  return aliasCoverage(canonicalPath(path), readMountTable())
-}
 
 /**
  * Classify one failed Windows ACL preparation step; the platform failure, or an
@@ -219,12 +205,6 @@ function bubblewrapAdvice(probe: BwrapProbe | undefined, installed: boolean, tim
     ? 'bubblewrap (bwrap) is installed but could not create a sandbox here, which usually means this system blocks unprivileged user namespaces, as Ubuntu\'s AppArmor setting kernel.apparmor_restrict_unprivileged_userns does for a program no AppArmor profile allows; run `bwrap --ro-bind / / true` to see its error, let bwrap create user namespaces, then start again'
     : 'install bubblewrap (the bwrap command, packaged as bubblewrap), then start again'
 }
-
-/** The default {@link Config.networkDeniedSockets}. */
-export const NETWORK_DENIED_SOCKETS: readonly string[] = ['/run/dbus/system_bus_socket', '/run/tailscale/tailscaled.sock', '/run/snapd.socket', '/run/snapd-snap.socket']
-
-/** The default {@link Config.networkDeniedSocketDirectories}. */
-export const NETWORK_DENIED_SOCKET_DIRECTORIES: readonly string[] = ['/run/systemd/resolve', '/run/nscd', '/run/avahi-daemon', '/run/cups']
 
 /** Probe whether `bwrap` can create the profile; the provider caches the bounded result. */
 function defaultProbeBwrap(timeoutMs: number): BwrapProbe {

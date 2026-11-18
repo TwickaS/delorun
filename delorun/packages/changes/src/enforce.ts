@@ -234,13 +234,21 @@ export async function prepareReload(request: EnforceRequest): Promise<StartChang
  */
 export async function repointActiveCopies(request: EnforceRequest): Promise<readonly string[]> {
   const { home, profile, profileDir } = request
-  return withFileLock(join(profileDir, 'package.json'), async () => {
-    const release = await referenceRelease(home, request.runningRelease)
-    const rewritten: string[] = []
+  const release = await referenceRelease(home, request.runningRelease)
+  /** The plugins whose active copy does not hold the version the record names. */
+  const stale = async (): Promise<[string, ActiveContent][]> => {
+    const behind: [string, ActiveContent][] = []
     for (const [plugin, content] of Object.entries((await readActiveRecord(home, profile)).plugins)) {
-      const directory = activeDirectory(home, profile, plugin)
-      if (content.version === undefined || await holdsVersion(home, directory, content.version, release)) continue
-      await holdContent(home, directory, content.version, release)
+      if (content.version !== undefined && !await holdsVersion(home, activeDirectory(home, profile, plugin), content.version, release)) behind.push([plugin, content])
+    }
+    return behind
+  }
+  // A normal restart finds every copy holding its version and takes no lock, so it never waits for a profile writer.
+  if ((await stale()).length === 0) return []
+  return withFileLock(join(profileDir, 'package.json'), async () => {
+    const rewritten: string[] = []
+    for (const [plugin, content] of await stale()) {
+      await holdContent(home, activeDirectory(home, profile, plugin), content.version, release)
       rewritten.push(plugin)
     }
     return rewritten
