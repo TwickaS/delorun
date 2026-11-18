@@ -157,6 +157,8 @@ interface Turning {
 function LivingTile({ frames, cell, tabIndex, onFocus }: { frames: readonly Shot[]; cell: number; tabIndex: number; onFocus: () => void }) {
   const [frame, setFrame] = useState(0)
   const own = useRef<HTMLSpanElement>(null)
+  // The atlas already shows the first frame; the sharper pictures wait for the first scroll or the idle moment.
+  const armed = useArmed()
   useEffect(() => {
     setFrame(0)
     if (frames.length < 2 || matchMedia('(prefers-reduced-motion: reduce)').matches) return
@@ -179,10 +181,14 @@ function LivingTile({ frames, cell, tabIndex, onFocus }: { frames: readonly Shot
   return (
     <Tile shot={shot} bare className={`${s.mosaicTile} ${s.livingTile}`} cell={cell} tabIndex={tabIndex} onFocus={onFocus} label={`${tileLabel(shot)}, live`}>
       <span ref={own} hidden />
-      <picture key={shot.id}>
-        <source type="image/avif" srcSet={lodUrl(shot.id, 2, 'avif')} />
-        <img className={s.livingFrame} src={lodUrl(shot.id, 2, 'webp')} alt="" draggable={false} />
-      </picture>
+      {armed
+        ? (
+            <picture key={shot.id}>
+              <source type="image/avif" srcSet={lodUrl(shot.id, 2, 'avif')} />
+              <img className={s.livingFrame} src={lodUrl(shot.id, 2, 'webp')} alt="" draggable={false} />
+            </picture>
+          )
+        : null}
     </Tile>
   )
 }
@@ -334,8 +340,8 @@ export function MosaicWall({ name, layout }: { name: LayoutName; layout: Layout 
       })}
       {HANDOVER === undefined ? null : (
         <>
-          <img className={s.pinSwap} data-always="" src={shotSrc(HANDOVER.dark?.id ?? HANDOVER.id, armed ? 'full' : 'thumb')} loading="lazy" alt="" aria-hidden="true" draggable={false} style={{ ['--col' as string]: pin.col, ['--row' as string]: pin.row }} />
-          <img className={`${s.pinSwap} ${s.lightOnly}`} src={shotSrc(HANDOVER.id, armed ? 'full' : 'thumb')} loading="lazy" alt="" aria-hidden="true" draggable={false} style={{ ['--col' as string]: pin.col, ['--row' as string]: pin.row }} />
+          <img className={s.pinSwap} data-always="" src={armed ? shotSrc(HANDOVER.dark?.id ?? HANDOVER.id, 'full') : undefined} loading="lazy" alt="" aria-hidden="true" draggable={false} style={{ ['--col' as string]: pin.col, ['--row' as string]: pin.row }} />
+          <img className={`${s.pinSwap} ${s.lightOnly}`} src={armed ? shotSrc(HANDOVER.id, 'full') : undefined} loading="lazy" alt="" aria-hidden="true" draggable={false} style={{ ['--col' as string]: pin.col, ['--row' as string]: pin.row }} />
         </>
       )}
       <svg className={s.mosaicShade} data-tint="" viewBox={`0 0 ${cols} ${rows}`} preserveAspectRatio="none" aria-hidden="true">

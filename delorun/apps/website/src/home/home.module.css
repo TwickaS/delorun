@@ -481,7 +481,7 @@
   line-height: 1;
   color: var(--dl-stage-muted);
 }
-.wallCount strong { margin-right: 4px; font-size: 22px; font-weight: 700; color: var(--dl-accent); }
+.wallCount strong { margin-right: 4px; font-size: 22px; font-weight: 700; color: var(--dl-accent-text); }
 
 /*
  * The wall: many small tiles, wider than the text column. Spans keep each tile near its picture's proportions, and every
