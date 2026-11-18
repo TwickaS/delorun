@@ -133,7 +133,9 @@ export class EdgeController {
     html.style.setProperty('--edge-top-background', colours.top)
     html.style.setProperty('--edge-bottom-background', colours.bottom)
     html.style.background = colours.top
-    this.doc.body.style.background = colours.bottom
+    // An opaque body background would paint over the strips, which sit just above the `html` background, and Safari
+    // would then have no visible edge element to take its tint from. The body paints only where the two edges differ.
+    this.doc.body.style.background = colours.top === colours.bottom ? this.saved.bodyBackground : colours.bottom
     this.ownThemeColor.content = colours.top
   }
 
