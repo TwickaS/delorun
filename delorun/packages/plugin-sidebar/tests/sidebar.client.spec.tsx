@@ -144,7 +144,7 @@ function show(fields: {
     attach: (owner: { current: unknown }) => { calls.attach(owner.current); return calls.detach },
     preference: { read: (key: string) => stored.get(key) ?? null, write: (key: string, value: string) => { stored.set(key, value) } },
     undoLine,
-    updateNotice: { notice: { getSnapshot: () => fields.update ?? null, subscribe: () => () => {} }, notes: async () => null, dismiss: null },
+    updateNotice: { notice: { getSnapshot: () => fields.update ?? null, subscribe: () => () => {} }, notes: async () => null, open: null, dismiss: null },
     t: makeTranslate(en),
   } as SidebarProps
   // The foot's undo notice offers what the list remembers, as in the studio.
