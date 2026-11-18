@@ -3007,6 +3007,12 @@
       "class": "delorun-feature",
       "feature": "model-prompt",
       "reason": "The workflow paragraph is sent only when the workflow tool is offered to the agent in that step."
+    },
+    {
+      "path": "packages/context/time-context/src/index.ts",
+      "class": "delorun-feature",
+      "feature": "model-prompt",
+      "reason": "The per-step time block omits the elapsed line when the elapsed time is unknown instead of printing 'unavailable'."
     }
   ],
   "retired": []

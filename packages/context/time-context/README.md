@@ -29,7 +29,7 @@ Mount this plugin when the model should interpret unqualified dates and times in
 
 ### What the model gets
 
-Each injected reading has three lines: an ISO-shaped timestamp with numeric offset and IANA zone, the browser-zone policy for the request, and the elapsed duration in compact whole-second units. Step 1 measures from the latest preceding model-visible message; later steps measure from the preceding time-context event in the same turn. A missing baseline reports `unavailable`, and backward wall-clock movement clamps elapsed time to zero.
+Each injected reading has up to three lines: an ISO-shaped timestamp with numeric offset and IANA zone, the browser-zone policy for the request, and the elapsed duration in compact whole-second units. Step 1 measures from the latest preceding model-visible message; later steps measure from the preceding time-context event in the same turn. A missing baseline omits the elapsed line, and backward wall-clock movement clamps elapsed time to zero.
 
 ### Configuration
 
@@ -109,7 +109,7 @@ Each injected message contains three lines. `<timestamp>` is an ISO-shaped times
 ```markdown
 Time sampled while preparing turn <turn>, step 1: <timestamp>
 Browser time zone for this request: <iana-zone-or-mixed-or-unavailable-policy>.
-Elapsed since the preceding model-visible message: <duration-or-unavailable>.
+Elapsed since the preceding model-visible message: <duration>.
 ```
 
 ##### Later steps
@@ -117,7 +117,7 @@ Elapsed since the preceding model-visible message: <duration-or-unavailable>.
 ```markdown
 Time sampled while preparing turn <turn>, step <step>: <timestamp>
 Browser time zone for this request: <iana-zone-or-mixed-or-unavailable-policy>.
-Elapsed since the preceding step context: <duration-or-unavailable>.
+Elapsed since the preceding step context: <duration>.
 ```
 
 #### Token effect

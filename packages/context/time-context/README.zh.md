@@ -29,7 +29,7 @@ kind: "package-reference"
 
 ### 模型能得到什么
 
-每条注入读数包含三行：带数字偏移与 IANA 时区、形如 ISO 的时间戳，该请求的浏览器时区策略，以及以紧凑整秒单位表示的经过时长。第 1 步从最新一条先前模型可见消息起测量；后续步骤从同一轮次中前一个 time-context 事件起测量。缺少基线时报告 `unavailable`，挂钟时间倒退时把经过时长钳制为零。
+每条注入读数最多包含三行：带数字偏移与 IANA 时区、形如 ISO 的时间戳，该请求的浏览器时区策略，以及以紧凑整秒单位表示的经过时长。第 1 步从最新一条先前模型可见消息起测量；后续步骤从同一轮次中前一个 time-context 事件起测量。缺少基线时省略经过时长这一行，挂钟时间倒退时把经过时长钳制为零。
 
 ### 配置
 
@@ -109,7 +109,7 @@ pre-step 监听器在等待投影注册前安装。激活期间到达的步骤�
 ```markdown
 Time sampled while preparing turn <turn>, step 1: <timestamp>
 Browser time zone for this request: <iana-zone-or-mixed-or-unavailable-policy>.
-Elapsed since the preceding model-visible message: <duration-or-unavailable>.
+Elapsed since the preceding model-visible message: <duration>.
 ```
 
 ##### 后续步骤
@@ -117,7 +117,7 @@ Elapsed since the preceding model-visible message: <duration-or-unavailable>.
 ```markdown
 Time sampled while preparing turn <turn>, step <step>: <timestamp>
 Browser time zone for this request: <iana-zone-or-mixed-or-unavailable-policy>.
-Elapsed since the preceding step context: <duration-or-unavailable>.
+Elapsed since the preceding step context: <duration>.
 ```
 
 #### Token 影响

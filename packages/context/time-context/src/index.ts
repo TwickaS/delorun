@@ -104,12 +104,11 @@ function renderText(
   timeZone: string,
   browserContext: BrowserTimeZoneContext,
 ): string {
-  const elapsed = previous === undefined ? 'unavailable' : formatDuration(now - previous)
   const baseline = step === 1 ? 'model-visible message' : 'step context'
   const browserText = renderBrowserTimeZoneContext(browserContext)
   return `Time sampled while preparing turn ${turn}, step ${step}: ${formatTimestamp(now, formatter, timeZone)}\n`
-    + `${browserText}\n`
-    + `Elapsed since the preceding ${baseline}: ${elapsed}.`
+    + browserText
+    + (previous === undefined ? '' : `\nElapsed since the preceding ${baseline}: ${formatDuration(now - previous)}.`)
 }
 
 /** Reject refresh intervals that cannot represent an exact elapsed-millisecond threshold. */
