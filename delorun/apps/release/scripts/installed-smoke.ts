@@ -4,7 +4,7 @@
  * with no model key and no model request. `cut-rc.ts` runs it as its last step.
  *
  * `tsx delorun/apps/release/scripts/installed-smoke.ts --channel <dir|origin> --version <v> [--launcher <tgz>]
- * [--upgrade] [--channel-port <n>] [--studio-port <n>] [--budget-minutes <n>] [--log <file>] [--keep-going]`
+ * [--keys <dir>] [--channel-port <n>] [--studio-port <n>] [--budget-minutes <n>] [--log <file>] [--keep-going]`
  *
  * A channel directory is served read-only on `127.0.0.1:<channel-port>` for the run, and the launcher is built from
  * this checkout for that origin (`npm-launcher/src/build.ts`). An origin is used as it is, with a launcher built for it
@@ -14,7 +14,7 @@
  * runs with the same environment.
  *
  * Steps, each named on failure: 1 install and start, 2 add the offered packs, 3 wait for the installs and check each
- * pack's plugins are loaded, 4 stop and start twice with a clean home log, 5 create a chat, 6 upgrade the previous release, installed with the Claude Code and Codex packs, to this one with `delorun update --yes --data-copy` and check both packs still load (skipped, with its reason, for a channel origin or a channel with no older release), 7 clean up. The scratch
+ * pack's plugins are loaded, 4 stop and start twice with a clean home log, 5 create a chat, 6 upgrade the previous release, installed with the Claude Code and Codex packs, to this one with `delorun update --yes --data-copy` and check both packs still load (needs `--keys`, whose `timestamp.pem` signs a snapshot of the channel that names the previous release; skipped, with its reason, without it, for a channel origin, or for a channel with no older release), 7 clean up. The scratch
  * directory `/var/tmp/itest-*` (outside `/tmp`, which a sandboxed command may write, as a real home is) is removed and every process the run started is stopped, whether it passes or not. The run
  * stops at the first failure; `--keep-going` records a failed check (a refused home-log line, a pack that is not loaded)
  * and goes on, so one run names every failing step. Exit codes: 0 passed, 1 a step or check failed, 2 a wrong command
@@ -38,6 +38,7 @@ import { serveChannel } from './local-channel.ts'
 import { logProblems } from '../src/installed-smoke/home-log.ts'
 import { channelSource, offeredPacks, type ChannelSource } from '../src/installed-smoke/offered-packs.ts'
 import { previousRelease } from '../src/installed-smoke/previous-release.ts'
+import { writeSnapshot } from '../src/installed-smoke/snapshot.ts'
 import { signIn, type StudioClient } from '../src/installed-smoke/studio.ts'
 import type { QueueItem} from '../src/installed-smoke/wire.ts';
 import { BundleView, PacksResult, PacksSnapshot, PluginView, readAnswer } from '../src/installed-smoke/wire.ts'
@@ -66,8 +67,8 @@ export interface SmokeRequest {
   readonly log: string
   /** Record a failed check and go on to the next step, instead of stopping at it. */
   readonly keepGoing: boolean
-  /** Run step 6, which installs the previous release; the launcher installs an older release only after a person confirms it, so it is off unless asked for. */
-  readonly upgrade: boolean
+  /** The directory holding `timestamp.pem`, which signs the snapshot step 6 installs the previous release from; step 6 is skipped without it. */
+  readonly keys: string | undefined
 }
 
 /**
@@ -89,7 +90,7 @@ export function parseSmokeArgs(argv: readonly string[]): SmokeRequest {
       'budget-minutes': { type: 'string', default: '30' },
       'log': { type: 'string' },
       'keep-going': { type: 'boolean', default: false },
-      'upgrade': { type: 'boolean', default: false },
+      'keys': { type: 'string' },
     },
   })
   if (values.channel === undefined || values.channel === '') throw new Error('pass --channel <dir|origin>')
@@ -111,7 +112,7 @@ export function parseSmokeArgs(argv: readonly string[]): SmokeRequest {
     budgetMinutes: budget,
     log: resolve(values.log ?? join(tmpdir(), `installed-smoke-${values.version}.log`)),
     keepGoing: values['keep-going'],
-    upgrade: values.upgrade,
+    keys: values.keys === undefined ? undefined : resolve(values.keys),
   }
 }
 
@@ -438,8 +439,8 @@ export async function runSmoke(request: SmokeRequest, say: (line: string) => voi
 
     begin(6)
     const previous = /^https?:\/\//u.test(request.channel) ? undefined : await previousRelease(request.channel, request.version)
-    if (!request.upgrade) {
-      done(' (skipped: pass --upgrade to run it; the launcher installs an older release only after a person confirms it)')
+    if (request.keys === undefined) {
+      done(' (skipped: pass --keys <dir with timestamp.pem>; the launcher installs an older release only from a channel whose timestamp names it)')
     } else if (previous === undefined) {
       done(/^https?:\/\//u.test(request.channel) ? ' (skipped: a channel origin lists no releases to start from)' : ` (skipped: the channel holds no release older than ${request.version})`)
     } else {
@@ -449,6 +450,15 @@ export async function runSmoke(request: SmokeRequest, say: (line: string) => voi
       } else {
         await required(['stop'], 120_000)
         started = false
+        // The previous release installs from a snapshot whose timestamp names it, served on the live channel's port.
+        const snapshot = join(scratch, 'snapshot')
+        const snapshotVersion = await writeSnapshot({ channel: request.channel, directory: snapshot, release: previous, timestampKey: join(request.keys, 'timestamp.pem'), now: Math.floor(Date.now() / 1000) })
+        say(`      snapshot of the channel at ${previous}, timestamp version ${String(snapshotVersion)}`)
+        const serve = async (directory: string): Promise<void> => {
+          await new Promise<void>(closed => (server === undefined ? closed() : server.close(() => closed())))
+          server = (await serveChannel({ channel: directory, port: request.channelPort, host: '127.0.0.1', log: line => appendFileSync(request.log, `channel: ${line}\n`) })).server
+        }
+        await serve(snapshot)
         const upgrade = join(scratch, 'upgrade')
         const upgradePaths = { home: join(upgrade, 'home'), delorun: join(upgrade, 'home', '.delorun'), tmp: join(upgrade, 'tmp'), npm: join(upgrade, 'npm-cache'), project: join(upgrade, 'home', 'project') }
         for (const directory of [upgradePaths.home, upgradePaths.tmp, upgradePaths.npm, upgradePaths.project]) mkdirSync(directory, { recursive: true, mode: 0o700 })
@@ -469,6 +479,7 @@ export async function runSmoke(request: SmokeRequest, say: (line: string) => voi
         old = await awaitInstalls(old, agentPacks)
         await loaded(old, agentPacks)
         say(`      ${previous} runs with ${agentPacks.join(' and ')} loaded`)
+        await serve(request.channel)
         const updateOffset = logOffset()
         await required(['update', '--yes', '--data-copy'], 900_000)
         expected = request.version

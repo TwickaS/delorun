@@ -299,7 +299,7 @@ describe('registerHomeProcess', () => {
     expect(readdirSync(join(root, 'run', DATA_USERS_DIRECTORY))).toEqual([String(pid)])
   })
 
-  it('drops a registration from an earlier boot even when it records another pid namespace, and keeps one of this boot', async () => {
+  it.runIf(process.platform === 'linux')('drops a registration from an earlier boot even when it records another pid namespace, and keeps one of this boot', async () => {
     const root = newHome()
     const directory = join(root, 'run', DATA_USERS_DIRECTORY)
     mkdirSync(directory, { recursive: true })

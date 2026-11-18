@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 import { activeDirectory, attestTerminal, ChangesError, readChangeLog, setProtection } from '@delorun/changes'
 import { RuntimeStoreError } from '@delorun/runtime-store'
-import { changesApprovedContent, isCarriedPackage, repointForSuccessor, repointsBeforeBoot, startChanges } from '../src/changes/start.ts'
+import { changesApprovedContent, isCarriedPackage, repointForSuccessor, repointingBoot, repointsBeforeBoot, startChanges } from '../src/changes/start.ts'
 import { carriedPackageDirectory } from '../src/delorun-bundles.ts'
 import { prepareHome, type CommandContext } from '../src/command.ts'
 import { NO_APPROVED_CONTENT } from '../src/compose.ts'
@@ -319,6 +319,21 @@ describe('repointsBeforeBoot', () => {
     expect(repointsBeforeBoot(false, 0)).toBe(false)
     expect(repointsBeforeBoot(true, 0)).toBe(true)
     expect(repointsBeforeBoot(false, 1)).toBe(true)
+  })
+})
+
+describe('repointingBoot', () => {
+  it('re-points before a successor\'s first boot, and before a second boot of a process that failed a switch, never before a fresh first boot', async () => {
+    const calls: string[] = []
+    const repoint = (): Promise<void> => { calls.push('repoint'); return Promise.resolve() }
+    const fresh = repointingBoot({ home, profile: 'default' }, false, () => { calls.push('boot'); return Promise.resolve(1) }, repoint)
+    await fresh()
+    await fresh()
+    expect(calls).toEqual(['boot', 'repoint', 'boot'])
+    calls.length = 0
+    const successor = repointingBoot({ home, profile: 'default' }, true, () => { calls.push('boot'); return Promise.resolve(1) }, repoint)
+    await successor()
+    expect(calls).toEqual(['repoint', 'boot'])
   })
 })
 

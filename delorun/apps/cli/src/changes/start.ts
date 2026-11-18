@@ -135,6 +135,22 @@ export function repointsBeforeBoot(successor: boolean, bootsBefore: number): boo
 }
 
 /**
+ * Wrap a profile's Host boot so that it re-points the active copies first when {@link repointsBeforeBoot} says so.
+ * @param request - the home and the profile.
+ * @param successor - whether this process is an update's successor.
+ * @param boot - boots the Host.
+ * @param repoint - re-points the copies; {@link repointForSuccessor} by default.
+ * @returns the wrapped boot, which counts the boots it has run.
+ */
+export function repointingBoot<A extends unknown[], T>(request: { readonly home: string, readonly profile: string }, successor: boolean, boot: (...args: A) => Promise<T>, repoint: (request: { readonly home: string, readonly profile: string }) => Promise<void> = repointForSuccessor): (...args: A) => Promise<T> {
+  let booted = 0
+  return async (...args) => {
+    if (repointsBeforeBoot(successor, booted++)) await repoint(request)
+    return boot(...args)
+  }
+}
+
+/**
  * An update's successor boots without the pre-start steps, so before its Host boots it re-points each recorded active
  * copy's links into the runtime store to its own release ({@link repointActiveCopies}); otherwise a plugin pack copy
  * written under the previous release fails the load check of the new one and the update rolls back.

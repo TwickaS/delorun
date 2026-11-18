@@ -3,4 +3,4 @@ area: Install and update
 section: Fixed
 ---
 
-- `delorun update` is no longer refused after a restart because of a chat-data registration the earlier run left behind. A registration from before the restart no longer counts as a running process.
+- A chat-data registration left behind before a restart no longer blocks `delorun update`. An update run from release 0.1.0-preview.1.10 or earlier can still be refused.
