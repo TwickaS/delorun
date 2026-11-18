@@ -217,6 +217,11 @@
     },
     {
       "area": "Install and update",
+      "section": "Fixed",
+      "text": "An update no longer fails its check and goes back when the Claude Code or Codex plugin was installed on an earlier release: the plugin loads on the new release as it did before."
+    },
+    {
+      "area": "Install and update",
       "section": "Security",
       "text": "Starting an installed runtime does not trust a release root merely because a file under `~/.delorun/trust/` names a newer version: the launcher keeps the root chain the install walked, checks that it leads from a root the launcher carries, and otherwise stops and offers a reinstall. It starts a runtime only when the release root the home stored is one the launcher ships."
     },
@@ -2607,6 +2612,27 @@
     }
   ],
   "versions": [
+    {
+      "version": "0.1.0-preview.1.12",
+      "date": "2026-11-18",
+      "preview": true,
+      "areas": [
+        {
+          "area": "Install and update",
+          "items": [
+            {
+              "section": "Fixed",
+              "text": "An update no longer fails its check and goes back when the Claude Code or Codex plugin was installed on an earlier release: the plugin loads on the new release as it did before."
+            }
+          ]
+        }
+      ],
+      "fromUpstream": {
+        "ref": "dsh-v0.2.2-rc.3",
+        "items": []
+      },
+      "previews": []
+    },
     {
       "version": "0.1.0-preview.1.11",
       "date": "2026-11-17",
