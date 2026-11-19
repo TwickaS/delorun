@@ -97,7 +97,10 @@ export function FaceIdSheet({ t, action, kind, api, browser, hasPasskey, fallbac
   const usable = hasPasskey && available !== false
   const listed = action.items?.slice(0, LISTED_ITEMS) ?? []
   const rest = (action.items?.length ?? 0) - listed.length
-  const status = !hasPasskey ? t('sheet.noPasskey', { method }) : available === false ? t('sheet.unsupported', { method })
+  // With no passkey and no PIN to fall back on, the sheet can only say how to get one; it offers no keypad.
+  const stranded = !hasPasskey && fallback === 'computer'
+  const status = stranded ? t(action.noPin === true ? 'sheet.setUpFirst' : 'sheet.nothingToConfirm', { method })
+    : !hasPasskey ? t('sheet.noPasskey', { method }) : available === false ? t('sheet.unsupported', { method })
     : phase === 'cancelled' ? t('sheet.cancelled', { method }) : phase === 'failed' ? t('sheet.failed', { method }) : undefined
   const label = phase === 'waiting' ? t('sheet.waiting', { method }) : phase === 'ready' ? t('sheet.confirm', { method }) : t('sheet.again', { method })
   const showFallback = !usable || phase === 'cancelled' || phase === 'failed'
@@ -111,7 +114,7 @@ export function FaceIdSheet({ t, action, kind, api, browser, hasPasskey, fallbac
         {rest > 0 ? <li>{t('sheet.more', { count: String(rest) })}</li> : null}
       </ul>}
       <div className={css.glyph} aria-hidden="true"><DelorunBrandMark size={96} /></div>
-      {faceOnly ? <p className={css.status} role="status">{t('sheet.faceOnly', { method })}</p> : null}
+      {faceOnly && !stranded ? <p className={css.status} role="status">{t('sheet.faceOnly', { method })}</p> : null}
       {status === undefined ? null : <p className={css.status} role="status">{status}</p>}
       {usable
         ? <Button ref={confirmRef} variant="primary" type="button" className={css.confirm} disabled={phase === 'waiting'}
@@ -121,7 +124,7 @@ export function FaceIdSheet({ t, action, kind, api, browser, hasPasskey, fallbac
           : null}
       {showFallback && fallback === 'pin'
         ? <button type="button" className={css.link} data-face-id-fallback="pin" onClick={onFallback}>{t('sheet.usePin')}</button> : null}
-      {showFallback && fallback === 'computer' ? <p className={css.status} data-face-id-fallback="computer">{t('sheet.askComputer')}</p> : null}
+      {showFallback && fallback === 'computer' && !stranded ? <p className={css.status} data-face-id-fallback="computer">{t('sheet.askComputer')}</p> : null}
       <button type="button" className={css.link} onClick={onCancel}>{t('sheet.cancel')}</button>
     </div>
   </div>

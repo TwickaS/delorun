@@ -11,6 +11,7 @@ import { createReachCommand, homeRuns } from '../src/reach/command.ts'
 import { REACH_OFF, writeReachRow } from '../src/reach/row.ts'
 import { sendHomeRequest, type LocalDeviceApproval, type UnsignedRequest } from '@delorun/home-process'
 import { EXIT } from '../src/exit.ts'
+import { PIN_OPTIONS_NO_EFFECT } from '../src/help.ts'
 import type { CommandContext } from '../src/command.ts'
 import { createDevicesCommand, type DevicesDependencies } from '../src/devices/command.ts'
 import { startRunningHome, type RunningHome } from './fixtures/running-home.ts'
@@ -90,13 +91,15 @@ function command(overrides: { readonly typed?: (string | undefined)[]; readonly 
 describe('delorun devices pin', () => {
   it('sets a PIN over the home socket, prints what it allows and keeps the secret out of output and file names', async () => {
     running = await startRunningHome(home, PROFILE, undefined, pinOnlyApproval())
-    const code = await command({ typed: [SECRET, SECRET] }).run(['pin', 'set', '--idle-minutes', '5', '--lock-when-hidden'], context)
+    const code = await command({ typed: [SECRET, SECRET] }).run(['pin', 'set'], context)
     expect(out.stderr).toBe('')
     expect(code).toBe(EXIT.ok)
     expect(out.stderr).toBe('')
-    expect(sent).toEqual([{ op: 'pin.set', args: { secret: SECRET, idleMinutes: 5, lockWhenHidden: true } }])
+    expect(sent).toEqual([{ op: 'pin.set', args: { secret: SECRET } }])
     expect(out.stdout).toContain('PIN mode is on, with a PIN.')
-    expect(out.stdout).toContain('after 5 idle minutes, and at once when it is hidden')
+    // Pins the grant model's words (A483): the output never promises a page that stays unlocked for a while.
+    expect(out.stdout).toContain('confirms each sensitive action by typing the PIN when it asks, one action at a time; nothing stays unlocked.')
+    expect(out.stdout).not.toMatch(/idle minutes|locks again|unlock sensitive actions/)
     expect(out.stdout).toContain('five on one device remove that device and sign it out')
     expect(out.stdout).not.toContain('lock that device')
     expect(out.stdout + out.stderr).not.toContain(SECRET)
@@ -104,9 +107,9 @@ describe('delorun devices pin', () => {
     for (const file of readdirSync(secrets())) expect(readFileSync(join(secrets(), file), 'utf8')).not.toContain(SECRET)
     out.stdout = ''
     await expect(command().run(['pin', 'status'], context)).resolves.toBe(EXIT.ok)
-    expect(out.stdout).toBe('PIN mode is on, with a PIN; a page locks after 5 idle minutes and at once when it is hidden.\n')
+    expect(out.stdout).toBe('PIN mode is on, with a PIN.\n')
     await expect(command().run(['pin', 'resume'], context)).resolves.toBe(EXIT.ok)
-    expect(out.stdout).toContain('PIN unlocks are resumed.')
+    expect(out.stdout).toContain('The PIN and Face ID are resumed.')
     await expect(command().run(['pin', 'off'], context)).resolves.toBe(EXIT.ok)
     expect(out.stdout).toContain('PIN mode is off and the PIN is dropped.')
     out.stdout = ''
@@ -122,7 +125,7 @@ describe('delorun devices pin', () => {
     expect(out.stdout).not.toContain(SECRET)
   })
 
-  it('changes the idle minutes and lock-when-hidden with no secret, and keeps the PIN', async () => {
+  it('stores the idle minutes and lock-when-hidden with no secret, says they have no effect, and keeps the PIN', async () => {
     running = await startRunningHome(home, PROFILE, undefined, pinOnlyApproval())
     await command({ typed: [SECRET, SECRET] }).run(['pin', 'set'], context)
     const hashBefore = readFileSync(join(secrets(), 'pin-mode.json'), 'utf8').match(/"dk":\s*"[^"]+"/)?.[0]
@@ -131,13 +134,13 @@ describe('delorun devices pin', () => {
     out.stdout = ''
     await expect(command().run(['pin', 'options', '--idle-minutes', '7', '--lock-when-hidden'], context)).resolves.toBe(EXIT.ok)
     expect(sent).toEqual([{ op: 'pin.options', args: { idleMinutes: 7, lockWhenHidden: true } }])
-    expect(out.stdout).toContain('7 idle minutes')
-    expect(out.stdout).toContain('at once when it is hidden')
+    expect(out.stdout).toContain('Saved: 7 idle minutes, lock when hidden.')
+    expect(out.stdout).toContain(PIN_OPTIONS_NO_EFFECT)
     await expect(command().run(['pin', 'options', '--no-lock-when-hidden'], context)).resolves.toBe(EXIT.ok)
     expect(sent.at(-1)).toEqual({ op: 'pin.options', args: { lockWhenHidden: false } })
     out.stdout = ''
     await command().run(['pin', 'status'], context)
-    expect(out.stdout).toBe('PIN mode is on, with a PIN; a page locks after 7 idle minutes.\n')
+    expect(out.stdout).toBe('PIN mode is on, with a PIN.\n')
     expect(readFileSync(join(secrets(), 'pin-mode.json'), 'utf8').match(/"dk":\s*"[^"]+"/)?.[0]).toBe(hashBefore)
     // Nothing to change, an out-of-range value and a conflict are refused before anything is sent.
     sent = []
@@ -208,13 +211,14 @@ describe('delorun devices pin', () => {
     expect(sent).toEqual([])
   })
 
-  it('never takes the secret from an argument and rejects a bad idle time', async () => {
+  it('never takes the secret from an argument, and set no longer takes the lock options', async () => {
     const refused = await command().run(['pin', 'set', SECRET], context).catch((error: unknown) => error)
     expect(refused).toMatchObject({ exit: EXIT.usage })
     expect(String(refused instanceof Error ? refused.message : refused)).not.toContain(SECRET)
     await expect(command().run(['pin', 'set', `--secret=${SECRET}`], context)).rejects.toMatchObject({ exit: EXIT.usage })
-    await expect(command({ typed: [SECRET, SECRET] }).run(['pin', 'set', '--idle-minutes', '61'], context)).rejects.toMatchObject({ exit: EXIT.usage })
-    await expect(command({ typed: [SECRET, SECRET] }).run(['pin', 'set', '--idle-minutes', 'soon'], context)).rejects.toMatchObject({ exit: EXIT.usage })
+    // Setting a PIN asks nothing about lock options, which would change nothing (F39).
+    await expect(command({ typed: [SECRET, SECRET] }).run(['pin', 'set', '--idle-minutes', '5'], context)).rejects.toMatchObject({ exit: EXIT.usage })
+    await expect(command({ typed: [SECRET, SECRET] }).run(['pin', 'set', '--lock-when-hidden'], context)).rejects.toMatchObject({ exit: EXIT.usage })
     await expect(command().run(['pin', 'later'], context)).rejects.toMatchObject({ exit: EXIT.usage })
     expect(sent).toEqual([])
   })

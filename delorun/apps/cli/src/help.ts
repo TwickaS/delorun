@@ -34,6 +34,9 @@ export interface CommandHelp {
 /** The exit codes every command shares, unless its help says otherwise. */
 export const COMMON_EXIT_CODES = 'Exit codes: 0 done, 1 failed, 2 wrong command line, 3 Delorun is not running.'
 
+/** The line `delorun devices pin options` prints and its help gives: the options are stored but change nothing. */
+export const PIN_OPTIONS_NO_EFFECT = 'These options have no effect: a device confirms each action with Face ID or the PIN, and nothing stays unlocked.'
+
 const PROFILE: HelpEntry = { name: '--profile <name>', text: 'Use this profile instead of the default one (also DELORUN_PROFILE).' }
 const JSON_OUTPUT: HelpEntry = { name: '--json', text: 'Print the result as JSON.' }
 
@@ -181,9 +184,9 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
       { name: 'remove <device id>', text: 'Stop trusting a device.' },
       { name: 'code', text: 'Show the code that signs in a new device.' },
       { name: 'pin set', text: 'Turn PIN mode on, or change the PIN or passcode. Asks with the characters hidden; --stdin reads one line instead.' },
-      { name: 'pin options', text: 'Change how long a page may sit idle (--idle-minutes 1-60) or whether it locks when hidden (--lock-when-hidden, --no-lock-when-hidden).' },
+      { name: 'pin options', text: `Change the stored idle minutes (--idle-minutes 1-60) or lock when hidden (--lock-when-hidden, --no-lock-when-hidden). ${PIN_OPTIONS_NO_EFFECT}` },
       { name: 'pin off', text: 'Turn PIN mode off and drop the PIN.' },
-      { name: 'pin resume', text: 'Resume PIN unlocks after ten wrong tries paused them.' },
+      { name: 'pin resume', text: 'Resume the PIN and Face ID after ten wrong tries paused them.' },
       { name: 'pin status', text: 'Say whether PIN mode is on and how it is set.' },
     ],
     options: [PROFILE],

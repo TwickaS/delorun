@@ -22,6 +22,8 @@ export const en = {
   'sheet.openDevices': 'Open Face ID settings',
   'sheet.usePin': 'Use PIN instead',
   'sheet.askComputer': 'Or do this at your computer.',
+  'sheet.nothingToConfirm': 'This device has nothing to confirm with yet. Set up {method} for it: Settings → Face ID → Add {method}, then type the code it shows at your computer. Or set a PIN at your computer in Settings → PIN mode, or do this at your computer.',
+  'sheet.setUpFirst': 'This device has no {method} yet. Set it up: Settings → Face ID → Add {method}, then type the code it shows at your computer. Or do this at your computer.',
   'sheet.faceOnly': 'This needs {method} itself. A PIN cannot approve it.',
   'sheet.cancel': 'Cancel',
   'pin.lead': 'Enter your PIN to approve this once.',

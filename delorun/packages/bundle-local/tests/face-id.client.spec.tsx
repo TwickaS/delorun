@@ -16,6 +16,7 @@ import { HostRequestError } from '../src/client/host-api.ts'
 import { FaceIdPin } from '../src/client/FaceIdPin.tsx'
 import { FACE_ID_KINDS, type FaceIdAction, type PasskeyDevice } from '../src/client/face-id-types.ts'
 import { FaceIdSheet, OPTIONS_TIMEOUT_MS } from '../src/client/FaceIdSheet.tsx'
+import { FaceIdGrantFlow } from '../src/client/FaceIdGrantFlow.tsx'
 import { AddFaceId, CODE_POLL_MS, FaceIdPairingStep, PasskeyCodeEntry } from '../src/client/FaceIdEnrol.tsx'
 import { PasskeyDevices } from '../src/client/PasskeyDevices.tsx'
 
@@ -153,6 +154,34 @@ describe('FaceIdSheet', () => {
     expect(await screen.findByRole('button', { name: 'Confirm with Windows Hello' })).toBeTruthy()
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(props.onCancel).toHaveBeenCalled()
+  })
+})
+
+describe('FaceIdGrantFlow with nothing to confirm with', () => {
+  /** The flow on a home with no PIN, for a device with no passkey. */
+  function stranded(over: Partial<FaceIdAction> = {}) {
+    const props = { t, action: { ...action, ...over }, kind: 'faceId' as const, api: fakeApi(), browser: fakeBrowser(), hasPasskey: false, secret: undefined,
+      onGranted: vi.fn(), onCancel: vi.fn() }
+    render(<FaceIdGrantFlow {...props} />)
+    return props
+  }
+  it('offers no keypad or confirm button and says how to set up Face ID or a PIN', () => {
+    // Pins the plain answer for a device that cannot confirm: a keypad or a Confirm button here could never succeed.
+    const props = stranded()
+    expect(screen.getByRole('status').textContent).toBe(t('sheet.nothingToConfirm', { method: 'Face ID' }))
+    expect(screen.getByRole('status').textContent).toMatch(/Settings → Face ID → Add Face ID, then type the code it shows at your computer/)
+    expect(screen.queryByLabelText(en['pin.label'])).toBeNull()
+    expect(screen.queryByRole('button', { name: en['sheet.usePin'] })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Confirm with Face ID' })).toBeNull()
+    expect(screen.queryByText(en['sheet.askComputer'])).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: en['sheet.cancel'] }))
+    expect(props.onCancel).toHaveBeenCalledOnce()
+    expect(props.onGranted).not.toHaveBeenCalled()
+  })
+  it('does not suggest a PIN for an action only Face ID approves', () => {
+    stranded({ noPin: true })
+    expect(screen.getByRole('status').textContent).toBe(t('sheet.setUpFirst', { method: 'Face ID' }))
+    expect(screen.getByRole('status').textContent).not.toMatch(/PIN/)
   })
 })
 

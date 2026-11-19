@@ -5,7 +5,8 @@
  *   `--stdin`. The secret is never read from an argument or an environment variable and never printed or logged. The
  *   command applies the PIN and passcode rules before it sends anything, then sends `pin.set` over the home socket (C19),
  *   which only the person's own command may call.
- * - `options` changes the idle minutes and lock-when-hidden of a mode that is on, with no secret, by sending `pin.options`.
+ * - `options` changes the stored idle minutes and lock-when-hidden of a mode that is on, with no secret, by sending
+ *   `pin.options`. They have no effect: a device confirms each action and holds no unlock window (A483).
  * - `off` sends `pin.off`; `resume` sends `pin.resume`.
  * - `status` reads the PIN files in the home, without the home running, and never reads the hash.
  *
@@ -19,9 +20,10 @@ import { CliError, EXIT, type ExitCode } from '../exit.ts'
 import { parseOptions, type CommandContext } from '../command.ts'
 import { notRunningText } from '../messages.ts'
 import { printable } from '../terminal-text.ts'
+import { PIN_OPTIONS_NO_EFFECT } from '../help.ts'
 
 /** The usage line of the `pin` actions. */
-export const PIN_USAGE = 'Usage: delorun devices pin set [--idle-minutes <1-60>] [--lock-when-hidden] [--stdin] | options [--idle-minutes <1-60>] [--lock-when-hidden|--no-lock-when-hidden] | off | resume | status [--profile <name>]'
+export const PIN_USAGE = 'Usage: delorun devices pin set [--stdin] | options [--idle-minutes <1-60>] [--lock-when-hidden|--no-lock-when-hidden] | off | resume | status [--profile <name>]'
 
 /** What the PIN actions run against. */
 export interface PinDependencies {
@@ -126,17 +128,14 @@ async function readSecret(stdin: boolean, where: PinWhere): Promise<string | und
 /**
  * What PIN mode allows, in words.
  * @param kind - the secret's kind.
- * @param idleMinutes - the minutes of idleness after which a page locks, or undefined for the home's default.
- * @param lockWhenHidden - whether a hidden page locks at once.
  * @returns the lines.
  */
-function allowedLines(kind: string, idleMinutes: number | undefined, lockWhenHidden: boolean | undefined): readonly string[] {
+function allowedLines(kind: string): readonly string[] {
   return [
     `PIN mode is on, with a ${kind}.`,
-    `A device you approved can now unlock sensitive actions on its own page by typing the ${kind}, without a code from this computer.`,
+    `A device you approved confirms each sensitive action by typing the ${kind} when it asks, one action at a time; nothing stays unlocked.`,
     'It covers the Tailscale private address only. Setting or changing the PIN, turning the mode on or off, and approving a device stay at this computer.',
-    `A page locks again after ${idleMinutes === undefined ? 'the idle time you set (the home\'s default when you did not)' : `${String(idleMinutes)} idle minutes`}${lockWhenHidden === true ? ', and at once when it is hidden' : ''}.`,
-    `Ten wrong tries across the home pause PIN unlocks until you run delorun devices pin resume; five on one device remove that device and sign it out, and you approve it again at this computer.`,
+    `Ten wrong tries across the home pause the ${kind} and Face ID until you run delorun devices pin resume; five on one device remove that device and sign it out, and you approve it again at this computer.`,
     'Turn it off with delorun devices pin off.',
   ]
 }
@@ -199,8 +198,8 @@ function parseActionOptions<T extends NonNullable<Parameters<typeof parseOptions
  * @returns the parsed values.
  * @throws {CliError} with the usage code and a fixed message for any argument or option `set` does not take.
  */
-function parseSetOptions(options: readonly string[]): ReturnType<typeof parseOptions<{ profile: { type: 'string' }, 'idle-minutes': { type: 'string' }, 'lock-when-hidden': { type: 'boolean' }, stdin: { type: 'boolean' } }>> {
-  return parseActionOptions('set', options, { profile: { type: 'string' }, 'idle-minutes': { type: 'string' }, 'lock-when-hidden': { type: 'boolean' }, stdin: { type: 'boolean' } })
+function parseSetOptions(options: readonly string[]): ReturnType<typeof parseOptions<{ profile: { type: 'string' }, stdin: { type: 'boolean' } }>> {
+  return parseActionOptions('set', options, { profile: { type: 'string' }, stdin: { type: 'boolean' } })
 }
 
 /**
@@ -211,12 +210,6 @@ function parseSetOptions(options: readonly string[]): ReturnType<typeof parseOpt
  */
 async function set(options: readonly string[], where: PinWhere): Promise<ExitCode> {
   const values = parseSetOptions(options)
-  const idle = values['idle-minutes']
-  if (idle !== undefined && !/^[0-9]+$/.test(idle)) throw new CliError(EXIT.usage, `delorun devices pin set: --idle-minutes is a whole number of minutes from 1 to ${String(PIN_MODE_LIMITS.maxIdleMinutes)}\n${PIN_USAGE}`)
-  const idleMinutes = idle === undefined ? undefined : Number(idle)
-  if (idleMinutes !== undefined && (idleMinutes < 1 || idleMinutes > PIN_MODE_LIMITS.maxIdleMinutes)) {
-    throw new CliError(EXIT.usage, `delorun devices pin set: --idle-minutes is a whole number of minutes from 1 to ${String(PIN_MODE_LIMITS.maxIdleMinutes)}\n${PIN_USAGE}`)
-  }
   const presented = await readSecret(values.stdin === true, where)
   if (presented === undefined) return EXIT.failed
   let checked: ReturnType<typeof checkNewSecret>
@@ -227,19 +220,14 @@ async function set(options: readonly string[], where: PinWhere): Promise<ExitCod
     where.context.stderr(`delorun devices pin set: ${error.detail}. Nothing was changed.\n`)
     return EXIT.failed
   }
-  const args = {
-    secret: checked.secret,
-    ...(idleMinutes === undefined ? {} : { idleMinutes }),
-    ...(values['lock-when-hidden'] === true ? { lockWhenHidden: true } : {}),
-  }
-  const answer = await ask({ op: 'pin.set', args }, where)
+  const answer = await ask({ op: 'pin.set', args: { secret: checked.secret } }, where)
   if (answer === undefined) return EXIT.failed
   if (answer.ok !== true) {
     where.context.stderr(`delorun devices pin set: Delorun refused: ${refusal(answer)}. Nothing was changed.\n`)
     return EXIT.failed
   }
   const kind = answer.secret === 'passcode' ? 'passcode' : 'PIN'
-  where.context.stdout(`${allowedLines(kind, idleMinutes, values['lock-when-hidden']).join('\n')}\n`)
+  where.context.stdout(`${allowedLines(kind).join('\n')}\n`)
   return EXIT.ok
 }
 
@@ -260,7 +248,8 @@ function idleMinutesOf(text: string | undefined, command: string): number | unde
 }
 
 /**
- * `delorun devices pin options`: change the idle minutes and lock-when-hidden of a mode that is on, with no secret.
+ * `delorun devices pin options`: change the stored idle minutes and lock-when-hidden of a mode that is on, with no secret.
+ * They have no effect, which the output says.
  * @param options - the options.
  * @param where - the invocation.
  * @returns the exit code.
@@ -282,7 +271,7 @@ async function options_(options: readonly string[], where: PinWhere): Promise<Ex
     where.context.stderr(`delorun devices pin options: Delorun refused: ${refusal(answer)}. Nothing was changed.\n`)
     return EXIT.failed
   }
-  where.context.stdout(`A page now locks after ${String(answer.idleMinutes)} idle minutes${answer.lockWhenHidden === true ? ', and at once when it is hidden' : ''}. The PIN is unchanged.\n`)
+  where.context.stdout(`Saved: ${String(answer.idleMinutes)} idle minutes${answer.lockWhenHidden === true ? ', lock when hidden' : ''}. The PIN is unchanged.\n${PIN_OPTIONS_NO_EFFECT}\n`)
   return EXIT.ok
 }
 
@@ -300,7 +289,7 @@ async function off(options: readonly string[], where: PinWhere): Promise<ExitCod
     where.context.stderr(`delorun devices pin off: Delorun refused: ${refusal(answer)}\n`)
     return EXIT.failed
   }
-  where.context.stdout('PIN mode is off and the PIN is dropped. Devices unlock sensitive actions with a code from this computer again.\n')
+  where.context.stdout('PIN mode is off and the PIN is dropped. A device without Face ID takes its sensitive actions at this computer.\n')
   return EXIT.ok
 }
 
@@ -318,7 +307,7 @@ async function resume(options: readonly string[], where: PinWhere): Promise<Exit
     where.context.stderr(`delorun devices pin resume: Delorun refused: ${refusal(answer)}\n`)
     return EXIT.failed
   }
-  where.context.stdout('PIN unlocks are resumed. The home-wide count of wrong tries starts again.\n')
+  where.context.stdout('The PIN and Face ID are resumed. The home-wide count of wrong tries starts again.\n')
   return EXIT.ok
 }
 
@@ -350,8 +339,8 @@ async function status(options: readonly string[], where: PinWhere): Promise<Exit
  */
 export function pinStatusLines(summary: ReturnType<PinModeStore['summary']>): readonly string[] {
   if (!summary.enabled) return ['PIN mode is off. Turn it on with delorun devices pin set.']
-  const lines = [`PIN mode is on, with a ${summary.kind === 'passcode' ? 'passcode' : 'PIN'}; a page locks after ${String(summary.idleMinutes)} idle minutes${summary.lockWhenHidden ? ' and at once when it is hidden' : ''}.`]
-  if (summary.paused) lines.push('PIN unlocks are paused after ten wrong tries across the home. Resume them with delorun devices pin resume.')
+  const lines = [`PIN mode is on, with a ${summary.kind === 'passcode' ? 'passcode' : 'PIN'}.`]
+  if (summary.paused) lines.push('The PIN and Face ID are paused after ten wrong tries across the home. Resume them with delorun devices pin resume.')
   return lines
 }
 
@@ -379,5 +368,5 @@ export async function pinOffHint(home: string): Promise<string | undefined> {
     if (error instanceof HomeAuthError) return undefined
     throw error
   }
-  return store.summary().enabled ? undefined : 'PIN mode is off: a device unlocks sensitive actions with a code from this computer. Set a PIN with delorun devices pin set.'
+  return store.summary().enabled ? undefined : 'PIN mode is off: a device without Face ID takes its sensitive actions at this computer. Set a PIN with delorun devices pin set.'
 }
