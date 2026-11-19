@@ -87,7 +87,7 @@ describe('the studio\'s Restart', () => {
         expect(json(noDevice), `${flag} ${path}`).toMatchObject({ code: 'LOOPBACK_REQUIRED' })
         const locked = flag === 'off' ? 'LOOPBACK_REQUIRED' : 'ELEVATION_REQUIRED'
         for (const unlock of ['none', 'grace'] as const) {
-          const reply = await send(server.port, path, fromDevice(unlock, {}, true))
+          const reply = await send(server.port, path, fromDevice(unlock, {}, flag === 'off'))
           expect(reply.status, `${flag} ${path} ${unlock}`).toBe(403)
           expect(json(reply), `${flag} ${path} ${unlock}`).toMatchObject({ code: locked })
         }
@@ -109,7 +109,7 @@ describe('the studio\'s Restart', () => {
     const world = grantWorld({ hasPasskey: false })
     const on = await restartServer(world.face)
     for (const path of Object.values(RESTART_PATHS)) {
-      expect(json(await send(on.server.port, path, fromDevice('fresh', {}, true))), path).toMatchObject({ code: 'ELEVATION_REQUIRED' })
+      expect(json(await send(on.server.port, path, fromDevice('fresh', {}))), path).toMatchObject({ code: 'ELEVATION_REQUIRED' })
     }
     expect(on.restart?.begun).toEqual([])
     const base = fromDevice('none', {})

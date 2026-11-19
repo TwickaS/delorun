@@ -93,7 +93,7 @@ const ADMITTED_ROUTES: ReadonlySet<string> = new Set([
   '/api/delorunOnboarding.keyTest', '/api/delorunOnboarding.recommend', '/api/delorunOnboarding.setupRecord', '/api/delorunOnboarding.deferStep',
   '/api/delorunOnboarding.readiness', '/api/delorunOnboarding.start', '/api/delorunOnboarding.localModels', '/api/delorunOnboarding.workspaceNotice',
   '/api/delorunMcpConsent.waiting', '/api/delorunBranding.icon', '/api/delorunChatStates.list', '/api/delorunChatStates.set',
-  '/api/delorunPreviewFlags.list',
+  '/api/delorunPreviewFlags.list', '/api/delorunNewWorkspace.cloneStatus', '/api/delorunNewWorkspace.defaults',
 ])
 
 /**
@@ -167,13 +167,6 @@ beforeAll(async () => {
   await symlink(directory, join(folder, 'linked'))
   workspaceId = (await ctx.workspaceRegistry.create(folder)).id
 }, 120_000)
-
-/**
- * @returns the home-auth secrets directory of the test's home.
- */
-function secretsDirectory(): string {
-  return join(directory, 'home', 'secrets', 'home-auth')
-}
 
 afterAll(async () => {
   await reachListener?.close()
@@ -433,7 +426,8 @@ describe('a terminal with no grant', () => {
   it('has no Phone powers route to change, for a phone, unlocked or not', async () => {
     const unlock = elevate()
     try {
-      expect((await postAsPhone('/auth/phone-powers', { level: 'full' }, deviceCookie())).status).toBe(404)
+      // Nothing is registered at the address; the web server answers a POST there with 404 or 405, never with a level.
+      expect([404, 405]).toContain((await postAsPhone('/auth/phone-powers', { level: 'full' }, deviceCookie())).status)
     } finally {
       studio.ctx.homeAuth.revokeElevation(unlock)
     }
@@ -521,7 +515,7 @@ describe('a reach device in its approval grace', () => {
     }
   })
 
-  it('cannot attach to an existing terminal to write to it, which an unlocked device can', async () => {
+  it('cannot attach to an existing terminal to write to it, and neither can an unlocked device without a grant', async () => {
     const graced = await gracePhone('Grace phone 2')
     const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
     const unlock = elevate()
@@ -542,8 +536,8 @@ describe('a reach device in its approval grace', () => {
       }
     }
     try {
-      // The unlocked device reaches the terminal controller, which answers for the terminal itself.
-      expect(await attach(peer)).not.toMatchObject({ code: 'remote-access/denied' })
+      // A terminal takes a grant: an unlocked device is refused too, and the Face ID flag is off here, so no grant exists.
+      expect(await attach(peer)).toMatchObject({ code: 'remote-access/denied', details: { action: 'terminal/attach', reason: 'elevation-required: terminal/attach' } })
       // Pins GRACE_REFUSED_ACTIONS for the input stream: under the grace the attachment never opens.
       expect(await attach(graced.peer)).toMatchObject({ code: 'remote-access/denied', details: { action: 'terminal/attach', reason: 'elevation-required: terminal/attach' } })
     } finally {

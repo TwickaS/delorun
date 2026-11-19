@@ -715,11 +715,11 @@ describe('the phone access step', () => {
     expect(screen.getByText(APPROVE_COMMAND).tagName).toBe('CODE')
   })
 
-  it('names the commands run at this computer, that a phone is approved there and Face ID or a PIN confirms the rest, and no relay', async () => {
+  it('names the commands run at this computer, that a phone is approved there and the phone confirms the rest, and no relay', async () => {
     render(<ReachStep services={stepServices()} guide={guideOf()} />)
     await settle()
     expect([REACH_COMMAND, APPROVE_COMMAND]).toEqual(['delorun reach on tailscale', 'delorun devices approve'])
-    expect(document.body.textContent).toContain('A phone is approved only at this computer, and the sensitive things it does are confirmed with Face ID or its PIN.')
+    expect(document.body.textContent).toContain('A phone is approved only at this computer, and the sensitive things it does are confirmed on the phone itself.')
     for (const [key, text] of Object.entries(en)) if (key.startsWith('reach.')) expect(text).not.toMatch(/relay|中继/i)
   })
 })

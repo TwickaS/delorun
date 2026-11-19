@@ -22,6 +22,15 @@ import { writeMayAskAt } from './pairing-row.ts'
 import { listenerPortFor, readReachRowAt, writeReachRowAt } from './row.ts'
 import { TRUST_STATEMENT } from './trust.ts'
 
+/** The section's place in the flow: after background, before the profile. */
+export const REACH_SECTION_ORDER = 45
+
+/**
+ * Build the section over a `tailscale` runner.
+ * @param tailscale - the runner.
+ * @param running - whether a profile's home process runs; `homeRuns` of `delorun reach` in a real setup.
+ * @returns the section.
+ */
 export function reachSection(tailscale: TailscaleRunner, running: (home: string, profile: string) => boolean): SetupSection {
   return {
     id: 'reach',

@@ -95,7 +95,7 @@ function screen(): string {
 function configFile(document: Record<string, unknown>): string {
   const path = join(osHome, 'answers.json')
   writeFileSync(path, JSON.stringify({
-    schemaVersion: 4,
+    schemaVersion: 5,
     modelProvider: { id: DS, credential: { source: 'environment', name: 'DEEPSEEK_API_KEY' }, baseURL: null, model: null },
     prompts: 'safer', background: true, profile: { name: null, port: null }, reach: { option: 'none', identityFactor: null }, importStockHome: false,
     ...document,

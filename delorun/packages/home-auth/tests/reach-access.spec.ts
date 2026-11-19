@@ -565,7 +565,6 @@ describe('a slash command', () => {
 })
 
 describe('a terminal', () => {
-  const ALLOW = { kind: 'allow' }
   const SESSION = { kind: 'session', id: session('s-1') } as const
   const TERMINAL_ACTIONS = Object.keys(REACH_ELEVATED_ACTIONS).filter(name => name.startsWith('terminal/')) as RemoteAccessAction[]
 

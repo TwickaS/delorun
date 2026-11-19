@@ -54,8 +54,8 @@ describe('a paired phone in PIN mode', () => {
       const answer = await route.fetch(request)
       if (unlocked) expect(await answer.text()).toBe('ran')
       else expect([answer.status, await answer.json()]).toEqual([403, expect.objectContaining({ error: 'ELEVATION_REQUIRED' })])
-      const action = createCondition(facts, principal(unlocked))({ action: 'terminal/create' as never, resource: GLOBAL, args: {} })
-      expect(action, String(unlocked)).toEqual(unlocked ? { kind: 'allow' } : { kind: 'deny', reason: 'elevation-required: terminal/create' })
+      const action = createCondition(facts, principal(unlocked))({ action: 'directoryPicker/pick' as never, resource: GLOBAL, args: {} })
+      expect(action, String(unlocked)).toEqual(unlocked ? { kind: 'allow' } : { kind: 'deny', reason: 'elevation-required: directoryPicker/pick' })
     }
   })
 

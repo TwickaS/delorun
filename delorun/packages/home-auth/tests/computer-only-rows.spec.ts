@@ -85,7 +85,7 @@ describe('the approval grace while PIN mode is on', () => {
     const grace = { ...facts('grace'), unlockModeEnabled: () => true }
     const device = reachDevicePrincipal('device-1', LISTENER)
     const condition = createCondition(grace, device)
-    expect(condition({ action: 'terminal/create' as never, resource: GLOBAL, args: {} }).kind).toBe('allow')
+    expect(condition({ action: 'directoryPicker/pick' as never, resource: GLOBAL, args: {} }).kind).toBe('allow')
     // Pins the PIN check: model keys need an unlocked page in PIN mode, and the grace is no page.
     expect(condition({ action: 'credentials/set', resource: GLOBAL, args: { ref: 'DEEPSEEK_API_KEY' } })).toEqual({ kind: 'deny', reason: 'elevation-required: credentials/set' })
     // A lifted refusal (an unlisted command) stays refused: only a PIN page or dangerous mode lifts it.

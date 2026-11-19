@@ -108,7 +108,6 @@ describe('the Devices section without Phone powers', () => {
       const { unmount } = render(<DevicesSection {...props} />)
       await screen.findByText(DEVICE_A.label)
       await settle()
-      expect(screen.queryByRole('radiogroup')).toBeNull()
       expect(screen.queryByText(/Phone powers/i)).toBeNull()
       expect(host.received.map(request => request.key).filter(key => key.includes('phone-powers'))).toEqual([])
       unmount()

@@ -54,7 +54,8 @@ describe('who may use each control', () => {
           const refused = reach === 'computer-only' ? 'LOOPBACK_REQUIRED' : reach === 'grant-only' ? (flag === 'off' ? 'LOOPBACK_REQUIRED' : 'ELEVATION_REQUIRED') : unlock === 'fresh' ? undefined : 'ELEVATION_REQUIRED'
           if (refused !== undefined) {
             // Pins the class and the unlock in `gate`, before the body: without them a phone in its grace, or one whose unlock stands in for a grant, acts.
-            const reply = await send(server.port, path, fromDevice(unlock, {}, true))
+            // With the flag on the gate reads the body to look for a grant before it refuses, so the body is sent.
+            const reply = await send(server.port, path, fromDevice(unlock, {}, flag === 'off'))
             expect(reply.status, cell).toBe(403)
             expect(json(reply).code, cell).toBe(refused)
           } else {

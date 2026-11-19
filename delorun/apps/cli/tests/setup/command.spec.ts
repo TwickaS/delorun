@@ -112,7 +112,7 @@ describe('delorun setup', { timeout: 60_000 }, () => {
 
   it('names the document\'s modelProvider, not the flags, when --config --check-key has no provider', async () => {
     const document = join(osHome, 'none.json')
-    writeFileSync(document, JSON.stringify({ schemaVersion: 4, modelProvider: null, prompts: 'safer', background: true, profile: { name: null, port: null }, reach: { option: 'none', identityFactor: null }, importStockHome: false }))
+    writeFileSync(document, JSON.stringify({ schemaVersion: 5, modelProvider: null, prompts: 'safer', background: true, profile: { name: null, port: null }, reach: { option: 'none', identityFactor: null }, importStockHome: false }))
     expect((await refusal(['--config', document, '--check-key'])).message).toBe('delorun setup --config: --check-key checks the chosen provider\'s key; name a provider in the document\'s modelProvider')
   })
 

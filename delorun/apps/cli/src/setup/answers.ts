@@ -118,6 +118,12 @@ const answersSchema = z.strictObject({
   acceptDangerousMode: z.boolean().optional(),
 })
 
+/**
+ * The version-4 document, which may still hold `phonePowers` (ignored: {@link parseAnswers} drops it), read as the current version.
+ */
+const version4Schema = answersSchema.extend({ schemaVersion: z.literal(4) })
+  .transform(({ schemaVersion: _version, ...answers }) => ({ ...answers, schemaVersion: SETUP_ANSWERS_SCHEMA_VERSION }))
+
 /** The version-3 document, which has no provider question, read as the current version with DeepSeek as its provider. */
 const version3Schema = z.strictObject({ schemaVersion: z.literal(3), modelProvider: earlierModelProvider, ...answerFields, updateCheck: z.boolean().default(SETUP_DEFAULTS.updateCheck), sections })
   .transform(({ modelProvider: provider, sections: record, schemaVersion: _version, ...answers }) => ({ schemaVersion: SETUP_ANSWERS_SCHEMA_VERSION, useCase: SETUP_DEFAULT_USE_CASE, modelProvider: provider, ...answers, sections: record }))
@@ -131,9 +137,10 @@ const version2Schema = z.strictObject({ schemaVersion: z.literal(2), modelProvid
  * @param document - a parsed JSON value.
  * @returns the schema of version 2 or 3 for a document that declares it, otherwise the current one.
  */
-function schemaFor(document: unknown): typeof answersSchema | typeof version3Schema | typeof version2Schema {
+function schemaFor(document: unknown): typeof answersSchema | typeof version4Schema | typeof version3Schema | typeof version2Schema {
   const version = typeof document === 'object' && document !== null ? Reflect.get(document, 'schemaVersion') : undefined
   if (version === 2) return version2Schema
+  if (version === 4) return version4Schema
   return version === 3 ? version3Schema : answersSchema
 }
 
@@ -200,12 +207,21 @@ export function parseAnswers(document: unknown): z.ZodSafeParseResult<ParsedAnsw
 }
 
 /**
+ * @param document - a parsed JSON value.
+ * @returns whether it declares a version before the current one, whose documents may hold a key of {@link IGNORED_ANSWER_KEYS}.
+ */
+function isEarlierDocument(document: unknown): boolean {
+  const version = typeof document === 'object' && document !== null ? Reflect.get(document, 'schemaVersion') : undefined
+  return typeof version === 'number' && (SETUP_ANSWERS_EARLIER_SCHEMA_VERSIONS as readonly number[]).includes(version)
+}
+
+/**
  * Drop the keys of {@link IGNORED_ANSWER_KEYS}, which an answers document written before their question was removed may hold.
  * @param document - a parsed JSON value.
- * @returns the value without those keys; a value that is not an object is returned as it is.
+ * @returns the value without those keys when it declares a version before the current one; any other value is returned as it is.
  */
 function withoutIgnoredKeys(document: unknown): unknown {
-  if (typeof document !== 'object' || document === null || Array.isArray(document)) return document
+  if (typeof document !== 'object' || document === null || Array.isArray(document) || !isEarlierDocument(document)) return document
   return Object.fromEntries(Object.entries(document).filter(([key]) => !(IGNORED_ANSWER_KEYS as readonly string[]).includes(key)))
 }
 
@@ -258,7 +274,7 @@ export function readAnswersDocument(path: string, note: (line: string) => void =
   if (removed.length > 0) {
     throw new CliError(EXIT.failed, `delorun setup --config: ${path} holds ${removed.join(', ')}, which setup no longer asks; remove ${removed.length === 1 ? 'it' : 'them'} from the document`)
   }
-  const ignored = typeof parsed === 'object' && parsed !== null ? IGNORED_ANSWER_KEYS.filter(key => key in parsed) : []
+  const ignored = typeof parsed === 'object' && parsed !== null && isEarlierDocument(parsed) ? IGNORED_ANSWER_KEYS.filter(key => key in parsed) : []
   if (ignored.length > 0) note(`delorun setup --config: ${path} holds ${ignored.join(', ')}, which Delorun no longer has; it is ignored`)
   const checked = parseAnswers(parsed)
   if (!checked.success) {

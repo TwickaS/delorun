@@ -7,15 +7,16 @@
  */
 
 /** Schema version of the answers document that setup writes. */
-export const SETUP_ANSWERS_SCHEMA_VERSION = 4 as const
+export const SETUP_ANSWERS_SCHEMA_VERSION = 5 as const
 
 /**
  * Earlier schema versions setup still reads. A version-2 document has no `updateCheck` and reads as the check on; a
  * version-2 or version-3 document's model provider reads as DeepSeek with the profile's default model, which is what
- * setup of those versions applied whatever id the document named. Setup refuses every version not listed here or in
+ * setup of those versions applied whatever id the document named. A document of version 2, 3 or 4 may hold
+ * `phonePowers`, which version 5 removed: it is read, ignored and reported. Setup refuses every version not listed here or in
  * {@link SETUP_ANSWERS_SCHEMA_VERSION}.
  */
-export const SETUP_ANSWERS_EARLIER_SCHEMA_VERSIONS = [2, 3] as const
+export const SETUP_ANSWERS_EARLIER_SCHEMA_VERSIONS = [2, 3, 4] as const
 
 /**
  * The model providers setup can set up, by the route id the profile selects them with: DeepSeek's own adapter
@@ -167,7 +168,7 @@ export interface SetupAnswers {
 
 /** The value setup applies to each question the person does not answer. */
 export const SETUP_DEFAULTS = {
-  schemaVersion: 4,
+  schemaVersion: 5,
   useCase: SETUP_DEFAULT_USE_CASE,
   modelProvider: { id: SETUP_DEFAULT_PROVIDER_ID, credential: { source: 'prompt' }, baseURL: null, model: null },
   prompts: 'safer',
@@ -187,8 +188,9 @@ export const SETUP_DEFAULTS = {
 export const LEGACY_SETUP_MODE_KEY = 'mode' as const
 
 /**
- * Keys that earlier answers documents carried for a question Delorun no longer has (`phonePowers`, the removed Phone powers
- * level). Readers accept them, ignore their values and say so.
+ * Keys that answers documents of version 4 or earlier carried for a question Delorun no longer has (`phonePowers`, the
+ * removed Phone powers level). Readers of those versions accept them, ignore their values and say so; a version-5 document
+ * that holds one is refused.
  */
 export const IGNORED_ANSWER_KEYS = ['phonePowers'] as const
 

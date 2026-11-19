@@ -72,7 +72,7 @@ describe('the answers a profile holds now', () => {
 
   // Removing the ignored-keys filter makes a record that still holds the removed `phonePowers` answer fall back to the defaults.
   it('reads a record that still holds the removed phonePowers answer, and ignores it', () => {
-    writeFileSync(join(directory, ANSWERS_FILENAME), JSON.stringify({ version: 1, ...SETUP_DEFAULTS, useCase: 'remote', phonePowers: 'full' }))
+    writeFileSync(join(directory, ANSWERS_FILENAME), JSON.stringify({ version: 1, ...SETUP_DEFAULTS, schemaVersion: 4, useCase: 'remote', phonePowers: 'full' }))
     const current = currentAnswers(directory)
     expect(current).toMatchObject({ useCase: 'remote' })
     expect(current).not.toHaveProperty('phonePowers')

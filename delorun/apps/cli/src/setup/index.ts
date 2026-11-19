@@ -12,7 +12,6 @@
  * @module @delorun/cli/setup
  */
 import { existsSync } from 'node:fs'
-import { join } from 'node:path'
 import { createServer } from 'node:net'
 import { createRuntimeResolution, initProfile, loadProfile } from '@deepseek-ai/dsh-app-boot'
 import { DELORUN_PROFILE_BUNDLES } from '@delorun/bundle-local/profile'
