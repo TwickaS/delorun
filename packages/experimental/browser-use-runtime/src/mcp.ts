@@ -2,7 +2,7 @@
 
 import { createHash } from 'node:crypto'
 import { chmod, lstat, mkdir, realpath, stat, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
 import { pathWithin, writableRoots } from '@deepseek-ai/dsh-sandbox'
@@ -235,25 +235,70 @@ async function sessionOutputDirectory(root: string, sessionId: string): Promise<
 }
 
 /**
+ * The refusal of a Session's output folder, which leaves Browser off in that chat instead of failing the chat's creation.
+ * The chat starts with Browser's tools off; the message is the plain reason, and it is written to Delorun's log.
+ */
+export class OutputFolderRefusedError extends Error {
+  override readonly name = 'OutputFolderRefusedError'
+}
+
+/**
+ * Resolve a path to its canonical form.
+ * @param path - the path.
+ * @returns the canonical path.
+ * @throws {OutputFolderRefusedError} when the file system fails the call (an error with a string errno `code` and a `syscall`);
+ *   any other error propagates.
+ */
+async function resolvedPath(path: string): Promise<string> {
+  try {
+    return await realpath(path)
+  } catch (error) {
+    const { code, syscall } = error as NodeJS.ErrnoException
+    if (typeof code !== 'string' || syscall === undefined) throw error
+    throw new OutputFolderRefusedError(`Browser is off in this chat: its output folder could not be checked against the folders this chat can write (${(error as Error).message}).`, { cause: error })
+  }
+}
+
+/** Where a writable folder that overlaps the output folder comes from, which decides the advice. */
+type OverlapSource = 'workspace' | 'extra'
+
+/**
  * Refuse an output folder that overlaps a folder a confined command of the Session can write: inside one, the chat could
  * replace the output folder; around one, that folder would be inside the output folder. The writable folders are the
  * Session's working directory and, when a sandbox policy is provided, the policy's workspace-write roots, the
- * workspace, the extra writable directories and the temp areas, whatever mode the Session is in now.
+ * workspace, the extra writable directories and the temp areas, whatever mode the Session is in now. A path the file
+ * system fails to resolve refuses too; any other error propagates.
  * @param ctx - the provider context, which may provide the sandbox policy.
  * @param agent - the Agent whose Session starts.
  * @param output - the Session's output folder.
  * @param sessionDirectory - the Session's working directory.
- * @throws when either folder is inside the other, or the policy's roots cannot be read.
+ * @throws {OutputFolderRefusedError} when either folder is inside the other, or a folder cannot be resolved; the message
+ *   names the cause and the remedy.
  */
 async function assertOutsideWritableFolders(ctx: Context, agent: Agent, output: string, sessionDirectory: string): Promise<void> {
   const policy = ctx.get('sandboxPolicy')?.resolve({ session: agent.session, mode: 'workspace-write' })
-  const writable = [sessionDirectory, ...policy === undefined ? [] : [policy.workspaceRoot, ...writableRoots(policy)]]
-  const folder = await realpath(output)
+  const writable: Array<{ path: string; source: OverlapSource }> = [
+    { path: sessionDirectory, source: 'workspace' },
+    ...policy === undefined ? [] : [
+      { path: policy.workspaceRoot, source: 'workspace' as const },
+      ...writableRoots(policy).map(path => ({ path, source: 'extra' as const })),
+    ],
+  ]
+  const folder = await resolvedPath(output)
   for (const candidate of writable) {
-    const real = await realpath(candidate).catch(() => candidate)
-    if (pathWithin(folder, real) || pathWithin(real, folder)) {
-      throw new Error(`the output folder ${folder} overlaps ${real}, where a sandboxed command can write, so the browser server is not started; set XDG_CACHE_HOME to a folder outside the chat's writable folders`)
-    }
+    const real = await resolvedPath(candidate.path).catch((error: unknown) => {
+      if (error instanceof OutputFolderRefusedError && (error.cause as NodeJS.ErrnoException).code === 'ENOENT') return candidate.path
+      throw error
+    })
+    if (!pathWithin(folder, real) && !pathWithin(real, folder)) continue
+    const cache = process.env.XDG_CACHE_HOME
+    const cacheInside = cache !== undefined && isAbsolute(cache) && pathWithin(folder, await resolvedPath(cache).catch(() => cache))
+    const remedy = cacheInside && pathWithin(folder, real)
+      ? 'XDG_CACHE_HOME points inside it; point XDG_CACHE_HOME somewhere this chat cannot write.'
+      : candidate.source === 'workspace'
+        ? "Use a workspace that isn't your home folder."
+        : `${real} is an extra folder this chat can write; remove it from the chat's writable folders, or use a different workspace.`
+    throw new OutputFolderRefusedError(`Browser is off in this chat: its output folder would sit inside a folder this chat can write (${real}). ${remedy}`)
   }
 }
 
@@ -346,10 +391,13 @@ interface ClientState {
  * Whether a failed acquisition is the add-time consent keeping the server stopped, which leaves one Session without
  * browser tools rather than failing its creation.
  * @param error - the acquisition's failure.
- * @returns true for a refused start or a declared consent that did not start.
+ * @returns true for a refused start, a declared consent that did not start, or a refused output folder.
  */
-function isConsentStop(error: unknown): error is McpClient.McpConsentRefusedError | McpClient.McpConsentUnavailableError {
+function isConsentStop(
+  error: unknown,
+): error is McpClient.McpConsentRefusedError | McpClient.McpConsentUnavailableError | OutputFolderRefusedError {
   return error instanceof McpClient.McpConsentRefusedError || error instanceof McpClient.McpConsentUnavailableError
+    || error instanceof OutputFolderRefusedError
 }
 
 /**
@@ -360,6 +408,8 @@ function isConsentStop(error: unknown): error is McpClient.McpConsentRefusedErro
  * activation reviews the start again. When the consent accepts that server's start (`mcp-client/consent-accepted`),
  * each live Session left without tools by a refusal runs the same consent check once more and, when it passes, gets the
  * server's tools; a Session the check still refuses stays without them and starts nothing.
+ * An output folder that overlaps a folder the chat's sandbox can write, or that cannot be checked, does the same with a
+ * warning that holds the plain reason ({@link OutputFolderRefusedError}); no server starts with a folder that failed the check.
  * Every other startup failure fails the Agent's creation.
  * Once a Session's server has started, its output folder, when the provider names one, is created if missing and given
  * a `.gitignore` of `*` if it has none; a failure to do so is logged as a warning and the Session keeps its tools.
@@ -517,7 +567,7 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
     } catch (error) {
       if (!isConsentStop(error)) throw error
       // The consent keeps the server stopped and lists it for the person's answer; this Session runs without its tools.
-      ctx.logger.warn(`${options.name}: the browser tools are off in Session ${agent.id} until the server's start is allowed: ${error.message}`)
+      ctx.logger.warn(`${options.name}: the browser tools are off in Session ${agent.id}${error instanceof OutputFolderRefusedError ? '' : " until the server's start is allowed"}: ${error.message}`)
       state.status = 'refused'
       refreshBlockedMasks()
       return
@@ -592,7 +642,7 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
     } catch (error) {
       if (!isConsentStop(error)) throw error
       // The consent keeps the server stopped and lists it for the person's answer; this Session runs without its tools.
-      ctx.logger.warn(`${options.name}: the browser tools are off in Session ${agent.id} until the server's start is allowed: ${error.message}`)
+      ctx.logger.warn(`${options.name}: the browser tools are off in Session ${agent.id}${error instanceof OutputFolderRefusedError ? '' : " until the server's start is allowed"}: ${error.message}`)
       state.status = 'refused'
       clients.set(agent, state)
       refreshBlockedMasks()
