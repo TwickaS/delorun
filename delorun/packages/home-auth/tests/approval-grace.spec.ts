@@ -214,7 +214,7 @@ describe('the approval grace and PIN mode', () => {
     const grace = served.auth.elevationOf(phone.id, LISTENER)
     const facts = (elevation: { readonly id: string; readonly grace?: true } | undefined): ReachAccessFacts => ({
       admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere',
-      elevationOf: () => elevation, pageUnlockOf: () => undefined, pinEnabled: () => false,
+      elevationOf: () => elevation, pageUnlockOf: () => undefined, unlockModeEnabled: () => false,
       keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
       computerOnlySwitches: () => [], protectedEntryIds: () => new Set(['include:delorun-mcp-consent', 'delorun-mcp-consent']), computerOnlyEntryIds: () => new Set(),
       defaultPermission: () => undefined, phonePowers: () => 'full' as const, dangerousMode: () => false,
@@ -237,7 +237,7 @@ describe('the approval grace and PIN mode', () => {
     expect(grace?.grace).toBe(true)
     const facts = (elevation: { readonly id: string; readonly grace?: true } | undefined, page?: { readonly id: string }): ReachAccessFacts => ({
       admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere',
-      elevationOf: () => elevation, pageUnlockOf: () => page, pinEnabled: () => page !== undefined,
+      elevationOf: () => elevation, pageUnlockOf: () => page, unlockModeEnabled: () => page !== undefined,
       keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
       computerOnlySwitches: () => [], protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set(),
       defaultPermission: () => undefined, phonePowers: () => 'full' as const, dangerousMode: () => false,
@@ -270,7 +270,7 @@ describe('the approval grace and the computer-only table', () => {
     await signIn(served.auth, phone)
     const facts = (dangerous: boolean): ReachAccessFacts => ({
       admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere',
-      elevationOf: (deviceId, listener) => served.auth.elevationOf(deviceId, listener), pageUnlockOf: () => undefined, pinEnabled: () => false,
+      elevationOf: (deviceId, listener) => served.auth.elevationOf(deviceId, listener), pageUnlockOf: () => undefined, unlockModeEnabled: () => false,
       keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
       computerOnlySwitches: () => [HOME_AUTH_SWITCH, REACH_SWITCH], protectedEntryIds: () => new Set(['include:home-auth']), computerOnlyEntryIds: () => new Set(['include:home-auth']),
       defaultPermission: () => undefined, phonePowers: () => 'full' as const, dangerousMode: () => dangerous,

@@ -34,6 +34,7 @@ import { checkStoredBranding } from '@delorun/brand/branding'
 import { DEFAULT_WORKSPACE_ICON, parseWorkspaceIcon } from '@delorun/brand/workspace-icon'
 import type { ReachListenerId } from '@delorun/contract-admission'
 import type { SettingsLift } from './dangerous-settings.ts'
+import { HOLD_OPENERS, holdFeatureOf, hashArgs, type GrantStore, type HoldFeature } from './grants.ts'
 import type { PhonePowersLevel } from './phone-powers.ts'
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
@@ -1163,7 +1164,7 @@ function createsInKnownWorkspace(facts: Pick<ReachAccessFacts, 'workspaces'>, ar
  * @returns the condition.
  */
 export function createCondition(
-  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'delorunHome' | 'elevationOf' | 'touchUnlock' | 'logElevated' | 'liftedSettings' | 'computerOnlySwitches' | 'protectedEntryIds' | 'computerOnlyEntryIds' | 'defaultPermission' | 'dangerousMode' | 'pageUnlockOf' | 'pinEnabled' | 'pinLiftedSettings' | 'keyRefs' | 'phonePowers'>,
+  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'delorunHome' | 'elevationOf' | 'touchUnlock' | 'logElevated' | 'liftedSettings' | 'computerOnlySwitches' | 'protectedEntryIds' | 'computerOnlyEntryIds' | 'defaultPermission' | 'dangerousMode' | 'pageUnlockOf' | 'unlockModeEnabled' | 'faceGrants' | 'pinLiftedSettings' | 'keyRefs' | 'phonePowers'>,
   principal: ReachDevicePrincipal,
 ): ReachCondition {
   const { deviceId, listener, unlockId } = principal
@@ -1180,9 +1181,15 @@ export function createCondition(
    * @param call - whether a call's arguments came with the question.
    * @returns the refusal, or undefined when an unlock admits it.
    */
-  const unlocked = (action: RemoteAccessAction, reason: string, call: boolean): RemoteAccessDecision | undefined => {
+  const unlocked = (action: RemoteAccessAction, reason: string, call: boolean, args?: unknown): RemoteAccessDecision | undefined => {
+    const faced = facts.faceGrants?.()
+    // A device that holds a passkey is admitted by a grant for this call and by no unlock window.
+    if (faced?.deviceHasPasskey(deviceId) === true) return grantFor(faced, action, reason, call, args)
     const elevation = unlock()
-    if (elevation === undefined || (elevation.grace === true && GRACE_REFUSED_ACTIONS.has(action))) return { kind: 'deny', reason }
+    const blocked = elevation === undefined || (elevation.grace === true && GRACE_REFUSED_ACTIONS.has(action))
+    // A device with no passkey, on a home with PIN mode on or a passkey enrolled, mints a grant with its PIN.
+    if (blocked && faced !== undefined && unlockModeOn()) return grantFor(faced, action, reason, call, args)
+    if (elevation === undefined || blocked) return { kind: 'deny', reason }
     if (call) {
       facts.logElevated(`home-auth: elevated action: device=${deviceId} listener=${listener} action=${action} elevation=${elevation.id}`)
       // Renewed below, once the whole condition allows the call.
@@ -1191,6 +1198,33 @@ export function createCondition(
     return undefined
   }
   let renew: string | undefined
+  /** The grants this call uses up, once the whole condition allows it. */
+  let spend: (() => void)[] = []
+  const unlockModeOn = (): boolean => facts.unlockModeEnabled()
+  /**
+   * Decide a call by the grant the home keeps for it. A question without arguments is allowed so the studio lists the
+   * action; a call needs a live hold on the terminal or picker it names, or a grant for exactly these arguments,
+   * which is used up only when the whole decision allows.
+   * @param faced - the grant facts.
+   * @param action - the action.
+   * @param reason - the refusal.
+   * @param call - whether a call's arguments came with the question.
+   * @param args - the arguments.
+   * @returns the refusal, or undefined when a hold or a grant admits it.
+   */
+  const grantFor = (faced: FaceGrantFacts, action: RemoteAccessAction, reason: string, call: boolean, args: unknown): RemoteAccessDecision | undefined => {
+    if (!call) return undefined
+    const holder = { deviceId, listener }
+    const feature = holdFeatureOf(action)
+    const id = feature === undefined ? undefined : holdIdOf(feature, args)
+    if (feature !== undefined && !ALWAYS_GRANTED.has(action) && (id === undefined ? faced.grants.holdsAny(holder, feature) : faced.grants.holdAdmits(holder, feature, id))) return undefined
+    const hash = hashArgs(args)
+    if (hash === undefined || !faced.grants.has(holder, action, hash)) return { kind: 'deny', reason }
+    const opens = feature !== undefined && id !== undefined && HOLD_OPENERS[action] === feature ? { feature, id } : undefined
+    spend.push(() => { faced.grants.consume(holder, action, hash, opens) })
+    facts.logElevated(`home-auth: elevated action: device=${deviceId} listener=${listener} action=${action} grant`)
+    return undefined
+  }
   const decide: ReachCondition = ({ action, resource, args }) => {
     // Phone powers keeps a terminal at the computer under Careful: no unlock, PIN page or mode lifts it.
     if (FULL_POWERS_ACTIONS.has(action) && facts.phonePowers() !== 'full') return { kind: 'deny', reason: phonePowersRefusal(action) }
@@ -1227,13 +1261,19 @@ export function createCondition(
     }
     if (DANGEROUS_SET.has(action)) {
       if (!facts.dangerousMode() && !pageUnlocked) return { kind: 'deny', reason: `loopback-required: ${action}` }
-      const refused = unlocked(action, `elevation-required: ${action}`, args !== undefined)
+      const refused = unlocked(action, `elevation-required: ${action}`, args !== undefined, args)
       if (refused !== undefined) return refused
     }
-    if (KEY_SET.has(action) && facts.pinEnabled() && !pageUnlocked) return { kind: 'deny', reason: `elevation-required: ${action}` }
+    if (KEY_SET.has(action) && facts.unlockModeEnabled() && !pageUnlocked) {
+      const faced = facts.faceGrants?.()
+      if (faced === undefined) return { kind: 'deny', reason: `elevation-required: ${action}` }
+      // Saving or removing a key needs a grant for this call; presence and its events stay free.
+      const refused = FACE_KEY_ACTIONS.has(action) ? grantFor(faced, action, `elevation-required: ${action}`, args !== undefined, args) : undefined
+      if (refused !== undefined) return refused
+    }
     if (KEY_SET.has(action) && args !== undefined && !namesOnlyDeclaredRefs(action, args, facts.keyRefs())) return { kind: 'deny', reason: UNDECLARED_KEY_REFUSAL }
     if (ELEVATED_SET.has(action) && !(args !== undefined && isEverydayCall(action, args))) {
-      const refused = unlocked(action, `elevation-required: ${action}`, args !== undefined)
+      const refused = unlocked(action, `elevation-required: ${action}`, args !== undefined, args)
       if (refused !== undefined) return refused
     }
     // The write proceeds once the unlock admitted it, so the mode's end can set the field back.
@@ -1244,7 +1284,7 @@ export function createCondition(
     if (args === undefined) return ALLOW
     if (action === 'session/create') {
       if (createsInKnownWorkspace(facts, args)) return ALLOW
-      return unlocked(action, CREATE_OUTSIDE_WORKSPACES, true) ?? ALLOW
+      return unlocked(action, CREATE_OUTSIDE_WORKSPACES, true, args) ?? ALLOW
     }
     if (WORKSPACE_PATH_ACTIONS.has(action)) {
       const bounds = boundsOf(facts, resource)
@@ -1252,7 +1292,7 @@ export function createCondition(
       const outside = `loopback-required: ${action} with a path outside the chat's workspace`
       // Dangerous mode moves the workspace bound for an unlocked device; the Delorun home stays out of reach.
       if (bounds !== undefined && (facts.dangerousMode() || pageUnlocked) && workspacePathsReachable({ ...bounds, confined: false }, args)) {
-        return unlocked(action, outside, true) ?? ALLOW
+        return unlocked(action, outside, true, args) ?? ALLOW
       }
       return { kind: 'deny', reason: outside }
     }
@@ -1260,9 +1300,12 @@ export function createCondition(
   }
   return (question) => {
     renew = undefined
+    spend = []
     const decision = decide(question)
     // An unlock is renewed by a state-changing call that was allowed, never by a read or a call refused after the unlock check.
     if (decision.kind === 'allow' && renew !== undefined) facts.touchUnlock?.(renew)
+    // A grant is used up only once the whole decision allows, so a call refused later keeps it.
+    if (decision.kind === 'allow') for (const use of spend) use()
     return decision
   }
 }
@@ -1270,6 +1313,39 @@ export function createCondition(
 const GLOBAL_ROLE = role('global')
 const WORKSPACE_ROLE = role('workspace')
 const SESSION_ROLE = role('session')
+
+/** What the policy reads of the grants while the Face ID preview flag is on. */
+export interface FaceGrantFacts {
+  /** The grants and holds a verified assertion or a correct PIN minted. */
+  readonly grants: Pick<GrantStore, 'has' | 'consume' | 'holdAdmits' | 'holdsAny'>
+  /**
+   * Whether a device holds a passkey; such a device is admitted by a grant and never by an unlock window.
+   * @param deviceId - the device.
+   * @returns whether it does.
+   */
+  readonly deviceHasPasskey: (deviceId: string) => boolean
+}
+
+/** The model key actions a grant covers; the others of {@link REACH_KEY_ACTIONS} read presence and stay free. */
+const FACE_KEY_ACTIONS: ReadonlySet<string> = new Set(['credentials/set', 'credentials/unset'])
+
+/** The actions that open a new stream whatever hold a device has: a terminal is created only with a grant. */
+const ALWAYS_GRANTED: ReadonlySet<string> = new Set(['terminal/create'])
+
+/** The id every `directoryPicker/*` hold carries: the picker has no id of its own, so one device holds one. */
+export const PICKER_HOLD_ID = 'directoryPicker'
+
+/**
+ * The terminal or picker a call names, which a hold is bound to.
+ * @param feature - the hold's feature.
+ * @param args - the call's arguments.
+ * @returns the id, or undefined for a call that names none, such as listing the terminals.
+ */
+function holdIdOf(feature: HoldFeature, args: unknown): string | undefined {
+  if (feature === 'picker') return PICKER_HOLD_ID
+  if (typeof args === 'object' && args !== null && 'id' in args && typeof args.id === 'string' && args.id !== '') return args.id
+  return undefined
+}
 
 /** Host state the policy reads, all synchronous and in memory. */
 export interface ReachAccessFacts {
@@ -1317,10 +1393,16 @@ export interface ReachAccessFacts {
    */
   readonly pageUnlockOf: (unlockId: string) => { readonly id: string } | undefined
   /**
-   * Whether PIN mode is on, which makes the model key actions ({@link REACH_KEY_ACTIONS}) need an unlocked page.
+   * Whether a locked device is refused where an unlock matters, which makes the model key actions
+   * ({@link REACH_KEY_ACTIONS}) need an unlocked page or a grant: a PIN is set or a passkey is enrolled.
    * @returns whether it is.
    */
-  readonly pinEnabled: () => boolean
+  readonly unlockModeEnabled: () => boolean
+  /**
+   * The grant store, while the Face ID preview flag is on; undefined while it is off, when elevated actions keep the unlock check.
+   * @returns the store, or undefined.
+   */
+  readonly faceGrants?: () => FaceGrantFacts | undefined
   /**
    * The credential references the model providers declare, read when a key action arrives: each provider's conventional
    * key reference, the environment variables its authentication reads and the `apiKeyEnv` its profile names. A key action

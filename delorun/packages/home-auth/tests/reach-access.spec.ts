@@ -79,7 +79,7 @@ function facts(overrides: Partial<ReachAccessFacts> = {}): ReachAccessFacts {
     delorunHome: '/nowhere',
     elevationOf: () => undefined,
     pageUnlockOf: () => undefined,
-    pinEnabled: () => false,
+    unlockModeEnabled: () => false,
     keyRefs: () => new Set(['DEEPSEEK_API_KEY', 'OPENAI_API_KEY']),
     logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
     computerOnlySwitches: () => [CONSENT],
@@ -652,7 +652,7 @@ describe('the model key actions', () => {
   })
 
   it('refuses a locked page and admits an unlocked one while PIN mode is on', () => {
-    const on = facts({ pinEnabled: () => true, pageUnlockOf: id => id === 'page-1' ? { id: 'unlock-1' } : undefined })
+    const on = facts({ unlockModeEnabled: () => true, pageUnlockOf: id => id === 'page-1' ? { id: 'unlock-1' } : undefined })
     for (const { action, args } of KEY_CALLS) {
       // Pins the PIN check: without it a locked page saves, removes and reads the status of keys.
       expect(createCondition(on, locked)({ action, resource: GLOBAL, args }), action).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
@@ -780,7 +780,7 @@ describe('the everyday settings and shipped plugin toggles of an approved device
       expect(approved()({ action: 'settings/update', resource: GLOBAL, args: { ns, patch: { [field]: 'soft' } } })).toEqual(ALLOW)
       expect(approved()({ action: 'settings/mutate', resource: GLOBAL, args: { ns, ops: [{ op: 'set', path: [field], value: 1 }] } })).toEqual(ALLOW)
       // The PIN rule: everyday settings follow ordinary device writes, so a locked page is admitted.
-      expect(approved({ pinEnabled: () => true })({ action: 'settings/update', resource: GLOBAL, args: { ns, patch: {} } })).toEqual(ALLOW)
+      expect(approved({ unlockModeEnabled: () => true })({ action: 'settings/update', resource: GLOBAL, args: { ns, patch: {} } })).toEqual(ALLOW)
     }
   })
 
@@ -847,7 +847,7 @@ describe('the everyday settings and shipped plugin toggles of an approved device
 
   it('refuses the shipped-row and bundle toggles of a locked PIN page the same as a locked device without PIN mode', () => {
     // PIN mode does not gate everyday calls (a locked page toggles a shipped row), and still gates any other.
-    const locked = facts({ pinEnabled: () => true })
+    const locked = facts({ unlockModeEnabled: () => true })
     const condition = createCondition(locked, DEVICE)
     expect(condition({ action: 'pluginManager/setPluginEnabled', resource: GLOBAL, args: { id: 'delorun-cost-meter', enabled: true } })).toEqual(ALLOW)
     expect(condition({ action: 'pluginManager/setBundleEnabled', resource: GLOBAL, args: { name: '@delorun/plugin-cost-meter', enabled: true } })).toEqual(ALLOW)

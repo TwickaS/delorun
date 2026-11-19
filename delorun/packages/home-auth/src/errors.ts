@@ -34,7 +34,7 @@ export type HomeAuthErrorCode =
   | DeviceApprovalErrorCode
   | AdmissionRefusalCode
   | HomeAuthLocalCode
-  | Extract<IdentityErrorCode, 'TAILNET_IDENTITY_UNAVAILABLE' | 'LOOPBACK_REQUIRED' | 'PIN_INVALID' | 'PIN_WEAK' | 'PIN_MODE_OFF' | 'PIN_NOT_ALLOWED_ON_ADDRESS' | 'PIN_UNLOCKS_PAUSED' | 'UNLOCK_INVALID'>
+  | Extract<IdentityErrorCode, 'TAILNET_IDENTITY_UNAVAILABLE' | 'LOOPBACK_REQUIRED' | 'PIN_INVALID' | 'PIN_WEAK' | 'PIN_MODE_OFF' | 'PIN_NOT_ALLOWED_ON_ADDRESS' | 'PIN_UNLOCKS_PAUSED' | 'UNLOCK_INVALID' | 'PASSKEY_UNAVAILABLE' | 'PASSKEY_ASSERTION_INVALID' | 'PASSKEY_USER_VERIFICATION_REQUIRED' | 'PASSKEY_COUNTER_REGRESSED'>
 
 /**
  * The HTTP status of each code this package answers over HTTP. C5's table gives the first group, C4's refusal table the
@@ -66,6 +66,10 @@ export const HOME_AUTH_HTTP_STATUS = {
   PIN_NOT_ALLOWED_ON_ADDRESS: 403,
   PIN_UNLOCKS_PAUSED: 429,
   UNLOCK_INVALID: 401,
+  PASSKEY_UNAVAILABLE: 404,
+  PASSKEY_ASSERTION_INVALID: 403,
+  PASSKEY_USER_VERIFICATION_REQUIRED: 403,
+  PASSKEY_COUNTER_REGRESSED: 403,
   NOT_SIGNED_IN: ADMISSION_REFUSAL_STATUS.NOT_SIGNED_IN,
   SESSION_EXPIRED: ADMISSION_REFUSAL_STATUS.SESSION_EXPIRED,
   ROTATION_REQUIRED: ADMISSION_REFUSAL_STATUS.ROTATION_REQUIRED,
@@ -129,7 +133,7 @@ export function refusalBody(code: HomeAuthErrorCode, message: string, fields: Re
 }
 
 /** The codes whose `details` are answered as structured fields: the PIN refusals a client reads without parsing the sentence. */
-export const STRUCTURED_REFUSALS: ReadonlySet<HomeAuthErrorCode> = new Set<HomeAuthErrorCode>(['PIN_INVALID', 'PIN_UNLOCKS_PAUSED'])
+export const STRUCTURED_REFUSALS: ReadonlySet<HomeAuthErrorCode> = new Set<HomeAuthErrorCode>(['PIN_INVALID', 'PIN_UNLOCKS_PAUSED', 'PASSKEY_ASSERTION_INVALID'])
 
 /** Compile-time: the two refusals C4 adds to this package's answers are mapped, so a route never answers an unmapped code. */
 export const CLAIM_REFUSAL_STATUS = {
