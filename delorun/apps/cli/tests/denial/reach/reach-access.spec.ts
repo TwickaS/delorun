@@ -367,10 +367,10 @@ describe('a reach device through the Gateway', () => {
         await expectAdmitted('terminal/shells', { agentId })
         await expectElevationRequired('terminal/create', { agentId, request: { id: 'phone-1', cols: 80, rows: 24 } })
       }
-      await expectElevationRequired('terminal/list', { sessionId: granted.sessionId })
+      await expectAdmitted('terminal/list', { sessionId: granted.sessionId })
       unlock = elevate()
       await expectAdmitted('terminal/shells', { agentId: ungranted.sessionId })
-      await expectElevationRequired('terminal/list', { sessionId: granted.sessionId })
+      await expectAdmitted('terminal/list', { sessionId: granted.sessionId })
     } finally {
       if (unlock !== undefined) studio.ctx.homeAuth.revokeElevation(unlock)
       await dispose()
@@ -380,7 +380,7 @@ describe('a reach device through the Gateway', () => {
 
   it('needs an unlock for terminals and the directory picker, and reads the Changes view', async () => {
     const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
-    await expectElevationRequired('terminal/list', { sessionId: created.sessionId })
+    await expectAdmitted('terminal/list', { sessionId: created.sessionId })
     // F29: a terminal's metadata is free, so a first terminal takes one Face ID, at create.
     await expectAdmitted('terminal/shells', { agentId: created.sessionId })
     await expectAdmitted('terminal/environment', { agentId: created.sessionId })
@@ -428,7 +428,7 @@ describe('a terminal with no grant', () => {
     try {
       await expectAdmitted('terminal/shells', { agentId: created.sessionId })
       await expectElevationRequired('terminal/create', { agentId: created.sessionId, request: { id: 'careful-1', cols: 80, rows: 24 } })
-      await expectElevationRequired('terminal/list', { sessionId: created.sessionId })
+      await expectAdmitted('terminal/list', { sessionId: created.sessionId })
       // A running unlock opens no other elevated action either (A483); a grant for the call does.
       await expectElevationRequired('directoryPicker/list', {})
       await expectAdmittedWithGrant('directoryPicker/list', {})
@@ -525,7 +525,7 @@ describe('a reach device in its approval grace', () => {
       // Pins GRACE_REFUSED_ACTIONS in the unlock check: the grace stands for a computer-approved unlock everywhere else.
       await expectAdmitted('terminal/shells', { agentId: created.sessionId }, graced.peer)
       await expectElevationRequired('terminal/create', { agentId: created.sessionId, request: { id: 'grace-1', cols: 80, rows: 24 } }, graced.peer)
-      await expectElevationRequired('terminal/list', { sessionId: created.sessionId }, graced.peer)
+      await expectAdmitted('terminal/list', { sessionId: created.sessionId }, graced.peer)
     } finally {
       studio.ctx.homeAuth.revokeElevation(graced.graceId)
     }

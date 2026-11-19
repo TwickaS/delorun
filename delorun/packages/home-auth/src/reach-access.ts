@@ -100,9 +100,12 @@ export const REACH_ALLOWED_ACTIONS = {
   'session/state': 'read a chat\'s state',
   'session/wait': 'wait on a chat\'s state',
   'session/attachment': 'read an image a chat holds',
-  // F29: a terminal's metadata, with no output, so a first terminal takes one Face ID, at `terminal/create`.
+  // F29: a terminal's metadata, with no output, so a first terminal takes one Face ID, at `terminal/create`. An id-less
+  // `terminal/watch` could stream other terminals' events, so it stays face and no hold admits it.
   'terminal/environment': 'read the size limits a chat\'s terminal can take and the chat\'s working directory, which the chat\'s own state already shows, with no terminal output',
   'terminal/shells': 'read the shells a chat\'s terminal can start, their paths and names, with no terminal output',
+  // F31: a reloaded terminal tab lists before it reopens, so listing is free and the reopen takes the one Face ID.
+  'terminal/list': 'list a chat\'s terminals: their ids, titles, shells, working directories and states, never their output or input',
   'session/modelCatalog': 'read the models a chat can run',
   'session/canOpenWorkspacePath': 'read whether the home can open a folder; opening one belongs to the computer',
   'session/create': 'start a chat in a workspace you registered at the computer, with any of your presets; a chat in another folder needs an unlock, and full access still needs the workspace\'s consent at the computer',
@@ -466,7 +469,7 @@ export const RENEWING_ACTIONS: ReadonlySet<string> = new Set([
  * covers every elevated action, which `tests/unlock-slide.spec.ts` checks, so a new action is classified on purpose.
  */
 export const ELEVATED_READS: ReadonlySet<string> = new Set([
-  'terminal/list', 'terminal/watch', 'terminal/retain', 'terminal/attach',
+  'terminal/watch', 'terminal/retain', 'terminal/attach',
   'mcpManager/watch',
   'directoryPicker/list',
   'dynamicCordisRunner/getClientCode', 'dynamicCordisRunner/inventory', 'dynamicCordisRunner/resolveInspectQuery', 'dynamicCordisRunner/syncInspectManifest',
@@ -507,7 +510,6 @@ export const REACH_ELEVATED_ACTIONS = {
   'terminal/attach': TERMINAL,
   'terminal/close': TERMINAL,
   'terminal/create': TERMINAL,
-  'terminal/list': TERMINAL,
   'terminal/rename': TERMINAL,
   'terminal/retain': TERMINAL,
   'terminal/watch': TERMINAL,
@@ -1208,7 +1210,7 @@ export function createCondition(
     const holder = { deviceId, listener, unlockId }
     const feature = holdFeatureOf(action)
     const id = feature === undefined ? undefined : holdIdOf(feature, action, args)
-    if (feature !== undefined && !ALWAYS_GRANTED.has(action) && (id === undefined ? (feature === 'picker' || HOLD_METADATA_ACTIONS.has(action)) && faced.grants.holdsAny(holder, feature, scope) : faced.grants.holdAdmits(holder, feature, id, scope))) return undefined
+    if (feature !== undefined && !ALWAYS_GRANTED.has(action) && (id === undefined ? feature === 'picker' && faced.grants.holdsAny(holder, feature, scope) : faced.grants.holdAdmits(holder, feature, id, scope))) return undefined
     const hash = hashArgs(args)
     if (hash === undefined || !faced.grants.has(holder, action, hash)) return { kind: 'deny', reason }
     const opens = feature !== undefined && id !== undefined && HOLD_OPENERS[action] === feature ? { feature, id, scope } : undefined
@@ -1328,12 +1330,6 @@ const FACE_KEY_ACTIONS: ReadonlySet<string> = new Set(['credentials/set', 'crede
 /** The actions a hold never admits: a terminal is created, and a folder made, only with a grant for that call. */
 const ALWAYS_GRANTED: ReadonlySet<string> = new Set(['terminal/create', 'directoryPicker/createDirectory'])
 
-/**
- * The id-less terminal actions a live hold of any terminal admits: they return metadata and no output. An id-less
- * `terminal/watch` could stream other terminals' events, so it needs its own grant. `terminal/environment` and
- * `terminal/shells` are allowed without any hold (F29).
- */
-const HOLD_METADATA_ACTIONS: ReadonlySet<string> = new Set(['terminal/list'])
 
 /** The id every `directoryPicker/*` hold carries: the picker has no id of its own, so one device holds one. */
 export const PICKER_HOLD_ID = 'directoryPicker'

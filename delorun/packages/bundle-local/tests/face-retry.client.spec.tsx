@@ -125,14 +125,16 @@ describe('a Remote call the home refuses for want of a grant', () => {
   })
 
   // Without the hold, a reloaded terminal tab asks again for each of its streams.
-  it('gives terminal/attach the hold of the terminal it attaches to', async () => {
+  it.each([
+    ['terminal/attach', { agentId: 's1', id: 'term-2' }],
+    ['terminal/retain', { sessionId: 's1', id: 'term-2' }],
+  ] as const)('gives %s the hold of the terminal it reopens', async (endpoint, args) => {
     const { source, grant, api } = world()
-    const attach = { agentId: 's1', id: 'term-2' }
-    const lifted = remoteDenialLift(grant)(denial('terminal/attach', attach))
+    const lifted = remoteDenialLift(grant)(denial(endpoint, args))
     const { sent, title } = await answer(source, api, 'faceId')
     await expect(lifted).resolves.toBe(true)
     expect(title).toContain('Open a terminal')
-    expect(sent).toEqual({ actions: [{ action: 'terminal/attach', hash: homeHashArgs(attach), hold: { feature: 'terminal', id: 'term-2' } }] })
+    expect(sent).toEqual({ actions: [{ action: endpoint, hash: homeHashArgs(args), hold: { feature: 'terminal', id: 'term-2' } }] })
   })
 
   // Asking about a call the studio sends on load or reconnect puts a sheet nobody asked for in front of the person,

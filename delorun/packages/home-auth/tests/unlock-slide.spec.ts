@@ -104,7 +104,7 @@ describe('which actions renew an unlock', () => {
   })
 
   it('keep the keepalives off the renewing list and the everyday state-changing steps on it', () => {
-    for (const action of ['terminal/retain', 'terminal/attach', 'terminal/watch', 'terminal/list', 'mcpManager/watch', 'dynamicCordisRunner/reportRenderFailure']) expect(RENEWING_ACTIONS.has(action), action).toBe(false)
+    for (const action of ['terminal/retain', 'terminal/attach', 'terminal/watch', 'mcpManager/watch', 'dynamicCordisRunner/reportRenderFailure']) expect(RENEWING_ACTIONS.has(action), action).toBe(false)
     for (const action of ['terminal/create', 'settings/update', 'pluginManager/setBundleEnabled', 'commands/execute', 'mcpManager/restart', 'workspace/create', 'session/create']) expect(RENEWING_ACTIONS.has(action), action).toBe(true)
   })
 
@@ -128,7 +128,7 @@ describe('which actions renew an unlock', () => {
     expect(served.auth.elevationOf(deviceId, LISTENER)?.endsAt).toBe(record.endsAt)
     served.clock.advance(MINUTE)
     expect(served.auth.elevationOf(deviceId, LISTENER)).toBeUndefined()
-    expect(condition({ action: 'terminal/list' as never, resource: { kind: 'global' }, args: {} })).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/list' })
+    expect(condition({ action: 'terminal/watch' as never, resource: { kind: 'global' }, args: {} })).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/watch' })
   })
 })
 

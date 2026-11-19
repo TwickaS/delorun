@@ -4,8 +4,8 @@
  * the PIN keypad first on a device with no passkey), mints a grant for exactly that call, and sends the call once more:
  *
  * - **Remote:** the gateway asks {@link remoteDenialLift} about a call refused with `elevation-required: …`; the grant is
- *   `{ action: <method>, hash: hashArgs(args) }`, with the terminal's or picker's hold for `terminal/create` and
- *   `directoryPicker/list`, and the same call is sent again (the home keeps the grant; nothing travels in a header).
+ *   `{ action: <method>, hash: hashArgs(args) }`, with the terminal's or picker's hold for `terminal/create`,
+ *   `terminal/retain`, `terminal/attach` and `directoryPicker/list`, and the same call is sent again (the home keeps the grant; nothing travels in a header).
  * - **Fetch:** {@link grantingFetch} reads a `403 ELEVATION_REQUIRED` answer whose body names its grant `action`; the grant
  *   is `{ action, hash: hashRequest(method, pathname + search, body) }`, and the request is sent again with `Delorun-Grant`.
  *
@@ -87,12 +87,13 @@ export function confirmationQueue(): ConfirmationQueue {
 /**
  * The hold a grant for one Remote call opens.
  * @param endpoint - the method, `<namespace>/<method>`.
- * @param args - the call's wire arguments; `terminal/create` names its terminal in `request.id`, `terminal/attach` in `id`.
+ * @param args - the call's wire arguments; `terminal/create` names its terminal in `request.id`, `terminal/attach` and
+ *   `terminal/retain` in `id`.
  * @returns the terminal's or the picker's hold, or undefined for a call that opens none.
  */
 export function holdOfCall(endpoint: string, args: Readonly<Record<string, unknown>>): FaceGrantHold | undefined {
   if (endpoint === 'directoryPicker/list') return { feature: 'picker', id: PICKER_HOLD_ID }
-  if (endpoint !== 'terminal/create' && endpoint !== 'terminal/attach') return undefined
+  if (endpoint !== 'terminal/create' && endpoint !== 'terminal/attach' && endpoint !== 'terminal/retain') return undefined
   const named = endpoint === 'terminal/create' ? args.request : args
   const id: unknown = typeof named === 'object' && named !== null ? Reflect.get(named, 'id') : undefined
   return typeof id === 'string' && id !== '' ? { feature: 'terminal', id } : undefined

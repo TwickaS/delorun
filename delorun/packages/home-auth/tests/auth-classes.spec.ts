@@ -56,9 +56,9 @@ describe('AUTH_CLASSES', () => {
 
   // Terminal and picker rows name the hold feature their grant may open; removing it leaves a terminal needing a Face ID per keystroke.
   // F29: a terminal's metadata reads are free, so a first terminal asks for Face ID once, at create.
-  it('classes a terminal\'s size limits and shells free, and its list, attach and create face', () => {
-    for (const id of ['remote:terminal/environment', 'remote:terminal/shells']) expect(authClassOf(id), id).toBe('free')
-    for (const id of ['remote:terminal/list', 'remote:terminal/attach', 'remote:terminal/create']) expect(authClassOf(id), id).toBe('face')
+  it('classes a terminal\'s size limits, shells and list free, and its streams and create face (F29, F31)', () => {
+    for (const id of ['remote:terminal/environment', 'remote:terminal/shells', 'remote:terminal/list']) expect(authClassOf(id), id).toBe('free')
+    for (const id of ['remote:terminal/retain', 'remote:terminal/attach', 'remote:terminal/create', 'remote:terminal/watch']) expect(authClassOf(id), id).toBe('face')
     // The environment read also returns the chat's working directory; its row says so (review P3-4).
     expect(AUTH_CLASSES.find(row => row.id === 'remote:terminal/environment')?.reason).toContain('working directory')
   })

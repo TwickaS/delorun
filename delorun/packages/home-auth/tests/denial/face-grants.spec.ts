@@ -152,13 +152,24 @@ describe('holds for terminals', () => {
     expect(decide('terminal/attach', { id: 't-2' }).kind).toBe('deny')
   })
   // F29: moving the metadata reads back to the elevated table makes a first terminal ask for Face ID three times.
-  it('leave a terminal\'s size limits and shells free, and keep listing, attaching and creating behind a hold or grant', () => {
+  it('leave a terminal\'s size limits, shells and list free, and keep attaching, retaining and creating behind a hold or grant', () => {
     const { decide } = world()
     expect(decide('terminal/environment', { agentId: 'chat-1' }).kind).toBe('allow')
     expect(decide('terminal/shells', { agentId: 'chat-1' }).kind).toBe('allow')
-    expect(decide('terminal/list', { sessionId: 'chat-1' })).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/list' })
+    expect(decide('terminal/list', { sessionId: 'chat-1' }).kind).toBe('allow')
+    expect(decide('terminal/retain', { sessionId: 'chat-1', id: 't-1' })).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/retain' })
     expect(decide('terminal/attach', { id: 't-1' })).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/attach' })
     expect(decide('terminal/create', create)).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/create' })
+  })
+  // Removing terminal/retain from HOLD_OPENERS makes a reloaded terminal tab, which retains before it attaches, confirm twice.
+  it('open on a grant to retain an existing terminal, for that terminal alone', () => {
+    const { grants, decide } = world()
+    const retain = { sessionId: 'chat-1', id: 't-1' }
+    grants.mint(HOLDER, [{ action: 'terminal/retain', hash: hashArgs(retain) ?? '', hold: { feature: 'terminal', id: 't-1' } }], 'passkey')
+    expect(decide('terminal/retain', retain).kind).toBe('allow')
+    expect(decide('terminal/attach', { agentId: 'chat-1', id: 't-1' }).kind).toBe('allow')
+    expect(decide('terminal/retain', { sessionId: 'chat-1', id: 't-2' })).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/retain' })
+    expect(decide('terminal/attach', { agentId: 'chat-1', id: 't-2' })).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/attach' })
   })
   // Removing terminal/attach from HOLD_OPENERS makes a reloaded terminal tab confirm again for each of its streams.
   it('open on a grant to attach to an existing terminal, for that terminal alone', () => {
@@ -214,8 +225,6 @@ describe('holds are bound to the resource and the device (P2-1, P2-2)', () => {
     expect(decide('terminal/create', create, sessionA).kind).toBe('allow')
     expect(decide('terminal/attach', { id: 't-1' }, sessionA).kind).toBe('allow')
     expect(decide('terminal/attach', { id: 't-1' }, sessionB).kind).toBe('deny')
-    expect(decide('terminal/list', {}, sessionB).kind).toBe('deny')
-    expect(decide('terminal/list', {}, sessionA).kind).toBe('allow')
   })
   // Removing unlockId from the hold key lets another page's Peer of the same device use a hold it never opened; removing endPeer leaves the hold after its Peer is disposed.
   it('belong to the Peer that opened them: another page of the device is refused, and the hold ends with its Peer', () => {
@@ -227,7 +236,7 @@ describe('holds are bound to the resource and the device (P2-1, P2-2)', () => {
     expect(ask(peerA, 'terminal/create', create)).toBe('allow')
     expect(ask(peerA, 'terminal/attach', { id: 't-1' })).toBe('allow')
     expect(ask(peerB, 'terminal/attach', { id: 't-1' })).toBe('deny')
-    expect(ask(peerB, 'terminal/list', {})).toBe('deny')
+    expect(ask(peerB, 'terminal/retain', { id: 't-1' })).toBe('deny')
     grants.endPeer({ ...HOLDER, unlockId: 'unlock-a' })
     expect(ask(peerA, 'terminal/attach', { id: 't-1' })).toBe('deny')
   })

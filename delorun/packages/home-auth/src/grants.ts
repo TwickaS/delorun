@@ -46,11 +46,12 @@ export type HoldFeature = (typeof HOLD_FEATURES)[number]
 
 /**
  * The actions whose grant opens a hold, by the feature the hold is for: `terminal/create` opens the terminal it creates,
- * `terminal/attach` the existing terminal it names (so a reloaded terminal tab confirms once), and `directoryPicker/list`
- * opens the picker. The other actions of the feature are admitted by a live hold of the device (`./grants.ts`).
+ * `terminal/retain` and `terminal/attach` the existing terminal they name (so a reloaded terminal tab confirms once,
+ * whichever of its streams opens first), and `directoryPicker/list` opens the picker. The other actions of the feature are admitted by a live hold of the device (`./grants.ts`).
  */
 export const HOLD_OPENERS: Readonly<Record<string, HoldFeature>> = {
   'terminal/create': 'terminal',
+  'terminal/retain': 'terminal',
   'terminal/attach': 'terminal',
   'directoryPicker/list': 'picker',
 }
