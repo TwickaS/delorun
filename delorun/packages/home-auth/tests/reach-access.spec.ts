@@ -85,7 +85,7 @@ function facts(overrides: Partial<ReachAccessFacts> = {}): ReachAccessFacts {
     computerOnlySwitches: () => [CONSENT],
     protectedEntryIds: () => new Set([PROTECTED_ROW]), computerOnlyEntryIds: () => new Set([COMPUTER_ONLY_ROW]),
     defaultPermission: () => PERMISSION,
-    phonePowers: () => 'full' as const, dangerousMode: () => false,
+    dangerousMode: () => false,
     ...overrides,
   }
 }
@@ -583,9 +583,10 @@ describe('a terminal', () => {
     }
   })
 
-  it.each([false, true])('admits an unlocked device, with dangerous mode %s', (dangerousMode) => {
+  // Removing the grant-only return for a terminal lets an unlock open a shell outside the sandbox.
+  it.each([false, true])('refuses an unlocked device with no grant, with dangerous mode %s', (dangerousMode) => {
     const condition = createCondition(facts({ dangerousMode: () => dangerousMode, elevationOf: () => ({ id: 'elevation-1' }) }), DEVICE)
-    for (const action of TERMINAL_ACTIONS) expect(condition({ action, resource: SESSION, args: {} }), action).toEqual(ALLOW)
+    for (const action of TERMINAL_ACTIONS) expect(condition({ action, resource: SESSION, args: {} }), action).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
   })
 })
 
@@ -614,17 +615,17 @@ describe('an elevated action', () => {
       return deviceId === 'device-1' && listener === LISTENER ? ELEVATION : undefined
     }
     const condition = createCondition(facts({ elevationOf, logElevated: (line) => { lines.push(line) } }), DEVICE)
-    expect(condition({ action: 'terminal/create', resource: GLOBAL, args: { shell: 'x' } })).toEqual({ kind: 'allow' })
-    expect(condition({ action: 'terminal/create', resource: GLOBAL })).toEqual({ kind: 'allow' })
+    expect(condition({ action: 'directoryPicker/list', resource: GLOBAL, args: { path: 'x' } })).toEqual({ kind: 'allow' })
+    expect(condition({ action: 'directoryPicker/list', resource: GLOBAL })).toEqual({ kind: 'allow' })
     // Pins the device the condition asks for: device B's condition does not borrow device A's unlock.
-    expect(createCondition(facts({ elevationOf }), reachDevicePrincipal('device-2', LISTENER))({ action: 'terminal/create', resource: GLOBAL, args: {} }))
-      .toEqual({ kind: 'deny', reason: 'elevation-required: terminal/create' })
+    expect(createCondition(facts({ elevationOf }), reachDevicePrincipal('device-2', LISTENER))({ action: 'directoryPicker/list', resource: GLOBAL, args: {} }))
+      .toEqual({ kind: 'deny', reason: 'elevation-required: directoryPicker/list' })
     // Pins the listener the condition asks for: an unlock on one listener admits nothing on another.
-    expect(createCondition(facts({ elevationOf }), reachDevicePrincipal('device-1', OTHER_LISTENER))({ action: 'terminal/create', resource: GLOBAL, args: {} }))
-      .toEqual({ kind: 'deny', reason: 'elevation-required: terminal/create' })
+    expect(createCondition(facts({ elevationOf }), reachDevicePrincipal('device-1', OTHER_LISTENER))({ action: 'directoryPicker/list', resource: GLOBAL, args: {} }))
+      .toEqual({ kind: 'deny', reason: 'elevation-required: directoryPicker/list' })
     expect(asked).toEqual([`device-1@${LISTENER}`, `device-1@${LISTENER}`, `device-2@${LISTENER}`, `device-1@${OTHER_LISTENER}`])
     // Only a call is logged; an event or a snapshot question is not one.
-    expect(lines).toEqual([`home-auth: elevated action: device=device-1 listener=${LISTENER} action=terminal/create elevation=elevation-1`])
+    expect(lines).toEqual([`home-auth: elevated action: device=device-1 listener=${LISTENER} action=directoryPicker/list elevation=elevation-1`])
   })
 
   it('keeps the workspace-file rule under an unlock', () => {

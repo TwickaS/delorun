@@ -8,7 +8,7 @@
  *   call. The home reads the request body itself, up to {@link GRANT_BODY_CAP_BYTES}, and hashes method, path with query and body
  *   ({@link hashRequest}); the `Delorun-Grant` header only names the grant id and must equal the id of the grant that hash
  *   finds. The grant is used up just before the route's handler runs, and the header is removed before the handler sees
- *   the request. Under Careful, a route with `legacy.phonePowers: 'full'` is refused before the grant lookup for every device, until Phone powers is removed. A device that holds a passkey is admitted by a grant alone; a device without one may also hold the
+ *   the request. A device that holds a passkey is admitted by a grant alone; a device without one may also hold the
  *   legacy unlock the route declared in `legacy`. While the flag is off, `face` behaves as `gateByUnlock` with `legacy`.
  * - `computer` and `ticket`: not Fetch gates; such a route registers no `admitPeer` of this kind.
  *
@@ -31,7 +31,6 @@ export type GrantGateHome = DangerousModeHome & Pick<HomeAuthService, 'passkeysE
 export interface LegacyUnlock {
   readonly grace?: boolean
   readonly renews: boolean
-  readonly phonePowers?: 'full'
 }
 
 /** What {@link gateByClass} is configured with. */
@@ -112,7 +111,7 @@ export function gateByClass(homeAuth: () => GrantGateHome | undefined, fetch: (r
   // A hold needs a scope the route does not carry yet; the Fetch gate pins holds to the global scope, which a terminal's per-chat holds must not share.
   if (options.hold?.feature === 'terminal') throw new Error(`home-auth: the row "${options.row}" asks for a terminal hold, which gateByClass cannot scope to a chat yet`)
   const principals = new WeakMap<Request, ReachDevicePrincipal>()
-  const legacy = gateByUnlock(homeAuth, fetch, { renews: options.legacy.renews, ...options.legacy.grace === undefined ? {} : { grace: options.legacy.grace }, ...options.legacy.phonePowers === undefined ? {} : { phonePowers: options.legacy.phonePowers } })
+  const legacy = gateByUnlock(homeAuth, fetch, { renews: options.legacy.renews, ...options.legacy.grace === undefined ? {} : { grace: options.legacy.grace } })
   const refuse = (message: string): Response => new Response(refusalBody('ELEVATION_REQUIRED', message), { status: 403, headers: REFUSAL_HEADERS })
   return {
     admitPeer: (request, peer) => {
@@ -127,8 +126,6 @@ export function gateByClass(homeAuth: () => GrantGateHome | undefined, fetch: (r
       const home = homeAuth()
       const grants = home?.passkeysEnabled() === true ? home.faceGrants() : undefined
       if (home === undefined || grants === undefined) return legacy.fetch(request)
-      // Until Phone powers is removed, a Full-only route stays refused under Careful before any grant is looked up, for every device.
-      if (options.legacy.phonePowers === 'full' && home.phonePowers?.().level !== 'full') return legacy.fetch(request)
       const holder = { deviceId: principal.deviceId, listener: principal.listener, unlockId: principal.unlockId }
       const passkey = home.deviceHasPasskey(principal.deviceId)
       const body = await readBodyCapped(request.clone(), GRANT_BODY_CAP_BYTES)

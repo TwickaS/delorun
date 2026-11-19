@@ -116,7 +116,7 @@ describe('which actions renew an unlock', () => {
       pageUnlockOf: () => undefined, unlockModeEnabled: () => false,
       keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
       computerOnlySwitches: () => [], protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set(),
-      defaultPermission: () => undefined, phonePowers: () => 'full' as const, dangerousMode: () => false,
+      defaultPermission: () => undefined, dangerousMode: () => false,
     }
     const condition = createCondition(real, reachDevicePrincipal(deviceId, LISTENER))
     const polled = ['terminal/list', 'terminal/watch', 'terminal/retain', 'terminal/attach', 'mcpManager/watch', 'directoryPicker/list', 'dynamicCordisRunner/getClientCode']
@@ -138,7 +138,7 @@ describe('what renews an unlock', () => {
     elevationOf: () => ({ id: 'unlock-1' }), touchUnlock: touch, pageUnlockOf: () => undefined, unlockModeEnabled: () => false,
     keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
     computerOnlySwitches: () => [], protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set(),
-    defaultPermission: () => undefined, phonePowers: () => 'full' as const, dangerousMode: () => false,
+    defaultPermission: () => undefined, dangerousMode: () => false,
   })
   const principal = reachDevicePrincipal('device-1', LISTENER)
   const resource = { kind: 'global' } as const

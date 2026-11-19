@@ -26,7 +26,7 @@ function facts(kind: Kind): ReachAccessFacts {
     pageUnlockOf: () => (kind === 'pin-page' ? UNLOCK : undefined), unlockModeEnabled: () => kind === 'pin-page',
     keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
     computerOnlySwitches: () => [], protectedEntryIds: () => new Set(SANDBOX_IDS), computerOnlyEntryIds: () => new Set(SANDBOX_IDS),
-    defaultPermission: () => undefined, phonePowers: () => 'full' as const, dangerousMode: () => kind === 'dangerous',
+    defaultPermission: () => undefined, dangerousMode: () => kind === 'dangerous',
   }
 }
 

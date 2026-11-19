@@ -25,7 +25,7 @@ function world(options: { passkey?: boolean; unlockMode?: boolean; flag?: boolea
     unlockModeEnabled: () => options.unlockMode ?? true, keyRefs: () => new Set(['DEEPSEEK_API_KEY']),
     logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined, computerOnlySwitches: () => [],
     protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set(), defaultPermission: () => undefined,
-    phonePowers: () => 'full' as const, dangerousMode: () => false,
+    dangerousMode: () => false,
     faceGrants: () => (options.flag === false ? undefined : { grants, deviceHasPasskey: () => options.passkey ?? true }),
   }
   const condition = createCondition(facts, DEVICE)
@@ -211,7 +211,7 @@ describe('a page unlock made before enrolment (P3-1)', () => {
       elevationOf: () => undefined, pageUnlockOf: () => ({ id: 'page-1' } as never), unlockModeEnabled: () => true, keyRefs: () => new Set(['DEEPSEEK_API_KEY']),
       logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined, computerOnlySwitches: () => [],
       protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set(), defaultPermission: () => undefined,
-      phonePowers: () => 'full' as const, dangerousMode: () => false,
+      dangerousMode: () => false,
       faceGrants: () => ({ grants, deviceHasPasskey: () => true }),
     }
     const condition = createCondition(facts, reachDevicePrincipal('device-1', LISTENER, 'page-1'))
@@ -231,31 +231,38 @@ describe('answer grants (P2-3)', () => {
   })
 })
 
-describe('Phone powers Careful on a Fetch gate (P2-5, F11)', () => {
-  const ROW = 'route:plugin-packs/src/routes.ts#path (write)'
-  const peer = { principal: DEVICE }
-  const careful = async (options: { passkey: boolean; level: 'careful' | 'full' }): Promise<{ status: number; ran: number }> => {
-    const { grants } = world()
-    let ran = 0
-    const home: GrantGateHome = {
-      passkeysEnabled: () => true, faceGrants: () => grants, deviceHasPasskey: () => options.passkey,
-      arrivalOf: () => ({ listener: LISTENER, host: 'h.ts.net', source: 'test' }), dangerousMode: () => false, elevationOf: () => undefined, pageUnlockOf: () => undefined, unlockModeEnabled: () => true,
-      phonePowers: () => ({ level: options.level }) as never,
+describe('a terminal action after Phone powers is gone (A2)', () => {
+  const ARGS = { cwd: '/w' }
+  const hash = hashArgs(ARGS) ?? ''
+  const TERMINALS = ['terminal/create', 'terminal/attach', 'terminal/close', 'terminal/rename'] as const
+
+  // Removing the early grant-only return lets a running unlock open a terminal for a device with no passkey, the Full set Careful kept at the computer.
+  it('is refused to a device with no passkey and a running unlock, with PIN mode on or off', () => {
+    for (const unlockMode of [true, false]) {
+      for (const action of TERMINALS) {
+        expect(world({ passkey: false, elevation: true, unlockMode }).decide(action, ARGS), `${action} unlockMode=${unlockMode}`).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
+      }
     }
-    const gate = gateByClass(() => home, () => { ran += 1; return Promise.resolve(new Response('ok')) }, { row: ROW, action: 'plugin-packs/enqueue', legacy: { renews: false, phonePowers: 'full' } })
-    const body = '{"pack":"a"}'
-    const hash = hashRequest({ method: 'POST', path: '/api/delorun/packs/enqueue', body: new TextEncoder().encode(body) }) ?? ''
-    const id = grants.mint(HOLDER, [{ action: 'plugin-packs/enqueue', hash }], 'passkey').grantId
-    const request = new Request('https://h.ts.net/api/delorun/packs/enqueue', { method: 'POST', body, headers: { [GRANT_HEADER]: id } })
-    gate.admitPeer(request, peer)
-    const response = await gate.fetch(request)
-    return { status: response.status, ran }
-  }
-  // Removing the Careful check before the grant lookup lets a grant open a route Careful refuses.
-  it('refuses a Full-only route under Careful for a device with a matching grant, passkey or not', async () => {
-    expect(await careful({ passkey: true, level: 'careful' })).toEqual({ status: 403, ran: 0 })
-    expect(await careful({ passkey: false, level: 'careful' })).toEqual({ status: 403, ran: 0 })
-    expect(await careful({ passkey: true, level: 'full' })).toEqual({ status: 200, ran: 1 })
+  })
+
+  // Removing the grant branch for a device with no passkey makes the terminal unreachable from a PIN, or lets the flag-off path open it.
+  it('is admitted once, for exactly the call, by a PIN grant on a device with no passkey', () => {
+    for (const action of TERMINALS) {
+      const { grants, decide } = world({ passkey: false, elevation: true })
+      grants.mint(HOLDER, [{ action, hash }], 'pin')
+      expect(decide(action, { cwd: '/other' }).kind, action).toBe('deny')
+      expect(decide(action, ARGS).kind, action).toBe('allow')
+      expect(decide(action, ARGS).kind, `${action} replayed`).toBe('deny')
+    }
+  })
+
+  // Removing the faced check lets a home with the Face ID flag off admit a terminal by an unlock.
+  it('is refused to every device while the Face ID flag is off, unlocked or not', () => {
+    for (const passkey of [true, false]) {
+      for (const action of TERMINALS) {
+        expect(world({ flag: false, passkey, elevation: true }).decide(action, ARGS), `${action} passkey=${passkey}`).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
+      }
+    }
   })
 })
 
