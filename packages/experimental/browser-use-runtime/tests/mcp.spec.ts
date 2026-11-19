@@ -31,6 +31,17 @@ import * as McpClient from '@deepseek-ai/dsh-mcp-client'
 import type { McpConsentDecision, McpServerCommand } from '@deepseek-ai/dsh-mcp-client'
 import { BrowserMcpConfig, mountSessionMcp, validateBrowserMcpConfig, type BrowserToolCall, type SessionMcpOptions } from '../src/mcp.ts'
 
+/** Lets one test make `realpath` fail for a path; every other call is the real one. */
+const realpathHook = vi.hoisted(() => ({ fail: undefined as undefined | ((path: string) => NodeJS.ErrnoException | undefined) }))
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>()
+  return { ...actual, realpath: (async (path: Parameters<typeof actual.realpath>[0], ...rest: unknown[]) => {
+    const error = realpathHook.fail?.(String(path))
+    if (error !== undefined) throw error
+    return (actual.realpath as (...args: unknown[]) => Promise<string>)(path, ...rest)
+  }) as typeof actual.realpath }
+})
+
 const fixture = fileURLToPath(new URL('./mcp-fixture.mjs', import.meta.url))
 const roots: string[] = []
 const contexts: Context[] = []
@@ -38,6 +49,7 @@ const activations: Promise<void>[] = []
 const TOOL = 'mcp__browser-fixture__visit'
 
 afterEach(async () => {
+  realpathHook.fail = undefined
   const disposed = await Promise.allSettled(contexts.splice(0).map(ctx => ctx.fiber.dispose()))
   await Promise.all(activations.splice(0))
   const removed = await Promise.allSettled(roots.splice(0).map(root => rm(root, { recursive: true, force: true })))
@@ -640,17 +652,71 @@ describe('Session MCP Loader composition', () => {
     expect(existsSync(join(root, 'events.ndjson'))).toBe(false)
   })
 
-  it('leaves Browser off, and starts no server, when the check of the output folder cannot decide', async () => {
+  it('names the remedy by the cause of the overlap: the workspace, an extra writable folder, or XDG_CACHE_HOME', async () => {
+    const outputRoot = join(tmpdir(), `dsh-cause-root-${process.pid}`)
+    roots.push(outputRoot)
+    const { ctx, root, warnings } = await load({ outputRoot })
+    const quiet = join(root, 'quiet')
+    await mkdir(quiet)
+    const { agent } = await ctx.agents.create({ sessionId: SessionId('cause-workspace'), meta: { cwd: tmpdir() } })
+    await warm(ctx, agent)
+    expect(warnings.at(-1)).toContain("Use a workspace that isn't your home folder.")
+    ctx.provide('sandboxPolicy')
+    ctx.set('sandboxPolicy', { resolve: () => ({ mode: 'workspace-write', workspaceRoot: quiet, additionalWritableRoots: [tmpdir()] }) } as never)
+    const extra = await ctx.agents.create({ sessionId: SessionId('cause-extra'), meta: { cwd: quiet } })
+    await warm(ctx, extra.agent)
+    expect(warnings.at(-1)).toContain(`${await realpath(tmpdir())} is an extra folder this chat can write`)
+    vi.stubEnv('XDG_CACHE_HOME', tmpdir())
+    try {
+      const cache = await ctx.agents.create({ sessionId: SessionId('cause-cache'), meta: { cwd: quiet } })
+      await warm(ctx, cache.agent)
+    } finally {
+      vi.unstubAllEnvs()
+    }
+    expect(warnings.at(-1)).toContain('XDG_CACHE_HOME points inside it; point XDG_CACHE_HOME somewhere this chat cannot write.')
+    expect(warnings).toHaveLength(3)
+  })
+
+  it.each(['ENOENT', 'ENOTDIR', 'EACCES', 'ELOOP'])('leaves Browser off, and starts no server, when the file system cannot resolve the output folder (%s)', async (code) => {
     const outputRoot = join(tmpdir(), `dsh-check-root-${process.pid}`)
     roots.push(outputRoot)
     const { ctx, root, warnings } = await load({ outputRoot })
-    ctx.provide('sandboxPolicy')
-    ctx.set('sandboxPolicy', { resolve: () => { throw new Error('policy unreadable') } } as never)
+    realpathHook.fail = path => path.startsWith(outputRoot) ? Object.assign(new Error(`${code}: cannot resolve`), { code }) : undefined
     const { agent } = await ctx.agents.create({ sessionId: SessionId('check-fails') })
     const assembled = await warm(ctx, agent)
     expect(assembled.tools.some(tool => tool.name === TOOL)).toBe(false)
+    expect(assembled.sections.some(section => section.name === 'mcp:browser-fixture')).toBe(false)
+    expect(await execute(ctx, agent, TOOL).then(result => result.isError, () => true)).toBe(true)
     expect(warnings).toEqual([expect.stringContaining('its output folder could not be checked')])
-    expect(warnings[0]).toContain('policy unreadable')
+    expect(warnings[0]).toContain(`${code}: cannot resolve`)
+    expect(existsSync(join(root, 'events.ndjson'))).toBe(false)
+  })
+
+  it('lets any other error of the check propagate, so the chat fails loudly instead of Browser going quietly off', async () => {
+    const outputRoot = join(tmpdir(), `dsh-check-root-other-${process.pid}`)
+    roots.push(outputRoot)
+    const { ctx, warnings } = await load({ outputRoot })
+    ctx.provide('sandboxPolicy')
+    ctx.set('sandboxPolicy', { resolve: () => { throw new Error('policy unreadable') } } as never)
+    await expect(ctx.agents.create({ sessionId: SessionId('check-throws') }).then(({ agent }) => warm(ctx, agent))).rejects.toThrow('policy unreadable')
+    ctx.set('sandboxPolicy', undefined)
+    realpathHook.fail = path => path.startsWith(outputRoot) ? Object.assign(new Error('disk on fire'), { code: 'EIO' }) : undefined
+    await expect(ctx.agents.create({ sessionId: SessionId('check-eio') }).then(({ agent }) => warm(ctx, agent))).rejects.toThrow('disk on fire')
+    expect(warnings).toEqual([])
+  })
+
+  it('checks the output folder again when the consent is accepted for a chat the folder check left without Browser, and keeps it off', async () => {
+    const outputRoot = join(tmpdir(), `dsh-retry-root-${process.pid}`)
+    roots.push(outputRoot)
+    const { ctx, root, warnings } = await load({ consent: true, outputRoot })
+    const consent = ctx.get('mcpAddConsent') as RefuseBrowserConsent
+    consent.accepted = true
+    const { agent } = await ctx.agents.create({ sessionId: SessionId('folder-then-consent'), meta: { cwd: tmpdir() } })
+    expect((await warm(ctx, agent)).tools.some(tool => tool.name === TOOL)).toBe(false)
+    expect(warnings).toHaveLength(1)
+    await ctx.parallel('mcp-client/consent-accepted', 'browser-fixture')
+    expect(warnings).toHaveLength(2)
+    expect((await warm(ctx, agent)).tools.some(tool => tool.name === TOOL)).toBe(false)
     expect(existsSync(join(root, 'events.ndjson'))).toBe(false)
   })
 
