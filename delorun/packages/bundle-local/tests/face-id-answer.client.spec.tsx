@@ -8,6 +8,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
+import type { ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { ApprovalAllowGate } from '@deepseek-ai/dsh-client-ui-approval/client'
 import { en } from '../src/client/face-id-locales.ts'
 import { fakeApi, fakeBrowser } from '../src/client/face-id-fake.ts'
@@ -22,13 +23,13 @@ const passkey = { credentialId: 'c1', createdAt: 0, lastUsedAt: null, synced: fa
 const pinView = (phase: PinView['phase']): PinView => ({ phase, secret: 'pin', busy: false, outcome: undefined, paused: false, asked: false })
 
 /** Render the step and hand back the gate it registered. */
-function card(over: { on?: boolean; computer?: boolean; grants?: FaceIdAnswerProps['grants']; callId?: FaceIdAnswerProps['callId'] } = {}) {
+function card(over: { on?: boolean | undefined; computer?: boolean | undefined; callId?: ToolCallId | undefined; grants?: FaceIdAnswerProps['grants'] } = {}) {
   const host = fakeHost(flags(over.on ?? true))
   const api = fakeApi({ devices: [{ deviceId: 'd', label: 'Phone', thisDevice: true, passkeys: [passkey] }] })
   const gateAllow = vi.fn<(gate: ApprovalAllowGate | null) => void>()
   const props = {
-    t, grants: 'grants' in over ? over.grants : 'full-access', callId: 'callId' in over ? over.callId : 'call-7', toolName: 'claude-code',
-    gateAllow, sessionId: 'chat-1', fetch: host.fetch, api, browser: fakeBrowser(), atComputer: () => over.computer ?? false,
+    t, grants: over.grants ?? 'full-access', callId: 'callId' in over ? over.callId : 'call-7' as ToolCallId, toolName: 'claude-code',
+    allow: async () => {}, answered: false, canAnswer: () => true, gateAllow, sessionId: 'chat-1', fetch: host.fetch, api, browser: fakeBrowser(), atComputer: () => over.computer ?? false,
     usePin: <S,>(select: (view: PinView) => S): S => select(pinView('unlocked')),
   } as FaceIdAnswerProps
   render(<FaceIdAnswerAction {...props} />)
@@ -75,7 +76,6 @@ describe('the approval card\'s Face ID step', () => {
   it.each([
     ['the flag is off', { on: false }],
     ['the page is the home\'s own computer', { computer: true }],
-    ['the request grants nothing', { grants: undefined }],
     ['the request has no call id', { callId: undefined }],
   ])('registers no gate when %s', async (_name, over) => {
     // Every other answer, and the computer\'s own studio, must go through without a prompt.

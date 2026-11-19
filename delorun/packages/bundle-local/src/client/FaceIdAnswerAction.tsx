@@ -71,7 +71,7 @@ export function FaceIdAnswerAction({ t, grants, callId, toolName, gateAllow, ses
   const secret = pin.phase === 'off' || pin.phase === 'unknown' ? undefined : pin.secret
   const computer = atComputer()
   // A prompt without a call id cannot be keyed, so no grant covers it.
-  const asks = grants !== undefined && callId !== undefined && !computer
+  const asks = callId !== undefined && !computer
   useEffect(() => {
     if (!asks) return
     let current = true
@@ -103,7 +103,7 @@ export function FaceIdAnswerAction({ t, grants, callId, toolName, gateAllow, ses
       done?.(false)
     }
   }, [on, gateAllow])
-  if (!on || !open || grants === undefined || callId === undefined) return null
+  if (!on || !open || callId === undefined) return null
   const action = answerActionOf(t, { sessionId, callId, grants, toolName })
   return <FaceIdGrantFlow t={t} action={action} kind={kind} api={api} browser={passkeys} hasPasskey={hasPasskey} secret={secret}
     onGranted={() => { close(true) }} onCancel={() => { close(false) }} />
