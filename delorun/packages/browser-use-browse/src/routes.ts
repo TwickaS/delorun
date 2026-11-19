@@ -11,7 +11,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { SessionId } from '@deepseek-ai/dsh-session'
-import { admitApprovedDevice, gateByUnlock, requireComputerOrDevice, routedPathname } from '@delorun/home-auth'
+import { admitApprovedDevice, gateByClass, requireComputerOrDevice, routedPathname } from '@delorun/home-auth'
 import { z } from 'zod'
 import type { RealBrowserGrants } from './grant.ts'
 import { MAX_REAL_BROWSER_REQUEST_BYTES, REAL_BROWSER_ROUTES, type RealBrowserRefusalCode, type RealBrowserState } from './wire.ts'
@@ -111,16 +111,23 @@ export function registerRealBrowserRoutes(ctx: Context, grants: RealBrowserGrant
       return json(200, stateOf(agent))
     },
   })
+  // Turning the away permission off only tightens, so it is free; turning it on lets runs the person did not start use their
+  // own browser, so it is a `face` route. The home reads the body to tell them apart: a body that does not say `on: false`
+  // takes the Face ID gate, which hashes the same bytes, so a free call cannot carry `on: true`.
+  const turnAway = async (request: Request): Promise<Response> => {
+    const body = await parsed(request, AwayBody)
+    if (body === undefined) return refuse('INVALID_REQUEST', 'the request must be JSON naming the chat and on')
+    const agent = chat(body.sessionId)
+    if (agent === undefined) return unknownChat()
+    const recorded = grants.setAway(agent.session, body.on ? options.now() + options.awayMs() : null)
+    if (!recorded) return refuse('NO_GRANT', 'nothing changed: the chat does not use the person\'s own browser')
+    return json(200, stateOf(agent))
+  }
+  const awayOn = gateByClass(() => ctx.get('homeAuth'), turnAway, { row: 'route:browser-use-browse/src/routes.ts#REAL_BROWSER_ROUTES.away', action: 'browser-use-browse/away', legacy: { grace: false, renews: true } })
+  const awayOff = async (request: Request): Promise<boolean> => (await parsed(request.clone(), AwayBody))?.on === false
   ctx.connection.fetch.register({
     path: REAL_BROWSER_ROUTES.away, methods: ['POST'], requestBody: 'buffered',
-    ...gateByUnlock(() => ctx.get('homeAuth'), async (request) => {
-      const body = await parsed(request, AwayBody)
-      if (body === undefined) return refuse('INVALID_REQUEST', 'the request must be JSON naming the chat and on')
-      const agent = chat(body.sessionId)
-      if (agent === undefined) return unknownChat()
-      const recorded = grants.setAway(agent.session, body.on ? options.now() + options.awayMs() : null)
-      if (!recorded) return refuse('NO_GRANT', 'nothing changed: the chat does not use the person\'s own browser')
-      return json(200, stateOf(agent))
-    }, { grace: false, renews: true }),
+    admitPeer: awayOn.admitPeer,
+    fetch: async request => ((await awayOff(request)) ? turnAway(request) : awayOn.fetch(request)),
   })
 }

@@ -25,7 +25,7 @@ import type {} from '@deepseek-ai/dsh-session-query'
 import type {} from '@deepseek-ai/dsh-spill'
 import type {} from '@deepseek-ai/dsh-workspace'
 import schema from '@deepseek-ai/schemastery'
-import { admitApprovedDevice, gateByUnlock } from '@delorun/home-auth'
+import { admitApprovedDevice, gateByClass } from '@delorun/home-auth'
 import { journalPath, readJournal, stashPath } from '@delorun/home-process'
 import { discardKeptData, isDataSafetyError, listKeptData } from '@delorun/update'
 import { TrashError, type ProjectionCachePurge, type SessionIndexPurge, type TrashStores } from '@delorun/trash'
@@ -139,8 +139,8 @@ export function apply(ctx: Context, config: Config): void {
     ctx.logger.warn(`${name}: the trash's start pass failed, so expired items stay until the next start: ${String(error)}`)
   })
 
-  // Listing, deleting to the trash and restoring need no unlock; deleting forever does.
-  const route = (path: string, handle: (body: Readonly<Record<string, unknown>>) => Promise<unknown>, needsUnlock = false): void => {
+  // Listing, deleting to the trash and restoring are free; deleting forever is a `face` route (Face ID, or the unlock of today).
+  const route = (path: string, handle: (body: Readonly<Record<string, unknown>>) => Promise<unknown>, face?: string): void => {
     const answerTo = async (request: Request): Promise<Response> => {
       let body: unknown
       try {
@@ -161,18 +161,18 @@ export function apply(ctx: Context, config: Config): void {
     }
     ctx.effect(() => ctx.connection.fetch.register({
       path, methods: ['POST'], requestBody: 'buffered',
-      ...needsUnlock ? gateByUnlock(() => ctx.get('homeAuth'), answerTo, { renews: true }) : { admitPeer: admitApprovedDevice(), fetch: answerTo },
+      ...face === undefined ? { admitPeer: admitApprovedDevice(), fetch: answerTo } : gateByClass(() => ctx.get('homeAuth'), answerTo, { row: TRASH_WRITE_ROW, action: `plugin-trash/${face}`, legacy: { renews: true } }),
     }), `${name}: ${path}`)
   }
   route(TRASH_PATHS.list, () => operations.list())
   route(TRASH_PATHS.deleteChat, body => operations.deleteChat(SessionId(id(body, 'sessionId')), label(body)))
   route(TRASH_PATHS.deleteWorkspace, body => operations.deleteWorkspace(id(body, 'workspaceId')))
   route(TRASH_PATHS.restore, body => operations.restore(id(body, 'itemId')))
-  route(TRASH_PATHS.purge, body => operations.purge(id(body, 'itemId'), flag(body, 'clearLogs')), true)
-  route(TRASH_PATHS.empty, body => operations.empty(flag(body, 'clearLogs')), true)
+  route(TRASH_PATHS.purge, body => operations.purge(id(body, 'itemId'), flag(body, 'clearLogs')), 'purge')
+  route(TRASH_PATHS.empty, body => operations.empty(flag(body, 'clearLogs')), 'empty')
 
   // What a rollback set aside and the copies an update took live in the home, outside the trash; they are listed here and
-  // deleted forever only with an unlock, as `delorun recover discard` does.
+  // deleted forever only with Face ID or an unlock, as `delorun recover discard` does.
   const profileOf = (): ProfileContext => {
     const launched = ctx.get('profileContext')
     if (launched === undefined) throw new TrashOperationError('KEPT_DATA_UNAVAILABLE', 'this harness runs no profile whose update record guards the copies')
@@ -199,8 +199,11 @@ export function apply(ctx: Context, config: Config): void {
       throw error
     }
     return { path } satisfies SetAsideRemoved
-  }, true)
+  }, 'remove-set-aside')
 }
+
+/** The `AUTH_CLASSES` row of the routes that delete forever. */
+const TRASH_WRITE_ROW = 'route:plugin-trash/src/index.ts#path (write)'
 
 /** The cache header every answer carries. */
 const NO_STORE = { 'cache-control': 'no-store' } as const

@@ -18,7 +18,7 @@ import type {} from '@deepseek-ai/dsh-client-connection'
 // Type-only: the ctx.settings merge.
 import type {} from '@deepseek-ai/dsh-settings'
 // The ctx.homeAuth merge, and the pathname the guard compares.
-import { admitApprovedDevice, admitKeyDevice, gateByUnlock, requireComputerOrDevice, routedPathname } from '@delorun/home-auth'
+import { admitApprovedDevice, admitKeyDevice, requireComputerOrDevice, routedPathname } from '@delorun/home-auth'
 // Type-only: the ctx.workspaceRegistry merge.
 import type {} from '@deepseek-ai/dsh-workspace'
 // Type-only: the ctx.subagents merge.
@@ -94,7 +94,7 @@ export function apply(ctx: Context, config: Config): void {
   })
   // Without the registry the routes are absent and the studio's requests fail, which its folder choice reports.
   ctx.inject(['workspaceRegistry'], (child) => {
-    // Before the body is read: only the computer or a reach device reaches the route, and a device needs an unlock.
+    // Before the body is read: only the computer or a reach device reaches the route; it lists an agent's models, which any approved device may (class `free`).
     child.on('connection/request', async (request, response, next) => {
       if (routedPathname(request.url) === AGENT_MODELS_PATH && !requireComputerOrDevice(request, response, child.get('homeAuth'), 'Listing an agent\'s models')) return
       await next()
@@ -106,12 +106,12 @@ export function apply(ctx: Context, config: Config): void {
       admitPeer: admitApprovedDevice(),
       fetch: () => Promise.resolve(json({ setAside: child.workspaceRegistry.quarantined.slice(-MAX_SET_ASIDE).map(file => basename(file)) } satisfies WorkspaceNoticeAnswer)),
     })
-    const unlocked = (fetch: (request: Request) => Promise<Response>, options: { readonly renews: boolean }) => gateByUnlock(() => child.get('homeAuth'), fetch, { renews: options.renews })
     child.connection.fetch.register({
       path: AGENT_MODELS_PATH,
       methods: ['POST'],
       requestBody: 'buffered',
-      ...unlocked(async (request) => {
+      admitPeer: admitApprovedDevice(),
+      fetch: async (request) => {
         let body: unknown
         try {
           body = await request.json()
@@ -127,7 +127,7 @@ export function apply(ctx: Context, config: Config): void {
           timeoutMs: config.agentModelsTimeoutMs,
           warn,
         }))
-      }, { renews: false }),
+      },
     })
   })
   const deferred = createDeferredStore(ctx.get('profileContext')?.dir, warn)

@@ -51,7 +51,7 @@ describe('the update routes\' fence and levels', () => {
   it('update-begin-refused-phone-without-unlock, update-begin-refused-phone-approval-grace-only and update-rollback-refused-phone-without-unlock: Full needs an unlock the person entered', async () => {
     const update = await serveUpdate({ powers: 'full' })
     for (const unlock of ['none', 'grace'] as const) {
-      for (const path of [UPDATE_PATHS.prepare, UPDATE_PATHS.apply, UPDATE_PATHS.rollback, UPDATE_PATHS.cancel, UPDATE_PATHS.dismiss, UPDATE_PATHS.stop]) {
+      for (const path of [UPDATE_PATHS.prepare, UPDATE_PATHS.apply, UPDATE_PATHS.rollback, UPDATE_PATHS.stop]) {
         const reply = await send(update.server.port, path, fromDevice(unlock, { chats: 'wait', handle: 'x', profileOnly: false }))
         expect(reply.status, `${path} ${unlock}`).toBe(403)
         expect(json(reply), `${path} ${unlock}`).toMatchObject({ code: 'ELEVATION_REQUIRED' })

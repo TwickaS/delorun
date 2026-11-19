@@ -12,7 +12,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: the ctx.connection merge and its `connection/request` event.
 import type {} from '@deepseek-ai/dsh-client-connection'
-import { admitApprovedDevice, gateByUnlock, requireComputerOrDevice, routedPathname } from '@delorun/home-auth'
+import { admitApprovedDevice, gateByClass, requireComputerOrDevice, routedPathname } from '@delorun/home-auth'
 import { z } from 'zod'
 import { MCP_REVIEW_ID_PATTERN, McpReviewError, type McpReviews } from './review.ts'
 import { ACCEPTANCE_ID_PATTERN } from './store.ts'
@@ -92,7 +92,7 @@ export function registerMcpConsentRoutes(ctx: Context, reviews: McpReviews): voi
     await next()
   })
   // Pending, decline and revoke are read or tighten only, so any approved device uses them; accepting a server lets its
-  // command run, so it needs an unlock.
+  // command run, so it is a `face` route.
   const anyDevice = admitApprovedDevice()
   ctx.connection.fetch.register({
     path: MCP_CONSENT_ROUTES.pending,
@@ -112,11 +112,11 @@ export function registerMcpConsentRoutes(ctx: Context, reviews: McpReviews): voi
     path: MCP_CONSENT_ROUTES.accept,
     methods: ['POST'],
     requestBody: 'buffered',
-    ...gateByUnlock(() => ctx.get('homeAuth'), async (request) => {
+    ...gateByClass(() => ctx.get('homeAuth'), async (request) => {
       const body = await bodyOf(request, AcceptBody)
       if (body === undefined) return answer(400, { error: 'INVALID_REQUEST', message: 'the request must be JSON with the server name, the review id and confirmed' })
       return answered(() => reviews.acceptReview(body.serverName, body.reviewId, body.confirmed))
-    }, { grace: false, renews: true }),
+    }, { row: 'route:plugin-mcp-consent/src/routes.ts#MCP_CONSENT_ROUTES.accept', action: 'plugin-mcp-consent/accept', legacy: { grace: false, renews: true } }),
   })
   ctx.connection.fetch.register({
     path: MCP_CONSENT_ROUTES.decline,

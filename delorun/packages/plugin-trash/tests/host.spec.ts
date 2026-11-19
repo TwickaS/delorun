@@ -15,8 +15,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { WorkspaceUnknownSessionError } from '@deepseek-ai/dsh-workspace'
+import { REACH_DEVICE } from '@delorun/home-auth'
 import { journalPath, writeJournal, type JournalledUpdate } from '@delorun/home-process'
 import { DAY_MS, TrashStore, sessionDirectoryPath } from '@delorun/trash'
+import { faceWorld } from '../../plugin-changes/tests/face-world.ts'
 import * as Trash from '../src/index.ts'
 import { TRASH_PATHS, type EmptyOutcome, type SetAsideListing, type SetAsideRemoved, type PurgeOutcome, type TrashEntry, type TrashListing, type TrashRefusal } from '../src/index.ts'
 
@@ -405,7 +407,7 @@ describe('the routes', () => {
 
   it('admit a reach device to every route and no other Peer, and answer a locked device ELEVATION_REQUIRED on deleting forever only', async () => {
     await mount()
-    harness.ctx.provide('homeAuth', { elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : undefined), pageUnlockOf: () => undefined } as never)
+    harness.ctx.provide('homeAuth', { passkeysEnabled: () => false, faceGrants: () => undefined, deviceHasPasskey: () => false, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : undefined), pageUnlockOf: () => undefined } as never)
     const device = (deviceId: string) => ({ kind: 'reach-device', deviceId, listener: 'reach-tailscale-private' })
     const asDevice = async (path: string, deviceId: string) => {
       const request = new Request(`http://localhost${path}`, { method: 'POST', body: '{}' })
@@ -432,6 +434,86 @@ describe('the routes', () => {
     await harness.ctx.fiber.dispose()
 
     expect(harness.routes.size).toBe(0)
+  })
+})
+
+describe('the routes under Face ID', () => {
+  const device = (extra: object = {}) => ({ principal: { kind: REACH_DEVICE, deviceId: 'd1', listener: 'reach', ...extra } })
+  const FACE_PATHS = [TRASH_PATHS.purge, TRASH_PATHS.empty, TRASH_PATHS.removeSetAside]
+  const request = (path: string, text: string, grant?: string): Request => new Request(`http://localhost${path}`, { method: 'POST', headers: grant === undefined ? {} : { 'delorun-grant': grant }, body: text })
+
+  /** Provide a `homeAuth` whose Face ID flag is on for device `d1`, which holds a passkey and whatever unlock `home` holds when asked. */
+  function underFace(home: { elevation?: { id: string, grace?: true }, page?: boolean } = {}) {
+    const world = faceWorld('d1', 'reach')
+    harness.ctx.provide('homeAuth', {
+      ...world.fields, arrivalOf: () => ({ listener: 'reach' }), touchUnlock: () => {},
+      elevationOf: () => home.elevation, pageUnlockOf: () => (home.page === true ? { id: 'p1' } : undefined),
+    } as never)
+    return world
+  }
+
+  /** Run one request as the Connection does: admit the Peer, then answer it. */
+  async function through(path: string, call: Request, peer: object = device()): Promise<number | 'refused'> {
+    if (harness.admits.get(path)?.(call, peer) !== true) return 'refused'
+    return (await harness.routes.get(path)!(call)).status
+  }
+
+  it('refuses a device with a passkey that holds an unlock, a PIN page unlock, the grace or no grant on every route that deletes forever, and deletes nothing', async () => {
+    // Pins `gateByClass`: without the grant check the unlock of today would admit the first two.
+    await mount()
+    plantChat('chat-a')
+    const deleted = await post<TrashEntry>(TRASH_PATHS.deleteChat, { sessionId: 'chat-a' })
+    const home: { elevation?: { id: string, grace?: true }, page?: boolean } = {}
+    underFace(home)
+    const bodies = new Map<string, object>([[TRASH_PATHS.purge, { itemId: deleted.json.id, clearLogs: false }], [TRASH_PATHS.empty, { clearLogs: false }], [TRASH_PATHS.removeSetAside, { path: 'data-copies/0.1.3' }]])
+    for (const held of [{ elevation: { id: 'e1' } }, { page: true }, { elevation: { id: 'g1', grace: true as const } }, {}]) {
+      Object.assign(home, { elevation: undefined, page: undefined }, held)
+      for (const path of FACE_PATHS) {
+        const call = request(path, JSON.stringify(bodies.get(path)))
+        expect(harness.admits.get(path)!(call, device(held.page === true ? { unlockId: 'live' } : {})), path).toBe(true)
+        const refusal = await harness.routes.get(path)!(call)
+        expect([refusal.status, await refusal.json()], `${path} ${JSON.stringify(held)}`).toEqual([403, expect.objectContaining({ error: 'ELEVATION_REQUIRED' })])
+      }
+    }
+    expect((await listing()).items.map(item => item.id)).toEqual([deleted.json.id])
+  })
+
+  it('admits exactly the body a grant was made for, once, and no other body', async () => {
+    // Pins the request hash: without it a grant for one item would purge another.
+    await mount()
+    plantChat('chat-a')
+    const deleted = await post<TrashEntry>(TRASH_PATHS.deleteChat, { sessionId: 'chat-a' })
+    const world = underFace()
+    const exact = JSON.stringify({ itemId: deleted.json.id, clearLogs: false })
+    const grant = world.grantFor('plugin-trash/purge', { path: TRASH_PATHS.purge, body: exact })
+    expect(await through(TRASH_PATHS.purge, request(TRASH_PATHS.purge, JSON.stringify({ itemId: deleted.json.id, clearLogs: true }), grant))).toBe(403)
+    expect((await listing()).items).toHaveLength(1)
+    expect(await through(TRASH_PATHS.purge, request(TRASH_PATHS.purge, exact, grant))).toBe(200)
+    expect((await listing()).items).toEqual([])
+    // Pins the single use: the item is gone, so a replay that got through would answer 404, not 403.
+    expect(await through(TRASH_PATHS.purge, request(TRASH_PATHS.purge, exact, grant))).toBe(403)
+  })
+
+  it('answers list, deleteChat, deleteWorkspace, restore and setAside to a device with no unlock and no grant', async () => {
+    // Pins the `free` class: gating them like purge would refuse a locked phone the trash's everyday calls.
+    await mount({ workspaces: [{ id: 'ws-a', title: 'Project', path: '/work/project', sessionIds: [SessionId('chat-b')] }] })
+    plantChat('chat-a')
+    plantChat('chat-b')
+    underFace()
+    expect(await through(TRASH_PATHS.list, request(TRASH_PATHS.list, '{}'))).toBe(200)
+    expect(await through(TRASH_PATHS.deleteChat, request(TRASH_PATHS.deleteChat, JSON.stringify({ sessionId: 'chat-a' })))).toBe(200)
+    expect(await through(TRASH_PATHS.deleteWorkspace, request(TRASH_PATHS.deleteWorkspace, JSON.stringify({ workspaceId: 'ws-a' })))).toBe(200)
+    const [first] = (await listing()).items
+    expect(await through(TRASH_PATHS.restore, request(TRASH_PATHS.restore, JSON.stringify({ itemId: first!.id })))).toBe(200)
+    // No profile runs here, so the handler's own 503 answers, which only a device the gate admitted reaches.
+    expect(await through(TRASH_PATHS.setAside, request(TRASH_PATHS.setAside, '{}'))).toBe(503)
+  })
+
+  it('never asks the computer: a request that skips admitPeer reaches the handler', async () => {
+    // Pins `principal === undefined`: without it the owner's Peer would be asked for a grant.
+    await mount()
+    underFace()
+    expect((await harness.routes.get(TRASH_PATHS.empty)!(request(TRASH_PATHS.empty, JSON.stringify({ clearLogs: false })))).status).toBe(200)
   })
 })
 

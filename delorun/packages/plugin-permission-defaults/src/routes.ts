@@ -9,10 +9,11 @@
  *
  * @module @delorun/plugin-permission-defaults/routes
  */
+import { AsyncLocalStorage } from 'node:async_hooks'
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: the ctx.connection merge and its `connection/request` event.
 import type {} from '@deepseek-ai/dsh-client-connection'
-import { admitApprovedDevice, gateByUnlock, requireComputerOrDevice, routedPathname } from '@delorun/home-auth'
+import { admitApprovedDevice, gateByClass, requireComputerOrDevice, routedPathname } from '@delorun/home-auth'
 import { removeDangerousGrant } from './store.ts'
 import { resolveDelorunHome } from '@delorun/home'
 import { z } from 'zod'
@@ -109,14 +110,16 @@ export function registerPermissionRoutes(ctx: Context): void {
     await next()
   })
   // Reading, reviewing and turning dangerous mode off only read or tighten, so any approved device may; granting a
-  // workspace full access needs an unlock. Turning dangerous mode on is not a route: it is setup and config only.
+  // workspace full access is a `face` route. Turning dangerous mode on is not a route: it is setup and config only.
   const anyDevice = admitApprovedDevice()
-  const fullAccessGate = gateByUnlock(() => ctx.get('homeAuth'), async (request) => {
+  const requesters = new AsyncLocalStorage<'device' | 'computer'>()
+  const fullAccessGate = gateByClass(() => ctx.get('homeAuth'), async (request) => {
     const body = await bodyOf(request, SetFullAccessBody)
     if (body === undefined) return refusal('INVALID_REQUEST', 'the request must be JSON with the workspace, the review id, on and confirmed')
-    return answered(() => ctx.permissionDefaults.setFullAccess(body, deviceRequests.has(request) ? 'device' : 'computer'))
-  }, { grace: false, renews: true })
+    return answered(() => ctx.permissionDefaults.setFullAccess(body, requesters.getStore() ?? 'computer'))
+  }, { row: 'route:plugin-permission-defaults/src/routes.ts#PERMISSION_ROUTES.setFullAccess', action: 'plugin-permission-defaults/set-full-access', legacy: { grace: false, renews: true } })
   const deviceRequests = new WeakSet<Request>()
+  // The gate hands its handler a copy of the request (with the grant header removed), so the device mark kept on the original request is read here and carried in async context.
   ctx.connection.fetch.register({
     path: PERMISSION_ROUTES.everywhere,
     methods: ['GET'],
@@ -165,6 +168,6 @@ export function registerPermissionRoutes(ctx: Context): void {
       deviceRequests.add(request)
       return true
     },
-    fetch: fullAccessGate.fetch,
+    fetch: request => requesters.run(deviceRequests.has(request) ? 'device' : 'computer', () => fullAccessGate.fetch(request)),
   })
 }

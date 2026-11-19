@@ -37,20 +37,21 @@ export const UPDATE_PATHS = {
 /**
  * The controls these routes are, in the Changes access table (`@delorun/plugin-changes/access`):
  *
- * - `update-check`: any paired device, unlocked or not (it reads and records the release check);
- * - `update-begin`: the computer, or a device with an unlock it entered while Phone powers is Full;
- * - `update-rollback`: the same as `update-begin`;
- * - `update-cancel`, `update-dismiss` and `stop`: the computer, or a device with an unlock it entered at either level.
+ * - `update-check`, `update-cancel` and `update-dismiss`: class `free`, any paired device with no prompt (they read, or only
+ *   take back);
+ * - `update-begin`, `update-rollback` and `stop`: class `face`, the computer, or a device with a Face ID (or PIN) grant for
+ *   exactly that call. While the Face ID flag is off, and for a device with no passkey, the unlock of today applies:
+ *   `update-begin` and `update-rollback` while Phone powers is Full, `stop` at either level.
  */
 export type UpdateControl = 'update-check' | 'update-begin' | 'update-cancel' | 'update-rollback' | 'update-dismiss' | 'stop'
 
 /** Every {@link UpdateControl}. */
 export const UPDATE_CONTROLS: readonly UpdateControl[] = ['update-check', 'update-begin', 'update-cancel', 'update-rollback', 'update-dismiss', 'stop']
 
-/** Whether a request may use a control now, and if not, what it needs: the computer, or an unlock entered on the device. */
+/** Whether a request may use a control now, and if not, what it needs: the computer, Face ID for this call, or an unlock entered on the device. */
 export type UpdateMayView =
   | { readonly ok: true }
-  | { readonly ok: false, readonly needs: 'computer' | 'unlock' }
+  | { readonly ok: false, readonly needs: 'computer' | 'unlock' | 'face' }
 
 /** Who may use what, for the request that read `state`. */
 export interface UpdateAccessView {

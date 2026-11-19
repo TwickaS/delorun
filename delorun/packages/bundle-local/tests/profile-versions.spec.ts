@@ -39,7 +39,7 @@ function routesOver(service: ProfileVersions, listener: string | undefined): Fak
   const routes = new Map<string, { fetch: (request: Request) => Promise<Response>, admitPeer?: (request: Request, peer: never) => boolean }>()
   const ctx = {
     on: (_name: string, registered: FakeConnection['hook']) => { hook = registered },
-    get: (name: string) => (name === 'homeAuth' ? { arrivalOf: () => ({ listener }), elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : undefined), pageUnlockOf: () => undefined } : undefined),
+    get: (name: string) => (name === 'homeAuth' ? { arrivalOf: () => ({ listener }), passkeysEnabled: () => false, faceGrants: () => undefined, deviceHasPasskey: () => false, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : undefined), pageUnlockOf: () => undefined } : undefined),
     connection: { fetch: { register: (route: { path: string, fetch: (request: Request) => Promise<Response>, admitPeer?: (request: Request, peer: never) => boolean }) => { routes.set(route.path, route) } } },
   }
   registerVersionRoutes(ctx as never, service)
