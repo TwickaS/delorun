@@ -217,13 +217,17 @@ export class SeatRelay {
   /**
    * Log "Allow for this run" once the gate kept the rule. The gate calls `addRunRule` after the answer is returned
    * and falls back to allow once when the lease is gone, so the log is written a macrotask later, from the rule list.
+   * The event is dropped when the turn that asked has ended by then, so it never lands after that turn's `turn/end`.
    * @param child - the seat child.
    * @param rule - the rule the question offered.
    * @param askedSeq - the question's `approval/asked` event.
    */
   private logWhenKept(child: Agent, rule: ProgramRunRule, askedSeq: SessionSeq): void {
+    const turnOf = (): SessionSeq | null | undefined => this.ctx.get('agents')?.turnBoundaryOf(child.session).openTurnStartSeq
+    const askedIn = turnOf()
     setImmediate(() => {
       try {
+        if (askedIn == null || turnOf() !== askedIn) return
         const consent: unknown = this.ctx.get('delegationConsent')
         if (!keepsRunRules(consent) || !consent.runRules(child.id).includes(rule)) return
         child.session.append('external-agent/run-allowed', { askedSeq })

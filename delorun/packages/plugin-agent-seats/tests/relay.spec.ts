@@ -480,6 +480,18 @@ describe('the log of Allow for this run', () => {
     expect(w.kept).toEqual([])
   })
 
+  it('drops the event when the turn that asked has ended before the rule is logged', async () => {
+    const w = await world()
+    w.relay.prepareChild(w.child)
+    const result = viaGate(w, question({ runRule: RULE }))
+    await settle()
+    w.answer('computer', RUN_ANSWER)
+    await expect(result).resolves.toBe('allow-run')
+    w.openTurns.delete(w.child.id)
+    await settle()
+    expect(runAllowed(w)).toEqual([])
+  })
+
   it('appends nothing for Allow once', async () => {
     const w = await world()
     w.relay.prepareChild(w.child)
