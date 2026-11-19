@@ -13,6 +13,7 @@ import { HomeAuthAuthenticator, HomeAuthService } from '@delorun/home-auth'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { claimOf, recordOf } from '../../home-auth/tests/fixtures/home.ts'
 import { DeviceStore } from '../../home-auth/src/devices.ts'
+import { answerKey } from '../../home-auth/src/grants.ts'
 import { RUN_ANSWER } from '../src/relay/index.ts'
 
 const ADDRESS = brandString<StudioAddress>('https://home.example.ts.net')
@@ -89,15 +90,22 @@ describe('the real reach guard on a seat question', () => {
     expect(() => { check(grace, 'allowed-once') }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
   })
 
-  it('accepts a for-run answer from an unlocked PIN page', async () => {
+  // Pins A483 for seats: with the page-unlock lift back in checkAnswer, a PIN page answers for this run with no grant.
+  it('refuses a for-run answer from a page that holds a PIN unlock until its own answer grant, once', async () => {
     const page = await phone(4)
     const reach = provider()['reachPeers'].get(page.id as never)
     if (reach === undefined) throw new Error('no reach Peer')
     provider()['reachPeers'].set(page.id as never, { ...reach, unlockId: 'page-1' })
     vi.spyOn(ctx.homeAuth, 'pageUnlockOf').mockImplementation(() => ({ id: 'page-1' }) as never)
-    expect(() => { check(page, RUN_ANSWER) }).not.toThrow()
-    vi.spyOn(ctx.homeAuth, 'pageUnlockOf').mockImplementation(() => undefined)
-    expect(() => { check(page, RUN_ANSWER) }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
+    const question = { ...QUESTION, agent: { id: 'seat-child' }, callId: 'call_9' }
+    const answer = (value: string): void => { provider().checkAnswer({ peer: page as never, event: 'approval/request', request: question, value }) }
+    expect(() => { answer(RUN_ANSWER) }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED', details: { action: 'external-agent' } }))
+    const grants = ctx.homeAuth.faceGrants()
+    if (grants === undefined) throw new Error('no grant store')
+    grants.mintAnswer({ deviceId: reach.deviceId, listener: reach.listener }, answerKey({ agent: 'seat-child', callId: 'call_9', grants: 'external-agent' }), RUN_ANSWER)
+    expect(() => { answer('allowed-once') }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
+    expect(() => { answer(RUN_ANSWER) }).not.toThrow()
+    expect(() => { answer(RUN_ANSWER) }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
   })
 
   it('accepts the computer\'s for-run answer', () => {

@@ -19,7 +19,7 @@ import { fakeHost } from './fake-host.ts'
 const t = makeTranslate(en)
 const call = { method: 'POST', path: '/delorun/changes/discard', body: { id: 'c1' } } as const
 const request = { action: 'changes/plugin-discard', call }
-const pinView = (phase: PinView['phase']): PinView => ({ phase, secret: 'pin', busy: false, outcome: undefined, paused: false, asked: false })
+const pinView = (phase: PinView['phase']): PinView => ({ phase, secret: 'pin' })
 
 afterEach(cleanup)
 
@@ -60,7 +60,7 @@ describe('the Face ID grant overlay', () => {
     const props = {
       t, fetch: fakeHost({}).fetch, api, browser: fakeBrowser(), settle: source.settle,
       usePending: <S,>(select: (pending: ReturnType<typeof source.hooks.pending.getSnapshot>) => S): S => select(source.hooks.pending.getSnapshot()),
-      usePin: <S,>(select: (view: PinView) => S): S => select(pinView('unlocked')),
+      usePin: <S,>(select: (view: PinView) => S): S => select(pinView('on')),
     } as FaceIdGrantOverlayProps
     const granted = source.grant(request)
     const view = render(<FaceIdGrantOverlay {...props} />)
@@ -79,7 +79,7 @@ describe('the Face ID grant overlay', () => {
       const props = {
         t, fetch: fakeHost({}).fetch, api, browser: fakeBrowser(), settle: source.settle,
         usePending: <S,>(select: (pending: ReturnType<typeof source.hooks.pending.getSnapshot>) => S): S => select(source.hooks.pending.getSnapshot()),
-        usePin: <S,>(select: (view: PinView) => S): S => select({ ...pinView('unlocked'), secret: 'passcode' }),
+        usePin: <S,>(select: (view: PinView) => S): S => select({ ...pinView('on'), secret: 'passcode' }),
       } as FaceIdGrantOverlayProps
       const granted = source.grant(request)
       render(<FaceIdGrantOverlay {...props} />)
@@ -98,7 +98,7 @@ describe('the Face ID grant overlay', () => {
     const props = {
       t, fetch: fakeHost({}).fetch, api: fakeApi(), browser: fakeBrowser(), settle: source.settle,
       usePending: <S,>(select: (pending: ReturnType<typeof source.hooks.pending.getSnapshot>) => S): S => select(source.hooks.pending.getSnapshot()),
-      usePin: <S,>(select: (view: PinView) => S): S => select(pinView('unlocked')),
+      usePin: <S,>(select: (view: PinView) => S): S => select(pinView('on')),
     } as FaceIdGrantOverlayProps
     void source.grant(request)
     const view = render(<FaceIdGrantOverlay {...props} />)

@@ -19,7 +19,7 @@ import { confirmationQueue, type ConfirmationQueue } from '../src/client/face-re
 
 const t = makeTranslate(en)
 const passkey = { credentialId: 'c1', createdAt: 0, lastUsedAt: null, synced: false }
-const pinView = (phase: PinView['phase']): PinView => ({ phase, secret: 'pin', busy: false, outcome: undefined, paused: false, asked: false })
+const pinView = (phase: PinView['phase']): PinView => ({ phase, secret: 'pin' })
 
 /** Render the step and hand back the gate it registered. */
 function card(over: { passkeys?: boolean | undefined; stateFails?: true; secret?: PinView['secret']; computer?: boolean | undefined; callId?: ToolCallId | undefined; grants?: FaceIdAnswerProps['grants']; queue?: ConfirmationQueue } = {}) {
@@ -30,7 +30,7 @@ function card(over: { passkeys?: boolean | undefined; stateFails?: true; secret?
   const props = {
     t, grants: over.grants ?? 'full-access', callId: 'callId' in over ? over.callId : 'call-7' as ToolCallId, toolName: 'claude-code',
     allow: async () => {}, answered: false, canAnswer: () => true, gateAllow, sessionId: 'chat-1', fetch: host.fetch, api, browser: fakeBrowser(), atComputer: () => over.computer ?? false,
-    usePin: <S,>(select: (view: PinView) => S): S => select({ ...pinView('unlocked'), secret: over.secret ?? 'pin' }),
+    usePin: <S,>(select: (view: PinView) => S): S => select({ ...pinView('on'), secret: over.secret ?? 'pin' }),
     ...over.queue === undefined ? {} : { queue: over.queue },
   } as FaceIdAnswerProps
   render(<FaceIdAnswerAction {...props} />)

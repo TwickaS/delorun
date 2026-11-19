@@ -16,7 +16,7 @@ English | [中文](README.zh.md)
 - [Use this bundle](#use-this-bundle)
 - [Rows](#rows)
 - [The Privacy section](#the-privacy-section)
-- [The PIN lock screen](#the-pin-lock-screen)
+- [PIN mode on a device](#pin-mode-on-a-device)
 - [The PIN mode section](#the-pin-mode-section)
 - [The consent surfaces](#the-consent-surfaces)
 - [Tests](#tests)
@@ -96,16 +96,13 @@ The same row registers the **Devices** section (`delorun-devices`, right after P
 
 Settings has a **Face ID** section (`src/client/FaceIdSection.tsx`). A phone lists its own passkeys and, behind a Face ID confirmation, every device's; the computer lists every device's passkeys, removes one or a device in one tap, and takes the code a phone shows to add a passkey (`PasskeyDevices.tsx`, `FaceIdEnrol.tsx`). After the computer approves a pairing, the pairing overlay offers **Set up Face ID** once (`FaceIdPairingOverlay.tsx`). A sensitive action opens the action sheet (`FaceIdSheet.tsx`): it asks the home for options listing every call the tap makes, hashes each call as the home does (`face-id-hash.ts`), asks the browser for the passkey and sends the grant id in `Delorun-Grant`. A cancelled or failed ceremony shows **Use PIN instead** (`FaceIdPin.tsx`), or **Approve at the computer** when no PIN is set. The routes are those of [`@delorun/home-auth`](../../docs/contracts/c14-oidc-passkeys.md#face-id-unlock).
 
-## The PIN lock screen
+## PIN mode on a device
 
-When the home has PIN mode on, a phone or other device shows a full-page lock until the person unlocks the page. The device's studio asks `GET /auth/pin/state`: with the mode on and no unlock token in the page, the `delorun-pin-lock` `shell.overlay` entry (`src/client/PinLock.tsx`, store in `src/client/pin-lock.ts`, requests in `src/client/pin-api.ts`) covers the studio with a digit keypad for a PIN (at least six digits) or a text field for a passcode. The fields use `inputmode`, `autocomplete="off"` and a font of at least 16 px, so a phone does not zoom the page, and the layout holds at 390 px. A home with the mode off, an older home (404) and the home's own computer show today's unlock dialog, unchanged.
+A device holds no PIN unlock and sees no PIN lock screen: with PIN mode on, the home refuses `POST /auth/pin/unlock` to every device with `ELEVATION_REQUIRED`, and the studio never sends it. A device confirms each sensitive action with Face ID, or on a device with no passkey with the PIN or passcode typed into the Face ID grant sheet (`src/client/FaceIdPin.tsx`), which posts `/auth/passkey/pin` and mints a grant for that one call. The studio holds no window and no unlock token.
 
-- **Unlock.** The secret is posted once and the field is cleared as the request leaves. The returned token is held only in page memory (`src/client/page-unlock-token.ts`), never in `localStorage`, `sessionStorage`, a cookie or a URL, so a reload, a new tab and a restored page start locked.
-- **Outcomes, in place.** A wrong try says how many tries are left; the fifth miss says the home signed the device out and that it needs approval again at the computer; unlocks paused home-wide say they resume when the person resumes them at the computer; a computer that cannot be reached, and an address where a PIN does not unlock, each say so.
-- **Staying unlocked.** Pointer, key and touch input sends `POST /auth/pin/touch` at most once a minute (or every half idle period when that is shorter); polls and reads never touch. A local timer locks the page at the unlock's idle end. Any `401 UNLOCK_INVALID` locks the page.
-- **Locking.** Lock now in the unlock banner ends the page's PIN unlock (`POST /auth/pin/lock`, then the token is dropped, whatever the home answers). When the state says `lockWhenHidden`, a hidden page locks; a page restored from the back-forward cache drops its token; a closing page sends a `keepalive` lock.
-
-Known debt: the state does not yet carry `lockWhenHidden`, and the home's `PIN_INVALID` answer carries tries left and the removal only in its sentence, which the page reads in `pinMissOf`; a structured field on the home's side replaces both.
+- **The state.** `src/client/pin-lock.ts` reads `GET /auth/pin/state` once at load and after each connection reset, through `src/client/pin-api.ts`, and holds only whether the mode is on and whether it takes a PIN (a digit keypad of at least six digits) or a passcode (a text field). The Face ID sheets read it to choose the keypad. A home with the mode off, an older home (404) and the home's own computer leave the state `off`.
+- **Lock now.** The Devices section's Unlock opens the code dialog for the device's elevation from the computer, and Lock now ends that elevation; it never touches a PIN.
+- **Denial tests.** `tests/no-pin-window.client.spec.tsx` fails if the lock screen or a `/auth/pin/unlock` call returns.
 
 ## The PIN mode section
 

@@ -29,7 +29,7 @@ export const GRANT_HEADER = 'delorun-grant'
 /** What a gate reads of the home. */
 export type GrantGateHome = DangerousModeHome & Pick<HomeAuthService, 'faceGrants' | 'deviceHasPasskey'>
 
-/** The unlock a `face` route keeps for a device with no passkey: the options of `gateByUnlock`. */
+/** The unlock a `face` route reads only before the home service starts, when no unlock exists either: the options of `gateByUnlock`. */
 export interface LegacyUnlock {
   readonly grace?: boolean
   readonly renews: boolean
@@ -44,7 +44,7 @@ export interface GateOptions {
    * describes; the route's own name in the form `<package>/<route>` (for example `plugin-packs/add`).
    */
   readonly action: string
-  /** The unlock a `face` route keeps before the home service starts and for a device with no passkey. */
+  /** The unlock a `face` route reads before the home service starts; once it starts, a grant alone (Face ID, or the PIN on a device with no passkey) admits a call. */
   readonly legacy: LegacyUnlock
   /**
    * For a route that opens or reads inside a terminal or picker: the feature, how the call names the one it concerns, and

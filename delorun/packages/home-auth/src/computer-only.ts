@@ -122,7 +122,8 @@ export function admitUnlockedDevice(homeAuth: () => DangerousModeHome | undefine
 
 /**
  * The `admitPeer` of a route that adds or tests model keys: it admits a reach device (an approved device holds a
- * session; no unlock is needed) and, while PIN mode is on, only the Peer of an unlocked page. The owner's Peer never
+ * session; no unlock is needed) while PIN mode is off. While it is on, it admits only the Peer of a running page unlock,
+ * and no route mints one (A483), so no device is admitted. The owner's Peer never
  * reaches `admitPeer`.
  * @param homeAuth - a way to the mounted `homeAuth` service, read when a request arrives.
  * @returns the function for `ConnectionFetchRoute.admitPeer`.

@@ -23,7 +23,7 @@ function pinHome(pageUnlocked: boolean) {
   const facts: ReachAccessFacts = {
     admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere',
     elevationOf: () => undefined, pageUnlockOf: id => (pageUnlocked && id === 'page-1' ? unlock : undefined), unlockModeEnabled: () => true,
-    keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
+    keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined,
     computerOnlySwitches: () => [], protectedEntryIds: () => new Set([ROW]), computerOnlyEntryIds: () => new Set([ROW]),
     defaultPermission: () => undefined, dangerousMode: () => false,
   }

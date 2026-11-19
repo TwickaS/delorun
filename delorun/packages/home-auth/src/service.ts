@@ -181,9 +181,6 @@ export const REACH_SWITCH: ComputerOnlySwitch = { ns: 'delorun-reach', field: EV
 /** The refusal of a device's settings write whose dangerous-mode record could not be saved. */
 const RECORD_REFUSAL = 'loopback-required: the home could not record this change to be set back when dangerous mode ends; make it at the home\'s computer'
 
-/** The refusal of a PIN page's settings write whose record could not be saved. */
-const PIN_RECORD_REFUSAL = 'loopback-required: the home could not record this change to be set back when PIN mode turns off; make it at the home\'s computer'
-
 /** The `homeAuth` service. */
 export class HomeAuthService extends Service {
   static inject = ['webServer']
@@ -562,21 +559,6 @@ export class HomeAuthService extends Service {
     }
   }
 
-  /**
-   * Record the settings an unlocked PIN page is about to loosen, with the values they have now.
-   * @param lifts - the fields and the values the call sets.
-   * @returns undefined once the record is saved to disk, or the refusal the page's write meets when it cannot be.
-   */
-  recordPinLifts(lifts: readonly SettingsLift[]): string | undefined {
-    if (this.pinLifts === undefined) return PIN_RECORD_REFUSAL
-    try {
-      this.pinLifts.record(lifts, (ns, field) => this.settingsFields().read(ns, field))
-      return undefined
-    } catch (error) {
-      this.ctx.logger.warn(`home-auth: the record of PIN mode settings could not be saved, so a page's settings write was refused: ${error instanceof Error ? error.message : String(error)}`)
-      return PIN_RECORD_REFUSAL
-    }
-  }
 
   /**
    * Write back, through the settings service, every setting a PIN page loosened once PIN mode is off, except one the

@@ -67,11 +67,10 @@ describe('apply', () => {
   })
 
   it('injects the page\'s reach service, when there is one, into the approval card', () => {
-    const service = { get: () => ({ kind: 'computer' }), subscribe: () => () => undefined, openUnlock: () => undefined }
+    const service = { get: () => ({ kind: 'computer' }), subscribe: () => () => undefined }
     const card = (reach?: unknown) => mount(reach).registered.find(entry => entry.name === 'conversation.composer')
     expect(card(service)?.inject?.()['reach']).toBe(service)
     expect(card()?.inject?.()['reach']).toBeUndefined()
-    expect(typeof card()?.inject?.()['clock']).toBe('function')
     expect(card()?.select).toBeTypeOf('function')
   })
 })

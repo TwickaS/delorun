@@ -16,7 +16,7 @@ import type { ProgramApprovalAnswer, ProgramApprovalRequest, ProgramRunRule, Sea
 import { programSays } from './copy.ts'
 import { RunScope, RUN_SCOPE } from './run-scope.ts'
 
-/** The marker every relayed question carries, so only the computer or an unlocked page may allow it (D1). */
+/** The marker every relayed question carries, so only the computer, or a device with an answer grant for it, may allow it (D1). */
 export const EXTERNAL_AGENT_GRANT = 'external-agent'
 
 /** What the relay needs from the seat lane. */

@@ -1,7 +1,8 @@
 /**
- * PIN mode in the home (C14, "PIN mode"): the computer-only routes that set the PIN, the page unlock a PIN mints on the
- * Tailscale private listener, its token binding, its idle and absolute ends, the wrong tries that remove a device or
- * pause unlocks, and the guarantee that the PIN reaches no log, error or file in the clear.
+ * PIN mode in the home (C14, "PIN mode"): the computer-only routes that set the PIN, the refusal of a device's page
+ * unlock (A483: a paired device holds no PIN window and confirms each action with a one-action grant), the wrong tries
+ * on the PIN grant route that remove a device or pause PIN checks, and the guarantee that the PIN reaches no log, error
+ * or file in the clear.
  *
  * A request under `?reach` is stamped with the Tailscale private listener, one under `?funnel` with the Funnel
  * listener, and every other request arrives on the socket the fixture names as the loopback listener's.
@@ -24,6 +25,7 @@ import { DeviceStore } from '../src/devices.ts'
 import type { ElevationChange, ElevationRecord } from '../src/elevation.ts'
 import { PinModeStore } from '../src/pin-mode.ts'
 import type { PinEvent } from '../src/pin-unlocks.ts'
+import { passkeyPinHandler, PASSKEY_PATHS } from '../src/passkey-routes.ts'
 import { PIN_PATHS, pinLockHandler, pinModeHandler, pinOffHandler, pinOptionsHandler, pinResumeHandler, pinSetHandler, pinStateHandler, pinTouchHandler, pinUnlockHandler } from '../src/pin-routes.ts'
 import type { RouteHandler } from '../src/routes.ts'
 import { claimOf, homeFixture, recordOf, STUDIO_COOKIE, testCredential, type Home } from './fixtures/home.ts'
@@ -35,6 +37,9 @@ const PIN = '482916'
 /** Each secret comparison is one scrypt derivation at the production cost; these specs make a dozen or more, so they outlast the default 10 s under load. */
 const SCRYPT_TIMEOUT_MS = 60_000
 const MINUTE = 60_000
+/** The one action the grant tests confirm, with the lowercase hex SHA-256 of its arguments the grant route requires. */
+const ACTION = 'pluginManager/installBundle'
+const HASH = 'a'.repeat(64)
 
 interface Reply {
   readonly status: number
@@ -97,6 +102,7 @@ beforeEach(async () => {
     [PIN_PATHS.off]: pinOffHandler(home.auth, testCredential),
     [PIN_PATHS.options]: pinOptionsHandler(home.auth, testCredential),
     [PIN_PATHS.resume]: pinResumeHandler(home.auth, testCredential),
+    [PASSKEY_PATHS.pin]: passkeyPinHandler(home.auth),
   }
   const server = createServer((request: IncomingMessage, response: ServerResponse) => {
     const url = new URL(request.url ?? '/', 'http://server.invalid')
@@ -170,7 +176,7 @@ async function turnOn(secret: string = PIN): Promise<void> {
 }
 
 /**
- * Unlock the first device's page.
+ * Ask the unlock route for the first device's page, which a device never gets.
  * @param secret - the PIN to send.
  * @param cookie - the session token to send, the first device's by default.
  * @returns the reply.
@@ -179,26 +185,53 @@ function unlock(secret: string = PIN, cookie: string = token): Promise<Reply> {
   return send('POST', `${PIN_PATHS.unlock}?reach`, { secret }, { cookie: `${REACH_SESSION_COOKIE}=${cookie}` })
 }
 
+/**
+ * Confirm one action of the first device with the PIN: the device's one-action grant.
+ * @param secret - the PIN to send.
+ * @param cookie - the session token to send, the first device's by default.
+ * @param suffix - `reach` for the private listener, `funnel` for the Funnel listener.
+ * @returns the reply; a 200 carries the grant id.
+ */
+function grant(secret: string = PIN, cookie: string = token, suffix: 'reach' | 'funnel' = 'reach'): Promise<Reply> {
+  return send('POST', `${PASSKEY_PATHS.pin}?${suffix}`, { secret, actions: [{ action: ACTION, hash: HASH }] }, { cookie: `${REACH_SESSION_COOKIE}=${cookie}` })
+}
+
+/**
+ * Whether a device holds a live grant for {@link ACTION}.
+ * @param deviceId - the device, the first by default.
+ * @param listener - the listener, the private one by default.
+ * @returns whether a grant covers the action.
+ */
+function granted(deviceId: DeviceId = first, listener: ReachListenerId = PRIVATE): boolean {
+  return home.auth.grants.has({ deviceId, listener }, ACTION, HASH)
+}
+
 describe('with PIN mode off', () => {
-  it('answers an unlock as off and mints no elevation', async () => {
-    // Pins the mode check: an unlock on a home that never turned the mode on succeeds nowhere.
-    expect(await unlock()).toMatchObject({ status: 409, body: { error: 'PIN_MODE_OFF' } })
+  it('refuses an unlock as an elevation and mints no elevation, and answers a grant as off', async () => {
+    // Pins the unlock refusal: removing it lets a home that never turned the mode on answer the unlock route with anything but ELEVATION_REQUIRED.
+    expect(await unlock()).toMatchObject({ status: 403, body: { error: 'ELEVATION_REQUIRED' } })
     expect((await send('GET', `${PIN_PATHS.state}?reach`)).body).toEqual({ kind: 'off' })
     expect(running()).toBeUndefined()
     expect(home.auth.elevationsAtComputer().running).toEqual([])
-    // A header the old home never reads changes nothing.
+    // Pins the mode check on the grant route: a PIN grants nothing while the mode is off.
+    expect(await grant()).toMatchObject({ status: 409, body: { error: 'PIN_MODE_OFF' } })
+    expect(granted()).toBe(false)
+    // A header the home never reads changes nothing.
     expect((await send('GET', `${PIN_PATHS.state}?reach`, undefined, { 'delorun-unlock': 'anything' })).body).toEqual({ kind: 'off' })
   })
 
   it('is off again after the computer turns it off', async () => {
     await turnOn()
-    const unlocked = await unlock()
-    expect(unlocked.status).toBe(200)
+    const confirmed = await grant()
+    expect(confirmed).toMatchObject({ status: 200, body: { grantId: expect.any(String) } })
+    expect(granted()).toBe(true)
     expect((await send('POST', PIN_PATHS.off, {})).body).toEqual({ enabled: false })
-    // Pins the end at mode off: the unlock goes with the mode.
+    // Pins the mode check on the grant route: the PIN goes with the mode and mints no new grant.
+    expect(await grant()).toMatchObject({ status: 409, body: { error: 'PIN_MODE_OFF' } })
+    expect(home.auth.pin.summary().enabled).toBe(false)
+    expect((await send('GET', `${PIN_PATHS.state}?reach`)).body).toEqual({ kind: 'off' })
     expect(running()).toBeUndefined()
-    expect(changes.at(-1)).toMatchObject({ kind: 'ended', reason: 'pin-mode-off' })
-    expect(await unlock()).toMatchObject({ status: 409, body: { error: 'PIN_MODE_OFF' } })
+    expect(await unlock()).toMatchObject({ status: 403, body: { error: 'ELEVATION_REQUIRED' } })
   })
 })
 
@@ -206,42 +239,41 @@ describe('changing the options without the secret', () => {
   /** The bytes of the record's hash fields, which an options change must leave alone. */
   const hashOf = async (): Promise<string> => JSON.stringify((JSON.parse(await readFile(join(home.directory, HOME_AUTH_FILES.pinMode), 'utf8')) as { hash: unknown }).hash)
 
-  it('changes the idle minutes and lock-when-hidden on the computer, keeps the hash and the unlocks', async () => {
+  it('changes the idle minutes and lock-when-hidden on the computer, keeps the hash and the grants', async () => {
     await turnOn()
     const before = await hashOf()
-    const unlocked = await unlock()
-    expect(unlocked.status).toBe(200)
+    expect((await grant()).status).toBe(200)
     expect((await send('POST', PIN_PATHS.options, { idleMinutes: 30, lockWhenHidden: true })).body).toEqual({ idleMinutes: 30, lockWhenHidden: true })
     expect(home.auth.pin.summary()).toMatchObject({ enabled: true, idleMinutes: 30, lockWhenHidden: true })
     expect(await hashOf()).toBe(before)
-    // Pins that an options change is no secret change: the page's unlock stays.
-    expect(changes.some(change => change.kind === 'ended')).toBe(false)
+    // Pins that an options change is no secret change: the device's grant stays.
+    expect(granted()).toBe(true)
     // One field alone leaves the other as it was.
     expect((await send('POST', PIN_PATHS.options, { lockWhenHidden: false })).body).toEqual({ idleMinutes: 30, lockWhenHidden: false })
-    // The change is on disk and the PIN still opens.
+    // The change is on disk and the PIN still confirms.
     const stored = JSON.parse(await readFile(join(home.directory, HOME_AUTH_FILES.pinMode), 'utf8')) as { idleMinutes: number; lockWhenHidden: boolean }
     expect(stored).toMatchObject({ idleMinutes: 30, lockWhenHidden: false })
-    expect((await unlock()).status).toBe(200)
+    expect((await grant()).status).toBe(200)
   })
 
-  it('ends the idling of a running unlock within a shorter idle time, and leaves a shorter one alone', async () => {
+  it('leaves a device no window for the idle minutes to shorten', async () => {
     await turnOn()
     await send('POST', PIN_PATHS.options, { idleMinutes: 60 })
-    expect((await unlock()).status).toBe(200)
-    expect(running()?.endsAt).toBe(home.clock.now + 60 * MINUTE)
+    // Pins the unlock refusal: removing it mints a window that the idle minutes would govern.
+    expect(await unlock()).toMatchObject({ status: 403, body: { error: 'ELEVATION_REQUIRED' } })
     await send('POST', PIN_PATHS.options, { idleMinutes: 1 })
-    // Pins the clamp: cutting 60 to 1 ends an idle page within a minute, not within the hour.
-    expect(running()?.endsAt).toBe(home.clock.now + MINUTE)
-    // A longer period does not stretch an unlock that already ends sooner.
-    await send('POST', PIN_PATHS.options, { idleMinutes: 30 })
-    expect(running()?.endsAt).toBe(home.clock.now + MINUTE)
+    expect(await unlock()).toMatchObject({ status: 403, body: { error: 'ELEVATION_REQUIRED' } })
+    expect(running()).toBeUndefined()
+    expect(home.auth.elevationsAtComputer().running).toEqual([])
+    expect((await send('GET', `${PIN_PATHS.state}?reach`)).body).toMatchObject({ kind: 'on', idleMinutes: 1, unlock: null })
   })
 
   it('is the computer\'s alone', async () => {
     await turnOn()
     const before = JSON.stringify(home.auth.pin.summary())
     expect(await send('POST', `${PIN_PATHS.options}?reach`, { idleMinutes: 5 })).toMatchObject({ status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
-    expect((await unlock()).status).toBe(200)
+    expect((await grant()).status).toBe(200)
+    // Pins the computer-only rule: a device that confirmed with the PIN still changes no option.
     expect(await send('POST', `${PIN_PATHS.options}?reach`, { idleMinutes: 5 })).toMatchObject({ status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
     expect(JSON.stringify(home.auth.pin.summary())).toBe(before)
   })
@@ -273,15 +305,15 @@ describe('the computer\'s view of the mode', () => {
 
 describe('setting the PIN', () => {
   it('is the computer\'s alone', async () => {
-    // Pins the computer-only rule: a device, unlocked or not, never sets, clears or resumes in version 1.
+    // Pins the computer-only rule: a device, confirmed or not, never sets, clears or resumes in version 1.
     for (const path of [PIN_PATHS.set, PIN_PATHS.off, PIN_PATHS.resume]) {
       expect(await send('POST', `${path}?reach`, { secret: PIN })).toMatchObject({ status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
     }
     expect(await send('GET', `${PIN_PATHS.mode}?reach`)).toMatchObject({ status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
     expect(home.auth.pin.summary().enabled).toBe(false)
     await turnOn()
-    // The same refusal while the mode is on and the device is unlocked.
-    expect((await unlock()).status).toBe(200)
+    // The same refusal while the mode is on and the device holds a grant.
+    expect((await grant()).status).toBe(200)
     expect(await send('POST', `${PIN_PATHS.set}?reach`, { secret: '739150' })).toMatchObject({ status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
     expect(await send('POST', `${PIN_PATHS.off}?reach`, {})).toMatchObject({ status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
     expect(home.auth.pin.summary().enabled).toBe(true)
@@ -302,8 +334,9 @@ describe('setting the PIN', () => {
   it('keeps the PIN out of the files, the logs and every answer', async () => {
     const passcode = 'correct horse battery'
     await turnOn(passcode)
-    expect((await unlock('wrong horse battery')).status).toBe(403)
-    expect((await unlock(passcode)).status).toBe(200)
+    expect((await grant('wrong horse battery')).status).toBe(403)
+    expect((await unlock(passcode)).status).toBe(403)
+    expect((await grant(passcode)).status).toBe(200)
     const files = await Promise.all(['pin-mode.json', 'pin-attempts.json'].map(name => readFile(join(home.directory, name), 'utf8')))
     const record = JSON.parse(files[0] ?? '') as { hash: { alg: string; salt: string; dk: string } }
     // Pins the hashing: the file holds a salted scrypt hash and no PIN.
@@ -315,159 +348,143 @@ describe('setting the PIN', () => {
   })
 })
 
-describe('a page unlock', () => {
+describe('a device with no page unlock window', () => {
   beforeEach(async () => { await turnOn() })
 
-  it('admits the device\'s elevated actions and reports its state to the page that holds the token', async () => {
-    const reply = await unlock()
-    expect(reply).toMatchObject({ status: 200, body: { token: expect.any(String), unlockId: expect.any(String) } })
-    expect(running()?.id).toBe(reply.body.unlockId)
-    // Pins the once-only token: the home keeps a digest, so no read gives it back.
-    const state = await send('GET', `${PIN_PATHS.state}?reach`, undefined, { 'delorun-unlock': reply.body.token as string })
-    expect(state.body).toMatchObject({ kind: 'on', secret: 'pin', paused: false, lockWhenHidden: false, unlock: { unlockId: reply.body.unlockId } })
-    expect(JSON.stringify(state.body)).not.toContain(reply.body.token as string)
-    // A page without the token sees the mode and no unlock.
+  it('refuses every unlock, right PIN, wrong PIN or no body, and mints, answers and counts nothing', async () => {
+    const asDevice = { cookie: `${REACH_SESSION_COOKIE}=${token}` }
+    // Pins the unlock refusal: removing it makes the route read the secret, answer a token or count a try.
+    for (const body of [{ secret: PIN }, { secret: '135790' }, undefined] as const) {
+      const reply = await send('POST', `${PIN_PATHS.unlock}?reach`, body, asDevice)
+      expect(reply, JSON.stringify(body)).toMatchObject({ status: 403, body: { error: 'ELEVATION_REQUIRED' } })
+      for (const word of ['token', 'unlockId', 'endsAt', 'idleEndsAt', 'triesLeft', 'removed']) expect(reply.text, word).not.toContain(word)
+      expect(reply.text).not.toContain('135790')
+    }
+    expect(running()).toBeUndefined()
+    expect(home.auth.elevationsAtComputer().running).toEqual([])
     expect((await send('GET', `${PIN_PATHS.state}?reach`)).body).toMatchObject({ kind: 'on', unlock: null })
-  })
+    // Six wrong unlocks would remove the device on its fifth if the route counted them.
+    for (let miss = 0; miss < 6; miss += 1) expect((await unlock('135790')).status).toBe(403)
+    expect((await home.auth.devices()).devices.map(device => device.id)).toContain(first)
+    expect(home.auth.admitToken(token, PRIVATE)).toMatchObject({ kind: 'admitted' })
+    expect(events.filter(event => event.kind !== 'set')).toEqual([])
+    // The tries are untouched: the first wrong grant has four left, and the right PIN then confirms.
+    const wrong = await grant('135790')
+    expect(wrong.body).toMatchObject({ error: 'PIN_INVALID', triesLeft: 4, removed: false })
+    expect(granted()).toBe(false)
+    expect((await grant()).status).toBe(200)
+    expect(granted()).toBe(true)
+  }, SCRYPT_TIMEOUT_MS)
 
-  it('is refused on the Funnel listener and the loopback listener', async () => {
+  it('is refused on the Funnel listener and the loopback listener, for the unlock and for the grant', async () => {
     const funnelToken = await signIn(first, FUNNEL)
-    // Pins the address rule: version 1 unlocks with a PIN on the private address only.
-    expect(await send('POST', `${PIN_PATHS.unlock}?funnel`, { secret: PIN }, { cookie: `${REACH_SESSION_COOKIE}=${funnelToken}` })).toMatchObject({ status: 403, body: { error: 'PIN_NOT_ALLOWED_ON_ADDRESS' } })
+    const asFunnel = { cookie: `${REACH_SESSION_COOKIE}=${funnelToken}` }
+    // Pins the address rule: version 1 confirms with a PIN on the private address only.
+    expect(await send('POST', `${PIN_PATHS.unlock}?funnel`, { secret: PIN }, asFunnel)).toMatchObject({ status: 403, body: { error: 'ELEVATION_REQUIRED' } })
+    expect(await grant(PIN, funnelToken, 'funnel')).toMatchObject({ status: 403, body: { error: 'PIN_NOT_ALLOWED_ON_ADDRESS' } })
     expect(await send('POST', PIN_PATHS.unlock, { secret: PIN })).toMatchObject({ status: 421, body: { error: 'HOST_MISMATCH' } })
+    expect(await send('POST', PASSKEY_PATHS.pin, { secret: PIN, actions: [{ action: ACTION, hash: HASH }] })).toMatchObject({ status: 421, body: { error: 'HOST_MISMATCH' } })
+    expect(granted(first, FUNNEL)).toBe(false)
+    expect(granted()).toBe(false)
     expect(running(FUNNEL)).toBeUndefined()
     expect(running()).toBeUndefined()
   })
 
-  it('answers a wrong secret with the tries left and a foreign page\'s POST with a refusal', async () => {
-    const wrong = await unlock('135790')
+  it('answers a wrong secret on the grant with the tries left, and a foreign page\'s POST with a refusal', async () => {
+    const wrong = await grant('135790')
     expect(wrong).toMatchObject({ status: 403, body: { error: 'PIN_INVALID' } })
     expect(wrong.text).toContain('4 tries left')
     // Pins the structured fields a page reads instead of the sentence.
     expect(wrong.body).toMatchObject({ triesLeft: 4, removed: false })
     expect(wrong.text).not.toContain('135790')
-    // Pins the origin fence on the unlock.
-    expect(await send('POST', `${PIN_PATHS.unlock}?reach`, { secret: PIN }, { 'sec-fetch-site': 'cross-site' })).toMatchObject({ status: 403, body: { error: 'ORIGIN_MISMATCH' } })
+    // Pins the origin fence on the grant route and on the unlock route.
+    const foreign = { 'sec-fetch-site': 'cross-site' }
+    expect(await send('POST', `${PASSKEY_PATHS.pin}?reach`, { secret: PIN, actions: [{ action: ACTION, hash: HASH }] }, foreign)).toMatchObject({ status: 403, body: { error: 'ORIGIN_MISMATCH' } })
+    expect(await send('POST', `${PIN_PATHS.unlock}?reach`, { secret: PIN }, foreign)).toMatchObject({ status: 403, body: { error: 'ORIGIN_MISMATCH' } })
+    expect(granted()).toBe(false)
     expect(running()).toBeUndefined()
   })
 
-  it('gives no unlock window to a device that holds a passkey and keeps it for one without', async () => {
-    await turnOn()
+  it('gives no unlock window to a device with a passkey or without one, and a grant to both', async () => {
     await home.auth.passkeyStore.add({
       credentialId: 'cred-1', publicKey: 'AAAA', counter: 0, backupEligible: false, backupState: false, transports: [], createdAt: 1, lastUsedAt: null,
       address: ADDRESS, rpId: '127.0.0.1', deviceId: first,
     })
-    // Pins the window rule (Extension 3, D3): the page unlock is for a device with no passkey; a passkey device uses one-action grants.
-    expect(await unlock()).toMatchObject({ status: 403, body: { error: 'ELEVATION_REQUIRED' } })
-    expect(running()).toBeUndefined()
     const other = await addDevice(2)
-    expect((await unlock(PIN, other.token)).status).toBe(200)
+    // Pins the window rule (A483): removing the unlock refusal gives the device without a passkey the page window it had before.
+    expect(await unlock()).toMatchObject({ status: 403, body: { error: 'ELEVATION_REQUIRED' } })
+    expect(await unlock(PIN, other.token)).toMatchObject({ status: 403, body: { error: 'ELEVATION_REQUIRED' } })
+    expect(running()).toBeUndefined()
+    expect(home.auth.elevationsAtComputer().running).toEqual([])
+    expect((await grant()).status).toBe(200)
+    expect((await grant(PIN, other.token)).status).toBe(200)
+    expect(granted(first)).toBe(true)
+    expect(granted(other.deviceId)).toBe(true)
   })
 
-  it('refuses a token from another device, another session or another listener, and ends the unlock', async () => {
+  it('admits nothing on a forged Delorun-Unlock header from any device, session or listener, and reports no window', async () => {
     const other = await addDevice(2)
     const sameDeviceElsewhere = await signIn(first)
     const funnelSession = await signIn(first, FUNNEL)
-    for (const [label, cookie, suffix] of [['device', other.token, 'reach'], ['session', sameDeviceElsewhere, 'reach'], ['listener', funnelSession, 'funnel']] as const) {
-      const unlocked = await unlock()
-      const header = unlocked.body.token as string
-      expect(running(), label).toBeDefined()
-      // Pins the binding: the digest names its device, listener and session, and a mismatch burns the unlock.
-      const replay = await send('POST', `${PIN_PATHS.touch}?${suffix}`, undefined, { cookie: `${REACH_SESSION_COOKIE}=${cookie}`, 'delorun-unlock': header })
-      expect(replay, label).toMatchObject({ status: 401, body: { error: 'UNLOCK_INVALID' } })
-      expect(running(), label).toBeUndefined()
-      const burnt = await send('POST', `${PIN_PATHS.touch}?reach`, undefined, { 'delorun-unlock': header })
-      expect(burnt, label).toMatchObject({ status: 401, body: { error: 'UNLOCK_INVALID' } })
-    }
-    expect(changes.filter(change => change.kind === 'ended' && change.reason === 'token-refused')).toHaveLength(3)
-  })
-
-  it('follows a session roll both ways during the grace', async () => {
-    const HOUR = 60 * MINUTE
-    const rollable = async (): Promise<{ readonly oldToken: string; readonly newToken: string }> => {
-      const oldToken = (await home.auth.openSession({ deviceId: first, listener: PRIVATE, address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: 72 * HOUR })).token
-      for (const hours of [11, 11, 2]) {
-        home.clock.advance(hours * HOUR)
-        if (hours === 11) home.auth.admitToken(oldToken, PRIVATE)
+    expect((await grant()).status).toBe(200)
+    for (const [label, cookie, suffix] of [['device', other.token, 'reach'], ['session', sameDeviceElsewhere, 'reach'], ['listener', funnelSession, 'funnel'], ['first device', token, 'reach']] as const) {
+      for (const forged of ['unknown-token', 'A'.repeat(43), 'a'.repeat(64)]) {
+        const headers = { cookie: `${REACH_SESSION_COOKIE}=${cookie}`, 'delorun-unlock': forged }
+        // Pins the header check: a touch or lock that finds no unlock of the token refuses and ends nothing, whoever sends it.
+        expect(await send('POST', `${PIN_PATHS.touch}?${suffix}`, undefined, headers), label).toMatchObject({ status: 401, body: { error: 'UNLOCK_INVALID' } })
+        expect(await send('POST', `${PIN_PATHS.lock}?${suffix}`, undefined, headers), label).toMatchObject({ status: 401, body: { error: 'UNLOCK_INVALID' } })
       }
-      const rolled = home.auth.admitToken(oldToken, PRIVATE, { roll: true })
-      if (rolled.kind !== 'admitted' || rolled.rolled === undefined) throw new Error('the session did not roll')
-      return { oldToken, newToken: rolled.rolled.token }
     }
-    const touch = (cookie: string, header: string): Promise<Reply> =>
-      send('POST', `${PIN_PATHS.touch}?reach`, undefined, { cookie: `${REACH_SESSION_COOKIE}=${cookie}`, 'delorun-unlock': header })
-    // Unlocked with the old cookie in the grace: the new cookie continues the session and keeps the unlock.
-    const { oldToken, newToken } = await rollable()
-    const header = (await unlock(PIN, oldToken)).body.token as string
-    // Pins the successor mapping in `mint`: bound to the raw old id, the new cookie would burn the unlock.
-    expect(await touch(newToken, header)).toMatchObject({ status: 200 })
-    expect(running()).toBeDefined()
-    expect(await touch(oldToken, header)).toMatchObject({ status: 200 })
-    // Unlocked with the new cookie: the old cookie in the grace still carries it.
-    const again = await rollable()
-    const second = (await unlock(PIN, again.newToken)).body.token as string
-    expect(await touch(again.oldToken, second)).toMatchObject({ status: 200 })
-    expect(await touch(again.newToken, second)).toMatchObject({ status: 200 })
-  })
-
-  it('reads the token from the header only', async () => {
-    const unlocked = await unlock()
-    const header = unlocked.body.token as string
-    // Pins the header-only rule: a query or body token is no token.
-    expect(await send('POST', `${PIN_PATHS.touch}?reach&token=${header}`, { token: header })).toMatchObject({ status: 401, body: { error: 'UNLOCK_INVALID' } })
-    expect(await send('POST', `${PIN_PATHS.touch}?reach`, undefined, { 'delorun-unlock': 'unknown-token' })).toMatchObject({ status: 401, body: { error: 'UNLOCK_INVALID' } })
-    expect(running()).toBeDefined()
-  })
-
-  it('locks on the lock route', async () => {
-    const header = (await unlock()).body.token as string
-    expect(await send('POST', `${PIN_PATHS.lock}?reach`, undefined, { 'delorun-unlock': header })).toMatchObject({ status: 200, body: { locked: true } })
-    // Pins the server-side end: the lock button ends the unlock, not only the page's copy of the token.
+    // A token in the query or the body, or no header at all, is no token.
+    expect(await send('POST', `${PIN_PATHS.touch}?reach&token=${'a'.repeat(43)}`, { token: 'a'.repeat(43) })).toMatchObject({ status: 401, body: { error: 'UNLOCK_INVALID' } })
+    expect(await send('POST', `${PIN_PATHS.lock}?reach`)).toMatchObject({ status: 401, body: { error: 'UNLOCK_INVALID' } })
+    // Pins the state: a page that sends a token and holds a grant still sees no unlock, idle end or cap.
+    const state = await send('GET', `${PIN_PATHS.state}?reach`, undefined, { 'delorun-unlock': 'a'.repeat(43) })
+    expect(state.body).toMatchObject({ kind: 'on', secret: 'pin', paused: false, lockWhenHidden: false, unlock: null })
+    expect(state.text).not.toContain('endsAt')
     expect(running()).toBeUndefined()
-    expect(await send('POST', `${PIN_PATHS.touch}?reach`, undefined, { 'delorun-unlock': header })).toMatchObject({ status: 401 })
+    expect(granted()).toBe(true)
   })
 
-  it('ends after the idle minutes, and activity moves the end forward', async () => {
-    const header = (await unlock()).body.token as string
-    home.clock.advance(10 * MINUTE)
-    expect(await send('POST', `${PIN_PATHS.touch}?reach`, undefined, { 'delorun-unlock': header })).toMatchObject({ status: 200 })
-    home.clock.advance(10 * MINUTE)
-    // Pins the touch: 20 minutes after the unlock, 10 after the touch, it stands.
-    expect(running()).toBeDefined()
-    // A poll that carries the token is not activity: only a touch moves the idle end.
-    for (let poll = 0; poll < PIN_MODE_LIMITS.defaultIdleMinutes; poll += 1) {
-      home.clock.advance(MINUTE)
-      await send('GET', `${PIN_PATHS.state}?reach`, undefined, { 'delorun-unlock': header })
+  it('opens no window across a session roll in the grace, on the old cookie or the new one', async () => {
+    const HOUR = 60 * MINUTE
+    const oldToken = (await home.auth.openSession({ deviceId: first, listener: PRIVATE, address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: 72 * HOUR })).token
+    for (const hours of [11, 11, 2]) {
+      home.clock.advance(hours * HOUR)
+      if (hours === 11) home.auth.admitToken(oldToken, PRIVATE)
     }
-    home.clock.advance(MINUTE)
-    // Pins the idle end.
-    expect(running()).toBeUndefined()
-    expect(changes.at(-1)).toMatchObject({ kind: 'ended', reason: 'expired' })
-  })
-
-  it('ends at the absolute cap however active the page is', async () => {
-    const unlocked = await unlock()
-    const header = unlocked.body.token as string
-    const asker = { deviceId: first, listener: PRIVATE, sessionId: running()?.sessionId ?? '' }
-    let elapsed = 0
-    while (elapsed + 10 * MINUTE < PIN_MODE_LIMITS.absoluteCapMs) {
-      home.clock.advance(10 * MINUTE)
-      elapsed += 10 * MINUTE
-      home.auth.pin.touch(header, asker)
+    const rolled = home.auth.admitToken(oldToken, PRIVATE, { roll: true })
+    if (rolled.kind !== 'admitted' || rolled.rolled === undefined) throw new Error('the session did not roll')
+    // Pins the unlock refusal on both cookies of a rolled session: no id mapping can bind a window that is never minted.
+    for (const cookie of [oldToken, rolled.rolled.token]) {
+      expect(await unlock(PIN, cookie)).toMatchObject({ status: 403, body: { error: 'ELEVATION_REQUIRED' } })
+      expect(await send('POST', `${PIN_PATHS.touch}?reach`, undefined, { cookie: `${REACH_SESSION_COOKIE}=${cookie}`, 'delorun-unlock': 'a'.repeat(43) })).toMatchObject({ status: 401, body: { error: 'UNLOCK_INVALID' } })
     }
-    expect(running()).toBeDefined()
-    home.clock.advance(PIN_MODE_LIMITS.absoluteCapMs - elapsed + 1)
-    // Pins the cap: touching never pushes the end past twelve hours from the unlock.
     expect(running()).toBeUndefined()
   })
 
-  it('ends when the PIN changes, and when the device\'s session ends', async () => {
-    await unlock()
+  it('opens no window at any age: no idle end or absolute cap can come', async () => {
+    // Pins the unlock refusal over time: removing it lets a window start that the idle minutes and the twelve-hour cap would then end.
+    expect(await unlock()).toMatchObject({ status: 403, body: { error: 'ELEVATION_REQUIRED' } })
+    home.clock.advance(PIN_MODE_LIMITS.defaultIdleMinutes * MINUTE - 1)
+    expect((await send('GET', `${PIN_PATHS.state}?reach`, undefined, { 'delorun-unlock': 'a'.repeat(43) })).body).toMatchObject({ kind: 'on', unlock: null })
+    home.clock.advance(PIN_MODE_LIMITS.absoluteCapMs)
+    expect(running()).toBeUndefined()
+    expect(changes.filter(change => change.kind === 'started')).toEqual([])
+    expect(changes.filter(change => change.kind === 'ended')).toEqual([])
+  })
+
+  it('refuses the old PIN once the computer changes it, and ends the grants of a removed device', async () => {
+    expect((await grant()).status).toBe(200)
     expect((await send('POST', PIN_PATHS.set, { secret: '739150' })).status).toBe(200)
+    // Pins the PIN change: the old PIN confirms nothing and the new one confirms.
+    expect(await grant()).toMatchObject({ status: 403, body: { error: 'PIN_INVALID' } })
+    expect((await grant('739150')).status).toBe(200)
     expect(running()).toBeUndefined()
-    expect(changes.at(-1)).toMatchObject({ kind: 'ended', reason: 'pin-changed' })
-    expect((await unlock('739150')).status).toBe(200)
+    // Pins the grant end at device removal: a grant never outlives its device.
+    expect(granted()).toBe(true)
     await home.auth.revokeDevice(first)
+    expect(granted()).toBe(false)
     expect(running()).toBeUndefined()
   })
 })
@@ -477,10 +494,10 @@ describe('wrong tries', () => {
 
   it('remove the device on the fifth and close its sessions', async () => {
     for (let tries = 4; tries >= 1; tries -= 1) {
-      const reply = await unlock('135790')
+      const reply = await grant('135790')
       expect(reply.text).toContain(`${String(tries)} ${tries === 1 ? 'try' : 'tries'} left`)
     }
-    const last = await unlock('135790')
+    const last = await grant('135790')
     // Pins the lockout: the fifth wrong try removes the device as the computer's removal does.
     expect(last).toMatchObject({ status: 403, body: { error: 'PIN_INVALID' } })
     expect(last.text).toContain('signed out')
@@ -488,31 +505,35 @@ describe('wrong tries', () => {
     expect(home.closed).toContainEqual({ deviceId: first })
     expect((await home.auth.devices()).devices.map(device => device.id)).not.toContain(first)
     expect(home.auth.admitToken(token, PRIVATE)).toMatchObject({ kind: 'refused' })
-    expect(await unlock(PIN)).toMatchObject({ status: 401 })
+    expect(await grant(PIN)).toMatchObject({ status: 401 })
+    expect(granted()).toBe(false)
     expect(events.some(event => event.kind === 'lockout')).toBe(true)
   })
 
   it('count twenty parallel guesses as at most five', async () => {
-    const replies = await Promise.all(Array.from({ length: 20 }, () => unlock('135790')))
+    const replies = await Promise.all(Array.from({ length: 20 }, () => grant('135790')))
     // Pins the count-before-compare under a per-device queue: only four guesses are told how many tries are left.
     expect(replies.filter(reply => /tries? left/.test(reply.text)).length).toBeLessThanOrEqual(4)
     expect(replies.filter(reply => reply.text.includes('signed out')).length).toBeGreaterThanOrEqual(1)
     expect(replies.every(reply => reply.status === 403 || reply.status === 401)).toBe(true)
     expect((await home.auth.devices()).devices.map(device => device.id)).not.toContain(first)
+    expect(granted()).toBe(false)
   })
 
-  it('pause every device\'s unlock after ten across the home, until the computer resumes', async () => {
+  it('pause every device\'s PIN after ten across the home, until the computer resumes', async () => {
     const devices = [{ deviceId: first, token }, await addDevice(2), await addDevice(3)]
     for (const [index, device] of devices.entries()) {
-      for (let miss = 0; miss < (index === 2 ? 2 : 4); miss += 1) await unlock('135790', device.token)
+      for (let miss = 0; miss < (index === 2 ? 2 : 4); miss += 1) await grant('135790', device.token)
     }
     // Pins the home-wide count: the tenth miss pauses even a correct PIN from a device that missed twice.
     const third = devices[2]
-    expect(await unlock(PIN, third?.token)).toMatchObject({ status: 429, body: { error: 'PIN_UNLOCKS_PAUSED', paused: true } })
+    expect(await grant(PIN, third?.token)).toMatchObject({ status: 429, body: { error: 'PIN_UNLOCKS_PAUSED', paused: true } })
+    expect(granted(third?.deviceId)).toBe(false)
     expect(events.some(event => event.kind === 'paused')).toBe(true)
     expect((await send('GET', PIN_PATHS.mode)).body).toMatchObject({ enabled: true, paused: true })
     await send('POST', PIN_PATHS.resume, {})
-    expect((await unlock(PIN, third?.token)).status).toBe(200)
+    expect((await grant(PIN, third?.token)).status).toBe(200)
+    expect(granted(third?.deviceId)).toBe(true)
   })
 })
 
@@ -554,7 +575,7 @@ describe('a change while a secret is being compared', () => {
   beforeEach(async () => { await turnOn() })
 
   /**
-   * Start an unlock whose comparison waits until the gate opens.
+   * Start a PIN grant whose comparison waits until the gate opens.
    * @returns the pending reply, the point the comparison started and the gate's opener.
    */
   async function gated(): Promise<{ readonly reply: Promise<Reply>; readonly open: () => void }> {
@@ -572,7 +593,7 @@ describe('a change while a secret is being compared', () => {
       await gate
       return real(...args)
     }
-    const reply = unlock()
+    const reply = grant()
     await started
     return { reply, open }
   }
@@ -581,8 +602,9 @@ describe('a change while a secret is being compared', () => {
     const { reply, open } = await gated()
     await home.auth.pin.off()
     open()
-    // Pins the generation check: an emergency turn-off is not followed by an unlock from a try already in flight.
+    // Pins the generation check: an emergency turn-off is not followed by a grant from a try already in flight.
     expect((await reply).status).not.toBe(200)
+    expect(granted()).toBe(false)
     expect(running()).toBeUndefined()
   })
 
@@ -591,6 +613,7 @@ describe('a change while a secret is being compared', () => {
     await home.auth.pin.set('739150', {})
     open()
     expect((await reply).status).not.toBe(200)
+    expect(granted()).toBe(false)
     expect(running()).toBeUndefined()
   })
 
@@ -599,6 +622,7 @@ describe('a change while a secret is being compared', () => {
     await home.auth.revokeDevice(first)
     open()
     expect((await reply).status).not.toBe(200)
+    expect(granted()).toBe(false)
     expect(running()).toBeUndefined()
   })
 
@@ -608,6 +632,7 @@ describe('a change while a secret is being compared', () => {
     home.auth.admitToken(token, PRIVATE)
     open()
     expect((await reply).status).not.toBe(200)
+    expect(granted()).toBe(false)
     expect(running()).toBeUndefined()
   })
 
@@ -616,6 +641,7 @@ describe('a change while a secret is being compared', () => {
     stopServing()
     open()
     expect((await reply).status).not.toBe(200)
+    expect(granted()).toBe(false)
     expect(running()).toBeUndefined()
   })
 })
@@ -626,7 +652,7 @@ describe('home-wide pause on every miss path', () => {
    * @param cookie - the session token.
    */
   async function ceiling(cookie: string): Promise<void> {
-    for (let miss = 0; miss < 5; miss += 1) await unlock('135790', cookie)
+    for (let miss = 0; miss < 5; miss += 1) await grant('135790', cookie)
   }
 
   it('pauses after two devices miss five times each', async () => {
@@ -638,7 +664,8 @@ describe('home-wide pause on every miss path', () => {
     // A removal rotates the home's sessions, so the next device signs in again.
     await ceiling(await signIn(third.deviceId))
     // Pins the count on the lockout path: ten misses pause even when each device was removed by its own fifth.
-    expect(await unlock(PIN, await signIn(fourth.deviceId))).toMatchObject({ status: 429, body: { error: 'PIN_UNLOCKS_PAUSED' } })
+    expect(await grant(PIN, await signIn(fourth.deviceId))).toMatchObject({ status: 429, body: { error: 'PIN_UNLOCKS_PAUSED' } })
+    expect(granted(fourth.deviceId)).toBe(false)
     expect(events.some(event => event.kind === 'paused')).toBe(true)
   }, SCRYPT_TIMEOUT_MS)
 })
@@ -652,22 +679,22 @@ describe('structured PIN refusals and the state fields', () => {
     const third = await addDevice(3)
     const fourth = await addDevice(4)
     // Pins the structured miss: the client reads numbers, not the sentence.
-    expect(await unlock('135790', second.token)).toMatchObject({ body: { error: 'PIN_INVALID', triesLeft: 4, removed: false } })
-    for (let miss = 0; miss < 3; miss += 1) await unlock('135790', second.token)
-    expect(await unlock('135790', second.token)).toMatchObject({ body: { error: 'PIN_INVALID', triesLeft: 0, removed: true } })
-    for (let miss = 0; miss < 5; miss += 1) await unlock('135790', await signIn(third.deviceId))
+    expect(await grant('135790', second.token)).toMatchObject({ body: { error: 'PIN_INVALID', triesLeft: 4, removed: false } })
+    for (let miss = 0; miss < 3; miss += 1) await grant('135790', second.token)
+    expect(await grant('135790', second.token)).toMatchObject({ body: { error: 'PIN_INVALID', triesLeft: 0, removed: true } })
+    for (let miss = 0; miss < 5; miss += 1) await grant('135790', await signIn(third.deviceId))
     // Pins the structured pause.
-    expect(await unlock(PIN, await signIn(fourth.deviceId))).toMatchObject({ status: 429, body: { error: 'PIN_UNLOCKS_PAUSED', paused: true } })
+    expect(await grant(PIN, await signIn(fourth.deviceId))).toMatchObject({ status: 429, body: { error: 'PIN_UNLOCKS_PAUSED', paused: true } })
   }, 40_000)
 })
 
-describe('the unlock state and the hash cost', () => {
-  it('reports the idle end and the cap as the unlock and the touch do', async () => {
+describe('the PIN state and the hash cost', () => {
+  it('reports no unlock, idle end or cap after a grant, as no window exists', async () => {
     await turnOn()
-    const reply = await unlock()
-    const state = await send('GET', `${PIN_PATHS.state}?reach`, undefined, { 'delorun-unlock': reply.body.token as string })
-    expect(state.body).toMatchObject({ unlock: { unlockId: reply.body.unlockId, endsAt: reply.body.endsAt, idleEndsAt: reply.body.idleEndsAt } })
-    expect(reply.body.endsAt).not.toBe(reply.body.idleEndsAt)
+    expect((await grant()).status).toBe(200)
+    const state = await send('GET', `${PIN_PATHS.state}?reach`)
+    // Pins the state: removing the unlock refusal lets a window appear in the state with its idle end and cap.
+    expect(state.body).toEqual({ kind: 'on', secret: 'pin', idleMinutes: PIN_MODE_LIMITS.defaultIdleMinutes, lockWhenHidden: false, paused: false, unlock: null })
   })
 
   it('hashes a new PIN at 2^17 and still verifies a record with the earlier parameters', async () => {

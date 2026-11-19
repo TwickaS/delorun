@@ -30,7 +30,7 @@ import { acceptServer, setFullAccess, type PendingServer, type WorkspaceAccess }
 
 const t = makeTranslate(en)
 const BASE = 'https://home.example.ts.net/studio/'
-const pinView: PinView = { phase: 'unlocked', secret: 'passcode', busy: false, outcome: undefined, paused: false, asked: false }
+const pinView: PinView = { phase: 'on', secret: 'passcode' }
 const PASSKEY = { credentialId: 'c1', createdAt: 0, lastUsedAt: null, synced: false }
 
 afterEach(cleanup)
@@ -82,7 +82,7 @@ describe('a live agent\'s granting answer on a device', () => {
   it('shows the granting answers on a device with a passkey, and Allow mints the answer grant with Face ID', async () => {
     const { source, grant, api } = world()
     const reach = reachOn('device', grant)
-    expect(reach?.get().kind).not.toBe('locked-phone')
+    expect(reach?.get()).toEqual({ kind: 'device' })
     const confirming = reach!.confirm(ANSWER)
     const { sent, title } = await answer(source, api, 'faceId')
     expect(title).toContain('Allow the live agent')
@@ -93,7 +93,7 @@ describe('a live agent\'s granting answer on a device', () => {
   it('opens straight on the PIN keypad on a device with no passkey, and mints the same answer grant', async () => {
     const { source, grant, api } = world({ passkey: false })
     const reach = reachOn('device', grant)
-    expect(reach?.get().kind).not.toBe('locked-phone')
+    expect(reach?.get()).toEqual({ kind: 'device' })
     const confirming = reach!.confirm(ANSWER)
     const { sent } = await answer(source, api, 'pin')
     expect(sent).toEqual({ ...SENT, secret: 'correct horse' })
@@ -105,6 +105,13 @@ describe('a live agent\'s granting answer on a device', () => {
     const confirming = reachOn('device', grant)!.confirm(ANSWER)
     expect((await answer(source, api, 'cancel')).sent).toBeUndefined()
     await expect(confirming).resolves.toBe(false)
+  })
+
+  // Sending a prompt no grant can name answers with no grant, which the home refuses (P3-4).
+  it('does not confirm a prompt without a call id on a device, and opens no sheet', async () => {
+    const { source, grant } = world()
+    await expect(reachOn('device', grant)!.confirm({ ...ANSWER, callId: undefined })).resolves.toBe(false)
+    expect(source.hooks.pending.getSnapshot()).toBeNull()
   })
 
   it('never asks on the computer, and gives a page that is neither the computer nor an approved device no reach', async () => {

@@ -60,17 +60,17 @@
   en: 1e51d673a07493c2
   zh: dcfb4c62bbdf5893
 /contract-c14-openid-connect-and-passkeys/contract/face-id-unlock:
-  en: 5febe2c807bfd0d2
-  zh: 933c89ffb6285474
+  en: c6c581599c9528a1
+  zh: afd34dd06cda82ac
 /contract-c14-openid-connect-and-passkeys/contract/pin-mode:
-  en: 99a1323fbfd2dcef
-  zh: abc89d0d3c7cf490
+  en: 26a2a7edd9ab5e48
+  zh: 3bdadb633a024658
 /contract-c14-openid-connect-and-passkeys/contract/limits:
   en: a72ddae0f679d724
   zh: ac19d58423de47a9
 /contract-c14-openid-connect-and-passkeys/contract/errors:
-  en: 6035a46e2327411b
-  zh: bec45aca51606b50
+  en: 9941fc1afdcd2a15
+  zh: ff223ef34761b4eb
 /contract-c14-openid-connect-and-passkeys/contract/delo-run-issuer:
   en: 6051dd4d0ff54a25
   zh: 770990173ac3d2c2
@@ -81,8 +81,8 @@
   en: 33920b0a42258627
   zh: 1dbaa430a41344f7
 /contract-c14-openid-connect-and-passkeys/security:
-  en: fb38bcefffde8d6c
-  zh: 53ec38ced3c76c62
+  en: 4764e00b68169ea0
+  zh: 3778e6a5263aa41d
 /contract-c14-openid-connect-and-passkeys/security/what-this-does-not-prove:
   en: 9a3fe97757023136
   zh: 71dd3422caac8ed3

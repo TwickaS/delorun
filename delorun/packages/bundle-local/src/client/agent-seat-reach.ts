@@ -9,7 +9,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { FaceGrant } from '@delorun/plugin-changes/face-grant'
 
 /** What the live-agent chat reads: the same shape as `SeatReachSource` in `@delorun/plugin-agent-seats/client`. */
-type Reach = { readonly kind: 'computer' } | { readonly kind: 'unlocked-phone' } | { readonly kind: 'locked-phone' }
+type Reach = { readonly kind: 'computer' } | { readonly kind: 'device' }
 
 /** One granting answer of a seat's approval, as `SeatAnswerRequest` in `@delorun/plugin-agent-seats/client`. */
 interface SeatAnswer {
@@ -20,7 +20,7 @@ interface SeatAnswer {
 }
 
 const COMPUTER: Reach = { kind: 'computer' }
-const DEVICE: Reach = { kind: 'unlocked-phone' }
+const DEVICE: Reach = { kind: 'device' }
 
 /** The grant action whose words the Face ID sheet shows for a seat's answer. */
 export const SEAT_ANSWER_ACTION = 'plugin-agent-seats/answer'
@@ -31,12 +31,11 @@ export interface AgentSeatReachService {
   readonly get: () => Reach
   /** Listen for a change; returns the disposer. */
   readonly subscribe: (listener: () => void) => () => void
-  /** Nothing to open: every page with a reach may answer. */
-  readonly openUnlock: () => void
   /**
    * Confirm one granting answer before it is sent.
    * @param answer - the prompt and the answer's value.
-   * @returns true when the answer may go: always on the computer; on a device once the answer grant is minted.
+   * @returns true when the answer may go: always on the computer; on a device once the answer grant is minted, and never
+   *   for a prompt without a call id, which no grant can name.
    */
   readonly confirm: (answer: SeatAnswer) => Promise<boolean>
 }
@@ -61,11 +60,10 @@ export function provideAgentSeatReach(ctx: Context, place: 'computer' | 'device'
     get: () => reach,
     // The page's place never changes.
     subscribe: () => () => undefined,
-    openUnlock: () => undefined,
     confirm: async ({ sessionId, callId, grants, value }) => {
       if (place === 'computer') return true
-      // A prompt without a call id cannot be keyed; the answer goes without a grant and the home refuses it.
-      if (callId === undefined) return true
+      // No grant can name a prompt without a call id, and the home refuses a device's answer without one.
+      if (callId === undefined) return false
       return await grant({ action: SEAT_ANSWER_ACTION, call: { answer: { agent: sessionId, callId, grants, value } } }) !== undefined
     },
   })

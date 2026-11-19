@@ -25,7 +25,7 @@ function world(options: { passkey?: boolean; unlockMode?: boolean; grants?: bool
     admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere',
     elevationOf: () => (options.elevation === true ? { id: 'unlock-1' } : undefined), pageUnlockOf: () => undefined,
     unlockModeEnabled: () => options.unlockMode ?? true, keyRefs: () => new Set(['DEEPSEEK_API_KEY']),
-    logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined, computerOnlySwitches: () => [],
+    logElevated: () => {}, liftedSettings: () => undefined, computerOnlySwitches: () => [],
     protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set(), defaultPermission: () => undefined,
     dangerousMode: () => false,
     faceGrants: () => (options.grants === false ? undefined : { grants, deviceHasPasskey: () => options.passkey ?? true }),
@@ -261,7 +261,7 @@ describe('a page unlock made before enrolment (P3-1)', () => {
     const facts: ReachAccessFacts = {
       admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere',
       elevationOf: () => undefined, pageUnlockOf: () => ({ id: 'page-1' } as never), unlockModeEnabled: () => true, keyRefs: () => new Set(['DEEPSEEK_API_KEY']),
-      logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined, computerOnlySwitches: () => [],
+      logElevated: () => {}, liftedSettings: () => undefined, computerOnlySwitches: () => [],
       protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set(), defaultPermission: () => undefined,
       dangerousMode: () => false,
       faceGrants: () => ({ grants, deviceHasPasskey: () => true }),
@@ -278,7 +278,7 @@ describe('a model key on a phone with no passkey inside a PIN page window (r2 P1
     const facts: ReachAccessFacts = {
       admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere',
       elevationOf: () => undefined, pageUnlockOf: id => (id === 'page-1' ? { id: 'unlock-1' } : undefined), unlockModeEnabled: () => true,
-      keyRefs: () => new Set(['DEEPSEEK_API_KEY']), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
+      keyRefs: () => new Set(['DEEPSEEK_API_KEY']), logElevated: () => {}, liftedSettings: () => undefined,
       computerOnlySwitches: () => [], protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set(), defaultPermission: () => undefined,
       dangerousMode: () => false,
       faceGrants: () => ({ grants, deviceHasPasskey: () => false }),

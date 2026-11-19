@@ -24,7 +24,7 @@ function facts(kind: Kind): ReachAccessFacts {
     admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere',
     elevationOf: () => (kind === 'code' || kind === 'grace' || kind === 'dangerous' ? UNLOCK : undefined),
     pageUnlockOf: () => (kind === 'pin-page' ? UNLOCK : undefined), unlockModeEnabled: () => kind === 'pin-page',
-    keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
+    keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined,
     computerOnlySwitches: () => [], protectedEntryIds: () => new Set(SANDBOX_IDS), computerOnlyEntryIds: () => new Set(SANDBOX_IDS),
     defaultPermission: () => undefined, dangerousMode: () => kind === 'dangerous',
   }

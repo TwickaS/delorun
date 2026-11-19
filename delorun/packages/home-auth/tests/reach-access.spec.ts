@@ -82,7 +82,7 @@ function facts(overrides: Partial<ReachAccessFacts> = {}): ReachAccessFacts {
     pageUnlockOf: () => undefined,
     unlockModeEnabled: () => false,
     keyRefs: () => new Set(['DEEPSEEK_API_KEY', 'OPENAI_API_KEY']),
-    logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
+    logElevated: () => {}, liftedSettings: () => undefined,
     computerOnlySwitches: () => [CONSENT],
     protectedEntryIds: () => new Set([PROTECTED_ROW]), computerOnlyEntryIds: () => new Set([COMPUTER_ONLY_ROW]),
     defaultPermission: () => PERMISSION,
@@ -200,6 +200,14 @@ describe('a device\'s workspace-file call', () => {
       expect(condition({ action, resource: chat, args: { path: 'linked-file' } })).toEqual(refusal(action))
     }
     expect(condition({ action: 'workspaceFiles/list', resource: chat, args: { path: 'linked-dir' } })).toEqual(refusal('workspaceFiles/list'))
+  })
+
+  // Pins A483 for the path bound: with the page-unlock lift back, an old PIN page token reads a file outside the workspace.
+  it('keeps the workspace bound for a page that holds an old PIN unlock, with or without a grant', () => {
+    const grants = new GrantStore({ now: () => 5_000_000, random: size => new Uint8Array(size).fill(4) })
+    const page = createCondition(facts({ workspaceRootOf: id => (id === 's-1' ? root : undefined), delorunHome, pageUnlockOf: id => (id === 'page-1' ? { id: 'unlock-1' } : undefined), faceGrants: () => ({ grants, deviceHasPasskey: () => false }) }), { ...DEVICE, unlockId: 'page-1' })
+    const outside = join(directory, 'outside', 'secret.txt')
+    expect(page({ action: 'workspaceFiles/read', resource: chat, args: { path: outside } })).toEqual(refusal('workspaceFiles/read'))
   })
 
   it('refuses the Delorun home even inside the workspace', () => {
@@ -652,13 +660,14 @@ describe('the model key actions', () => {
     }
   })
 
-  it('refuses a locked page and, before the grant store starts, admits an unlocked one while PIN mode is on', () => {
+  it('refuses a locked page and, before the grant store starts, an unlocked one too while PIN mode is on', () => {
     const on = facts({ unlockModeEnabled: () => true, pageUnlockOf: id => id === 'page-1' ? { id: 'unlock-1' } : undefined })
     for (const { action, args } of KEY_CALLS) {
       // Pins the PIN check: without it a locked page saves, removes and reads the status of keys.
       expect(createCondition(on, locked)({ action, resource: GLOBAL, args }), action).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
       expect(createCondition(on, { ...locked, unlockId: 'ended' })({ action, resource: GLOBAL, args }), action).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
-      expect(createCondition(on, unlockedPage)({ action, resource: GLOBAL, args }), action).toEqual({ kind: 'allow' })
+      // Pins A483 before the grant store starts: a PIN page unlock admits no key action either.
+      expect(createCondition(on, unlockedPage)({ action, resource: GLOBAL, args }), action).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
     }
   })
 

@@ -70,7 +70,7 @@ function facts(mode: boolean, unlocked: boolean): ReachAccessFacts {
     delorunHome: '/nowhere',
     elevationOf: () => (unlocked ? UNLOCK : undefined),
     pageUnlockOf: () => undefined,
-    keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
+    keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined,
     computerOnlySwitches: () => [CONSENT],
     protectedEntryIds: () => new Set([PROTECTED_ROW]), computerOnlyEntryIds: () => new Set([COMPUTER_ONLY_ROW]),
     defaultPermission: () => PERMISSION,

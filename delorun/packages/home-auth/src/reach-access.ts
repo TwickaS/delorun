@@ -254,8 +254,8 @@ const DANGEROUS_SET: ReadonlySet<string> = new Set(Object.keys(REACH_DANGEROUS_A
 
 /**
  * The actions that add, remove and check a model provider's key from an approved device. Each is allowed to a
- * device without an unlock and, while PIN mode is on, only to a Peer of an unlocked page; a locked page's Peer is refused
- * with `elevation-required: <action>`. A stored key is never sent to a device: `credentials/describe` answers presence
+ * device without an unlock while PIN mode is off and no passkey is enrolled; otherwise a save or removal needs a grant
+ * for exactly that call (Face ID, or the PIN), and is refused with `elevation-required: <action>` without one. A stored key is never sent to a device: `credentials/describe` answers presence
  * and writability only, and the events name the key, never its value. A call may name only the references the model
  * providers declare ({@link ReachAccessFacts.keyRefs}); any other is refused with {@link UNDECLARED_KEY_REFUSAL}.
  */
@@ -1156,7 +1156,7 @@ function createsInKnownWorkspace(facts: Pick<ReachAccessFacts, 'workspaces'>, ar
  * @returns the condition.
  */
 export function createCondition(
-  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'delorunHome' | 'elevationOf' | 'touchUnlock' | 'logElevated' | 'liftedSettings' | 'computerOnlySwitches' | 'protectedEntryIds' | 'computerOnlyEntryIds' | 'defaultPermission' | 'dangerousMode' | 'pageUnlockOf' | 'unlockModeEnabled' | 'faceGrants' | 'pinLiftedSettings' | 'keyRefs'>,
+  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'delorunHome' | 'elevationOf' | 'touchUnlock' | 'logElevated' | 'liftedSettings' | 'computerOnlySwitches' | 'protectedEntryIds' | 'computerOnlyEntryIds' | 'defaultPermission' | 'dangerousMode' | 'pageUnlockOf' | 'unlockModeEnabled' | 'faceGrants' | 'keyRefs'>,
   principal: ReachDevicePrincipal,
 ): ReachCondition {
   const { deviceId, listener, unlockId } = principal
@@ -1219,16 +1219,11 @@ export function createCondition(
   }
   const decide: ReachCondition = ({ action, resource, args }) => {
     const scope = scopeOf(resource)
-    // Dangerous mode lifts the four refusals below for an unlocked device: an elevated action is still refused to a
-    // locked one, and the unlock check follows. The mode is read per call, so withdrawing the grant restores them.
+    // Dangerous mode lifts the four refusals below: each call still needs its grant, and the check follows. The mode is
+    // read per call, so withdrawing the grant restores them. A PIN page unlock lifts nothing (A483: never a window).
     const lifts: SettingsLift[] = []
-    // An unlocked PIN page lifts the same refusals as dangerous mode. Its settings writes are recorded in the PIN
-    // file when dangerous mode does not hold, and set back when PIN mode turns off.
-    // A page unlock made with the PIN before a passkey was enrolled lifts nothing for a device that now holds one.
-    const pageUnlocked = unlockId !== undefined && facts.pageUnlockOf(unlockId) !== undefined && facts.faceGrants?.()?.deviceHasPasskey(deviceId) !== true
     if (args !== undefined) {
-      const dangerous = facts.dangerousMode()
-      const lifted = dangerous || pageUnlocked
+      const lifted = facts.dangerousMode()
       // A computer-only switch stays on, new chats' permission stays as loose as it is, a protected row stays as it is,
       // and a command a device does not run stays unrun, so no unlock admits any of them. The mode lifts a switch only
       // when DANGEROUS_LIFTABLE_SWITCHES lists it: the remote-access settings stay at the computer.
@@ -1253,7 +1248,7 @@ export function createCondition(
       }
     }
     if (DANGEROUS_SET.has(action)) {
-      if (!facts.dangerousMode() && !pageUnlocked) return { kind: 'deny', reason: `loopback-required: ${action}` }
+      if (!facts.dangerousMode()) return { kind: 'deny', reason: `loopback-required: ${action}` }
       const refused = unlocked(action, `elevation-required: ${action}`, args !== undefined, scope, args)
       if (refused !== undefined) return refused
     }
@@ -1264,8 +1259,8 @@ export function createCondition(
         // window); presence and its events stay free.
         const refused = FACE_KEY_ACTIONS.has(action) ? grantFor(faced, action, `elevation-required: ${action}`, args !== undefined, scope, args) : undefined
         if (refused !== undefined) return refused
-      } else if (!pageUnlocked) {
-        // Before the grant store starts, a key action falls back to the page's PIN unlock, which cannot exist yet either.
+      } else {
+        // Before the grant store starts, no grant can admit a key action.
         return { kind: 'deny', reason: `elevation-required: ${action}` }
       }
     }
@@ -1274,9 +1269,9 @@ export function createCondition(
       const refused = unlocked(action, `elevation-required: ${action}`, args !== undefined, scope, args)
       if (refused !== undefined) return refused
     }
-    // The write proceeds once the unlock admitted it, so the mode's end can set the field back.
+    // The write proceeds once the grant admitted it, so the mode's end can set the field back.
     if (lifts.length > 0) {
-      const unrecorded = facts.dangerousMode() ? facts.liftedSettings(lifts) : facts.pinLiftedSettings(lifts)
+      const unrecorded = facts.liftedSettings(lifts)
       if (unrecorded !== undefined) return { kind: 'deny', reason: unrecorded }
     }
     if (args === undefined) return ALLOW
@@ -1288,8 +1283,8 @@ export function createCondition(
       const bounds = boundsOf(facts, resource)
       if (bounds !== undefined && workspacePathsReachable(bounds, args)) return ALLOW
       const outside = `loopback-required: ${action} with a path outside the chat's workspace`
-      // Dangerous mode moves the workspace bound for an unlocked device; the Delorun home stays out of reach.
-      if (bounds !== undefined && (facts.dangerousMode() || pageUnlocked) && workspacePathsReachable({ ...bounds, confined: false }, args)) {
+      // Dangerous mode moves the workspace bound for a call with its grant; the Delorun home stays out of reach.
+      if (bounds !== undefined && facts.dangerousMode() && workspacePathsReachable({ ...bounds, confined: false }, args)) {
         return unlocked(action, outside, true, scope, args) ?? ALLOW
       }
       return { kind: 'deny', reason: outside }
@@ -1396,7 +1391,7 @@ export interface ReachAccessFacts {
   readonly pageUnlockOf: (unlockId: string) => { readonly id: string } | undefined
   /**
    * Whether a locked device is refused where an unlock matters, which makes the model key actions
-   * ({@link REACH_KEY_ACTIONS}) need an unlocked page or a grant: a PIN is set or a passkey is enrolled.
+   * ({@link REACH_KEY_ACTIONS}) need a grant: a PIN is set or a passkey is enrolled.
    * @returns whether it is.
    */
   readonly unlockModeEnabled: () => boolean
@@ -1424,13 +1419,6 @@ export interface ReachAccessFacts {
    * @returns undefined once recorded, or the refusal reason when the record could not be saved, which refuses the write.
    */
   readonly liftedSettings: (lifts: readonly SettingsLift[]) => string | undefined
-  /**
-   * Record the settings an unlocked PIN page is about to loosen, so PIN mode turning off sets them back. Called under the
-   * same conditions as {@link liftedSettings}, when dangerous mode does not hold.
-   * @param lifts - the fields and the values the call sets.
-   * @returns undefined once recorded, or the refusal reason when the record could not be saved, which refuses the write.
-   */
-  readonly pinLiftedSettings: (lifts: readonly SettingsLift[]) => string | undefined
   /**
    * The computer-only switches the mounted plugins registered.
    * @returns the switches.

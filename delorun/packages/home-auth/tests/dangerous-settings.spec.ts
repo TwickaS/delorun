@@ -229,11 +229,12 @@ describe('the reach policy records what dangerous mode lets a device loosen', ()
    * @param mode - whether dangerous mode holds.
    * @param unlocked - whether the device holds an unlock.
    * @param seen - the lifts the policy recorded.
+   * @param pageUnlocked - whether the page `page-1` holds a PIN page unlock.
    * @returns the facts.
    */
-  function facts(mode: boolean, unlocked: boolean, seen: unknown[], pinSeen: unknown[] = [], pageUnlocked = false): ReachAccessFacts {
+  function facts(mode: boolean, unlocked: boolean, seen: unknown[], pageUnlocked = false): ReachAccessFacts {
     return {
-      unlockModeEnabled: () => false, keyRefs: () => new Set<string>(), pageUnlockOf: id => (pageUnlocked && id === 'page-1' ? { id: 'page-1' } : undefined), pinLiftedSettings: (lifts) => { pinSeen.push(...lifts); return undefined }, admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere',
+      unlockModeEnabled: () => false, keyRefs: () => new Set<string>(), pageUnlockOf: id => (pageUnlocked && id === 'page-1' ? { id: 'page-1' } : undefined), admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere',
       elevationOf: () => (unlocked ? { id: 'elevation-1' } : undefined), logElevated: () => {}, liftedSettings: (lifts) => { seen.push(...lifts); return undefined },
       computerOnlySwitches: () => [SWITCH], protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set([COMPUTER_ONLY_ROW]),
       defaultPermission: () => ({ namespaces: new Set(['permission']), current: LEVELS['workspace-write'], levelOf: name => LEVELS[name] }),
@@ -279,38 +280,23 @@ describe('the reach policy records what dangerous mode lets a device loosen', ()
     const loosenPreset = call({ ns: 'permission', patch: { defaultPreset: 'danger-full-access' } })
     const consentOff = call({ ns: CONSENT.ns, patch: { enabled: false } })
 
-    it('records an unlocked page\'s loosening in the PIN file\'s ledger, never dangerous mode\'s', () => {
-      const seen: unknown[] = []
-      const pinSeen: unknown[] = []
-      const condition = createCondition(facts(false, false, seen, pinSeen, true), page)
-      expect(condition(loosenPreset)).toEqual({ kind: 'allow' })
-      expect(condition(consentOff)).toEqual({ kind: 'allow' })
-      // Pins the destination: a lift in dangerous mode's record would be set back by that mode, not by PIN mode.
-      expect(pinSeen).toEqual([{ ...PRESET, written: 'danger-full-access' }, { ...CONSENT, written: false }])
-      expect(seen).toEqual([])
-    })
-
-    it('refuses a locked page\'s settings write and records nothing', () => {
-      const seen: unknown[] = []
-      const pinSeen: unknown[] = []
-      const locked = createCondition(facts(false, false, seen, pinSeen, false), page)
-      expect(locked(loosenPreset)).toMatchObject({ kind: 'deny' })
-      expect(locked(consentOff)).toMatchObject({ kind: 'deny' })
-      expect(pinSeen).toEqual([])
+    // Pins A483 (never a window): with the page-unlock lift back, the unlocked page turns the consent off and loosens new chats.
+    it('lets an unlocked PIN page lift nothing and record nothing, as a locked one', () => {
+      for (const pageUnlocked of [true, false]) {
+        const seen: unknown[] = []
+        const condition = createCondition(facts(false, false, seen, pageUnlocked), page)
+        expect(condition(loosenPreset), String(pageUnlocked)).toMatchObject({ kind: 'deny' })
+        expect(condition(consentOff), String(pageUnlocked)).toEqual({ kind: 'deny', reason: 'loopback-required: turning the external-agent consent off' })
+        expect(seen).toEqual([])
+      }
     })
 
     it('keeps the computer-only switch on for a device that holds a code unlock but no page unlock', () => {
-      // Pins the lift's condition: only dangerous mode or a PIN page lifts the switch, a code unlock alone does not.
+      // Pins the lift's condition: only dangerous mode lifts the switch, a code unlock alone does not.
       const seen: unknown[] = []
-      const pinSeen: unknown[] = []
-      const elevated = createCondition(facts(false, true, seen, pinSeen, false), page)
+      const elevated = createCondition(facts(false, true, seen), page)
       expect(elevated(consentOff)).toEqual({ kind: 'deny', reason: 'loopback-required: turning the external-agent consent off' })
-      expect(pinSeen).toEqual([])
-    })
-
-    it('refuses the write when the PIN record is not saved', () => {
-      const refusing: ReachAccessFacts = { ...facts(false, false, [], [], true), pinLiftedSettings: () => 'pin-record-refused' }
-      expect(createCondition(refusing, page)(consentOff)).toEqual({ kind: 'deny', reason: 'pin-record-refused' })
+      expect(seen).toEqual([])
     })
   })
 })

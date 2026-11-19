@@ -15,10 +15,10 @@ import { COMPUTER_ONLY_ROW_MODULES } from './reach-access.ts'
 /**
  * How a route answers a paired device:
  * - `R`: any approved device, with no unlock (`admitApprovedDevice`);
- * - `U`: class `face`: a device needs Face ID for exactly this call, or, for a device with no
- *   passkey, an unlock; a device with neither is answered `403 ELEVATION_REQUIRED` (`gateByClass`, or `gateByUnlock`);
+ * - `U`: class `face`: a device needs a grant alone for exactly this call (Face ID, or the PIN on a device with no
+ *   passkey); without one it is answered `403 ELEVATION_REQUIRED` (`gateByClass`, or `gateByUnlock`);
  * - `C`: only the computer; a device is refused (`403 LOOPBACK_REQUIRED`) whatever its unlock;
- * - `K`: a device that holds no PIN lock (`admitKeyDevice`): model keys are tested, never shown;
+ * - `K`: a device while PIN mode is off (`admitKeyDevice`): model keys are tested, never shown;
  * - `R+U`: one registration serves both levels, by route (see the reason).
  */
 export type RouteLevel = 'R' | 'U' | 'C' | 'K' | 'R+U'
@@ -141,7 +141,7 @@ export const PLUGIN_ROUTE_ACCESS: Readonly<Record<string, Readonly<Record<string
     WORKSPACE_NOTICE_PATH: READ('names the files set aside, not their paths'),
     SETUP_RECORD_PATH: READ('reads which setup steps are done'),
     READINESS_PATH: READ('reads what the computer has installed for setup'),
-    KEY_TEST_PATH: { level: 'K', reason: 'tests the model keys and names each provider\'s result, never a key; under PIN mode only an unlocked page' },
+    KEY_TEST_PATH: { level: 'K', reason: 'tests the model keys and names each provider\'s result, never a key; under PIN mode no device' },
     START_PATH: READ('a random id naming this start of the home, with no setting or data'),
     DEFER_STEP_PATH: READ('notes that a setup step waits for the computer: ids from a closed list, no setting changes'),
     AGENT_MODELS_PATH: READ('lists an agent\'s models by starting the agent\'s own program under a timeout; it is bounded and changes nothing'),

@@ -23,7 +23,7 @@ import type { RemoteAccessBinding, RemoteAccessPolicy } from '@deepseek-ai/dsh-a
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { SESSION_LIMITS, type StudioAddress } from '@delorun/contract-admission'
 import { HOME_AUTH_SWITCH, HomeAuthService, REACH_SWITCH } from '../src/service.ts'
-import { defaultPermissionOf, EXTERNAL_AGENT_REFUSAL, FULL_ACCESS_REFUSAL, HomeAuthAuthenticator, matchesPreLogin, computerOnlyEntryIdsOf, protectedEntryIdsOf, REAL_BROWSER_REFUSAL, registerReachPolicy, WORKSPACE_MANAGEMENT_REFUSAL } from '../src/authenticator.ts'
+import { defaultPermissionOf, EXTERNAL_AGENT_REFUSAL, FULL_ACCESS_REFUSAL, HomeAuthAuthenticator, matchesPreLogin, computerOnlyEntryIdsOf, protectedEntryIdsOf, registerReachPolicy, WORKSPACE_MANAGEMENT_REFUSAL } from '../src/authenticator.ts'
 import { createCondition, createReachAccessPolicy, REACH_ALLOWED_ACTIONS, REACH_DENIED_ACTIONS, REACH_ELEVATED_ACTIONS, REACH_KEY_ACTIONS, reachDevicePrincipal, type ReachDevicePrincipal } from '../src/reach-access.ts'
 import { REQUEST_LISTENER } from '@delorun/home'
 import { DeviceStore } from '../src/devices.ts'
@@ -236,7 +236,7 @@ describe('the authenticator provider', () => {
     const condition = createCondition({
       workspaces: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere',
       elevationOf: () => undefined, pageUnlockOf: () => undefined, unlockModeEnabled: () => true, keyRefs: () => new Set<string>(),
-      logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined, computerOnlySwitches: () => [],
+      logElevated: () => {}, liftedSettings: () => undefined, computerOnlySwitches: () => [],
       protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set(), defaultPermission: () => undefined, dangerousMode: () => false,
       faceGrants: () => ({ grants, deviceHasPasskey: () => true }),
     }, principal)
@@ -319,83 +319,36 @@ describe('the authenticator provider', () => {
     expect(() => { answer('rejected') }).not.toThrow()
   })
 
-  it('lets an unlocked device give full-access, workspace-management and external-agent grants while dangerous mode holds, and no other device', async () => {
+  // Pins A483 (never a window): with the unlock or dangerous-mode lift back in checkAnswer, a device answers a reserved
+  // prompt with no grant while a code unlock or the mode holds.
+  it('refuses each reserved grant from a device without its answer grant, whatever code unlock, grace or dangerous mode it holds', async () => {
     ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
     const admitted = provider().admit(request({ headers: { cookie: `__Host-delorun-session=${await session(2)}` } }), 'reach-tailscale-private')
     if (admitted.kind !== 'admitted') throw new Error('not admitted')
-    let mode = true
-    let grants: object | undefined = { dangerousMode: () => mode }
-    vi.spyOn(ctx, 'get').mockImplementation(((name: string) => (name === 'reachFullAccessGrants' ? grants : name === 'previewFlags' ? undefined : Context.prototype.get.call(ctx, name as never))) as never)
-    let unlocked = true
-    vi.spyOn(ctx.homeAuth, 'elevationOf').mockImplementation(() => (unlocked ? { id: 'elevation-1' } as never : undefined))
-    const give = (grantsMarker: string): void => {
-      provider().checkAnswer({ peer: admitted.peer, event: 'approval/request', request: { grants: grantsMarker }, value: 'allowed-once' })
-    }
-    for (const marker of ['full-access', 'workspace-management', 'external-agent']) expect(() => { give(marker) }, marker).not.toThrow()
-    // Pins the unlock check: a device whose unlock ended keeps every refusal.
-    unlocked = false
-    for (const marker of ['full-access', 'workspace-management', 'external-agent']) expect(() => { give(marker) }, marker).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
-    unlocked = true
-    // Pins the mode check: with the mode off, without a service and with a store that cannot be read, nothing is lifted.
-    mode = false
-    expect(() => { give('full-access') }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
-    grants = undefined
-    expect(ctx.homeAuth.dangerousMode()).toBe(false)
-    expect(() => { give('external-agent') }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
-    grants = { dangerousMode: () => { throw new Error('unreadable store') } }
-    expect(ctx.homeAuth.dangerousMode()).toBe(false)
-    expect(() => { give('workspace-management') }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
-  })
-
-  it('refuses a real-browser grant from a merely signed-in device or one in its approval grace and lets an unlocked device give it, with dangerous mode off', async () => {
-    ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
-    const admitted = provider().admit(request({ headers: { cookie: `__Host-delorun-session=${await session(2)}` } }), 'reach-tailscale-private')
-    if (admitted.kind !== 'admitted') throw new Error('not admitted')
-    expect(ctx.homeAuth.dangerousMode()).toBe(false)
+    let mode = false
+    vi.spyOn(ctx, 'get').mockImplementation(((name: string) => (name === 'reachFullAccessGrants' ? { dangerousMode: () => mode } : name === 'previewFlags' ? undefined : Context.prototype.get.call(ctx, name as never))) as never)
     let unlock: { id: string; grace?: true } | undefined
     vi.spyOn(ctx.homeAuth, 'elevationOf').mockImplementation(() => unlock as never)
-    const give = (peer: PeerScope, value: unknown = 'allowed-once'): void => {
-      provider().checkAnswer({ peer, event: 'approval/request', request: { grants: 'real-browser' }, value })
+    const holder = { deviceId: recordOf(2, ADDRESS).id, listener: 'reach-tailscale-private' } as const
+    const grants = ctx.homeAuth.faceGrants()
+    if (grants === undefined) throw new Error('no grant store')
+    const markers = ['full-access', 'workspace-management', 'external-agent', 'real-browser'] as const
+    const give = (marker: string): void => {
+      provider().checkAnswer({ peer: admitted.peer, event: 'approval/request', request: { agent: { id: 'chat-a' }, callId: 'call_1', grants: marker }, value: 'allowed-once' })
     }
-    // Pins the locked refusal: a signed-in device without a running unlock is refused with its own action and sentence.
-    expect(() => { give(admitted.peer) }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED', message: REAL_BROWSER_REFUSAL, details: { action: 'real-browser' } }))
-    // Pins the refusal the Gateway sees: the guard throws, so the answer is not applied and the prompt stays pending.
-    expect(() => { ctx.get('remoteAnswerGuard')?.check({ peer: admitted.peer, event: 'approval/request', request: { grants: 'real-browser' }, value: 'allowed-once' } as never) })
-      .toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED', details: { action: 'real-browser' } }))
-    // A locked device may still say no, and the computer may always say yes.
-    for (const value of ['rejected', 'cancelled', 'unavailable']) expect(() => { give(admitted.peer, value) }, value).not.toThrow()
-    expect(() => { give(fakePeer('local')) }).not.toThrow()
-    // Pins the grace exclusion: a device in its approval grace typed no code or PIN, so it cannot give the grant.
-    unlock = { id: 'grace-1', grace: true }
-    expect(() => { give(admitted.peer) }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED', message: REAL_BROWSER_REFUSAL, details: { action: 'real-browser' } }))
-    // Pins the unlocked device: a running unlock gives the grant, while the computer's other reserved grants stay refused.
-    unlock = { id: 'elevation-1' }
-    expect(() => { give(admitted.peer) }).not.toThrow()
-    for (const marker of ['full-access', 'workspace-management', 'external-agent']) {
-      expect(() => { provider().checkAnswer({ peer: admitted.peer, event: 'approval/request', request: { grants: marker }, value: 'allowed-once' }) }, marker)
-        .toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
+    for (const state of [{ mode: false, unlock: undefined }, { mode: false, unlock: { id: 'elevation-1' } }, { mode: false, unlock: { id: 'grace-1', grace: true as const } }, { mode: true, unlock: { id: 'elevation-1' } }, { mode: true, unlock: { id: 'grace-1', grace: true as const } }]) {
+      mode = state.mode
+      unlock = state.unlock
+      expect(ctx.homeAuth.dangerousMode()).toBe(state.mode)
+      for (const marker of markers) expect(() => { give(marker) }, `${marker} ${JSON.stringify(state)}`).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
     }
-    // Pins the end of the unlock: the device is refused again.
-    unlock = undefined
-    expect(() => { give(admitted.peer) }).toThrow(expect.objectContaining({ details: { action: 'real-browser' } }))
-  })
-
-  it('refuses a real-browser grant from a device in its approval grace while dangerous mode holds', async () => {
-    ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
-    const admitted = provider().admit(request({ headers: { cookie: `__Host-delorun-session=${await session(2)}` } }), 'reach-tailscale-private')
-    if (admitted.kind !== 'admitted') throw new Error('not admitted')
-    vi.spyOn(ctx, 'get').mockImplementation(((name: string) => (name === 'reachFullAccessGrants' ? { dangerousMode: () => true } : name === 'previewFlags' ? undefined : Context.prototype.get.call(ctx, name as never))) as never)
-    expect(ctx.homeAuth.dangerousMode()).toBe(true)
-    let unlock: { id: string; grace?: true } = { id: 'grace-1', grace: true }
-    vi.spyOn(ctx.homeAuth, 'elevationOf').mockImplementation(() => unlock as never)
-    const give = (grantsMarker: string): void => {
-      provider().checkAnswer({ peer: admitted.peer, event: 'approval/request', request: { grants: grantsMarker }, value: 'allowed-once' })
+    // The answer grant admits its own prompt, once, and a device may always say no.
+    for (const marker of markers) {
+      grants.mintAnswer(holder, answerKey({ agent: 'chat-a', callId: 'call_1', grants: marker }), 'allowed-once')
+      expect(() => { give(marker) }, marker).not.toThrow()
+      expect(() => { give(marker) }, marker).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
+      expect(() => { provider().checkAnswer({ peer: admitted.peer, event: 'approval/request', request: { grants: marker }, value: 'rejected' }) }).not.toThrow()
     }
-    // Pins the grace exclusion in dangerous mode: the mode lifts the computer's grants for the grace, not this one.
-    expect(() => { give('real-browser') }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED', message: REAL_BROWSER_REFUSAL, details: { action: 'real-browser' } }))
-    expect(() => { give('full-access') }).not.toThrow()
-    unlock = { id: 'elevation-1' }
-    expect(() => { give('real-browser') }).not.toThrow()
   })
 
   it('sets the rolled cookie on a plain request and never on an upgrade', async () => {
@@ -484,7 +437,7 @@ describe('the authenticator provider', () => {
     it('registers the policy, which lets a device answer approval prompts, only while an answer guard is mounted', () => {
       const registered: string[] = []
       const registry = { registerPolicy: (kind: string) => { registered.push(kind); return () => {} } }
-      const policy = createReachAccessPolicy({ admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere', elevationOf: () => undefined, pageUnlockOf: () => undefined, unlockModeEnabled: () => false, keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined, computerOnlySwitches: () => [], protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set([COMPUTER_ONLY_ROW]), defaultPermission: () => undefined, dangerousMode: () => false })
+      const policy = createReachAccessPolicy({ admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere', elevationOf: () => undefined, pageUnlockOf: () => undefined, unlockModeEnabled: () => false, keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, computerOnlySwitches: () => [], protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set([COMPUTER_ONLY_ROW]), defaultPermission: () => undefined, dangerousMode: () => false })
       expect(Object.keys(REACH_ALLOWED_ACTIONS)).toContain('event:approval/request')
       // Pins the guard check: without it a device could answer every approval prompt with nothing to refuse a grant.
       expect(() => registerReachPolicy(undefined, registry, policy)).toThrow(/no remoteAnswerGuard is mounted/)
@@ -787,8 +740,8 @@ describe('the authenticator provider', () => {
       expect(create(page.unlock.unlockId)).toEqual({ kind: 'deny', reason: 'elevation-required: directoryPicker/pick' })
       expect(create(undefined)).toEqual({ kind: 'deny', reason: 'elevation-required: directoryPicker/pick' })
       const give = (peer: PeerScope): void => { provider().checkAnswer({ peer, event: 'approval/request', request: { grants: 'full-access' }, value: 'allowed-once' }) }
-      expect(() => { give(peerOf(unlocked)) }).not.toThrow()
-      // Pins the answer guard: it reads the answering page's Peer, so a locked tab cannot answer what a sibling could.
+      // Pins A483 for answers: the page that holds an unlock answers no reserved prompt without its grant, nor does its sibling tab.
+      expect(() => { give(peerOf(unlocked)) }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
       expect(() => { give(peerOf(locked)) }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
     })
 
@@ -822,7 +775,7 @@ describe('the authenticator provider', () => {
         const peer = principalOf(admission)
         if (peer === undefined) throw new Error('no principal')
         const principal = reachDevicePrincipal(peer.deviceId, peer.listener, peer.unlockId)
-        const policy = createReachAccessPolicy({ admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere', elevationOf: () => (unlocked ? { id: 'elevation-1' } : undefined), pageUnlockOf: () => undefined, unlockModeEnabled: () => false, keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined, computerOnlySwitches: () => [], protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set([COMPUTER_ONLY_ROW]), defaultPermission: () => undefined, dangerousMode: () => mode })
+        const policy = createReachAccessPolicy({ admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere', elevationOf: () => (unlocked ? { id: 'elevation-1' } : undefined), pageUnlockOf: () => undefined, unlockModeEnabled: () => false, keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, computerOnlySwitches: () => [], protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set([COMPUTER_ONLY_ROW]), defaultPermission: () => undefined, dangerousMode: () => mode })
         return policy.bindings(principal)[0]?.condition?.({ action, resource: { kind: 'global' }, args: {} } as never)
       }
       for (const action of [...Object.keys(REACH_ALLOWED_ACTIONS), ...Object.keys(REACH_KEY_ACTIONS), ...Object.keys(REACH_ELEVATED_ACTIONS), ...Object.keys(REACH_DENIED_ACTIONS), 'terminal/create']) {
@@ -883,21 +836,33 @@ describe('the authenticator provider', () => {
       }
     })
 
-    it('lets only an unlocked page give a real-browser grant, and refuses its locked sibling tab and the page once it locks', async () => {
+    // Pins A483 for a phone with no passkey: with the page-unlock lift back in checkAnswer or the policy, an unlock token
+    // minted before the window was removed answers reserved prompts and admits face rows with no grant.
+    it('gives a no-passkey page that holds an old unlock token no face row and no answer, and its PIN grants admit each once', async () => {
       await turnPinOn()
       ctx.homeAuth.serve({ listener: PRIVATE, address: ADDRESS, factor: 'tailnet-membership' })
       const page = await unlockedPage(2)
+      expect(ctx.homeAuth.deviceHasPasskey(page.deviceId)).toBe(false)
+      expect(ctx.homeAuth.pageUnlockOf(page.unlock.unlockId)).toBeDefined()
       const unlocked = peerOf(admitAs(page.cookie, { 'delorun-unlock': page.unlock.token }))
-      const sibling = peerOf(admitAs(page.cookie))
-      const give = (peer: PeerScope): void => {
-        provider().checkAnswer({ peer, event: 'approval/request', request: { grants: 'real-browser' }, value: 'allowed-once' })
+      expect(provider().reachPeer(unlocked.id)?.unlockId).toBe(page.unlock.unlockId)
+      const policy = await policyOf()
+      const pick = { action: 'directoryPicker/pick', resource: { kind: 'global' }, args: {} } as never
+      const decide = () => policy.bindings(reachDevicePrincipal(page.deviceId, PRIVATE, page.unlock.unlockId))[0]?.condition?.(pick)
+      expect(decide()).toEqual({ kind: 'deny', reason: 'elevation-required: directoryPicker/pick' })
+      const give = (marker: string): void => {
+        provider().checkAnswer({ peer: unlocked, event: 'approval/request', request: { agent: { id: 'chat-a' }, callId: 'call_2', grants: marker }, value: 'allowed-once' })
       }
-      expect(() => { give(unlocked) }).not.toThrow()
-      // Pins the per-page rule: a tab of the same device without the unlock is merely signed in.
-      expect(() => { give(sibling) }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED', details: { action: 'real-browser' } }))
-      // Pins the end of the page's unlock (its idle end, say) while its Peer still stands: the page is refused.
-      vi.spyOn(ctx.homeAuth, 'pageUnlockOf').mockReturnValue(undefined)
-      expect(() => { give(unlocked) }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED', details: { action: 'real-browser' } }))
+      for (const marker of ['full-access', 'workspace-management', 'external-agent', 'real-browser']) {
+        expect(() => { give(marker) }, marker).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
+      }
+      // The PIN gives this device one-action grants, as Face ID gives a passkey phone.
+      const grants = ctx.homeAuth.faceGrants()
+      if (grants === undefined) throw new Error('no grant store')
+      const holder = { deviceId: page.deviceId, listener: PRIVATE } as const
+      grants.mintAnswer(holder, answerKey({ agent: 'chat-a', callId: 'call_2', grants: 'real-browser' }), 'allowed-once')
+      expect(() => { give('real-browser') }).not.toThrow()
+      expect(() => { give('real-browser') }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
     })
 
     it('ignores a token in a query and refuses a repeated or mismatched one, burning the unlock', async () => {

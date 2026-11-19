@@ -17,11 +17,11 @@ import { fakeHost } from './fake-host.ts'
 
 const t = makeTranslate(en)
 const entry = { credentialId: 'c1', createdAt: Date.UTC(2026, 10, 18), lastUsedAt: null, synced: false }
-const pinView = (phase: PinView['phase']): PinView => ({ phase, secret: 'pin', busy: false, outcome: undefined, paused: false, asked: false })
+const pinView = (phase: PinView['phase']): PinView => ({ phase, secret: 'pin' })
 
 function section(script: Parameters<typeof fakeHost>[0], over: { computer?: boolean; phase?: PinView['phase'] } = {}) {
   const host = fakeHost(script)
-  const props = { t, close: () => {}, fetch: host.fetch, atComputer: () => over.computer ?? false, usePin: <S,>(select: (view: PinView) => S): S => select(pinView(over.phase ?? 'unlocked')), browser: fakeBrowser() } as FaceIdSectionProps
+  const props = { t, close: () => {}, fetch: host.fetch, atComputer: () => over.computer ?? false, usePin: <S,>(select: (view: PinView) => S): S => select(pinView(over.phase ?? 'on')), browser: fakeBrowser() } as FaceIdSectionProps
   render(<FaceIdSection {...props} />)
   return host
 }

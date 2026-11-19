@@ -58,8 +58,7 @@ export const en = {
   'approval.forRun': 'Allow for this run',
   'approval.once': 'Allow once',
   'approval.locked': 'Allow this at your computer. A phone can reject it.',
-  'approval.unlock': 'Unlock to answer',
-  'approval.unlockedUntil': 'This phone is unlocked until {time}.',
+  'approval.notConfirmed': 'Not confirmed. Nothing was sent.',
 }
 
 /** A key of the dictionary. */
@@ -120,8 +119,7 @@ export const zh: Record<AgentSeatsLocaleKey, string> = {
   'approval.forRun': '本次运行内允许',
   'approval.once': '仅允许一次',
   'approval.locked': 'Allow this at your computer. A phone can reject it.',
-  'approval.unlock': '解锁后答复',
-  'approval.unlockedUntil': '这部手机已解锁至 {time}。',
+  'approval.notConfirmed': 'Not confirmed. Nothing was sent.',
 }
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {

@@ -2,8 +2,8 @@
  * The PIN mode routes (C14, "PIN mode"), version 1.
  *
  * - **Device routes** answer a device on a reach listener with a live session cookie and, for a `POST`, the studio's own
- *   origin, as the elevation routes do. `POST /auth/pin/unlock` takes `{ secret }` and answers the page unlock's token,
- *   once; it answers `PIN_NOT_ALLOWED_ON_ADDRESS` on any listener but the Tailscale private one. `POST /auth/pin/touch`
+ *   origin, as the elevation routes do. `POST /auth/pin/unlock` is refused to every device with `ELEVATION_REQUIRED`:
+ *   a device confirms each action by a one-action grant (`/auth/passkey/pin` with the PIN), never a page window (A483). `POST /auth/pin/touch`
  *   and `POST /auth/pin/lock` name the unlock by the `Delorun-Unlock` header, never by the URL.
  * - **Computer routes** set or replace the PIN and turn the mode on (`set`), change the idle minutes and lock-when-hidden
  *   without the secret (`options`), turn it off (`off`) and resume unlocks after a home-wide pause (`resume`). Each answers only the person at the computer ({@link personAtComputer}), so a device
@@ -63,26 +63,18 @@ export function pinStateHandler(auth: HomeAuth): RouteHandler {
 }
 
 /**
- * Build the route a device unlocks its page on.
+ * Build the route that refuses a device's page unlock: no device holds a PIN window (A483).
  * @param auth - the home-auth instance.
  * @returns the handler.
  */
 export function pinUnlockHandler(auth: HomeAuth): RouteHandler {
-  return async (request, response) => {
-    const device = deviceSession(auth, request, response, 'POST')
-    if (device === undefined) return
-    try {
-      const message = await readMessage(request, response)
-      if (message === undefined) return
-      if (typeof message.secret !== 'string') throw new HomeAuthError('BAD_REQUEST', 'an unlock carries the PIN or passcode')
-      // A device that holds a passkey confirms each action with Face ID or its PIN as a one-action grant, never a window.
-      if (auth.passkeyStore.forDevice(device.session.deviceId).length > 0) {
-        throw new HomeAuthError('ELEVATION_REQUIRED', 'This device confirms each action with Face ID or your PIN. It has no unlock window')
-      }
-      sendJson(response, 200, await auth.pin.unlock(askerOf(device), message.secret))
-    } catch (error) {
-      sendThrown(response, error)
+  return (request, response) => {
+    // Every device confirms each action with Face ID or its PIN as a one-action grant through `/auth/passkey/pin`, never
+    // a window (A483); the home's grant store exists whenever this route is served. Nothing of the request is read.
+    if (deviceSession(auth, request, response, 'POST') !== undefined) {
+      sendThrown(response, new HomeAuthError('ELEVATION_REQUIRED', 'This device confirms each action with Face ID or your PIN. It has no unlock window'))
     }
+    return Promise.resolve()
   }
 }
 
