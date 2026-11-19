@@ -16,6 +16,7 @@ export {
   WIDER_MODES,
   approveEscalation,
   denialMarkers,
+  clearSandboxFault,
   environmentDenialMarker,
   escalationHintMarker,
   noteSandboxFault,
@@ -207,6 +208,18 @@ export interface ConfinedArgv {
  * failure.
  */
 export const SANDBOX_UNAVAILABLE = 'SANDBOX_UNAVAILABLE'
+
+/**
+ * Whether a runner's failure text names a passing resource or mount-table fault rather than a lasting one: a mount
+ * point that could not be made (`Can't mkdir`, `Not a directory`),
+ * `EAGAIN`, `ENOMEM` or a timeout. The command never ran, so repeating it is safe.
+ * @param detail - the matched runner failure line.
+ * @returns true when a retry can succeed.
+ */
+export function isTransientRunnerFailure(detail: string): boolean {
+  const passing = /can't mkdir|can't mount|not a directory|resource temporarily unavailable|cannot allocate memory/iu
+  return passing.test(detail) || /timed out|\beagain\b|\benomem\b/iu.test(detail)
+}
 
 /**
  * Thrown when {@link SandboxProvider.confine} cannot enforce the requested

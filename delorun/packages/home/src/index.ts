@@ -14,7 +14,7 @@ export { claimFatalHandler, FATAL_EXIT, installLastResort, recordFatal, renderFa
 export { FAIL_CLOSED_STUB, FAIL_CLOSED_STUB_KEY, isFailClosedStub, type FailClosedStub } from './fail-closed.ts'
 export { resolveDelorunHome, type DelorunHome } from './resolve.ts'
 export { shellQuote } from './shell-quote.ts'
-export { checkPrivateDirectory, checkPrivateDirectorySync, ensureHomeTree, insideBwrapSandbox, runDirectory, type PrivateDirectoryOptions } from './tree.ts'
+export { checkPrivateDirectory, checkPrivateDirectorySync, ensureHomeTree, insideBwrapSandbox, runDirectory, SANDBOX_VIEW_ENV, type PrivateDirectoryOptions } from './tree.ts'
 export { checkProtectedFile, checkProtectedFileSync, readProtectedFile, writeProtectedFile } from './protected-file.ts'
 export { checkHolder, currentHolder, darwinProcessStart, holderAlive, holderIdentity, holderOf, linuxProcessStart, parseHolder, processExists, readPidNamespace, readProcessStart, SYSTEM_PROCESS_TABLE, type HolderCheck, type HolderIdentity, type ProcessHolder, type ProcessTable, type UnconfirmedHolder } from './holder.ts'
 export { isLockId, LockFile, randomLockId, type LockFileKind } from './lock-file.ts'

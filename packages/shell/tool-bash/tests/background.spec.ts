@@ -326,6 +326,27 @@ describe('foreground commands as jobs', () => {
     expect(ctx.jobs.list()).toEqual([])
   })
 
+  it('repeats a command once when the sandbox runner failed on a passing mount fault, and never twice', async () => {
+    const ctx = await setup()
+    const transient = () => new SandboxUnavailableError('workspace-write', "bwrap: Can't mkdir /mnt/wsl/x: Not a directory", { transient: true })
+    const execute = vi.spyOn(ctx.shell, 'execute').mockRejectedValueOnce(transient())
+    const repeated = await call(ctx, { command: 'echo repeated', description: 'test command' })
+    expect(repeated.isError).not.toBe(true)
+    expect(text(repeated)).toContain('repeated')
+    expect(execute).toHaveBeenCalledTimes(2)
+    execute.mockReset().mockRejectedValue(transient())
+    const refused = await call(ctx, { command: 'true', description: 'test command' })
+    expect(refused).toMatchObject({ isError: true, error: { info: { name: 'SandboxUnavailableError' } } })
+    expect(execute).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not repeat a command whose runner failure is lasting', async () => {
+    const ctx = await setup()
+    const execute = vi.spyOn(ctx.shell, 'execute').mockRejectedValue(new SandboxUnavailableError('workspace-write', 'bwrap: setting up uid map: Permission denied'))
+    await call(ctx, { command: 'true', description: 'test command' })
+    expect(execute).toHaveBeenCalledTimes(1)
+  })
+
   it('cancelling the call kills its job, waits for it to settle, and reports the structured abort', async ({ task }) => {
     const ctx = await setup()
     const seen: string[] = []

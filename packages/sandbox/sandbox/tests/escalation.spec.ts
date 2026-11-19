@@ -15,6 +15,7 @@ import {
   WIDER_MODES,
   approveEscalation,
   escalationHintMarker,
+  clearSandboxFault,
   noteSandboxFault,
   sandboxDenialMarker,
   sandboxPermissionsDescription,
@@ -124,15 +125,33 @@ describe('approveEscalation', () => {
     })
   })
 
-  it('after a temporary sandbox fault, says so once on the card and tells the model to retry inside the sandbox on rejection', async () => {
+  it('after a temporary sandbox fault, a full-access ask says so once, offers no chat-scoped choice, and a rejection tells the model to retry in the sandbox', async () => {
     const agent = {}
-    const seen: { displayReason?: { en: string; zh: string } }[] = []
+    const seen: { displayReason?: { en: string; zh: string }; notice?: { en: string; zh: string }; escalatesTo?: string }[] = []
+    const record = (r: unknown): void => { seen.push(r as never) }
     noteSandboxFault(agent)
-    await expect(approveEscalation(req(), ingredients({ agent, approver: approver('rejected', r => seen.push(r as never)) }))).rejects.toThrow(/without sandbox_permissions/)
-    expect(seen[0]?.displayReason?.en).toMatch(/^Delorun's sandbox had a problem; this asks to run without it\. Allow this operation/)
-    expect(seen[0]?.displayReason?.zh).toContain('Delorun 的沙盒出了问题')
-    await approveEscalation(req(), ingredients({ agent, approver: approver('allowed-once', r => seen.push(r as never)) }))
+    await expect(approveEscalation(req({ requestedMode: 'danger-full-access' }), ingredients({ agent, approver: approver('rejected', record) }))).rejects.toThrow(/without sandbox_permissions/)
+    expect(seen[0]?.notice?.en).toBe("Delorun's sandbox had a problem; this asks to run without it.")
+    expect(seen[0]?.notice?.zh).toContain('Delorun 的沙盒出了问题')
+    expect(seen[0]?.displayReason?.en).toMatch(/^Allow this operation/)
+    expect(seen[0]).not.toHaveProperty('escalatesTo')
+    await approveEscalation(req({ requestedMode: 'danger-full-access' }), ingredients({ agent, approver: approver('allowed-once', record) }))
     expect(seen[1]?.displayReason?.en).toMatch(/^Allow this operation/)
+    expect(seen[1]).not.toHaveProperty('notice')
+    expect(seen[1]?.escalatesTo).toBe('danger-full-access')
+  })
+
+  it('a confined success clears the fault note, and a workspace-write ask never carries it', async () => {
+    const agent = {}
+    const seen: { displayReason?: { en: string } }[] = []
+    const record = (r: unknown): void => { seen.push(r as never) }
+    noteSandboxFault(agent)
+    clearSandboxFault(agent)
+    await approveEscalation(req({ requestedMode: 'danger-full-access' }), ingredients({ agent, approver: approver('allowed-once', record) }))
+    noteSandboxFault(agent)
+    await approveEscalation(req(), ingredients({ agent, approver: approver('allowed-once', record) }))
+    expect(seen.map(entry => entry.displayReason?.en.startsWith('Allow'))).toEqual([true, true])
+    expect(seen.some(entry => 'notice' in entry)).toBe(false)
   })
 
   it('marks only an escalation to full access as a full-access grant', async () => {

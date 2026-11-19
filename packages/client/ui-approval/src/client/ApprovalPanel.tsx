@@ -13,6 +13,7 @@ export function ApprovalPanel(props: ApprovalComposerProps) {
     requestKey: approval.key,
     title: reason ?? props.t('escalation', { toolName: approval.toolName }),
     toolName: approval.toolName,
+    ...(approval.notice === undefined ? {} : { description: props.resolveReason(approval.notice) }),
     ...(approval.grants === undefined ? {} : { grants: approval.grants }),
     ...(approval.escalatesTo === undefined ? {} : { escalatesTo: approval.escalatesTo }),
     ...(approval.callId === undefined ? {} : { callId: approval.callId }),

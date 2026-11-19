@@ -8,7 +8,7 @@
 import { parseArgs, type ParseArgsConfig } from 'node:util'
 import { CliError, EXIT, type ExitCode } from './exit.ts'
 import { helpPointer } from './help.ts'
-import { ensureHomeTree, resolveDelorunHome, type DelorunHome } from '@delorun/home'
+import { ensureHomeTree, insideBwrapSandbox, resolveDelorunHome, type DelorunHome } from '@delorun/home'
 import { applyLaunchEnvironment } from './launch-environment.ts'
 import { selectProfile } from './profile.ts'
 
@@ -68,7 +68,8 @@ export interface PreparedHome {
 export async function prepareHome(context: CommandContext, profileFlag: string | undefined): Promise<PreparedHome> {
   const profile = selectProfile(profileFlag, context.env)
   const home = await resolveDelorunHome(context.env)
-  await ensureHomeTree(home.path, profile)
+  // Inside a Delorun chat sandbox bwrap shows the home's real 0700 as 0755, so the mode bits are not checked there.
+  await ensureHomeTree(home.path, profile, { insideSandbox: insideBwrapSandbox(undefined, context.env) })
   applyLaunchEnvironment(home.path, profile)
   return { home, profile }
 }

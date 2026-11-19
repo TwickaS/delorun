@@ -130,10 +130,12 @@ describe.runIf(POSIX)('ensureHomeTree', () => {
     expect((await refusal(checkPrivateDirectory(link, { insideSandbox: true }))).code).toBe('HOME_MODE')
   })
 
-  it('recognises bubblewrap by process 1 and treats an unreadable /proc as not sandboxed', () => {
-    expect(insideBwrapSandbox(() => 'bwrap\n')).toBe(true)
-    expect(insideBwrapSandbox(() => 'systemd\n')).toBe(false)
-    expect(insideBwrapSandbox(() => { throw new Error('ENOENT') })).toBe(false)
+  it('recognises the Delorun-launched bubblewrap by process 1 plus the launcher marker (a Flatpak-style bwrap without it still refuses), and treats an unreadable /proc as not sandboxed', () => {
+    const marked = { DELORUN_SANDBOX_VIEW: '1' }
+    expect(insideBwrapSandbox(() => 'bwrap\n', marked)).toBe(true)
+    expect(insideBwrapSandbox(() => 'bwrap\n', {})).toBe(false)
+    expect(insideBwrapSandbox(() => 'systemd\n', marked)).toBe(false)
+    expect(insideBwrapSandbox(() => { throw new Error('ENOENT') }, marked)).toBe(false)
   })
 
   it('refuses a laxer secrets/ or run/<profile>/ and a home that is a symbolic link', async () => {

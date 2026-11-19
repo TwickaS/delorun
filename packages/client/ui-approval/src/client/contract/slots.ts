@@ -141,6 +141,8 @@ export interface ApprovalPresentationRequest {
   readonly reason?: string
   /** Localized presentation copy; the audit reason remains unchanged. */
   readonly displayReason?: { readonly en: string; readonly [locale: string]: string }
+  /** Localized line shown beside the request, apart from the asker's reason. */
+  readonly notice?: { readonly en: string; readonly [locale: string]: string }
   /** What an `allowed-once` answer grants beyond an ordinary tool call, when it does. */
   readonly grants?: ApprovalGrant
   /** The sandbox mode a sandbox escalation asks for, when the request is one. */
@@ -171,6 +173,8 @@ export class PendingApproval {
   readonly reason: string | undefined
   /** Localized presentation copy, when supplied by the asker. */
   readonly displayReason: ApprovalPresentationRequest['displayReason']
+  /** Localized notice apart from the reason, when supplied by the asker. */
+  readonly notice: ApprovalPresentationRequest['notice']
   /** Grant an `allowed-once` answer gives, when the asker declared one. */
   readonly grants: ApprovalGrant | undefined
   /** The sandbox mode an escalation asked for, when the asker declared one. */
@@ -197,6 +201,7 @@ export class PendingApproval {
     this.callId = request.callId
     this.reason = request.reason
     this.displayReason = request.displayReason
+    this.notice = request.notice
     this.grants = request.grants
     this.escalatesTo = request.escalatesTo
     const completion = Promise.withResolvers<ApprovalDecision>()

@@ -2,7 +2,7 @@
 
 /** English escalation messages. */
 export const en = {
-  afterFault: "Delorun's sandbox had a problem; this asks to run without it. ",
+  afterFault: "Delorun's sandbox had a problem; this asks to run without it.",
   escalation: (mode: string, justification: string): string => `Allow this operation with ${mode} permissions: ${justification}`,
 }
 
@@ -20,54 +20,44 @@ export const ja = {
 
 /** Spanish dictionary, checked against the English keys. */
 export const es = {
-  afterFault: 'El sandbox de Delorun tuvo un problema; esta solicitud pide ejecutar sin él. ',
+  afterFault: 'El sandbox de Delorun tuvo un problema; esta solicitud pide ejecutar sin él.',
   escalation: (mode: string, justification: string): string => `Permitir esta operación con permisos ${mode}: ${justification}`,
 } satisfies typeof en
 
 /** French dictionary, checked against the English keys. */
 export const fr = {
-  afterFault: "Le bac à sable de Delorun a rencontré un problème ; cette demande exige d'exécuter sans lui. ",
+  afterFault: "Le bac à sable de Delorun a rencontré un problème ; cette demande exige d'exécuter sans lui.",
   escalation: (mode: string, justification: string): string => `Autoriser cette opération avec les permissions ${mode} : ${justification}`,
 } satisfies typeof en
 
 /** German dictionary, checked against the English keys. */
 export const de = {
-  afterFault: 'Die Sandbox von Delorun hatte ein Problem; diese Anfrage bittet darum, ohne sie auszuführen. ',
+  afterFault: 'Die Sandbox von Delorun hatte ein Problem; diese Anfrage bittet darum, ohne sie auszuführen.',
   escalation: (mode: string, justification: string): string => `Diesen Vorgang mit ${mode}-Berechtigungen zulassen: ${justification}`,
 } satisfies typeof en
 
 /** Russian dictionary, checked against the English keys. */
 export const ru = {
-  afterFault: 'У песочницы Delorun возникла проблема; этот запрос просит выполнить без неё. ',
+  afterFault: 'У песочницы Delorun возникла проблема; этот запрос просит выполнить без неё.',
   escalation: (mode: string, justification: string): string => `Разрешить эту операцию с правами ${mode}: ${justification}`,
 } satisfies typeof en
 
 /** Portuguese dictionary, checked against the English keys. */
 export const pt = {
-  afterFault: 'O sandbox do Delorun teve um problema; este pedido solicita executar sem ele. ',
+  afterFault: 'O sandbox do Delorun teve um problema; este pedido solicita executar sem ele.',
   escalation: (mode: string, justification: string): string => `Permitir esta operação com permissões ${mode}: ${justification}`,
 } satisfies typeof en
+
+/** Localized text type shared by the approval request's `displayReason` and `notice`. */
+type Localized = Record<'en' | 'zh' | 'ja' | 'es' | 'fr' | 'de' | 'ru' | 'pt', string>
 
 /**
  * Build translations for the existing Client localized-text resolver.
  * @param mode - requested sandbox mode.
  * @param justification - raw model justification, preserved in every translation.
- * @param afterFault - whether the request follows a temporary sandbox fault, which the text then states first.
  * @returns localized approval text.
  */
-export function escalationDisplayReason(mode: string, justification: string, afterFault = false): Record<'en' | 'zh' | 'ja' | 'es' | 'fr' | 'de' | 'ru' | 'pt', string> {
-  if (afterFault) {
-    return {
-      en: en.afterFault + en.escalation(mode, justification),
-      zh: zh.afterFault + zh.escalation(mode, justification),
-      ja: ja.afterFault + ja.escalation(mode, justification),
-      es: es.afterFault + es.escalation(mode, justification),
-      fr: fr.afterFault + fr.escalation(mode, justification),
-      de: de.afterFault + de.escalation(mode, justification),
-      ru: ru.afterFault + ru.escalation(mode, justification),
-      pt: pt.afterFault + pt.escalation(mode, justification),
-    }
-  }
+export function escalationDisplayReason(mode: string, justification: string): Localized {
   return {
     en: en.escalation(mode, justification),
     zh: zh.escalation(mode, justification),
@@ -77,5 +67,22 @@ export function escalationDisplayReason(mode: string, justification: string, aft
     de: de.escalation(mode, justification),
     ru: ru.escalation(mode, justification),
     pt: pt.escalation(mode, justification),
+  }
+}
+
+/**
+ * The line an approval card shows when a full-access request follows a temporary sandbox fault.
+ * @returns localized notice text, separate from the model's justification.
+ */
+export function sandboxFaultNotice(): Localized {
+  return {
+    en: en.afterFault,
+    zh: zh.afterFault,
+    ja: ja.afterFault,
+    es: es.afterFault,
+    fr: fr.afterFault,
+    de: de.afterFault,
+    ru: ru.afterFault,
+    pt: pt.afterFault,
   }
 }

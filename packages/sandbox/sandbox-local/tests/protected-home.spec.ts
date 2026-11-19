@@ -46,7 +46,7 @@ function aliasMount(target: string, alias: string): MountEntry[] {
   return [{ device, root: '/', mountPoint: '/', fsType: 'ext4' }, { device, root: dirname(target), mountPoint: alias, fsType: 'ext4' }]
 }
 
-const BASE = ['--ro-bind', '/', '/', '--dev', '/dev', '--unshare-pid', '--proc', '/proc', '--die-with-parent']
+const BASE = ['--ro-bind', '/', '/', '--dev', '/dev', '--unshare-pid', '--proc', '/proc', '--die-with-parent', '--setenv', 'DELORUN_SANDBOX_VIEW', '1']
 
 const dirs: string[] = []
 const contexts: Context[] = []
@@ -137,6 +137,30 @@ describe('resolveProtection with aliases', () => {
     expect(protection.homeAliases).toEqual([join(alias, basename(home)), join(data, home)])
     // Landlock leaves out the whole second mount, and the firmlink spelling itself.
     expect(protection.homeAliasMounts).toEqual([alias, join(data, home)])
+  })
+
+  it('hides a bind-mount root whole instead of making a tmpfs at each alias under it, and only while the root is a directory', () => {
+    const { root, home } = fixture()
+    const bindRoot = join(root, 'docker-bind')
+    mkdirSync(bindRoot)
+    const alias = join(bindRoot, 'Ubuntu-x')
+    symlinkSync(dirname(home), alias, 'dir')
+    const protection = resolveProtection(settingsOf({ home }), aliasMount(home, alias), NO_DATA_VOLUME, 'linux', bindRoot)
+    expect(protection.hiddenDirectories).toEqual([bindRoot])
+    expect(protection.homeAliases).toEqual([join(alias, basename(home))])
+    const args = bwrapProfileArgs({ mode: 'read-only', workspaceRoot: '/ws' }, protection)
+    expect(args.filter(arg => arg === bindRoot)).toHaveLength(2)
+    expect(args).not.toContain(join(alias, basename(home)))
+  })
+
+  it('leaves a bind-mount root that is not a directory to the per-alias mounts', () => {
+    const { root, home } = fixture()
+    const bindRoot = join(root, 'docker-bind-file')
+    writeFileSync(bindRoot, '')
+    const alias = join(root, 'elsewhere')
+    symlinkSync(dirname(home), alias, 'dir')
+    const protection = resolveProtection(settingsOf({ home }), aliasMount(home, alias), NO_DATA_VOLUME, 'linux', bindRoot)
+    expect(protection.hiddenDirectories).toEqual([])
   })
 
   it('shadows a denied socket at each of its mount aliases outside the home', () => {

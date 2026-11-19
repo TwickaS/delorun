@@ -18,7 +18,7 @@
 
 import { HarnessError } from '@deepseek-ai/dsh-error'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
-import { escalationDisplayReason } from './locales.ts'
+import { escalationDisplayReason, sandboxFaultNotice } from './locales.ts'
 import type { SandboxMode } from './index.ts'
 
 /**
@@ -106,6 +106,15 @@ const faulted = new WeakSet<object>()
  */
 export function noteSandboxFault(agent: object | undefined): void {
   if (agent !== undefined) faulted.add(agent)
+}
+
+/**
+ * Forget a remembered sandbox fault after this agent's next confined command ran, so a later escalation is not
+ * presented as following the fault.
+ * @param agent - the calling agent.
+ */
+export function clearSandboxFault(agent: object | undefined): void {
+  if (agent !== undefined) faulted.delete(agent)
 }
 
 /**
@@ -275,16 +284,18 @@ export async function approveEscalation<A, C>(request: EscalationRequest, approv
   }
   // Self-contained for the audit trail: approval/asked stores this reason,
   // and the target mode is part of the grant's identity.
-  const afterFault = faulted.delete(approval.agent as object)
+  // The note belongs to a full-access ask only; a chat-scoped allow is not offered after a fault (no `escalatesTo`).
+  const afterFault = faulted.delete(approval.agent as object) && mode === 'danger-full-access'
   const outcome = await approval.approver.request({
     agent: approval.agent,
     toolName: approval.toolName,
     callId: approval.callId,
     reason: `escalate sandbox to ${mode}: ${justification}`,
-    displayReason: escalationDisplayReason(mode, justification, afterFault),
+    displayReason: escalationDisplayReason(mode, justification),
+    ...afterFault ? { notice: sandboxFaultNotice() } : {},
     ...mode === 'danger-full-access' ? { grants: 'full-access' as const } : {},
     // Only command and operation escalations offer the chat-scoped choice; other subjects keep upstream's buttons.
-    ...(subject === 'command' || subject === 'operation') && (mode === 'workspace-write' || mode === 'danger-full-access') ? { escalatesTo: mode } : {},
+    ...!afterFault && (subject === 'command' || subject === 'operation') && (mode === 'workspace-write' || mode === 'danger-full-access') ? { escalatesTo: mode } : {},
     ...approval.signal ? { signal: approval.signal } : {},
   })
   switch (outcome) {

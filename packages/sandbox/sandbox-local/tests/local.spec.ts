@@ -75,12 +75,12 @@ const SEATBELT_RO_PROFILE = '(version 1) (allow default) (deny file-write*) (all
 
 describe('profile dialects', () => {
   it('bwrap read-only: whole tree read-only with fresh /dev and private PID-scoped /proc, no writable mounts', () => {
-    expect(bwrapProfileArgs(RO)).toEqual(['--ro-bind', '/', '/', '--dev', '/dev', '--unshare-pid', '--proc', '/proc', '--die-with-parent'])
+    expect(bwrapProfileArgs(RO)).toEqual(['--ro-bind', '/', '/', '--dev', '/dev', '--unshare-pid', '--proc', '/proc', '--die-with-parent', '--setenv', 'DELORUN_SANDBOX_VIEW', '1'])
   })
 
   it('bwrap workspace-write: adds an ephemeral /tmp and rebinds the workspace root', () => {
     expect(bwrapProfileArgs(WW)).toEqual([
-      '--ro-bind', '/', '/', '--dev', '/dev', '--unshare-pid', '--proc', '/proc', '--die-with-parent',
+      '--ro-bind', '/', '/', '--dev', '/dev', '--unshare-pid', '--proc', '/proc', '--die-with-parent', '--setenv', 'DELORUN_SANDBOX_VIEW', '1',
       '--tmpfs', '/tmp', '--bind', '/ws', '/ws',
     ])
   })
@@ -102,7 +102,7 @@ describe('profile dialects', () => {
     const realWs = realpathSync.native(ws)
     const realExtra = realpathSync.native(extra)
     expect(bwrapProfileArgs({ mode: 'workspace-write', workspaceRoot: ws, additionalWritableRoots: [extra] })).toEqual([
-      '--ro-bind', '/', '/', '--dev', '/dev', '--unshare-pid', '--proc', '/proc', '--die-with-parent',
+      '--ro-bind', '/', '/', '--dev', '/dev', '--unshare-pid', '--proc', '/proc', '--die-with-parent', '--setenv', 'DELORUN_SANDBOX_VIEW', '1',
       '--tmpfs', '/tmp', '--bind', realWs, realWs, '--bind', realExtra, realExtra,
     ])
   })
@@ -318,18 +318,27 @@ describe('the platform chains', () => {
     let usable = false
     const probeBwrap = vi.fn(() => usable)
     const { sandbox } = await setup({ probeAttempts: 1 }, { platform: 'linux', probeBwrap, probeLandlock: () => 'unusable', bwrapInstalled: () => true })
-    await expect(sandbox.confine(['true'], RO)).rejects.toThrow(expect.objectContaining({ transient: true }))
+    await expect(sandbox.confine(['true'], RO)).rejects.toThrow(expect.objectContaining({ transient: false }))
     usable = true
     await expect(sandbox.confine(['true'], RO)).resolves.toMatchObject({ enforcement: 'full' })
   })
 
-  it('an installed bwrap whose check fails is a temporary fault that points away from full access', async () => {
+  it('a bwrap check that timed out or hit a resource limit is a temporary fault; a plain failure is not', async () => {
     const { sandbox } = await setup({ probeAttempts: 1 }, { platform: 'linux', probeBwrap: () => 'timed-out', probeLandlock: () => 'unusable', bwrapInstalled: () => true })
     const error = await sandbox.confine(['true'], RO).catch((caught: unknown) => caught)
     expect(error).toBeInstanceOf(SandboxUnavailableError)
     expect((error as SandboxUnavailableError).transient).toBe(true)
     expect((error as Error).message).toContain('temporary fault')
     expect((error as Error).message).toContain('web search')
+    const limited = await setup({ probeAttempts: 1 }, { platform: 'linux', probeBwrap: () => 'resource-limit', probeLandlock: () => 'unusable', bwrapInstalled: () => true })
+    await expect(limited.sandbox.confine(['true'], RO)).rejects.toThrow(expect.objectContaining({ transient: true }))
+    const blocked = await setup({ probeAttempts: 1 }, { platform: 'linux', probeBwrap: () => false, probeLandlock: () => 'unusable', bwrapInstalled: () => true })
+    await expect(blocked.sandbox.confine(['true'], RO)).rejects.toThrow(expect.objectContaining({ transient: false }))
+  })
+
+  it('bounds the probe retries', async () => {
+    await expect(setup({ probeAttempts: 6 })).rejects.toThrow()
+    await expect(setup({ probeBackoffMs: 2_001 })).rejects.toThrow()
   })
 
   it('a multi-rung chain probes a seatbelt rung like any other (the walk, not the platform table, decides)', async () => {

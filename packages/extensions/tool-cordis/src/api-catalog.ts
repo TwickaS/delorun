@@ -5630,6 +5630,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'options', description: 'the full request. A LOOP-built request carries the process-local {@link markAgentLoopRequest} identity and arrives deep-frozen (mutation throws): its content is a pure function of the session log (the reconstructability Agent Note), so listeners read it, never rewrite it. Hand-built calls do not carry that marker; callers own their request inputs and must keep them unchanged until the stream settles.' }],
   },
   {
+    name: 'mcp-client/call-arguments',
+    mode: 'bail',
+    signature: '\'mcp-client/call-arguments\'(serverName: string, args: Record<string, unknown>, execution: ToolExecution): Record<string, unknown> | undefined | Promise<Record<string, unknown> | undefined>',
+    summary: 'Before a tool call is sent to an MCP server, after every `tools/execute` guard has let it run: a listener may replace the arguments object the server receives, such as a path the server would open by a Host-made copy, and nothing else; the server, the tool name and the execution are fixed.',
+    description: 'Before a tool call is sent to an MCP server, after every `tools/execute` guard has let it run: a listener may replace the arguments object the server receives, such as a path the server would open by a Host-made copy, and nothing else; the server, the tool name and the execution are fixed. The call\'s logged arguments stay what the model sent. A listener that throws fails the call; the model\'s arguments are never sent in its place.',
+    parameters: [{ name: 'serverName', description: 'the server\'s configured namespace.' }, { name: 'args', description: 'the arguments the model sent.' }, { name: 'execution', description: 'the call, whose `agent` identifies the Session.' }],
+  },
+  {
     name: 'mcp-client/consent-accepted',
     mode: 'parallel',
     signature: '\'mcp-client/consent-accepted\'(serverName: string): void | Promise<void>',
@@ -6223,7 +6231,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ApprovalRequestEvent',
-    declaration: 'export interface ApprovalRequestEvent {\n    readonly agent: Agent;\n    readonly toolName: string;\n    readonly callId?: ToolCallId;\n    readonly reason?: string;\n    readonly displayReason?: {\n        readonly en: string;\n        readonly [locale: string]: string;\n    };\n    readonly grants?: ApprovalGrant;\n    readonly escalatesTo?: ApprovalEscalation;\n    readonly signal?: AbortSignal;\n}',
+    declaration: 'export interface ApprovalRequestEvent {\n    readonly agent: Agent;\n    readonly toolName: string;\n    readonly callId?: ToolCallId;\n    readonly reason?: string;\n    readonly displayReason?: {\n        readonly en: string;\n        readonly [locale: string]: string;\n    };\n    readonly notice?: {\n        readonly en: string;\n        readonly [locale: string]: string;\n    };\n    readonly grants?: ApprovalGrant;\n    readonly escalatesTo?: ApprovalEscalation;\n    readonly signal?: AbortSignal;\n}',
   },
   {
     name: 'ArchiveSessionOptions',

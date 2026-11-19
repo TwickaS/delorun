@@ -39,14 +39,23 @@ async function makePrivateDirectory(path: string): Promise<void> {
   }
 }
 
+/** Set to `1` by Delorun's own bubblewrap launcher (`SANDBOX_VIEW_ENV` in `@deepseek-ai/dsh-sandbox-local`). */
+export const SANDBOX_VIEW_ENV = 'DELORUN_SANDBOX_VIEW'
+
 /**
- * Whether this process runs inside a bubblewrap sandbox. bubblewrap puts the command in a new PID namespace
+ * Whether this process runs inside a bubblewrap sandbox that Delorun launched. bubblewrap puts the command in a new PID namespace
  * whose process 1 is `bwrap`; there it also fakes the parents of its mount points as 0755, so a directory's mode
- * bits are not the host's. Other sandboxes do not alter modes.
+ * bits are not the host's. Process 1 alone is not enough, because another program can run bwrap (a Flatpak host does):
+ * the launcher's marker variable must be set too. Other sandboxes do not alter modes.
  * @param readComm - reads the name of process 1; defaults to `/proc/1/comm`, which is unreadable off Linux.
- * @returns true when process 1 is `bwrap`.
+ * @param env - the environment that may carry the launcher's marker.
+ * @returns true when process 1 is `bwrap` and the marker is set.
  */
-export function insideBwrapSandbox(readComm: () => string = () => readFileSync('/proc/1/comm', 'utf8')): boolean {
+export function insideBwrapSandbox(
+  readComm: () => string = () => readFileSync('/proc/1/comm', 'utf8'),
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): boolean {
+  if (env[SANDBOX_VIEW_ENV] !== '1') return false
   try {
     return readComm().trim() === 'bwrap'
   } catch (error) {
@@ -60,7 +69,7 @@ export function insideBwrapSandbox(readComm: () => string = () => readFileSync('
 export interface PrivateDirectoryOptions {
   /**
    * Whether the process sees fake mode bits, in which case the group and other bits are not checked: the real
-   * mode cannot be read from here. Owner and symbolic-link checks stay. Defaults to {@link insideBwrapSandbox}.
+   * mode cannot be read from here. Owner and symbolic-link checks stay. Defaults to false: only a caller that runs inside a Delorun sandbox opts in with {@link insideBwrapSandbox}.
    */
   insideSandbox?: boolean
 }
@@ -91,7 +100,7 @@ function directoryRefusal(path: string, stats: Stats, insideSandbox: boolean): H
  */
 export async function checkPrivateDirectory(path: string, options: PrivateDirectoryOptions = {}): Promise<void> {
   if (process.platform === 'win32') return
-  const problem = directoryRefusal(path, await lstat(path), options.insideSandbox ?? insideBwrapSandbox())
+  const problem = directoryRefusal(path, await lstat(path), options.insideSandbox === true)
   if (problem !== undefined) throw problem
 }
 
@@ -104,7 +113,7 @@ export async function checkPrivateDirectory(path: string, options: PrivateDirect
  */
 export function checkPrivateDirectorySync(path: string, options: PrivateDirectoryOptions = {}): void {
   if (process.platform === 'win32') return
-  const problem = directoryRefusal(path, lstatSync(path), options.insideSandbox ?? insideBwrapSandbox())
+  const problem = directoryRefusal(path, lstatSync(path), options.insideSandbox === true)
   if (problem !== undefined) throw problem
 }
 
@@ -114,14 +123,15 @@ export function checkPrivateDirectorySync(path: string, options: PrivateDirector
  * Upstream's entries are left to upstream.
  * @param home - the resolved Delorun home.
  * @param profile - the CLI profile whose `run/<profile>/` directory is created.
+ * @param options - see {@link PrivateDirectoryOptions}.
  * @throws {HomeLayoutError} `HOME_MODE` when one of the three checked directories is laxer than 0700, a symbolic link or another user's.
  */
-export async function ensureHomeTree(home: string, profile: string): Promise<void> {
+export async function ensureHomeTree(home: string, profile: string, options: PrivateDirectoryOptions = {}): Promise<void> {
   // The parents of a custom home are created at 0700 too; the home's own mode is checked below.
   await mkdir(home, { recursive: true, mode: PRIVATE_DIR_MODE })
-  await checkPrivateDirectory(home)
+  await checkPrivateDirectory(home, options)
   for (const entry of Object.values(DELORUN_HOME_ENTRIES)) await makePrivateDirectory(join(home, entry))
   await makePrivateDirectory(runDirectory(home, profile))
-  await checkPrivateDirectory(join(home, DELORUN_HOME_ENTRIES.secrets))
-  await checkPrivateDirectory(runDirectory(home, profile))
+  await checkPrivateDirectory(join(home, DELORUN_HOME_ENTRIES.secrets), options)
+  await checkPrivateDirectory(runDirectory(home, profile), options)
 }

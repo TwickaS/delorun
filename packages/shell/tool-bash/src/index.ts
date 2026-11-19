@@ -24,7 +24,7 @@ import type { JobId, JobRegistry, JobView } from '@deepseek-ai/dsh-jobs'
 import type {} from '@deepseek-ai/dsh-user-approval'
 import type {} from '@deepseek-ai/dsh-shell-env'
 import type { SandboxExecutionPolicy, SandboxMode } from '@deepseek-ai/dsh-sandbox'
-import { ESCALATION_TARGETS, SandboxEscalationError, SandboxUnavailableError, approveEscalation, noteSandboxFault, sandboxPermissionsDescription, validateEscalationArgs } from '@deepseek-ai/dsh-sandbox'
+import { ESCALATION_TARGETS, SandboxEscalationError, SandboxUnavailableError, approveEscalation, clearSandboxFault, noteSandboxFault, sandboxPermissionsDescription, validateEscalationArgs } from '@deepseek-ai/dsh-sandbox'
 import { subprocessSpawnFailure } from '@deepseek-ai/dsh-subprocess'
 import type { SandboxPolicyService } from '@deepseek-ai/dsh-sandbox-policy'
 import { DSH_ENV_PREFIX } from '@deepseek-ai/dsh-shell'
@@ -187,6 +187,24 @@ function toolAborted(): HarnessError {
   const error = new HarnessError('tool call aborted', TOOL_ABORTED)
   error.name = 'AbortError'
   return error
+}
+
+/**
+ * Run `first`; when it fails because the sandbox runner hit a passing fault (a mount point that could not be made,
+ * `EAGAIN`, `ENOMEM`, a timeout), run `again` once. The runner failed before the command started, so repeating it
+ * cannot run it twice, and the repeat rebuilds the runner's mount list. Any other failure, and a second one, stands.
+ * @param signal - the call's abort signal; an aborted call is not repeated.
+ * @param first - the first attempt.
+ * @param again - the single repeat.
+ * @returns the result of the attempt that settled.
+ */
+async function afterTransientFault<T>(signal: AbortSignal, first: () => Promise<T>, again: () => Promise<T>): Promise<T> {
+  try {
+    return await first()
+  } catch (error) {
+    if (!(error instanceof SandboxUnavailableError) || !error.transient || signal.aborted) throw error
+    return again()
+  }
 }
 
 /**
@@ -390,6 +408,7 @@ export function apply(ctx: Context, config: Config = {}): void {
         throw failure === undefined ? new Error(view.detail) : launchFailure(failure.error, exec.signal, exec.agent)
       }
       const result = await process.result().catch((error: unknown) => { throw launchFailure(error, exec.signal, exec.agent) })
+      clearSandboxFault(exec.agent)
       const stopped = attached.stopped()
       return { kind: 'foreground' as const, ...canonicalBashResult(result, spec.workdir), ...stopped !== undefined ? { stopped } : {} }
     }
@@ -550,16 +569,23 @@ export function apply(ctx: Context, config: Config = {}): void {
           } catch (error) {
             ctx.logger.warn(`bash: job registration refused, running in the foreground with the timeout kill instead: ${String(error)}`)
           }
-          if (attached !== undefined) return waitOnJob(jobs, attached, exec, spec)
+          if (attached !== undefined) {
+            const first = attached
+            const repeat = (): ReturnType<typeof waitOnJob> => waitOnJob(jobs, startJob(jobs, args, exec, spec), exec, spec)
+            return afterTransientFault(exec.signal, () => waitOnJob(jobs, first, exec, spec), repeat)
+          }
         }
         const spec = ctx.shell.resolve({ ...request, signal: exec.signal })
-        let result: ShellRunResult
-        try {
-          result = await (await ctx.shell.execute(spec)).result()
-        } catch (error) {
-          throw launchFailure(error, exec.signal, exec.agent)
+        const runForeground = async (): Promise<ShellRunResult> => {
+          try {
+            return await (await ctx.shell.execute(spec)).result()
+          } catch (error) {
+            throw launchFailure(error, exec.signal, exec.agent)
+          }
         }
+        const result = await afterTransientFault(exec.signal, runForeground, runForeground)
         if (result.aborted) throw toolAborted()
+        clearSandboxFault(exec.agent)
         return { kind: 'foreground' as const, ...canonicalBashResult(result, spec.workdir) }
       },
       presentCall: presentBashCall,

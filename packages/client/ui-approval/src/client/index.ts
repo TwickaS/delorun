@@ -55,6 +55,7 @@ async function answerApproval(
       : { callId: request.callId }),
     ...(request.reason === undefined ? {} : { reason: request.reason }),
     ...(request.displayReason === undefined ? {} : { displayReason: request.displayReason }),
+    ...(request.notice === undefined ? {} : { notice: request.notice }),
     ...(request.grants === undefined ? {} : { grants: request.grants }),
     ...(request.escalatesTo === undefined ? {} : { escalatesTo: request.escalatesTo }),
     ...(request.signal === undefined ? {} : { signal: request.signal }),

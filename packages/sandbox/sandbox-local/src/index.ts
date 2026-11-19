@@ -191,11 +191,16 @@ function bwrapOnPath(): boolean {
   })
 }
 
+/** Upper bounds of `probeAttempts` and of each wait of `probeBackoffMs`, which doubles up to the bound. */
+const MAX_PROBE_ATTEMPTS = 5
+const MAX_PROBE_BACKOFF_MS = 2_000
+
 /**
  * A `bwrap` probe's verdict: whether bwrap created the profile, or `timed-out` when it did not finish within the
- * provider's `probeTimeoutMs`, which says nothing about whether it can.
+ * provider's `probeTimeoutMs`, or `resource-limit` when the host could not start it (`EAGAIN`, `ENOMEM`); neither says
+ * anything about whether it can.
  */
-type BwrapProbe = boolean | 'timed-out'
+type BwrapProbe = boolean | 'timed-out' | 'resource-limit'
 
 /**
  * The fix the Landlock escape refusal names, by why the Linux chain fell to Landlock.
@@ -205,6 +210,9 @@ type BwrapProbe = boolean | 'timed-out'
  * @returns the refusal's closing advice.
  */
 function bubblewrapAdvice(probe: BwrapProbe | undefined, installed: boolean, timeoutMs: number): string {
+  if (probe === 'resource-limit') {
+    return 'bubblewrap could not start because the computer is out of processes or memory for a moment; start again to check it again'
+  }
   if (probe === 'timed-out') {
     return `bubblewrap's check did not finish within ${String(timeoutMs)} ms, as can happen while the computer is busy; start again to check it again, or raise probeTimeoutMs`
   }
@@ -220,7 +228,9 @@ function defaultProbeBwrap(timeoutMs: number): BwrapProbe {
     stdio: 'ignore',
   })
   if (probe.status === 0) return true
-  return (probe.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT' ? 'timed-out' : false
+  const code = (probe.error as NodeJS.ErrnoException | undefined)?.code
+  if (code === 'ETIMEDOUT') return 'timed-out'
+  return code === 'EAGAIN' || code === 'ENOMEM' ? 'resource-limit' : false
 }
 
 /**
@@ -509,8 +519,8 @@ export class LocalSandboxProvider extends SandboxProvider {
     runnerCommand: z.array(z.string()).default([]),
     runnerFailureSignatures: z.array(z.string()).default([]),
     probeTimeoutMs: z.natural().default(5_000),
-    probeAttempts: z.natural().default(3),
-    probeBackoffMs: z.natural().default(250),
+    probeAttempts: z.natural().max(MAX_PROBE_ATTEMPTS).default(3),
+    probeBackoffMs: z.natural().max(MAX_PROBE_BACKOFF_MS).default(250),
     protectedHome: z.string(),
     protectedHomeReadable: z.array(z.string()).default([]),
     protectedHomeToolReadable: z.array(z.string()).default([]),
@@ -670,7 +680,7 @@ export class LocalSandboxProvider extends SandboxProvider {
         runnerFailureRules: [{ fatalSignatures: this.configuredRunnerFailureSignatures }, ...bridgeRules],
       })
     }
-    const selected = this.selectRunner(policy.mode)
+    const selected = await this.selectRunner(policy.mode)
     const escape = this.escapeSocketDirectories.find(directory => existsSync(directory))
     if (escape !== undefined && !RUNNER_PROTECTION[selected.runner].socketConnect) {
       // Only the Linux chain falls back from bwrap; the advice is about bwrap, so another runner's refusal has none.
@@ -913,22 +923,21 @@ export class LocalSandboxProvider extends SandboxProvider {
    * Resolve which runner confines commands: this platform's chain ({@link PLATFORM_CHAINS}), its sole
    * candidate selected directly, multiple candidates arbitrated by functional probes in chain order.
    * A usable runner is remembered for the provider's lifetime. A walk that finds none is retried up to
-   * `probeAttempts` times with doubling backoff and then refused fail-closed without being remembered, so the
-   * next command probes again. The refusal is `transient` when `bwrap` is installed, since its check
-   * failing or timing out then says nothing about the host lacking it.
+   * `probeAttempts` times with doubling backoff on a timer, so the event loop keeps running, and then refused
+   * fail-closed without being remembered: the next command probes again. The refusal is `transient` only when the
+   * last `bwrap` check timed out or hit a resource limit; any other failure is a lasting one.
    */
-  private selectRunner(mode: ConfinedSandboxMode): SelectedRunner {
+  private async selectRunner(mode: ConfinedSandboxMode): Promise<SelectedRunner> {
     if (this.selectedRunner !== undefined) return this.selectedRunner
     let wait = this.probeBackoffMs
     for (let attempt = 1; ; attempt++) {
       const verdict = this.chainVerdict()
       if (verdict !== 'unavailable') return (this.selectedRunner = verdict)
       if (attempt >= this.probeAttempts) break
-      if (wait > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, wait)
-      wait *= 2
+      if (wait > 0) await new Promise<void>(resolve => setTimeout(resolve, wait))
+      wait = Math.min(wait * 2, MAX_PROBE_BACKOFF_MS)
     }
-    const transient = this.bwrapProbe !== undefined && (this.internals.bwrapInstalled ?? bwrapOnPath)()
-    throw new SandboxUnavailableError(mode, undefined, { transient })
+    throw new SandboxUnavailableError(mode, undefined, { transient: this.bwrapProbe === 'timed-out' || this.bwrapProbe === 'resource-limit' })
   }
 
   /** Walk this platform's chain: sole candidate unprobed, several probed in order, none usable → unavailable. */
