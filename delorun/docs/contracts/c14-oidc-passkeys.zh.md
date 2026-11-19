@@ -16,7 +16,7 @@ description: "约定 C14：远程访问地址可使用的身份因子；每个�
 <a id="status"></a>
 ## 状态
 
-Face ID unlock (below) is built behind the `unlock.passkeys` preview flag, off by default. The passkey and OpenID Connect sign-in factors on this page are not built: the home has no passkey relying party and no OpenID Connect client. The `tailnet-membership` factor of the Tailscale private route is built.
+Face ID unlock (below) is built. The passkey and OpenID Connect sign-in factors on this page are not built: the home has no passkey relying party and no OpenID Connect client. The `tailnet-membership` factor of the Tailscale private route is built.
 
 - **已构建并已接入：** 设置的答案模式指明 `reach.identityFactor`，并在 `--config` 文档中拒绝 `null` 以外的任何值（[C11](c11-setup-answers.zh.md)）。
 - **未构建：** 带用户验证与计数器的通行密钥注册与断言；在本人提供方处的客户端注册；带 `state`、`nonce`、PKCE 与签发方检查的授权流程；ID 令牌检查与签名密钥轮换；固定的所有者主体；重新认证；Delo Run 签发方。
@@ -217,7 +217,7 @@ The three tables below are the classes of [`AUTH_CLASSES`](#face-id-unlock) for 
 <a id="face-id-unlock"></a>
 ### Face ID unlock
 
-While the preview flag `unlock.passkeys` is on, a paired device may confirm a sensitive action with a passkey (Face ID, Touch ID, Windows Hello or the device lock) or with its PIN, one action at a time. It is an unlock factor, not an identity factor: the device key and the reach session stay the sign-in, and the sign-in factors above are unchanged. While the flag is off, every route below answers `404 PASSKEY_UNAVAILABLE`, no grant is minted and each gate behaves as in Elevation and PIN mode.
+A paired device may confirm a sensitive action with a passkey (Face ID, Touch ID, Windows Hello or the device lock) or with its PIN, one action at a time. It is an unlock factor, not an identity factor: the device key and the reach session stay the sign-in, and the sign-in factors above are unchanged.
 
 
 **One table.** `AUTH_CLASSES` in `auth-classes.ts` puts every Remote method, plugin Fetch route, prompt answer and `/auth` route in exactly one of four classes: `free` (any approved device, no prompt), `face` (one confirmation at the moment of the action), `computer` (only the person at the computer) or `ticket` (a device route that works only with the single-use enrolment ticket the computer's approval minted, such as `register/options`, `register` and `add/request`). Every action a phone could take only at the computer under the former Careful level is `face` or `computer`, so a PIN-only device can do nothing it could not before. The spec `tests/auth-classes.spec.ts` fails on an unlisted action or route, a duplicate row and a row in two classes.

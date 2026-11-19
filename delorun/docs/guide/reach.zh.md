@@ -245,8 +245,6 @@ An unlocked phone can also open a terminal, turn protection off, apply changes t
 
 ## Confirm with Face ID
 
-Face ID is a preview: it is off until you turn on **Face ID** in Settings, Preview features. With it off, everything on this page works as described, and the rest of this section does not apply.
-
 Face ID is how an approved phone confirms one sensitive action at the moment it happens, with the phone's own lock instead of a code from your computer. "Face ID" here means whatever your phone uses: Face ID or Touch ID on an iPhone, a fingerprint or screen lock on Android, Windows Hello on Windows. Behind it is a passkey that stays on the phone, which the [glossary](../reference/glossary.zh.md#face-id) explains. Delorun never sees your face or fingerprint.
 
 Every action a phone can take is in one of three groups:

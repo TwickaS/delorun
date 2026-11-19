@@ -14,7 +14,7 @@ Reach asks for an identity factor in addition to device approval: a passkey, or 
 <a id="status"></a>
 ## Status
 
-Face ID unlock (below) is built behind the `unlock.passkeys` preview flag, off by default. The passkey and OpenID Connect sign-in factors on this page are not built: the home has no passkey relying party and no OpenID Connect client. The `tailnet-membership` factor of the Tailscale private route is built.
+Face ID unlock (below) is built. The passkey and OpenID Connect sign-in factors on this page are not built: the home has no passkey relying party and no OpenID Connect client. The `tailnet-membership` factor of the Tailscale private route is built.
 
 - **Built and reached:** setup's answers schema names `reach.identityFactor` and refuses any value other than `null` in a `--config` document ([C11](c11-setup-answers.md)).
 - **Not built:** passkey enrolment and assertion with user verification and counters; client registration at the person's provider; the authorisation flow with `state`, `nonce`, PKCE and issuer checks; ID token checks and signing-key rotation; the pinned owner subject; re-authentication; the Delo Run issuer.
@@ -215,7 +215,7 @@ The three tables below are the classes of [`AUTH_CLASSES`](#face-id-unlock) for 
 <a id="face-id-unlock"></a>
 ### Face ID unlock
 
-While the preview flag `unlock.passkeys` is on, a paired device may confirm a sensitive action with a passkey (Face ID, Touch ID, Windows Hello or the device lock) or with its PIN, one action at a time. It is an unlock factor, not an identity factor: the device key and the reach session stay the sign-in, and the sign-in factors above are unchanged. While the flag is off, every route below answers `404 PASSKEY_UNAVAILABLE`, no grant is minted and each gate behaves as in Elevation and PIN mode.
+A paired device may confirm a sensitive action with a passkey (Face ID, Touch ID, Windows Hello or the device lock) or with its PIN, one action at a time. It is an unlock factor, not an identity factor: the device key and the reach session stay the sign-in, and the sign-in factors above are unchanged.
 
 
 **One table.** `AUTH_CLASSES` in `auth-classes.ts` puts every Remote method, plugin Fetch route, prompt answer and `/auth` route in exactly one of four classes: `free` (any approved device, no prompt), `face` (one confirmation at the moment of the action), `computer` (only the person at the computer) or `ticket` (a device route that works only with the single-use enrolment ticket the computer's approval minted, such as `register/options`, `register` and `add/request`). Every action a phone could take only at the computer under the former Careful level is `face` or `computer`, so a PIN-only device can do nothing it could not before. The spec `tests/auth-classes.spec.ts` fails on an unlisted action or route, a duplicate row and a row in two classes.
