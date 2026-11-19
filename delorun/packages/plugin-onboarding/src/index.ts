@@ -18,7 +18,7 @@ import type {} from '@deepseek-ai/dsh-client-connection'
 // Type-only: the ctx.settings merge.
 import type {} from '@deepseek-ai/dsh-settings'
 // The ctx.homeAuth merge, and the pathname the guard compares.
-import { admitApprovedDevice, admitKeyDevice, gateByUnlock, requireComputerOrDevice, routedPathname } from '@delorun/home-auth'
+import { admitApprovedDevice, admitKeyDevice, requireComputerOrDevice, routedPathname } from '@delorun/home-auth'
 // Type-only: the ctx.workspaceRegistry merge.
 import type {} from '@deepseek-ai/dsh-workspace'
 // Type-only: the ctx.subagents merge.
@@ -39,7 +39,7 @@ import { readSetupRecord } from './answers.ts'
 import { createDeferredStore } from './deferred.ts'
 import type { Config } from './config.ts'
 import { DEEPSEEK_ROUTE, listingResult, testKeys, type KeyTestDeps } from './key-test.ts'
-import { VARIABLE_NAME, type KeySource, type KeySourceKind } from './wire.ts'
+import { VARIABLE_NAME, type AgentModelsAnswer, type KeySource, type KeySourceKind } from './wire.ts'
 import { assertRowsExist, type RowSource } from './rows.ts'
 import { findLocalServers } from './local-models.ts'
 import { PREVIEW_FLAGS } from './preview-flags.ts'
@@ -111,7 +111,7 @@ export function apply(ctx: Context, config: Config): void {
   })
   // Without the registry the routes are absent and the studio's requests fail, which its folder choice reports.
   ctx.inject(['workspaceRegistry'], (child) => {
-    // Before the body is read: only the computer or a reach device reaches the route, and a device needs an unlock.
+    // Before the body is read: only the computer or a reach device reaches the route; it lists an agent's models, which any approved device may (class `free`).
     child.on('connection/request', async (request, response, next) => {
       if (routedPathname(request.url) === AGENT_MODELS_PATH && !requireComputerOrDevice(request, response, child.get('homeAuth'), 'Listing an agent\'s models')) return
       await next()
@@ -123,12 +123,14 @@ export function apply(ctx: Context, config: Config): void {
       admitPeer: admitApprovedDevice(),
       fetch: () => Promise.resolve(json({ setAside: child.workspaceRegistry.quarantined.slice(-MAX_SET_ASIDE).map(file => basename(file)) } satisfies WorkspaceNoticeAnswer)),
     })
-    const unlocked = (fetch: (request: Request) => Promise<Response>, options: { readonly renews: boolean }) => gateByUnlock(() => child.get('homeAuth'), fetch, { renews: options.renews })
+    // Any approved device may ask, so one listing runs per agent at a time and a call made meanwhile receives that listing's answer.
+    const listings = new Map<AgentModelsRequest['agent'], Promise<AgentModelsAnswer>>()
     child.connection.fetch.register({
       path: AGENT_MODELS_PATH,
       methods: ['POST'],
       requestBody: 'buffered',
-      ...unlocked(async (request) => {
+      admitPeer: admitApprovedDevice(),
+      fetch: async (request) => {
         let body: unknown
         try {
           body = await request.json()
@@ -138,13 +140,19 @@ export function apply(ctx: Context, config: Config): void {
         }
         const parsed = AgentModelsRequest.safeParse(body)
         if (!parsed.success) return new Response(JSON.stringify({ error: 'the request must be JSON with agent' }), { status: 400, headers: { 'content-type': 'application/json' } })
-        return json(await listAgentModels(parsed.data.agent, {
-          provider: agent => ctx.get('subagents')?.getProvider(agent),
-          cwd: () => ctx.get('profileContext')?.dir ?? process.cwd(),
-          timeoutMs: config.agentModelsTimeoutMs,
-          warn,
-        }))
-      }, { renews: false }),
+        const agent = parsed.data.agent
+        let listing = listings.get(agent)
+        if (listing === undefined) {
+          listing = listAgentModels(agent, {
+            provider: name => ctx.get('subagents')?.getProvider(name),
+            cwd: () => ctx.get('profileContext')?.dir ?? process.cwd(),
+            timeoutMs: config.agentModelsTimeoutMs,
+            warn,
+          }).finally(() => { listings.delete(agent) })
+          listings.set(agent, listing)
+        }
+        return json(await listing)
+      },
     })
   })
   const deferred = createDeferredStore(ctx.get('profileContext')?.dir, warn)

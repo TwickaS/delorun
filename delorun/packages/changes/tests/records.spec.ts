@@ -126,6 +126,7 @@ describe('attestStudio', () => {
     await setProtection(home, 'on', terminal())
     // Without the fresh-unlock check a device in its approval grace, or a locked one, holds a proof.
     expect(await refusal(() => attestDevice({ remoteSession: true, device: { id: 'device-1', label: 'Phone' }, freshUnlock: false }))).toBe('NOT_AT_COMPUTER')
+    expect(await refusal(() => attestDevice({ remoteSession: true, device: { id: 'device-1', label: 'Phone' }, freshUnlock: false, freeControl: true }))).toBeUndefined()
     const device = attestDevice({ remoteSession: true, device: { id: 'device-1', label: 'Phone' }, freshUnlock: true })
     expect(device).toMatchObject({ kind: 'studio', device: { id: 'device-1', label: 'Phone' } })
     expect((await setProtection(home, 'off', device)).level).toBe('off')

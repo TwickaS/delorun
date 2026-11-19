@@ -9,6 +9,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { AUTH_CLASSES, authClassOf, checkAuthTable, type AuthRow } from '../src/auth-classes.ts'
 import { PLUGIN_ROUTE_ACCESS, type RouteLevel } from '../src/route-access.ts'
 
 const PACKAGES = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -74,9 +75,9 @@ function exists(path: string): boolean {
   }
 }
 
-const GATE = /gateByUnlock|unlocked\(|fullAccessGate/
+const GATE = /gateByUnlock|gateByClass|faced\(|fullAccessGate|awayOn/
 const FULL_GATE = /phonePowers:\s*'full'/
-const READER = /admitApprovedDevice|admitReachDevice|anyDevice|admitPeer,|admitsReach|admitsBill/
+const READER = /admitApprovedDevice|admitReachDevice|anyDevice|admitPeer,|admitsReach|admitsBill|free\(/
 
 /**
  * Whether a registration's code admits a device as the level says.
@@ -87,7 +88,7 @@ const READER = /admitApprovedDevice|admitReachDevice|anyDevice|admitPeer,|admits
 function matches(level: RouteLevel, block: string): boolean {
   switch (level) {
     case 'R': return READER.test(block) && !GATE.test(block)
-    case 'U': return GATE.test(block) && !FULL_GATE.test(block)
+    case 'U': return GATE.test(block) && !FULL_GATE.test(block) && !/gateByUnlock/.test(block)
     case 'F': return block.includes('gateByUnlock') && FULL_GATE.test(block)
     case 'K': return block.includes('admitKeyDevice')
     case 'C': return !block.includes('admitPeer') && !GATE.test(block)
@@ -133,7 +134,7 @@ describe('the plugin Fetch routes', () => {
       if (!exists(src)) continue
       for (const file of sources(src)) {
         const text = readFileSync(file, 'utf8')
-        for (const match of text.matchAll(/gateByUnlock\(/g)) {
+        for (const match of text.matchAll(/gateByUnlock\(|gateByClass\(/g)) {
           if (text.slice(Math.max(0, match.index - 20), match.index).includes('function ')) continue
           let depth = 0
           let end = match.index + match[0].length - 1
@@ -156,7 +157,67 @@ describe('the plugin Fetch routes', () => {
     expect(matches('R', "register({ path: X, fetch })")).toBe(false)
     expect(matches('F', "register({ path: X, ...gateByUnlock(home, fetch, { renews: true }) })")).toBe(false)
     expect(matches('U', "register({ path: X, ...gateByUnlock(home, fetch, { renews: true, phonePowers: 'full' }) })")).toBe(false)
+    expect(matches('U', "register({ path: X, ...gateByClass(home, fetch, { row: 'route:a#X', action: 'a', legacy: { renews: true } }) })")).toBe(true)
+    expect(matches('R', "register({ path: X, ...gateByClass(home, fetch, { row: 'route:a#X', action: 'a', legacy: { renews: true } }) })")).toBe(false)
     expect(matches('F', "register({ path: X, ...gateByUnlock(home, fetch, { renews: true, phonePowers: 'full' }) })")).toBe(true)
+  })
+})
+
+/**
+ * Every `AUTH_CLASSES` row id a source file's gates name: `row: 'route:...'` literals and constants, and the expression
+ * of a `faced('EXPR', ...)` call of the new-workspace helper.
+ * @param file - the file's path relative to the packages directory.
+ * @param text - the file's text.
+ * @returns the ids.
+ */
+function namedRows(file: string, text: string): string[] {
+  const literals = [...text.matchAll(/'(route:[^']+)'/g)].map(match => match[1] ?? '')
+  const faced = [...text.matchAll(/faced\('([A-Za-z0-9_.]+)'/g)].map(match => `route:${file}#${match[1] ?? ''}`)
+  return [...literals, ...faced]
+}
+
+describe('the class gate on the consumer routes', () => {
+  const found = registrations()
+  const sourceOf = (file: string): string => readFileSync(join(PACKAGES, file), 'utf8')
+
+  it('names, for every route that takes Face ID, the AUTH_CLASSES row of exactly that route', () => {
+    // Pins the link between code and table: a `face` route whose gate names another route's row, or none, fails.
+    const missing: string[] = []
+    for (const { file, path } of found) {
+      const level = PLUGIN_ROUTE_ACCESS[file]?.[path]?.level
+      if (level !== 'U' && level !== 'R+U') continue
+      const expected = level === 'U' ? `route:${file}#${path}` : `route:${file}#${path} (write)`
+      if (!namedRows(file, sourceOf(file)).includes(expected)) missing.push(`${file}: ${path} should name ${expected}`)
+    }
+    expect(missing).toEqual([])
+  })
+
+  it('names only rows that AUTH_CLASSES lists, each in the class face', () => {
+    const wrong: string[] = []
+    for (const file of new Set(found.map(registration => registration.file))) {
+      for (const id of namedRows(file, sourceOf(file))) if (authClassOf(id) !== 'face') wrong.push(`${file}: ${id} is ${authClassOf(id) ?? 'not listed'}`)
+    }
+    expect(wrong).toEqual([])
+  })
+
+  it('leaves no consumer route on the unlock gate of today', () => {
+    const users = found.filter(({ block }) => /gateByUnlock/.test(block)).map(({ file, path }) => `${file}: ${path}`)
+    expect(users).toEqual([])
+  })
+
+  it('classifies each route once: a doubly listed or doubly classed route row fails the gate', () => {
+    // Proves the gate rejects: the same route id in two classes, and listed twice, are both reported.
+    const row: AuthRow = { id: 'route:plugin-packs/src/routes.ts#path (write)', surface: 'route', authClass: 'face', reason: 'r' }
+    expect(checkAuthTable([...AUTH_CLASSES, { ...row, authClass: 'free' }])).toEqual([`${row.id} is in two classes (face, free)`])
+    expect(checkAuthTable([...AUTH_CLASSES, row])).toEqual([`${row.id} is listed twice`])
+    expect(checkAuthTable(AUTH_CLASSES)).toEqual([])
+  })
+
+  it('finds a gate that names a row the table does not list', () => {
+    // Proves the scan rejects: a snippet naming an unlisted row is read as that row, which is not face.
+    const named = namedRows('plugin-x/src/routes.ts', "gateByClass(home, fetch, { row: 'route:plugin-x/src/routes.ts#GONE', action: 'a', legacy: { renews: true } })")
+    expect(named).toEqual(['route:plugin-x/src/routes.ts#GONE'])
+    expect(authClassOf(named[0] ?? '')).toBeUndefined()
   })
 })
 

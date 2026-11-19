@@ -21,7 +21,7 @@ import type {} from '@deepseek-ai/dsh-agent'
 // Type-only: the ctx.llm merge.
 import type {} from '@deepseek-ai/dsh-llm'
 // The ctx.homeAuth merge, and the pathname the guard compares.
-import { gateByUnlock, requireComputerOrDevice, routedPathname } from '@delorun/home-auth'
+import { admitApprovedDevice, gateByClass, PICKER_HOLD_ID, requireComputerOrDevice, routedPathname } from '@delorun/home-auth'
 import { createBrowserAdmission } from './browser-admission.ts'
 import { createCloneService, spawnGit } from './clone.ts'
 import type { Config } from './config.ts'
@@ -77,46 +77,54 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       if (gated.has(routedPathname(request.url)) && !requireComputerOrDevice(request, response, child.get('homeAuth'), 'Setting up a workspace')) return
       await next()
     })
-    const unlocked = (fetch: (request: Request) => Promise<Response>, options: { readonly renews: boolean }) => gateByUnlock(() => child.get('homeAuth'), fetch, { renews: options.renews })
+    const row = (expression: string): string => `route:plugin-new-workspace/src/index.ts#${expression}`
+    // A `face` route: Face ID for the call (or, with the flag off or no passkey, an unlock). One Face ID opens the folder picker
+    // for the three reads that name the computer's paths; a live hold on `PICKER_HOLD_ID` admits the rest of that picker's reads.
+    const faced = (expression: string, action: string, fetch: (request: Request) => Promise<Response>, options: { readonly renews: boolean, readonly picker?: true }) => gateByClass(() => child.get('homeAuth'), fetch, {
+      row: row(expression), action: `plugin-new-workspace/${action}`, legacy: { renews: options.renews },
+      ...options.picker === true ? { hold: { feature: 'picker' as const, idOf: () => PICKER_HOLD_ID, opens: true } } : {},
+    })
+    // A `free` route: any approved device, no prompt.
+    const free = (fetch: (request: Request) => Promise<Response>) => ({ admitPeer: admitApprovedDevice(), fetch })
     child.connection.fetch.register({
       path: PLACES_PATH,
       methods: ['POST'],
       requestBody: 'buffered',
-      ...unlocked(async () => reply(200, await readPlaces({
+      ...faced('PLACES_PATH', 'places', async () => reply(200, await readPlaces({
         ...deps, roots: config.roots, suggested: config.suggested, firstParent: config.firstParent, lastParent: () => lastParent(located),
-      })), { renews: false }),
+      })), { renews: false, picker: true }),
     })
     child.connection.fetch.register({
       path: SEARCH_PATH,
       methods: ['POST'],
       requestBody: 'buffered',
-      ...unlocked(async (request) => {
+      ...faced('SEARCH_PATH', 'search', async (request) => {
         const body = await readBody(request, SearchRequest)
         if (body === undefined) return reply(400, { error: 'the request must be JSON with a query of 1 to 100 characters' })
         return reply(200, await searchFolders(body.query, { ...located, roots: config.roots, depth: config.searchDepth, folders: config.searchFolders, timeMs: config.searchTimeMs }))
-      }, { renews: false }),
+      }, { renews: false, picker: true }),
     })
     child.connection.fetch.register({
       path: PREVIEW_PATH,
       methods: ['POST'],
       requestBody: 'buffered',
-      ...unlocked(async (request) => {
+      ...faced('PREVIEW_PATH', 'preview', async (request) => {
         const body = await readBody(request, PreviewRequest)
         if (body === undefined) return reply(400, { error: 'the request must be JSON with one path' })
         return reply(200, await previewFolder(body.path, { ...located, roots: config.roots, timeMs: config.searchTimeMs }))
-      }, { renews: false }),
+      }, { renews: false, picker: true }),
     })
-    child.connection.fetch.register({ path: ADD_WORKSPACE_PATH, methods: ['POST'], requestBody: 'buffered', ...unlocked(request => addWorkspace(request, deps), { renews: true }) })
+    child.connection.fetch.register({ path: ADD_WORKSPACE_PATH, methods: ['POST'], requestBody: 'buffered', ...faced('ADD_WORKSPACE_PATH', 'add', request => addWorkspace(request, deps), { renews: true }) })
     child.connection.fetch.register({
       path: CREATE_PATH,
       methods: ['POST'],
       requestBody: 'buffered',
-      ...unlocked(request => createWorkspace(request, { ...deps, roots: config.roots, git: spawnGit, timeoutMs: config.cloneTimeoutMs, remember }), { renews: true }),
+      ...faced('CREATE_PATH', 'create', request => createWorkspace(request, { ...deps, roots: config.roots, git: spawnGit, timeoutMs: config.cloneTimeoutMs, remember }), { renews: true }),
     })
-    child.connection.fetch.register({ path: CLONE_PATH, methods: ['POST'], requestBody: 'buffered', ...unlocked(request => clones.start(request), { renews: true }) })
-    child.connection.fetch.register({ path: CLONE_STATUS_PATH, methods: ['POST'], requestBody: 'buffered', ...unlocked(request => clones.status(request), { renews: false }) })
-    child.connection.fetch.register({ path: DEFAULTS_PATH, methods: ['POST'], requestBody: 'buffered', ...unlocked(request => readDefaultsRoute(request, located), { renews: false }) })
-    child.connection.fetch.register({ path: SET_DEFAULTS_PATH, methods: ['POST'], requestBody: 'buffered', ...unlocked(async (request) => {
+    child.connection.fetch.register({ path: CLONE_PATH, methods: ['POST'], requestBody: 'buffered', ...faced('CLONE_PATH', 'clone', request => clones.start(request), { renews: true }) })
+    child.connection.fetch.register({ path: CLONE_STATUS_PATH, methods: ['POST'], requestBody: 'buffered', ...free(request => clones.status(request)) })
+    child.connection.fetch.register({ path: DEFAULTS_PATH, methods: ['POST'], requestBody: 'buffered', ...free(request => readDefaultsRoute(request, located, child.workspaceRegistry)) })
+    child.connection.fetch.register({ path: SET_DEFAULTS_PATH, methods: ['POST'], requestBody: 'buffered', ...faced('SET_DEFAULTS_PATH', 'set-defaults', async (request) => {
       const response = await setDefaultsRoute(request, located)
       if (response.ok) await browserAdmission.refresh()
       return response

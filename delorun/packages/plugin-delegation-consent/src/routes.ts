@@ -10,7 +10,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: the ctx.connection merge and its `connection/request` event.
 import type {} from '@deepseek-ai/dsh-client-connection'
-import { admitApprovedDevice, gateByUnlock, requireComputerOrDevice, routedPathname } from '@delorun/home-auth'
+import { admitApprovedDevice, gateByClass, requireComputerOrDevice, routedPathname } from '@delorun/home-auth'
 import { z } from 'zod'
 import { DelegationConsentError, type DelorunDelegationConsent } from './service.ts'
 import { DELEGATION_CONSENT_ROUTES, MAX_DELEGATION_REQUEST_BYTES, type DelegationRefusalCode } from './wire.ts'
@@ -89,7 +89,7 @@ export function registerDelegationRoutes(ctx: Context, service: DelorunDelegatio
     if (paths.has(routedPathname(request.url)) && !requireComputerOrDevice(request, response, ctx.get('homeAuth'), ACTION)) return
     await next()
   })
-  // Reading the grants and revoking one need no unlock; allowing an agent into a workspace does.
+  // Reading the grants and revoking one are free; allowing an agent into a workspace is a `face` route.
   const admitPeer = admitApprovedDevice()
   ctx.connection.fetch.register({
     path: DELEGATION_CONSENT_ROUTES.grants, methods: ['GET'], requestBody: 'buffered', admitPeer,
@@ -101,11 +101,11 @@ export function registerDelegationRoutes(ctx: Context, service: DelorunDelegatio
   })
   ctx.connection.fetch.register({
     path: DELEGATION_CONSENT_ROUTES.allow, methods: ['POST'], requestBody: 'buffered',
-    ...gateByUnlock(() => ctx.get('homeAuth'), async (request) => {
+    ...gateByClass(() => ctx.get('homeAuth'), async (request) => {
       const body = await parsed(request, AllowBody)
       if (body === undefined) return json(400, { error: 'INVALID_REQUEST', message: 'the request must be JSON with the chat, the agent and confirmed' })
       return run(() => service.allowWorkspace(body))
-    }, { grace: false, renews: true }),
+    }, { row: 'route:plugin-delegation-consent/src/routes.ts#DELEGATION_CONSENT_ROUTES.allow', action: 'plugin-delegation-consent/allow', legacy: { grace: false, renews: true } }),
   })
   ctx.connection.fetch.register({
     path: DELEGATION_CONSENT_ROUTES.revoke, methods: ['POST'], requestBody: 'buffered', admitPeer,

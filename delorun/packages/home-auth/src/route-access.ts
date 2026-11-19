@@ -15,7 +15,8 @@ import { COMPUTER_ONLY_ROW_MODULES } from './reach-access.ts'
 /**
  * How a route answers a paired device:
  * - `R`: any approved device, with no unlock (`admitApprovedDevice`);
- * - `U`: an unlocked device only; a locked one is answered `403 ELEVATION_REQUIRED` (`gateByUnlock`);
+ * - `U`: class `face`: a device needs Face ID for exactly this call, or, with the Face ID flag off and for a device with no
+ *   passkey, an unlock; a device with neither is answered `403 ELEVATION_REQUIRED` (`gateByClass`, or `gateByUnlock`);
  * - `C`: only the computer; a device is refused (`403 LOOPBACK_REQUIRED`) whatever its unlock;
  * - `K`: a device that holds no PIN lock (`admitKeyDevice`): model keys are tested, never shown;
  * - `F`: an unlocked device only while Phone powers is Full, and only with a code or a PIN unlock (`gateByUnlock` with
@@ -40,7 +41,6 @@ const READ = at('R')
 /** Level `R` for a write that changes only an everyday setting or the person's own organising, so it needs no unlock. */
 const EVERYDAY = at('R')
 const UNLOCKED = at('U')
-const FULL = at('F')
 const COMPUTER = at('C')
 
 /**
@@ -61,7 +61,7 @@ export const PLUGIN_ROUTE_ACCESS: Readonly<Record<string, Readonly<Record<string
   'browser-use-browse/src/routes.ts': {
     'REAL_BROWSER_ROUTES.state': READ('reads whether a chat may use the person\'s own browser'),
     'REAL_BROWSER_ROUTES.end': READ('ending the grant only narrows what the agent may reach'),
-    'REAL_BROWSER_ROUTES.away': UNLOCKED('lets runs the person did not start use their own browser, with their sign-ins; the approval grace does not open it, as it does not give the grant'),
+    'REAL_BROWSER_ROUTES.away': UNLOCKED('turning it on lets runs the person did not start use their own browser, with their sign-ins, so it takes Face ID; the home reads the body, and a body that says `on: false` only tightens and takes none'),
   },
   'plugin-delegation-consent/src/routes.ts': {
     'DELEGATION_CONSENT_ROUTES.grants': READ('lists which agents may work in which workspaces'),
@@ -98,7 +98,7 @@ export const PLUGIN_ROUTE_ACCESS: Readonly<Record<string, Readonly<Record<string
   },
   'bundle-local/src/trust.ts': {
     TRUST_BILL_PATH: READ('reads what the harness trusts'),
-    TRUST_CHECK_PATH: UNLOCKED('a check asks the network and spends time on the computer'),
+    TRUST_CHECK_PATH: READ('a check reads and asks the network under the service\'s own bounds, and writes nothing'),
   },
   'bundle-local/src/report.ts': {
     REPORT_ROUTE: UNLOCKED('the report excerpt can hold paths of the home'),
@@ -132,8 +132,8 @@ export const PLUGIN_ROUTE_ACCESS: Readonly<Record<string, Readonly<Record<string
     ADD_WORKSPACE_PATH: UNLOCKED('a workspace is what the model may write'),
     CREATE_PATH: UNLOCKED('makes a folder on the computer, runs Git in it and adds it as a workspace'),
     CLONE_PATH: UNLOCKED('cloning writes a repository into a folder on the computer'),
-    CLONE_STATUS_PATH: UNLOCKED('reports the clone the unlocked device started'),
-    DEFAULTS_PATH: UNLOCKED('reads a workspace\'s model and browser defaults by its path'),
+    CLONE_STATUS_PATH: READ('reports the state of a clone by its id, a status read that starts nothing'),
+    DEFAULTS_PATH: READ('reads a registered workspace\'s model and browser defaults, a read of settings the studio already lists; any other path is answered with none, unchecked'),
     SET_DEFAULTS_PATH: UNLOCKED('sets the model and browser every new chat in a workspace starts with'),
   },
   'preview-flags/src/index.ts': {
@@ -146,7 +146,7 @@ export const PLUGIN_ROUTE_ACCESS: Readonly<Record<string, Readonly<Record<string
     KEY_TEST_PATH: { level: 'K', reason: 'tests the model keys and names each provider\'s result, never a key; under PIN mode only an unlocked page' },
     START_PATH: READ('a random id naming this start of the home, with no setting or data'),
     DEFER_STEP_PATH: READ('notes that a setup step waits for the computer: ids from a closed list, no setting changes'),
-    AGENT_MODELS_PATH: UNLOCKED('starts the agent\'s own process to list its models'),
+    AGENT_MODELS_PATH: READ('lists an agent\'s models by starting the agent\'s own program under a timeout; it is bounded and changes nothing'),
     LOCAL_MODELS_PATH: READ('probes the two loopback model listings'),
     RECOMMEND_PATH: READ('names the recommended packages and connections'),
   },
@@ -203,18 +203,30 @@ export const COMPUTER_ONLY: readonly ComputerOnlyRow[] = [
   { kind: 'changes-route', id: '/delorun/changes actions, harness, protection off and setup under Phone powers Careful', reason: 'applying, turning off, setup and changes to Delorun itself change what runs; Careful keeps them at the computer and lets a phone only take back or tighten' },
 ]
 
-/** How a Changes route answers a paired device, as {@link RouteLevel} says. Every `U` and `F` route of Changes refuses the approval grace. */
-export type ChangesRouteLevel = Extract<RouteLevel, 'R' | 'U' | 'F' | 'C'>
-
 /**
- * The web-server routes of Changes (`plugin-changes`' `access.ts` holds the decision for each control): `state`, `show`
- * and `workspaces` are read by any admitted session; every `POST` is decided before its body is read, and a device's
- * proof names the device in the log as decided in the studio.
+ * The Changes controls and their classes, one row per control of `plugin-changes`' `CONTROL_LEVELS` (the id is the
+ * control's name; `plugin-changes/tests/face-grants.spec.ts` keeps this table and that one equal), plus `reads` for the
+ * `state`, `show` and `workspaces` routes and `setup` for the setup routes. Every `U` row takes Face ID.
  */
-export const CHANGES_ROUTE_ACCESS: Readonly<Record<'reads' | 'tightening' | 'decisions' | 'setup' | 'notice', RouteAccess & { readonly level: ChangesRouteLevel }>> = {
+export const CHANGES_ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> = {
   reads: READ('what failed, the recent changes and the waiting ones, without file contents beyond a shown change'),
-  tightening: UNLOCKED('undo of a plugin\'s change, discard of a plugin\'s or a harness change and protection on only take back or tighten'),
-  decisions: FULL('apply, turning plugins off or on, work sessions, safe mode, create, request, reveal, harness apply, undo and Make my copy, protection off and restart change what runs'),
-  setup: FULL('a setup file leaves the computer and changes what the profile runs'),
-  notice: COMPUTER('the notice of a change a phone made is for the person at the computer'),
+  'plugin-undo': UNLOCKED('undoing a plugin\'s change rewrites the person\'s files'),
+  'plugin-discard': UNLOCKED('discarding a plugin\'s change deletes a recorded change'),
+  'harness-discard': UNLOCKED('discarding a change to Delorun itself deletes a recorded change'),
+  'plugin-apply': UNLOCKED('applying a plugin\'s change changes what runs'),
+  'plugin-other': UNLOCKED('turning plugins off or on, work sessions, safe mode, create, request and reveal change what runs'),
+  'harness-apply': UNLOCKED('applying a change to Delorun itself changes what runs'),
+  'harness-undo': UNLOCKED('undoing a change to Delorun itself rewrites what runs'),
+  'make-copy': UNLOCKED('Make my copy writes a copy of Delorun'),
+  restart: UNLOCKED('a restart ends the chats that are running'),
+  'protection-off': UNLOCKED('turning protection off lets plugin changes run unreviewed'),
+  'protection-on': READ('turning protection on only tightens'),
+  'update-check': READ('reads and records the release check'),
+  'update-begin': UNLOCKED('preparing and applying an update replaces the release the home runs'),
+  'update-rollback': UNLOCKED('a rollback replaces the release the home runs'),
+  'update-cancel': READ('cancelling an update that has not begun only takes back'),
+  'update-dismiss': READ('dismissing the record of an update only hides a message'),
+  stop: UNLOCKED('stopping the home ends every chat that is running'),
+  setup: UNLOCKED('a setup file leaves the computer and changes what the profile runs'),
+  'notice-seen': COMPUTER('the notice of a change a phone made is for the person at the computer'),
 }

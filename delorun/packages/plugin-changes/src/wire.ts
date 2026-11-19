@@ -271,10 +271,10 @@ export type ChangesControl =
   | 'notice-seen'
   | 'update-check' | 'update-begin' | 'update-cancel' | 'update-rollback' | 'update-dismiss' | 'stop'
 
-/** Whether a request may use a control now, and if not, what it needs: the computer, or an unlock entered on the device. */
+/** Whether a request may use a control now, and if not, what it needs: the computer, Face ID for this call, or an unlock entered on the device. */
 export type MayView =
   | { readonly ok: true }
-  | { readonly ok: false, readonly needs: 'computer' | 'unlock' }
+  | { readonly ok: false, readonly needs: 'computer' | 'unlock' | 'face' }
 
 /** Who may use what, for the request that read `state`. */
 export interface AccessView {

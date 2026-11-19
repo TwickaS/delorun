@@ -154,6 +154,8 @@ export interface DeviceArrival {
    * for a locked device and for one that holds only the approval grace.
    */
   readonly freshUnlock: boolean
+  /** The control is one any approved device may use with no unlock (class `free`), so the proof does not claim an unlock. */
+  readonly freeControl?: true
 }
 
 /**
@@ -162,10 +164,10 @@ export interface DeviceArrival {
  * device take; the proof is recorded as `studio`.
  * @param facts - the device and its unlock.
  * @returns the proof, naming the device.
- * @throws {ChangesError} `NOT_AT_COMPUTER` unless the device holds a fresh unlock.
+ * @throws {ChangesError} `NOT_AT_COMPUTER` unless the device holds a fresh unlock or the control is free.
  */
 export function attestDevice(facts: DeviceArrival): AtComputer {
-  if (facts.remoteSession !== true || facts.freshUnlock !== true || facts.device.id === '') {
+  if (facts.remoteSession !== true || (facts.freshUnlock !== true && facts.freeControl !== true) || facts.device.id === '') {
     throw new ChangesError('NOT_AT_COMPUTER', 'studio', 'Unlock this device first: it needs a code from your computer, or your PIN where PIN mode is on.')
   }
   return issue('studio', facts.device)
