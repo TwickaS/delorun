@@ -238,6 +238,15 @@ export class PasskeyAuth {
   }
 
   /**
+   * Every device's passkeys, for the studio's device list.
+   * @returns one entry per device that holds a passkey.
+   */
+  allDevices(): readonly { readonly deviceId: DeviceId; readonly passkeys: readonly PasskeySummary[] }[] {
+    const ids = [...new Set(this.options.store.list().map(record => record.deviceId))]
+    return ids.map(deviceId => ({ deviceId, passkeys: this.stateOf(deviceId).passkeys }))
+  }
+
+  /**
    * A paired device asks to add a passkey: the home derives a code the device shows and the person types at the computer.
    * @param asker - the device, listener and session.
    * @param address - the studio address the session is bound to.

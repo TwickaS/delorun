@@ -37,6 +37,8 @@ export const PASSKEY_PATHS = {
   pin: '/auth/passkey/pin',
   /** `POST` `{ credentialId }`: the device removes one of its own passkeys; the studio first confirms the action with a grant. */
   remove: '/auth/passkey/remove',
+  /** `GET`: every approved device's passkeys; a `face` action (action `auth/passkey/devices`, hash of `{}`). */
+  devices: '/auth/passkey/devices',
   /** `GET`: the computer's list of pending requests to add a passkey. */
   pending: '/auth/passkey/add/pending',
   /** `POST` `{ requestId, code }`: the computer types the code a device shows. */
@@ -64,6 +66,9 @@ function isRegistration(message: Readonly<Record<string, unknown>>): message is 
 function isAssertion(message: Readonly<Record<string, unknown>>): message is Readonly<Record<string, unknown>> & AuthenticationResponseJSON {
   return typeof message.id === 'string' && typeof message.rawId === 'string' && typeof message.type === 'string' && isRecord(message.response) && typeof message.response.clientDataJSON === 'string'
 }
+
+/** The action name the cross-device passkey listing is confirmed under: its grant covers `{}`. */
+export const PASSKEY_DEVICES_ACTION = 'auth/passkey/devices'
 
 /** The name an authenticator shows for a passkey's account. */
 const PASSKEY_LABEL = 'Delorun'
@@ -173,21 +178,51 @@ export function passkeyPinHandler(auth: HomeAuth): RouteHandler {
 }
 
 /**
- * Build the route a device removes one of its own passkeys on. It is a `face` action ({@link PASSKEY_REMOVE_ACTION}):
- * the home uses up a grant for `{ credentialId }` of this device and refuses `ELEVATION_REQUIRED` without one.
+ * Use up the grant for one `face` call of a device route, keyed by the JCS hash of its arguments.
+ * @param auth - the home-auth instance.
+ * @param device - the admitted session.
+ * @param action - the action name.
+ * @param args - the call's arguments as the home received them.
+ * @param refusal - the sentence of the refusal.
+ * @throws {HomeAuthError} `ELEVATION_REQUIRED` without a live grant for exactly these arguments.
+ */
+function useGrant(auth: HomeAuth, device: DeviceSession, action: string, args: Readonly<Record<string, unknown>>, refusal: string): void {
+  const hash = hashArgs(args)
+  if (hash === undefined || auth.grants.consume({ deviceId: device.session.deviceId, listener: device.listener }, action, hash) === undefined) {
+    throw new HomeAuthError('ELEVATION_REQUIRED', refusal)
+  }
+}
+
+/**
+ * Build the route a device lists every approved device's passkeys on. It is a `face` action
+ * ({@link PASSKEY_DEVICES_ACTION}) because it reads device metadata.
+ * @param auth - the home-auth instance.
+ * @returns the handler.
+ */
+export function passkeyDevicesHandler(auth: HomeAuth): RouteHandler {
+  return deviceRoute(auth, 'GET', (device) => {
+    useGrant(auth, device, PASSKEY_DEVICES_ACTION, {}, 'Confirm with Face ID or your PIN to see the passkeys of your devices')
+    return { devices: auth.passkeys.allDevices() }
+  })
+}
+
+/**
+ * Build the route a device removes a passkey on: its own, or another device's when the body names `deviceId`. It is a
+ * `face` action ({@link PASSKEY_REMOVE_ACTION}): the home uses up a grant for exactly the body sent, `{ credentialId }`
+ * or `{ credentialId, deviceId }`, and refuses `ELEVATION_REQUIRED` without one.
  * @param auth - the home-auth instance.
  * @returns the handler.
  */
 export function passkeyRemoveHandler(auth: HomeAuth): RouteHandler {
   return deviceRoute(auth, 'POST', async (device, message) => {
-    if (typeof message.credentialId !== 'string') throw new HomeAuthError('BAD_REQUEST', 'a removal names the passkey')
-    const record = auth.passkeyStore.find(message.credentialId)
-    if (record?.deviceId !== device.session.deviceId) throw new HomeAuthError('BAD_REQUEST', 'this device has no such passkey')
-    const hash = hashArgs({ credentialId: message.credentialId })
-    if (hash === undefined || auth.grants.consume({ deviceId: device.session.deviceId, listener: device.listener }, PASSKEY_REMOVE_ACTION, hash) === undefined) {
-      throw new HomeAuthError('ELEVATION_REQUIRED', 'Confirm with Face ID or your PIN to remove this passkey')
+    const { credentialId, deviceId, ...rest } = message
+    if (typeof credentialId !== 'string' || (deviceId !== undefined && typeof deviceId !== 'string') || Object.keys(rest).length > 0) {
+      throw new HomeAuthError('BAD_REQUEST', 'a removal names the passkey and, for another device, its device id')
     }
-    return { removed: await auth.passkeys.remove(device.session.deviceId, message.credentialId) }
+    const owner = deviceId ?? device.session.deviceId
+    if (auth.passkeyStore.find(credentialId)?.deviceId !== owner) throw new HomeAuthError('BAD_REQUEST', 'that device has no such passkey')
+    useGrant(auth, device, PASSKEY_REMOVE_ACTION, message, 'Confirm with Face ID or your PIN to remove this passkey')
+    return { removed: await auth.passkeys.remove(owner, credentialId) }
   })
 }
 
