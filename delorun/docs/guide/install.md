@@ -220,7 +220,7 @@ The install step appears only when the launcher started setup, and the key step 
 
   ```json setup-answers-example
   {
-    "schemaVersion": 4,
+    "schemaVersion": 5,
     "useCase": "local",
     "modelProvider": { "id": "deepseek-official", "credential": { "source": "environment", "name": "DEEPSEEK_API_KEY" }, "baseURL": null, "model": null },
     "prompts": "safer",
@@ -229,7 +229,6 @@ The install step appears only when the launcher started setup, and the key step 
     "reach": { "option": "none", "identityFactor": null },
     "importStockHome": false,
     "protectChanges": false,
-    "phonePowers": null,
     "updateCheck": true,
     "sections": []
   }

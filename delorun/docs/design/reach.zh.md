@@ -95,6 +95,17 @@ reach 让一个人通过自己的 Tailscale tailnet，从自己的手机或笔�
 
 13. `delorun reach status | on tailscale | off` 和 `delorun devices list | approve | elevate | remove | code`；`elevate` 回答设备解锁敏感操作的请求（见 [C14](../contracts/c14-oidc-passkeys.zh.md#elevation)）。`delorun reach on tailscale` 检查 `tailscale` 已安装并在运行、tailnet 已开启 HTTPS 证书，以及此人可以运行 `tailscale serve`；对于最后一项，它会打印此人自己要运行的那一条命令，Delorun 从不运行 `sudo`。没有所有者的 home 通过 home 套接字以本地人的身份被认领。
 
+**The grant model.** A paired device confirms one sensitive action at a time instead of holding an unlock for minutes. The rules are in [C14](../contracts/c14-oidc-passkeys.zh.md#face-id-unlock) and [C4](../contracts/c04-admission.zh.md); this paragraph and the list give the design.
+
+- **One table decides.** `AUTH_CLASSES` puts every Remote method, plugin Fetch route, prompt answer and `/auth` route in one of four classes: `free` (any approved device), `face` (one confirmation for exactly this call), `computer` (only the person at the computer) and `ticket` (a route that needs the enrolment ticket the computer's approval minted). A spec fails on an unlisted action or route, a duplicate row and a row in two classes, so a new route cannot ship without a class.
+- **The home keeps the grants.** A grant is a server-side record keyed by device, listener, action and a hash of the call. The browser never sends a token that carries authority: it asks the home for a challenge, confirms with its passkey (or its PIN), and receives a grant id.
+- **The home hashes the body.** A Fetch route of class `face` reads the request body itself, up to 1 MiB, hashes method, path, query and body (JSON in canonical form) and looks up the grant under that hash. The client's idea of the hash is never checked, so a grant for one request cannot cover another. A larger body is refused.
+- **`Delorun-Grant` carries only the id.** The header names the grant; the home checks it equals the grant it found, uses the grant up and removes the header before the route runs, as it does `Delorun-Unlock`. Grants live 30 seconds and are used once, only after the whole decision allows.
+- **Holds keep a terminal or a picker open without a grant per call.** A grant that opens a terminal or the folder picker also opens a hold bound to that terminal's or picker's id, to the device and to the page's connection, with a 5-minute idle cap and a 60-minute total cap. A hold admits follow-up calls on that id; it ends with the device's session, with the device's removal and when the connection closes. Another terminal needs a new grant.
+- **A device with a passkey has no other way in.** Its PIN window, a code typed at the computer and the approval grace admit nothing in class `face`; the PIN still mints a one-action grant. A device with no passkey keeps what an unlock covers, and every other `face` action needs a one-action grant from its PIN, so no running unlock opens a terminal or a Changes apply.
+- **Answers are keyed too.** A prompt answer that grants more authority is admitted by a grant for the agent, call id, grants marker and answer value.
+- **Computer-only stays computer-only.** Approving or removing a device from a device that holds no passkey, the PIN, remote access and the settings document are class `computer`. Removing another device needs a grant from a device that holds a passkey.
+
 <a id="what-this-does-not-protect-against"></a>
 
 ## 本设计不防护什么

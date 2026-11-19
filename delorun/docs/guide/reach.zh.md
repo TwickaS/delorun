@@ -24,7 +24,7 @@ tailnet 上的任何设备都能打开登录页面，但只有你在电脑上批
 - [批准设备](#approve-a-device)
 - [让批准权掌握在你手里](#keep-approval-yours)
 - [已批准的手机能做什么、不能做什么](#what-an-approved-phone-can-and-cannot-do)
-- [选择已解锁的手机可以做多少事](#choose-how-much-an-unlocked-phone-may-do)
+- [Confirm with Face ID](#confirm-with-face-id)
 - [暂时解锁敏感操作](#unlock-sensitive-actions-for-a-while)
 - [用 PIN 解锁](#unlock-with-a-pin)
 - [移除设备](#remove-a-device)
@@ -196,18 +196,18 @@ Tailscale 报告为以你所允许的用户登录的手机，可以在批准窗�
 - 放宽工作区的网络、运行信任检查，以及发送问题报告（其中可能包含你电脑上的路径）；
 - 保留你所做的更改：解锁结束时不会撤回任何东西，回滚更改要靠撤销和已保存的设置版本。
 
-新批准的手机在首次登录时就处于已解锁状态，持续一个解锁时长，或直到新手引导完成，以先到者为准，因此从手机上设置不需要解锁提示。这个起始状态无论[手机权限](#choose-how-much-an-unlocked-phone-may-do)是什么级别，都永远不会打开终端，也永远不涵盖受保护的设置，也不涵盖四项会放宽 Delorun 所允许范围的操作（接受 MCP 服务器、允许外部 agent、授予完全访问和放宽工作区的网络）。这些操作仍然需要来自你电脑的代码。在 PIN 模式下根本没有这种起始状态：每个需要解锁的操作都会要求输入 PIN。
+A newly approved phone starts unlocked on its first sign-in, for the unlock time or until onboarding finishes, whichever comes first, so setting up from the phone needs no unlock prompts. That start never opens a terminal and never covers protected settings or the four actions that loosen what Delorun allows (accepting an MCP server, allowing an external agent, granting full access and loosening a workspace's network). Those still ask for a code from your computer. In PIN mode there is no such start at all: every action that needs an unlock asks for the PIN.
 
 即使手机已解锁，也只能在你的电脑上：
 
 - 开启或关闭远程访问、设置或更改 PIN，以及批准或移除设备；
-- 选择[手机权限](#choose-how-much-an-unlocked-phone-may-do)，以及清除告诉你某部手机更改了保护的通知；
+- dismiss the notice that tells you a phone changed protection;
 - 关闭更新检查（开启则可以在手机上进行）；
 - 在你电脑上的应用程序中打开文件或文件夹。
 
 手机会把这些显示为 “Do this on your computer”，并附上原因。
 
-还有哪些事留在你的电脑上，取决于手机权限。在默认的 Careful 下，已解锁的手机也不能打开终端、关闭保护、应用对你的插件或对 Delorun 自己文件的变更、关闭或打开插件、开始工作会话、创建插件、把设置文件移入或移出，或者重启 Delorun。在 Full 下它可以。
+An unlocked phone can also open a terminal, turn protection off, apply changes to your plugins or to Delorun's own files, turn a plugin off or on, start a work session, create a plugin, move a setup file in or out, or restart Delorun. Each of these takes its own confirmation: a fresh unlock, or [Face ID](#confirm-with-face-id) when you have set it up.
 
 即使已解锁，也永远不能：
 
@@ -225,7 +225,7 @@ Tailscale 报告为以你所允许的用户登录的手机，可以在批准窗�
 <details>
 <summary>边界情况</summary>
 
-- 如果某个工作区处于完全访问，那么手机仍然需要手机权限设为 Full 并且解锁，才能在那里打开或连接终端，危险模式也是如此：终端是带着你的权限的 shell，所以选择了 Full 的已解锁手机被视为你的电脑。
+- If a workspace is on full access, then the phone still needs a fresh unlock, or Face ID, to open or attach to a terminal there, and so does dangerous mode: a terminal is a shell with your authority, so the phone confirms each terminal it opens.
 - 如果手机的会话空闲了 12 小时，或自登录起已过去 14 天，那么会话结束，它打开的连接也会关闭：手机会用自己的密钥从登录页面重新登录。
 - 如果你批准或移除了任何设备，那么每部手机已打开的连接都会关闭：每部手机会自动重新登录。
 - 如果回复以你电脑上的文件的形式显示图片，或你预览了某个文件，那么它不会在手机上显示：附加在消息中的图片则会显示。
@@ -241,20 +241,59 @@ Tailscale 报告为以你所允许的用户登录的手机，可以在批准窗�
 
 </details>
 
-<a id="choose-how-much-an-unlocked-phone-may-do"></a>
+<a id="confirm-with-face-id"></a>
 
-## 选择已解锁的手机可以做多少事
+## Confirm with Face ID
 
-手机权限（Phone powers）有两个级别。你在自己的电脑上选择它，手机无论是否已解锁都不能更改它。
+Face ID is how an approved phone confirms one sensitive action at the moment it happens, with the phone's own lock instead of a code from your computer. "Face ID" here means whatever your phone uses: Face ID or Touch ID on an iPhone, a fingerprint or screen lock on Android, Windows Hello on Windows. Behind it is a passkey that stays on the phone, which the [glossary](../reference/glossary.zh.md#face-id) explains. Delorun never sees your face or fingerprint.
 
-- **Careful** 是默认级别。已解锁的手机不能打开终端、关闭保护、应用对你插件的变更、更改 Delorun 自己的文件或撤销对它们的变更、制作你的 Delorun 副本、重启 Delorun，也不能做[上面](#what-an-approved-phone-can-and-cannot-do)列为留在你电脑上的其他事。它仍然可以撤销插件的变更、丢弃任何等待中的变更，以及打开保护。Careful 不涵盖已解锁的手机所给出的批准：接受 MCP 服务器、允许外部 agent 和给工作区完全访问在两个级别下都可以，而且每一项都仍可能在沙箱之外启动程序。
-- **Full** 让已解锁的手机能做你的电脑能做的一切，每次都需要你在手机上输入的解锁：来自你电脑的代码，或你的 PIN。批准手机之后的 15 分钟永远不算数。
+Every action a phone can take is in one of three groups:
 
-`delorun setup` 会在你打开远程访问时请你选择，并预选你的 home 当前的级别；如果还没有级别，则预选 Careful。运行 `delorun devices powers` 查看级别。运行 `delorun devices powers careful` 或 `delorun devices powers full` 来选择；Full 需要终端。你电脑上的“设置 → 设备”也会显示并设置它；在手机上它只显示，不能更改。选择会立即生效，无需重启。
+- **Never asks.** Reading, following a chat, replying, attaching files, stopping a run, and the other actions listed above as working without an unlock.
+- **Asks every time.** The actions listed above as needing an unlock, and the ones an unlocked phone could take only at the computer's higher level: opening a terminal, turning protection off, applying changes to your plugins or to Delorun's own files, restarting Delorun, saving or removing a provider key, and answering a prompt that grants full access. The phone shows a sheet that names the action, and you confirm with Face ID. One confirmation covers that one action, once, within 30 seconds.
+- **Only at your computer.** Approving or removing devices, setting the PIN, turning remote access on or off, and the other actions listed above as staying at your computer. Face ID never opens these.
 
-在手机权限出现之前就已存在的 home，会从它的 `phonePowersOnUpgrade` 设置所指定的级别开始（除非你改过，否则是 Careful），你电脑上的“设置 → 设备”会一直提醒你，直到你作出选择，其中的 **Keep Careful** 可选定它所应用的级别。如果 Delorun 无法读取已保存的选择，就应用 Careful。
+When a phone holds a passkey, the 15 minutes after a code unlock, the PIN's unlock window and the first sign-in start no longer unlock anything on that phone: each sensitive action asks for Face ID. A terminal you opened with Face ID stays open for its own follow-up work, so you are not asked for every keystroke. It ends after 5 minutes idle, 60 minutes in all, or when the phone signs out. Another terminal needs its own confirmation.
 
-当手机打开或关闭保护时，你的电脑会显示一条通知，`delorun changes list` 会把它打印在 “Changed from a phone:” 下，并在打印到终端时清除它。从手机关闭保护会问两次，和在电脑上一样；第二个问题能挡住一次失手，但挡不住拿着你已解锁、且已选择 Full 的手机的人。
+**Set up Face ID.**
+
+1. **While you pair the phone.** On your computer, approve the phone as in [Approve a device](#approve-a-device). Once you do, the phone offers **Set up Face ID**. Choose it, then confirm with the phone's lock when it asks. **Skip for now** hides the offer for that visit, and Settings, Face ID offers it again.
+2. **Later, on a phone that is already paired.** Open Settings, Face ID on the phone and choose **Add Face ID**. The phone shows an 8-digit code. At your computer, open Settings, Face ID, pick the phone under **Device**, type the code and choose **Confirm**. Back on the phone, choose **Set up Face ID** and confirm with its lock. The code ties the new passkey to the screen you can see, as an approval code does.
+
+Each phone has its own passkey. Adding Face ID on one phone changes nothing on another.
+
+**When Face ID fails or is not there.**
+
+Choose **Use PIN instead** on the sheet to confirm the same action with your PIN ([Unlock with a PIN](#unlock-with-a-pin)). A correct PIN confirms that one action only; it does not unlock the phone for a while. The sheet shows this choice as soon as Face ID is cancelled or does not work. If you have set no PIN, the sheet says **Approve at the computer** and the action waits for your code as an unlock does.
+
+Cancelling the phone's own sheet counts for nothing. A wrong passkey or a wrong PIN counts as a wrong PIN try: the fifth on one phone removes that phone, and ten across all phones pause PIN and Face ID confirmations until you run `delorun devices pin resume` at your computer.
+
+**What Face ID does not do.**
+
+- It does not sign a phone in. The phone's own key and your approval still do that.
+- It does not let a phone do what only your computer may do.
+- It does not make a stolen, unlocked phone safe by itself. On an iPhone, turn on **Stolen Device Protection** in Settings, Face ID & Passcode, so that someone who learns the phone's passcode still cannot use Face ID, change the passcode or turn the protection off away from your usual places without waiting an hour.
+- It does not work in a browser that cannot make a platform passkey. Some versions of Firefox, and other browsers without one, say "This browser cannot use Face ID here"; that phone keeps confirming actions with a code from your computer or its PIN. Safari on an iPhone and Chrome on Android work in the browsers tried.
+
+<details>
+<summary>Edge cases</summary>
+
+- If you set up Face ID on one address and later change your reach address, then the old passkey does not work on the new one: the phone says to set Face ID up again.
+- If the phone's sheet runs longer than 60 seconds, then the request expires — choose the action again.
+- If a passkey syncs between your devices through your account, then it still works only on the phone that created it with Delorun, because the phone's own session is part of the check.
+- If you choose Use PIN while a passkey fails, then the failed passkey tries still count as wrong tries.
+- If you use only your computer, then nothing here applies: the computer is never asked.
+- If an action's request is larger than 1 MiB, then Face ID cannot cover it — do it at your computer.
+
+</details>
+
+<details>
+<summary>Go further</summary>
+
+- `delorun devices list` shows each device; Settings, Face ID on your computer lists every device's passkeys with when each was last used.
+- Face ID rows are listed in `AUTH_CLASSES` ([reach design](../design/reach.zh.md)).
+
+</details>
 
 <a id="unlock-sensitive-actions-for-a-while"></a>
 
@@ -327,6 +366,8 @@ PIN 模式让已批准的设备通过输入 PIN 或口令来解锁敏感操作�
 当你丢失了某台设备或不再使用它时，请移除它。用 `delorun devices list` 中的 id 运行 `delorun devices remove <device id>`，或在你电脑上 studio 的“设备”部分选择该设备旁的 **Remove**。
 
 你应该会看到 “Removed <device id>; <n> session(s) ended.” 该设备会立即退出登录，它打开的连接也会关闭。要再次使用它，需要重新批准。
+
+**Remove a passkey.** Remove a passkey when you replace a phone's lock or no longer trust it. At your computer, open Settings, Face ID and choose **Remove** beside the passkey, or **Remove device** to remove the whole device; removing a device with `delorun devices remove <device id>` removes its passkeys in the same step. On a phone, open Settings, Face ID: the phone lists its own passkeys, and you choose **Remove** beside one and confirm with Face ID. **Show all devices**, which asks for Face ID, lists the others. To remove another device's passkey, or another device, the phone must hold a passkey itself: a PIN cannot confirm it. You should see the passkey gone from the list; a phone with no passkey left confirms with a code or its PIN again.
 
 <details>
 <summary>边界情况</summary>

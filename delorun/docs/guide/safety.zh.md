@@ -150,7 +150,7 @@ setup 的提示问题决定 Delorun 在有风险的更改之前如何询问。`d
 - 它放宽新 chat 开始时的权限。
 - 它回答关于 MCP 服务器、外部 agent 和工作区网络的问题。
 - 它给出预留完全访问的批准。
-- 它仅在[手机权限](reach.zh.md#choose-how-much-an-unlocked-phone-may-do)为 Full 时使用终端（每个终端都需要解锁，没有任何开关或完全访问工作区可以免除）。
+- It uses terminals only with a fresh unlock or [Face ID](reach.zh.md#confirm-with-face-id) for each terminal it opens; no switch or full-access workspace waives it.
 - 它保存或移除提供方密钥（但从不读回已保存的密钥）。
 - 它在电脑上的应用程序中打开 chat 的文件夹。
 - 它读取 chat 工作区之外的文件（但从不读取 Delorun home 之内的）。这与该模式下完全访问给予 chat 的权限范围相同。

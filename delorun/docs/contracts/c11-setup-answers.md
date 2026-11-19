@@ -88,7 +88,6 @@ Setup asks these questions, in this order. The default applies when the person a
 | Prompts | `prompts` | Ask me first (`safer`), Ask less (`stock`), or Never ask (dangerous); `--yes` never selects dangerous. | Ask me first |
 | Keep running in the background | `background` | Yes or no. | Yes; No for `automation`, which does not ask. |
 | Open Delorun from your phone or another device over Tailscale? | `reach` | Yes or no. | No; the question starts on Yes for `remote`. |
-| What may an unlocked phone do? | `reach` | Careful, or Full, which adds the terminal, turning protection off and changes to Delorun itself, each with an unlock entered on the phone. Asked only after remote access is turned on. | Careful; the level the person chose before on a re-run. |
 | Hold changes to your plugins and to Delorun itself for your review before they load? | `changes-protection` | Yes or no. No leaves the home's setting as it is, and setup never turns protection off. | No; yes when protection is already on. |
 | Profile name and port | `profile` | A profile name and a free port from 1024 to 65535. | The selected profile, and 3080. |
 
@@ -128,7 +127,7 @@ An answers document is a JSON object with the fields below. The same schema is u
 
 ```json
 {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "useCase": "local",
   "modelProvider": { "id": "anthropic", "credential": { "source": "environment", "name": "ANTHROPIC_API_KEY" }, "baseURL": null, "model": "claude-sonnet-5" },
   "prompts": "safer",
@@ -137,7 +136,6 @@ An answers document is a JSON object with the fields below. The same schema is u
   "reach": { "option": "none", "identityFactor": null },
   "importStockHome": false,
   "protectChanges": false,
-  "phonePowers": null,
   "updateCheck": true,
   "sections": [{ "id": "privacy", "status": "seen" }, { "id": "key", "status": "answered" }]
 }
@@ -145,7 +143,7 @@ An answers document is a JSON object with the fields below. The same schema is u
 
 | Field | Type and values | Default | Rule |
 | --- | --- | --- | --- |
-| `schemaVersion` | Integer `4`, or `2` or `3` for a document written before the provider question. | `4` | Setup refuses any other value. A version-2 document has no `updateCheck`, reads as `true`, and is refused when it carries one. A version-2 or version-3 document's `modelProvider` holds `id` and `credential` only, and reads as `deepseek-official` with its credential and the profile's default model, because setup of those versions applied DeepSeek's key and no other provider. One that names another id is refused with a message that it needs schema version 4. |
+| `schemaVersion` | Integer `5`, or `2`, `3` or `4` for a document written earlier. | `5` | Setup refuses any other value. A version-2, version-3 or version-4 document that holds `phonePowers` is read with that key ignored and a line on standard error saying so; a version-5 document that holds it is refused as an unknown field (`IGNORED_ANSWER_KEYS` in `@delorun/contract-setup-answers`). A version-2 document has no `updateCheck`, reads as `true`, and is refused when it carries one. A version-2 or version-3 document's `modelProvider` holds `id` and `credential` only, and reads as `deepseek-official` with its credential and the profile's default model, because setup of those versions applied DeepSeek's key and no other provider. One that names another id is refused with a message that it needs schema version 4. |
 | `useCase` | `local`, `remote` or `automation`. | `local` | How the person uses Delorun. The interactive form sets the defaults and the questions from it; `--yes` and `--config` store it and ask nothing. A `remote` document cannot enable reach, so remote access is turned on with `delorun setup reach`. A record written before the use-case question has none and reads as `local`; its `mode` key (`quick` or `full`, written by the setup that asked Quick or Full) is read and ignored, and any other `mode` value is refused. |
 | `modelProvider` | An object with the four fields below, or `null` for no provider. | The object with each field's default in a terminal; `null` with `--yes` unless `--provider` is given. | `null` writes no provider row and leaves the rows already there, so new chats keep the model the profile selected; setup says which. |
 | `modelProvider.id` | An id of [Model providers](#model-providers). | `deepseek-official` | Any other id is refused, naming the ids setup accepts. |
@@ -159,7 +157,6 @@ An answers document is a JSON object with the fields below. The same schema is u
 | `reach.option` | `none`, `tailscale-private`, `tailscale-funnel` or `self-hosted-relay`. | `none` | Any value other than `none` is accepted only in the interactive form. |
 | `reach.identityFactor` | `passkey`, `oidc`, `tailnet`, `tailnet-membership` or `null`. | `null` | `null` when the option is `none`. The built `reach` section records `tailnet-membership` for `tailscale-private`. `passkey` or `oidc` for `tailscale-funnel` and `self-hosted-relay`. `passkey`, `oidc` or `tailnet` for `tailscale-private`. `tailnet` is available only under C7's socket variant ([C7](c07-reach-providers.md#tailscale-serve-target)); otherwise setup refuses it with `TAILNET_IDENTITY_UNAVAILABLE`. `passkey` on a `ts.net` address is available only where C14 makes passkeys available there ([C14](c14-oidc-passkeys.md#relying-party-ids)); otherwise setup refuses it with `PASSKEY_UNAVAILABLE`. |
 | `importStockHome` | Boolean. | `false` | Set by the import section. `--config` refuses `true`, because the import shows its preview before it asks. |
-| `phonePowers` | `careful`, `full` or `null`. | `null` | Set by the `reach` section, which asks it only when remote access is turned on, with the earlier answer selected, else the level the home records, else Careful. `--yes` takes it from `--phone-powers`, and a document may name it. `null` leaves the home's level as it is; an absent field reads as `null`. |
 | `protectChanges` | Boolean. | `false` | Set by the `changes-protection` section; an absent field reads as `false`. `--config` refuses `true`, because only a terminal proof changes the protection setting ([C21](c21-changes.md)). |
 | `updateCheck` | Boolean; optional. | `true` | Whether Delorun checks the release channel for a newer release. `--no-update-check` sets it to `false` for a whole setup run in every form; `delorun setup <section>` refuses it, and `delorun setup privacy` asks the question instead. |
 | `sections` | A list of `{ "id", "status" }`, in flow order. | `[]` | Written by setup, never by a document. `seen` is a note shown, `answered` a question answered, `skipped` a section that took its default without being asked. The studio's onboarding leaves out what the terminal covered. |
@@ -185,7 +182,6 @@ Each answer produces the writes below. Config writes go to the per-profile `cord
 | `reach.identityFactor` | An enrolment request for the reach address. No config row. | Home-auth state, under the identity contracts. |
 | `importStockHome` | The data of the stock-home import of [C8](c08-archive-and-trash.md#the-stock-home-import): exactly the plan the section's preview showed, under the home lock of every profile. A stock file that changed since, a Delorun home that gained a chat since, or a run that did not show the preview refuses it. | The home. |
 | `protectChanges` | `true` writes `changes/protection.json` with the level `on`, at mode 0600 under a 0700 `changes/`, through the terminal proof `delorun changes protection on` uses, taken from setup's own standard input and output. Nothing is written when protection is already on or the answer is `false`. When either stream is not a terminal, setup stops before the write and names how to finish: `delorun setup` in a terminal resumes the step, or `delorun changes protection on` turns it on. | The home. |
-| `phonePowers` | A level writes `secrets/home-auth/phone-powers.json` as the person's choice, at mode 0600 ([C14](c14-oidc-passkeys.md#phone-powers)), whether or not remote access is on; `null` writes nothing. | The home. |
 | `updateCheck` | `false` writes the `delorun-update-check` row as Settings → General → Updates saves it: its id, its plugin name and the bundle's config with `enabled: false`. `true` leaves no config on that row, so the bundle's `enabled: true` applies. | The profile's `cordis.patch.yml`, before Delorun first starts. |
 | `sections` | Recorded in `setup-answers.json`. | The profile directory. |
 
@@ -194,7 +190,7 @@ Upstream's session-telemetry row `session-telemetry-otel` is not an answer. In u
 <a id="yes-and-config-forms"></a>
 ### The --yes and --config forms
 
-`--yes` keeps the `local` use case, accepts every default but the provider, and applies no answer other than the defaults, the provider flags, `--prompts`, `--phone-powers` and `--no-update-check`. `--phone-powers careful|full` records that Phone powers level and applies to `--yes` only. The level is per home, so an unattended run, `--yes` or `--config`, chooses Full only in a home with no Phone powers record or one that holds Full already, and otherwise stops before it writes anything, naming `delorun devices powers full` in a terminal; Careful it always records. Without `--provider` it sets up no provider, whatever keys the environment holds, and prints how to add one: `delorun setup key` in a terminal or with the provider flags, or the studio's Settings → Agent → Models. `--provider <id>` names a provider of [Model providers](#model-providers), `--model <id>` its model, which every provider but DeepSeek needs, `--base-url <url>` the endpoint of `openai-compatible` and of no other provider, and `--key-env <NAME>` the variable the key is read from at each start, which defaults to the provider's key variable. A key is never accepted on the command line, and a `--key-env` value that is not a variable name is refused without being echoed. When the variable is unset, setup stops with a typed error that names it. `delorun setup key` takes the same flags on a profile that is set up and then asks nothing. `--check-key` without a provider is refused with the usage code.
+`--yes` keeps the `local` use case, accepts every default but the provider, and applies no answer other than the defaults, the provider flags, `--prompts` and `--no-update-check`. Without `--provider` it sets up no provider, whatever keys the environment holds, and prints how to add one: `delorun setup key` in a terminal or with the provider flags, or the studio's Settings → Agent → Models. `--provider <id>` names a provider of [Model providers](#model-providers), `--model <id>` its model, which every provider but DeepSeek needs, `--base-url <url>` the endpoint of `openai-compatible` and of no other provider, and `--key-env <NAME>` the variable the key is read from at each start, which defaults to the provider's key variable. A key is never accepted on the command line, and a `--key-env` value that is not a variable name is refused without being echoed. When the variable is unset, setup stops with a typed error that names it. `delorun setup key` takes the same flags on a profile that is set up and then asks nothing. `--check-key` without a provider is refused with the usage code.
 
 `--config <file>` reads an answers document with the schema above, and applies its answers under the same rules as `--yes`; its provider is the one `modelProvider` names, and the provider flags are refused beside it; `--no-update-check` turns the release check off whatever the document says. A document whose `reach.option` is not `none` is refused with a typed error that names the field, and so is a document whose `importStockHome` or `protectChanges` is `true`. Neither form changes the protection setting. A document that carries a removed key is refused with a message that names the removed keys. A document that carries a credential value, in any field, is refused without echoing that value.
 
@@ -225,7 +221,7 @@ The statements about recovery and Docker belong to the sections that add those t
 <a id="compatibility"></a>
 ## Compatibility
 
-The answers schema is versioned by `schemaVersion`, which is `4`. A change that adds a question with a safe default keeps the version when an older reader that ignores the new field writes the same profile; `useCase` is such a field, because the answers it sets are stored beside it and the profile files do not depend on it. A change that alters the meaning of an existing answer, or that removes a field, increments the version; version 2 removed five fields. Version 3 added `updateCheck`: a reader that ignored `false` would leave the release check on, so the version increments. Version 4 gave `modelProvider.id` its meaning and added `baseURL`, `model` and `null`: a version-3 reader ignores the id and would store an Anthropic key as DeepSeek's, so the version increments. Setup reads a version-2 or version-3 document as version 4, as [Answer schema](#answer-schema) describes, and records it as version 4. Setup refuses an answers document whose version it does not know.
+The answers schema is versioned by `schemaVersion`, which is `5`. A change that adds a question with a safe default keeps the version when an older reader that ignores the new field writes the same profile; `useCase` is such a field, because the answers it sets are stored beside it and the profile files do not depend on it. A change that alters the meaning of an existing answer, or that removes a field, increments the version; version 2 removed five fields. Version 3 added `updateCheck`: a reader that ignored `false` would leave the release check on, so the version increments. Version 4 gave `modelProvider.id` its meaning and added `baseURL`, `model` and `null`: a version-3 reader ignores the id and would store an Anthropic key as DeepSeek's, so the version increments. Version 5 removed `phonePowers`, so the version increments. Setup reads a version-2, version-3 or version-4 document as version 5, as [Answer schema](#answer-schema) describes, and records it as version 5. Setup refuses an answers document whose version it does not know.
 
 A new upstream opt-in is added as a question with a default of off, in the same change that adds its profile row to the mapping.
 
@@ -254,9 +250,6 @@ Denial tests:
 | `refuses a document that asks for the stock-home import, which shows its preview in a terminal first` | A document whose `importStockHome` is `true` is refused with a typed error that names the field. |
 | `refuses a document that turns changes protection on, which only a terminal changes, and reads an absent answer as no` | A document whose `protectChanges` is `true` is refused with a typed error that names the field. |
 | `stops a yes before it writes, naming how to finish, and a run at a terminal resumes it` | A yes whose standard output is not a terminal writes no protection record. |
-| `takes --phone-powers only with --yes and only a level` | `--phone-powers` without `--yes`, or with a value that is not a level, is refused with the usage code. |
-| `an unattended run for a new profile cannot choose Full on a home that already has a level` | `--yes` or `--config` naming Full in a home whose record holds Careful, chosen or not, or cannot be read, stops and leaves the record as it was; Full over Full and Careful at any time are recorded. |
-| `is not asked when remote access is off, and the home keeps no level` | A terminal run that leaves remote access off asks no Phone powers question and writes no record. |
 | `config file with a removed key is refused` | A document that carries a removed key is refused with a typed error that names the removed keys and no value. |
 | `config file carrying a credential value is refused` | A document with a credential value in any field is refused, and the value is not echoed. |
 | `live key check sends the key to the provider origin only` | For every provider, the check's request goes to one origin, with redirects refused, and the key is in no URL, message or output; a redirect to another origin fails, and that origin receives nothing. |
@@ -285,7 +278,7 @@ Acceptance tests:
 <a id="decided-values"></a>
 ## Decided values
 
-- The answers schema version is `4`; setup also reads versions 2 and 3.
+- The answers schema version is `5`; setup also reads versions 2, 3 and 4.
 - The provider question starts on `deepseek-official` in a terminal, and `--yes` sets up no provider unless `--provider` names one.
 - The use case defaults to `local`; `remote` and `automation` are chosen, never defaulted.
 - The defaults are "Ask me first" prompts, background running on, port 3080, `none` for reach, off for the stock-home import, which the import section also preselects as no when it is shown, and on for the release check.
