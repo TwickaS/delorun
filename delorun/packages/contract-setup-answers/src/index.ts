@@ -7,15 +7,16 @@
  */
 
 /** Schema version of the answers document that setup writes. */
-export const SETUP_ANSWERS_SCHEMA_VERSION = 4 as const
+export const SETUP_ANSWERS_SCHEMA_VERSION = 5 as const
 
 /**
  * Earlier schema versions setup still reads. A version-2 document has no `updateCheck` and reads as the check on; a
  * version-2 or version-3 document's model provider reads as DeepSeek with the profile's default model, which is what
- * setup of those versions applied whatever id the document named. Setup refuses every version not listed here or in
+ * setup of those versions applied whatever id the document named. A document of version 2, 3 or 4 may hold
+ * `phonePowers`, which version 5 removed: it is read, ignored and reported. Setup refuses every version not listed here or in
  * {@link SETUP_ANSWERS_SCHEMA_VERSION}.
  */
-export const SETUP_ANSWERS_EARLIER_SCHEMA_VERSIONS = [2, 3] as const
+export const SETUP_ANSWERS_EARLIER_SCHEMA_VERSIONS = [2, 3, 4] as const
 
 /**
  * The model providers setup can set up, by the route id the profile selects them with: DeepSeek's own adapter
@@ -92,9 +93,6 @@ export interface ReachAnswer {
   readonly pairing?: PairingAsker | undefined
 }
 
-/** The Phone powers levels, as `@delorun/home-auth` names them: `careful`, the default, and `full`. */
-export type PhonePowersAnswer = 'careful' | 'full'
-
 /**
  * The prompts answers. `safer` keeps Delorun's consent and permission defaults; `stock` sets them to upstream's behaviour;
  * `dangerous` sets them to upstream's behaviour too and makes full access available to every chat without a
@@ -162,11 +160,6 @@ export interface SetupAnswers {
    * setting as it is. Never true in a `--config` document.
    */
   readonly protectChanges: boolean
-  /**
-   * The Phone powers level setup records for the home (contract C14, "Phone powers"), or `null` to leave the home's level
-   * as it is. The terminal asks it only when remote access is turned on; `--yes` takes it from `--phone-powers`.
-   */
-  readonly phonePowers: PhonePowersAnswer | null
   /** Whether Delorun checks the release channel for a newer release; a document may leave it out, which means `true`. */
   readonly updateCheck: boolean
   /** The sections this run showed, in order; the studio's onboarding leaves out what the terminal covered. */
@@ -175,7 +168,7 @@ export interface SetupAnswers {
 
 /** The value setup applies to each question the person does not answer. */
 export const SETUP_DEFAULTS = {
-  schemaVersion: 4,
+  schemaVersion: 5,
   useCase: SETUP_DEFAULT_USE_CASE,
   modelProvider: { id: SETUP_DEFAULT_PROVIDER_ID, credential: { source: 'prompt' }, baseURL: null, model: null },
   prompts: 'safer',
@@ -184,7 +177,6 @@ export const SETUP_DEFAULTS = {
   reach: { option: 'none', identityFactor: null },
   importStockHome: false,
   protectChanges: false,
-  phonePowers: null,
   updateCheck: true,
   sections: [],
 } as const satisfies SetupAnswers
@@ -194,6 +186,13 @@ export const SETUP_DEFAULTS = {
  * choice. Readers accept it and ignore it.
  */
 export const LEGACY_SETUP_MODE_KEY = 'mode' as const
+
+/**
+ * Keys that answers documents of version 4 or earlier carried for a question Delorun no longer has (`phonePowers`, the
+ * removed Phone powers level). Readers of those versions accept them, ignore their values and say so; a version-5 document
+ * that holds one is refused.
+ */
+export const IGNORED_ANSWER_KEYS = ['phonePowers'] as const
 
 /** Keys that earlier answers documents carried and that setup no longer asks; a document holding one is refused. */
 export const REMOVED_ANSWER_KEYS = ['studioAdditions', 'runtime', 'helpSetUpModels', 'sessionLogUpload', 'desktopAnalytics'] as const

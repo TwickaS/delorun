@@ -289,14 +289,14 @@ describe('a PIN on a device', () => {
     expect(grants.has({ deviceId: PHONE, listener: LISTENER }, 'pluginManager/installBundle', ACTIONS.entries[0].hash)).toBe(false)
   })
 
-  // Removing the passkey check in pinGrant lets a PIN seen on a stolen phone mint the grant that removes another device (F16).
-  it('mints no device-removal grant for a device that holds no passkey, and one for a device that does', async () => {
+  // Removing the refusal in pinGrant lets a PIN seen on a stolen phone mint the grant that removes another device, passkey or not (F16, F20).
+  it('mints no device-removal grant by PIN, for a device with a passkey or without', async () => {
     const remove = { kind: 'actions', entries: [{ action: DEVICE_REMOVE_ACTION, hash: hashArgs({ v: 1, deviceId: 'x' }) ?? '' }] } as const
     expect(await code(() => auth.pinGrant(asker(OTHER), '1234', remove))).toBe('LOOPBACK_REQUIRED')
     expect(grants.has({ deviceId: OTHER, listener: LISTENER }, DEVICE_REMOVE_ACTION, remove.entries[0].hash)).toBe(false)
     await enrol(PHONE)
-    await auth.pinGrant(asker(PHONE), '1234', remove)
-    expect(grants.has({ deviceId: PHONE, listener: LISTENER }, DEVICE_REMOVE_ACTION, remove.entries[0].hash)).toBe(true)
+    expect(await code(() => auth.pinGrant(asker(PHONE), '1234', remove))).toBe('LOOPBACK_REQUIRED')
+    expect(grants.has({ deviceId: PHONE, listener: LISTENER }, DEVICE_REMOVE_ACTION, remove.entries[0].hash)).toBe(false)
   })
 
   // Face ID for "Allow once" is not a persistent allow.

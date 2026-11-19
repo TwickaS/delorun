@@ -203,7 +203,8 @@ export function removeDeviceHandler(auth: HomeAuth, credential: LoopbackCredenti
           // While Face ID is on, a confirmation for exactly this body lets a device remove another one (it only shrinks access).
           const hash = hashArgs(message)
           const holder = { deviceId: device.session.deviceId, listener: device.listener }
-          if (!auth.passkeys.enabled() || hash === undefined || auth.grants.consume(holder, DEVICE_REMOVE_ACTION, hash) === undefined) {
+          // Only a grant a passkey minted removes another device: a PIN seen on a stolen phone must not lock the owner out of the rest.
+          if (!auth.passkeys.enabled() || hash === undefined || auth.grants.peek(holder, DEVICE_REMOVE_ACTION, hash)?.factor !== 'passkey' || auth.grants.consume(holder, DEVICE_REMOVE_ACTION, hash) === undefined) {
             sendError(response, new HomeAuthError('LOOPBACK_REQUIRED', 'Removing another device needs you at your computer: open the studio on the home\'s own computer'))
             return
           }

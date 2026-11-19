@@ -11,7 +11,7 @@ import type { AddressInfo } from 'node:net'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
-import { REACH_SESSION_COOKIE, type StudioAddress } from '@delorun/contract-admission'
+import { REACH_SESSION_COOKIE, type DeviceId, type StudioAddress } from '@delorun/contract-admission'
 import { ELEVATION_LIMITS } from '@delorun/contract-oidc-passkeys'
 import { stampListener } from '@delorun/home'
 import {
@@ -23,6 +23,7 @@ import {
   elevationRevokeHandler,
   elevationStateHandler,
 } from '../src/elevation-routes.ts'
+import { PASSKEY_PATHS, PASSKEY_REMOVE_ACTION, passkeyRemoveHandler } from '../src/passkey-routes.ts'
 import { DEVICE_REMOVE_ACTION, DEVICE_REMOVE_PATH, DEVICES_PATH, devicesHandler, removeDeviceHandler, type RouteHandler } from '../src/routes.ts'
 import { claimOf, homeFixture, recordOf, STUDIO_COOKIE, testCredential, type Home } from './fixtures/home.ts'
 import { DeviceStore } from '../src/devices.ts'
@@ -51,6 +52,7 @@ beforeEach(async () => {
   const routes: Readonly<Record<string, RouteHandler>> = {
     [DEVICES_PATH]: devicesHandler(home.auth, testCredential),
     [DEVICE_REMOVE_PATH]: removeDeviceHandler(home.auth, testCredential),
+    [PASSKEY_PATHS.remove]: passkeyRemoveHandler(home.auth),
     [ELEVATION_PATHS.state]: elevationStateHandler(home.auth),
     [ELEVATION_PATHS.request]: elevationRequestHandler(home.auth),
     [ELEVATION_PATHS.lock]: elevationLockHandler(home.auth),
@@ -147,6 +149,43 @@ describe('the device list and removal for a signed-in device', () => {
     expect((await home.auth.devices()).devices).toHaveLength(2)
   })
 
+  describe('removing a passkey while Face ID is on (F20)', () => {
+    const record = (credentialId: string, deviceId: string) => ({ credentialId, publicKey: 'k', counter: 0, backupEligible: false, backupState: false, transports: [], createdAt: 1, lastUsedAt: null, address: ADDRESS, rpId: 'home.example.ts.net', deviceId: brandString<DeviceId>(deviceId) })
+    const setup = async (): Promise<{ other: ReturnType<typeof recordOf>; current: string; grant: (message: object, factor: 'passkey' | 'pin') => void }> => {
+      home.flags.passkeys = true
+      const other = recordOf(9, ADDRESS)
+      await new DeviceStore({ file: join(home.directory, HOME_AUTH_FILES.devices) }).add(other)
+      const current = String((await send('GET', `${DEVICES_PATH}?reach`)).body['current'])
+      await home.auth.passkeyStore.add(record('cred-other', other.id))
+      await home.auth.passkeyStore.add(record('cred-own', current))
+      return { other, current, grant: (message, factor) => { home.auth.grants.mint({ deviceId: current, listener: LISTENER }, [{ action: PASSKEY_REMOVE_ACTION, hash: hashArgs(message) ?? '' }], factor) } }
+    }
+
+    // Removing the factor check lets a PIN seen on a stolen phone strip Face ID from the owner's other phones: the grant stays unused and the passkey stays.
+    it('refuses another device\'s passkey with a grant the PIN minted', async () => {
+      const { other, grant } = await setup()
+      const message = { credentialId: 'cred-other', deviceId: other.id }
+      grant(message, 'pin')
+      expect(await send('POST', `${PASSKEY_PATHS.remove}?reach`, message)).toMatchObject({ status: 403, body: { error: 'ELEVATION_REQUIRED' } })
+      expect(home.auth.passkeyStore.find('cred-other')).toBeDefined()
+    })
+
+    it('removes another device\'s passkey with a grant a passkey minted, once', async () => {
+      const { other, grant } = await setup()
+      const message = { credentialId: 'cred-other', deviceId: other.id }
+      grant(message, 'passkey')
+      expect(await send('POST', `${PASSKEY_PATHS.remove}?reach`, message)).toMatchObject({ status: 200, body: { removed: true } })
+      expect(home.auth.passkeyStore.find('cred-other')).toBeUndefined()
+    })
+
+    it('still takes a PIN grant for the device\'s own passkey', async () => {
+      const { grant } = await setup()
+      const message = { credentialId: 'cred-own' }
+      grant(message, 'pin')
+      expect(await send('POST', `${PASSKEY_PATHS.remove}?reach`, message)).toMatchObject({ status: 200, body: { removed: true } })
+    })
+  })
+
   describe('removing another device while Face ID is on', () => {
     const body = (deviceId: string): { v: 1; deviceId: string } => ({ v: 1, deviceId })
     const setup = async (): Promise<{ other: ReturnType<typeof recordOf>; current: string; grant: (message: object) => void }> => {
@@ -187,6 +226,15 @@ describe('the device list and removal for a signed-in device', () => {
       grant(body('someone-else'))
       expect(await send('POST', `${DEVICE_REMOVE_PATH}?reach`, body(other.id))).toMatchObject({ status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
       expect(home.auth.grants.has({ deviceId: current, listener: LISTENER }, DEVICE_REMOVE_ACTION, hashArgs(body('someone-else')) ?? '')).toBe(true)
+      expect((await home.auth.devices()).devices.map(device => device.id)).toContain(other.id)
+    })
+
+    // Removing the factor check at consume lets a PIN grant remove another device (F20): the grant stays unused and the device stays.
+    it('is refused with a grant the PIN minted, and the device stays', async () => {
+      home.flags.passkeys = true
+      const { other, current } = await setup()
+      home.auth.grants.mint({ deviceId: current, listener: LISTENER }, [{ action: DEVICE_REMOVE_ACTION, hash: hashArgs(body(other.id)) ?? '' }], 'pin')
+      expect(await send('POST', `${DEVICE_REMOVE_PATH}?reach`, body(other.id))).toMatchObject({ status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
       expect((await home.auth.devices()).devices.map(device => device.id)).toContain(other.id)
     })
 

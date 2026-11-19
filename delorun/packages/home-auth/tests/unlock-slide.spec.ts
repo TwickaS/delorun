@@ -116,10 +116,10 @@ describe('which actions renew an unlock', () => {
       pageUnlockOf: () => undefined, unlockModeEnabled: () => false,
       keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
       computerOnlySwitches: () => [], protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set(),
-      defaultPermission: () => undefined, phonePowers: () => 'full' as const, dangerousMode: () => false,
+      defaultPermission: () => undefined, dangerousMode: () => false,
     }
     const condition = createCondition(real, reachDevicePrincipal(deviceId, LISTENER))
-    const polled = ['terminal/list', 'terminal/watch', 'terminal/retain', 'terminal/attach', 'mcpManager/watch', 'directoryPicker/list', 'dynamicCordisRunner/getClientCode']
+    const polled = ['mcpManager/watch', 'directoryPicker/list', 'dynamicCordisRunner/getClientCode']
     for (let minute = 1; minute < 15; minute += 1) {
       served.clock.advance(MINUTE)
       for (const action of polled) expect(condition({ action: action as never, resource: { kind: 'global' }, args: {} }).kind, `${action} at ${String(minute)}`).toBe('allow')
@@ -138,7 +138,7 @@ describe('what renews an unlock', () => {
     elevationOf: () => ({ id: 'unlock-1' }), touchUnlock: touch, pageUnlockOf: () => undefined, unlockModeEnabled: () => false,
     keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
     computerOnlySwitches: () => [], protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set(),
-    defaultPermission: () => undefined, phonePowers: () => 'full' as const, dangerousMode: () => false,
+    defaultPermission: () => undefined, dangerousMode: () => false,
   })
   const principal = reachDevicePrincipal('device-1', LISTENER)
   const resource = { kind: 'global' } as const
@@ -149,10 +149,10 @@ describe('what renews an unlock', () => {
     // Pins the reads: they decide without the unlock, so they never touch it.
     condition({ action: 'session/list', resource, args: {} })
     condition({ action: 'session/state', resource })
-    condition({ action: 'terminal/create' as never, resource })
+    condition({ action: 'directoryPicker/pick' as never, resource })
     expect(touch).not.toHaveBeenCalled()
     // Pins the renewal: a call of an elevated action renews the unlock it ran under.
-    condition({ action: 'terminal/create' as never, resource, args: {} })
+    condition({ action: 'directoryPicker/pick' as never, resource, args: {} })
     expect(touch).toHaveBeenCalledWith('unlock-1')
   })
 
@@ -160,15 +160,16 @@ describe('what renews an unlock', () => {
     const touch = vi.fn()
     const condition = createCondition(facts(touch), principal)
     expect([...ELEVATED_READS].every(action => Object.hasOwn(REACH_ELEVATED_ACTIONS, action))).toBe(true)
-    for (const action of ELEVATED_READS) {
+    // A terminal read takes a grant, never an unlock, so no unlock decides it.
+    for (const action of [...ELEVATED_READS].filter(name => !name.startsWith('terminal/'))) {
       // Pins the read list: a studio that re-lists or reopens a watch on reconnect must not keep an idle unlock alive.
       expect(condition({ action: action as never, resource, args: {} }).kind, action).toBe('allow')
     }
     expect(touch).not.toHaveBeenCalled()
-    for (const action of ['terminal/create', 'terminal/close', 'mcpManager/restart', 'directoryPicker/pick', 'pluginManager/setBundleEnabled']) {
+    for (const action of ['mcpManager/restart', 'directoryPicker/pick', 'pluginManager/setBundleEnabled']) {
       condition({ action: action as never, resource, args: { name: '@delorun/plugin-trash' } })
     }
-    expect(touch).toHaveBeenCalledTimes(5)
+    expect(touch).toHaveBeenCalledTimes(3)
   })
 
   it('is not a call the condition refuses after the unlock check', () => {

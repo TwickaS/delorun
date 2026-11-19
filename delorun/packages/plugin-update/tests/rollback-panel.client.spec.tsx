@@ -14,7 +14,7 @@ const t = makeTranslate(en)
 /** An idle state on 0.1.3 with a rollback to 0.1.2 on offer; `may` replaces the named controls' decisions. */
 function stateOf(fields: Partial<UpdateStateView> = {}, may: Partial<Record<UpdateControl, UpdateMayView>> = {}): UpdateStateView {
   const access: UpdateStateView['access'] = {
-    actor: 'computer', phonePowers: 'full',
+    actor: 'computer',
     may: Object.fromEntries(UPDATE_CONTROLS.map(control => [control, may[control] ?? { ok: true }])) as Record<UpdateControl, UpdateMayView>,
   }
   return { release: { delorun: '0.1.3', dsh: '0.2.2' }, available: true, access, check: { enabled: true }, progress: { kind: 'idle' }, rollback: { available: true, to: '0.1.2' }, ...fields }
@@ -58,7 +58,7 @@ describe('the Go back panel', () => {
     await waitFor(() => { expect(rollback).toHaveBeenCalledWith({ chats: 'wait', profileOnly: true }) })
   })
 
-  it('update-rollback-refused-careful-phone: a phone that needs the computer gets the sentence and no button', () => {
+  it('update-rollback-refused-flag-off-phone: a phone that needs the computer gets the sentence and no button', () => {
     const rollback = granted()
     render(<RollbackPanel state={stateOf({}, { 'update-rollback': { ok: false, needs: 'computer' } })} t={t} rollback={rollback} />)
     expect(screen.getByText(en['needs.computer'])).toBeTruthy()

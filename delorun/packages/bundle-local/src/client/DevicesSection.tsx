@@ -1,7 +1,6 @@
 /**
  * The Devices settings section: the reach state, the approved devices with their removal, the approval of a new
- * device while the approval window is open, unlocks of sensitive actions, and the Phone powers level, which only the
- * computer changes. At the home's own computer it lists the
+ * device while the approval window is open, and unlocks of sensitive actions. At the home's own computer it lists the
  * devices asking to unlock, each approved by typing the code the device shows or declined, and the running unlocks, each
  * with End. On a device it shows the device's own unlock with Unlock or Lock now, through the unlock store of
  * [`./unlock.ts`](./unlock.ts). Every request goes to the home through the injected `fetch`; the home refuses device
@@ -24,7 +23,6 @@ import type { OptInMutation } from './opt-in.ts'
 import type { PairingSource } from './pairing-source.ts'
 import type { PairingRowSettings } from './pairing-writer.ts'
 import { PairingSettings, type PairingSettingsProps } from './PairingSettings.tsx'
-import { PhonePowers } from './PhonePowers.tsx'
 import type { UnlockSource, UnlockView } from './unlock.ts'
 import { clockTime, ELEVATE_COMMAND } from './UnlockOverlay.tsx'
 import { failureSentence, type Loaded } from './host-api.ts'
@@ -34,7 +32,7 @@ import css from './DevicesSection.module.css'
 export const REACH_ON_COMMAND = 'delorun reach on tailscale'
 
 /** What the section names in a refusal that needs the home's own computer. */
-export type DevicesAction = 'status' | 'list' | 'add' | 'approve' | 'cancel' | 'remove' | 'unlocks' | 'unlockApprove' | 'unlockRevoke' | 'powers'
+export type DevicesAction = 'status' | 'list' | 'add' | 'approve' | 'cancel' | 'remove' | 'unlocks' | 'unlockApprove' | 'unlockRevoke'
 
 /** The request function and the unlock store the plugin supplies. */
 export interface DevicesSectionInjected {
@@ -120,7 +118,6 @@ export function DevicesSection({
   const pairingForm = usePairingForm(current => current)
   const pairingMutation = usePairingMutation(current => current)
   useEffect(() => startPairing(), [startPairing])
-  const powersFailure = useCallback((error: unknown) => failureText(t, error, 'powers'), [t])
   const [reach, setReach] = useState<Loaded<ReachStatus | undefined>>({ kind: 'loading' })
   useEffect(() => {
     let current = true
@@ -142,7 +139,6 @@ export function DevicesSection({
         {reach.kind === 'loading' ? null : <PairingSettings t={t} time={at => formatTime(t, at)} state={pairing} form={pairingForm}
           mutation={pairingMutation} set={setPairing} openCode={openPairingCode} decline={declinePairing} />}
         {reach.kind === 'loading' ? null : <DeviceManager t={t} fetch={fetch} hasOwner={reach.kind !== 'ready' || reach.value?.hasOwner !== false} />}
-        {reach.kind === 'loading' ? null : <PhonePowers t={t} fetch={fetch} onDevice={unlock.place === 'unknown' ? undefined : unlock.place === 'device'} failure={powersFailure} />}
       </>}
   </div>
 }

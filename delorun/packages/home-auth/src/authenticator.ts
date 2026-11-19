@@ -321,7 +321,6 @@ export class HomeAuthAuthenticator extends Authenticator {
         computerOnlyEntryIds: () => computerOnlyEntryIdsOf(ctx),
         defaultPermission: () => defaultPermissionOf(access),
         dangerousMode: () => ctx.homeAuth.dangerousMode(),
-        phonePowers: () => ctx.homeAuth.phonePowers().level,
       }))
       // A device's snapshot lists the Sessions and Workspaces it may reach, so it is recomputed when they change.
       const invalidate = (): void => {

@@ -24,7 +24,6 @@ import {
   readDevices, readPendingDevices, removeDevice, type ApprovalRequestId, type DeviceId, type HostFetch,
 } from '../src/client/devices-api.ts'
 import { en, zh } from '../src/client/devices-locales.ts'
-import { PHONE_POWERS_PATH } from '@delorun/home-auth/wire'
 import { approvalCode, DevicesSection, failureText, REACH_ON_COMMAND, type DevicesSectionProps } from '../src/client/DevicesSection.tsx'
 import { AWAY, fakeHost, staticPairing, staticUnlock } from './fake-host.ts'
 import type { ExternalAgentsSectionInjected } from '../src/client/ExternalAgentsSection.tsx'
@@ -97,73 +96,22 @@ function standardHost() {
 /** A paired device's unlock view, as on a phone. */
 const ON_DEVICE = { ...AWAY, place: 'device' } as const
 
-/** Render the section over a fake home with reach ready and a Phone powers answer. */
-function renderPowers(powers: { level: 'careful' | 'full', chosen: boolean }, view = AWAY) {
-  const host = fakeHost({
-    [`GET ${DEVICE_ROUTES.reachStatus}`]: READY,
-    [`GET ${DEVICE_ROUTES.devices}`]: { status: 200, body: { owner: OWNER, devices: [DEVICE_A] } },
-    [`GET ${PHONE_POWERS_PATH}`]: { status: 200, body: powers },
-    [`POST ${PHONE_POWERS_PATH}`]: { status: 200, body: { level: 'full', chosen: true } },
-  })
-  const props = { t: makeTranslate(en), close: () => {}, fetch: host.fetch, ...staticUnlock(view), ...staticPairing() } as DevicesSectionProps
-  render(<DevicesSection {...props} />)
-  return host
-}
-
-describe('Phone powers in the Devices section', () => {
-  it('at the computer, shows both levels with what each allows and changes the level', async () => {
-    const host = renderPowers({ level: 'careful', chosen: true })
-    const group = await screen.findByRole('radiogroup', { name: en['powers.title'] })
-    expect(within(group).getByText(en['powers.careful.body'])).toBeTruthy()
-    expect(within(group).getByText(en['powers.full.body'])).toBeTruthy()
-    const careful = within(group).getByRole('radio', { name: new RegExp(`^${en['powers.careful']}`) }) as HTMLInputElement
-    const full = within(group).getByRole('radio', { name: new RegExp(`^${en['powers.full']}`) }) as HTMLInputElement
-    expect(careful.checked).toBe(true)
-    expect(screen.queryByText(en['powers.unchosen.careful'])).toBeNull()
-    fireEvent.click(full)
-    await settle()
-    expect(host.received.filter(request => request.key === `POST ${PHONE_POWERS_PATH}`).map(request => request.body)).toEqual([{ level: 'full' }])
-    expect((within(group).getByRole('radio', { name: new RegExp(`^${en['powers.full']}`) }) as HTMLInputElement).checked).toBe(true)
-  })
-
-  it('at the computer, a level nobody chose shows the notice until the person keeps or changes it', async () => {
-    const host = renderPowers({ level: 'careful', chosen: false })
-    host.script[`POST ${PHONE_POWERS_PATH}`] = { status: 200, body: { level: 'careful', chosen: true } }
-    expect(await screen.findByText(en['powers.unchosen.careful'])).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: en['powers.keep.careful'] }))
-    await settle()
-    expect(host.received.filter(request => request.key === `POST ${PHONE_POWERS_PATH}`).map(request => request.body)).toEqual([{ level: 'careful' }])
-    expect(screen.queryByText(en['powers.unchosen.careful'])).toBeNull()
-  })
-
-  it('on a phone, shows the level read-only with change this at your computer, and sends nothing', async () => {
-    const host = renderPowers({ level: 'careful', chosen: false }, ON_DEVICE)
-    const group = await screen.findByRole('radiogroup', { name: en['powers.title'] })
-    for (const radio of within(group).getAllByRole('radio')) expect((radio as HTMLInputElement).disabled).toBe(true)
-    expect(screen.getByText(en['powers.device'])).toBeTruthy()
-    expect(screen.queryByText(en['powers.unchosen.careful'])).toBeNull()
-    fireEvent.click(within(group).getByRole('radio', { name: new RegExp(`^${en['powers.full']}`) }))
-    await settle()
-    expect(host.count(`POST ${PHONE_POWERS_PATH}`)).toBe(0)
-  })
-
-  it('says why a choice was refused, and leaves the level as it was', async () => {
-    const host = renderPowers({ level: 'careful', chosen: true })
-    host.script[`POST ${PHONE_POWERS_PATH}`] = loopbackRefusal
-    const group = await screen.findByRole('radiogroup', { name: en['powers.title'] })
-    fireEvent.click(within(group).getByRole('radio', { name: new RegExp(`^${en['powers.full']}`) }))
-    await settle()
-    expect(screen.getByRole('alert').textContent).toBe(en.loopback.replace('{action}', en['action.powers']))
-    expect((within(group).getByRole('radio', { name: new RegExp(`^${en['powers.careful']}`) }) as HTMLInputElement).checked).toBe(true)
-  })
-
-  it('shows nothing in a profile that does not serve the route', async () => {
-    const host = fakeHost({ [`GET ${DEVICE_ROUTES.reachStatus}`]: READY, [`GET ${DEVICE_ROUTES.devices}`]: { status: 200, body: { owner: OWNER, devices: [] } } })
-    const props = { t: makeTranslate(en), close: () => {}, fetch: host.fetch, ...staticUnlock(AWAY), ...staticPairing() } as DevicesSectionProps
-    render(<DevicesSection {...props} />)
-    await screen.findByText(en['devices.none'])
-    await settle()
-    expect(screen.queryByRole('radiogroup', { name: en['powers.title'] })).toBeNull()
+describe('the Devices section without Phone powers', () => {
+  // Removing the Phone powers block from the section brings back a choice for a level that no longer exists; the section never asks for the route.
+  it('shows no Phone powers choice, at the computer or on a phone, and never asks for the route', async () => {
+    for (const view of [AWAY, ON_DEVICE]) {
+      const host = fakeHost({
+        [`GET ${DEVICE_ROUTES.reachStatus}`]: READY,
+        [`GET ${DEVICE_ROUTES.devices}`]: { status: 200, body: { owner: OWNER, devices: [DEVICE_A] } },
+      })
+      const props = { t: makeTranslate(en), close: () => {}, fetch: host.fetch, ...staticUnlock(view), ...staticPairing() } as DevicesSectionProps
+      const { unmount } = render(<DevicesSection {...props} />)
+      await screen.findByText(DEVICE_A.label)
+      await settle()
+      expect(screen.queryByText(/Phone powers/i)).toBeNull()
+      expect(host.received.map(request => request.key).filter(key => key.includes('phone-powers'))).toEqual([])
+      unmount()
+    }
   })
 })
 

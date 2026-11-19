@@ -26,7 +26,7 @@ function facts(kind: Kind): ReachAccessFacts {
     pageUnlockOf: () => (kind === 'pin-page' ? UNLOCK : undefined), unlockModeEnabled: () => kind === 'pin-page',
     keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
     computerOnlySwitches: () => [], protectedEntryIds: () => new Set(SANDBOX_IDS), computerOnlyEntryIds: () => new Set(SANDBOX_IDS),
-    defaultPermission: () => undefined, phonePowers: () => 'full' as const, dangerousMode: () => kind === 'dangerous',
+    defaultPermission: () => undefined, dangerousMode: () => kind === 'dangerous',
   }
 }
 
@@ -85,7 +85,7 @@ describe('the approval grace while PIN mode is on', () => {
     const grace = { ...facts('grace'), unlockModeEnabled: () => true }
     const device = reachDevicePrincipal('device-1', LISTENER)
     const condition = createCondition(grace, device)
-    expect(condition({ action: 'terminal/create' as never, resource: GLOBAL, args: {} }).kind).toBe('allow')
+    expect(condition({ action: 'directoryPicker/pick' as never, resource: GLOBAL, args: {} }).kind).toBe('allow')
     // Pins the PIN check: model keys need an unlocked page in PIN mode, and the grace is no page.
     expect(condition({ action: 'credentials/set', resource: GLOBAL, args: { ref: 'DEEPSEEK_API_KEY' } })).toEqual({ kind: 'deny', reason: 'elevation-required: credentials/set' })
     // A lifted refusal (an unlisted command) stays refused: only a PIN page or dangerous mode lifts it.

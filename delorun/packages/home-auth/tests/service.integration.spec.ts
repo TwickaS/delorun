@@ -53,12 +53,10 @@ const ROUTES: readonly (readonly [string, string])[] = [
   ['exact', PIN_PATHS.options],
   ['exact', PIN_PATHS.resume],
   ...Object.values(PASSKEY_PATHS).map((path): ['exact', string] => ['exact', path]),
-  ['exact', PHONE_POWERS_PATH],
 ]
 import { ELEVATION_PATHS } from '../src/elevation-routes.ts'
 import { PASSKEY_PATHS } from '../src/passkey-routes.ts'
 import { PIN_PATHS } from '../src/pin-routes.ts'
-import { PHONE_POWERS_PATH } from '../src/wire.ts'
 import { deviceIdOf } from '../src/records.ts'
 import { claimOf, keyOf } from './fixtures/home.ts'
 
@@ -109,6 +107,8 @@ describe('the homeAuth service', () => {
     try {
       expect(mounted.ctx.get('homeAuth')).toBeInstanceOf(HomeAuthService)
       expect(mounted.registered.map(route => [route.kind, route.path])).toEqual(ROUTES)
+      // The Phone powers route is gone: nothing answers it, so a request for it is a 404 (A2, owner decision L92).
+      expect(mounted.registered.map(route => route.path)).not.toContain('/auth/phone-powers')
     } finally {
       await mounted.fiber.dispose()
       await rm(mounted.directory, { recursive: true, force: true })

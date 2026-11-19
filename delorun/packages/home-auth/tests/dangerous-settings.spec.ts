@@ -237,7 +237,7 @@ describe('the reach policy records what dangerous mode lets a device loosen', ()
       elevationOf: () => (unlocked ? { id: 'elevation-1' } : undefined), logElevated: () => {}, liftedSettings: (lifts) => { seen.push(...lifts); return undefined },
       computerOnlySwitches: () => [SWITCH], protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set([COMPUTER_ONLY_ROW]),
       defaultPermission: () => ({ namespaces: new Set(['permission']), current: LEVELS['workspace-write'], levelOf: name => LEVELS[name] }),
-      phonePowers: () => 'full' as const, dangerousMode: () => mode,
+      dangerousMode: () => mode,
     }
   }
   const call = (args: Record<string, unknown>) => ({ action: 'settings/update' as never, resource: { kind: 'global' } as const, args })

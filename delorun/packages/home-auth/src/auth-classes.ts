@@ -74,7 +74,7 @@ const REMOTE_ROWS: readonly AuthRow[] = [
 ]
 
 /** How a legacy plugin route level maps to its classes; `R+U` is both, by route. */
-const LEGACY_CLASS: Readonly<Record<RouteLevel, readonly AuthClass[]>> = { R: ['free'], U: ['face'], F: ['face'], C: ['computer'], K: ['free'], 'R+U': ['free', 'face'] }
+const LEGACY_CLASS: Readonly<Record<RouteLevel, readonly AuthClass[]>> = { R: ['free'], U: ['face'], C: ['computer'], K: ['free'], 'R+U': ['free', 'face'] }
 
 /**
  * @param surface - `route` or `changes`.

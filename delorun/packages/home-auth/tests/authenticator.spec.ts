@@ -24,7 +24,7 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import { SESSION_LIMITS, type StudioAddress } from '@delorun/contract-admission'
 import { HOME_AUTH_SWITCH, HomeAuthService, REACH_SWITCH } from '../src/service.ts'
 import { defaultPermissionOf, EXTERNAL_AGENT_REFUSAL, FULL_ACCESS_REFUSAL, HomeAuthAuthenticator, matchesPreLogin, computerOnlyEntryIdsOf, protectedEntryIdsOf, REAL_BROWSER_REFUSAL, registerReachPolicy, WORKSPACE_MANAGEMENT_REFUSAL } from '../src/authenticator.ts'
-import { createReachAccessPolicy, REACH_ALLOWED_ACTIONS, REACH_DENIED_ACTIONS, REACH_ELEVATED_ACTIONS, REACH_KEY_ACTIONS, reachDevicePrincipal, type ReachDevicePrincipal } from '../src/reach-access.ts'
+import { createCondition, createReachAccessPolicy, REACH_ALLOWED_ACTIONS, REACH_DENIED_ACTIONS, REACH_ELEVATED_ACTIONS, REACH_KEY_ACTIONS, reachDevicePrincipal, type ReachDevicePrincipal } from '../src/reach-access.ts'
 import { REQUEST_LISTENER } from '@delorun/home'
 import { DeviceStore } from '../src/devices.ts'
 import { answerKey } from '../src/grants.ts'
@@ -83,7 +83,7 @@ beforeEach(async () => {
     },
     closeReachConnections: () => 0,
   } as never)
-  fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'secrets', 'home-auth'), phonePowersOnUpgrade: 'full' })
+  fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'secrets', 'home-auth') })
   await new Promise<void>((resolve) => { ctx.inject(['authenticator'], () => { resolve() }) })
 })
 
@@ -219,6 +219,31 @@ describe('the authenticator provider', () => {
     await first.peer.dispose()
     expect(grants.holdAdmits(one, 'terminal', 't-1', 'session:s-1')).toBe(false)
     expect(grants.holdAdmits(two, 'terminal', 't-1', 'session:s-1')).toBe(true)
+  })
+
+  // Removing the abort listener in admit leaves the first Peer's terminal open: the whole path, from a Peer's close to the reach policy's denial (A1 round-3 P3-4).
+  it('denies terminal/attach through the reach policy once the Peer that opened the hold is closed', async () => {
+    ctx.provide('previewFlags', { isOn: () => true, declare: () => () => {} } as never)
+    ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
+    const first = provider().admit(request({ headers: { cookie: `__Host-delorun-session=${await session(2)}` } }), 'reach-tailscale-private')
+    if (first.kind !== 'admitted') throw new Error('not admitted')
+    const grants = ctx.homeAuth.faceGrants()
+    if (grants === undefined) throw new Error('no grant store')
+    const principal = reachDevicePrincipal(recordOf(2, ADDRESS).id, 'reach-tailscale-private')
+    const holder = { deviceId: principal.deviceId, listener: principal.listener, unlockId: principal.unlockId }
+    grants.mint(holder, [{ action: 'terminal/create', hash: 'h', hold: { feature: 'terminal', id: 't-1' } }], 'passkey')
+    grants.consume(holder, 'terminal/create', 'h', { feature: 'terminal', id: 't-1', scope: 'session:s-1' })
+    const condition = createCondition({
+      workspaces: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere',
+      elevationOf: () => undefined, pageUnlockOf: () => undefined, unlockModeEnabled: () => true, keyRefs: () => new Set<string>(),
+      logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined, computerOnlySwitches: () => [],
+      protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set(), defaultPermission: () => undefined, dangerousMode: () => false,
+      faceGrants: () => ({ grants, deviceHasPasskey: () => true }),
+    }, principal)
+    const attach = { action: 'terminal/attach' as const, resource: { kind: 'session', id: 's-1' } as never, args: { id: 't-1' } }
+    expect(condition(attach).kind).toBe('allow')
+    await first.peer.dispose()
+    expect(condition(attach).kind).toBe('deny')
   })
 
   it('refuses a full-access, workspace-management or external-agent grant answered from a reach Peer, and nothing else', async () => {
@@ -358,7 +383,7 @@ describe('the authenticator provider', () => {
     await fiber.dispose()
     vi.useFakeTimers({ toFake: ['Date'] })
     try {
-      fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'secrets', 'home-auth'), phonePowersOnUpgrade: 'full' })
+      fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'secrets', 'home-auth') })
       await new Promise<void>((resolve) => { ctx.inject(['authenticator'], () => { resolve() }) })
       ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
       const token = await session(2, SESSION_LIMITS.reach.absoluteMs)
@@ -387,7 +412,7 @@ describe('the authenticator provider', () => {
     await fiber.dispose()
     vi.useFakeTimers({ toFake: ['Date'] })
     try {
-      fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'secrets', 'home-auth'), phonePowersOnUpgrade: 'full' })
+      fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'secrets', 'home-auth') })
       await new Promise<void>((resolve) => { ctx.inject(['authenticator'], () => { resolve() }) })
       ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
       const cookie = { cookie: `__Host-delorun-session=${await session(2, SESSION_LIMITS.reach.absoluteMs)}` }
@@ -439,7 +464,7 @@ describe('the authenticator provider', () => {
     it('registers the policy, which lets a device answer approval prompts, only while an answer guard is mounted', () => {
       const registered: string[] = []
       const registry = { registerPolicy: (kind: string) => { registered.push(kind); return () => {} } }
-      const policy = createReachAccessPolicy({ admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere', elevationOf: () => undefined, pageUnlockOf: () => undefined, unlockModeEnabled: () => false, keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined, computerOnlySwitches: () => [], protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set([COMPUTER_ONLY_ROW]), defaultPermission: () => undefined, phonePowers: () => 'full' as const, dangerousMode: () => false })
+      const policy = createReachAccessPolicy({ admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere', elevationOf: () => undefined, pageUnlockOf: () => undefined, unlockModeEnabled: () => false, keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined, computerOnlySwitches: () => [], protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set([COMPUTER_ONLY_ROW]), defaultPermission: () => undefined, dangerousMode: () => false })
       expect(Object.keys(REACH_ALLOWED_ACTIONS)).toContain('event:approval/request')
       // Pins the guard check: without it a device could answer every approval prompt with nothing to refuse a grant.
       expect(() => registerReachPolicy(undefined, registry, policy)).toThrow(/no remoteAnswerGuard is mounted/)
@@ -485,9 +510,9 @@ describe('the authenticator provider', () => {
       provider().admit(request({ headers: { cookie: `__Host-delorun-session=${token}` } }), 'reach-tailscale-private')
       const device = reachDevicePrincipal(recordOf(2, ADDRESS).id, 'reach-tailscale-private')
       const [binding] = access.policy().bindings(device)
-      const create = () => binding?.condition?.({ action: 'terminal/create', resource: { kind: 'global' }, args: {} } as never)
+      const create = () => binding?.condition?.({ action: 'directoryPicker/pick', resource: { kind: 'global' }, args: {} } as never)
       const asked = vi.spyOn(ctx.homeAuth, 'elevationOf')
-      expect(create()).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/create' })
+      expect(create()).toEqual({ kind: 'deny', reason: 'elevation-required: directoryPicker/pick' })
       // Pins the listener the authenticator asks for: the principal's own, so an unlock on one listener admits nothing on another.
       expect(asked).toHaveBeenCalledWith(device.deviceId, 'reach-tailscale-private')
       const before = access.invalidated.length
@@ -496,11 +521,11 @@ describe('the authenticator provider', () => {
       const record = ctx.homeAuth.approveElevation(state.requestId, state.code)
       // Pins the facts the authenticator gives the policy: the home's elevation for the device, and the log.
       expect(create()).toEqual({ kind: 'allow' })
-      expect(logged).toContain(`home-auth: elevated action: device=${device.deviceId} listener=reach-tailscale-private action=terminal/create elevation=${record.id}`)
+      expect(logged).toContain(`home-auth: elevated action: device=${device.deviceId} listener=reach-tailscale-private action=directoryPicker/pick elevation=${record.id}`)
       ctx.homeAuth.lockElevation(device.deviceId, 'reach-tailscale-private')
       // Pins the invalidation: the device's snapshot is recomputed when its elevation starts and when it ends.
       expect(access.invalidated.slice(before)).toEqual([device, device])
-      expect(create()).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/create' })
+      expect(create()).toEqual({ kind: 'deny', reason: 'elevation-required: directoryPicker/pick' })
     })
 
     it('names a Session\'s workspace root from its live header, else from its Workspace, for the file reads', async () => {
@@ -683,7 +708,7 @@ describe('the authenticator provider', () => {
       }
       await fiber.dispose()
       await writeFile(file, pinRecord, { mode: 0o600 })
-      fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'secrets', 'home-auth'), phonePowersOnUpgrade: 'full' })
+      fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'secrets', 'home-auth') })
       await new Promise<void>((resolve) => { ctx.inject(['authenticator'], () => { resolve() }) })
     }
 
@@ -739,10 +764,10 @@ describe('the authenticator provider', () => {
       expect(provider().reachPeer(peerOf(unlocked).id)?.unlockId).toBe(page.unlock.unlockId)
       expect(provider().reachPeer(peerOf(locked).id)?.unlockId).toBeUndefined()
       expect(peerOf(admitAs(page.cookie))).toBe(peerOf(locked))
-      const create = (unlockId: string | undefined) => policy.bindings(reachDevicePrincipal(page.deviceId, PRIVATE, unlockId))[0]?.condition?.({ action: 'terminal/create', resource: { kind: 'global' }, args: {} } as never)
+      const create = (unlockId: string | undefined) => policy.bindings(reachDevicePrincipal(page.deviceId, PRIVATE, unlockId))[0]?.condition?.({ action: 'directoryPicker/pick', resource: { kind: 'global' }, args: {} } as never)
       expect(create(page.unlock.unlockId)).toEqual({ kind: 'allow' })
       // Pins the policy's own lookup: the sibling locked tab holds nothing while this page is unlocked.
-      expect(create(undefined)).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/create' })
+      expect(create(undefined)).toEqual({ kind: 'deny', reason: 'elevation-required: directoryPicker/pick' })
       const give = (peer: PeerScope): void => { provider().checkAnswer({ peer, event: 'approval/request', request: { grants: 'full-access' }, value: 'allowed-once' }) }
       expect(() => { give(peerOf(unlocked)) }).not.toThrow()
       // Pins the answer guard: it reads the answering page's Peer, so a locked tab cannot answer what a sibling could.
@@ -779,7 +804,7 @@ describe('the authenticator provider', () => {
         const peer = principalOf(admission)
         if (peer === undefined) throw new Error('no principal')
         const principal = reachDevicePrincipal(peer.deviceId, peer.listener, peer.unlockId)
-        const policy = createReachAccessPolicy({ admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere', elevationOf: () => (unlocked ? { id: 'elevation-1' } : undefined), pageUnlockOf: () => undefined, unlockModeEnabled: () => false, keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined, computerOnlySwitches: () => [], protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set([COMPUTER_ONLY_ROW]), defaultPermission: () => undefined, phonePowers: () => 'full' as const, dangerousMode: () => mode })
+        const policy = createReachAccessPolicy({ admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere', elevationOf: () => (unlocked ? { id: 'elevation-1' } : undefined), pageUnlockOf: () => undefined, unlockModeEnabled: () => false, keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined, computerOnlySwitches: () => [], protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set([COMPUTER_ONLY_ROW]), defaultPermission: () => undefined, dangerousMode: () => mode })
         return policy.bindings(principal)[0]?.condition?.({ action, resource: { kind: 'global' }, args: {} } as never)
       }
       for (const action of [...Object.keys(REACH_ALLOWED_ACTIONS), ...Object.keys(REACH_KEY_ACTIONS), ...Object.keys(REACH_ELEVATED_ACTIONS), ...Object.keys(REACH_DENIED_ACTIONS), 'terminal/create']) {

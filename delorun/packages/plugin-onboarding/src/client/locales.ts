@@ -252,7 +252,7 @@ export const en = {
   'reach.uses.2.text': 'Reply when a chat asks you something, so its work does not wait.',
   'reach.uses.3.title': 'Start a chat',
   'reach.uses.3.text': 'Start a new chat in any of your workspaces.',
-  'reach.limits': 'A phone is approved only at this computer, and Phone powers above sets how much an unlocked phone may do. You can skip this: Delorun works on this computer without it.',
+  'reach.limits': 'A phone is approved only at this computer, and the sensitive things it does are confirmed on the phone itself. You can skip this: Delorun works on this computer without it.',
 
   'workspace.lead': 'Choose the folder your first chat works in. You can add other folders as workspaces later.',
   'workspace.how': 'Where to work',
@@ -599,7 +599,7 @@ export const zh: Record<OnboardingLocaleKey, string> = {
   'reach.uses.2.text': '对话向你提问时及时回复，工作不必停下来等你。',
   'reach.uses.3.title': '开始对话',
   'reach.uses.3.text': '在任意一个工作区中开始新对话。',
-  'reach.limits': '手机只能在这台电脑上批准，已解锁的手机能做多少事由上面的「手机权限」决定。可以跳过：没有它，Delorun 在这台电脑上照常使用。',
+  'reach.limits': '手机只能在这台电脑上批准，它所做的敏感操作需要在手机上确认。可以跳过：没有它，Delorun 在这台电脑上照常使用。',
 
   'workspace.lead': '选择第一个对话所使用的文件夹。之后可以把其他文件夹也添加为工作区。',
   'workspace.how': '在哪里工作',

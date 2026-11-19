@@ -38,12 +38,13 @@ const STATIC = 'upstream\'s frontend-static fallback: the studio page, its built
 const CHANGES = '@delorun/plugin-changes: reads for any signed-in device'
 /**
  * Why the Changes controls of `@delorun/plugin-changes` are reached by a device: each action, setup and protection route
- * decides by its control's level in `access.ts` before it reads the body. Undo and Discard of a plugin's change, Discard
- * of a change to Delorun and turning protection on need an unlocked device at either Phone powers level; every other
- * action, setup included, Apply and Undo of a change to Delorun, Make my copy and turning protection off need an unlocked
- * device and Phone powers Full; dismissing the notice of a device's change is the computer's alone.
+ * decides by its control's level in `access.ts` before it reads the body. Undo and Discard of a plugin's change and Discard
+ * of a change to Delorun take a grant, or an unlock on a device with no passkey; turning protection on needs nothing; every
+ * other action, setup included, Apply and Undo of a change to Delorun, Make my copy and turning protection off take a grant
+ * from every device (a PIN grant where it holds no passkey) and stay at the computer while the Face ID flag is off;
+ * dismissing the notice of a device's change is the computer's alone.
  */
-const CHANGES_CONTROLS = '@delorun/plugin-changes: a device only as the control\'s level and Phone powers allow, with an unlock it entered; the notice of a device\'s change only at the computer'
+const CHANGES_CONTROLS = '@delorun/plugin-changes: a device only as the control\'s level allows, with a grant or an unlock it entered; the notice of a device\'s change only at the computer'
 /** Why the routes of `@delorun/home-auth` are reached by a device. */
 const HOME_AUTH = '@delorun/home-auth: sign-in and the device routes, which refuse a reach session where C5 reserves them'
 
@@ -115,7 +116,6 @@ const REACHED: Readonly<Record<string, string>> = {
   'exact /auth/pin/off': HOME_AUTH,
   'exact /auth/pin/options': HOME_AUTH,
   'exact /auth/pin/resume': HOME_AUTH,
-  'exact /auth/phone-powers': '@delorun/home-auth: a signed-in device reads the Phone powers level; setting it answers only the person at the computer, so a phone never changes what a phone may do',
 }
 
 /**

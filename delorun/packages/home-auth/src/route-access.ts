@@ -19,12 +19,9 @@ import { COMPUTER_ONLY_ROW_MODULES } from './reach-access.ts'
  *   passkey, an unlock; a device with neither is answered `403 ELEVATION_REQUIRED` (`gateByClass`, or `gateByUnlock`);
  * - `C`: only the computer; a device is refused (`403 LOOPBACK_REQUIRED`) whatever its unlock;
  * - `K`: a device that holds no PIN lock (`admitKeyDevice`): model keys are tested, never shown;
- * - `F`: an unlocked device only while Phone powers is Full, and only with a code or a PIN unlock (`gateByUnlock` with
- *   `phonePowers: 'full'`); under Careful a device is refused (`403 LOOPBACK_REQUIRED`). Moving a `U` route to Full is its
- *   row here and that option at its gate, which `tests/route-access.spec.ts` keeps in step;
  * - `R+U`: one registration serves both levels, by route (see the reason).
  */
-export type RouteLevel = 'R' | 'U' | 'F' | 'C' | 'K' | 'R+U'
+export type RouteLevel = 'R' | 'U' | 'C' | 'K' | 'R+U'
 
 /** One route's level and the reason for it. */
 export interface RouteAccess {
@@ -190,10 +187,9 @@ export const COMPUTER_ONLY: readonly ComputerOnlyRow[] = [
   AUTH('/auth/pin/options', 'a phone must not choose the rules of its own unlock secret'),
   AUTH('/auth/pin/off', 'a phone must not turn its own unlock gate off'),
   AUTH('/auth/pin/resume', 'a phone must not lift a brute-force pause on its own unlock'),
-  AUTH('/auth/phone-powers (POST)', 'a phone must not widen what a phone may do; any device reads the level'),
-  { kind: 'mode', id: 'terminal/* under Phone powers Careful', reason: 'a terminal is a shell outside the sandbox that runs the same delorun changes commands Careful keeps at the computer' },
+  { kind: 'mode', id: 'terminal/* without a grant', reason: 'a terminal is a shell outside the sandbox: a device needs a grant for the call, from a passkey or a PIN, and no unlock opens it' },
   { kind: 'changes-route', id: '/delorun/changes/notice-seen', reason: 'the notice of a change a phone made is for the person at the computer; a phone must not dismiss it' },
-  { kind: 'changes-route', id: '/delorun/changes actions, harness, protection off and setup under Phone powers Careful', reason: 'applying, turning off, setup and changes to Delorun itself change what runs; Careful keeps them at the computer and lets a phone only take back or tighten' },
+  { kind: 'changes-route', id: '/delorun/changes actions, harness, protection off and setup without a grant', reason: 'applying, turning off, setup and changes to Delorun itself change what runs; a device needs a grant for the call, from a passkey or a PIN, and may take back or tighten without one' },
 ]
 
 /**

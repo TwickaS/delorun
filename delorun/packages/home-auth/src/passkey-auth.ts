@@ -449,12 +449,12 @@ export class PasskeyAuth {
    * @param secret - the PIN or passcode.
    * @param request - the actions or the answer to confirm.
    * @returns the grant minted.
-   * @throws {HomeAuthError} `PASSKEY_UNAVAILABLE` while the flag is off, `LOOPBACK_REQUIRED` for a request that names {@link DEVICE_REMOVE_ACTION} from a device that holds no passkey, and the refusals of {@link PinUnlocks.verify}.
+   * @throws {HomeAuthError} `PASSKEY_UNAVAILABLE` while the flag is off, `LOOPBACK_REQUIRED` for a request that names {@link DEVICE_REMOVE_ACTION} from any device, and the refusals of {@link PinUnlocks.verify}.
    */
   async pinGrant(asker: UnlockAsker, secret: string, request: AssertionRequest): Promise<PasskeyGrantResult> {
     this.assertEnabled()
-    // Removing another device needs a passkey: a PIN seen on a stolen phone must not lock the owner out of the rest.
-    if (request.kind === 'actions' && request.entries.some(entry => entry.action === DEVICE_REMOVE_ACTION) && this.options.store.forDevice(asker.deviceId).length === 0) {
+    // Removing another device needs the passkey factor: a PIN seen on a stolen phone must not lock the owner out of the rest.
+    if (request.kind === 'actions' && request.entries.some(entry => entry.action === DEVICE_REMOVE_ACTION)) {
       throw new HomeAuthError('LOOPBACK_REQUIRED', 'Removing another device needs Face ID on this device, or you at your computer')
     }
     await this.options.pin.verify(asker, secret)

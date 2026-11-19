@@ -160,8 +160,8 @@ export interface DeviceArrival {
 
 /**
  * Attest that a paired device's studio request comes from the person, with an unlock they entered. Only the studio's
- * Changes routes (`@delorun/plugin-changes`) call it, and only for an action the person's Phone powers level lets a
- * device take; the proof is recorded as `studio`.
+ * Changes routes (`@delorun/plugin-changes`) call it, and only for an action a device may take with that unlock or a
+ * grant; the proof is recorded as `studio`.
  * @param facts - the device and its unlock.
  * @returns the proof, naming the device.
  * @throws {ChangesError} `NOT_AT_COMPUTER` unless the device holds a fresh unlock or the control is free.

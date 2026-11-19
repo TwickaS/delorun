@@ -398,7 +398,7 @@ export async function runSmoke(request: SmokeRequest, say: (line: string) => voi
       launcher = join(out, `delorun-${request.version}.tgz`)
     }
     const answers = join(scratch, 'setup-answers.json')
-    writeFileSync(answers, `${JSON.stringify({ schemaVersion: 4, useCase: 'local', modelProvider: null, prompts: 'safer', background: true, profile: { name: null, port: request.studioPort }, reach: { option: 'none', identityFactor: null }, importStockHome: false, protectChanges: false, updateCheck: false })}\n`)
+    writeFileSync(answers, `${JSON.stringify({ schemaVersion: 5, useCase: 'local', modelProvider: null, prompts: 'safer', background: true, profile: { name: null, port: request.studioPort }, reach: { option: 'none', identityFactor: null }, importStockHome: false, protectChanges: false, updateCheck: false })}\n`)
     await required(['setup', '--config', answers], 900_000)
     await start('the first start')
     done(` (${request.version} running, studio on port ${String(request.studioPort)})`)

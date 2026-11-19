@@ -35,7 +35,6 @@ import { DEFAULT_WORKSPACE_ICON, parseWorkspaceIcon } from '@delorun/brand/works
 import type { ReachListenerId } from '@delorun/contract-admission'
 import type { SettingsLift } from './dangerous-settings.ts'
 import { HOLD_OPENERS, holdFeatureOf, hashArgs, scopeOf, type GrantStore, type HoldFeature } from './grants.ts'
-import type { PhonePowersLevel } from './phone-powers.ts'
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface PrincipalMap {
@@ -537,27 +536,11 @@ export const REACH_ELEVATED_ACTIONS = {
 } as const satisfies Readonly<Record<RemoteAccessAction, string>>
 
 /**
- * The elevated actions the approval grace does not open: every `terminal/*` action, a new one included. A terminal is a
- * shell outside the sandbox, so it needs a code, a PIN page or the unlock the person chose, never the grace a phone
- * starts with after its approval at the computer.
+ * The elevated actions no unlock opens: every `terminal/*` action, a new one included. A terminal is a shell outside the
+ * sandbox, so a device needs a grant for exactly the call, from a passkey or a PIN, and while the Face ID flag is off no
+ * device opens one.
  */
 export const GRACE_REFUSED_ACTIONS: ReadonlySet<string> = new Set(Object.keys(REACH_ELEVATED_ACTIONS).filter(action => action.startsWith('terminal/')))
-
-/**
- * The actions only Phone powers' Full level lets a device take: every `terminal/*` action, a new one included. Under
- * Careful a terminal stays at the computer, because a shell outside the sandbox runs the same `delorun changes` commands
- * that Careful keeps there; each is refused with {@link PHONE_POWERS_REFUSAL}, unlocked or not, in every mode.
- */
-export const FULL_POWERS_ACTIONS: ReadonlySet<string> = GRACE_REFUSED_ACTIONS
-
-/**
- * The refusal of an action Phone powers keeps at the computer.
- * @param action - the refused action.
- * @returns `loopback-required: <action> needs Phone powers set to Full`.
- */
-export function phonePowersRefusal(action: string): string {
-  return `loopback-required: ${action} needs Phone powers set to Full at the computer`
-}
 
 /**
  * Assert that no action is in two of the tables.
@@ -1145,9 +1128,8 @@ function createsInKnownWorkspace(facts: Pick<ReachAccessFacts, 'workspaces'>, ar
  * The condition of one device's bindings on one listener, the single place an elevated action is decided. It refuses
  * an action of {@link REACH_ELEVATED_ACTIONS} with `elevation-required: <action>` unless the device holds a running
  * unlock on the principal's listener, for a call and for an event, a snapshot or a list filter alike, and logs each
- * call an unlock admits with the unlock's id. Every `terminal/*` action needs Phone powers set to Full
- * ({@link FULL_POWERS_ACTIONS}, refused first with {@link phonePowersRefusal}) and an unlock, always: no switch, workspace
- * grant or dangerous mode waives either, and the approval grace is not an unlock ({@link GRACE_REFUSED_ACTIONS}).
+ * call an unlock admits with the unlock's id. Every `terminal/*` action ({@link GRACE_REFUSED_ACTIONS}) needs a grant for exactly the call, from a passkey
+ * or a PIN, on every device, and no unlock window admits it: no switch, workspace grant or dangerous mode waives that.
  * It treats a `session/create` that starts a chat outside the known
  * workspaces (see {@link createsInKnownWorkspace}) the same way, with {@link CREATE_OUTSIDE_WORKSPACES}: a folder
  * decides where the chat's commands may write. It refuses a workspace-file call unless every path it names is one a
@@ -1164,7 +1146,7 @@ function createsInKnownWorkspace(facts: Pick<ReachAccessFacts, 'workspaces'>, ar
  * @returns the condition.
  */
 export function createCondition(
-  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'delorunHome' | 'elevationOf' | 'touchUnlock' | 'logElevated' | 'liftedSettings' | 'computerOnlySwitches' | 'protectedEntryIds' | 'computerOnlyEntryIds' | 'defaultPermission' | 'dangerousMode' | 'pageUnlockOf' | 'unlockModeEnabled' | 'faceGrants' | 'pinLiftedSettings' | 'keyRefs' | 'phonePowers'>,
+  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'delorunHome' | 'elevationOf' | 'touchUnlock' | 'logElevated' | 'liftedSettings' | 'computerOnlySwitches' | 'protectedEntryIds' | 'computerOnlyEntryIds' | 'defaultPermission' | 'dangerousMode' | 'pageUnlockOf' | 'unlockModeEnabled' | 'faceGrants' | 'pinLiftedSettings' | 'keyRefs'>,
   principal: ReachDevicePrincipal,
 ): ReachCondition {
   const { deviceId, listener, unlockId } = principal
@@ -1174,8 +1156,8 @@ export function createCondition(
    */
   const unlock = (): { readonly id: string; readonly grace?: true } | undefined => unlockId === undefined ? facts.elevationOf(deviceId, listener) : facts.pageUnlockOf(unlockId)
   /**
-   * Refuse without an unlock on the principal's listener, and log an admitted call. The approval grace does not admit an
-   * action of {@link GRACE_REFUSED_ACTIONS}.
+   * Refuse without an unlock on the principal's listener, and log an admitted call. An action of
+   * {@link GRACE_REFUSED_ACTIONS} is admitted by a grant alone, never by an unlock.
    * @param action - the action.
    * @param reason - the refusal.
    * @param call - whether a call's arguments came with the question.
@@ -1185,11 +1167,12 @@ export function createCondition(
     const faced = facts.faceGrants?.()
     // A device that holds a passkey is admitted by a grant for this call and by no unlock window.
     if (faced?.deviceHasPasskey(deviceId) === true) return grantFor(faced, action, reason, call, scope, args)
+    // A terminal opens only with a grant for the call, from a PIN where the device holds no passkey, and never from an unlock window.
+    if (GRACE_REFUSED_ACTIONS.has(action)) return faced === undefined ? { kind: 'deny', reason } : grantFor(faced, action, reason, call, scope, args)
     const elevation = unlock()
-    const blocked = elevation === undefined || (elevation.grace === true && GRACE_REFUSED_ACTIONS.has(action))
     // A device with no passkey, on a home with PIN mode on or a passkey enrolled, mints a grant with its PIN.
-    if (blocked && faced !== undefined && unlockModeOn()) return grantFor(faced, action, reason, call, scope, args)
-    if (elevation === undefined || blocked) return { kind: 'deny', reason }
+    if (elevation === undefined && faced !== undefined && unlockModeOn()) return grantFor(faced, action, reason, call, scope, args)
+    if (elevation === undefined) return { kind: 'deny', reason }
     if (call) {
       facts.logElevated(`home-auth: elevated action: device=${deviceId} listener=${listener} action=${action} elevation=${elevation.id}`)
       // Renewed below, once the whole condition allows the call.
@@ -1228,8 +1211,6 @@ export function createCondition(
   }
   const decide: ReachCondition = ({ action, resource, args }) => {
     const scope = scopeOf(resource)
-    // Phone powers keeps a terminal at the computer under Careful: no unlock, PIN page or mode lifts it.
-    if (FULL_POWERS_ACTIONS.has(action) && facts.phonePowers() !== 'full') return { kind: 'deny', reason: phonePowersRefusal(action) }
     // Dangerous mode lifts the four refusals below for an unlocked device: an elevated action is still refused to a
     // locked one, and the unlock check follows. The mode is read per call, so withdrawing the grant restores them.
     const lifts: SettingsLift[] = []
@@ -1468,12 +1449,6 @@ export interface ReachAccessFacts {
    * @returns whether it holds; false without a permission-defaults service or while its store cannot be read.
    */
   readonly dangerousMode: () => boolean
-  /**
-   * The Phone powers level in force, read on every check: under `careful` every `terminal/*` action is refused to a
-   * device ({@link FULL_POWERS_ACTIONS}).
-   * @returns the level; Careful while the record cannot be read.
-   */
-  readonly phonePowers: () => PhonePowersLevel
 }
 
 /**
