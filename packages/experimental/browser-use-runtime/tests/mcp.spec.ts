@@ -215,7 +215,7 @@ function registerIndependentTool(ctx: Context) {
 }
 
 async function events(root: string) {
-  return (await readFile(join(root, 'events.ndjson'), 'utf8')).trim().split('\n').map(line => JSON.parse(line) as { event: string; pid: number; name?: string; cwd?: string; roots?: { uri: string; name: string }[] })
+  return (await readFile(join(root, 'events.ndjson'), 'utf8')).trim().split('\n').map(line => JSON.parse(line) as { event: string; pid: number; name?: string; cwd?: string; outputDir?: string | null; arguments?: unknown; roots?: { uri: string; name: string }[] })
 }
 
 it('requires a browser mode and validates launch and attachment settings', () => {
