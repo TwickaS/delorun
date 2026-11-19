@@ -21,7 +21,7 @@
  * @module @deepseek-ai/dsh-sandbox-local
  */
 
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { accessSync, constants as fsConstants, existsSync, mkdtempSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, delimiter, dirname, isAbsolute, join, normalize, relative, sep } from 'node:path'
@@ -99,7 +99,7 @@ export interface Config {
    * covering the executable runner's own failure dialect.
    */
   runnerFailureSignatures?: string[]
-  /** Positive timeout for each functional probe; zero would mean unbounded to Node. */
+  /** Positive timeout in milliseconds for each functional probe, at most 60 000; zero would mean unbounded to Node. */
   probeTimeoutMs?: number
   /**
    * How many times a confined command walks the runner chain before it is refused as unavailable; at least one.
@@ -194,6 +194,8 @@ function bwrapOnPath(): boolean {
 /** Upper bounds of `probeAttempts` and of each wait of `probeBackoffMs`, which doubles up to the bound. */
 const MAX_PROBE_ATTEMPTS = 5
 const MAX_PROBE_BACKOFF_MS = 2_000
+/** Upper bound of `probeTimeoutMs`. */
+const MAX_PROBE_TIMEOUT_MS = 60_000
 
 /**
  * A `bwrap` probe's verdict: whether bwrap created the profile, or `timed-out` when it did not finish within the
@@ -221,16 +223,28 @@ function bubblewrapAdvice(probe: BwrapProbe | undefined, installed: boolean, tim
     : 'install bubblewrap (the bwrap command, packaged as bubblewrap), then start again'
 }
 
-/** Probe whether `bwrap` can create the profile; the provider caches the bounded result. */
-function defaultProbeBwrap(timeoutMs: number): BwrapProbe {
-  const probe = spawnSync('bwrap', [...bwrapProfileArgs({ mode: 'read-only', workspaceRoot: '/' }), '--', 'true'], {
-    timeout: timeoutMs,
-    stdio: 'ignore',
+/**
+ * Probe whether `bwrap` can create the profile, without blocking the event loop; the provider retries a failed result.
+ * @param timeoutMs - how long bwrap may run before it is killed and the probe reports `timed-out`.
+ * @returns the probe's verdict.
+ */
+function defaultProbeBwrap(timeoutMs: number): Promise<BwrapProbe> {
+  return new Promise<BwrapProbe>((resolve) => {
+    const child = spawn('bwrap', [...bwrapProfileArgs({ mode: 'read-only', workspaceRoot: '/' }), '--', 'true'], { stdio: 'ignore' })
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL')
+      resolve('timed-out')
+    }, timeoutMs)
+    child.once('error', (error) => {
+      clearTimeout(timer)
+      const code = (error as NodeJS.ErrnoException).code
+      resolve(code === 'EAGAIN' || code === 'ENOMEM' ? 'resource-limit' : false)
+    })
+    child.once('close', (status) => {
+      clearTimeout(timer)
+      resolve(status === 0)
+    })
   })
-  if (probe.status === 0) return true
-  const code = (probe.error as NodeJS.ErrnoException | undefined)?.code
-  if (code === 'ETIMEDOUT') return 'timed-out'
-  return code === 'EAGAIN' || code === 'ENOMEM' ? 'resource-limit' : false
 }
 
 /**
@@ -282,7 +296,7 @@ export interface SandboxInternals {
   /** Replaces the check whether the kernel offers virtual-machine sockets, which decides bwrap's seccomp filter. */
   vsockOffered?: () => boolean
   /** Replaces the functional `bwrap` probe (the Linux chain's first rung). */
-  probeBwrap?: () => BwrapProbe
+  probeBwrap?: () => BwrapProbe | Promise<BwrapProbe>
   /** Replaces the check whether an executable `bwrap` is on `PATH`, which chooses the escape refusal's advice. */
   bwrapInstalled?: () => boolean
   /** Replaces the functional Landlock launcher probe (the Linux chain's second rung). */
@@ -518,7 +532,7 @@ export class LocalSandboxProvider extends SandboxProvider {
   static Config: z<Config> = z.object({
     runnerCommand: z.array(z.string()).default([]),
     runnerFailureSignatures: z.array(z.string()).default([]),
-    probeTimeoutMs: z.natural().default(5_000),
+    probeTimeoutMs: z.natural().max(MAX_PROBE_TIMEOUT_MS).default(5_000),
     probeAttempts: z.natural().max(MAX_PROBE_ATTEMPTS).default(3),
     probeBackoffMs: z.natural().max(MAX_PROBE_BACKOFF_MS).default(250),
     protectedHome: z.string(),
@@ -931,7 +945,7 @@ export class LocalSandboxProvider extends SandboxProvider {
     if (this.selectedRunner !== undefined) return this.selectedRunner
     let wait = this.probeBackoffMs
     for (let attempt = 1; ; attempt++) {
-      const verdict = this.chainVerdict()
+      const verdict = await this.chainVerdict()
       if (verdict !== 'unavailable') return (this.selectedRunner = verdict)
       if (attempt >= this.probeAttempts) break
       if (wait > 0) await new Promise<void>(resolve => setTimeout(resolve, wait))
@@ -941,21 +955,21 @@ export class LocalSandboxProvider extends SandboxProvider {
   }
 
   /** Walk this platform's chain: sole candidate unprobed, several probed in order, none usable → unavailable. */
-  private chainVerdict(): SelectedRunner | 'unavailable' {
+  private async chainVerdict(): Promise<SelectedRunner | 'unavailable'> {
     const chain = this.internals.chain ?? PLATFORM_CHAINS[this.internals.platform ?? process.platform] ?? []
     const [first, ...rest] = chain
     if (first === undefined) return 'unavailable'
     // A sole candidate needs no arbitration; its execution-time refusal still fails closed.
     if (rest.length === 0) return { runner: first, enforcement: STATIC_ENFORCEMENT[first] }
     for (const runner of chain) {
-      const enforcement = this.probeRunner(runner)
+      const enforcement = await this.probeRunner(runner)
       if (enforcement !== 'unusable') return { runner, enforcement }
     }
     return 'unavailable'
   }
 
   /** One rung's functional probe (each at most once, via the chain walk). */
-  private probeRunner(runner: SelectedRunner['runner']): SandboxEnforcement | 'unusable' {
+  private async probeRunner(runner: SelectedRunner['runner']): Promise<SandboxEnforcement | 'unusable'> {
     // bwrap's mount profile and Seatbelt's deny-file-write* profile govern
     // every promised file effect by construction, so their passing probes
     // are always full enforcement; the Landlock launcher's probe report
@@ -965,7 +979,7 @@ export class LocalSandboxProvider extends SandboxProvider {
     switch (runner) {
       case 'bwrap': {
         const probe = this.internals.probeBwrap ?? (() => defaultProbeBwrap(this.probeTimeoutMs))
-        this.bwrapProbe = probe()
+        this.bwrapProbe = await probe()
         return this.bwrapProbe === true ? 'full' : 'unusable'
       }
       case 'landlock': {

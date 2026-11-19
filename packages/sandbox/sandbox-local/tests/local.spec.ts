@@ -323,6 +323,28 @@ describe('the platform chains', () => {
     await expect(sandbox.confine(['true'], RO)).resolves.toMatchObject({ enforcement: 'full' })
   })
 
+  it('a probe that resolves late does not block a timer scheduled meanwhile', async () => {
+    const probeBwrap = vi.fn(() => new Promise<boolean>(resolve => setTimeout(() => { resolve(true) }, 60)))
+    const { sandbox } = await setup({}, { platform: 'linux', probeBwrap, probeLandlock: () => 'unusable' })
+    let ticked = false
+    setTimeout(() => { ticked = true }, 5)
+    const pending = sandbox.confine(['true'], RO)
+    await new Promise<void>(resolve => setTimeout(resolve, 30))
+    expect(ticked).toBe(true)
+    await expect(pending).resolves.toMatchObject({ enforcement: 'full' })
+  })
+
+  it('an asynchronous probe timeout is still a temporary fault, and an asynchronous plain false still refuses with the advice', async () => {
+    const slow = await setup({ probeAttempts: 1 }, { platform: 'linux', probeBwrap: () => Promise.resolve('timed-out' as const), probeLandlock: () => 'unusable', bwrapInstalled: () => true })
+    await expect(slow.sandbox.confine(['true'], RO)).rejects.toThrow(expect.objectContaining({ transient: true }))
+    const plain = await setup({ probeAttempts: 1 }, { platform: 'linux', probeBwrap: () => Promise.resolve(false), probeLandlock: () => 'unusable', bwrapInstalled: () => true })
+    await expect(plain.sandbox.confine(['true'], RO)).rejects.toThrow(expect.objectContaining({ transient: false }))
+  })
+
+  it('rejects a probeTimeoutMs above 60 000', async () => {
+    await expect(setup({ probeTimeoutMs: 60_001 })).rejects.toThrow()
+  })
+
   it('a bwrap check that timed out or hit a resource limit is a temporary fault; a plain failure is not', async () => {
     const { sandbox } = await setup({ probeAttempts: 1 }, { platform: 'linux', probeBwrap: () => 'timed-out', probeLandlock: () => 'unusable', bwrapInstalled: () => true })
     const error = await sandbox.confine(['true'], RO).catch((caught: unknown) => caught)

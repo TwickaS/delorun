@@ -135,7 +135,7 @@ function touches(path: string, protectedPaths: readonly string[]): boolean {
  * @param settings - the provider's validated protection settings.
  * @param mounts - the mount table; read from this process when omitted.
  * @param dataVolume - where macOS mounts the Data volume that firmlinks point into.
- * @param bindMountsRoot - the directory of Docker Desktop's bind mounts, hidden whole when an alias lies under it.
+ * @param bindMountsRoot - the directory of Docker Desktop's bind mounts, hidden whole when it is a directory and a home is protected.
  * @param platform - the operating system, which decides whether alias coverage is checked and whether the entries of
  *   each denied socket directory are listed for Seatbelt's path rules.
  * @returns the protection the profile builders apply.
@@ -215,12 +215,10 @@ export function resolveProtection(
       if (!protectedPaths.some(entry => pathWithin(path, entry))) shadowedSockets.add(path)
     }
   }
-  // Docker Desktop binds the home under a root of mount points that come and go; a tmpfs over each one fails when the
-  // mount point vanishes before bwrap runs, so the whole root is hidden instead, which also hides what is beside them.
-  const aliasPaths = [...homeAliases, ...settings.privateTmp ? aliasesOf(tmp) : []]
-  if (aliasPaths.some(path => pathWithin(path, bindMountsRoot)) && isDirectory(bindMountsRoot)) {
-    hiddenDirectories.add(bindMountsRoot)
-  }
+  // Docker Desktop's bind mounts come and go; a tmpfs over one fails when it vanishes before bwrap runs, so a protected
+  // home hides the whole root, whether or not an alias lies under it. Only a directory is hidden: an absent or other
+  // root needs no mount argument.
+  if (home !== undefined && isDirectory(bindMountsRoot)) hiddenDirectories.add(bindMountsRoot)
   return {
     home,
     homeAliases,

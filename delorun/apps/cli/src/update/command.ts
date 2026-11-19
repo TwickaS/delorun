@@ -352,7 +352,7 @@ export async function runUpdate(args: readonly string[], context: CommandContext
   const values = parseOptions('update', args, UPDATE_OPTIONS)
   const host = hostRefusal(process.platform)
   if (host !== undefined) throw new CliError(EXIT.failed, `delorun update: ${host}`)
-  const { home, profile } = await prepareHome(context, values.profile)
+  const { home, profile } = await prepareHome(context, values.profile, false)
   if (values.from !== undefined && (values.check === true || values.report === true)) {
     throw new CliError(EXIT.usage, 'delorun update: --from installs a release, so it takes neither --check nor --report')
   }

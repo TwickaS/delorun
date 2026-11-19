@@ -227,19 +227,23 @@ export function isTransientRunnerFailure(detail: string): boolean {
  * channel.
  */
 export class SandboxUnavailableError extends HarnessError {
-  /** True when a backend is installed but its check failed or timed out, so the same command may work on a retry. */
+  /**
+   * True when the sandbox hit a temporary fault (a start-up check that timed out or lacked resources, or a runner
+   * mount or memory fault), so the same command may work on a retry.
+   */
   readonly transient: boolean
 
   /**
    * @param mode - the confined mode that was requested.
    * @param detail - the runner's own failure text, when it gave one.
-   * @param options - `transient`: the backend is installed and its check failed, so retrying can succeed.
+   * @param options - `transient`: the fault was temporary (a start-up check that timed out or lacked resources, or a
+   *   runner mount or memory fault), so retrying can succeed.
    */
   constructor(mode: ConfinedSandboxMode, detail?: string, options: { transient?: boolean } = {}) {
     const transient = options.transient === true
     super(
       transient
-        ? `sandbox mode "${mode}" is requested but the sandbox had a temporary fault (its start-up check failed, as can `
+        ? `sandbox mode "${mode}" is requested but the sandbox had a temporary fault (its start-up check or the runner failed, as can `
           + 'happen while the computer is busy); refusing to run the command unconfined. Retry the command, or use a tool '
           + 'that needs no shell, such as web search or file reads. Do not ask for danger-full-access because of this.'
         : `sandbox mode "${mode}" is requested but no sandbox backend is usable on this host; `

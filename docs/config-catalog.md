@@ -3165,7 +3165,7 @@ export interface Config {
    * covering the executable runner's own failure dialect.
    */
   runnerFailureSignatures?: string[]
-  /** Positive timeout for each functional probe; zero would mean unbounded to Node. */
+  /** Positive timeout in milliseconds for each functional probe, at most 60 000; zero would mean unbounded to Node. */
   probeTimeoutMs?: number
   /**
    * How many times a confined command walks the runner chain before it is refused as unavailable; at least one.

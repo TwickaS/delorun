@@ -34,7 +34,7 @@ function resolveIsolated(
   mounts: readonly MountEntry[] = NO_MOUNTS,
   platform: string = process.platform,
 ): Protection {
-  return resolveProtection(settings, mounts, NO_DATA_VOLUME, platform)
+  return resolveProtection(settings, mounts, NO_DATA_VOLUME, platform, '/nonexistent-bind-mounts')
 }
 
 /**
@@ -161,6 +161,21 @@ describe('resolveProtection with aliases', () => {
     symlinkSync(dirname(home), alias, 'dir')
     const protection = resolveProtection(settingsOf({ home }), aliasMount(home, alias), NO_DATA_VOLUME, 'linux', bindRoot)
     expect(protection.hiddenDirectories).toEqual([])
+  })
+
+  it('hides a bind-mount root that is a directory whenever a home is protected, even with no alias under it', () => {
+    const { root, home } = fixture()
+    const bindRoot = join(root, 'docker-bind-bare')
+    mkdirSync(bindRoot)
+    const protection = resolveProtection(settingsOf({ home }), NO_MOUNTS, NO_DATA_VOLUME, 'linux', bindRoot)
+    expect(protection.hiddenDirectories).toEqual([bindRoot])
+  })
+
+  it('adds no mount argument for a bind-mount root that is absent, and does not fail', () => {
+    const { root, home } = fixture()
+    const protection = resolveProtection(settingsOf({ home }), NO_MOUNTS, NO_DATA_VOLUME, 'linux', join(root, 'docker-bind-absent'))
+    expect(protection.hiddenDirectories).toEqual([])
+    expect(() => bwrapProfileArgs({ mode: 'read-only', workspaceRoot: '/ws' }, protection)).not.toThrow()
   })
 
   it('shadows a denied socket at each of its mount aliases outside the home', () => {

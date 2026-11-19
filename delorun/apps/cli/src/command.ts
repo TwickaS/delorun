@@ -61,15 +61,16 @@ export interface PreparedHome {
  * changes something runs this before any upstream code.
  * @param context - the command's context.
  * @param profileFlag - the `--profile` value, if given.
+ * @param allowSandboxView - whether the home's mode bits are not checked when this process runs inside a Delorun chat sandbox; `start`, `setup` and `update` pass false and always check.
  * @returns the home and profile.
  * @throws {HomeLayoutError} for a refused home or a laxer home, `secrets/` or `run/<profile>/`.
  * @throws {CliError} for a refused profile name.
  */
-export async function prepareHome(context: CommandContext, profileFlag: string | undefined): Promise<PreparedHome> {
+export async function prepareHome(context: CommandContext, profileFlag: string | undefined, allowSandboxView = true): Promise<PreparedHome> {
   const profile = selectProfile(profileFlag, context.env)
   const home = await resolveDelorunHome(context.env)
   // Inside a Delorun chat sandbox bwrap shows the home's real 0700 as 0755, so the mode bits are not checked there.
-  await ensureHomeTree(home.path, profile, { insideSandbox: insideBwrapSandbox(undefined, context.env) })
+  await ensureHomeTree(home.path, profile, { insideSandbox: allowSandboxView && insideBwrapSandbox(undefined, context.env) })
   applyLaunchEnvironment(home.path, profile)
   return { home, profile }
 }
