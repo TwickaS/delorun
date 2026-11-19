@@ -242,21 +242,19 @@ export class OutputFolderRefusedError extends Error {
   override readonly name = 'OutputFolderRefusedError'
 }
 
-/** File system error codes from resolving a path that leave the overlap check unable to decide. */
-const UNRESOLVABLE_PATH_CODES: ReadonlySet<string> = new Set(['ENOENT', 'ENOTDIR', 'EACCES', 'ELOOP'])
-
 /**
  * Resolve a path to its canonical form.
  * @param path - the path.
  * @returns the canonical path.
- * @throws {OutputFolderRefusedError} when the file system cannot resolve it (ENOENT, ENOTDIR, EACCES, ELOOP); any other error propagates.
+ * @throws {OutputFolderRefusedError} when the file system fails the call (an error with a string errno `code` and a `syscall`);
+ *   any other error propagates.
  */
 async function resolvedPath(path: string): Promise<string> {
   try {
     return await realpath(path)
   } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code
-    if (code === undefined || !UNRESOLVABLE_PATH_CODES.has(code)) throw error
+    const { code, syscall } = error as NodeJS.ErrnoException
+    if (typeof code !== 'string' || syscall === undefined) throw error
     throw new OutputFolderRefusedError(`Browser is off in this chat: its output folder could not be checked against the folders this chat can write (${(error as Error).message}).`, { cause: error })
   }
 }
@@ -269,7 +267,7 @@ type OverlapSource = 'workspace' | 'extra'
  * replace the output folder; around one, that folder would be inside the output folder. The writable folders are the
  * Session's working directory and, when a sandbox policy is provided, the policy's workspace-write roots, the
  * workspace, the extra writable directories and the temp areas, whatever mode the Session is in now. A path the file
- * system cannot resolve refuses too; any other error propagates.
+ * system fails to resolve refuses too; any other error propagates.
  * @param ctx - the provider context, which may provide the sandbox policy.
  * @param agent - the Agent whose Session starts.
  * @param output - the Session's output folder.

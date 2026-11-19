@@ -677,11 +677,11 @@ describe('Session MCP Loader composition', () => {
     expect(warnings).toHaveLength(3)
   })
 
-  it.each(['ENOENT', 'ENOTDIR', 'EACCES', 'ELOOP'])('leaves Browser off, and starts no server, when the file system cannot resolve the output folder (%s)', async (code) => {
+  it.each(['ENOENT', 'ENOTDIR', 'EACCES', 'ELOOP', 'EPERM', 'EIO', 'ENAMETOOLONG'])('leaves Browser off, and starts no server, when the file system cannot resolve the output folder (%s)', async (code) => {
     const outputRoot = join(tmpdir(), `dsh-check-root-${process.pid}`)
     roots.push(outputRoot)
     const { ctx, root, warnings } = await load({ outputRoot })
-    realpathHook.fail = path => path.startsWith(outputRoot) ? Object.assign(new Error(`${code}: cannot resolve`), { code }) : undefined
+    realpathHook.fail = path => path.startsWith(outputRoot) ? Object.assign(new Error(`${code}: cannot resolve`), { code, syscall: 'realpath' }) : undefined
     const { agent } = await ctx.agents.create({ sessionId: SessionId('check-fails') })
     const assembled = await warm(ctx, agent)
     expect(assembled.tools.some(tool => tool.name === TOOL)).toBe(false)
@@ -700,7 +700,7 @@ describe('Session MCP Loader composition', () => {
     ctx.set('sandboxPolicy', { resolve: () => { throw new Error('policy unreadable') } } as never)
     await expect(ctx.agents.create({ sessionId: SessionId('check-throws') }).then(({ agent }) => warm(ctx, agent))).rejects.toThrow('policy unreadable')
     ctx.set('sandboxPolicy', undefined)
-    realpathHook.fail = path => path.startsWith(outputRoot) ? Object.assign(new Error('disk on fire'), { code: 'EIO' }) : undefined
+    realpathHook.fail = path => path.startsWith(outputRoot) ? new TypeError('disk on fire') : undefined
     await expect(ctx.agents.create({ sessionId: SessionId('check-eio') }).then(({ agent }) => warm(ctx, agent))).rejects.toThrow('disk on fire')
     expect(warnings).toEqual([])
   })
