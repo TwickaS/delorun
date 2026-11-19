@@ -93,7 +93,7 @@ const ADMITTED_ROUTES: ReadonlySet<string> = new Set([
   '/api/delorunOnboarding.keyTest', '/api/delorunOnboarding.recommend', '/api/delorunOnboarding.setupRecord', '/api/delorunOnboarding.deferStep',
   '/api/delorunOnboarding.readiness', '/api/delorunOnboarding.start', '/api/delorunOnboarding.localModels', '/api/delorunOnboarding.workspaceNotice',
   '/api/delorunMcpConsent.waiting', '/api/delorunBranding.icon', '/api/delorunChatStates.list', '/api/delorunChatStates.set',
-  '/api/delorunPreviewFlags.list', '/api/delorunNewWorkspace.cloneStatus', '/api/delorunNewWorkspace.defaults',
+  '/api/delorunPreviewFlags.list', '/api/delorunNewWorkspace.cloneStatus', '/api/delorunNewWorkspace.defaults', '/api/delorunOnboarding.agentModels', '/api/delorunTrust.check',
 ])
 
 /**
