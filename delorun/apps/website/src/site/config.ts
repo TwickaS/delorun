@@ -59,6 +59,4 @@ export const DESKTOP_DOWNLOAD_PLACES = [
  * stylesheet from the page, so the page is styled with scripts off. `scripts/check-styles.ts` fails the build for a class
  * with no rule.
  */
-export const RENDERED_CHUNK_STYLES: Readonly<Record<string, readonly string[]>> = {
-  'index.html': ['home-below'],
-}
+export const RENDERED_CHUNK_STYLES: Readonly<Record<string, readonly string[]>> = {}

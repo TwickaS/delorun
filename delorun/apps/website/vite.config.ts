@@ -5,9 +5,6 @@ import tailwindcss from '@tailwindcss/vite'
 import { tanstackStart } from '@tanstack/react-start/plugin/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
-import { replicaPlugins } from './src/replica/build/plugins.ts'
-import { replicaOptions } from './replica-options.ts'
-import { STUDIO_ALIASES } from './studio-aliases.ts'
 import { SITEMAP_PATHS } from './src/site/config.ts'
 import { sitemapPaths, sitemapXml } from './src/site/sitemap.ts'
 import { readNotices, type Notice } from '../../packages/site-design/scripts/notices.ts'
@@ -88,7 +85,6 @@ export default defineConfig({
   build: { outDir: '.build' },
   environments: { client: { build: { outDir: OUT_DIR } } },
   plugins: [
-    ...replicaPlugins(replicaOptions(REPOSITORY_ROOT)),
     changelogModule(headlinesOnly(changelog)),
     noticesModule(notices),
     sitemapFile(),
@@ -108,10 +104,12 @@ export default defineConfig({
     }),
     react(),
   ],
+  // The brand's fonts load by file from the sibling `packages` directory, which the dev server refuses unless it is allowed.
+  server: { fs: { allow: [fileURLToPath(new URL('.', import.meta.url)), fileURLToPath(new URL('../../packages', import.meta.url))] } },
   resolve: {
     tsconfigPaths: true,
     // The shared design's stylesheet imports Fumadocs UI's CSS from outside this directory, so the import resolves to this site's install.
-    alias: [...STUDIO_ALIASES, { find: '#upstream', replacement: fileURLToPath(new URL('../../packages/brand/src/upstream.web.tsx', import.meta.url)) }, { find: /^sonner$/, replacement: fileURLToPath(new URL('./node_modules/sonner', import.meta.url)) }, { find: /^fumadocs-ui\/css\//, replacement: fileURLToPath(new URL('./node_modules/fumadocs-ui/css/', import.meta.url)) }],
+    alias: [{ find: '#upstream', replacement: fileURLToPath(new URL('../../packages/brand/src/upstream.web.tsx', import.meta.url)) }, { find: /^sonner$/, replacement: fileURLToPath(new URL('./node_modules/sonner', import.meta.url)) }, { find: /^fumadocs-ui\/css\//, replacement: fileURLToPath(new URL('./node_modules/fumadocs-ui/css/', import.meta.url)) }],
     dedupe: ['react', 'react-dom'],
   },
 })

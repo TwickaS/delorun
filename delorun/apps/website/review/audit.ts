@@ -288,7 +288,6 @@ export async function phoneVitals(browser: Browser, base: string): Promise<{ fin
   const measurements = { largestPaintMs: first.lcpMs, largestPaintElement: first.element, layoutShiftOnLoad: Math.round(first.cls * 1000) / 1000, layoutShiftAfterScroll: Math.round(after * 1000) / 1000, profile: 'phone, 4x CPU slowdown, 1.6 Mbit/s, 150 ms' }
   if (first.lcpMs === null) findings.push(warn('largest-paint', 'phone profile', 'no largest paint was recorded'))
   else if (first.lcpMs > LCP_LIMIT_MS) findings.push(fail('largest-paint', 'phone profile', `${String(first.lcpMs)} ms, over ${String(LCP_LIMIT_MS)} ms (${first.element ?? 'unknown element'})`))
-  if (first.element !== null && /replica/i.test(first.element)) findings.push(fail('largest-paint', 'phone profile', `the largest paint is inside the replica: ${first.element}`))
   if (after > CLS_LIMIT) findings.push(fail('layout-shift', 'phone profile', `layout shift ${String(Math.round(after * 1000) / 1000)} after scrolling the page, over ${String(CLS_LIMIT)}`))
   else if (first.cls > CLS_LIMIT) findings.push(fail('layout-shift', 'phone profile', `layout shift ${String(Math.round(first.cls * 1000) / 1000)} on load, over ${String(CLS_LIMIT)}`))
   findings.push(info('largest-paint', 'phone profile', `${String(first.lcpMs)} ms, ${first.element ?? 'unknown element'}`))

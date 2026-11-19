@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import view from 'virtual:delorun-changelog'
-import { Home } from '@/components/home.tsx'
+import { Home } from '@/home/Home.tsx'
 import { pageHead } from '@/site/head.ts'
 import { COPY } from '@/site/copy.ts'
 import { softwareData } from '@/site/structured-data.ts'

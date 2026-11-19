@@ -78,12 +78,14 @@ describe('the motion tokens', () => {
 
   it('have no ease-in, keep the interface within 300 ms and leave quicker than anything arrives', () => {
     expect(css).not.toMatch(/ease-in[;\s)]/)
-    const { leave, explain, ...arrivals } = BRAND_MOTION.durations
+    // A scene is an explanatory moment on a marketing page (a zoom, a re-tile); it is not an interface control.
+    const { leave, explain, scene, ...arrivals } = BRAND_MOTION.durations
     for (const ms of Object.values(arrivals)) {
       expect(ms).toBeLessThanOrEqual(300)
       expect(leave).toBeLessThan(ms)
     }
     expect(explain).toBeLessThanOrEqual(400)
+    expect(scene).toBeGreaterThan(explain)
   })
 
   it('under reduced motion stop movement and pressed shrinking but keep colour and opacity timings', () => {

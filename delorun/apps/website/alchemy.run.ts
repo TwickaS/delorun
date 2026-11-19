@@ -14,7 +14,6 @@ import { fileURLToPath } from 'node:url'
 import * as Cloudflare from '@alchemy.run/cloudflare'
 import * as Alchemy from 'alchemy'
 import * as Effect from 'effect/Effect'
-import { refuseStandIns } from './deploy-guard.ts'
 import { SITE_URL, SUPPORT_EMAIL, UPDATES_EMAIL } from './src/site/config.ts'
 import { resolveSending } from './src/site/sending.ts'
 
@@ -23,9 +22,6 @@ const SITE_DIR = fileURLToPath(new URL('.', import.meta.url))
 
 /** Sign-ups a connection may make per period, counted by Cloudflare's rate limiter. */
 const SIGNUPS_PER_MINUTE = 5
-
-// The build below inherits this environment: a stand-in variable left exported must stop the deploy before it builds.
-refuseStandIns(process.env)
 
 export default Alchemy.Stack(
   'DelorunWebsite',

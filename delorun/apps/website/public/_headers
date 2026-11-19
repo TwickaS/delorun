@@ -7,3 +7,7 @@
 # Bundled files carry a content hash in their names, so a name never changes content.
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
+
+# The picture pyramid's names carry a hash of what each file is made from (scripts/lod.ts), so a name never changes content.
+/lod/*
+  Cache-Control: public, max-age=31536000, immutable
