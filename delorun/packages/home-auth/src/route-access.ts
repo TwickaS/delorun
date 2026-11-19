@@ -67,7 +67,8 @@ export const PLUGIN_ROUTE_ACCESS: Readonly<Record<string, Readonly<Record<string
     'DELEGATION_CONSENT_ROUTES.revoke': READ('revoking only withdraws a grant'),
   },
   'plugin-agent-seats/src/mount.ts': {
-    'route.path': UNLOCKED('resuming an agent after its plan limit and picking its model change what the person\'s own program runs next; both go through the unlock gate'),
+    'RESUME_PATH': READ('resuming an agent after its plan limit only flips the seat\'s status; the next message the person sends is what spends plan usage'),
+    'CHOOSE_MODEL_PATH': READ('picking the model the person\'s own program runs for a seat changes no permission, sandbox or tool the program has'),
   },
   'external-agents/src/accounts/routes.ts': {
     'ACCOUNT_ROUTES.accounts': READ('reads each agent\'s sign-in, plan and limit figures, which hold no personal data; reading starts no check'),

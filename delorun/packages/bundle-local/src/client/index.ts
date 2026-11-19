@@ -522,7 +522,7 @@ export function apply(ctx: Context): void {
     pinPhase = phase
   }), 'delorun-pin: the unlock banner reads the elevation again when the page unlocks or locks')
   ctx.effect(() => installGateUnlock(unlock), 'delorun-devices: gate notices open the unlock dialog')
-  provideAgentSeatReach(ctx, pin, unlock, (ctx.get('connection') as ConnectionHandle).isLoopback)
+  provideAgentSeatReach(ctx, (ctx.get('connection') as ConnectionHandle).isLoopback)
   const pairing = createPairingSource(browserFetch)
   const pairingWriter = new PairingWriter(ctx.configForms.get<PairingRowSettings>(HOME_AUTH_ROW))
   const devicesFace = (): DevicesSectionInjected => ({

@@ -16,7 +16,7 @@ import type {} from '@deepseek-ai/dsh-session-query'
 import type {} from '@deepseek-ai/dsh-workspace'
 import { agentTitle } from '@delorun/external-agents/copy'
 import type { ProgramApprovalAnswer, ProgramApprovalRequest } from '@delorun/external-agents/contract'
-import { gateByUnlock, requireComputerOrDevice, routedPathname } from '@delorun/home-auth'
+import { admitApprovedDevice, requireComputerOrDevice, routedPathname } from '@delorun/home-auth'
 import { registerSeatRoutes, type SeatRouteRegistration, type SeatRouteSpec } from './adapter/index.ts'
 import { programVersion } from '@delorun/external-agents/locate'
 import { accountOf, programInfo } from './account.ts'
@@ -26,6 +26,7 @@ import { questionRefusedNotice } from './relay/copy.ts'
 import { registerSeatProviders, seatProviderName } from './provider/index.ts'
 import { recordPrefixOf, seatPreset } from './executor/index.ts'
 import { mountSeatState, type SeatStateMount } from './state/index.ts'
+import { CHOOSE_MODEL_PATH, RESUME_PATH } from './state/routes.ts'
 
 /** What a relay is built from: the mounted seat state and the exact provider names that identify a seat child. */
 export interface SeatRelayWiring {
@@ -154,20 +155,27 @@ export async function mountSeats(ctx: Context, config: Config, options: SeatMoun
     if (ctx.sessions.get(child) !== undefined && state.store.viewOf(child) !== null) state.end(child, text)
   })
   const paths = new Set(state.routes.map(route => route.path))
-  // Before the body is read: only the computer or a reach device reaches these routes, and a device needs an unlock.
+  // Before the body is read: only the computer or a reach device reaches these routes.
   ctx.on('connection/request', async (request, response, next) => {
     if (paths.has(routedPathname(request.url)) && !requireComputerOrDevice(request, response, ctx.get('homeAuth'), RESUME_LABEL)) return
     await next()
   })
-  for (const route of state.routes) {
-    ctx.effect(() => ctx.connection.fetch.register({
-      path: route.path,
-      methods: route.methods,
-      requestBody: 'buffered',
-      // The studio posts JSON; the gateway's default media type refuses it before the route reads a body.
-      requestMediaType: 'application/json',
-      ...gateByUnlock(() => ctx.get('homeAuth'), route.fetch, { renews: true }),
-    }), `delorun-agent-seats: route ${route.path}`)
+  // Any approved device may resume a seat or pick its model with no prompt (class `free`), once the home is mounted.
+  const approved = admitApprovedDevice()
+  const admitPeer: typeof approved = (request, peer) => ctx.get('homeAuth') !== undefined && approved(request, peer)
+  const routeAt = (path: string): (typeof state.routes)[number] => {
+    const found = state.routes.find(route => route.path === path)
+    if (found === undefined) throw new Error(`delorun-agent-seats: no route ${path}`)
+    return found
   }
+  const resume = routeAt(RESUME_PATH)
+  const chooseModel = routeAt(CHOOSE_MODEL_PATH)
+  // The studio posts JSON; the gateway's default media type refuses it before the route reads a body.
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: RESUME_PATH, methods: resume.methods, requestBody: 'buffered', requestMediaType: 'application/json', admitPeer, fetch: resume.fetch,
+  }), `delorun-agent-seats: route ${RESUME_PATH}`)
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: CHOOSE_MODEL_PATH, methods: chooseModel.methods, requestBody: 'buffered', requestMediaType: 'application/json', admitPeer, fetch: chooseModel.fetch,
+  }), `delorun-agent-seats: route ${CHOOSE_MODEL_PATH}`)
   return state
 }

@@ -57,7 +57,7 @@ export const en = {
   'approval.reject': 'Reject',
   'approval.forRun': 'Allow for this run',
   'approval.once': 'Allow once',
-  'approval.locked': 'Only your computer, or a phone you\'ve unlocked, can allow this.',
+  'approval.locked': 'Allow this at your computer. A phone can reject it.',
   'approval.unlock': 'Unlock to answer',
   'approval.unlockedUntil': 'This phone is unlocked until {time}.',
 }
@@ -119,7 +119,7 @@ export const zh: Record<AgentSeatsLocaleKey, string> = {
   'approval.reject': '拒绝',
   'approval.forRun': '本次运行内允许',
   'approval.once': '仅允许一次',
-  'approval.locked': '只有你的电脑或已解锁的手机可以批准。',
+  'approval.locked': 'Allow this at your computer. A phone can reject it.',
   'approval.unlock': '解锁后答复',
   'approval.unlockedUntil': '这部手机已解锁至 {time}。',
 }

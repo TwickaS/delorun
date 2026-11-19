@@ -153,7 +153,7 @@ const OPEN = (reason: string, answers?: number): FetchDecision => ({ device: 'ad
  * one-action grant, a PIN grant where it holds no passkey.
  */
 const FACE_ROUTES: ReadonlySet<string> = new Set([
-  '/api/delorunDelegationConsent.allow', '/api/delorunMcpConsent.accept', '/api/delorunNetwork.set', '/api/delorunNewWorkspace.add', '/api/delorunNewWorkspace.clone',
+  '/api/delorunDelegationConsent.allow', '/api/delorunExternalAgents.refresh', '/api/delorunMcpConsent.accept', '/api/delorunNetwork.set', '/api/delorunNewWorkspace.add', '/api/delorunNewWorkspace.clone',
   '/api/delorunNewWorkspace.create', '/api/delorunNewWorkspace.places', '/api/delorunNewWorkspace.preview', '/api/delorunNewWorkspace.search', '/api/delorunNewWorkspace.setDefaults',
   '/api/delorunPacks.enqueue', '/api/delorunPacks.remove', '/api/delorunPacks.retry', '/api/delorunPermission.setFullAccess', '/api/delorunReport.details',
   '/api/delorunTrash.empty', '/api/delorunTrash.purge', '/api/delorunTrash.removeSetAside', '/api/delorunVersions.save', '/api/delorunVersions.switch',
@@ -231,6 +231,8 @@ const FETCH_ROUTES: Readonly<Record<string, FetchDecision>> = {
   '/api/delorunDelegationConsent.levels': READ('reads each external agent\'s saved level and what its sandbox lacks; it changes no level, which only a settings write does, and the reach policy ranks that'),
   '/api/delorunDelegationConsent.allow': UNLOCKED('allowing an external agent for a workspace starts a program outside the sandbox without asking'),
   '/api/delorunDelegationConsent.revoke': OPEN('revoking only withdraws a grant', 400),
+  '/api/delorunExternalAgents.accounts': READ('reads each agent\'s sign-in, plan and limit figures, which hold no personal data; reading starts no check'),
+  '/api/delorunExternalAgents.refresh': UNLOCKED('a check starts the person\'s own Claude Code or Codex program on the computer'),
   '/api/delorunMcpConsent.waiting': READ('the names of the servers waiting for the person\'s OK, without their commands'),
   '/api/session/uploadFileBinary': { device: 'per-call', reason: 'upstream asks remote access for fileUploads/upload, which the reach-device policy allows' },
   '/api/session.export': { device: 'refused', reason: UPSTREAM_OWNER_ONLY },

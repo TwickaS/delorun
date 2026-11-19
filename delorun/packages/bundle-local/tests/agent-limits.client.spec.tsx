@@ -122,12 +122,14 @@ describe('Plans and limits in Settings', () => {
     await waitFor(() => { expect(within(claude).getByRole('alert').textContent).toBe('The check did not start: the program is busy') })
   })
 
-  it('turns the button into "Unlock to check" when a locked device is refused', async () => {
-    show({ [READ]: answer(account()), [CHECK]: { status: 403, body: { error: 'ELEVATION_REQUIRED', message: 'Unlock this device first.' } } })
+  // Pointing a refusal that reaches the card at an unlock sends the person to a dialog that no longer opens a check (F36).
+  it('says the check was not confirmed when the person cancels its Face ID, and keeps "Check now"', async () => {
+    show({ [READ]: answer(account()), [CHECK]: { status: 403, body: { error: 'ELEVATION_REQUIRED', message: 'Confirm with Face ID or your PIN first', action: 'external-agents/refresh' } } })
     const claude = await row('claude-code')
     fireEvent.click(within(claude).getByRole('button', { name: 'Check now' }))
-    await waitFor(() => { expect(within(claude).getByRole('button', { name: 'Unlock to check' })).toBeTruthy() })
-    expect(within(claude).getByText(/^Unlock this device to check\./)).toBeTruthy()
+    await waitFor(() => { expect(within(claude).getByRole('status').textContent).toBe(en['limits.notConfirmed']) })
+    expect(within(claude).getByRole('button', { name: 'Check now' })).toBeTruthy()
+    expect(within(claude).queryByText(/unlock/i)).toBeNull()
   })
 
   it('reports a check that cannot reach the home or is refused for another reason', async () => {
