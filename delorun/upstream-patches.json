@@ -2921,7 +2921,7 @@
     {
       "path": "packages/experimental/browser-use-playwright-mcp/src/output-folder.ts",
       "class": "security",
-      "reason": "Browser output folder (L67, L68): the folder name, the refusal when it is a link that leads outside the chat folder, and the check after each call that refuses files written outside it. Holds helpers moved out of the plugin entry module so the entry exports only the plugin (verify-plugin-entry-exports, L69); the code is unchanged. Lead verdict (2026-11-17): review4 checks the move. Also holds the output-root, read-argument copy and written-outside checks of fix/p2-brrace (L67, L68, L72), moved from index.ts at merge 9b3d9ac024; review4 confirmed byte-identical logic (2026-11-17).",
+      "reason": "Browser output folder (L67, L68): the folder name, the refusal when it is a link that leads outside the chat folder, and the check after each call that refuses files written outside it. Holds helpers moved out of the plugin entry module so the entry exports only the plugin (verify-plugin-entry-exports, L69); the code is unchanged. Lead verdict (2026-11-17): review4 checks the move. Also holds the output-root, read-argument copy and written-outside checks of fix/p2-brrace (L67, L68, L72), moved from index.ts at the p2-brrace merge; review4 confirmed byte-identical logic (2026-11-17).",
       "sha256": "4c8156308871f3ae2c66d11112f6b92c18d6112fe7487fec482abb6c3beb42c4"
     },
     {

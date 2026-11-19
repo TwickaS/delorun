@@ -12,7 +12,7 @@ export const TOUCH_INPUTS_ATTRIBUTE = 'data-delorun-touch-inputs'
 
 /** The controls that take typed text; a checkbox, radio, slider, file or colour input has no text to zoom for. */
 const FIELDS = [
-  'input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([type="image"]):not([type="button"]):not([type="submit"]):not([type="reset"])',
+  'input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([type="image"]):not([type="button"]):not([type="submit"]):not([type="reset"])', // us-spelling: quoted output
   'textarea',
   'select',
   '[contenteditable]:not([contenteditable="false"])',
