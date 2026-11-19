@@ -157,6 +157,8 @@ describe('the seat relay on the real Gateway and the real reach guard', () => {
     expect(w.events(w.child, 'approval/decided')).toEqual([])
     expect(await answer(computer, eventId, 'allowed-once')).toMatchObject(applied)
     await expect(result).resolves.toBe('allow-once')
+    await new Promise<void>(resolve => { setImmediate(resolve) })
+    expect(w.events(w.child, 'external-agent/run-allowed')).toEqual([])
   })
 
   it('lets the locked phone reject', async () => {
