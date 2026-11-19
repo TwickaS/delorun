@@ -16,7 +16,6 @@ import { readProfileManifest, resolveBundleDir, type ProfileContext } from '@dee
 // Type-only: the ctx.connection merge.
 import type {} from '@deepseek-ai/dsh-client-connection'
 import z from '@deepseek-ai/schemastery'
-import { admitApprovedDevice } from '@delorun/home-auth'
 import { packageOf, readFlagIndex, rowPackages, type FlagIndex } from './manifest.ts'
 import { createPreviewFlags, type PreviewFlags } from './registry.ts'
 import { PREVIEW_FLAG_ROUTES, type PreviewFlagsAnswer } from './wire.ts'
@@ -34,6 +33,21 @@ declare module '@deepseek-ai/cordis' {
     /** Delorun's preview flags; present while the `delorun-preview-flags` row is mounted. */
     previewFlags: PreviewFlags
   }
+}
+
+/** The principal kind of an approved reach device, which `@delorun/home-auth` names `REACH_DEVICE`. */
+const REACH_DEVICE_KIND = 'reach-device'
+
+/**
+ * The `admitPeer` of the read route: an approved reach device, whether or not its page is unlocked. The owner's Peer never reaches it.
+ * @param _request - the request, unused.
+ * @param peer - the Peer.
+ * @param peer.principal - the Peer's principal.
+ * @param peer.principal.kind - the principal's kind.
+ * @returns whether the Peer is an approved reach device.
+ */
+function admitReachDevice(_request: unknown, peer: { readonly principal: { readonly kind: string } }): boolean {
+  return peer.principal.kind === REACH_DEVICE_KIND
 }
 
 /** The plugin's name in logs. */
@@ -115,7 +129,7 @@ export function apply(ctx: Context, config: Config): void {
     methods: ['GET'],
     requestBody: 'buffered',
     // Flag ids, their words and whether each is on: no setting or data, so a signed-in device reads it as the computer does.
-    admitPeer: admitApprovedDevice(),
+    admitPeer: admitReachDevice,
     fetch: () => Promise.resolve(new Response(JSON.stringify({ flags: [...flags.list()] } satisfies PreviewFlagsAnswer), {
       status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
     })),

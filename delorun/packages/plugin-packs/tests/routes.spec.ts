@@ -25,7 +25,7 @@ function setup(home: { elevated?: boolean, page?: Record<string, boolean> } = {}
     get: (name: string) => (name === 'homeAuth' ? {
       elevationOf: () => (home.elevated === true ? { id: 'e1' } : undefined),
       pageUnlockOf: (id: string) => (home.page?.[id] === true ? { id: 'p1' } : undefined),
-      arrivalOf: () => ({ listener: 'reach' }), dangerousMode: () => false, pinEnabled: () => false, touchUnlock: (id: string) => { touched.push(id) },
+      arrivalOf: () => ({ listener: 'reach' }), dangerousMode: () => false, unlockModeEnabled: () => false, touchUnlock: (id: string) => { touched.push(id) },
     } : undefined),
     connection: { fetch: { register: (route: Registered) => { routes.set(route.path, route); return () => Promise.resolve() } } },
   }

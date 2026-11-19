@@ -32,6 +32,7 @@ import type {} from '@deepseek-ai/dsh-workspace'
 import type {} from '@deepseek-ai/dsh-working-directory'
 import type {} from '@deepseek-ai/dsh-permission-presets'
 import type {} from './full-access-grants.ts'
+import { answerKey } from './grants.ts'
 import { LOOPBACK_LISTENER } from '@deepseek-ai/dsh-client-connection/authenticator'
 import { Authenticator, type Admission, type ConnectionIndexRequest, type ListenerPolicy, type PreLoginRoute } from '@deepseek-ai/dsh-client-connection'
 import type { RemoteAnswerGuard, RemoteEventAnswer } from '@deepseek-ai/dsh-api-gateway'
@@ -306,7 +307,11 @@ export class HomeAuthAuthenticator extends Authenticator {
         elevationOf: (deviceId, listener) => ctx.homeAuth.elevationOf(deviceId, listener),
         touchUnlock: id => { ctx.homeAuth.touchUnlock(id) },
         pageUnlockOf: unlockId => ctx.homeAuth.pageUnlockOf(unlockId),
-        pinEnabled: () => ctx.homeAuth.pinEnabled(),
+        unlockModeEnabled: () => ctx.homeAuth.unlockModeEnabled(),
+        faceGrants: () => {
+          const grants = ctx.homeAuth.passkeysEnabled() ? ctx.homeAuth.faceGrants() : undefined
+          return grants === undefined ? undefined : { grants, deviceHasPasskey: deviceId => ctx.homeAuth.deviceHasPasskey(deviceId) }
+        },
         keyRefs: () => keyRefsOf(access),
         logElevated: (line) => { ctx.logger.info(line) },
         liftedSettings: lifts => ctx.homeAuth.recordLifts(lifts),
@@ -350,12 +355,25 @@ export class HomeAuthAuthenticator extends Authenticator {
    */
   checkAnswer(answer: RemoteEventAnswer): void {
     if (answer.event !== 'approval/request' || NON_GRANTING_OUTCOMES.has(answer.value)) return
-    const refusal = REFUSED_GRANTS.get(Reflect.get(answer.request, 'grants'))
+    const marker: unknown = Reflect.get(answer.request, 'grants')
+    const refusal = REFUSED_GRANTS.get(marker)
     if (refusal === undefined) return
     // This provider creates every reach Peer, and every reach session this home builds has the factor
     // `tailnet-membership`.
     const reach = this.reachPeers.get(answer.peer.id)
     if (reach === undefined) return
+    // With Face ID on, the grant the person made for exactly this prompt and this answer admits it, and is used up here.
+    const grants = this.ctx.homeAuth.passkeysEnabled() ? this.ctx.homeAuth.faceGrants() : undefined
+    if (grants !== undefined) {
+      // The grant names the prompt by its Session, call id and grants marker: one call can raise two prompts, and call ids repeat across chats.
+      const callId: unknown = Reflect.get(answer.request, 'callId')
+      const agent: unknown = Reflect.get(answer.request, 'agent')
+      const agentId: unknown = typeof agent === 'object' && agent !== null ? Reflect.get(agent, 'id') : undefined
+      if (typeof callId === 'string' && typeof agentId === 'string' && typeof marker === 'string' && typeof answer.value === 'string'
+        && grants.consumeAnswer({ deviceId: reach.deviceId, listener: reach.listener }, answerKey({ agent: agentId, callId, grants: marker }), answer.value) !== undefined) return
+      // A device that holds a passkey is admitted by a grant and by no unlock window.
+      if (this.ctx.homeAuth.deviceHasPasskey(reach.deviceId)) throw new RemoteError('LOOPBACK_REQUIRED', refusal.message, { action: refusal.action })
+    }
     if (refusal.reach === 'unlocked-device') {
       const unlock = unlockOf(this.ctx.homeAuth, reachDevicePrincipal(reach.deviceId, reach.listener, reach.unlockId))
       // The approval grace follows an approval, not a code or PIN typed on the device, so it gives no such grant, in
@@ -409,7 +427,7 @@ export class HomeAuthAuthenticator extends Authenticator {
     // With PIN mode off the token is ignored; with it on, a token that does not name this page's unlock is refused and
     // burned, so the page learns it is locked.
     let unlockId: string | undefined
-    if (this.ctx.homeAuth.pinEnabled() && (presented.token !== undefined || presented.ambiguous)) {
+    if (this.ctx.homeAuth.unlockModeEnabled() && (presented.token !== undefined || presented.ambiguous)) {
       try {
         if (presented.ambiguous || presented.token === undefined) throw new HomeAuthError('UNLOCK_INVALID', 'This page is locked. Unlock it again')
         unlockId = this.ctx.homeAuth.resolvePageUnlock(presented.token, { deviceId: session.deviceId, listener: served.listener, sessionId })
@@ -423,6 +441,9 @@ export class HomeAuthAuthenticator extends Authenticator {
     if (peer === undefined) {
       peer = this.ctx.connection.createPeer({ principal: reachDevicePrincipal(session.deviceId, served.listener, unlockId) })
       this.peers.set(key, peer)
+      // The holds a Peer's grants opened end with the Peer.
+      const holder = { deviceId: session.deviceId, listener: served.listener, unlockId }
+      peer.signal.addEventListener('abort', () => { this.ctx.homeAuth.faceGrants()?.endPeer(holder) }, { once: true })
       this.reachPeers.set(peer.id, { deviceId: session.deviceId, listener: served.listener, factor: session.factor, ...unlockId === undefined ? {} : { unlockId } })
     }
     const rolled = admission.rolled

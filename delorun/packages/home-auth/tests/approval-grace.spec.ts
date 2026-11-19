@@ -206,6 +206,24 @@ describe('the approval grace and PIN mode', () => {
     expect(served.auth.elevationOf(other.id, LISTENER)).toBeUndefined()
   })
 
+  // Reverting either unlockModeEnabled check in startApprovalGrace or elevationOf to this.pin.enabled() gives a passkey-only home a grace (R2-P2-3).
+  it('gives no grace on a home whose only factor is a passkey, and hides a running one once the first passkey is enrolled', async () => {
+    const { home: served } = await graced(10)
+    const running = device()
+    await approve(served.auth, running)
+    await signIn(served.auth, running)
+    expect(served.auth.elevationOf(running.id, LISTENER)).toMatchObject({ grace: true })
+    const enrolled = device()
+    await served.auth.passkeyStore.add({ credentialId: 'cred-1', publicKey: 'key', counter: 0, backupEligible: false, backupState: false, transports: [], createdAt: served.clock.now, lastUsedAt: null, address: ADDRESS, rpId: 'home.example.ts.net', deviceId: enrolled.id })
+    expect(served.auth.pin.enabled()).toBe(false)
+    expect(served.auth.elevationOf(running.id, LISTENER)).toBeUndefined()
+    const fresh = device()
+    await approve(served.auth, fresh)
+    await signIn(served.auth, fresh)
+    expect(served.auth.elevationOf(fresh.id, LISTENER)).toBeUndefined()
+    expect(served.auth.elevationState(fresh.id, LISTENER)).toMatchObject({ kind: 'none' })
+  })
+
   it('does not cover a consent or guard row\'s settings, which need a code or a PIN page', async () => {
     const { home: served } = await graced(10)
     const phone = device()
@@ -214,7 +232,7 @@ describe('the approval grace and PIN mode', () => {
     const grace = served.auth.elevationOf(phone.id, LISTENER)
     const facts = (elevation: { readonly id: string; readonly grace?: true } | undefined): ReachAccessFacts => ({
       admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere',
-      elevationOf: () => elevation, pageUnlockOf: () => undefined, pinEnabled: () => false,
+      elevationOf: () => elevation, pageUnlockOf: () => undefined, unlockModeEnabled: () => false,
       keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
       computerOnlySwitches: () => [], protectedEntryIds: () => new Set(['include:delorun-mcp-consent', 'delorun-mcp-consent']), computerOnlyEntryIds: () => new Set(),
       defaultPermission: () => undefined, phonePowers: () => 'full' as const, dangerousMode: () => false,
@@ -237,7 +255,7 @@ describe('the approval grace and PIN mode', () => {
     expect(grace?.grace).toBe(true)
     const facts = (elevation: { readonly id: string; readonly grace?: true } | undefined, page?: { readonly id: string }): ReachAccessFacts => ({
       admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere',
-      elevationOf: () => elevation, pageUnlockOf: () => page, pinEnabled: () => page !== undefined,
+      elevationOf: () => elevation, pageUnlockOf: () => page, unlockModeEnabled: () => page !== undefined,
       keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
       computerOnlySwitches: () => [], protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set(),
       defaultPermission: () => undefined, phonePowers: () => 'full' as const, dangerousMode: () => false,
@@ -270,7 +288,7 @@ describe('the approval grace and the computer-only table', () => {
     await signIn(served.auth, phone)
     const facts = (dangerous: boolean): ReachAccessFacts => ({
       admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere',
-      elevationOf: (deviceId, listener) => served.auth.elevationOf(deviceId, listener), pageUnlockOf: () => undefined, pinEnabled: () => false,
+      elevationOf: (deviceId, listener) => served.auth.elevationOf(deviceId, listener), pageUnlockOf: () => undefined, unlockModeEnabled: () => false,
       keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
       computerOnlySwitches: () => [HOME_AUTH_SWITCH, REACH_SWITCH], protectedEntryIds: () => new Set(['include:home-auth']), computerOnlyEntryIds: () => new Set(['include:home-auth']),
       defaultPermission: () => undefined, phonePowers: () => 'full' as const, dangerousMode: () => dangerous,

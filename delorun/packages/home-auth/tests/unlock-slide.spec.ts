@@ -113,7 +113,7 @@ describe('which actions renew an unlock', () => {
     const real: ReachAccessFacts = {
       admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere',
       elevationOf: (id, listener) => served.auth.elevationOf(id, listener), touchUnlock: id => { served.auth.touchUnlock(id) },
-      pageUnlockOf: () => undefined, pinEnabled: () => false,
+      pageUnlockOf: () => undefined, unlockModeEnabled: () => false,
       keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
       computerOnlySwitches: () => [], protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set(),
       defaultPermission: () => undefined, phonePowers: () => 'full' as const, dangerousMode: () => false,
@@ -135,7 +135,7 @@ describe('which actions renew an unlock', () => {
 describe('what renews an unlock', () => {
   const facts = (touch: (id: string) => void): ReachAccessFacts => ({
     admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere',
-    elevationOf: () => ({ id: 'unlock-1' }), touchUnlock: touch, pageUnlockOf: () => undefined, pinEnabled: () => false,
+    elevationOf: () => ({ id: 'unlock-1' }), touchUnlock: touch, pageUnlockOf: () => undefined, unlockModeEnabled: () => false,
     keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
     computerOnlySwitches: () => [], protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set(),
     defaultPermission: () => undefined, phonePowers: () => 'full' as const, dangerousMode: () => false,

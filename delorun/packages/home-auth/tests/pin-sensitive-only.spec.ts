@@ -19,10 +19,10 @@ const ROW = 'include:delorun-home-auth'
  */
 function pinHome(pageUnlocked: boolean) {
   const unlock = { id: 'page-1' }
-  const home = { pinEnabled: () => true, pageUnlockOf: (id: string) => (pageUnlocked && id === 'page-1' ? unlock : undefined), elevationOf: () => undefined, dangerousMode: () => false } as never
+  const home = { unlockModeEnabled: () => true, pageUnlockOf: (id: string) => (pageUnlocked && id === 'page-1' ? unlock : undefined), elevationOf: () => undefined, dangerousMode: () => false } as never
   const facts: ReachAccessFacts = {
     admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere',
-    elevationOf: () => undefined, pageUnlockOf: id => (pageUnlocked && id === 'page-1' ? unlock : undefined), pinEnabled: () => true,
+    elevationOf: () => undefined, pageUnlockOf: id => (pageUnlocked && id === 'page-1' ? unlock : undefined), unlockModeEnabled: () => true,
     keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
     computerOnlySwitches: () => [], protectedEntryIds: () => new Set([ROW]), computerOnlyEntryIds: () => new Set([ROW]),
     defaultPermission: () => undefined, phonePowers: () => 'full' as const, dangerousMode: () => false,

@@ -18,6 +18,7 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import type { DeviceId } from '@delorun/contract-admission'
 import { DEVICE_APPROVAL_VERSION } from '@delorun/contract-device-approval'
 import type { HomeAuth } from './home-auth.ts'
+import { DEVICE_REMOVE_ACTION, hashArgs } from './grants.ts'
 import { HomeAuthError, refusalBody, STRUCTURED_REFUSALS } from './errors.ts'
 import { isForeignFetchSite, isLoopbackHost, isSameLoopbackOrigin, loopbackAddressOf } from '@delorun/home'
 import { deviceSession, signedInDevice } from './elevation-routes.ts'
@@ -175,6 +176,8 @@ export function devicesHandler(auth: HomeAuth, credential: LoopbackCredential): 
   }
 }
 
+export { DEVICE_REMOVE_ACTION }
+
 /**
  * Build the route that revokes one device.
  * @param auth - the home-auth instance to revoke with.
@@ -183,8 +186,9 @@ export function devicesHandler(auth: HomeAuth, credential: LoopbackCredential): 
  */
 export function removeDeviceHandler(auth: HomeAuth, credential: LoopbackCredential): RouteHandler {
   return async (request, response) => {
-    // A signed-in device may remove itself, which is its own sign-out. Removing another device stays at the computer: a
-    // stolen unlocked phone must not lock the person out of their other devices.
+    // A signed-in device may remove itself, which is its own sign-out. Removing another device stays at the computer
+    // unless Face ID is on and the device holds a grant for exactly this body: a stolen unlocked phone must not lock the
+    // person out of their other devices without a Face ID or PIN confirmation of that removal.
     if (isReachArrival(auth, request)) {
       const device = deviceSession(auth, request, response, 'POST')
       if (device === undefined) return
@@ -196,7 +200,14 @@ export function removeDeviceHandler(auth: HomeAuth, credential: LoopbackCredenti
           return
         }
         if (message.deviceId !== device.session.deviceId) {
-          sendError(response, new HomeAuthError('LOOPBACK_REQUIRED', 'Removing another device needs you at your computer: open the studio on the home\'s own computer'))
+          // While Face ID is on, a confirmation for exactly this body lets a device remove another one (it only shrinks access).
+          const hash = hashArgs(message)
+          const holder = { deviceId: device.session.deviceId, listener: device.listener }
+          if (!auth.passkeys.enabled() || hash === undefined || auth.grants.consume(holder, DEVICE_REMOVE_ACTION, hash) === undefined) {
+            sendError(response, new HomeAuthError('LOOPBACK_REQUIRED', 'Removing another device needs you at your computer: open the studio on the home\'s own computer'))
+            return
+          }
+          sendJson(response, 200, await auth.revokeDevice(brandString<DeviceId>(message.deviceId)))
           return
         }
         sendJson(response, 200, await auth.revokeDevice(device.session.deviceId))
