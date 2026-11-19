@@ -11,42 +11,56 @@ export type FaceIdKind = 'faceId' | 'touchId' | 'windowsHello' | 'fingerprint' |
 /** The kinds, in the order a spec walks them. */
 export const FACE_ID_KINDS: readonly FaceIdKind[] = ['faceId', 'touchId', 'windowsHello', 'fingerprint', 'deviceLock']
 
+/** What the grant covers: the calls one tap makes, or one prompt answer. */
+export type GrantRequest =
+  | { readonly actions: readonly { readonly action: string; readonly hash: string }[] }
+  | { readonly answer: { readonly requestId: string; readonly value: string } }
+
 /** What a sensitive action is, in the words its own description gives the person. */
 export interface FaceIdAction {
-  /** The elevated action's name, which the home checks the grant against. */
-  readonly name: string
+  /** What the grant covers, hashed by the caller from the calls it is about to make. */
+  readonly grant: GrantRequest
   /** The action as a question, such as `Install “Reports”?`. */
   readonly title: string
   /** One or two lines saying what changes and what widens. */
   readonly body: string
   /** The items a batch covers; the sheet shows at most three, then the count of the rest. */
   readonly items?: readonly string[]
-  /** The SHA-256 hash of the action's canonical arguments, as the options request sends it. */
-  readonly bodyHash: string
 }
 
-/** A passkey as the Devices list shows it. */
+/** A passkey as the home lists it. */
 export interface PasskeyEntry {
-  readonly id: string
-  readonly kind: FaceIdKind
+  readonly credentialId: string
   /** Milliseconds since the epoch. */
-  readonly addedAt: number
-  readonly lastUsedAt?: number
-  /** How many times it was used today. */
-  readonly usesToday: number
+  readonly createdAt: number
+  /** Milliseconds since the epoch; null before its first use. */
+  readonly lastUsedAt: number | null
   /** Whether the passkey is backup-eligible, so the platform syncs it. */
   readonly synced: boolean
 }
 
 /** A device with the passkeys it holds. */
 export interface PasskeyDevice {
-  readonly id: string
+  readonly deviceId: string
   readonly label: string
   /** Whether this page is that device. */
   readonly thisDevice: boolean
-  /** Milliseconds since the epoch; undefined for a device that never signed in. */
-  readonly lastSeenAt?: number
   readonly passkeys: readonly PasskeyEntry[]
+}
+
+/** A pending "Add Face ID" request, as the computer lists it. */
+export interface PendingAdd {
+  readonly requestId: string
+  readonly deviceId: string
+  readonly deviceLabel: string
+  readonly expiresAt: number
+}
+
+/** A grant the home now holds, used once by the call that carries its id in `Delorun-Grant`. */
+export interface GrantTicket {
+  readonly grantId: string
+  /** Milliseconds since the epoch. */
+  readonly expiresAt: number
 }
 
 /** The JSON a passkey creation needs, as the home sends it: binary fields are base64url strings. */
@@ -80,6 +94,8 @@ export interface RegistrationResponseJSON {
   readonly rawId: string
   readonly type: 'public-key'
   readonly response: { readonly clientDataJSON: string; readonly attestationObject: string; readonly transports?: readonly string[] }
+  readonly clientExtensionResults: Record<string, never>
+  readonly authenticatorAttachment?: string
 }
 
 /** An assertion, in the base64url JSON the home verifies. */
@@ -88,55 +104,73 @@ export interface AssertionResponseJSON {
   readonly rawId: string
   readonly type: 'public-key'
   readonly response: { readonly clientDataJSON: string; readonly authenticatorData: string; readonly signature: string; readonly userHandle?: string }
+  readonly clientExtensionResults: Record<string, never>
+  readonly authenticatorAttachment?: string
 }
 
-/** The result of one request to the passkey routes. */
+/** The home's passkey routes, one method per route. Each rejects with the home's refusal or an unreachable-host error. */
 export interface PasskeyApi {
   /**
-   * Ask for the options of one assertion, for one action.
-   * @param request - the action's name and the hash of its arguments.
-   * @returns the options, and the id the verify request names.
+   * What this device holds, and whether an enrolment ticket waits.
+   * @returns the passkeys and the ticket flag.
    */
-  assertionOptions(request: { readonly action: string; readonly bodyHash: string }): Promise<{ readonly challengeId: string; readonly options: RequestOptionsJSON }>
+  state(): Promise<{ readonly passkeys: readonly PasskeyEntry[]; readonly ticket: boolean }>
+  /**
+   * Ask for the options of one assertion.
+   * @param request - the calls the tap covers, or one prompt answer.
+   * @returns the options, with a 60 s single-use challenge.
+   */
+  options(request: GrantRequest): Promise<RequestOptionsJSON>
   /**
    * Send the assertion.
-   * @param request - the challenge id and the assertion.
-   * @returns the id of the grant the home now holds for the action.
+   * @param response - the browser's assertion.
+   * @returns the grant.
    */
-  verifyAssertion(request: { readonly challengeId: string; readonly response: AssertionResponseJSON }): Promise<{ readonly grantId: string }>
+  verify(response: AssertionResponseJSON): Promise<GrantTicket>
   /**
-   * Ask for the options of a new passkey.
-   * @param request - the enrol ticket the computer's Pair tap minted, or absent for a device that is already paired.
-   * @returns the options, and the id the register request names.
+   * Mint a grant with the PIN or passcode, for a device with no passkey or after a cancelled prompt.
+   * @param request - the secret and what the grant covers.
+   * @returns the grant.
    */
-  registrationOptions(request: { readonly ticket?: string }): Promise<{ readonly challengeId: string; readonly options: CreationOptionsJSON }>
+  pin(request: GrantRequest & { readonly secret: string }): Promise<GrantTicket>
   /**
-   * Send the new credential.
-   * @param request - the challenge id and the credential.
-   * @returns `done` once the pairing's own approval covers it, or `code` with the `delorun-passkey-v1` code to type at the computer.
+   * The options of a new passkey; needs a live enrolment ticket.
+   * @returns the options.
    */
-  register(request: { readonly challengeId: string; readonly response: RegistrationResponseJSON }): Promise<{ readonly kind: 'done' } | { readonly kind: 'code'; readonly code: string }>
+  registerOptions(): Promise<CreationOptionsJSON>
   /**
-   * Whether the computer accepted the code of a later "Add Face ID".
-   * @returns `pending` until the computer's person types the code.
+   * Send the new credential; uses the ticket up.
+   * @param response - the browser's credential.
+   * @returns the stored passkey.
    */
-  registrationState(): Promise<'pending' | 'done' | 'refused'>
+  register(response: RegistrationResponseJSON): Promise<PasskeyEntry>
   /**
-   * The computer's side of a later "Add Face ID": the code typed at the computer.
-   * @param code - the digits the phone shows.
+   * A paired device asks to add a passkey.
+   * @returns the request id and the code to type at the computer.
+   */
+  addRequest(): Promise<{ readonly requestId: string; readonly code: string; readonly expiresAt: number }>
+  /**
+   * The computer's pending requests.
+   * @returns the requests, without their codes.
+   */
+  pendingAdds(): Promise<readonly PendingAdd[]>
+  /**
+   * The computer's person types the code the device shows.
+   * @param request - the request and the digits.
    * @returns whether the code matched.
    */
-  confirmCode(code: string): Promise<{ readonly matched: boolean }>
+  approveAdd(request: { readonly requestId: string; readonly code: string }): Promise<{ readonly matched: boolean }>
   /**
-   * The devices with their passkeys.
-   * @returns the list.
+   * Every device with its passkeys. A phone needs the grant of a Face ID confirmation for action `auth/passkey/devices`.
+   * @param request - the grant, when the page is a phone.
+   * @returns the devices.
    */
-  list(): Promise<readonly PasskeyDevice[]>
+  devices(request?: { readonly grantId?: string }): Promise<readonly PasskeyDevice[]>
   /**
    * Remove one passkey.
-   * @param request - the passkey, and the grant of a Face ID confirmation when the page is a phone.
+   * @param request - the passkey, its device, and the grant of a Face ID confirmation when the page is a phone.
    */
-  removePasskey(request: { readonly passkeyId: string; readonly grantId?: string }): Promise<void>
+  removePasskey(request: { readonly credentialId: string; readonly deviceId: string; readonly grantId?: string }): Promise<void>
   /**
    * Remove one device with its passkeys.
    * @param request - the device, and the grant of a Face ID confirmation when the page is a phone.

@@ -129,6 +129,8 @@ export function browserPasskeys(scope: { readonly navigator: Navigator; readonly
             signature: toBase64Url(response.signature),
             userHandle: response.userHandle === null ? undefined : toBase64Url(response.userHandle),
           },
+          clientExtensionResults: {},
+          authenticatorAttachment: pk.authenticatorAttachment ?? undefined,
         },
       }
     },
@@ -164,6 +166,8 @@ export function browserPasskeys(scope: { readonly navigator: Navigator; readonly
             attestationObject: toBase64Url(response.attestationObject),
             transports: response.getTransports?.(),
           },
+          clientExtensionResults: {},
+          authenticatorAttachment: pk.authenticatorAttachment ?? undefined,
         },
       }
     },

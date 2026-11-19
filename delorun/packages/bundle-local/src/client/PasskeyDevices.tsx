@@ -1,15 +1,18 @@
 /**
- * Settings → Devices, passkeys (B4): a card per device with its passkeys, "Add Face ID" where a device has none, and
- * Remove for a passkey or a device. On a phone each removal first opens the action sheet, so it takes Face ID
- * (L92); at the computer it is one tap. Desktop shows the cards in two columns.
+ * Settings → Devices, passkeys (B4): a card per device with its passkeys, "Add Face ID" where this device has none, and
+ * Remove for a passkey or a device. At the computer the list loads and each removal is one tap. On a phone the list
+ * starts with this device's own passkeys; "Show all devices" and each removal first open the action sheet, so they take
+ * Face ID (L92), with the PIN keypad after a cancel.
  */
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PasskeyBrowser } from './face-id-browser.ts'
+import { hashArgs, hashRequest } from './face-id-hash.ts'
 import type { FaceIdAction, FaceIdKind, PasskeyApi, PasskeyDevice, PasskeyEntry } from './face-id-types.ts'
-import { FaceIdSheet, type FaceIdFallback } from './FaceIdSheet.tsx'
+import { FaceIdPin } from './FaceIdPin.tsx'
+import { FaceIdSheet } from './FaceIdSheet.tsx'
 import css from './FaceId.module.css'
 
 type Translate = PropsLocale<'delorunFaceId'>['t']
@@ -21,20 +24,27 @@ export interface PasskeyDevicesProps {
   readonly browser: PasskeyBrowser
   /** The noun of this page's own platform unlock, which the sheet's button names. */
   readonly kind: FaceIdKind
-  /** Whether the page is the home's own computer, where removal needs no prompt. */
+  /** Whether the page is the home's own computer, where nothing needs a prompt. */
   readonly atComputer: boolean
-  /** Where the sheet's small link leads. */
-  readonly fallback: FaceIdFallback
-  /** Whether this page's device holds a passkey, which a phone needs to remove anything. */
+  /** The home's secret for the fallback keypad, or undefined when none is set (the sheet then points at the computer). */
+  readonly secret: 'pin' | 'passcode' | undefined
+  /** Whether this page's device holds a passkey. */
   readonly hasPasskey: boolean
   /** Start "Add Face ID" for this page's device. */
   readonly onAdd: () => void
-  readonly onFallback: () => void
-  /** A hash of the removal's canonical arguments. */
-  readonly hashOf: (request: { readonly kind: 'passkey' | 'device'; readonly id: string }) => string
+  /** Called when the sheet's "Approve at the computer" link is tapped. */
+  readonly onAskComputer: () => void
 }
 
-type Pending = { readonly kind: 'passkey' | 'device'; readonly id: string; readonly label: string }
+type Target =
+  | { readonly kind: 'list' }
+  | { readonly kind: 'passkey'; readonly credentialId: string; readonly deviceId: string; readonly label: string }
+  | { readonly kind: 'device'; readonly deviceId: string; readonly label: string }
+
+type Asked = { readonly target: Target; readonly action: FaceIdAction; readonly pin: boolean }
+
+/** The route a device removal posts to, which its grant is hashed against. */
+const REMOVE_DEVICE_PATH = '/auth/devices/remove'
 
 /**
  * A date as the card shows it.
@@ -47,87 +57,119 @@ function day(t: Translate, at: number): string {
 }
 
 /**
+ * Build the sheet's action for a target: its words, and the hash the home will compare against the call.
+ * @param t - the copy.
+ * @param target - what is about to happen.
+ * @returns the action.
+ */
+async function actionOf(t: Translate, target: Target): Promise<FaceIdAction> {
+  if (target.kind === 'list') {
+    return { title: t('list.title'), body: t('list.body'), grant: { actions: [{ action: 'auth/passkey/devices', hash: await hashArgs({}) }] } }
+  }
+  if (target.kind === 'passkey') {
+    return {
+      title: t('remove.passkeyTitle', { name: target.label }), body: t('remove.passkeyBody'),
+      grant: { actions: [{ action: 'auth/passkey/remove', hash: await hashArgs({ credentialId: target.credentialId, deviceId: target.deviceId }) }] },
+    }
+  }
+  return {
+    title: t('remove.deviceTitle', { name: target.label }), body: t('remove.deviceBody'),
+    grant: { actions: [{ action: 'auth/devices/remove', hash: await hashRequest({ method: 'POST', path: REMOVE_DEVICE_PATH, body: { v: 1, deviceId: target.deviceId } }) }] },
+  }
+}
+
+/**
  * Render the list.
  * @param props - see {@link PasskeyDevicesProps}.
  * @returns the cards.
  */
-export function PasskeyDevices({ t, api, browser, kind, atComputer, fallback, hasPasskey, onAdd, onFallback, hashOf }: PasskeyDevicesProps): ReactNode {
+export function PasskeyDevices({ t, api, browser, kind, atComputer, secret, hasPasskey, onAdd, onAskComputer }: PasskeyDevicesProps): ReactNode {
   const [devices, setDevices] = useState<readonly PasskeyDevice[] | undefined>(undefined)
+  const [all, setAll] = useState(atComputer)
   const [failed, setFailed] = useState(false)
-  const [pending, setPending] = useState<Pending | undefined>(undefined)
-  const reload = useCallback(async (): Promise<void> => {
+  const [asked, setAsked] = useState<Asked | undefined>(undefined)
+  const load = useCallback(async (grantId?: string): Promise<void> => {
     try {
-      setDevices(await api.list())
+      if (atComputer || grantId !== undefined) setDevices(await api.devices({ grantId }))
+      else {
+        const own = await api.state()
+        setDevices([{ deviceId: 'this', label: t('devices.thisDevice'), thisDevice: true, passkeys: own.passkeys }])
+      }
       setFailed(false)
     } catch {
       setFailed(true)
     }
-  }, [api])
-  useEffect(() => { void reload() }, [reload])
-  const remove = useCallback(async (target: Pending, grantId?: string): Promise<void> => {
+  }, [api, atComputer, t])
+  useEffect(() => { void load() }, [load])
+  const run = useCallback(async (target: Target, grantId?: string): Promise<void> => {
     try {
-      if (target.kind === 'passkey') await api.removePasskey({ passkeyId: target.id, grantId })
-      else await api.removeDevice({ deviceId: target.id, grantId })
+      if (target.kind === 'list') {
+        await load(grantId)
+        setAll(true)
+        return
+      }
+      if (target.kind === 'passkey') await api.removePasskey({ credentialId: target.credentialId, deviceId: target.deviceId, grantId })
+      else await api.removeDevice({ deviceId: target.deviceId, grantId })
     } catch {
       setFailed(true)
       return
     }
-    setPending(undefined)
-    await reload()
-  }, [api, reload])
-  // A phone confirms with Face ID first; the computer removes at once.
-  const ask = (target: Pending): void => {
-    if (atComputer) void remove(target)
-    else setPending(target)
+    await load(all ? grantId : undefined)
+  }, [api, load, all])
+  const ask = async (target: Target): Promise<void> => {
+    if (atComputer) { await run(target); return }
+    setAsked({ target, action: await actionOf(t, target), pin: false })
   }
-  const action: FaceIdAction | undefined = pending === undefined ? undefined : {
-    name: pending.kind === 'passkey' ? 'passkey.remove' : 'device.remove',
-    title: t(pending.kind === 'passkey' ? 'remove.passkeyTitle' : 'remove.deviceTitle', { name: pending.label }),
-    body: t(pending.kind === 'passkey' ? 'remove.passkeyBody' : 'remove.deviceBody'),
-    bodyHash: hashOf({ kind: pending.kind, id: pending.id }),
+  const done = (grantId: string): void => {
+    const target = asked?.target
+    setAsked(undefined)
+    if (target !== undefined) void run(target, grantId)
   }
+  const fallbackToPin = secret !== undefined
   return <div data-face-id-devices>
     {failed ? <p className={css.failed} role="alert">{t('devices.failed')}</p> : null}
     {devices === undefined ? null : <div className={css.devices}>
-      {devices.map(device => <DeviceCard key={device.id} t={t} device={device} onAdd={onAdd} onRemove={ask} />)}
+      {devices.map(device => <DeviceCard key={device.deviceId} t={t} kind={kind} device={device} canRemoveDevice={all && !device.thisDevice}
+        onAdd={onAdd} onRemove={(target) => { void ask(target) }} />)}
     </div>}
-    {pending === undefined || action === undefined ? null
-      : <FaceIdSheet t={t} action={action} kind={kind} api={api} browser={browser} hasPasskey={hasPasskey} fallback={fallback}
-        onGranted={(grantId) => { void remove(pending, grantId) }} onCancel={() => { setPending(undefined) }} onFallback={onFallback} />}
+    {all ? null : <Button variant="outline" type="button" className={css.action} onClick={() => { void ask({ kind: 'list' }) }}>{t('devices.showAll')}</Button>}
+    {asked === undefined ? null : asked.pin && secret !== undefined
+      ? <FaceIdPin t={t} action={asked.action} api={api} secret={secret} onGranted={done} onBack={() => { setAsked({ ...asked, pin: false }) }} />
+      : <FaceIdSheet t={t} action={asked.action} kind={kind} api={api} browser={browser} hasPasskey={hasPasskey} fallback={fallbackToPin ? 'pin' : 'computer'}
+        onGranted={done} onCancel={() => { setAsked(undefined) }}
+        onFallback={() => { if (fallbackToPin) setAsked({ ...asked, pin: true }); else onAskComputer() }} />}
   </div>
 }
 
 /** One device's card. */
-function DeviceCard({ t, device, onAdd, onRemove }: {
-  readonly t: Translate; readonly device: PasskeyDevice
-  readonly onAdd: () => void; readonly onRemove: (target: Pending) => void
+function DeviceCard({ t, kind, device, canRemoveDevice, onAdd, onRemove }: {
+  readonly t: Translate; readonly kind: FaceIdKind; readonly device: PasskeyDevice; readonly canRemoveDevice: boolean
+  readonly onAdd: () => void; readonly onRemove: (target: Target) => void
 }): ReactNode {
-  return <section className={css.card} data-face-id-device={device.id}>
+  return <section className={css.card} data-face-id-device={device.deviceId}>
     <h3 className={css.cardTitle}>
       <span>{device.label}</span>
       {device.thisDevice ? <span className={css.tag}>{t('devices.thisDevice')}</span> : null}
     </h3>
-    {device.lastSeenAt === undefined ? null : <p className={css.meta}>{t('devices.lastSeen', { time: day(t, device.lastSeenAt) })}</p>}
-    {device.passkeys.map(passkey => <PasskeyRow key={passkey.id} t={t} passkey={passkey} device={device} onRemove={onRemove} />)}
+    {device.passkeys.map(passkey => <PasskeyRow key={passkey.credentialId} t={t} passkey={passkey} kind={kind}
+      onRemove={() => { onRemove({ kind: 'passkey', credentialId: passkey.credentialId, deviceId: device.deviceId, label: device.label }) }} />)}
     {device.passkeys.length === 0 && device.thisDevice
       ? <Button variant="primary" type="button" className={css.action} onClick={onAdd}>{t('devices.add')}</Button> : null}
-    <Button variant="outline" type="button" className={css.action} onClick={() => { onRemove({ kind: 'device', id: device.id, label: device.label }) }}>
-      {t(device.thisDevice ? 'devices.removeDevice' : 'devices.removeOther')}
-    </Button>
+    {canRemoveDevice
+      ? <Button variant="outline" type="button" className={css.action} onClick={() => { onRemove({ kind: 'device', deviceId: device.deviceId, label: device.label }) }}>
+        {t('devices.removeOther')}
+      </Button> : null}
   </section>
 }
 
 /** One passkey inside a device's card. */
-function PasskeyRow({ t, passkey, device, onRemove }: {
-  readonly t: Translate; readonly passkey: PasskeyEntry; readonly device: PasskeyDevice; readonly onRemove: (target: Pending) => void
+function PasskeyRow({ t, passkey, kind, onRemove }: {
+  readonly t: Translate; readonly passkey: PasskeyEntry; readonly kind: FaceIdKind; readonly onRemove: () => void
 }): ReactNode {
-  const method = t(`kind.${passkey.kind}`)
-  return <div className={css.passkey} data-face-id-passkey={passkey.id}>
-    <p className={css.meta}>{method}</p>
-    <p className={css.meta}>{t('devices.added', { date: day(t, passkey.addedAt) })} · {t(passkey.synced ? 'devices.synced' : 'devices.deviceOnly')}</p>
-    {passkey.usesToday > 0 ? <p className={css.meta}>{t('devices.usedToday', { count: String(passkey.usesToday) })}</p> : null}
-    <Button variant="outline" type="button" className={css.action} onClick={() => { onRemove({ kind: 'passkey', id: passkey.id, label: device.label }) }}>
-      {t('devices.removePasskey', { method })}
-    </Button>
+  const method = t(`kind.${kind}`)
+  return <div className={css.passkey} data-face-id-passkey={passkey.credentialId}>
+    <p className={css.meta}>{t('devices.added', { date: day(t, passkey.createdAt) })} · {t(passkey.synced ? 'devices.synced' : 'devices.deviceOnly')}</p>
+    <p className={css.meta}>{passkey.lastUsedAt === null ? t('devices.neverUsed') : t('devices.lastUsed', { date: day(t, passkey.lastUsedAt) })}</p>
+    <Button variant="outline" type="button" className={css.action} onClick={onRemove}>{t('devices.removePasskey', { method })}</Button>
   </div>
 }

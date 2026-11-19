@@ -68,18 +68,18 @@ export function FaceIdSheet({ t, action, kind, api, browser, hasPasskey, fallbac
   }, [onCancel])
   const confirm = useCallback(async (): Promise<void> => {
     setPhase('waiting')
-    let challenge: Awaited<ReturnType<PasskeyApi['assertionOptions']>>
+    let options: Awaited<ReturnType<PasskeyApi['options']>>
     try {
-      challenge = await api.assertionOptions({ action: action.name, bodyHash: action.bodyHash })
+      options = await api.options(action.grant)
     } catch {
       if (alive.current) setPhase('failed')
       return
     }
-    const result = await browser.get(challenge.options)
+    const result = await browser.get(options)
     if (!alive.current) return
     if (result.kind !== 'ok') { setPhase(result.kind); return }
     try {
-      const { grantId } = await api.verifyAssertion({ challengeId: challenge.challengeId, response: result.value })
+      const { grantId } = await api.verify(result.value)
       if (alive.current) onGranted(grantId)
     } catch {
       if (alive.current) setPhase('failed')
