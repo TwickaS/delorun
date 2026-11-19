@@ -2969,8 +2969,8 @@
     {
       "path": "packages/sandbox/sandbox/src/locales.ts",
       "class": "delorun-feature",
-      "feature": "TODO",
-      "reason": "TODO"
+      "feature": "sandbox-fault",
+      "reason": "Localized notice that an approval after a temporary sandbox fault asks to run without the sandbox."
     }
   ],
   "retired": []
