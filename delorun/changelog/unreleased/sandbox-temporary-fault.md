@@ -7,3 +7,4 @@ section: Fixed
 - If the agent then asks to run without the sandbox, the approval card shows "Delorun's sandbox had a problem; this asks to run without it" as its own line, offers no "allow for this chat" choice, and declining tells the agent to retry inside the sandbox. The note clears after the next sandboxed command runs. A command is still never run unconfined because of a failed check.
 - Commands run inside a chat's sandbox no longer refuse Delorun's home as "mode 0755" when the real folder is private. Only Delorun's own sandbox launcher marks that view as untrustworthy; anywhere else a 0755 home is still refused.
 - Delorun's own start, setup and update commands always check that its home is private, even from inside a chat's sandbox.
+- When no sandbox can start on a computer at all, the message now speaks to the person who runs Delorun and tells the agent not to ask for full access because of it; it only reports that the sandbox is unavailable.
