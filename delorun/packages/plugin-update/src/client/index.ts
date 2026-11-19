@@ -88,6 +88,7 @@ export function apply(ctx: Context): void {
       ctx.emit('remote/call-denied', { endpoint, reason: `elevation-required: ${endpoint}` })
     },
     reload: () => { location.reload() },
+    faceGrant: () => ctx.get('delorunFaceGrant')?.grant,
   })
   ctx.effect(() => controller.poll(), 'delorun-update: the update state the screens show')
   const mayBegin = (): boolean => {

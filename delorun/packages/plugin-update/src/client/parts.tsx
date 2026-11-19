@@ -49,11 +49,11 @@ export function controlUse(state: UpdateStateView, control: UpdateControl, t: T)
   const may = state.access.may[control]
   if (may.ok) return { disabled: false, title: undefined }
   if (may.needs === 'computer') return { disabled: true, title: t('needs.computer.title') }
-  return { disabled: false, title: t('needs.unlock') }
+  return { disabled: false, title: t(may.needs === 'face' ? 'needs.face' : 'needs.unlock') }
 }
 
 /** The refusal codes the dictionary words, as `refusal.<code>` keys. */
-const WORDED = new Set<string>(['CROSS_SITE', 'LOOPBACK_REQUIRED', 'ELEVATION_REQUIRED', 'UPDATE_UNAVAILABLE', 'REPORT_EXPIRED', 'UPDATE_IN_PROGRESS', 'RESTART_IN_PROGRESS', 'ACKNOWLEDGEMENT_MISSING', 'REPORT_BLOCKED', 'HARNESS_CHANGES_PENDING', 'HARNESS_REPORT_STALE', 'HARNESS_COPY_UNREADABLE', 'DATA_COPY_NO_SPACE', 'CHATS_RUNNING', 'NO_UPDATE_RECORD', 'ROLLBACK_NEEDS_DATA_COPY', 'ROLLBACK_TARGET_UNUSABLE', 'NO_RUNTIME_STORE', 'VERIFY_FAILED', 'CHANNEL_UNREACHABLE', 'GIT_UNAVAILABLE', 'TARGET_LOWER', 'NO_UPDATE_AVAILABLE'])
+const WORDED = new Set<string>(['CROSS_SITE', 'LOOPBACK_REQUIRED', 'ELEVATION_REQUIRED', 'FACE_CANCELLED', 'UPDATE_UNAVAILABLE', 'REPORT_EXPIRED', 'UPDATE_IN_PROGRESS', 'RESTART_IN_PROGRESS', 'ACKNOWLEDGEMENT_MISSING', 'REPORT_BLOCKED', 'HARNESS_CHANGES_PENDING', 'HARNESS_REPORT_STALE', 'HARNESS_COPY_UNREADABLE', 'DATA_COPY_NO_SPACE', 'CHATS_RUNNING', 'NO_UPDATE_RECORD', 'ROLLBACK_NEEDS_DATA_COPY', 'ROLLBACK_TARGET_UNUSABLE', 'NO_RUNTIME_STORE', 'VERIFY_FAILED', 'CHANNEL_UNREACHABLE', 'GIT_UNAVAILABLE', 'TARGET_LOWER', 'NO_UPDATE_AVAILABLE'])
 
 /**
  * The sentence for a refusal: its worded code, or the generic line with the Host's own message.

@@ -83,6 +83,9 @@ import { createPinSource, type PinSource } from './pin-lock.ts'
 import { en as pinEn, zh as pinZh, type PinLocaleKey } from './pin-locales.ts'
 import { en as faceIdEn, zh as faceIdZh, type FaceIdLocaleKey } from './face-id-locales.ts'
 import { PinLock } from './PinLock.tsx'
+import type { FaceGrantService } from '@delorun/plugin-changes/face-grant'
+import { createFaceGrantSource } from './face-grant.ts'
+import { FaceIdGrantOverlay } from './FaceIdGrantOverlay.tsx'
 import { FaceIdAnswerAction, type FaceIdAnswerInjected } from './FaceIdAnswerAction.tsx'
 import { FaceIdSection, type FaceIdSectionInjected } from './FaceIdSection.tsx'
 import { FaceIdPairingOverlay } from './FaceIdPairingOverlay.tsx'
@@ -236,6 +239,9 @@ export const FACE_ID_SECTION_ID = 'delorun-face-id'
 
 /** The `conversation.approval.action` id of the Face ID step on a granting approval card. */
 export const FACE_ID_ANSWER_ID = 'delorun-face-id-answer'
+
+/** The `shell.overlay` id of the confirmation another plugin's call asks for through `ctx.delorunFaceGrant`. */
+export const FACE_ID_GRANT_ID = 'delorun-face-id-grant'
 
 /** The `shell.overlay` id of the pairing step. */
 export const FACE_ID_OVERLAY_ID = 'delorun-face-id-pairing'
@@ -574,6 +580,14 @@ export function apply(ctx: Context): void {
     locale: FACE_ID_NS,
     inject: faceIdFace,
   }, FaceIdSection))
+  const faceGrant = createFaceGrantSource()
+  ctx.provide('delorunFaceGrant', { grant: faceGrant.grant } satisfies FaceGrantService)
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+    name: 'shell.overlay',
+    id: FACE_ID_GRANT_ID,
+    locale: FACE_ID_NS,
+    inject: () => ({ fetch: browserFetch, hooks: { ...pin.hooks, ...faceGrant.hooks }, settle: faceGrant.settle }),
+  }, FaceIdGrantOverlay))
   ctx.slots.inject('conversation.approval.action', () => ctx.slots.register({
     name: 'conversation.approval.action',
     id: FACE_ID_ANSWER_ID,

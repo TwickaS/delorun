@@ -13,9 +13,8 @@ import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { httpPasskeyApi } from './face-id-api.ts'
 import { browserPasskeys, faceIdKindOf, type PasskeyBrowser } from './face-id-browser.ts'
 import type { FaceIdAction, PasskeyApi } from './face-id-types.ts'
-import { FaceIdPin } from './FaceIdPin.tsx'
+import { FaceIdGrantFlow } from './FaceIdGrantFlow.tsx'
 import { flagIsOn } from './FaceIdSection.tsx'
-import { FaceIdSheet } from './FaceIdSheet.tsx'
 import type { HostFetch } from './host-api.ts'
 import type { PinSource } from './pin-lock.ts'
 
@@ -41,8 +40,6 @@ export type FaceIdAnswerProps = ApprovalActionOwnerProps & PropsLocale<'delorunF
 /** The value the card's allow answers send. */
 const ANSWER_VALUE = 'allowed-once'
 
-type Step = 'sheet' | 'pin'
-
 /**
  * The sheet's words and the grant request for one approval request.
  * @param t - the copy.
@@ -65,7 +62,7 @@ export function answerActionOf(t: PropsLocale<'delorunFaceId'>['t'], request: { 
 export function FaceIdAnswerAction({ t, grants, callId, toolName, gateAllow, sessionId, fetch, atComputer, usePin, browser, api: injectedApi }: FaceIdAnswerProps): ReactNode {
   const [on, setOn] = useState(false)
   const [hasPasskey, setHasPasskey] = useState(false)
-  const [step, setStep] = useState<Step | undefined>(undefined)
+  const [open, setOpen] = useState(false)
   const settle = useRef<((sent: boolean) => void) | null>(null)
   const api = useMemo(() => injectedApi ?? httpPasskeyApi(fetch), [injectedApi, fetch])
   const passkeys = useMemo(() => browser ?? browserPasskeys(), [browser])
@@ -88,7 +85,7 @@ export function FaceIdAnswerAction({ t, grants, callId, toolName, gateAllow, ses
     return () => { current = false }
   }, [asks, fetch, api])
   const close = useCallback((sent: boolean): void => {
-    setStep(undefined)
+    setOpen(false)
     const done = settle.current
     settle.current = null
     done?.(sent)
@@ -97,7 +94,7 @@ export function FaceIdAnswerAction({ t, grants, callId, toolName, gateAllow, ses
     if (!on) return
     gateAllow(() => new Promise<boolean>((resolve) => {
       settle.current = resolve
-      setStep('sheet')
+      setOpen(true)
     }))
     return () => {
       gateAllow(null)
@@ -106,13 +103,8 @@ export function FaceIdAnswerAction({ t, grants, callId, toolName, gateAllow, ses
       done?.(false)
     }
   }, [on, gateAllow])
-  if (!on || step === undefined || grants === undefined || callId === undefined) return null
+  if (!on || !open || grants === undefined || callId === undefined) return null
   const action = answerActionOf(t, { sessionId, callId, grants, toolName })
-  const fallbackToPin = secret !== undefined
-  if (step === 'pin' && secret !== undefined) {
-    return <FaceIdPin t={t} action={action} api={api} secret={secret} onGranted={() => { close(true) }} onBack={() => { setStep('sheet') }} />
-  }
-  return <FaceIdSheet t={t} action={action} kind={kind} api={api} browser={passkeys} hasPasskey={hasPasskey} fallback={fallbackToPin ? 'pin' : 'computer'}
-    onGranted={() => { close(true) }} onCancel={() => { close(false) }}
-    onFallback={() => { if (fallbackToPin) setStep('pin'); else close(false) }} />
+  return <FaceIdGrantFlow t={t} action={action} kind={kind} api={api} browser={passkeys} hasPasskey={hasPasskey} secret={secret}
+    onGranted={() => { close(true) }} onCancel={() => { close(false) }} />
 }

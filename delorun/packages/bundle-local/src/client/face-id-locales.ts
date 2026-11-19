@@ -73,6 +73,34 @@ export const en = {
   'answer.external-agent.body': 'This once, {agent} runs outside the sandbox with your own account.',
   'answer.real-browser.title': 'Use your real browser?',
   'answer.real-browser.body': 'This once, the agent can act in your own browser, signed in as you.',
+  'change.plugin-undo.title': 'Undo this plugin change?',
+  'change.plugin-undo.body': 'The plugin goes back to how it was before the change.',
+  'change.plugin-discard.title': 'Discard this plugin change?',
+  'change.plugin-discard.body': 'The change is thrown away and the plugin stays as it is now.',
+  'change.harness-discard.title': 'Discard this change to Delorun?',
+  'change.harness-discard.body': 'The change is thrown away and Delorun stays as it is now.',
+  'change.plugin-apply.title': 'Apply this plugin change?',
+  'change.plugin-apply.body': 'The plugin starts running with the change, with the access it was reviewed for.',
+  'change.plugin-other.title': 'Change your plugins?',
+  'change.plugin-other.body': 'This starts, ends or changes plugin work on this computer.',
+  'change.harness-apply.title': 'Apply this change to Delorun?',
+  'change.harness-apply.body': 'Delorun itself changes, and it may restart to run the change.',
+  'change.harness-undo.title': 'Undo this change to Delorun?',
+  'change.harness-undo.body': 'Delorun goes back to how it was before the change.',
+  'change.protection-off.title': 'Turn protection off?',
+  'change.protection-off.body': 'Changes to plugins and to Delorun then take effect without a review.',
+  'change.make-copy.title': 'Make your own copy of Delorun?',
+  'change.make-copy.body': 'A copy of Delorun’s files is made so changes can be tried safely.',
+  'change.restart.title': 'Restart Delorun?',
+  'change.restart.body': 'Delorun restarts on this computer. Chats that are running may stop.',
+  'change.update-begin.title': 'Update Delorun?',
+  'change.update-begin.body': 'Delorun installs the newest release and then restarts.',
+  'change.update-rollback.title': 'Go back to the previous Delorun?',
+  'change.update-rollback.body': 'Delorun returns to the release it ran before the last update, and then restarts.',
+  'change.stop.title': 'End the work session?',
+  'change.stop.body': 'Your plugin work session ends and its changes wait for review.',
+  'change.generic.title': 'Confirm this change?',
+  'change.generic.body': 'Delorun asks you to confirm this on this device.',
   'devices.failed': 'The device list could not be read or changed. Try again.',
   'devices.thisDevice': 'This device',
   'devices.added': 'Added {date}',
@@ -85,6 +113,9 @@ export const en = {
   'devices.removePasskey': 'Remove {method}',
   'devices.removeOther': 'Remove device',
 }
+
+/** The Changes and update controls whose confirmation has its own words; any other control uses the generic ones. */
+export const CHANGE_CONTROLS = ['plugin-undo', 'plugin-discard', 'harness-discard', 'plugin-apply', 'plugin-other', 'harness-apply', 'harness-undo', 'protection-off', 'make-copy', 'restart', 'update-begin', 'update-rollback', 'stop'] as const
 
 /** A key of the dictionary. */
 export type FaceIdLocaleKey = keyof typeof en
