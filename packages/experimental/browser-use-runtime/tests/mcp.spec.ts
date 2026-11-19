@@ -610,26 +610,47 @@ describe('Session MCP Loader composition', () => {
     expect(await readdir(second)).toEqual([])
   })
 
-  it('does not start the server when the output folder overlaps a folder the chat can write: its working directory, or a root of its sandbox policy', async () => {
+  it('leaves Browser off in a chat whose output folder overlaps a folder the chat can write: its working directory, or a root of its sandbox policy', async () => {
     const outputRoot = join(tmpdir(), `dsh-overlap-root-${process.pid}`)
     roots.push(outputRoot)
-    const { ctx, root } = await load({ outputRoot })
+    const { ctx, root, warnings } = await load({ outputRoot })
     const start = async (id: string, cwd: string): Promise<void> => {
       const { agent } = await ctx.agents.create({ sessionId: SessionId(id), meta: { cwd } })
-      await warm(ctx, agent)
+      expect(ctx.agents.get(agent.id)).toBe(agent)
+      const assembled = await warm(ctx, agent)
+      expect(assembled.tools.some(tool => tool.name === TOOL)).toBe(false)
+      expect(assembled.sections.some(section => section.name === 'mcp:browser-fixture')).toBe(false)
+      expect(await execute(ctx, agent, TOOL).then(result => result.isError, () => true)).toBe(true)
     }
     // XDG_CACHE_HOME pointing into the workspace: the output folder lies inside the working directory.
-    await expect(start('overlap-inside', tmpdir())).rejects.toThrow('overlaps')
+    await start('overlap-inside', tmpdir())
+    expect(warnings.at(-1)).toContain('Browser is off in this chat: its output folder would sit inside a folder this chat can write')
+    expect(warnings.at(-1)).toContain("Use a workspace that isn't your home folder.")
     const quiet = join(root, 'quiet')
     await mkdir(quiet)
     ctx.provide('sandboxPolicy')
     ctx.set('sandboxPolicy', { resolve: () => ({ mode: 'workspace-write', workspaceRoot: quiet, additionalWritableRoots: [tmpdir()] }) } as never)
-    await expect(start('overlap-extra-root', quiet)).rejects.toThrow('overlaps')
+    await start('overlap-extra-root', quiet)
     // A chat in a subfolder, with the output folder elsewhere in the sandbox's workspace root.
     const sub = join(root, 'workspace-sub')
     await mkdir(sub)
     ctx.set('sandboxPolicy', { resolve: () => ({ mode: 'workspace-write', workspaceRoot: tmpdir() }) } as never)
-    await expect(start('overlap-workspace-root', sub)).rejects.toThrow('overlaps')
+    await start('overlap-workspace-root', sub)
+    expect(warnings).toHaveLength(3)
+    expect(existsSync(join(root, 'events.ndjson'))).toBe(false)
+  })
+
+  it('leaves Browser off, and starts no server, when the check of the output folder cannot decide', async () => {
+    const outputRoot = join(tmpdir(), `dsh-check-root-${process.pid}`)
+    roots.push(outputRoot)
+    const { ctx, root, warnings } = await load({ outputRoot })
+    ctx.provide('sandboxPolicy')
+    ctx.set('sandboxPolicy', { resolve: () => { throw new Error('policy unreadable') } } as never)
+    const { agent } = await ctx.agents.create({ sessionId: SessionId('check-fails') })
+    const assembled = await warm(ctx, agent)
+    expect(assembled.tools.some(tool => tool.name === TOOL)).toBe(false)
+    expect(warnings).toEqual([expect.stringContaining('its output folder could not be checked')])
+    expect(warnings[0]).toContain('policy unreadable')
     expect(existsSync(join(root, 'events.ndjson'))).toBe(false)
   })
 
