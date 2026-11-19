@@ -1,7 +1,7 @@
 /**
  * The studio's Restart routes: Apply's fence and level decide before the body is read and before the home process's
  * restart is asked, by every request a remote, locked or cross-site caller can make; a phone restarts only with a grant
- * for the call (a PIN grant where it holds no passkey), and never with the Face ID flag off; the home process's refusals keep their codes; and `state` names a restart as
+ * for the call (a PIN grant where it holds no passkey), and never with no grant store; the home process's refusals keep their codes; and `state` names a restart as
  * needed only for a decided change the running Host does not run in a file that is not live.
  */
 import { writeFileSync } from 'node:fs'
@@ -80,8 +80,8 @@ describe('the studio\'s Restart', () => {
     for (const flag of ['off', 'on'] as const) {
       const { server, restart } = await restartServer(grantWorld({ enabled: flag === 'on', hasPasskey: false }).face)
       for (const path of Object.values(RESTART_PATHS)) {
-        // No paired device's session, a locked phone and a phone in its approval grace, with the Face ID flag off and on: with
-        // the flag off a phone is sent to the computer whatever its unlock; with it on a phone needs a grant, which no unlock replaces.
+        // No paired device's session, a locked phone and a phone in its approval grace, with and without a grant store: with
+        // no grant store a phone is sent to the computer whatever its unlock; with one a phone needs a grant, which no unlock replaces.
         const noDevice = await send(server.port, path, { method: 'POST', headers: [CREDENTIAL, 'x-test-remote: 1'], body: {}, withholdBody: true })
         expect(noDevice.status, `${flag} ${path}`).toBe(403)
         expect(json(noDevice), `${flag} ${path}`).toMatchObject({ code: 'LOOPBACK_REQUIRED' })
@@ -99,7 +99,7 @@ describe('the studio\'s Restart', () => {
   })
 
   // Removing the `grant` row of `restart` in LEGACY_LEVELS lets a running unlock restart Delorun from a phone with no passkey.
-  it('an unlocked phone cannot restart, whatever the Face ID flag; a PIN grant for the call restarts, once', async () => {
+  it('an unlocked phone cannot restart, whatever the grant store; a PIN grant for the call restarts, once', async () => {
     const off = await restartServer(grantWorld({ enabled: false }).face)
     for (const path of Object.values(RESTART_PATHS)) {
       expect(json(await send(off.server.port, path, fromDevice('fresh', {}, true))), path).toMatchObject({ code: 'LOOPBACK_REQUIRED' })

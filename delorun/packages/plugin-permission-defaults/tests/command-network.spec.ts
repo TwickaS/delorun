@@ -260,7 +260,7 @@ describe('the routes', () => {
 describe('under Face ID', () => {
   const device = (extra: object = {}) => ({ principal: { kind: REACH_DEVICE, deviceId: 'd1', listener: 'reach', ...extra } })
 
-  /** The service with a `homeAuth` whose Face ID flag is on for device `d1`, which holds a passkey and whatever unlock the options give. */
+  /** The service with a `homeAuth` whose grant store exists for device `d1`, which holds a passkey and whatever unlock the options give. */
   async function underFace(home: { elevation?: { id: string, grace?: true }, page?: boolean } = {}) {
     const result = await mounted()
     const world = faceWorld('d1', 'reach')

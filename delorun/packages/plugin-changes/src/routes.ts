@@ -492,7 +492,7 @@ async function gate(request: IncomingMessage, admission: { readonly arrival: Stu
   const may = mayUse(actorOf(requester), control, faceStateOf(requester))
   // A control that stays at the computer (the home keeps no grant store) is refused before any grant is looked up.
   if (!may.ok && may.needs === 'computer') throw new RouteRefusal(403, LOOPBACK_REQUIRED, LOOPBACK_REQUIRED_SENTENCE)
-  // With the flag on, a grant for exactly this call admits any device; one for another body, path or control does not.
+  // With a grant store, a grant for exactly this call admits any device; one for another body, path or control does not.
   if (CONTROL_LEVELS[control] === 'face' && face?.enabled === true) {
     const header = request.headers['delorun-grant']
     // A body over the grant cap cannot be hashed, so no grant covers it; its stream is left unread for the route's own limit.

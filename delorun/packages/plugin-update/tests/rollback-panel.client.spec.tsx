@@ -58,7 +58,7 @@ describe('the Go back panel', () => {
     await waitFor(() => { expect(rollback).toHaveBeenCalledWith({ chats: 'wait', profileOnly: true }) })
   })
 
-  it('update-rollback-refused-flag-off-phone: a phone that needs the computer gets the sentence and no button', () => {
+  it('update-rollback-refused-no-grant-store-phone: a phone that needs the computer gets the sentence and no button', () => {
     const rollback = granted()
     render(<RollbackPanel state={stateOf({}, { 'update-rollback': { ok: false, needs: 'computer' } })} t={t} rollback={rollback} />)
     expect(screen.getByText(en['needs.computer'])).toBeTruthy()

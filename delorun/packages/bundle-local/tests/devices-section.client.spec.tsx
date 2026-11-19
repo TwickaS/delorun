@@ -17,7 +17,7 @@ import {
   ABOUT_SECTION_ID, ABOUT_SECTION_ORDER, apply, CONSENT_TOAST_ID, DEVICES_SECTION_ID, DEVICES_SECTION_ORDER, EXTERNAL_AGENT_ACTION_ID,
   EXTERNAL_AGENTS_SECTION_ID, EXTERNAL_AGENTS_SECTION_ORDER, FULL_ACCESS_ACTION_ID, FULL_ACCESS_CONSENT_ID, inject, MCP_REVIEW_ID,
   MCP_WAITING_NOTICE_ID, NETWORK_SECTION_ID, PAIRING_NOTICE_ID, NETWORK_SECTION_ORDER, SETUP_VERSIONS_SECTION_ID, SETUP_VERSIONS_SECTION_ORDER, PERMISSIONS_SECTION_ID, PERMISSIONS_SECTION_ORDER, PRIVACY_SECTION_ID,
-  PLUGIN_INSTALLS_SECTION_ID, PLUGIN_INSTALLS_SECTION_ORDER, PRIVACY_SECTION_ORDER, readReachStatus, PIN_LOCK_OVERLAY_ID, PIN_MODE_SECTION_ID, PIN_MODE_SECTION_ORDER, REMOTE_NOTICE_ID, UNLOCK_OVERLAY_ID,
+  PLUGIN_INSTALLS_SECTION_ID, PLUGIN_INSTALLS_SECTION_ORDER, PRIVACY_SECTION_ORDER, readReachStatus, PIN_LOCK_OVERLAY_ID, PIN_MODE_SECTION_ID, PIN_MODE_SECTION_ORDER, FACE_ID_SECTION_ID, FACE_ID_GRANT_ID, FACE_ID_OVERLAY_ID, FACE_ID_ANSWER_ID, FACE_ID_SECTION_ORDER, REMOTE_NOTICE_ID, UNLOCK_OVERLAY_ID,
 } from '../src/client/index.ts'
 import {
   approveDevice, DEVICE_ROUTES, HostRequestError, hostFailureOf, isRefused, openApprovalWindow, PENDING_POLL_MS,
@@ -521,22 +521,23 @@ describe('the plugin', () => {
         { id: PLUGIN_INSTALLS_SECTION_ID, order: PLUGIN_INSTALLS_SECTION_ORDER },
         { id: PRIVACY_SECTION_ID, order: PRIVACY_SECTION_ORDER }, { id: DEVICES_SECTION_ID, order: DEVICES_SECTION_ORDER },
         { id: PIN_MODE_SECTION_ID, order: PIN_MODE_SECTION_ORDER },
+        { id: FACE_ID_SECTION_ID, order: FACE_ID_SECTION_ORDER },
         { id: PERMISSIONS_SECTION_ID, order: PERMISSIONS_SECTION_ORDER },
         { id: EXTERNAL_AGENTS_SECTION_ID, order: EXTERNAL_AGENTS_SECTION_ORDER },
         { id: NETWORK_SECTION_ID, order: NETWORK_SECTION_ORDER }, { id: SETUP_VERSIONS_SECTION_ID, order: SETUP_VERSIONS_SECTION_ORDER }, { id: ABOUT_SECTION_ID, order: ABOUT_SECTION_ORDER },
       ])
       expect(DEVICES_SECTION_ORDER).toBe(PRIVACY_SECTION_ORDER + 1)
       expect(sections.map(section => typeof section.label === 'function' ? section.label() : section.label))
-        .toEqual(['Plugin downloads', 'Privacy', en.nav, 'PIN mode', 'Permissions', 'External agents', 'Network', 'Setup versions', 'About'])
+        .toEqual(['Plugin downloads', 'Privacy', en.nav, 'PIN mode', 'Face ID', 'Permissions', 'External agents', 'Network', 'Setup versions', 'About'])
       // The preview notice's copy lookup reads the Privacy dictionary.
       const notice = slots.entries('settings.onboarding')[0]?.inject?.() as { t: (key: string) => string }
       expect(notice.t('notice.continue')).toBe('Continue')
-      expect(slots.entries('shell.overlay').map(entry => entry.options.id)).toEqual([PIN_LOCK_OVERLAY_ID, UNLOCK_OVERLAY_ID, PAIRING_NOTICE_ID, REMOTE_NOTICE_ID, FULL_ACCESS_CONSENT_ID, MCP_REVIEW_ID, MCP_WAITING_NOTICE_ID, CONSENT_TOAST_ID])
+      expect(slots.entries('shell.overlay').map(entry => entry.options.id)).toEqual([PIN_LOCK_OVERLAY_ID, UNLOCK_OVERLAY_ID, PAIRING_NOTICE_ID, FACE_ID_GRANT_ID, FACE_ID_OVERLAY_ID, REMOTE_NOTICE_ID, FULL_ACCESS_CONSENT_ID, MCP_REVIEW_ID, MCP_WAITING_NOTICE_ID, CONSENT_TOAST_ID])
       // Each overlay and each section with a store (the About section has none) read their store's view and actions.
       for (const entry of [...slots.entries('shell.overlay'), ...slots.entries('settings.section').filter(section => section.options.id !== ABOUT_SECTION_ID)]) expect(entry.inject?.()).toBeTypeOf('object')
       // Each approval card action is bound to the card's chat.
       const actions = slots.entries('conversation.approval.action')
-      expect(actions.map(entry => entry.options.id)).toEqual([FULL_ACCESS_ACTION_ID, EXTERNAL_AGENT_ACTION_ID])
+      expect(actions.map(entry => entry.options.id)).toEqual([FACE_ID_ANSWER_ID, FULL_ACCESS_ACTION_ID, EXTERNAL_AGENT_ACTION_ID])
       for (const action of actions) expect((action.inject as ((sessionId: typeof SESSION) => object) | undefined)?.(SESSION)).toMatchObject({ sessionId: SESSION })
       await expect(ctx.get('permissionSwitchConsent')?.confirm(SESSION, 'ask')).resolves.toBe(true)
       expect(slots.entries('settings.section.icon').filter(entry => entry.options.id === DEVICES_SECTION_ID).map(entry => [entry.options.id, entry.component])).toEqual([[DEVICES_SECTION_ID, IconLinkOutlineMedium]])

@@ -174,6 +174,7 @@ describe('a Delorun CLI profile', () => {
       '@delorun/skill-report-problem',
       '@delorun/plugin-delegation-consent',
       '@delorun/plugin-changes',
+      '@delorun/plugin-update',
       '@delorun/plugin-packs',
       '@delorun/bundle-local/workspace-rename',
       `${LOCAL_BUNDLE}/update-gate`,

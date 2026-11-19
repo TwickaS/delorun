@@ -442,7 +442,7 @@ describe('the routes under Face ID', () => {
   const FACE_PATHS = [TRASH_PATHS.purge, TRASH_PATHS.empty, TRASH_PATHS.removeSetAside]
   const request = (path: string, text: string, grant?: string): Request => new Request(`http://localhost${path}`, { method: 'POST', headers: grant === undefined ? {} : { 'delorun-grant': grant }, body: text })
 
-  /** Provide a `homeAuth` whose Face ID flag is on for device `d1`, which holds a passkey and whatever unlock `home` holds when asked. */
+  /** Provide a `homeAuth` whose grant store exists for device `d1`, which holds a passkey and whatever unlock `home` holds when asked. */
   function underFace(home: { elevation?: { id: string, grace?: true }, page?: boolean } = {}) {
     const world = faceWorld('d1', 'reach')
     harness.ctx.provide('homeAuth', {

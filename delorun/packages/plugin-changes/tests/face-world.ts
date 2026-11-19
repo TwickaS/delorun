@@ -6,7 +6,7 @@
  */
 import { GrantStore, hashRequest } from '@delorun/home-auth'
 
-/** The fields a `homeAuth` stand-in spreads in to turn the Face ID flag on for one device. */
+/** The fields a `homeAuth` stand-in spreads in to give a device a grant store for one device. */
 export interface FaceWorld {
   readonly fields: { readonly faceGrants: () => GrantStore, readonly deviceHasPasskey: (deviceId: string) => boolean }
   /**

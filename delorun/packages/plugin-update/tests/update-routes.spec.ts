@@ -38,7 +38,7 @@ describe('the update routes\' fence and levels', () => {
     expect(update.channel.requests).toEqual([])
   })
 
-  it('update-begin-refused-flag-off-phone and update-rollback-refused-flag-off-phone: with Face ID off even an unlocked phone updates and goes back at the computer', async () => {
+  it('update-begin-refused-no-grant-store-phone and update-rollback-refused-no-grant-store-phone: with no grant store even an unlocked phone updates and goes back at the computer', async () => {
     const update = await serveUpdate()
     for (const path of [UPDATE_PATHS.prepare, UPDATE_PATHS.apply, UPDATE_PATHS.rollback]) {
       const reply = await send(update.server.port, path, fromDevice('fresh', { chats: 'wait', handle: 'x', profileOnly: false }))
@@ -65,7 +65,7 @@ describe('the update routes\' fence and levels', () => {
     expect(update.channel.requests).toEqual([])
   })
 
-  it('a phone with no passkey may prepare, apply and go back with a PIN grant for each call, and stop with an unlock; with Face ID off it may only cancel, dismiss and stop', async () => {
+  it('a phone with no passkey may prepare, apply and go back with a PIN grant for each call, and stop with an unlock; with no grant store it may only cancel, dismiss and stop', async () => {
     const world = grantWorld({ hasPasskey: false })
     const full = await serveUpdate({ face: world.face })
     const withPin = (control: string, path: string, body: object) => {

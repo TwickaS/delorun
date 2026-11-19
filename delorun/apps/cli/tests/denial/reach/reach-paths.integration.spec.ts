@@ -41,7 +41,7 @@ const CHANGES = '@delorun/plugin-changes: reads for any signed-in device'
  * decides by its control's level in `access.ts` before it reads the body. Undo and Discard of a plugin's change and Discard
  * of a change to Delorun take a grant, or an unlock on a device with no passkey; turning protection on needs nothing; every
  * other action, setup included, Apply and Undo of a change to Delorun, Make my copy and turning protection off take a grant
- * from every device (a PIN grant where it holds no passkey) and stay at the computer while the Face ID flag is off;
+ * from every device (a PIN grant where it holds no passkey) and stay at the computer with no grant store;
  * dismissing the notice of a device's change is the computer's alone.
  */
 const CHANGES_CONTROLS = '@delorun/plugin-changes: a device only as the control\'s level allows, with a grant or an unlock it entered; the notice of a device\'s change only at the computer'

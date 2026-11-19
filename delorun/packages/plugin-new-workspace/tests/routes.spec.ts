@@ -213,7 +213,7 @@ describe('under Face ID', () => {
   const device = (extra: object = {}) => ({ principal: { kind: REACH_DEVICE, deviceId: 'd1', listener: 'reach', ...extra } })
   const grantCall = (path: string, text: string, grant?: string) => new Request(`http://harness.test${path}`, { method: 'POST', headers: grant === undefined ? {} : { 'delorun-grant': grant }, body: text })
 
-  /** A `homeAuth` whose Face ID flag is on, for a device with a passkey that holds whatever unlock `home` gives. */
+  /** A `homeAuth` whose grant store exists, for a device with a passkey that holds whatever unlock `home` gives. */
   function faceHome(face: FaceWorld['fields'], home: { elevation?: { id: string, grace?: true }, page?: boolean } = {}) {
     return { service: {
       arrivalOf: () => ({ listener: 'reach' }), touchUnlock: vi.fn(), ...face,

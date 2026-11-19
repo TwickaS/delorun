@@ -405,7 +405,7 @@ describe('a reach device through the Gateway', () => {
 })
 
 describe('a terminal with no grant', () => {
-  // Removing the grant-only return for a terminal in the condition lets an unlocked phone open a shell outside the sandbox; the Face ID flag is off here, so no grant exists.
+  // Removing the grant-only return for a terminal in the condition lets an unlocked phone open a shell outside the sandbox; with no grant store, so no grant exists.
   it('is refused to an unlocked phone in dangerous mode too, and its unlock opens the rest', async () => {
     const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
     const dispose = studio.ctx.effect(() => studio.ctx.provide('reachFullAccessGrants', { dangerousMode: () => true, onDangerousModeEnd: () => () => {} }), 'test dangerous mode')
@@ -536,7 +536,7 @@ describe('a reach device in its approval grace', () => {
       }
     }
     try {
-      // A terminal takes a grant: an unlocked device is refused too, and the Face ID flag is off here, so no grant exists.
+      // A terminal takes a grant: an unlocked device is refused too, and with no grant store, so no grant exists.
       expect(await attach(peer)).toMatchObject({ code: 'remote-access/denied', details: { action: 'terminal/attach', reason: 'elevation-required: terminal/attach' } })
       // Pins GRACE_REFUSED_ACTIONS for the input stream: under the grace the attachment never opens.
       expect(await attach(graced.peer)).toMatchObject({ code: 'remote-access/denied', details: { action: 'terminal/attach', reason: 'elevation-required: terminal/attach' } })

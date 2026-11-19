@@ -42,10 +42,10 @@ const COMPUTER: MayView = { ok: false, needs: 'computer' }
 const FACE: MayView = { ok: false, needs: 'face' }
 
 /**
- * A paired phone's access, as the route computes it: with the Face ID flag off the controls that change what runs stay at
+ * A paired phone's access, as the route computes it: with no grant store the controls that change what runs stay at
  * the computer; with it on they ask Face ID (or a PIN) for the call; the phone locked asks an unlock of the take-back controls.
  * @param actor - the phone's state.
- * @param flag - whether the Face ID flag is off or on.
+ * @param flag - whether with no grant store or on.
  * @returns the access.
  */
 function phoneAccess(actor: ActorView, flag: 'off' | 'on'): AccessView {
@@ -761,7 +761,7 @@ describe('the Changes section', () => {
     await waitFor(() => { expect(toasts()).toContain(en['toast.safeMode.off']) })
   })
 
-  it('keeps the safe-mode button at the computer for a phone with Face ID off, and enabled for a phone with it on', async () => {
+  it('keeps the safe-mode button at the computer for a phone with no grant store, and enabled for a phone with it on', async () => {
     await openSection(emptyState({ atComputer: false, access: phoneAccess('device-unlocked', 'off') }))
     expect((screen.getByRole('button', { name: en['safeMode.start'] }) as HTMLButtonElement).disabled).toBe(true)
     cleanup()
@@ -1076,7 +1076,7 @@ describe('the Changes section', () => {
     expect(note?.textContent).not.toContain('Phone powers')
   })
 
-  it('an unlocked phone with Face ID on sees what it takes without asking and what it confirms, and no Phone powers level', async () => {
+  it('an unlocked phone with a grant store sees what it takes without asking and what it confirms, and no Phone powers level', async () => {
     await openSection(emptyState({ atComputer: false, access: phoneAccess('device-unlocked', 'on'), pending: [PENDING] }))
     const note = document.querySelector('[data-delorun-changes-remote="device-unlocked"]')
     expect(note?.textContent).toContain(en['access.device.title'])
@@ -1091,7 +1091,7 @@ describe('the Changes section', () => {
     expect(within(dialog).getByRole('button', { name: en['review.apply'] }).hasAttribute('disabled')).toBe(false)
   })
 
-  it('an unlocked phone with Face ID off cannot turn protection off or apply, and the notices wait for the computer', async () => {
+  it('an unlocked phone with no grant store cannot turn protection off or apply, and the notices wait for the computer', async () => {
     const notice = { id: 'n1', level: 'off', at: new Date().toISOString(), device: 'Ana\'s phone' } as const
     await openSection(emptyState({ atComputer: false, access: phoneAccess('device-unlocked', 'off'), notices: [notice], pending: [PENDING] }))
     const note = document.querySelector('[data-delorun-changes-remote="device-unlocked"]')
@@ -1236,7 +1236,7 @@ describe('the restart', () => {
     await waitFor(() => { expect(fake.callsTo(RESTART_PATHS.restart)).toEqual([{}]) })
   })
 
-  it('keeps Restart at the computer with Face ID off, and leaves it enabled for a phone with Face ID on', async () => {
+  it('keeps Restart at the computer with no grant store, and leaves it enabled for a phone with a grant store', async () => {
     await openSection(emptyState({ atComputer: false, access: phoneAccess('device-unlocked', 'off'), restart: NEEDED }))
     const careful = screen.getByRole('button', { name: en['restart.now'] })
     expect(careful.hasAttribute('disabled')).toBe(true)

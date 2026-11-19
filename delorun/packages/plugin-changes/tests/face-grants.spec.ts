@@ -64,7 +64,7 @@ describe('Changes: face controls', () => {
     }
   })
 
-  // Removing the `grant` rows of LEGACY_LEVELS, or the flag check in `mayUse`, lets a running unlock (a code or a PIN window) open the set an unlocked phone could once open, for a device with no passkey.
+  // Removing the `grant` rows of LEGACY_LEVELS, or the grant-store check in `mayUse`, lets a running unlock (a code or a PIN window) open the set an unlocked phone could once open, for a device with no passkey.
   it('refuse every control that changes what runs to a device with no passkey and a running unlock, and open it to a PIN grant for the call', async () => {
     const { ctx } = routeHome()
     const world = grantWorld({ hasPasskey: false })
@@ -84,8 +84,8 @@ describe('Changes: face controls', () => {
     }
   })
 
-  // Removing the `face.enabled` branch in `mayUse` sends a grant, which cannot exist with the flag off, to the unlock path.
-  it('keep every control that changes what runs at the computer while the flag is off, whatever unlock a device holds', async () => {
+  // Removing the `face.enabled` branch in `mayUse` sends a grant, which cannot exist with no grant store, to the unlock path.
+  it('keep every control that changes what runs at the computer with no grant store, whatever unlock a device holds', async () => {
     const { ctx } = routeHome()
     const server = await serveRoutes(ctx, { face: grantWorld({ enabled: false }).face })
     for (const { path } of [...FORMER_FULL_ROUTES, ...Object.values(SETUP_PATHS).map(path => ({ path }))]) {
@@ -163,7 +163,7 @@ describe('Changes: face controls', () => {
     expect(WHERE_REFUSALS).not.toContain(json(await send(server.port, path, withGrant('none', { id: 'a' }, world.grantFor('plugin-undo', path, { id: 'a' })))).code)
   })
 
-  it('stay at the unlock while the flag is off, for the take-back controls', async () => {
+  it('stay at the unlock with no grant store, for the take-back controls', async () => {
     const { ctx } = routeHome()
     const server = await serveRoutes(ctx, { face: grantWorld({ enabled: false }).face })
     expect(json(await send(server.port, ACTION_PATHS.undo, fromDevice('none', {}))).code).toBe('ELEVATION_REQUIRED')

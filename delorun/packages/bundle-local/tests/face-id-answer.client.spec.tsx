@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * The Face ID step on a granting approval card: it registers a gate only on a phone whose home has the flag on, mints the
+ * The Face ID step on a granting approval card: it registers a gate only on a phone, mints the
  * grant for exactly the request's Session, call and grants marker, and lets a cancel send nothing.
  *
  * Each test's comment names the behaviour whose removal makes it fail.

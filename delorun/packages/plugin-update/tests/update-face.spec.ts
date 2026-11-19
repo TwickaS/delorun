@@ -29,8 +29,8 @@ describe('update routes under Face ID', () => {
     expect(update.channel.requests).toEqual([])
   })
 
-  // Removing the flag check for the `grant` set in `mayUse` sends update-begin and update-rollback to the unlock path while the flag is off, where no grant can exist.
-  it('update-begin and update-rollback stay at the computer while the Face ID flag is off, whatever unlock the device holds', async () => {
+  // Removing the grant-store check for the `grant` set in `mayUse` sends update-begin and update-rollback to the unlock path with no grant store, where no grant can exist.
+  it('update-begin and update-rollback stay at the computer with no grant store, whatever unlock the device holds', async () => {
     const update = await serveUpdate()
     for (const unlock of ['fresh', 'grace', 'none'] as const) {
       for (const path of [UPDATE_PATHS.prepare, UPDATE_PATHS.apply, UPDATE_PATHS.rollback]) {

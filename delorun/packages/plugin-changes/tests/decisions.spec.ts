@@ -1,5 +1,5 @@
 /**
- * What the studio decides on its Changes routes and from where: who may use each control with the Face ID flag off and
+ * What the studio decides on its Changes routes and from where: who may use each control with no grant store and
  * on, changes to Delorun itself (Apply, Undo, Discard, Make my copy), and the protection switch both ways.
  *
  * Each test's comment names the check whose removal makes it fail, so the suite is also the mutation record.
@@ -44,17 +44,17 @@ describe('who may use each control', () => {
   it('a phone uses a control only where its class lets it: an unlock for the take-back controls, a grant for the rest, nothing for the notice', async () => {
     const { ctx } = routeHome()
     expect(ROUTE_REACH.length).toBe(Object.keys(ACTION_PATHS).length + Object.keys(SETUP_PATHS).length + Object.keys(HARNESS_PATHS).length + 2)
-    // The Face ID flag off, and on for a device with no passkey, which a PIN grant serves.
+    // No grant store, and a grant store for a device with no passkey, which a PIN grant serves.
     for (const flag of ['off', 'on'] as const) {
       const server = await serveRoutes(ctx, { face: grantWorld({ enabled: flag === 'on', hasPasskey: false }).face })
       for (const { path, reach } of ROUTE_REACH) {
         for (const unlock of ['fresh', 'grace', 'none'] as const) {
           const cell = `flag ${flag} ${unlock} ${path}`
-          // Without the grant, no unlock opens a grant-only control: with the flag off it stays at the computer.
+          // Without the grant, no unlock opens a grant-only control: with no grant store it stays at the computer.
           const refused = reach === 'computer-only' ? 'LOOPBACK_REQUIRED' : reach === 'grant-only' ? (flag === 'off' ? 'LOOPBACK_REQUIRED' : 'ELEVATION_REQUIRED') : unlock === 'fresh' ? undefined : 'ELEVATION_REQUIRED'
           if (refused !== undefined) {
             // Pins the class and the unlock in `gate`, before the body: without them a phone in its grace, or one whose unlock stands in for a grant, acts.
-            // With the flag on the gate reads the body to look for a grant before it refuses, so the body is sent.
+            // With a grant store the gate reads the body to look for a grant before it refuses, so the body is sent.
             const reply = await send(server.port, path, fromDevice(unlock, {}, flag === 'off'))
             expect(reply.status, cell).toBe(403)
             expect(json(reply).code, cell).toBe(refused)
@@ -80,7 +80,7 @@ describe('who may use each control', () => {
     const grantOnly = ['plugin-apply', 'protection-off', 'restart'] as const satisfies readonly ChangesControl[]
     for (const actor of ['computer', 'device-unlocked', 'device-grace', 'device-locked'] as const satisfies readonly ActorView[]) {
       for (const control of grantOnly) {
-        // The flag off: no grant exists, so the control stays at the computer.
+        // No grant store: no grant exists, so the control stays at the computer.
         expect(mayUse(actor, control), `${actor} ${control}`).toEqual(actor === 'computer' ? { ok: true } : { ok: false, needs: 'computer' })
         // The flag on: a grant from every device, a PIN one where it holds no passkey; no unlock changes that.
         for (const hasPasskey of [false, true]) {
@@ -169,7 +169,7 @@ describe('changes to Delorun itself', () => {
         expect(reply.status, path).toBe(403)
       }
     }
-    // An unlocked phone with the Face ID flag off: Apply, Undo and Make my copy stay at the computer.
+    // An unlocked phone with no grant store: Apply, Undo and Make my copy stay at the computer.
     for (const path of [HARNESS_PATHS.apply, HARNESS_PATHS.undo, HARNESS_PATHS.copy]) {
       expect(json(await send(server.port, path, fromDevice('fresh', { id: change.id, to: change.to }, true))), path).toMatchObject({ code: 'LOOPBACK_REQUIRED' })
     }
@@ -234,7 +234,7 @@ describe('the protection switch', () => {
       // Turning protection on is a `free` control (face-grants.spec.ts), so only off is refused to a phone in its grace.
       if (path === PROTECTION_PATHS.off) expect(json(await send(careful.port, path, fromDevice('grace', { confirmed: true }, true))), path).toMatchObject({ code: 'LOOPBACK_REQUIRED' })
     }
-    // With the Face ID flag off an unlocked phone cannot turn protection off.
+    // With with no grant store an unlocked phone cannot turn protection off.
     expect(json(await send(careful.port, PROTECTION_PATHS.off, fromDevice('fresh', { confirmed: true }, true)))).toMatchObject({ code: 'LOOPBACK_REQUIRED' })
     expect(await readProtection(ctx.home)).toBe('on')
     // With a PIN grant for the call it can, after the second ask; the change is kept as a notice for the computer.
