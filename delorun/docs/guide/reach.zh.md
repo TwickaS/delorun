@@ -187,7 +187,7 @@ Tailscale 报告为以你所允许的用户登录的手机，可以在批准窗�
 - 更改设置；
 - 运行只更改该 chat 的斜杠命令：`/compact`、`/export`、`/goal`、`/permission` 和 `/plan`；手机不运行其他斜杠命令；
 - 安装、启用、更新或移除插件，以及撤销或恢复 profile 更改。Delorun 自己的防护插件和远程访问无法以这种方式关闭或更改，会改变它们的撤销或恢复也会被拒绝；
-- 撤销或丢弃「变更」中的一项变更，以及打开保护；
+- 在「变更」中撤销插件的变更或丢弃任何等待中的变更，以及打开保护；
 - 用文件夹选择器浏览文件夹、添加工作区，并在不属于你的工作区的文件夹中开始 chat；
 - 运行模型编写的插件代码；
 - 授予完全访问，无论是某条命令请求在沙箱之外运行，还是某个工作区请求被设为完全访问，以及允许外部 agent 在某个工作区中工作。没有解锁时，手机会说明解锁持续多少分钟并提供 **Unlock**，提示会继续等待；
@@ -247,12 +247,12 @@ Tailscale 报告为以你所允许的用户登录的手机，可以在批准窗�
 
 手机权限（Phone powers）有两个级别。你在自己的电脑上选择它，手机无论是否已解锁都不能更改它。
 
-- **Careful** 是默认级别。已解锁的手机不能打开终端、关闭保护、应用对你插件的变更、更改 Delorun 自己的文件，也不能做[上面](#what-an-approved-phone-can-and-cannot-do)列为留在你电脑上的其他事。它仍然可以撤销或丢弃一项变更，以及打开保护。Careful 不涵盖已解锁的手机所给出的批准：接受 MCP 服务器、允许外部 agent 和给工作区完全访问在两个级别下都可以，而且每一项都仍可能在沙箱之外启动程序。
+- **Careful** 是默认级别。已解锁的手机不能打开终端、关闭保护、应用对你插件的变更、更改 Delorun 自己的文件或撤销对它们的变更、制作你的 Delorun 副本、重启 Delorun，也不能做[上面](#what-an-approved-phone-can-and-cannot-do)列为留在你电脑上的其他事。它仍然可以撤销插件的变更、丢弃任何等待中的变更，以及打开保护。Careful 不涵盖已解锁的手机所给出的批准：接受 MCP 服务器、允许外部 agent 和给工作区完全访问在两个级别下都可以，而且每一项都仍可能在沙箱之外启动程序。
 - **Full** 让已解锁的手机能做你的电脑能做的一切，每次都需要你在手机上输入的解锁：来自你电脑的代码，或你的 PIN。批准手机之后的 15 分钟永远不算数。
 
-`delorun setup` 会在你打开远程访问时请你选择，并预选你的 home 当前的级别；如果还没有级别，则预选 Careful。运行 `delorun devices powers` 查看级别。运行 `delorun devices powers careful` 或 `delorun devices powers full` 来选择；Full 需要终端。你电脑上的 studio 也会显示并设置它。选择会立即生效，无需重启。
+`delorun setup` 会在你打开远程访问时请你选择，并预选你的 home 当前的级别；如果还没有级别，则预选 Careful。运行 `delorun devices powers` 查看级别。运行 `delorun devices powers careful` 或 `delorun devices powers full` 来选择；Full 需要终端。你电脑上的“设置 → 设备”也会显示并设置它；在手机上它只显示，不能更改。选择会立即生效，无需重启。
 
-在手机权限出现之前就已存在的 home，会从它的 `phonePowersOnUpgrade` 设置所指定的级别开始（除非你改过，否则是 Careful），studio 会一直提醒你，直到你作出选择。如果 Delorun 无法读取已保存的选择，就应用 Careful。
+在手机权限出现之前就已存在的 home，会从它的 `phonePowersOnUpgrade` 设置所指定的级别开始（除非你改过，否则是 Careful），你电脑上的“设置 → 设备”会一直提醒你，直到你作出选择，其中的 **Keep Careful** 可选定它所应用的级别。如果 Delorun 无法读取已保存的选择，就应用 Careful。
 
 当手机打开或关闭保护时，你的电脑会显示一条通知，`delorun changes list` 会把它打印在 “Changed from a phone:” 下，并在打印到终端时清除它。从手机关闭保护会问两次，和在电脑上一样；第二个问题能挡住一次失手，但挡不住拿着你已解锁、且已选择 Full 的手机的人。
 

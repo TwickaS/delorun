@@ -44,9 +44,10 @@
     "typecheck": "tsc -b tsconfig.json && tsc --noEmit -p tsconfig.tests.json && tsc --noEmit -p tsconfig.tests.client.json"
   },
   "dependencies": {
+    "@delorun/brand": "workspace:*",
     "@delorun/contract-release-manifest": "workspace:*",
     "@delorun/contract-update-report": "workspace:*",
-    "@delorun/brand": "workspace:*",
+    "@delorun/plugin-update": "workspace:*",
     "@delorun/settings-controls": "workspace:*",
     "zod": "4.6.6"
   },

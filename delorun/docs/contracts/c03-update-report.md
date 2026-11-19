@@ -191,7 +191,7 @@ Automatic rollback runs when:
 
 On request, the person rolls back at any later time with `delorun recover rollback`. The studio has no update screen, and the desktop app has no Delorun rollback.
 
-A rollback restores the snapshot's files and switches the installation back to the release it replaced: for `cli-home`, the runtime the store keeps ([C1](c01-home-layout.md)); for `desktop-host`, the cached previous release ([C2](c02-release-manifest.md#desktop-updates-and-rollback)), which is not built. After an automatic rollback `delorun update` names the criterion that failed. A rollback that fails leaves the state `failed` and offers safe mode and `delorun recover`.
+The studio's Go back sends the same request as `delorun recover rollback`, and its wording is this table's. A rollback restores the snapshot's files and switches the installation back to the release it replaced: for `cli-home`, the runtime the store keeps ([C1](c01-home-layout.md)); for `desktop-host`, the cached previous release ([C2](c02-release-manifest.md#desktop-updates-and-rollback)), which is not built. After an automatic rollback `delorun update` names the criterion that failed. A rollback that fails leaves the state `failed` and offers safe mode and `delorun recover`.
 
 ## Rollback
 
@@ -230,10 +230,10 @@ A plugin version the current revocation list revokes is restored disabled with i
 
 ## Consumers
 
-- `delorun/packages/update/` (WP3.4): builds the report.
-- Upstream's `compatibility-preflight.ts`, `profile.ts`, `profile-sanitize.ts` and the plugin manager's restore (WP3.5): no silent disable, history versions before normalisation and sanitising, transactional restore.
-- `delorun/packages/profile-safety/` (WP3.6): undo, restore, safe mode and `delorun recover`.
-- The studio's update screens and the desktop updater (WP6.3).
+- `delorun/packages/update/`: builds the report.
+- Upstream's `compatibility-preflight.ts`, `profile.ts`, `profile-sanitize.ts` and the plugin manager's restore: no silent disable, history versions before normalisation and sanitising, transactional restore.
+- `delorun/packages/profile-safety/`: undo, restore, safe mode and `delorun recover`.
+- The studio's update screens and the desktop updater.
 
 ## Compatibility
 
@@ -255,20 +255,20 @@ The report's `schema` names its major version; reason codes form a closed list i
 
 ### Denial tests
 
-| Test | Owner | Behaviour it shows |
+| Test | Component | Behaviour it shows |
 | --- | --- | --- |
-| `c03-unnamed-disable-rolls-back` | WP3.4, WP3.5 | A target that disables a plugin the report did not name fails H3 and rolls back to the previous release and snapshot. |
-| `c03-health-timeout-rolls-back` | WP3.4 | A target whose Host is not ready 120 seconds after start rolls back. |
-| `c03-unverified-metadata-shown` | WP3.4 | A plugin whose `package.json` does not parse appears as `manifest-unreadable` and `unverified`, and `--yes` does not confirm the report. |
+| `c03-unnamed-disable-rolls-back` | `update`, plugin manager | A target that disables a plugin the report did not name fails H3 and rolls back to the previous release and snapshot. |
+| `c03-health-timeout-rolls-back` | `update` | A target whose Host is not ready 120 seconds after start rolls back. |
+| `c03-unverified-metadata-shown` | `update` | A plugin whose `package.json` does not parse appears as `manifest-unreadable` and `unverified`, and `--yes` does not confirm the report. |
 | `c03-yes-refuses-unchecked-log` | release-chain | A report whose `log` is `unchecked`, as the install recorded it, shows that state and the line that the log was not reached; `--yes` refuses it and nothing applies. |
-| `c03-delorun-requirement-excludes-target` | WP3.4 | A plugin whose `engines.delorun` excludes the target appears as `delorun-requirement-unmet` with both target versions. |
-| `c03-no-report-for-unverified-target` | WP3.4 | A target whose manifest signature fails produces no report and the update stops. |
-| `c03-no-silent-disable-at-start` | WP3.5 | An incompatible plugin at startup is reported with Update, Keep disabled and Roll back. |
-| `c03-sanitize-writes-history` | WP3.5 | Desktop fatal recovery writes a history version before disabling third-party plugins. |
-| `c03-restore-lists-changes` | WP3.6 | Restoring a version that brings back a plugin, a build approval and an exemption shows all three in the approval prompt before any file changes. |
-| `c03-restore-revoked-stays-disabled` | WP3.6 | Restoring a version that holds a revoked plugin version brings it back disabled with its reason. |
-| `c03-failed-restore-reverts` | WP3.5 | A restore whose install step fails leaves every profile file as it was. |
-| `c03-desktop-update-leaves-cli` | WP3.4, WP6.3 | Updating the desktop Host leaves the CLI home's version and state unchanged, and both appear in the report. |
+| `c03-delorun-requirement-excludes-target` | `update` | A plugin whose `engines.delorun` excludes the target appears as `delorun-requirement-unmet` with both target versions. |
+| `c03-no-report-for-unverified-target` | `update` | A target whose manifest signature fails produces no report and the update stops. |
+| `c03-no-silent-disable-at-start` | plugin manager | An incompatible plugin at startup is reported with Update, Keep disabled and Roll back. |
+| `c03-sanitize-writes-history` | plugin manager | Desktop fatal recovery writes a history version before disabling third-party plugins. |
+| `c03-restore-lists-changes` | `profile-safety` | Restoring a version that brings back a plugin, a build approval and an exemption shows all three in the approval prompt before any file changes. |
+| `c03-restore-revoked-stays-disabled` | `profile-safety` | Restoring a version that holds a revoked plugin version brings it back disabled with its reason. |
+| `c03-failed-restore-reverts` | plugin manager | A restore whose install step fails leaves every profile file as it was. |
+| `c03-desktop-update-leaves-cli` | `update`, desktop updater | Updating the desktop Host leaves the CLI home's version and state unchanged, and both appear in the report. |
 | `c03-data-change-named` | update | Two releases whose data facts differ produce one `data-format-changed` item with the copy's size and the free space. |
 | `c03-unknown-data-format-is-unverified` | update | A release without `data-formats.json` produces `data-format-unknown`, `unverified`, and `--yes` does not confirm the report. |
 | `c03-yes-takes-the-copy` | update | `delorun update --yes` on a report with a `data` item takes the session-data copy. |

@@ -142,7 +142,7 @@ async function fixture(options: FixtureOptions = {}) {
     // Delorun links its bundle into the profile, and the fixture's bundles are not dependencies, so no pnpm run is real.
     writeBundle(dir, GUARD_BUNDLE, [{ insert: PROTECTED.map(name => ({ id: rowId(name), name, config: shippedConfig(name) })) }])
     for (const [name, patch] of Object.entries(bundles)) writeBundle(dir, name, patch)
-    writePackage(dir, LOCAL_BUNDLE, {}, ['update-check', 'update-gate'])
+    writePackage(dir, LOCAL_BUNDLE, {}, ['trust', 'update-check', 'update-gate'])
     for (const name of PROTECTED.filter(name => !name.startsWith(`${LOCAL_BUNDLE}/`))) writePackage(dir, name)
   } else {
     // Upstream's bundles resolve through the CLI's package, as a source checkout's Delorun profile does.

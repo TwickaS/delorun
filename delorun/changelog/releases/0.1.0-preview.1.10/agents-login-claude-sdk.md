@@ -1,5 +1,5 @@
 ---
-area: CLI
+area: Commands
 section: Fixed
 ---
 

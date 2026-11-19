@@ -22,7 +22,7 @@ import { changeId, CHANGE_LOG_SCHEMA, enforceApprovedContent, type HarnessContex
 import { REQUEST_LISTENER } from '@delorun/home'
 import { onTestFinished } from 'vitest'
 import { restartRoutes, type RestartRouteDependencies } from '../src/restart-route.ts'
-import { changesRoutes, type RouteDependencies, type RouteDevice } from '../src/routes.ts'
+import { changesRoutes, type ChangesRoute, type RouteDependencies, type RouteDevice } from '../src/routes.ts'
 
 /** The fixture's profile. */
 export const PROFILE = 'default'
@@ -149,10 +149,11 @@ export interface RouteServer {
  * Serve the Changes routes on a loopback port; stopped after the test.
  * @param ctx - the profile the Host runs, or undefined for a Host that runs none.
  * @param options - what the dependencies answer, replacing the defaults; `operationResult` is what the stand-in plugin
- *   operation answers; `restartRoute` is the restart the Restart routes reach, none by default.
+ *   operation answers; `restartRoute` is the restart the Restart routes reach, none by default; `extraRoutes` builds the
+ *   routes of another plugin over the same dependencies, as `@delorun/plugin-update` does with the Changes gate.
  * @returns the server.
  */
-export async function serveRoutes(ctx: ChangesContext | undefined, options: Partial<RouteDependencies> & { readonly reloadOutcome?: ReloadOutcome, readonly operationResult?: PluginOperationResult, readonly powers?: 'careful' | 'full', readonly restartRoute?: RestartRouteDependencies } = {}): Promise<RouteServer> {
+export async function serveRoutes(ctx: ChangesContext | undefined, options: Partial<RouteDependencies> & { readonly reloadOutcome?: ReloadOutcome, readonly operationResult?: PluginOperationResult, readonly powers?: 'careful' | 'full', readonly restartRoute?: RestartRouteDependencies, readonly extraRoutes?: (dependencies: RouteDependencies) => readonly ChangesRoute[] } = {}): Promise<RouteServer> {
   let profileReads = 0
   let renewals = 0
   let reloads = 0
@@ -202,7 +203,7 @@ export async function serveRoutes(ctx: ChangesContext | undefined, options: Part
     clearRestartFailure: () => {},
     ...options,
   }
-  const routes = [...changesRoutes(dependencies), ...restartRoutes(dependencies, options.restartRoute ?? { restart: () => undefined, waitSeconds: 600 })]
+  const routes = [...changesRoutes(dependencies), ...restartRoutes(dependencies, options.restartRoute ?? { restart: () => undefined, waitSeconds: 600 }), ...options.extraRoutes?.(dependencies) ?? []]
   const server = createServer((request, response) => {
     const listener = request.headers['x-test-listener']
     if (typeof listener === 'string') Object.defineProperty(request, REQUEST_LISTENER, { value: listener })

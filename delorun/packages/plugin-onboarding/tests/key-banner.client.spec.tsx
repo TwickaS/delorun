@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { en } from '../src/client/locales.ts'
-import { bannerState, hasNoWorkingKey, KEY_RECHECK_MS, KeyBanner, type KeyBannerProps } from '../src/client/KeyBanner.tsx'
+import { bannerState, hasNoWorkingKey, KeyBanner, type KeyBannerProps } from '../src/client/KeyBanner.tsx'
 import type { KeyResult, KeyTestAnswer } from '../src/wire.ts'
 import { t } from './fixtures.client.ts'
 
@@ -53,7 +53,8 @@ describe('the banner', () => {
 
   it('stays away, and never asks again, when a key works', async () => {
     const { keyTest, container } = mount(answer('works'))
-    await settle(KEY_RECHECK_MS * 3)
+    await settle(60_000)
+    fireEvent.focus(window)
     expect(container.textContent).toBe('')
     expect(keyTest).toHaveBeenCalledOnce()
   })
@@ -64,17 +65,21 @@ describe('the banner', () => {
     expect(container.textContent).toBe('')
   })
 
-  it('asks again while it shows and leaves once a key is added', async () => {
+  it('asks again only when the window regains focus, and leaves once a key is added', async () => {
     const { keyTest, container } = mount(answer('no-key'), answer('no-key'), answer('works'))
     await settle()
-    expect(screen.queryByRole('status')).not.toBeNull()
-    await settle(KEY_RECHECK_MS - 1)
-    expect(screen.queryByRole('status')).not.toBeNull()
-    await settle(1)
-    expect(container.textContent).toBe('')
     const asked = keyTest.mock.calls.length
-    await settle(KEY_RECHECK_MS * 3)
+    await settle(60_000)
     expect(keyTest).toHaveBeenCalledTimes(asked)
+    expect(screen.queryByRole('status')).not.toBeNull()
+    fireEvent.focus(window)
+    await settle()
+    expect(container.textContent).toBe('')
+    const after = keyTest.mock.calls.length
+    expect(after).toBeGreaterThan(asked)
+    fireEvent.focus(window)
+    await settle(60_000)
+    expect(keyTest).toHaveBeenCalledTimes(after)
   })
 
   it('ignores an answer that arrives after it was removed', async () => {

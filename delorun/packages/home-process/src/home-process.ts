@@ -253,7 +253,7 @@ export class HomeProcess implements HandshakeSubject {
     const home = new HomeProcess(options)
     try {
       await home.checkDirectories()
-      home.lock = await acquireHomeLock({ runDirectory: runDirectory(options.home, options.profile), runtime: options.running, probe: options.probe, startId: options.startId })
+      home.lock = await acquireHomeLock({ runDirectory: runDirectory(options.home, options.profile), runtime: options.running, probe: options.probe, startId: options.startId, log: (line) => { options.logger.warn(line) } })
       options.onExit(() => { home.cleanUpSync() })
       home.listenSignals()
       home.runAgeChecks()
@@ -410,6 +410,7 @@ export class HomeProcess implements HandshakeSubject {
     try {
       await this.closeHost()
       this.removeToken()
+      this.lock?.setListening(false)
       await this.channel?.close()
       this.channel = undefined
       await this.launched?.stop()
@@ -608,6 +609,7 @@ export class HomeProcess implements HandshakeSubject {
       handle: async (request, progress) => this.dispatch(request, progress, check),
       answered: (request) => { this.answered(request) },
     })
+    this.lock?.setListening(true)
     logger.info('update channel listening')
   }
 
@@ -998,6 +1000,7 @@ export class HomeProcess implements HandshakeSubject {
     const failure = outcome === undefined || outcome.stopped || error instanceof HostNotStoppedError ? error : new HostNotStoppedError(error, outcome)
     if (outcome !== undefined && !outcome.stopped) this.logger.error('the failed start\'s Host did not stop', { ...outcome.kind === 'failed' ? { err: outcome.error } : {}, data: { detail: hostStopFailure(outcome) } })
     this.removeToken()
+    this.lock?.setListening(false)
     await this.channel?.close()
     this.channel = undefined
     await this.launched?.stop()

@@ -3,14 +3,14 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/packages/reach/spikes/serve-socket/README.md
 /:
-  en: 66eba282cec514b3
-  zh: 0c0eb7091e88d22a
+  en: 55c91cc10744d9dd
+  zh: 7fceb73eb1e2445b
 /spike-tailscale-serve-to-a-mode-0600-unix-socket:
   en: 00cdcf39474a5844
   zh: 220559d501b4660e
 /spike-tailscale-serve-to-a-mode-0600-unix-socket/summary:
-  en: e126b1edb725c5ca
-  zh: 873df4203b72323a
+  en: 4833c69bf4fd1305
+  zh: 37c9ab1dfda7f411
 /spike-tailscale-serve-to-a-mode-0600-unix-socket/answers:
   en: 42248cf6a7cf0268
   zh: cb68ae8e23fbe20f
@@ -24,8 +24,8 @@
   en: 52c2a0620c303da3
   zh: 3e243d345b04f556
 /spike-tailscale-serve-to-a-mode-0600-unix-socket/the-fallback-path-through-tailscaled:
-  en: 2445bfb566ec81e2
-  zh: ba239539d0f2992a
+  en: 382eba692cf551a3
+  zh: 8c55534be0a42293
 /spike-tailscale-serve-to-a-mode-0600-unix-socket/not-covered:
   en: c761844df082e48e
   zh: 7c4fb662f8a0f4ae

@@ -1368,7 +1368,36 @@ describe('the External agents section', () => {
     const claude = screen.getByRole('group', { name: 'Claude Code' })
     expect((within(claude).getByRole('radio', { name: /Unrestricted/ }) as HTMLInputElement).disabled).toBe(true)
     expect((within(claude).getByRole('radio', { name: /Careful/ }) as HTMLInputElement).disabled).toBe(false)
-    expect((within(claude).getByRole('radio', { name: /Your own settings/ }) as HTMLInputElement).disabled).toBe(false)
+    expect((within(claude).getByRole('radio', { name: /Your own Claude Code settings/ }) as HTMLInputElement).disabled).toBe(false)
+    expect((within(screen.getByRole('group', { name: 'Codex' })).getByRole('radio', { name: /Your own Codex settings/ }) as HTMLInputElement).disabled).toBe(false)
+  })
+
+  it('names only its own agent in the own-settings choice, and keeps a level description in one block beside its radio', async () => {
+    renderExternalAgents(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]) }), agentSettingsForm({ enabled: true, runTimeoutMinutes: 30, fullAccessStartsAgents: true, claudeCodeLevel: 'standard', codexLevel: 'standard' }))
+    await settle()
+    for (const [group, own, other] of [['Claude Code', 'Claude Code', 'Codex'], ['Codex', 'Codex', 'Claude Code']] as const) {
+      const radio = within(screen.getByRole('group', { name: group })).getByRole('radio', { name: new RegExp(`Your own ${own} settings`, 'u') })
+      const label = radio.closest('label')!
+      expect(label.textContent).not.toContain(other)
+      expect(label.textContent).toContain(`Your own ${own} settings decide.`)
+      // The description wraps inside the text block, so it hangs under the name and not under the radio button.
+      expect(radio.nextElementSibling?.tagName).toBe('SPAN')
+      expect(radio.nextElementSibling?.textContent).toContain('Delorun sets nothing.')
+      expect([...label.childNodes].filter(node => node.nodeType === Node.TEXT_NODE && (node.textContent ?? '').trim() !== '')).toEqual([])
+    }
+  })
+
+  it('states the missing sandbox as a note on the level it affects, not as an error', async () => {
+    const levels: LevelsAnswer = { levels: [
+      { provider: 'claude-code', agent: 'Claude Code', level: 'standard', sandboxMissing: { tools: ['bubblewrap', 'socat'], installCommand: 'sudo apt install bubblewrap socat' } },
+      { provider: 'codex', agent: 'Codex', level: 'careful' },
+    ] }
+    const settings = agentSettingsForm({ enabled: true, runTimeoutMinutes: 30, fullAccessStartsAgents: true, claudeCodeLevel: 'standard', codexLevel: 'careful' })
+    renderExternalAgents(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]), [`GET ${DELEGATION_CONSENT_ROUTES.levels}`]: { status: 200, body: levels } }), settings)
+    await settle()
+    const note = screen.getByRole('group', { name: 'Claude Code' }).querySelector('[data-sandbox-missing]')!
+    expect(note.textContent).toBe('Careful needs bubblewrap and socat: sudo apt install bubblewrap socat. Until then, Standard runs without a command sandbox.')
+    expect(note.className).not.toMatch(/boxFailed/u)
   })
 
   it('words the chip for a level, with the missing sandbox', () => {

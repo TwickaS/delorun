@@ -83,7 +83,7 @@ describe('cut-rc plan', () => {
 
   it('ends with the installed-release smoke against the channel, within its budget, unless --no-smoke', () => {
     const request = parseCutArgs([...BASE, '--smoke-minutes', '20'])
-    expect(smokeArgs(request)).toEqual(['delorun/apps/release/scripts/installed-smoke.ts', '--channel', request.channel, '--version', '0.1.0-rc.2', '--budget-minutes', '20', '--log', join(request.work, 'installed-smoke-0.1.0-rc.2.log')])
+    expect(smokeArgs(request)).toEqual(['delorun/apps/release/scripts/installed-smoke.ts', '--channel', request.channel, '--version', '0.1.0-rc.2', '--keys', request.keys, '--budget-minutes', '20', '--log', join(request.work, 'installed-smoke-0.1.0-rc.2.log')])
     expect(planSteps(request).at(-1)?.title).toContain('at most 20 min')
     expect(planSteps(parseCutArgs([...BASE, '--no-smoke'])).map(step => step.id)).not.toContain('smoke')
     expect(() => parseCutArgs([...BASE, '--smoke-minutes', '0'])).toThrow(/--smoke-minutes/u)

@@ -45,6 +45,21 @@ describe('writeBootRecord and readBootRecord', () => {
     expect(await readBootRecord(fx.home, PROFILE)).toEqual(record)
   })
 
+  it('finds a bundle plugin\'s rows by the ids its patch inserts, as its rows import other modules', async () => {
+    const fx = fixture()
+    for (const name of ['bundle', 'quiet']) linkAs(fx, name, folder(fx, name))
+    await start(fx)
+    const rows: readonly BootRow[] = [
+      { id: 'inner-runtime', name: '@x/runtime', disabled: false, state: 'active' },
+      { id: 'inner-off', name: '@x/ingress', disabled: true, state: 'not-imported' },
+    ]
+    const record = await writeBootRecord({ home: fx.home, profile: PROFILE, profileDir: fx.profileDir, rows, insertedRows: { bundle: ['inner-runtime', 'inner-off'] }, now: () => NOW })
+    expect(record.plugins).toEqual([
+      { plugin: 'bundle', rows: [{ id: 'inner-runtime', state: 'active' }, { id: 'inner-off', state: 'not-imported' }], loaded: true },
+      { plugin: 'quiet', rows: [], loaded: false, error: 'the profile has no row for it' },
+    ])
+  })
+
   it('records a start that failed: every plugin not loaded, and the failure', async () => {
     const { fx } = await migrated()
     const record = await writeBootRecord({ home: fx.home, profile: PROFILE, profileDir: fx.profileDir, rows: [], failure: 'plug threw at load' })

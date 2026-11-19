@@ -1,5 +1,7 @@
 /** The Devices settings section's copy, the remote studio's refused-answer notice and its unlock. */
 
+import * as phonePowers from '@delorun/plugin-changes/phone-powers-locales'
+
 /** English dictionary. */
 export const en = {
   'nav': 'Devices',
@@ -30,7 +32,6 @@ export const en = {
   'waiting': 'Waiting for a new device — open your address on it and choose Ask for approval',
   'pending.requested': 'Asked {time}',
   'pending.code': 'Code shown on {label}',
-  'pending.codePlaceholder': '8-digit code',
   'pending.approve': 'Approve',
   'pending.cancel': 'Cancel request',
   'loopback': 'This needs you at your computer: {action}.',
@@ -99,7 +100,6 @@ export const en = {
   'pairing.box.device': '{label} · {platform}',
   'pairing.box.explain': 'Type the 8 digits shown on {label}. Approve only a device you expect.',
   'pairing.box.code': 'Match code',
-  'pairing.box.placeholder': '8 digits',
   'pairing.box.wrong': 'That code does not match. Wrong codes: {count} of {max}.',
   'pairing.box.cancelled': 'Too many wrong codes. The request is cancelled; the device can ask again.',
   'pairing.box.decline': 'Decline',
@@ -132,6 +132,18 @@ export const en = {
   'pairing.fixed': 'Fixed for safety: approval only at this computer, the 8-digit match code, three wrong codes cancel a request, at most five requests wait, and a remote device never sees or answers a request.',
   'pairing.failed': 'The change was not saved. Try again.',
   'action.pairing': 'changing the pairing choices',
+  'action.powers': 'changing Phone powers',
+  'powers.title': 'Phone powers',
+  'powers.intro': 'How much an unlocked phone may do. Each action still needs an unlock you entered on the phone.',
+  'powers.careful': 'Careful',
+  'powers.careful.body': phonePowers.en.careful,
+  'powers.full': 'Full',
+  'powers.full.body': phonePowers.en.full,
+  'powers.device': 'Change this at your computer.',
+  'powers.unchosen.careful': 'Delorun uses Careful until you choose: an unlocked phone cannot open a terminal. Choose Full to let it.',
+  'powers.unchosen.full': 'Delorun uses Full until you choose: an unlocked phone can do everything this computer can.',
+  'powers.keep.careful': 'Keep Careful',
+  'powers.keep.full': 'Keep Full',
   'time.locale': 'en',
 }
 
@@ -168,7 +180,6 @@ export const zh: typeof en = {
   'waiting': '正在等待新设备——在新设备上打开你的地址，然后选择“Ask for approval”',
   'pending.requested': '请求于 {time}',
   'pending.code': '{label} 上显示的代码',
-  'pending.codePlaceholder': '8 位代码',
   'pending.approve': '批准',
   'pending.cancel': '取消请求',
   'loopback': '这需要你在电脑前操作：{action}。',
@@ -237,7 +248,6 @@ export const zh: typeof en = {
   'pairing.box.device': '{label} · {platform}',
   'pairing.box.explain': '输入 {label} 上显示的 8 位数字。只批准你预期中的设备。',
   'pairing.box.code': '匹配代码',
-  'pairing.box.placeholder': '8 位数字',
   'pairing.box.wrong': '代码不匹配。错误次数：{count} / {max}。',
   'pairing.box.cancelled': '错误代码太多，请求已取消；该设备可以重新请求。',
   'pairing.box.decline': '拒绝',
@@ -270,5 +280,17 @@ export const zh: typeof en = {
   'pairing.fixed': '出于安全而固定：只能在这台电脑上批准，使用 8 位匹配代码，三次错误代码会取消请求，最多五个请求在等待，远程设备永远看不到也无法回应请求。',
   'pairing.failed': '更改未保存，请重试。',
   'action.pairing': '更改配对选项',
+  'action.powers': '更改手机权限',
+  'powers.title': '手机权限',
+  'powers.intro': '已解锁的手机可以做多少事。每项操作仍需要你在手机上输入的解锁。',
+  'powers.careful': '谨慎',
+  'powers.careful.body': phonePowers.zh.careful,
+  'powers.full': '完全',
+  'powers.full.body': phonePowers.zh.full,
+  'powers.device': '请在你的电脑上更改。',
+  'powers.unchosen.careful': '在你选择之前，Delorun 使用“谨慎”：已解锁的手机不能打开终端。选择“完全”即可允许。',
+  'powers.unchosen.full': '在你选择之前，Delorun 使用“完全”：已解锁的手机可以做这台电脑能做的一切。',
+  'powers.keep.careful': '保留“谨慎”',
+  'powers.keep.full': '保留“完全”',
   'time.locale': 'zh-CN',
 }

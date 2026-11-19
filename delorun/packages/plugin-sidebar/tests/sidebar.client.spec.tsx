@@ -144,7 +144,7 @@ function show(fields: {
     attach: (owner: { current: unknown }) => { calls.attach(owner.current); return calls.detach },
     preference: { read: (key: string) => stored.get(key) ?? null, write: (key: string, value: string) => { stored.set(key, value) } },
     undoLine,
-    updateNotice: { notice: { getSnapshot: () => fields.update ?? null, subscribe: () => () => {} }, notes: async () => null, dismiss: null },
+    updateNotice: { notice: { getSnapshot: () => fields.update ?? null, subscribe: () => () => {} }, notes: async () => null, open: null, canOpen: { getSnapshot: () => false, subscribe: () => () => {} }, dismiss: null },
     t: makeTranslate(en),
   } as SidebarProps
   // The foot's undo notice offers what the list remembers, as in the studio.
@@ -169,6 +169,17 @@ describe('the chat list', () => {
     expect(container.querySelector('[class*="boundary"]')).toBeNull()
     expect(shelf('Snoozed').getAttribute('aria-expanded')).toBe('false')
     expect(within(row(container, 'b')).getAllByText(en['status.approval']).length).toBeGreaterThan(0)
+  })
+
+  it('pins the Working shelf below the scrolling list, last for the keyboard, the screen reader and the Alt jump', () => {
+    const { container } = show({ stored: { 'shelf.settled': 'open', 'shelf.snoozed': 'open' } })
+    const order = [...container.querySelectorAll('[data-sidebar-row], button[aria-expanded]')]
+      .map(each => each.getAttribute('data-sidebar-row') ?? `shelf:${each.textContent?.replace(/\d+$/, '') ?? ''}`)
+    expect(order.indexOf('w')).toBe(order.indexOf('shelf:Working') + 1)
+    expect(container.querySelector('[data-testid="sidebar-working"]')?.closest('[class*="scroll"]')).toBeNull()
+    expect(order.indexOf('d')).toBeLessThan(order.indexOf('shelf:Working'))
+    expect(order.indexOf('shelf:Settled')).toBeLessThan(order.indexOf('shelf:Working'))
+    expect(order.indexOf('a')).toBeLessThan(order.indexOf('shelf:Settled'))
   })
 
   it('shows the update notice below the list, outside the region that scrolls, and nothing without one', () => {
@@ -926,7 +937,7 @@ describe('dragging a chat', () => {
     expect(within(row(container, 'd')).getByRole('status').textContent).toBe(en['drop.unsettle'])
     act(() => { fireEvent.pointerUp(window) })
     act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Alt', altKey: true })) })
-    expect(within(row(container, 'd')).getByText('5')).toBeTruthy()
+    expect(within(row(container, 'd')).getByText('4')).toBeTruthy()
   })
 })
 

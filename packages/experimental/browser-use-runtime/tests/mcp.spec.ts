@@ -1,9 +1,10 @@
 import { executeToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import * as PtcToolExecutor from '@deepseek-ai/dsh-tool-executor-ptc'
+import { existsSync } from 'node:fs'
 import { chmod, mkdir, mkdtemp, readdir, readFile, readlink, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
@@ -86,9 +87,11 @@ class PresentationRuntime extends PtcRuntime {
 class RefuseBrowserConsent extends McpClient.McpAddConsent {
   static readonly providesMcpAddConsent = true
   readonly reviewed: string[] = []
+  /** Whether the browser fixture's start is now accepted. */
+  accepted = false
   review(command: McpServerCommand): Promise<McpConsentDecision> {
     this.reviewed.push(command.serverName)
-    return Promise.resolve(command.serverName === 'browser-fixture' ? { allow: false, reason: 'no server is accepted yet' } : { allow: true })
+    return Promise.resolve(command.serverName === 'browser-fixture' && !this.accepted ? { allow: false, reason: 'no server is accepted yet' } : { allow: true })
   }
 }
 
@@ -111,7 +114,10 @@ interface LoadOptions {
   explainFailure?: (message: string) => string | undefined
   directory?: string
   outputFolder?: string
+  outputRoot?: string
   refuseCall?: SessionMcpOptions['refuseCall']
+  checkResult?: SessionMcpOptions['checkResult']
+  prepareCall?: SessionMcpOptions['prepareCall']
   registration?: SessionMcpOptions['registration']
   admission?: SessionMcpOptions['admission']
   deniedTools?: string[]
@@ -119,7 +125,8 @@ interface LoadOptions {
 
 async function load(options: LoadOptions = {}) {
   const { exclusive = false, mode, toolCallTimeoutMs, toolOrder, consent = false } = options
-  const { explainFailure, directory, outputFolder, refuseCall, registration, admission, deniedTools } = options
+  const { explainFailure, directory, outputFolder, outputRoot, refuseCall, checkResult, prepareCall } = options
+  const { registration, admission, deniedTools } = options
   const root = await mkdtemp(join(tmpdir(), 'dsh-browser-mcp-'))
   roots.push(root)
   const model = new FixtureModel()
@@ -135,7 +142,10 @@ async function load(options: LoadOptions = {}) {
         name: 'browser-fixture', exclusive, command: process.execPath, args: [fixture, root, ...mode === undefined ? [] : [mode]],
         ...toolCallTimeoutMs === undefined ? {} : { toolCallTimeoutMs, env: {} }, ...explainFailure === undefined ? {} : { explainFailure },
         ...directory === undefined ? {} : { directory }, ...outputFolder === undefined ? {} : { outputFolder },
-        ...refuseCall === undefined ? {} : { refuseCall }, ...deniedTools === undefined ? {} : { deniedTools },
+        ...outputRoot === undefined ? {} : { outputRoot },
+        ...prepareCall === undefined ? {} : { prepareCall },
+        ...refuseCall === undefined ? {} : { refuseCall }, ...checkResult === undefined ? {} : { checkResult },
+        ...deniedTools === undefined ? {} : { deniedTools },
         ...registration === undefined ? {} : { registration }, ...admission === undefined ? {} : { admission },
       })
     } }],
@@ -205,7 +215,7 @@ function registerIndependentTool(ctx: Context) {
 }
 
 async function events(root: string) {
-  return (await readFile(join(root, 'events.ndjson'), 'utf8')).trim().split('\n').map(line => JSON.parse(line) as { event: string; pid: number; name?: string; cwd?: string; roots?: { uri: string; name: string }[] })
+  return (await readFile(join(root, 'events.ndjson'), 'utf8')).trim().split('\n').map(line => JSON.parse(line) as { event: string; pid: number; name?: string; cwd?: string; outputDir?: string | null; arguments?: unknown; roots?: { uri: string; name: string }[] })
 }
 
 it('requires a browser mode and validates launch and attachment settings', () => {
@@ -452,6 +462,52 @@ describe('Session MCP Loader composition', () => {
     expect(warnings).toHaveLength(2)
   })
 
+  it('starts the browser server in a Session its refusal left without tools only once the consent accepts it', async () => {
+    const { ctx, root } = await load({ consent: true })
+    const consent = ctx.get('mcpAddConsent') as RefuseBrowserConsent
+    const created = await ctx.agents.create({ sessionId: SessionId('refused-then-accepted'), agentOptions: { provider: 'fixture', model: 'fixture' } })
+    await warm(ctx, created.agent)
+    const reviewed = (): number => consent.reviewed.filter(name => name === 'browser-fixture').length
+    expect(reviewed()).toBe(1)
+    // Still refused: the check runs again, nothing starts, and the Session keeps no browser tools.
+    await ctx.parallel('mcp-client/consent-accepted', 'browser-fixture')
+    expect(reviewed()).toBe(2)
+    await expect(readFile(join(root, 'events.ndjson'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+    expect((await warm(ctx, created.agent)).tools.some(tool => tool.name === TOOL)).toBe(false)
+    // Another server's acceptance asks nothing.
+    await ctx.parallel('mcp-client/consent-accepted', 'other-fixture')
+    expect(reviewed()).toBe(2)
+    consent.accepted = true
+    await ctx.parallel('mcp-client/consent-accepted', 'browser-fixture')
+    expect((await warm(ctx, created.agent)).tools.map(tool => tool.name)).toContain(TOOL)
+    expect((await execute(ctx, created.agent, TOOL)).isError).toBe(false)
+  })
+
+  it('starts no server after the consent is accepted in a Session whose admission has ended', async () => {
+    const admittedSessions = new Set<string>(['refused-session'])
+    const admission: NonNullable<SessionMcpOptions['admission']> = {
+      admitted: agent => admittedSessions.has(agent.id),
+      changed: () => () => {},
+    }
+    const { ctx, root } = await load({ consent: true, registration: 'none', admission })
+    const consent = ctx.get('mcpAddConsent') as RefuseBrowserConsent
+    const refused = await ctx.agents.create({ sessionId: SessionId('refused-session'), agentOptions: { provider: 'fixture', model: 'fixture' } })
+    const unadmitted = await ctx.agents.create({ sessionId: SessionId('no-browser'), agentOptions: { provider: 'fixture', model: 'fixture' } })
+    const reviewed = (): number => consent.reviewed.filter(name => name === 'browser-fixture').length
+    // Only the admitted Session asked the consent; the Session of a No browser workspace never did.
+    expect(reviewed()).toBe(1)
+    // The provider stops admitting the refused Session before it reports the change.
+    admittedSessions.delete('refused-session')
+    consent.accepted = true
+    await ctx.parallel('mcp-client/consent-accepted', 'browser-fixture')
+    expect(reviewed()).toBe(1)
+    await expect(readFile(join(root, 'events.ndjson'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+    for (const created of [refused, unadmitted]) {
+      expect((await warm(ctx, created.agent)).tools.some(tool => tool.name === TOOL)).toBe(false)
+      expect((await execute(ctx, created.agent, TOOL)).isError).toBe(true)
+    }
+  })
+
   it('creates the Session without browser tools when a row declares the add-time consent and did not start', async () => {
     const { ctx, root, warnings } = await load({ consent: 'failed' })
     const created = await ctx.agents.create({ sessionId: SessionId('unavailable'), agentOptions: { provider: 'fixture', model: 'fixture' } })
@@ -529,6 +585,52 @@ describe('Session MCP Loader composition', () => {
     expect((await readdir(join(used, '.fixture-output'))).sort()).toEqual(['.gitignore', 'kept.png'])
     expect(await readFile(join(used, '.fixture-output', '.gitignore'), 'utf8')).toBe('*\n')
     expect(await readFile(join(used, '.fixture-output', 'kept.png'), 'utf8')).toBe('kept')
+  })
+
+  it('gives each Session its own owner-only output folder under the output root, tells the server, and leaves the Session\'s folder without one', async () => {
+    const offered: BrowserToolCall[] = []
+    const { ctx, root } = await load({ outputFolder: '.fixture-output', outputRoot: join(tmpdir(), `dsh-output-root-${process.pid}`), refuseCall: async (call) => { offered.push(call); return undefined } })
+    const outputRoot = join(tmpdir(), `dsh-output-root-${process.pid}`)
+    roots.push(outputRoot)
+    const [first, second] = [join(root, 'first'), join(root, 'second')]
+    await Promise.all([mkdir(first), mkdir(second)])
+    for (const [id, cwd] of [['output-one', first], ['output-two', second]] as const) {
+      const { agent } = await ctx.agents.create({ sessionId: SessionId(id), meta: { cwd } })
+      await warm(ctx, agent)
+      expect((await visit(ctx, agent, id)).isError).toBe(false)
+    }
+    const folders = offered.map(call => call.outputDirectory!)
+    expect(new Set(folders).size).toBe(2)
+    for (const folder of folders) {
+      expect(dirname(folder)).toBe(outputRoot)
+      expect((await stat(folder)).mode & 0o777).toBe(0o700)
+    }
+    expect([...new Set((await events(root)).filter(event => event.event === 'start').map(event => String(event.outputDir)))].sort()).toEqual([...folders].sort())
+    expect(await readdir(first)).toEqual([])
+    expect(await readdir(second)).toEqual([])
+  })
+
+  it('does not start the server when the output folder overlaps a folder the chat can write: its working directory, or a root of its sandbox policy', async () => {
+    const outputRoot = join(tmpdir(), `dsh-overlap-root-${process.pid}`)
+    roots.push(outputRoot)
+    const { ctx, root } = await load({ outputRoot })
+    const start = async (id: string, cwd: string): Promise<void> => {
+      const { agent } = await ctx.agents.create({ sessionId: SessionId(id), meta: { cwd } })
+      await warm(ctx, agent)
+    }
+    // XDG_CACHE_HOME pointing into the workspace: the output folder lies inside the working directory.
+    await expect(start('overlap-inside', tmpdir())).rejects.toThrow('overlaps')
+    const quiet = join(root, 'quiet')
+    await mkdir(quiet)
+    ctx.provide('sandboxPolicy')
+    ctx.set('sandboxPolicy', { resolve: () => ({ mode: 'workspace-write', workspaceRoot: quiet, additionalWritableRoots: [tmpdir()] }) } as never)
+    await expect(start('overlap-extra-root', quiet)).rejects.toThrow('overlaps')
+    // A chat in a subfolder, with the output folder elsewhere in the sandbox's workspace root.
+    const sub = join(root, 'workspace-sub')
+    await mkdir(sub)
+    ctx.set('sandboxPolicy', { resolve: () => ({ mode: 'workspace-write', workspaceRoot: tmpdir() }) } as never)
+    await expect(start('overlap-workspace-root', sub)).rejects.toThrow('overlaps')
+    expect(existsSync(join(root, 'events.ndjson'))).toBe(false)
   })
 
   it('never writes through a link or over a person\'s own rules in the output folder', async () => {
@@ -619,6 +721,37 @@ describe('Session MCP Loader composition', () => {
       { tool: 'visit', arguments: { label: 'refused' }, directory: cwd },
       { tool: 'visit', arguments: { label: 'allowed' }, directory: cwd },
     ])
+  })
+
+  it('lets the provider replace a call\'s arguments before the server sees them, or refuse the call', async () => {
+    const { ctx, root } = await load({ prepareCall: async (call) => {
+      const label = (call.arguments as { label: string }).label
+      if (label === 'throws') throw new Error('copy failed')
+      return label === 'refused' ? 'Not readable.' : label === 'copy' ? { arguments: { label: 'copied' }, note: 'Uploaded a copy.' } : undefined
+    } })
+    const { agent } = await ctx.agents.create({ sessionId: SessionId('prepared') })
+    await warm(ctx, agent)
+    expect(await visit(ctx, agent, 'refused')).toMatchObject({ isError: true, error: { message: 'Not readable.' } })
+    const copied = await visit(ctx, agent, 'copy')
+    expect(copied.isError).toBe(false)
+    expect(copied.content.at(-1)).toMatchObject({ type: 'text', text: 'Uploaded a copy.' })
+    expect((await visit(ctx, agent, 'throws')).isError).toBe(true)
+    expect((await visit(ctx, agent, 'same')).isError).toBe(false)
+    expect((await events(root)).filter(event => event.event === 'call').map(event => (event.arguments as { label: string }).label)).toEqual(['copied', 'same'])
+  })
+
+  it('replaces a call\'s result with the provider\'s refusal after the server answered, and keeps it otherwise', async () => {
+    const checked: Array<[BrowserToolCall, boolean]> = []
+    const { ctx, root } = await load({ checkResult: async (call, startedAt) => {
+      checked.push([call, startedAt <= Date.now()])
+      return (call.arguments as { label: string }).label === 'landed-outside' ? 'The file landed outside.' : undefined
+    } })
+    const { agent } = await ctx.agents.create({ sessionId: SessionId('checked') })
+    await warm(ctx, agent)
+    expect(await visit(ctx, agent, 'landed-outside')).toMatchObject({ isError: true, error: { message: 'The file landed outside.' } })
+    expect((await visit(ctx, agent, 'fine')).isError).toBe(false)
+    expect((await events(root)).filter(event => event.event === 'call')).toHaveLength(2)
+    expect(checked.map(([call, timed]) => [(call.arguments as { label: string }).label, timed])).toEqual([['landed-outside', true], ['fine', true]])
   })
 
   it('replaces a browser failure the provider explains and keeps every other failure and result', async () => {

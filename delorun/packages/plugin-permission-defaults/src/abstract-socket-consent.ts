@@ -13,7 +13,8 @@
  * @module @delorun/plugin-permission-defaults/abstract-socket-consent
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { LocalSandboxProvider, checkAbstractSockets, refuseAbstractSockets, type AbstractSocketCheck } from '@deepseek-ai/dsh-sandbox-local'
+import { LocalSandboxProvider, type AbstractSocketCheck } from '@deepseek-ai/dsh-sandbox-local'
+import { checkAbstractSockets, refuseAbstractSockets } from '@deepseek-ai/dsh-sandbox-local/abstract-sockets'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
 import type { ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'

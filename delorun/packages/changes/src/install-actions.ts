@@ -20,7 +20,7 @@
 import { readFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
-import { recordPendingBuilds } from '@deepseek-ai/dsh-plugin-manager'
+import { recordPendingBuilds } from '@deepseek-ai/dsh-plugin-manager/operations'
 import { InvalidInstallSpecError, parseInstallSpec, type ParsedInstallSpec } from '@deepseek-ai/dsh-plugin-manager'
 import { PROTECTED_FILE_MODE } from '@delorun/contract-home-layout'
 import type { ChangesContext, ReloadHost } from './actions.ts'
@@ -425,7 +425,7 @@ export async function applyInstallChange(ctx: ChangesContext, id: ChangeId, pres
       }
     }
     await operation.after()
-    const recorded = await recordVersion(ctx, `Applied ${id}: ${entry.summary}`)
+    const recorded = await recordVersion(ctx, `Applied: ${entry.summary}`)
     const applied: ChangeEntry = { ...request, state: 'applied', decidedAt: at, decidedFrom: presence.kind, ...recorded }
     await writeChangeLog(ctx.home, ctx.profile, withEntry(operation.log, applied))
     const outcome = await options.reload()

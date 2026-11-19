@@ -16,7 +16,7 @@ import {
   readSetupChanges, readSetupVersions, saveSetupVersion, switchSetupVersion,
   type VersionChanges, type VersionEntry, type VersionsAnswer,
 } from './versions-api.ts'
-import { groupVersions, settingsEditName } from './version-rows.ts'
+import { groupVersions, settingsEditName, withoutChangeId } from './version-rows.ts'
 import { SetupTransfer } from './SetupTransfer.tsx'
 import css from './VersionsSection.module.css'
 
@@ -164,7 +164,7 @@ function VersionList({ t, fetch, answer, onSwitched }: {
 }
 
 /**
- * The title of a version: the name the person gave, or the history's own summary.
+ * The title of a version: the name the person gave, or the history's own summary without a change id.
  * @param t - the section's copy.
  * @param version - the version.
  * @returns the title.
@@ -172,7 +172,7 @@ function VersionList({ t, fetch, answer, onSwitched }: {
 function titleOf(t: Translate, version: VersionEntry): string {
   if (version.origin === 'saved') return version.name ?? t('version.saved')
   const edited = settingsEditName(version.summary)
-  return edited === undefined ? version.summary : t('version.settings', { name: edited })
+  return edited === undefined ? withoutChangeId(version.summary) : t('version.settings', { name: edited })
 }
 
 /**

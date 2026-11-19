@@ -269,7 +269,7 @@ export function planSteps(request: CutRequest): PlannedStep[] {
  * @returns the arguments of `installed-smoke.ts`.
  */
 export function smokeArgs(request: CutRequest): string[] {
-  return ['delorun/apps/release/scripts/installed-smoke.ts', '--channel', request.channel, '--version', request.version, '--budget-minutes', String(request.smokeMinutes ?? 30), '--log', join(request.work, `installed-smoke-${request.version}.log`)]
+  return ['delorun/apps/release/scripts/installed-smoke.ts', '--channel', request.channel, '--version', request.version, '--keys', request.keys, '--budget-minutes', String(request.smokeMinutes ?? 30), '--log', join(request.work, `installed-smoke-${request.version}.log`)]
 }
 
 /** The result of one command. */

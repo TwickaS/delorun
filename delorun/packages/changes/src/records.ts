@@ -444,6 +444,9 @@ const APPROVED_RULES: Readonly<Record<string, FieldRule>> = {
   plugins: byPackageName({ source: required.string, version: required.version, approvedAt: required.iso, approvedAtUpgrade: { test: isTrue, expected: 'true', optional: true } }),
 }
 
+/** A `/` followed by an empty, `.` or `..` segment; matched rather than split, because a read checks every file of a copy. */
+const UNSAFE_HARNESS_SEGMENT = /\/\.{0,2}(?:\/|$)/u
+
 /**
  * Whether a path names a harness file Changes may hold.
  * @param path - the path.
@@ -451,8 +454,7 @@ const APPROVED_RULES: Readonly<Record<string, FieldRule>> = {
  *   segment.
  */
 export function isHarnessPath(path: string): boolean {
-  if (!path.startsWith('app/') || path.includes('\\') || path.includes('\0')) return false
-  return path.split('/').every(segment => segment !== '' && segment !== '.' && segment !== '..')
+  return path.startsWith('app/') && !path.includes('\\') && !path.includes('\0') && !UNSAFE_HARNESS_SEGMENT.test(path)
 }
 
 const HARNESS_RULES: Readonly<Record<string, FieldRule>> = {

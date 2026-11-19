@@ -115,4 +115,4 @@ Soft 是 Delorun 自己的。T3 Code 的六个主题以 [`src/palette/t3-themes.
 
 ## 共享控件与 Safari 边缘
 
-芯片控件（`ChipGroup`、`ThemePicker`、`AccentPicker`）以及设置 → 外观与引导的「外观」步骤共用的 `StudioLookSwitch`，位于 [`@delorun/brand`](../brand/README.zh.md) 这一唯一的控件集中；[`src/client/controls`](src/client/controls) 只把它们重新导出为 `@delorun/plugin-theme/controls`。[`src/client/edges.ts`](src/client/edges.ts) 根据当前主题的令牌绘制两条固定的、`aria-hidden` 的边缘条、`html` 和 `body` 的背景以及一个 `theme-color` 标签，使移动版 Safari 的状态栏和工具栏延续 studio 的样子。它向页面的 viewport 标签添加 `viewport-fit=cover`，并在释放时恢复所有更改。
+芯片控件（`ChipGroup`、`ThemePicker`、`AccentPicker`）以及设置 → 外观与引导的「外观」步骤共用的 `StudioLookSwitch`，位于 [`@delorun/brand`](../brand/README.zh.md) 这一唯一的控件集中；[`src/client/controls`](src/client/controls) 只把它们重新导出为 `@delorun/plugin-theme/controls`。[`src/client/edges.ts`](src/client/edges.ts) 根据当前主题的令牌绘制两条固定的、`aria-hidden` 的边缘条（在屏幕外 7px、位于页面之上）、`html` 和 `body` 的背景以及一个 `theme-color` 标签，使移动版 Safari 的状态栏和工具栏延续 studio 的样子。它向页面的 viewport 标签添加 `viewport-fit=cover`，并在释放时恢复所有更改。

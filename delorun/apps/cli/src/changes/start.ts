@@ -18,7 +18,7 @@
  */
 import { resolve } from 'node:path'
 import { getDelorunRuntimeVersion } from '@deepseek-ai/dsh-app-boot'
-import { checkChangesInvariants, enforceApprovedContent, isChangesError, markShownAtUpgrade, PROFILE_LOCK_WAIT_MS, startNotice, workFinishedLine, writeBootRecord, type BootRow, type ReloadHost, type StartChanges } from '@delorun/changes'
+import { checkChangesInvariants, enforceApprovedContent, isChangesError, markShownAtUpgrade, PROFILE_LOCK_WAIT_MS, repointActiveCopies, startNotice, workFinishedLine, writeBootRecord, type BootRow, type ReloadHost, type StartChanges } from '@delorun/changes'
 import { finishWorkWithoutPerson } from '@delorun/changes/stop'
 import type { DelorunLogger } from '@delorun/logs'
 import { RuntimeStoreError } from '@delorun/runtime-store'
@@ -123,6 +123,52 @@ export async function startChanges(request: ChangesStartRequest, output: (text: 
 }
 
 /**
+ * Whether a Host boot first re-points the recorded active copies to this process's release: a successor's first boot,
+ * whose copies name its predecessor's release, and every boot after a process's first, which follows a failed switch
+ * that left the copies naming the release that failed. A fresh start's first boot has the pre-start steps instead.
+ * @param successor - whether this process is an update's successor.
+ * @param bootsBefore - how many Hosts this process has booted already.
+ * @returns true when the copies are re-pointed first.
+ */
+export function repointsBeforeBoot(successor: boolean, bootsBefore: number): boolean {
+  return successor || bootsBefore > 0
+}
+
+/**
+ * Wrap a profile's Host boot so that it re-points the active copies first when {@link repointsBeforeBoot} says so.
+ * @param request - the home and the profile.
+ * @param successor - whether this process is an update's successor.
+ * @param boot - boots the Host.
+ * @param repoint - re-points the copies; {@link repointForSuccessor} by default.
+ * @returns the wrapped boot, which counts the boots it has run.
+ */
+export function repointingBoot<A extends unknown[], T>(request: { readonly home: string, readonly profile: string }, successor: boolean, boot: (...args: A) => Promise<T>, repoint: (request: { readonly home: string, readonly profile: string }) => Promise<void> = repointForSuccessor): (...args: A) => Promise<T> {
+  let booted = 0
+  return async (...args) => {
+    if (repointsBeforeBoot(successor, booted++)) await repoint(request)
+    return boot(...args)
+  }
+}
+
+/**
+ * An update's successor boots without the pre-start steps, so before its Host boots it re-points each recorded active
+ * copy's links into the runtime store to its own release ({@link repointActiveCopies}); otherwise a plugin pack copy
+ * written under the previous release fails the load check of the new one and the update rolls back.
+ * @param request - the home and the profile about to boot.
+ * @returns when the copies name this release's packages; immediately for a home without the profile.
+ * @throws {CliError} when a copy cannot be re-pointed: the successor does not boot, so the update rolls back.
+ */
+export async function repointForSuccessor(request: { readonly home: string, readonly profile: string }): Promise<void> {
+  const { home, profile } = request
+  if (!hasCliProfile(home, profile)) return
+  try {
+    await repointActiveCopies({ home, profile, profileDir: profileDirectory(home, profile), harnessLink: isCarriedPackage, ...runningRelease() })
+  } catch (error) {
+    throw new CliError(EXIT.failed, `delorun: the profile ${profile} was not started, because its plugin copies could not be pointed at this release: ${isChangesError(error) ? error.detail : String(error)}`)
+  }
+}
+
+/**
  * The pre-start step `changes` ([pre-start](../pre-start.ts)): {@link startChanges} for the profile about to boot, with
  * the stored runtime's check when a fresh start runs from the store. A fresh start of the CLI profile holds the home
  * lock, so it ends a work session a home process that did not stop left open; `delorun headless` holds no lock and ends
@@ -181,11 +227,12 @@ export interface ChangesBootRequest {
  * @param request - the home, the profile and the logger.
  * @param rows - the Loader's rows after startup settled; empty when the profile did not boot.
  * @param failure - what the profile's boot failed with, when it failed.
+ * @param insertedRows - the ids of the rows each bundle layer inserts, by package name.
  */
-export async function recordChangesBoot(request: ChangesBootRequest, rows: readonly BootRow[], failure?: unknown): Promise<void> {
+export async function recordChangesBoot(request: ChangesBootRequest, rows: readonly BootRow[], failure?: unknown, insertedRows?: Readonly<Record<string, readonly string[]>>): Promise<void> {
   const { home, profile, logger } = request
   try {
-    await writeBootRecord({ home, profile, profileDir: profileDirectory(home, profile), rows, ...failure === undefined ? {} : { failure: failure instanceof Error ? failure.message : String(failure) } })
+    await writeBootRecord({ home, profile, profileDir: profileDirectory(home, profile), rows, ...insertedRows === undefined ? {} : { insertedRows }, ...failure === undefined ? {} : { failure: failure instanceof Error ? failure.message : String(failure) } })
   } catch (error) {
     logger.warn(`Changes could not record which plugins loaded at this start: ${isChangesError(error) ? error.detail : String(error)}`)
   }

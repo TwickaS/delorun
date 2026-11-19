@@ -10,7 +10,7 @@
 import type { Readable, Writable } from 'node:stream'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { SubagentResult } from '@deepseek-ai/dsh-subagent'
-import { isAgentSignInFailure } from '@deepseek-ai/dsh-subagent'
+import { isAgentSignInFailure } from '@deepseek-ai/dsh-subagent/out-of-process'
 import { JsonRpcLineTransport } from '@deepseek-ai/dsh-sdk-protocol'
 import type { CodexRunPermissions } from './run.ts'
 
@@ -43,8 +43,16 @@ export interface CodexModelOption {
   readonly displayName: string
 }
 
-/** The most `model/list` pages one listing follows. */
-const MAX_MODEL_PAGES = 10
+/** The most `model/list` pages one listing follows; a listing that reaches it fails instead of reading as complete. */
+const MAX_MODEL_PAGES = 1000
+
+/** The app-server's `model/list` kept returning pages past the ceiling, so which models are offered is unknown. */
+export class CodexModelListIncomplete extends Error {
+  constructor() {
+    super(`Delorun could not read the full model list from Codex; it returned more than ${String(MAX_MODEL_PAGES)} pages. Try again, and report it if it persists.`)
+    this.name = 'CodexModelListIncomplete'
+  }
+}
 
 /**
  * `thread/start` fields per mode. `sandbox: 'workspace-write'` here would make
@@ -493,12 +501,14 @@ export class CodexAppServerWire {
    * Ask the app-server for the models it offers, following its pages.
    * @param signal - cancellation.
    * @returns each visible model's name for `thread/start` and its display name.
+   * @throws CodexModelListIncomplete when the server still has a next page after the ceiling.
    */
   async listModels(signal: AbortSignal): Promise<CodexModelOption[]> {
     const models: CodexModelOption[] = []
     let cursor: string | null = null
-    // The app-server pages its answer; a bound keeps a server that never ends from holding the caller.
-    for (let page = 0; page < MAX_MODEL_PAGES; page += 1) {
+    // The app-server pages its answer; the ceiling keeps a server whose cursor never ends from holding the caller.
+    for (let page = 0; ; page += 1) {
+      if (page >= MAX_MODEL_PAGES) throw new CodexModelListIncomplete()
       const response: JsonObject = object(await this.guarded(this.transport.request('model/list', {
         ...cursor === null ? {} : { cursor },
       }, signal), signal), 'model/list response')
@@ -513,9 +523,8 @@ export class CodexAppServerWire {
         })
       }
       cursor = typeof response.nextCursor === 'string' ? response.nextCursor : null
-      if (cursor === null) break
+      if (cursor === null) return models
     }
-    return models
   }
 
   /** Detach JSON-RPC listeners and reject outstanding requests. Idempotent. */

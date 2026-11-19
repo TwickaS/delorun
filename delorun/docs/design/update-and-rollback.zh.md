@@ -34,6 +34,20 @@ description: "Delorun 更新与回退的设计：更新报告的数据项、默�
 
 ## 规则
 
+<a id="the-studios-update"></a>
+
+### studio 的更新
+
+在电脑前的人，或使用已解锁手机的人，无需终端就能在 studio 中更新、回退和停止 Delorun。每一个验证、安装、切换或回滚的步骤都留在 home 进程中；Host 的更新插件（[`@delorun/plugin-update`](../../packages/plugin-update/README.zh.md)）只通过更新通道向它发问，并向此人显示它的回答。
+
+- **谁。** Check now 对任何已配对的手机开放。Update now 与 Go back 需要在电脑前，或者在 Phone powers 为 Full 时使用此人输入过解锁（验证码或 PIN，绝不是批准宽限）的手机；Careful 手机显示「Update at your computer」。Cancel 与 Stop 需要在电脑前，或使用任一级别的已解锁手机。来自其他站点的请求在读取其正文之前就被拒绝。
+- **报告。** `prepare` 返回 C3 的报告，Host 把它保存在内存中并配以不透明的句柄；页面从不持有 home 进程的报告 id 或通道令牌。报告在 600 秒后过期，`apply` 以 `REPORT_EXPIRED` 拒绝未知或已过期的句柄。
+- **勾选。** `--yes` 所用的规则决定什么需要人来确认：每个会关闭或移除某物的条目、已合并的 harness 文件、未验证的条目、未完成的发布日志检查，以及拒绝数据复制，都各需要一次明确的勾选；有冲突的 harness 文件或失败的日志检查则根本不提供 Update。
+- **结果。** 页面无法读取 home 进程的最后一行，因为 Host 在切换时停止。home 进程在每次结束时写入 `run/<profile>/update-result.json`（`committed`、带有未通过健康判据的 `rolled-back`、`aborted`、`failed`）；之后运行的 Host 显示它，直到此人关闭它，并且当 Host 的发行版与页面所加载的不同时，页面会自行重新加载一次。
+- **回退。** 已提交的更新记录会提供 Go back，带有同样的等待或停止选择以及 C3 表中的措辞；没有 chat 数据的副本时只回退设置。
+- **停止。** Stop Delorun 请求 home 进程停止；studio 中没有任何东西会再次启动 Delorun，屏幕提示从应用图标或启动器启动它。
+- **不提供。** `delorun update --from` 放宽新鲜度要求，并且仍留在终端中。
+
 ### 报告指出数据更改
 
 1. 每个发布版本在其运行时中携带一个已签名的文件 `data-formats.json`：`{ "schema": "delorun.data-formats/1", "persistence": <SHA-256 of upstream's generated persistence schema at the built commit>, "delorunRecords": { <record name>: <version> } }`。`delorunRecords` 列出 Delorun 自己的包在 home 之下保存的带版本的记录。该文件在已签名的文件列表中，所以发布 manifest 不变。
@@ -119,5 +133,7 @@ description: "Delorun 更新与回退的设计：更新报告的数据项、默�
 <a id="implementation-status"></a>
 
 ## 实现状态
+
+studio 的更新已构建：路由、访问表、结果记录及其拒绝测试（`update-begin-refused-from-other-site`、`update-begin-refused-careful-phone`、`update-begin-refused-phone-without-unlock`、`update-begin-refused-phone-approval-grace-only`、`update-rollback-refused-careful-phone`、`update-rollback-refused-phone-without-unlock`、`update-apply-refuses-page-supplied-report`、`update-apply-refuses-while-restarting`、`update-confirm-requires-ticks`、`update-conflicted-harness-cannot-confirm`、`update-failed-log-check-cannot-confirm`、`update-token-never-leaves-host`、`update-result-survives-switch`）。
 
 规则 1 到 14 和规则 16 已为 CLI home 构建，由 C3、C19、C1 和 C2 描述：运行时存储在安装任何东西之前，会以 `TARGET_LOWER` 拒绝低于 `current` 的更新目标，而 `delorun update` 会拒绝目标低于正在运行发布版本的报告。规则 15 的、CLI home 和桌面应用共用的一把锁，以及桌面应用的规则 17、18 和 20，尚未构建。规则 19 通过上游的更新器成立，后者拒绝降级（`allowDowngrade` 为 false）。

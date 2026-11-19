@@ -9,7 +9,7 @@ import { TRANSCRIPT_VIEW_FIELD } from './chat-settings.ts'
 import { ChatSettingsFields } from './chat-settings.ts'
 
 export {
-  CHAT_SETTINGS_NAMESPACE, CUSTOM_DISPLAY_FIELD, DEFAULT_CUSTOM_DISPLAY, STEP_GROUPINGS, THINKING_DISPLAYS,
+  CHAT_SETTINGS_NAMESPACE,
   type CustomDisplay, type StepGrouping, type ThinkingDisplay, DEFAULT_TRANSCRIPT_VIEW_MODE, LEGACY_TRANSCRIPT_VIEW_MODE,
   LEGACY_EXPANDED_TRANSCRIPT_VIEW_MODE, TRANSCRIPT_VIEW_FIELD,
   TRANSCRIPT_VIEW_MODES, type ChatSettings, type TranscriptViewMode,

@@ -37,8 +37,8 @@ describe('the edge controller', () => {
     expect(strips.map(strip => strip.getAttribute(EDGE_ATTRIBUTE))).toEqual(['top', 'bottom'])
     for (const strip of strips) expect(strip.getAttribute('aria-hidden')).toBe('true')
     const rules = document.querySelector(`style[${EDGE_ATTRIBUTE}]`)?.textContent ?? ''
-    expect(rules).toContain('[data-delorun-edge="top"]{position:fixed;left:0;right:0;top:0;height:max(12px,env(safe-area-inset-top));pointer-events:none')
-    expect(rules).toContain('[data-delorun-edge="bottom"]{position:fixed;left:0;right:0;bottom:0;height:max(12px,env(safe-area-inset-bottom));pointer-events:none')
+    expect(rules).toContain('[data-delorun-edge="top"]{position:fixed;left:0;right:0;top:-7px;height:max(12px,calc(env(safe-area-inset-top) + 7px));pointer-events:none;z-index:10')
+    expect(rules).toContain('[data-delorun-edge="bottom"]{position:fixed;left:0;right:0;bottom:-7px;height:max(12px,calc(env(safe-area-inset-bottom) + 7px));pointer-events:none;z-index:10')
     expect(rules).toContain('background:var(--edge-top-background)')
     expect(document.querySelectorAll('meta[name="theme-color"]')).toHaveLength(1)
     expect(document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.content).toBe('rgb(250 250 248)')

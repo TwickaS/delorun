@@ -48,7 +48,7 @@ kind: "package-bundle"
 | `permissionMode` 值 | `thread/start` 字段 | 原生行为 |
 |---|---|---|
 | `never` | `approvalPolicy: never`；省略 sandbox | 永不请求审批；在原生 sandbox 下发生的执行失败会返回给模型 |
-| `approve-for-me` | `approvalPolicy: on-request`、`approvalsReviewer: auto_review`、`sandbox: workspace-write` | 由 Codex 自动评审权限请求，不等待人工 |
+| `approve-for-me` | `approvalPolicy: on-request`、`approvalsReviewer: auto_review`、`sandbox: read-only`；每个 `turn/start` 携带 `sandboxPolicy: { type: workspaceWrite, writableRoots: [cwd] }` | 由 Codex 自动评审权限请求，不等待人工；该轮次内工作区可写，且 Codex 不会向本人的 `config.toml` 写入受信任文件夹条目 |
 | `dangerously-bypass-approvals-and-sandbox` | `approvalPolicy: never`、`sandbox: danger-full-access` | 跳过审批与 sandbox；必须显式选择该值 |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-subagent-codex)是每个受支持字段及其 JSDoc 的穷尽式真源。已配置的 `model` 会原样传给每个临时 `thread/start`；省略时保留原生模型选择。提供方不会发现模型、改写别名、选择 `modelProvider` 或 `serviceTier`，也不会设置 fallback。具有凭证特征的环境变量会在显式 `env` 覆盖生效前被移除，因此供子进程使用的 API 密钥必须在该配置中显式提供。
@@ -107,7 +107,7 @@ Bundle 将 `tool-subagent-codex` 作为 Host 条目插入，因此 `subagent_cod
 
 ### 运行流程
 
-一次启动只接受非空的文本块序列，并使用子代理服务选择的子级 cwd。它经子进程 seam spawn 固定命令，完成 `initialize` → `initialized` 握手，把 Profile 选择的模式与可选模型映射为官方 `thread/start` 字段并与 `{ cwd, ephemeral: true }` 一起发送，且仅在 Codex 返回有效的临时线程后发布运行。已发布的结果恰好启动一个轮次，只接受与此次运行的线程和轮次匹配的通知，并等待权威的 `turn/completed` 终态。以最后一条 `phase: "final_answer"` 的 `agentMessage` 为准；若没有，则选最后一条 `phase: "partial_answer"` 的消息（稳定的回答文本，其后仍可能有助手输出或工具调用）；若 Codex 两种明确的回答阶段都没有发出，则以最后一条 `phase: null` 的消息作为兼容性回退。`commentary` 消息绝不会被选中，其它任何阶段都会使运行失败。成功完成的轮次若没有非空白答案，结果也会判为错误。失败轮次使用粗粒度类别 `limit`、`access-policy`、`service`、`transport`、`product-error`、`invalid-result` 或 `unknown`；app-server 提前退出使用 `process`，适用的连接与 stream 失败保留数值 `httpStatusCode`。
+一次启动只接受非空的文本块序列，并使用子代理服务选择的子级 cwd。它经子进程 seam spawn 固定命令，完成 `initialize` → `initialized` 握手，把 Profile 选择的模式与可选模型映射为官方 `thread/start` 字段并与 `{ cwd, ephemeral: true }` 一起发送，并且在内置 `openai` 提供方为该线程提供服务时，对照未隐藏的 `model/list` 条目检查该线程的模型；套餐不提供的模型会在任何轮次之前使启动失败，并给出点明该模型及所提供模型的固定句子，提供方绝不会改选其它模型。它仅在 Codex 返回有效的临时线程后发布运行。已发布的结果恰好启动一个轮次，只接受与此次运行的线程和轮次匹配的通知，并等待权威的 `turn/completed` 终态。以最后一条 `phase: "final_answer"` 的 `agentMessage` 为准；若没有，则选最后一条 `phase: "partial_answer"` 的消息（稳定的回答文本，其后仍可能有助手输出或工具调用）；若 Codex 两种明确的回答阶段都没有发出，则以最后一条 `phase: null` 的消息作为兼容性回退。`commentary` 消息绝不会被选中，其它任何阶段都会使运行失败。成功完成的轮次若没有非空白答案，结果也会判为错误。套餐的用量或速率限额（`usageLimitExceeded`、`rateLimitExceeded`）会增加一句说明已达到限额的话；当 `account/rateLimits/updated` 通知报告了已耗尽的窗口时，还会给出其 UTC 重置时间。失败轮次使用粗粒度类别 `limit`、`access-policy`、`service`、`transport`、`product-error`、`invalid-result` 或 `unknown`；app-server 提前退出使用 `process`，适用的连接与 stream 失败保留数值 `httpStatusCode`。
 
 </details>
 

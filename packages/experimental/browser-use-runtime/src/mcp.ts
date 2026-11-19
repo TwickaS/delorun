@@ -1,9 +1,11 @@
 /** Session-owned MCP browser processes and provider catalog activation. @module */
 
-import { chmod, lstat, mkdir, stat, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { chmod, lstat, mkdir, realpath, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
+import { pathWithin, writableRoots } from '@deepseek-ai/dsh-sandbox'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import Schema from '@deepseek-ai/schemastery'
 import { BrowserUseProviderName } from '@deepseek-ai/dsh-browser-use/brand'
@@ -14,6 +16,7 @@ import { SessionResources } from './index.ts'
 import type {} from '@deepseek-ai/dsh-browser-use'
 import type { ToolExecutionResult } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-system-prompt'
+import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import type {} from '@deepseek-ai/dsh-working-directory'
 
 /** Browser launch settings shared by the MCP integrations. */
@@ -126,6 +129,14 @@ export interface SessionMcpOptions {
    * `.gitignore` are never changed, and a Session whose server did not start gets no folder.
    */
   outputFolder?: string
+  /**
+   * Absolute folder under which the Host creates one output folder for each Session, with mode 0700, and tells the
+   * server to save its output files there instead of in the Session's working directory (`PLAYWRIGHT_MCP_OUTPUT_DIR`).
+   * Choose a folder no sandbox grants a confined command write access to, so a sandboxed command cannot replace the
+   * Session's output folder. When set, {@link outputFolder} is ignored and the Session's own folder gets no output
+   * folder.
+   */
+  outputRoot?: string
   /** Explicit overrides merged into the MCP client's scrubbed child environment. */
   env?: Record<string, string>
   /** Per-call timeout override; omission retains the MCP client default. */
@@ -145,6 +156,25 @@ export interface SessionMcpOptions {
    * @returns the model-visible refusal, or `undefined` to let the call through.
    */
   refuseCall?: (call: BrowserToolCall) => Promise<string | undefined>
+  /**
+   * Replace the arguments of a browser tool call before it reaches the server, after {@link refuseCall} let it through,
+   * such as a path the server would read replaced by a copy the Host made, so the server never opens a path a confined
+   * command can swap.
+   * @param call - the call, as given to {@link refuseCall}.
+   * @returns the model-visible refusal; or `arguments`, whose entries replace the same-named entries of the call's
+   * arguments, and the `note` that is added to the call's result so the model and the log show what the server got; or
+   * `undefined` to send the call as it is. A throw fails the call.
+   */
+  prepareCall?: (call: BrowserToolCall) => Promise<string | { arguments: Record<string, unknown>; note?: string } | undefined>
+  /**
+   * Check what a browser tool call left behind, after the server answered, such as a file saved outside the Session's
+   * folder. A result it refuses is replaced by a failure with the returned text. It runs after failed calls too,
+   * because a call can write a file and still fail; its own failure is kept when it refuses nothing.
+   * @param call - the call, as given to {@link refuseCall}.
+   * @param startedAt - the time, in milliseconds since the epoch, taken just before the call was sent to the server.
+   * @returns the model-visible refusal, or `undefined` to keep the result.
+   */
+  checkResult?: (call: BrowserToolCall, startedAt: number) => Promise<string | undefined>
   /**
    * `slot` (the default) registers the provider as the browser-use slot's one provider; `none` registers nothing, for a
    * second browser that sits beside the slot's provider, such as the person's own browser.
@@ -189,6 +219,42 @@ export interface BrowserToolCall {
   arguments: unknown
   /** The Session's working directory when its server started, which the server was told as its one MCP root. */
   directory: string
+  /** The Session's output folder, when the provider set {@link SessionMcpOptions.outputRoot}. */
+  outputDirectory?: string
+}
+
+/**
+ * Create a Session's output folder under the provider's output root.
+ * @param root - the provider's output root.
+ * @param sessionId - the Session's id.
+ * @returns the folder, named by a digest of the id so the name is safe on every file system, with mode 0700.
+ */
+async function sessionOutputDirectory(root: string, sessionId: string): Promise<string> {
+  const directory = join(await fixedDirectory(root), createHash('sha256').update(sessionId).digest('hex').slice(0, 32))
+  return fixedDirectory(directory)
+}
+
+/**
+ * Refuse an output folder that overlaps a folder a confined command of the Session can write: inside one, the chat could
+ * replace the output folder; around one, that folder would be inside the output folder. The writable folders are the
+ * Session's working directory and, when a sandbox policy is provided, the policy's workspace-write roots, the
+ * workspace, the extra writable directories and the temp areas, whatever mode the Session is in now.
+ * @param ctx - the provider context, which may provide the sandbox policy.
+ * @param agent - the Agent whose Session starts.
+ * @param output - the Session's output folder.
+ * @param sessionDirectory - the Session's working directory.
+ * @throws when either folder is inside the other, or the policy's roots cannot be read.
+ */
+async function assertOutsideWritableFolders(ctx: Context, agent: Agent, output: string, sessionDirectory: string): Promise<void> {
+  const policy = ctx.get('sandboxPolicy')?.resolve({ session: agent.session, mode: 'workspace-write' })
+  const writable = [sessionDirectory, ...policy === undefined ? [] : [policy.workspaceRoot, ...writableRoots(policy)]]
+  const folder = await realpath(output)
+  for (const candidate of writable) {
+    const real = await realpath(candidate).catch(() => candidate)
+    if (pathWithin(folder, real) || pathWithin(real, folder)) {
+      throw new Error(`the output folder ${folder} overlaps ${real}, where a sandboxed command can write, so the browser server is not started; set XDG_CACHE_HOME to a folder outside the chat's writable folders`)
+    }
+  }
 }
 
 /**
@@ -246,6 +312,18 @@ async function ignoredOutputFolder(folder: string): Promise<void> {
   }
 }
 
+declare module '@deepseek-ai/cordis' {
+  interface Events {
+    /**
+     * The add-time consent accepted one server's start. A provider that mounts the server per Session starts it again
+     * in the live Sessions the refusal left without its tools; the consent is still checked at that start.
+     * @param serverName - the accepted server.
+     * @mode parallel
+     */
+    'mcp-client/consent-accepted'(serverName: string): void | Promise<void>
+  }
+}
+
 interface ClientState {
   /**
    * `ready` holds a started client; `blocked` waits for a busy attachment; `refused` is a start the add-time consent did
@@ -253,13 +331,15 @@ interface ClientState {
    */
   status: 'ready' | 'blocked' | 'refused' | 'unadmitted'
   mask?: Scope
-  /** The admission change running for this Session; changes run one after another. */
+  /** The admission change or consent retry running for this Session; they run one after another. */
   transition?: Promise<void>
   /**
    * Whether an admission change is starting or closing the Session's server: its own tools, which the start adds and
    * the close removes, are not masked meanwhile.
    */
   changing?: boolean
+  /** The Agent's creation signal, which a later start of a `refused` Session runs under. */
+  signal?: AbortSignal | undefined
 }
 
 /**
@@ -277,7 +357,10 @@ function isConsentStop(error: unknown): error is McpClient.McpConsentRefusedErro
  * A busy attachment leaves that activation without browser tools; its other turns continue. A start the mounted
  * add-time consent refuses, or a declared consent that did not start, also leaves that activation without browser
  * tools and logs a warning naming the server and the consent's reason; the Agent is still created, and the next
- * activation reviews the start again. Every other startup failure fails the Agent's creation.
+ * activation reviews the start again. When the consent accepts that server's start (`mcp-client/consent-accepted`),
+ * each live Session left without tools by a refusal runs the same consent check once more and, when it passes, gets the
+ * server's tools; a Session the check still refuses stays without them and starts nothing.
+ * Every other startup failure fails the Agent's creation.
  * Once a Session's server has started, its output folder, when the provider names one, is created if missing and given
  * a `.gitignore` of `*` if it has none; a failure to do so is logged as a warning and the Session keeps its tools.
  * A call the provider's `refuseCall` refuses fails with the provider's text and never reaches the server.
@@ -328,23 +411,63 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
         try {
           signal.throwIfAborted()
           const sessionDirectory = await workingDirectory.ensure(agent, signal)
+          // The call's logged arguments stay as the model sent them; the server gets the replacement.
+          const replacements = new WeakMap<object, Record<string, unknown>>()
+          const notes = new WeakMap<object, string>()
+          // The registry rebuilds a wrapper's result from the tool body's own output, so the note joins the content
+          // the model sees at the post-execute step.
+          scope.ctx.on('tools/post-execute', async (exec, result, next) => {
+            const decision = await next()
+            const note = exec.agent === agent ? notes.get(exec) : undefined
+            if (note === undefined || decision.kind !== 'accept' || decision.content !== undefined) return decision
+            return {
+              kind: 'accept',
+              content: [...result.content, { type: 'text', text: note }],
+              ...decision.additionalContexts === undefined ? {} : { additionalContexts: decision.additionalContexts },
+            }
+          })
+          scope.ctx.on('mcp-client/call-arguments', (serverName, _args, exec) =>
+            serverName === options.name && exec.agent === agent ? replacements.get(exec) : undefined)
+          const outputDirectory = options.outputRoot === undefined ? undefined : await sessionOutputDirectory(options.outputRoot, agent.id)
+          if (outputDirectory !== undefined) await assertOutsideWritableFolders(ctx, agent, outputDirectory, sessionDirectory)
           scope.ctx.on('tools/execute', async (exec, next) => {
             if (!exec.name.startsWith(toolPrefix)) return next()
             if (exec.agent !== agent) {
               if (ctx.tools.get(exec.name, exec.agent) !== ctx.tools.get(exec.name, agent)) return next()
               throw new Error(`${options.name}: browser tool belongs to another Session`)
             }
-            const refusal = await options.refuseCall?.({
+            const call: BrowserToolCall = {
               tool: exec.name.slice(toolPrefix.length), arguments: exec.arguments, directory: sessionDirectory,
-            })
-            return refusal === undefined ? next() : failure(refusal)
+              ...outputDirectory === undefined ? {} : { outputDirectory },
+            }
+            const refusal = await options.refuseCall?.(call)
+            if (refusal !== undefined) return failure(refusal)
+            const prepared = await options.prepareCall?.(call)
+            if (typeof prepared === 'string') return failure(prepared)
+            if (prepared !== undefined) replacements.set(exec, { ...exec.arguments as Record<string, unknown>, ...prepared.arguments })
+            if (typeof prepared === 'object' && prepared.note !== undefined) notes.set(exec, prepared.note)
+            if (options.checkResult === undefined) return next()
+            const startedAt = Date.now()
+            let result: ToolExecutionResult | undefined
+            let thrown: unknown
+            try {
+              result = await next()
+            } catch (error) {
+              thrown = error
+            }
+            const refused = await options.checkResult(call, startedAt)
+            if (refused !== undefined) return failure(refused)
+            if (result === undefined) throw thrown
+            return result
           })
           await scope.ctx.plugin(McpClient, McpClient.Config({
             transport: 'stdio',
             serverName: options.name,
             command: options.command,
             args: options.args,
-            ...options.env === undefined ? {} : { env: options.env },
+            ...options.env === undefined && outputDirectory === undefined
+              ? {}
+              : { env: { ...options.env, ...outputDirectory === undefined ? {} : { PLAYWRIGHT_MCP_OUTPUT_DIR: outputDirectory } } },
             cwd: options.directory === undefined ? sessionDirectory : await fixedDirectory(options.directory),
             roots: [sessionDirectory],
             ...options.deniedTools === undefined ? {} : { deniedTools: options.deniedTools },
@@ -352,7 +475,7 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
             failOnStartupError: true,
             reconnect: { enabled: false },
           }))
-          if (options.outputFolder !== undefined) {
+          if (options.outputFolder !== undefined && outputDirectory === undefined) {
             try {
               await ignoredOutputFolder(join(sessionDirectory, options.outputFolder))
             } catch (error) {
@@ -450,7 +573,10 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
 
   ctx.on('agent/created', async ({ agent, signal }) => {
     const unadmitted = options.admission !== undefined && !options.admission.admitted(agent)
-    const state: ClientState = { status: unadmitted ? 'unadmitted' : resources.available(agent) ? 'ready' : 'blocked' }
+    const state: ClientState = {
+      status: unadmitted ? 'unadmitted' : resources.available(agent) ? 'ready' : 'blocked',
+      signal: signal ?? new AbortController().signal,
+    }
     agent.ctx.effect(() => async () => {
       clients.delete(agent)
       await state.transition
@@ -475,6 +601,43 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
     clients.set(agent, state)
   }, { prepend: true })
   ctx.on('tools/change', refreshBlockedMasks)
+  /** Start the server again in a `refused` Session the person's acceptance may now allow; the consent decides again. */
+  const retryRefused = async (agent: Agent, state: ClientState): Promise<void> => {
+    if (stopping || clients.get(agent) !== state || state.status !== 'refused' || state.signal?.aborted !== false) return
+    if (options.admission !== undefined && !options.admission.admitted(agent)) return
+    // The mask denies the server's tools in this Session; it comes off first, because the new registration names them.
+    const mask = state.mask
+    delete state.mask
+    try {
+      await mask?.dispose()
+    } catch (error) {
+      // The accept already took effect; a Session whose mask would not come off stays as it was.
+      if (mask !== undefined) state.mask = mask
+      ctx.logger.warn(`${options.name}: the browser tools stay off in Session ${agent.id}: ${(error as Error).message}`)
+      return
+    }
+    state.changing = true
+    try {
+      await start(agent, state, state.signal)
+    } catch (error) {
+      state.status = 'refused'
+      ctx.logger.warn(`${options.name}: the browser tools could not start in Session ${agent.id} after the server was allowed: ${(error as Error).message}`)
+    } finally {
+      state.changing = false
+      refreshBlockedMasks()
+    }
+  }
+  ctx.on('mcp-client/consent-accepted', async (serverName) => {
+    if (stopping || serverName !== options.name) return
+    const transitions: Promise<void>[] = []
+    for (const [agent, state] of [...clients]) {
+      if (state.status !== 'refused') continue
+      const previous = state.transition ?? Promise.resolve()
+      state.transition = previous.then(() => retryRefused(agent, state))
+      transitions.push(state.transition)
+    }
+    await Promise.all(transitions)
+  })
   ctx.on('tools/execute', async (exec, next) => {
     const ownResource = resourceTools.has(exec.name)
       && typeof exec.arguments === 'object' && exec.arguments !== null

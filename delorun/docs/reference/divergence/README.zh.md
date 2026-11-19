@@ -76,7 +76,7 @@ Delorun 修改了上游 DeepSeek Harness 的一些文件。差异台账记录其
 | `profile-history` | profile 历史、安全模式以及安装时的插件审计 | 已发布的 `cli`（`delorun recover`）和 `profile-safety` |
 | `scheduled-task-consent` | 计划任务唤醒其 Session 之前所询问的同意 | 已发布的 `plugin-schedule-consent` |
 | `session-created-at` | Session 列表行携带 `createdAt` | 已发布的 `plugin-sidebar`（按创建时间排序） |
-| `studio-seams` | 设置布局、新手引导、主题、侧栏和单列表工作区接缝（WP1.6） | studio 通道；`bundle-local` 设置 `welcomeNotice` |
+| `studio-seams` | 设置布局、新手引导、主题、侧栏和单列表工作区接缝 | studio 通道；`bundle-local` 设置 `welcomeNotice` |
 | `terminal-card-controls` | 终端卡片的复制命令控件、时长和打开的开始 | studio 通道 |
 | `trash-purge` | 在搜索索引和投影缓存中遗忘被清除的 Session（C8） | 已发布的 `trash` |
 | `vendor-rescope` | vendor 重新限定范围脚本的后置条件和跳过列表 | 仓库工具 |

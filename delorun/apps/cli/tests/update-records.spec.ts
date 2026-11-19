@@ -108,6 +108,8 @@ const DECLARATIONS: Readonly<Record<string, string | null>> = {
   'delorun.changes-notices': 'changes-notices',
   // A cache of file digests that a start rebuilds when it cannot read it; never decides anything.
   'delorun.changes-scan-cache': null,
+  // The files of the changes the last read of a harness copy found; an action checks each file again, and reads the whole copy when it cannot use it.
+  'delorun.changes-harness-pending': null,
   // Documents a person exports, passes in or reads; no release reads them back from the home's data.
   ARCHIVE_CUSTOMISATION_SCHEMA_VERSION: null,
   SETUP_ANSWERS_SCHEMA_VERSION: null,

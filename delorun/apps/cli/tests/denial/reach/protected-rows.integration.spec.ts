@@ -160,8 +160,9 @@ describe('an unlocked device and the protected plugin rows', () => {
     // The home-auth and reach rows are refused as a whole, so a reach row without live fields (it is not described) is still decided.
     const found = namespaces.filter(ns => protectedRows().some(row => row.rowId === ns))
     expect(found.filter(ns => !decided.includes(ns))).toEqual([])
-    // The release check's row (`UPDATE_CHECK_SWITCH` in bundle-local) is decided too: a device cannot turn the check off. The consent row has four switches: enabled, Full access starts, and the two levels.
-    expect([...decided].sort()).toEqual([DELEGATION_CONSENT_ROW, DELEGATION_CONSENT_ROW, DELEGATION_CONSENT_ROW, DELEGATION_CONSENT_ROW, HOME_AUTH_SWITCH.ns, REACH_SWITCH.ns, 'delorun-update-check'].sort())
+    // The release check's row (`UPDATE_CHECK_SWITCH` in bundle-local) is decided too: a device cannot turn the check off.
+    // The external-agent consent's row holds four decided fields (see the next test), so its namespace appears four times.
+    expect([...decided].sort()).toEqual([...Array<string>(4).fill(DELEGATION_CONSENT_ROW), HOME_AUTH_SWITCH.ns, REACH_SWITCH.ns, 'delorun-update-check'].sort())
     // Every computer-only switch names a protected row.
     expect(decided.filter(ns => !protectedRows().some(row => row.rowId === ns))).toEqual([])
   })
@@ -255,6 +256,21 @@ describe('an unlocked device and slash commands', () => {
 })
 
 describe('an unlocked device and the computer-only switches', () => {
+  it('decides each field of the external-agent consent row by the kind its registration has', () => {
+    const kindOf = (target: { readonly ranked?: unknown; readonly safeValue?: boolean }): string =>
+      target.ranked !== undefined ? 'ranked' : target.safeValue === false ? 'on' : 'off'
+    const fields = studio.ctx.homeAuth.computerOnlySwitches().filter(target => target.ns === DELEGATION_CONSENT_ROW)
+    expect(Object.fromEntries(fields.map(target => [target.field, kindOf(target)]))).toEqual({
+      // Turning the consent off is computer-only: it ends the ask before an agent starts.
+      enabled: 'off',
+      // A level is a ranked computer-only switch: a device may keep or tighten it, and only the computer loosens it.
+      claudeCodeLevel: 'ranked',
+      codexLevel: 'ranked',
+      // Computer-only to turn on: it lets a Full access chat start an agent without asking, so a device may only write false.
+      fullAccessStartsAgents: 'on',
+    })
+  })
+
   it('never turns the external-agent consent off, through the switch the consent\'s own plugin registers', async () => {
     const ns = DELEGATION_CONSENT_ROW
     const off = switchOffRefusal(EXTERNAL_AGENT_CONSENT_SWITCH.label)

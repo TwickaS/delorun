@@ -14,8 +14,8 @@ import { dirname, resolve } from 'node:path'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session'
+import { agentSignInFailureText } from '@deepseek-ai/dsh-subagent/out-of-process'
 import {
-  agentSignInFailureText,
   settleRunResult,
   subprocessRunHandle,
   type SubagentResult,
@@ -31,6 +31,7 @@ import type {
 } from '@deepseek-ai/dsh-subprocess'
 import {
   CodexAppServerWire,
+  CodexModelListIncomplete,
   type CodexModelOption,
   type CodexWireFailureFacts,
 } from './wire.ts'
@@ -144,7 +145,12 @@ function safeModelName(name: string): string | undefined {
   return /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,63}$/.test(name) ? name : undefined
 }
 
-/** The fixed, model-safe sentence for a configured model that the plan does not offer. */
+/**
+ * The fixed, model-safe sentence for a configured model that the plan does not offer.
+ * @param configured - the model name the configuration asks for.
+ * @param offered - the model ids the app-server lists for the person's plan.
+ * @returns a sentence that shows only names that look like model ids, at most twelve of the offered ones.
+ */
 export function modelNotOfferedText(configured: string, offered: readonly string[]): string {
   const name = safeModelName(configured)
   const subject = name === undefined ? 'configured model' : `configured model ${name}`
@@ -418,7 +424,7 @@ export async function startCodexRun(
       // Let an already-exiting process publish those facts before rollback.
       await new Promise<void>((resolve) => { setImmediate(resolve) })
     }
-    const failure = error instanceof CodexModelNotOffered ? error : new CodexRunFailure({
+    const failure = error instanceof CodexModelNotOffered || error instanceof CodexModelListIncomplete ? error : new CodexRunFailure({
       stage: startupStage,
       category: 'unknown',
       outcome: error instanceof CodexRunFailure

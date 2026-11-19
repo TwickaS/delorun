@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { BOOT_WORDMARK_GLOBAL, BootPage, bootWordmark, RECOVERY_ROUTES_GLOBAL, recoveryRoutes, recoveryText } from '../src/boot-page.ts'
+import { BOOT_WORDMARK_GLOBAL, BootPage, bootWordmark, RECOVERY_ROUTES_GLOBAL, RECOVERY_UPDATE_ROUTES_GLOBAL, recoveryRoutes, recoveryText, recoveryUpdateRoutes } from '../src/boot-page.ts'
 
 afterEach(() => { document.body.innerHTML = '' })
 
@@ -98,6 +98,8 @@ describe('the recovery screen', () => {
 
   interface Options {
     state?: unknown
+    /** The update routes' state, answered at `/delorun/update/state`; a status 500 when absent. */
+    updateState?: unknown
     stateStatus?: number
     answers?: Answer[]
     confirm?: boolean
@@ -114,6 +116,10 @@ describe('the recovery screen', () => {
         const answer = answers.shift() ?? { status: 200, body: {} }
         if (typeof answer === 'string' || answer instanceof Error) throw answer
         return new Response(typeof answer.body === 'string' ? answer.body : JSON.stringify(answer.body), { status: answer.status })
+      }
+      if (url === '/delorun/update/state') {
+        if (options.updateState === 'offline') throw new Error('offline')
+        return new Response(JSON.stringify(options.updateState ?? {}), { status: options.updateState === undefined ? 500 : 200 })
       }
       const state = options.state ?? STATE
       return new Response(typeof state === 'string' ? state : JSON.stringify(state), { status: options.stateStatus ?? 200 })
@@ -187,7 +193,8 @@ describe('the recovery screen', () => {
     expect(screen.lang).toBe('zh')
     expect(screen.textContent).toContain('暂无更改。')
     expect(screen.textContent).toContain('安全模式已开启，开始于 2026-11-10T09:00:00.000Z')
-    expect(screen.querySelectorAll('button')).toHaveLength(0)
+    expect(screen.querySelectorAll('button')).toHaveLength(1)
+    expect(screen.querySelector('button')?.textContent).toBe('退出安全模式')
   })
 
   it('names a state it cannot read', async () => {
@@ -290,5 +297,115 @@ describe('the recovery screen', () => {
     } finally {
       vi.unstubAllGlobals()
     }
+  })
+
+  it('leaves safe mode after asking', async () => {
+    const { env, posted, confirm } = environment({ state: { atComputer: true, recent: [], safeMode: { since: '2026-11-10T09:00:00.000Z' } }, answers: [{ status: 200, body: { lines: ['Safe mode is off.'] } }] })
+    const { el, page } = mountRecovery(env)
+    page.recover()
+    await vi.waitFor(() => { expect(el.querySelectorAll('button')).toHaveLength(1) })
+    button(el, 'Leave safe mode').click()
+    await vi.waitFor(() => { expect(el.querySelector('[role="status"]')?.textContent).toContain('Done. Safe mode is off.') })
+    expect(confirm).toHaveBeenCalledWith('Leave safe mode? The next start loads your whole profile again.')
+    expect(posted).toEqual([{ url: '/delorun/changes/exit-safe-mode', body: {} }])
+  })
+
+  describe('Roll back', () => {
+    const UPDATE_ROUTES = '/delorun/update'
+    const OFFER = { available: true, release: { delorun: '0.1.3', dsh: '0.2.2' }, rollback: { available: true, to: '0.1.2' } }
+    beforeEach(() => { Reflect.set(globalThis, RECOVERY_UPDATE_ROUTES_GLOBAL, UPDATE_ROUTES) })
+    afterEach(() => { Reflect.deleteProperty(globalThis, RECOVERY_UPDATE_ROUTES_GLOBAL) })
+
+    it('reads the update routes the page names and nothing else', () => {
+      expect(recoveryUpdateRoutes({ [RECOVERY_UPDATE_ROUTES_GLOBAL]: '/delorun/update' })).toBe('/delorun/update')
+      for (const value of [undefined, '', 'update', '/delorun/', 'https://evil.example/x', 7]) expect(recoveryUpdateRoutes({ [RECOVERY_UPDATE_ROUTES_GLOBAL]: value })).toBeUndefined()
+    })
+
+    it('offers it when the update routes say a rollback is possible, and posts after asking', async () => {
+      const { env, posted, confirm } = environment({ updateState: OFFER, answers: [{ status: 202, body: { kind: 'rollback-begun', target: '0.1.2', runningChats: 0 } }] })
+      const { el, page } = mountRecovery(env)
+      page.recover()
+      await vi.waitFor(() => { expect(el.textContent).toContain('Roll back to 0.1.2') })
+      expect(el.textContent).toContain('Delorun 0.1.3 started after an update. Going back returns to 0.1.2')
+      expect(el.textContent).not.toContain('No copy of your chats')
+      button(el, 'Roll back to 0.1.2').click()
+      await vi.waitFor(() => { expect(el.querySelector('[role="status"]')?.textContent).toBe('Going back to 0.1.2. This page loses its connection for a moment; reload it when Delorun is back.') })
+      expect(confirm).toHaveBeenCalledWith('Roll back to 0.1.2? Running chats finish first, then Delorun restarts.')
+      expect(posted).toEqual([{ url: '/delorun/update/rollback', body: { chats: 'wait', profileOnly: false } }])
+    })
+
+    it('offers only the settings when no copy of the chats was taken', async () => {
+      const { env, posted } = environment({ updateState: { ...OFFER, rollback: { ...OFFER.rollback, dataCopyMissing: true } }, answers: [{ status: 202, body: { target: '0.1.2' } }] })
+      const { el, page } = mountRecovery(env)
+      page.recover()
+      await vi.waitFor(() => { expect(el.textContent).toContain('Go back to 0.1.2 (settings only)') })
+      expect(el.textContent).toContain('No copy of your chats was taken before the update')
+      expect(el.textContent).not.toContain('Roll back to 0.1.2')
+      button(el, 'Go back to 0.1.2 (settings only)').click()
+      await vi.waitFor(() => { expect(posted).toHaveLength(1) })
+      expect(posted[0]).toEqual({ url: '/delorun/update/rollback', body: { chats: 'wait', profileOnly: true } })
+    })
+
+    it('update-rollback-refused-phone-without-unlock: a refusal for a phone or an unlock says it needs the computer, and nothing else changes', async () => {
+      for (const code of ['LOOPBACK_REQUIRED', 'ELEVATION_REQUIRED']) {
+        const { env } = environment({ updateState: OFFER, answers: [{ status: 403, body: { code, message: 'refused' } }] })
+        const { el, page } = mountRecovery(env)
+        page.recover()
+        await vi.waitFor(() => { expect(el.textContent).toContain('Roll back to 0.1.2') })
+        button(el, 'Roll back to 0.1.2').click()
+        await vi.waitFor(() => { expect(el.querySelector('[role="alert"]')?.textContent).toBe('This needs you at your computer.') })
+        expect(el.querySelector('[role="status"]')?.textContent).toBe('')
+        page.dispose()
+      }
+    })
+
+    it('shows a refusal of the home process in its own words', async () => {
+      const { env } = environment({ updateState: OFFER, answers: [{ status: 409, body: { code: 'CHATS_RUNNING', message: 'Chats are running.' } }] })
+      const { el, page } = mountRecovery(env)
+      page.recover()
+      await vi.waitFor(() => { expect(el.textContent).toContain('Roll back to 0.1.2') })
+      button(el, 'Roll back to 0.1.2').click()
+      await vi.waitFor(() => { expect(el.querySelector('[role="alert"]')?.textContent).toBe('It did not work: Chats are running.') })
+    })
+
+    it('does not post when the person declines', async () => {
+      const { env, posted } = environment({ updateState: OFFER, confirm: false })
+      const { el, page } = mountRecovery(env)
+      page.recover()
+      await vi.waitFor(() => { expect(el.textContent).toContain('Roll back to 0.1.2') })
+      button(el, 'Roll back to 0.1.2').click()
+      expect(posted).toEqual([])
+    })
+
+    it('offers nothing when no rollback is possible, the update routes fail, or the page names none', async () => {
+      for (const options of [
+        { updateState: { ...OFFER, rollback: { available: false } } },
+        { updateState: { ...OFFER, available: false } },
+        { updateState: { ...OFFER, rollback: { available: true } } },
+        { updateState: undefined },
+        { updateState: 'offline' },
+      ]) {
+        const { env } = environment(options)
+        const { el, page } = mountRecovery(env)
+        page.recover()
+        await vi.waitFor(() => { expect(el.textContent).toContain('Recent changes') })
+        expect(el.textContent).not.toContain('Roll back')
+        page.dispose()
+      }
+      Reflect.deleteProperty(globalThis, RECOVERY_UPDATE_ROUTES_GLOBAL)
+      const { env, fetch } = environment({ updateState: OFFER })
+      const { el, page } = mountRecovery(env)
+      page.recover()
+      await vi.waitFor(() => { expect(el.textContent).toContain('Recent changes') })
+      expect(el.textContent).not.toContain('Roll back')
+      expect(fetch).not.toHaveBeenCalledWith('/delorun/update/state')
+    })
+
+    it('says it in Chinese', async () => {
+      const { env } = environment({ updateState: OFFER, language: 'zh-CN' })
+      const { el, page } = mountRecovery(env)
+      page.recover()
+      await vi.waitFor(() => { expect(el.textContent).toContain('回滚到 0.1.2') })
+    })
   })
 })

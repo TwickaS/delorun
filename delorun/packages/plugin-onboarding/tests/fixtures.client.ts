@@ -9,6 +9,7 @@ import type { BrowserReadiness, BrowserSetupStore } from '@delorun/browser-setup
 import type { TurnOffOutcome } from '../src/client/browser-pack.ts'
 import type { BundleInstaller, BundleView, RowView } from '../src/client/bundles.ts'
 import { en } from '../src/client/locales.ts'
+import { en as devicesEn } from '../../bundle-local/src/client/devices-locales.ts'
 import type { DelegationConsentSettings } from '@delorun/plugin-delegation-consent/wire'
 import type { PreviewFlagsStore, PreviewFlagView } from '@delorun/preview-flags/client'
 import type { ThemeSettings } from '@delorun/plugin-theme'
@@ -25,6 +26,9 @@ import { DIRECTORY } from './directory.fixture.ts'
 export const t: StepServices['t'] = makeTranslate(en)
 
 /** The theme's labels the look step shows, as the theme words them. */
+/** The Devices section's copy, which the Phone access step's Phone powers choice draws with. */
+export const devices: StepServices['phonePowers']['t'] = makeTranslate(devicesEn)
+
 export const appearance: StepServices['appearance'] = makeTranslate({
   'mode': 'Mode', 'mode.light': 'Light', 'mode.dark': 'Dark', 'mode.system': 'System',
   'palette': 'Theme', 'palette.soft': 'Soft', 'palette.t3-code': 'T3 Code', 'palette.t3-chat': 'T3 Chat', 'palette.grove': 'Grove',
@@ -264,6 +268,7 @@ export function stepServices(change: Partial<StepServices> = {}): StepServices &
     renderSection: (id: string) => `section ${id}`,
     resolveText: text => (typeof text === 'string' ? text : text.en),
     pin: { fetch: () => Promise.reject(new Error('no PIN requests in this spec')), openSettings: () => undefined },
+    phonePowers: { t: devices, fetch: () => Promise.resolve(new Response(null, { status: 404 })) },
     browser: browserFake().face,
     previewFlags: flagsFake(),
     spies: bundles,

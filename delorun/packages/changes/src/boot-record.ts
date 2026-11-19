@@ -110,6 +110,11 @@ export interface BootRecordRequest {
   readonly rows: readonly BootRow[]
   /** What the start failed with, when the profile did not boot. */
   readonly failure?: string
+  /**
+   * The ids of the rows each bundle's patch inserts, by package name. A bundle plugin's rows import other modules than
+   * its own package, so its rows are found by these ids as well as by module.
+   */
+  readonly insertedRows?: Readonly<Record<string, readonly string[]>>
   /** The clock; `() => new Date()` by default. */
   readonly now?: () => Date
 }
@@ -128,10 +133,11 @@ export function pluginRows<Row extends Pick<BootRow, 'name'>>(plugin: string, ro
  * @param plugin - a package name.
  * @param rows - the Loader's rows.
  * @param failed - whether the profile did not boot.
+ * @param inserted - the ids of the rows the plugin's patch inserts, when it is a bundle.
  * @returns the plugin's entry of the record.
  */
-function bootPlugin(plugin: string, rows: readonly BootRow[], failed: boolean): BootPlugin {
-  const own = pluginRows(plugin, rows)
+function bootPlugin(plugin: string, rows: readonly BootRow[], failed: boolean, inserted: ReadonlySet<string>): BootPlugin {
+  const own = rows.filter(row => inserted.has(row.id) || pluginRows(plugin, [row]).length > 0)
   const listed = own.map(({ id, state }) => ({ id, state }))
   if (failed) return { plugin, rows: listed, loaded: false }
   const enabled = own.filter(row => !row.disabled)
@@ -156,7 +162,7 @@ export async function writeBootRecord(request: BootRecordRequest): Promise<BootR
   const record: BootRecord = {
     schema: BOOT_RECORD_SCHEMA,
     at: (request.now ?? (() => new Date()))().toISOString(),
-    plugins: plugins.map(({ plugin }) => bootPlugin(plugin, rows, failure !== undefined)),
+    plugins: plugins.map(({ plugin }) => bootPlugin(plugin, rows, failure !== undefined, new Set(request.insertedRows?.[plugin]))),
     ...failure === undefined ? {} : { failure },
   }
   await mkdir(runDirectory(home, profile), { recursive: true, mode: PRIVATE_DIR_MODE })

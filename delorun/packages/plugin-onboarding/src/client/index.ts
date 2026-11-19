@@ -242,6 +242,10 @@ export function applyStudio(ctx: Context): void {
       // Looked up on click, as for the Models link above.
       openSettings: () => { ctx.get('settingsShell')?.openSection(PIN_MODE_SECTION_ID) },
     },
+    phonePowers: {
+      t: ctx.locale.bind('delorunDevices'),
+      fetch: (input, init) => globalThis.fetch(input, init),
+    },
     browser: {
       setup: browserSetup,
       turnOff: () => turnBrowserOff(ctx),
@@ -338,9 +342,10 @@ export function applyStudio(ctx: Context): void {
   }, 'delorun-onboarding: finish later')
   const laterStore = {
     ...laterBase,
-    set: (next: boolean): void => {
+    set: (next: boolean, remember = true): void => {
       reopened = !next
       laterBase.set(next)
+      if (!remember) return
       void currentStart().then((id) => {
         if (id !== undefined && (next || (progress.getSnapshot().value?.pausedStart ?? '') !== '')) writeProgress('pausedStart', next ? id : '')
       })

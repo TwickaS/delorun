@@ -105,6 +105,7 @@ import { isForeignFetchSite, isSameLoopbackOrigin, listenerOf, loopbackAddressOf
 import { mayUse, accessView } from './access.ts'
 import { isProfileSafetyError, readSafeMode, recover } from '@delorun/profile-safety'
 import {
+  type AccessView,
   ACTION_PATHS,
   CHANGED_SINCE_REVIEW,
   CONFIRM_PROTECTION,
@@ -1081,6 +1082,19 @@ async function act(action: ChangesAction, body: Readonly<Record<string, unknown>
       })
       return { lines: report.lines, skipped: report.skipped }
     }
+    case 'exit-safe-mode': {
+      onlyFields(body, [])
+      const report = await recover({
+        profileDir: ctx.profileDir,
+        homeDir: ctx.home,
+        profile: ctx.profile,
+        action: { kind: 'exit-safe-mode' },
+        installationBundles: dependencies.installationBundles,
+        changedBy: { kind: 'person' },
+      })
+      // The safe-mode overlay file the last start left is read only by a start in safe mode, which rewrites or removes it.
+      return { lines: report.lines, skipped: [] }
+    }
   }
 }
 
@@ -1178,6 +1192,7 @@ const ACTION_CONTROLS: Readonly<Record<ChangesAction, ChangesControl>> = {
   work: 'plugin-other',
   done: 'plugin-other',
   'safe-mode': 'plugin-other',
+  'exit-safe-mode': 'plugin-other',
   create: 'plugin-other',
   request: 'plugin-other',
   reveal: 'plugin-other',
@@ -1193,13 +1208,41 @@ const ACTION_CONTROLS: Readonly<Record<ChangesAction, ChangesControl>> = {
  * @returns the handler.
  */
 export function decidingRoute(control: ChangesControl, dependencies: RouteDependencies, run: (body: Readonly<Record<string, unknown>>, ctx: ChangesContext, presence: AtComputer) => Promise<object>): RouteHandler {
+  return postRoute(dependencies, (request, admission) => gate(request, admission, control, dependencies.devices), run)
+}
+
+/**
+ * Build one `POST` route for a control at level `open`: the site fence first, then any paired device or the computer,
+ * unlocked or not, and a session that is neither is refused. No proof of presence is issued, so `run` can only read
+ * and record what any session may see.
+ * @param dependencies - what the routes reach.
+ * @param run - the action, given the body and the profile.
+ * @returns the handler.
+ */
+function openRoute(dependencies: RouteDependencies, run: (body: Readonly<Record<string, unknown>>, ctx: ChangesContext) => Promise<object>): RouteHandler {
+  return postRoute(dependencies, async (request, admission) => {
+    const requester = await requesterOf(admission, dependencies.devices)
+    if (requester.kind === 'device' ? isCrossSiteDevice(request) : isCrossSite(request)) throw new RouteRefusal(403, 'CROSS_SITE', 'Another site cannot change what your harness runs.')
+    if (requester.kind === 'other') throw new RouteRefusal(403, LOOPBACK_REQUIRED, LOOPBACK_REQUIRED_SENTENCE)
+    return { presence: undefined, renew: () => {} }
+  }, (body, ctx) => run(body, ctx))
+}
+
+/**
+ * The shell every `POST` route shares: admit, decide before the body is read, read the body, run, renew, answer.
+ * @param dependencies - what the routes reach.
+ * @param decide - the decision for this request: what `run` receives as proof, and a renewal to run after success.
+ * @param run - the action.
+ * @returns the handler.
+ */
+function postRoute<P>(dependencies: RouteDependencies, decide: (request: IncomingMessage, admission: { readonly arrival: StudioArrival, readonly peer: object }) => Promise<{ readonly presence: P, readonly renew: () => void }>, run: (body: Readonly<Record<string, unknown>>, ctx: ChangesContext, presence: P) => Promise<object>): RouteHandler {
   return async (request, response) => {
     const admission = admitted(request, response, dependencies.connection, dependencies.loopbackPort)
     if (admission === undefined) return
     let home: HomeWords | undefined
     try {
       if (request.method !== 'POST') throw new RouteRefusal(405, 'METHOD_NOT_ALLOWED', 'Changes are made with a POST.')
-      const { presence, renew } = await gate(request, admission, control, dependencies.devices)
+      const { presence, renew } = await decide(request, admission)
       const ctx = profileOf(dependencies)
       home = homeWords(ctx.home, dependencies.logger)
       const body = await readBody(request)
@@ -1448,4 +1491,44 @@ export function changesRoutes(dependencies: RouteDependencies): readonly Changes
     { kind: 'exact', path: NOTICE_SEEN_PATH, handler: noticeSeenRoute(dependencies) },
     ...(Object.keys(SETUP_PATHS) as (keyof typeof SETUP_PATHS)[]).map((kind): ChangesRoute => ({ kind: 'exact', path: SETUP_PATHS[kind], handler: setupRoute(kind, dependencies, held) })),
   ]
+}
+
+/**
+ * The gated routes of this plugin, for another plugin's routes that need the same fence and levels: `@delorun/plugin-update`
+ * registers the studio's update routes through it, so a request from another site, a device's level and its unlock are
+ * decided by this module's rules and table ({@link CONTROL_LEVELS}) before the other plugin reads a body.
+ */
+export interface ChangesGate {
+  /**
+   * Build a `POST` route decided before its body is read, as {@link decidingRoute} does.
+   * @param control - the control the route is; its level is in {@link CONTROL_LEVELS}.
+   * @param run - the action, given the body, the profile and the proof; a {@link RouteRefusal} it throws answers with its status and code.
+   * @returns the handler.
+   */
+  post(control: ChangesControl, run: (body: Readonly<Record<string, unknown>>, ctx: ChangesContext, presence: AtComputer) => Promise<object>): RouteHandler
+  /**
+   * Build a `POST` route for a control at level `open` (`update-check`): the site fence, then the computer or any paired device, unlocked or not.
+   * @param run - the action, given the body and the profile; it receives no proof of presence.
+   * @returns the handler.
+   */
+  open(run: (body: Readonly<Record<string, unknown>>, ctx: ChangesContext) => Promise<object>): RouteHandler
+  /**
+   * Build a `GET` route that any admitted session reads, as `state` does.
+   * @param read - what the route answers, given the profile and every control's decision for this request.
+   * @returns the handler.
+   */
+  get(read: (ctx: ChangesContext, access: AccessView) => Promise<object>): RouteHandler
+}
+
+/**
+ * The gate over one set of route dependencies.
+ * @param dependencies - what the routes reach.
+ * @returns the gate.
+ */
+export function changesGate(dependencies: RouteDependencies): ChangesGate {
+  return {
+    post: (control, run) => decidingRoute(control, dependencies, run),
+    open: run => openRoute(dependencies, run),
+    get: read => readingRoute((ctx, _url, requester) => read(ctx, accessView(actorOf(requester), dependencies.devices.phonePowers())), dependencies),
+  }
 }

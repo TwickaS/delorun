@@ -19,19 +19,18 @@ import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import type { SaveTextSpill } from '@deepseek-ai/dsh-spill'
 import LocalSpillStore, {
-  DEFAULT_ROOT_DIR_NAME,
   DEFAULT_ROOT_PREFIX,
   discoverDefaultRoots,
   encodeSegment,
   isErrno,
   privateRoot,
-  privateRootFallbackCause,
   saveTextFile,
   sessionDir,
   sweepSpillRoots,
 } from '@deepseek-ai/dsh-spill-local'
 import type { SweepRoot } from '@deepseek-ai/dsh-spill-local'
 import { gatherSweepRoots } from '../src/cleanup.ts'
+import { DEFAULT_ROOT_DIR_NAME, privateRootFallbackCause } from '../src/store.ts'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 

@@ -40,6 +40,8 @@
 
 `closure.json` 列出发布平台，即本次发布为之发布运行时的平台：`linux-x64` 与 `linux-arm64`；Windows 由运行 Linux 运行时的 WSL2 提供服务。构建、SBOM、重建记录的必需输出与签名恰好覆盖这些平台，当列表中出现 `toolchain.json` 把原生插件标为 `unbuilt` 的平台时，读取配方会失败。它还给出客户端标题 `Delorun`，客户端产物把它用作页面标题、主屏幕标题和 web manifest 的名称；以及安装锚点 `@deepseek-ai/dsh`，上游的运行时解析会读取其 `package.json`，以判断某个配置的插件行能导入什么，它必须声明的 Delorun bundle 是 `@delorun/bundle-local` 与 `@delorun/bundle-studio`，即每个新 CLI 配置所列出的所有 `@delorun/` bundle。没有这项声明，`delorun` 会拒绝每一次启动，因为某个 Delorun 插件行导入失败。`closure.json` 还列出 `foreignPrebuilds`：在主包中携带其他平台预构建文件的包（目前是 `@deepseek-ai/libreoffice-kit` 的 `frame-forwarding/prebuilds`，针对 macOS 与 Windows 平台），以及需要删除的平台目录。构建会从每个发行包中恰好删除这些目录，每个目录记录一行日志，并在原生代码检查之前完成；未列出的外来预构建文件仍会使检查失败，而以发行包自身平台命名的目录从不会被删除。每个列出的目录都必须存在于发行包中，否则构建会在删除任何内容之前失败；目录经由 `..` 段或符号链接解析到其包之外的规则，同样会被拒绝。配方在读取时就拒绝带有 `.` 或 `..` 段的 `directory`。
 
+`closure.json` 还列出 `packExternals`，即插件包从不携带的包名（精确名称，或以 `*` 结尾的前缀），因为发布者的许可证禁止再分发：Claude Code 的 `@anthropic-ai/claude-agent-sdk` 包及其平台程序 `@anthropic-ai/claude-agent-sdk-*`，以及 Codex 的 `@openai/codex-*`。packs 文件按 npm tarball URL 和 SHA-512 固定其中每一个，启用插件包时会从注册表获取并校验它。
+
 `node_modules/.bin/tsx delorun/apps/release/src/build-closure.ts --version <version> --out <dir> [--commit <rev>] [--platform <platform>]... [--cache <dir>]` 从某个提交（默认 `HEAD`）构建所有发布平台或指定平台的发行包。它在带有 Docker 引擎的 Linux 或 macOS 上运行（原生步骤需要 Docker），在 Node 或 pnpm 版本与 `toolchain.json` 固定的不一致时拒绝运行，并拒绝不是发布平台的平台。每次构建它依次：
 
 1. 把该提交的目录树导出到 `closure.json` 固定的构建根目录 `/var/tmp/delorun-release-build/source`，使打包工具嵌入客户端产物的绝对路径在每个构建者那里都相同；构建持有锁文件 `/var/tmp/delorun-release-build.lock`，其中记录进程 id，因此同一台计算机上的第二次构建会拒绝运行并指出持有者，而不是删除第一次构建的目录树，该路径上并非本命令创建的目录会被拒绝，绝不会被删除；
@@ -281,5 +283,5 @@ openssl rand -out ~/.config/delorun/rebuild-attestation.key 32
 
 - SBOM 不描述桌面安装程序，Delorun 不构建它，因为它没有桌面应用（[路线图](../../docs/guide/roadmap.zh.md)）。
 - 配方没有用于上游原生系统插件 macOS 二进制文件的固定工具链，所以 `darwin-x64` 与 `darwin-arm64` 不是发布平台（[原生代码](#native-code)）。
-- S2 镜像不携带 S2 辅助程序或出口代理（WP4.4），S3 镜像不在 `/usr/local/bin/delorun-egress-proxy`（C9 指定的路径）携带出口代理（WP4.3）。
+- S2 镜像不携带 S2 辅助程序或出口代理，S3 镜像不在 `/usr/local/bin/delorun-egress-proxy`（C9 指定的路径）携带出口代理。
 - 发布日志规格使用本地替身；首次提交到实时日志（`log2025-1.rekor.sigstore.dev`）是所有者的操作，因为那会公开发布。对该日志的只读请求可以显示其布局：`GET https://log2025-1.rekor.sigstore.dev/api/v2/checkpoint` 返回一个 C2SP 签名注记，其来源行是 `log2025-1.rekor.sigstore.dev`，由该日志签名，并由多个见证者共同签名；`GET https://log2025-1.rekor.sigstore.dev/api/v2/tile/<L>/<N>` 返回 8,192 字节的哈希分块（`/api/v2/tile/entries/<N>` 返回条目 bundle），而主机根路径下的 `/checkpoint` 与 `/proof/consistency` 返回 `404`。启动器在根的 `log.origin` 中从该主机读取这一布局。因此，实时日志的 `--submit`、`--checkpoint` 与 `--tiles` 值分别是 `https://log2025-1.rekor.sigstore.dev/api/v2/log/entries`、`https://log2025-1.rekor.sigstore.dev/api/v2/checkpoint` 与 `https://log2025-1.rekor.sigstore.dev/api/v2/`；提交路径由 C18 定义，尚未实际运行过。

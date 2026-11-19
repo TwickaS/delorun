@@ -3,7 +3,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, symlinkSync, 
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { writeProtectedFile } from '@delorun/home'
-import { CACHE_SETTLE_MS, compareCodeUnits, CONTENT_BYTE_LIMIT, CONTENT_ENTRY_LIMIT, isDigest, manifestOf, openRegularFile, readChunks, SCAN_CACHE_SCHEMA, scanFolder, versionOf } from '../src/tree.ts'
+import { CACHE_SETTLE_MS, compareCodeUnits, CONTENT_BYTE_LIMIT, CONTENT_ENTRY_LIMIT, isDigest, manifestOf, openRegularFile, readChunks, SCAN_CACHE_SCHEMA, scanFile, scanFolder, versionOf } from '../src/tree.ts'
 import { VERSION_MANIFEST_SCHEMA, type ObjectDigest, type VersionEntry } from '../src/types.ts'
 import { lockOut, makeFifo, modeOf, rejection, temporaryDirectory, understateSize, writeFiles } from './support.ts'
 
@@ -465,6 +465,21 @@ describe('scanFolder', () => {
 })
 
 describe('the scan cache', () => {
+  it('leaves the cache file alone when it holds what the scan records, and writes it when a file changed', async () => {
+    const folder = temporaryDirectory()
+    const cache = join(temporaryDirectory(), 'scan-cache.json')
+    writeFiles(folder, { 'a.js': 'a', 'b.js': 'b' })
+    await scanFolder(folder, { home: HOME, cache, now: later })
+    const written = statSync(cache)
+    await scanFolder(folder, { home: HOME, cache, now: later })
+    expect(statSync(cache).ino).toBe(written.ino)
+    writeFileSync(join(folder, 'b.js'), 'changed')
+    const { entries } = await scanFolder(folder, { home: HOME, cache, now: later })
+    expect(entries.map((entry) => entry.type === 'file' && entry.digest)).toEqual([sha('a'), sha('changed')])
+    expect(statSync(cache).ino).not.toBe(written.ino)
+    expect(JSON.parse(readFileSync(cache, 'utf8'))).toMatchObject({ files: { 'b.js': { digest: sha('changed') } } })
+  })
+
   it('records settled files only, in a 0600 file in a 0700 directory it creates', async () => {
     const folder = temporaryDirectory()
     const home = temporaryDirectory()
@@ -636,5 +651,58 @@ describe('openRegularFile and readChunks', () => {
 
   it('fails with the filesystem error for a missing file', async () => {
     await expect(openRegularFile(join(temporaryDirectory(), 'missing'))).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+})
+
+describe('scanFile', () => {
+  it('hashes a regular file from its bytes', async () => {
+    const folder = temporaryDirectory()
+    writeFiles(folder, { 'a/b.js': 'b' })
+    chmodSync(join(folder, 'a', 'b.js'), 0o700)
+    expect(await scanFile(folder, 'a/b.js')).toEqual({ kind: 'file', file: { entry: { type: 'file', path: 'a/b.js', digest: sha('b'), size: 1, executable: true }, source: join(folder, 'a', 'b.js') } })
+  })
+
+  it('finds nothing where the folder\'s scan lists no file: no entry, a directory, or below a link, a file or a .git directory', async () => {
+    const folder = temporaryDirectory()
+    writeFiles(folder, { 'a/b.js': 'b', '.git/c.js': 'c', 'a/.git/d.js': 'd' })
+    symlinkSync('a', join(folder, 'link'))
+    for (const path of ['missing.js', 'a/missing.js', 'a', 'link/b.js', 'a/b.js/c.js', '.git/c.js', 'a/.git/d.js']) {
+      expect(await scanFile(folder, path)).toEqual({ kind: 'absent' })
+    }
+    expect((await scanFolder(folder, { active: true })).entries.map((entry) => entry.path)).toEqual(['a/b.js', 'link'])
+  })
+
+  it('skips what the folder\'s scan lists as a link or skips', async () => {
+    const folder = temporaryDirectory()
+    writeFiles(folder, { 'a.js': 'a' })
+    symlinkSync('a.js', join(folder, 'link.js'))
+    makeFifo(join(folder, 'fifo'))
+    expect(await scanFile(folder, 'link.js')).toEqual({ kind: 'skipped' })
+    expect(await scanFile(folder, 'fifo')).toEqual({ kind: 'skipped' })
+  })
+
+  it('refuses a file past the byte limit before reading it', async () => {
+    const folder = temporaryDirectory()
+    writeFiles(folder, { 'a.js': 'abc' })
+    const error = await rejection(scanFile(folder, 'a.js', { entries: 1, bytes: 2 }), 'CONTENT_TOO_LARGE')
+    expect(error.subject).toBe(folder)
+  })
+
+  it('a file that grows while it is read is refused', async () => {
+    const folder = temporaryDirectory()
+    writeFiles(folder, { 'grown.js': 'grown!' })
+    const restore = await understateSize(join(folder, 'grown.js'), 3)
+    try {
+      await rejection(scanFile(folder, 'grown.js'), 'CHANGED_WHILE_READING')
+    } finally {
+      restore()
+    }
+  })
+
+  it('fails with the filesystem error when a directory above the file cannot be read', async () => {
+    const folder = temporaryDirectory()
+    writeFiles(folder, { 'locked/inner/a.js': 'a' })
+    lockOut(join(folder, 'locked'))
+    await expect(scanFile(folder, 'locked/inner/a.js')).rejects.toMatchObject({ code: 'EACCES' })
   })
 })

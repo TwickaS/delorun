@@ -135,6 +135,7 @@ export const ACTION_PATHS = {
   work: `${CHANGES_ROUTE_PREFIX}/work`,
   done: `${CHANGES_ROUTE_PREFIX}/done`,
   'safe-mode': `${CHANGES_ROUTE_PREFIX}/safe-mode`,
+  'exit-safe-mode': `${CHANGES_ROUTE_PREFIX}/exit-safe-mode`,
   create: `${CHANGES_ROUTE_PREFIX}/create`,
   request: `${CHANGES_ROUTE_PREFIX}/request`,
   reveal: `${CHANGES_ROUTE_PREFIX}/reveal`,
@@ -268,6 +269,7 @@ export type ChangesControl =
   | 'make-copy' | 'restart'
   | 'plugin-apply' | 'plugin-undo' | 'plugin-discard' | 'plugin-other'
   | 'notice-seen'
+  | 'update-check' | 'update-begin' | 'update-cancel' | 'update-rollback' | 'update-dismiss' | 'stop'
 
 /** Whether a request may use a control now, and if not, what it needs: the computer, or an unlock entered on the device. */
 export type MayView =
@@ -624,6 +626,14 @@ export interface ProtectionChangedView {
   readonly protection: ProtectionView
   /** How many changes loaded without review while protection was off; 0 after turning it off. */
   readonly unreviewedSinceOff: number
+}
+
+/** `safe-mode` and `exit-safe-mode`: what the record says now. */
+export interface SafeModeView {
+  /** The record's words for the person. */
+  readonly lines: readonly string[]
+  /** The bundles the next start leaves out; empty when safe mode ended. */
+  readonly skipped: readonly string[]
 }
 
 /** `work`. */

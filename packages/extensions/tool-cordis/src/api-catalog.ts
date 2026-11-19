@@ -1111,6 +1111,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'review', description: 'the facts of the start.' }],
         returns: 'the verdict.',
       },
+      {
+        signature: 'permissionLevel?(provider: string): SubagentSafetyLevel | undefined',
+        description: 'The safety level for the next run of one external provider, read at every start so a changed level applies to the next run. A provider with no answer uses its own configured permission mode.',
+        parameters: [{ name: 'provider', description: 'the registered provider name.' }],
+        returns: 'the level, or undefined to keep the provider\'s configured mode.',
+      },
     ],
   },
   {
@@ -5622,6 +5628,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     summary: 'Waterfall around every streaming model call (retry, replay, routing).',
     description: 'Waterfall around every streaming model call (retry, replay, routing). Bound to the LlmRuntime; call `next()` to reach the resolved adapter\'s stream, or yield your own chunks to short-circuit.',
     parameters: [{ name: 'options', description: 'the full request. A LOOP-built request carries the process-local {@link markAgentLoopRequest} identity and arrives deep-frozen (mutation throws): its content is a pure function of the session log (the reconstructability Agent Note), so listeners read it, never rewrite it. Hand-built calls do not carry that marker; callers own their request inputs and must keep them unchanged until the stream settles.' }],
+  },
+  {
+    name: 'mcp-client/consent-accepted',
+    mode: 'parallel',
+    signature: '\'mcp-client/consent-accepted\'(serverName: string): void | Promise<void>',
+    summary: 'The add-time consent accepted one server\'s start.',
+    description: 'The add-time consent accepted one server\'s start. A provider that mounts the server per Session starts it again in the live Sessions the refusal left without its tools; the consent is still checked at that start.',
+    parameters: [{ name: 'serverName', description: 'the accepted server.' }],
   },
   {
     name: 'mcp-manager/status',
@@ -10182,6 +10196,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SubagentRuntime',
     declaration: 'export class SubagentRuntime extends TypertRemoteService {\n    static Config;\n    static inject;\n    constructor(ctx: Context, private config: Config);\n    resolveMaxDepth(configured?: number | \'provider-managed\'): number | undefined;\n    startActivation(spec: SubagentActivationSpec & {\n        readonly childId: SessionId;\n    }): Promise<SubagentActivation & {\n        readonly messageId: MessageId;\n    }>;\n    startActivation(spec: SubagentActivationSpec): Promise<SubagentActivation>;\n    rootOf(caller: Agent): Agent;\n    namesOf(agent: Agent): SubagentMemberNames;\n    async resolveName(caller: Agent, name: string, signal: AbortSignal): Promise<SessionId>;\n    async waitForTreeWork(root: Agent): Promise<boolean>;\n    async sendMessage(sender: Agent, targetId: SessionId, content: ContentBlock[], options: SubagentSendMessageOptions): Promise<MessageId>;\n    interrupt(targetSessionId: SessionId, authority: SubagentInterruptAuthority): void;\n    async drainDescendants(parents: readonly Agent[]): Promise<void>;\n    listDescendants(rootSessionId: SessionId, signal?: AbortSignal): Promise<SubagentDescendantListEntry[]>;\n    @Remote({ name: \'prompt\', resources: { session: request => request.childSessionId } })\n    async prompt(request: SubagentPromptRequest, signal: AbortSignal): Promise<SubagentPromptReceipt>;\n    @Remote({ name: \'interruptByUser\', resources: { session: childSessionId => childSessionId } })\n    interruptByUser(childSessionId: SessionId): SubagentInterruptReceipt;\n  /* …truncated — full shape in source */',
+  },
+  {
+    name: 'SubagentSafetyLevel',
+    declaration: 'export type SubagentSafetyLevel = \'careful\' | \'standard\' | \'own\' | \'unrestricted\';',
   },
   {
     name: 'SubagentSendMessageOptions',

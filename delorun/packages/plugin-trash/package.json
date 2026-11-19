@@ -51,11 +51,14 @@
   },
   "dependencies": {
     "@delorun/home-auth": "workspace:*",
+    "@delorun/home-process": "workspace:*",
     "@delorun/contract-archive-and-trash": "workspace:*",
-    "@delorun/trash": "workspace:*"
+    "@delorun/trash": "workspace:*",
+    "@delorun/update": "workspace:*"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-app-boot": "workspace:*",
     "@deepseek-ai/dsh-client-connection": "workspace:*",
     "@deepseek-ai/dsh-session": "workspace:*",
     "@deepseek-ai/dsh-session-projection-cache": "workspace:*",

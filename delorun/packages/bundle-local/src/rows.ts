@@ -208,6 +208,12 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: no listener or guard holds plugin_manager back, so it installs and removes as upstream does, behind its own approval.' },
   },
   {
+    id: 'delorun-plugin-update',
+    kind: 'added',
+    reason: 'The studio\'s update: Check now, Update now with the update report, Go back after an update, and Stop Delorun, as Host routes that hand each step to the home process, which verifies, installs, switches and rolls back; upstream has no such routes.',
+    parity: { kind: 'disabled', reason: 'Nothing in upstream calls the plugin; without the row no update route exists, and Delorun updates only with `delorun update`.' },
+  },
+  {
     id: 'delorun-packs',
     kind: 'added',
     reason: 'Plugin packs: plugins outside the default install download from the release channel, verify against the release\'s signed packs file and load through the plugin manager, from one Host install queue that survives a reload; the `packs` remote lists and changes that queue.',

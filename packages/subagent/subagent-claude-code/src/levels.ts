@@ -6,11 +6,8 @@
  */
 
 import type { Options } from '@anthropic-ai/claude-agent-sdk'
-import {
-  CLAUDE_SANDBOX_INSTALL_COMMAND,
-  missingClaudeSandboxTools,
-  type SubagentSafetyLevel,
-} from '@deepseek-ai/dsh-subagent'
+import type { SubagentSafetyLevel } from '@deepseek-ai/dsh-subagent'
+import { CLAUDE_SANDBOX_INSTALL_COMMAND, missingClaudeSandboxTools } from '@deepseek-ai/dsh-subagent/safety-level'
 import type { ClaudeCodePermissionMode } from './run.ts'
 
 /** The SDK parameters a safety level selects for one run. */

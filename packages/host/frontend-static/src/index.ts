@@ -32,6 +32,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-host-webserver'
+import { RECOVERY_ROUTES_GLOBAL } from './recovery.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'frontend-static'
@@ -69,13 +70,6 @@ const MIME: Record<string, string> = {
 
 /** The page path of the boot page's recovery screen, which renders the index while a distribution names its routes. */
 const RECOVERY_PATH = '/recovery'
-
-/**
- * The `global` index injection row name through which a distribution names its recovery routes; the boot page
- * (`RECOVERY_ROUTES_GLOBAL` of `@deepseek-ai/dsh-client-web`) reads the same name and offers no recovery screen
- * without it.
- */
-export const RECOVERY_ROUTES_GLOBAL = 'dshRecoveryRoutes'
 
 const STATIC_MISS_CODES: ReadonlySet<string | undefined> = new Set([
   'ENOENT',
