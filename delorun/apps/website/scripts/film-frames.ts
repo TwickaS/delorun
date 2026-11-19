@@ -11,7 +11,8 @@
  * - The wide `agent-steps`, `approval`, `agent-finished` and `answer` frames drop the sidebar (the chat column is kept), so the
  *   film's camera never shows a sliver of it.
  * - Rows under the header that hold the cut lower half of a line are removed (`approval` wide and phone, `agent-steps` phone,
- *   `answer` wide), so the chat starts on a whole line.
+ *   `answer` wide), so the chat starts on a whole line. The wide `agent-finished` frame also drops the rows down to its second
+ *   turn's first line and the scroll marks at its right edge.
  * - `answer` ends at its "Summary line" row; the paragraph below it, which contradicts the run, and the composer are cut off.
  *
  * Nothing else in a frame changes. All numbers are 2× pixels.
@@ -36,13 +37,13 @@ const CHIP = { wide: { x0: 1310, x1: 1624, y0: 1586, y1: 1650 }, phone: { y0: 19
  * the aspect ratio (width over height) the result is brought to, which the film's stage shows whole: a frame taller than that has a
  * band of rows between two blank rows removed, and one wider than that loses equal columns on both sides.
  */
-interface Crop { readonly left?: number; readonly cuts?: readonly (readonly [number, number])[]; readonly bottom?: number; readonly aspect?: number }
+interface Crop { readonly left?: number; readonly right?: number; readonly cuts?: readonly (readonly [number, number])[]; readonly bottom?: number; readonly aspect?: number; readonly anchorLeft?: boolean }
 
 /** The crops by moment, for 1440 and 390 captures. The header's rule is at row 151. */
 const CROPS: Readonly<Record<string, { readonly 1440?: Crop; readonly 390?: Crop }>> = {
   'agent-steps': { 1440: { left: 532, aspect: 1.6 }, 390: { cuts: [[152, 172]] } },
   approval: { 1440: { left: 532, cuts: [[152, 170]], aspect: 1.6 }, 390: { cuts: [[152, 186]] } },
-  'agent-finished': { 1440: { left: 532, aspect: 1.6 } },
+  'agent-finished': { 1440: { left: 532, right: 80, cuts: [[152, 667]], aspect: 1.6, anchorLeft: true } },
   answer: { 1440: { left: 532, cuts: [[0, 220]], bottom: 1250, aspect: 1.6 }, 390: { bottom: 930 } },
 }
 
@@ -134,7 +135,13 @@ function applyCrop(r: Raster, crop: Crop): Raster {
     for (let y = 0; y < out.h; y++) out.data.copy(data, y * w * 3, (y * out.w + crop.left) * 3, (y + 1) * out.w * 3)
     out = { w, h: out.h, data }
   }
-  if (crop.aspect !== undefined) out = fitAspect(out, crop.aspect)
+  if (crop.right !== undefined) {
+    const w = out.w - crop.right
+    const data = Buffer.alloc(w * out.h * 3)
+    for (let y = 0; y < out.h; y++) out.data.copy(data, y * w * 3, y * out.w * 3, (y * out.w + w) * 3)
+    out = { w, h: out.h, data }
+  }
+  if (crop.aspect !== undefined) out = fitAspect(out, crop.aspect, crop.anchorLeft === true)
   return out
 }
 
@@ -142,9 +149,10 @@ function applyCrop(r: Raster, crop: Crop): Raster {
  * Bring a frame to an aspect ratio without padding it.
  * @param r - the frame.
  * @param aspect - width over height.
+ * @param anchorLeft - removes a frame's excess width from its right side only, instead of from both sides.
  * @returns the frame with rows or columns removed.
  */
-function fitAspect(r: Raster, aspect: number): Raster {
+function fitAspect(r: Raster, aspect: number, anchorLeft: boolean): Raster {
   const height = Math.round(r.w / aspect)
   if (height < r.h) {
     const excess = r.h - height
@@ -157,7 +165,7 @@ function fitAspect(r: Raster, aspect: number): Raster {
     return cutRows(r, 160, 160 + excess)
   }
   const width = Math.round(r.h * aspect)
-  const left = Math.floor((r.w - width) / 2)
+  const left = anchorLeft ? 0 : Math.floor((r.w - width) / 2)
   const data = Buffer.alloc(width * r.h * 3)
   for (let y = 0; y < r.h; y++) r.data.copy(data, y * width * 3, (y * r.w + left) * 3, (y * r.w + left + width) * 3)
   return { w: width, h: r.h, data }
