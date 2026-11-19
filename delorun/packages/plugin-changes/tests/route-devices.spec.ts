@@ -18,7 +18,6 @@ const PEER = { principal: { kind: 'reach-device', deviceId: 'device-1', listener
  */
 function scope(unlock: { readonly id: string, readonly grace?: true } | undefined, touched: string[]): Pick<Context, 'get'> {
   const homeAuth = {
-    passkeysEnabled: () => false,
     faceGrants: () => undefined,
     deviceHasPasskey: () => false,
     elevationOf: () => unlock,

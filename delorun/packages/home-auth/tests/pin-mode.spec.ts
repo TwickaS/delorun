@@ -351,9 +351,8 @@ describe('a page unlock', () => {
     expect(running()).toBeUndefined()
   })
 
-  it('gives no unlock window to a device that holds a passkey while Face ID is on, and keeps it for one without', async () => {
+  it('gives no unlock window to a device that holds a passkey and keeps it for one without', async () => {
     await turnOn()
-    home.flags.passkeys = true
     await home.auth.passkeyStore.add({
       credentialId: 'cred-1', publicKey: 'AAAA', counter: 0, backupEligible: false, backupState: false, transports: [], createdAt: 1, lastUsedAt: null,
       address: ADDRESS, rpId: '127.0.0.1', deviceId: first,
@@ -363,8 +362,6 @@ describe('a page unlock', () => {
     expect(running()).toBeUndefined()
     const other = await addDevice(2)
     expect((await unlock(PIN, other.token)).status).toBe(200)
-    home.flags.passkeys = false
-    expect((await unlock()).status).toBe(200)
   })
 
   it('refuses a token from another device, another session or another listener, and ends the unlock', async () => {

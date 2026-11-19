@@ -309,7 +309,7 @@ export class HomeAuthAuthenticator extends Authenticator {
         pageUnlockOf: unlockId => ctx.homeAuth.pageUnlockOf(unlockId),
         unlockModeEnabled: () => ctx.homeAuth.unlockModeEnabled(),
         faceGrants: () => {
-          const grants = ctx.homeAuth.passkeysEnabled() ? ctx.homeAuth.faceGrants() : undefined
+          const grants = ctx.homeAuth.faceGrants()
           return grants === undefined ? undefined : { grants, deviceHasPasskey: deviceId => ctx.homeAuth.deviceHasPasskey(deviceId) }
         },
         keyRefs: () => keyRefsOf(access),
@@ -362,7 +362,7 @@ export class HomeAuthAuthenticator extends Authenticator {
     const reach = this.reachPeers.get(answer.peer.id)
     if (reach === undefined) return
     // With Face ID on, the grant the person made for exactly this prompt and this answer admits it, and is used up here.
-    const grants = this.ctx.homeAuth.passkeysEnabled() ? this.ctx.homeAuth.faceGrants() : undefined
+    const grants = this.ctx.homeAuth.faceGrants()
     if (grants !== undefined) {
       // The grant names the prompt by its Session, call id and grants marker: one call can raise two prompts, and call ids repeat across chats.
       const callId: unknown = Reflect.get(answer.request, 'callId')

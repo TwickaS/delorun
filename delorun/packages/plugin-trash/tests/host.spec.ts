@@ -407,7 +407,7 @@ describe('the routes', () => {
 
   it('admit a reach device to every route and no other Peer, and answer a locked device ELEVATION_REQUIRED on deleting forever only', async () => {
     await mount()
-    harness.ctx.provide('homeAuth', { passkeysEnabled: () => false, faceGrants: () => undefined, deviceHasPasskey: () => false, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : undefined), pageUnlockOf: () => undefined } as never)
+    harness.ctx.provide('homeAuth', { faceGrants: () => undefined, deviceHasPasskey: () => false, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : undefined), pageUnlockOf: () => undefined } as never)
     const device = (deviceId: string) => ({ kind: 'reach-device', deviceId, listener: 'reach-tailscale-private' })
     const asDevice = async (path: string, deviceId: string) => {
       const request = new Request(`http://localhost${path}`, { method: 'POST', body: '{}' })

@@ -15,7 +15,7 @@ const DEVICE = reachDevicePrincipal('device-1', LISTENER)
 const HOLDER = { deviceId: 'device-1', listener: LISTENER } as const
 const GLOBAL = { kind: 'global' } as const
 
-function world(options: { passkey?: boolean; unlockMode?: boolean; flag?: boolean; elevation?: boolean } = {}): { grants: GrantStore; clock: { at: number }; facts: ReachAccessFacts; decide: (action: string, args?: Record<string, unknown>, resource?: object) => { kind: string; reason?: string } } {
+function world(options: { passkey?: boolean; unlockMode?: boolean; grants?: boolean; elevation?: boolean } = {}): { grants: GrantStore; clock: { at: number }; facts: ReachAccessFacts; decide: (action: string, args?: Record<string, unknown>, resource?: object) => { kind: string; reason?: string } } {
   const clock = { at: 5_000_000 }
   let counter = 0
   const grants = new GrantStore({ now: () => clock.at, random: size => Uint8Array.from({ length: size }, () => (counter++ % 251) + 1) })
@@ -26,7 +26,7 @@ function world(options: { passkey?: boolean; unlockMode?: boolean; flag?: boolea
     logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined, computerOnlySwitches: () => [],
     protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set(), defaultPermission: () => undefined,
     dangerousMode: () => false,
-    faceGrants: () => (options.flag === false ? undefined : { grants, deviceHasPasskey: () => options.passkey ?? true }),
+    faceGrants: () => (options.grants === false ? undefined : { grants, deviceHasPasskey: () => options.passkey ?? true }),
   }
   const condition = createCondition(facts, DEVICE)
   return { grants, clock, facts, decide: (action, args, resource = GLOBAL) => condition({ action: action as RemoteAccessAction, resource: resource as never, ...args === undefined ? {} : { args } }) }
@@ -84,12 +84,12 @@ describe('a face action in the reach policy', () => {
     expect(world({ passkey: false }).decide('pluginManager/installBundle', ARGS).kind).toBe('deny')
   })
 
-  // While the preview flag is off no grant counts and the unlock decides, as before.
-  it('keeps the unlock check while the flag is off', () => {
-    const { grants, decide } = world({ flag: false, passkey: false })
+  // While the home keeps no grant store no grant counts and the unlock decides, as before.
+  it('keeps the unlock check while the home keeps no grant store', () => {
+    const { grants, decide } = world({ grants: false, passkey: false })
     grants.mint(HOLDER, [{ action: 'pluginManager/installBundle', hash }], 'passkey')
     expect(decide('pluginManager/installBundle', ARGS).kind).toBe('deny')
-    expect(world({ flag: false, elevation: true }).decide('pluginManager/installBundle', ARGS).kind).toBe('allow')
+    expect(world({ grants: false, elevation: true }).decide('pluginManager/installBundle', ARGS).kind).toBe('allow')
   })
 
   // Another device's grant never admits this one.
@@ -245,7 +245,7 @@ describe('a terminal action after Phone powers is gone (A2)', () => {
     }
   })
 
-  // Removing the grant branch for a device with no passkey makes the terminal unreachable from a PIN, or lets the flag-off path open it.
+  // Removing the grant branch for a device with no passkey makes the terminal unreachable from a PIN, or lets the no-store path open it.
   it('is admitted once, for exactly the call, by a PIN grant on a device with no passkey', () => {
     for (const action of TERMINALS) {
       const { grants, decide } = world({ passkey: false, elevation: true })
@@ -256,11 +256,11 @@ describe('a terminal action after Phone powers is gone (A2)', () => {
     }
   })
 
-  // Removing the faced check lets a home with the Face ID flag off admit a terminal by an unlock.
-  it('is refused to every device while the Face ID flag is off, unlocked or not', () => {
+  // Removing the faced check lets a home with no grant store admit a terminal by an unlock.
+  it('is refused to every device while the home keeps no grant store, unlocked or not', () => {
     for (const passkey of [true, false]) {
       for (const action of TERMINALS) {
-        expect(world({ flag: false, passkey, elevation: true }).decide(action, ARGS), `${action} passkey=${passkey}`).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
+        expect(world({ grants: false, passkey, elevation: true }).decide(action, ARGS), `${action} passkey=${passkey}`).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
       }
     }
   })
@@ -294,11 +294,11 @@ describe('the Fetch gate for a face route', () => {
   const ACTION = 'plugin-packs/enqueue'
   const peer = { principal: DEVICE }
 
-  function gateWorld(options: { passkey?: boolean; flag?: boolean } = {}): { grants: GrantStore; ran: Request[]; gate: ReturnType<typeof gateByClass> } {
+  function gateWorld(options: { passkey?: boolean; grants?: boolean } = {}): { grants: GrantStore; ran: Request[]; gate: ReturnType<typeof gateByClass> } {
     const { grants } = world()
     const ran: Request[] = []
     const home: GrantGateHome = {
-      passkeysEnabled: () => options.flag ?? true, faceGrants: () => grants, deviceHasPasskey: () => options.passkey ?? true,
+      faceGrants: () => grants, deviceHasPasskey: () => options.passkey ?? true,
       arrivalOf: () => ({ listener: LISTENER, host: 'h.ts.net', source: 'test' }), dangerousMode: () => false, elevationOf: () => undefined, pageUnlockOf: () => undefined, unlockModeEnabled: () => true,
     }
     const gate = gateByClass(() => home, (request) => { ran.push(request); return Promise.resolve(new Response('ok')) }, { row: ROW, action: ACTION, legacy: { renews: true } })

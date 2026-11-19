@@ -30,14 +30,12 @@ let cleared: string[]
 let store: PasskeyStore
 let grants: GrantStore
 let auth: PasskeyAuth
-let flag: boolean
 
 beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), 'passkey-auth-'))
   clock = { at: 10_000_000 }
   misses = []
   cleared = []
-  flag = true
   let counter = 0
   const random = (size: number): Uint8Array => Uint8Array.from({ length: size }, () => (counter++ % 251) + 1)
   store = new PasskeyStore({ file: join(directory, 'passkeys.json') })
@@ -48,7 +46,7 @@ beforeEach(async () => {
     cleared: (deviceId) => { cleared.push(deviceId); return Promise.resolve() },
     verify: (_who, secret) => (secret === '1234' ? Promise.resolve() : Promise.reject(new HomeAuthError('PIN_INVALID', 'wrong'))),
   }
-  auth = new PasskeyAuth({ store, grants, pin, now: () => clock.at, random, sameSession: (a, b) => a === b, enabled: () => flag, log: () => {} })
+  auth = new PasskeyAuth({ store, grants, pin, now: () => clock.at, random, sameSession: (a, b) => a === b, log: () => {} })
 })
 afterEach(async () => { await rm(directory, { recursive: true, force: true }) })
 
@@ -89,15 +87,6 @@ describe('enrolment', () => {
   it('is refused to another device', async () => {
     auth.mintTicket(PHONE, LISTENER)
     expect(await code(() => auth.registrationOptions(asker(OTHER), ADDRESS, 'Phone'))).toBe('ELEVATION_REQUIRED')
-  })
-
-  // Removing the flag check leaves enrolment open while the preview is off.
-  it('answers PASSKEY_UNAVAILABLE while the flag is off and mints no ticket', async () => {
-    flag = false
-    auth.mintTicket(PHONE, LISTENER)
-    expect(await code(() => auth.registrationOptions(asker(PHONE), ADDRESS, 'Phone'))).toBe('PASSKEY_UNAVAILABLE')
-    flag = true
-    expect(await code(() => auth.registrationOptions(asker(PHONE), ADDRESS, 'Phone'))).toBe('ELEVATION_REQUIRED')
   })
 
   // The creation options ask for what the plan fixes.
@@ -270,13 +259,6 @@ describe('assertion', () => {
   it('offers no passkey enrolled on another address', async () => {
     await enrol()
     expect(await code(() => auth.assertionOptions(asker(PHONE), 'https://renamed.tail1234.ts.net', ACTIONS))).toBe('PASSKEY_UNAVAILABLE')
-  })
-
-  // The flag gates assertion as well.
-  it('answers PASSKEY_UNAVAILABLE while the flag is off', async () => {
-    await enrol()
-    flag = false
-    expect(await code(() => options())).toBe('PASSKEY_UNAVAILABLE')
   })
 })
 

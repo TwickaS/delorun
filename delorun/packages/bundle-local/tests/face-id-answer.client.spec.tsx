@@ -17,15 +17,13 @@ import type { PinView } from '../src/client/pin-lock.ts'
 import { fakeHost } from './fake-host.ts'
 
 const t = makeTranslate(en)
-const FLAGS = 'GET /api/delorunPreviewFlags.list' as const
-const flags = (on: boolean) => ({ [FLAGS]: { status: 200, body: { flags: [{ id: 'unlock.passkeys', on }] } } })
 const passkey = { credentialId: 'c1', createdAt: 0, lastUsedAt: null, synced: false }
 const pinView = (phase: PinView['phase']): PinView => ({ phase, secret: 'pin', busy: false, outcome: undefined, paused: false, asked: false })
 
 /** Render the step and hand back the gate it registered. */
-function card(over: { on?: boolean | 'unreadable' | undefined; computer?: boolean | undefined; callId?: ToolCallId | undefined; grants?: FaceIdAnswerProps['grants'] } = {}) {
-  const host = fakeHost(over.on === 'unreadable' ? { [FLAGS]: { status: 500, body: { message: 'down' } } } : flags(over.on ?? true))
-  const api = fakeApi({ devices: [{ deviceId: 'd', label: 'Phone', thisDevice: true, passkeys: [passkey] }] })
+function card(over: { passkeys?: boolean | undefined; computer?: boolean | undefined; callId?: ToolCallId | undefined; grants?: FaceIdAnswerProps['grants'] } = {}) {
+  const host = fakeHost({})
+  const api = fakeApi({ devices: [{ deviceId: 'd', label: 'Phone', thisDevice: true, passkeys: over.passkeys === false ? [] : [passkey] }] })
   const gateAllow = vi.fn<(gate: ApprovalAllowGate | null) => void>()
   const props = {
     t, grants: over.grants ?? 'full-access', callId: 'callId' in over ? over.callId : 'call-7' as ToolCallId, toolName: 'claude-code',
@@ -83,20 +81,13 @@ describe('the approval card\'s Face ID step', () => {
     expect(gateAllow).not.toHaveBeenCalled()
     expect(api.calls.some(call => call.name === 'options')).toBe(false)
   })
-  it('lets an Allow through without a prompt when the flag is off, once the flag is read', async () => {
-    // The gate is installed early, so a flag-off home must still answer without a sheet.
-    const { gate, gateAllow, api } = card({ on: false })
+  it('asks for the PIN on a phone with no passkey, and never lets the answer go unconfirmed', async () => {
+    // Without a passkey the sheet falls back to the PIN keypad; the gate still holds the answer until it is confirmed.
+    const { gate, gateAllow } = card({ passkeys: false })
     await waitFor(() => { expect(gateAllow).toHaveBeenCalled() })
-    await expect(gate()()).resolves.toBe(true)
-    expect(screen.queryByRole('dialog')).toBeNull()
-    expect(api.calls.some(call => call.name === 'options')).toBe(false)
-  })
-  it('sends nothing when the flag cannot be read', async () => {
-    // Failing open would let an answer go without a grant the home needs; the gate stops it.
-    const { gate, gateAllow } = card({ on: 'unreadable' })
-    await waitFor(() => { expect(gateAllow).toHaveBeenCalled() })
-    await expect(gate()()).resolves.toBe(false)
-    expect(screen.queryByRole('dialog')).toBeNull()
+    act(() => { void gate()() })
+    fireEvent.click(await screen.findByRole('button', { name: 'Use PIN instead' }))
+    expect(await screen.findByText('Enter your PIN to approve this once.')).toBeTruthy()
   })
   it('removes the gate and settles an open sheet as cancelled when it unmounts', async () => {
     // A withdrawn card must not hold a stale gate.

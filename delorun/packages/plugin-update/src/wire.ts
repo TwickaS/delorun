@@ -41,7 +41,7 @@ export const UPDATE_PATHS = {
  *   take back);
  * - `update-begin`, `update-rollback` and `stop`: class `face`, the computer, or a device with a Face ID (or PIN) grant for
  *   exactly that call; a device with no passkey takes `update-begin` and `update-rollback` with a PIN grant, and `stop`
- *   also with an unlock it entered. While the Face ID flag is off, `update-begin` and `update-rollback` stay at the computer.
+ *   also with an unlock it entered. While the home keeps no grant store, `update-begin` and `update-rollback` stay at the computer.
  */
 export type UpdateControl = 'update-check' | 'update-begin' | 'update-cancel' | 'update-rollback' | 'update-dismiss' | 'stop'
 

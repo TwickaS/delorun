@@ -50,7 +50,7 @@ function homeAuthOn(listener: Listener | undefined) {
   const touchUnlock = vi.fn()
   const service = {
     arrivalOf: (request: { headers: { host?: string } }) => ({ listener, host: request.headers.host, source: 'test' }),
-    passkeysEnabled: () => false, faceGrants: () => undefined, deviceHasPasskey: () => false, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'unlock-1' } : undefined),
+    faceGrants: () => undefined, deviceHasPasskey: () => false, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'unlock-1' } : undefined),
     pageUnlockOf: () => undefined,
     touchUnlock,
   }

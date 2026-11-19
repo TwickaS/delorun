@@ -76,7 +76,7 @@ export function pinUnlockHandler(auth: HomeAuth): RouteHandler {
       if (message === undefined) return
       if (typeof message.secret !== 'string') throw new HomeAuthError('BAD_REQUEST', 'an unlock carries the PIN or passcode')
       // A device that holds a passkey confirms each action with Face ID or its PIN as a one-action grant, never a window.
-      if (auth.passkeys.enabled() && auth.passkeyStore.forDevice(device.session.deviceId).length > 0) {
+      if (auth.passkeyStore.forDevice(device.session.deviceId).length > 0) {
         throw new HomeAuthError('ELEVATION_REQUIRED', 'This device confirms each action with Face ID or your PIN. It has no unlock window')
       }
       sendJson(response, 200, await auth.pin.unlock(askerOf(device), message.secret))

@@ -1,7 +1,7 @@
 /**
  * The pairing step as a full-screen overlay (B1): a phone the computer just approved holds a single-use enrolment ticket,
  * and its first studio page offers "Set up Face ID" once, ahead of the studio. Skipping hides it for this page; Settings →
- * Face ID offers it again. Nothing shows at the computer, while the flag is off, or when no ticket waits.
+ * Face ID offers it again. Nothing shows at the computer or when no ticket waits.
  */
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
@@ -9,7 +9,7 @@ import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { browserPasskeys, faceIdKindOf } from './face-id-browser.ts'
 import { httpPasskeyApi } from './face-id-api.ts'
 import { FaceIdPairingStep } from './FaceIdEnrol.tsx'
-import { flagIsOn, type FaceIdSectionInjected } from './FaceIdSection.tsx'
+import type { FaceIdSectionInjected } from './FaceIdSection.tsx'
 import css from './FaceId.module.css'
 
 /** What the plugin supplies: the section's own supplies, without the lock's store. */
@@ -32,12 +32,12 @@ export function FaceIdPairingOverlay({ t, fetch, atComputer, browser }: FaceIdPa
   useEffect(() => {
     if (computer) return undefined
     let current = true
-    void flagIsOn(fetch).then(on => (on ? api.state() : undefined)).then(
+    void api.state().then(
       (state) => { if (current && state?.ticket === true) setShown(true) },
       () => undefined,
     )
     return () => { current = false }
-  }, [computer, fetch, api])
+  }, [computer, api])
   if (!shown) return null
   return <div className={css.cover} data-face-id-pairing>
     <FaceIdPairingStep t={t} kind={kind} api={api} browser={passkeys} onDone={() => { setShown(false) }} onSkip={() => { setShown(false) }} />

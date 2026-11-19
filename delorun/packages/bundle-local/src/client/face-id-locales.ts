@@ -5,7 +5,6 @@ export const en = {
   'nav': 'Face ID',
   'section.title': 'Face ID',
   'section.intro': 'Confirm installs, full access and updates with Face ID or your device lock. Tailscale and your PIN keep working.',
-  'section.off': 'Face ID is a preview feature. Turn it on in Settings → Preview features.',
   'time.locale': 'en-GB',
   'kind.faceId': 'Face ID',
   'kind.touchId': 'Touch ID',

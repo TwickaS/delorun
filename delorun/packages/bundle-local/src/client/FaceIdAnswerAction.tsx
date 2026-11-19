@@ -1,10 +1,9 @@
 /**
  * The approval card's Face ID step for a request that asks for a grant (full access, workspace management, an external
- * agent or the real browser). On a paired phone whose home has the `unlock.passkeys` flag on, the card's allow answers
+ * agent or the real browser). On a paired phone the card's allow answers
  * first open the action sheet of [`FaceIdSheet.tsx`](./FaceIdSheet.tsx); the home accepts the answer only with a grant
  * minted for exactly this Session, call, grants marker and the value `allowed-once`. A cancelled sheet sends nothing and
- * leaves the card answerable. Reject, requests that grant nothing, the home's own computer and a home with the flag off
- * never ask.
+ * leaves the card answerable. Reject, requests that grant nothing and the home's own computer never ask.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
@@ -14,7 +13,6 @@ import { httpPasskeyApi } from './face-id-api.ts'
 import { browserPasskeys, faceIdKindOf, type PasskeyBrowser } from './face-id-browser.ts'
 import type { FaceIdAction, PasskeyApi } from './face-id-types.ts'
 import { FaceIdGrantFlow } from './FaceIdGrantFlow.tsx'
-import { readFlag } from './FaceIdSection.tsx'
 import type { HostFetch } from './host-api.ts'
 import type { PinSource } from './pin-lock.ts'
 
@@ -80,17 +78,13 @@ export function FaceIdAnswerAction({ t, grants, callId, toolName, gateAllow, ses
   useEffect(() => {
     if (!asks) return
     let current = true
-    // The gate is in place before the flag is known: an Allow tapped early waits for the read, and a failed read sends nothing.
-    const reading = readFlag(fetch).then(async (flag) => {
-      if (flag !== 'on') return flag
-      const state = await api.state().catch((): undefined => undefined)
+    // The gate is in place before the passkeys are known: an Allow tapped early waits for the read; a failed read offers the PIN.
+    const reading = api.state().catch((): undefined => undefined).then((state) => {
       if (current) setHasPasskey((state?.passkeys.length ?? 0) > 0)
-      return flag
     })
     gateAllow(async () => {
-      const flag = await reading
-      if (flag === 'off') return true
-      if (flag === 'unknown' || !current) return false
+      await reading
+      if (!current) return false
       return await new Promise<boolean>((resolve) => {
         settle.current = resolve
         setOpen(true)
@@ -103,7 +97,7 @@ export function FaceIdAnswerAction({ t, grants, callId, toolName, gateAllow, ses
       settle.current = null
       done?.(false)
     }
-  }, [asks, fetch, api, gateAllow])
+  }, [asks, api, gateAllow])
   if (!open || callId === undefined) return null
   const action = answerActionOf(t, { sessionId, callId, grants, toolName })
   return <FaceIdGrantFlow t={t} action={action} kind={kind} api={api} browser={passkeys} hasPasskey={hasPasskey} secret={secret}

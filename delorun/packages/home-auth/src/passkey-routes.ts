@@ -1,6 +1,5 @@
 /**
- * The Face ID routes (C14, "Passkeys"), version 1. Every route answers `PASSKEY_UNAVAILABLE` (404) while the
- * `unlock.passkeys` preview flag is off ({@link PasskeyAuth.assertEnabled}).
+ * The Face ID routes (C14, "Passkeys"), version 1.
  *
  * - **Device routes** answer a device on a reach listener with a live session cookie and, for a `POST`, the studio's own
  *   origin, as the PIN routes do: `state`, `registerOptions`, `register`, `addRequest`, `options`, `verify`, `pin` and `remove`.
@@ -94,7 +93,6 @@ function deviceRoute(auth: HomeAuth, method: 'GET' | 'POST', run: (device: Devic
     const device = deviceSession(auth, request, response, method)
     if (device === undefined) return
     try {
-      auth.passkeys.assertEnabled()
       const message = method === 'POST' ? await readMessage(request, response) : {}
       if (message === undefined) return
       sendJson(response, 200, await run(device, message))
@@ -245,7 +243,6 @@ export function passkeyPendingHandler(auth: HomeAuth, credential: LoopbackCreden
       return
     }
     try {
-      auth.passkeys.assertEnabled()
       sendJson(response, 200, { pending: auth.passkeys.pendingAdds() })
     } catch (error) {
       sendThrown(response, error)
@@ -267,7 +264,6 @@ export function passkeyApproveHandler(auth: HomeAuth, credential: LoopbackCreden
       return
     }
     try {
-      auth.passkeys.assertEnabled()
       const message = await readMessage(request, response)
       if (message === undefined) return
       if (typeof message.requestId !== 'string' || typeof message.code !== 'string') throw new HomeAuthError('BAD_REQUEST', 'an approval names the request and the code typed')

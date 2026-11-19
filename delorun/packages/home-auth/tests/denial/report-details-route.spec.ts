@@ -21,7 +21,7 @@ describe('the report details route', () => {
     const route = routes[0] as { admitPeer: (request: Request, peer: object) => boolean, fetch: (request: Request) => Promise<Response> }
     const request = () => new Request('http://localhost/api/delorunReport.details')
     let holdsUnlock = false
-    ctx.provide('homeAuth', { passkeysEnabled: () => false, elevationOf: () => (holdsUnlock ? { id: 'e' } : undefined), pageUnlockOf: () => undefined } as never)
+    ctx.provide('homeAuth', { elevationOf: () => (holdsUnlock ? { id: 'e' } : undefined), pageUnlockOf: () => undefined } as never)
     const asDevice = async (unlocked: boolean) => {
       holdsUnlock = unlocked
       const call = request()

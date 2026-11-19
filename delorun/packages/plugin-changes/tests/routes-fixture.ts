@@ -383,7 +383,7 @@ export function fromDevice(unlock: RouteDevice['unlock'], body: unknown = {}, wi
 
 const FACE_HOLDER: GrantHolder = { deviceId: TEST_DEVICE.id, listener: 'tailscale-private' as GrantHolder['listener'] }
 
-/** A grant store and the access one device sees of it; `enabled: false` is a home with the Face ID flag off. */
+/** A grant store and the access one device sees of it; `enabled: false` is a home that keeps no grant store. */
 export function grantWorld(options: { readonly hasPasskey?: boolean, readonly enabled?: boolean } = {}) {
   const clock = { at: 1_000_000 }
   let counter = 0

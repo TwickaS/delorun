@@ -51,10 +51,7 @@ import {
   elevationStateHandler,
 } from './elevation-routes.ts'
 import type { UnlockAsker } from './pin-unlocks.ts'
-// Type-only: the ctx.previewFlags merge.
-import type {} from '@delorun/preview-flags'
 import type { GrantStore } from './grants.ts'
-import { PASSKEY_UNLOCK } from './preview-flags.ts'
 import { PASSKEY_PATHS, passkeyAddRequestHandler, passkeyApproveHandler, passkeyDevicesHandler, passkeyOptionsHandler, passkeyPendingHandler, passkeyPinHandler, passkeyRegisterHandler, passkeyRegisterOptionsHandler, passkeyRemoveHandler, passkeyStateHandler, passkeyVerifyHandler } from './passkey-routes.ts'
 import { PIN_PATHS, pinLockHandler, pinModeHandler, pinOffHandler, pinOptionsHandler, pinResumeHandler, pinSetHandler, pinStateHandler, pinTouchHandler, pinUnlockHandler } from './pin-routes.ts'
 
@@ -221,21 +218,6 @@ export class HomeAuthService extends Service {
   }
 
   /**
-   * Whether the Face ID preview flag is on; off while the flags service is not mounted or does not know the flag yet.
-   * @returns whether it is on.
-   */
-  private passkeyFlagOn(): boolean {
-    const flags = this.ctx.get('previewFlags')
-    if (flags === undefined) return false
-    try {
-      return flags.isOn(PASSKEY_UNLOCK.id)
-    } catch (_undeclared) {
-      // The flag is declared when this plugin's injection runs; a read before that sees no flag, which is off.
-      return false
-    }
-  }
-
-  /**
    * Create the secrets directory, open the stores and register the routes, all owned by this fiber.
    * @throws Error when the secrets directory is not an absolute path; the filesystem failure of `mkdir`.
    */
@@ -255,10 +237,8 @@ export class HomeAuthService extends Service {
       closeReachConnections: match => this.ctx.get('connection')?.closeReachConnections(match) ?? 0,
       loopbackPort: () => this.ctx.webServer.port,
       secrets: this.ctx.get('delorunSecrets'),
-      passkeysEnabled: () => this.passkeyFlagOn(),
       log: (event) => { this.ctx.logger.info(event) },
     })
-    this.ctx.inject(['previewFlags'], (scope) => { scope.effect(() => scope.previewFlags.declare(PASSKEY_UNLOCK), 'home-auth: Face ID preview flag') })
     await core.start()
     this.core = core
     this.lifts = new DangerousSettingsLedger(join(this.secretsDirectory, HOME_AUTH_FILES.reachDangerousSettings))
@@ -484,14 +464,6 @@ export class HomeAuthService extends Service {
    */
   deviceHasPasskey(deviceId: string): boolean {
     return (this.core?.passkeyStore.forDevice(deviceId).length ?? 0) > 0
-  }
-
-  /**
-   * Whether the Face ID preview flag is on, so grants are minted and the gates use them.
-   * @returns whether it is.
-   */
-  passkeysEnabled(): boolean {
-    return this.passkeyFlagOn()
   }
 
   /**

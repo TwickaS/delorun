@@ -279,7 +279,7 @@ export interface RouteDevice {
 
 /** What a route reads of the home's Face ID grants for one device. */
 export interface FaceAccess {
-  /** Whether the Face ID flag is on, so the home asks for a grant. */
+  /** Whether the home keeps a grant store, so it asks for a grant. */
   readonly enabled: boolean
   /** Whether the device holds a passkey. A device with one is admitted by a grant alone. */
   readonly hasPasskey: boolean
@@ -465,7 +465,7 @@ function actorOf(requester: Requester): ActorView {
 
 /**
  * @param requester - where a request came from.
- * @returns what the home asks this requester for Face ID: whether the flag is on, and whether a device holds a passkey.
+ * @returns what the home asks this requester for Face ID: whether the home keeps a grant store, and whether a device holds a passkey.
  */
 function faceStateOf(requester: Requester): FaceState {
   const face = requester.kind === 'device' ? requester.device.face : undefined
@@ -473,7 +473,7 @@ function faceStateOf(requester: Requester): FaceState {
 }
 
 /**
- * Decide a `POST` before its body is parsed: the site, then the control's class, then the proof. A `face` control with the Face ID flag on reads the raw body, at most the grant cap, to check the grant against it.
+ * Decide a `POST` before its body is parsed: the site, then the control's class, then the proof. A `face` control with a grant store reads the raw body, at most the grant cap, to check the grant against it.
  * @param request - the request.
  * @param admission - the arrival and the admitted session.
  * @param control - the control the route is.
@@ -490,7 +490,7 @@ async function gate(request: IncomingMessage, admission: { readonly arrival: Stu
   const { device } = requester
   const face = device.face
   const may = mayUse(actorOf(requester), control, faceStateOf(requester))
-  // A control that stays at the computer (the Face ID flag is off) is refused before any grant is looked up.
+  // A control that stays at the computer (the home keeps no grant store) is refused before any grant is looked up.
   if (!may.ok && may.needs === 'computer') throw new RouteRefusal(403, LOOPBACK_REQUIRED, LOOPBACK_REQUIRED_SENTENCE)
   // With the flag on, a grant for exactly this call admits any device; one for another body, path or control does not.
   if (CONTROL_LEVELS[control] === 'face' && face?.enabled === true) {

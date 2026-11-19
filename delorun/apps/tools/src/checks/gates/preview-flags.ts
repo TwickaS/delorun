@@ -39,7 +39,6 @@ const DEFINING_PACKAGE = '@delorun/preview-flags'
  * reach a model request.
  */
 export const HOST_READERS: Readonly<Record<string, string>> = {
-  'home-auth/src/service.ts': 'it decides whether a device\'s confirmed actions mint and use grants (authentication of device calls); no prompt, tool, tool result or model request field depends on it',
 }
 
 const manifestFields = z.looseObject({

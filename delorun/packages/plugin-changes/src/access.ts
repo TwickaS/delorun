@@ -5,10 +5,10 @@
  *
  * - `free`: any paired device, with no prompt: the controls that only read, take back or tighten (turning protection on,
  *   cancelling or dismissing an update, the update check);
- * - `face`: one Face ID (or one PIN, as a one-action grant) for exactly this call, or, while the Face ID flag is off or on
+ * - `face`: one Face ID (or one PIN, as a one-action grant) for exactly this call, or, on
  *   a device that holds no passkey, an unlock the person entered for the controls {@link LEGACY_LEVELS} names `unlocked`; the
- *   rest of the `face` controls take a grant on every device, from a PIN where the device holds no passkey, and while the
- *   flag is off stay at the computer;
+ *   rest of the `face` controls take a grant on every device, from a PIN where the device holds no passkey, and, while the home
+ *   keeps no grant store, stay at the computer;
  * - `computer`: never from a device: dismissing the notice of a change a device made.
  *
  * The update controls (`@delorun/plugin-update`) sit in the same table. The routes decide from {@link mayUse} before they
@@ -45,8 +45,8 @@ export const CONTROL_LEVELS: Readonly<Record<ChangesControl, ControlLevel>> = {
 }
 
 /**
- * What a `face` control asks of a device with no passkey, or while the Face ID flag is off: an unlock the person entered
- * (`unlocked`), or a grant on every device and nothing while the flag is off (`grant`). The `grant` set, the controls that
+ * What a `face` control asks of a device with no passkey, or while the home keeps no grant store: an unlock the person entered
+ * (`unlocked`), or a grant on every device and nothing while the home keeps no grant store (`grant`). The `grant` set, the controls that
  * change what runs, was reachable from a phone only under the removed Phone powers Full; no unlock opens it now.
  */
 export const LEGACY_LEVELS: Readonly<Record<Exclude<ChangesControl, 'protection-on' | 'notice-seen' | 'update-check' | 'update-cancel' | 'update-dismiss'>, 'unlocked' | 'grant'>> = {
@@ -65,7 +65,7 @@ export const LEGACY_LEVELS: Readonly<Record<Exclude<ChangesControl, 'protection-
   'update-rollback': 'grant',
 }
 
-/** What the home asks of a device for Face ID: whether the flag is on, and whether the device holds a passkey. */
+/** What the home asks of a device for Face ID: whether the home keeps a grant store, and whether the device holds a passkey. */
 export interface FaceState {
   readonly enabled: boolean
   readonly hasPasskey: boolean
@@ -75,7 +75,7 @@ export interface FaceState {
  * Whether a request may use one control now.
  * @param actor - where the request came from.
  * @param control - the control.
- * @param face - the Face ID flag and whether the device holds a passkey.
+ * @param face - whether the home keeps a grant store and whether the device holds a passkey.
  * @returns ok, or what the request needs: the computer, Face ID or a PIN for the call, or an unlock the person enters on the device.
  */
 export function mayUse(actor: ActorView, control: ChangesControl, face: FaceState = { enabled: false, hasPasskey: false }): MayView {
@@ -83,7 +83,7 @@ export function mayUse(actor: ActorView, control: ChangesControl, face: FaceStat
   const level = CONTROL_LEVELS[control]
   if (level === 'free') return { ok: true }
   if (level === 'computer') return { ok: false, needs: 'computer' }
-  // A control that changes what runs takes a grant from every device, a PIN grant where it holds no passkey; with the flag off no grant exists, so it stays at the computer.
+  // A control that changes what runs takes a grant from every device, a PIN grant where it holds no passkey; with no grant store no grant exists, so it stays at the computer.
   if (LEGACY_LEVELS[control as keyof typeof LEGACY_LEVELS] === 'grant') return face.enabled ? { ok: false, needs: 'face' } : { ok: false, needs: 'computer' }
   if (face.enabled && face.hasPasskey) return { ok: false, needs: 'face' }
   return actor === 'device-unlocked' ? { ok: true } : { ok: false, needs: 'unlock' }
@@ -92,7 +92,7 @@ export function mayUse(actor: ActorView, control: ChangesControl, face: FaceStat
 /**
  * Every control's decision for one request, as `state` answers it.
  * @param actor - where the request came from.
- * @param face - the Face ID flag and whether the device holds a passkey.
+ * @param face - whether the home keeps a grant store and whether the device holds a passkey.
  * @returns the view.
  */
 export function accessView(actor: ActorView, face: FaceState = { enabled: false, hasPasskey: false }): AccessView {

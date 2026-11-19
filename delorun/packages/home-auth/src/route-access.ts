@@ -15,7 +15,7 @@ import { COMPUTER_ONLY_ROW_MODULES } from './reach-access.ts'
 /**
  * How a route answers a paired device:
  * - `R`: any approved device, with no unlock (`admitApprovedDevice`);
- * - `U`: class `face`: a device needs Face ID for exactly this call, or, with the Face ID flag off and for a device with no
+ * - `U`: class `face`: a device needs Face ID for exactly this call, or, for a device with no
  *   passkey, an unlock; a device with neither is answered `403 ELEVATION_REQUIRED` (`gateByClass`, or `gateByUnlock`);
  * - `C`: only the computer; a device is refused (`403 LOOPBACK_REQUIRED`) whatever its unlock;
  * - `K`: a device that holds no PIN lock (`admitKeyDevice`): model keys are tested, never shown;

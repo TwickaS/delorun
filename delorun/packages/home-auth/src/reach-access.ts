@@ -537,8 +537,7 @@ export const REACH_ELEVATED_ACTIONS = {
 
 /**
  * The elevated actions no unlock opens: every `terminal/*` action, a new one included. A terminal is a shell outside the
- * sandbox, so a device needs a grant for exactly the call, from a passkey or a PIN, and while the Face ID flag is off no
- * device opens one.
+ * sandbox, so a device needs a grant for exactly the call, from a passkey or a PIN; an unlock window never opens one.
  */
 export const GRACE_REFUSED_ACTIONS: ReadonlySet<string> = new Set(Object.keys(REACH_ELEVATED_ACTIONS).filter(action => action.startsWith('terminal/')))
 
@@ -1298,7 +1297,7 @@ const GLOBAL_ROLE = role('global')
 const WORKSPACE_ROLE = role('workspace')
 const SESSION_ROLE = role('session')
 
-/** What the policy reads of the grants while the Face ID preview flag is on. */
+/** What the policy reads of the grants for Face ID. */
 export interface FaceGrantFacts {
   /** The grants and holds a verified assertion or a correct PIN minted. */
   readonly grants: Pick<GrantStore, 'has' | 'consume' | 'holdAdmits' | 'holdsAny'>
@@ -1392,7 +1391,7 @@ export interface ReachAccessFacts {
    */
   readonly unlockModeEnabled: () => boolean
   /**
-   * The grant store, while the Face ID preview flag is on; undefined while it is off, when elevated actions keep the unlock check.
+   * The grant store; undefined before the service starts, when elevated actions keep the unlock check.
    * @returns the store, or undefined.
    */
   readonly faceGrants?: () => FaceGrantFacts | undefined

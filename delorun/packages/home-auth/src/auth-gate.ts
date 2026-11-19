@@ -4,12 +4,12 @@
  * `fetch` of a `ConnectionFetchRoute`.
  *
  * - `free`: any approved reach device, no prompt.
- * - `face`: while the Face ID preview flag is on, a reach device passes only with a grant the home keeps for exactly this
+ * - `face`: a reach device passes only with a grant the home keeps for exactly this
  *   call. The home reads the request body itself, up to {@link GRANT_BODY_CAP_BYTES}, and hashes method, path with query and body
  *   ({@link hashRequest}); the `Delorun-Grant` header only names the grant id and must equal the id of the grant that hash
  *   finds. The grant is used up just before the route's handler runs, and the header is removed before the handler sees
  *   the request. A device that holds a passkey is admitted by a grant alone; a device without one may also hold the
- *   legacy unlock the route declared in `legacy`. While the flag is off, `face` behaves as `gateByUnlock` with `legacy`.
+ *   legacy unlock the route declared in `legacy`. Before the home service starts, `face` behaves as `gateByUnlock` with `legacy`.
  * - `computer` and `ticket`: not Fetch gates; such a route registers no `admitPeer` of this kind.
  *
  * @module @delorun/home-auth/auth-gate
@@ -25,9 +25,9 @@ import type { HomeAuthService } from './service.ts'
 export const GRANT_HEADER = 'delorun-grant'
 
 /** What a gate reads of the home. */
-export type GrantGateHome = DangerousModeHome & Pick<HomeAuthService, 'passkeysEnabled' | 'faceGrants' | 'deviceHasPasskey'>
+export type GrantGateHome = DangerousModeHome & Pick<HomeAuthService, 'faceGrants' | 'deviceHasPasskey'>
 
-/** The unlock a `face` route keeps while the preview flag is off, and for a device with no passkey: the options of `gateByUnlock`. */
+/** The unlock a `face` route keeps for a device with no passkey: the options of `gateByUnlock`. */
 export interface LegacyUnlock {
   readonly grace?: boolean
   readonly renews: boolean
@@ -42,7 +42,7 @@ export interface GateOptions {
    * describes; the route's own name in the form `<package>/<route>` (for example `plugin-packs/add`).
    */
   readonly action: string
-  /** The unlock a `face` route keeps while the flag is off. */
+  /** The unlock a `face` route keeps before the home service starts and for a device with no passkey. */
   readonly legacy: LegacyUnlock
   /**
    * For a route that opens or reads inside a terminal or picker: the feature, how the call names the one it concerns, and
@@ -124,7 +124,7 @@ export function gateByClass(homeAuth: () => GrantGateHome | undefined, fetch: (r
       const principal = principals.get(request)
       if (authClass === 'free' || principal === undefined) return fetch(request)
       const home = homeAuth()
-      const grants = home?.passkeysEnabled() === true ? home.faceGrants() : undefined
+      const grants = home?.faceGrants()
       if (home === undefined || grants === undefined) return legacy.fetch(request)
       const holder = { deviceId: principal.deviceId, listener: principal.listener, unlockId: principal.unlockId }
       const passkey = home.deviceHasPasskey(principal.deviceId)
