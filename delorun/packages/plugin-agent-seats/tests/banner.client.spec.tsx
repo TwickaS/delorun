@@ -258,11 +258,14 @@ describe('the approval card', () => {
     expect(source.openUnlock).toHaveBeenCalled()
   })
 
-  it('counts the page as the computer without a reach source, and names Codex records', () => {
+  it('offers Reject only without a reach source, and names Codex records', () => {
     const answer = vi.fn(() => Promise.resolve())
     const codex = { ...(pending(answer) as object), toolName: 'codex.commandExecution', reason: undefined } as never
     const { unmount } = render(<SeatApproval matched={codex} t={t} reach={undefined} clock={clock} />)
-    expect(screen.getByText('Allow once')).toBeTruthy()
+    expect(screen.getByText('Reject')).toBeTruthy()
+    expect(screen.queryByText('Allow once')).toBeNull()
+    expect(screen.queryByText('Allow for this run')).toBeNull()
+    expect(screen.queryByText('Unlock to answer')).toBeNull()
     expect(screen.queryByText('git push origin fix')).toBeNull()
     expect(agentOfTool('codex.commandExecution')).toBe('codex')
     expect(agentOfTool('claude_code.Bash')).toBe('claude-code')

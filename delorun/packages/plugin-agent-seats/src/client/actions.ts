@@ -1,7 +1,7 @@
 /**
  * The seams the chat's cards call out through: the page's reach for approvals, which the host studio provides as the
  * optional client service `agentSeatReach`, and the Host routes for Resume and the model choice, called by this
- * plugin's own client. Without a reach service the page counts as the computer.
+ * plugin's own client. Without a reach service the page cannot tell who answers, so a card offers Reject only.
  * @module
  */
 
@@ -21,7 +21,7 @@ export interface SeatReachSource {
   readonly openUnlock: () => void
 }
 
-/** The service a studio that knows the page's unlock state provides as `agentSeatReach`, read with `ctx.get`; without it the page counts as the computer. */
+/** The service a studio that knows the page's unlock state provides as `agentSeatReach`, read with `ctx.get`; without it a card offers Reject only. */
 export type SeatReachService = SeatReachSource
 
 /** What the chat's cards call out through. */

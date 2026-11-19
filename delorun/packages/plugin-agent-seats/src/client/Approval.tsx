@@ -48,7 +48,7 @@ export function agentOfTool(toolName: string): SeatAgent {
 
 /** What the studio injects. */
 export interface ApprovalInjected {
-  /** This page's reach for approvals; absent means the computer. */
+  /** This page's reach for approvals; absent means the page cannot tell, which offers Reject only. */
   readonly reach: SeatReachSource | undefined
   /** Format an epoch-millisecond time of day. */
   readonly clock: (epochMs: number) => string
@@ -62,12 +62,12 @@ export interface SeatApprovalProps extends ApprovalInjected {
   readonly t: SeatTranslate
 }
 
-const COMPUTER: SeatReach = { kind: 'computer' }
+const UNKNOWN: SeatReach = { kind: 'locked-phone' }
 
 function useReach(source: SeatReachSource | undefined): SeatReach {
   return useSyncExternalStore(
     source?.subscribe ?? (() => () => undefined),
-    source?.get ?? (() => COMPUTER),
+    source?.get ?? (() => UNKNOWN),
   )
 }
 
