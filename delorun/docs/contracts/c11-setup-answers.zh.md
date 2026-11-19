@@ -129,7 +129,7 @@ setup 提供下列提供方，按名称排列，不让任何一家排在另一�
 
 ```json
 {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "useCase": "local",
   "modelProvider": { "id": "anthropic", "credential": { "source": "environment", "name": "ANTHROPIC_API_KEY" }, "baseURL": null, "model": "claude-sonnet-5" },
   "prompts": "safer",
@@ -145,7 +145,7 @@ setup 提供下列提供方，按名称排列，不让任何一家排在另一�
 
 | 字段 | 类型与取值 | 默认值 | 规则 |
 | --- | --- | --- | --- |
-| `schemaVersion` | 整数 `4`，对于在提供方问题之前写入的文档为 `2` 或 `3`。 | `4` | setup 拒绝任何其他值。版本 2 的文档没有 `updateCheck`，读作 `true`，带有它时被拒绝。版本 2 或版本 3 文档的 `modelProvider` 只含 `id` 和 `credential`，读作 `deepseek-official`，带有其凭据和 profile 的默认模型，因为这些版本的 setup 只应用 DeepSeek 的密钥而不应用任何其他提供方。指名其他 id 的文档会被拒绝，并提示它需要 schema 版本 4。 |
+| `schemaVersion` | Integer `5`, or `2`, `3` or `4` for a document written earlier. | `5` | Setup refuses any other value. A version-2, version-3 or version-4 document that holds `phonePowers` is read with that key ignored and a line on standard error saying so; a version-5 document that holds it is refused as an unknown field (`IGNORED_ANSWER_KEYS` in `@delorun/contract-setup-answers`). A version-2 document has no `updateCheck`, reads as `true`, and is refused when it carries one. A version-2 or version-3 document's `modelProvider` holds `id` and `credential` only, and reads as `deepseek-official` with its credential and the profile's default model, because setup of those versions applied DeepSeek's key and no other provider. One that names another id is refused with a message that it needs schema version 4. |
 | `useCase` | `local`、`remote` 或 `automation`。 | `local` | 本人如何使用 Delorun。交互形式据此设定默认值和问题；`--yes` 和 `--config` 存储它而不问任何问题。`remote` 文档不能启用 reach，因此远程访问用 `delorun setup reach` 开启。在使用场景问题之前写入的记录没有它，读作 `local`；其 `mode` 键（询问过 Quick 或 Full 的 setup 所写的 `quick` 或 `full`）被读取并忽略，任何其他 `mode` 值会被拒绝。 |
 | `modelProvider` | 带有下面四个字段的对象，或表示没有提供方的 `null`。 | 在终端中为带有各字段默认值的对象；使用 `--yes` 时为 `null`，除非给出 `--provider`。 | `null` 不写入任何提供方行，并保留已有的行，因此新 chat 保持 profile 所选的模型；setup 会说明这一点。 |
 | `modelProvider.id` | [模型提供方](#model-providers)中的一个 id。 | `deepseek-official` | 任何其他 id 都被拒绝，并写明 setup 接受的 id。 |
@@ -223,7 +223,7 @@ setup 在每次终端运行开始时显示隐私说明，并在无人值守的�
 <a id="compatibility"></a>
 ## 兼容性
 
-回答 schema 通过 `schemaVersion` 标记版本，其值为 `4`。若新增的问题带有安全的默认值，且忽略该新字段的旧读取者写入的 profile 相同，则该变更保持版本不变；`useCase` 就是这样的字段，因为它所设定的回答与它一起存储，而 profile 文件并不依赖它。改变既有回答含义，或删除字段，都会递增版本；版本 2 删除了五个字段。版本 3 增加了 `updateCheck`：忽略 `false` 的读取者会让发布检查保持开启，因此版本递增。版本 4 赋予 `modelProvider.id` 含义，并增加了 `baseURL`、`model` 和 `null`：版本 3 的读取者忽略该 id，会把 Anthropic 的密钥存储为 DeepSeek 的，因此版本递增。setup 如[回答 schema](#answer-schema) 所述，把版本 2 或版本 3 的文档读作版本 4，并将其记录为版本 4。setup 拒绝其版本它不认识的回答文档。
+The answers schema is versioned by `schemaVersion`, which is `5`. A change that adds a question with a safe default keeps the version when an older reader that ignores the new field writes the same profile; `useCase` is such a field, because the answers it sets are stored beside it and the profile files do not depend on it. A change that alters the meaning of an existing answer, or that removes a field, increments the version; version 2 removed five fields. Version 3 added `updateCheck`: a reader that ignored `false` would leave the release check on, so the version increments. Version 4 gave `modelProvider.id` its meaning and added `baseURL`, `model` and `null`: a version-3 reader ignores the id and would store an Anthropic key as DeepSeek's, so the version increments. Version 5 removed `phonePowers`, so the version increments. Setup reads a version-2, version-3 or version-4 document as version 5, as [Answer schema](#answer-schema) describes, and records it as version 5. Setup refuses an answers document whose version it does not know.
 
 上游新增的选择加入项，以默认关闭的问题形式加入，并在同一次变更中把其 profile 行加入映射表。
 
@@ -280,7 +280,7 @@ setup 在每次终端运行开始时显示隐私说明，并在无人值守的�
 <a id="decided-values"></a>
 ## 决定的取值
 
-- 回答 schema 的版本为 `4`；setup 也读取版本 2 和 3。
+- The answers schema version is `5`; setup also reads versions 2, 3 and 4.
 - 提供方问题在终端中起始为 `deepseek-official`，`--yes` 不设置任何提供方，除非 `--provider` 指名一家。
 - 使用场景默认为 `local`；`remote` 和 `automation` 由本人选择，从不作为默认值。
 - 默认值为：「Ask me first」提示，后台运行开启，端口 3080，远程访问 `none`，stock home 导入关闭（导入节显示时也预选为否），发布检查开启。

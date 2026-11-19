@@ -127,7 +127,7 @@ An answers document is a JSON object with the fields below. The same schema is u
 
 ```json
 {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "useCase": "local",
   "modelProvider": { "id": "anthropic", "credential": { "source": "environment", "name": "ANTHROPIC_API_KEY" }, "baseURL": null, "model": "claude-sonnet-5" },
   "prompts": "safer",
@@ -143,7 +143,7 @@ An answers document is a JSON object with the fields below. The same schema is u
 
 | Field | Type and values | Default | Rule |
 | --- | --- | --- | --- |
-| `schemaVersion` | Integer `4`, or `2` or `3` for a document written before the provider question. | `4` | Setup refuses any other value. A version-2 document has no `updateCheck`, reads as `true`, and is refused when it carries one. A version-2 or version-3 document's `modelProvider` holds `id` and `credential` only, and reads as `deepseek-official` with its credential and the profile's default model, because setup of those versions applied DeepSeek's key and no other provider. One that names another id is refused with a message that it needs schema version 4. |
+| `schemaVersion` | Integer `5`, or `2`, `3` or `4` for a document written earlier. | `5` | Setup refuses any other value. A version-2, version-3 or version-4 document that holds `phonePowers` is read with that key ignored and a line on standard error saying so; a version-5 document that holds it is refused as an unknown field (`IGNORED_ANSWER_KEYS` in `@delorun/contract-setup-answers`). A version-2 document has no `updateCheck`, reads as `true`, and is refused when it carries one. A version-2 or version-3 document's `modelProvider` holds `id` and `credential` only, and reads as `deepseek-official` with its credential and the profile's default model, because setup of those versions applied DeepSeek's key and no other provider. One that names another id is refused with a message that it needs schema version 4. |
 | `useCase` | `local`, `remote` or `automation`. | `local` | How the person uses Delorun. The interactive form sets the defaults and the questions from it; `--yes` and `--config` store it and ask nothing. A `remote` document cannot enable reach, so remote access is turned on with `delorun setup reach`. A record written before the use-case question has none and reads as `local`; its `mode` key (`quick` or `full`, written by the setup that asked Quick or Full) is read and ignored, and any other `mode` value is refused. |
 | `modelProvider` | An object with the four fields below, or `null` for no provider. | The object with each field's default in a terminal; `null` with `--yes` unless `--provider` is given. | `null` writes no provider row and leaves the rows already there, so new chats keep the model the profile selected; setup says which. |
 | `modelProvider.id` | An id of [Model providers](#model-providers). | `deepseek-official` | Any other id is refused, naming the ids setup accepts. |
@@ -221,7 +221,7 @@ The statements about recovery and Docker belong to the sections that add those t
 <a id="compatibility"></a>
 ## Compatibility
 
-The answers schema is versioned by `schemaVersion`, which is `4`. A change that adds a question with a safe default keeps the version when an older reader that ignores the new field writes the same profile; `useCase` is such a field, because the answers it sets are stored beside it and the profile files do not depend on it. A change that alters the meaning of an existing answer, or that removes a field, increments the version; version 2 removed five fields. Version 3 added `updateCheck`: a reader that ignored `false` would leave the release check on, so the version increments. Version 4 gave `modelProvider.id` its meaning and added `baseURL`, `model` and `null`: a version-3 reader ignores the id and would store an Anthropic key as DeepSeek's, so the version increments. Setup reads a version-2 or version-3 document as version 4, as [Answer schema](#answer-schema) describes, and records it as version 4. Setup refuses an answers document whose version it does not know. A document written before Phone powers was removed may still hold a `phonePowers` field: setup reads it, ignores it, writes no record for it and logs that the field is ignored, so an older answers file keeps loading without a change of version.
+The answers schema is versioned by `schemaVersion`, which is `5`. A change that adds a question with a safe default keeps the version when an older reader that ignores the new field writes the same profile; `useCase` is such a field, because the answers it sets are stored beside it and the profile files do not depend on it. A change that alters the meaning of an existing answer, or that removes a field, increments the version; version 2 removed five fields. Version 3 added `updateCheck`: a reader that ignored `false` would leave the release check on, so the version increments. Version 4 gave `modelProvider.id` its meaning and added `baseURL`, `model` and `null`: a version-3 reader ignores the id and would store an Anthropic key as DeepSeek's, so the version increments. Version 5 removed `phonePowers`, so the version increments. Setup reads a version-2, version-3 or version-4 document as version 5, as [Answer schema](#answer-schema) describes, and records it as version 5. Setup refuses an answers document whose version it does not know.
 
 A new upstream opt-in is added as a question with a default of off, in the same change that adds its profile row to the mapping.
 
@@ -278,7 +278,7 @@ Acceptance tests:
 <a id="decided-values"></a>
 ## Decided values
 
-- The answers schema version is `4`; setup also reads versions 2 and 3.
+- The answers schema version is `5`; setup also reads versions 2, 3 and 4.
 - The provider question starts on `deepseek-official` in a terminal, and `--yes` sets up no provider unless `--provider` names one.
 - The use case defaults to `local`; `remote` and `automation` are chosen, never defaulted.
 - The defaults are "Ask me first" prompts, background running on, port 3080, `none` for reach, off for the stock-home import, which the import section also preselects as no when it is shown, and on for the release check.
