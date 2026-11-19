@@ -81,6 +81,7 @@ import { readVersions } from './versions.ts'
 import { createRemoteNoticeSource, RemoteNotice } from './RemoteNotice.tsx'
 import { createPinSource, type PinSource } from './pin-lock.ts'
 import { en as pinEn, zh as pinZh, type PinLocaleKey } from './pin-locales.ts'
+import { en as faceIdEn, zh as faceIdZh, type FaceIdLocaleKey } from './face-id-locales.ts'
 import { PinLock } from './PinLock.tsx'
 import { en as pinModeEn, zh as pinModeZh, type PinModeLocaleKey } from './pin-mode-locales.ts'
 import { PinModeSection, type PinModeSectionInjected } from './PinModeSection.tsx'
@@ -124,6 +125,7 @@ import { DELEGATION_CONSENT_ROW, type DelegationConsentSettings } from '@delorun
 export type { PrivacyLocaleKey } from './locales.ts'
 export type { DevicesLocaleKey } from './devices-locales.ts'
 export type { PinLocaleKey } from './pin-locales.ts'
+export type { FaceIdLocaleKey } from './face-id-locales.ts'
 export type { PinModeLocaleKey } from './pin-mode-locales.ts'
 export type { PinModeSectionProps } from './PinModeSection.tsx'
 export type { PinOutcome, PinSource, PinView } from './pin-lock.ts'
@@ -197,6 +199,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'delorunDevices': DevicesLocaleKey
     /** The PIN lock screen's copy. */
     'delorunPin': PinLocaleKey
+    /** The Face ID screens' copy: the action sheet, enrolment and the passkey list. */
+    'delorunFaceId': FaceIdLocaleKey
     /** The PIN mode settings section's copy. */
     'delorunPinMode': PinModeLocaleKey
     /** The trust badge's and the trust panel's copy. */
@@ -220,6 +224,9 @@ export const DEVICES_NS = 'delorunDevices'
 
 /** Dictionary namespace of the PIN lock screen. */
 export const PIN_NS = 'delorunPin'
+
+/** Dictionary namespace of the Face ID screens. */
+export const FACE_ID_NS = 'delorunFaceId'
 
 /** Dictionary namespace of the PIN mode settings section. */
 export const PIN_MODE_NS = 'delorunPinMode'
@@ -490,6 +497,7 @@ export function apply(ctx: Context): void {
   ctx.effect(() => ctx.locale.register(DEVICES_NS, { en: devicesEn, zh: devicesZh }), 'delorun-devices: section dictionaries')
   const devicesT = ctx.locale.bind(DEVICES_NS)
   ctx.effect(() => ctx.locale.register(PIN_NS, { en: pinEn, zh: pinZh }), 'delorun-pin: lock screen dictionaries')
+  ctx.effect(() => ctx.locale.register(FACE_ID_NS, { en: faceIdEn, zh: faceIdZh }), 'delorun-face-id: screen dictionaries')
   // One function for the plugin's lifetime: the section's requests restart when its identity changes.
   const browserFetch: HostFetch = (input, init) => globalThis.fetch(input, init)
   const pin = applyPin(ctx, browserFetch, (ctx.get('connection') as ConnectionHandle).isLoopback)

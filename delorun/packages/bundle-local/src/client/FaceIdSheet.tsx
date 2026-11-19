@@ -1,0 +1,117 @@
+/**
+ * The action sheet (B2, B3): what is about to happen in plain words and one large Confirm button. The tap on Confirm
+ * fetches the options and calls `get()` in the same handler, so Safari still counts the tap as the person's; nothing
+ * prompts when the sheet opens. A cancel or a failure leaves the sheet in place with the way down to the PIN keypad or to
+ * the computer, and is never an error colour.
+ */
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
+import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
+import type { PasskeyBrowser } from './face-id-browser.ts'
+import type { FaceIdAction, FaceIdKind, PasskeyApi } from './face-id-types.ts'
+import css from './FaceId.module.css'
+
+/** The most items of a batch the sheet lists before it counts the rest. */
+const LISTED_ITEMS = 3
+
+/** Where the small link under the button leads. */
+export type FaceIdFallback = 'pin' | 'computer'
+
+/** Props of the sheet. */
+export interface FaceIdSheetProps {
+  readonly t: PropsLocale<'delorunFaceId'>['t']
+  readonly action: FaceIdAction
+  readonly kind: FaceIdKind
+  readonly api: PasskeyApi
+  readonly browser: PasskeyBrowser
+  /** Whether this device holds a passkey; without one the sheet goes straight to the way down. */
+  readonly hasPasskey: boolean
+  /** The way down: the PIN keypad when a PIN is set, otherwise a request the computer approves. */
+  readonly fallback: FaceIdFallback
+  /** Called with the grant the home now holds for the action. */
+  readonly onGranted: (grantId: string) => void
+  readonly onCancel: () => void
+  /** Open the PIN keypad (`fallback` is `pin`) or the computer request (`fallback` is `computer`). */
+  readonly onFallback: () => void
+  /** Open Settings → Devices, for a device that holds no passkey. */
+  readonly onOpenDevices?: () => void
+}
+
+type Phase = 'ready' | 'waiting' | 'cancelled' | 'failed'
+
+/**
+ * Render the sheet.
+ * @param props - see {@link FaceIdSheetProps}.
+ * @returns the sheet: a bottom sheet on a phone and a centred dialog from 480px.
+ */
+export function FaceIdSheet({ t, action, kind, api, browser, hasPasskey, fallback, onGranted, onCancel, onFallback, onOpenDevices }: FaceIdSheetProps): ReactNode {
+  const [phase, setPhase] = useState<Phase>('ready')
+  const [available, setAvailable] = useState<boolean | undefined>(undefined)
+  const confirmRef = useRef<HTMLButtonElement>(null)
+  const alive = useRef(true)
+  const method = t(`kind.${kind}`)
+  useEffect(() => {
+    alive.current = true
+    return () => { alive.current = false }
+  }, [])
+  useEffect(() => {
+    let current = true
+    void browser.available().then((value) => { if (current) setAvailable(value) })
+    return () => { current = false }
+  }, [browser])
+  useEffect(() => { confirmRef.current?.focus() }, [available])
+  useEffect(() => {
+    const close = (event: KeyboardEvent): void => { if (event.key === 'Escape') onCancel() }
+    document.addEventListener('keydown', close)
+    return () => { document.removeEventListener('keydown', close) }
+  }, [onCancel])
+  const confirm = useCallback(async (): Promise<void> => {
+    setPhase('waiting')
+    let challenge: Awaited<ReturnType<PasskeyApi['assertionOptions']>>
+    try {
+      challenge = await api.assertionOptions({ action: action.name, bodyHash: action.bodyHash })
+    } catch {
+      if (alive.current) setPhase('failed')
+      return
+    }
+    const result = await browser.get(challenge.options)
+    if (!alive.current) return
+    if (result.kind !== 'ok') { setPhase(result.kind); return }
+    try {
+      const { grantId } = await api.verifyAssertion({ challengeId: challenge.challengeId, response: result.value })
+      if (alive.current) onGranted(grantId)
+    } catch {
+      if (alive.current) setPhase('failed')
+    }
+  }, [api, browser, action, onGranted])
+  const usable = hasPasskey && available !== false
+  const listed = action.items?.slice(0, LISTED_ITEMS) ?? []
+  const rest = (action.items?.length ?? 0) - listed.length
+  const status = !hasPasskey ? t('sheet.noPasskey', { method }) : available === false ? t('sheet.unsupported', { method })
+    : phase === 'cancelled' ? t('sheet.cancelled', { method }) : phase === 'failed' ? t('sheet.failed', { method }) : undefined
+  const label = phase === 'waiting' ? t('sheet.waiting', { method }) : phase === 'ready' ? t('sheet.confirm', { method }) : t('sheet.again', { method })
+  const showFallback = !usable || phase === 'cancelled' || phase === 'failed'
+  return <div className={css.scrim} data-face-id-sheet={phase}>
+    <div className={css.sheet} role="dialog" aria-modal="true" aria-labelledby="delorun-face-id-title">
+      <h2 id="delorun-face-id-title" className={css.title}>{action.title}</h2>
+      <p className={css.body}>{action.body}</p>
+      {listed.length === 0 ? null : <ul className={css.items}>
+        {listed.map(item => <li key={item}>{item}</li>)}
+        {rest > 0 ? <li>{t('sheet.more', { count: String(rest) })}</li> : null}
+      </ul>}
+      {status === undefined ? null : <p className={css.status} role="status">{status}</p>}
+      {usable
+        ? <Button ref={confirmRef} variant="primary" type="button" className={css.confirm} disabled={phase === 'waiting'}
+          onClick={() => { void confirm() }}>{label}</Button>
+        : !hasPasskey && onOpenDevices !== undefined
+          ? <Button variant="primary" type="button" className={css.confirm} onClick={onOpenDevices}>{t('sheet.openDevices')}</Button>
+          : null}
+      {showFallback
+        ? <button type="button" className={css.link} data-face-id-fallback={fallback} onClick={onFallback}>
+          {t(fallback === 'pin' ? 'sheet.usePin' : 'sheet.askComputer')}
+        </button> : null}
+      <button type="button" className={css.link} onClick={onCancel}>{t('sheet.cancel')}</button>
+    </div>
+  </div>
+}
