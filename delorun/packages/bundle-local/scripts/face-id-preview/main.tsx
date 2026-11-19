@@ -11,6 +11,7 @@ import '../../../../../packages/client/ui-theme/src/styles/focus.css'
 import '@delorun/brand/fonts.css'
 import '@delorun/brand/tokens.css'
 import { AddFaceId, FaceIdPairingStep, PasskeyCodeEntry } from '../../src/client/FaceIdEnrol.tsx'
+import { answerActionOf } from '../../src/client/FaceIdAnswerAction.tsx'
 import { FaceIdPin } from '../../src/client/FaceIdPin.tsx'
 import { FaceIdSheet } from '../../src/client/FaceIdSheet.tsx'
 import { PasskeyDevices } from '../../src/client/PasskeyDevices.tsx'
@@ -50,6 +51,9 @@ function screenOf(screen: string): ReactNode {
     case 'b2-sheet':
       return <FaceIdSheet t={t} action={ACTION} kind="faceId" api={fakeApi()} browser={fakeBrowser()} hasPasskey fallback="pin"
         onGranted={noop} onCancel={noop} onFallback={noop} />
+    case 'b2-answer':
+      return <FaceIdSheet t={t} action={answerActionOf(t, { sessionId: 'chat-1', callId: 'call-7', grants: 'external-agent', toolName: 'Claude Code' })} kind="faceId"
+        api={fakeApi()} browser={fakeBrowser()} hasPasskey fallback="pin" onGranted={noop} onCancel={noop} onFallback={noop} />
     case 'b2-cancelled':
       return <FaceIdSheet t={t} action={ACTION} kind="faceId" api={fakeApi()} browser={fakeBrowser({ get: [{ kind: 'cancelled' }] })} hasPasskey fallback="pin"
         onGranted={noop} onCancel={noop} onFallback={noop} />
