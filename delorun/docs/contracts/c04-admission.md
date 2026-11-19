@@ -159,6 +159,9 @@ While [PIN mode](c14-oidc-passkeys.md#pin-mode) is on, a page may prove an unloc
 - **Ending.** When an unlock ends, its Peer is disposed and the reach connections of its session close. The device's other pages reconnect with their own tokens.
 - **Caching.** The reach index answers `Cache-Control: no-store`, so a restored page is not served from the cache.
 
+**Grants (Face ID).** While the `unlock.passkeys` preview flag is on, a confirmed action does not travel as a token: the home keeps a grant per device, listener, action and call hash (C14, "Face ID unlock"). A plugin Fetch route of class `face` names its grant in the `Delorun-Grant` header, which the home reads and removes before the route runs, as it does `Delorun-Unlock`; the header holds only the grant id and the home checks the hash of the request it received. A Remote call and a prompt answer carry nothing: the policy and the answer guard look the grant up. A terminal's or folder picker's hold is bound to that id and to the connection.
+
+
 <a id="launch-tokens"></a>
 ### Launch tokens
 

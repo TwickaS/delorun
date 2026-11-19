@@ -129,7 +129,7 @@ interface AssertionChallenge {
 export interface PasskeyAuthOptions {
   readonly store: PasskeyStore
   readonly grants: GrantStore
-  readonly pin: PinUnlocks
+  readonly pin: Pick<PinUnlocks, 'missed' | 'cleared' | 'verify'>
   readonly now: () => number
   readonly random: RandomBytes
   /** Whether two session ids are one session, a roll's successor included. */
@@ -368,8 +368,9 @@ export class PasskeyAuth {
    */
   async assertionOptions(asker: UnlockAsker, address: string, request: AssertionRequest): Promise<PublicKeyCredentialRequestOptionsJSON> {
     this.assertEnabled()
-    const mine = this.options.store.forDevice(asker.deviceId)
-    if (mine.length === 0) throw new HomeAuthError('PASSKEY_UNAVAILABLE', 'This device has no Face ID set up')
+    // A passkey enrolled on another address has another relying-party id: it cannot assert here, and the device sets Face ID up again.
+    const mine = this.options.store.forDevice(asker.deviceId).filter(record => record.address === address)
+    if (mine.length === 0) throw new HomeAuthError('PASSKEY_UNAVAILABLE', 'This device has no Face ID set up for this address')
     const { rpId } = relyingParty(address)
     const options = await generateAuthenticationOptions({
       rpID: rpId, userVerification: 'required', timeout: ASSERTION_CHALLENGE_MS,
