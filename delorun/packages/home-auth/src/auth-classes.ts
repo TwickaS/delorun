@@ -112,7 +112,8 @@ const PASSKEY_ROWS: readonly AuthRow[] = [
   { id: 'auth:/auth/passkey/options', surface: 'auth', authClass: 'free', reason: 'asks for a challenge; nothing happens until an assertion verifies' },
   { id: 'auth:/auth/passkey/verify', surface: 'auth', authClass: 'free', reason: 'a failed assertion counts as a wrong try; a passed one mints a one-action grant' },
   { id: 'auth:/auth/passkey/pin', surface: 'auth', authClass: 'free', reason: 'a correct PIN mints a one-action grant; wrong tries count as an unlock does' },
-  { id: 'auth:/auth/passkey/remove', surface: 'auth', authClass: 'face', reason: 'a device removes its own passkey only with a grant for that passkey' },
+  { id: 'auth:/auth/passkey/devices', surface: 'auth', authClass: 'face', reason: 'it reads the device list and each device\'s passkeys, which is device metadata' },
+  { id: 'auth:/auth/passkey/remove', surface: 'auth', authClass: 'face', reason: 'a device removes its own or another device\'s passkey only with a grant for exactly that removal' },
 ]
 
 /** The things that stay at the computer, from `COMPUTER_ONLY` in `./route-access.ts`. */

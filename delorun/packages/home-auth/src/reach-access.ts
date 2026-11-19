@@ -1217,7 +1217,7 @@ export function createCondition(
     const holder = { deviceId, listener }
     const feature = holdFeatureOf(action)
     const id = feature === undefined ? undefined : holdIdOf(feature, args)
-    if (feature !== undefined && !ALWAYS_GRANTED.has(action) && (id === undefined ? faced.grants.holdsAny(holder, feature) : faced.grants.holdAdmits(holder, feature, id))) return undefined
+    if (feature !== undefined && !ALWAYS_GRANTED.has(action) && (id === undefined ? (feature === 'picker' || HOLD_METADATA_ACTIONS.has(action)) && faced.grants.holdsAny(holder, feature) : faced.grants.holdAdmits(holder, feature, id))) return undefined
     const hash = hashArgs(args)
     if (hash === undefined || !faced.grants.has(holder, action, hash)) return { kind: 'deny', reason }
     const opens = feature !== undefined && id !== undefined && HOLD_OPENERS[action] === feature ? { feature, id } : undefined
@@ -1331,6 +1331,12 @@ const FACE_KEY_ACTIONS: ReadonlySet<string> = new Set(['credentials/set', 'crede
 
 /** The actions that open a new stream whatever hold a device has: a terminal is created only with a grant. */
 const ALWAYS_GRANTED: ReadonlySet<string> = new Set(['terminal/create'])
+
+/**
+ * The id-less terminal actions a live hold of any terminal admits: they return metadata and no output. An id-less
+ * `terminal/watch` could stream other terminals' events, so it needs its own grant.
+ */
+const HOLD_METADATA_ACTIONS: ReadonlySet<string> = new Set(['terminal/list', 'terminal/shells', 'terminal/environment'])
 
 /** The id every `directoryPicker/*` hold carries: the picker has no id of its own, so one device holds one. */
 export const PICKER_HOLD_ID = 'directoryPicker'

@@ -125,6 +125,17 @@ describe('holds for terminals', () => {
     expect(decide('terminal/attach', { id: 't-2' }).kind).toBe('deny')
     expect(decide('terminal/create', { ...create, id: 't-2' }).kind).toBe('deny')
   })
+  // Removing the metadata-only rule lets a hold on terminal A stream the events or output of terminal B.
+  it('give no output or events of another terminal: id-less watch needs its own grant, listing rides the hold', () => {
+    const { grants, decide } = world()
+    grants.mint(HOLDER, [{ action: 'terminal/create', hash: hashArgs(create) ?? '', hold: { feature: 'terminal', id: 't-1' } }], 'passkey')
+    decide('terminal/create', create)
+    expect(decide('terminal/list', {}).kind).toBe('allow')
+    expect(decide('terminal/shells', {}).kind).toBe('allow')
+    expect(decide('terminal/watch', {}).kind).toBe('deny')
+    expect(decide('terminal/retain', { id: 't-2' }).kind).toBe('deny')
+    expect(decide('terminal/attach', { id: 't-2' }).kind).toBe('deny')
+  })
   it('are not opened by a grant whose call opens no terminal', () => {
     const { grants, decide } = world()
     const settings = { ns: 'x', patch: {} }

@@ -77,7 +77,7 @@ function exists(path: string): boolean {
 
 const GATE = /gateByUnlock|gateByClass|faced\(|fullAccessGate|awayOn/
 const FULL_GATE = /phonePowers:\s*'full'/
-const READER = /admitApprovedDevice|anyDevice|admitPeer,|admitsReach|admitsBill|free\(/
+const READER = /admitApprovedDevice|admitReachDevice|anyDevice|admitPeer,|admitsReach|admitsBill|free\(/
 
 /**
  * Whether a registration's code admits a device as the level says.
@@ -143,7 +143,7 @@ describe('the plugin Fetch routes', () => {
             if (text[end] === ')' && --depth === 0) break
           }
           // Pins the choice: a route behind the unlock says whether it renews, so none is left to a default.
-          if (!/renews:\s*(true|false|options\.renews)/.test(text.slice(match.index, end + 1))) missing.push(relative(PACKAGES, file))
+          if (!/renews:\s*(true|false|options\.renews|options\.legacy\.renews)/.test(text.slice(match.index, end + 1))) missing.push(relative(PACKAGES, file))
         }
       }
     }

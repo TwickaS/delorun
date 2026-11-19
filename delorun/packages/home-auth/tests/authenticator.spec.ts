@@ -235,7 +235,7 @@ describe('the authenticator provider', () => {
     if (admitted.kind !== 'admitted') throw new Error('not admitted')
     let mode = true
     let grants: object | undefined = { dangerousMode: () => mode }
-    vi.spyOn(ctx, 'get').mockImplementation(((name: string) => (name === 'reachFullAccessGrants' ? grants : Context.prototype.get.call(ctx, name as never))) as never)
+    vi.spyOn(ctx, 'get').mockImplementation(((name: string) => (name === 'reachFullAccessGrants' ? grants : name === 'previewFlags' ? undefined : Context.prototype.get.call(ctx, name as never))) as never)
     let unlocked = true
     vi.spyOn(ctx.homeAuth, 'elevationOf').mockImplementation(() => (unlocked ? { id: 'elevation-1' } as never : undefined))
     const give = (grantsMarker: string): void => {
@@ -294,7 +294,7 @@ describe('the authenticator provider', () => {
     ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
     const admitted = provider().admit(request({ headers: { cookie: `__Host-delorun-session=${await session(2)}` } }), 'reach-tailscale-private')
     if (admitted.kind !== 'admitted') throw new Error('not admitted')
-    vi.spyOn(ctx, 'get').mockImplementation(((name: string) => (name === 'reachFullAccessGrants' ? { dangerousMode: () => true } : Context.prototype.get.call(ctx, name as never))) as never)
+    vi.spyOn(ctx, 'get').mockImplementation(((name: string) => (name === 'reachFullAccessGrants' ? { dangerousMode: () => true } : name === 'previewFlags' ? undefined : Context.prototype.get.call(ctx, name as never))) as never)
     expect(ctx.homeAuth.dangerousMode()).toBe(true)
     let unlock: { id: string; grace?: true } = { id: 'grace-1', grace: true }
     vi.spyOn(ctx.homeAuth, 'elevationOf').mockImplementation(() => unlock as never)

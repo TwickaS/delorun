@@ -58,7 +58,7 @@ import { PHONE_POWERS_PATH, type PhonePowersLevel } from './wire.ts'
 import type {} from '@delorun/preview-flags'
 import type { GrantStore } from './grants.ts'
 import { PASSKEY_UNLOCK } from './preview-flags.ts'
-import { PASSKEY_PATHS, passkeyAddRequestHandler, passkeyApproveHandler, passkeyOptionsHandler, passkeyPendingHandler, passkeyPinHandler, passkeyRegisterHandler, passkeyRegisterOptionsHandler, passkeyRemoveHandler, passkeyStateHandler, passkeyVerifyHandler } from './passkey-routes.ts'
+import { PASSKEY_PATHS, passkeyAddRequestHandler, passkeyApproveHandler, passkeyDevicesHandler, passkeyOptionsHandler, passkeyPendingHandler, passkeyPinHandler, passkeyRegisterHandler, passkeyRegisterOptionsHandler, passkeyRemoveHandler, passkeyStateHandler, passkeyVerifyHandler } from './passkey-routes.ts'
 import { PIN_PATHS, pinLockHandler, pinModeHandler, pinOffHandler, pinOptionsHandler, pinResumeHandler, pinSetHandler, pinStateHandler, pinTouchHandler, pinUnlockHandler } from './pin-routes.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -361,6 +361,7 @@ export class HomeAuthService extends Service {
         server.register({ kind: 'exact', path: PASSKEY_PATHS.verify, handler: passkeyVerifyHandler(core) }),
         server.register({ kind: 'exact', path: PASSKEY_PATHS.pin, handler: passkeyPinHandler(core) }),
         server.register({ kind: 'exact', path: PASSKEY_PATHS.remove, handler: passkeyRemoveHandler(core) }),
+        server.register({ kind: 'exact', path: PASSKEY_PATHS.devices, handler: passkeyDevicesHandler(core) }),
         server.register({ kind: 'exact', path: PASSKEY_PATHS.pending, handler: passkeyPendingHandler(core, credential) }),
         server.register({ kind: 'exact', path: PASSKEY_PATHS.approve, handler: passkeyApproveHandler(core, credential) }),
         server.register({ kind: 'exact', path: PHONE_POWERS_PATH, handler: phonePowersHandler(core, credential, { current: () => this.phonePowers(), set: level => this.setPhonePowers(level) }) }),

@@ -88,7 +88,8 @@ export async function readBodyCapped(request: Request, cap: number): Promise<Uin
     if (done) break
     size += value.byteLength
     if (size > cap) {
-      await reader.cancel()
+      // Not awaited: cancelling a branch of a cloned body waits for the other branch, which nobody reads.
+      void reader.cancel().catch(() => undefined)
       return undefined
     }
     chunks.push(value)
@@ -109,7 +110,7 @@ export function gateByClass(homeAuth: () => GrantGateHome | undefined, fetch: (r
   if (authClass === undefined) throw new Error(`home-auth: gateByClass names the row "${options.row}", which AUTH_CLASSES does not list`)
   if (authClass === 'computer') throw new Error(`home-auth: the row "${options.row}" is computer-only; a computer route registers no admitPeer`)
   const principals = new WeakMap<Request, ReachDevicePrincipal>()
-  const legacy = gateByUnlock(homeAuth, fetch, options.legacy)
+  const legacy = gateByUnlock(homeAuth, fetch, { renews: options.legacy.renews, ...options.legacy.grace === undefined ? {} : { grace: options.legacy.grace }, ...options.legacy.phonePowers === undefined ? {} : { phonePowers: options.legacy.phonePowers } })
   const refuse = (message: string): Response => new Response(refusalBody('ELEVATION_REQUIRED', message), { status: 403, headers: REFUSAL_HEADERS })
   return {
     admitPeer: (request, peer) => {
