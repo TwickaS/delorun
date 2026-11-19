@@ -2965,6 +2965,12 @@
       "class": "delorun-feature",
       "feature": "fork-gates",
       "reason": "Treats Delorun package and app tests as test files."
+    },
+    {
+      "path": "scripts/build.ts",
+      "class": "delorun-feature",
+      "feature": "release-cut",
+      "reason": "Writes the build stamp that lets a cut refuse stale lib/ directories."
     }
   ],
   "retired": []
