@@ -17,6 +17,7 @@ This package is the home of the authenticator provider of [contract C4](../../do
 - [The admission denial suite](#the-admission-denial-suite)
 - [Dangerous mode](#dangerous-mode)
 - [PIN mode](#pin-mode)
+- [Face ID unlock](#face-id-unlock)
 - [Phone powers](#phone-powers)
 - [Notes for the provider](#notes-for-the-provider)
 - [Tests](#tests)
@@ -117,6 +118,10 @@ PIN mode lets a person who holds an approved device unlock a page with a PIN or 
 - **What is not built.** Step-up, passkeys, the Funnel and relay addresses, and setting the PIN from a device. The lock screen is in `bundle-local`, and an unlocked page's settings lifts are recorded in `reach-pin-settings.json` and set back when the mode turns off.
 
 `tests/pin-mode.spec.ts` proves each defence by a test that fails without it: the count before the comparison, the device removal, the home-wide pause, the address rule, the token binding, a reload or new tab starting locked, the idle end and the cap, the lock route ending the unlock on the server, a token replayed by another device, session, listener or after a PIN change, a query token ignored, a locked tab's grant answer refused beside an unlocked one, the mode off with a token present, the computer-only routes, and that the PIN is in no file, log or answer.
+
+## Face ID unlock
+
+Behind the `unlock.passkeys` preview flag (off by default), a paired device confirms a `face` action with a passkey or its PIN as a one-action grant. [`auth-classes.ts`](src/auth-classes.ts) holds `AUTH_CLASSES`, the one table that puts every action and route in `free`, `face` or `computer`; a Fetch route declares its row with `gateByClass` ([`auth-gate.ts`](src/auth-gate.ts)); the reach policy and `checkAnswer` read the same grants ([`grants.ts`](src/grants.ts)). Passkeys are stored in [`passkeys.ts`](src/passkeys.ts), enrolled and asserted in [`passkey-auth.ts`](src/passkey-auth.ts) and served by [`passkey-routes.ts`](src/passkey-routes.ts). The rules are in [C14, "Face ID unlock"](../../docs/contracts/c14-oidc-passkeys.md#face-id-unlock). `unlockModeEnabled()` (a PIN is set or any passkey is enrolled) is the only reading behind the locked-device refusals. The denial specs are `tests/denial/face-grants.spec.ts` and `tests/denial/passkey-auth.spec.ts`, which use a software authenticator (`tests/fixtures/virtual-authenticator.ts`).
 
 ## Phone powers
 
