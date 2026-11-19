@@ -2070,7 +2070,7 @@
       "path": "packages/client/ui-approval/src/client/ApprovalCard.tsx",
       "class": "security",
       "reason": "Security entry (per-workspace full access). Lead verdict: approved. A request that declares `grants` renders the `conversation.approval.action` list between its body and its decision buttons; each action answers through `allow`, which is the card's own Allow answer (`allowed-once`) behind the same one-shot guard, so an action cannot answer a card twice, answer one that no longer accepts an answer, or give any other outcome. A request without `grants` renders no list and answers exactly as before. Who may grant is decided on the Host: an answer for a `full-access` grant from a session that may not grant it is refused (C14 LOOPBACK_REQUIRED). Tests: tests/ui-approval.client.spec.tsx (renders no action list for a request without a grant; carries the grant; renders the list with the request facts). GAP before recording: no test that an action's `allow` after the card answered sends nothing; add it. The action list also receives `answered` and `canAnswer()`, so an action renders disabled once the card is sending or has answered and checks before each effect; how the card answers is unchanged. The earlier test gap is closed by the specs for an action after the card answered. Lead verdict (2026-11-13): approved after the lead review of the merged diff. The decision row renders the `conversation.approval.choice` list slot after Allow once for a request with `escalatesTo`; an entry answers through the card's own one-shot `allow`, and Allow once draws as outline while an entry reports `offer(true)`. Lead verdict (2026-11-13): approved after an independent Opus review of the card answer path and the lead review; the choice answers the card through the same one-shot `answer()` as Allow once, only after the chat's permission projection shows the requested preset and while the card still accepts answers, and never lowers a chat raised meanwhile, and `escalatesTo` never reaches a logged event.",
-      "sha256": "f09b12a370d6f43a99f170e65611817a22c27df1cbcc12854ee311f58957d6b5"
+      "sha256": "dc7ce3afeee318c5678a01e2311adcd1dc33cb77e1dd61201b32117bdfc16fcc"
     },
     {
       "path": "packages/client/ui-approval/src/client/ApprovalPanel.module.css",
@@ -2088,13 +2088,13 @@
       "path": "packages/client/ui-approval/src/client/contract/slots.ts",
       "class": "security",
       "reason": "Security entry, same feature and verdict as ApprovalCard.tsx: declares the `conversation.approval.action` list slot, the `ApprovalGrant` values of `@deepseek-ai/dsh-user-approval`, and carries `grants` on the pending request unchanged; the action's `allow` is documented as the Allow button's one-shot answer. `ApprovalGrant` gains `external-agent`; `ApprovalActionOwnerProps` gains `answered` and `canAnswer`. Lead verdict (2026-11-13): approved after the lead review of the merged diff. Declares the `conversation.approval.choice` slot and its owner props (`escalatesTo`, `toolName`, `callId`, `allow`, `answered`, `canAnswer`, `offer`). Lead verdict (2026-11-13): approved after an independent Opus review of the card answer path and the lead review; the choice answers the card through the same one-shot `answer()` as Allow once, only after the chat's permission projection shows the requested preset and while the card still accepts answers, and never lowers a chat raised meanwhile, and `escalatesTo` never reaches a logged event. `ApprovalGrant` gains `real-browser`, mirroring `@deepseek-ai/dsh-user-approval`. Awaiting the lead's review.",
-      "sha256": "6832d14597d596551acaa3e704075126eff478ed8259f7f150ddbbbcf7a75913"
+      "sha256": "7d094d64716a26e674ead42fb60574f7ff1ccbf7e7bdda5f49c992e2d4bc0a9e"
     },
     {
       "path": "packages/client/ui-approval/src/client/index.ts",
       "class": "security",
       "reason": "Security entry, same feature and verdict as ApprovalCard.tsx: forwards `grants` from the Remote Event request to the pending approval and registers the action list as a child slot of the card; no answer path is added. Forwards `escalatesTo` from the request to the card input. Lead verdict (2026-11-13): approved after an independent Opus review of the card answer path and the lead review; the choice answers the card through the same one-shot `answer()` as Allow once, only after the chat's permission projection shows the requested preset and while the card still accepts answers, and never lowers a chat raised meanwhile, and `escalatesTo` never reaches a logged event.",
-      "sha256": "b8e079efbbd4874bd8e3ca6493a8de613042024c4f09a5655f4112c6f35887c6"
+      "sha256": "200e12372b485107365e75b1299d090a334a7e90e58ac1d4db0322288367fed4"
     },
     {
       "path": "apps/cli/src/plugin.ts",

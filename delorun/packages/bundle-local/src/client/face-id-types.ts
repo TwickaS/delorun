@@ -11,10 +11,10 @@ export type FaceIdKind = 'faceId' | 'touchId' | 'windowsHello' | 'fingerprint' |
 /** The kinds, in the order a spec walks them. */
 export const FACE_ID_KINDS: readonly FaceIdKind[] = ['faceId', 'touchId', 'windowsHello', 'fingerprint', 'deviceLock']
 
-/** What the grant covers: the calls one tap makes, or one prompt answer. */
+/** What the grant covers: the calls one tap makes, or one prompt answer, keyed by the approval request's Session id, call id and grants marker. */
 export type GrantRequest =
   | { readonly actions: readonly { readonly action: string; readonly hash: string }[] }
-  | { readonly answer: { readonly requestId: string; readonly value: string } }
+  | { readonly answer: { readonly agent: string; readonly callId: string; readonly grants: string; readonly value: string } }
 
 /** What a sensitive action is, in the words its own description gives the person. */
 export interface FaceIdAction {

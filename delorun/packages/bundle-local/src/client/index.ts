@@ -83,6 +83,7 @@ import { createPinSource, type PinSource } from './pin-lock.ts'
 import { en as pinEn, zh as pinZh, type PinLocaleKey } from './pin-locales.ts'
 import { en as faceIdEn, zh as faceIdZh, type FaceIdLocaleKey } from './face-id-locales.ts'
 import { PinLock } from './PinLock.tsx'
+import { FaceIdAnswerAction, type FaceIdAnswerInjected } from './FaceIdAnswerAction.tsx'
 import { FaceIdSection, type FaceIdSectionInjected } from './FaceIdSection.tsx'
 import { FaceIdPairingOverlay } from './FaceIdPairingOverlay.tsx'
 import { en as pinModeEn, zh as pinModeZh, type PinModeLocaleKey } from './pin-mode-locales.ts'
@@ -232,6 +233,9 @@ export const FACE_ID_NS = 'delorunFaceId'
 
 /** The `settings.section` id of the Face ID section, which sits just after PIN mode. */
 export const FACE_ID_SECTION_ID = 'delorun-face-id'
+
+/** The `conversation.approval.action` id of the Face ID step on a granting approval card. */
+export const FACE_ID_ANSWER_ID = 'delorun-face-id-answer'
 
 /** The `shell.overlay` id of the pairing step. */
 export const FACE_ID_OVERLAY_ID = 'delorun-face-id-pairing'
@@ -570,6 +574,12 @@ export function apply(ctx: Context): void {
     locale: FACE_ID_NS,
     inject: faceIdFace,
   }, FaceIdSection))
+  ctx.slots.inject('conversation.approval.action', () => ctx.slots.register({
+    name: 'conversation.approval.action',
+    id: FACE_ID_ANSWER_ID,
+    locale: FACE_ID_NS,
+    inject: (sessionId): FaceIdAnswerInjected => ({ ...faceIdFace(), sessionId }),
+  }, FaceIdAnswerAction))
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({
     name: 'shell.overlay',
     id: FACE_ID_OVERLAY_ID,

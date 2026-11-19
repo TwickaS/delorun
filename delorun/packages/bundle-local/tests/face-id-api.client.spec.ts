@@ -30,11 +30,11 @@ describe('httpPasskeyApi', () => {
     expect(await api.state()).toEqual({ passkeys: [entry], ticket: true })
     await api.options({ actions: [{ action: 'a', hash: 'h' }] })
     expect(await api.verify({ id: 'i', rawId: 'i', type: 'public-key', clientExtensionResults: {}, response: { clientDataJSON: 'a', authenticatorData: 'b', signature: 'c' } })).toEqual({ grantId: 'g', expiresAt: 5 })
-    expect((await api.pin({ answer: { requestId: 'q', value: 'v' }, secret: 's' })).grantId).toBe('p')
+    expect((await api.pin({ answer: { agent: 'a', callId: 'c', grants: 'full-access', value: 'allowed-once' }, secret: 's' })).grantId).toBe('p')
     await api.registerOptions()
     expect(await api.register({ id: 'i', rawId: 'i', type: 'public-key', clientExtensionResults: {}, response: { clientDataJSON: 'a', attestationObject: 'b' } })).toEqual(entry)
     expect((await api.addRequest()).code).toBe('12345678')
-    expect(host.received.find(request => request.key === `POST ${PASSKEY_ROUTES.pin}`)?.body).toEqual({ answer: { requestId: 'q', value: 'v' }, secret: 's' })
+    expect(host.received.find(request => request.key === `POST ${PASSKEY_ROUTES.pin}`)?.body).toEqual({ answer: { agent: 'a', callId: 'c', grants: 'full-access', value: 'allowed-once' }, secret: 's' })
   })
   it('lists pending adds with device names, falling back to the id', async () => {
     // A request without a name would be unreadable at the computer.
