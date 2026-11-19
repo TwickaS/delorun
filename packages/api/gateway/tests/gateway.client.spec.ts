@@ -1392,6 +1392,79 @@ describe('Client Typert API', () => {
     expect(asked).toHaveLength(4)
   })
 
+  // Removing the stream lift leaves a refused stream open, such as a reloaded terminal's attach, with no grant step.
+  it('asks the denial lift about a refused stream open and reopens it once with the uplink the refused open took', async () => {
+    const denied = (): RemoteError => new RemoteError('remote-access/denied', 'fixture: denied', { action: 'probe/attach', reason: 'elevation-required: probe/attach' } as never)
+    const opens: { topic: unknown; uplink: unknown[] }[] = []
+    const open: NonNullable<ConnectionHandle['rpc']['open']> = async function* (_route, _endpoint, payload, _signal, uplink) {
+      const record = { topic: (payload as { readonly args: { readonly topic: unknown } }).args.topic, uplink: [] as unknown[] }
+      opens.push(record)
+      const items = uplink?.[Symbol.asyncIterator]()
+      if (opens.filter(open => open.topic === record.topic).length === 1) {
+        // Each topic's first open is refused; the refused open has taken one item before the refusal arrives.
+        const first = await items?.next()
+        if (first?.done === false) record.uplink.push(first.value)
+        throw denied()
+      }
+      while (items !== undefined) {
+        const next = await items.next()
+        if (next.done === true) break
+        record.uplink.push(next.value)
+        yield `${String(record.topic)}:${String(next.value)}`
+      }
+    }
+    const call = vi.fn<ConnectionHandle['rpc']['call']>()
+    const { ctx, client } = await benchFiber(call, 'in-process', open)
+    const dispose = await ctx.remote.$mount({ package: '@fixture/attach', descriptors: [attachDescriptor()] })
+    const asked: { endpoint: string; reason: string | undefined; args: unknown }[] = []
+    const answers = [true, false]
+    const withdraw = ctx.remote.$liftDenials(({ endpoint, reason, args }) => {
+      asked.push({ endpoint, reason, args: { ...args } })
+      return Promise.resolve(answers.shift() ?? false)
+    })
+    try {
+      // Lifted: reopened once with the same arguments, and the item the refused open took is sent first.
+      const lifted = ctx.remote.probe.attach('alpha')
+      lifted.send('a')
+      lifted.send('b')
+      lifted.end()
+      await expect(drainStream(lifted)).resolves.toEqual(['alpha:a', 'alpha:b'])
+      expect(opens.slice(0, 2)).toEqual([{ topic: 'alpha', uplink: ['a'] }, { topic: 'alpha', uplink: ['a', 'b'] }])
+      expect(asked).toEqual([{ endpoint: 'probe/attach', reason: 'elevation-required: probe/attach', args: { topic: 'alpha' } }])
+      // Declined: the refusal is the caller's and nothing more opens.
+      const declined = ctx.remote.probe.attach('beta')
+      declined.send('c')
+      await expect(drainStream(declined)).rejects.toMatchObject({ code: 'remote-access/denied' })
+      expect(opens).toHaveLength(3)
+      expect(asked).toHaveLength(2)
+    } finally {
+      withdraw()
+      await dispose()
+      await client.dispose()
+    }
+  })
+
+  // Removing the mount check after the lift runs a granted call on the Host for a plugin that is gone.
+  it('sends nothing more when the calling plugin is withdrawn while the lift is deciding', async () => {
+    const denied = { ok: false, error: { code: 'remote-access/denied', message: 'fixture: denied', details: { action: 'probe/create', reason: 'elevation-required: probe/create' } } } as const
+    const call = vi.fn<ConnectionHandle['rpc']['call']>().mockResolvedValue(denied)
+    const ctx = await bench(call)
+    const dispose = await ctx.remote.$mount({ package: '@fixture/probe', descriptors: [directDescriptor()] })
+    const decided = Promise.withResolvers<boolean>()
+    const asked = Promise.withResolvers<undefined>()
+    const withdraw = ctx.remote.$liftDenials(() => { asked.resolve(undefined); return decided.promise })
+    try {
+      const pending = ctx.remote.probe.create('agent-1', { objective: 'ship' })
+      await asked.promise
+      await dispose()
+      decided.resolve(true)
+      await expect(pending).resolves.toMatchObject({ ok: false })
+      expect(call).toHaveBeenCalledTimes(1)
+    } finally {
+      withdraw()
+    }
+  })
+
   it('preserves a __proto__ wire parameter as an own named argument', async () => {
     const call = vi.fn<ConnectionHandle['rpc']['call']>()
       .mockResolvedValue({ ok: true, value: { ref: 'goal-1' } })

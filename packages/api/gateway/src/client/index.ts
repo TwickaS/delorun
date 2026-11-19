@@ -140,10 +140,13 @@ export interface ClientRemote extends TypertClientRemote {
    */
   readonly $host: RemoteHostFacts
   /**
-   * Register the one handler asked about every unary call the Host's remote access refuses with
+   * Register the one handler asked about every unary call, and every stream open, the Host's remote access refuses with
    * `remote-access/denied`, before the caller sees the refusal. When it resolves true, the same call with the same
-   * arguments is sent once more and its outcome is the caller's; when it resolves false or throws, the caller receives
-   * the refusal. `remote/call-denied` is emitted only for a refusal the caller receives. Streams are not asked.
+   * arguments is sent once more and its outcome is the caller's: a stream opens once more and first sends the uplink
+   * items the refused open took. When it resolves false or throws, or the calling plugin was withdrawn meanwhile, the
+   * caller receives the refusal. A stream that has delivered an item, or whose refused open took more than
+   * {@link LIFTED_UPLINK_LIMIT} uplink items, is not asked. `remote/call-denied` is emitted only for a unary refusal the
+   * caller receives.
    * @param lift - the handler.
    * @returns disposer that withdraws it.
    * @throws {Error} when a handler is already registered.
@@ -520,7 +523,7 @@ class ClientRemoteService extends Service implements ClientRemote {
     try {
       const send = (): ReturnType<typeof connection.rpc.call> => connection.rpc.call('/api', endpoint, { args: prepared.args }, prepared.signal)
       let result = await send()
-      if (!result.ok && result.error.code === 'remote-access/denied' && mountActive(token) && await this.lifted(endpoint, result.error.details, prepared)) {
+      if (!result.ok && result.error.code === 'remote-access/denied' && mountActive(token) && await this.lifted(endpoint, result.error.details, prepared) && mountActive(token)) {
         result = await send()
       }
       if (!mountActive(token)) return withdrawn(endpoint)
@@ -580,13 +583,38 @@ class ClientRemoteService extends Service implements ClientRemote {
     const prepared = this.prepareInvocation(descriptor, projection, token, callerCtx, values, boundIdentity)
     const generation = new AbortController()
     const uplink = new ClientUplinkQueue(endpoint)
-    const downlink = this.openRemoteStream(
-      endpoint,
-      { args: prepared.args },
-      AbortSignal.any([prepared.signal, generation.signal]),
-      uplink,
-    )
+    const signal = AbortSignal.any([prepared.signal, generation.signal])
+    const downlink = this.denialLift === undefined
+      ? this.openRemoteStream(endpoint, { args: prepared.args }, signal, uplink)
+      : this.liftedStream({ ...prepared, signal }, uplink, token)
     return new ClientStreamHandle(endpoint, downlink, uplink, generation, token)
+  }
+
+  /**
+   * Open a stream whose refused open the registered lift is asked about, before any item arrives. The carrier reads the
+   * handle's uplink through a {@link ReplayingUplink}, so a reopen sends the items the refused open took.
+   */
+  private async *liftedStream(prepared: PreparedClientInvocation, uplink: ClientUplinkQueue, token: MountToken): AsyncGenerator<unknown> {
+    const { endpoint, signal } = prepared
+    const replay = new ReplayingUplink(endpoint, uplink)
+    let delivered = false
+    try {
+      for await (const item of this.openRemoteStream(endpoint, { args: prepared.args }, signal, replay.open())) {
+        if (!delivered) replay.settle()
+        delivered = true
+        yield item
+      }
+      return
+    } catch (error) {
+      const failure = remoteErrorOf(error)
+      // The Host declares `remote-access/denied` by merging the code map, which this Client program does not see.
+      const code: string | undefined = failure?.code
+      if (delivered || failure === undefined || code !== 'remote-access/denied' || !replay.replayable() || !mountActive(token)
+        || !await this.lifted(endpoint, failure.details, prepared) || !mountActive(token)) throw error
+    }
+    const again = replay.open()
+    replay.settle()
+    yield* this.openRemoteStream(endpoint, { args: prepared.args }, signal, again)
   }
 
   private prepareInvocation(
@@ -636,6 +664,70 @@ class ClientRemoteService extends Service implements ClientRemote {
       ? token.abort.signal
       : AbortSignal.any([token.abort.signal, callerSignal])
     return { endpoint, args, signal }
+  }
+}
+
+/** The most uplink items a refused stream open may have taken and still be asked about; past it the refusal stands. */
+export const LIFTED_UPLINK_LIMIT = 256
+
+/**
+ * A handle's uplink as one stream generation after another reads it: items move from the handle's queue to the current
+ * generation's queue, and until {@link ReplayingUplink.settle} each is also kept, so a reopened generation starts with
+ * the items the refused one took (the Host refused that open before reading any of them).
+ */
+class ReplayingUplink {
+  private readonly taken: unknown[] = []
+  private keeping = true
+  private overflowed = false
+  private ended = false
+  private current: ClientUplinkQueue | undefined
+
+  constructor(
+    private readonly endpoint: string,
+    private readonly source: ClientUplinkQueue,
+  ) {}
+
+  /**
+   * Start the next generation's queue, filled with the kept items.
+   * @returns the queue the carrier reads.
+   */
+  open(): ClientUplinkQueue {
+    const next = new ClientUplinkQueue(this.endpoint)
+    for (const item of this.taken) next.push(item)
+    if (this.ended) next.end()
+    const first = this.current === undefined
+    this.current = next
+    if (first) void this.forward()
+    return next
+  }
+
+  /** Stop keeping items: the stream was admitted, or reopened for the last time. */
+  settle(): void {
+    this.keeping = false
+    this.taken.length = 0
+  }
+
+  /** @returns whether every item the refused generation took is kept. */
+  replayable(): boolean {
+    return !this.overflowed
+  }
+
+  private async forward(): Promise<void> {
+    while (true) {
+      const next = await this.source.next()
+      if (next.done === true) break
+      if (this.keeping) {
+        if (this.taken.length < LIFTED_UPLINK_LIMIT) this.taken.push(next.value)
+        else this.overflowed = true
+      }
+      try {
+        this.current?.push(next.value)
+      } catch (_terminated) {
+        // The refused generation's queue closed; a kept item reaches the reopened one, any other belongs to an ended stream.
+      }
+    }
+    this.ended = true
+    this.current?.end()
   }
 }
 

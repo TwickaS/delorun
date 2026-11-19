@@ -15,6 +15,7 @@ import type { FaceIdAction, PasskeyApi } from './face-id-types.ts'
 import { FaceIdGrantFlow } from './FaceIdGrantFlow.tsx'
 import type { HostFetch } from './host-api.ts'
 import type { PinSource } from './pin-lock.ts'
+import type { ConfirmationQueue } from './face-retry.ts'
 
 /** What the plugin supplies the action for one chat. */
 export interface FaceIdAnswerInjected {
@@ -30,6 +31,8 @@ export interface FaceIdAnswerInjected {
   readonly browser?: PasskeyBrowser
   /** The page's passkey routes; a spec supplies a fake. */
   readonly api?: PasskeyApi
+  /** The page's one-at-a-time queue, so the sheet waits for another confirmation that is showing. */
+  readonly queue?: ConfirmationQueue
 }
 
 /** Props the renderer binds for the action. */
@@ -57,7 +60,7 @@ export function answerActionOf(t: PropsLocale<'delorunFaceId'>['t'], request: { 
  * @param props - the card's request and gate, the chat, the page's passkey calls and the copy.
  * @returns the sheet or the PIN entry while the person confirms; otherwise nothing.
  */
-export function FaceIdAnswerAction({ t, grants, callId, toolName, gateAllow, sessionId, fetch, atComputer, usePin, browser, api: injectedApi }: FaceIdAnswerProps): ReactNode {
+export function FaceIdAnswerAction({ t, grants, callId, toolName, gateAllow, sessionId, fetch, atComputer, usePin, browser, api: injectedApi, queue }: FaceIdAnswerProps): ReactNode {
   const [hasPasskey, setHasPasskey] = useState(false)
   const [open, setOpen] = useState(false)
   const settle = useRef<((sent: boolean) => void) | null>(null)
@@ -82,14 +85,15 @@ export function FaceIdAnswerAction({ t, grants, callId, toolName, gateAllow, ses
     const reading = api.state().catch((): undefined => undefined).then((state) => {
       if (current) setHasPasskey((state?.passkeys.length ?? 0) > 0)
     })
-    gateAllow(async () => {
+    const confirm = async (): Promise<boolean> => {
       await reading
       if (!current) return false
       return await new Promise<boolean>((resolve) => {
         settle.current = resolve
         setOpen(true)
       })
-    })
+    }
+    gateAllow(() => queue === undefined ? confirm() : queue.run(confirm))
     return () => {
       current = false
       gateAllow(null)
@@ -97,7 +101,7 @@ export function FaceIdAnswerAction({ t, grants, callId, toolName, gateAllow, ses
       settle.current = null
       done?.(false)
     }
-  }, [asks, api, gateAllow])
+  }, [asks, api, gateAllow, queue])
   if (!open || callId === undefined) return null
   const action = answerActionOf(t, { sessionId, callId, grants, toolName })
   return <FaceIdGrantFlow t={t} action={action} kind={kind} api={api} browser={passkeys} hasPasskey={hasPasskey} secret={secret}

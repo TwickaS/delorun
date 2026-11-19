@@ -15,13 +15,14 @@ import { fakeApi, fakeBrowser } from '../src/client/face-id-fake.ts'
 import { FaceIdAnswerAction, type FaceIdAnswerProps } from '../src/client/FaceIdAnswerAction.tsx'
 import type { PinView } from '../src/client/pin-lock.ts'
 import { fakeHost } from './fake-host.ts'
+import { confirmationQueue, type ConfirmationQueue } from '../src/client/face-retry.ts'
 
 const t = makeTranslate(en)
 const passkey = { credentialId: 'c1', createdAt: 0, lastUsedAt: null, synced: false }
 const pinView = (phase: PinView['phase']): PinView => ({ phase, secret: 'pin', busy: false, outcome: undefined, paused: false, asked: false })
 
 /** Render the step and hand back the gate it registered. */
-function card(over: { passkeys?: boolean | undefined; stateFails?: true; secret?: PinView['secret']; computer?: boolean | undefined; callId?: ToolCallId | undefined; grants?: FaceIdAnswerProps['grants'] } = {}) {
+function card(over: { passkeys?: boolean | undefined; stateFails?: true; secret?: PinView['secret']; computer?: boolean | undefined; callId?: ToolCallId | undefined; grants?: FaceIdAnswerProps['grants']; queue?: ConfirmationQueue } = {}) {
   const host = fakeHost({})
   const base = fakeApi({ devices: [{ deviceId: 'd', label: 'Phone', thisDevice: true, passkeys: over.passkeys === false ? [] : [passkey] }] })
   const api = over.stateFails === true ? Object.assign(base, { state: () => Promise.reject(new Error('state unreadable')) }) : base
@@ -30,6 +31,7 @@ function card(over: { passkeys?: boolean | undefined; stateFails?: true; secret?
     t, grants: over.grants ?? 'full-access', callId: 'callId' in over ? over.callId : 'call-7' as ToolCallId, toolName: 'claude-code',
     allow: async () => {}, answered: false, canAnswer: () => true, gateAllow, sessionId: 'chat-1', fetch: host.fetch, api, browser: fakeBrowser(), atComputer: () => over.computer ?? false,
     usePin: <S,>(select: (view: PinView) => S): S => select({ ...pinView('unlocked'), secret: over.secret ?? 'pin' }),
+    ...over.queue === undefined ? {} : { queue: over.queue },
   } as FaceIdAnswerProps
   render(<FaceIdAnswerAction {...props} />)
   const gate = (): ApprovalAllowGate => {
@@ -54,6 +56,21 @@ describe('the approval card\'s Face ID step', () => {
     expect(api.calls.find(call => call.name === 'options')?.request)
       .toEqual({ answer: { agent: 'chat-1', callId: 'call-7', grants: 'full-access', value: 'allowed-once' } })
     expect(screen.queryByRole('dialog')).toBeNull()
+  })
+  it('waits for a confirmation that is showing before it opens, and then opens', async () => {
+    // Opening at once would show two sheets together, or end the one showing as cancelled (review P3-3).
+    const queue = confirmationQueue()
+    const showing = Promise.withResolvers<undefined>()
+    void queue.run(() => showing.promise)
+    const { gate, gateAllow } = card({ queue })
+    await waitFor(() => { expect(gateAllow).toHaveBeenCalled() })
+    let sent: Promise<boolean> | undefined
+    act(() => { sent = gate()() })
+    await new Promise(resolve => setTimeout(resolve, 20))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    await act(async () => { showing.resolve(undefined); await showing.promise })
+    fireEvent.click(await screen.findByRole('button', { name: /Confirm with/ }))
+    await expect(sent).resolves.toBe(true)
   })
   it('names the request in the sheet', async () => {
     // The sheet says what is being allowed, in the grant kind\'s own words.

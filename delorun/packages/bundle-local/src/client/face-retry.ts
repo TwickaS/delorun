@@ -11,6 +11,8 @@
  *
  * A cancelled confirmation sends nothing more and hands the refusal to the caller, whose own error shows. Neither path
  * opens the code-from-your-computer unlock. The home's own computer is never refused, so it never reaches either path.
+ * The calls of {@link NEVER_ASKED} are never asked about: the studio sends them without a tap. Every confirmation of the
+ * page, these and the Changes, Update and approval ones, waits its turn in one {@link ConfirmationQueue}.
  * @module @delorun/bundle-local/client/face-retry
  */
 import type { FaceGrant, FaceGrantHold, FaceGrantRequest, GrantingFetch } from '@delorun/plugin-changes/face-grant'
@@ -38,16 +40,61 @@ export const GRANT_HEADER = 'Delorun-Grant'
 export const PICKER_HOLD_ID = 'directoryPicker'
 
 /**
+ * The Remote methods the Face ID step never asks about, with why: the studio sends each on load, on reconnect, on a
+ * home broadcast, on a timer or from a model-written plugin's own code, never from a tap, so a sheet for one would be a
+ * sheet nobody asked for. Each stays refused on a phone, and its surface works at the computer.
+ */
+export const NEVER_ASKED = {
+  'dynamicCordisRunner/syncInspectManifest': 'publishes the page\'s inspect providers on load and on every reconnect',
+  'dynamicCordisRunner/resolveInspectQuery': 'answers an inspect query the home broadcasts',
+  'dynamicCordisRunner/reportRenderFailure': 'reports a model-written plugin\'s render failure on its own',
+  'dynamicCordisRunner/reportClientGuardFailure': 'reports a model-written plugin\'s guard failure on its own',
+  'dynamicCordisRunner/inventory': 'reads the model-written plugins on load, on reconnect and on each home broadcast about them',
+  'dynamicCordisRunner/runHostHalf': 'starts a run, also on its own for an automatic activation the home broadcasts; one run makes several of these calls',
+  'dynamicCordisRunner/getClientCode': 'loads a run\'s browser code as the step after runHostHalf',
+  'dynamicCordisRunner/invoke': 'is called by a model-written plugin\'s own code, on its own timers',
+  'dynamicCordisRunner/resolveRequestRun': 'answers the home\'s run request as the last step of a run',
+  'dynamicCordisRunner/settleUserRun': 'settles a run as its last step',
+  'terminal/watch': 'the chat header opens the roster of the chat\'s terminals on every chat view',
+} as const satisfies Readonly<Record<string, string>>
+
+/** One confirmation at a time across the page. */
+export interface ConfirmationQueue {
+  /**
+   * Run one confirmation once the one before it has settled.
+   * @param confirm - shows the confirmation and settles when the person answers.
+   * @returns what the confirmation settled with.
+   */
+  readonly run: <T>(confirm: () => Promise<T>) => Promise<T>
+}
+
+/**
+ * Create the page's queue.
+ * @returns a queue in which a failed confirmation does not hold up the next one.
+ */
+export function confirmationQueue(): ConfirmationQueue {
+  let last: Promise<unknown> = Promise.resolve()
+  return {
+    run: (confirm) => {
+      const next = last.then(confirm)
+      // A failed confirmation does not hold up the next one.
+      last = next.catch((_failed: unknown) => undefined)
+      return next
+    },
+  }
+}
+
+/**
  * The hold a grant for one Remote call opens.
  * @param endpoint - the method, `<namespace>/<method>`.
- * @param args - the call's wire arguments; `terminal/create` names its terminal in `request.id`.
+ * @param args - the call's wire arguments; `terminal/create` names its terminal in `request.id`, `terminal/attach` in `id`.
  * @returns the terminal's or the picker's hold, or undefined for a call that opens none.
  */
 export function holdOfCall(endpoint: string, args: Readonly<Record<string, unknown>>): FaceGrantHold | undefined {
   if (endpoint === 'directoryPicker/list') return { feature: 'picker', id: PICKER_HOLD_ID }
-  if (endpoint !== 'terminal/create') return undefined
-  const request = args.request
-  const id: unknown = typeof request === 'object' && request !== null ? Reflect.get(request, 'id') : undefined
+  if (endpoint !== 'terminal/create' && endpoint !== 'terminal/attach') return undefined
+  const named = endpoint === 'terminal/create' ? args.request : args
+  const id: unknown = typeof named === 'object' && named !== null ? Reflect.get(named, 'id') : undefined
   return typeof id === 'string' && id !== '' ? { feature: 'terminal', id } : undefined
 }
 
@@ -55,27 +102,22 @@ export function holdOfCall(endpoint: string, args: Readonly<Record<string, unkno
  * One confirmation at a time: a request waits for the one before it to settle, so two calls refused together each get
  * their own confirmation instead of the second ending the first.
  * @param grant - the confirmation.
+ * @param queue - the page's queue; a new one by default.
  * @returns the same confirmation, queued.
  */
-export function oneAtATime(grant: FaceGrant): FaceGrant {
-  let last: Promise<unknown> = Promise.resolve()
-  return (request) => {
-    const next = last.then(() => grant(request))
-    // A failed confirmation does not hold up the next one.
-    last = next.catch((_failed: unknown) => undefined)
-    return next
-  }
+export function oneAtATime(grant: FaceGrant, queue: ConfirmationQueue = confirmationQueue()): FaceGrant {
+  return request => queue.run(() => grant(request))
 }
 
 /**
  * The handler the gateway asks about a refused Remote call.
  * @param grant - the confirmation, already queued with {@link oneAtATime}.
- * @returns the handler: true once a grant for exactly this call is minted; false for a refusal no grant lifts or a
- *   cancelled confirmation.
+ * @returns the handler: true once a grant for exactly this call is minted; false for a refusal no grant lifts, a call of
+ *   {@link NEVER_ASKED} (which never joins the queue) or a cancelled confirmation.
  */
 export function remoteDenialLift(grant: FaceGrant): RemoteDenialHandler {
   return async ({ endpoint, reason, args }) => {
-    if (reason?.startsWith(ELEVATION_REASON) !== true) return false
+    if (reason?.startsWith(ELEVATION_REASON) !== true || Object.hasOwn(NEVER_ASKED, endpoint)) return false
     const hold = holdOfCall(endpoint, args)
     const request: FaceGrantRequest = { action: endpoint, call: { args }, ...hold === undefined ? {} : { hold } }
     return await grant(request) !== undefined

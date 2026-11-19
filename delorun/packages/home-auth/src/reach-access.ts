@@ -101,7 +101,7 @@ export const REACH_ALLOWED_ACTIONS = {
   'session/wait': 'wait on a chat\'s state',
   'session/attachment': 'read an image a chat holds',
   // F29: a terminal's metadata, with no output, so a first terminal takes one Face ID, at `terminal/create`.
-  'terminal/environment': 'read the size limits a chat\'s terminal can take, metadata with no terminal output',
+  'terminal/environment': 'read the size limits a chat\'s terminal can take and the chat\'s working directory, which the chat\'s own state already shows, with no terminal output',
   'terminal/shells': 'read the shells a chat\'s terminal can start, their paths and names, with no terminal output',
   'session/modelCatalog': 'read the models a chat can run',
   'session/canOpenWorkspacePath': 'read whether the home can open a folder; opening one belongs to the computer',
@@ -967,6 +967,12 @@ const ROW_CALLS: ReadonlySet<string> = new Set(['pluginManager/setPluginEnabled'
 export const PROTECTED_ROW_REFUSAL = 'loopback-required: changing a protected plugin row'
 
 /**
+ * The refusal of a consent or guard row's settings write during a device's approval grace. It names no grant action, so
+ * a phone's Face ID step never asks for one: no grant admits the write before the grace ends.
+ */
+export const GRACE_PROTECTED_ROW_REFUSAL = 'loopback-required: a consent or guard row\'s settings while the pairing grace lasts'
+
+/**
  * The module names a `plugin-manager` row's configuration protects: its `protectedPlugins`, the single list a profile
  * keeps of the guard, consent and sandbox rows that plugin management may not change.
  * @param config - the row's configuration, as the Loader holds it.
@@ -1229,8 +1235,9 @@ export function createCondition(
         if (off !== undefined) return { kind: 'deny', reason: off.ranked === undefined ? switchOffRefusal(off.label, off.safeValue) : `loopback-required: loosening ${off.label}` }
         // The settings of the gate, reach and sandbox rows stay as the computer set them: a write there replaces the row in effect.
         if (settingsOfComputerOnlyRow(facts, args)) return { kind: 'deny', reason: PROTECTED_ROW_REFUSAL }
-        // The approval grace never covers a consent or guard row's settings: those need a code or a PIN page.
-        if (unlockId === undefined && facts.elevationOf(deviceId, listener)?.grace === true && settingsOfProtectedRow(facts, args)) return { kind: 'deny', reason: `elevation-required: ${action}` }
+        // The approval grace never covers a consent or guard row's settings, and no grant lifts this refusal: the write
+        // waits until the grace ends, when it takes Face ID or the PIN like any other.
+        if (unlockId === undefined && facts.elevationOf(deviceId, listener)?.grace === true && settingsOfProtectedRow(facts, args)) return { kind: 'deny', reason: GRACE_PROTECTED_ROW_REFUSAL }
         const loosens = loosensDefaultPermission(action, args, facts.defaultPermission())
         if (!lifted && loosens) return { kind: 'deny', reason: DEFAULT_PERMISSION_REFUSAL }
         if (lifted) lifts.push(...liftsOf(facts, action, args, loosens))

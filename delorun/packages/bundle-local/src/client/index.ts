@@ -86,7 +86,7 @@ import { en as faceIdEn, zh as faceIdZh, type FaceIdLocaleKey } from './face-id-
 import { PinLock } from './PinLock.tsx'
 import type { FaceGrantService } from '@delorun/plugin-changes/face-grant'
 import { createFaceGrantSource, type FaceGrantSource } from './face-grant.ts'
-import { grantingFetch, oneAtATime, remoteDenialLift } from './face-retry.ts'
+import { confirmationQueue, grantingFetch, oneAtATime, remoteDenialLift, type ConfirmationQueue } from './face-retry.ts'
 import { FaceIdGrantOverlay } from './FaceIdGrantOverlay.tsx'
 import { FaceIdAnswerAction, type FaceIdAnswerInjected } from './FaceIdAnswerAction.tsx'
 import { FaceIdSection, type FaceIdSectionInjected } from './FaceIdSection.tsx'
@@ -502,28 +502,28 @@ export function apply(ctx: Context): void {
     locale: NS,
     inject: installsFace,
   }, PluginInstallsSection))
+  // One function for the plugin's lifetime: the section's requests restart when its identity changes.
+  const browserFetch: HostFetch = (input, init) => globalThis.fetch(input, init)
+  const { source: faceGrant, fetch: studioFetch, queue: faceQueue } = applyFaceGrant(ctx, browserFetch, (ctx.get('connection') as ConnectionHandle).isLoopback)
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: ABOUT_SECTION_ID,
     order: ABOUT_SECTION_ORDER,
     label: () => t('about.nav'),
     locale: NS,
-    inject: () => ({ surface: studioSurface(ctx), startChat: reportChatStarter(ctx), versions }),
+    inject: () => ({ surface: studioSurface(ctx), fetchImpl: studioFetch, startChat: reportChatStarter(ctx), versions }),
   }, AboutSection))
   ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
     name: 'sidebar.footer.action',
     id: REPORT_ACTION.id,
     order: REPORT_ACTION.order,
     locale: NS,
-    inject: () => ({ surface: studioSurface(ctx), startChat: reportChatStarter(ctx) }),
+    inject: () => ({ surface: studioSurface(ctx), fetchImpl: studioFetch, startChat: reportChatStarter(ctx) }),
   }, ReportFooterAction))
   ctx.effect(() => ctx.locale.register(DEVICES_NS, { en: devicesEn, zh: devicesZh }), 'delorun-devices: section dictionaries')
   const devicesT = ctx.locale.bind(DEVICES_NS)
   ctx.effect(() => ctx.locale.register(PIN_NS, { en: pinEn, zh: pinZh }), 'delorun-pin: lock screen dictionaries')
   ctx.effect(() => ctx.locale.register(FACE_ID_NS, { en: faceIdEn, zh: faceIdZh }), 'delorun-face-id: screen dictionaries')
-  // One function for the plugin's lifetime: the section's requests restart when its identity changes.
-  const browserFetch: HostFetch = (input, init) => globalThis.fetch(input, init)
-  const { source: faceGrant, fetch: studioFetch } = applyFaceGrant(ctx, browserFetch, (ctx.get('connection') as ConnectionHandle).isLoopback)
   const pin = applyPin(ctx, browserFetch, (ctx.get('connection') as ConnectionHandle).isLoopback)
   const unlock = applyUnlock(ctx, browserFetch, (ctx.get('connection') as ConnectionHandle).isLoopback, pin)
   // The unlock banner follows the page's PIN unlock: read the elevation again when the page unlocks or locks.
@@ -593,7 +593,7 @@ export function apply(ctx: Context): void {
     name: 'conversation.approval.action',
     id: FACE_ID_ANSWER_ID,
     locale: FACE_ID_NS,
-    inject: (sessionId): FaceIdAnswerInjected => ({ ...faceIdFace(), sessionId }),
+    inject: (sessionId): FaceIdAnswerInjected => ({ ...faceIdFace(), sessionId, queue: faceQueue }),
   }, FaceIdAnswerAction))
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({
     name: 'shell.overlay',
@@ -863,17 +863,18 @@ export function applyConsents(ctx: Context, fetch: HostFetch): void {
  * @param onComputer - whether the page is the home's own computer.
  * @returns the confirmation's store, which the overlay shows, and the `fetch` the plugin's own sections send through.
  */
-export function applyFaceGrant(ctx: Context, fetch: HostFetch, onComputer: boolean): { readonly source: FaceGrantSource; readonly fetch: HostFetch } {
+export function applyFaceGrant(ctx: Context, fetch: HostFetch, onComputer: boolean): { readonly source: FaceGrantSource; readonly fetch: HostFetch; readonly queue: ConfirmationQueue } {
   const source = createFaceGrantSource()
-  const queued = oneAtATime(source.grant)
+  const queue = confirmationQueue()
+  const queued = oneAtATime(source.grant, queue)
   const studioFetch: HostFetch = onComputer ? fetch : grantingFetch(fetch, queued)
-  ctx.provide('delorunFaceGrant', { grant: source.grant, fetch: studioFetch } satisfies FaceGrantService)
+  ctx.provide('delorunFaceGrant', { grant: queued, fetch: studioFetch } satisfies FaceGrantService)
   if (!onComputer) {
     ctx.inject(['remote'], (inner) => {
       inner.effect(() => inner.remote.$liftDenials(remoteDenialLift(queued)), 'delorun-face-id: a refused Remote call asks for Face ID and is sent once more')
     })
   }
-  return { source, fetch: studioFetch }
+  return { source, fetch: studioFetch, queue }
 }
 
 /**

@@ -16,7 +16,7 @@ import { createFaceGrantSource, type FaceGrantSource } from '../src/client/face-
 import { en } from '../src/client/face-id-locales.ts'
 import { fakeApi, fakeBrowser } from '../src/client/face-id-fake.ts'
 import { callActionOf, FaceIdGrantOverlay, type FaceIdGrantOverlayProps } from '../src/client/FaceIdGrantOverlay.tsx'
-import { GRANT_HEADER, grantingFetch, oneAtATime, PICKER_HOLD_ID, remoteDenialLift } from '../src/client/face-retry.ts'
+import { GRANT_HEADER, grantingFetch, NEVER_ASKED, oneAtATime, PICKER_HOLD_ID, remoteDenialLift } from '../src/client/face-retry.ts'
 import type { GrantRequest, PasskeyApi } from '../src/client/face-id-types.ts'
 import type { PinView } from '../src/client/pin-lock.ts'
 import { fakeHost } from './fake-host.ts'
@@ -122,6 +122,36 @@ describe('a Remote call the home refuses for want of a grant', () => {
     await expect(lifted).resolves.toBe(true)
     expect(title).toContain('Open a terminal')
     expect(sent).toEqual({ actions: [{ action: 'terminal/create', hash: homeHashArgs(created), hold: { feature: 'terminal', id: 'term-1' } }] })
+  })
+
+  // Without the hold, a reloaded terminal tab asks again for each of its streams.
+  it('gives terminal/attach the hold of the terminal it attaches to', async () => {
+    const { source, grant, api } = world()
+    const attach = { agentId: 's1', id: 'term-2' }
+    const lifted = remoteDenialLift(grant)(denial('terminal/attach', attach))
+    const { sent, title } = await answer(source, api, 'faceId')
+    await expect(lifted).resolves.toBe(true)
+    expect(title).toContain('Open a terminal')
+    expect(sent).toEqual({ actions: [{ action: 'terminal/attach', hash: homeHashArgs(attach), hold: { feature: 'terminal', id: 'term-2' } }] })
+  })
+
+  // Asking about a call the studio sends on load or reconnect puts a sheet nobody asked for in front of the person,
+  // ahead of the action they tapped (review P1-1).
+  it('never asks about a background call, and leaves the person\'s confirmation as it is', async () => {
+    const { source, grant, api } = world()
+    const install = remoteDenialLift(grant)(denial('pluginManager/installBundle', ARGS))
+    await waitFor(() => { expect(source.hooks.pending.getSnapshot()).not.toBeNull() })
+    const shown = source.hooks.pending.getSnapshot()
+    for (const endpoint of Object.keys(NEVER_ASKED)) {
+      await expect(remoteDenialLift(grant)(denial(endpoint, { manifests: [] }))).resolves.toBe(false)
+    }
+    expect(source.hooks.pending.getSnapshot()).toBe(shown)
+    const { sent, title } = await answer(source, api, 'faceId')
+    await expect(install).resolves.toBe(true)
+    expect(title).toContain('Install a plugin')
+    expect(sent).toEqual({ actions: [{ action: 'pluginManager/installBundle', hash: homeHashArgs(ARGS) }] })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(source.hooks.pending.getSnapshot()).toBeNull()
   })
 
   // A picker hold id other than the home's would open a hold no later read matches (`face-grants.spec.ts` pins it to the home's).
@@ -254,16 +284,16 @@ describe('the bundle\'s own Fetch surfaces', () => {
 })
 
 describe('the plugin\'s Face ID wiring', () => {
-  async function wired(onComputer: boolean): Promise<{ lifts: unknown[]; ctx: Context; studioFetch: HostFetch; fetch: ReturnType<typeof vi.fn> }> {
+  async function wired(onComputer: boolean): Promise<{ lifts: unknown[]; ctx: Context; studioFetch: HostFetch; fetch: ReturnType<typeof vi.fn>; source: FaceGrantSource }> {
     const ctx = new Context()
     const lifts: unknown[] = []
     ctx.provide('remote', { $liftDenials: (lift: unknown) => { lifts.push(lift); return () => {} } } as never)
     const fetch = vi.fn((_input: string, _init?: RequestInit) => Promise.resolve(refusal('plugin-packs/add')))
-    let studioFetch: HostFetch | undefined
-    await ctx.plugin({ apply: (scope: Context) => { studioFetch = applyFaceGrant(scope, fetch, onComputer).fetch } }).await()
+    let applied: ReturnType<typeof applyFaceGrant> | undefined
+    await ctx.plugin({ apply: (scope: Context) => { applied = applyFaceGrant(scope, fetch, onComputer) } }).await()
     await new Promise(resolve => setTimeout(resolve, 0))
-    if (studioFetch === undefined) throw new Error('not applied')
-    return { lifts, ctx, studioFetch, fetch }
+    if (applied === undefined) throw new Error('not applied')
+    return { lifts, ctx, studioFetch: applied.fetch, fetch, source: applied.source }
   }
 
   // Asking on the computer would put a Face ID sheet in front of the owner for calls the home never refuses there.
@@ -272,6 +302,25 @@ describe('the plugin\'s Face ID wiring', () => {
     expect(lifts).toEqual([])
     expect(studioFetch).toBe(fetch)
     expect(ctx.get('delorunFaceGrant')?.fetch).toBe(fetch)
+    await ctx.fiber.dispose()
+  })
+
+  // Providing the bare grant lets a Changes or Update tap end a sheet that is showing as cancelled (review P3-3).
+  it('gives Changes and Update the queued confirmation, so theirs waits for a sheet that is showing', async () => {
+    const { lifts, ctx, source } = await wired(false)
+    const api = fakeApi({ devices: [{ deviceId: 'd', label: 'Phone', thisDevice: true, passkeys: [PASSKEY] }] })
+    const lift = lifts[0] as ReturnType<typeof remoteDenialLift>
+    const refused = lift({ endpoint: 'settings/update', reason: 'elevation-required: settings/update', args: { a: 1 }, signal: new AbortController().signal })
+    await waitFor(() => { expect(source.hooks.pending.getSnapshot()).not.toBeNull() })
+    const shown = source.hooks.pending.getSnapshot()
+    const changes = ctx.get('delorunFaceGrant')?.grant({ action: 'changes/restart', call: { method: 'POST', path: '/api/changes/restart', body: {} } })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(source.hooks.pending.getSnapshot()).toBe(shown)
+    await answer(source, api, 'faceId')
+    await expect(refused).resolves.toBe(true)
+    const second = await answer(source, api, 'faceId')
+    await expect(changes).resolves.toEqual(expect.any(String))
+    expect(second.title).toContain('Restart Delorun')
     await ctx.fiber.dispose()
   })
 

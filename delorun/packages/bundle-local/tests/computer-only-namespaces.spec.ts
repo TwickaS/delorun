@@ -12,7 +12,7 @@ import { Context } from '@deepseek-ai/cordis'
 import yaml from 'js-yaml'
 import { describe, expect, it } from 'vitest'
 import { entryListSchema } from '@deepseek-ai/cordis-plugin-include'
-import { computerOnlyEntryIdsOf, COMPUTER_ONLY_ROW_MODULES, createCondition, PROTECTED_ROW_REFUSAL, protectedEntryIdsOf, reachDevicePrincipal, type ReachAccessFacts } from '@delorun/home-auth'
+import { computerOnlyEntryIdsOf, COMPUTER_ONLY_ROW_MODULES, createCondition, GRACE_PROTECTED_ROW_REFUSAL, PROTECTED_ROW_REFUSAL, protectedEntryIdsOf, reachDevicePrincipal, type ReachAccessFacts } from '@delorun/home-auth'
 import { PACKAGE_DIR, REPO } from './profiles.ts'
 
 type Patch = Record<string, unknown>
@@ -104,7 +104,7 @@ describe('the rows the plugin manager protects', () => {
     for (const row of protectedRows) {
       const call = { action: 'settings/update' as const, resource: { kind: 'global' } as const, args: { ns: row.id, patch: {} } }
       // Pins the grace exclusion: a consent or guard row's settings need a code or a PIN page.
-      expect(createCondition(settings(true), principal)(call), `grace ${row.id}`).toEqual({ kind: 'deny', reason: 'elevation-required: settings/update' })
+      expect(createCondition(settings(true), principal)(call), `grace ${row.id}`).toEqual({ kind: 'deny', reason: GRACE_PROTECTED_ROW_REFUSAL })
       expect(createCondition(settings(false), principal)(call).kind, `code ${row.id}`).toBe('allow')
     }
   })

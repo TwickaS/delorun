@@ -160,6 +160,25 @@ describe('holds for terminals', () => {
     expect(decide('terminal/attach', { id: 't-1' })).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/attach' })
     expect(decide('terminal/create', create)).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/create' })
   })
+  // Removing terminal/attach from HOLD_OPENERS makes a reloaded terminal tab confirm again for each of its streams.
+  it('open on a grant to attach to an existing terminal, for that terminal alone', () => {
+    const { grants, decide } = world()
+    const attach = { agentId: 'chat-1', id: 't-1' }
+    expect(decide('terminal/attach', attach)).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/attach' })
+    grants.mint(HOLDER, [{ action: 'terminal/attach', hash: hashArgs(attach) ?? '', hold: { feature: 'terminal', id: 't-1' } }], 'passkey')
+    expect(decide('terminal/attach', attach).kind).toBe('allow')
+    expect(decide('terminal/attach', attach).kind).toBe('allow')
+    expect(decide('terminal/retain', { sessionId: 'chat-1', id: 't-1' }).kind).toBe('allow')
+    expect(decide('terminal/attach', { agentId: 'chat-1', id: 't-2' })).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/attach' })
+    expect(decide('terminal/retain', { sessionId: 'chat-1', id: 't-2' })).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/retain' })
+    expect(decide('terminal/watch', { sessionId: 'chat-1' })).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/watch' })
+  })
+  it('refuse a terminal stream opened with no grant and no hold', () => {
+    const { decide } = world()
+    for (const [action, args] of [['terminal/attach', { agentId: 'chat-1', id: 't-1' }], ['terminal/retain', { sessionId: 'chat-1', id: 't-1' }], ['terminal/watch', { sessionId: 'chat-1' }], ['mcpManager/watch', {}]] as const) {
+      expect(decide(action, args), action).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
+    }
+  })
   it('are not opened by a grant whose call opens no terminal', () => {
     const { grants, decide } = world()
     const settings = { ns: 'x', patch: {} }

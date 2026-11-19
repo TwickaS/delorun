@@ -16,7 +16,7 @@ import { signInMessage } from '../src/sign-in.ts'
 import { deviceIdOf } from '../src/records.ts'
 import type { ElevationChange } from '../src/elevation.ts'
 import type { HomeAuth } from '../src/home-auth.ts'
-import { createCondition, createReachAccessPolicy, GRACE_REFUSED_ACTIONS, PROTECTED_ROW_REFUSAL, REACH_ELEVATED_ACTIONS, reachDevicePrincipal, type ReachAccessFacts } from '../src/reach-access.ts'
+import { createCondition, createReachAccessPolicy, GRACE_PROTECTED_ROW_REFUSAL, GRACE_REFUSED_ACTIONS, PROTECTED_ROW_REFUSAL, REACH_ELEVATED_ACTIONS, reachDevicePrincipal, type ReachAccessFacts } from '../src/reach-access.ts'
 import { HOME_AUTH_SWITCH, REACH_SWITCH } from '../src/service.ts'
 import { homeFixture, type Home } from './fixtures/home.ts'
 
@@ -239,8 +239,10 @@ describe('the approval grace and PIN mode', () => {
     })
     const call = { action: 'settings/update' as const, resource: { kind: 'global' } as const, args: { ns: 'delorun-mcp-consent', patch: {} } }
     const principal = reachDevicePrincipal(phone.id, LISTENER)
-    // Pins the grace flag: the same write under a code is the unlock's to allow.
-    expect(createCondition(facts(grace), principal)(call)).toEqual({ kind: 'deny', reason: 'elevation-required: settings/update' })
+    // Pins the grace flag: the same write under a code is the unlock's to allow. The refusal names no grant action, so a
+    // phone's Face ID step does not ask for a grant no rule would accept (review P3-1).
+    expect(createCondition(facts(grace), principal)(call)).toEqual({ kind: 'deny', reason: GRACE_PROTECTED_ROW_REFUSAL })
+    expect(GRACE_PROTECTED_ROW_REFUSAL.startsWith('elevation-required:')).toBe(false)
     expect(createCondition(facts({ id: 'code' }), principal)(call).kind).toBe('allow')
     // An ordinary write is the grace's to allow.
     expect(createCondition(facts(grace), principal)({ ...call, args: { ns: 'delorun-cost-meter', patch: {} } }).kind).toBe('allow')

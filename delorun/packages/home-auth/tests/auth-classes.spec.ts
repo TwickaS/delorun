@@ -59,6 +59,8 @@ describe('AUTH_CLASSES', () => {
   it('classes a terminal\'s size limits and shells free, and its list, attach and create face', () => {
     for (const id of ['remote:terminal/environment', 'remote:terminal/shells']) expect(authClassOf(id), id).toBe('free')
     for (const id of ['remote:terminal/list', 'remote:terminal/attach', 'remote:terminal/create']) expect(authClassOf(id), id).toBe('face')
+    // The environment read also returns the chat's working directory; its row says so (review P3-4).
+    expect(AUTH_CLASSES.find(row => row.id === 'remote:terminal/environment')?.reason).toContain('working directory')
   })
   it('names the hold feature of terminal and picker rows', () => {
     expect(AUTH_CLASSES.find(row => row.id === 'remote:terminal/attach')?.hold).toBe('terminal')
