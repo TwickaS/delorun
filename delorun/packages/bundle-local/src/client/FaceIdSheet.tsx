@@ -16,6 +16,9 @@ import css from './FaceId.module.css'
 /** The most items of a batch the sheet lists before it counts the rest. */
 const LISTED_ITEMS = 3
 
+/** How long the options request may take: under Safari's 10 s window for a prompt that follows a tap. */
+export const OPTIONS_TIMEOUT_MS = 8000
+
 /** Where the small link under the button leads. */
 export type FaceIdFallback = 'pin' | 'computer'
 
@@ -71,11 +74,15 @@ export function FaceIdSheet({ t, action, kind, api, browser, hasPasskey, fallbac
   const confirm = useCallback(async (): Promise<void> => {
     setPhase('waiting')
     let options: Awaited<ReturnType<PasskeyApi['options']>>
+    let timer: ReturnType<typeof setTimeout> | undefined
     try {
-      options = await api.options(action.grant)
+      const expired = new Promise<never>((_resolve, reject) => { timer = setTimeout(() => { reject(new Error('the options request timed out')) }, OPTIONS_TIMEOUT_MS) })
+      options = await Promise.race([api.options(action.grant), expired])
     } catch {
       if (alive.current) setPhase('failed')
       return
+    } finally {
+      clearTimeout(timer)
     }
     const result = await browser.get(options)
     if (!alive.current) return

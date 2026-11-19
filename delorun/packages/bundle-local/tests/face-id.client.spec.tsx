@@ -15,7 +15,7 @@ import { canonicalJson, hashArgs, hashRequest } from '../src/client/face-id-hash
 import { HostRequestError } from '../src/client/host-api.ts'
 import { FaceIdPin } from '../src/client/FaceIdPin.tsx'
 import { FACE_ID_KINDS, type FaceIdAction, type PasskeyDevice } from '../src/client/face-id-types.ts'
-import { FaceIdSheet } from '../src/client/FaceIdSheet.tsx'
+import { FaceIdSheet, OPTIONS_TIMEOUT_MS } from '../src/client/FaceIdSheet.tsx'
 import { AddFaceId, CODE_POLL_MS, FaceIdPairingStep, PasskeyCodeEntry } from '../src/client/FaceIdEnrol.tsx'
 import { PasskeyDevices } from '../src/client/PasskeyDevices.tsx'
 
@@ -108,6 +108,20 @@ describe('FaceIdSheet', () => {
     render(<div onKeyDown={(event) => { event.stopPropagation() }}><FaceIdSheet {...props} /></div>)
     fireEvent.keyDown(screen.getByRole('button', { name: 'Confirm with Face ID' }), { key: 'Escape' })
     expect(onCancel).toHaveBeenCalled()
+  })
+  it('fails with Try again and the PIN link when the options request outlasts the gesture window', async () => {
+    // A late browser prompt would be refused as not user-initiated; the sheet gives up first and never leaves the person waiting.
+    vi.useFakeTimers()
+    const api = fakeApi()
+    api.options = () => new Promise(() => {})
+    const browser = fakeBrowser()
+    sheet({ api, browser })
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm with Face ID' }))
+    await act(async () => { await vi.advanceTimersByTimeAsync(OPTIONS_TIMEOUT_MS) })
+    expect(screen.getByText('Face ID did not work.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Try Face ID again' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Use PIN instead' })).toBeTruthy()
+    expect(browser.calls).toEqual([])
   })
   it('fails when the options or the verification are refused', async () => {
     // A refused request must not be reported as a grant.
