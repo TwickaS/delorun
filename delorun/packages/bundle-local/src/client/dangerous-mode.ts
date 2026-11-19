@@ -1,5 +1,5 @@
 /**
- * Whether dangerous mode holds, as a remote studio's sections read it to offer the actions an unlocked device may take
+ * Whether dangerous mode holds, as a remote studio's sections read it to offer the actions a device may take with Face ID or its PIN
  * instead of the notice that they need the computer. The mode is the `everywhere` answer of the permission routes.
  *
  * @module @delorun/bundle-local/client/dangerous-mode

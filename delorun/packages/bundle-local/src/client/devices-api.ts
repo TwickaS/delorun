@@ -52,18 +52,20 @@ export interface Device {
   readonly id: DeviceId
   readonly label: string
   readonly platform: string
-  readonly address: string
+  /** The address it signed in through; absent in the list a device reads, where it is the computer's to read. */
+  readonly address?: string
   /** Milliseconds since the epoch. */
   readonly approvedAt: number
-  /** `local` when the device was approved at the home's own computer. */
-  readonly approvedBy: string | null
+  /** `local` when the device was approved at the home's own computer; absent in the list a device reads. */
+  readonly approvedBy?: string | null
   /** Milliseconds since the epoch, or null before the first sign-in. */
   readonly lastSignInAt: number | null
 }
 
 /** What `GET /auth/devices` answers once the home has an owner. */
 export interface DeviceList {
-  readonly owner: { readonly claimedAt: number; readonly firstDeviceId: string }
+  /** The first device's id is absent in the list a device reads. */
+  readonly owner: { readonly claimedAt: number; readonly firstDeviceId?: string }
   readonly devices: readonly Device[]
 }
 
@@ -143,10 +145,10 @@ const isReachStatus = fields({
   })),
 })
 const isDeviceList = fields({
-  owner: fields({ claimedAt: isTime, firstDeviceId: isString }),
+  owner: fields({ claimedAt: isTime, firstDeviceId: optional(isString) }),
   devices: listOf(fields({
-    id: isString, label: isString, platform: isString, address: isString,
-    approvedAt: isTime, approvedBy: orNull(isString), lastSignInAt: orNull(isTime),
+    id: isString, label: isString, platform: isString, address: optional(isString),
+    approvedAt: isTime, approvedBy: optional(orNull(isString)), lastSignInAt: orNull(isTime),
   })),
 })
 const isWindow = fields({ closesAt: isTime })
@@ -305,17 +307,11 @@ export const ELEVATION_ROUTES = {
   revoke: '/auth/elevation/revoke',
 } as const
 
-/** The prefix of the reason remote access gives a call that needs an unlock. */
-export const ELEVATION_REQUIRED = 'elevation-required:'
-
 /** The Host error code a device route answers on the computer's own address, where no device unlocks. */
 export const HOST_MISMATCH = 'HOST_MISMATCH'
 
-/** Interval between two reads of the unlock state while a request waits, and of the computer's list while it shows. */
+/** Interval between two reads of the computer's list of unlock requests while it shows. */
 export const ELEVATION_POLL_MS = 2000
-
-/** Interval between two reads of the unlock state while an unlock runs, which notices an unlock ended at the computer. */
-export const ELEVATED_POLL_MS = 30_000
 
 const isElevationState: Check = value => fields({ kind: kind => kind === 'none', unlockMinutes: optional(isTime) })(value)
   || fields({ kind: kind => kind === 'pending', requestId: isString, code: code => typeof code === 'string' && /^\d{8}$/.test(code), expiresAt: isTime, unlockMinutes: optional(isTime) })(value)
@@ -342,27 +338,6 @@ export async function readElevation(fetch: HostFetch): Promise<ElevationState | 
     if (failure.kind !== 'unreachable' && (failure.status === 404 || (failure.kind === 'refused' && failure.code === HOST_MISMATCH))) return undefined
     throw error
   }
-}
-
-/**
- * Ask the computer for an unlock from this device.
- * @param fetch - the request function.
- * @returns the state, a waiting request with the code to type at the computer, or the unlock this device holds.
- * @throws {HostRequestError} for a refusal (`APPROVAL_PENDING_LIMIT` among them), an unreachable Host or an unreadable
- *   answer.
- */
-export function requestElevation(fetch: HostFetch): Promise<ElevationState> {
-  return call<ElevationState>(fetch, ELEVATION_ROUTES.request, isElevationState, {})
-}
-
-/**
- * End this device's unlock and withdraw its waiting request. A device may end its own unlock, never start or extend one.
- * @param fetch - the request function.
- * @returns the state after it, `none`.
- * @throws {HostRequestError} for a refusal, an unreachable Host or an unreadable answer.
- */
-export function lockElevation(fetch: HostFetch): Promise<ElevationState> {
-  return call<ElevationState>(fetch, ELEVATION_ROUTES.lock, isElevationState, {})
 }
 
 /**

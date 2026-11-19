@@ -17,6 +17,9 @@ import { FaceIdSheet } from '../../src/client/FaceIdSheet.tsx'
 import { callActionOf } from '../../src/client/FaceIdGrantOverlay.tsx'
 import { PasskeyDevices } from '../../src/client/PasskeyDevices.tsx'
 import { fakeApi, fakeBrowser } from '../../src/client/face-id-fake.ts'
+import { DevicesSection, type DevicesSectionProps } from '../../src/client/DevicesSection.tsx'
+import { DEVICE_ROUTES, type HostFetch } from '../../src/client/devices-api.ts'
+import { en as devicesEn } from '../../src/client/devices-locales.ts'
 import { en } from '../../src/client/face-id-locales.ts'
 import type { FaceIdAction, PasskeyDevice } from '../../src/client/face-id-types.ts'
 
@@ -43,6 +46,44 @@ const COMPUTER_DEVICES: readonly PasskeyDevice[] = [
   { deviceId: 'd2', label: 'Work laptop in the office with a long name', thisDevice: false, passkeys: [{ ...PASSKEY, credentialId: 'CCCC', lastUsedAt: null, synced: false }] },
 ]
 const noop = (): void => undefined
+
+/** The home a phone's Devices section reads: reach ready, two approved devices; anything else needs the computer. */
+const PHONE_HOME: HostFetch = (input) => {
+  const answers: Readonly<Record<string, unknown>> = {
+    [DEVICE_ROUTES.reachStatus]: { available: true, hasOwner: true, options: [{ option: 'tailscale-private', state: 'ready', address: 'https://home.example.ts.net' }] },
+    // As the home answers a device: no addresses, approvers or first device, with this device's id and running unlocks.
+    [DEVICE_ROUTES.devices]: {
+      owner: { claimedAt: NOW - 3 * DAY },
+      devices: [
+        { id: 'a'.repeat(43), label: 'Vadim’s iPhone', platform: 'iOS', approvedAt: NOW - DAY, lastSignInAt: NOW - 3_600_000 },
+        { id: 'b'.repeat(43), label: 'Work laptop', platform: 'macOS', approvedAt: NOW - 2 * DAY, lastSignInAt: null },
+      ],
+      current: 'a'.repeat(43),
+      unlocks: [],
+    },
+  }
+  const body = answers[String(input)]
+  return Promise.resolve(body === undefined
+    ? new Response(JSON.stringify({ error: 'LOOPBACK_REQUIRED', message: 'This needs you at your computer' }), { status: 403 })
+    : new Response(JSON.stringify(body), { status: 200 }))
+}
+
+/** The English Devices copy, with `{name}` placeholders filled. */
+const devicesT = ((key: keyof typeof devicesEn, values?: Record<string, string>) =>
+  devicesEn[key].replace(/\{(\w+)\}/g, (_match, name: string) => values?.[name] ?? '')) as DevicesSectionProps['t']
+
+/** The Devices section as a paired phone shows it. */
+function PhoneDevices(): ReactNode {
+  const props: DevicesSectionProps = {
+    t: devicesT, fetch: PHONE_HOME, close: noop,
+    useUnlock: select => select({ place: 'device' }),
+    usePairing: select => select({ place: 'remote', requests: [], view: undefined, open: undefined, quieted: [] }),
+    usePairingForm: select => select({ status: 'ready', value: {}, base: undefined, user: undefined, revision: 1, writable: false }),
+    usePairingMutation: select => select({ busy: false, failed: false }),
+    startPairing: () => noop, setPairing: noop, openPairingCode: noop, declinePairing: noop,
+  } as DevicesSectionProps
+  return <DevicesSection {...props} />
+}
 
 /**
  * Build the chosen screen.
@@ -79,6 +120,8 @@ function screenOf(screen: string): ReactNode {
     case 'b4-computer':
       return <PasskeyDevices t={t} api={fakeApi({ devices: COMPUTER_DEVICES })} browser={fakeBrowser()} kind="faceId" atComputer secret="pin" hasPasskey={false}
         onAdd={noop} onAskComputer={noop} />
+    case 'devices-phone':
+      return <PhoneDevices />
     default:
       return <p>Unknown screen {screen}</p>
   }
@@ -89,7 +132,7 @@ document.body.style.cssText = 'margin: 0; font-family: var(--dl-font-sans); back
 const query = new URLSearchParams(window.location.search)
 if (query.get('theme') === 'dark') document.body.dataset.dsDarkTheme = ''
 document.documentElement.style.colorScheme = query.get('theme') === 'dark' ? 'dark' : 'light'
-const wrap = query.get('screen')?.startsWith('b4') === true || query.get('screen') === 'code-entry'
+const wrap = query.get('screen')?.startsWith('b4') === true || query.get('screen') === 'code-entry' || query.get('screen') === 'devices-phone'
 const screen = screenOf(query.get('screen') ?? '')
 const root = document.getElementById('root')
 if (root === null) throw new Error('no #root')

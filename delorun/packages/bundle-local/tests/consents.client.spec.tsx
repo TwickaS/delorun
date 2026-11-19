@@ -32,8 +32,6 @@ import { AGENTS_COMMAND, ExternalAgentsSection, type ExternalAgentsSectionProps 
 import { MCP_COMMAND, PermissionsSection, type PermissionsSectionProps } from '../src/client/PermissionsSection.tsx'
 import { OptIn } from '../src/client/opt-in.ts'
 import { switchChat } from '../src/client/index.ts'
-import { installGateUnlock } from '../src/client/gate-unlock.ts'
-import type { UnlockSource, UnlockView } from '../src/client/unlock.ts'
 
 afterEach(() => {
   cleanup()
@@ -1567,26 +1565,26 @@ describe('dangerous mode', () => {
     expect(screen.getByText(en['everywhere.on'])).toBeTruthy()
   })
 
-  it('offers the unlock, not the computer, on a remote studio that cannot list its workspaces while the mode is on', async () => {
+  it('offers the Face ID confirmation, not the computer, on a remote studio that cannot list its workspaces while the mode is on', async () => {
     const host = fakeHost({ [`GET ${PERMISSION_ROUTES.workspaces}`]: REMOTE, [EVERYWHERE_ROUTE]: EVERYWHERE_ON })
     renderPermissions(host, {})
     await settle()
     // Pins the mode check in the section: with the mode off the same refusal shows the computer line.
-    expect(screen.getByText(en.unlockHere)).toBeTruthy()
+    expect(screen.getByText(en.confirmHere)).toBeTruthy()
     expect(screen.queryByText(en['permissions.remote'], { exact: false })).toBeNull()
   })
 
-  it('offers the unlock in External agents and the MCP notice while the mode is on, and the computer line while it is off', async () => {
+  it('offers the Face ID confirmation in External agents and the MCP notice while the mode is on, and the computer line while it is off', async () => {
     for (const mode of [true, false]) {
       const everywhere = { status: 200, body: mode ? { on: true } : { on: false } }
       const agents = renderExternalAgents(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: REMOTE, [EVERYWHERE_ROUTE]: everywhere }))
       await settle()
-      expect(screen.queryByText(en.unlockHere) !== null, `agents, mode ${String(mode)}`).toBe(mode)
+      expect(screen.queryByText(en.confirmHere) !== null, `agents, mode ${String(mode)}`).toBe(mode)
       expect(screen.queryByText(en['agents.remote'], { exact: false }) !== null, `agents, mode ${String(mode)}`).toBe(!mode)
       agents.unmount()
       const notice = renderNotice(fakeHost({ [`GET ${MCP_CONSENT_ROUTES.pending}`]: REMOTE, [`GET ${MCP_CONSENT_ROUTES.waiting}`]: { status: 200, body: { servers: [{ serverName: 'files', change: 'new' }] } }, [EVERYWHERE_ROUTE]: everywhere }))
       await settle()
-      expect(screen.queryByText('MCP tools are off until you allow files. Unlock this device to review it here.') !== null, `notice, mode ${String(mode)}`).toBe(mode)
+      expect(screen.queryByText('MCP tools are off until you allow files. You can review it here; allowing asks for Face ID or your PIN.') !== null, `notice, mode ${String(mode)}`).toBe(mode)
       notice.unmount()
     }
   })
@@ -1598,55 +1596,25 @@ describe('dangerous mode', () => {
   })
 })
 
-describe('a refusal that needs the device unlocked', () => {
-  const REFUSAL: Answer = { status: 403, body: { error: 'ELEVATION_REQUIRED', message: 'Unlock this device first' } }
+describe('a refusal that needs Face ID or the PIN', () => {
+  const REFUSAL: Answer = { status: 403, body: { error: 'ELEVATION_REQUIRED', message: 'Confirm first' } }
 
-  /** An unlock store for a device whose unlock lasts 15 minutes. */
-  function unlockStore() {
-    const view: UnlockView = { place: 'device', state: { kind: 'none', unlockMinutes: 15 }, dialog: null, ended: 0, lockFailed: false }
-    const open = vi.fn()
-    const noop = async (): Promise<void> => {}
-    const source: UnlockSource = { hooks: { unlock: { getSnapshot: () => view, subscribe: () => () => {} } }, refresh: noop, refused: () => {}, open, request: noop, cancel: noop, lock: noop, dismissEnded: () => {}, dispose: () => {} }
-    return { source, open }
-  }
-
-  it('is worded as an unlock that states the minutes, where an unlock can be opened', () => {
-    const { source } = unlockStore()
-    const dispose = installGateUnlock(source)
-    try {
-      const text = consentFailureText(makeTranslate(en), { kind: 'unlock' })
-      expect(text).toContain('15 minutes')
-      expect(text).toContain(en.unlockWhere)
-    } finally {
-      dispose()
-    }
+  it('is worded as a Face ID confirmation, never an unlock', () => {
+    const text = consentFailureText(makeTranslate(en), { kind: 'face' })
+    expect(text).toBe(en['gate.face'])
+    expect(text).not.toMatch(/unlock/i)
   })
 
-  it('says the unlock without minutes where the home has not said how long it lasts', () => {
-    expect(consentFailureText(makeTranslate(en), { kind: 'unlock' })).toContain(en['gate.unlockUnknown'])
-  })
-
-  it('shows the full-access dialog an Unlock button that opens the unlock dialog, and keeps the dialog open', async () => {
-    const { source, open } = unlockStore()
-    const dispose = installGateUnlock(source)
-    try {
-      const host = fakeHost({ [`POST ${PERMISSION_ROUTES.setFullAccess}`]: REFUSAL })
-      const consent = createFullAccessConsentSource(host.fetch)
-      void consent.ask(OFF)
-      consent.confirm()
-      await settle()
-      renderConsent(consent)
-      expect(screen.getByRole('alert').textContent).toContain('15 minutes')
-      fireEvent.click(screen.getByRole('button', { name: en['gate.unlockButton'] }))
-      expect(open).toHaveBeenCalledOnce()
-      expect(screen.getByRole('dialog')).toBeTruthy()
-    } finally {
-      dispose()
-    }
-  })
-
-  it('has the same unlock copy in Chinese', () => {
-    expect(zh['gate.unlock']).toContain('{minutes}')
-    expect(zh.unlockWhere).not.toBe(en.unlockWhere)
+  // Returning the `unlock` failure kind brings back the Unlock button and its sentence in the full-access dialog.
+  it('shows the full-access dialog the Face ID line, with no Unlock button, and keeps the dialog open', async () => {
+    const host = fakeHost({ [`POST ${PERMISSION_ROUTES.setFullAccess}`]: REFUSAL })
+    const consent = createFullAccessConsentSource(host.fetch)
+    void consent.ask(OFF)
+    consent.confirm()
+    await settle()
+    renderConsent(consent)
+    expect(screen.getByRole('alert').textContent).toBe(en['gate.face'])
+    expect(screen.queryByRole('button', { name: /unlock/i })).toBeNull()
+    expect(screen.getByRole('dialog')).toBeTruthy()
   })
 })

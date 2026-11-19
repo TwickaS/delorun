@@ -26,14 +26,14 @@ const flush = async (ms = 0) => { await act(async () => { await vi.advanceTimers
 const click = async (element: HTMLElement) => { await act(async () => { fireEvent.click(element) }) }
 const type = async (field: HTMLElement, value: string) => { await act(async () => { fireEvent.change(field, { target: { value } }) }) }
 
-async function mount(change: Parameters<typeof providersFake>[0] = {}, keys: KeyTestAnswer = KEYS) {
+async function mount(change: Parameters<typeof providersFake>[0] = {}, keys: KeyTestAnswer = KEYS, remote = false) {
   const providers = providersFake(change)
   const next = vi.fn()
   const back = vi.fn()
   const guide = createGuide(hostFake({ keys }).host)
   render(
     <StepFrame title="Models" headingRef={null} count="Step 2 of 7" place={2} total={7} steps={['Welcome', 'Models']} stepsLabel="Steps" stepKey="models">
-      <ProvidersStep services={stepServices({ providers: providers.face })} guide={guide} next={next} back={back} />
+      <ProvidersStep services={stepServices({ providers: providers.face })} guide={guide} next={next} back={back} remote={remote} />
     </StepFrame>,
   )
   await flush()
@@ -96,6 +96,18 @@ describe('the providers landing', () => {
     const { next } = await mount(change)
     expect(screen.getByText(text)).toBeTruthy()
     await click(screen.getByRole('button', { name: label }))
+    expect(next).toHaveBeenCalledOnce()
+  })
+})
+
+// Offering Try again on a phone loops: the home refuses a device's key test once a PIN or any passkey exists (F37 P3-1).
+describe('the providers step on a phone', () => {
+  it('says the keys are tested at the computer, offers no Try again and keeps Continue', async () => {
+    const { next } = await mount({ directory: undefined }, KEYS, true)
+    expect(screen.getByText(en['providers.atComputer'])).toBeTruthy()
+    expect(screen.queryByText(en['providers.unread'])).toBeNull()
+    expect(screen.queryByRole('button', { name: en['key.again'] })).toBeNull()
+    await click(screen.getByRole('button', { name: en.continue }))
     expect(next).toHaveBeenCalledOnce()
   })
 })

@@ -68,8 +68,8 @@ export function requireComputerOrDevice(request: ComputerRequest, response: Serv
   return requireComputer(request, response, homeAuth, action)
 }
 
-/** The sentence a locked device reads when a route needs an unlock. */
-const ELEVATION_REQUIRED_SENTENCE = 'Unlock this device first: it needs a code from your computer, or your PIN where PIN mode is on'
+/** The sentence a device reads when a route needs its confirmation for that call. */
+const ELEVATION_REQUIRED_SENTENCE = 'Confirm this with Face ID or your PIN when asked, or do it at your computer'
 
 /**
  * The reach-device half of a route that needs an unlock (level U): its `admitPeer` admits a reach device and records
@@ -122,8 +122,8 @@ export function admitUnlockedDevice(homeAuth: () => DangerousModeHome | undefine
 
 /**
  * The `admitPeer` of a route that adds or tests model keys: it admits a reach device (an approved device holds a
- * session; no unlock is needed) while PIN mode is off. While it is on, it admits only the Peer of a running page unlock,
- * and no route mints one (A483), so no device is admitted. The owner's Peer never
+ * session; no unlock is needed) until a PIN or any passkey exists (`unlockModeEnabled`). From then on it admits only the
+ * Peer of a running page unlock, and no route mints one (A483), so no device is admitted. The owner's Peer never
  * reaches `admitPeer`.
  * @param homeAuth - a way to the mounted `homeAuth` service, read when a request arrives.
  * @returns the function for `ConnectionFetchRoute.admitPeer`.

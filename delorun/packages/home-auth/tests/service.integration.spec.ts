@@ -58,6 +58,7 @@ import { ELEVATION_PATHS } from '../src/elevation-routes.ts'
 import { PASSKEY_PATHS } from '../src/passkey-routes.ts'
 import { PIN_PATHS } from '../src/pin-routes.ts'
 import { deviceIdOf } from '../src/records.ts'
+import { claimOf, keyOf } from './fixtures/home.ts'
 
 /** One settings field a PIN page loosened, as the PIN set-back ledger records it. */
 interface PinLift { readonly ns: string; readonly field: string; readonly written: unknown }
@@ -72,7 +73,6 @@ function seedPinLift(ctx: Context, lifts: readonly PinLift[]): void {
   if (ledger === undefined) throw new Error('the PIN set-back ledger is not loaded')
   ledger.record(lifts, (ns, field) => ctx.homeAuth['settingsFields']().read(ns, field))
 }
-import { claimOf, keyOf } from './fixtures/home.ts'
 
 const ADDRESS = brandString<StudioAddress>('http://127.0.0.1:3080')
 const HOUR = 60 * 60 * 1000

@@ -15,7 +15,7 @@ import { PASSKEY_ROUTES, httpPasskeyApi } from '../src/client/face-id-api.ts'
 import { fakeBrowser } from '../src/client/face-id-fake.ts'
 import { en } from '../src/client/face-id-locales.ts'
 import { FaceIdGrantOverlay, type FaceIdGrantOverlayProps } from '../src/client/FaceIdGrantOverlay.tsx'
-import { applyPin, applyUnlock, UNLOCK_OVERLAY_ID } from '../src/client/index.ts'
+import { applyPin, applyUnlock } from '../src/client/index.ts'
 import { createPinSource } from '../src/client/pin-lock.ts'
 import { createUnlockSource } from '../src/client/unlock.ts'
 import { ELEVATION_ROUTES } from '../src/client/devices-api.ts'
@@ -44,23 +44,20 @@ function deviceHome() {
 }
 
 describe('a device with PIN mode on', () => {
-  // Reverting `askPin` in the unlock store returns the PIN lock screen as the Devices section's Unlock.
-  it('opens only the code dialog from the Devices section, and never posts the PIN unlock', async () => {
+  // Returning a request or dialog to the unlock store lets a device open the code dialog or post the PIN unlock.
+  it('tells a device from the computer and never posts the PIN unlock', async () => {
     const host = deviceHome()
     const pin = createPinSource(host.fetch)
     const unlock = createUnlockSource(host.fetch)
     await act(async () => { await Promise.all([pin.refresh(), unlock.refresh()]) })
     expect(pin.hooks.pin.getSnapshot()).toEqual({ phase: 'on', secret: 'passcode' })
-    act(() => { unlock.open() })
-    expect(unlock.hooks.unlock.getSnapshot().dialog).toEqual({ action: undefined, busy: false, outcome: undefined })
-    await act(async () => { await unlock.request() })
+    expect(unlock.hooks.unlock.getSnapshot()).toEqual({ place: 'device' })
     expect(host.count(UNLOCK_CALL)).toBe(0)
     pin.dispose()
-    unlock.dispose()
   })
 
   // Reverting the `shell.overlay` entry of `applyPin` returns the lock screen over the studio.
-  it('registers no PIN lock overlay, and renders no lock screen when the unlock is opened', async () => {
+  it('registers no PIN lock overlay and no unlock overlay, and renders no lock screen', async () => {
     const host = deviceHome()
     vi.stubGlobal('fetch', host.fetch)
     const ctx = new Context()
@@ -69,17 +66,15 @@ describe('a device with PIN mode on', () => {
     if (slots === undefined) throw new Error('no slot registry')
     try {
       slots.register({ name: 'root', children: { 'shell.overlay': { kind: 'list', scope: 'root' } }, inject: () => ({}) }, ({ renderSlot }) => <>{renderSlot('shell.overlay', {})}</>)
-      let unlock: ReturnType<typeof applyUnlock> | undefined
       await ctx.plugin({
         inject: ['slots'],
         apply: (scope: Context) => {
           applyPin(scope, host.fetch)
-          unlock = applyUnlock(scope, host.fetch)
+          applyUnlock(scope, host.fetch)
         },
       }).await()
-      expect(slots.entries('shell.overlay').map(entry => entry.options.id)).toEqual([UNLOCK_OVERLAY_ID])
+      expect(slots.entries('shell.overlay')).toEqual([])
       await act(async () => { await Promise.resolve() })
-      act(() => { unlock?.open() })
       expect(document.querySelector('[data-pin-lock]')).toBeNull()
       expect(host.count(UNLOCK_CALL)).toBe(0)
     } finally {

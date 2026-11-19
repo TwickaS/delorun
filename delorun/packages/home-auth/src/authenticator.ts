@@ -55,17 +55,17 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
   }
 }
 
-/** The sentence the remote studio shows for a refused full-access grant. */
-export const FULL_ACCESS_REFUSAL = 'This needs you at your computer: granting full access. Answer this prompt in the studio on the home\'s own computer'
+/** The sentence the remote studio shows for a full-access grant a device answered without its confirmation. */
+export const FULL_ACCESS_REFUSAL = 'This needs your confirmation: granting full access. Answer again and confirm with Face ID or your PIN when asked, or answer at the home\'s own computer'
 
-/** The sentence the remote studio shows for a refused workspace-management grant. */
-export const WORKSPACE_MANAGEMENT_REFUSAL = 'This needs you at your computer: managing workspaces and their instructions. Answer this prompt in the studio on the home\'s own computer'
+/** The sentence the remote studio shows for a workspace-management grant a device answered without its confirmation. */
+export const WORKSPACE_MANAGEMENT_REFUSAL = 'This needs your confirmation: managing workspaces and their instructions. Answer again and confirm with Face ID or your PIN when asked, or answer at the home\'s own computer'
 
-/** The sentence the remote studio shows for a refused external-agent start. */
-export const EXTERNAL_AGENT_REFUSAL = 'This needs you at your computer: starting an external agent such as Claude Code or Codex, which runs outside Delorun\'s sandbox. Answer this prompt in the studio on the home\'s own computer'
+/** The sentence the remote studio shows for an external-agent start a device answered without its confirmation. */
+export const EXTERNAL_AGENT_REFUSAL = 'This needs your confirmation: starting an external agent such as Claude Code or Codex, which runs outside Delorun\'s sandbox. Answer again and confirm with Face ID or your PIN when asked, or answer at the home\'s own computer'
 
-/** The sentence the remote studio shows for a refused real-browser grant, answered from a locked device. */
-export const REAL_BROWSER_REFUSAL = 'This needs an unlocked device: letting the agent use your own browser, with your sign-ins, in this chat. Unlock this device with its code or PIN and answer again, or answer at the home\'s own computer'
+/** The sentence the remote studio shows for a real-browser grant a device answered without its confirmation. */
+export const REAL_BROWSER_REFUSAL = 'This needs your confirmation: letting the agent use your own browser, with your sign-ins, in this chat. Answer again and confirm with Face ID or your PIN when asked, or answer at the home\'s own computer'
 
 /**
  * The `LOOPBACK_REQUIRED` refusal of each grant a reach Peer gives only with an answer grant, by the approval request's

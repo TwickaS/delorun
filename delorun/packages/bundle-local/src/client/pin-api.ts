@@ -45,13 +45,9 @@ export async function readPinState(fetch: HostFetch): Promise<PinState | undefin
 export const PIN_COMPUTER_ROUTES = {
   mode: '/auth/pin/mode',
   set: '/auth/pin/set',
-  options: '/auth/pin/options',
   off: '/auth/pin/off',
   resume: '/auth/pin/resume',
 } as const
-
-/** The longest idle time the home accepts, in minutes. */
-export const PIN_MAX_IDLE_MINUTES = 60
 
 /** PIN mode as the computer reads it. */
 export interface PinMode {
@@ -87,17 +83,6 @@ export function readPinMode(fetch: HostFetch): Promise<PinMode | undefined> {
  */
 export async function setPinMode(fetch: HostFetch, body: { readonly secret: string; readonly idleMinutes: number; readonly lockWhenHidden: boolean }): Promise<void> {
   await call<{ enabled: boolean }>(fetch, PIN_COMPUTER_ROUTES.set, fields({ enabled: isBoolean }), body)
-}
-
-/**
- * Change the idle time and lock-when-hidden of a mode that is on, without the secret.
- * @param fetch - the request function.
- * @param body - the two settings.
- * @throws {HostRequestError} `PIN_MODE_OFF` while the mode is off, `BAD_REQUEST`, `LOOPBACK_REQUIRED` away from the computer,
- *   an unreachable Host or an unreadable answer.
- */
-export async function setPinOptions(fetch: HostFetch, body: { readonly idleMinutes: number; readonly lockWhenHidden: boolean }): Promise<void> {
-  await call<{ idleMinutes: number }>(fetch, PIN_COMPUTER_ROUTES.options, fields({ idleMinutes: isTime, lockWhenHidden: isBoolean }), body)
 }
 
 /**

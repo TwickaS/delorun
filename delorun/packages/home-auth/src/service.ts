@@ -559,7 +559,6 @@ export class HomeAuthService extends Service {
     }
   }
 
-
   /**
    * Write back, through the settings service, every setting a PIN page loosened once PIN mode is off, except one the
    * person changed since.

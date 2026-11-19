@@ -168,7 +168,7 @@ export interface DeviceArrival {
  */
 export function attestDevice(facts: DeviceArrival): AtComputer {
   if (facts.remoteSession !== true || (facts.freshUnlock !== true && facts.freeControl !== true) || facts.device.id === '') {
-    throw new ChangesError('NOT_AT_COMPUTER', 'studio', 'Unlock this device first: it needs a code from your computer, or your PIN where PIN mode is on.')
+    throw new ChangesError('NOT_AT_COMPUTER', 'studio', 'Confirm this with Face ID or your PIN when asked, or do it at your computer.')
   }
   return issue('studio', facts.device)
 }

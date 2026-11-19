@@ -1,9 +1,8 @@
 /**
  * The studio's routes to a chat's real-browser grant ({@link REAL_BROWSER_ROUTES}): its state and its end, which any
  * approved device reaches because they read or only narrow, and the away permission, which widens what the grant
- * covers and so needs the computer or a device unlocked with a code or PIN, as the grant's own approval does; the
- * approval grace opens neither. A request the
- * home cannot place is refused before its body is read.
+ * covers and so needs the computer or a device that confirms that call with Face ID or its PIN, as the grant's own
+ * approval does. A request the home cannot place is refused before its body is read.
  * @module @delorun/browser-use-browse/routes
  */
 import type { Context } from '@deepseek-ai/cordis'

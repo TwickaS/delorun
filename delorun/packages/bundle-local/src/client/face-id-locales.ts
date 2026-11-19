@@ -35,7 +35,7 @@ export const en = {
   'pin.confirm': 'Approve',
   'pin.checking': 'Checking…',
   'pin.back': 'Back',
-  'pair.title': 'Use {method} to unlock',
+  'pair.title': 'Confirm actions with {method}',
   'pair.body': 'Use {method} to confirm installs, full access and updates from this device.',
   'pair.protection': 'Turn on Stolen Device Protection in iPhone Settings so a passcode alone cannot approve this.',
   'pair.setUp': 'Set up {method}',

@@ -17,7 +17,7 @@ import {
   ABOUT_SECTION_ID, ABOUT_SECTION_ORDER, apply, CONSENT_TOAST_ID, DEVICES_SECTION_ID, DEVICES_SECTION_ORDER, EXTERNAL_AGENT_ACTION_ID,
   EXTERNAL_AGENTS_SECTION_ID, EXTERNAL_AGENTS_SECTION_ORDER, FULL_ACCESS_ACTION_ID, FULL_ACCESS_CONSENT_ID, inject, MCP_REVIEW_ID,
   MCP_WAITING_NOTICE_ID, NETWORK_SECTION_ID, PAIRING_NOTICE_ID, NETWORK_SECTION_ORDER, SETUP_VERSIONS_SECTION_ID, SETUP_VERSIONS_SECTION_ORDER, PERMISSIONS_SECTION_ID, PERMISSIONS_SECTION_ORDER, PRIVACY_SECTION_ID,
-  PLUGIN_INSTALLS_SECTION_ID, PLUGIN_INSTALLS_SECTION_ORDER, PRIVACY_SECTION_ORDER, readReachStatus, PIN_MODE_SECTION_ID, PIN_MODE_SECTION_ORDER, FACE_ID_SECTION_ID, FACE_ID_GRANT_ID, FACE_ID_OVERLAY_ID, FACE_ID_ANSWER_ID, FACE_ID_SECTION_ORDER, REMOTE_NOTICE_ID, UNLOCK_OVERLAY_ID,
+  PLUGIN_INSTALLS_SECTION_ID, PLUGIN_INSTALLS_SECTION_ORDER, PRIVACY_SECTION_ORDER, readReachStatus, PIN_MODE_SECTION_ID, PIN_MODE_SECTION_ORDER, FACE_ID_SECTION_ID, FACE_ID_GRANT_ID, FACE_ID_OVERLAY_ID, FACE_ID_ANSWER_ID, FACE_ID_SECTION_ORDER, REMOTE_NOTICE_ID,
 } from '../src/client/index.ts'
 import {
   approveDevice, DEVICE_ROUTES, HostRequestError, hostFailureOf, isRefused, openApprovalWindow, PENDING_POLL_MS,
@@ -95,6 +95,29 @@ function standardHost() {
 
 /** A paired device's unlock view, as on a phone. */
 const ON_DEVICE = { ...AWAY, place: 'device' } as const
+
+describe('the Devices section on a device', () => {
+  // A device reads a list without addresses, approvers or the first device (home-auth's devicesHandler); requiring them
+  // again shows "could not be read" in place of the list on every phone.
+  it('lists the devices from the list the home sends a device', async () => {
+    const host = fakeHost({
+      [`GET ${DEVICE_ROUTES.reachStatus}`]: READY,
+      [`GET ${DEVICE_ROUTES.devices}`]: { status: 200, body: {
+        owner: { claimedAt: OWNER.claimedAt },
+        devices: [DEVICE_A, DEVICE_B].map(({ address: _address, approvedBy: _approvedBy, ...rest }) => rest),
+        current: DEVICE_A.id,
+        unlocks: [],
+      } },
+    })
+    const props = { t: makeTranslate(en), close: () => {}, fetch: host.fetch, ...staticUnlock(ON_DEVICE), ...staticPairing({ state: { place: 'remote' } }) } as DevicesSectionProps
+    render(<DevicesSection {...props} />)
+    await settle()
+    expect(screen.getByText(DEVICE_A.label)).toBeTruthy()
+    expect(screen.getByText(DEVICE_B.label)).toBeTruthy()
+    expect(screen.getByText(DEVICE_A.platform)).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+})
 
 describe('the Devices section without Phone powers', () => {
   // Removing the Phone powers block from the section brings back a choice for a level that no longer exists; the section never asks for the route.
@@ -532,7 +555,7 @@ describe('the plugin', () => {
       // The preview notice's copy lookup reads the Privacy dictionary.
       const notice = slots.entries('settings.onboarding')[0]?.inject?.() as { t: (key: string) => string }
       expect(notice.t('notice.continue')).toBe('Continue')
-      expect(slots.entries('shell.overlay').map(entry => entry.options.id)).toEqual([UNLOCK_OVERLAY_ID, PAIRING_NOTICE_ID, FACE_ID_GRANT_ID, FACE_ID_OVERLAY_ID, REMOTE_NOTICE_ID, FULL_ACCESS_CONSENT_ID, MCP_REVIEW_ID, MCP_WAITING_NOTICE_ID, CONSENT_TOAST_ID])
+      expect(slots.entries('shell.overlay').map(entry => entry.options.id)).toEqual([PAIRING_NOTICE_ID, FACE_ID_GRANT_ID, FACE_ID_OVERLAY_ID, REMOTE_NOTICE_ID, FULL_ACCESS_CONSENT_ID, MCP_REVIEW_ID, MCP_WAITING_NOTICE_ID, CONSENT_TOAST_ID])
       // Each overlay and each section with a store (the About section has none) read their store's view and actions.
       for (const entry of [...slots.entries('shell.overlay'), ...slots.entries('settings.section').filter(section => section.options.id !== ABOUT_SECTION_ID)]) expect(entry.inject?.()).toBeTypeOf('object')
       // Each approval card action is bound to the card's chat.

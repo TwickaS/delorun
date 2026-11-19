@@ -39,6 +39,8 @@ interface ModelsStepProps {
   readonly next: () => void
   /** Go back to the previous step. */
   readonly back: () => void
+  /** Whether the guide runs on a paired device, where the home refuses the key test once a PIN or any passkey exists. */
+  readonly remote?: boolean
 }
 
 /**
@@ -46,7 +48,7 @@ interface ModelsStepProps {
  * @param props - the services, the guide and the dialog's `next` and `back`.
  * @returns the step body.
  */
-export function ModelsStep({ services, guide, next, back }: ModelsStepProps): ReactNode {
+export function ModelsStep({ services, guide, next, back, remote = false }: ModelsStepProps): ReactNode {
   const { t, providers } = services
   const keys = useStore(guide.keys)
   const phase = useStore(guide.providersPhase)
@@ -110,7 +112,10 @@ export function ModelsStep({ services, guide, next, back }: ModelsStepProps): Re
   if (cards === undefined) {
     return (
       <div className={shared.stack}>
-        <StateLine tone="error" action={{ label: t('key.again'), onClick: () => { guide.testKeys() } }}>{t('providers.unread')}</StateLine>
+        {/* On a device the key test is refused every time, so Try again would only fail again. */}
+        {remote
+          ? <StateLine tone="info">{t('providers.atComputer')}</StateLine>
+          : <StateLine tone="error" action={{ label: t('key.again'), onClick: () => { guide.testKeys() } }}>{t('providers.unread')}</StateLine>}
         <FooterPortal><StepFooter back={{ label: t('back'), onClick: back }} next={{ label: t('continue'), onClick: next }} /></FooterPortal>
       </div>
     )

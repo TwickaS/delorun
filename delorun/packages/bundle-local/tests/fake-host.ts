@@ -44,18 +44,16 @@ export function fakeHost(script: Partial<Record<RouteKey, Answer>> = {}) {
 }
 
 /** The unlock view where no device unlocks, as at the home's own computer. */
-export const AWAY: UnlockView = { place: 'away', state: { kind: 'none' }, dialog: null, ended: 0, lockFailed: false }
+export const AWAY: UnlockView = { place: 'away' }
 
 /**
- * The unlock props of the Devices section over one fixed view.
+ * The place prop of the Devices section over one fixed view.
  * @param view - the view.
- * @returns the hook and spies for the open and lock actions.
+ * @returns the hook.
  */
 export function staticUnlock(view: UnlockView) {
   return {
     useUnlock: <T,>(select: (current: UnlockView) => T): T => select(view),
-    openUnlock: vi.fn<() => void>(),
-    lockUnlock: vi.fn<() => Promise<void>>(async () => {}),
   }
 }
 

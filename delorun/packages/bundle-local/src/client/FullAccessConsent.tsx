@@ -10,9 +10,7 @@ import { useState, type ReactNode } from 'react'
 import { Button, Checkbox, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { HostObservable, InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { FULL_ACCESS_PRESET, readEverywhere, reviewChat, setFullAccess, type WorkspaceAccess } from './consents-api.ts'
-import { ELEVATION_REQUIRED, namesGrantAction, unlockSentence } from './gate.ts'
-import { useRetryOnUnlock } from './GateNotice.tsx'
-import { currentGateUnlock, noteUnlockedAction, useGateUnlock } from './gate-unlock.ts'
+import { ELEVATION_REQUIRED } from './gate.ts'
 import { hostFailureOf, isRefused, LOOPBACK_REQUIRED, type HostFetch } from './host-api.ts'
 import css from './ConsentSections.module.css'
 
@@ -42,7 +40,7 @@ export type FullAccessConsentState = {
 
 /** Why an answer was not recorded: a code the consent words itself, or the home's own sentence. */
 export type ConsentFailure =
-  | { readonly kind: 'stale' | 'remote' | 'face' | 'unlock' | 'unreachable' | 'unreadable' }
+  | { readonly kind: 'stale' | 'remote' | 'face' | 'unreachable' | 'unreadable' }
   | { readonly kind: 'refused'; readonly message: string }
 
 /** The store the overlay entry reads, and the questions surfaces ask through it. */
@@ -87,8 +85,7 @@ export function consentFailureOf(error: unknown): ConsentFailure {
       if (failure.code === 'STALE_REVIEW') return { kind: 'stale' }
       if (failure.code === LOOPBACK_REQUIRED) return { kind: 'remote' }
       // A cancelled Face ID confirmation: trying again asks again; no unlock admits it.
-      if (namesGrantAction(failure)) return { kind: 'face' }
-      if (failure.code === ELEVATION_REQUIRED) return { kind: 'unlock' }
+      if (failure.code === ELEVATION_REQUIRED) return { kind: 'face' }
       return { kind: 'refused', message: failure.message }
     case 'unreachable':
     case 'unreadable':
@@ -159,7 +156,7 @@ export function createFullAccessConsentSource(fetch: HostFetch): FullAccessConse
       if (open.access === undefined) return
       publish({ ...open, busy: true })
       setFullAccess(fetch, open.access, true, open.chat).then(
-        () => { noteUnlockedAction(); if (state?.seq === open.seq) close(true) },
+        () => { if (state?.seq === open.seq) close(true) },
         (error: unknown) => { if (state?.seq === open.seq) publish({ ...open, busy: false, failure: consentFailureOf(error) }) },
       )
     },
@@ -233,7 +230,6 @@ export function consentFailureText(t: FullAccessConsentProps['t'], failure: Cons
     case 'stale': return t('failed.stale')
     case 'remote': return t('loopback', { action: t(action) })
     case 'face': return t('gate.face')
-    case 'unlock': return `${unlockSentence(t, currentGateUnlock().minutes)} ${t('unlockWhere')}`
     case 'unreachable': return t('failed.unreachable')
     case 'unreadable': return t('failed.unreadable')
     case 'refused': return failure.message
@@ -244,16 +240,13 @@ export function consentFailureText(t: FullAccessConsentProps['t'], failure: Cons
 }
 
 /**
- * A failure's line: its sentence, with an Unlock button when the device can open the unlock dialog.
- * @param props - the consents copy and the failure.
+ * A failure's line.
+ * @param props - the consents copy, the failure and the phrase a remote refusal names.
  * @returns the alert line.
  */
-export function ConsentFailureLine({ t, failure, action, retry }: { readonly t: FullAccessConsentProps['t']; readonly failure: ConsentFailure; readonly action?: Parameters<typeof consentFailureText>[2]; readonly retry?: (() => void) | undefined }): ReactNode {
-  const { open, unlocked } = useGateUnlock()
-  useRetryOnUnlock(failure.kind === 'unlock', unlocked, retry)
+export function ConsentFailureLine({ t, failure, action }: { readonly t: FullAccessConsentProps['t']; readonly failure: ConsentFailure; readonly action?: Parameters<typeof consentFailureText>[2] }): ReactNode {
   return <div className={css.failed} role="alert">
     <p>{consentFailureText(t, failure, action)}</p>
-    {failure.kind === 'unlock' && open !== undefined ? <Button variant="primary" size="sm" onClick={open}>{t('gate.unlockButton')}</Button> : null}
   </div>
 }
 
@@ -301,7 +294,7 @@ function OpenConsent({ consent, confirm, cancel, t }: OpenConsentProps): ReactNo
       ? <div className={css.consent}>
         <p className={css.text}>{t('switch.risk')}</p>
         {acknowledge}
-        {consent.failure === undefined ? null : <ConsentFailureLine t={t} failure={consent.failure} retry={confirm} />}
+        {consent.failure === undefined ? null : <ConsentFailureLine t={t} failure={consent.failure} />}
       </div>
       : access === undefined
       ? <p className={css.text}>{t('consent.remote')} <code className={css.command}>{FULL_ACCESS_COMMAND}</code></p>
@@ -323,7 +316,7 @@ function OpenConsent({ consent, confirm, cancel, t }: OpenConsentProps): ReactNo
           </ul>
           <p className={css.text}>{t('consent.scope')}</p>
         </details>
-        {consent.failure === undefined ? null : <ConsentFailureLine t={t} failure={consent.failure} retry={confirm} />}
+        {consent.failure === undefined ? null : <ConsentFailureLine t={t} failure={consent.failure} />}
       </div>}
   </Modal>
 }

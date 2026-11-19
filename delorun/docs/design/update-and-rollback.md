@@ -30,7 +30,7 @@ Before an update changes anything, Delorun shows a report of what the new releas
 
 ### The studio's update
 
-The person at the computer, or at an unlocked phone, updates, goes back and stops Delorun in the studio, with no terminal. Every step that verifies, installs, switches or rolls back stays in the home process; the Host's update plugin ([`@delorun/plugin-update`](../../packages/plugin-update/README.md)) only asks it over the update channel and shows the person what it answers.
+The person at the computer, or at a phone that confirms each step with Face ID or the PIN, updates, goes back and stops Delorun in the studio, with no terminal. Every step that verifies, installs, switches or rolls back stays in the home process; the Host's update plugin ([`@delorun/plugin-update`](../../packages/plugin-update/README.md)) only asks it over the update channel and shows the person what it answers.
 
 - **Who.** Check now is open to any paired phone. Update now, Go back and Stop need the computer, or a phone that confirms the action with a Face ID grant or, without a passkey, an unlock the person entered (a code or a PIN, never the approval grace). Cancel and Dismiss are free for any paired phone. A request from another site is refused before its body is read.
 - **The report.** `prepare` returns C3's report, which the Host keeps in memory under an opaque handle; the page never holds the home process's report id or channel token. The report expires after 600 seconds, and `apply` refuses an unknown or expired handle with `REPORT_EXPIRED`.

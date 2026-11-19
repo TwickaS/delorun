@@ -1,5 +1,5 @@
 ---
-description: "Open your Delorun studio from your phone over your own Tailscale network: turn remote access on, approve a phone at your computer, what an approved phone can and cannot do, unlock sensitive actions for a while, remove a device and turn remote access off."
+description: "Open your Delorun studio from your phone over your own Tailscale network: turn remote access on, approve a phone at your computer, what an approved phone can and cannot do, confirm sensitive actions with Face ID or a PIN, remove a device and turn remote access off."
 ---
 
 # Reach the studio from your phone
@@ -23,8 +23,7 @@ Any device on your tailnet can open the sign-in page, but only a device you appr
 - [Keep approval yours](#keep-approval-yours)
 - [What an approved phone can and cannot do](#what-an-approved-phone-can-and-cannot-do)
 - [Confirm with Face ID](#confirm-with-face-id)
-- [Unlock sensitive actions for a while](#unlock-sensitive-actions-for-a-while)
-- [Unlock with a PIN](#unlock-with-a-pin)
+- [Confirm with a PIN](#confirm-with-a-pin)
 - [Remove a device](#remove-a-device)
 - [Turn remote access off](#turn-remote-access-off)
 - [Get a one-time owner code](#get-a-one-time-owner-code)
@@ -150,11 +149,11 @@ Approval is meant for you, at your computer. Three facts help you keep it that w
 
 ## What an approved phone can and cannot do
 
-An approved phone is you: it can already ask the model to do things, so it can do everything that is no riskier than a message. A few sensitive actions need a short [unlock](../reference/glossary.md#unlock) that you approve at your computer, and a few things never work from a phone.
+An approved phone is you: it can already ask the model to do things, so it can do everything that is no riskier than a message. A few sensitive actions ask you to confirm each one, with Face ID or your PIN, and a few things never work from a phone.
 
 ![The studio at phone width: a chat about laying out raised beds, with the assistant's reply and a JSON block above the message box.](pictures/phone-chat.webp)
 
-Without an unlock, the phone can:
+Without asking, the phone can:
 
 - read your chats and workspaces, and follow a chat while it runs;
 - reply, attach files, edit or withdraw a queued message, fork a chat, and start a chat in a [workspace](../reference/glossary.md#workspace) you already have, with any of your [presets](../reference/glossary.md#preset). Choosing a preset grants nothing by itself: the workspace's full access and every approval prompt still decide what that chat may do;
@@ -168,7 +167,7 @@ Without an unlock, the phone can:
 - give feedback on a chat or a message;
 - answer ordinary prompts and questions the model asks, and stop a run or a background job.
 
-With an unlock, the phone can also:
+After you confirm each one with Face ID or your PIN, the phone can also:
 
 - change settings;
 - run the slash commands that change only the chat: `/compact`, `/export`, `/goal`, `/permission` and `/plan`; the phone runs no other slash command;
@@ -176,15 +175,15 @@ With an unlock, the phone can also:
 - undo a plugin's change or discard any waiting change in Changes, and turn protection on;
 - browse folders with the folder picker, add a workspace, and start a chat in a folder that is not one of your workspaces;
 - run plugin code the model wrote;
-- grant full access, whether a command asks to run outside the sandbox or a workspace asks to be put on full access, and allow an external agent to work in a workspace. Without the unlock the phone says how many minutes the unlock lasts and offers **Unlock**, and the prompt keeps waiting;
+- grant full access, whether a command asks to run outside the sandbox or a workspace asks to be put on full access, and allow an external agent to work in a workspace. The phone asks for Face ID or your PIN when you answer, and if you cancel, the prompt keeps waiting;
 - accept an [MCP server](../reference/glossary.md#mcp-server), because accepting lets its command run on your computer;
 - save the setup as a version and switch to a saved version;
 - loosen a workspace's network, run a trust check, and send a problem report, which can hold paths from your computer;
-- keep what you changed: nothing is set back when the unlock ends, and undo and the saved setup versions are how you roll a change back.
+- keep what you changed: nothing is set back later, and undo and the saved setup versions are how you roll a change back.
 
-A newly approved phone starts unlocked on its first sign-in, for the unlock time or until onboarding finishes, whichever comes first, so setting up from the phone needs no unlock prompts. That start never opens a terminal and never covers protected settings or the four actions that loosen what Delorun allows (accepting an MCP server, allowing an external agent, granting full access and loosening a workspace's network). Those still ask for a code from your computer. In PIN mode there is no such start at all: every action that needs an unlock asks for the PIN.
+No confirmation opens a window: each sensitive action asks again, also right after you approve a new phone and while you set Delorun up from it.
 
-Only your computer, even when the phone is unlocked:
+Only your computer, whatever the phone confirms:
 
 - turn remote access on or off, set or change the PIN, and approve or remove devices;
 - dismiss the notice that tells you a phone changed protection;
@@ -193,16 +192,16 @@ Only your computer, even when the phone is unlocked:
 
 The phone shows these as "Do this on your computer" with the reason.
 
-An unlocked phone can also open a terminal, turn protection off, apply changes to your plugins or to Delorun's own files, turn a plugin off or on, start a work session, create a plugin, move a setup file in or out, or restart Delorun. Each of these takes its own confirmation: a fresh unlock, or [Face ID](#confirm-with-face-id) when you have set it up.
+The phone can also open a terminal, turn protection off, apply changes to your plugins or to Delorun's own files, turn a plugin off or on, start a work session, create a plugin, move a setup file in or out, or restart Delorun. Each of these takes its own confirmation, with [Face ID](#confirm-with-face-id) or your PIN.
 
-Never, even unlocked:
+Never, whatever the phone confirms:
 
 - read or change your keys and other credentials, or your account;
 - turn off **Ask before external agents run**; the phone can still turn it on and change its run time limit ([External agents](safety.md#external-agents));
 - loosen the permission new chats start in, such as moving it toward full access; the phone can still make it stricter;
 - answer a prompt that would let the model manage workspaces and their instructions;
 - open the settings file in an editor on your computer;
-- unlock itself without your computer or make an unlock longer, or reset the home.
+- reset the home.
 
 You should see the studio's error message when a phone tries another refused action.
 
@@ -211,7 +210,7 @@ A workspace that you already put on full access at your computer can still be dr
 <details>
 <summary>Edge cases</summary>
 
-- If a workspace is on full access, then the phone still needs a fresh unlock, or Face ID, to open or attach to a terminal there, and so does dangerous mode: a terminal is a shell with your authority, so the phone confirms each terminal it opens.
+- If a workspace is on full access, then the phone still confirms with Face ID or your PIN to open or attach to a terminal there, and so does dangerous mode: a terminal is a shell with your authority, so the phone confirms each terminal it opens.
 - If a phone's session is idle for 12 hours, or 14 days have passed since it signed in, then the session ends and its open connections close — the phone signs in again from the sign-in page with its own key.
 - If you approve or remove any device, then every phone's open connections close — each phone signs in again by itself.
 - If a reply shows an image as a file on your computer, or you preview a file, then it does not show on the phone — images attached to messages do show.
@@ -233,11 +232,11 @@ Face ID is how an approved phone confirms one sensitive action at the moment it 
 
 Every action a phone can take is in one of three groups:
 
-- **Never asks.** Reading, following a chat, replying, attaching files, stopping a run, and the other actions listed above as working without an unlock.
-- **Asks every time.** The actions listed above as needing an unlock, and the ones an unlocked phone could take only at the computer's higher level: opening a terminal, turning protection off, applying changes to your plugins or to Delorun's own files, restarting Delorun, saving or removing a provider key, and answering a prompt that grants full access. The phone shows a sheet that names the action, and you confirm with Face ID. One confirmation covers that one action, once, within 30 seconds.
+- **Never asks.** Reading, following a chat, replying, attaching files, stopping a run, and the other actions listed above as working without asking.
+- **Asks every time.** The actions listed above as asking each time: opening a terminal, turning protection off, applying changes to your plugins or to Delorun's own files, restarting Delorun, saving or removing a provider key, and answering a prompt that grants full access. The phone shows a sheet that names the action, and you confirm with Face ID, or with your PIN on a phone without it. One confirmation covers that one action, once, within 30 seconds.
 - **Only at your computer.** Approving or removing devices, setting the PIN, turning remote access on or off, and the other actions listed above as staying at your computer. Face ID never opens these.
 
-When a phone holds a passkey, the 15 minutes after a code unlock, the PIN's unlock window and the first sign-in start no longer unlock anything on that phone: each sensitive action asks for Face ID. A terminal you opened with Face ID stays open for its own follow-up work, so you are not asked for every keystroke. It ends after 5 minutes idle, 60 minutes in all, or when the phone signs out. Another terminal needs its own confirmation.
+No phone holds an unlock for a while: neither a code from your computer, your PIN nor a new phone's first sign-in opens one, so each sensitive action asks again. A terminal you opened with Face ID stays open for its own follow-up work, so you are not asked for every keystroke. It ends after 5 minutes idle, 60 minutes in all, or when the phone signs out. Another terminal needs its own confirmation.
 
 **Set up Face ID.**
 
@@ -248,7 +247,7 @@ Each phone has its own passkey. Adding Face ID on one phone changes nothing on a
 
 **When Face ID fails or is not there.**
 
-Choose **Use PIN instead** on the sheet to confirm the same action with your PIN ([Unlock with a PIN](#unlock-with-a-pin)). A correct PIN confirms that one action only; it does not unlock the phone for a while. The sheet shows this choice as soon as Face ID is cancelled or does not work. If you have set no PIN, the sheet says **Approve at the computer** and the action waits for your code as an unlock does.
+Choose **Use PIN instead** on the sheet to confirm the same action with your PIN ([Confirm with a PIN](#confirm-with-a-pin)). A correct PIN confirms that one action only. The sheet shows this choice as soon as Face ID is cancelled or does not work. If you have set no PIN, the sheet says **Or do this at your computer**: take that action at your computer.
 
 Cancelling the phone's own sheet counts for nothing. A wrong passkey or a wrong PIN counts as a wrong PIN try: the fifth on one phone removes that phone, and ten across all phones pause PIN and Face ID confirmations until you run `delorun devices pin resume` at your computer.
 
@@ -257,7 +256,7 @@ Cancelling the phone's own sheet counts for nothing. A wrong passkey or a wrong 
 - It does not sign a phone in. The phone's own key and your approval still do that.
 - It does not let a phone do what only your computer may do.
 - It does not make a stolen, unlocked phone safe by itself. On an iPhone, turn on **Stolen Device Protection** in Settings, Face ID & Passcode, so that someone who learns the phone's passcode still cannot use Face ID, change the passcode or turn the protection off away from your usual places without waiting an hour.
-- It does not work in a browser that cannot make a platform passkey. Some versions of Firefox, and other browsers without one, say "This browser cannot use Face ID here"; that phone keeps confirming actions with a code from your computer or its PIN. Safari on an iPhone and Chrome on Android work in the browsers tried.
+- It does not work in a browser that cannot make a platform passkey. Some versions of Firefox, and other browsers without one, say "This browser cannot use Face ID here"; that phone confirms actions with its PIN, or you take them at your computer. Safari on an iPhone and Chrome on Android work in the browsers tried.
 
 <details>
 <summary>Edge cases</summary>
@@ -279,63 +278,29 @@ Cancelling the phone's own sheet counts for nothing. A wrong passkey or a wrong 
 
 </details>
 
-## Unlock sensitive actions for a while
+## Confirm with a PIN
 
-A code unlock stays on while you keep using it: each action that changes something and needs the unlock, and typing in an attached terminal (counted at most once a minute), pushes its end back by the unlock time, up to 8 hours in all. Reading, polling, checking a clone and reconnecting a terminal do not extend it. You need an unlock when a phone tries something sensitive, such as changing a setting. The phone says "This needs a quick unlock from your computer" and offers **Unlock**, and says how long the unlock lasts. You can also unlock ahead of time from Settings, Devices on the phone.
-
-1. On the phone, choose **Unlock**. The phone shows an 8-digit code and waits for your computer for up to 5 minutes; **Cancel** withdraws the request.
-2. On your computer, open Settings, Devices in the studio, where the request waits with a code field, or run `delorun devices elevate`, which lists the phones that ask. Type the number of the request and the code the phone shows. In the studio, type the code and choose **Approve**.
-3. The phone shows "Sensitive actions unlocked until" and the time the unlock ends, with **Lock now**. At your computer, the command prints "Unlocked sensitive actions on <device name> until <time>."
-
-An unlock lasts 15 minutes by default after the last action that needed it, and never more than 8 hours from its start: when it ends, unlock again. It works only for the phone that asked, on the address it asked on, and only in the profile that approved it. Delorun logs each start and end, and each action taken under an unlock.
-
-<details>
-<summary>Edge cases</summary>
-
-- If you type the wrong code 3 times, then the request is cancelled — ask again from the phone. If you choose **Decline** (or `e` and the request's number in the command), then the phone says your computer declined the request.
-- If the code is not approved within 5 minutes, then the phone says "The code expired before your computer approved it." — choose **Try again**.
-- If many requests wait, then the phone says "Too many requests are waiting at your computer." — answer them at your computer, then try again.
-- If Delorun is not running, then `delorun devices elevate` refuses and says no device holds an unlock — run `delorun start`.
-- If no phone asks, then `delorun devices elevate` says "No device asks to unlock sensitive actions, and none holds an unlock."
-- If an unlock ends, then the phone reconnects, so a terminal opened under it closes — unlock again.
-- If you want to end an unlock early, then choose **Lock now** on the phone, **End** in Settings, Devices on your computer, or `e` and its number in `delorun devices elevate`. It also ends when the phone's session ends, when you remove the phone, and when Delorun stops or turns remote access off.
-
-</details>
-
-<details>
-<summary>Go further</summary>
-
-- `elevationMinutes` in the profile's reach row changes how long an unlock lasts after the last action that needed it, from 1 to 60 minutes. The `unlockCapMinutes` setting of the `delorun-home-auth` row changes the most one unlock can last from its start, 480 minutes (8 hours) by default. Neither has a command or a Settings page.
-- Unlock ahead of time from Settings, Devices on the phone before you start work that needs it.
-
-</details>
-
-## Unlock with a PIN
-
-PIN mode lets an approved device unlock sensitive actions by typing a PIN or passcode, without asking you for a code at your computer each time. A phone opens the studio without the PIN; it asks for the PIN only when an action needs an unlock, and **Not now** closes the question and leaves the studio open and locked. It is off until you turn it on, and you can only turn it on at your computer. It works only on the Tailscale private address, not on a Funnel address.
+PIN mode lets an approved phone confirm a sensitive action by typing a PIN or passcode, the same way Face ID does: on a phone without Face ID, and on a phone with it when Face ID fails. A correct PIN confirms that one action, once; the next action asks again. A phone opens the studio without the PIN. It is off until you turn it on, and you can only turn it on at your computer. It works only on the Tailscale private address, not on a Funnel address.
 
 The first-run guide offers this as its PIN step once phone access is on, at your computer only; **Skip** there leaves PIN mode off. You can also set it later in Settings, PIN mode, or run `delorun devices pin set` in a terminal while Delorun is running. It asks for the secret twice, with the characters hidden. A PIN has at least 6 digits and is not a repeat or a run, such as `111111` or `123456`. A passcode has at least 10 characters and is any secret that is not all digits. To pipe one line instead of typing it, add `--stdin`.
 
 You should see "PIN mode is on, with a PIN." and a short list of what it allows. Setting or changing the PIN, turning the mode on or off, and approving a device stay at your computer.
 
-A page locks again after it sits idle. `--idle-minutes <1-60>` sets how long, and `--lock-when-hidden` also locks it at once when you switch away from it. Change either later with `delorun devices pin options`, and use `--no-lock-when-hidden` to undo the second.
-
-The mode limits wrong tries. The fifth wrong try on one device removes that device and signs it out; approve it again at your computer. Ten wrong tries across all your devices pause PIN unlocks for everyone until you run `delorun devices pin resume`.
+The mode limits wrong tries. The fifth wrong try on one device removes that device and signs it out; approve it again at your computer. Ten wrong tries across all your devices pause the PIN and Face ID for everyone until you run `delorun devices pin resume`.
 
 | Command | What it does |
 | --- | --- |
 | `delorun devices pin set` | Turns PIN mode on, or changes the PIN or passcode. |
-| `delorun devices pin options` | Changes the idle time or the lock-when-hidden choice. |
-| `delorun devices pin off` | Turns PIN mode off and drops the PIN. Devices go back to codes from your computer. |
-| `delorun devices pin resume` | Resumes PIN unlocks after wrong tries paused them. |
+| `delorun devices pin off` | Turns PIN mode off and drops the PIN. A phone without Face ID then takes its sensitive actions at your computer. |
+| `delorun devices pin resume` | Resumes the PIN and Face ID after wrong tries paused them. |
 | `delorun devices pin status` | Says whether PIN mode is on and how it is set. It works when Delorun is not running. |
 
 <details>
 <summary>Edge cases</summary>
 
-- If Delorun is not running, then `pin set`, `options`, `off` and `resume` stop and say so. Start it with `delorun start`, then run the command again. Nothing changes until then.
+- If Delorun is not running, then `pin set`, `off` and `resume` stop and say so. Start it with `delorun start`, then run the command again. Nothing changes until then.
 - If the PIN is too weak, then the command says why and changes nothing (`PIN_FAILED` in [Troubleshooting](troubleshooting.md)).
-- If `delorun devices pin status` says "PIN mode is off. Turn it on with delorun devices pin set.", then devices still unlock with a code from your computer.
+- If `delorun devices pin status` says "PIN mode is off. Turn it on with delorun devices pin set.", then a phone without Face ID takes its sensitive actions at your computer.
 
 </details>
 

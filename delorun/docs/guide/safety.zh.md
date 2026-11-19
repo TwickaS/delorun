@@ -139,27 +139,25 @@ setup 的提示问题决定 Delorun 在有风险的更改之前如何询问。`d
 
 **Never ask (dangerous)** 是第三个答案。它像 Ask less 一样关闭这三项同意，并让任何 chat 无需询问就能切换为完全访问，无论是来自 studio、手机、计划任务还是脚本。setup 会打印一条警告，要求你确认两次并输入 `full access everywhere`；对 root 用户它会拒绝这个答案，`--yes` 也从不选择它。用 `delorun setup prompts` 选择另一个答案即可再次关闭它。
 
-使用 Never ask 时，已解锁的手机拥有电脑的权限，所以请把它视为电脑。
+With Never ask, a phone you hold unlocked has nearly the computer's authority, so treat it as the computer.
 
 ### Never ask 下已解锁的手机能做什么
 
-通过远程访问登录、且解锁正在生效的手机或浏览器，此时可以做电脑能做的一切：
+A phone or browser signed in over remote access can then do these too, each time it confirms that action with [Face ID](reach.zh.md#confirm-with-face-id) or your PIN:
 
 - 它更改在其他答案下只有电脑才能更改的设置和插件行。
 - 它运行任何斜杠命令。
 - 它放宽新 chat 开始时的权限。
-- 它回答关于 MCP 服务器、外部 agent 和工作区网络的问题。
-- 它给出预留完全访问的批准。
-- It uses terminals only with a fresh unlock or [Face ID](reach.zh.md#confirm-with-face-id) for each terminal it opens; no switch or full-access workspace waives it.
 - 它保存或移除提供方密钥（但从不读回已保存的密钥）。
-- 它在电脑上的应用程序中打开 chat 的文件夹。
 - 它读取 chat 工作区之外的文件（但从不读取 Delorun home 之内的）。这与该模式下完全访问给予 chat 的权限范围相同。
+
+Answering the questions for MCP servers, external agents and a workspace's network, giving the approvals that reserve full access and opening a terminal ask for Face ID or your PIN every time, whatever the answer; no switch or full-access workspace waives them. Opening a chat's folder in an application stays at the computer.
 
 手机以这种方式放宽的预设或同意（新 chat 开始时的权限，或被关闭的外部 agent 同意），在该模式结束时会被设回，除非你在那之后已在电脑上更改过。设备在该模式开启期间所做的任何事都不会比它活得更久：设备开启的终端开关或工作区完全访问会在该模式结束时关闭，这些工作区中的 chat 回到 Workspace Write，而你在电脑上设置的则保持不变。
 
-远程访问从不自行扩展：只有电脑能通过 `delorun setup` 开启该模式、批准新设备、批准解锁或移除设备、更改远程访问设置以及重置 home，设备则像以前一样登录。
+Remote access never extends itself: only the computer, through `delorun setup`, turns the mode on, approves a new device or removes a device, changes the remote-access settings and resets the home, and a device signs in as before.
 
-拥有终端、或在完全访问工作区中向 chat 发出提示的手机，拥有电脑的权限：电脑上的 shell 可以运行 `delorun devices approve`、`elevate` 和 `code`，所以请把已解锁的手机视为电脑。解锁已结束的设备，保留它在其他答案下所有的拒绝，也不能打开终端。[`@delorun/home-auth`](../../packages/home-auth/README.zh.md#dangerous-mode) 列出了该模式解除的每一项拒绝。
+A phone that has a terminal, or that prompts a chat in a full-access workspace, has the computer's authority: a shell on the computer can run `delorun devices approve`, `elevate` and `code`, so treat a phone you hold unlocked as the computer. Without its confirmation, a phone keeps every refusal it has with the other answers, and it opens no terminal. [`@delorun/home-auth`](../../packages/home-auth/README.zh.md#dangerous-mode) lists each refusal the mode lifts.
 
 `web_fetch` [防护](../reference/glossary.zh.md#fetch-guard)、更新保护以及[外部 agent](#external-agents) 同意，在两种答案下都保持原样。在任何模式下，插件管理都不能关闭、移除或更改 Delorun 的同意和防护插件或沙箱。
 

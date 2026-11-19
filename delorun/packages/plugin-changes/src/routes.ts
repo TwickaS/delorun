@@ -169,8 +169,8 @@ export const RECENT_CHANGES = 20
 /** The sentence a request that is not at the computer is answered with. */
 export const LOOPBACK_REQUIRED_SENTENCE = 'This needs you at your computer.'
 
-/** The sentence a paired device without an unlock the person entered is answered with. */
-export const ELEVATION_REQUIRED_SENTENCE = 'Unlock this device first: it needs a code from your computer, or your PIN where PIN mode is on.'
+/** The sentence a paired device is answered with when an action needs its confirmation for that call. */
+export const ELEVATION_REQUIRED_SENTENCE = 'Confirm this with Face ID or your PIN when asked, or do it at your computer.'
 
 /** The sentence a device reads when a control needs Face ID or a PIN for this call. */
 export const FACE_REQUIRED_SENTENCE = 'Confirm with Face ID or your PIN first.'

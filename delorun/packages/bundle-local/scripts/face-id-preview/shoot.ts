@@ -41,6 +41,7 @@ const SHOTS: readonly { readonly name: string; readonly screen: string; readonly
   { name: 'code-entry', screen: 'code-entry', wide: true },
   { name: 'b4-phone', screen: 'b4-phone', wide: false },
   { name: 'b4-computer', screen: 'b4-computer', wide: true },
+  { name: 'devices-phone', screen: 'devices-phone', wide: false },
 ]
 
 const playwright = createRequire(new URL('../../../../../apps/web/package.json', import.meta.url))('playwright') as Playwright

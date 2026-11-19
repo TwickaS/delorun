@@ -301,7 +301,7 @@ describe('reach on the Tailscale private address', () => {
       expect(guard).toBeDefined()
       const answer = (request: object, value: unknown, by: PeerScope): void => { guard?.check({ peer: by, event: 'approval/request', request, value }) }
       expect(() => { answer({ toolName: 'bash', grants: 'full-access' }, 'allowed-once', peer) }).toThrow(RemoteError)
-      expect(() => { answer({ toolName: 'permission', grants: 'full-access' }, 'allowed-once', peer) }).toThrow(/needs you at your computer/)
+      expect(() => { answer({ toolName: 'permission', grants: 'full-access' }, 'allowed-once', peer) }).toThrow(/needs your confirmation: granting full access/)
       // Refusing the same prompt from the phone, and answering any other prompt, apply.
       expect(() => { answer({ toolName: 'bash', grants: 'full-access' }, 'rejected', peer) }).not.toThrow()
       expect(() => { answer({ toolName: 'bash' }, 'allowed-once', peer) }).not.toThrow()
@@ -313,7 +313,7 @@ describe('reach on the Tailscale private address', () => {
       const guard = studio.ctx.get('remoteAnswerGuard')
       expect(guard).toBeDefined()
       const answer = (request: object, value: unknown, by: PeerScope): void => { guard?.check({ peer: by, event: 'approval/request', request, value }) }
-      expect(() => { answer({ toolName: 'claude-code', grants: 'external-agent' }, 'allowed-once', peer) }).toThrow(/needs you at your computer: starting an external agent/)
+      expect(() => { answer({ toolName: 'claude-code', grants: 'external-agent' }, 'allowed-once', peer) }).toThrow(/needs your confirmation: starting an external agent/)
       // Declining from the phone applies, and the studio on the home's computer can allow the start.
       expect(() => { answer({ toolName: 'claude-code', grants: 'external-agent' }, 'rejected', peer) }).not.toThrow()
       expect(() => { answer({ toolName: 'claude-code', grants: 'external-agent' }, 'allowed-once', studio.ctx.connection.browserPeer) }).not.toThrow()
