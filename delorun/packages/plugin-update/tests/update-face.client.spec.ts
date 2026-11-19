@@ -25,7 +25,7 @@ afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks() })
 function controller(needs: Partial<Record<UpdateControl, UpdateMayView>>, faceGrant: () => FaceGrant | undefined) {
   const update = new UpdateController({ unlockNeeded: () => {}, reload: () => {}, faceGrant })
   const may = new Proxy({}, { get: (_target, key: string) => needs[key as UpdateControl] ?? { ok: true } })
-  update.state.set({ status: 'ready', state: { access: { may } } as UpdateStateView, reconnecting: false })
+  update.state.set({ status: 'ready', state: { access: { may }, progress: { kind: 'idle' } } as UpdateStateView, reconnecting: false })
   return update
 }
 
