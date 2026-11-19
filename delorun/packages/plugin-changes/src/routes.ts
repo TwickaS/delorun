@@ -503,7 +503,7 @@ async function gate(request: IncomingMessage, admission: { readonly arrival: Stu
     // A body over the grant cap cannot be hashed, so no grant covers it; its stream is left unread for the route's own limit.
     if (!(Number(request.headers['content-length'] ?? '0') > GRANT_BODY_CAP_BYTES)) {
       const bytes = await bodyBytes(request, GRANT_BODY_CAP_BYTES)
-      if (face.take(`changes/${control}`, { method: 'POST', path: new URL(String(request.url), 'http://studio.invalid').pathname, body: bytes }, typeof header === 'string' ? header : undefined)) {
+      if (face.take(`changes/${control}`, { method: 'POST', path: pathAndQueryOf(request), body: bytes }, typeof header === 'string' ? header : undefined)) {
         return { presence: attestDevice({ remoteSession: true, device: { id: device.id, label: device.label }, freshUnlock: true }), renew: () => {} }
       }
     }
@@ -514,6 +514,15 @@ async function gate(request: IncomingMessage, admission: { readonly arrival: Stu
       : new RouteRefusal(403, ELEVATION_REQUIRED, may.needs === 'face' ? FACE_REQUIRED_SENTENCE : ELEVATION_REQUIRED_SENTENCE)
   }
   return { presence: attestDevice({ remoteSession: true, device: { id: device.id, label: device.label }, freshUnlock: CONTROL_LEVELS[control] === 'free' || device.unlock === 'fresh' }), renew: device.renew }
+}
+
+/**
+ * @param request - the request.
+ * @returns the path and query as received, which a grant is hashed over.
+ */
+function pathAndQueryOf(request: IncomingMessage): string {
+  const url = new URL(String(request.url), 'http://studio.invalid')
+  return url.pathname + url.search
 }
 
 /** The bodies a gate already read, so the route reads the same bytes the grant was checked against. */
