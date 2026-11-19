@@ -308,6 +308,12 @@ const PENDING = { requestId: 'AAAAAAAAAAAAAAAAAAAAAA', label: 'Phone', platform:
 const SECOND = { requestId: 'BBBBBBBBBBBBBBBBBBBBBB', label: 'Tablet', platform: '', address: `https://${HOST}`, createdAt: 1000, expiresAt: 2 }
 
 describe('delorun devices', () => {
+  // Putting the `powers` action back makes this command run instead of refusing with the usage code.
+  it('no longer has a powers action: `delorun devices powers` is an unknown action', async () => {
+    const { command } = devices()
+    await expect(command.run(['powers'], context)).rejects.toMatchObject({ exit: EXIT.usage, message: expect.stringContaining('unknown action "powers"') })
+  })
+
   beforeEach(() => {
     writeReachRow(delorunHome, 'default', { ...REACH_OFF, enabled: true, address: `https://${HOST}/` })
   })
