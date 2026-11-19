@@ -4,10 +4,12 @@
  * removal makes it fail.
  */
 import { describe, expect, it } from 'vitest'
+import { brandString } from '@deepseek-ai/dsh-brand'
+import type { DeviceId } from '@delorun/contract-admission'
 import type { RemoteAccessAction } from '@deepseek-ai/dsh-api-remote-access/types'
 import { gateByClass, GRANT_HEADER, type GrantGateHome } from '../../src/auth-gate.ts'
 import { answerKey, GrantStore, hashArgs, hashRequest } from '../../src/grants.ts'
-import { createCondition, reachDevicePrincipal, type ReachAccessFacts } from '../../src/reach-access.ts'
+import { createCondition, reachDevicePrincipal, REACH_ELEVATED_ACTIONS, type ReachAccessFacts } from '../../src/reach-access.ts'
 import { REACH_DEVICE } from '../../src/reach-access.ts'
 
 const LISTENER = 'reach-tailscale-private'
@@ -78,13 +80,25 @@ describe('a face action in the reach policy', () => {
     expect(world({ elevation: true }).decide('pluginManager/installBundle', ARGS).kind).toBe('deny')
   })
 
-  // A device with no passkey keeps the unlock a code or its PIN started.
-  it('is admitted to a device with no passkey by its running unlock', () => {
-    expect(world({ passkey: false, elevation: true }).decide('pluginManager/installBundle', ARGS).kind).toBe('allow')
-    expect(world({ passkey: false }).decide('pluginManager/installBundle', ARGS).kind).toBe('deny')
+  // A device with no passkey is admitted by a one-action PIN grant alone (A483): no unlock window, code or approval grace opens an install. Removing the grant-only return in `unlocked` fails it.
+  it('is refused to a device with no passkey that holds a running unlock, and admitted once by its PIN grant', () => {
+    for (const unlockMode of [true, false]) {
+      expect(world({ passkey: false, elevation: true, unlockMode }).decide('pluginManager/installBundle', ARGS), `unlockMode=${unlockMode}`).toEqual({ kind: 'deny', reason: 'elevation-required: pluginManager/installBundle' })
+    }
+    const { grants, decide } = world({ passkey: false, elevation: true })
+    grants.mint(HOLDER, [{ action: 'pluginManager/installBundle', hash }], 'pin')
+    expect(decide('pluginManager/installBundle', ARGS).kind).toBe('allow')
+    expect(decide('pluginManager/installBundle', ARGS).kind).toBe('deny')
   })
 
-  // While the home keeps no grant store no grant counts and the unlock decides, as before.
+  // Every elevated method names a face row, so none is opened by an unlock on a device with no passkey.
+  it('refuses every elevated method to a device with no passkey that holds a running unlock', () => {
+    for (const action of Object.keys(REACH_ELEVATED_ACTIONS).filter(name => !name.startsWith('event:'))) {
+      expect(world({ passkey: false, elevation: true }).decide(action, ARGS).kind, action).toBe('deny')
+    }
+  })
+
+  // Before the home keeps a grant store no grant counts and the unlock decides.
   it('keeps the unlock check while the home keeps no grant store', () => {
     const { grants, decide } = world({ grants: false, passkey: false })
     grants.mint(HOLDER, [{ action: 'pluginManager/installBundle', hash }], 'passkey')
@@ -154,8 +168,9 @@ describe('an event question (P1-1)', () => {
       expect(world({ passkey: false, unlockMode: true }).decide(action), action).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
     }
   })
-  it('is still admitted to a no-passkey device that holds a running unlock, and a method listing stays allowed', () => {
-    expect(world({ passkey: false, elevation: true }).decide('event:cordis/dynamic-package').kind).toBe('allow')
+  // Removing the `event:` refusal for a no-passkey device lets a running unlock forward the events again.
+  it('is refused to a no-passkey device that holds a running unlock, and a method listing stays allowed', () => {
+    expect(world({ passkey: false, elevation: true }).decide('event:cordis/dynamic-package').kind).toBe('deny')
     expect(world().decide('pluginManager/installBundle').kind).toBe('allow')
   })
 })
@@ -272,7 +287,7 @@ describe('the Fetch gate hashes the query string (P3-2)', () => {
   it('refuses the same path with another query', async () => {
     const { grants } = world()
     const home: GrantGateHome = {
-      passkeysEnabled: () => true, faceGrants: () => grants, deviceHasPasskey: () => true,
+      faceGrants: () => grants, deviceHasPasskey: () => true,
       arrivalOf: () => ({ listener: LISTENER, host: 'h.ts.net', source: 'test' }), dangerousMode: () => false, elevationOf: () => undefined, pageUnlockOf: () => undefined, unlockModeEnabled: () => true,
     }
     let ran = 0
@@ -366,5 +381,40 @@ describe('the Fetch gate for a face route', () => {
     const { gate } = gateWorld()
     expect(gate.admitPeer(call('{}'), { principal: { kind: 'owner' } })).toBe(false)
     expect(REACH_DEVICE).toBe('reach-device')
+  })
+})
+
+describe('the Fetch gate for a device with no passkey (A483)', () => {
+  const peer = { principal: DEVICE }
+  const ROWS = [
+    { what: 'an install', row: 'route:plugin-packs/src/routes.ts#path (write)', action: 'plugin-packs/enqueue', grace: undefined },
+    { what: 'full access', row: 'route:plugin-permission-defaults/src/routes.ts#PERMISSION_ROUTES.setFullAccess', action: 'plugin-permission-defaults/set-full-access', grace: false },
+    { what: 'a network set', row: 'route:plugin-permission-defaults/src/command-network.ts#NETWORK_SET_PATH', action: 'plugin-permission-defaults/network-set', grace: undefined },
+    { what: 'a consent answer', row: 'route:plugin-mcp-consent/src/routes.ts#MCP_CONSENT_ROUTES.accept', action: 'plugin-mcp-consent/accept', grace: false },
+  ] as const
+
+  // Removing the refusal and falling back to `legacy.fetch` lets a PIN window, a code or the approval grace open each of these.
+  it.each(ROWS)('refuses $what inside a running unlock, a PIN window or the approval grace, and admits it once by a PIN grant', async ({ row, action, grace }) => {
+    const record = { startedAt: 0, endsAt: 1, deviceId: brandString<DeviceId>('device-1'), listener: LISTENER, sessionId: 's1' } as const
+    for (const unlock of [{ ...record, id: 'u1' }, { ...record, id: 'u2', grace: true as const }]) {
+      const { grants } = world({ passkey: false })
+      const ran: Request[] = []
+      const home: GrantGateHome = {
+        faceGrants: () => grants, deviceHasPasskey: () => false,
+        arrivalOf: () => ({ listener: LISTENER, host: 'h.ts.net', source: 'test' }), dangerousMode: () => false, elevationOf: () => unlock, pageUnlockOf: () => unlock, unlockModeEnabled: () => true,
+      }
+      const gate = gateByClass(() => home, (request) => { ran.push(request); return Promise.resolve(new Response('ok')) }, { row, action, legacy: { renews: true, ...grace === undefined ? {} : { grace } } })
+      const path = 'https://h.ts.net/api/delorun/x'
+      const open = new Request(path, { method: 'POST', body: '{}' })
+      expect(gate.admitPeer(open, peer)).toBe(true)
+      expect((await gate.fetch(open)).status).toBe(403)
+      expect(ran).toHaveLength(0)
+      const hash = hashRequest({ method: 'POST', path: '/api/delorun/x', body: new TextEncoder().encode('{}') }) ?? ''
+      const id = grants.mint(HOLDER, [{ action, hash }], 'pin').grantId
+      const granted = new Request(path, { method: 'POST', body: '{}', headers: { [GRANT_HEADER]: id } })
+      gate.admitPeer(granted, peer)
+      expect((await gate.fetch(granted)).status).toBe(200)
+      expect(ran).toHaveLength(1)
+    }
   })
 })

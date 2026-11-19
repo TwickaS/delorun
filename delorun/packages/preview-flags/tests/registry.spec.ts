@@ -128,6 +128,19 @@ describe('the configured flags', () => {
   })
 })
 
+describe('a retired flag', () => {
+  // Removing the retired-id filter makes a home that once set `unlock.passkeys` fail to load, which turns every other flag off.
+  it('is ignored with one notice while the other flags keep their state, and an unknown id still throws', () => {
+    const created = createPreviewFlags({ configured: { 'unlock.passkeys': true, 'onboarding.previewSteps': true }, index: ONE, pluginOff: pluginsOn })
+    expect(created.notices).toHaveLength(1)
+    expect(created.notices[0]).toContain('"unlock.passkeys" is retired and ignored')
+    created.flags.declare(flag())
+    expect(created.flags.isOn(STEPS)).toBe(true)
+    expect(createPreviewFlags({ configured: { 'unlock.passkeys': false }, index: undefined, pluginOff: pluginsOn }).notices).toHaveLength(1)
+    expect(() => createPreviewFlags({ configured: { 'unlock.passkeys': true, 'unlock.nothing': true }, index: ONE, pluginOff: pluginsOn })).toThrow('"unlock.nothing" is set')
+  })
+})
+
 describe('the Host\'s flags', () => {
   it('are off by default and on only for a declared flag the row sets', () => {
     const unset = createPreviewFlags({ configured: {}, index: ONE, pluginOff: pluginsOn }).flags

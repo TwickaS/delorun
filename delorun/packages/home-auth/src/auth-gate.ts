@@ -8,8 +8,8 @@
  *   call. The home reads the request body itself, up to {@link GRANT_BODY_CAP_BYTES}, and hashes method, path with query and body
  *   ({@link hashRequest}); the `Delorun-Grant` header only names the grant id and must equal the id of the grant that hash
  *   finds. The grant is used up just before the route's handler runs, and the header is removed before the handler sees
- *   the request. A device that holds a passkey is admitted by a grant alone; a device without one may also hold the
- *   legacy unlock the route declared in `legacy`. Before the home service starts, `face` behaves as `gateByUnlock` with `legacy`.
+ *   the request. Every device is admitted by a grant alone, a PIN grant where it holds no passkey (A483); no unlock window,
+ *   code or approval grace admits a `face` row. Before the home service starts, `face` behaves as `gateByUnlock` with `legacy`.
  * - `computer` and `ticket`: not Fetch gates; such a route registers no `admitPeer` of this kind.
  *
  * @module @delorun/home-auth/auth-gate
@@ -143,9 +143,8 @@ export function gateByClass(homeAuth: () => GrantGateHome | undefined, fetch: (r
         grants.consume(holder, options.action, hash, opens)
         return fetch(withoutGrantHeader(request))
       }
-      // A device with no passkey may still hold the unlock a code or its PIN started; one with a passkey is admitted by a grant alone.
-      if (!passkey) return legacy.fetch(request)
-      return refuse('Confirm with Face ID or your PIN first')
+      // A device is admitted by a grant alone: no PIN window, code or approval grace admits a face row (A483).
+      return refuse(passkey ? 'Confirm with Face ID or your PIN first' : 'Confirm with your PIN first')
     },
   }
 }

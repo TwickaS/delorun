@@ -43,9 +43,9 @@ const FACE: MayView = { ok: false, needs: 'face' }
 
 /**
  * A paired phone's access, as the route computes it: with no grant store the controls that change what runs stay at
- * the computer; with it on they ask Face ID (or a PIN) for the call; the phone locked asks an unlock of the take-back controls.
+ * the computer; with it on they ask Face ID (or a PIN) for the call.
  * @param actor - the phone's state.
- * @param flag - whether with no grant store or on.
+ * @param flag - `off` for no grant store, `on` for a grant store.
  * @returns the access.
  */
 function phoneAccess(actor: ActorView, flag: 'off' | 'on'): AccessView {
@@ -1030,7 +1030,7 @@ describe('the Changes section', () => {
     }
   })
 
-  it('a locked phone sees the changes, the controls kept at the computer are disabled, and Undo asks it to unlock', async () => {
+  it('a locked phone sees the changes, the controls kept at the computer are disabled, and a refused Undo opens no unlock dialog', async () => {
     const leftOut = logged({ id: 'c0000000009', state: 'left-out-at-start', plugin: 'broken-plugin', undoable: false })
     const session = { plugin: 'hello-plugin', source: '/work/hello-plugin', startedAt: new Date().toISOString(), endsAt: new Date(Date.now() + HOUR).toISOString() }
     const { fake, page } = await openSection(emptyState({
@@ -1040,10 +1040,9 @@ describe('the Changes section', () => {
     const denied: Array<{ endpoint: string, reason?: string | undefined }> = []
     page.ctx.on('remote/call-denied', (denial) => { denied.push(denial) })
     const note = document.querySelector('[data-delorun-changes-remote="device-locked"]')
-    expect(note?.textContent).toContain(en['access.locked.title'])
-    expect(note?.textContent).toContain(en['access.locked.body'])
+    expect(note?.textContent).toContain(en['access.device.title'])
     expect(note?.textContent).toContain(en['access.device.body'])
-    // What stays at the computer is disabled with the reason; the rest stays enabled and says an unlock comes first.
+    // What stays at the computer is disabled with the reason; the rest stays enabled.
     for (const name of [en['work.done'], en['leftOut.applyAgain'], en['review.apply']]) {
       for (const button of screen.getAllByRole('button', { name })) {
         expect(button.hasAttribute('disabled'), name).toBe(true)
@@ -1059,19 +1058,20 @@ describe('the Changes section', () => {
     expect(within(dialog).getByRole('button', { name: en['review.apply'] }).hasAttribute('disabled')).toBe(true)
     expect(within(dialog).getByRole('button', { name: en['review.discard'] }).hasAttribute('disabled')).toBe(false)
     fireEvent.click(within(dialog).getByRole('button', { name: en['confirm.cancel'] }))
-    // The route refuses the unlocked-less Undo; the studio opens its unlock dialog and says so.
+    // The route refuses the grant-less Undo; the studio words the refusal and opens no unlock dialog (A483).
     fake.replace(ACTION_PATHS.undo, () => Response.json({ code: 'ELEVATION_REQUIRED', message: 'Unlock this phone.' }, { status: 403 }))
     fireEvent.click(within(screen.getByRole('region', { name: en['recent.heading'] })).getByRole('button', { name: en['confirm.undo'] }))
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: en['confirm.undo'] }))
     await waitFor(() => { expect(toasts()).toContain(en['toast.unlock']) })
-    expect(denied).toEqual([{ endpoint: 'delorunChanges/plugin-undo', reason: 'elevation-required: delorunChanges/plugin-undo' }])
+    // Removing the unlock dialog's removal from the controller makes a no-passkey phone ask for a page unlock again.
+    expect(denied).toEqual([])
     expect(fake.callsTo(ACTION_PATHS.undo)).toEqual([{ id: 'c0000000006' }])
   })
 
-  it('a phone in its approval grace is told it counts as locked', async () => {
+  it('a phone in its approval grace is told what it confirms, not that it must unlock', async () => {
     await openSection(emptyState({ atComputer: false, access: phoneAccess('device-grace', 'on') }))
     const note = document.querySelector('[data-delorun-changes-remote="device-grace"]')
-    expect(note?.textContent).toContain(en['access.locked.title'])
+    expect(note?.textContent).toContain(en['access.device.title'])
     expect(note?.textContent).toContain(en['access.device.body'])
     expect(note?.textContent).not.toContain('Phone powers')
   })
@@ -1081,7 +1081,7 @@ describe('the Changes section', () => {
     const note = document.querySelector('[data-delorun-changes-remote="device-unlocked"]')
     expect(note?.textContent).toContain(en['access.device.title'])
     expect(note?.textContent).toContain(en['access.device.body'])
-    expect(note?.textContent).not.toContain(en['access.locked.title'])
+    expect(note?.textContent).not.toContain('Unlock this phone')
     expect(note?.textContent).not.toContain('Phone powers')
     expect(note?.hasAttribute('data-phone-powers')).toBe(false)
     fireEvent.click(screen.getByRole('button', { name: en['pending.review'] }))

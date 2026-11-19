@@ -17,16 +17,15 @@ import { CREDENTIAL, DEVICE_HOST, grantWorld, fromDevice, get, json, post, route
 // Each case starts a server on a loopback port and writes a temporary home; under a loaded host that takes longer than vitest's default.
 vi.setConfig({ testTimeout: 60_000 })
 
-/** Where a phone may use a control: with an unlock, with a grant only (the set an unlocked phone could once open), or never. */
-type Reach = 'unlock' | 'grant-only' | 'computer-only'
+/** Where a phone may use a control: with a grant for the call only (no unlock opens it), or never. */
+type Reach = 'grant-only' | 'computer-only'
 
-/** Every `POST` route of the section with where an unlocked phone may use it. */
+/** Every `POST` route of the section with where a phone may use it. */
 const ROUTE_REACH: readonly { readonly path: string, readonly reach: Reach }[] = [
-  // Taking back or tightening: an unlocked phone.
-  { path: ACTION_PATHS.undo, reach: 'unlock' },
-  { path: ACTION_PATHS.discard, reach: 'unlock' },
-  { path: HARNESS_PATHS.discard, reach: 'unlock' },
-  // Everything else: a grant for the call, which no unlock stands in for.
+  // Taking back, and everything else: a grant for the call, which no unlock stands in for.
+  { path: ACTION_PATHS.undo, reach: 'grant-only' },
+  { path: ACTION_PATHS.discard, reach: 'grant-only' },
+  { path: HARNESS_PATHS.discard, reach: 'grant-only' },
   ...(['apply', 'off', 'on', 'work', 'done', 'safe-mode', 'exit-safe-mode', 'create', 'request', 'reveal'] as const satisfies readonly ChangesAction[]).map(action => ({ path: ACTION_PATHS[action], reach: 'grant-only' as const })),
   ...Object.values(SETUP_PATHS).map(path => ({ path, reach: 'grant-only' as const })),
   { path: HARNESS_PATHS.apply, reach: 'grant-only' },
@@ -41,7 +40,7 @@ const ROUTE_REACH: readonly { readonly path: string, readonly reach: Reach }[] =
 const WHERE_REFUSALS = ['LOOPBACK_REQUIRED', 'ELEVATION_REQUIRED', 'CROSS_SITE']
 
 describe('who may use each control', () => {
-  it('a phone uses a control only where its class lets it: an unlock for the take-back controls, a grant for the rest, nothing for the notice', async () => {
+  it('a phone uses a control only where its class lets it: a grant for every face control whatever unlock it holds, nothing for the notice', async () => {
     const { ctx } = routeHome()
     expect(ROUTE_REACH.length).toBe(Object.keys(ACTION_PATHS).length + Object.keys(SETUP_PATHS).length + Object.keys(HARNESS_PATHS).length + 2)
     // No grant store, and a grant store for a device with no passkey, which a PIN grant serves.
@@ -51,7 +50,7 @@ describe('who may use each control', () => {
         for (const unlock of ['fresh', 'grace', 'none'] as const) {
           const cell = `flag ${flag} ${unlock} ${path}`
           // Without the grant, no unlock opens a grant-only control: with no grant store it stays at the computer.
-          const refused = reach === 'computer-only' ? 'LOOPBACK_REQUIRED' : reach === 'grant-only' ? (flag === 'off' ? 'LOOPBACK_REQUIRED' : 'ELEVATION_REQUIRED') : unlock === 'fresh' ? undefined : 'ELEVATION_REQUIRED'
+          const refused = reach === 'computer-only' ? 'LOOPBACK_REQUIRED' : (flag === 'off' ? 'LOOPBACK_REQUIRED' : 'ELEVATION_REQUIRED')
           if (refused !== undefined) {
             // Pins the class and the unlock in `gate`, before the body: without them a phone in its grace, or one whose unlock stands in for a grant, acts.
             // With a grant store the gate reads the body to look for a grant before it refuses, so the body is sent.
@@ -72,10 +71,10 @@ describe('who may use each control', () => {
     const server = await serveRoutes(ctx)
     expect(json(await get(server.port, STATE_PATH))).toMatchObject({ atComputer: true, access: { actor: 'computer', may: { 'harness-apply': { ok: true }, 'notice-seen': { ok: true } } } })
     const grace = json(await send(server.port, STATE_PATH, { host: DEVICE_HOST, headers: [CREDENTIAL, 'x-test-remote: 1', 'x-test-unlock: grace'] }))
-    expect(grace).toMatchObject({ atComputer: false, access: { actor: 'device-grace', may: { 'harness-apply': { ok: false, needs: 'computer' }, 'plugin-undo': { ok: false, needs: 'unlock' }, 'notice-seen': { ok: false, needs: 'computer' } } } })
+    expect(grace).toMatchObject({ atComputer: false, access: { actor: 'device-grace', may: { 'harness-apply': { ok: false, needs: 'computer' }, 'plugin-undo': { ok: false, needs: 'computer' }, 'notice-seen': { ok: false, needs: 'computer' } } } })
     const careful = await serveRoutes(ctx)
     const fresh = json(await send(careful.port, STATE_PATH, { host: DEVICE_HOST, headers: [CREDENTIAL, 'x-test-remote: 1', 'x-test-unlock: fresh'] }))
-    expect(fresh).toMatchObject({ access: { actor: 'device-unlocked', may: { 'harness-apply': { ok: false, needs: 'computer' }, 'harness-discard': { ok: true }, 'protection-on': { ok: true } } } })
+    expect(fresh).toMatchObject({ access: { actor: 'device-unlocked', may: { 'harness-apply': { ok: false, needs: 'computer' }, 'harness-discard': { ok: false, needs: 'computer' }, 'protection-on': { ok: true } } } })
     // Each cell of the table, for every actor.
     const grantOnly = ['plugin-apply', 'protection-off', 'restart'] as const satisfies readonly ChangesControl[]
     for (const actor of ['computer', 'device-unlocked', 'device-grace', 'device-locked'] as const satisfies readonly ActorView[]) {
@@ -88,8 +87,9 @@ describe('who may use each control', () => {
         }
       }
     }
-    expect(mayUse('device-unlocked', 'plugin-undo')).toEqual({ ok: true })
-    expect(mayUse('device-unlocked', 'plugin-undo', { enabled: true, hasPasskey: true })).toEqual({ ok: false, needs: 'face' })
+    // A take-back control is a face control too: an unlock never opens it, with or without a passkey.
+    expect(mayUse('device-unlocked', 'plugin-undo')).toEqual({ ok: false, needs: 'computer' })
+    for (const hasPasskey of [false, true]) expect(mayUse('device-unlocked', 'plugin-undo', { enabled: true, hasPasskey })).toEqual({ ok: false, needs: 'face' })
   })
 
   it('a phone\'s request from another site is refused before its level or its body', async () => {
@@ -234,7 +234,7 @@ describe('the protection switch', () => {
       // Turning protection on is a `free` control (face-grants.spec.ts), so only off is refused to a phone in its grace.
       if (path === PROTECTION_PATHS.off) expect(json(await send(careful.port, path, fromDevice('grace', { confirmed: true }, true))), path).toMatchObject({ code: 'LOOPBACK_REQUIRED' })
     }
-    // With with no grant store an unlocked phone cannot turn protection off.
+    // With no grant store an unlocked phone cannot turn protection off.
     expect(json(await send(careful.port, PROTECTION_PATHS.off, fromDevice('fresh', { confirmed: true }, true)))).toMatchObject({ code: 'LOOPBACK_REQUIRED' })
     expect(await readProtection(ctx.home)).toBe('on')
     // With a PIN grant for the call it can, after the second ask; the change is kept as a notice for the computer.

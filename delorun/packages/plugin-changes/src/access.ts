@@ -6,9 +6,8 @@
  * - `free`: any paired device, with no prompt: the controls that only read, take back or tighten (turning protection on,
  *   cancelling or dismissing an update, the update check);
  * - `face`: one Face ID (or one PIN, as a one-action grant) for exactly this call, or, on
- *   a device that holds no passkey, an unlock the person entered for the controls {@link LEGACY_LEVELS} names `unlocked`; the
- *   rest of the `face` controls take a grant on every device, from a PIN where the device holds no passkey, and, while the home
- *   keeps no grant store, stay at the computer;
+ *   a device that holds no passkey, one PIN grant for exactly this call, never an unlock window; while the home
+ *   keeps no grant store, they stay at the computer;
  * - `computer`: never from a device: dismissing the notice of a change a device made.
  *
  * The update controls (`@delorun/plugin-update`) sit in the same table. The routes decide from {@link mayUse} before they
@@ -45,15 +44,14 @@ export const CONTROL_LEVELS: Readonly<Record<ChangesControl, ControlLevel>> = {
 }
 
 /**
- * What a `face` control asks of a device with no passkey, or while the home keeps no grant store: an unlock the person entered
- * (`unlocked`), or a grant on every device and nothing while the home keeps no grant store (`grant`). The `grant` set, the controls that
- * change what runs, was reachable from a phone only under the removed Phone powers Full; no unlock opens it now.
+ * What every `face` control asks of a device: a grant for exactly the call, from Face ID or, on a device with no passkey, from its PIN, and nothing
+ * while the home keeps no grant store. No unlock window, code or approval grace opens any of them (A483).
  */
-export const LEGACY_LEVELS: Readonly<Record<Exclude<ChangesControl, 'protection-on' | 'notice-seen' | 'update-check' | 'update-cancel' | 'update-dismiss'>, 'unlocked' | 'grant'>> = {
-  'plugin-undo': 'unlocked',
-  'plugin-discard': 'unlocked',
-  'harness-discard': 'unlocked',
-  'stop': 'unlocked',
+export const LEGACY_LEVELS: Readonly<Record<Exclude<ChangesControl, 'protection-on' | 'notice-seen' | 'update-check' | 'update-cancel' | 'update-dismiss'>, 'grant'>> = {
+  'plugin-undo': 'grant',
+  'plugin-discard': 'grant',
+  'harness-discard': 'grant',
+  'stop': 'grant',
   'plugin-apply': 'grant',
   'plugin-other': 'grant',
   'harness-apply': 'grant',
@@ -83,10 +81,8 @@ export function mayUse(actor: ActorView, control: ChangesControl, face: FaceStat
   const level = CONTROL_LEVELS[control]
   if (level === 'free') return { ok: true }
   if (level === 'computer') return { ok: false, needs: 'computer' }
-  // A control that changes what runs takes a grant from every device, a PIN grant where it holds no passkey; with no grant store no grant exists, so it stays at the computer.
-  if (LEGACY_LEVELS[control as keyof typeof LEGACY_LEVELS] === 'grant') return face.enabled ? { ok: false, needs: 'face' } : { ok: false, needs: 'computer' }
-  if (face.enabled && face.hasPasskey) return { ok: false, needs: 'face' }
-  return actor === 'device-unlocked' ? { ok: true } : { ok: false, needs: 'unlock' }
+  // A face control takes a grant from every device, a PIN grant where it holds no passkey; with no grant store no grant exists, so it stays at the computer.
+  return face.enabled ? { ok: false, needs: 'face' } : { ok: false, needs: 'computer' }
 }
 
 /**

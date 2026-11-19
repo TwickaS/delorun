@@ -83,10 +83,6 @@ export function apply(ctx: Context): void {
   const t = ctx.locale.bind(NS)
   const dialog = createSnapshotStore(false)
   const controller = new UpdateController({
-    unlockNeeded: (control) => {
-      const endpoint = `delorunUpdate/${control}`
-      ctx.emit('remote/call-denied', { endpoint, reason: `elevation-required: ${endpoint}` })
-    },
     reload: () => { location.reload() },
     faceGrant: () => ctx.get('delorunFaceGrant')?.grant,
   })

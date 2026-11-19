@@ -78,13 +78,8 @@ export function apply(ctx: Context): void {
   ctx.effect(() => ctx.locale.register(NS, { en, zh }), 'delorun-changes: dictionaries')
   const t = ctx.locale.bind(NS)
   const toast = createChangesToastSource()
-  // A refusal until the device is unlocked opens the studio's unlock dialog the way a refused Remote call does.
   const changes = new ChangesController({
     report: toast.report,
-    unlockNeeded: (control) => {
-      const endpoint = `delorunChanges/${control}`
-      ctx.emit('remote/call-denied', { endpoint, reason: `elevation-required: ${endpoint}` })
-    },
     // Read at the call, so the Face ID service may load after this plugin.
     faceGrant: () => ctx.get('delorunFaceGrant')?.grant,
   })

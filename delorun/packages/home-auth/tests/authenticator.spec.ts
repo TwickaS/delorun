@@ -511,17 +511,15 @@ describe('the authenticator provider', () => {
       const device = reachDevicePrincipal(recordOf(2, ADDRESS).id, 'reach-tailscale-private')
       const [binding] = access.policy().bindings(device)
       const create = () => binding?.condition?.({ action: 'directoryPicker/pick', resource: { kind: 'global' }, args: {} } as never)
-      const asked = vi.spyOn(ctx.homeAuth, 'elevationOf')
       expect(create()).toEqual({ kind: 'deny', reason: 'elevation-required: directoryPicker/pick' })
-      // Pins the listener the authenticator asks for: the principal's own, so an unlock on one listener admits nothing on another.
-      expect(asked).toHaveBeenCalledWith(device.deviceId, 'reach-tailscale-private')
       const before = access.invalidated.length
       const state = ctx.homeAuth.requestElevation(admitted.sessionId, admitted.session)
       if (state.kind !== 'pending') throw new Error('no request is waiting')
       const record = ctx.homeAuth.approveElevation(state.requestId, state.code)
-      // Pins the facts the authenticator gives the policy: the home's elevation for the device, and the log.
-      expect(create()).toEqual({ kind: 'allow' })
-      expect(logged).toContain(`home-auth: elevated action: device=${device.deviceId} listener=reach-tailscale-private action=directoryPicker/pick elevation=${record.id}`)
+      // Pins A483: a face action takes a grant for the call, so a running unlock the person approved at the computer admits nothing, and logs no elevated call.
+      expect(record.id).toBeTruthy()
+      expect(create()).toEqual({ kind: 'deny', reason: 'elevation-required: directoryPicker/pick' })
+      expect(logged.filter(line => line.includes('elevated action'))).toEqual([])
       ctx.homeAuth.lockElevation(device.deviceId, 'reach-tailscale-private')
       // Pins the invalidation: the device's snapshot is recomputed when its elevation starts and when it ends.
       expect(access.invalidated.slice(before)).toEqual([device, device])
@@ -765,8 +763,8 @@ describe('the authenticator provider', () => {
       expect(provider().reachPeer(peerOf(locked).id)?.unlockId).toBeUndefined()
       expect(peerOf(admitAs(page.cookie))).toBe(peerOf(locked))
       const create = (unlockId: string | undefined) => policy.bindings(reachDevicePrincipal(page.deviceId, PRIVATE, unlockId))[0]?.condition?.({ action: 'directoryPicker/pick', resource: { kind: 'global' }, args: {} } as never)
-      expect(create(page.unlock.unlockId)).toEqual({ kind: 'allow' })
-      // Pins the policy's own lookup: the sibling locked tab holds nothing while this page is unlocked.
+      // Pins A483: a PIN page unlock admits no face action, so the unlocked page and its sibling tab are both refused.
+      expect(create(page.unlock.unlockId)).toEqual({ kind: 'deny', reason: 'elevation-required: directoryPicker/pick' })
       expect(create(undefined)).toEqual({ kind: 'deny', reason: 'elevation-required: directoryPicker/pick' })
       const give = (peer: PeerScope): void => { provider().checkAnswer({ peer, event: 'approval/request', request: { grants: 'full-access' }, value: 'allowed-once' }) }
       expect(() => { give(peerOf(unlocked)) }).not.toThrow()

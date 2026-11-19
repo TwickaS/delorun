@@ -65,7 +65,7 @@ describe('the update routes\' fence and levels', () => {
     expect(update.channel.requests).toEqual([])
   })
 
-  it('a phone with no passkey may prepare, apply and go back with a PIN grant for each call, and stop with an unlock; with no grant store it may only cancel, dismiss and stop', async () => {
+  it('a phone with no passkey may prepare, apply, go back and stop with a PIN grant for each call; with no grant store it may only cancel and dismiss', async () => {
     const world = grantWorld({ hasPasskey: false })
     const full = await serveUpdate({ face: world.face })
     const withPin = (control: string, path: string, body: object) => {
@@ -80,12 +80,13 @@ describe('the update routes\' fence and levels', () => {
     expect((await send(full.server.port, UPDATE_PATHS.apply, withPin('update-begin', UPDATE_PATHS.apply, apply))).status).toBe(200)
     const rollback = { chats: 'stop', profileOnly: false }
     expect((await send(full.server.port, UPDATE_PATHS.rollback, withPin('update-rollback', UPDATE_PATHS.rollback, rollback))).status).toBe(200)
-    expect((await send(full.server.port, UPDATE_PATHS.stop, fromDevice('fresh', { chats: 'wait' }))).status).toBe(200)
+    expect((await send(full.server.port, UPDATE_PATHS.stop, fromDevice('fresh', { chats: 'wait' }))).status).toBe(403)
+    expect((await send(full.server.port, UPDATE_PATHS.stop, withPin('stop', UPDATE_PATHS.stop, { chats: 'wait' }))).status).toBe(200)
     const off = await serveUpdate()
     expect((await send(off.server.port, UPDATE_PATHS.cancel, fromDevice('fresh'))).status).toBe(200)
     expect((await send(off.server.port, UPDATE_PATHS.dismiss, fromDevice('fresh'))).status).toBe(200)
-    expect((await send(off.server.port, UPDATE_PATHS.stop, fromDevice('fresh', { chats: 'wait' }))).status).toBe(200)
-    expect(off.channel.ops()).toEqual(['status', 'update.cancel', 'status', 'stop'])
+    expect(json(await send(off.server.port, UPDATE_PATHS.stop, fromDevice('fresh', { chats: 'wait' })))).toMatchObject({ code: 'LOOPBACK_REQUIRED' })
+    expect(off.channel.ops()).toEqual(['status', 'update.cancel'])
   })
 
   it('the release check is open to a locked phone, but not to another site or a session that is no paired device\'s', async () => {
@@ -257,7 +258,7 @@ describe('rollback, cancel, stop and state', () => {
     expect(computer.prepared).toMatchObject({ handle })
     expect(computer.access).toMatchObject({ actor: 'computer', may: { 'update-begin': { ok: true }, 'update-rollback': { ok: true }, stop: { ok: true } } })
     const phone = json(await send(update.server.port, UPDATE_PATHS.state, { method: 'GET', host: 'studio.example.ts.net', headers: [CREDENTIAL, 'x-test-remote: 1', 'x-test-unlock: fresh'] }))
-    expect(phone.access).toMatchObject({ actor: 'device-unlocked', may: { 'update-check': { ok: true }, 'update-begin': { ok: false, needs: 'computer' }, 'update-rollback': { ok: false, needs: 'computer' }, 'update-cancel': { ok: true }, stop: { ok: true } } })
+    expect(phone.access).toMatchObject({ actor: 'device-unlocked', may: { 'update-check': { ok: true }, 'update-begin': { ok: false, needs: 'computer' }, 'update-rollback': { ok: false, needs: 'computer' }, 'update-cancel': { ok: true }, stop: { ok: false, needs: 'computer' } } })
     expect(phone.prepared).toBeUndefined()
     expect(JSON.stringify(phone)).not.toContain('@x/plug')
   })

@@ -58,7 +58,7 @@ export async function callActionOf(t: PropsLocale<'delorunFaceId'>['t'], request
 export function FaceIdGrantOverlay({ t, fetch, usePending, usePin, settle, browser, api: injectedApi }: FaceIdGrantOverlayProps): ReactNode {
   const pending = usePending(current => current)
   // The action is kept with the confirmation it was built for, so a new confirmation never shows the previous one's words.
-  const [built, setBuilt] = useState<{ readonly id: number; readonly for: typeof pending; readonly action: FaceIdAction } | undefined>(undefined)
+  const [built, setBuilt] = useState<{ readonly id: number; readonly for: typeof pending; readonly action: FaceIdAction; readonly hasPasskey: boolean } | undefined>(undefined)
   const sequence = useRef(0)
   const api = useMemo(() => injectedApi ?? httpPasskeyApi(fetch), [injectedApi, fetch])
   const passkeys = useMemo(() => browser ?? browserPasskeys(), [browser])
@@ -68,11 +68,12 @@ export function FaceIdGrantOverlay({ t, fetch, usePending, usePin, settle, brows
   useEffect(() => {
     if (pending === null) return
     let current = true
-    void callActionOf(t, pending.request).then((next) => { if (current) setBuilt({ id: ++sequence.current, for: pending, action: next }) })
+    // A failed read of the device's passkeys opens the PIN keypad, which the home checks itself.
+    const held = api.state().then((state) => (state.passkeys.length > 0), (): boolean => false)
+    void Promise.all([callActionOf(t, pending.request), held]).then(([next, hasPasskey]) => { if (current) setBuilt({ id: ++sequence.current, for: pending, action: next, hasPasskey }) })
     return () => { current = false }
-  }, [pending, t])
+  }, [pending, t, api])
   if (pending === null || built?.for !== pending) return null
-  // The state said this device holds a passkey before the control asked for Face ID.
-  return <FaceIdGrantFlow key={built.id} t={t} action={built.action} kind={kind} api={api} browser={passkeys} hasPasskey secret={secret}
+  return <FaceIdGrantFlow key={built.id} t={t} action={built.action} kind={kind} api={api} browser={passkeys} hasPasskey={built.hasPasskey} secret={secret}
     onGranted={settle} onCancel={() => { settle(undefined) }} />
 }

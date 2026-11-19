@@ -288,10 +288,9 @@ describe('reach on the Tailscale private address', () => {
         type: 'client-request', rpcId: 'reach-row', method: 'pluginManager/setPluginEnabled', payload: { args: { id: 'delorun-reach', enabled: false } },
       })
       expect(switched.status).toBe(200)
-      // This fixture mounts the reach and home-auth plugins directly, so the Loader holds no `delorun-reach` row for the policy to
-      // name; the call reaches the plugin manager, which changes nothing of an unknown row. The policy's refusal of the real
-      // composed rows (`remote-access/denied`, PROTECTED_ROW_REFUSAL) is pinned by `protected-rows.integration.spec.ts`.
-      expect(json(switched).result).toMatchObject({ ok: true, value: { changed: false, error: { code: 'unknown-plugin' } } })
+      // A phone holding an unlock still has no grant for the call, so the policy refuses it before the plugin manager sees it (A483). The refusal of
+      // the real composed rows (`remote-access/denied`, PROTECTED_ROW_REFUSAL) is pinned by `protected-rows.integration.spec.ts`.
+      expect(json(switched).result).toMatchObject({ ok: false, error: { code: 'remote-access/denied' } })
       expect(studio.ctx.reach.status()[0]?.state).toBe('ready')
       expect(calls.filter(call => call.at(-1) === 'off')).toEqual([])
     })

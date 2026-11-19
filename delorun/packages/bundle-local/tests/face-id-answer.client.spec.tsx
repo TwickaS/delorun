@@ -21,14 +21,15 @@ const passkey = { credentialId: 'c1', createdAt: 0, lastUsedAt: null, synced: fa
 const pinView = (phase: PinView['phase']): PinView => ({ phase, secret: 'pin', busy: false, outcome: undefined, paused: false, asked: false })
 
 /** Render the step and hand back the gate it registered. */
-function card(over: { passkeys?: boolean | undefined; computer?: boolean | undefined; callId?: ToolCallId | undefined; grants?: FaceIdAnswerProps['grants'] } = {}) {
+function card(over: { passkeys?: boolean | undefined; stateFails?: true; secret?: PinView['secret']; computer?: boolean | undefined; callId?: ToolCallId | undefined; grants?: FaceIdAnswerProps['grants'] } = {}) {
   const host = fakeHost({})
-  const api = fakeApi({ devices: [{ deviceId: 'd', label: 'Phone', thisDevice: true, passkeys: over.passkeys === false ? [] : [passkey] }] })
+  const base = fakeApi({ devices: [{ deviceId: 'd', label: 'Phone', thisDevice: true, passkeys: over.passkeys === false ? [] : [passkey] }] })
+  const api = over.stateFails === true ? Object.assign(base, { state: () => Promise.reject(new Error('state unreadable')) }) : base
   const gateAllow = vi.fn<(gate: ApprovalAllowGate | null) => void>()
   const props = {
     t, grants: over.grants ?? 'full-access', callId: 'callId' in over ? over.callId : 'call-7' as ToolCallId, toolName: 'claude-code',
     allow: async () => {}, answered: false, canAnswer: () => true, gateAllow, sessionId: 'chat-1', fetch: host.fetch, api, browser: fakeBrowser(), atComputer: () => over.computer ?? false,
-    usePin: <S,>(select: (view: PinView) => S): S => select(pinView('unlocked')),
+    usePin: <S,>(select: (view: PinView) => S): S => select({ ...pinView('unlocked'), secret: over.secret ?? 'pin' }),
   } as FaceIdAnswerProps
   render(<FaceIdAnswerAction {...props} />)
   const gate = (): ApprovalAllowGate => {
@@ -81,13 +82,35 @@ describe('the approval card\'s Face ID step', () => {
     expect(gateAllow).not.toHaveBeenCalled()
     expect(api.calls.some(call => call.name === 'options')).toBe(false)
   })
-  it('asks for the PIN on a phone with no passkey, and never lets the answer go unconfirmed', async () => {
-    // Without a passkey the sheet falls back to the PIN keypad; the gate still holds the answer until it is confirmed.
-    const { gate, gateAllow } = card({ passkeys: false })
+  // Reverting the keypad start in FaceIdGrantFlow shows a passkey sheet to a phone that has none.
+  it('opens straight on the PIN keypad on a phone with no passkey, and mints a one-action grant through the PIN route, never a page unlock', async () => {
+    const { api, gate, gateAllow } = card({ passkeys: false, secret: 'passcode' })
+    await waitFor(() => { expect(gateAllow).toHaveBeenCalled() })
+    let sent: Promise<boolean> | undefined
+    act(() => { sent = gate()() })
+    expect(screen.queryByRole('button', { name: 'Use PIN instead' })).toBeNull()
+    fireEvent.change(await screen.findByLabelText('Passcode'), { target: { value: 'correct horse' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+    await expect(sent).resolves.toBe(true)
+    expect(api.calls.find(call => call.name === 'pin')?.request).toEqual({ answer: { agent: 'chat-1', callId: 'call-7', grants: 'full-access', value: 'allowed-once' }, secret: 'correct horse' })
+    expect(api.calls.some(call => call.name === 'options')).toBe(false)
+  })
+  // Reverting the Back-cancels rule for a phone with no passkey would drop it onto a passkey sheet it cannot use.
+  it('sends nothing when the keypad of a phone with no passkey is left', async () => {
+    const { gate, gateAllow } = card({ passkeys: false, secret: 'passcode' })
+    await waitFor(() => { expect(gateAllow).toHaveBeenCalled() })
+    let sent: Promise<boolean> | undefined
+    act(() => { sent = gate()() })
+    fireEvent.click(await screen.findByRole('button', { name: 'Back' }))
+    await expect(sent).resolves.toBe(false)
+  })
+  // Removing the catch on the state read leaves the gate waiting for ever when the passkey state cannot be read.
+  it('opens the PIN keypad, not a passkey sheet, when the passkey state cannot be read', async () => {
+    const { gate, gateAllow } = card({ stateFails: true, secret: 'passcode' })
     await waitFor(() => { expect(gateAllow).toHaveBeenCalled() })
     act(() => { void gate()() })
-    fireEvent.click(await screen.findByRole('button', { name: 'Use PIN instead' }))
-    expect(await screen.findByText('Enter your PIN to approve this once.')).toBeTruthy()
+    expect(await screen.findByLabelText('Passcode')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Confirm with/ })).toBeNull()
   })
   it('removes the gate and settles an open sheet as cancelled when it unmounts', async () => {
     // A withdrawn card must not hold a stale gate.

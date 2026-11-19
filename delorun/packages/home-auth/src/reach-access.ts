@@ -1127,8 +1127,8 @@ function createsInKnownWorkspace(facts: Pick<ReachAccessFacts, 'workspaces'>, ar
  * The condition of one device's bindings on one listener, the single place an elevated action is decided. It refuses
  * an action of {@link REACH_ELEVATED_ACTIONS} with `elevation-required: <action>` unless the device holds a running
  * unlock on the principal's listener, for a call and for an event, a snapshot or a list filter alike, and logs each
- * call an unlock admits with the unlock's id. Every `terminal/*` action ({@link GRACE_REFUSED_ACTIONS}) needs a grant for exactly the call, from a passkey
- * or a PIN, on every device, and no unlock window admits it: no switch, workspace grant or dangerous mode waives that.
+ * call an unlock admits with the unlock's id once the home keeps no grant store. Once it does, every elevated action needs a grant for exactly the call, from a passkey
+ * or a PIN, on every device, and no unlock window admits it (A483); no switch, workspace grant or dangerous mode waives that. Every `terminal/*` action ({@link GRACE_REFUSED_ACTIONS}) is refused before the store starts too.
  * It treats a `session/create` that starts a chat outside the known
  * workspaces (see {@link createsInKnownWorkspace}) the same way, with {@link CREATE_OUTSIDE_WORKSPACES}: a folder
  * decides where the chat's commands may write. It refuses a workspace-file call unless every path it names is one a
@@ -1164,13 +1164,11 @@ export function createCondition(
    */
   const unlocked = (action: RemoteAccessAction, reason: string, call: boolean, scope: string, args?: unknown): RemoteAccessDecision | undefined => {
     const faced = facts.faceGrants?.()
-    // A device that holds a passkey is admitted by a grant for this call and by no unlock window.
-    if (faced?.deviceHasPasskey(deviceId) === true) return grantFor(faced, action, reason, call, scope, args)
-    // A terminal opens only with a grant for the call, from a PIN where the device holds no passkey, and never from an unlock window.
-    if (GRACE_REFUSED_ACTIONS.has(action)) return faced === undefined ? { kind: 'deny', reason } : grantFor(faced, action, reason, call, scope, args)
+    // A face action is admitted by a grant for exactly this call, from Face ID or, on a device with no passkey, from its PIN (A483); no unlock window, code or approval grace admits it.
+    if (faced !== undefined) return grantFor(faced, action, reason, call, scope, args)
+    // Before the grant store starts, a terminal stays refused and any other action falls back to the unlock the person entered.
+    if (GRACE_REFUSED_ACTIONS.has(action)) return { kind: 'deny', reason }
     const elevation = unlock()
-    // A device with no passkey, on a home with PIN mode on or a passkey enrolled, mints a grant with its PIN.
-    if (elevation === undefined && faced !== undefined && unlockModeOn()) return grantFor(faced, action, reason, call, scope, args)
     if (elevation === undefined) return { kind: 'deny', reason }
     if (call) {
       facts.logElevated(`home-auth: elevated action: device=${deviceId} listener=${listener} action=${action} elevation=${elevation.id}`)
@@ -1182,7 +1180,6 @@ export function createCondition(
   let renew: string | undefined
   /** The grants this call uses up, once the whole condition allows it. */
   let spend: (() => void)[] = []
-  const unlockModeOn = (): boolean => facts.unlockModeEnabled()
   /**
    * Decide a call by the grant the home keeps for it. A question without arguments is allowed only for a list or a
    * snapshot read of a method, so the studio lists the action; an `event:` action is refused without arguments, because

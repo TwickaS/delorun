@@ -56,7 +56,7 @@ describe('the Face ID grant overlay', () => {
   it('shows the sheet for the pending request and settles with the grant id', async () => {
     // Confirm mints the grant and hands its id to the waiting call.
     const source = createFaceGrantSource()
-    const api = fakeApi({ devices: [{ deviceId: 'd', label: 'Phone', thisDevice: true, passkeys: [] }] })
+    const api = fakeApi({ devices: [{ deviceId: 'd', label: 'Phone', thisDevice: true, passkeys: [{ credentialId: 'c1', createdAt: 0, lastUsedAt: null, synced: false }] }] })
     const props = {
       t, fetch: fakeHost({}).fetch, api, browser: fakeBrowser(), settle: source.settle,
       usePending: <S,>(select: (pending: ReturnType<typeof source.hooks.pending.getSnapshot>) => S): S => select(source.hooks.pending.getSnapshot()),
@@ -69,6 +69,28 @@ describe('the Face ID grant overlay', () => {
     expect(api.calls.find(entry => entry.name === 'options')?.request).toEqual({ actions: [{ action: 'changes/plugin-discard', hash: await hashRequest(call) }] })
     act(() => { view.rerender(<FaceIdGrantOverlay {...props} />) })
     expect(screen.queryByRole('dialog')).toBeNull()
+  })
+  // Reverting the state read leaves `hasPasskey` fixed, so a phone with no passkey is shown a sheet it cannot answer, or no keypad.
+  it('opens a phone with no passkey, or one whose state cannot be read, on the PIN keypad and mints the grant through the PIN route', async () => {
+    for (const unreadable of [false, true]) {
+      const source = createFaceGrantSource()
+      const base = fakeApi({ devices: [{ deviceId: 'd', label: 'Phone', thisDevice: true, passkeys: [] }] })
+      const api = unreadable ? Object.assign(base, { state: () => Promise.reject(new Error('state unreadable')) }) : base
+      const props = {
+        t, fetch: fakeHost({}).fetch, api, browser: fakeBrowser(), settle: source.settle,
+        usePending: <S,>(select: (pending: ReturnType<typeof source.hooks.pending.getSnapshot>) => S): S => select(source.hooks.pending.getSnapshot()),
+        usePin: <S,>(select: (view: PinView) => S): S => select({ ...pinView('unlocked'), secret: 'passcode' }),
+      } as FaceIdGrantOverlayProps
+      const granted = source.grant(request)
+      render(<FaceIdGrantOverlay {...props} />)
+      expect(screen.queryByRole('button', { name: /Confirm with/ })).toBeNull()
+      fireEvent.change(await screen.findByLabelText('Passcode'), { target: { value: 'correct horse' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+      await expect(granted).resolves.toBe('g2')
+      expect(api.calls.some(call => call.name === 'options')).toBe(false)
+      expect(api.calls.find(call => call.name === 'pin')?.request).toMatchObject({ actions: [{ action: 'changes/plugin-discard' }], secret: 'correct horse' })
+      cleanup()
+    }
   })
   it('never shows the previous request\'s sheet for a new pending request', async () => {
     // The sheet is kept with the request it was built for; a frame of the old words under a new request would be confirmed by mistake.

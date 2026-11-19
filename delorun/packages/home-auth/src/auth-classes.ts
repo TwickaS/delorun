@@ -115,7 +115,7 @@ const PASSKEY_ROWS: readonly AuthRow[] = [
   { id: 'auth:/auth/passkey/verify', surface: 'auth', authClass: 'free', reason: 'a failed assertion counts as a wrong try; a passed one mints a one-action grant' },
   { id: 'auth:/auth/passkey/pin', surface: 'auth', authClass: 'free', reason: 'a correct PIN mints a one-action grant; wrong tries count as an unlock does' },
   { id: 'auth:/auth/passkey/devices', surface: 'auth', authClass: 'face', reason: 'it reads the device list and each device\'s passkeys, which is device metadata' },
-  { id: 'auth:/auth/devices/remove', surface: 'auth', authClass: 'face', reason: 'a device removes another device only with a grant for exactly that removal, while Face ID is on; removing itself needs none' },
+  { id: 'auth:/auth/devices/remove', surface: 'auth', authClass: 'face', reason: 'a device removes another device only with a grant for exactly that removal; removing itself needs none' },
   { id: 'auth:/auth/passkey/remove', surface: 'auth', authClass: 'face', reason: 'a device removes its own or another device\'s passkey only with a grant for exactly that removal' },
 ]
 
