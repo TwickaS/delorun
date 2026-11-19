@@ -171,6 +171,16 @@ describe('resolveProtection with aliases', () => {
     expect(protection.hiddenDirectories).toEqual([bindRoot])
   })
 
+  it('hides a bind-mount root that is a directory under a private tmp without a protected home', () => {
+    const { root } = fixture()
+    const bindRoot = join(root, 'docker-bind-tmp')
+    mkdirSync(bindRoot)
+    const protection = resolveProtection(settingsOf({ privateTmp: true }), NO_MOUNTS, NO_DATA_VOLUME, 'linux', bindRoot)
+    expect(protection.hiddenDirectories).toEqual([bindRoot])
+    const plain = resolveProtection(settingsOf({}), NO_MOUNTS, NO_DATA_VOLUME, 'linux', bindRoot)
+    expect(plain.hiddenDirectories).toEqual([])
+  })
+
   it('adds no mount argument for a bind-mount root that is absent, and does not fail', () => {
     const { root, home } = fixture()
     const protection = resolveProtection(settingsOf({ home }), NO_MOUNTS, NO_DATA_VOLUME, 'linux', join(root, 'docker-bind-absent'))

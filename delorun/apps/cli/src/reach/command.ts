@@ -114,7 +114,7 @@ export const reachCommand: CliCommand = createReachCommand({ tailscale: systemTa
  */
 async function preparedProfile(command: string, args: readonly string[], context: CommandContext): Promise<{ readonly home: string; readonly profile: string; readonly yes: boolean }> {
   const values = parseOptions(`reach ${command}`, args, command === 'on' ? { profile: { type: 'string' }, yes: { type: 'boolean', default: false } } : { profile: { type: 'string' } })
-  const { home, profile } = await prepareHome(context, values.profile)
+  const { home, profile } = await prepareHome(context, values.profile, true)
   if (!hasCliProfile(home.path, profile)) throw new CliError(EXIT.failed, `delorun reach: the profile ${profile} is not set up; run delorun setup first`)
   return { home: home.path, profile, yes: 'yes' in values && values.yes === true }
 }

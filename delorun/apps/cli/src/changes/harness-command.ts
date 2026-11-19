@@ -122,7 +122,7 @@ export async function runHarnessCommand(args: readonly string[], context: Comman
   if (parsed.positionals.length !== 1) throw new CliError(EXIT.usage, `delorun changes: ${JSON.stringify(parsed.positionals.join(' '))} is not a subcommand\n${USAGE}`)
   // The person must be at the terminal before anything is read or written, the home's tree included.
   const presence = attest()
-  const { home } = await prepareHome(context, parsed.values.profile)
+  const { home } = await prepareHome(context, parsed.values.profile, true)
   const harness = installed(dependencies.harness(home.path, context))
   try {
     if (parsed.values.discard !== true) {

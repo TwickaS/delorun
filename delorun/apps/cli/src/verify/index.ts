@@ -267,7 +267,7 @@ export function createVerifyCommand(environment: VerifyEnvironment): CliCommand 
       const named = values.release ?? environment.running()
       const release = parseRuntimeVersion(named)
       if (release === undefined) throw new CliError(EXIT.usage, `delorun verify: ${JSON.stringify(named)} is not a Delorun release version`)
-      const { home, profile } = await prepareHome(context, undefined)
+      const { home, profile } = await prepareHome(context, undefined, true)
       const now = environment.now()
       const { bill, outcome } = await runVerifyStage(
         { home: home.path, profile, platform: environment.platform, running: environment.running(), env: context.env, now, ...environment.plugins === undefined ? {} : { plugins: environment.plugins }, ...environment.changes === undefined ? {} : { changes: environment.changes } },

@@ -33,7 +33,7 @@ beforeEach(async () => {
   vi.stubEnv('DELORUN_PROFILE', undefined)
   context = { env: { HOME: osHome, DSH_HOME: join(osHome, '.dsh'), DEEPSEEK_API_KEY: 'fixture-key' }, stdout: () => undefined, stderr: (text) => { stderr.push(text) } }
   expect(await main(['setup', '--yes'], context)).toBe(EXIT.ok)
-  await prepareHome(context, undefined)
+  await prepareHome(context, undefined, true)
 }, 60_000)
 
 afterEach(() => {

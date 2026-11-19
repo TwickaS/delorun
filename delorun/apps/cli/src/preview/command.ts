@@ -213,7 +213,7 @@ export function createPreviewCommand(dependencies: PreviewDependencies): CliComm
       const wrong = (problem: string): CliError => new CliError(EXIT.usage, `delorun preview: ${problem}\n${PREVIEW_USAGE}`)
       if (action !== 'list' && action !== 'on' && action !== 'off') throw wrong(action === undefined ? 'name an action' : `${JSON.stringify(printable(action))} is not an action`)
       if (action === 'list' ? flag !== undefined : flag === undefined || extra !== undefined) throw wrong(action === 'list' ? 'list takes no flag' : 'name one flag')
-      const { home, profile } = await prepareHome(context, values.profile)
+      const { home, profile } = await prepareHome(context, values.profile, true)
       const request: PreviewRequest = {
         home: home.path, profile, profileDir: profileDirectory(home.path, profile), installAnchor: await dependencies.installAnchor(),
         running: dependencies.running(home.path, profile), output: context,

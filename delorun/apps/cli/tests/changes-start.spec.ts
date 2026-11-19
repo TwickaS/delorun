@@ -124,7 +124,7 @@ const fromStore = (home: string): ReturnType<typeof runtimeOfFile> => runtimeOfF
 
 describe('a start of the CLI profile', { timeout: 60_000 }, () => {
   it('approves a linked plugin at the first start and loads it from its active directory before the profile is read', async () => {
-    await prepareHome(context, undefined)
+    await prepareHome(context, undefined, true)
     const folder = profileLinkingPlug('default')
     const seen: (string | undefined)[] = []
     await expect(startForeground({ home, profile: 'default', open: false, output: context, env: context.env }, stoppingAtPrepare(seen))).rejects.toThrow('could not be loaded: stopped after Changes')
@@ -135,7 +135,7 @@ describe('a start of the CLI profile', { timeout: 60_000 }, () => {
   })
 
   it('refuses a fresh start from the store whose runtime files differ, before the profile is touched', async () => {
-    await prepareHome(context, undefined)
+    await prepareHome(context, undefined, true)
     profileLinkingPlug('default')
     const seen: (string | undefined)[] = []
     const checked: string[] = []
@@ -154,7 +154,7 @@ describe('a start of the CLI profile', { timeout: 60_000 }, () => {
   })
 
   it('starts from the store when its runtime check passes', async () => {
-    await prepareHome(context, undefined)
+    await prepareHome(context, undefined, true)
     profileLinkingPlug('default')
     const seen: (string | undefined)[] = []
     await expect(startForeground({ home, profile: 'default', open: false, output: context, env: context.env }, stoppingAtPrepare(seen, { runtime: fromStore, checkRuntime: () => Promise.resolve() })))
@@ -185,7 +185,7 @@ describe('startChanges', () => {
   })
 
   it('leaves a link to the bundle this installation carries alone, as a source checkout\'s setup writes it', async () => {
-    await prepareHome(context, undefined)
+    await prepareHome(context, undefined, true)
     const carried = carriedPackageDirectory('@delorun/bundle-local')!
     mkdirSync(join(home, 'profiles', 'default'), { recursive: true })
     writeFileSync(join(home, 'profiles', 'default', 'package.json'), `${JSON.stringify({ name: 'dsh-profile-default', dependencies: { '@delorun/bundle-local': `link:${carried}` } })}\n`)
@@ -195,7 +195,7 @@ describe('startChanges', () => {
   })
 
   it('prints nothing for a profile that links no plugin from a folder', async () => {
-    await prepareHome(context, undefined)
+    await prepareHome(context, undefined, true)
     mkdirSync(join(home, 'profiles', 'default'), { recursive: true })
     writeFileSync(join(home, 'profiles', 'default', 'package.json'), '{"name":"dsh-profile-default","dependencies":{}}\n')
     await startChanges({ home, profile: 'default' }, context.stdout)
@@ -204,7 +204,7 @@ describe('startChanges', () => {
   })
 
   it('refuses the start when a record of Changes cannot be read, naming it', async () => {
-    await prepareHome(context, undefined)
+    await prepareHome(context, undefined, true)
     profileLinkingPlug('default')
     mkdirSync(join(home, 'changes', 'profiles', 'default'), { recursive: true, mode: 0o700 })
     writeFileSync(join(home, 'changes', 'profiles', 'default', 'log.json'), '{"schema":"other"}\n', { mode: 0o600 })
@@ -214,7 +214,7 @@ describe('startChanges', () => {
   })
 
   it('a start whose output reaches no terminal names the plugins approved at upgrade again at the next start', async () => {
-    await prepareHome(context, undefined)
+    await prepareHome(context, undefined, true)
     const folder = profileLinkingPlug('default')
     const notice = `Delorun now runs the approved copy of plug, linked from ${folder}. Edits in that folder wait for your review: delorun changes list.\n`
     // `delorun start` runs the home process with its output in the log only.
@@ -229,7 +229,7 @@ describe('startChanges', () => {
   })
 
   it('a start goes on when it cannot record that the notice was shown, and says so', async () => {
-    await prepareHome(context, undefined)
+    await prepareHome(context, undefined, true)
     profileLinkingPlug('default')
     hooks.markError = new Error('the log is busy\u001b[2J')
     await startChanges({ home, profile: 'default', terminal: true }, context.stdout)
@@ -241,7 +241,7 @@ describe('startChanges', () => {
   })
 
   it('a start without a terminal setting records the notice as shown only when standard output and standard error both are terminals', async () => {
-    await prepareHome(context, undefined)
+    await prepareHome(context, undefined, true)
     profileLinkingPlug('default')
     const before = { stdout: Object.getOwnPropertyDescriptor(process.stdout, 'isTTY'), stderr: Object.getOwnPropertyDescriptor(process.stderr, 'isTTY') }
     const terminals = (stdout: boolean, stderr: boolean): void => {
@@ -265,7 +265,7 @@ describe('startChanges', () => {
   })
 
   it('a profile created after the first start under Changes does not approve its links at upgrade', async () => {
-    await prepareHome(context, undefined)
+    await prepareHome(context, undefined, true)
     await setProtection(home, 'on', attestTerminal({ stdin: { isTTY: true }, stdout: { isTTY: true } }))
     mkdirSync(join(home, 'profiles', 'default'), { recursive: true })
     writeFileSync(join(home, 'profiles', 'default', 'package.json'), '{"name":"dsh-profile-default","dependencies":{}}\n')
@@ -280,7 +280,7 @@ describe('startChanges', () => {
   })
 
   it('refuses the start when the profile history cannot record the change', async () => {
-    await prepareHome(context, undefined)
+    await prepareHome(context, undefined, true)
     profileLinkingPlug('default')
     vi.stubEnv('PATH', join(base, 'no-git'))
     await expect(startChanges({ home, profile: 'default' }, () => {})).rejects.toThrow(/could not be prepared: HistoryUnavailableError: /)
@@ -296,7 +296,7 @@ describe('the approved plugin content step', () => {
   const draft = (profile: string): Parameters<typeof changesApprovedContent>[0] => ({ request: { home, profile, kind: 'cli', output: context, env: context.env } })
 
   it('adds no overlay when every invariant holds, and for a profile the home does not have', async () => {
-    await prepareHome(context, undefined)
+    await prepareHome(context, undefined, true)
     profileLinkingPlug('default')
     await startChanges({ home, profile: 'default' }, () => {})
     await expect(changesApprovedContent(draft('default'))).resolves.toEqual([])
@@ -304,7 +304,7 @@ describe('the approved plugin content step', () => {
   })
 
   it('refuses the start, naming each broken invariant, when an active directory holds what Changes did not keep', async () => {
-    await prepareHome(context, undefined)
+    await prepareHome(context, undefined, true)
     profileLinkingPlug('default')
     await startChanges({ home, profile: 'default' }, () => {})
     writeFileSync(join(activeDirectory(home, 'default', 'plug'), 'index.js'), 'export default 2\n')
@@ -339,7 +339,7 @@ describe('repointingBoot', () => {
 
 describe('repointForSuccessor', () => {
   it('leaves a home without the profile, and a profile whose copies already hold their versions, alone', async () => {
-    await prepareHome(context, undefined)
+    await prepareHome(context, undefined, true)
     await expect(repointForSuccessor({ home, profile: 'other' })).resolves.toBeUndefined()
     profileLinkingPlug('default')
     await startChanges({ home, profile: 'default' }, () => {})
@@ -347,7 +347,7 @@ describe('repointForSuccessor', () => {
   })
 
   it('refuses the successor\'s boot, naming the profile, when a record of Changes cannot be read', async () => {
-    await prepareHome(context, undefined)
+    await prepareHome(context, undefined, true)
     profileLinkingPlug('default')
     await startChanges({ home, profile: 'default' }, () => {})
     writeFileSync(join(home, 'changes', 'profiles', 'default', 'active.json'), 'not json')
@@ -382,7 +382,7 @@ describe('delorun headless', () => {
   }
 
   it('brings the headless profile\'s linked plugins under Changes before upstream prepares it, and says so on standard error', async () => {
-    await prepareHome(context, undefined)
+    await prepareHome(context, undefined, true)
     const folder = profileLinkingPlug('headless')
     const seen: (string | undefined)[] = []
     await expect(headless(['say hello'], context, headlessStoppingAtPrepare(seen), () => undefined)).rejects.toThrow('stopped after Changes')

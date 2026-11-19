@@ -103,7 +103,7 @@ function writeEmptyProfile(): void {
 
 describe('delorun plugin', () => {
   it('says when the profile has no plugins to list, since pnpm prints nothing for it', async () => {
-    await prepareHome(context, undefined)
+    await prepareHome(context, undefined, true)
     writeEmptyProfile()
     const printed: string[] = []
     const listing: CommandContext = { ...context, stdout: (text) => { printed.push(text) } }
@@ -112,7 +112,7 @@ describe('delorun plugin', () => {
   })
 
   it('prints nothing extra when a profile lists plugins', async () => {
-    await prepareHome(context, undefined)
+    await prepareHome(context, undefined, true)
     writeEmptyProfile()
     writeFileSync(join(profileDir, 'package.json'), '{"name":"profile","private":true,"dependencies":{"good-plugin":"1.0.0"}}\n')
     const printed: string[] = []
@@ -139,7 +139,7 @@ describe('delorun plugin', () => {
     children.push(other)
     const pid = other.pid ?? 0
     const runs: Run[] = []
-    await prepareHome(context, undefined)
+    await prepareHome(context, undefined, true)
     registerDataUser(delorunHome, 'exclusive', 'import', pid)
     await expect(plugin(['add', 'some-plugin'], context, dependencies(runs))).rejects.toThrow(new CliError(EXIT.failed, `delorun plugin: process ${String(pid)} (delorun import) is changing the stores this command uses; wait for it to finish, and try again`))
     expect(runs).toEqual([])
@@ -147,7 +147,7 @@ describe('delorun plugin', () => {
   })
 
   it('sets the profile\'s packages to be copied from pnpm\'s store before pnpm runs, keeping its other settings', async () => {
-    await prepareHome(context, undefined)
+    await prepareHome(context, undefined, true)
     writeEmptyProfile()
     const seen: string[] = []
     const deps: PluginDependencies = { ...dependencies([]), runUpstream: () => { seen.push(readFileSync(join(profileDir, 'pnpm-workspace.yaml'), 'utf8')); return Promise.resolve(0) } }
@@ -156,7 +156,7 @@ describe('delorun plugin', () => {
   })
 
   it('resolves an installation, checks the lockfile, installs it, then records it, printing every finding', async () => {
-    await prepareHome(context, undefined)
+    await prepareHome(context, undefined, true)
     writeEmptyProfile()
     standIn.answers.advisories = { 'good-plugin': [advisory('GHSA-2222-3333-4444', 'high', '*')] }
     const runs: Run[] = []
@@ -173,7 +173,7 @@ describe('delorun plugin', () => {
   })
 
   it('repeats the options that restrict pnpm in the installation step, which runs the install scripts', async () => {
-    await prepareHome(context, undefined)
+    await prepareHome(context, undefined, true)
     writeEmptyProfile()
     const runs: Run[] = []
     const restricting = ['--ignore-scripts', '--offline', '--prefer-offline', '--loglevel', 'debug', '--reporter=silent', '--config.store-dir=/tmp/store', '--registry', 'http://registry.example.test/']
@@ -184,7 +184,7 @@ describe('delorun plugin', () => {
   })
 
   it('refuses a known critical advisory after resolution: nothing is installed, the files go back, and the command fails', async () => {
-    await prepareHome(context, undefined)
+    await prepareHome(context, undefined, true)
     writeEmptyProfile()
     const before = readFileSync(join(profileDir, 'package.json'), 'utf8')
     standIn.answers.advisories = { 'good-plugin': [advisory('GHSA-2222-3333-4444', 'critical', '*')] }
@@ -202,7 +202,7 @@ describe('delorun plugin', () => {
   })
 
   it('installs a known critical advisory that --allow-advisory names, without passing the option to pnpm', async () => {
-    await prepareHome(context, undefined)
+    await prepareHome(context, undefined, true)
     writeEmptyProfile()
     standIn.answers.advisories = { 'good-plugin': [advisory('GHSA-2222-3333-4444', 'critical', '*')] }
     const runs: Run[] = []
@@ -217,7 +217,7 @@ describe('delorun plugin', () => {
   })
 
   it('puts the profile files back byte for byte when the installation step fails, so the plugin is neither listed nor recorded', async () => {
-    await prepareHome(context, undefined)
+    await prepareHome(context, undefined, true)
     writeEmptyProfile()
     writeProfileFiles(profileDir, [])
     const manifest = readFileSync(join(profileDir, 'package.json'), 'utf8')
@@ -234,7 +234,7 @@ describe('delorun plugin', () => {
   })
 
   it('refuses the installation when the check throws, and puts the profile back', async () => {
-    await prepareHome(context, undefined)
+    await prepareHome(context, undefined, true)
     writeEmptyProfile()
     writeProfileFiles(profileDir, [])
     const manifest = readFileSync(join(profileDir, 'package.json'), 'utf8')
@@ -250,7 +250,7 @@ describe('delorun plugin', () => {
   })
 
   it('refuses the installation when the lockfile does not read, rather than installing it unchecked', async () => {
-    await prepareHome(context, undefined)
+    await prepareHome(context, undefined, true)
     writeEmptyProfile()
     const manifest = readFileSync(join(profileDir, 'package.json'), 'utf8')
     const runs: Run[] = []
@@ -267,7 +267,7 @@ describe('delorun plugin', () => {
   })
 
   it('puts the profile files back when the installation step throws, and rethrows the error', async () => {
-    await prepareHome(context, undefined)
+    await prepareHome(context, undefined, true)
     writeEmptyProfile()
     writeProfileFiles(profileDir, [])
     const manifest = readFileSync(join(profileDir, 'package.json'), 'utf8')
@@ -285,7 +285,7 @@ describe('delorun plugin', () => {
   })
 
   it('resolves a removal, then installs and forgets the records of removed plugins', async () => {
-    await prepareHome(context, undefined)
+    await prepareHome(context, undefined, true)
     writeEmptyProfile()
     await plugin(['add', 'good-plugin'], context, dependencies([]))
     expect(existsSync(recordPath(profileDir, 'good-plugin'))).toBe(true)
@@ -300,7 +300,7 @@ describe('delorun plugin', () => {
   })
 
   it('checks an installation the person limited to the lockfile, and installs nothing', async () => {
-    await prepareHome(context, undefined)
+    await prepareHome(context, undefined, true)
     writeEmptyProfile()
     const runs: Run[] = []
     expect(await plugin(['add', 'good-plugin', '--lockfile-only'], context, dependencies(runs))).toBe(0)
@@ -320,7 +320,7 @@ describe('delorun plugin', () => {
     ['patch-commit', 'good-plugin'],
   ]) {
     it(`resolves, checks and then installs for ${argv.join(' ')}`, async () => {
-      await prepareHome(context, undefined)
+      await prepareHome(context, undefined, true)
       writeEmptyProfile()
       const runs: Run[] = []
       expect(await plugin(argv, context, dependencies(runs))).toBe(0)
@@ -329,7 +329,7 @@ describe('delorun plugin', () => {
   }
 
   it('checks nothing after a failed operation, or with the check switched off', async () => {
-    await prepareHome(context, undefined)
+    await prepareHome(context, undefined, true)
     writeEmptyProfile()
     const failed: PluginDependencies = { ...dependencies([]), runUpstream: () => Promise.resolve(7) }
     expect(await plugin(['add', 'good-plugin'], context, failed)).toBe(7)
@@ -373,7 +373,7 @@ describe('a build pnpm refuses, with the install check on', () => {
   const add = ['add', 'good-plugin']
 
   beforeEach(async () => {
-    await prepareHome(context, undefined)
+    await prepareHome(context, undefined, true)
     writeEmptyProfile()
   })
 
@@ -465,7 +465,7 @@ describe('a build pnpm refuses, with the install check on', () => {
 
 describe('a build pnpm refuses, with the install check off', () => {
   beforeEach(async () => {
-    await prepareHome(context, undefined)
+    await prepareHome(context, undefined, true)
     writeEmptyProfile()
   })
 
@@ -547,7 +547,7 @@ describe('delorun plugin with the real pnpm', { timeout: 120_000 }, () => {
   beforeEach(async () => {
     vi.stubEnv('DSH_HOME', delorunHome)
     vi.stubEnv('MARKER', join(osHome, 'postinstall-ran'))
-    await prepareHome(context, undefined)
+    await prepareHome(context, undefined, true)
     mkdirSync(profileDir, { recursive: true })
     writeFileSync(join(profileDir, 'package.json'), '{"name":"profile","private":true,"dependencies":{}}\n')
     writeFileSync(join(profileDir, 'pnpm-workspace.yaml'), `packages:\n  - .\nnodeLinker: hoisted\nautoInstallPeers: false\nstoreDir: ${join(osHome, 'pnpm-store')}\nallowBuilds:\n  evil-plugin: true\n`)

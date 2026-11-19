@@ -61,12 +61,12 @@ export interface PreparedHome {
  * changes something runs this before any upstream code.
  * @param context - the command's context.
  * @param profileFlag - the `--profile` value, if given.
- * @param allowSandboxView - whether the home's mode bits are not checked when this process runs inside a Delorun chat sandbox; `start`, `setup` and `update` pass false and always check.
+ * @param allowSandboxView - whether the home's mode bits are not checked when this process runs inside a Delorun chat sandbox; `start`, `setup`, `update` and the bare `delorun` pass false and always check; a call site passes true only where an agent runs the command inside a chat sandbox.
  * @returns the home and profile.
  * @throws {HomeLayoutError} for a refused home or a laxer home, `secrets/` or `run/<profile>/`.
  * @throws {CliError} for a refused profile name.
  */
-export async function prepareHome(context: CommandContext, profileFlag: string | undefined, allowSandboxView = true): Promise<PreparedHome> {
+export async function prepareHome(context: CommandContext, profileFlag: string | undefined, allowSandboxView: boolean): Promise<PreparedHome> {
   const profile = selectProfile(profileFlag, context.env)
   const home = await resolveDelorunHome(context.env)
   // Inside a Delorun chat sandbox bwrap shows the home's real 0700 as 0755, so the mode bits are not checked there.

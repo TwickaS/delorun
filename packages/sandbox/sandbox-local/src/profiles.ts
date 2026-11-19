@@ -218,7 +218,7 @@ export function resolveProtection(
   // Docker Desktop's bind mounts come and go; a tmpfs over one fails when it vanishes before bwrap runs, so a protected
   // home hides the whole root, whether or not an alias lies under it. Only a directory is hidden: an absent or other
   // root needs no mount argument.
-  if (home !== undefined && isDirectory(bindMountsRoot)) hiddenDirectories.add(bindMountsRoot)
+  if ((home !== undefined || settings.privateTmp) && isDirectory(bindMountsRoot)) hiddenDirectories.add(bindMountsRoot)
   return {
     home,
     homeAliases,

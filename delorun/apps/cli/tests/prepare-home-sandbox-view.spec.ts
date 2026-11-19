@@ -33,14 +33,14 @@ const context = (): Parameters<typeof prepareHome>[0] => ({ env: { DELORUN_HOME:
 
 describe('prepareHome inside a Delorun chat sandbox', () => {
   it('skips the mode bits only for a caller that opts in', async () => {
-    await expect(prepareHome(context(), undefined)).resolves.toMatchObject({ profile: expect.any(String) })
+    await expect(prepareHome(context(), undefined, true)).resolves.toMatchObject({ profile: expect.any(String) })
   })
 
   it('refuses a 0755 home when the caller does not opt in', async () => {
     await expect(prepareHome(context(), undefined, false)).rejects.toMatchObject({ code: 'HOME_MODE' })
   })
 
-  it.each(['start.ts', 'setup/index.ts', 'update/command.ts'])('%s passes false so it always checks the mode', file => {
+  it.each(['start.ts', 'setup/index.ts', 'update/command.ts', 'main.ts'])('%s passes false so it always checks the mode', file => {
     expect(readFileSync(join(import.meta.dirname, '../src', file), 'utf8')).toContain('prepareHome(context, values.profile, false)')
   })
 })

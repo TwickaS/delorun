@@ -25,6 +25,9 @@ import { bwrapProfileArgs, landlockProfileArgs, seatbeltProfileArgs } from '../s
 const RO: SandboxPolicy = { mode: 'read-only', workspaceRoot: '/ws' }
 const WW: SandboxPolicy = { mode: 'workspace-write', workspaceRoot: '/ws' }
 
+/** A `bwrap` probe verdict, as the test hook returns it. */
+type BwrapVerdict = boolean | 'timed-out' | 'resource-limit'
+
 /** Every temp dir created by this file (fake launchers and runner entries), removed after each test. */
 const tempDirs: string[] = []
 afterEach(() => {
@@ -341,6 +344,37 @@ describe('the platform chains', () => {
     await expect(plain.sandbox.confine(['true'], RO)).rejects.toThrow(expect.objectContaining({ transient: false }))
   })
 
+  it('two concurrent commands share one probe and get the same verdict', async () => {
+    let release: (value: BwrapVerdict) => void = () => {}
+    const probeBwrap = vi.fn(() => new Promise<BwrapVerdict>((resolve) => { release = resolve }))
+    const { sandbox } = await setup({ probeAttempts: 1 }, { platform: 'linux', probeBwrap, probeLandlock: () => 'unusable', bwrapInstalled: () => true })
+    const first = sandbox.confine(['true'], RO).catch((caught: unknown) => caught)
+    const second = sandbox.confine(['true'], WW).catch((caught: unknown) => caught)
+    await new Promise<void>(resolve => setTimeout(resolve, 5))
+    release('timed-out')
+    const [a, b] = await Promise.all([first, second])
+    expect(probeBwrap).toHaveBeenCalledTimes(1)
+    expect(a).toMatchObject({ name: 'SandboxUnavailableError', transient: true })
+    expect(b).toMatchObject({ name: 'SandboxUnavailableError', transient: true })
+  })
+
+  it('a Landlock fallback after a timed-out bwrap probe serves the command but is not cached', async () => {
+    const probeBwrap = vi.fn<() => BwrapVerdict>().mockReturnValueOnce('timed-out').mockReturnValue(true)
+    const { sandbox } = await setup({ probeAttempts: 1 }, { platform: 'linux', probeBwrap, probeLandlock: () => 'full' as const, landlockLauncher: fakeLauncher() })
+    expect((await sandbox.confine(['true'], RO)).argv.join(' ')).not.toContain('bwrap')
+    const next = await sandbox.confine(['true'], RO)
+    expect(probeBwrap).toHaveBeenCalledTimes(2)
+    expect(next.argv.join(' ')).toContain('bwrap')
+  })
+
+  it('a plain bwrap failure that falls through to Landlock is cached', async () => {
+    const probeBwrap = vi.fn(() => false)
+    const { sandbox } = await setup({ probeAttempts: 1 }, { platform: 'linux', probeBwrap, probeLandlock: () => 'full' as const, landlockLauncher: fakeLauncher() })
+    await sandbox.confine(['true'], RO)
+    await sandbox.confine(['true'], RO)
+    expect(probeBwrap).toHaveBeenCalledTimes(1)
+  })
+
   it('rejects a probeTimeoutMs above 60 000', async () => {
     await expect(setup({ probeTimeoutMs: 60_001 })).rejects.toThrow()
   })
@@ -449,7 +483,7 @@ describe('probeTimeoutMs config', () => {
   it('rejects 0 at construction: Node treats a 0 spawnSync timeout as UNBOUNDED, the opposite of the field', async () => {
     const ctx = new Context()
     await expect(ctx.plugin(LocalSandboxProvider, { probeTimeoutMs: 0 }))
-      .rejects.toThrow(/probeTimeoutMs must be a positive finite number/)
+      .rejects.toThrow(/probeTimeoutMs expected number >= 1/)
   })
 
   it('bounds the default probes: a launcher slower than the configured timeout reads as unusable', async () => {

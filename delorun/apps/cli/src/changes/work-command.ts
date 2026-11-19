@@ -223,7 +223,7 @@ export async function runWorkCommand(args: readonly string[], context: CommandCo
   const { request, profile: profileFlag } = requested(args)
   // The person must be at the terminal before anything is read or written, the home's tree included.
   const presence = attest()
-  const { home, profile } = await prepareHome(context, profileFlag)
+  const { home, profile } = await prepareHome(context, profileFlag, true)
   if (!hasCliProfile(home.path, profile)) throw new CliError(EXIT.failed, `delorun changes: the CLI profile ${profile} is not set up in ${home.path}; run: delorun setup`)
   const ctx: ChangesContext = { home: home.path, profile, profileDir: profileDirectory(home.path, profile), ...runningRelease() }
   const plugin = request.plugin
