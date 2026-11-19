@@ -187,6 +187,26 @@
     },
     {
       "area": "Install and update",
+      "section": "Added",
+      "text": "The recovery screen, which opens when the studio will not start, has **Roll back** next to Start in safe mode. It goes back to the release before the last update and says first that chats made since are set aside, not deleted; when the update took no copy of your chats it offers to go back with your settings only. It needs you at your computer, and a rollback waits for running chats to finish before Delorun restarts. **Leave safe mode** ends safe mode from the same screen."
+    },
+    {
+      "area": "Install and update",
+      "section": "Added",
+      "text": "Settings → Changes starts and ends safe mode with a button, so safe mode no longer needs a terminal. Starting it changes nothing until Delorun next starts."
+    },
+    {
+      "area": "Install and update",
+      "section": "Added",
+      "text": "Settings → Trash lists **Set aside by a rollback**: the chats a rollback moved out of use and the chat copies an update took, with their sizes. Each has a Remove button that asks first and, from a phone, needs the unlock you entered on it. Delorun never removes them on its own, and refuses to remove a copy a rollback of the last update still needs."
+    },
+    {
+      "area": "Install and update",
+      "section": "Added",
+      "text": "Update Delorun from the studio, with no terminal. The update notice in the sidebar has an **Update now…** button, and Settings → Updates shows the release that runs, **Check now** and the newer release. The report dialog lists each plugin the update would turn off and each item it changes, offers a copy of your chat data (ticked by default), asks you to confirm each item that needs it, and lets you wait for running chats or stop them. While it runs, a card shows the wait or the switch and the page reconnects by itself, then reloads once on the new release. If the new release does not work, a card says why and that Delorun went back; your chats are unchanged."
+    },
+    {
+      "area": "Install and update",
       "section": "Changed",
       "text": "`delorun update --report` and `delorun update` show, under a plugin the update turns off because its DeepSeek Harness version range excludes the new release, the command that accepts the risk for that exact version and say that the health check after the switch rolls the update back if the plugin then fails to load. A new guide page, \"Update Delorun with many plugins\", walks through saving, checking, updating and going back."
     },
@@ -224,6 +244,16 @@
       "area": "Install and update",
       "section": "Fixed",
       "text": "An update with the Claude Code plugin installed completes again. The two previous previews were built without the fix and went back to the release before."
+    },
+    {
+      "area": "Install and update",
+      "section": "Fixed",
+      "text": "An update whose new release fails its health check leaves the previous release running again, with its plugin copies pointed at it, instead of stopping Delorun until you start it by hand."
+    },
+    {
+      "area": "Install and update",
+      "section": "Fixed",
+      "text": "A chat-data registration left behind before a restart no longer blocks `delorun update`. An update run from release 0.1.0-preview.1.10 or earlier can still be refused."
     },
     {
       "area": "Install and update",
@@ -1262,6 +1292,16 @@
     },
     {
       "area": "Studio",
+      "section": "Changed",
+      "text": "PINs and pairing codes are entered in large digit cells that fill the width of the screen, on a phone and on a desktop dialog alike. Under the cells is one real field, so pasting a whole code, autofill, backspace and screen readers work as in any field. A wrong entry turns the cells red and shakes them, unless your system asks for less motion. The setup step, the lock screen, the pairing-code box and the unlock-request rows share the one design."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "In the sidebar, the Working group is pinned to the bottom edge, just above the footer, and is always in view while chats run. The chat list, Snoozed and Settled scroll above it; Working takes up to 40% of the sidebar, scrolls by itself when long and takes no space when nothing is running. Keyboard, screen-reader and Alt number-jump order follow the same order."
+    },
+    {
+      "area": "Studio",
       "section": "Fixed",
       "text": "Searching the sidebar now finds words inside chats. Before, the search showed \"Messages could not be searched.\" because the index it reads was switched off. The index is built in memory from your own chats when you first search; it sends nothing anywhere and leaves no copy of your chats on disk."
     },
@@ -1274,6 +1314,16 @@
       "area": "Studio",
       "section": "Fixed",
       "text": "The studio's tab icon is Delorun's on every page, including the sign-in page over Tailscale, and a plain icon file and `favicon.ico` replace a stale icon a browser kept from another app on the same address. The installed web app is named Delorun."
+    },
+    {
+      "area": "Studio",
+      "section": "Fixed",
+      "text": "On an iPhone, Safari's top and bottom bars now take the studio's colour in light and dark. The edge strips that Safari reads its tint from were hidden behind the page background; they now show, and follow the theme and accent when you change them."
+    },
+    {
+      "area": "Studio",
+      "section": "Fixed",
+      "text": "On an iPhone, typing in a field no longer zooms the page in. Every text field, text area, selector and editable region, including the composer, answers, search, Settings and code entry, is at least 16px on touch screens. Pinch zoom still works."
     },
     {
       "area": "Studio",
@@ -2617,6 +2667,68 @@
     }
   ],
   "versions": [
+    {
+      "version": "0.1.0-preview.1.14",
+      "date": "2026-11-19",
+      "preview": true,
+      "areas": [
+        {
+          "area": "Install and update",
+          "items": [
+            {
+              "section": "Added",
+              "text": "The recovery screen, which opens when the studio will not start, has **Roll back** next to Start in safe mode. It goes back to the release before the last update and says first that chats made since are set aside, not deleted; when the update took no copy of your chats it offers to go back with your settings only. It needs you at your computer, and a rollback waits for running chats to finish before Delorun restarts. **Leave safe mode** ends safe mode from the same screen."
+            },
+            {
+              "section": "Added",
+              "text": "Settings → Changes starts and ends safe mode with a button, so safe mode no longer needs a terminal. Starting it changes nothing until Delorun next starts."
+            },
+            {
+              "section": "Added",
+              "text": "Settings → Trash lists **Set aside by a rollback**: the chats a rollback moved out of use and the chat copies an update took, with their sizes. Each has a Remove button that asks first and, from a phone, needs the unlock you entered on it. Delorun never removes them on its own, and refuses to remove a copy a rollback of the last update still needs."
+            },
+            {
+              "section": "Added",
+              "text": "Update Delorun from the studio, with no terminal. The update notice in the sidebar has an **Update now…** button, and Settings → Updates shows the release that runs, **Check now** and the newer release. The report dialog lists each plugin the update would turn off and each item it changes, offers a copy of your chat data (ticked by default), asks you to confirm each item that needs it, and lets you wait for running chats or stop them. While it runs, a card shows the wait or the switch and the page reconnects by itself, then reloads once on the new release. If the new release does not work, a card says why and that Delorun went back; your chats are unchanged."
+            },
+            {
+              "section": "Fixed",
+              "text": "An update whose new release fails its health check leaves the previous release running again, with its plugin copies pointed at it, instead of stopping Delorun until you start it by hand."
+            },
+            {
+              "section": "Fixed",
+              "text": "A chat-data registration left behind before a restart no longer blocks `delorun update`. An update run from release 0.1.0-preview.1.10 or earlier can still be refused."
+            }
+          ]
+        },
+        {
+          "area": "Studio",
+          "items": [
+            {
+              "section": "Changed",
+              "text": "PINs and pairing codes are entered in large digit cells that fill the width of the screen, on a phone and on a desktop dialog alike. Under the cells is one real field, so pasting a whole code, autofill, backspace and screen readers work as in any field. A wrong entry turns the cells red and shakes them, unless your system asks for less motion. The setup step, the lock screen, the pairing-code box and the unlock-request rows share the one design."
+            },
+            {
+              "section": "Changed",
+              "text": "In the sidebar, the Working group is pinned to the bottom edge, just above the footer, and is always in view while chats run. The chat list, Snoozed and Settled scroll above it; Working takes up to 40% of the sidebar, scrolls by itself when long and takes no space when nothing is running. Keyboard, screen-reader and Alt number-jump order follow the same order."
+            },
+            {
+              "section": "Fixed",
+              "text": "On an iPhone, Safari's top and bottom bars now take the studio's colour in light and dark. The edge strips that Safari reads its tint from were hidden behind the page background; they now show, and follow the theme and accent when you change them."
+            },
+            {
+              "section": "Fixed",
+              "text": "On an iPhone, typing in a field no longer zooms the page in. Every text field, text area, selector and editable region, including the composer, answers, search, Settings and code entry, is at least 16px on touch screens. Pinch zoom still works."
+            }
+          ]
+        }
+      ],
+      "fromUpstream": {
+        "ref": "dsh-v0.2.2-rc.3",
+        "items": []
+      },
+      "previews": []
+    },
     {
       "version": "0.1.0-preview.1.13",
       "date": "2026-11-18",
