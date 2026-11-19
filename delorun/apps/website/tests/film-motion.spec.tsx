@@ -58,12 +58,10 @@ describe('the film', () => {
     expect(document.querySelector<HTMLElement>('[data-active="true"] img')?.style.transform).toBe(later)
   })
 
-  it('has one picture per chapter that can be enlarged, and names the chapters for screen readers', async () => {
+  it('has one picture per chapter, and names the chapters for screen readers', async () => {
     browser(true)
     await transformAfter(0)
-    const buttons = [...document.querySelectorAll('button')]
-    expect(buttons.length).toBeGreaterThanOrEqual(4)
-    for (const button of buttons) expect(button.getAttribute('aria-label')).toMatch(/^Enlarge: /)
+    expect(document.querySelectorAll('[data-shot]').length).toBeGreaterThanOrEqual(4)
     expect(document.querySelector('section')?.getAttribute('aria-labelledby')).toBe('film')
   })
 })

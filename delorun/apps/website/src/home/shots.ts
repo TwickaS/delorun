@@ -133,6 +133,12 @@ export const SIZES: Readonly<Record<Device, { readonly width: number; readonly h
   phone: { width: 390, height: 844 },
 }
 
+/** A picture's size in CSS pixels: half the pixels of its 2× capture. */
+export interface Size {
+  readonly width: number
+  readonly height: number
+}
+
 /** One chapter of the film: a picture, where the camera pushes in, and what it says. */
 export interface Chapter {
   readonly id: string
@@ -144,17 +150,24 @@ export interface Chapter {
   readonly focus: readonly [number, number]
   /** How far the camera pushes in on a wide screen. */
   readonly zoom: number
+  /** The wide picture's size, which differs from the full window where the capture was cropped to the part that matters. */
+  readonly size: Size
   /** The dark capture of the same moment, and its focus point when it differs. */
   readonly dark?: { readonly id: string; readonly focus?: readonly [number, number] }
-  /** The phone capture of the same moment (a picture in the pyramid), and the height (a fraction) the camera centres on. */
-  readonly phone: { readonly file: string; readonly focusY: number }
+  /** The phone capture of the same moment (a picture in the pyramid) with its dark capture and size, and the height (a fraction) the camera centres on. */
+  readonly phone: { readonly file: string; readonly dark?: string; readonly size: Size; readonly focusY: number }
 }
+
+/** The size of a capture that shows the whole window. */
+const WINDOW: Size = SIZES.computer
 
 /** The film: one real job from ask to answer, then Delorun changing itself. */
 export const FILM: readonly Chapter[] = [
-  { id: 'handoff-light', line: 'You ask in plain words.', detail: 'Run the project’s tests and tell me which pass. Delorun hands the job to Claude Code.', time: '21:29', focus: [0.56, 0.2], zoom: 1.35, dark: { id: 'handoff-dark' }, phone: { file: 'film-lead-handoff-390-light', focusY: 0.2 } },
-  { id: 'approval-light', line: 'It asks before it acts.', detail: 'A command its settings do not allow waits for you: once, for this run, or not at all.', time: '21:29', focus: [0.59, 0.86], zoom: 1.6, dark: { id: 'approval-dark' }, phone: { file: 'film-approval-computer-390-light', focusY: 0.86 } },
-  { id: 'agents-light', line: 'You watch it work.', detail: 'Every step is in the chat as it happens, and the agent it handed work to keeps its own chat.', time: '21:32', focus: [0.555, 0.4], zoom: 1.4, dark: { id: 'agents-dark' }, phone: { file: 'film-lead-handoff-390-light', focusY: 0.58 } },
-  { id: 'answer-light', line: 'It tells you what happened.', detail: 'All 12 tests pass, in 2 minutes 13 seconds, with every step kept.', time: '21:32', focus: [0.585, 0.66], zoom: 1.55, dark: { id: 'handoff-dark', focus: [0.585, 0.62] }, phone: { file: 'film-child-finished-390-light', focusY: 0.66 } },
-  { id: 'changes-restart', line: 'It can change itself, too.', detail: 'Edits to Delorun’s own files wait for your review and run after a restart you choose. By default, a phone cannot change them.', focus: [0.54, 0.5], zoom: 1.15, phone: { file: 'film-changes-phone-390', focusY: 0.3 } },
+  { id: 'film-handoff-working-light', line: 'You ask in plain words.', detail: 'Hand this task to Claude Code: run the project tests and report which pass. Delorun hands the job over.', time: '17:20', focus: [0.6, 0.3], zoom: 1.35, size: WINDOW, dark: { id: 'film-handoff-working-dark' }, phone: { file: 'film-handoff-working-390-light', dark: 'film-handoff-working-390-dark', size: { width: 390, height: 712 }, focusY: 0.25 } },
+  { id: 'film-handoff-consent-light', line: 'It asks before it starts.', detail: 'Claude Code runs as its own program outside Delorun’s sandbox, so Delorun asks first: once, for this workspace, or not at all.', time: '17:20', focus: [0.585, 0.8], zoom: 1.5, size: WINDOW, dark: { id: 'film-handoff-consent-dark' }, phone: { file: 'film-handoff-consent-390-light', dark: 'film-handoff-consent-390-dark', size: { width: 390, height: 808 }, focusY: 0.7 } },
+  { id: 'film-agent-steps-light', line: 'You watch it work.', detail: 'Claude Code’s own chat shows every step it takes, as it happens.', focus: [0.5, 0.5], zoom: 1.1, size: { width: 1176.5, height: 600 }, dark: { id: 'film-agent-steps-dark' }, phone: { file: 'film-agent-steps-390-light', dark: 'film-agent-steps-390-dark', size: { width: 390, height: 844 }, focusY: 0.6 } },
+  { id: 'film-approval-light', line: 'It asks before it acts.', detail: 'A command its settings do not allow waits for you: once, for this run, or not at all.', focus: [0.5, 0.5], zoom: 1.25, size: { width: 1176.5, height: 735.5 }, dark: { id: 'film-approval-dark' }, phone: { file: 'film-approval-390-light', dark: 'film-approval-390-dark', size: { width: 390, height: 487.5 }, focusY: 0.5 } },
+  { id: 'film-agent-finished-light', line: 'It finishes the job.', detail: 'Claude Code’s chat shows it done: 12 of 12 tests pass.', time: '17:31', focus: [0.55, 0.45], zoom: 1.3, size: WINDOW, dark: { id: 'film-agent-finished-dark' }, phone: { file: 'film-agent-finished-390-light', dark: 'film-agent-finished-390-dark', size: { width: 390, height: 844 }, focusY: 0.5 } },
+  { id: 'film-answer-light', line: 'It tells you what happened.', detail: 'Delorun reports that all 12 tests pass, and every step is kept.', time: '17:31', focus: [0.585, 0.36], zoom: 1.55, size: WINDOW, dark: { id: 'film-answer-dark' }, phone: { file: 'film-answer-390-light', dark: 'film-answer-390-dark', size: { width: 390, height: 712 }, focusY: 0.35 } },
+  { id: 'changes-restart', line: 'It can change itself, too.', detail: 'Edits to Delorun’s own files wait for your review and run after a restart you choose. By default, a phone cannot change them.', focus: [0.54, 0.5], zoom: 1.15, size: WINDOW, phone: { file: 'film-changes-phone-390', size: SIZES.phone, focusY: 0.3 } },
 ]

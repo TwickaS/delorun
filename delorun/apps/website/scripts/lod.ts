@@ -41,7 +41,7 @@ interface Picture {
 const PICTURES: readonly Picture[] = [...new Map<string, Picture>([
   ...SHOTS.map(shot => [shot.id, shot] as const),
   ...FILM.flatMap(chapter => [chapter.id, ...(chapter.dark === undefined ? [] : [chapter.dark.id])].map(id => [id, { id, device: 'computer' }] as const)),
-  ...FILM.map(chapter => [chapter.phone.file, { id: chapter.phone.file, device: 'phone' }] as const),
+  ...FILM.flatMap(chapter => [chapter.phone.file, ...(chapter.phone.dark === undefined ? [] : [chapter.phone.dark])].map(id => [id, { id, device: 'phone' }] as const)),
 ].reverse()).values()].reverse()
 
 const run = promisify(execFile)

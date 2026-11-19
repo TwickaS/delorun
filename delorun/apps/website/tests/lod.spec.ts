@@ -34,7 +34,7 @@ describe('the addresses of the pyramid', () => {
   })
 
   it('cover every picture of the wall and the film', () => {
-    const ids = [...SHOTS.map(shot => shot.id), ...FILM.flatMap(chapter => [chapter.id, chapter.phone.file, ...(chapter.dark === undefined ? [] : [chapter.dark.id])])]
+    const ids = [...SHOTS.map(shot => shot.id), ...FILM.flatMap(chapter => [chapter.id, chapter.phone.file, ...(chapter.phone.dark === undefined ? [] : [chapter.phone.dark]), ...(chapter.dark === undefined ? [] : [chapter.dark.id])])]
     for (const id of ids) expect(LOD_TILES[id], id).toBeDefined()
   })
 

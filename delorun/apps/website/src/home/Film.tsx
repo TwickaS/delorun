@@ -1,5 +1,5 @@
 /**
- * The film: one real job told in five real screenshots on a stage that stays in place while the page scrolls. Each
+ * The film: one real job told in six real screenshots, then Delorun changing itself, on a stage that stays in place while the page scrolls. Each
  * chapter cuts to its picture wide, then the camera pushes in on the part that matters, while the clock shows the time
  * printed on that screenshot. The first push waits until the stage has reached the top of the window, so a section
  * above can hand over to the first picture as it stands before the push.
@@ -7,10 +7,9 @@
  * @module @delorun/website/home/film
  */
 import { useEffect, useRef, useState } from 'react'
-import { useOpenShot } from './Lightbox.tsx'
 import { MS } from './motion.ts'
 import { lodUrl } from './pictures.ts'
-import { FILM, SIZES, type Chapter } from './shots.ts'
+import { FILM, type Chapter } from './shots.ts'
 import s from './home.module.css'
 
 /**
@@ -22,7 +21,7 @@ import s from './home.module.css'
  */
 function camera(chapter: Chapter, stage: { width: number; height: number }, push: boolean, dark = false): string {
   const narrow = stage.width < 640
-  const { width: iw, height: ih } = narrow ? SIZES.phone : SIZES.computer
+  const { width: iw, height: ih } = narrow ? chapter.phone.size : chapter.size
   const cover = Math.max(stage.width / iw, stage.height / ih)
   // A phone capture already reads at this size, so on a phone the camera tilts down to the moment instead of pushing in.
   const scale = cover * (push && !narrow ? chapter.zoom : 1)
@@ -50,7 +49,6 @@ export function Film({ id, heading }: { id: string; heading: string }) {
   const [stage, setStage] = useState<{ width: number; height: number } | undefined>(undefined)
   const markers = useRef<(HTMLDivElement | null)[]>([])
   const frame = useRef<HTMLDivElement>(null)
-  const open = useOpenShot()
 
   useEffect(() => {
     const element = frame.current
@@ -97,39 +95,43 @@ export function Film({ id, heading }: { id: string; heading: string }) {
       <div className={s.filmSticky}>
         <div className={s.filmFrame} ref={frame} data-handover="">
           {FILM.map((each, index) => (
-            <button
+            <div
               key={each.id + index}
-              type="button"
               className={s.filmShot}
               data-active={index === active}
               data-shot={each.id}
-              tabIndex={index === active ? 0 : -1}
               aria-hidden={index !== active}
-              aria-label={`Enlarge: ${each.line}`}
-              onClick={event => open(each.id, event.currentTarget)}
             >
               {narrow
                 ? (
-                    <picture className={s.pictureContents}>
-                      <source type="image/avif" srcSet={lodUrl(each.phone.file, 3, 'avif')} />
-                      <img loading="lazy" src={lodUrl(each.phone.file, 3, 'webp')} alt="" draggable={false} style={stage === undefined ? undefined : { ...SIZES.phone, transform: camera(each, stage, index === active && pushed) }} />
-                    </picture>
+                    <>
+                      <picture className={s.pictureContents}>
+                        <source type="image/avif" srcSet={lodUrl(each.phone.file, 3, 'avif')} />
+                        <img loading="lazy" src={lodUrl(each.phone.file, 3, 'webp')} alt="" draggable={false} className={each.phone.dark === undefined ? undefined : s.lightOnly} style={stage === undefined ? undefined : { ...each.phone.size, transform: camera(each, stage, index === active && pushed) }} />
+                      </picture>
+                      {each.phone.dark === undefined ? null : (
+                        <picture className={s.pictureContents}>
+                          <source type="image/avif" srcSet={lodUrl(each.phone.dark, 3, 'avif')} />
+                          <img loading="lazy" src={lodUrl(each.phone.dark, 3, 'webp')} alt="" draggable={false} className={s.darkOnly} style={stage === undefined ? undefined : { ...each.phone.size, transform: camera(each, stage, index === active && pushed) }} />
+                        </picture>
+                      )}
+                    </>
                   )
                 : (
                     <>
                       <picture className={s.pictureContents}>
                         <source type="image/avif" srcSet={lodUrl(each.id, 3, 'avif')} />
-                        <img loading="lazy" src={lodUrl(each.id, 3, 'webp')} alt="" draggable={false} className={each.dark === undefined ? undefined : s.lightOnly} style={stage === undefined ? undefined : { ...SIZES.computer, transform: camera(each, stage, index === active && pushed) }} />
+                        <img loading="lazy" src={lodUrl(each.id, 3, 'webp')} alt="" draggable={false} className={each.dark === undefined ? undefined : s.lightOnly} style={stage === undefined ? undefined : { ...each.size, transform: camera(each, stage, index === active && pushed) }} />
                       </picture>
                       {each.dark === undefined ? null : (
                         <picture className={s.pictureContents}>
                           <source type="image/avif" srcSet={lodUrl(each.dark.id, 3, 'avif')} />
-                          <img loading="lazy" src={lodUrl(each.dark.id, 3, 'webp')} alt="" draggable={false} className={s.darkOnly} style={stage === undefined ? undefined : { ...SIZES.computer, transform: camera(each, stage, index === active && pushed, true) }} />
+                          <img loading="lazy" src={lodUrl(each.dark.id, 3, 'webp')} alt="" draggable={false} className={s.darkOnly} style={stage === undefined ? undefined : { ...each.size, transform: camera(each, stage, index === active && pushed, true) }} />
                         </picture>
                       )}
                     </>
                   )}
-            </button>
+            </div>
           ))}
         </div>
         <div className={s.filmCaption}>
