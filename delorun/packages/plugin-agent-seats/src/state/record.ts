@@ -3,7 +3,7 @@
  * an archive restore and a fork carry them with the rest of the log; the `agentSeat` projection folds them.
  * @module @delorun/plugin-agent-seats/state/record
  */
-import type { SeatModelPicker, SeatViewState } from './view.ts'
+import type { SeatModelPicker, SeatSandbox, SeatViewState } from './view.ts'
 
 /** The plugin record type of the seat state. */
 export const SEAT_STATE_RECORD = 'plugin:delorun/agent-seat/state'
@@ -47,8 +47,8 @@ export interface SeatStatusRecordData {
   readonly weeklyPercent?: number
   /** When the 5-hour window resets, epoch milliseconds; stays as it was when absent. */
   readonly fiveHourResetAt?: number
-  /** Whether the program's own sandbox confines it at its level, as of its start; a `starting` record clears it. */
-  readonly sandboxed?: boolean
+  /** What the program's own sandbox does at its level, as of its start; a `starting` record clears it. */
+  readonly sandbox?: SeatSandbox
   /** While `limit`: when the limit lifts, epoch milliseconds. */
   readonly resetAt?: number
   /** While `ended`: the plain-words reason. */

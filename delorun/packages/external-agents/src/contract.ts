@@ -207,16 +207,19 @@ export interface ProgramOpenRequest {
  */
 export type ProgramInterruptOutcome = 'interrupted' | 'closed'
 
+/** What a program's own sandbox does at its level; see {@link ProgramSession.sandbox}. */
+export type ProgramSandbox = 'on' | 'off' | 'own'
+
 /** One open program session. */
 export interface ProgramSession {
   /** The program's own session or thread id, which `resume` takes. */
   readonly programSessionId: string
   /**
-   * Whether the program's own OS sandbox confines its commands and file writes at the level it runs at; false, or absent,
-   * means none does (the person's own settings, Unrestricted, or a level whose sandbox tools this computer lacks). The seat's
-   * banner shows it.
+   * What the program's own sandbox does at the level it runs at: `on` when it confines the program's commands and file
+   * writes, `off` when none does (Unrestricted, or a level whose sandbox tools this computer lacks), `own` when the person's
+   * own settings decide and Delorun cannot see which. Absent counts as `off`. The seat's banner shows it.
    */
-  readonly sandboxed?: boolean | undefined
+  readonly sandbox?: ProgramSandbox | undefined
   /** Whether a program turn is running now. */
   readonly turnRunning: boolean
   /**

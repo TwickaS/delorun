@@ -26,6 +26,9 @@ export interface SeatModelPicker {
 /** The agent's state, in the words the chat shows. */
 export type SeatViewState = 'starting' | 'working' | 'idle' | 'limit' | 'not-signed-in' | 'model-needed' | 'ended'
 
+/** What a program's own sandbox does at its level: on, off, or left to the person's own settings. */
+export type SeatSandbox = 'on' | 'off' | 'own'
+
 /** What the chat knows about its live agent. Same fields as the client's `AgentSeatView` (ea2/chat). */
 export interface AgentSeatView {
   /** Which program runs this chat. */
@@ -34,8 +37,8 @@ export interface AgentSeatView {
   readonly version?: string
   /** A short name for the program's own settings, such as `accept edits`. */
   readonly ownSettings: string
-  /** Whether the program's own sandbox confines it at its level; absent until the program has started. */
-  readonly sandbox?: 'on' | 'off'
+  /** What the program's own sandbox does at its level: on, off, or decided by the person's own settings; absent until the program has started. */
+  readonly sandbox?: SeatSandbox
   /** The agent's state. */
   readonly state: SeatViewState
   /** The plan's name, such as `Max`, when known. */

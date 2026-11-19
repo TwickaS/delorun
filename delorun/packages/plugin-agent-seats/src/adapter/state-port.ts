@@ -4,7 +4,7 @@
  * know where the state is kept.
  * @module @delorun/plugin-agent-seats/adapter/state-port
  */
-import type { ExternalAgentName, OfferedModel, ProgramFailure, SessionId } from '@delorun/external-agents/contract'
+import type { ExternalAgentName, OfferedModel, ProgramFailure, ProgramSandbox, SessionId } from '@delorun/external-agents/contract'
 
 /** A seat's logged state: which program session backs it (absent after an unreadable resume, so the next message starts a fresh one) and how far input has reached the program. */
 export interface SeatState {
@@ -80,7 +80,7 @@ export interface SeatAdapterEvents {
    * The program answered the start, so the chat is working.
    * @param child - the seat child.
    */
-  onStarted?(child: SessionId, started: { readonly sandboxed: boolean }): void
+  onStarted?(child: SessionId, started: { readonly sandbox: ProgramSandbox }): void
   /**
    * The start ended without a program, whether the gate refused it or it failed, so the "Starting …" state ends. The
    * turn's own failure follows through {@link onTurnFailure} when it is one the chat shows.

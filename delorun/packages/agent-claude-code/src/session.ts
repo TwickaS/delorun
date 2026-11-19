@@ -16,7 +16,7 @@ import type { TokenUsage } from '@deepseek-ai/dsh-llm'
 import { isAgentSignInFailure } from '@deepseek-ai/dsh-subagent'
 import { ClaudeCodeDriverError } from './errors.ts'
 import { runObservation } from './limits.ts'
-import type { AccountObservation, OfferedModel, ProgramEvent, ProgramFailure, ProgramInterruptOutcome, ProgramSession } from '@delorun/external-agents/contract'
+import type { AccountObservation, OfferedModel, ProgramEvent, ProgramFailure, ProgramInterruptOutcome, ProgramSandbox, ProgramSession } from '@delorun/external-agents/contract'
 import { Queue } from './queue.ts'
 import type { ClaudeQuery } from './sdk.ts'
 
@@ -143,8 +143,8 @@ export class ClaudeCodeSession implements ProgramSession {
   get programSessionId(): string { return this.#programSessionId }
   /** Whether a program turn is running. */
   get turnRunning(): boolean { return this.#running }
-  /** Whether Claude Code's own sandbox is on at the level; see `ProgramSession.sandboxed`. */
-  sandboxed = false
+  /** What Claude Code's own sandbox does at the level; see `ProgramSession.sandbox`. */
+  sandbox: ProgramSandbox = 'off'
 
   /**
    * The input the query reads: one SDK user message per {@link ClaudeCodeSession.send}, ending at close.

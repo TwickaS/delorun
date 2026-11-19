@@ -9,7 +9,7 @@ import type { SeatState, SeatStateStore } from '../adapter/state-port.ts'
 import type { SeatProjectionState } from './fold.ts'
 import { viewOf } from './fold.ts'
 import { SEAT_NOTICE_RECORD, SEAT_STATE_RECORD, SEAT_STATUS_RECORD, type SeatNoticeKind } from './record.ts'
-import type { AgentSeatView, SeatModelPicker, SeatViewState } from './view.ts'
+import type { AgentSeatView, SeatModelPicker, SeatSandbox, SeatViewState } from './view.ts'
 
 /** Where the store finds a seat child's Session. */
 export interface SeatSessions {
@@ -47,8 +47,8 @@ export interface StatusChange extends AccountFigures {
   readonly version?: string
   /** A short name for the program's own settings. */
   readonly ownSettings?: string
-  /** Whether the program's own sandbox confines it at its level, as of its start; a `starting` record clears it. */
-  readonly sandboxed?: boolean
+  /** What the program's own sandbox does at its level, as of its start; a `starting` record clears it. */
+  readonly sandbox?: SeatSandbox
   /** While `limit`: when the limit lifts, epoch milliseconds. */
   readonly resetAt?: number
   /** While `ended`: the plain-words reason. */

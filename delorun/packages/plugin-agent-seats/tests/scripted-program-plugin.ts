@@ -33,8 +33,8 @@ export interface ScriptedProgramConfig {
   readonly provider: ExternalAgentName
   /** The steps of each program turn, in order. */
   readonly turns: readonly (readonly ScriptStep[])[]
-  /** Whether the scripted program reports its own sandbox as on. */
-  readonly sandboxed?: boolean
+  /** What the scripted program reports for its own sandbox; absent means off. */
+  readonly sandbox?: 'on' | 'off' | 'own'
   /** What `probe` reports; absent means signed in with no limits. */
   readonly account?: Omit<AccountObservation, 'provider' | 'source'>
   /** Makes `open` fail with this limit, so a start ends as a reached plan limit. */
@@ -53,7 +53,7 @@ export const inject = ['externalAgents']
 class ScriptedSession implements ProgramSession {
   readonly programSessionId: string
   turnRunning = false
-  sandboxed = false
+  sandbox: 'on' | 'off' | 'own' = 'off'
   private readonly request: ProgramOpenRequest
   private readonly turns: readonly (readonly ScriptStep[])[]
   private turn = 0
@@ -172,7 +172,7 @@ export function apply(ctx: Context, config: ScriptedProgramConfig): void {
       }
       opened++
       const session = new ScriptedSession(request, config.turns, request.resume ?? `program-${config.provider}-${opened}`)
-      session.sandboxed = config.sandboxed === true
+      session.sandbox = config.sandbox ?? 'off'
       return Promise.resolve(session)
     },
     probe: () => Promise.resolve({ provider: config.provider, signedIn: 'yes', windows: [], source: 'probe', ...config.account }),

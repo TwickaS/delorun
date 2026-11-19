@@ -62,7 +62,7 @@ function fakeProcess(spec: SubprocessSpawnSpec, pid?: number): FakeProcess {
 /** One scripted program session. */
 class ScriptedSession implements ProgramSession {
   readonly programSessionId = 'program-1'
-  sandboxed: boolean | undefined
+  sandbox: 'on' | 'off' | 'own' | undefined
   turnRunning = false
   closed = false
   honoursInterrupt = true
@@ -321,9 +321,9 @@ describe('the consent a seat start needs (review D6)', () => {
     expect(w.consent.reviews.map(review => [review.phase, review.root.id, review.creator.id, review.child.id])).toEqual([['hand-off', 'root', 'root', 'seat']])
     expect(w.driver.opens).toHaveLength(1)
     expect(session.programSessionId).toBe('program-1')
-    expect(session.sandboxed).toBeUndefined()
-    w.driver.sessions[0]!.sandboxed = true
-    expect(session.sandboxed).toBe(true)
+    expect(session.sandbox).toBeUndefined()
+    w.driver.sessions[0]!.sandbox = 'own'
+    expect(session.sandbox).toBe('own')
     expect(session.allowedBy).toBe('asked')
     expect(w.gate.seat(w.seat.id)).toEqual({ child: 'seat', root: 'root', provider: 'claude-code' })
   })

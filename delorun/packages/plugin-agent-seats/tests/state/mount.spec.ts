@@ -51,7 +51,7 @@ describe('while a turn runs', () => {
   it('records whether the program\'s own sandbox was on at its start, and shows nothing before then', async () => {
     const w = await stateWorld()
     const program = new ScriptedProgram()
-    program.sandboxed = true
+    program.sandbox = 'on'
     const before: Array<string | undefined> = []
     w.gate.next = () => {
       before.push(view(w)?.sandbox)
@@ -504,7 +504,7 @@ describe('what the adapter reports about a program that cannot start', () => {
     const plain = w.ctx.sessions.create().header.id
     w.mount.store.write(plain, { programSessionId: 'program-1' })
     w.mount.events.onStarting?.(plain, 'claude-code')
-    w.mount.events.onStarted?.(plain, { sandboxed: false })
+    w.mount.events.onStarted?.(plain, { sandbox: 'off' })
     await tick()
     expect(w.warnings).toEqual([])
   })
@@ -514,7 +514,7 @@ describe('what the adapter reports about a program that cannot start', () => {
     w.mount.store.write(w.child, { programSessionId: 'program-1' })
     w.mount.events.onStarting?.(w.child, 'claude-code')
     w.mount.store.write(w.child, {})
-    w.mount.events.onStarted?.(w.child, { sandboxed: false })
+    w.mount.events.onStarted?.(w.child, { sandbox: 'off' })
     await tick()
     expect(w.warnings).toEqual([])
   })

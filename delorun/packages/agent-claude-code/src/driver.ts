@@ -121,7 +121,7 @@ export class ClaudeCodeDriver implements ExternalAgentDriver {
       supportedDialogKinds: SUPPORTED_DIALOG_KINDS,
       spawnClaudeCodeProcess: this.#spawnOption(request.spawn),
     }
-    session.sandboxed = level.sandbox?.enabled === true
+    session.sandbox = request.level === 'own' ? 'own' : level.sandbox?.enabled === true ? 'on' : 'off'
     session.attach(sdk.query({ prompt: session.inputStream(), options }))
     request.signal.addEventListener('abort', () => { void session.close() }, { once: true })
     return session

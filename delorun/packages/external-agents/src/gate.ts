@@ -20,7 +20,7 @@ import { SENSITIVE_ENV_PATTERN, type SubprocessHandle } from '@deepseek-ai/dsh-s
 import {
   DELEGATION_CONSENT_ROW_ID, GateRefusedError, type AgentLevel, type AccountObservation, type ExternalAgentDriver, type ExternalAgentName,
   type ExternalAgentsGate, type ProgramApprovalAnswer, type ProgramApprovalRequest, type ProgramEvent,
-  type ProgramInterruptOutcome, type ProgramSession, type ProgramSpawn, type ProgramSpawnRequest, type SeatConsent, type SeatSession,
+  type ProgramInterruptOutcome, type ProgramSandbox, type ProgramSession, type ProgramSpawn, type ProgramSpawnRequest, type SeatConsent, type SeatSession,
   type SeatRecord, type SeatReviewPhase, type SeatStartRequest,
 } from './contract.ts'
 import { consentMissingRefusal, consentRowDisabledRefusal, limitRefusal, noRootRefusal } from './copy.ts'
@@ -632,8 +632,8 @@ class GateSession implements SeatSession {
     return this.inner.programSessionId
   }
 
-  get sandboxed(): boolean | undefined {
-    return this.inner.sandboxed
+  get sandbox(): ProgramSandbox | undefined {
+    return this.inner.sandbox
   }
 
   get turnRunning(): boolean {

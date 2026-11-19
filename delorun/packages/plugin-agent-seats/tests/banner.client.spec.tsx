@@ -42,7 +42,7 @@ describe('the opening card', () => {
     expect(screen.getByText('This agent is Claude Code, running outside Delorun')).toBeTruthy()
   })
 
-  it.for([['on', 'Sandboxed', 'No sandbox'], ['off', 'No sandbox', 'Sandboxed']] as const)('says on the card and on the one line that the agent\'s own sandbox is %s', ([sandbox, shown, hidden]) => {
+  it.for([['on', 'Sandboxed', 'No sandbox'], ['off', 'No sandbox', 'Sandboxed'], ['own', 'Own sandbox settings', 'No sandbox']] as const)('says on the card and on the one line that the agent\'s own sandbox is %s', ([sandbox, shown, hidden]) => {
     const { unmount } = banner({ ...base, sandbox })
     expect(screen.getByText(shown)).toBeTruthy()
     expect(screen.queryByText(hidden)).toBeNull()
@@ -50,6 +50,12 @@ describe('the opening card', () => {
     banner({ ...base, sandbox, turns: 1 })
     expect(screen.getByText(shown)).toBeTruthy()
     expect(screen.queryByText(hidden)).toBeNull()
+  })
+
+  it('does not warn about a sandbox the person\'s own settings decide', () => {
+    const { container } = banner({ ...base, sandbox: 'own' })
+    const warned = [...container.querySelectorAll('li')].filter(item => item.className.includes('chipWarn')).map(item => item.textContent)
+    expect(warned).not.toContain('Own sandbox settings')
   })
 
   it('shows no sandbox chip before the program has started', () => {

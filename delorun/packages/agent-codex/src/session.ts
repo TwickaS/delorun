@@ -14,7 +14,7 @@
 import type { TokenUsage } from '@deepseek-ai/dsh-llm'
 import type { SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
 import type {
-  AccountObservation, ProgramApprovalAnswer, ProgramApprovalRequest, ProgramEvent, ProgramFailure, ProgramExit, ProgramInterruptOutcome,
+  AccountObservation, ProgramApprovalAnswer, ProgramApprovalRequest, ProgramEvent, ProgramFailure, ProgramExit, ProgramInterruptOutcome, ProgramSandbox,
   ProgramRunRule, ProgramSession,
 } from '@delorun/external-agents/contract'
 import type { HarnessServer } from './harness-server.ts'
@@ -142,8 +142,8 @@ export class CodexSession implements ProgramSession {
     return this.threadId
   }
 
-  /** Whether Codex's own sandbox confines the thread at its level; set when the thread opens, see `ProgramSession.sandboxed`. */
-  sandboxed = false
+  /** What Codex's own sandbox does at the level; set when the thread opens, see `ProgramSession.sandbox`. */
+  sandbox: ProgramSandbox = 'off'
 
   /** Whether a Codex turn is running. */
   get turnRunning(): boolean {

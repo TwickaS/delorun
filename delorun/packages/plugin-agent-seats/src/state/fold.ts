@@ -8,7 +8,7 @@ import { pluginRecordOf, type SessionEvent } from '@deepseek-ai/dsh-session'
 // Type-only: the `subagent/descriptor` event merge.
 import type {} from '@deepseek-ai/dsh-subagent'
 import { SEAT_STATE_RECORD, SEAT_STATUS_RECORD, type SeatStateRecordData, type SeatStatusRecordData } from './record.ts'
-import type { AgentSeatView, SeatAgent, SeatModelPicker, SeatViewState } from './view.ts'
+import type { AgentSeatView, SeatAgent, SeatModelPicker, SeatSandbox, SeatViewState } from './view.ts'
 
 /** The fold's own version; bump it when the state fields or the fold change. */
 export const SEAT_FOLD_VERSION = 6
@@ -37,8 +37,8 @@ export interface SeatShown {
   readonly weeklyPercent: number | null
   /** When the 5-hour window resets. */
   readonly fiveHourResetAt: number | null
-  /** Whether the program's own sandbox confines it, as of its start; null before it has started. */
-  readonly sandboxed: boolean | null
+  /** What the program's own sandbox does, as of its start; null before it has started. */
+  readonly sandbox: SeatSandbox | null
   /** While `limit`: when the limit lifts. */
   readonly resetAt: number | null
   /** While `ended`: the reason. */
@@ -84,7 +84,7 @@ export const NO_LOGGED: SeatLogged = { programSessionId: null, cursor: null, pro
 
 /** The view's fields before any event. */
 export const NO_SHOWN: SeatShown = {
-  agent: null, state: 'idle', version: null, ownSettings: null, plan: null, fiveHourPercent: null, weeklyPercent: null, fiveHourResetAt: null, sandboxed: null, resetAt: null, endedReason: null, modelPicker: null, pending: null, lastAnswer: null, turns: 0,
+  agent: null, state: 'idle', version: null, ownSettings: null, plan: null, fiveHourPercent: null, weeklyPercent: null, fiveHourResetAt: null, sandbox: null, resetAt: null, endedReason: null, modelPicker: null, pending: null, lastAnswer: null, turns: 0,
 }
 
 /**
@@ -138,7 +138,7 @@ function foldStatus(shown: SeatShown, data: Partial<SeatStatusRecordData>): Seat
     fiveHourPercent: count(data.fiveHourPercent) ?? shown.fiveHourPercent,
     weeklyPercent: count(data.weeklyPercent) ?? shown.weeklyPercent,
     fiveHourResetAt: count(data.fiveHourResetAt) ?? shown.fiveHourResetAt,
-    sandboxed: typeof data.sandboxed === 'boolean' ? data.sandboxed : state === 'starting' ? null : shown.sandboxed,
+    sandbox: data.sandbox === 'on' || data.sandbox === 'off' || data.sandbox === 'own' ? data.sandbox : state === 'starting' ? null : shown.sandbox,
     resetAt: count(data.resetAt),
     endedReason: text(data.endedReason),
     modelPicker: pickerOf(data.modelPicker),
@@ -237,7 +237,7 @@ export function viewOf(shown: SeatShown): AgentSeatView | null {
     agent: shown.agent,
     ...shown.version === null ? {} : { version: shown.version },
     ownSettings: shown.ownSettings ?? DEFAULT_OWN_SETTINGS,
-    ...shown.sandboxed === null ? {} : { sandbox: shown.sandboxed ? 'on' as const : 'off' as const },
+    ...shown.sandbox === null ? {} : { sandbox: shown.sandbox },
     state: shown.state,
     ...shown.plan === null ? {} : { plan: shown.plan },
     ...shown.fiveHourPercent === null ? {} : { fiveHourPercent: shown.fiveHourPercent },

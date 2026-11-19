@@ -103,11 +103,11 @@ describe('open', () => {
     expect(s.codex.requests('config/read')).toEqual([])
   })
 
-  it.for([['standard', true], ['careful', true], ['unrestricted', false], ['own', false]] as const)('reports the %s level as sandboxed: %s', async ([level, sandboxed]) => {
+  it.for([['standard', 'on'], ['careful', 'on'], ['unrestricted', 'off'], ['own', 'own']] as const)('reports the %s level\'s sandbox as %s', async ([level, sandbox]) => {
     const s = setup()
     s.codex.answer('config/read', { result: { config: { approval_policy: 'on-request' }, origins: {} } })
     const session = await s.driver.open(s.request({ level }))
-    expect(session.sandboxed).toBe(sandboxed)
+    expect(session.sandbox).toBe(sandbox)
     await session.close()
   })
 
