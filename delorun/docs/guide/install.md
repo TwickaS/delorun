@@ -229,7 +229,6 @@ The install step appears only when the launcher started setup, and the key step 
     "reach": { "option": "none", "identityFactor": null },
     "importStockHome": false,
     "protectChanges": false,
-    "phonePowers": null,
     "updateCheck": true,
     "sections": []
   }

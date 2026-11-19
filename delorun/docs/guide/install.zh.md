@@ -241,7 +241,6 @@ If something looks wrong: delorun doctor.
     "reach": { "option": "none", "identityFactor": null },
     "importStockHome": false,
     "protectChanges": false,
-    "phonePowers": null,
     "updateCheck": true,
     "sections": []
   }

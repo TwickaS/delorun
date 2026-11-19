@@ -34,6 +34,18 @@ description: "Delorun 更新与回退的设计：更新报告的数据项、默�
 
 ## 规则
 
+### The studio's update
+
+The person at the computer, or at an unlocked phone, updates, goes back and stops Delorun in the studio, with no terminal. Every step that verifies, installs, switches or rolls back stays in the home process; the Host's update plugin ([`@delorun/plugin-update`](../../packages/plugin-update/README.zh.md)) only asks it over the update channel and shows the person what it answers.
+
+- **Who.** Check now is open to any paired phone. Update now, Go back and Stop need the computer, or a phone that confirms the action with a Face ID grant or, without a passkey, an unlock the person entered (a code or a PIN, never the approval grace). Cancel and Dismiss are free for any paired phone. A request from another site is refused before its body is read.
+- **The report.** `prepare` returns C3's report, which the Host keeps in memory under an opaque handle; the page never holds the home process's report id or channel token. The report expires after 600 seconds, and `apply` refuses an unknown or expired handle with `REPORT_EXPIRED`.
+- **The ticks.** The rule `--yes` uses decides what needs the person: each item that disables or removes something, a merged harness file, an unverified item, a release-log check that did not complete, and declining the data copy each need an explicit tick; a conflicted harness file or a failed log check offers no Update at all.
+- **The outcome.** The page cannot read the home process's last line, because the Host stops at the switch. The home process writes `run/<profile>/update-result.json` at every end (`committed`, `rolled-back` with the failed health criterion, `aborted`, `failed`); the Host that runs afterwards shows it until the person dismisses it, and the page reloads itself once when the Host's release differs from the one it loaded.
+- **Go back.** A committed update record offers Go back with the same wait-or-stop choice and the C3 table's wording; with no copy of the chat data only the settings go back.
+- **Stop.** Stop Delorun asks the home process to stop; nothing in the studio starts Delorun again, and the screen says to start it from the app icon or the launcher.
+- **Not offered.** `delorun update --from` relaxes freshness and stays in the terminal.
+
 ### 报告指出数据更改
 
 1. 每个发布版本在其运行时中携带一个已签名的文件 `data-formats.json`：`{ "schema": "delorun.data-formats/1", "persistence": <SHA-256 of upstream's generated persistence schema at the built commit>, "delorunRecords": { <record name>: <version> } }`。`delorunRecords` 列出 Delorun 自己的包在 home 之下保存的带版本的记录。该文件在已签名的文件列表中，所以发布 manifest 不变。

@@ -37,15 +37,14 @@ The wire types are [`src/wire.ts`](src/wire.ts). `apply`, `rollback` and `stop` 
 
 ## Who may use each control
 
-The controls are entries of the Changes access table ([`@delorun/plugin-changes`](../plugin-changes/README.md)), and the routes are built with its gate, so the site fence, the device's level and its unlock are decided before a body is read.
+The controls are entries of the Changes access table ([`@delorun/plugin-changes`](../plugin-changes/README.md)), and the routes are built with its gate, so the site fence, the control's class and the device's grant are decided before a body is read.
 
-| Control | Computer | Phone, Full | Phone, Careful |
-| --- | --- | --- | --- |
-| `update-check` | yes | yes, unlocked or not | yes, unlocked or not |
-| `update-begin`, `update-rollback` | yes | yes, with an unlock the person entered | no: at the computer |
-| `update-cancel`, `update-dismiss`, `stop` | yes | yes, with an unlock | yes, with an unlock |
+| Control | Computer | Phone |
+| --- | --- | --- |
+| `update-check`, `update-cancel`, `update-dismiss` | yes | yes, no prompt (class `free`) |
+| `update-begin`, `update-rollback`, `stop` | yes | yes, with a one-action grant for the request (class `face`) |
 
-An unlock is a code or a PIN the person entered; the approval grace does not count. `state` shows the prepared report, which names plugins and harness diffs, only to a request that may begin an update.
+A grant is a Face ID confirmation or the device's PIN for that one request; the approval grace does not count. `state` shows the prepared report, which names plugins and harness diffs, only to a request that may begin an update.
 
 ## What the Host keeps
 
@@ -58,4 +57,4 @@ The report and the home process's report id stay in Host memory; the page holds 
 
 ## Tests
 
-`tests/update-routes.spec.ts` holds the denial specs: other site, Careful phone, phone without an unlock or with only the approval grace, a page-supplied or expired report, a restart or update in progress, missing ticks, a conflicted report, and the channel token and report id never reaching an answer.
+`tests/update-routes.spec.ts` holds the denial specs: other site, phone without a grant or with only the approval grace, a page-supplied or expired report, a restart or update in progress, missing ticks, a conflicted report, and the channel token and report id never reaching an answer.

@@ -140,7 +140,7 @@ A phone or browser signed in over remote access, with its unlock running, can th
 - It loosens the permission new chats start in.
 - It answers the questions for MCP servers, external agents and a workspace's network.
 - It gives the approvals that reserve full access.
-- It uses terminals only when [Phone powers](reach.md#choose-how-much-an-unlocked-phone-may-do) is Full (each terminal needs the unlock, and no switch or full-access workspace waives it).
+- It uses terminals only with a fresh unlock or [Face ID](reach.md#confirm-with-face-id) for each terminal it opens; no switch or full-access workspace waives it.
 - It saves or removes provider keys (it never reads a saved key back).
 - It opens a chat's folder in an application on the computer.
 - It reads files outside the chat's workspace (never inside the Delorun home). This is the same reach that full access gives the chat in this mode.

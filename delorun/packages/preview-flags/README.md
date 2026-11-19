@@ -81,12 +81,12 @@ A change applies the next time Delorun starts. The row checks its `flags` when i
 
 ## Contract
 
-- **A preview flag changes studio UI only.** It never changes what reaches a model: no prompt, tool, tool result or request field may depend on a flag. A future flag that would change model-visible input adds a session event first, so the input stays reconstructable from the session log, and that event, not the flag, is what the request is built from.
+- **A preview flag changes studio UI only, with one exception.** `unlock.passkeys` is the one flag the Host reads, because it gates device authentication: it decides whether a paired device's confirmed actions mint and use one-action grants (`home-auth/src/service.ts`, named in the gate's `HOST_READERS` with that reason). It changes who may take an action, never what reaches a model. Every other flag changes studio UI only. A flag never changes what reaches a model: no prompt, tool, tool result or request field may depend on a flag. A future flag that would change model-visible input adds a session event first, so the input stays reconstructable from the session log, and that event, not the flag, is what the request is built from.
 - **Off by default.** A flag is on only where a profile's row sets it to `true`; no plugin and no bundle patch turns one on.
 - **No Settings page.** The row is written by `delorun preview` or by hand.
 - **One owner per flag.** Two packages that list one id, a plugin that declares another package's flag, and a second declaration of one flag are refused.
 
-Two checks hold the first rule as far as code can. `tests/ui-only.spec.ts`: nothing in the package imports the session, model or tool packages, and the Host API exposes no way to change a flag while Delorun runs. The `gates:preview-flags` gate: no Host source reads a flag with `isOn` unless the gate's list names the file with the reason the read cannot reach a model; no file is named today, and the studio reads flags through the route.
+Two checks hold the first rule as far as code can. `tests/ui-only.spec.ts`: nothing in the package imports the session, model or tool packages, and the Host API exposes no way to change a flag while Delorun runs. The `gates:preview-flags` gate: no Host source reads a flag with `isOn` unless the gate's list names the file with the reason the read cannot reach a model; one file is named, `home-auth/src/service.ts` for `unlock.passkeys`, and the studio reads every flag through the route.
 
 ## Tests
 

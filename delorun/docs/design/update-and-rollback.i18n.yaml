@@ -20,6 +20,9 @@
 /update-and-rollback/the-rules:
   en: 69ac054b668fcc66
   zh: be9454bd35582018
+/update-and-rollback/the-rules/the-studio-s-update:
+  en: 254ce3dfc1194656
+  zh: 254ce3dfc1194656
 /update-and-rollback/the-rules/the-report-names-a-data-change:
   en: 83032b465001c9d3
   zh: ba26984903d67d8d
@@ -45,5 +48,5 @@
   en: ed1097934cd2d757
   zh: f6c9a88deac5ff8b
 /update-and-rollback/implementation-status:
-  en: 149d492816207cbb
+  en: 16a1e2f24a091b1a
   zh: 10d01c842de703b5
