@@ -18,7 +18,7 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import type { DeviceId } from '@delorun/contract-admission'
 import { DEVICE_APPROVAL_VERSION } from '@delorun/contract-device-approval'
 import type { HomeAuth } from './home-auth.ts'
-import { hashArgs } from './grants.ts'
+import { DEVICE_REMOVE_ACTION, hashArgs } from './grants.ts'
 import { HomeAuthError, refusalBody, STRUCTURED_REFUSALS } from './errors.ts'
 import { isForeignFetchSite, isLoopbackHost, isSameLoopbackOrigin, loopbackAddressOf } from '@delorun/home'
 import { deviceSession, signedInDevice } from './elevation-routes.ts'
@@ -176,8 +176,7 @@ export function devicesHandler(auth: HomeAuth, credential: LoopbackCredential): 
   }
 }
 
-/** The action a device's removal of another device is confirmed under: its grant covers the JCS of the body sent. */
-export const DEVICE_REMOVE_ACTION = 'auth/devices/remove'
+export { DEVICE_REMOVE_ACTION }
 
 /**
  * Build the route that revokes one device.

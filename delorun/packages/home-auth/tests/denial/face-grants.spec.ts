@@ -174,14 +174,19 @@ describe('holds are bound to the resource and the device (P2-1, P2-2)', () => {
     expect(decide('terminal/list', {}, sessionB).kind).toBe('deny')
     expect(decide('terminal/list', {}, sessionA).kind).toBe('allow')
   })
-  // Removing the endDevice call on a session's end leaves a hold open for 60 minutes after the tab closed.
-  it('end with the device\'s session, and so do its grants', () => {
-    const { grants, decide } = world()
-    grants.mint(HOLDER, [{ action: 'terminal/create', hash: hashArgs(create) ?? '', hold: { feature: 'terminal', id: 't-1' } }, { action: 'pluginManager/installBundle', hash: hashArgs({ id: 'p1' }) ?? '' }], 'passkey')
-    decide('terminal/create', create, sessionA)
-    grants.endDevice('device-1')
-    expect(decide('terminal/attach', { id: 't-1' }, sessionA).kind).toBe('deny')
-    expect(decide('pluginManager/installBundle', { id: 'p1' }).kind).toBe('deny')
+  // Removing unlockId from the hold key lets another page's Peer of the same device use a hold it never opened; removing endPeer leaves the hold after its Peer is disposed.
+  it('belong to the Peer that opened them: another page of the device is refused, and the hold ends with its Peer', () => {
+    const { grants, facts } = world()
+    const peerA = reachDevicePrincipal('device-1', LISTENER, 'unlock-a')
+    const peerB = reachDevicePrincipal('device-1', LISTENER, 'unlock-b')
+    const ask = (principal: typeof peerA, action: string, args: Record<string, unknown>): string => createCondition(facts, principal)({ action: action as RemoteAccessAction, resource: sessionA as never, args }).kind
+    grants.mint({ ...HOLDER, unlockId: 'unlock-a' }, [{ action: 'terminal/create', hash: hashArgs(create) ?? '', hold: { feature: 'terminal', id: 't-1' } }], 'passkey')
+    expect(ask(peerA, 'terminal/create', create)).toBe('allow')
+    expect(ask(peerA, 'terminal/attach', { id: 't-1' })).toBe('allow')
+    expect(ask(peerB, 'terminal/attach', { id: 't-1' })).toBe('deny')
+    expect(ask(peerB, 'terminal/list', {})).toBe('deny')
+    grants.endPeer({ ...HOLDER, unlockId: 'unlock-a' })
+    expect(ask(peerA, 'terminal/attach', { id: 't-1' })).toBe('deny')
   })
   // Removing the scope on the picker keeps it a device-wide hold.
   it('give the folder picker a hold but never a folder write: createDirectory needs its own grant (P3-7)', () => {
@@ -343,6 +348,11 @@ describe('the Fetch gate for a face route', () => {
     expect(() => gateByClass(home, () => Promise.resolve(new Response('')), { row: 'route:nothing', action: 'x', legacy: { renews: true } })).toThrow(/does not list/)
     expect(() => gateByClass(home, () => Promise.resolve(new Response('')), { row: 'auth:/auth/passkey/add/approve', action: 'x', legacy: { renews: true } })).toThrow(/computer row/)
     expect(() => gateByClass(home, () => Promise.resolve(new Response('')), { row: 'auth:/auth/passkey/register', action: 'x', legacy: { renews: true } })).toThrow(/ticket row/)
+  })
+
+  // Removing the terminal refusal lets a Fetch route open a hold pinned to the global scope that every chat shares (P3-1).
+  it('refuses a terminal hold at registration until it carries a scope', () => {
+    expect(() => gateByClass(() => undefined, () => Promise.resolve(new Response('')), { row: ROW, action: 'x', legacy: { renews: true }, hold: { feature: 'terminal', idOf: () => 't-1', opens: true } })).toThrow(/terminal hold/)
   })
 
   it('admits only a reach device', () => {

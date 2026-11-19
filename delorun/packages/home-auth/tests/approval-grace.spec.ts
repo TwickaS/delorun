@@ -206,6 +206,24 @@ describe('the approval grace and PIN mode', () => {
     expect(served.auth.elevationOf(other.id, LISTENER)).toBeUndefined()
   })
 
+  // Reverting either unlockModeEnabled check in startApprovalGrace or elevationOf to this.pin.enabled() gives a passkey-only home a grace (R2-P2-3).
+  it('gives no grace on a home whose only factor is a passkey, and hides a running one once the first passkey is enrolled', async () => {
+    const { home: served } = await graced(10)
+    const running = device()
+    await approve(served.auth, running)
+    await signIn(served.auth, running)
+    expect(served.auth.elevationOf(running.id, LISTENER)).toMatchObject({ grace: true })
+    const enrolled = device()
+    await served.auth.passkeyStore.add({ credentialId: 'cred-1', publicKey: 'key', counter: 0, backupEligible: false, backupState: false, transports: [], createdAt: served.clock.now, lastUsedAt: null, address: ADDRESS, rpId: 'home.example.ts.net', deviceId: enrolled.id })
+    expect(served.auth.pin.enabled()).toBe(false)
+    expect(served.auth.elevationOf(running.id, LISTENER)).toBeUndefined()
+    const fresh = device()
+    await approve(served.auth, fresh)
+    await signIn(served.auth, fresh)
+    expect(served.auth.elevationOf(fresh.id, LISTENER)).toBeUndefined()
+    expect(served.auth.elevationState(fresh.id, LISTENER)).toMatchObject({ kind: 'none' })
+  })
+
   it('does not cover a consent or guard row\'s settings, which need a code or a PIN page', async () => {
     const { home: served } = await graced(10)
     const phone = device()

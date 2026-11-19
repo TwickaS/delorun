@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { DeviceId, ReachListenerId } from '@delorun/contract-admission'
 import { HomeAuthError } from '../../src/errors.ts'
-import { GrantStore, hashArgs } from '../../src/grants.ts'
+import { DEVICE_REMOVE_ACTION, GrantStore, hashArgs } from '../../src/grants.ts'
 import { PasskeyAuth, type PasskeyAuthOptions } from '../../src/passkey-auth.ts'
 import { PasskeyStore } from '../../src/passkeys.ts'
 import { VirtualAuthenticator } from '../fixtures/virtual-authenticator.ts'
@@ -287,6 +287,16 @@ describe('a PIN on a device', () => {
     expect(grants.has({ deviceId: OTHER, listener: LISTENER }, 'pluginManager/installBundle', ACTIONS.entries[0].hash)).toBe(true)
     expect(await code(() => auth.pinGrant(asker(PHONE), '0000', ACTIONS))).toBe('PIN_INVALID')
     expect(grants.has({ deviceId: PHONE, listener: LISTENER }, 'pluginManager/installBundle', ACTIONS.entries[0].hash)).toBe(false)
+  })
+
+  // Removing the passkey check in pinGrant lets a PIN seen on a stolen phone mint the grant that removes another device (F16).
+  it('mints no device-removal grant for a device that holds no passkey, and one for a device that does', async () => {
+    const remove = { kind: 'actions', entries: [{ action: DEVICE_REMOVE_ACTION, hash: hashArgs({ v: 1, deviceId: 'x' }) ?? '' }] } as const
+    expect(await code(() => auth.pinGrant(asker(OTHER), '1234', remove))).toBe('LOOPBACK_REQUIRED')
+    expect(grants.has({ deviceId: OTHER, listener: LISTENER }, DEVICE_REMOVE_ACTION, remove.entries[0].hash)).toBe(false)
+    await enrol(PHONE)
+    await auth.pinGrant(asker(PHONE), '1234', remove)
+    expect(grants.has({ deviceId: PHONE, listener: LISTENER }, DEVICE_REMOVE_ACTION, remove.entries[0].hash)).toBe(true)
   })
 
   // Face ID for "Allow once" is not a persistent allow.

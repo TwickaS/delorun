@@ -1216,17 +1216,14 @@ export function createCondition(
    */
   const grantFor = (faced: FaceGrantFacts, action: RemoteAccessAction, reason: string, call: boolean, scope: string, args: unknown): RemoteAccessDecision | undefined => {
     if (!call) return action.startsWith('event:') ? { kind: 'deny', reason } : undefined
-    const holder = { deviceId, listener }
+    const holder = { deviceId, listener, unlockId }
     const feature = holdFeatureOf(action)
     const id = feature === undefined ? undefined : holdIdOf(feature, action, args)
     if (feature !== undefined && !ALWAYS_GRANTED.has(action) && (id === undefined ? (feature === 'picker' || HOLD_METADATA_ACTIONS.has(action)) && faced.grants.holdsAny(holder, feature, scope) : faced.grants.holdAdmits(holder, feature, id, scope))) return undefined
     const hash = hashArgs(args)
     if (hash === undefined || !faced.grants.has(holder, action, hash)) return { kind: 'deny', reason }
     const opens = feature !== undefined && id !== undefined && HOLD_OPENERS[action] === feature ? { feature, id, scope } : undefined
-    spend.push(() => {
-      const used = faced.grants.consume(holder, action, hash, opens)
-      if (used !== undefined) facts.logElevated(`home-auth: passkey.used device=${deviceId} listener=${listener} action=${action} factor=${used.factor} grant=${used.grantId}`)
-    })
+    spend.push(() => { faced.grants.consume(holder, action, hash, opens) })
     return undefined
   }
   const decide: ReachCondition = ({ action, resource, args }) => {

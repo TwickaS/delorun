@@ -48,9 +48,10 @@ interface FakePeer extends PeerScope {
  */
 function fakePeer(id: string): FakePeer {
   const disposal = { disposed: false }
+  const lifetime = new AbortController()
   return {
-    id: brandString<PeerId>(id), ctx: new Context(), principal: { kind: 'owner' }, signal: new AbortController().signal, interactions: 'answer', disposal,
-    dispose: async () => { disposal.disposed = true },
+    id: brandString<PeerId>(id), ctx: new Context(), principal: { kind: 'owner' }, signal: lifetime.signal, interactions: 'answer', disposal,
+    dispose: async () => { disposal.disposed = true; lifetime.abort() },
   }
 }
 
@@ -195,6 +196,29 @@ describe('the authenticator provider', () => {
     expect(provider().reachPeer(one.peer.id)).toBeUndefined()
     await fiber.dispose()
     expect(created.map(peer => peer.disposal.disposed)).toEqual([true, true])
+  })
+
+  // Removing the abort listener in admit leaves a terminal hold open after its Peer closed (R2-P2-2).
+  it('ends the holds a Peer opened when the Peer is disposed, and keeps another Peer\'s', async () => {
+    ctx.provide('previewFlags', { isOn: () => true, declare: () => () => {} } as never)
+    ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
+    const first = provider().admit(request({ headers: { cookie: `__Host-delorun-session=${await session(2)}` } }), 'reach-tailscale-private')
+    const second = provider().admit(request({ headers: { cookie: `__Host-delorun-session=${await session(3)}` } }), 'reach-tailscale-private')
+    if (first.kind !== 'admitted' || second.kind !== 'admitted') throw new Error('not admitted')
+    const grants = ctx.homeAuth.faceGrants()
+    if (grants === undefined) throw new Error('no grant store')
+    const open = (fill: number): { deviceId: string; listener: 'reach-tailscale-private' } => {
+      const holder = { deviceId: recordOf(fill, ADDRESS).id, listener: 'reach-tailscale-private' } as const
+      grants.mint(holder, [{ action: 'terminal/create', hash: 'h', hold: { feature: 'terminal', id: 't-1' } }], 'passkey')
+      grants.consume(holder, 'terminal/create', 'h', { feature: 'terminal', id: 't-1', scope: 'session:s-1' })
+      return holder
+    }
+    const one = open(2)
+    const two = open(3)
+    expect(grants.holdAdmits(one, 'terminal', 't-1', 'session:s-1')).toBe(true)
+    await first.peer.dispose()
+    expect(grants.holdAdmits(one, 'terminal', 't-1', 'session:s-1')).toBe(false)
+    expect(grants.holdAdmits(two, 'terminal', 't-1', 'session:s-1')).toBe(true)
   })
 
   it('refuses a full-access, workspace-management or external-agent grant answered from a reach Peer, and nothing else', async () => {

@@ -22,7 +22,7 @@ import type { DeviceId, StudioAddress } from '@delorun/contract-admission'
 import { IDENTITY_LIMITS, PASSKEY_COSE_ALGORITHMS, PASSKEY_REGISTRATION, RELYING_PARTY_NAME } from '@delorun/contract-oidc-passkeys'
 import { HomeAuthError } from './errors.ts'
 import { isRecord } from './files.ts'
-import { answerKey, HOLD_FEATURES, type GrantEntry, type GrantStore, type HoldFeature } from './grants.ts'
+import { answerKey, DEVICE_REMOVE_ACTION, HOLD_FEATURES, type GrantEntry, type GrantStore, type HoldFeature } from './grants.ts'
 import { passkeyCode } from './match-code.ts'
 import type { PasskeyRecord, PasskeyStore } from './passkeys.ts'
 import type { PinUnlocks, UnlockAsker } from './pin-unlocks.ts'
@@ -449,10 +449,14 @@ export class PasskeyAuth {
    * @param secret - the PIN or passcode.
    * @param request - the actions or the answer to confirm.
    * @returns the grant minted.
-   * @throws {HomeAuthError} `PASSKEY_UNAVAILABLE` while the flag is off, and the refusals of {@link PinUnlocks.verify}.
+   * @throws {HomeAuthError} `PASSKEY_UNAVAILABLE` while the flag is off, `LOOPBACK_REQUIRED` for a request that names {@link DEVICE_REMOVE_ACTION} from a device that holds no passkey, and the refusals of {@link PinUnlocks.verify}.
    */
   async pinGrant(asker: UnlockAsker, secret: string, request: AssertionRequest): Promise<PasskeyGrantResult> {
     this.assertEnabled()
+    // Removing another device needs a passkey: a PIN seen on a stolen phone must not lock the owner out of the rest.
+    if (request.kind === 'actions' && request.entries.some(entry => entry.action === DEVICE_REMOVE_ACTION) && this.options.store.forDevice(asker.deviceId).length === 0) {
+      throw new HomeAuthError('LOOPBACK_REQUIRED', 'Removing another device needs Face ID on this device, or you at your computer')
+    }
     await this.options.pin.verify(asker, secret)
     return this.mint(asker, request, 'pin')
   }

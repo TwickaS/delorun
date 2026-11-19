@@ -12,9 +12,10 @@
  *   and the answer value, so Face ID for "Allow once" never admits a persistent allow, and a grant for one prompt never
  *   answers another that shares its call id.
  * - **Feature holds** are opened when a grant entry that names a terminal or picker id is consumed. A hold admits the
- *   events and reads of that exact id in that exact scope (the Session or global resource the call named) until it idles
- *   {@link HOLD_IDLE_MS}, lives {@link HOLD_ABSOLUTE_MS}, its device's session ends or the picker's close route is
- *   called. Another id or another scope needs a new grant.
+ *   events and reads of that exact id in that exact scope (the Session or global resource the call named) for the Peer
+ *   that opened it, until it idles {@link HOLD_IDLE_MS}, lives {@link HOLD_ABSOLUTE_MS}, its device's session ends or
+ *   that Peer is disposed ({@link GrantStore.endPeer}). A Peer is one device on one listener and one page unlock, so
+ *   closing a browser tab that shares it does not end the hold. Another id, scope or Peer needs a new grant.
  *
  * @module @delorun/home-auth/grants
  */
@@ -59,6 +60,12 @@ export function holdFeatureOf(action: string): HoldFeature | undefined {
   if (action.startsWith('directoryPicker/')) return 'picker'
   return undefined
 }
+
+/**
+ * The action a device's removal of another device is confirmed under: its grant covers the JCS of the body sent, and
+ * only a device that holds a passkey may mint it.
+ */
+export const DEVICE_REMOVE_ACTION = 'auth/devices/remove'
 
 /** The scope of a call on the global resource, such as the folder picker. */
 export const GLOBAL_SCOPE = 'global'
@@ -165,6 +172,11 @@ export interface GrantEntry {
 export interface GrantHolder {
   readonly deviceId: string
   readonly listener: ReachListenerId
+  /**
+   * The page unlock the Peer was admitted under; with the device and listener it names the Peer. Action and answer
+   * grants ignore it, and a hold is admitted only to the Peer that opened it.
+   */
+  readonly unlockId?: string | undefined
 }
 
 /** What the store keeps for one action grant entry. */
@@ -209,19 +221,22 @@ export interface MintedGrant {
 export class GrantStore {
   private readonly now: () => number
   private readonly random: RandomBytes
+  private readonly log: (line: string) => void
   private grants: StoredGrant[] = []
   private answers: StoredAnswer[] = []
   private readonly holds = new Map<string, StoredHold>()
   private seq = 0
 
   /**
-   * @param options - the clock and the random source.
+   * @param options - the clock, the random source and the log.
    * @param options.now - the clock in milliseconds since the epoch.
    * @param options.random - the source the grant ids come from.
+   * @param options.log - records `passkey.used` after each grant is used; the line holds no challenge, key or signature.
    */
-  constructor(options: { readonly now: () => number; readonly random: RandomBytes }) {
+  constructor(options: { readonly now: () => number; readonly random: RandomBytes; readonly log?: (line: string) => void }) {
     this.now = options.now
     this.random = options.random
+    this.log = options.log ?? (() => undefined)
   }
 
   /**
@@ -269,7 +284,7 @@ export class GrantStore {
    * Use the grant that covers a call. When the entry names a hold and the call opens that same terminal or picker, the
    * hold opens; a hold the entry names for any other id is dropped, so a grant for one action never opens a hold the
    * action does not open.
-   * @param holder - the device and listener the call arrived on.
+   * @param holder - the device, listener and page unlock the call arrived on; the hold it opens belongs to that Peer.
    * @param action - the action.
    * @param hash - the hash of the call the home received.
    * @param opens - the terminal or picker (and scope) the call itself opens, as the home read it from the call; none for a call that opens nothing.
@@ -281,6 +296,7 @@ export class GrantStore {
     this.grants = this.grants.filter(stored => stored !== found)
     const hold = found.entry.hold
     if (hold !== undefined && opens !== undefined && hold.feature === opens.feature && hold.id === opens.id) this.openHold(holder, hold.feature, hold.id, opens.scope)
+    this.log(`home-auth: passkey.used device=${holder.deviceId} listener=${holder.listener} action=${action} factor=${found.factor} grant=${found.grantId}`)
     return { grantId: found.grantId, factor: found.factor }
   }
 
@@ -313,6 +329,7 @@ export class GrantStore {
     const found = this.answers.find(stored => sameHolder(stored.holder, holder) && stored.requestKey === requestKey && stored.answer === answer && stored.expiresAt > at)
     if (found === undefined) return undefined
     this.answers = this.answers.filter(stored => stored !== found)
+    this.log(`home-auth: passkey.used device=${holder.deviceId} listener=${holder.listener} answer=${answer} grant=${found.grantId}`)
     return found.grantId
   }
 
@@ -348,13 +365,13 @@ export class GrantStore {
   holdsAny(holder: GrantHolder, feature: HoldFeature, scope: string): boolean {
     let found = false
     for (const hold of [...this.holds.values()]) {
-      if (hold.feature === feature && hold.scope === scope && sameHolder(hold.holder, holder) && this.holdAdmits(holder, feature, hold.id, scope)) found = true
+      if (hold.feature === feature && hold.scope === scope && samePeer(hold.holder, holder) && this.holdAdmits(holder, feature, hold.id, scope)) found = true
     }
     return found
   }
 
   /**
-   * End one hold, as a terminal's or picker's close does.
+   * End one hold. Nothing in this package calls it; a hold ends by idling, its cap, its Peer or its device.
    * @param holder - the device and listener.
    * @param feature - the feature.
    * @param id - the terminal or picker id.
@@ -362,6 +379,14 @@ export class GrantStore {
    */
   closeHold(holder: GrantHolder, feature: HoldFeature, id: string, scope: string): void {
     this.holds.delete(holdKey(holder, feature, id, scope))
+  }
+
+  /**
+   * End every hold of one Peer, as its disposal does.
+   * @param peer - the device and listener of the Peer, and its page unlock.
+   */
+  endPeer(peer: GrantHolder): void {
+    for (const [key, hold] of [...this.holds]) if (samePeer(hold.holder, peer)) this.holds.delete(key)
   }
 
   /**
@@ -434,6 +459,16 @@ function sameHolder(left: GrantHolder, right: GrantHolder): boolean {
 }
 
 /**
+ * Whether two holders are one Peer: the same device, listener and page unlock.
+ * @param left - one holder.
+ * @param right - another.
+ * @returns whether they are the same Peer.
+ */
+function samePeer(left: GrantHolder, right: GrantHolder): boolean {
+  return sameHolder(left, right) && left.unlockId === right.unlockId
+}
+
+/**
  * The map key of one hold.
  * @param holder - the device and listener.
  * @param feature - the feature.
@@ -442,5 +477,5 @@ function sameHolder(left: GrantHolder, right: GrantHolder): boolean {
  * @returns the key.
  */
 function holdKey(holder: GrantHolder, feature: HoldFeature, id: string, scope: string): string {
-  return JSON.stringify([holder.deviceId, holder.listener, feature, scope, id])
+  return JSON.stringify([holder.deviceId, holder.listener, holder.unlockId ?? null, feature, scope, id])
 }
