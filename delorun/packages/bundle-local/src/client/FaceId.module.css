@@ -22,7 +22,6 @@
   box-sizing: border-box;
   display: flex;
   width: 100%;
-  min-height: 70dvh;
   flex-direction: column;
   gap: 12px;
   padding: 20px 16px calc(env(safe-area-inset-bottom, 0px) + 16px);
@@ -85,13 +84,13 @@
 /* The main control takes the free height on a phone, so the sheet has no empty band above or below it. */
 .confirm {
   width: 100%;
-  min-height: 56px;
-  flex: 1 1 auto;
-  font-size: 17px;
+  min-height: 80px;
+  flex: 0 0 auto;
+  font-size: 18px;
 }
 
 @media (min-width: 480px) {
-  .confirm { flex: 0 0 auto; min-height: 64px; }
+  .confirm { min-height: 64px; }
 }
 
 .link {

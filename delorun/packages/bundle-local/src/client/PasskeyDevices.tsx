@@ -149,7 +149,7 @@ function DeviceCard({ t, kind, device, canRemoveDevice, onAdd, onRemove }: {
   return <section className={css.card} data-face-id-device={device.deviceId}>
     <h3 className={css.cardTitle}>
       <span>{device.label}</span>
-      {device.thisDevice ? <span className={css.tag}>{t('devices.thisDevice')}</span> : null}
+      {device.thisDevice && device.label !== t('devices.thisDevice') ? <span className={css.tag}>{t('devices.thisDevice')}</span> : null}
     </h3>
     {device.passkeys.map(passkey => <PasskeyRow key={passkey.credentialId} t={t} passkey={passkey} kind={kind}
       onRemove={() => { onRemove({ kind: 'passkey', credentialId: passkey.credentialId, deviceId: device.deviceId, label: device.label }) }} />)}
