@@ -15,10 +15,8 @@ import { ACCENT_PRESETS, PALETTE_CHOICES } from '../src/client/previews.ts'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import { TAILSCALE_OPERATOR_COMMAND } from '@delorun/contract-reach-providers'
-import { PHONE_POWERS_PATH } from '@delorun/home-auth/wire'
-import { en as devicesEn } from '../../bundle-local/src/client/devices-locales.ts'
 import type { Readiness, TailscaleReadiness } from '../src/wire.ts'
-import { agentsFake, DEFAULT_PATH, DEFAULT_WORKSPACE, hostFake, installerFake, KEYS, languageFace, liveForm, LOCALES, noticeFace, devices, READY, schemeFace, stepServices, THEME } from './fixtures.client.ts'
+import { agentsFake, DEFAULT_PATH, DEFAULT_WORKSPACE, hostFake, installerFake, KEYS, languageFace, liveForm, LOCALES, noticeFace, READY, schemeFace, stepServices, THEME } from './fixtures.client.ts'
 import type { HostFace, StartTarget, StepServices } from '../src/client/types.ts'
 import type { ThemeSettings } from '@delorun/plugin-theme'
 
@@ -684,32 +682,12 @@ describe('the phone access step', () => {
     expect(en['reach.lead']).not.toMatch(/\b(reach|tailnet|serve|PIN mode)\b/i)
   })
 
-  it('offers the Phone powers choice of Settings, Devices, and keeps a level nobody chose until the person keeps or changes it', async () => {
-    const posted: unknown[] = []
-    const fetch = vi.fn((input: string, init?: RequestInit) => {
-      expect(input).toBe(PHONE_POWERS_PATH)
-      if (init?.method === 'POST') {
-        posted.push(JSON.parse(String(init.body)))
-        return Promise.resolve(Response.json({ level: 'full', chosen: true }))
-      }
-      return Promise.resolve(Response.json({ level: 'careful', chosen: false }))
-    })
-    render(<ReachStep services={stepServices({ phonePowers: { t: devices, fetch } })} guide={guideOf(reachWith({ state: 'not-installed' } as TailscaleReadiness))} />)
-    await settle()
-    const group = screen.getByRole('radiogroup', { name: devicesEn['powers.title'] })
-    expect(screen.getByText(devicesEn['powers.unchosen.careful'])).toBeTruthy()
-    expect(within(group).getByRole('radio', { name: new RegExp(devicesEn['powers.careful']) })).toHaveProperty('checked', true)
-    fireEvent.click(within(group).getByRole('radio', { name: new RegExp(devicesEn['powers.full']) }))
-    await settle()
-    expect(posted).toEqual([{ level: 'full' }])
-    expect(within(group).getByRole('radio', { name: new RegExp(devicesEn['powers.full']) })).toHaveProperty('checked', true)
-    expect(screen.queryByText(devicesEn['powers.unchosen.careful'])).toBeNull()
-  })
-
-  it('shows no Phone powers choice where the home does not serve it', async () => {
+  // Removing the Phone powers block from the step brings back a choice for a level that no longer exists.
+  it('offers no Phone powers choice', async () => {
     render(<ReachStep services={stepServices()} guide={guideOf(reachWith({ state: 'not-installed' } as TailscaleReadiness))} />)
     await settle()
     expect(screen.queryByRole('radiogroup')).toBeNull()
+    expect(document.body.textContent).not.toMatch(/Phone powers/i)
   })
 
   it('leaves the PIN to its own step instead of offering it under More', async () => {
@@ -737,11 +715,11 @@ describe('the phone access step', () => {
     expect(screen.getByText(APPROVE_COMMAND).tagName).toBe('CODE')
   })
 
-  it('names the commands run at this computer, that a phone is approved there and Phone powers sets the rest, and no relay', async () => {
+  it('names the commands run at this computer, that a phone is approved there and Face ID or a PIN confirms the rest, and no relay', async () => {
     render(<ReachStep services={stepServices()} guide={guideOf()} />)
     await settle()
     expect([REACH_COMMAND, APPROVE_COMMAND]).toEqual(['delorun reach on tailscale', 'delorun devices approve'])
-    expect(document.body.textContent).toContain('A phone is approved only at this computer, and Phone powers above sets how much an unlocked phone may do.')
+    expect(document.body.textContent).toContain('A phone is approved only at this computer, and the sensitive things it does are confirmed with Face ID or its PIN.')
     for (const [key, text] of Object.entries(en)) if (key.startsWith('reach.')) expect(text).not.toMatch(/relay|中继/i)
   })
 })

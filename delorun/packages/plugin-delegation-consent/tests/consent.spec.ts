@@ -605,7 +605,7 @@ describe('mounting', () => {
       workspaces: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere', elevationOf: () => ({ id: 'elevation-1' }), pageUnlockOf: () => undefined,
       unlockModeEnabled: () => false, keyRefs: () => new Set(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
       computerOnlySwitches: () => registered, protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set(),
-      defaultPermission: () => undefined, phonePowers: () => 'full', dangerousMode: () => false, touchUnlock: () => {},
+      defaultPermission: () => undefined, dangerousMode: () => false, touchUnlock: () => {},
     } as never, { kind: 'reach-device', deviceId: 'phone', listener: 'reach-tailscale-private' } as never)
     const ns = 'delorun-delegation-consent'
     const patch = (value: boolean) => device({ action: 'settings/update', resource: { kind: 'global' }, args: { ns, patch: { fullAccessStartsAgents: value } } } as never)
@@ -648,7 +648,7 @@ describe('mounting', () => {
         workspaces: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere', elevationOf: () => ({ id: 'elevation-1' }), pageUnlockOf: () => undefined,
         unlockModeEnabled: () => false, keyRefs: () => new Set(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
         computerOnlySwitches: () => registered, protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set(),
-        defaultPermission: () => undefined, phonePowers: () => 'full', dangerousMode: () => false, touchUnlock: () => {},
+        defaultPermission: () => undefined, dangerousMode: () => false, touchUnlock: () => {},
       }
       const asDevice = createCondition(facts as never, { kind: 'reach-device', deviceId: 'phone', listener: 'reach-tailscale-private' } as never)
       const write = (who: typeof asDevice) => (patch: object) => who({ action: 'settings/update', resource: { kind: 'global' }, args: { ns, patch } } as never)
