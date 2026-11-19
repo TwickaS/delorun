@@ -1,0 +1,71 @@
+/*
+ * Sonner positions and moves the toast; these rules put its movement on the brand's tokens. A toast seats with a short
+ * travel from the enter scale, and leaves quicker than it came. The rules name Sonner's data attributes on the class
+ * the toaster gives each toast, doubled so it outranks Sonner's own attribute rules. Under reduced motion Sonner's stylesheet
+ * removes every transition with `!important`; the rule at the end gives the fade back, since opacity changes stay.
+ */
+/* The wrapper that notices focus inside the toaster takes no box of its own. */
+.focus {
+  display: contents;
+}
+
+.toaster {
+  font-family: var(--dl-font-sans);
+}
+
+.toast.toast[data-sonner-toast] {
+  width: 100%;
+  transition:
+    transform var(--dl-motion-move) var(--dl-ease-out),
+    opacity var(--dl-duration-move) var(--dl-ease-out),
+    height var(--dl-motion-quick) var(--dl-ease-out);
+}
+
+.toast.toast[data-sonner-toast][data-mounted='false'] {
+  --y: translateY(8px) scale(var(--dl-scale-enter));
+}
+
+.toast.toast[data-sonner-toast][data-removed='true'][data-swipe-out='false'] {
+  --y: translateY(8px) scale(var(--dl-scale-enter));
+  transition:
+    transform var(--dl-motion-leave) var(--dl-ease-out),
+    opacity var(--dl-duration-leave) var(--dl-ease-out);
+}
+
+/* A toast under the finger follows it at once. */
+.toast.toast[data-sonner-toast][data-swiping='true'] {
+  transition: none;
+}
+
+.card {
+  display: flex;
+  align-items: center;
+  gap: var(--dl-space-3);
+  box-sizing: border-box;
+  width: 100%;
+  padding: var(--dl-space-3) var(--dl-space-3) var(--dl-space-3) var(--dl-space-4);
+  border: 1px solid var(--dl-border);
+  border-radius: var(--dl-radius-md);
+  background: var(--dl-surface-raised);
+  box-shadow: 0 8px 24px color-mix(in oklab, var(--dl-text) 10%, transparent);
+  color: var(--dl-text);
+  font-family: var(--dl-font-sans);
+}
+
+.message {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.action {
+  flex: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast.toast[data-sonner-toast] {
+    transition: opacity var(--dl-duration-move) var(--dl-ease-out) !important;
+  }
+}

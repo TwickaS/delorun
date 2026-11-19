@@ -6,18 +6,23 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "build": "vite build && tsc --noEmit && node ../docs/scripts/check-links.mjs out",
+    "build": "node ../../packages/site-design/scripts/write-looks.ts --check && node scripts/lod.ts && vite build && tsc --noEmit && node scripts/link-chunk-styles.ts out && node scripts/check-styles.ts out && node ../docs/scripts/check-links.mjs out && node scripts/check-weight.ts out",
     "dev": "vite dev",
+    "pictures": "node scripts/lod.ts",
     "preview": "node ../docs/scripts/serve-static.mjs out",
-    "typecheck:deploy": "tsc --noEmit -p tsconfig.deploy.json"
+    "typecheck:deploy": "tsc --noEmit -p tsconfig.deploy.json",
+    "generate": "node ../../packages/site-design/scripts/write-looks.ts"
   },
   "dependencies": {
+    "@delorun/site-design": "link:../../packages/site-design",
     "@tanstack/react-router": "1.170.46",
     "@tanstack/react-start": "1.169.4",
+    "clsx": "2.1.1",
     "fumadocs-core": "16.17.8",
     "fumadocs-ui": "16.17.8",
     "react": "19.3.1",
-    "react-dom": "19.3.1"
+    "react-dom": "19.3.1",
+    "sonner": "2.0.8"
   },
   "devDependencies": {
     "@alchemy.run/cloudflare": "2.0.0-beta.84",
@@ -28,6 +33,7 @@
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.2",
     "alchemy": "2.0.0-beta.84",
+    "axe-core": "4.11.4",
     "effect": "4.0.7",
     "tailwindcss": "4.3.3",
     "typescript": "6.0.3",

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { EmailSender, Env, OutgoingEmail } from '../src/worker/env.ts'
 import { route, sweep, type Deps } from '../src/worker/routes.ts'
+import { CONSENT_OUT_OF_DATE, CONSENT_TEXT_VERSION } from '../src/site/signup.ts'
 import { createDb, type TestDb } from './d1-sqlite.ts'
 
 const ORIGIN = 'https://delorun.test'
@@ -24,11 +25,12 @@ function harness(options: { sending: boolean; turnstile?: 'passed' | 'failed' | 
     if (options.turnstile === 'down') throw new TypeError('network')
     return Response.json({ success: (options.turnstile ?? 'passed') === 'passed' })
   })
+  const rateLimit = vi.fn(async () => ({ success: options.allowed ?? true }))
   const state = { clock: NOW }
   const env: Env = {
     DB: db,
     ASSETS: { fetch: async () => new Response('asset', { status: 200 }) },
-    RATE_LIMIT: { limit: async () => ({ success: options.allowed ?? true }) },
+    RATE_LIMIT: { limit: rateLimit },
     TURNSTILE_SITEKEY: 'site-key',
     TURNSTILE_SECRET: 'secret',
     SEND_CONFIRMATION: options.sending ? 'on' : 'off',
@@ -38,7 +40,7 @@ function harness(options: { sending: boolean; turnstile?: 'passed' | 'failed' | 
     ...(options.sending ? { EMAIL: email } : {}),
   }
   return {
-    env, db, sent, siteverify,
+    env, db, sent, siteverify, rateLimit,
     deps: { fetch: siteverify as typeof fetch, now: () => state.clock },
     get clock() { return state.clock },
     set clock(value) { state.clock = value },
@@ -51,7 +53,7 @@ function post(path: string, fields: Record<string, string>, accept = 'applicatio
   return new Request(`${ORIGIN}${path}`, { method: 'POST', body, headers: { Accept: accept, 'CF-Connecting-IP': '203.0.113.9' } })
 }
 
-const SIGNUP = { email: 'ada@example.com', first_name: 'Ada', consent: 'yes', page: '/', 'cf-turnstile-response': 'token' }
+const SIGNUP = { email: 'ada@example.com', first_name: 'Ada', consent: 'yes', page: '/', consent_version: CONSENT_TEXT_VERSION, 'cf-turnstile-response': 'token' }
 
 function tokenIn(message: OutgoingEmail, route: 'confirm' | 'unsubscribe'): string {
   const match = new RegExp(`/${route}\\?token=([A-Za-z0-9_-]{43})`).exec(message.text)
@@ -94,6 +96,22 @@ describe('POST /api/subscribe', () => {
     expect(response.status).toBe(200)
     expect(h.sent).toHaveLength(0)
     expect(h.db.rows('SELECT status, confirmation_sent_at FROM subscribers')).toEqual([{ status: 'pending', confirmation_sent_at: null }])
+  })
+
+  it('refuses a stale, missing or malformed consent version with a reload answer, storing nothing and sending nothing', async () => {
+    const h = harness({ sending: true })
+    const { consent_version: _current, ...withoutVersion } = SIGNUP
+    for (const fields of [{ ...SIGNUP, consent_version: 'old' }, withoutVersion, { ...SIGNUP, consent_version: `${CONSENT_TEXT_VERSION}\u0000` }, { ...SIGNUP, consent_version: 'x'.repeat(1000) }]) {
+      const response = await route(post('/api/subscribe', fields), h.env, h.deps)
+      expect(response.status).toBe(409)
+      expect(await response.json()).toEqual({ ok: false, message: CONSENT_OUT_OF_DATE, code: 'out_of_date' })
+    }
+    const page = await route(post('/api/subscribe', { ...SIGNUP, consent_version: 'old' }, 'text/html'), h.env, h.deps)
+    expect(page.status).toBe(409)
+    expect(h.rateLimit).not.toHaveBeenCalled()
+    expect(h.siteverify).not.toHaveBeenCalled()
+    expect(h.db.rows('SELECT email FROM subscribers')).toEqual([])
+    expect(h.sent).toHaveLength(0)
   })
 
   it('does not reach the database for a bad form, a failed check or a limited connection', async () => {

@@ -178,8 +178,6 @@
   font-weight: 600;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .chip {
-    transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
-  }
+.chip {
+  transition: border-color var(--dl-duration-press) var(--dl-ease), box-shadow var(--dl-duration-press) var(--dl-ease), background-color var(--dl-duration-press) var(--dl-ease);
 }

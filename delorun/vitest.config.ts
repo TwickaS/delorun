@@ -15,6 +15,7 @@ import { standardDecoratorPlugin } from '../vitest.shared.ts'
  *   {@link INTEGRATION_TIMEOUT_MS} budget and their hooks {@link INTEGRATION_HOOK_TIMEOUT_MS}, which a contended machine needs for process start-up. The check runner runs
  *   this project in its own phase with a bounded worker count (`--maxWorkers`), so the children of many workers do not
  *   compete for the CPUs at once.
+ * - `fork-client-website`: the product website's component specs, with the website's React.
  * - `fork-client`: the client component specs, `*.spec.tsx`, at {@link CLIENT_TIMEOUT_MS}. They resolve upstream packages to
  *   their sources through `tsconfig.base.json`'s paths, as upstream's own client specs do, because the built client
  *   modules load React's CommonJS shims that the jsdom lane cannot import.
@@ -57,6 +58,8 @@ export const forkUnitProject = {
   resolve: {
     alias: [
       { find: '@design', replacement: fileURLToPath(new URL('./packages/site-design/src', import.meta.url)) },
+      { find: '#upstream', replacement: fileURLToPath(new URL('./packages/brand/src/upstream.web.tsx', import.meta.url)) },
+      { find: /^@brand\//, replacement: fileURLToPath(new URL('./packages/brand/src/', import.meta.url)) },
       { find: '@brand', replacement: fileURLToPath(new URL('./packages/brand/src/index.ts', import.meta.url)) },
       // The brand package resolves its own React; the website's spec renders it, so both use the website's copy. Without
       // an installed website, each package resolves its own React.
@@ -78,7 +81,33 @@ export const forkClientProject = {
   test: {
     name: 'fork-client',
     include: SPEC_DIRS.map(dir => `${dir}/*.spec.tsx`),
+    exclude: ['**/node_modules/**', 'apps/website/tests/*.spec.tsx'],
     setupFiles: [fileURLToPath(new URL('../scripts/test-dom-environment.ts', import.meta.url)), fileURLToPath(new URL('./vitest.dom-setup.ts', import.meta.url))],
+    testTimeout: CLIENT_TIMEOUT_MS,
+    hookTimeout: CLIENT_TIMEOUT_MS,
+  },
+}
+
+/**
+ * The product website's component specs, `apps/website/tests/*.spec.tsx`: the home page's component specs. It resolves `react` and `react-dom` to the website's copy, the aliases the
+ * unit project has, and `#upstream`, `@design` and `@brand` as the site does.
+ */
+export const forkClientWebsiteProject = {
+  plugins: [tsconfigPaths({ projects: [fileURLToPath(new URL('../tsconfig.base.json', import.meta.url))] })],
+  resolve: {
+    alias: [
+      { find: '#upstream', replacement: fileURLToPath(new URL('./packages/brand/src/upstream.web.tsx', import.meta.url)) },
+      { find: '@design', replacement: fileURLToPath(new URL('./packages/site-design/src', import.meta.url)) },
+      { find: /^@brand\//, replacement: fileURLToPath(new URL('./packages/brand/src/', import.meta.url)) },
+      { find: '@brand', replacement: fileURLToPath(new URL('./packages/brand/src/index.ts', import.meta.url)) },
+      // The site's own React 19 for every import, as in the unit project: the page's JSX and its components share it.
+      ...existsSync(WEBSITE_MODULES) ? [{ find: /^(react|react-dom)(\/.*)?$/, replacement: `${WEBSITE_MODULES}/$1$2` }] : [],
+    ],
+  },
+  test: {
+    name: 'fork-client-website',
+    include: ['apps/website/tests/*.spec.tsx'],
+    setupFiles: forkClientProject.test.setupFiles,
     testTimeout: CLIENT_TIMEOUT_MS,
     hookTimeout: CLIENT_TIMEOUT_MS,
   },
@@ -100,6 +129,7 @@ export default defineConfig({
         },
       },
       forkClientProject,
+      forkClientWebsiteProject,
     ],
   },
 })

@@ -1,0 +1,24 @@
+.bubble {
+  box-sizing: border-box;
+  color: var(--dl-text);
+  font-family: var(--dl-font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.bubble[data-from='person'] {
+  align-self: flex-end;
+  max-width: 80%;
+  padding: var(--dl-space-2) var(--dl-space-3);
+  border-radius: var(--dl-radius-md);
+  background: var(--dl-surface-sunken);
+}
+
+.bubble[data-from='agent'] {
+  align-self: stretch;
+  width: 100%;
+}
+
+.bubble :where(p) { margin: 0; }
+.bubble :where(p + p) { margin-top: var(--dl-space-2); }

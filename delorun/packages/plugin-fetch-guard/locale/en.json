@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Fetch guard",
+    "description": "Stops the agent's web fetch tool from reaching addresses on your own computer or private network, and says why when it refuses"
+  }
+}

@@ -22,6 +22,9 @@ const SOURCE = /(?<!\.d)\.(?:ts|tsx|mts|cts)$/u
 /** A bare specifier that names a file under an upstream package's `src/`. */
 const UPSTREAM_SRC_SPECIFIER = /^@deepseek-ai\/[^/]+\/src(?:\/|$)/u
 
+/** The alias the product website once had for upstream client source; no config resolves it any more. */
+const STUDIO_SPECIFIER = /^#studio\//u
+
 /** The top-level directories that hold upstream's packages. */
 const UPSTREAM_ROOTS = ['packages', 'vendor']
 
@@ -93,7 +96,9 @@ export function upstreamSourceImportErrors(root: string): string[] {
       if (!entry.isDirectory() || !existsSync(src)) continue
       for (const path of sources(src)) {
         for (const { specifier, position } of specifiers(path, readFileSync(path, 'utf8'))) {
-          if (reachesUpstreamSource(root, path, specifier)) {
+          if (STUDIO_SPECIFIER.test(specifier)) {
+            errors.push(`${relative(root, path)}:${position}: imports '${specifier}', an alias for upstream client source that no configuration resolves; import the package entry`)
+          } else if (reachesUpstreamSource(root, path, specifier)) {
             errors.push(`${relative(root, path)}:${position}: imports upstream source '${specifier}'; import the package entry and export what it lacks`)
           }
         }

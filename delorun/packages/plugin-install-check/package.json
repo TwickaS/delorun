@@ -8,7 +8,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./check": "./src/check.ts",
-    "./tests/*": "./tests/*.ts"
+    "./tests/*": "./tests/*.ts",
+    "./locale/*.json": "./locale/*.json"
   },
   "dependencies": {
     "@deepseek-ai/dsh-atomic-write": "workspace:*",

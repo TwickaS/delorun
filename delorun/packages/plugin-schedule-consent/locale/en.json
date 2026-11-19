@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Schedule consent",
+    "description": "Tells you what a scheduled task will do when you approve it, and checks each run against the permission level you approved"
+  }
+}

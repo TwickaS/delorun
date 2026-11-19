@@ -21,7 +21,10 @@ if (!existsSync(join(root, SITE, 'node_modules', 'vite', 'package.json'))) {
   console.error(`${NAME}-site: ${SITE} has no installed dependencies; run ${INSTALL}`)
   process.exit(1)
 }
-const build = spawnSync('pnpm', ['--dir', SITE, 'run', 'build'], { cwd: root, stdio: 'inherit' })
+// The product site's sessions are stand-ins until stage 3 records real ones; this check is not a deploy, so it builds with them allowed.
+// This is the one place the check runner sets the variable, so stage 3 removes it here.
+const env = NAME === 'website' ? { ...process.env, SITE_ALLOW_STANDINS: '1' } : process.env
+const build = spawnSync('pnpm', ['--dir', SITE, 'run', 'build'], { cwd: root, stdio: 'inherit', env })
 if (build.error !== undefined) {
   console.error(`${NAME}-site: the build did not start: ${build.error.message}`)
   process.exit(1)

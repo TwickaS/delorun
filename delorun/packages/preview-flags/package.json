@@ -12,6 +12,7 @@
     "./wire": "./src/wire.ts",
     "./client": "./src/client/index.ts",
     "./locales": "./src/client/locales.ts",
+    "./locale/*.json": "./locale/*.json",
     "./package.json": "./package.json"
   },
   "dependencies": {

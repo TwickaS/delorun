@@ -121,3 +121,18 @@ export function loadView(root: string, env: Readonly<Record<string, string | und
   const data = parseData(readFileSync(path, 'utf8'))
   return data.versions.length === 0 ? undefined : buildView(data)
 }
+
+/**
+ * The view the product site's home page needs: the latest version's number, date and headlines. Everything else is
+ * emptied, so the page's bundle does not carry the whole record; the documentation's changelog route reads the full view.
+ * @param view - the full view, or undefined when no version is assembled.
+ * @returns a view of the same type with the other versions and every area dropped, or undefined.
+ */
+export function headlinesOnly(view: ChangelogView | undefined): ChangelogView | undefined {
+  const latest = view?.versions[0]
+  if (view === undefined || latest === undefined) return view
+  return {
+    compared: { heading: view.compared.heading, intro: '', areas: [] },
+    versions: [{ ...latest, areas: [], fromUpstream: [], previews: [] }],
+  }
+}

@@ -161,6 +161,12 @@ export function gatesFor(base: string): readonly GateCheck[] {
       inputs: ['delorun/packages/*/package.json', 'delorun/apps/*/package.json', `${GATE_DIR}/package-states.ts`],
     },
     {
+      id: 'gates:plugin-sentences',
+      title: 'Every plugin the site lists has a title and a sentence in its locale/en.json',
+      command: [TSX, `${GATE_DIR}/plugin-sentences.ts`],
+      inputs: ['delorun/packages/*/package.json', 'delorun/packages/*/cordis.patch.yml', 'delorun/packages/*/locale/en.json', 'delorun/apps/website/src/plugin-browser/list-plugins.ts', `${GATE_DIR}/plugin-sentences.ts`],
+    },
+    {
       id: 'gates:preview-flags',
       title: 'Every Delorun package lists exactly the preview flags its plugin declares',
       command: [TSX, `${GATE_DIR}/preview-flags.ts`],

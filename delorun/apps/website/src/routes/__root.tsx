@@ -1,13 +1,8 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from '@tanstack/react-router'
+import { LOOK_SCRIPT, LOOK_SCRIPT_ID } from '@design/head-script.ts'
 import { OG_IMAGE_PATH, SITE_URL } from '@/site/config.ts'
 import { COPY } from '@/site/copy.ts'
 import appCss from '@/styles/app.css?url'
-
-/** Colours the page by the device's light or dark setting, before the first paint and when the setting changes. */
-const THEME_SCRIPT = "(function(){var m=matchMedia('(prefers-color-scheme: dark)');function a(){document.documentElement.classList.toggle('dark',m.matches)}a();m.addEventListener('change',a)})()"
-
-/** The id the build keeps when it strips the router's scripts from 404.html. */
-export const THEME_SCRIPT_ID = 'theme-init'
 
 export const Route = createRootRoute({
   head: () => ({
@@ -20,14 +15,17 @@ export const Route = createRootRoute({
       { property: 'og:title', content: `${COPY.siteTitle}: ${COPY.tagline}` },
       { property: 'og:description', content: COPY.description },
       { property: 'og:image', content: `${SITE_URL}${OG_IMAGE_PATH}` },
-      { property: 'og:image:alt', content: 'The Delorun mark and the words Delorun, an agent harness that runs on your own computer.' },
+      { property: 'og:image:alt', content: COPY.linkPreviewAlt },
       { name: 'twitter:card', content: 'summary_large_image' },
+      { name: 'twitter:description', content: COPY.description },
+      { name: 'twitter:image', content: `${SITE_URL}${OG_IMAGE_PATH}` },
+      { name: 'twitter:image:alt', content: COPY.linkPreviewAlt },
     ],
     links: [
       { rel: 'stylesheet', href: appCss },
       { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
     ],
-    scripts: [{ id: THEME_SCRIPT_ID, children: THEME_SCRIPT }],
+    scripts: [{ id: LOOK_SCRIPT_ID, children: LOOK_SCRIPT }],
   }),
   component: RootDocument,
 })

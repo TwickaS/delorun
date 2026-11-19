@@ -13,7 +13,7 @@ export interface SignupInput {
 }
 
 /** Why a submission was refused; each names the message the form shows. */
-export type SignupProblem = 'email' | 'name' | 'consent'
+export type SignupProblem = 'email' | 'name' | 'consent' | 'version'
 
 /** One address: no spaces, one `@`, a dot in the domain. Delivery is proved by the confirmation, so the check is only a shape check. */
 const EMAIL_SHAPE = /^[^\s@<>(),;:"[\]\\]+@[^\s@<>(),;:"[\]\\]+\.[^\s@<>(),;:"[\]\\]+$/
@@ -52,12 +52,16 @@ export function normaliseName(raw: string): string | null | undefined {
  * Checks a submitted form.
  * @param form - the form's fields.
  * @param fields - the field names the form uses.
- * @returns the cleaned sign-up, or the first problem found.
+ * @param currentVersion - the version of the consent sentence the Worker records; the form's submitted version must equal it, so a page that shows older words is refused, and so is a form with no version.
+ * @returns the cleaned sign-up, or the first problem found; a version that is missing, malformed or not the current one is `version`.
  */
 export function parseSignup(
   form: FormData,
-  fields: { firstName: string; email: string; consent: string; page: string },
+  fields: { firstName: string; email: string; consent: string; page: string; consentVersion: string },
+  currentVersion: string,
 ): { ok: true; value: SignupInput } | { ok: false; problem: SignupProblem } {
+  // A page cached from before a deploy shows older words than the ones this Worker would record, so its version must be the current one.
+  if (text(form, fields.consentVersion) !== currentVersion) return { ok: false, problem: 'version' }
   const email = normaliseEmail(text(form, fields.email))
   if (email === undefined) return { ok: false, problem: 'email' }
   const firstName = normaliseName(text(form, fields.firstName))

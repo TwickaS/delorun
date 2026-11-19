@@ -8,7 +8,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./wire": "./src/wire.ts",
-    "./assets/sign-in.js": "./assets/sign-in.js"
+    "./assets/sign-in.js": "./assets/sign-in.js",
+    "./locale/*.json": "./locale/*.json"
   },
   "dependencies": {
     "@deepseek-ai/cordis": "workspace:~",

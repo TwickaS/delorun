@@ -3,82 +3,25 @@
  * studio half that applies them: the palette (Soft or one of T3 Code's
  * themes), the accent preset or a custom colour, the contrast, the typeface,
  * the density, the reasoning-effort display, and the switch that turns Delorun's
- * look and every Delorun studio plugin on or back to the stock look.
+ * look and every Delorun studio plugin on or back to the stock look. The ids, ranges and types live in `settings.ts`,
+ * which needs no schema library; this module adds the defaults and the validated schema.
  * @module @delorun/plugin-theme/config
  */
 import type { Volatile } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { DEFAULT_STORED_BRANDING, ICON_SOURCES, type StoredBranding } from '@delorun/brand/branding'
+import {
+  ACCENT_CHOICES, CONTRAST, DENSITIES, EFFORT_DISPLAYS, PALETTES, TYPEFACES,
+  type AccentChoice, type Density, type EffortDisplay, type PaletteChoice, type ThemeSettings, type Typeface,
+} from './settings.ts'
 
-/** The Loader row id, which names the settings namespace the studio edits. */
-export const THEME_ROW_ID = 'delorun-theme'
-
-/** The accent choices: the presets, then a custom colour. */
-export const ACCENT_CHOICES = ['peach', 'cobalt', 'moss', 'mono', 'custom'] as const
-
-/** One accent choice. */
-export type AccentChoice = typeof ACCENT_CHOICES[number]
-
-/** The typefaces: Delorun's (Schibsted Grotesk and JetBrains Mono) or upstream's system stacks. */
-export const TYPEFACES = ['delorun', 'system'] as const
-
-/** One typeface choice. */
-export type Typeface = typeof TYPEFACES[number]
-
-/** How tightly the studio sets its rows and gaps. */
-export const DENSITIES = ['compact', 'comfortable', 'spacious'] as const
-
-/** One density choice. */
-export type Density = typeof DENSITIES[number]
-
-/** Each density's spacing scale, the value of `--dsh-density` that spacing rules multiply by. */
-export const DENSITY_SCALE: Readonly<Record<Density, number>> = { compact: 0.8, comfortable: 1, spacious: 1.2 }
-
-/** The preset palettes: Delorun's Soft, and T3 Code's six themes. Each fixes its own accent and colours. */
-export const PRESET_PALETTES = ['soft', 't3-code', 't3-chat', 'grove', 'ocean', 'ember', 'iris'] as const
-
-/** The palettes: the presets, then `custom`, the only palette that reads {@link ThemeSettings.accent}, {@link ThemeSettings.customAccent} and {@link ThemeSettings.contrast}. */
-export const PALETTES = [...PRESET_PALETTES, 'custom'] as const
-
-/** One palette choice. */
-export type PaletteChoice = typeof PALETTES[number]
-
-/** One preset palette. */
-export type PresetPalette = typeof PRESET_PALETTES[number]
-
-/** How reasoning effort shows in the composer's model picker: its name, or T3 Code's bars. */
-export const EFFORT_DISPLAYS = ['label', 'bars'] as const
-
-/** One effort display. */
-export type EffortDisplay = typeof EFFORT_DISPLAYS[number]
-
-/** The contrast slider, T3 Code's: quiet text and rules move towards the page below 100 and towards primary text above it. */
-export const CONTRAST = { min: 50, max: 200, step: 5, default: 100 } as const
+export {
+  ACCENT_CHOICES, CONTRAST, DENSITIES, DENSITY_SCALE, EFFORT_DISPLAYS, PALETTES, PRESET_PALETTES, THEME_ROW_ID, TYPEFACES,
+  type AccentChoice, type Density, type EffortDisplay, type PaletteChoice, type PresetPalette, type ThemeSettings, type Typeface,
+} from './settings.ts'
 
 /** The accent a fresh studio shows, and the colour a custom pick starts from. */
 export const DEFAULT_CUSTOM_ACCENT = '#E5734A'
-
-/** The settings as the studio reads them. */
-export interface ThemeSettings {
-  /** The accent preset, or `custom` for {@link customAccent}. Read only with the `custom` palette. */
-  accent: AccentChoice
-  /** The custom accent as `#RRGGBB`; used when {@link accent} is `custom`. */
-  customAccent: string
-  /** Which typeface the studio uses. */
-  typeface: Typeface
-  /** How tightly rows and gaps are set. */
-  density: Density
-  /** Whether Delorun's look and Delorun's studio plugins are on; off is upstream's stock look. */
-  studioAdditions: boolean
-  /** The palette: a preset, which fixes its own accent and colours, or `custom`, which uses `accent`, `customAccent` and `contrast`. */
-  palette: PaletteChoice
-  /** Contrast, `CONTRAST.min` to `CONTRAST.max`; 100 leaves the palette as generated. Read only with the `custom` palette. */
-  contrast: number
-  /** How reasoning effort shows in the model picker. */
-  effort: EffortDisplay
-  /** The person's own branding; every field is validated again where it is read. */
-  branding: StoredBranding
-}
 
 /** The settings the Appearance section shows before the stored ones arrive, and the `Config` defaults. */
 export const DEFAULT_SETTINGS: ThemeSettings = {

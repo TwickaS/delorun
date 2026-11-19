@@ -8,7 +8,7 @@ This package builds delorun.com, Delorun's product site: a home page, a blog ind
 
 | Route | Serves |
 | --- | --- |
-| `/` | What Delorun is, a studio picture (`public/hero-studio.webp`, a screenshot of the demonstration home; `HERO_IMAGE_PATH` in `src/site/config.ts` names it), the install command with the first setup question under it, the preview status, six short sections that each link a guide page, the roadmap's three stages, a "For teams" line, and with an assembled version a What's new section from the changelog record |
+| `/` | The home page: a mosaic of real studio screenshots in the shape of the Delorun mark with the promise and the install command, a zoom into a film of one real job, the case for people who take their tools apart, a wall of every screenshot, and the sign-up. See [`DESIGN.md`](DESIGN.md) |
 | `/blog` | The articles in `content/blog/`, newest first, or a line saying there are none. The header, the footer and the sitemap link it only once an article is published |
 | `/sitemap.xml`, `/robots.txt` | The sitemap, written by the build from the pages that exist, and the robots file in `public/` that names it |
 | `/privacy` | What the site collects, what its host logs and where to read what the program sends |
@@ -48,13 +48,17 @@ The tokens, the Delorun mark, the page footer and the changelog view are in [`de
 
 The site follows the device's light or dark setting. It loads no remote font and sets no cookie. Cloudflare's Turnstile script loads from `challenges.cloudflare.com` only when a visitor first uses the sign-up form.
 
+## Pictures
+
+The home page shows real screenshots of the studio, which are not in the repository. `SITE_PICTURES_DIR` names the folder of source pictures, one `<picture id>.webp` per picture; the build fails with a message naming the variable when it is unset or the folder is missing. `scripts/wall-shots.ts <capture folder>` picks the wall's pictures from a capture set and writes them there (`ingest-owner-shots.ts` adds vetted pictures of the owner's own), then `shot-colours.ts`, `mosaic-plans.ts` and `lod.ts --write` regenerate the committed manifests in `src/home/`. `scripts/lod.ts`, which `pnpm run build` runs, makes the level-of-detail pyramid in `public/lod/` (AVIF and WebP, names hashed from their inputs, cached as immutable by `public/_headers`) and fails when a manifest is stale. It needs `ffmpeg` with libaom-av1 and libwebp on the PATH.
+
 ## Commands
 
 Run from the repository root, on the Node major that `.nvmrc` pins.
 
 ```sh
 (cd delorun/apps && pnpm --dir website install --frozen-lockfile)  # installs the site's dependencies from its own lockfile
-(cd delorun/apps && pnpm --dir website run build)                  # builds into out/, typechecks the site and runs the dead-link check
+(cd delorun/apps && SITE_PICTURES_DIR=<pictures folder> pnpm --dir website run build)  # builds the pictures and into out/, typechecks the site and runs the dead-link check
 (cd delorun/apps && pnpm --dir website run preview)                # serves the built out/ on 127.0.0.1:4173 as a static host would
 ```
 

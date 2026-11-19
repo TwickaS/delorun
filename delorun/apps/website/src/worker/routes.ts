@@ -4,7 +4,7 @@
  *
  * @module @delorun/website/worker/routes
  */
-import { FIELDS, SIGNUP_CONFIG_PATH, SUBSCRIBE_PATH, UNCONFIRMED_DAYS } from '../site/signup.ts'
+import { CONSENT_OUT_OF_DATE, CONSENT_TEXT_VERSION, FIELDS, SIGNUP_CONFIG_PATH, SUBSCRIBE_PATH, UNCONFIRMED_DAYS } from '../site/signup.ts'
 import type { Env } from './env.ts'
 import { sendConfirmation } from './mail.ts'
 import { page } from './pages.ts'
@@ -37,6 +37,7 @@ const PROBLEMS: Record<SignupProblem, string> = {
   email: 'That does not look like an email address. Check it and try again.',
   name: 'That first name is too long. Shorten it or leave it empty.',
   consent: 'Tick the box to say you want Delorun release news.',
+  version: CONSENT_OUT_OF_DATE,
 }
 
 /**
@@ -44,11 +45,12 @@ const PROBLEMS: Record<SignupProblem, string> = {
  * @param request - the request.
  * @param status - the HTTP status.
  * @param message - the text to show.
+ * @param code - `out_of_date` when the page shows older consent words; the message already tells the visitor to reload, and a script may read the code.
  * @returns the response.
  */
-function answer(request: Request, status: number, message: string): Response {
+function answer(request: Request, status: number, message: string, code?: 'out_of_date'): Response {
   if ((request.headers.get('Accept') ?? '').includes('application/json')) {
-    return Response.json({ ok: status === 200, message }, { status, headers: { 'Cache-Control': 'no-store' } })
+    return Response.json({ ok: status === 200, message, ...code === undefined ? {} : { code } }, { status, headers: { 'Cache-Control': 'no-store' } })
   }
   return page(status, status === 200 ? 'Thank you' : 'Sign-up not saved', [message])
 }
@@ -69,8 +71,9 @@ export async function subscribe(request: Request, env: Env, deps: Deps): Promise
     console.error('subscribe: unreadable body', error instanceof Error ? error.name : 'unknown')
     return answer(request, 400, 'The form could not be read. Reload the page and try again.')
   }
-  const parsed = parseSignup(form, FIELDS)
-  if (!parsed.ok) return answer(request, 400, PROBLEMS[parsed.problem])
+  const parsed = parseSignup(form, FIELDS, CONSENT_TEXT_VERSION)
+  // An out-of-date page is refused before anything else runs: nothing is stored and no message is sent. The form shows `code: 'out_of_date'` as a reload prompt.
+  if (!parsed.ok) return parsed.problem === 'version' ? answer(request, 409, PROBLEMS.version, 'out_of_date') : answer(request, 400, PROBLEMS[parsed.problem])
 
   const limited = await env.RATE_LIMIT.limit({ key: request.headers.get('CF-Connecting-IP') ?? 'unknown' })
   if (!limited.success) return answer(request, 429, 'Too many sign-ups from your connection. Wait a minute and try again.')
