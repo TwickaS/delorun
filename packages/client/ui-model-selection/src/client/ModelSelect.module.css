@@ -156,6 +156,7 @@
     width: auto;
     min-width: 0;
     max-width: none;
+    justify-self: stretch;
     max-height: min(60dvh, calc(100dvh - 96px));
   }
 }

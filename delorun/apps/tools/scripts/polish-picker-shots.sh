@@ -9,15 +9,14 @@ export DELORUN_HOME="${POLISH_HOME:-/tmp/polish-home}"
 URL=$(node_modules/.bin/tsx delorun/apps/cli/src/bin.ts open --print 2>&1 | grep -o "http://[^ ]*" | head -1)
 SCRIPT="$(mktemp)"
 cat >"$SCRIPT" <<JS
-await page.waitForTimeout(1500)
-if (await page.locator('text=Choose workspace').count() > 0) {
-  await page.click('text=Choose workspace')
-  await page.click('text=Default workspace')
+await page.waitForTimeout(2500)
+if (await page.locator('text=Complete setup later').count() > 0) {
+  await page.click('text=Complete setup later')
+  await page.waitForTimeout(800)
 }
-await page.waitForTimeout(800)
-const chip = page.locator('button[aria-haspopup=menu][aria-label*=odel]').first()
-await chip.click()
-await page.waitForTimeout(500)
+const chip = page.locator('button[aria-haspopup=menu]', { hasText: 'DeepSeek' }).first()
+await chip.click({ force: true })
+await page.waitForTimeout(600)
 await page.screenshot({ path: '$3-1-root.png' })
 await page.locator('[role=menuitem]').first().click()
 await page.waitForTimeout(600)
