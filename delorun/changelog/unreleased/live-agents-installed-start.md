@@ -1,5 +1,5 @@
 ---
-area: Agents
+area: Install and update
 section: Fixed
 ---
 
