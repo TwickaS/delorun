@@ -1,0 +1,392 @@
+{
+  "plugins": [
+    {
+      "name": "@delorun/bundle-local",
+      "title": "Delorun local integration",
+      "sentence": "Delorun's defaults over the stock studio: DeepSeek's session-log upload and desktop analytics stay off until you turn them on in Settings → Safety → Privacy; Settings → Devices shows remote access and the devices you approved; Settings → Safety → Permissions is where you allow or revoke a workspace's full access and a new MCP server",
+      "state": "shipped",
+      "standing": "on",
+      "requires": [],
+      "files": 194,
+      "folder": "delorun/packages/bundle-local"
+    },
+    {
+      "name": "@delorun/plugin-instruction-consent",
+      "title": "Instruction consent",
+      "sentence": "Shows you the change and asks first when the agent's file tools write a skill, a Delorun setup file or an AGENTS.md file",
+      "state": "shipped",
+      "standing": "on",
+      "requires": [],
+      "files": 15,
+      "folder": "delorun/packages/plugin-instruction-consent"
+    },
+    {
+      "name": "@delorun/plugin-mcp-consent",
+      "title": "MCP server consent",
+      "sentence": "Asks you before a new MCP server command can start, and remembers the ones you accepted",
+      "state": "shipped",
+      "standing": "on",
+      "requires": [],
+      "files": 26,
+      "folder": "delorun/packages/plugin-mcp-consent"
+    },
+    {
+      "name": "@delorun/plugin-permission-defaults",
+      "title": "Permission defaults",
+      "sentence": "Gives each new workspace the safer permission level, asks once before a workspace gets full access, and sets what its commands can reach on the network",
+      "state": "shipped",
+      "standing": "on",
+      "requires": [],
+      "files": 34,
+      "folder": "delorun/packages/plugin-permission-defaults"
+    },
+    {
+      "name": "@delorun/plugin-schedule-consent",
+      "title": "Schedule consent",
+      "sentence": "Tells you what a scheduled task will do when you approve it, and checks each run against the permission level you approved",
+      "state": "shipped",
+      "standing": "on",
+      "requires": [],
+      "files": 10,
+      "folder": "delorun/packages/plugin-schedule-consent"
+    },
+    {
+      "name": "@delorun/plugin-fetch-guard",
+      "title": "Fetch guard",
+      "sentence": "Stops the agent's web fetch tool from reaching addresses on your own computer or private network, and says why when it refuses",
+      "state": "shipped",
+      "standing": "on",
+      "requires": [],
+      "files": 13,
+      "folder": "delorun/packages/plugin-fetch-guard"
+    },
+    {
+      "name": "@delorun/plugin-tool-failure-guard",
+      "title": "Tool failure guard",
+      "sentence": "Stops a turn that keeps hitting failing tool calls and says so in the chat, so a missing or broken tool does not use up tokens. Send a message to carry on.",
+      "state": "shipped",
+      "standing": "on",
+      "requires": [],
+      "files": 23,
+      "folder": "delorun/packages/plugin-tool-failure-guard"
+    },
+    {
+      "name": "@delorun/skill-plugin-authoring",
+      "title": "Plugin authoring skill",
+      "sentence": "Teaches the agent how to make or change a Delorun plugin in your workspace, and leaves turning it on to you",
+      "state": "shipped",
+      "standing": "on",
+      "requires": [],
+      "files": 8,
+      "folder": "delorun/packages/skill-plugin-authoring"
+    },
+    {
+      "name": "@delorun/skill-report-problem",
+      "title": "Report a problem skill",
+      "sentence": "Helps you write up a problem as a GitHub issue that you read and send yourself",
+      "state": "shipped",
+      "standing": "on",
+      "requires": [],
+      "files": 7,
+      "folder": "delorun/packages/skill-report-problem"
+    },
+    {
+      "name": "@delorun/plugin-delegation-consent",
+      "title": "Delegation consent",
+      "sentence": "Asks you before Claude Code, Codex or another outside agent starts work for you, remembers your answer for each workspace and limits how long a run can last",
+      "state": "shipped",
+      "standing": "on",
+      "requires": [],
+      "files": 17,
+      "folder": "delorun/packages/plugin-delegation-consent"
+    },
+    {
+      "name": "@delorun/plugin-changes",
+      "title": "Changes",
+      "sentence": "Nothing changes what Delorun runs until you approve it at your computer; the Changes section in Settings reviews, applies, discards and undoes changes, and loads a plugin's edits live while you work on it",
+      "state": "shipped",
+      "standing": "on",
+      "requires": [],
+      "files": 62,
+      "folder": "delorun/packages/plugin-changes"
+    },
+    {
+      "name": "@delorun/plugin-update",
+      "title": "Updates",
+      "sentence": "Update Delorun from the studio: check for a newer release, read what it would change, update, and go back, without a terminal",
+      "state": "shipped",
+      "standing": "on",
+      "requires": [],
+      "files": 31,
+      "folder": "delorun/packages/plugin-update"
+    },
+    {
+      "name": "@delorun/plugin-packs",
+      "title": "Plugin packs",
+      "sentence": "Downloads an optional plugin pack when you turn it on and checks it against the signed list of packs before it loads",
+      "state": "shipped",
+      "standing": "on",
+      "requires": [],
+      "files": 17,
+      "folder": "delorun/packages/plugin-packs"
+    },
+    {
+      "name": "@delorun/plugin-install-check",
+      "title": "Install check",
+      "sentence": "Warns about plugins with no integrity check, known security problems, very new versions or names that look like another plugin, and tells you when an installed plugin has changed",
+      "state": "shipped",
+      "standing": "on",
+      "requires": [],
+      "files": 17,
+      "folder": "delorun/packages/plugin-install-check"
+    },
+    {
+      "name": "@delorun/plugin-trash",
+      "title": "Trash",
+      "sentence": "Deleting a chat or a workspace moves it to the trash for 30 days; the Trash section in Settings restores it or deletes it forever",
+      "state": "shipped",
+      "standing": "on",
+      "requires": [],
+      "files": 28,
+      "folder": "delorun/packages/plugin-trash"
+    },
+    {
+      "name": "@delorun/home-auth",
+      "title": "Device sign-in",
+      "sentence": "Approves each phone or computer that connects, once, at your computer, and lists the devices you have approved",
+      "state": "shipped",
+      "standing": "on",
+      "requires": [],
+      "files": 98,
+      "folder": "delorun/packages/home-auth"
+    },
+    {
+      "name": "@delorun/reach",
+      "title": "Reach",
+      "sentence": "Lets you open Delorun from your phone or another computer over your own Tailscale network, once you turn it on",
+      "state": "shipped",
+      "standing": "on",
+      "requires": [],
+      "files": 20,
+      "folder": "delorun/packages/reach"
+    },
+    {
+      "name": "@delorun/plugin-theme",
+      "title": "Delorun theme",
+      "sentence": "Delorun's look in the studio: the Soft palette, the accent, Delorun's typefaces, the Appearance and Conversation settings, and one switch back to the stock look",
+      "state": "shipped",
+      "standing": "on",
+      "requires": [],
+      "files": 95,
+      "folder": "delorun/packages/plugin-theme"
+    },
+    {
+      "name": "@delorun/plugin-settings-layout",
+      "title": "Delorun settings layout",
+      "sentence": "Settings grouped by topic, with search and a larger panel. Turn it off, or choose the stock look, for upstream's flat list.",
+      "state": "shipped",
+      "standing": "on",
+      "requires": [],
+      "files": 25,
+      "folder": "delorun/packages/plugin-settings-layout"
+    },
+    {
+      "name": "@delorun/plugin-chat-states",
+      "title": "Chat states",
+      "sentence": "Snooze chats or mark them settled, with Snoozed and Settled shelves in the sidebar",
+      "state": "shipped",
+      "standing": "on",
+      "requires": [],
+      "files": 40,
+      "folder": "delorun/packages/plugin-chat-states"
+    },
+    {
+      "name": "@delorun/plugin-sidebar",
+      "title": "Delorun sidebar",
+      "sentence": "Chats as cards with Working, Snoozed and Settled shelves, search and a workspace filter. Choose the stock look under Settings → General → Look for the stock list.",
+      "state": "shipped",
+      "standing": "on",
+      "requires": [],
+      "files": 60,
+      "folder": "delorun/packages/plugin-sidebar"
+    },
+    {
+      "name": "@delorun/plugin-onboarding",
+      "title": "Delorun onboarding",
+      "sentence": "The first-run guide: language, model keys, look, agents, recommended plugins, phone access and a workspace, ending in a new chat. Settings → General → Getting started shows it again.",
+      "state": "shipped",
+      "standing": "on",
+      "requires": [],
+      "files": 131,
+      "folder": "delorun/packages/plugin-onboarding"
+    },
+    {
+      "name": "@delorun/plugin-new-workspace",
+      "title": "New workspace",
+      "sentence": "One guided dialog to start a workspace from a new folder, a folder on this computer or a Git repository, with the places you used last close at hand.",
+      "state": "shipped",
+      "standing": "on",
+      "requires": [],
+      "files": 71,
+      "folder": "delorun/packages/plugin-new-workspace"
+    },
+    {
+      "name": "@delorun/plugin-downloads",
+      "title": "Downloads panel",
+      "sentence": "Shows the plugins being installed, with their progress and place in the queue.",
+      "state": "shipped",
+      "standing": "on",
+      "requires": [],
+      "files": 38,
+      "folder": "delorun/packages/plugin-downloads"
+    },
+    {
+      "name": "@delorun/preview-flags",
+      "title": "Preview flags",
+      "sentence": "Lets a plugin mark a studio feature as not ready for everyone, with one setting that turns it on",
+      "state": "shipped",
+      "standing": "on",
+      "requires": [],
+      "files": 26,
+      "folder": "delorun/packages/preview-flags"
+    },
+    {
+      "name": "@delorun/plugin-cost-meter",
+      "title": "Cost meter",
+      "sentence": "Shows the chat's estimated cost under the composer, including its subagents and teammates, with a breakdown by agent, model and token type.",
+      "state": "experimental",
+      "standing": "off",
+      "requires": [],
+      "files": 35,
+      "folder": "delorun/packages/plugin-cost-meter"
+    },
+    {
+      "name": "@delorun/plugin-thinking-rsvp",
+      "title": "Thinking tab",
+      "sentence": "Read the model’s reasoning and reply word by word in the right sidebar as it writes them.",
+      "state": "experimental",
+      "standing": "off",
+      "requires": [],
+      "files": 31,
+      "folder": "delorun/packages/plugin-thinking-rsvp"
+    },
+    {
+      "name": "@delorun/bundle-agent-hooks",
+      "title": "Claude Code and Codex hooks",
+      "sentence": "Runs the hooks from your Claude Code settings and your Codex hooks file at the same points in a Delorun turn, and loads Claude Code mods",
+      "state": "experimental",
+      "standing": "pack",
+      "requires": [],
+      "files": 8,
+      "folder": "delorun/packages/bundle-agent-hooks"
+    },
+    {
+      "name": "@delorun/bundle-browser",
+      "title": "Browser",
+      "sentence": "Lets the agent open pages, click and read in a Chromium browser on this computer, through Playwright",
+      "state": "experimental",
+      "standing": "pack",
+      "requires": [
+        "a one-off chromium download"
+      ],
+      "files": 8,
+      "folder": "delorun/packages/bundle-browser"
+    },
+    {
+      "name": "@delorun/bundle-code-intelligence",
+      "title": "Code intelligence",
+      "sentence": "Lets the agent ask a language server for definitions, references and hover information. Needs typescript-language-server on your PATH",
+      "state": "shipped",
+      "standing": "pack",
+      "requires": [
+        "typescript-language-server installed"
+      ],
+      "files": 8,
+      "folder": "delorun/packages/bundle-code-intelligence"
+    },
+    {
+      "name": "@delorun/bundle-computer-use-driver",
+      "title": "Computer use (Cua Driver)",
+      "sentence": "Lets the agent see and operate desktop windows on Linux and Windows through the Cua Driver SDK. macOS has Computer use",
+      "state": "experimental",
+      "standing": "pack",
+      "requires": [],
+      "files": 8,
+      "folder": "delorun/packages/bundle-computer-use-driver"
+    },
+    {
+      "name": "@delorun/bundle-external-agents",
+      "title": "External agents",
+      "sentence": "Lets the agent hand a task to the Codex or Claude Code program you already have installed, and runs Python code in tool programs",
+      "state": "experimental",
+      "standing": "pack",
+      "requires": [
+        "codex or claude installed",
+        "python3 installed"
+      ],
+      "files": 8,
+      "folder": "delorun/packages/bundle-external-agents"
+    },
+    {
+      "name": "@delorun/bundle-real-browser",
+      "title": "Your own browser",
+      "sentence": "In a chat where you allow it, the agent works in your own Chrome, signed in as you, through browse",
+      "state": "experimental",
+      "standing": "pack",
+      "requires": [
+        "your own browser paired with it"
+      ],
+      "files": 8,
+      "folder": "delorun/packages/bundle-real-browser"
+    },
+    {
+      "name": "@delorun/bundle-webhooks",
+      "title": "Webhooks",
+      "sentence": "Starts a chat when a signed GitHub webhook arrives. Needs a secret in DELORUN_GITHUB_WEBHOOK_SECRET and a rule of your own",
+      "state": "experimental",
+      "standing": "pack",
+      "requires": [
+        "the DELORUN_GITHUB_WEBHOOK_SECRET setting"
+      ],
+      "files": 10,
+      "folder": "delorun/packages/bundle-webhooks"
+    }
+  ],
+  "scaffold": {
+    "tool": [
+      "package.json",
+      "cordis.patch.yml",
+      "locale/en.json",
+      "src/index.ts",
+      "tsdown.config.ts",
+      "tsconfig.json",
+      ".gitignore",
+      "README.md"
+    ],
+    "preset": [
+      "package.json",
+      "cordis.patch.yml",
+      "locale/en.json",
+      ".gitignore",
+      "README.md"
+    ],
+    "ui": [
+      "package.json",
+      "cordis.patch.yml",
+      "locale/en.json",
+      "src/index.ts",
+      "src/client/index.tsx",
+      "tsdown.config.ts",
+      "tsconfig.json",
+      ".gitignore",
+      "README.md"
+    ],
+    "bundle": [
+      "package.json",
+      "cordis.patch.yml",
+      "locale/en.json",
+      ".gitignore",
+      "README.md"
+    ]
+  }
+}

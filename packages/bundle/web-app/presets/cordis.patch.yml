@@ -8,13 +8,11 @@
         id: cordis
         order: 4
         plugins:
-          # The dsh-doc skill owns plugin implementation and authorization guidance.
+          # Plugin work on an install goes through the delorun-plugin-authoring skill.
           - id: persona
             name: '@deepseek-ai/dsh-persona'
             config:
-              prefix: >-
-                You are a coding agent powered by the {{model}} model.
-                You help the user customize DeepSeek Harness itself.
+              prefix: You help the person extend Delorun with plugins.
           - id: agent-instructions
             name: '@deepseek-ai/dsh-agent-instructions'
             config:

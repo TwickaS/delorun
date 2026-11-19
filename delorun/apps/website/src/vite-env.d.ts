@@ -6,3 +6,10 @@ declare module 'virtual:delorun-changelog' {
   const view: ChangelogView | null
   export default view
 }
+
+/** The licence texts of the material the site ships, read from the files that ship it. */
+declare module 'virtual:delorun-notices' {
+  import type { Notice } from '../../../packages/site-design/scripts/notices.ts'
+  const notices: readonly Notice[]
+  export default notices
+}

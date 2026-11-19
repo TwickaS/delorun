@@ -41,6 +41,7 @@
 | `event:delorun-main-chat/handoff` | event | `f8766d88c0cb3dc9fecdb0caeb5b11266cbb441db82d8e8c82bf2ac2c68e4b65` | [`{ type: "delorun-main-chat/handoff" }`](#persistence-type-sha256-f8766d88c0cb3dc9fecdb0caeb5b11266cbb441db82d8e8c82bf2ac2c68e4b65) |
 | `event:delorun-main-chat/read` | event | `514f7df060ae7775889b32b5c7003d63d978144a7e0c8483b0540239599713f6` | [`{ type: "delorun-main-chat/read" }`](#persistence-type-sha256-514f7df060ae7775889b32b5c7003d63d978144a7e0c8483b0540239599713f6) |
 | `event:developer/message` | event | `70349a1c0566c4fd43925d3790e6afa57724b2c738b0b549b87acc105aef22c2` | [`{ type: "developer/message" }`](#persistence-type-sha256-70349a1c0566c4fd43925d3790e6afa57724b2c738b0b549b87acc105aef22c2) |
+| `event:external-agent/run-allowed` | event | `0c201d883a00e1f807504b13aaffc6aeee8b9d0b654e5a16f49b2975fa0b31fe` | [`{ type: "external-agent/run-allowed" }`](#persistence-type-sha256-0c201d883a00e1f807504b13aaffc6aeee8b9d0b654e5a16f49b2975fa0b31fe) |
 | `event:feedback/message-delete` | event | `3ee93b06f3a125850337602bcdf155d2538c43a5c944ec55b1b3c365152d6796` | [`{ type: "feedback/message-delete" }`](#persistence-type-sha256-3ee93b06f3a125850337602bcdf155d2538c43a5c944ec55b1b3c365152d6796) |
 | `event:feedback/message-put` | event | `b5086d249e8502e9ead1d39156bb8d559bde7951cac0f14ce150345b4e42a2bf` | [`{ type: "feedback/message-put" }`](#persistence-type-sha256-b5086d249e8502e9ead1d39156bb8d559bde7951cac0f14ce150345b4e42a2bf) |
 | `event:feedback/record` | event | `b54940ff095c17e874c5be03815f4c2145a256cf3a1d34dae4ab2f7769dfffe8` | [`{ type: "feedback/record" }`](#persistence-type-sha256-b54940ff095c17e874c5be03815f4c2145a256cf3a1d34dae4ab2f7769dfffe8) |
@@ -509,7 +510,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'delorun-main-chat/handoff': { readonly chat: string }
 ```
 
-来源：[`delorun/packages/plugin-main-chat/src/reports.ts:33`](../delorun/packages/plugin-main-chat/src/reports.ts)
+来源：[`delorun/packages/plugin-main-chat/src/reports.ts:36`](../delorun/packages/plugin-main-chat/src/reports.ts)
 
 <a id="delorun-main-chatread--log-only"></a>
 
@@ -523,7 +524,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'delorun-main-chat/read': { readonly chat: string } | { readonly query: string } | { readonly workspace: string }
 ```
 
-来源：[`delorun/packages/plugin-main-chat/src/account-tools.ts:42`](../delorun/packages/plugin-main-chat/src/account-tools.ts)
+来源：[`delorun/packages/plugin-main-chat/src/account-tools.ts:45`](../delorun/packages/plugin-main-chat/src/account-tools.ts)
 
 ### `developer/*`
 
@@ -543,6 +544,25 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 ```
 
 来源：[`packages/core/session/src/types.ts:317`](../packages/core/session/src/types.ts)
+
+### `external-agent/*`
+
+<a id="external-agentrun-allowed--log-only"></a>
+
+#### `external-agent/run-allowed` — log-only
+
+```ts persistence-catalog
+/**
+ * The person answered a live external agent's question with "Allow for this run" and the start gate kept the
+ * program's rule for the rest of the run. Log-only audit: it carries no `surfaceOp` and never enters model
+ * history. Declared here because the persistence catalog scans `packages/` for Session event declarations;
+ * `@delorun/plugin-agent-seats` appends it.
+ * @param data - `askedSeq`, the `approval/asked` event of the question the person answered, in the same log.
+ */
+'external-agent/run-allowed': { askedSeq: AskedSeq }
+```
+
+来源：[`packages/subagent/subagent/src/descriptor.ts:46`](../packages/subagent/subagent/src/descriptor.ts)
 
 ### `feedback/*`
 
@@ -1936,6 +1956,14 @@ SHA-256: `66c5bf7473db21dd157d2535a6eb3f4849c73a1c1f429e9faf5e9fd1f65b3756`
 SHA-256: `fc351843b8ecbd05d739c4ca4fcd4bc7cfad6c0beacbbd48389959bb1bf06cf3`
 
 `"external"`
+
+<a id="persistence-type-sha256-6733f4ad03f3fbe0c196b509303777122972e1249602af6d5136b9b68ab88aed"></a>
+
+### `"external-agent/run-allowed"`
+
+SHA-256: `6733f4ad03f3fbe0c196b509303777122972e1249602af6d5136b9b68ab88aed`
+
+`"external-agent/run-allowed"`
 
 <a id="persistence-type-sha256-b57a2889408de36e4516807194c73bdecd51a92f633ccd05db81bf049200f420"></a>
 
@@ -3545,7 +3573,7 @@ SHA-256: `c748fb42c80a120038a8c587af80ec39924803c401364db11c8974d5bf6d0262`
 
 SHA-256: `6487b10ba7542f3c447b1e41a1c6a590b7bfafe0b9b66b49f34028da85bb970f`
 
-来源：[`packages/subagent/subagent/src/descriptor.ts:72`](../packages/subagent/subagent/src/descriptor.ts)
+来源：[`packages/subagent/subagent/src/descriptor.ts:80`](../packages/subagent/subagent/src/descriptor.ts)
 
 | 属性 | 存在性 | 类型 |
 |---|---|---|
@@ -4600,7 +4628,7 @@ SHA-256: `8e8e91646a5cae3fc78f7532a0013ff2088ae47077642c2edd507a508209b8af`
 
 SHA-256: `5f758f3de5f00c18968a7c6d347083aac5c9ae13f6a79c78f6611b23c4973564`
 
-来源：[`packages/subagent/subagent/src/descriptor.ts:61`](../packages/subagent/subagent/src/descriptor.ts)
+来源：[`packages/subagent/subagent/src/descriptor.ts:69`](../packages/subagent/subagent/src/descriptor.ts)
 
 | 属性 | 存在性 | 类型 |
 |---|---|---|
@@ -5115,7 +5143,7 @@ SHA-256: `058fc9a6b4fbd5d43437c3a64170002070dfc98e18d87de294b564ae446ca8ae`
 
 SHA-256: `86d1d0e9cfebb240421187e3dc37fb71cc38a1501885cf32f8f9adef7b0a2bde`
 
-来源：[`packages/subagent/subagent/src/descriptor.ts:89`](../packages/subagent/subagent/src/descriptor.ts)
+来源：[`packages/subagent/subagent/src/descriptor.ts:97`](../packages/subagent/subagent/src/descriptor.ts)
 
 以下类型之一：
 
@@ -6135,6 +6163,18 @@ SHA-256: `e4c18e294232c3ba6c9f1999f168263cc55956147cfe4121720899be8e52edd1`
 | `step` | 必需 | `number` |
 | `turn` | 必需 | `number` |
 
+<a id="persistence-type-sha256-4272b05b85ca6834f3af937de661ac623c24c63cac86a836c8aa7f518d276440"></a>
+
+### `{ askedSeq }`
+
+SHA-256: `4272b05b85ca6834f3af937de661ac623c24c63cac86a836c8aa7f518d276440`
+
+来源：[`packages/subagent/subagent/src/descriptor.ts:46`](../packages/subagent/subagent/src/descriptor.ts)
+
+| 属性 | 存在性 | 类型 |
+|---|---|---|
+| `askedSeq` | 必需 | `number` |
+
 <a id="persistence-type-sha256-1528539c63db8b23506f0209a99ce77d8ad138adfbfcee3d4769b7382d93756c"></a>
 
 ### `{ callId, files, turn }`
@@ -6213,7 +6253,7 @@ SHA-256: `664a28a5385dacbe2fcd164e33b75c3efa89adb4a532421b84f067607da2c1f5`
 
 SHA-256: `624b0506907beb45a1944f9c2441b7eeaeee522547d9b5602fb2070419d3ae09`
 
-来源：[`delorun/packages/plugin-main-chat/src/account-tools.ts:42`](../delorun/packages/plugin-main-chat/src/account-tools.ts) · [`delorun/packages/plugin-main-chat/src/reports.ts:33`](../delorun/packages/plugin-main-chat/src/reports.ts)
+来源：[`delorun/packages/plugin-main-chat/src/account-tools.ts:45`](../delorun/packages/plugin-main-chat/src/account-tools.ts) · [`delorun/packages/plugin-main-chat/src/reports.ts:36`](../delorun/packages/plugin-main-chat/src/reports.ts)
 
 | 属性 | 存在性 | 类型 |
 |---|---|---|
@@ -8379,7 +8419,7 @@ SHA-256: `8a9c990773f798eac10ca8878e6bcc531ee080bc589cac956730e462cc6a09ad`
 
 SHA-256: `795e21f0a7553e9e80dfedcd6b82135d20e0dd0be84a703a4edbcc3fc4037d5f`
 
-来源：[`delorun/packages/plugin-main-chat/src/account-tools.ts:42`](../delorun/packages/plugin-main-chat/src/account-tools.ts)
+来源：[`delorun/packages/plugin-main-chat/src/account-tools.ts:45`](../delorun/packages/plugin-main-chat/src/account-tools.ts)
 
 | 属性 | 存在性 | 类型 |
 |---|---|---|
@@ -8868,6 +8908,22 @@ SHA-256: `37ff65426bcf130f045d3a59ef2a4648eb170cd30280cbd024108a2e9b4401d1`
 | 属性 | 存在性 | 类型 |
 |---|---|---|
 | `type` | 必需 | `"disabled"` |
+
+<a id="persistence-type-sha256-0c201d883a00e1f807504b13aaffc6aeee8b9d0b654e5a16f49b2975fa0b31fe"></a>
+
+<a id="persistence-type-eventexternal-agentrun-allowed"></a>
+
+### `{ type: "external-agent/run-allowed" }`
+
+SHA-256: `0c201d883a00e1f807504b13aaffc6aeee8b9d0b654e5a16f49b2975fa0b31fe`
+
+| 属性 | 存在性 | 类型 |
+|---|---|---|
+| `data` | 必需 | [`{ askedSeq }`](#persistence-type-sha256-4272b05b85ca6834f3af937de661ac623c24c63cac86a836c8aa7f518d276440) |
+| `ignorable` | 可选 | `true` |
+| `seq` | 必需 | `number` |
+| `time` | 必需 | `number` |
+| `type` | 必需 | `"external-agent/run-allowed"` |
 
 <a id="persistence-type-sha256-3ee93b06f3a125850337602bcdf155d2538c43a5c944ec55b1b3c365152d6796"></a>
 
@@ -9832,7 +9888,7 @@ SHA-256: `e308ccf867a5398e316e0af8cb6ce238a8d33a63b9b384c8250a686786285f72`
 
 SHA-256: `7e628cddef4ffbab90934efae7e58a196bc7b54dda917ba1f0db1ab5a6494713`
 
-来源：[`delorun/packages/plugin-main-chat/src/account-tools.ts:42`](../delorun/packages/plugin-main-chat/src/account-tools.ts)
+来源：[`delorun/packages/plugin-main-chat/src/account-tools.ts:45`](../delorun/packages/plugin-main-chat/src/account-tools.ts)
 
 | 属性 | 存在性 | 类型 |
 |---|---|---|

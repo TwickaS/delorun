@@ -24,6 +24,9 @@
   border-radius: var(--dsw-radius-sm, var(--dl-radius-sm));
   background: var(--dsw-alias-bg-layer-1, var(--dl-surface-raised));
   box-shadow: var(--dsw-elevation-soft, 0 1px 2px rgb(0 0 0 / 8%));
+  /* A 1px outline sets the chosen segment apart from its track in a dark look, where the fills are close. */
+  outline: 1px solid var(--dsw-alias-border-l2, var(--dl-border));
+  outline-offset: -1px;
   transform: translateX(calc(var(--choice-index) * (100% + var(--segment-gap))));
   pointer-events: none;
 }
@@ -66,14 +69,12 @@
   outline-offset: -2px;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .indicator {
-    transition: transform 160ms ease;
-  }
+.indicator {
+  transition: transform var(--dl-motion-quick) var(--dl-ease-out);
+}
 
-  .segment {
-    transition: color 120ms ease;
-  }
+.segment {
+  transition: color var(--dl-duration-press) var(--dl-ease);
 }
 
 /* A filling group takes its container's width; the segments share it equally. */

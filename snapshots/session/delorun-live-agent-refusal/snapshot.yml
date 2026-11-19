@@ -1,0 +1,11 @@
+version: 1
+scenario: delorun-live-agent-refusal
+profile: headless
+composition: default
+recording: authored
+permission: workspace-write
+header:
+  class: delorun-live-agent-refusal
+  pin: true
+replay:
+  override: true

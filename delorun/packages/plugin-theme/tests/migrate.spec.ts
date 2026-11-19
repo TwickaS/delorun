@@ -2,7 +2,8 @@
 import { describe, expect, it } from 'vitest'
 import { CONTRAST, DEFAULT_SETTINGS, type ThemeSettings } from '../src/config.ts'
 import { chosenAccent, previewColors, themeLayers } from '../src/palette/layers.ts'
-import { customSeed, lookOf } from '../src/palette/migrate.ts'
+import { lookOf } from '../src/palette/migrate.ts'
+import { customSeed } from '../src/settings.ts'
 import { ACCENTS } from '../src/palette/soft.ts'
 import { t3Palette } from '../src/palette/t3.ts'
 

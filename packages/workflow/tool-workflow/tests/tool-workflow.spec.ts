@@ -4,9 +4,9 @@ import { createInboxStub, unsupportedModel, provideWorkingDirectoryFixture } fro
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
-import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
+import SystemPrompt, { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { TOOL_ABORTED_BEFORE_DISPATCH } from '@deepseek-ai/dsh-tools'
-import type { ToolExecutionResult, ToolExecutionToken } from '@deepseek-ai/dsh-tools'
+import type { ResolvedToolSet, ToolExecutionResult, ToolExecutionToken } from '@deepseek-ai/dsh-tools'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { WorkflowRunId, WorkflowEngine } from '@deepseek-ai/dsh-workflow'
 import type {
@@ -443,6 +443,22 @@ describe('dsh-tool-workflow', () => {
     const unwrapped = loader.unwrapExports(toolWorkflow) as Record<string, unknown>
     expect(unwrapped).toBe(toolWorkflow)
     expect(typeof unwrapped.apply).toBe('function')
+  })
+
+  describe('prompt paragraph', () => {
+    it('is sent only while the step offers the workflow tool', async () => {
+      const ctx = new Context()
+      onTestFinished(async () => { await ctx.fiber.dispose() })
+      await ctx.plugin(SystemPrompt)
+      await ctx.plugin(ToolRuntime)
+      await ctx.plugin(NativeToolExecutor)
+      await ctx.plugin(StubEngine)
+      await ctx.plugin(toolWorkflow, {})
+      const paragraph = 'Use the workflow tool ONLY'
+      const withheld: ResolvedToolSet = { dispose() {}, view: () => new Map() }
+      expect(renderPrompt(await ctx.systemPrompt.assemble())).toContain(paragraph)
+      expect(renderPrompt(await ctx.systemPrompt.assemble({ toolSet: withheld }))).not.toContain(paragraph)
+    })
   })
 
   describe('run_in_background', () => {

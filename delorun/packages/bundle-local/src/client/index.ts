@@ -95,6 +95,7 @@ import { FaceIdPairingOverlay } from './FaceIdPairingOverlay.tsx'
 import { en as pinModeEn, zh as pinModeZh, type PinModeLocaleKey } from './pin-mode-locales.ts'
 import { PinModeSection, type PinModeSectionInjected } from './PinModeSection.tsx'
 import { attachPinTriggers } from './pin-triggers.ts'
+import { provideAgentSeatReach } from './agent-seat-reach.ts'
 import { createUnlockSource, type UnlockSource } from './unlock.ts'
 import { UnlockOverlay } from './UnlockOverlay.tsx'
 import { trustApi, TrustStore, type TrustApi } from './trust-api.ts'
@@ -521,6 +522,7 @@ export function apply(ctx: Context): void {
     pinPhase = phase
   }), 'delorun-pin: the unlock banner reads the elevation again when the page unlocks or locks')
   ctx.effect(() => installGateUnlock(unlock), 'delorun-devices: gate notices open the unlock dialog')
+  provideAgentSeatReach(ctx, pin, unlock, (ctx.get('connection') as ConnectionHandle).isLoopback)
   const pairing = createPairingSource(browserFetch)
   const pairingWriter = new PairingWriter(ctx.configForms.get<PairingRowSettings>(HOME_AUTH_ROW))
   const devicesFace = (): DevicesSectionInjected => ({

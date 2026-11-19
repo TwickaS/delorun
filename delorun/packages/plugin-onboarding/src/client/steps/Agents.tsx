@@ -2,7 +2,9 @@
  * Agents: Claude Code and Codex, each with how a chat uses it, a use-at-your-own-risk warning and its sign-in on this
  * computer. One Add takes the defaults.
  */
+import { useState } from 'react'
 import type { ReactNode } from 'react'
+import { AgentLimits, runCheck, signInText, type AccountFigures } from '@delorun/bundle-local/agent-limits'
 import type { AgentSignIn } from '../../wire.ts'
 import { StateLine, type StateTone } from '../ui/StateLine.tsx'
 import { AgentAdvanced } from './AgentAdvanced.tsx'
@@ -40,6 +42,13 @@ function AgentCard({ agent, services, guide }: { readonly agent: typeof AGENT_BU
   const loading = readiness.status === 'loading'
   const bundleState = useBundle(services, agent.name)?.state
   const added = bundleState === 'installed' || bundleState === 'restart'
+  const stored = readiness.status === 'ready' ? readiness.value.accounts : undefined
+  const [checked, setChecked] = useState<{ readonly record: AccountFigures; readonly now: number } | undefined>()
+  const account: AccountFigures | undefined = checked?.record ?? stored?.agents.find(each => each.provider === agent.agent)
+  const now = checked?.now ?? stored?.now ?? 0
+  // The store's answer outranks the file hint once a check has said; before it, the hint stands in.
+  const known = account === undefined ? undefined : signInText(t, account)
+  const storeSignedOut = account?.signedIn === 'no'
   // The sign-in stays visible while the package is added; it hides while the package's own state is checking, failed or not available.
   const showSignIn = bundleState === 'available' || bundleState === 'installing' || bundleState === 'slow' || added
   return (
@@ -51,11 +60,19 @@ function AgentCard({ agent, services, guide }: { readonly agent: typeof AGENT_BU
       {bundleState !== undefined && bundleState !== 'checking' && bundleState !== 'unavailable' && !added && <p className={css.how}>{t('agents.download', { size: String(agent.downloadMb) })}</p>}
       <StateLine tone="warning">{t(`agents.${agent.key}.risk`)}</StateLine>
       {showSignIn && (
-        <StateLine tone={loading ? 'loading' : signIn === undefined ? 'info' : SIGN_IN_TONES[signIn]}>
-          {loading ? t('agents.signIn.checking') : signIn === undefined ? t('agents.signIn.unread') : t(`agents.${agent.key}.signIn.${signIn}`)}
+        <StateLine tone={loading ? 'loading' : known !== undefined ? (storeSignedOut ? 'warning' : 'success') : signIn === undefined ? 'info' : SIGN_IN_TONES[signIn]}>
+          {loading ? t('agents.signIn.checking') : known ?? (signIn === undefined ? t('agents.signIn.unread') : t(`agents.${agent.key}.signIn.${signIn}`))}
         </StateLine>
       )}
-      {showSignIn && !loading && signIn === 'missing' && <CommandRow command={`delorun agents login ${agent.agent}`} t={t} />}
+      {showSignIn && !loading && (storeSignedOut || (known === undefined && signIn === 'missing')) && <CommandRow command={`delorun agents login ${agent.agent}`} t={t} />}
+      {added && account !== undefined && (
+        <AgentLimits account={{ ...account, installed: true }} now={now} t={t}
+          check={async (provider) => {
+            const result = await runCheck(services.pin.fetch, t, provider)
+            if (result.kind === 'done') setChecked({ record: result.record, now: result.now })
+            return result.kind === 'unlock' ? 'unlock' : result.note
+          }} />
+      )}
       <AgentAdvanced agent={agent.agent} title={title} services={services} added={added} />
     </BundleCard>
   )

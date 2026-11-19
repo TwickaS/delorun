@@ -1,0 +1,45 @@
+.composer {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--dl-space-2);
+  font-family: var(--dl-font-sans);
+}
+
+.field {
+  flex: 1;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 40px;
+  padding: var(--dl-space-2) var(--dl-space-3);
+  border: 1px solid var(--dl-border);
+  border-radius: var(--dl-radius-md);
+  background: var(--dl-surface-raised);
+  color: var(--dl-text);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.placeholder { color: var(--dl-text-muted); }
+
+.caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.2em;
+  margin-inline-start: 1px;
+  vertical-align: text-bottom;
+  background: var(--dl-accent);
+  animation: blink calc(var(--dl-duration-move) * 2) var(--dl-ease-in-out) infinite alternate;
+}
+
+@keyframes blink {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .caret {
+    animation: none;
+    opacity: 1;
+  }
+}

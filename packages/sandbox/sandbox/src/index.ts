@@ -16,8 +16,10 @@ export {
   WIDER_MODES,
   approveEscalation,
   denialMarkers,
+  clearSandboxFault,
   environmentDenialMarker,
   escalationHintMarker,
+  noteSandboxFault,
   sandboxDenialMarker,
   sandboxPermissionsDescription,
   validateEscalationArgs,
@@ -208,22 +210,52 @@ export interface ConfinedArgv {
 export const SANDBOX_UNAVAILABLE = 'SANDBOX_UNAVAILABLE'
 
 /**
+ * Whether a runner's failure text names a passing resource or mount-table fault rather than a lasting one: a mount
+ * point that could not be made (`Can't mkdir`, `Not a directory`),
+ * `EAGAIN`, `ENOMEM` or a timeout. The command never ran, so repeating it is safe.
+ * @param detail - the matched runner failure line.
+ * @returns true when a retry can succeed.
+ */
+export function isTransientRunnerFailure(detail: string): boolean {
+  const passing = /can't mkdir|can't mount|not a directory|resource temporarily unavailable|cannot allocate memory/iu
+  return passing.test(detail) || /timed out|\beagain\b|\benomem\b/iu.test(detail)
+}
+
+/**
  * Thrown when {@link SandboxProvider.confine} cannot enforce the requested
  * mode. Carries {@link SANDBOX_UNAVAILABLE} through the structured error
  * channel.
  */
 export class SandboxUnavailableError extends HarnessError {
-  constructor(mode: ConfinedSandboxMode, detail?: string) {
+  /**
+   * True when the sandbox hit a temporary fault (a start-up check that timed out or lacked resources, or a runner
+   * mount or memory fault), so the same command may work on a retry.
+   */
+  readonly transient: boolean
+
+  /**
+   * @param mode - the confined mode that was requested.
+   * @param detail - the runner's own failure text, when it gave one.
+   * @param options - `transient`: the fault was temporary (a start-up check that timed out or lacked resources, or a
+   *   runner mount or memory fault), so retrying can succeed.
+   */
+  constructor(mode: ConfinedSandboxMode, detail?: string, options: { transient?: boolean } = {}) {
+    const transient = options.transient === true
     super(
-      `sandbox mode "${mode}" is requested but no sandbox backend is usable on this host; `
-      + 'refusing to run the command unconfined. Install bubblewrap or run a Landlock-enforcing '
-      + 'kernel (Linux), ensure sandbox-exec is usable (macOS), or ensure the ACL '
-      + 'restricted-token runner can start (Windows) — otherwise switch the consumer to '
-      + 'danger-full-access.'
-      + (detail === undefined ? '' : ` Runner failure: ${detail}`),
+      transient
+        ? `sandbox mode "${mode}" is requested but the sandbox had a temporary fault (its start-up check or the runner failed, as can `
+          + 'happen while the computer is busy); refusing to run the command unconfined. Retry the command, or use a tool '
+          + 'that needs no shell, such as web search or file reads. Do not ask for danger-full-access because of this.'
+        : `sandbox mode "${mode}" is requested but no sandbox backend is usable on this host; `
+          + 'refusing to run the command unconfined. The person who runs Delorun can fix this: install bubblewrap or run a '
+          + 'Landlock-enforcing kernel (Linux), ensure sandbox-exec is usable (macOS), or ensure the ACL '
+          + 'restricted-token runner can start (Windows). Do not ask for danger-full-access because of this; '
+          + 'tell the person the sandbox is unavailable.',
       SANDBOX_UNAVAILABLE,
     )
     this.name = 'SandboxUnavailableError'
+    this.transient = transient
+    if (detail !== undefined) this.message += ` Runner failure: ${detail}`
   }
 }
 

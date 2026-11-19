@@ -360,16 +360,16 @@ describe('the Fetch gate hashes the query string (P3-2)', () => {
     const { grants } = world()
     const home: GrantGateHome = {
       faceGrants: () => grants, deviceHasPasskey: () => true,
-      arrivalOf: () => ({ listener: LISTENER, host: 'h.ts.net', source: 'test' }), dangerousMode: () => false, elevationOf: () => undefined, pageUnlockOf: () => undefined, unlockModeEnabled: () => true,
+      arrivalOf: () => ({ listener: LISTENER, host: 'h.example.ts.net', source: 'test' }), dangerousMode: () => false, elevationOf: () => undefined, pageUnlockOf: () => undefined, unlockModeEnabled: () => true,
     }
     let ran = 0
     const gate = gateByClass(() => home, () => { ran += 1; return Promise.resolve(new Response('ok')) }, { row: ROW, action: 'plugin-packs/enqueue', legacy: { renews: true } })
     const hash = hashRequest({ method: 'POST', path: '/api/delorun/packs/enqueue?pack=a', body: new Uint8Array(0) }) ?? ''
     const id = grants.mint(HOLDER, [{ action: 'plugin-packs/enqueue', hash }], 'passkey').grantId
-    const other = new Request('https://h.ts.net/api/delorun/packs/enqueue?pack=b', { method: 'POST', headers: { [GRANT_HEADER]: id } })
+    const other = new Request('https://h.example.ts.net/api/delorun/packs/enqueue?pack=b', { method: 'POST', headers: { [GRANT_HEADER]: id } })
     gate.admitPeer(other, { principal: DEVICE })
     expect((await gate.fetch(other)).status).toBe(403)
-    const same = new Request('https://h.ts.net/api/delorun/packs/enqueue?pack=a', { method: 'POST', headers: { [GRANT_HEADER]: id } })
+    const same = new Request('https://h.example.ts.net/api/delorun/packs/enqueue?pack=a', { method: 'POST', headers: { [GRANT_HEADER]: id } })
     gate.admitPeer(same, { principal: DEVICE })
     expect((await gate.fetch(same)).status).toBe(200)
     expect(ran).toBe(1)
@@ -386,13 +386,13 @@ describe('the Fetch gate for a face route', () => {
     const ran: Request[] = []
     const home: GrantGateHome = {
       faceGrants: () => grants, deviceHasPasskey: () => options.passkey ?? true,
-      arrivalOf: () => ({ listener: LISTENER, host: 'h.ts.net', source: 'test' }), dangerousMode: () => false, elevationOf: () => undefined, pageUnlockOf: () => undefined, unlockModeEnabled: () => true,
+      arrivalOf: () => ({ listener: LISTENER, host: 'h.example.ts.net', source: 'test' }), dangerousMode: () => false, elevationOf: () => undefined, pageUnlockOf: () => undefined, unlockModeEnabled: () => true,
     }
     const gate = gateByClass(() => home, (request) => { ran.push(request); return Promise.resolve(new Response('ok')) }, { row: ROW, action: ACTION, legacy: { renews: true } })
     return { grants, ran, gate }
   }
 
-  const call = (body: string, headers: Record<string, string> = {}): Request => new Request('https://h.ts.net/api/delorun/packs/enqueue', { method: 'POST', body, headers })
+  const call = (body: string, headers: Record<string, string> = {}): Request => new Request('https://h.example.ts.net/api/delorun/packs/enqueue', { method: 'POST', body, headers })
   const grantFor = (grants: GrantStore, body: string): string => {
     const hash = hashRequest({ method: 'POST', path: '/api/delorun/packs/enqueue', body: new TextEncoder().encode(body) }) ?? ''
     return grants.mint(HOLDER, [{ action: ACTION, hash }], 'passkey').grantId

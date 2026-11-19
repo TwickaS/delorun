@@ -111,7 +111,7 @@ function runtimeHome(): { readonly home: string, readonly paths: StorePaths } {
  */
 function namesFrom(copy: string, entry: string): string[] {
   const url = pathToFileURL(join(copy, ...entry.split('/'))).href
-  return JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', `const { names } = await import(${JSON.stringify(url)}); process.stdout.write(JSON.stringify(names))`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })) as string[]
+  return JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', `const { names } = await import(${JSON.stringify(url)}); process.stdout.write(JSON.stringify(names))`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 30_000 })) as string[]
 }
 
 describe('a built pack\'s review copy', () => {

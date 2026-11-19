@@ -11,7 +11,7 @@
 
 import { Context } from '@deepseek-ai/cordis'
 import type { ShellExecRequest, ShellExecSpec, ShellExecution, ShellProcess, ShellRunResult } from '@deepseek-ai/dsh-shell'
-import { SandboxUnavailableError } from '@deepseek-ai/dsh-sandbox'
+import { SandboxUnavailableError, isTransientRunnerFailure } from '@deepseek-ai/dsh-sandbox'
 import type {
   ConfinedArgv,
   ConfinedSandboxMode,
@@ -124,7 +124,7 @@ export class SandboxBashExecutor extends LocalBashExecutor {
       // the matched fatal line, not an informational line that preceded it.
       const runnerFailure = classifyRunnerFailure(result.exitCode, result.stderr.text, runnerFailureRules)
       if (runnerFailure !== undefined) {
-        throw new SandboxUnavailableError(mode, runnerFailure.detail)
+        throw new SandboxUnavailableError(mode, runnerFailure.detail, { transient: isTransientRunnerFailure(runnerFailure.detail) })
       }
       // A policy signature outranks the environment's.
       return { ...result, sandbox: { mode, ...classifyDenial(result, denialSignatures, environment), enforcement } }
@@ -132,7 +132,7 @@ export class SandboxBashExecutor extends LocalBashExecutor {
       // An upstream abort remains cancellation even when it prevents spawn.
       if (spec.signal?.aborted === true) spec.signal.throwIfAborted()
       if (confined !== undefined && isRunnerSpawnFailure(error, confined.argv[0], spec.workdir)) {
-        throw new SandboxUnavailableError(mode, String(error))
+        throw new SandboxUnavailableError(mode, String(error), { transient: isTransientRunnerFailure(String(error)) })
       }
       throw error
     })

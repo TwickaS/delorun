@@ -6,9 +6,16 @@
  * another checkout, port, or installation leaves the system prompt unchanged.
  * A Session whose admitted prompt holds the paragraphs that embedded those
  * values keeps them verbatim, so resuming it never rewrites its logged prompt.
+ *
+ * The checkout text appears only in a real checkout: a git work tree with a
+ * pnpm workspace at its root, decided once when the plugin loads. On an
+ * installation the model gets one plugin-authoring line instead, and neither
+ * the runtime path nor the Web GUI URL reaches it.
  * @module @deepseek-ai/dsh-harness-dev-context
  */
 
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import { z as zod } from 'zod'
@@ -27,6 +34,22 @@ export const inject = ['systemPrompt', 'sessionProjections', 'webApp']
 /** This installation's root, four directories above this package's source or built entry. */
 const SOURCE_ROOT = fileURLToPath(new URL('../../../..', import.meta.url))
 
+/** Plugin options; no profile sets them. */
+export interface Config {
+  /** Root to classify as a checkout or an installation; tests point it at a temporary directory. Defaults to this installation's root. */
+  sourceRoot?: string
+}
+
+/**
+ * Whether a directory is a real checkout: a git work tree (a `.git` directory
+ * or worktree file) that also holds a pnpm workspace manifest.
+ * @param root - directory to classify.
+ * @returns true for a checkout, false for an installed copy.
+ */
+export function isCheckout(root: string): boolean {
+  return existsSync(join(root, '.git')) && existsSync(join(root, 'pnpm-workspace.yaml'))
+}
+
 /** Prompt-section and runtime-context name for the implementation checkout. */
 const HARNESS_SOURCE = 'harness:source'
 
@@ -35,9 +58,12 @@ const WEB_SURFACE = 'app:web-surface'
 
 const HARNESS_SOURCE_GUIDANCE = 'The checkout location and current working directory are separate values and may differ; '
   + 'never infer the working directory from the checkout path. Use pwd to determine the current working directory. '
-  + 'Use this checkout only to inspect or extend DSH itself.'
+  + 'Use this checkout only to inspect or extend Delorun itself.'
 
-const HARNESS_SOURCE_PROMPT = `The runtime context names the DeepSeek Harness implementation checkout. ${HARNESS_SOURCE_GUIDANCE}`
+const HARNESS_SOURCE_PROMPT = `The runtime context names the Delorun implementation checkout. ${HARNESS_SOURCE_GUIDANCE}`
+
+/** What an installation's model learns instead of the checkout text. */
+const INSTALLED_PROMPT = 'Make or change plugins with the delorun-plugin-authoring skill and review them in Changes (Apply or Undo). Never edit the installed program.'
 
 const WEB_SURFACE_GUIDANCE = 'When the user refers to "this page", "this GUI", or "this app" without naming another target, they mean this GUI. '
   + 'The browser provides no implicit DOM, route, or screenshot context. '
@@ -48,7 +74,13 @@ const WEB_SURFACE_GUIDANCE = 'When the user refers to "this page", "this GUI", o
   + 'The apps/web Vite entry builds the shell but is not a standalone application because only dsh web injects window.__DSH_BOOT__. '
   + 'Do not start a replacement server unless the user asks; if one is needed, use a managed background job and verify its exact URL.'
 
-const WEB_SURFACE_PROMPT = `You are interacting with the user through the DeepSeek Harness Web GUI whose URL the runtime context names. ${WEB_SURFACE_GUIDANCE}`
+const WEB_SURFACE_PROMPT = `You are interacting with the user through the Delorun studio whose URL the runtime context names. ${WEB_SURFACE_GUIDANCE}`
+
+/** Studio orientation on an installation: no checkout, watcher, or boot-object facts. */
+const INSTALLED_WEB_SURFACE_PROMPT = 'You are interacting with the user through the Delorun studio. '
+  + 'When the user refers to "this page", "this GUI", or "this app" without naming another target, they mean the studio. '
+  + 'The browser provides no implicit DOM, route, or screenshot context. '
+  + 'Do not start a replacement server unless the user asks.'
 
 /**
  * Fixed text around the value in each paragraph that embedded it, frozen as
@@ -117,9 +149,11 @@ const ADMITS_NOTHING: LegacyPrompt = { source: null, web: null }
  * Register the two sections, their runtime-context values, and the
  * projection that keeps a Session's admitted paragraphs.
  * @param ctx - plugin context with every {@link inject} service.
+ * @param config - optional root override for the checkout decision.
  * @returns after the projection reader and prompt registrations are ready.
  */
-export async function apply(ctx: Context): Promise<void> {
+export async function apply(ctx: Context, config: Config = {}): Promise<void> {
+  const checkout = isCheckout(config.sourceRoot ?? SOURCE_ROOT)
   const legacyPromptProjectionHandle = await ctx.sessionProjections.register({
     key: LEGACY_PROMPT,
     stateVersion: 1,
@@ -135,24 +169,24 @@ export async function apply(ctx: Context): Promise<void> {
     name: HARNESS_SOURCE,
     order: ctx.systemPrompt.getSectionOrder('HARNESS_SOURCE'),
     interpolate: false,
-    text: context => admitted(context).source ?? HARNESS_SOURCE_PROMPT,
+    text: context => admitted(context).source ?? (checkout ? HARNESS_SOURCE_PROMPT : INSTALLED_PROMPT),
   })
   ctx.systemPrompt.context({
     name: HARNESS_SOURCE,
     order: ctx.systemPrompt.getContextOrder('HARNESS_SOURCE'),
     interpolate: false,
-    text: `Current DeepSeek Harness implementation checkout: ${JSON.stringify(SOURCE_ROOT)}.`,
+    text: checkout ? `Current Delorun implementation checkout: ${JSON.stringify(config.sourceRoot ?? SOURCE_ROOT)}.` : '',
   })
   ctx.systemPrompt.section({
     name: WEB_SURFACE,
     order: ctx.systemPrompt.getSectionOrder('WEB_SURFACE'),
     interpolate: false,
-    text: context => admitted(context).web ?? WEB_SURFACE_PROMPT,
+    text: context => admitted(context).web ?? (checkout ? WEB_SURFACE_PROMPT : INSTALLED_WEB_SURFACE_PROMPT),
   })
   ctx.systemPrompt.context({
     name: WEB_SURFACE,
     order: ctx.systemPrompt.getContextOrder('WEB_SURFACE'),
     interpolate: false,
-    text: () => `Current DeepSeek Harness Web GUI URL: ${JSON.stringify(ctx.webApp.getAdvertisedUrl())}.`,
+    text: () => checkout ? `Current Delorun studio URL: ${JSON.stringify(ctx.webApp.getAdvertisedUrl())}.` : '',
   })
 }

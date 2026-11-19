@@ -43,7 +43,7 @@ kind: "package-reference"
 
 | 字段 | 默认值 | 含义 |
 |---|---|---|
-| `includeHarnessIdentity` | `true` | 是否包含顺序为 −1000 的第一方固定开场白 `You are an AI agent powered by DeepSeek Harness.`。仅当兼容性部署拥有完整系统提示词时设为 false。 |
+| `includeHarnessIdentity` | `true` | 是否包含顺序为 −1000 的第一方固定开场白（见 Harness identity）。仅当兼容性部署拥有完整系统提示词时设为 false。 |
 | `includeRuntimeContext` | `true` | 是否在组装中包含可选的有序动态 runtime 上下文 |
 | `personaPrefix` | `''` | 全局 persona 前缀模板，顺序为 `0`，位于第一方指导之前 |
 | `personaSuffix` | `''` | 全局 `deployment:persona-suffix` 模板，顺序为 `10200`，位于第一方指导之后 |
@@ -144,8 +144,10 @@ ctx.systemPrompt.variable('response_language', () => 'English')
 ##### harness 身份
 
 ```markdown
-You are an AI agent powered by DeepSeek Harness.
+You are Delorun, an agent studio. The model answering right now is {model}. Delorun is built on DeepSeek Harness; mention that only when the person asks how Delorun is built or how to extend it.
 ```
+
+只有当本次组装中 `model` 提示词变量有值时才出现模型那一句；开场白按字面渲染，因此模型名不会被当作模板。
 
 #### Token 影响
 

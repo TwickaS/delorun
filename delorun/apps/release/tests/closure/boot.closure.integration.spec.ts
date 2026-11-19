@@ -40,7 +40,7 @@ import { CliError } from '@delorun/cli/src/exit.js'
 import { profileDirectory } from '@delorun/cli/src/profile.js'
 import { startForeground, upstreamDependencies } from '@delorun/cli/src/start.js'
 const context = { env: { ...process.env }, stdout: text => void process.stderr.write(text), stderr: text => void process.stderr.write(text) }
-const { home, profile } = await prepareHome(context, undefined)
+const { home, profile } = await prepareHome(context, undefined, true)
 const bundle = readFileSync(fileURLToPath(import.meta.resolve('@deepseek-ai/dsh-web-app/cordis.patch.yml')), 'utf8').split('\\n')
 const indent = line => line.length - line.trimStart().length
 const row = bundle.findIndex(line => line.trim() === '- id: webserver')

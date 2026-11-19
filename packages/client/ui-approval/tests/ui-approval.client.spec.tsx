@@ -25,6 +25,7 @@ type ApprovalListener = (
     callId?: string
     reason?: string
     displayReason?: PendingApproval['displayReason']
+    notice?: PendingApproval['notice']
     grants?: ApprovalGrant
     escalatesTo?: ApprovalEscalation
     signal?: AbortSignal
@@ -413,6 +414,20 @@ describe('ApprovalPanel', () => {
     expect(document.querySelector('[data-approval-key]')?.getAttribute('aria-busy')).toBe('true')
 
     await expect(pending.result).resolves.toBe('allowed-once')
+  })
+
+  it('shows a notice apart from the reason, in the UI language', () => {
+    const pending = new PendingApproval(id('s1'), {
+      toolName: 'bash',
+      displayReason: { en: 'Allow this', zh: '允许' },
+      notice: { en: 'The sandbox had a problem', zh: '沙盒出了问题' },
+    })
+    const props = panelProps(pending)
+    const view = render(<ApprovalPanel {...props} />)
+    expect(screen.getByText('Allow this')).toBeTruthy()
+    expect(screen.getByText('The sandbox had a problem')).toBeTruthy()
+    view.rerender(<ApprovalPanel {...props} resolveReason={reason => reason['zh']!} />)
+    expect(screen.getByText('沙盒出了问题')).toBeTruthy()
   })
 
   it('keeps the audit reason intact and follows the UI language for presentation copy', () => {

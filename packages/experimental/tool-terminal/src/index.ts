@@ -159,7 +159,7 @@ export function apply(ctx: Context, config: Config = {}): void {
   ctx.systemPrompt.section({
     name: 'tool:pty',
     order: ctx.systemPrompt.getSectionOrder('TOOL_PTY'),
-    text: 'Use a terminal session only when work needs persistent terminal state or interactive stdin; prefer shell/read/write/edit for bounded one-shot operations. Track every terminal session id and close sessions that no longer matter. An inferred_idle or timeout result does not prove the foreground command exited.',
+    text: ({ scope, toolSet }) => ctx.tools.get('terminal_open', scope, toolSet) === undefined ? '' : 'Use a terminal session only when work needs persistent terminal state or interactive stdin; prefer shell/read/write/edit for bounded one-shot operations. Track every terminal session id and close sessions that no longer matter. An inferred_idle or timeout result does not prove the foreground command exited.',
   })
 
   ctx.tools.register(defineTool({

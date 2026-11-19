@@ -530,7 +530,7 @@ export const setupCommand: CliCommand = {
     const [section] = positionals
     const providerChoice = providerChoiceFromFlags(values, section, values.yes)
     const promptsAnswer = promptsFromFlags({ prompts: values.prompts, acceptDangerousMode: values['accept-dangerous-mode'] }, values.yes, PROMPTS_OPTIONS)
-    const { home, profile } = await prepareHome(context, values.profile)
+    const { home, profile } = await prepareHome(context, values.profile, false)
     const form = formFromFlags(values.yes, values.config)
     const request: SetupRequest = {
       home: home.path, profile, output: context, env: context.env, form, registry, checkEnvironmentKey: values['check-key'], noUpdateCheck: values['no-update-check'],

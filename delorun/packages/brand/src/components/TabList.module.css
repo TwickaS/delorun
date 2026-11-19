@@ -1,0 +1,53 @@
+/* On a narrow screen the row scrolls sideways and snaps to a tab rather than wrapping. */
+.list {
+  display: flex;
+  gap: var(--dl-space-1);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--dl-border);
+  font-family: var(--dl-font-sans);
+}
+
+.tab {
+  flex: none;
+  min-height: 40px;
+  padding: 0 var(--dl-space-3);
+  border: 0;
+  border-radius: var(--dl-radius-sm) var(--dl-radius-sm) 0 0;
+  background: transparent;
+  box-shadow: inset 0 -2px 0 transparent;
+  color: var(--dl-text-muted);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  scroll-snap-align: start;
+  transition:
+    color var(--dl-duration-quick) var(--dl-ease),
+    box-shadow var(--dl-duration-quick) var(--dl-ease),
+    transform var(--dl-motion-press) var(--dl-ease-out);
+}
+
+.tab[aria-selected='true'] {
+  box-shadow: inset 0 -2px 0 var(--dl-text);
+  color: var(--dl-text);
+}
+
+.tab:active { transform: scale(var(--dl-scale-pressed)); }
+
+.tab:focus-visible {
+  outline: var(--dl-focus-ring);
+  outline-offset: calc(var(--dl-focus-ring-offset) * -1);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .tab:hover:not([aria-selected='true']) { color: var(--dl-text); }
+}
+
+.panel:focus-visible {
+  outline: var(--dl-focus-ring);
+  outline-offset: var(--dl-focus-ring-offset);
+  border-radius: var(--dl-radius-sm);
+}

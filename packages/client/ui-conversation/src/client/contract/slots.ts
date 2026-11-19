@@ -281,6 +281,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     }
     /** Rows of the View tab row's More menu; the header shows More only while this list has registrations. */
     'conversation.session.header.views.actions': { kind: 'list'; scope: 'root'; owner: ConversationViewActionsOwnerProps }
+    /** Full-width entries between the header and the active View, in ascending order; an entry with nothing to show renders nothing. */
+    'conversation.session.banner': { kind: 'list'; scope: 'session' }
     /** Registered Conversation target Views, rendered one at a time. */
     'conversation.view': { kind: 'list'; scope: 'session'; owner: ConvViewOwnerProps }
     /**
@@ -712,7 +714,7 @@ export type ConversationWidthControlsProps =
 /** Full props of the strict Session body. */
 export type ConversationSessionSlotProps =
   PropsRuntime<'conversation.session'>
-  & PropsRenderSlots<'conversation.view'>
+  & PropsRenderSlots<'conversation.view' | 'conversation.session.banner'>
   & PropsStore<ConversationStore>
   & InjectFace<ConversationSessionInjected>
 

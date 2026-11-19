@@ -40,7 +40,7 @@ ${STYLE}
     <svg width="96" height="96" viewBox="0 0 32 32" aria-hidden="true"><path d="${MARK.nut}" fill="currentColor" fill-rule="evenodd"/><circle cx="${MARK.plug.cx}" cy="${MARK.plug.cy}" r="${MARK.plug.r}" fill="var(--dl-accent)"/></svg>
     Delorun
   </div>
-  <h1>Your harness. No limits.</h1>
+  <h1>Bring your own everything.</h1>
   <div class="foot"><span>Open-source agent harness on your own computer</span><code>npx delorun</code></div>
 </main>
 </html>

@@ -132,4 +132,6 @@ The person at the computer, or at an unlocked phone, updates, goes back and stop
 
 ## 实现状态
 
+studio 的更新已构建：路由、访问表、结果记录及其拒绝测试（`update-begin-refused-from-other-site`、`update-begin-refused-careful-phone`、`update-begin-refused-phone-without-unlock`、`update-begin-refused-phone-approval-grace-only`、`update-rollback-refused-careful-phone`、`update-rollback-refused-phone-without-unlock`、`update-apply-refuses-page-supplied-report`、`update-apply-refuses-while-restarting`、`update-confirm-requires-ticks`、`update-conflicted-harness-cannot-confirm`、`update-failed-log-check-cannot-confirm`、`update-token-never-leaves-host`、`update-result-survives-switch`）。
+
 规则 1 到 14 和规则 16 已为 CLI home 构建，由 C3、C19、C1 和 C2 描述：运行时存储在安装任何东西之前，会以 `TARGET_LOWER` 拒绝低于 `current` 的更新目标，而 `delorun update` 会拒绝目标低于正在运行发布版本的报告。规则 15 的、CLI home 和桌面应用共用的一把锁，以及桌面应用的规则 17、18 和 20，尚未构建。规则 19 通过上游的更新器成立，后者拒绝降级（`allowDowngrade` 为 false）。

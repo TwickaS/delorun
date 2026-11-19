@@ -7,13 +7,14 @@ import react from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
 import { SITEMAP_PATHS } from './src/site/config.ts'
 import { sitemapPaths, sitemapXml } from './src/site/sitemap.ts'
-import { loadView, type ChangelogView } from '../../packages/site-design/src/changelog.ts'
+import { readNotices, type Notice } from '../../packages/site-design/scripts/notices.ts'
+import { headlinesOnly, loadView, type ChangelogView } from '../../packages/site-design/src/changelog.ts'
 
 /** The static site's directory: the client build, with every prerendered page. */
 const OUT_DIR = 'out'
 
 /** The pages the build prerenders; the site has no others. */
-const PAGES = ['/', '/blog', '/privacy', '/404']
+const PAGES = ['/', '/blog', '/privacy', '/notices', '/404']
 
 /**
  * The not-found page without the router's scripts. A static host serves 404.html at any address, where the page's own
@@ -41,6 +42,22 @@ function changelogModule(view: ChangelogView | undefined): Plugin {
   }
 }
 
+/** The id the notices page imports the licence texts through. */
+const NOTICES_MODULE = 'virtual:delorun-notices'
+
+/**
+ * The module that carries the licence texts into the bundles of the notices page.
+ * @param notices - the notices, read from the files that ship the material.
+ * @returns the plugin.
+ */
+function noticesModule(notices: readonly Notice[]): Plugin {
+  return {
+    name: 'delorun-notices',
+    resolveId: source => source === NOTICES_MODULE ? `\0${NOTICES_MODULE}` : undefined,
+    load: id => id === `\0${NOTICES_MODULE}` ? `export default ${JSON.stringify(notices)}` : undefined,
+  }
+}
+
 /** The number of published articles; the blog index is in the sitemap only when it is above zero. */
 const articleCount = existsSync('content/blog') ? readdirSync('content/blog').filter(name => name.endsWith('.md')).length : 0
 
@@ -57,13 +74,19 @@ function sitemapFile(): Plugin {
 }
 
 // With no assembled version there is no record: the What's new section is left out.
-const changelog = loadView(resolve(process.cwd(), '../../..'))
+/** The repository's root, from this file's place, whichever directory the build starts in. */
+const REPOSITORY_ROOT = fileURLToPath(new URL('../../../', import.meta.url))
+
+const changelog = loadView(REPOSITORY_ROOT)
+
+const notices = readNotices({ packages: fileURLToPath(new URL('../../packages', import.meta.url)), sonnerLicence: fileURLToPath(new URL('./node_modules/sonner/LICENSE.md', import.meta.url)) })
 
 export default defineConfig({
   build: { outDir: '.build' },
   environments: { client: { build: { outDir: OUT_DIR } } },
   plugins: [
-    changelogModule(changelog),
+    changelogModule(headlinesOnly(changelog)),
+    noticesModule(notices),
     sitemapFile(),
     tailwindcss(),
     tanstackStart({
@@ -81,10 +104,12 @@ export default defineConfig({
     }),
     react(),
   ],
+  // The brand's fonts load by file from the sibling `packages` directory, which the dev server refuses unless it is allowed.
+  server: { fs: { allow: [fileURLToPath(new URL('.', import.meta.url)), fileURLToPath(new URL('../../packages', import.meta.url))] } },
   resolve: {
     tsconfigPaths: true,
     // The shared design's stylesheet imports Fumadocs UI's CSS from outside this directory, so the import resolves to this site's install.
-    alias: [{ find: '#upstream', replacement: fileURLToPath(new URL('../../packages/brand/src/upstream.web.tsx', import.meta.url)) }, { find: /^fumadocs-ui\/css\//, replacement: fileURLToPath(new URL('./node_modules/fumadocs-ui/css/', import.meta.url)) }],
+    alias: [{ find: '#upstream', replacement: fileURLToPath(new URL('../../packages/brand/src/upstream.web.tsx', import.meta.url)) }, { find: /^sonner$/, replacement: fileURLToPath(new URL('./node_modules/sonner', import.meta.url)) }, { find: /^fumadocs-ui\/css\//, replacement: fileURLToPath(new URL('./node_modules/fumadocs-ui/css/', import.meta.url)) }],
     dedupe: ['react', 'react-dom'],
   },
 })

@@ -48,7 +48,7 @@ beforeEach(async () => {
   vi.stubEnv('DELORUN_HOME', undefined)
   vi.stubEnv('DELORUN_PROFILE', undefined)
   context = { env: { HOME: osHome, DSH_HOME: join(osHome, '.dsh') }, stdout: () => undefined, stderr: () => undefined }
-  await prepareHome(context, undefined)
+  await prepareHome(context, undefined, true)
   await upstreamAddHeadlessBundle(delorunHome, context)
 }, 120_000)
 

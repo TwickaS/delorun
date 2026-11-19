@@ -7,7 +7,14 @@
  */
 :where(:root) {
   color-scheme: light dark;
+}
 
+/*
+ * The tokens read the studio's `--dsw-*` roles where they are declared, so an element that sets its own (a page region
+ * drawn in another look, which the product site's setup strip does with `data-look`) draws its `--dl-*` tokens in that
+ * look and not in the root's. The colour scheme stays the root's.
+ */
+:where(:root, [data-look]) {
   --dl-peach: #E5734A;
   --dl-accent: var(--dsw-alias-brand-primary, var(--dl-peach));
   --dl-accent-text: var(--dsw-alias-brand-text, light-dark(#B84A1B, #E5734A));
@@ -40,10 +47,58 @@
   --dl-space-5: calc(24px * var(--dsh-density, 1));
   --dl-space-6: calc(32px * var(--dsh-density, 1));
 
+  /* The stage: the ground the product's screenshots hang on, its text and lines, the paper caption plate over them, and
+   * the black a screenshot sits on while it loads. The stage is deeper than the page in both schemes. */
+  --dl-stage: light-dark(#EFECE7, #0C0B0A);
+  --dl-stage-text: light-dark(#141210, #F4F0EA);
+  --dl-stage-muted: light-dark(#5B554E, #A69F96);
+  --dl-stage-line: light-dark(rgb(20 18 16 / 0.14), rgb(244 240 234 / 0.12));
+  --dl-stage-scrim: rgb(20 18 16 / 0.94);
+  --dl-stage-scrim-text: #F4F0EA;
+  --dl-plate: #F4F0EA;
+  --dl-plate-text: #141210;
+  --dl-plate-muted: #6B645C;
+  --dl-plate-accent: #B4532F;
+  --dl-plate-line: rgb(20 18 16 / 0.14);
+  --dl-screen-ground: #000;
+
   --dl-focus-ring: 2px solid var(--dl-accent-text);
-  --dl-motion: 150ms ease;
+  --dl-focus-ring-offset: 2px;
+
+  /* Motion. Arrivals use the strong ease-out, movement across the screen the ease-in-out, colour changes the plain ease;
+   * nothing uses an ease-in. `--dl-duration-*` time colour and opacity changes; `--dl-motion-*` time transform and
+   * clip-path changes and collapse to 0ms under reduced motion. Leaving takes `leave`, which is shorter than any arrival. */
+  --dl-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --dl-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --dl-ease: ease;
+
+  --dl-duration-press: 120ms;
+  --dl-duration-quick: 180ms;
+  --dl-duration-move: 260ms;
+  --dl-duration-explain: 360ms;
+  --dl-duration-scene: 760ms;
+  --dl-duration-leave: 100ms;
+
+  --dl-motion-press: var(--dl-duration-press);
+  --dl-motion-quick: var(--dl-duration-quick);
+  --dl-motion-move: var(--dl-duration-move);
+  --dl-motion-explain: var(--dl-duration-explain);
+  --dl-motion-scene: var(--dl-duration-scene);
+  --dl-motion-leave: var(--dl-duration-leave);
+
+  --dl-scale-pressed: 0.97;
+  --dl-scale-enter: 0.95;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :where(:root) { --dl-motion: 0ms linear; }
+  :where(:root) {
+    --dl-motion-press: 0ms;
+    --dl-motion-quick: 0ms;
+    --dl-motion-move: 0ms;
+    --dl-motion-explain: 0ms;
+    --dl-motion-scene: 0ms;
+    --dl-motion-leave: 0ms;
+    --dl-scale-pressed: 1;
+    --dl-scale-enter: 1;
+  }
 }

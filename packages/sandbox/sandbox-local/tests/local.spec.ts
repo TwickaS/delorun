@@ -25,6 +25,9 @@ import { bwrapProfileArgs, landlockProfileArgs, seatbeltProfileArgs } from '../s
 const RO: SandboxPolicy = { mode: 'read-only', workspaceRoot: '/ws' }
 const WW: SandboxPolicy = { mode: 'workspace-write', workspaceRoot: '/ws' }
 
+/** A `bwrap` probe verdict, as the test hook returns it. */
+type BwrapVerdict = boolean | 'timed-out' | 'resource-limit'
+
 /** Every temp dir created by this file (fake launchers and runner entries), removed after each test. */
 const tempDirs: string[] = []
 afterEach(() => {
@@ -75,12 +78,12 @@ const SEATBELT_RO_PROFILE = '(version 1) (allow default) (deny file-write*) (all
 
 describe('profile dialects', () => {
   it('bwrap read-only: whole tree read-only with fresh /dev and private PID-scoped /proc, no writable mounts', () => {
-    expect(bwrapProfileArgs(RO)).toEqual(['--ro-bind', '/', '/', '--dev', '/dev', '--unshare-pid', '--proc', '/proc', '--die-with-parent'])
+    expect(bwrapProfileArgs(RO)).toEqual(['--ro-bind', '/', '/', '--dev', '/dev', '--unshare-pid', '--proc', '/proc', '--die-with-parent', '--setenv', 'DELORUN_SANDBOX_VIEW', '1'])
   })
 
   it('bwrap workspace-write: adds an ephemeral /tmp and rebinds the workspace root', () => {
     expect(bwrapProfileArgs(WW)).toEqual([
-      '--ro-bind', '/', '/', '--dev', '/dev', '--unshare-pid', '--proc', '/proc', '--die-with-parent',
+      '--ro-bind', '/', '/', '--dev', '/dev', '--unshare-pid', '--proc', '/proc', '--die-with-parent', '--setenv', 'DELORUN_SANDBOX_VIEW', '1',
       '--tmpfs', '/tmp', '--bind', '/ws', '/ws',
     ])
   })
@@ -102,7 +105,7 @@ describe('profile dialects', () => {
     const realWs = realpathSync.native(ws)
     const realExtra = realpathSync.native(extra)
     expect(bwrapProfileArgs({ mode: 'workspace-write', workspaceRoot: ws, additionalWritableRoots: [extra] })).toEqual([
-      '--ro-bind', '/', '/', '--dev', '/dev', '--unshare-pid', '--proc', '/proc', '--die-with-parent',
+      '--ro-bind', '/', '/', '--dev', '/dev', '--unshare-pid', '--proc', '/proc', '--die-with-parent', '--setenv', 'DELORUN_SANDBOX_VIEW', '1',
       '--tmpfs', '/tmp', '--bind', realWs, realWs, '--bind', realExtra, realExtra,
     ])
   })
@@ -183,9 +186,9 @@ describe('runnerCommand config', () => {
 
   it('an EMPTY runnerCommand means unconfigured: the platform chain still gates the wrap', async () => {
     const probeBwrap = vi.fn(() => false)
-    const { sandbox } = await setup({ runnerCommand: [] }, { platform: 'linux', probeBwrap, probeLandlock: () => 'unusable' })
+    const { sandbox } = await setup({ runnerCommand: [], probeBackoffMs: 1 }, { platform: 'linux', probeBwrap, probeLandlock: () => 'unusable' })
     await expect(sandbox.confine(['true'], RO)).rejects.toThrow(SandboxUnavailableError)
-    expect(probeBwrap).toHaveBeenCalledTimes(1)
+    expect(probeBwrap).toHaveBeenCalledTimes(3)
   })
 
   it('requires an operator-owned failure dialect for every configured runner', async () => {
@@ -294,14 +297,123 @@ describe('the platform chains', () => {
     expect(probeBwrap).toHaveBeenCalledTimes(1)
   })
 
-  it('the unavailable verdict is cached too, and the error is structured', async () => {
+  it('an unavailable verdict is refused fail-closed, structured, and never cached', async () => {
     const probeBwrap = vi.fn(() => false)
     const probeLandlock = vi.fn(() => 'unusable' as const)
-    const { sandbox } = await setup({}, { platform: 'linux', probeBwrap, probeLandlock })
-    await expect(sandbox.confine(['true'], RO)).rejects.toThrow(expect.objectContaining({ name: 'SandboxUnavailableError', code: SANDBOX_UNAVAILABLE }))
+    const { sandbox } = await setup({ probeAttempts: 2, probeBackoffMs: 1 }, { platform: 'linux', probeBwrap, probeLandlock, bwrapInstalled: () => false })
+    await expect(sandbox.confine(['true'], RO)).rejects.toThrow(expect.objectContaining({ name: 'SandboxUnavailableError', code: SANDBOX_UNAVAILABLE, transient: false }))
+    expect(probeBwrap).toHaveBeenCalledTimes(2)
     await expect(sandbox.confine(['true'], RO)).rejects.toThrow(SandboxUnavailableError)
+    expect(probeBwrap).toHaveBeenCalledTimes(4)
+  })
+
+  it('a probe that fails once and then passes retries within the command and confines it', async () => {
+    const probeBwrap = vi.fn<() => boolean>().mockReturnValueOnce(false).mockReturnValue(true)
+    const { sandbox } = await setup({ probeBackoffMs: 1 }, { platform: 'linux', probeBwrap, probeLandlock: () => 'unusable' })
+    const confined = await sandbox.confine(['true'], RO)
+    expect(confined.enforcement).toBe('full')
+    expect(probeBwrap).toHaveBeenCalledTimes(2)
+    await sandbox.confine(['true'], RO)
+    expect(probeBwrap).toHaveBeenCalledTimes(2)
+  })
+
+  it('a failed command does not poison the next one: the next command probes again and can succeed', async () => {
+    let usable = false
+    const probeBwrap = vi.fn(() => usable)
+    const { sandbox } = await setup({ probeAttempts: 1 }, { platform: 'linux', probeBwrap, probeLandlock: () => 'unusable', bwrapInstalled: () => true })
+    await expect(sandbox.confine(['true'], RO)).rejects.toThrow(expect.objectContaining({ transient: false }))
+    usable = true
+    await expect(sandbox.confine(['true'], RO)).resolves.toMatchObject({ enforcement: 'full' })
+  })
+
+  it('a probe that resolves late does not block a timer scheduled meanwhile', async () => {
+    const probeBwrap = vi.fn(() => new Promise<boolean>(resolve => setTimeout(() => { resolve(true) }, 60)))
+    const { sandbox } = await setup({}, { platform: 'linux', probeBwrap, probeLandlock: () => 'unusable' })
+    let ticked = false
+    setTimeout(() => { ticked = true }, 5)
+    const pending = sandbox.confine(['true'], RO)
+    await new Promise<void>(resolve => setTimeout(resolve, 30))
+    expect(ticked).toBe(true)
+    await expect(pending).resolves.toMatchObject({ enforcement: 'full' })
+  })
+
+  it('an asynchronous probe timeout is still a temporary fault, and an asynchronous plain false still refuses with the advice', async () => {
+    const slow = await setup({ probeAttempts: 1 }, { platform: 'linux', probeBwrap: () => Promise.resolve('timed-out' as const), probeLandlock: () => 'unusable', bwrapInstalled: () => true })
+    await expect(slow.sandbox.confine(['true'], RO)).rejects.toThrow(expect.objectContaining({ transient: true }))
+    const plain = await setup({ probeAttempts: 1 }, { platform: 'linux', probeBwrap: () => Promise.resolve(false), probeLandlock: () => 'unusable', bwrapInstalled: () => true })
+    await expect(plain.sandbox.confine(['true'], RO)).rejects.toThrow(expect.objectContaining({ transient: false }))
+  })
+
+  it('two concurrent commands share one probe and get the same verdict', async () => {
+    let release: (value: BwrapVerdict) => void = () => {}
+    const probeBwrap = vi.fn(() => new Promise<BwrapVerdict>((resolve) => { release = resolve }))
+    const { sandbox } = await setup({ probeAttempts: 1 }, { platform: 'linux', probeBwrap, probeLandlock: () => 'unusable', bwrapInstalled: () => true })
+    const first = sandbox.confine(['true'], RO).catch((caught: unknown) => caught)
+    const second = sandbox.confine(['true'], WW).catch((caught: unknown) => caught)
+    await new Promise<void>(resolve => setTimeout(resolve, 5))
+    release('timed-out')
+    const [a, b] = await Promise.all([first, second])
     expect(probeBwrap).toHaveBeenCalledTimes(1)
-    expect(probeLandlock).toHaveBeenCalledTimes(1)
+    expect(a).toMatchObject({ name: 'SandboxUnavailableError', transient: true })
+    expect(b).toMatchObject({ name: 'SandboxUnavailableError', transient: true })
+  })
+
+  it('a Landlock fallback after a timed-out bwrap probe serves the command but is not cached', async () => {
+    const probeBwrap = vi.fn<() => BwrapVerdict>().mockReturnValueOnce('timed-out').mockReturnValue(true)
+    const { sandbox } = await setup({ probeAttempts: 1 }, { platform: 'linux', probeBwrap, probeLandlock: () => 'full' as const, landlockLauncher: fakeLauncher() })
+    expect((await sandbox.confine(['true'], RO)).argv.join(' ')).not.toContain('bwrap')
+    const next = await sandbox.confine(['true'], RO)
+    expect(probeBwrap).toHaveBeenCalledTimes(2)
+    expect(next.argv.join(' ')).toContain('bwrap')
+  })
+
+  it('a probe that throws once refuses that command, then the next confines (the shared selection is cleared)', async () => {
+    const probeBwrap = vi.fn<() => BwrapVerdict>().mockImplementationOnce(() => { throw new Error('probe broke') }).mockReturnValue(true)
+    const { sandbox } = await setup({ probeAttempts: 1 }, { platform: 'linux', probeBwrap, probeLandlock: () => 'unusable' })
+    await expect(sandbox.confine(['true'], RO)).rejects.toThrow('probe broke')
+    await expect(sandbox.confine(['true'], RO)).resolves.toMatchObject({ enforcement: 'full' })
+    expect(probeBwrap).toHaveBeenCalledTimes(2)
+  })
+
+  it('a plain bwrap failure that falls through to Landlock is cached', async () => {
+    const probeBwrap = vi.fn(() => false)
+    const { sandbox } = await setup({ probeAttempts: 1 }, { platform: 'linux', probeBwrap, probeLandlock: () => 'full' as const, landlockLauncher: fakeLauncher() })
+    await sandbox.confine(['true'], RO)
+    await sandbox.confine(['true'], RO)
+    expect(probeBwrap).toHaveBeenCalledTimes(1)
+  })
+
+  it('retries without a wait when probeBackoffMs is 0', async () => {
+    const probeBwrap = vi.fn<() => boolean>().mockReturnValueOnce(false).mockReturnValue(true)
+    const { sandbox } = await setup({ probeBackoffMs: 0 }, { platform: 'linux', probeBwrap, probeLandlock: () => 'unusable' })
+    await expect(sandbox.confine(['true'], RO)).resolves.toMatchObject({ enforcement: 'full' })
+    expect(probeBwrap).toHaveBeenCalledTimes(2)
+  })
+
+  it('rejects a probeAttempts of 0, which would never probe', async () => {
+    await expect(setup({ probeAttempts: 0 })).rejects.toThrow('probeAttempts must be a positive finite number')
+  })
+
+  it('rejects a probeTimeoutMs above 60 000', async () => {
+    await expect(setup({ probeTimeoutMs: 60_001 })).rejects.toThrow()
+  })
+
+  it('a bwrap check that timed out or hit a resource limit is a temporary fault; a plain failure is not', async () => {
+    const { sandbox } = await setup({ probeAttempts: 1 }, { platform: 'linux', probeBwrap: () => 'timed-out', probeLandlock: () => 'unusable', bwrapInstalled: () => true })
+    const error = await sandbox.confine(['true'], RO).catch((caught: unknown) => caught)
+    expect(error).toBeInstanceOf(SandboxUnavailableError)
+    expect((error as SandboxUnavailableError).transient).toBe(true)
+    expect((error as Error).message).toContain('temporary fault')
+    expect((error as Error).message).toContain('web search')
+    const limited = await setup({ probeAttempts: 1 }, { platform: 'linux', probeBwrap: () => 'resource-limit', probeLandlock: () => 'unusable', bwrapInstalled: () => true })
+    await expect(limited.sandbox.confine(['true'], RO)).rejects.toThrow(expect.objectContaining({ transient: true }))
+    const blocked = await setup({ probeAttempts: 1 }, { platform: 'linux', probeBwrap: () => false, probeLandlock: () => 'unusable', bwrapInstalled: () => true })
+    await expect(blocked.sandbox.confine(['true'], RO)).rejects.toThrow(expect.objectContaining({ transient: false }))
+  })
+
+  it('bounds the probe retries', async () => {
+    await expect(setup({ probeAttempts: 6 })).rejects.toThrow()
+    await expect(setup({ probeBackoffMs: 2_001 })).rejects.toThrow()
   })
 
   it('a multi-rung chain probes a seatbelt rung like any other (the walk, not the platform table, decides)', async () => {
@@ -390,7 +502,7 @@ describe('probeTimeoutMs config', () => {
   it('rejects 0 at construction: Node treats a 0 spawnSync timeout as UNBOUNDED, the opposite of the field', async () => {
     const ctx = new Context()
     await expect(ctx.plugin(LocalSandboxProvider, { probeTimeoutMs: 0 }))
-      .rejects.toThrow(/probeTimeoutMs must be a positive finite number/)
+      .rejects.toThrow(/probeTimeoutMs expected number >= 1/)
   })
 
   it('bounds the default probes: a launcher slower than the configured timeout reads as unusable', async () => {
@@ -647,6 +759,14 @@ describe('escape socket directories', () => {
     const refusal = await sandbox.confine(['true'], WW).then(() => undefined, (error: unknown) => error)
     expect(refusal).toMatchObject({ code: 'SANDBOX_UNSUPPORTED_POLICY', message: expect.stringContaining('did not finish within 1234 ms') as string })
     expect((refusal as Error).message).not.toContain('user namespaces')
+  })
+
+  it.each(['timed-out', 'resource-limit'] as const)('the escape-socket refusal after a %s bwrap probe says to start again', async (verdict) => {
+    const dir = escapeDirectory()
+    const { sandbox } = await setup({ escapeSocketDirectories: [dir], probeAttempts: 1 }, { platform: 'linux', probeBwrap: () => verdict, probeLandlock: () => 'full', landlockLauncher: fakeLauncher(), bwrapInstalled: () => true })
+    const refusal = await sandbox.confine(['true'], WW).then(() => undefined, (error: unknown) => error)
+    expect(refusal).toMatchObject({ code: 'SANDBOX_UNSUPPORTED_POLICY' })
+    expect((refusal as Error).message).toContain('start again to check it again')
   })
 
   it('reads the default bwrap probe as timed out when bwrap does not finish within probeTimeoutMs, and as failed when it exits non-zero', async () => {

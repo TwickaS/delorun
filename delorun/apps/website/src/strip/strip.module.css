@@ -1,0 +1,374 @@
+/*
+ * The setup strip. Spacing uses the brand's spacing tokens, so the density the visitor chooses applies here. Colours come
+ * from the brand's tokens, and the theme swatches and accent dots read the looks stylesheet's `--look-*` roles on their
+ * own `data-look` element. Only opacity and transform move; under reduced motion the `--dl-motion-*` tokens are 0ms, so
+ * the seat keeps its fade and drops its travel.
+ */
+
+/*
+ * The box the page holds for the strip: the live strip's first height at each width in the largest density, which a
+ * look carried in the link can start in, and which the shorter still fills too, so nothing moves when one replaces the other. A change that writes more keys or a larger density grows the strip from
+ * the visitor's own press.
+ */
+.strip {
+  position: relative;
+  min-height: 1265px;
+  color: var(--dl-text);
+}
+
+@media (min-width: 640px) {
+  .strip {
+    min-height: 1150px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .strip {
+    min-height: 620px;
+  }
+}
+
+/* The columns and the gap between them are the page's grid utilities on the same element; only the row gap is set here. */
+.body {
+  row-gap: var(--dl-space-6);
+  align-content: start;
+}
+
+.controls {
+  --delorun-segmented-max: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--dl-space-5);
+  min-width: 0;
+}
+
+/* The entry and the versions side by side on a wide screen, the notes under the versions. */
+.record {
+  align-content: start;
+  row-gap: var(--dl-space-5);
+  min-width: 0;
+}
+
+/* The heading and the way back share a row; on a narrow strip the way back moves under the heading whole. */
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dl-space-2) var(--dl-space-3);
+  min-height: 2rem;
+}
+
+.back {
+  white-space: nowrap;
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dl-space-5);
+  min-width: 0;
+}
+
+.notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dl-space-2);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dl-space-2);
+  min-width: 0;
+}
+
+.label {
+  display: flex;
+  align-items: center;
+  min-height: 2rem;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--dl-text);
+}
+
+/*
+ * The theme tiles: all eight at once, four to a row at every width. Where a tile is too narrow for its name and the radio
+ * mark (below 1440 px wide, or in the spacious density), the mark goes and the name is centred; the chosen tile keeps its
+ * border, and under forced colours an outline in the system's highlight colour.
+ */
+.tiles {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (max-width: 1439px) {
+  .tiles {
+    --delorun-tile-mark: none;
+    --delorun-tile-label-align: center;
+  }
+}
+
+:global(html[data-density='spacious']) .tiles {
+  --delorun-tile-mark: none;
+  --delorun-tile-label-align: center;
+}
+
+.swatch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  height: 2.75rem;
+  overflow: hidden;
+  border: 1px solid var(--dl-border);
+  border-radius: var(--dl-radius-xs);
+}
+
+.half {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 6px;
+  color-scheme: light;
+  background: var(--look-surface);
+}
+
+.half[data-half='dark'] {
+  color-scheme: dark;
+}
+
+.line {
+  width: 75%;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--look-text);
+}
+
+.pill {
+  width: 45%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--look-accent);
+}
+
+.dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--look-accent);
+}
+
+/* The entry grows downwards as keys are written; on a wide screen nothing sits under it. */
+.entry {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dl-space-2);
+}
+
+.entryLine {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--dl-text-muted);
+}
+
+/* Every change of the Theme entry has the same title, so the studio's list collapses them into one row. */
+.list {
+  min-height: 4.5rem;
+}
+
+/* The studio's sentence for a profile with no versions, in the frame the list draws. */
+.noVersions {
+  margin: 0;
+  padding: var(--dl-space-3) var(--dl-space-4);
+  border: 1px solid var(--dl-border);
+  border-radius: var(--dl-radius-md);
+  background: var(--dl-surface-raised);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--dl-text-muted);
+}
+
+.versions {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--dl-border);
+  border-radius: var(--dl-radius-md);
+  background: var(--dl-surface-raised);
+}
+
+.version {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dl-space-1);
+  padding: var(--dl-space-2) var(--dl-space-4);
+  border-top: 1px solid var(--dl-border);
+}
+
+.version:first-child {
+  border-top: 0;
+}
+
+.versionTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--dl-space-2);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.versionLine {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--dl-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The accent marks the current version, one of the accent's three places on the page. */
+.current {
+  padding: 0 var(--dl-space-2);
+  border-radius: var(--dl-radius-xs);
+  background: var(--dl-accent);
+  color: var(--dl-on-accent);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+.note {
+  margin: 0;
+  max-width: 70ch;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--dl-text-muted);
+}
+
+/* A new entry and a new version seat: a short travel up and a fade, the version a moment after the entry. */
+.seat {
+  transition: opacity var(--dl-duration-quick) var(--dl-ease-out), transform var(--dl-motion-quick) var(--dl-ease-out);
+}
+
+.later {
+  transition-delay: calc(var(--dl-duration-press) / 2);
+}
+
+@starting-style {
+  .seat {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.announce {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The still: the same parts drawn as plain markup, after the studio's tile group, segmented control and code block. */
+.stillCaption {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--dl-text-muted);
+}
+
+/* The still's tiles never scroll, so the row is not a keyboard stop. */
+.stillTiles {
+  overflow: hidden;
+  display: grid;
+  gap: var(--dl-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stillTile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dl-space-1);
+  padding: var(--dl-space-2);
+  border: 1px solid var(--dl-border);
+  border-radius: var(--dl-radius-md);
+  background: var(--dl-surface-raised);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.stillTile[aria-current] {
+  border-color: var(--dl-accent);
+  box-shadow: inset 0 0 0 1px var(--dl-accent);
+}
+
+.segments {
+  display: flex;
+  margin: 0;
+  padding: 3px;
+  list-style: none;
+  border: 1px solid var(--dl-border);
+  border-radius: var(--dl-radius-md);
+  background: var(--dl-surface-raised);
+}
+
+.segment {
+  flex: 1;
+  padding: 6px var(--dl-space-2);
+  border-radius: var(--dl-radius-sm);
+  font-size: 13px;
+  line-height: 18px;
+  text-align: center;
+  color: var(--dl-text-muted);
+}
+
+.segment[aria-current] {
+  background: var(--dl-surface);
+  color: var(--dl-text);
+  font-weight: 500;
+}
+
+.code {
+  display: grid;
+  gap: var(--dl-space-2);
+  margin: 0;
+}
+
+.codeCaption {
+  font-size: 13px;
+  color: var(--dl-text-muted);
+}
+
+.codePre {
+  margin: 0;
+  padding: var(--dl-space-2) var(--dl-space-4);
+  border: 1px solid var(--dl-border);
+  border-radius: var(--dl-radius-md);
+  background: var(--dl-surface-sunken);
+  font-family: var(--dl-font-mono);
+  font-size: 15px;
+  line-height: 1.5;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+/* The spread: the new page is revealed by the clip the script animates, not cross-faded. */
+:global(html.strip-spread)::view-transition-old(root),
+:global(html.strip-spread)::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+/* Forced colours draw every tile's border alike, so the chosen tile gets an outline the system colours keep. */
+@media (forced-colors: active) {
+  .tiles > [aria-checked='true'],
+  .stillTile[aria-current] {
+    outline: 3px solid Highlight;
+    outline-offset: 2px;
+  }
+}

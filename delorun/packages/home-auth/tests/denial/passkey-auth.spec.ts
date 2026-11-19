@@ -15,8 +15,8 @@ import { PasskeyAuth, type PasskeyAuthOptions } from '../../src/passkey-auth.ts'
 import { PasskeyStore } from '../../src/passkeys.ts'
 import { VirtualAuthenticator } from '../fixtures/virtual-authenticator.ts'
 
-const ADDRESS = 'https://studio.tail1234.ts.net'
-const ORIGIN = 'https://studio.tail1234.ts.net'
+const ADDRESS = 'https://studio.example.ts.net'
+const ORIGIN = 'https://studio.example.ts.net'
 const LISTENER: ReachListenerId = 'reach-tailscale-private'
 const PHONE = brandString<DeviceId>(Buffer.from('phone-one-device!').toString('base64url'))
 const OTHER = brandString<DeviceId>(Buffer.from('phone-two-device!').toString('base64url'))
@@ -73,7 +73,7 @@ describe('enrolment', () => {
   it('records a passkey bound to the device, with the address host as relying-party id', async () => {
     await enrol()
     expect(store.forDevice(PHONE)).toHaveLength(1)
-    expect(store.forDevice(PHONE)[0]?.rpId).toBe('studio.tail1234.ts.net')
+    expect(store.forDevice(PHONE)[0]?.rpId).toBe('studio.example.ts.net')
     expect(store.forDevice(OTHER)).toHaveLength(0)
   })
 
@@ -93,7 +93,7 @@ describe('enrolment', () => {
   it('asks for a resident, user-verified platform credential with no attestation', async () => {
     auth.mintTicket(PHONE, LISTENER)
     const options = await auth.registrationOptions(asker(PHONE), ADDRESS, 'Phone')
-    expect(options.rp.id).toBe('studio.tail1234.ts.net')
+    expect(options.rp.id).toBe('studio.example.ts.net')
     expect(options.authenticatorSelection).toMatchObject({ residentKey: 'required', userVerification: 'required', authenticatorAttachment: 'platform' })
     expect(options.attestation).toBe('none')
   })
@@ -102,7 +102,7 @@ describe('enrolment', () => {
   it('refuses a credential whose user was not verified, a wrong relying party and a wrong origin, and keeps the ticket', async () => {
     const authenticator = new VirtualAuthenticator()
     auth.mintTicket(PHONE, LISTENER)
-    for (const ceremony of [{ origin: ORIGIN, uv: false }, { origin: ORIGIN, rpId: 'tail1234.ts.net' }, { origin: 'https://evil.example' }]) {
+    for (const ceremony of [{ origin: ORIGIN, uv: false }, { origin: ORIGIN, rpId: 'example.ts.net' }, { origin: 'https://evil.example' }]) {
       const creation = await auth.registrationOptions(asker(PHONE), ADDRESS, 'Phone')
       const failure = await code(() => auth.register(asker(PHONE), ADDRESS, authenticator.create(creation, ceremony)))
       expect(failure, JSON.stringify(ceremony)).toMatch(/^PASSKEY_/)
@@ -187,7 +187,7 @@ describe('assertion', () => {
   // Removing the relying-party check lets an assertion for another site count.
   it('refuses a wrong relying-party id and a wrong origin', async () => {
     const phone = await enrol()
-    expect(await code(async () => auth.verify(asker(PHONE), ADDRESS, phone.get(await options(), { origin: ORIGIN, rpId: 'tail1234.ts.net' })))).toBe('PASSKEY_ASSERTION_INVALID')
+    expect(await code(async () => auth.verify(asker(PHONE), ADDRESS, phone.get(await options(), { origin: ORIGIN, rpId: 'example.ts.net' })))).toBe('PASSKEY_ASSERTION_INVALID')
     expect(await code(async () => auth.verify(asker(PHONE), ADDRESS, phone.get(await options(), { origin: 'https://evil.example' })))).toBe('PASSKEY_ASSERTION_INVALID')
     expect(misses).toHaveLength(2)
   })
@@ -258,7 +258,7 @@ describe('assertion', () => {
   // Removing the address filter offers a passkey whose relying-party id the page can no longer use.
   it('offers no passkey enrolled on another address', async () => {
     await enrol()
-    expect(await code(() => auth.assertionOptions(asker(PHONE), 'https://renamed.tail1234.ts.net', ACTIONS))).toBe('PASSKEY_UNAVAILABLE')
+    expect(await code(() => auth.assertionOptions(asker(PHONE), 'https://renamed.example.ts.net', ACTIONS))).toBe('PASSKEY_UNAVAILABLE')
   })
 })
 

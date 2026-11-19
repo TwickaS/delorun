@@ -400,6 +400,38 @@ export interface ChangesReloadRequest extends RequestBase {
 /** What the Host answered to `changes.reload`: loaded, or why not. */
 export type ChangesReloadOutcome = { readonly ok: true } | { readonly ok: false, readonly error: string }
 
+/** An external agent whose sign-in status and plan limits the running Host keeps, by its provider name. */
+export type ExternalAgentProvider = 'claude-code' | 'codex'
+
+/**
+ * The `agents.accounts` request: each external agent's stored sign-in status and plan-limit figures, as the running
+ * Host's account service of `@delorun/external-agents` reads them. Reading never starts a check. Accepted with either
+ * token, because the figures hold no personal data and any approved device reads them.
+ */
+export interface AgentsAccountsRequest extends RequestBase {
+  /** The operation. */
+  readonly op: 'agents.accounts'
+}
+
+/**
+ * The `agents.refresh` request: the running Host checks one external agent's figures now, through its start gate, by a
+ * short-lived start of the person's own program with no task. `check-now` honours the Host's interval between checks;
+ * `signed-in`, which `delorun agents login` sends after a sign-in that ended well, skips it. Accepted only with the token
+ * from the token file, and refused with `LOOPBACK_REQUIRED` for the Host's channel token, because a check starts a
+ * program on the computer and a reach device needs an unlock for that.
+ */
+export interface AgentsRefreshRequest extends RequestBase {
+  /** The operation. */
+  readonly op: 'agents.refresh'
+  /** Arguments. */
+  readonly args: {
+    /** The agent to check. */
+    readonly provider: ExternalAgentProvider
+    /** Why the check is asked for. */
+    readonly reason: 'check-now' | 'signed-in'
+  }
+}
+
 /**
  * Every request the update channel accepts. No request carries a path, an archive or a URL the home process opens or
  * fetches, or a command it runs; `mcp.revoke` names an accepted start only by its acceptance id.
@@ -427,6 +459,8 @@ export type UpdateChannelRequest =
   | ReachStatusRequest
   | ReachApplyRequest
   | ChangesReloadRequest
+  | AgentsAccountsRequest
+  | AgentsRefreshRequest
 
 /** Error codes of this contract. */
 export type HomeProcessErrorCode =
@@ -466,6 +500,7 @@ export type HomeProcessErrorCode =
   | 'STALE_REVIEW'
   | 'CONSENT_FAILED'
   | 'REACH_UNAVAILABLE'
+  | 'AGENTS_UNAVAILABLE'
 
 /** The body of a `status` response line. */
 export interface HomeStatus {

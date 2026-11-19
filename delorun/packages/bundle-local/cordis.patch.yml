@@ -183,6 +183,37 @@
       config:
         enabled: true
 
+    # The start gate of live external agents: the only path that starts Claude Code or Codex for a seat or a limits
+    # check. It mounts always and starts nothing until a driver's pack is installed. A reached plan limit refuses a start.
+    - id: delorun-external-agents
+      name: '@delorun/external-agents'
+      config:
+        maxLivePrograms: 4
+        graceMs: 3000
+        probeMinIntervalMinutes: 30
+        probeTriggers:
+          - pack-added
+          - signed-in
+          - check-now
+        limitRefusal: true
+
+    # The drivers of the gate for Claude Code and Codex. Each registers only while upstream's provider of that name is
+    # (its pack is added), so both mount dormant; a harness tool call may wait fifteen minutes for the person.
+    - id: delorun-agent-claude-code
+      name: '@delorun/agent-claude-code'
+      config:
+        harnessToolTimeoutSeconds: 900
+    - id: delorun-agent-codex
+      name: '@delorun/agent-codex'
+      config:
+        harnessToolTimeoutSeconds: 900
+
+    # Live external agents behind the `externalAgents.liveAgents` preview flag (off unless a profile row sets it): the
+    # hand-off tools `claude_code` and `codex`, the agent's chat and its approvals. With the flag off the row adds no tool
+    # and no UI. The row is protected: it relays an agent's questions to the person.
+    - id: delorun-agent-seats
+      name: '@delorun/plugin-agent-seats'
+
     - id: delorun-plugin-changes
       name: '@delorun/plugin-changes'
       config:
@@ -315,6 +346,10 @@
       - '@delorun/plugin-fetch-guard'
       - '@delorun/plugin-tool-failure-guard'
       - '@delorun/plugin-delegation-consent'
+      - '@delorun/external-agents'
+      - '@delorun/agent-claude-code'
+      - '@delorun/agent-codex'
+      - '@delorun/plugin-agent-seats'
       - '@delorun/plugin-changes'
       - '@delorun/bundle-local/update-gate'
       - '@delorun/bundle-local/update-check'

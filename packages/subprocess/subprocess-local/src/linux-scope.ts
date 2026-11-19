@@ -722,5 +722,7 @@ export function launchLinuxScope(
     control: controlPipe(child, spec.stdio.control),
     direct,
     owner,
+    pid: child.pid,
+    unit: `${unitBase}.scope`,
   }
 }

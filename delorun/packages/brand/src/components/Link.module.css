@@ -3,7 +3,9 @@
   text-decoration: underline;
   text-underline-offset: 0.2em;
   text-decoration-thickness: 1px;
-  transition: color var(--dl-motion);
+  /* Vertical padding makes the link's box at least 24 px tall in a line of body text, for a finger. */
+  padding-block: 3px;
+  transition: color var(--dl-duration-quick) var(--dl-ease);
 }
 
 .link:hover { text-decoration-thickness: 2px; }

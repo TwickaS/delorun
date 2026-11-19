@@ -33,6 +33,7 @@ export function DefaultConversationViews({
   const viewId = view ?? active?.id
   return (
     <div className={css.viewArea}>
+      {renderSlot('conversation.session.banner', {})}
       {viewId !== undefined && renderSlot('conversation.view', {
         inspectCall,
         viewRequest,

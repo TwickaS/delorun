@@ -1,0 +1,72 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rewriteRelativeImportExtensions": false,
+    "composite": false,
+    "incremental": false,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": ["src", "tests"],
+  "exclude": ["src/client", "tests/**/*.client.spec.ts", "tests/**/*.client.spec.tsx", "tests/**/*.client.ts"],
+  "references": [
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../../vendor/schemastery"
+    },
+    {
+      "path": "../../../packages/api/gateway/tsconfig.host.json"
+    },
+    {
+      "path": "../../../packages/api/remote-access/tsconfig.host.json"
+    },
+    {
+      "path": "../../../packages/boot/app-boot"
+    },
+    {
+      "path": "../../../packages/client/connection/tsconfig.host.json"
+    },
+    {
+      "path": "../../../packages/core/agent"
+    },
+    {
+      "path": "../../../packages/core/session"
+    },
+    {
+      "path": "../../../packages/core/tools"
+    },
+    {
+      "path": "../../../packages/interaction/user-approval"
+    },
+    {
+      "path": "../../../packages/llm/llm"
+    },
+    {
+      "path": "../../../packages/preset/agent-preset-registry"
+    },
+    {
+      "path": "../../../packages/session/session-projection"
+    },
+    {
+      "path": "../../../packages/spill/spill-policy"
+    },
+    {
+      "path": "../../../packages/subagent/subagent"
+    },
+    {
+      "path": "../../../packages/typert/protocol"
+    },
+    {
+      "path": "../../../packages/typert/registry"
+    },
+    {
+      "path": "../../../packages/util/brand"
+    },
+    {
+      "path": "../../../packages/workspace/workspace"
+    }
+  ]
+}

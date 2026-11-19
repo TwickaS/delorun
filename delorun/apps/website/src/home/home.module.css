@@ -1,0 +1,1056 @@
+/*
+ * The home page's look. The screenshot sections sit on a deeper field than the page, so the pictures carry the colour;
+ * text and the accent follow the look the theme dot sets. Explanatory motion runs long and eases out; controls stay fast.
+ */
+
+.page {
+  --margin: 24px;
+  --inner: min(100vw - 2 * var(--margin), 1392px);
+  overflow-x: clip;
+  font-family: var(--dl-font-sans);
+}
+
+@media (max-width: 639px) {
+  .page { --margin: 14px; }
+}
+
+:global(html::view-transition-old(root)),
+:global(html::view-transition-new(root)) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.skip {
+  position: absolute;
+  left: 12px;
+  top: -60px;
+  z-index: 50;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--dl-text);
+  color: var(--dl-surface);
+}
+.skip:focus { top: 12px; }
+
+.main { outline: none; }
+
+/* Header */
+
+.header {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: var(--inner);
+  margin: 0 auto;
+  padding-block: 18px;
+}
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: inherit;
+  text-decoration: none;
+}
+.nav {
+  display: flex;
+  align-items: center;
+  gap: clamp(14px, 2vw, 28px);
+}
+.navLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: 15px;
+  color: inherit;
+  opacity: 0.72;
+  text-decoration: none;
+  transition: opacity var(--dl-duration-quick) var(--dl-ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .navLink:hover { opacity: 1; }
+}
+.brand:focus-visible,
+.navLink:focus-visible,
+.dotWrap:focus-visible,
+.starButton:focus-visible,
+.tile:focus-visible,
+.filmShot:focus-visible,
+.showAll:focus-visible,
+.lightboxButton:focus-visible {
+  outline: 3px solid var(--dl-accent);
+  outline-offset: 3px;
+}
+
+.dotWrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 44px;
+  padding: 0 0 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  transition: transform var(--dl-motion-quick) var(--dl-ease-out), background-color var(--dl-duration-quick) var(--dl-ease-out), border-color var(--dl-duration-quick) var(--dl-ease-out);
+}
+.dot {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+}
+.dot span {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--dl-accent);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--dl-accent) 26%, transparent);
+  transition: box-shadow var(--dl-duration-quick) var(--dl-ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .dotWrap:hover .dot span { box-shadow: 0 0 0 6px color-mix(in oklab, var(--dl-accent) 30%, transparent); }
+}
+.dotWrap:active { transform: scale(0.97); }
+.dotName {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* The effects readout (B): what runs and what waits, set like a command line. A phone shows a dot and a count. */
+
+.status { display: inline-flex; align-items: center; font: 500 12px/1 var(--dl-font-mono); }
+.statusLine {
+  width: 28ch;
+  overflow: hidden;
+  text-align: right;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  opacity: 0.72;
+  transition: opacity var(--dl-duration-move) var(--dl-ease-out);
+}
+.status[data-state='idle'] .statusLine { opacity: 0; }
+.status[data-state='busy'] .statusLine { opacity: 1; }
+.status[data-state='done'] .statusLine { opacity: 0.85; }
+.statusPrompt { color: var(--dl-accent); }
+@media (max-width: 1023px) {
+  .statusLine { width: auto; max-width: 18ch; }
+}
+/* A phone shows the readout as one line at the foot of the screen while something runs or has just finished. */
+@media (max-width: 639px) {
+  .statusLine {
+    position: fixed;
+    left: 50%;
+    bottom: max(16px, env(safe-area-inset-bottom));
+    z-index: 50;
+    width: auto;
+    max-width: calc(100vw - 32px);
+    padding: 9px 14px;
+    border-radius: 999px;
+    background: var(--dl-stage-scrim);
+    color: var(--dl-stage-scrim-text);
+    box-shadow: 0 6px 20px color-mix(in oklab, var(--dl-screen-ground) 30%, transparent);
+    opacity: 0;
+    translate: -50% 10px;
+    transition: opacity var(--dl-duration-quick) var(--dl-ease-out), translate var(--dl-motion-quick) var(--dl-ease-out);
+    pointer-events: none;
+  }
+  .status[data-state='busy'] .statusLine,
+  .status[data-state='done'] .statusLine { opacity: 1; translate: -50% 0; }
+}
+
+
+/* B's header: the theme control and the Star button are outlined pills of one size, so both read as controls. */
+
+.header .nav { gap: clamp(12px, 1.6vw, 22px); }
+.header .dotWrap,
+.starButton {
+  min-height: 38px;
+  border: 1px solid color-mix(in oklab, currentColor 26%, transparent);
+  background: color-mix(in oklab, var(--dl-stage) 70%, transparent);
+  backdrop-filter: blur(10px);
+}
+.header .dotWrap { gap: 6px; padding: 0 5px 0 14px; }
+.header .dotName { opacity: 0.85; }
+.header .dot { width: 26px; height: 26px; }
+.header .dot span { width: 14px; height: 14px; box-shadow: 0 0 0 3px color-mix(in oklab, var(--dl-accent) 26%, transparent); }
+.starButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 15px 0 13px;
+  border-radius: 999px;
+  color: inherit;
+  font: 600 14px/1 var(--dl-font-sans);
+  text-decoration: none;
+  transition: transform var(--dl-motion-quick) var(--dl-ease-out), background-color var(--dl-duration-quick) var(--dl-ease-out), border-color var(--dl-duration-quick) var(--dl-ease-out);
+}
+.starButton svg { flex: none; }
+.starButton:active { transform: scale(0.97); }
+@media (hover: hover) and (pointer: fine) {
+  .header .dotWrap:hover,
+  .starButton:hover { border-color: color-mix(in oklab, currentColor 55%, transparent); background: color-mix(in oklab, currentColor 8%, var(--dl-stage)); }
+}
+@media (max-width: 639px) {
+  .header .nav { gap: 8px; }
+  .header .dotWrap { gap: 5px; padding: 0 5px 0 11px; }
+  .starButton { width: 38px; padding: 0; justify-content: center; }
+  .starLabel { display: none; }
+}
+
+/* Shared type */
+
+.display {
+  grid-column: 1 / -1;
+  margin: 0 0 0 -0.05em;
+  font-size: clamp(54px, min(10.4vw, 17svh), 184px);
+  font-weight: 800;
+  line-height: 0.86;
+  letter-spacing: -0.055em;
+  text-wrap: balance;
+}
+.display span { display: block; }
+.displayQuiet { color: var(--dl-accent-text, var(--dl-accent)); }
+
+.lead {
+  margin: 0;
+  max-width: 34ch;
+  font-size: clamp(19px, 0.9rem + 0.6vw, 24px);
+  line-height: 1.38;
+  letter-spacing: -0.012em;
+}
+
+.sectionTitle {
+  margin: 0 0 0 -0.04em;
+  font-size: clamp(44px, 6.6vw, 116px);
+  font-weight: 800;
+  line-height: 0.9;
+  letter-spacing: -0.05em;
+  text-wrap: balance;
+}
+
+/* Hero A */
+
+.heroA {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 40px 24px;
+  width: var(--inner);
+  margin: 0 auto;
+  padding: clamp(28px, 6svh, 80px) 0 40px;
+}
+.heroAside {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: start;
+  gap: 32px 24px;
+}
+.heroAside .lead { grid-column: 1 / 6; }
+.heroAside .install { grid-column: 7 / 13; }
+.scrollCue {
+  grid-column: 1 / -1;
+  margin: 24px 0 0;
+  font: 500 13px/1 var(--dl-font-mono);
+  color: var(--dl-text-muted);
+}
+@media (max-width: 1023px) {
+  .heroAside .lead,
+  .heroAside .install { grid-column: 1 / -1; }
+}
+
+.install {
+  display: grid;
+  gap: 16px;
+  max-width: 560px;
+}
+.install[data-big='true'] { max-width: min(100%, 640px); }
+
+/* Film */
+
+.film {
+  position: relative;
+  height: calc(var(--chapters) * 100svh);
+  background: var(--dl-stage);
+  color: var(--dl-stage-text);
+}
+.filmSticky {
+  position: sticky;
+  top: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  justify-items: center;
+  align-items: center;
+  gap: 22px;
+  height: 100svh;
+  padding: 28px var(--margin) 30px;
+  overflow: hidden;
+}
+.filmFrame {
+  position: relative;
+  width: min(var(--inner), (100svh - 250px) * 1.6, 1360px);
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--dl-screen-ground);
+  box-shadow: 0 50px 120px -50px color-mix(in oklab, var(--dl-screen-ground) 65%, transparent), 0 0 0 1px var(--dl-stage-line);
+}
+.film .filmFrame { width: min(var(--inner), (100svh - 270px) * 1.6, 1120px); }
+.filmShot {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  padding: 0;
+  border: 0;
+  background: var(--dl-screen-ground);
+  opacity: 0;
+  clip-path: inset(0 0 0 100%);
+  transition: opacity 0s var(--dl-motion-scene), clip-path 0s var(--dl-motion-scene);
+}
+.filmShot[data-active='true'] {
+  z-index: 2;
+  opacity: 1;
+  clip-path: inset(0 0 0 0);
+  transition: clip-path var(--dl-motion-scene) var(--dl-ease-out), opacity 0s;
+}
+.filmShot img {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  object-fit: cover;
+  object-position: top left;
+  transform-origin: 0 0;
+  transition: transform calc(var(--dl-motion-scene) * 2) var(--dl-ease-out);
+}
+.filmMeta {
+  display: grid;
+  grid-template-columns: auto auto;
+  justify-content: end;
+  align-items: center;
+  gap: 10px 14px;
+  padding-bottom: 6px;
+  font: 500 13px/1 var(--dl-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.filmClock { display: inline-flex; align-items: center; gap: 8px; color: var(--dl-stage-text); }
+.filmRec {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--dl-accent);
+  animation: rec calc(var(--dl-motion-scene) * 2) var(--dl-ease-in-out) infinite;
+}
+@keyframes rec { 50% { opacity: 0.35; } }
+.filmCount { color: var(--dl-stage-muted); }
+:global(.dark) .lightOnly { display: none; }
+:global(html:not(.dark)) .darkOnly { display: none; }
+.filmCaption {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px 40px;
+  width: min(var(--inner), (100svh - 250px) * 1.6, 1360px);
+  min-height: 136px;
+  align-content: end;
+}
+.film .filmCaption { width: min(var(--inner), (100svh - 270px) * 1.6, 1120px); }
+.filmLine {
+  margin: 0 0 0 -0.04em;
+  font-size: clamp(32px, min(4vw, 6.4svh), 60px);
+  text-wrap: balance;
+  font-weight: 800;
+  line-height: 0.95;
+  letter-spacing: -0.045em;
+  animation: caption-in var(--dl-motion-scene) var(--dl-ease-out) both;
+}
+.filmDetail {
+  margin: 0;
+  max-width: 40ch;
+  font-size: 17px;
+  line-height: 1.45;
+  color: var(--dl-stage-muted);
+  animation: caption-in var(--dl-motion-scene) var(--dl-duration-leave) var(--dl-ease-out) both;
+}
+@keyframes caption-in {
+  from { opacity: 0; transform: translateY(0.4em); }
+}
+.filmTicks {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: end;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.filmTicks li {
+  width: 22px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--dl-stage-line);
+  transition: background var(--dl-duration-move) var(--dl-ease-out);
+}
+.filmTicks li[data-on='true'] { background: var(--dl-accent); }
+.filmMarkers {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-rows: repeat(var(--chapters), 1fr);
+  pointer-events: none;
+}
+
+@media (max-width: 1023px) {
+  .filmCaption { grid-template-columns: minmax(0, 1fr) auto; }
+  .filmDetail { grid-column: 1 / 2; }
+  .filmMeta { grid-column: 2; grid-row: 1 / 3; }
+}
+@media (max-width: 639px) {
+  .filmSticky { gap: 16px; padding-top: 16px; }
+  .filmFrame,
+  .film .filmFrame { width: 100%; height: auto; aspect-ratio: 4 / 5; max-height: calc(100svh - 250px); border-radius: 16px; }
+  .filmCaption,
+  .film .filmCaption { width: 100%; }
+  .filmCaption,
+  .film .filmCaption { grid-template-columns: minmax(0, 1fr); align-content: start; gap: 10px; min-height: 196px; }
+  .filmMeta { grid-column: 1; grid-row: 1; justify-content: start; grid-template-columns: auto auto 1fr; }
+  .filmTicks { grid-column: auto; }
+  .filmDetail { grid-column: 1; max-width: none; }
+  .filmLine { font-size: 38px; }
+  .filmDetail { font-size: 16px; }
+}
+
+/* Wall */
+
+.wallSection {
+  padding: 140px var(--margin) 160px;
+  background: var(--dl-stage);
+  color: var(--dl-stage-text);
+}
+.wallHead {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 28px 24px;
+  width: var(--inner);
+  margin: 0 auto 56px;
+}
+.wallHead .sectionTitle { grid-column: 1 / 9; }
+.wallLead {
+  grid-column: 9 / 13;
+  align-self: end;
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.5;
+  color: var(--dl-stage-muted);
+}
+.wallControls {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+}
+.wallCount {
+  font-size: 15px;
+  line-height: 1;
+  color: var(--dl-stage-muted);
+}
+.wallCount strong { margin-right: 4px; font-size: 22px; font-weight: 700; color: var(--dl-accent-text); }
+
+/*
+ * The wall: many small tiles, wider than the text column. Spans keep each tile near its picture's proportions, and every
+ * tile is a whole number of computer rows tall, so the dense flow leaves few holes.
+ */
+.wallGrid {
+  --wall: min(100vw - 2 * var(--margin), 1760px);
+  --gap: 10px;
+  --col: calc((var(--wall) - 23 * var(--gap)) / 24);
+  display: grid;
+  grid-template-columns: repeat(24, minmax(0, 1fr));
+  grid-auto-rows: calc(var(--col) * 0.57);
+  grid-auto-flow: dense;
+  gap: var(--gap);
+  width: var(--wall);
+  margin: 0 auto;
+}
+.showAll {
+  display: none;
+  justify-self: center;
+  min-height: 48px;
+  margin: 28px auto 0;
+  padding: 0 24px;
+  border: 1px solid var(--dl-stage-line);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: 600 16px/1 var(--dl-font-sans);
+  cursor: pointer;
+  transition: transform var(--dl-motion-quick) var(--dl-ease-out);
+}
+.showAll:active { transform: scale(var(--dl-scale-pressed)); }
+.showAll[data-wide='true'] { display: block; }
+.wallGrid[data-collapsed='true'] .tile[data-beyond='true'] { display: none; }
+@media (max-width: 639px) {
+  .showAll { display: block; }
+}
+
+.tile {
+  position: relative;
+  display: block;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 6px;
+  background: var(--dl-screen-ground);
+  box-shadow: 0 0 0 1px var(--dl-stage-line);
+  cursor: zoom-in;
+  transition: transform var(--dl-motion-quick) var(--dl-ease-out);
+}
+.tile img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+  transition: transform var(--dl-motion-scene) var(--dl-ease-out);
+}
+.tile:active { transform: scale(var(--dl-scale-pressed)); }
+@media (hover: hover) and (pointer: fine) {
+  .tile:hover img { transform: scale(1.06); }
+}
+.wallGrid .tile[data-device='computer'] { grid-column: span 4; grid-row: span 4; }
+.wallGrid .tile[data-device='phone'] { grid-column: span 3; grid-row: span 8; border-radius: 10px; }
+.wallGrid .tile[data-feature='true'] { grid-column: span 8; grid-row: span 8; }
+@media (max-width: 1023px) {
+  .wallGrid { grid-template-columns: repeat(16, minmax(0, 1fr)); --col: calc((var(--wall) - 15 * var(--gap)) / 16); }
+  .wallHead .sectionTitle,
+  .wallLead { grid-column: 1 / -1; }
+}
+@media (max-width: 639px) {
+  .wallSection { padding-block: 96px 112px; }
+  .wallGrid { --gap: 6px; --col: calc((var(--wall) - 5 * var(--gap)) / 6); grid-template-columns: repeat(6, minmax(0, 1fr)); grid-auto-rows: calc(var(--col) * 0.6); }
+  .wallGrid[data-collapsed='true'] .tile[data-extra='true'] { display: none; }
+  .tile { border-radius: 4px; }
+  .wallGrid .tile[data-device='computer'] { grid-column: span 2; grid-row: span 2; }
+  .wallGrid .tile[data-device='phone'] { grid-column: span 2; grid-row: span 6; border-radius: 7px; }
+  .wallGrid .tile[data-feature='true'] { grid-column: span 4; grid-row: span 4; }
+}
+
+/*
+ * Mosaic (B's hero). The section is taller than the window; its stage stays in place while the wall zooms in. The film
+ * after it slides up under it by the stage's height and a little more, so the film is in place under the stage while the
+ * stage fades out.
+ */
+
+.reveal {
+  position: relative;
+  z-index: 2;
+  height: 260svh;
+  color: var(--dl-stage-text);
+}
+.revealStage {
+  --words: 1;
+  --field-in: 0;
+  --hero-out: 0;
+  position: sticky;
+  top: 0;
+  height: 100svh;
+  min-height: 640px;
+  overflow: hidden;
+  opacity: calc(1 - var(--hero-out));
+}
+.reveal + .film { margin-top: -120svh; }
+.revealField {
+  position: absolute;
+  inset: 0;
+  background: var(--dl-stage);
+  opacity: var(--field-in);
+  pointer-events: none;
+}
+.handover {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--dl-screen-ground);
+  box-shadow: 0 50px 120px -50px color-mix(in oklab, var(--dl-screen-ground) 65%, transparent), 0 0 0 1px var(--dl-stage-line);
+  opacity: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+.handover img { position: absolute; left: 0; top: 0; width: 100%; max-width: none; }
+.handoverWide { height: 100%; object-fit: cover; object-position: top left; }
+.handoverNarrow { display: none; height: auto; }
+@media (max-width: 639px) {
+  .handoverWide { display: none; }
+  .handoverNarrow { display: block; }
+  .handover { border-radius: 16px; }
+}
+.mosaicFrame {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--dl-stage);
+}
+.mosaic {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--rows), minmax(0, 1fr));
+  transform-origin: 0 0;
+}
+.mosaic[data-layout='wide'] { width: max(100vw, 100svh * var(--ratio), 372px * var(--ratio)); aspect-ratio: var(--ratio); }
+/* The first paint: a one-pixel-per-cell placeholder, then the look's atlas, both under the tiles. */
+.mosaicTiny,
+.mosaicAtlas {
+  position: absolute;
+  inset: 0;
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+.mosaicTiny { image-rendering: pixelated; }
+/* Both colour schemes' atlases are in the page, since the prerendered page cannot know the scheme; one shows. */
+.mosaicLayers { position: absolute; inset: 0; pointer-events: none; }
+.mosaicLayers[data-mode='light'] { display: none; }
+:global(html:not(.dark)) .mosaicLayers[data-mode='light'] { display: block; }
+:global(html:not(.dark)) .mosaicLayers[data-mode='dark'] { display: none; }
+.mosaic[data-layout='narrow'] { display: none; }
+.mosaicTile {
+  width: 100%;
+  height: 100%;
+  border-radius: 2px;
+  box-shadow: none;
+  background: transparent;
+}
+.tileLayer,
+.tileSprite {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.tileLayer { object-fit: cover; object-position: top center; opacity: 0; transition: opacity var(--dl-duration-quick) var(--dl-ease-out); }
+.tileLayer[data-shown] { opacity: 1; }
+.tileSprite { background-repeat: no-repeat; }
+.pictureContents,
+.tile picture { display: contents; }
+/* A mosaic tile lifts on hover and focus and names its screen and look above itself; not while the page zooms. */
+.mosaicTile { overflow: visible; transition: transform var(--dl-motion-quick) var(--dl-ease-out), box-shadow var(--dl-duration-quick) var(--dl-ease-out); }
+.mosaicTile img { border-radius: inherit; }
+.mosaicTile:focus-visible { outline: 2px solid var(--dl-accent); outline-offset: 1px; }
+.tileLabel {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 6px);
+  z-index: 3;
+  padding: 4px 7px;
+  border-radius: 5px;
+  background: var(--dl-stage-scrim);
+  color: var(--dl-stage-scrim-text);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  opacity: 0;
+  translate: -50% 4px;
+  transition: opacity var(--dl-duration-quick) var(--dl-ease-out), translate var(--dl-motion-quick) var(--dl-ease-out);
+  pointer-events: none;
+}
+.mosaicTile:focus-visible { z-index: 2; transform: translateY(-2px) scale(1.08); box-shadow: 0 8px 22px color-mix(in oklab, var(--dl-screen-ground) 50%, transparent); }
+.mosaicTile:focus-visible .tileLabel { opacity: 1; translate: -50% 0; }
+@media (hover: hover) and (pointer: fine) {
+  .mosaicTile:hover img { transform: none; }
+  .mosaicTile:hover { z-index: 2; transform: translateY(-2px) scale(1.08); box-shadow: 0 8px 22px color-mix(in oklab, var(--dl-screen-ground) 50%, transparent); }
+  .mosaicTile:hover .tileLabel { opacity: 1; translate: -50% 0; }
+}
+.revealStage[data-zooming] .mosaicTile { transform: none; box-shadow: none; }
+/* The tile the zoom enters is lit while the zoom begins, so the eye knows where the page is going. */
+.mosaicTile[data-pinned]::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border: 2px solid var(--dl-accent);
+  border-radius: 4px;
+  box-shadow: 0 0 18px color-mix(in oklab, var(--dl-accent) 70%, transparent);
+  opacity: var(--lit, 0);
+  pointer-events: none;
+}
+.revealStage[data-zooming] .tileLabel { display: none; }
+
+/* The re-tile: each new picture turns in as its ring reaches it. The living tile fades between its frames. */
+@keyframes tileTurn {
+  from { opacity: 0; transform: perspective(300px) rotateY(-75deg); }
+}
+@keyframes tileFade {
+  from { opacity: 0; }
+}
+.mosaic[data-retiling] .tileSprite { animation: tileTurn var(--dl-duration-explain) var(--dl-ease-out) both; }
+.livingTile img { animation: tileFade calc(var(--dl-motion-scene) * 1.5) var(--dl-ease) both; }
+@media (prefers-reduced-motion: reduce) {
+  .mosaic[data-retiling] .tileSprite,
+  .livingTile img { animation: none; }
+}
+.pinSwap {
+  position: absolute;
+  left: calc(var(--step-x) * var(--col));
+  top: calc(var(--step-y) * var(--row));
+  width: var(--cell-w);
+  height: var(--cell-h);
+  max-width: none;
+  border-radius: 2px;
+  object-fit: cover;
+  object-position: top center;
+  opacity: var(--swap, 0);
+  pointer-events: none;
+}
+.pinSwap[data-always] { opacity: 1; }
+.mosaicShade,
+.mosaicPeach {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.mosaicShade { fill: var(--dl-stage); fill-opacity: 0.5; }
+/* In the light look the mark stands on the page's cream: the tiles around it and in its hole wash out to it. */
+:global(html:not(.dark)) .mosaicShade { fill: var(--dl-stage); fill-opacity: 0.7; }
+
+.mosaicPeach { fill: var(--dl-accent); fill-opacity: 0.5; mix-blend-mode: multiply; }
+
+.revealStage::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 1;
+  height: 120px;
+  background: linear-gradient(to bottom, color-mix(in oklab, var(--dl-stage) 85%, transparent), transparent);
+  opacity: var(--words);
+  pointer-events: none;
+}
+.revealShade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: var(--words);
+  background: linear-gradient(to right, var(--dl-stage) 0%, color-mix(in oklab, var(--dl-stage) 92%, transparent) 36%, color-mix(in oklab, var(--dl-stage) 40%, transparent) 50%, transparent 60%);
+}
+.revealWords {
+  position: absolute;
+  inset-block: 0;
+  left: max(var(--margin), (100vw - 1392px) / 2);
+  z-index: 2;
+  display: grid;
+  align-content: center;
+  gap: 24px;
+  width: min(44vw, 640px);
+  padding-top: 40px;
+  opacity: var(--words);
+  translate: 0 calc((1 - var(--words)) * -40px);
+  pointer-events: none;
+}
+.revealWords > * { pointer-events: auto; }
+.displayB {
+  margin: 0 0 0 -0.05em;
+  font-size: clamp(54px, 7.4vw, 150px);
+  font-weight: 800;
+  line-height: 0.86;
+  letter-spacing: -0.055em;
+  word-spacing: 0.06em;
+}
+.displayLine { display: block; width: max-content; white-space: nowrap; }
+.leadB {
+  margin: 0;
+  max-width: 34em;
+  font-size: 19px;
+  line-height: 1.42;
+}
+
+@media (max-width: 639px) {
+  .reveal { height: 220svh; }
+  .revealStage { min-height: 0; }
+  .mosaicFrame { place-items: start center; padding-top: 64px; }
+  .mosaic[data-layout='wide'] { display: none; }
+  .mosaic[data-layout='narrow'] { display: grid; width: 100vw; aspect-ratio: var(--ratio); }
+  .revealShade { display: none; }
+  .revealWords {
+    inset: calc(64px + 100vw * 150 / 160) 0 0;
+    align-content: start;
+    gap: 16px;
+    width: auto;
+    padding: 20px var(--margin) 0;
+    background: var(--dl-stage);
+  }
+  .displayB { font-size: 50px; }
+  .leadB { font-size: 16px; line-height: 1.4; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal { height: auto; }
+  .revealStage { position: relative; }
+  .reveal + .film { margin-top: 0; }
+}
+
+.countLine {
+  width: var(--inner);
+  margin: 0 auto;
+  padding: 72px 0 88px;
+  font-size: clamp(24px, 2.6vw, 40px);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+.countLine strong { color: var(--dl-accent); }
+.countLine span { color: var(--dl-text-muted); font-weight: 500; }
+
+/* Reasons */
+
+.reasons {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 24px;
+  width: var(--inner);
+  margin: 0 auto;
+  padding: 170px 0 120px;
+}
+.reasonsTitle {
+  grid-column: 1 / 10;
+  margin: 0 0 56px -0.04em;
+  font-size: clamp(42px, 6vw, 104px);
+  font-weight: 800;
+  line-height: 0.9;
+  letter-spacing: -0.05em;
+  text-wrap: balance;
+}
+.reasonList {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 80px 48px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.reason {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0 28px;
+  padding-top: 28px;
+  border-top: 1px solid var(--dl-border);
+}
+.reasonNumber {
+  grid-row: 1 / 3;
+  font-size: clamp(72px, 8vw, 136px);
+  font-weight: 800;
+  line-height: 0.78;
+  letter-spacing: -0.06em;
+  color: var(--dl-accent);
+  font-variant-numeric: tabular-nums;
+}
+.reasonTitle {
+  margin: 0;
+  font-size: clamp(26px, 2.5vw, 40px);
+  font-weight: 750;
+  line-height: 1.04;
+  letter-spacing: -0.03em;
+}
+.reasonText {
+  margin: 14px 0 0;
+  max-width: 38ch;
+  font-size: 18px;
+  line-height: 1.5;
+  color: var(--dl-text-muted);
+}
+@media (max-width: 767px) {
+  .reasons { padding-top: 112px; }
+  .reasonsTitle { grid-column: 1 / -1; margin-bottom: 24px; }
+  .reasonList { grid-template-columns: minmax(0, 1fr); gap: 48px; }
+  .reason { gap: 0 18px; }
+  .reasonNumber { font-size: 72px; }
+  .reasonText { font-size: 17px; }
+}
+
+/* Closing */
+
+.closing {
+  display: grid;
+  gap: 32px;
+  width: var(--inner);
+  margin: 0 auto;
+  padding: 80px 0 24px;
+}
+.closingTitle {
+  margin: 0 0 0 -0.05em;
+  font-size: clamp(52px, 9vw, 160px);
+  font-weight: 800;
+  line-height: 0.86;
+  letter-spacing: -0.055em;
+}
+.closingNote { margin: 0; font-size: 15px; color: var(--dl-text-muted); }
+.closingNote a,
+.closingNote a:visited { color: var(--dl-text); text-decoration: underline; text-underline-offset: 3px; }
+
+/* Lightbox */
+
+.lightbox {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: color-mix(in oklab, var(--dl-screen-ground) 98%, transparent);
+  color: var(--dl-stage-scrim-text);
+  overscroll-behavior: contain;
+}
+.lightbox::backdrop { background: transparent; backdrop-filter: blur(10px); }
+.lightboxPan {
+  position: fixed;
+  inset: 0 0 150px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.lightboxPan .lightboxImage { position: absolute; cursor: default; touch-action: pan-x; }
+.lightboxHint { display: block; margin-top: 6px; font-size: 13px; line-height: 1.3; opacity: 0.65; }
+.lightboxImage {
+  position: fixed;
+  max-width: none;
+  border-radius: 10px;
+  box-shadow: 0 40px 120px -30px color-mix(in oklab, var(--dl-screen-ground) 80%, transparent);
+  transform-origin: top left;
+  touch-action: none;
+  user-select: none;
+  cursor: grab;
+}
+.lightboxImage[data-device='phone'] { border-radius: 22px; }
+.lightboxImage { overflow: hidden; }
+.lightboxLayer { position: absolute; inset: 0; display: block; width: 100%; height: 100%; max-width: none; pointer-events: none; }
+.lightboxLayer[data-full] { opacity: 0; transition: opacity var(--dl-duration-quick) var(--dl-ease-out); }
+.lightboxLayer[data-full][data-ready] { opacity: 1; }
+.lightboxBar {
+  position: fixed;
+  left: 50%;
+  bottom: 22px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(1040px, calc(100vw - 24px));
+  transform: translateX(-50%);
+}
+.lightboxCaption { flex: 1; margin: 0; font-size: 17px; font-weight: 500; line-height: 1.35; }
+.lightboxCount { font-size: 14px; line-height: 1; opacity: 0.65; font-variant-numeric: tabular-nums; }
+.lightboxButton {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid color-mix(in oklab, var(--dl-stage-scrim-text) 22%, transparent);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font-size: 17px;
+  cursor: pointer;
+  transition: background-color var(--dl-duration-quick) var(--dl-ease-out), transform var(--dl-motion-quick) var(--dl-ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .lightboxButton:hover { background: color-mix(in oklab, var(--dl-stage-scrim-text) 10%, transparent); }
+}
+.lightboxButton:active { transform: scale(0.97); }
+@media (max-width: 639px) {
+  .lightboxBar { flex-wrap: wrap; bottom: 14px; }
+  .lightboxCaption { flex-basis: 100%; font-size: 16px; }
+  .lightboxCount { margin-right: auto; }
+}
+
+/* The caption plate (B): a paper label under the picture, like a gallery's. */
+
+.plateBar {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  width: min(980px, calc(100vw - 48px));
+  transform: translateX(-50%);
+}
+.plate {
+  display: grid;
+  gap: 10px;
+  padding: 14px 18px 14px 20px;
+  border-radius: 4px;
+  background: var(--dl-plate);
+  color: var(--dl-plate-text);
+  box-shadow: 0 24px 60px -24px color-mix(in oklab, var(--dl-screen-ground) 70%, transparent);
+}
+.plateTop { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.plateNumber { font-size: 13px; font-weight: 600; line-height: 1; color: var(--dl-plate-accent); font-variant-numeric: tabular-nums; }
+.plateButtons { display: flex; gap: 6px; }
+.lightboxButton[data-paper] { width: 36px; height: 36px; border-color: color-mix(in oklab, var(--dl-plate-text) 20%, transparent); font-size: 15px; }
+@media (hover: hover) and (pointer: fine) {
+  .lightboxButton[data-paper]:hover { background: color-mix(in oklab, var(--dl-plate-text) 7%, transparent); }
+}
+.plateTitle { margin: -4px 0 0; font-size: 19px; font-weight: 700; line-height: 1.25; letter-spacing: -0.01em; }
+.plateFacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 28px;
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in oklab, var(--dl-plate-text) 14%, transparent);
+}
+.plateFacts dt { font-size: 12.5px; font-weight: 500; line-height: 1; color: var(--dl-plate-muted); }
+.plateFacts dd { margin: 5px 0 0; font-size: 14px; font-weight: 500; }
+.plateCredit { margin: 0; font-size: 13px; line-height: 1.35; color: var(--dl-plate-muted); }
+/* On a wide screen the facts sit beside the title, so the plate takes less height from the picture. */
+@media (min-width: 1024px) {
+  .plate { grid-template-columns: minmax(0, 1fr) auto; column-gap: 32px; row-gap: 8px; }
+  .plateTop,
+  .plateCredit { grid-column: 1 / -1; }
+  .plateTitle { align-self: center; margin: 0; }
+  .plateFacts { padding-top: 0; border-top: 0; }
+}
+@media (max-width: 639px) {
+  .plateBar { bottom: 10px; width: calc(100vw - 20px); }
+  .plate { gap: 8px; padding: 10px 12px 12px 14px; }
+  .plateTitle { font-size: 16px; }
+  .plateFacts { gap: 6px 18px; padding-top: 8px; }
+  .plateFacts dd { font-size: 13px; margin-top: 3px; }
+  .plateCredit { font-size: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .filmShot,
+  .filmShot[data-active='true'] { clip-path: none; transition: opacity var(--dl-duration-quick); }
+  .filmShot img { transition: none; }
+  .filmLine,
+  .filmDetail { animation-name: fade-in; }
+  .filmRec { animation: none; }
+  .tile img { transition: none; }
+}
+@keyframes fade-in { from { opacity: 0; } }

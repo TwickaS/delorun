@@ -369,7 +369,7 @@ describe('starting the home process', { timeout: 60_000 }, () => {
 
   it('boots the CLI profile with DSH_HOME set to the Delorun home, and a second start leaves one holder', async () => {
     expect(await main(['setup', '--yes'], context)).toBe(EXIT.ok)
-    const prepared = await prepareHome(context, undefined)
+    const prepared = await prepareHome(context, undefined, true)
     expect(prepared.home).toEqual({ path: delorunHome, ignoredDshHome: dshHome })
     const seen: { options: RunProfileOptions, dshHome: string | undefined }[] = []
     expect(await startForeground({ home: delorunHome, profile: 'default', open: true, output: context, env: context.env }, recording(seen))).toBeUndefined()
@@ -454,7 +454,7 @@ describe('starting the home process', { timeout: 60_000 }, () => {
   })
 
   it('releases the lock when the profile fails to boot, and refuses a home without the CLI profile', async () => {
-    await prepareHome(context, undefined)
+    await prepareHome(context, undefined, true)
     await expect(startForeground({ home: delorunHome, profile: 'default', open: false, output: context, env: context.env }, recording([]))).rejects.toThrow('run: delorun setup')
     expect(await main(['setup', '--yes'], context)).toBe(EXIT.ok)
     const failing: StartDependencies = { ...recording([]), runProfile: () => Promise.reject(new Error('boot failed')) }

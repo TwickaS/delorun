@@ -1,0 +1,124 @@
+.block {
+  display: grid;
+  gap: var(--dl-space-2);
+  margin: 0;
+  min-width: 0;
+  font-family: var(--dl-font-sans);
+}
+
+.caption {
+  color: var(--dl-text-muted);
+  font-size: 13px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--dl-space-2);
+  min-width: 0;
+  padding: var(--dl-space-2) var(--dl-space-2) var(--dl-space-2) var(--dl-space-4);
+  border: 1px solid var(--dl-border);
+  border-radius: var(--dl-radius-md);
+  background: var(--dl-surface-sunken);
+  color: var(--dl-text);
+}
+
+/* A long command wraps inside the block instead of pushing the page sideways. */
+.pre {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-family: var(--dl-font-mono);
+  font-size: 15px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Code whose indentation matters keeps its lines and scrolls sideways; focus shows the ring so a keyboard user sees where it is. */
+.pre[data-scroll] {
+  white-space: pre;
+  overflow-x: auto;
+  overflow-wrap: normal;
+}
+
+.pre[data-scroll]:focus-visible {
+  outline: var(--dl-focus-ring);
+  outline-offset: var(--dl-focus-ring-offset);
+}
+
+.block[data-size='lg'] .pre {
+  font-size: clamp(18px, 0.9rem + 1.6vw, 32px);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.copy {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: var(--dl-space-1);
+  min-width: 36px;
+  height: 36px;
+  padding: 0 var(--dl-space-2);
+  border: 1px solid transparent;
+  border-radius: var(--dl-radius-sm);
+  background: transparent;
+  color: var(--dl-text-muted);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    color var(--dl-duration-press) var(--dl-ease),
+    background-color var(--dl-duration-press) var(--dl-ease),
+    transform var(--dl-motion-press) var(--dl-ease-out);
+}
+
+/* Before scripts run the button keeps its space but cannot be seen or reached. */
+.copy[data-ready='false'] { visibility: hidden; }
+.copy:active { transform: scale(var(--dl-scale-pressed)); }
+.copy:focus-visible { outline: var(--dl-focus-ring); outline-offset: var(--dl-focus-ring-offset); }
+.copy[data-answer='copied'] { color: var(--dl-success); }
+.copy[data-answer='failed'] { color: var(--dl-error); }
+
+/* The page's one main button: the accent fill with its readable text. While it answers, it shows the state colour on a raised ground. */
+.copy[data-emphasis='primary'] { background: var(--dl-accent); color: var(--dl-on-accent); }
+.copy[data-emphasis='primary'][data-answer='copied'],
+.copy[data-emphasis='primary'][data-answer='failed'] { background: var(--dl-surface-raised); border-color: var(--dl-border); }
+
+@media (hover: hover) and (pointer: fine) {
+  .copy[data-emphasis='primary'][data-answer='idle']:hover { background: color-mix(in srgb, var(--dl-accent) 88%, var(--dl-text)); color: var(--dl-on-accent); }
+  .copy[data-answer='idle']:not([data-emphasis]):hover { background: var(--dl-surface-raised); color: var(--dl-text); }
+}
+
+.answer {
+  white-space: nowrap;
+  transition: opacity var(--dl-duration-quick) var(--dl-ease-out), transform var(--dl-motion-quick) var(--dl-ease-out);
+
+  @starting-style {
+    opacity: 0;
+    transform: scale(var(--dl-scale-enter));
+  }
+}
+
+.failed {
+  margin: 0;
+  color: var(--dl-error);
+  font-size: 14px;
+  transition: opacity var(--dl-duration-quick) var(--dl-ease-out);
+
+  @starting-style {
+    opacity: 0;
+  }
+}
+
+.announce {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

@@ -82,22 +82,30 @@ Read these pages when the package-level contract is not enough. They move from t
 
 #### What the model sees
 
-Two system-prompt paragraphs at first-party orders 10000 and 10100, after reusable instructions, and two runtime-context lines at context orders 200 and 210. A Session admitted under an earlier release sees its own earlier paragraphs instead of the two below.
+Two system-prompt paragraphs at first-party orders 10000 and 10100, after reusable instructions, and two runtime-context lines at context orders 200 and 210. A Session admitted under an earlier release sees its own earlier paragraphs instead of the two below. The paragraphs and lines below appear only in a real checkout: a git work tree with a pnpm workspace at the installation root, decided once when the plugin loads. On an installed copy the model instead receives the two shorter paragraphs under On an installation, and neither the runtime path nor the studio URL. The optional `sourceRoot` option names the directory to classify, which lets tests exercise both cases.
 
 ##### System-prompt paragraphs
 
 ```markdown
-The runtime context names the DeepSeek Harness implementation checkout. The checkout location and current working directory are separate values and may differ; never infer the working directory from the checkout path. Use pwd to determine the current working directory. Use this checkout only to inspect or extend DSH itself.
+The runtime context names the Delorun implementation checkout. The checkout location and current working directory are separate values and may differ; never infer the working directory from the checkout path. Use pwd to determine the current working directory. Use this checkout only to inspect or extend Delorun itself.
 
-You are interacting with the user through the DeepSeek Harness Web GUI whose URL the runtime context names. When the user refers to "this page", "this GUI", or "this app" without naming another target, they mean this GUI. The browser provides no implicit DOM, route, or screenshot context. The client-plugin HMR receiver is active, but client-plugin changes reload without a refresh only while `pnpm run dev:web` is also running from this same checkout to rebuild their bundles; verify that watcher before promising automatic updates. Every other change — the apps/web shell and plain packages — requires rebuilding the affected Web artifacts and verifying this existing URL after a page refresh. Starting another server does not update this GUI. The apps/web Vite entry builds the shell but is not a standalone application because only dsh web injects window.__DSH_BOOT__. Do not start a replacement server unless the user asks; if one is needed, use a managed background job and verify its exact URL.
+You are interacting with the user through the Delorun studio whose URL the runtime context names. When the user refers to "this page", "this GUI", or "this app" without naming another target, they mean this GUI. The browser provides no implicit DOM, route, or screenshot context. The client-plugin HMR receiver is active, but client-plugin changes reload without a refresh only while `pnpm run dev:web` is also running from this same checkout to rebuild their bundles; verify that watcher before promising automatic updates. Every other change — the apps/web shell and plain packages — requires rebuilding the affected Web artifacts and verifying this existing URL after a page refresh. Starting another server does not update this GUI. The apps/web Vite entry builds the shell but is not a standalone application because only dsh web injects window.__DSH_BOOT__. Do not start a replacement server unless the user asks; if one is needed, use a managed background job and verify its exact URL.
 ```
 
 ##### Runtime-context lines
 
 ```markdown
-Current DeepSeek Harness implementation checkout: "<installation root>".
+Current Delorun implementation checkout: "<installation root>".
 
-Current DeepSeek Harness Web GUI URL: "<advertised URL>".
+Current Delorun studio URL: "<advertised URL>".
+```
+
+##### On an installation
+
+```markdown
+Make or change plugins with the delorun-plugin-authoring skill and review them in Changes (Apply or Undo). Never edit the installed program.
+
+You are interacting with the user through the Delorun studio. When the user refers to "this page", "this GUI", or "this app" without naming another target, they mean the studio. The browser provides no implicit DOM, route, or screenshot context. Do not start a replacement server unless the user asks.
 ```
 
 #### Token effect

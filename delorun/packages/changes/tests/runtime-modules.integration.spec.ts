@@ -198,7 +198,7 @@ describe('a plugin pack whose peers link into the runtime store', () => {
    * @returns what its own package imports from the peer, in a separate Node process.
    */
   function answerOf(copy: string): string {
-    return execFileSync(process.execPath, ['--input-type=module', '-e', `const { answer } = await import(${JSON.stringify(pathToFileURL(join(copy, 'node_modules', 'inner', 'index.js')).href)}); process.stdout.write(String(answer))`], { encoding: 'utf8' })
+    return execFileSync(process.execPath, ['--input-type=module', '-e', `const { answer } = await import(${JSON.stringify(pathToFileURL(join(copy, 'node_modules', 'inner', 'index.js')).href)}); process.stdout.write(String(answer))`], { encoding: 'utf8', timeout: 30_000 })
   }
 
   it('records a peer link into the active runtime\'s installed packages by its path there, and still leaves out a link to anywhere else in the home', async () => {

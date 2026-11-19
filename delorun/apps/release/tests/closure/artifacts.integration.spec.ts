@@ -11,7 +11,10 @@ import { describe, expect, it } from 'vitest'
 import { buildClosures } from '../../src/build-closure.ts'
 import { readRecipe } from '../../src/closure/config.ts'
 import { artifactDirectories, artifactProblems, isArtifactSource } from '../../src/closure/artifacts.ts'
+import { BUILD_STAMP_PATH, captureBuildStart, writeBuildStamp } from '../../../../../scripts/build-stamp.ts'
 import { scratch, writeTree } from '../support.ts'
+
+const NO_STAMP = 'no build stamp: the artifacts were not written by a clean `pnpm run build:artifacts`; run it, or cut with `--artifacts build`'
 
 const ENV = { ...process.env, GIT_CONFIG_GLOBAL: devNull, GIT_CONFIG_NOSYSTEM: '1', GIT_AUTHOR_NAME: 'Fixture', GIT_AUTHOR_EMAIL: 'fixture@example.test', GIT_COMMITTER_NAME: 'Fixture', GIT_COMMITTER_EMAIL: 'fixture@example.test' }
 
@@ -62,6 +65,7 @@ describe('artifactProblems', () => {
     const directory = scratch(test)
     const commit = repository(directory)
     expect(artifactProblems(directory, commit)).toEqual([
+      NO_STAMP,
       '@x/web has no lib/index.js; run the artifact build',
       '@x/built has no lib/index.js; run the artifact build',
       'packages/group/nameless has no lib/index.js; run the artifact build',
@@ -73,13 +77,47 @@ describe('artifactProblems', () => {
     const directory = scratch(test)
     const commit = repository(directory)
     for (const path of ['packages/group/built', 'packages/group/nameless', 'apps/web', 'vendor/tool']) build(directory, path)
+    writeBuildStamp(directory, captureBuildStart(directory))
     expect(artifactProblems(directory, commit)).toEqual([])
+  })
+
+  it('refuses artifacts whose stamp names another commit', (test) => {
+    const directory = scratch(test)
+    const commit = repository(directory)
+    for (const path of ['packages/group/built', 'packages/group/nameless', 'apps/web', 'vendor/tool']) build(directory, path)
+    writeBuildStamp(directory, captureBuildStart(directory))
+    execFileSync('git', ['commit', '-q', '--allow-empty', '-m', 'next'], { cwd: directory, env: ENV, timeout: 30_000 })
+    const next = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: directory, env: ENV, encoding: 'utf8' }).trim()
+    expect(artifactProblems(directory, next)).toEqual([`the artifacts were built at ${commit}, not at ${next}; run \`pnpm run build:artifacts\` again, or cut with \`--artifacts build\``])
+  })
+
+  it('refuses artifacts without a stamp or with a truncated one', (test) => {
+    const directory = scratch(test)
+    const commit = repository(directory)
+    for (const path of ['packages/group/built', 'packages/group/nameless', 'apps/web', 'vendor/tool']) build(directory, path)
+    expect(artifactProblems(directory, commit)).toEqual([NO_STAMP])
+    mkdirSync(join(directory, '.dsh-build'), { recursive: true })
+    writeFileSync(join(directory, BUILD_STAMP_PATH), '{"commit":')
+    expect(artifactProblems(directory, commit)).toEqual([NO_STAMP])
+    writeFileSync(join(directory, BUILD_STAMP_PATH), '{"commit":7}')
+    expect(artifactProblems(directory, commit)).toEqual([NO_STAMP])
+  })
+
+  it('writes no stamp when tracked files differ from HEAD, and clears an older one', (test) => {
+    const directory = scratch(test)
+    const commit = repository(directory)
+    expect(writeBuildStamp(directory, captureBuildStart(directory))?.commit).toBe(commit)
+    writeFileSync(join(directory, 'vendor/stray.txt'), 'edited\n')
+    expect(captureBuildStart(directory)).toBeUndefined()
+    expect(writeBuildStamp(directory, captureBuildStart(directory))).toBeUndefined()
+    expect(artifactProblems(directory, commit)[0]).toBe(NO_STAMP)
   })
 
   it('refuses a package whose sources are newer than its lib/', (test) => {
     const directory = scratch(test)
     const commit = repository(directory)
     for (const path of ['packages/group/built', 'packages/group/nameless', 'apps/web', 'vendor/tool']) build(directory, path)
+    writeBuildStamp(directory, captureBuildStart(directory))
     const later = new Date(Date.now() + 3_600_000)
     utimesSync(join(directory, 'packages/group/built/src/index.ts'), later, later)
     expect(artifactProblems(directory, commit)).toEqual(['@x/built\'s sources are newer than its lib/; run the artifact build again'])
@@ -89,6 +127,7 @@ describe('artifactProblems', () => {
     const directory = scratch(test)
     const commit = repository(directory)
     for (const path of ['packages/group/built', 'packages/group/nameless', 'apps/web', 'vendor/tool']) build(directory, path)
+    writeBuildStamp(directory, captureBuildStart(directory))
     writeFileSync(join(directory, 'vendor/stray.txt'), 'edited\n')
     expect(artifactProblems(directory, commit)).toEqual(['tracked files differ from the commit; commit or restore them before building from existing artifacts'])
     expect(artifactProblems(directory, 'b'.repeat(40))[0]).toContain(`the worktree is at ${commit}, not at ${'b'.repeat(40)}`)
@@ -103,7 +142,7 @@ describe('a repository without every package group', () => {
     writeTree(directory, { 'packages/g/a/package.json': '{"name":"@x/a","main":"lib/index.js"}\n', 'packages/g/a/src/index.ts': 'export {}\n' })
     git('add', '-A')
     git('commit', '-q', '-m', 'fixture')
-    expect(artifactProblems(directory, git('rev-parse', 'HEAD'))).toEqual(['@x/a has no lib/index.js; run the artifact build'])
+    expect(artifactProblems(directory, git('rev-parse', 'HEAD'))).toEqual([NO_STAMP, '@x/a has no lib/index.js; run the artifact build'])
   })
 })
 
@@ -138,6 +177,6 @@ describe('a build from existing artifacts', () => {
     const directory = scratch(test)
     const commit = repository(directory)
     await expect(buildClosures(directory, readRecipe(), { version: '0.1.0', commit, out: join(directory, 'out'), platforms: ['linux-x64'], cache: join(directory, 'cache'), writePins: false, artifacts: 'existing' }))
-      .rejects.toThrow('the worktree\'s artifacts cannot be used:\n@x/web has no lib/index.js; run the artifact build')
+      .rejects.toThrow(`the worktree's artifacts cannot be used:\n${NO_STAMP}\n@x/web has no lib/index.js; run the artifact build`)
   })
 })

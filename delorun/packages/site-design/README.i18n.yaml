@@ -1,0 +1,34 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/packages/site-design/README.md
+/:
+  en: 035215f5256b737b
+  zh: 607ac97f2542d34c
+/delorun-site-design:
+  en: e7da4ef56fe9bdb9
+  zh: 445de4bad4a5c668
+/delorun-site-design/summary:
+  en: 8bb6c6e64ee113a8
+  zh: c5d7f83c8c78b2e3
+/delorun-site-design/contents:
+  en: 1e74efd94db1f847
+  zh: 11d81d8f6639f2a2
+/delorun-site-design/use-this-package:
+  en: 105a37f159c4adbc
+  zh: 92cb90af5ede490f
+/delorun-site-design/the-looks:
+  en: dd62d0f0decdf027
+  zh: 22d8abf6b7448eea
+/delorun-site-design/carrying-a-look-between-the-sites:
+  en: 5f6ce5b3972d5e42
+  zh: 529b2a9844205d77
+/delorun-site-design/the-shared-parts:
+  en: c9225e9f306eda46
+  zh: b6dbab5d572349d8
+/delorun-site-design/weight:
+  en: d9f12aa5a2dee7cb
+  zh: 029ee4fb2bf634d1
+/delorun-site-design/tests-and-tools:
+  en: 754451d93f843e61
+  zh: 639278a4f01d06a9

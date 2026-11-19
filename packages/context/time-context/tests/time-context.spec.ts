@@ -195,16 +195,14 @@ describe('durable step context', () => {
     expect(event.surfaceOp).toBe('append')
   })
 
-  it('reports an unavailable first-step baseline when no model-visible message precedes it', async () => {
+  it('omits the elapsed line when no model-visible message precedes it', async () => {
     const { ctx } = await mount()
     const session = Session.create(SessionId('unavailable'))
     session.append('turn/start', { turn: 1 })
 
     await fire(ctx, sessionAgent(session), 1, 1)
 
-    expect(contextTexts(session)[0]).toContain(
-      'Elapsed since the preceding model-visible message: unavailable.',
-    )
+    expect(contextTexts(session)[0]).not.toContain('Elapsed since')
   })
 
   it('uses the preceding durable step-context timestamp after step one with zero interval', async () => {
@@ -253,27 +251,23 @@ describe('durable step context', () => {
     )
   })
 
-  it('reports an unavailable later-step baseline at the matching turn boundary', async () => {
+  it('omits the elapsed line for a later step with no baseline at the matching turn boundary', async () => {
     const { ctx } = await mount()
     const session = Session.create(SessionId('later-step-boundary'))
     openMessageTurn(session, 4)
 
     await fire(ctx, sessionAgent(session), 4, 2)
 
-    expect(contextTexts(session)[0]).toContain(
-      'Elapsed since the preceding step context: unavailable.',
-    )
+    expect(contextTexts(session)[0]).not.toContain('Elapsed since')
   })
 
-  it('reports an unavailable later-step baseline when event lookup is exhausted', async () => {
+  it('omits the elapsed line for a later step with no baseline when event lookup is exhausted', async () => {
     const { ctx } = await mount()
     const session = Session.create(SessionId('later-step-exhausted'))
 
     await fire(ctx, sessionAgent(session), 1, 2)
 
-    expect(contextTexts(session)[0]).toContain(
-      'Elapsed since the preceding step context: unavailable.',
-    )
+    expect(contextTexts(session)[0]).not.toContain('Elapsed since')
   })
 
   it('injects after backward wall-clock movement and clamps elapsed time to zero', async () => {
@@ -326,9 +320,7 @@ describe('durable step context', () => {
     await fire(ctx, resumedAgent, 2, 2)
 
     expect(contextTexts(resumed)).toHaveLength(2)
-    expect(contextTexts(resumed)[1]).toContain(
-      'Elapsed since the preceding step context: unavailable.',
-    )
+    expect(contextTexts(resumed)[1]).not.toContain('Elapsed since')
   })
 
   it('applies a positive interval across turns without sharing state between sessions', async () => {
@@ -616,7 +608,7 @@ describe('real agent-loop request history', () => {
     const firstRequestText = requestText(adapter.requests[0]!)
     const secondRequestText = requestText(adapter.requests[1]!)
     expect(firstRequestText).toContain('Time sampled while preparing turn 1, step 1:')
-    expect(firstRequestText).toContain('Elapsed since the preceding model-visible message: unavailable.')
+    expect(firstRequestText).not.toContain('Elapsed since')
     expect(firstRequestText).not.toContain('Time sampled while preparing turn 1, step 2:')
     expect(secondRequestText).toContain('Time sampled while preparing turn 1, step 1:')
     expect(secondRequestText).toContain('Time sampled while preparing turn 1, step 2:')

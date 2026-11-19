@@ -774,6 +774,28 @@ describe('Gateway forwarded events for non-owner Peers', () => {
     await allowed.events.return?.()
   })
 
+  it('relays an approval request\'s notice field to the owner stream unchanged', async () => {
+    const { ctx } = await setup({ connection: true })
+    const push = eventSource(ctx)
+    const abort = new AbortController()
+    const ownerEvents = (await ctx.typertGateway.wireStream.open('$events', { args: {} }, (async function* () {})(), ctx.connection.browserPeer, abort.signal))[Symbol.asyncIterator]()
+    await ownerEvents.next()
+    const agentCtx = ctx.extend({})
+    const subject = {}
+    const notice = { en: 'Delorun\'s sandbox had a problem; this asks to run without it', zh: '沙箱出现问题；此请求要求在没有沙箱的情况下运行' }
+    push({
+      event: 'fixture/ask',
+      request: { toolName: 'bash', escalatesTo: 'danger-full-access', notice, agent: subject },
+      context: { value: agentCtx, subject, agentId: 'agent-1' },
+      resolve: vi.fn(),
+      reject: vi.fn(),
+    })
+    const frame = await ownerEvents.next()
+    expect(frame.value).toMatchObject({ type: 'waterfall', event: 'fixture/ask', request: { toolName: 'bash', escalatesTo: 'danger-full-access', notice } })
+    abort.abort()
+    await ownerEvents.return?.()
+  })
+
   it('delivers only allowed broadcasts and no answerable waterfall to a non-owner, and refuses its results', async () => {
     const { ctx, hold } = await setup({ connection: true })
     hold(shelf('s1'))

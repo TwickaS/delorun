@@ -187,7 +187,7 @@ describe('selection', () => {
 
   it('runs every fork spec for a fork-wide change, such as the checks runner\'s own sources', () => {
     const plan = select(CHECKS, TREE, { ...NONE, changed: { base: 'main', paths: ['delorun/apps/tools/src/checks/plan.ts'] } })
-    expect(plan.find(check => check.id === 'tests:fork')?.command).toEqual(['node_modules/.bin/vitest', 'run', '--config', 'delorun/vitest.config.ts', '--project', 'fork', '--project', 'fork-client', '--maxWorkers=12', '--passWithNoTests'])
+    expect(plan.find(check => check.id === 'tests:fork')?.command).toEqual(['node_modules/.bin/vitest', 'run', '--config', 'delorun/vitest.config.ts', '--project', 'fork', '--project', 'fork-client', '--project', 'fork-client-website', '--maxWorkers=12', '--passWithNoTests'])
     expect(plan.find(check => check.id === 'tests:fork:integration')?.command).toEqual(['node_modules/.bin/vitest', 'run', '--config', 'delorun/vitest.config.ts', '--project', 'fork-integration', `--maxWorkers=${String(FORK_INTEGRATION_WORKERS)}`, '--passWithNoTests'])
   })
 
@@ -429,10 +429,11 @@ describe('the documentation website check', () => {
     expect(CHECKS.find(check => check.id === 'website-site')).toMatchObject({
       group: 'docs-site',
       command: ['node_modules/.bin/tsx', 'delorun/apps/tools/src/check-docs-site.ts', 'website'],
-      inputs: ['delorun/apps/website/**', 'delorun/packages/site-design/**', 'delorun/packages/brand/**', 'delorun/changelog/changelog.json'],
+      inputs: expect.arrayContaining(['delorun/apps/website/**', 'delorun/packages/site-design/**', 'delorun/packages/brand/**', 'delorun/changelog/changelog.json', 'packages/client/ui-approval/src/**', 'delorun/packages/plugin-changes/src/**']),
       needs: [],
     })
     expect(catalog(TREE, { ...HOST, staleRuntime: ['packages/client/ui-primitives'] }).find(check => check.id === 'website-site')?.needs).toEqual(['build:artifacts'])
+    for (const path of ['packages/client/ui-approval/src/client/ApprovalCard.tsx', 'delorun/packages/plugin-changes/src/client/ChangesSection.tsx']) expect(selected([path]), path).toContain('website-site')
     for (const path of ['delorun/apps/website/src/site/copy.ts', 'delorun/packages/site-design/src/mark.tsx', 'delorun/packages/brand/src/settings/AppearancePickers.tsx', 'delorun/changelog/changelog.json']) expect(selected([path])).toContain('website-site')
     expect(selected(['delorun/apps/docs/source.config.ts'])).not.toContain('website-site')
     expect(selected(['delorun/packages/site-design/src/mark.tsx'])).toContain('docs-site')

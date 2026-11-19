@@ -158,7 +158,7 @@ describe('a Delorun CLI profile', () => {
     const delorunRows = rows.filter(row => strings([row.name]).some(name => name.startsWith('@delorun/')))
     const studioRows = ['delorun-theme', 'delorun-settings-layout', 'delorun-chat-states', 'delorun-sidebar', 'delorun-onboarding', 'delorun-new-workspace', 'delorun-downloads', 'delorun-preview-flags', 'delorun-cost-meter', 'delorun-thinking-rsvp']
     expect(delorunRows.map(row => row.id)).toEqual([...LOCAL_ROWS.filter(row => row.kind === 'added').map(row => row.id), ...studioRows])
-    // The bundle's own browser half, each consent and guard plugin it mounts, its update gate, its update check, which fetches
+    // The bundle's own browser half, each consent and guard plugin it mounts, the external-agent start gate, which sends nothing itself and starts a program only for a seat or a limits check the person asked for, its update gate, its update check, which fetches
     // the release channel's signed files and sends nothing about the person, the trust bill, which serves what the start check and the stored records say, the plugin packs, which fetch the signed packs file and a pack only when the person adds one, the plugin install check, which asks the advisory
     // feed and the registry only when the person installs a plugin, the trash, which keeps everything local, the home's
     // admission and remote access, the studio plugins of @delorun/bundle-studio and its preview flags, which read the profile's bundles and send nothing, and the new-workspace flow, whose clone reaches only the address the person types.
@@ -173,6 +173,10 @@ describe('a Delorun CLI profile', () => {
       '@delorun/skill-plugin-authoring',
       '@delorun/skill-report-problem',
       '@delorun/plugin-delegation-consent',
+      '@delorun/external-agents',
+      '@delorun/agent-claude-code',
+      '@delorun/agent-codex',
+      '@delorun/plugin-agent-seats',
       '@delorun/plugin-changes',
       '@delorun/plugin-update',
       '@delorun/plugin-packs',

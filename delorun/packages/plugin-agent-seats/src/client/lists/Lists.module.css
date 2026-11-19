@@ -1,0 +1,49 @@
+/* Look C (agents list), look B (hand-off line) and look A (team view). Colours come from the brand's badge colours. */
+.mono { flex: none; position: relative; width: 22px; height: 22px; margin-inline-end: 8px; border-radius: 6px; display: inline-grid; place-items: center; font-size: 10px; font-weight: 600; color: #fff; background: var(--mono-colour, var(--delorun-badge-slate)); }
+.mono[data-colour='violet'] { --mono-colour: var(--delorun-badge-violet); }
+.mono[data-colour='teal'] { --mono-colour: var(--delorun-badge-teal); }
+.mono[data-colour='blue'] { --mono-colour: var(--delorun-badge-blue); }
+.arrow { position: absolute; inset-block-start: -5px; inset-inline-end: -5px; width: 12px; height: 12px; border-radius: 50%; display: grid; place-items: center; font-size: 8px; line-height: 1; background: var(--dsw-alias-bg-primary, #fff); color: var(--dsw-alias-label-primary); border: 1px solid var(--dsw-alias-border-primary, rgba(0, 0, 0, .2)); }
+
+.words { font-size: 12px; color: var(--dsw-alias-label-secondary); white-space: nowrap; }
+.words[data-waiting] { color: var(--delorun-badge-amber); font-weight: 600; }
+.words[data-limit] { color: var(--delorun-badge-red); }
+
+.trail { display: inline-flex; align-items: center; gap: 8px; flex: none; margin-inline-start: 8px; }
+.answer { font: inherit; font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--delorun-badge-amber); background: transparent; color: var(--dsw-alias-label-primary); cursor: pointer; }
+.answer:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(0, 0, 0, .06)); }
+.answer:focus-visible { outline: 2px solid var(--delorun-badge-amber); outline-offset: 2px; }
+
+.ring { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-secondary); }
+.ringTrack { fill: none; stroke: var(--dsw-alias-border-primary, rgba(0, 0, 0, .15)); stroke-width: 2.5; }
+.ringValue { fill: none; stroke: var(--delorun-badge-green); stroke-width: 2.5; stroke-linecap: round; }
+.ring[data-near] .ringValue { stroke: var(--delorun-badge-amber); }
+.ring[data-reached] .ringValue { stroke: var(--delorun-badge-red); }
+.ringText { min-width: 2.4em; text-align: end; }
+
+.outside { color: var(--dsw-alias-label-secondary); white-space: nowrap; flex: none; }
+
+/* Hand-off line in the lead chat */
+.handoff { display: flex; flex-direction: column; gap: 6px; margin: 2px 0; }
+.handoffRow { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; color: var(--dsw-alias-label-secondary); }
+.handoffMono { width: 18px; height: 18px; font-size: 9px; margin: 0; border-radius: 5px; }
+.handoffTitle { color: var(--dsw-alias-label-primary); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.spacer { flex: 1; }
+.state { font-size: 12px; font-variant-numeric: tabular-nums; flex: none; }
+.open { font: inherit; font-size: 12px; font-weight: 600; background: none; border: 0; padding: 2px 6px; border-radius: 6px; color: var(--dsw-alias-label-primary); cursor: pointer; text-decoration: underline; }
+.open:focus-visible { outline: 2px solid var(--delorun-badge-blue); outline-offset: 2px; }
+.noAsk { font-size: 12px; color: var(--dsw-alias-label-secondary); padding-inline-start: 26px; }
+.quote { margin: 2px 0 0 26px; padding: 8px 12px; border-inline-start: 3px solid var(--quote-colour, var(--delorun-badge-slate)); background: var(--dsw-alias-interactive-bg-hover, rgba(0, 0, 0, .04)); border-radius: 0 8px 8px 0; display: flex; flex-direction: column; gap: 6px; }
+.quote[data-colour='violet'] { --quote-colour: var(--delorun-badge-violet); }
+.quote[data-colour='teal'] { --quote-colour: var(--delorun-badge-teal); }
+.quoteTitle { font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-secondary); }
+.quoteText { margin: 0; font-size: 13px; line-height: 1.45; color: var(--dsw-alias-label-primary); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* At phone width the row's right side keeps the words and the percent; the ring's drawing goes, so the title keeps a line of its own. */
+@media (max-width: 520px) {
+  .trail { margin-inline-start: 4px; gap: 6px; }
+  .ring svg { display: none; }
+  .answer { padding: 2px 8px; }
+  /* Below the header's icon-only width the trigger would clip the chip; it grows to hold the chip whole and the title gives way. */
+  :global(button):has(.outside) { width: auto; min-width: 28px; flex: none; padding-inline: 4px; gap: 2px; }
+}

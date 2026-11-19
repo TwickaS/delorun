@@ -22,6 +22,7 @@ import {
 } from './client-build-environment.ts'
 import { aggregateBuildArgs, aggregateCheckArgs, contractSteps, libraryBuildSteps } from './compile-referenced-projects.ts'
 import type { LibraryStep } from './compile-referenced-projects.ts'
+import { captureBuildStart, clearBuildStamp, writeBuildStamp } from './build-stamp.ts'
 import { pnpmCommand } from './release/process.ts'
 import { defaultParallelism, describeDefaultParallelism } from './parallelism.ts'
 import { runAggregate } from './run-gates.ts'
@@ -181,10 +182,13 @@ async function main(): Promise<number> {
   const clientEnvironment = resolveClientBuildEnvironment(repositoryEnvironment, profile ?? process.env[CLIENT_BUILD_PROFILE_SELECTOR])
   const environment = environmentOverlay(process.env, clientBuildProcessEnvironment(process.env, clientEnvironment))
   rmSync(resolve(root, CLIENT_BUILD_RECORD_PATH), { force: true })
+  clearBuildStamp(root)
+  const buildStart = captureBuildStart(root)
   const gates = buildGates(root, scope, environment, serial)
   const exitCode = await runAggregate(name, gates, workers(gates))
   if (exitCode !== 0) return exitCode
   const record = writeClientBuildRecord(root, clientEnvironment)
+  if (writeBuildStamp(root, buildStart) === undefined) console.warn('build: tracked files differed from HEAD before or during the build, so no build stamp was written and a release cut cannot reuse these artifacts')
   console.log(
     `build: recorded ${String(record.artifacts.fileCount)} client artifact(s) with ${String(Object.keys(record.environment).length)} public value(s)`,
   )

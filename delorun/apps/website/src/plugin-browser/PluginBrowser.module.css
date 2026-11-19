@@ -1,0 +1,182 @@
+/*
+ * The browser's first height: the tabs, the first rows and "Show all plugins". The live browser starts at it and grows
+ * when the visitor shows the whole list; the still holds it while scripts run, so nothing moves when the browser arrives.
+ */
+.root,
+.plain {
+  --browser-first: 500px;
+}
+
+.root {
+  display: grid;
+  grid-template-rows: auto auto;
+  align-content: start;
+  min-height: var(--browser-first);
+  min-width: 0;
+  color: var(--dl-text);
+  font-family: var(--dl-font-sans);
+}
+
+.panel { min-width: 0; }
+
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+@media (min-width: 960px) {
+  .split {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    column-gap: var(--dl-space-5);
+  }
+  .side { grid-column: 1 / 5; }
+  .detail { grid-column: 5 / 13; position: sticky; top: var(--dl-space-5); }
+}
+
+.side { min-width: 0; padding-bottom: var(--dl-space-3); }
+
+.list {
+  margin: 0;
+  padding: var(--dl-space-3) 0 var(--dl-space-3);
+  list-style: none;
+}
+
+.showAll { margin-inline-start: var(--dl-space-3); min-height: 44px; }
+
+.group { margin: 0; padding: 0; list-style: none; }
+
+.groupName {
+  margin: var(--dl-space-4) 0 var(--dl-space-1);
+  padding: 0 var(--dl-space-3);
+  color: var(--dl-text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.list > li:first-child > .groupName { margin-top: 0; }
+
+.row {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: var(--dl-space-2) var(--dl-space-3);
+  border: 0;
+  border-radius: var(--dl-radius-sm);
+  background: transparent;
+  color: var(--dl-text);
+  font: inherit;
+  font-size: 15px;
+  line-height: 24px;
+  text-align: start;
+  cursor: pointer;
+  transition:
+    background-color var(--dl-duration-quick) var(--dl-ease),
+    transform var(--dl-motion-press) var(--dl-ease-out);
+}
+
+/* A title of more than two lines is clamped; the row's name, its tooltip and the detail's heading carry it whole. */
+.rowTitle {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow-wrap: anywhere;
+}
+
+/*
+ * The chosen row stands apart from the page in every look: a rule in the text colour at its leading edge and a tone mixed
+ * from the text into the ground, since some looks draw the sunken surface as the ground. On a phone no row is chosen
+ * until one is pressed.
+ */
+.row { border-inline-start: 2px solid transparent; }
+
+.row[aria-current="true"] {
+  border-inline-start-color: var(--dl-text);
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+  background: color-mix(in srgb, var(--dl-text) 7%, var(--dl-surface));
+  font-weight: 600;
+}
+
+.row:active { transform: scale(var(--dl-scale-pressed)); }
+.row:focus-visible { outline: var(--dl-focus-ring); outline-offset: calc(var(--dl-focus-ring-offset) * -1); }
+
+@media (hover: hover) and (pointer: fine) {
+  .row:hover:not([aria-current='true']) { background: var(--dl-surface-sunken); }
+}
+
+/* On a phone the detail opens under the chosen row; on a wide screen it fills the right-hand columns. */
+.inline { display: block; padding: var(--dl-space-1) var(--dl-space-3) var(--dl-space-4); }
+.aside { display: none; }
+
+@media (min-width: 960px) {
+  .inline { display: none; }
+  .aside { display: block; }
+}
+
+.detail {
+  padding: var(--dl-space-3) 0;
+}
+
+.card { min-width: 0; }
+
+.title { margin: 0; font-size: 22px; font-weight: 600; line-height: 28px; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.sentence { margin: var(--dl-space-2) 0 0; font-size: 16px; line-height: 24px; max-width: 60ch; overflow-wrap: anywhere; }
+.facts { display: flex; flex-wrap: wrap; gap: var(--dl-space-2); margin: var(--dl-space-3) 0 0; padding: 0; list-style: none; }
+.standing { margin: var(--dl-space-3) 0 0; color: var(--dl-text-muted); font-size: 14px; line-height: 20px; }
+
+.needsHeading { margin: var(--dl-space-4) 0 var(--dl-space-1); font-size: 14px; font-weight: 600; line-height: 20px; }
+.needs { margin: 0; padding-inline-start: 1.2em; font-size: 15px; line-height: 24px; overflow-wrap: anywhere; }
+.nothing { margin: 0; color: var(--dl-text-muted); font-size: 15px; line-height: 24px; }
+
+.files { margin: var(--dl-space-4) 0 0; font-size: 14px; line-height: 20px; }
+.files summary { min-height: 24px; cursor: pointer; border-radius: var(--dl-radius-xs); }
+.files summary:focus-visible { outline: var(--dl-focus-ring); outline-offset: var(--dl-focus-ring-offset); }
+.files p { margin: var(--dl-space-2) 0 0; }
+.files a { color: var(--dl-accent-text); overflow-wrap: anywhere; }
+
+/* The list without scripts: every plugin as a term and its descriptions, taking the room it needs. */
+.plain { padding: var(--dl-space-3) 0; color: var(--dl-text); font-family: var(--dl-font-sans); }
+
+/* While scripts run, the still holds the live browser's first height until the browser replaces it. */
+@media (scripting: enabled) {
+  .plain { height: var(--browser-first); overflow: hidden; }
+}
+
+.plainSection + .plainSection { margin-top: var(--dl-space-6); }
+.plainHeading { margin: 0 0 var(--dl-space-2); color: var(--dl-text-muted); font-size: 14px; font-weight: 600; line-height: 20px; }
+.plainList { margin: 0; border-top: 1px solid var(--dl-border); }
+.plainItem { display: grid; gap: var(--dl-space-1); padding: var(--dl-space-3) 0; border-bottom: 1px solid var(--dl-border); }
+.plainTitle { font-size: 16px; font-weight: 600; line-height: 24px; overflow-wrap: anywhere; }
+.plainSentence { margin: 0; max-width: 70ch; font-size: 15px; line-height: 24px; overflow-wrap: anywhere; }
+.plainNeeds { margin: 0; color: var(--dl-text-muted); font-size: 14px; line-height: 20px; overflow-wrap: anywhere; }
+.plainNeedsLabel { display: block; color: var(--dl-text); font-weight: 600; }
+
+/* One disclosure per kind: its name on the summary line, its sentence and files inside. */
+.plainKind { margin-top: var(--dl-space-3); padding: var(--dl-space-2) var(--dl-space-3); border: 1px solid var(--dl-border); border-radius: var(--dl-radius-md); background: var(--dl-surface-raised); }
+.plainKind summary { min-height: 24px; font-size: 15px; font-weight: 600; line-height: 24px; cursor: pointer; border-radius: var(--dl-radius-xs); }
+.plainKind summary:focus-visible { outline: var(--dl-focus-ring); outline-offset: var(--dl-focus-ring-offset); }
+.plainIntro { margin: 0; max-width: 62ch; font-size: 16px; line-height: 24px; }
+.plain .note { margin: var(--dl-space-3) 0 0; color: var(--dl-text-muted); font-size: 14px; }
+.plain .kindSummary { margin: var(--dl-space-3) 0 0; color: var(--dl-text-muted); font-size: 15px; line-height: 24px; }
+
+.kinds { display: flex; flex-wrap: wrap; gap: var(--dl-space-2); margin: var(--dl-space-3) 0 0; padding: 0; list-style: none; }
+.make { padding: var(--dl-space-3) 0; }
+.make p { margin: 0; max-width: 62ch; font-size: 16px; line-height: 24px; }
+.make .kindSummary { margin-top: var(--dl-space-3); color: var(--dl-text-muted); }
+.fileList { margin: var(--dl-space-3) 0 0; padding: 0; }
+.fileList dd { margin: 0; }
+.fileItem { display: grid; grid-template-columns: minmax(0, 18rem) minmax(0, 1fr); gap: var(--dl-space-1) var(--dl-space-4); padding: var(--dl-space-2) 0; border-bottom: 1px solid var(--dl-border); font-size: 15px; line-height: 24px; }
+.fileItem dd { color: var(--dl-text-muted); }
+.fileList code { font-family: var(--dl-font-mono); font-size: 14px; overflow-wrap: anywhere; }
+.fileHeading { margin: var(--dl-space-4) 0 0; font-size: 14px; font-weight: 600; line-height: 20px; }
+.guide { display: inline-block; margin-top: var(--dl-space-4); color: var(--dl-accent-text); font-size: 15px; }
+.make .note { margin-top: var(--dl-space-3); color: var(--dl-text-muted); font-size: 14px; }
+
+@media (max-width: 599px) {
+  .fileItem { grid-template-columns: minmax(0, 1fr); }
+}

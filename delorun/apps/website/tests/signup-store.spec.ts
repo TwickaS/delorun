@@ -3,6 +3,7 @@ import { confirm, listUnsent, purgeUnconfirmed, recordSignup, rotateTokens, unsu
 import { hashToken, isTokenShape, newToken } from '../src/worker/tokens.ts'
 import { normaliseEmail, normaliseName, parseSignup } from '../src/worker/validate.ts'
 import { createDb } from './d1-sqlite.ts'
+import { CONSENT_TEXT_VERSION } from '../src/site/signup.ts'
 
 const INPUT = { email: 'ada@example.com', firstName: 'Ada', page: '/' }
 const T0 = '2026-11-13T10:00:00.000Z'
@@ -27,12 +28,23 @@ describe('validation', () => {
   })
 
   it('needs the consent box and keeps only known pages', () => {
-    const fields = { firstName: 'first_name', email: 'email', consent: 'consent', page: 'page' }
+    const fields = { firstName: 'first_name', email: 'email', consent: 'consent', page: 'page', consentVersion: 'consent_version' }
+    const V = '3'
     const form = (entries: Record<string, string>): FormData => Object.entries(entries).reduce((data, [key, value]) => (data.set(key, value), data), new FormData())
-    expect(parseSignup(form({ email: 'ada@example.com' }), fields)).toEqual({ ok: false, problem: 'consent' })
-    expect(parseSignup(form({ email: 'nope', consent: 'yes' }), fields)).toEqual({ ok: false, problem: 'email' })
-    expect(parseSignup(form({ email: 'ada@example.com', consent: 'yes', page: '/evil' }), fields)).toEqual({ ok: true, value: { email: 'ada@example.com', firstName: null, page: 'unknown' } })
-    expect(parseSignup(form({ email: 'ada@example.com', consent: 'yes', page: '/privacy', first_name: 'Ada' }), fields)).toMatchObject({ ok: true, value: { firstName: 'Ada', page: '/privacy' } })
+    expect(parseSignup(form({ email: 'ada@example.com', consent_version: V }), fields, V)).toEqual({ ok: false, problem: 'consent' })
+    expect(parseSignup(form({ email: 'nope', consent: 'yes', consent_version: V }), fields, V)).toEqual({ ok: false, problem: 'email' })
+    expect(parseSignup(form({ email: 'ada@example.com', consent: 'yes', page: '/evil', consent_version: V }), fields, V)).toEqual({ ok: true, value: { email: 'ada@example.com', firstName: null, page: 'unknown' } })
+    expect(parseSignup(form({ email: 'ada@example.com', consent: 'yes', page: '/privacy', first_name: 'Ada', consent_version: V }), fields, V)).toMatchObject({ ok: true, value: { firstName: 'Ada', page: '/privacy' } })
+  })
+
+  it('refuses a missing, stale or malformed consent version, whatever else is right', () => {
+    const fields = { firstName: 'first_name', email: 'email', consent: 'consent', page: 'page', consentVersion: 'consent_version' }
+    const base = { email: 'ada@example.com', consent: 'yes' }
+    const form = (entries: Record<string, string>): FormData => Object.entries(entries).reduce((data, [key, value]) => (data.set(key, value), data), new FormData())
+    for (const version of [undefined, '', '2', '3 ', '03', '3\u0000', 'x'.repeat(500)]) {
+      expect(parseSignup(form(version === undefined ? base : { ...base, consent_version: version }), fields, '3')).toEqual({ ok: false, problem: 'version' })
+    }
+    expect(parseSignup(form({ ...base, consent_version: '3' }), fields, '3').ok).toBe(true)
   })
 })
 
@@ -65,7 +77,7 @@ describe('the subscriber table', () => {
     const db = createDb()
     expect(await recordSignup(db, INPUT, await hashes(), T0)).toEqual({ kind: 'created' })
     const [row] = db.rows('SELECT * FROM subscribers')
-    expect(row).toMatchObject({ email: 'ada@example.com', first_name: 'Ada', status: 'pending', consent_at: T0, consent_page: '/', consent_text_version: '1', confirmation_sent_at: null })
+    expect(row).toMatchObject({ email: 'ada@example.com', first_name: 'Ada', status: 'pending', consent_at: T0, consent_page: '/', consent_text_version: CONSENT_TEXT_VERSION, confirmation_sent_at: null })
     expect(Object.keys(row ?? {})).not.toContain('ip')
   })
 

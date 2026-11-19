@@ -23,7 +23,6 @@ function setup(home: { face: FaceWorld, elevation?: { id: string, grace?: true }
   const ctx = {
     on: () => {},
     get: (name: string) => (name === 'homeAuth' ? {
-      faceGrants: () => undefined, deviceHasPasskey: () => false,
       ...home.face.fields,
       elevationOf: () => home.elevation, pageUnlockOf: () => (home.page === true ? { id: 'p1' } : undefined),
       arrivalOf: () => ({ listener: 'reach' }), dangerousMode: () => false, unlockModeEnabled: () => false, touchUnlock: () => {},

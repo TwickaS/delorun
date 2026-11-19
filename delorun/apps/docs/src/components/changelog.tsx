@@ -72,12 +72,12 @@ function Upstream({ title, lines, level: Heading }: { title: string, lines: read
 function Version({ version, upstream }: { version: ViewVersion, upstream: string }) {
   return (
     <section id={`v${version.version}`} className="mt-12">
-      <h2 className="text-2xl font-semibold">{version.version} <span className="text-base font-normal text-fd-muted-foreground">({version.date})</span></h2>
+      <h2 className="text-2xl font-semibold">{version.version} <span className="text-base font-normal text-(--dl-text-muted)">({version.date})</span></h2>
       <Areas areas={version.areas} level="h3" />
       <Upstream title={upstream} lines={version.fromUpstream} level="h3" />
       {version.previews.map(preview => (
         <section key={preview.version} id={`v${preview.version}`}>
-          <h3 className="mt-8 text-xl font-semibold">{preview.version} <span className="text-base font-normal text-fd-muted-foreground">({preview.date})</span></h3>
+          <h3 className="mt-8 text-xl font-semibold">{preview.version} <span className="text-base font-normal text-(--dl-text-muted)">({preview.date})</span></h3>
           <Areas areas={preview.areas} level="h4" />
           {preview.fromUpstream.length === 0 ? null : <Upstream title={upstream} lines={preview.fromUpstream} level="h4" />}
         </section>
@@ -98,7 +98,7 @@ export function ChangelogPage({ locale }: { locale: Locale }) {
     <HomeLayout {...baseOptions(locale)}>
       <main className="mx-auto w-full max-w-3xl px-4 py-16">
         <h1 className="text-3xl font-semibold">{copy.changelog.title}</h1>
-        <p className="mt-4 text-fd-muted-foreground">{copy.changelog.intro}</p>
+        <p className="mt-4 text-(--dl-text-muted)">{copy.changelog.intro}</p>
         <section lang="en" id="compared">
           <h2 className="mt-12 text-2xl font-semibold">{view.compared.heading}</h2>
           <p className="mt-4"><Inline text={view.compared.intro} /></p>

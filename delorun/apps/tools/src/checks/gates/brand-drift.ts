@@ -1,7 +1,10 @@
 /**
  * One source for Delorun's brand: no brand colour literal, no named typeface in a `font-family` and no second copy of the
  * hex mark in the Delorun packages and sites outside `delorun/packages/brand`. Colours, fonts and the mark are written
- * once, in the brand package; everything else reads its custom properties, its fonts or its `Mark`.
+ * once, in the brand package; everything else reads its custom properties, its fonts or its `Mark`. In the two sites and
+ * in `site-design`, motion is written once as well: a raw easing curve or duration is refused, and the code reads the
+ * brand's `--dl-ease-*` and `--dl-duration-*` tokens. A file the brand package generates, which says so in its first
+ * line, is not read; the brand package's own test keeps it equal to its builder.
  *
  * `node_modules/.bin/tsx delorun/apps/tools/src/checks/gates/brand-drift.ts` exits 1 with one line per refusal. A file
  * that must keep a literal is listed with a reason in `brand-drift.allowlist.json`; the list only shrinks.
@@ -20,7 +23,7 @@ export const ALLOWLIST_PATH = 'delorun/apps/tools/src/checks/gates/brand-drift.a
 const allowlistFile = z.object({
   entries: z.array(z.object({
     path: z.string(),
-    rule: z.enum(['colour', 'font', 'mark']),
+    rule: z.enum(['colour', 'font', 'mark', 'easing', 'duration']),
     reason: z.string().min(1),
   })),
 })
@@ -29,7 +32,7 @@ const allowlistFile = z.object({
 export type Allowlist = z.infer<typeof allowlistFile>
 
 /** The rules a line can break. */
-export type Rule = 'colour' | 'font' | 'mark'
+export type Rule = 'colour' | 'font' | 'mark' | 'easing' | 'duration'
 
 /** One refusal. */
 export interface Finding {
@@ -44,6 +47,21 @@ const COLOUR = /#(?:E5734A|B84A1B)\b/i
 const MARK = /M16 2\.5L27\.7|A6\.6 6\.6 0 1 0 9\.4 16/
 /** A `font-family` declaration whose value names a typeface in quotes. */
 const FONT = /font-family\s*:[^;{}]*['"]/i
+
+/** An easing written out: a curve, a step function, a keyword in a `transition` or `animation`, or a Tailwind easing class. */
+const EASING = /cubic-bezier\(|\bsteps\(|\btransitionTimingFunction\s*:\s*['"`](?:ease|linear)|\banimationTimingFunction\s*:\s*['"`](?:ease|linear)|\b(?:transition|animation)(?:-timing-function)?\s*:[^;{}]*(?<![\w-])(?:ease|ease-in|ease-out|ease-in-out|linear)(?![\w-])|(?<![\w-])ease-(?:in|out|in-out|linear|\[)/
+/** A duration or delay written out: a time in a `transition` or `animation`, or a Tailwind duration or delay class. */
+const DURATION = /\b(?:transition|animation)(?:-duration|-delay)?\s*:[^;{}]*\b(?!0m?s\b)\d*\.?\d+m?s\b|\b(?:duration|delay)-(?!0\b)(?:\d|\[)|\b(?:transition|animation)(?:Duration|Delay)\s*:\s*['"`]?(?!0m?s)\d|\b(?:duration|delay)\s*:\s*(?!0m?s?\b)\d/
+/** The files that carry no raw motion: the two sites and the package they share. */
+const MOTION_SCANNED = /^delorun\/(?:apps\/(?:website|docs)\/(?:src|public|scripts)\/|packages\/site-design\/)/
+/**
+ * The files the brand package's builders write, with the rules each needs: the social card page carries a copy of the
+ * mark. A file is exempt only by this list and only from the rules named, whatever its first line says; the brand
+ * package's own test keeps each equal to its builder.
+ */
+export const GENERATED_BY_BRAND: Readonly<Record<string, readonly Rule[]>> = {
+  'delorun/apps/website/scripts/og.html': ['mark'],
+}
 
 /** The source trees the gate reads, including the sign-in page's assets; the brand package is the one place the literals live. */
 const SCANNED = /^delorun\/(?:packages\/(?!brand\/)[^/]+\/src\/|apps\/(?:website|docs)\/(?:src|public|scripts)\/|packages\/site-design\/|packages\/home-auth\/assets\/)/
@@ -61,15 +79,18 @@ export function isScanned(path: string): boolean {
 /**
  * The refusals of one file's text.
  * @param text - the file's text.
- * @returns the lines that hold a brand colour, a named typeface in `font-family` or a copy of the mark.
+ * @param motion - whether raw easings and durations are refused too, as in the two sites and `site-design`.
+ * @returns the lines that hold a brand colour, a named typeface in `font-family`, a copy of the mark or, when `motion` is set, a raw easing or duration.
  */
-export function lineFindings(text: string): Finding[] {
+export function lineFindings(text: string, motion = false): Finding[] {
   return text.split('\n').flatMap((line, index): Finding[] => {
     const found: Finding[] = []
     const at = index + 1
     if (COLOUR.test(line)) found.push({ rule: 'colour', line: at, message: 'a brand colour literal; read `--dl-accent` or `--dl-accent-text`, or import BRAND_COLOURS from @delorun/brand/tokens' })
     if (FONT.test(line)) found.push({ rule: 'font', line: at, message: 'a named typeface in font-family; use `var(--dl-font-sans)` or `var(--dl-font-mono)`' })
     if (MARK.test(line)) found.push({ rule: 'mark', line: at, message: 'a copy of the hex mark; import `Mark` or `MARK` from @delorun/brand/mark' })
+    if (motion && EASING.test(line)) found.push({ rule: 'easing', line: at, message: 'a raw easing; use `var(--dl-ease-out)`, `var(--dl-ease-in-out)` or `var(--dl-ease)`' })
+    if (motion && DURATION.test(line)) found.push({ rule: 'duration', line: at, message: 'a raw duration; use a `var(--dl-duration-*)` or `var(--dl-motion-*)` token' })
     return found
   })
 }
@@ -93,8 +114,8 @@ export function readAllowlist(path: string): Allowlist {
  */
 export function fileErrors(path: string, text: string, allowlist: Allowlist): string[] {
   if (!isScanned(path)) return []
-  const exempt = new Set(allowlist.entries.filter(entry => entry.path === path).map(entry => entry.rule))
-  return lineFindings(text).filter(finding => !exempt.has(finding.rule)).map(finding => `${path}:${String(finding.line)}: ${finding.message}`)
+  const exempt = new Set<Rule>([...allowlist.entries.filter(entry => entry.path === path).map(entry => entry.rule), ...GENERATED_BY_BRAND[path] ?? []])
+  return lineFindings(text, MOTION_SCANNED.test(path)).filter(finding => !exempt.has(finding.rule)).map(finding => `${path}:${String(finding.line)}: ${finding.message}`)
 }
 
 async function main(): Promise<number> {

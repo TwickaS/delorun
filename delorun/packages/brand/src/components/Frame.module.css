@@ -1,0 +1,35 @@
+.frame {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--frame-width);
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--dl-border);
+  border-radius: var(--dl-radius-md);
+  background: var(--dl-surface-raised);
+  contain: layout paint;
+}
+
+.still,
+.content {
+  position: absolute;
+  inset: 0;
+}
+
+.still > :where(img, picture, svg) {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Content that is not ready is hidden from the pointer, the keyboard and assistive technology as well as the eye. */
+.content {
+  visibility: hidden;
+  opacity: 0;
+  background: var(--dl-surface-raised);
+  transition: opacity var(--dl-duration-move) var(--dl-ease-out);
+}
+
+.frame[data-ready='true'] .content { visibility: visible; opacity: 1; }

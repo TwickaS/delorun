@@ -54,6 +54,18 @@ function delorunManagerConfig(): { protectedPlugins: string[] } {
 
 const PROTECTED = delorunManagerConfig().protectedPlugins
 
+/**
+ * The config `@delorun/bundle-local` gives a protected module's inserted row, or `{ enabled: true }` for a module it
+ * does not insert, such as upstream's sandbox rows. The start gate of live agents has no `enabled` field.
+ * @param name - the module.
+ * @returns the row's config.
+ */
+function shippedConfig(name: string): Record<string, unknown> {
+  const rows = loadOverlayPatches('dsh', LOCAL_PATCH).flatMap(patch => (Array.isArray(patch.insert) ? patch.insert : []))
+  const row = rows.find(entry => entry.name === name)
+  return (row?.config as Record<string, unknown> | undefined) ?? { enabled: true }
+}
+
 /** The row id a protected module name gets in {@link GUARD_BUNDLE}. */
 const rowId = (name: string): string => `guard-${PROTECTED.indexOf(name)}`
 
@@ -128,7 +140,7 @@ async function fixture(options: FixtureOptions = {}) {
     initProfile(dir, ['core', GUARD_BUNDLE, ...Object.keys(bundles)])
     writeBundle(dir, 'core', managerRow)
     // Delorun links its bundle into the profile, and the fixture's bundles are not dependencies, so no pnpm run is real.
-    writeBundle(dir, GUARD_BUNDLE, [{ insert: PROTECTED.map(name => ({ id: rowId(name), name, config: { enabled: true } })) }])
+    writeBundle(dir, GUARD_BUNDLE, [{ insert: PROTECTED.map(name => ({ id: rowId(name), name, config: shippedConfig(name) })) }])
     for (const [name, patch] of Object.entries(bundles)) writeBundle(dir, name, patch)
     writePackage(dir, LOCAL_BUNDLE, {}, ['trust', 'update-check', 'update-gate'])
     for (const name of PROTECTED.filter(name => !name.startsWith(`${LOCAL_BUNDLE}/`))) writePackage(dir, name)
@@ -254,11 +266,11 @@ const WEAKENING: ReadonlyArray<readonly [string, Patch]> = [
 ]
 
 describe('plugin_manager in danger-full-access with @delorun/bundle-local\'s protection', () => {
-  it('names the consent and guard plugins, the update gate, the update check, the trust bill, the install check, sign-in and reach, and the sandbox rows', () => {
+  it('names the consent and guard plugins, the live-agent gate and its two drivers, the update gate, the update check, the trust bill, the install check, sign-in and reach, and the sandbox rows', () => {
     expect([...PROTECTED].sort()).toEqual([
-      '@deepseek-ai/dsh-sandbox-local', '@deepseek-ai/dsh-sandbox-policy', '@delorun/bundle-local/trust', '@delorun/bundle-local/update-check', '@delorun/bundle-local/update-gate',
-      '@delorun/home-auth', '@delorun/plugin-changes', '@delorun/plugin-delegation-consent', '@delorun/plugin-fetch-guard', '@delorun/plugin-install-check', '@delorun/plugin-instruction-consent', '@delorun/plugin-mcp-consent',
-      '@delorun/plugin-permission-defaults', '@delorun/plugin-schedule-consent', '@delorun/plugin-tool-failure-guard', '@delorun/reach',
+      '@deepseek-ai/dsh-sandbox-local', '@deepseek-ai/dsh-sandbox-policy', '@delorun/agent-claude-code', '@delorun/agent-codex', '@delorun/bundle-local/trust', '@delorun/bundle-local/update-check', '@delorun/bundle-local/update-gate',
+      '@delorun/external-agents', '@delorun/home-auth', '@delorun/plugin-changes', '@delorun/plugin-delegation-consent', '@delorun/plugin-fetch-guard', '@delorun/plugin-install-check',
+      '@delorun/plugin-instruction-consent', '@delorun/plugin-mcp-consent', '@delorun/plugin-permission-defaults', '@delorun/plugin-schedule-consent', '@delorun/plugin-tool-failure-guard', '@delorun/reach',
     ])
   })
 
@@ -289,7 +301,19 @@ describe('plugin_manager in danger-full-access with @delorun/bundle-local\'s pro
     expect(result.isError).toBe(true)
     expect(JSON.stringify(result.content)).toContain('cannot be changed (management-required): plugin management protects this entry')
     expect(files()).toEqual(before)
-    expect([...ctx.loader.entries()].find(entry => entry.options.name === name)?.options.config).toEqual({ enabled: true })
+    expect([...ctx.loader.entries()].find(entry => entry.options.name === name)?.options.config).toEqual(shippedConfig(name))
+  })
+
+  it('refuses to raise the live-agent gate\'s cap or turn its limit refusal off, a row with no enabled field', async () => {
+    const { ctx, call, files } = await fixture()
+    const gate = '@delorun/external-agents'
+    expect(shippedConfig(gate)).not.toHaveProperty('enabled')
+    const before = files()
+    const result = await call({ action: 'configure', target: rowId(gate), config: { ...shippedConfig(gate), maxLivePrograms: 99, limitRefusal: false } })
+    expect(result.isError).toBe(true)
+    expect(JSON.stringify(result.content)).toContain('cannot be changed (management-required): plugin management protects this entry')
+    expect(files()).toEqual(before)
+    expect([...ctx.loader.entries()].find(entry => entry.options.name === gate)?.options.config).toEqual(shippedConfig(gate))
   })
 
   it('refuses to set the permission row\'s fullAccessEverywhere, so no chat turns dangerous mode on', async () => {

@@ -36,9 +36,12 @@ const DEFINING_PACKAGE = '@delorun/preview-flags'
 
 /**
  * The Host sources that may read a flag, by path relative to `delorun/packages`, each with the reason its read cannot
- * reach a model request.
+ * reach a model request, or why what it changes stays reconstructable from the session log.
  */
 export const HOST_READERS: Readonly<Record<string, string>> = {
+  'plugin-agent-seats/src/live-agents.ts':
+    'the read decides whether the hand-off tools exist; the tool list a model sees is recorded in the session log, so the request stays reconstructable from it',
+  'home-auth/src/service.ts': 'it decides whether a device\'s confirmed actions mint and use grants (authentication of device calls); no prompt, tool, tool result or model request field depends on it',
 }
 
 const manifestFields = z.looseObject({

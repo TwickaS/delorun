@@ -34,10 +34,11 @@ kind: "package-library"
 | 导出 | 内容 |
 | --- | --- |
 | `@delorun/brand` | 组件、`Mark`、`MARK` 和令牌；导入它会加载 `tokens.css`，因此清单不声明 `sideEffects` |
-| `@delorun/brand/tokens` | 以数据形式给出的 `BRAND_COLOURS`、`BRAND_FONTS`、`BRAND_RADII`、`BRAND_SPACE` |
+| `@delorun/brand/tokens` | 以数据形式给出的 `BRAND_COLOURS`、`BRAND_FONTS`、`BRAND_MOTION`、`BRAND_RADII`、`BRAND_SPACE` |
 | `@delorun/brand/tokens.css` | 同样的取值，写成 `--dl-*` 自定义属性 |
 | `@delorun/brand/fonts.css` | Schibsted Grotesk 与 JetBrains Mono 的 `@font-face`，拉丁子集，SIL OFL 1.1 |
 | `@delorun/brand/mark` | `MARK`（路径数据）和 `Mark`（组件） |
+| `@delorun/brand/toast` | `Toaster`、`showToast` 和 `ToastCard`，仅供网站和文档使用：通知通过 Sonner 绘制，而工作室不加载 Sonner |
 
 <a id="tokens"></a>
 ## 令牌
@@ -46,6 +47,7 @@ kind: "package-library"
 - **链接用文字安全的桃色。** 在浅色页面上，链接和强调文字用 `#B84A1B`：在白色上 5.21:1，在 `#FCFCFC` 上 5.07:1，高于 WCAG AA 对正文要求的 4.5:1。在深色页面上，桃色本身在 `#111110` 上就有 6.19:1。`tests/tokens.spec.ts` 会计算这些比值。
 - **字体。** 所有界面的文字用 Schibsted Grotesk，代码用 JetBrains Mono。
 - **深色模式跟随系统。** `tokens.css` 设置 `color-scheme: light dark`，并用 `light-dark()` 定义每种颜色；页面自己设置 `color-scheme` 或带有 `.dark` 祖先元素时，以页面的设置为准。
+- **动效。** 同一套缓动：到达用 `--dl-ease-out`，跨屏移动用 `--dl-ease-in-out`，颜色变化用 `--dl-ease`；不使用任何 ease-in。时长有 `press`（120 ms）、`quick`（180 ms）、`move`（260 ms）、`explain`（360 ms，仅用于主题切换）和 `leave`（100 ms，短于任何到达）。`--dl-duration-*` 为颜色和不透明度计时；`--dl-motion-*` 为 transform 和 clip-path 计时，在减少动效时变为 0 ms，此时 `--dl-scale-pressed`（0.97）和 `--dl-scale-enter`（0.95）也变为 1。本库的样式表不含其他缓动曲线或时长，`tests/tokens.spec.ts` 会检查这一点。
 - **优先使用工作室角色。** 每个 `--dl-*` 令牌在有对应的工作室 `--dsw-*` 角色时读取它，因此在工作室内组件跟随调色板、强调色设置和密度；没有工作室的页面则使用品牌取值。
 
 <a id="components"></a>
@@ -55,7 +57,7 @@ kind: "package-library"
 
 | 组件 | 所组合的上游行为 | 增加的内容 |
 | --- | --- | --- |
-| `Button` | `Button` | `primary`、`secondary`、`destructive`、`ghost` 四种变体 |
+| `Button` | `Button` | `primary`、`secondary`、`destructive`、`ghost` 四种变体；按下时缩小，仅在精确指针下有悬停效果，焦点环，以及 `unavailable`：`aria-disabled`、仍可获得焦点、按下和悬停都不变化、文字达到 AA 可读 |
 | `TextField` | `Input` | 可见标签、用 `aria-describedby` 关联的帮助行和错误行，错误会被朗读 |
 | `Pill` | `Pill` | 色调 |
 | `Dialog` | `Modal` | 操作区页脚和 `warning` 色调 |
@@ -66,6 +68,11 @@ kind: "package-library"
 | `PinDots`、`Keypad` | 无 | PIN 输入：不携带任何值的圆点，以及由真实按钮组成的 72 px 圆形键盘 |
 | `ConfirmAction` | `Button` | 带一次行内确认的破坏性操作 |
 | `Link` | 无 | 文字安全的桃色，带下划线 |
+| `SectionHeading` | 无 | 放在 `<hgroup>` 中的分区标题（1 到 3 级）和引导句，流式字号、紧凑字距、均衡断行 |
+| `TabList`、`TabPanel` | 无 | 一个 Tab 停靠点，方向键、Home 和 End 选择；面板由所选标签命名，可放在标签行上方或旁边，含有控件时用 `focusable={false}` 移出 Tab 顺序；没有禁用的标签；窄屏上标签行横向滚动并吸附 |
+| `CodeBlock` | 无 | 用品牌等宽字体显示的代码，带一个就地回应的复制按钮（成功时按钮中显示对勾和已复制文字，失败时在代码下方单独一行显示失败文字，并选中代码），每次复制都会朗读；所有文字都是属性；按钮在脚本运行后出现，不会移动代码块 |
+| `Frame` | 无 | 放置复刻界面的框：12 px 圆角、线条颜色、由内容宽高固定的尺寸，以及在内容就绪前显示的静态图 |
+| `Toaster`、`showToast`（`@delorun/brand/toast`） | 无（Sonner） | 一次只显示一条通知，新的替换旧的；它在获得焦点或指针停留时保持，操作是可用键盘到达的真实按钮（也可用 Alt+T），并可滑动关闭 |
 | `Mark` | 无 | 六角插头标志；螺母取文字颜色，插头取 `--dl-accent` |
 | `LookChooser` | 无 | 配色方案一行、以“自定义”结尾的主题方块网格、自定义面板（仅在选择“自定义”时显示）和实时示例；“设置”→“外观”与新手引导的“外观”步骤都用它自己的文字渲染它 |
 | `ChipGroup`、`ThemePicker`、`AccentPicker`、`StudioLookSwitch` | 无 | 芯片单选组（44 px 目标、一个 Tab 停靠点、方向键）以及建立在其上的主题和强调色选择器（设置 → 外观与新手引导的“外观”步骤共用它们），还有设置 → 通用使用的 Delorun 外观开关（默认开启；关闭即选择原版）；`@delorun/plugin-theme/controls` 会重新导出它们 |
@@ -74,11 +81,11 @@ kind: "package-library"
 <a id="contract"></a>
 ## 约定
 
-- **`#upstream` 是唯一的接缝。** 组件从 `#upstream` 导入 `Button`、`Input`、`Modal` 和 `Pill`。包的 `imports` 字段把它解析到 `src/upstream.ts`，后者重新导出上游原语，所以工作室得到上游的行为。静态网站无法携带上游原语（它们会引入工作室的存储和语法高亮），所以网站和文档把 `#upstream` 解析到 `src/upstream.web.tsx`：原生的 `button`、`input` 和模态 `<dialog>`，焦点、键盘和 Escape 行为由浏览器提供。组件需要两个文件都没有导出的原语时，两处都要加。
+- **`#upstream` 是唯一的接缝。** 组件从 `#upstream` 导入 `Button`、`Input`、`Modal`、`Pill` 和 `Switch`。包的 `imports` 字段把它解析到 `src/upstream.ts`，后者重新导出上游原语，所以工作室得到上游的行为。静态网站无法携带上游原语（它们会引入工作室的存储和语法高亮），所以网站和文档把 `#upstream` 解析到 `src/upstream.web.tsx`：原生的 `button`、`input`、带 `switch` 角色的 `button` 和模态 `<dialog>`，焦点、键盘和 Escape 行为由浏览器提供。组件需要两个文件都没有导出的原语时，两处都要加。
 - **没有产品文案。** 每个组件的文字都由调用方以本地化文本传入，本包不含文案。
 - **DOM 中没有机密。** `PinDots` 不渲染已输入的值，无论在文本还是属性中，并带有 `aria-hidden`。
 - **关闭时。** 工作室的外观关闭时，`--dl-*` 仍通过上游的 `--dsw-*` 角色解析，组件采用上游的调色板。
-- **动效。** 时长使用 `--dl-motion`，在 `prefers-reduced-motion: reduce` 下为 `0ms`。
+- **动效。** 每个过渡和动画都读取动效令牌；在 `prefers-reduced-motion: reduce` 下移动停止，颜色和不透明度变化保留各自的时长。
 - **React。** 对等依赖范围是 `^18.2.0 || ^19.0.0`：工作室运行 React 18，网站运行 React 19。
 
 <a id="the-drift-gate"></a>
@@ -98,4 +105,4 @@ kind: "package-library"
 <a id="tests"></a>
 ## 测试
 
-`node_modules/.bin/vitest run --config delorun/vitest.config.ts delorun/packages/brand` 运行 [`tests/tokens.spec.ts`](tests/tokens.spec.ts)，检查对比度比值，以及 `tokens.css`、`tokens.ts`、两个网站图标和工作室主题的默认强调色是否一致；还运行 [`tests/components.client.spec.tsx`](tests/components.client.spec.tsx)，检查每个组件的角色、名称和回调。`preview/` 是用于截图的本地图库：`vite --config delorun/packages/brand/preview/vite.config.ts`。
+`node_modules/.bin/vitest run --config delorun/vitest.config.ts delorun/packages/brand` 运行 [`tests/tokens.spec.ts`](tests/tokens.spec.ts)，检查对比度比值，以及 `tokens.css`、`tokens.ts`、两个网站图标和工作室主题的默认强调色是否一致；以及动效令牌是否一致、是否为样式表中仅有的时长；还运行 [`tests/components.client.spec.tsx`](tests/components.client.spec.tsx)，检查每个组件的角色、名称和回调，以及 [`tests/site-parts.client.spec.tsx`](tests/site-parts.client.spec.tsx) 和 [`tests/toast.client.spec.tsx`](tests/toast.client.spec.tsx)，检查网站使用的部件。`preview/` 是用于截图的本地图库，端口 18620：`vite --config delorun/packages/brand/preview/vite.config.ts`；加上 `BRAND_PREVIEW_SEAM=web` 时，`/parts.html` 在浅色和深色两栏中显示网站使用的部件。

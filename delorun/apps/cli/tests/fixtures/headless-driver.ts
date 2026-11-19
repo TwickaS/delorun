@@ -41,7 +41,7 @@ type Mode = 'probe' | 'permission-mode' | 'disable-guard' | 'replace-guard'
 const mode = (process.argv[2] ?? 'probe') as Mode
 const output = { env: { ...process.env }, stdout: (text: string) => void process.stderr.write(text), stderr: (text: string) => void process.stderr.write(text) }
 const workspace = join(process.cwd(), 'workspace')
-const { home } = await prepareHome(output, undefined)
+const { home } = await prepareHome(output, undefined, true)
 // With protection on, an agent's plugin install waits for the person.
 await setProtection(home.path, 'on', attestTerminal({ stdin: { isTTY: true }, stdout: { isTTY: true } }))
 mkdirSync(workspace, { recursive: true })

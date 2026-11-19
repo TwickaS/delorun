@@ -15,7 +15,7 @@ import { NS } from './locales.ts'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-token-meter/client'
 import type {} from '@deepseek-ai/dsh-agent-team/client'
-import type {} from './slots.ts'
+import type { SubagentChildValues, SubagentRowOwner, SubagentTriggerOwner } from './slots.ts'
 import css from './SubagentHeaderLineage.module.css'
 
 type SubagentCatalogSnapshot = Omit<SessionProjectionSnapshot, 'values' | 'state'> & {
@@ -23,6 +23,18 @@ type SubagentCatalogSnapshot = Omit<SessionProjectionSnapshot, 'values' | 'state
   entries: (SessionProjectionMap['subagentCatalog'][number] & { activity: 'running' | 'inactive' })[]
 }
 type Catalogs = Readonly<Record<SessionId, SubagentCatalogSnapshot>>
+
+/** The plugin-contributed row positions; absent when no plugin registered any, so rows render as without the slots. */
+export interface SubagentRowSlots {
+  /** Renders one position of a row. */
+  readonly row: (key: 'lead' | 'detail' | 'trail', owner: SubagentRowOwner) => ReactNode
+  /** Renders the trigger's addition. */
+  readonly trigger: (owner: SubagentTriggerOwner) => ReactNode
+  /** Child projection values by session, as last read. */
+  readonly values: Readonly<Record<string, SubagentChildValues>>
+  /** Children with an approval card waiting for an answer. */
+  readonly awaitingApproval: ReadonlySet<string>
+}
 
 /** Business actions supplied by the slot registration. */
 export type SubagentCatalogInjected = {
@@ -33,11 +45,33 @@ export type SubagentCatalogInjected = {
   prepareCatalog: (parentSessionId: SessionId) => Promise<void>
 }
 
+/** Slot keys of the plugin-contributed row and trigger positions. */
+type RowSlotKey = 'conversation.session.header.actions.subagent.row.lead'
+  | 'conversation.session.header.actions.subagent.row.detail'
+  | 'conversation.session.header.actions.subagent.row.trail'
+  | 'conversation.session.header.actions.subagent.trigger'
+
+/** Binds the rendered row positions to `renderSlot`, or nothing while no plugin contributes. */
+function bindRowSlots(
+  available: boolean,
+  renderSlot: PropsRenderSlots<RowSlotKey>['renderSlot'],
+): SubagentRowSlots | undefined {
+  if (!available) return undefined
+  return {
+    row: (key, owner) => renderSlot(`conversation.session.header.actions.subagent.row.${key}` as const, owner),
+    trigger: owner => renderSlot('conversation.session.header.actions.subagent.trigger', owner),
+    values: {},
+    awaitingApproval: new Set(),
+  }
+}
+
 /** Root catalog actions and availability of its optional footer. */
 export type SubagentCatalogActionInjected = SubagentCatalogInjected & {
   hooks: {
     /** Whether the catalog footer currently has a registered contributor. */
     footerAvailable: HostObservable<boolean>
+    /** Whether any plugin contributes to the row or trigger positions. */
+    rowSlotsAvailable: HostObservable<boolean>
   }
 }
 
@@ -58,6 +92,7 @@ interface CatalogRowsProps {
   refreshProjection: (parentSessionId: SessionId) => void
   toggleBranch: (childSessionId: SessionId) => void
   closeCatalog: () => void
+  rowSlots: SubagentRowSlots | undefined
 }
 
 function treeItems(root: HTMLDivElement | null): HTMLElement[] {
@@ -243,10 +278,30 @@ function catalogProgress(entries: SubagentCatalogSnapshot['entries'], summaries:
   ].join('\u2002·\u2002')
 }
 
+/** The slot owner for a trigger: one entry per direct row, without row-only values. */
+function triggerRow(
+  entry: SubagentCatalogSnapshot['entries'][number],
+  summary: SessionSummary | undefined,
+  values: SubagentChildValues | undefined,
+  awaitingApproval: boolean,
+): SubagentTriggerOwner['rows'][number] {
+  return {
+    sessionId: entry.id,
+    mode: entry.mode,
+    label: entry.label || summary?.title || entryName(entry),
+    running: entry.activity === 'running',
+    summary,
+    values: values ?? {},
+    awaitingApproval,
+    tokens: tokenTotal(summary?.projectionValues?.tokenUsage),
+    durationMs: undefined,
+  }
+}
+
 /** Render one catalog level and recurse only through explicitly expanded rows. */
 function CatalogRows({
   parentSessionId, currentSessionId, catalog, catalogs, summaries, expanded, level,
-  openChild, openChildAside, refreshProjection, toggleBranch, closeCatalog, t,
+  openChild, openChildAside, refreshProjection, toggleBranch, closeCatalog, rowSlots, t,
 }: CatalogRowsProps & { t: TranslateNS<typeof NS> }) {
   const [now, setNow] = useState(() => Date.now())
   const running = catalog.entries.some(entry => entry.activity === 'running')
@@ -330,6 +385,18 @@ function CatalogRows({
           })
           closeCatalog()
         }
+        const rowOwner = rowSlots === undefined ? undefined : {
+          sessionId: entry.id,
+          mode: entry.mode,
+          label: primaryLabel,
+          running: entry.activity === 'running',
+          summary,
+          values: rowSlots.values[entry.id] ?? {},
+          awaitingApproval: rowSlots.awaitingApproval.has(entry.id),
+          tokens: totalTokens,
+          durationMs,
+          open,
+        } satisfies SubagentRowOwner
         const handleKey = (event: KeyboardEvent<HTMLDivElement>): void => {
           if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault()
@@ -378,6 +445,7 @@ function CatalogRows({
                   </button>
                 )}
               <div className={css.clickarea}>
+                {rowSlots !== undefined && rowOwner !== undefined && rowSlots.row('lead', rowOwner)}
                 <span className={css.rowActivitySlot}>
                   <StateDot state={entry.activity === 'running' ? 'ongoing' : completed ? 'done' : 'idle'} />
                 </span>
@@ -386,6 +454,7 @@ function CatalogRows({
                   {secondaryLabel !== undefined && (
                     <span className={css.secondaryLabel}>{secondaryLabel}</span>
                   )}
+                  {rowSlots !== undefined && rowOwner !== undefined && rowSlots.row('detail', rowOwner)}
                 </span>
                 {metrics !== '' && (
                   <span className={css.metrics}>
@@ -400,6 +469,7 @@ function CatalogRows({
                     )}
                   </span>
                 )}
+                {rowSlots !== undefined && rowOwner !== undefined && rowSlots.row('trail', rowOwner)}
                 {isCurrent
                   ? (
                     <span className={`${css.sidebarSpace} ${css.currentCheck}`} aria-hidden data-subagent-current>
@@ -453,6 +523,7 @@ function CatalogRows({
                   refreshProjection={refreshProjection}
                   toggleBranch={toggleBranch}
                   closeCatalog={closeCatalog}
+                  rowSlots={rowSlots}
                   t={t}
                 />
               </div>
@@ -475,6 +546,8 @@ interface CatalogDropdownSharedProps extends InjectFace<SubagentCatalogInjected>
   /** Retain an empty catalog's entry for shared tasks or a task-board error. */
   hasBoardContent?: boolean
   renderFooter?: () => ReactNode
+  /** Plugin-contributed row and trigger positions. */
+  rowSlots?: SubagentRowSlots
 }
 
 type CatalogDropdownProps = CatalogDropdownSharedProps & (
@@ -525,6 +598,12 @@ function CatalogDropdown(props: CatalogDropdownProps) {
     }))
   }, [projections, summaries, statuses])
   const catalog = catalogs[rootSessionId]
+  const rowSlotsWithValues = useMemo<SubagentRowSlots | undefined>(() => props.rowSlots === undefined ? undefined : {
+    row: props.rowSlots.row,
+    trigger: props.rowSlots.trigger,
+    values: Object.fromEntries(Object.entries(projections).map(([id, snapshot]) => [id, snapshot.values])),
+    awaitingApproval: new Set([...statuses].filter(([, status]) => status.pendingInteraction?.kind === 'approval').map(([id]) => id)),
+  }, [props.rowSlots, projections, statuses])
   const prepareLevel = (sessionId: SessionId): void => {
     void prepareCatalog(sessionId).catch((error: unknown) => {
       console.error('[ui-subagent] catalog discovery failed:', error)
@@ -771,6 +850,12 @@ function CatalogDropdown(props: CatalogDropdownProps) {
                   {runningCount > 0 && <StateDot state="ongoing" className={css.textModeActivity} />}
                 </span>
                 <span ref={countRef} className={css.count} data-subagent-count>{t(totalCountKey, { count: directCount })}</span>
+                {rowSlotsWithValues !== undefined && rowSlotsWithValues.trigger({
+                  rows: directChildren.map(entry => triggerRow(
+                    entry, summaries[entry.id], rowSlotsWithValues.values[entry.id],
+                    rowSlotsWithValues.awaitingApproval.has(entry.id),
+                  )),
+                })}
               </>
             )}
           {variant === 'switcher' && <SubagentSwitcherIcon />}
@@ -818,6 +903,7 @@ function CatalogDropdown(props: CatalogDropdownProps) {
                 refreshProjection={prepareLevel}
                 toggleBranch={toggleBranch}
                 closeCatalog={() => { changeOpen(false) }}
+                rowSlots={rowSlotsWithValues}
                 t={t}
               />
             </div>
@@ -832,7 +918,7 @@ function CatalogDropdown(props: CatalogDropdownProps) {
 /** Full props for the root-session catalog entry in the header actions band. */
 export type SubagentCatalogActionProps =
   PropsRuntime<'conversation.session.header.actions'> & InjectFace<SubagentCatalogActionInjected> & PropsLocale<typeof NS>
-  & Omit<PropsRenderSlots<'conversation.session.header.actions.subagent.footer'>, 'SessionProvider'>
+  & Omit<PropsRenderSlots<'conversation.session.header.actions.subagent.footer' | RowSlotKey>, 'SessionProvider'>
 
 /**
  * Session-header catalog action for root sessions: the descendant count and
@@ -851,13 +937,14 @@ export function SubagentCatalogAction(props: SubagentCatalogActionProps) {
 
 /** Bind task-board visibility only in root conversations. */
 function RootCatalogAction({
-  sessionId, useProjection, useSessions, useSessionStatus, useFooterAvailable,
+  sessionId, useProjection, useSessions, useSessionStatus, useFooterAvailable, useRowSlotsAvailable,
   openChild, openChildAside, refreshProjection, prepareCatalog, t, renderSlot,
 }: SubagentCatalogActionProps) {
   const hasSharedTasks = useProjection('agentTeam', team => team?.enabled === true
     && team.tasks.some(task => task.status !== 'deleted'))
   const hasTaskFailure = useProjection('agentTeam', team => team?.enabled === true && team.failure !== undefined)
   const footerAvailable = useFooterAvailable(value => value)
+  const rowSlots = bindRowSlots(useRowSlotsAvailable(value => value), renderSlot)
   return (
     <CatalogDropdown
       key={sessionId}
@@ -866,6 +953,7 @@ function RootCatalogAction({
       hasSharedTasks={footerAvailable && hasSharedTasks}
       hasBoardContent={footerAvailable && (hasSharedTasks || hasTaskFailure)}
       renderFooter={() => renderSlot('conversation.session.header.actions.subagent.footer', {})}
+      {...rowSlots === undefined ? {} : { rowSlots }}
       useSessions={useSessions}
       useSessionStatus={useSessionStatus}
       openChild={openChild}

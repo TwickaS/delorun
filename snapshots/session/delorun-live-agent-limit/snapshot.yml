@@ -1,0 +1,13 @@
+version: 1
+scenario: delorun-live-agent-limit
+profile: headless
+composition: default
+recording: authored
+permission: workspace-write
+header:
+  class: delorun-live-agent-limit
+  pin: true
+  childSystemPrompts: [1]
+  childToolSchemas: [1]
+replay:
+  override: true
