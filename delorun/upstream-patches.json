@@ -204,7 +204,7 @@
       "path": "packages/api/gateway/tests/gateway.client.spec.ts",
       "class": "security",
       "reason": "Reach listener Content Security Policy (C4): the gateway client fixture's ConnectionHandle mocks carry `remoteMedia: 'load'`, the loopback mode of the property the admission seam requires. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end. It also covers the client's refused-answer path: a result the Host refuses with LOOPBACK_REQUIRED emits `remote/answer-refused` and keeps the event stream, while any other refusal still ends the generation. Covers `remote/call-denied`: emitted with the endpoint and reason on `remote-access/denied`, not on other failures, and a throwing listener leaves the call result unchanged. Lead verdict (2026-11-13): approved after the lead review of the merged diff. The fixture's ConnectionHandle mocks also carry `registerRequestExtras`, which the PIN mode page unlock requires. Covers `$liftDenials`: one handler at a time; a refused unary call is sent exactly once more only when the handler resolves true, and the caller receives that second outcome; false, a throwing handler or a withdrawn handler hands the refusal to the caller, and `remote/call-denied` is emitted only for a refusal the caller receives. It also covers the stream lift (a refused stream open is reopened once with the uplink the refused open took, and a declined lift hands the refusal to the stream's reader) and the withdrawn-plugin case (nothing more is sent). Lead verdict: pending (faceid-wire, F30).",
-      "sha256": "9808a53c728a3a9b56c217573f71c030bda0bbb8932fa4f98a579c1dd9cfa66f"
+      "sha256": "f78bd89b79c18f624a2019e4d5606693f1302a6fe5f38c0837192b53c3e27bd4"
     },
     {
       "path": "packages/api/job-controller/tests/client-apply.client.spec.ts",
@@ -1950,7 +1950,7 @@
       "path": "packages/api/gateway/src/client/index.ts",
       "class": "security",
       "reason": "Declares the client event `remote/answer-refused`, which the Client emits when the Host refuses a forwarded prompt's answer with LOOPBACK_REQUIRED; nothing emits it in upstream's own compositions. Lead verdict (2026-11-11): kept; only a `LOOPBACK_REQUIRED` failure becomes `remote/answer-refused` and keeps the event stream, and every other failure ends the generation as upstream does. Also declares `remote/call-denied` and `RemoteCallDenial`: a Remote call the Host refuses with `remote-access/denied` emits the refused endpoint and the policy reason for observability; the caller still receives the same failure and a throwing listener is contained. Lead verdict (2026-11-13): approved after the lead review of the merged diff. Adds `$liftDenials(lift)` on `ctx.remote`: one registered handler is asked about a unary call refused with `remote-access/denied` and may resolve true to have the same call, with the same wire arguments, sent exactly once more; a false, throwing or absent handler hands the refusal to the caller. Delorun's Face ID step registers it on a reach device to mint a grant for exactly that call (A483). A stream open refused the same way before any item is asked too, and reopened once with the uplink items the refused open took (at most `LIFTED_UPLINK_LIMIT`, 256); the resend re-checks that the calling plugin is still mounted. Lead verdict: pending (faceid-wire, F30).",
-      "sha256": "694481ad7f3bcbaefd34b89b1a367623eb84cf6f10335401fac24a45ed922268"
+      "sha256": "0e8d25987b490b79187c63400018bcb31c3ddfe4d353db61244d0f21efd70921"
     },
     {
       "path": "packages/api/gateway/src/client/remote-events.ts",
@@ -2965,6 +2965,12 @@
       "class": "delorun-feature",
       "feature": "fork-gates",
       "reason": "Treats Delorun package and app tests as test files."
+    },
+    {
+      "path": "packages/api/terminal-controller/src/client/model.ts",
+      "class": "delorun-feature",
+      "feature": "studio-seams",
+      "reason": "Face ID on a reach device (A483, F33): a terminal view whose window hold (`terminal/retain`) the Host's remote access refuses still attaches, so the refusal reaches `terminal/attach`, the call the person's own terminal view makes, and the hold is asked for again once the attachment delivers its first frame. Any other hold failure fails the view as before. Lead verdict: pending (faceid-wire, F33; class, feature and reason proposed by the lane)."
     }
   ],
   "retired": []

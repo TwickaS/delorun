@@ -51,8 +51,10 @@ export interface FaceGrantRequest {
   readonly action: string
   /** The call the grant is hashed from. */
   readonly call: FaceGrantCall | RemoteGrantCall
-  /** The hold the grant opens, for `terminal/create` and `directoryPicker/list`. */
+  /** The hold the grant opens, for `terminal/create`, `terminal/attach` and `directoryPicker/list`. */
   readonly hold?: FaceGrantHold | undefined
+  /** The call's cancellation: a confirmation whose call is cancelled closes as cancelled, or never shows. */
+  readonly signal?: AbortSignal | undefined
 }
 
 /**

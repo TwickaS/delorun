@@ -88,7 +88,9 @@ export class TerminalView {
    * @param id - Host terminal identity, reused when recovering an item from its Session list.
    * @param createWhenMissing - allow allocation only for a new tab, never a listed terminal.
    * @param shellPath - explicit shell chosen at the guide; omission uses the remembered available shell.
-   * @param retain - window hold acknowledgement required before output attachment.
+   * @param retain - window hold acknowledgement required before output attachment. A hold the Host's remote access
+   *   refuses does not stop the view: it attaches anyway, so the refusal reaches the attach the person asked for, and
+   *   asks for the hold again once the attachment delivers its first frame.
    */
   constructor(
     private readonly sessionId: SessionId,
@@ -173,9 +175,13 @@ export class TerminalView {
     this.createWhenMissing = false
     this.patch({ info, title: info.title })
     if (this.retain === undefined) { if (this.mounted && this.closing === undefined) this.connect(); return }
-    void this.retain(this.lifetime.signal).then(() => {
-      if (this.mounted && this.closing === undefined) this.connect()
-    }).catch((error: unknown) => { if (!this.stopped()) this.fail(error) })
+    void this.retain(this.lifetime.signal).then(() => true, (error: unknown) => {
+      if (accessRefused(error)) return true
+      if (!this.stopped()) this.fail(error)
+      return false
+    }).then((connect) => {
+      if (connect && this.mounted && this.closing === undefined) this.connect()
+    })
   }
 
   /** Reattach with a fresh screen and regain input control. */
@@ -186,7 +192,7 @@ export class TerminalView {
     const stream = this.gateway.$stream<TerminalFrame>({
       name: 'Browser terminal output',
       open: async function* (this: TerminalView, signal: AbortSignal) {
-        await this.retain?.(signal)
+        let retained = await this.retainUnlessRefused(signal)
         signal.throwIfAborted()
         const handle = this.remote.attach(this.sessionId, info.id, signal)
         const attachment: TerminalInputAttachment = {
@@ -198,6 +204,8 @@ export class TerminalView {
         try {
           for await (const frame of handle) {
             if (frame.type === 'snapshot') attachment.window = frame.inputWindow
+            // The admitted attachment opened what the refused hold needed; the hold follows it.
+            if (!retained) { retained = true; void this.retainUnlessRefused(signal).catch((_ended: unknown) => undefined) }
             yield frame
           }
         }
@@ -398,6 +406,21 @@ export class TerminalView {
     }
   }
 
+  /**
+   * Wait for the window hold, unless the Host's remote access refuses it.
+   * @param signal - the attachment's lifetime.
+   * @returns true once the hold is acknowledged, false when remote access refused it.
+   */
+  private async retainUnlessRefused(signal: AbortSignal): Promise<boolean> {
+    try {
+      await this.retain?.(signal)
+      return true
+    } catch (error) {
+      if (accessRefused(error)) return false
+      throw error
+    }
+  }
+
   private patch(patch: Partial<TerminalViewState>): void {
     if (this.lifetime.signal.aborted) return
     this.state.set({ ...this.state.getSnapshot(), ...patch })
@@ -409,6 +432,17 @@ export class TerminalView {
     if (!this.stopped() && issue === 'missingTerminal') this.inventory.remove(this.id)
     this.patch({ phase: error instanceof RemoteStreamCarrierError ? 'disconnected' : 'failed', writable: false, issue, error: error instanceof Error ? error.message : String(error) })
   }
+}
+
+/**
+ * Whether the Host's remote access refused a call, a failure the person's own action may lift (a reach device's grant).
+ * @param error - a caught failure.
+ * @returns true for `remote-access/denied`.
+ */
+function accessRefused(error: unknown): boolean {
+  // The Host declares the code by merging the failure map, which this Client program does not see.
+  const code: string | undefined = remoteErrorOf(error)?.code
+  return code === 'remote-access/denied'
 }
 
 function valueOf<T>(result: RemoteResult<T>): T {

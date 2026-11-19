@@ -27,7 +27,7 @@ import type {
 } from '@deepseek-ai/dsh-typert-protocol'
 import TypertRegistry from '@deepseek-ai/dsh-typert-registry'
 import type { ClientRemote } from '../src/client/index.ts'
-import { apply, inject, isRemoteFailure, RemoteStream } from '../src/client/index.ts'
+import { apply, inject, isRemoteFailure, LIFTED_UPLINK_LIMIT, RemoteStream } from '../src/client/index.ts'
 import {
   ClientUplinkQueue,
   RemoteStreamCarrierError,
@@ -1437,6 +1437,34 @@ describe('Client Typert API', () => {
       await expect(drainStream(declined)).rejects.toMatchObject({ code: 'remote-access/denied' })
       expect(opens).toHaveLength(3)
       expect(asked).toHaveLength(2)
+    } finally {
+      withdraw()
+      await dispose()
+      await client.dispose()
+    }
+  })
+
+  // Removing the overflow check after the lift reopens a stream whose uplink lost the items sent while the sheet showed.
+  it('hands the refusal to the reader when the uplink outgrew the replay while the lift decided', async () => {
+    const opens: unknown[] = []
+    const open: NonNullable<ConnectionHandle['rpc']['open']> = async function* (_route, _endpoint, payload) {
+      opens.push(payload)
+      yield* []
+      throw new RemoteError('remote-access/denied', 'fixture: denied', { action: 'probe/attach', reason: 'elevation-required: probe/attach' } as never)
+    }
+    const call = vi.fn<ConnectionHandle['rpc']['call']>()
+    const { ctx, client } = await benchFiber(call, 'in-process', open)
+    const dispose = await ctx.remote.$mount({ package: '@fixture/attach', descriptors: [attachDescriptor()] })
+    let stream: ReturnType<typeof ctx.remote.probe.attach> | undefined
+    const withdraw = ctx.remote.$liftDenials(async () => {
+      for (let index = 0; index <= LIFTED_UPLINK_LIMIT; index += 1) stream?.send(`item-${String(index)}`)
+      await new Promise(resolve => setTimeout(resolve, 0))
+      return true
+    })
+    try {
+      stream = ctx.remote.probe.attach('alpha')
+      await expect(drainStream(stream)).rejects.toMatchObject({ code: 'remote-access/denied' })
+      expect(opens).toHaveLength(1)
     } finally {
       withdraw()
       await dispose()

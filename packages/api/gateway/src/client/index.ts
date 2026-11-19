@@ -144,9 +144,9 @@ export interface ClientRemote extends TypertClientRemote {
    * `remote-access/denied`, before the caller sees the refusal. When it resolves true, the same call with the same
    * arguments is sent once more and its outcome is the caller's: a stream opens once more and first sends the uplink
    * items the refused open took. When it resolves false or throws, or the calling plugin was withdrawn meanwhile, the
-   * caller receives the refusal. A stream that has delivered an item, or whose refused open took more than
-   * {@link LIFTED_UPLINK_LIMIT} uplink items, is not asked. `remote/call-denied` is emitted only for a unary refusal the
-   * caller receives.
+   * caller receives the refusal. A stream that has delivered an item is not asked; one whose refused open took more than
+   * {@link LIFTED_UPLINK_LIMIT} uplink items, before or while the handler decided, receives the refusal.
+   * `remote/call-denied` is emitted only for a unary refusal the caller receives.
    * @param lift - the handler.
    * @returns disposer that withdraws it.
    * @throws {Error} when a handler is already registered.
@@ -610,7 +610,7 @@ class ClientRemoteService extends Service implements ClientRemote {
       // The Host declares `remote-access/denied` by merging the code map, which this Client program does not see.
       const code: string | undefined = failure?.code
       if (delivered || failure === undefined || code !== 'remote-access/denied' || !replay.replayable() || !mountActive(token)
-        || !await this.lifted(endpoint, failure.details, prepared) || !mountActive(token)) throw error
+        || !await this.lifted(endpoint, failure.details, prepared) || !mountActive(token) || !replay.replayable()) throw error
     }
     const again = replay.open()
     replay.settle()

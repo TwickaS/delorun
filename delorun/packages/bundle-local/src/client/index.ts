@@ -77,6 +77,7 @@ import { VersionsRow, type VersionsRowInjected } from './VersionsRow.tsx'
 import { AboutSection } from './AboutSection.tsx'
 import { overridePluginCopy, overrideSettingsCopy } from './plugin-copy.ts'
 import { ReportFooterAction, reportChatStarter, studioSurface } from './ReportFooterAction.tsx'
+import type { StudioSurface } from './report-url.ts'
 import { overrideTitle } from './title.ts'
 import { readVersions } from './versions.ts'
 import { createRemoteNoticeSource, RemoteNotice } from './RemoteNotice.tsx'
@@ -511,14 +512,14 @@ export function apply(ctx: Context): void {
     order: ABOUT_SECTION_ORDER,
     label: () => t('about.nav'),
     locale: NS,
-    inject: () => ({ surface: studioSurface(ctx), fetchImpl: studioFetch, startChat: reportChatStarter(ctx), versions }),
+    inject: () => ({ ...reportFace(ctx, studioFetch), versions }),
   }, AboutSection))
   ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
     name: 'sidebar.footer.action',
     id: REPORT_ACTION.id,
     order: REPORT_ACTION.order,
     locale: NS,
-    inject: () => ({ surface: studioSurface(ctx), fetchImpl: studioFetch, startChat: reportChatStarter(ctx) }),
+    inject: () => reportFace(ctx, studioFetch),
   }, ReportFooterAction))
   ctx.effect(() => ctx.locale.register(DEVICES_NS, { en: devicesEn, zh: devicesZh }), 'delorun-devices: section dictionaries')
   const devicesT = ctx.locale.bind(DEVICES_NS)
@@ -854,6 +855,17 @@ export function applyConsents(ctx: Context, fetch: HostFetch): void {
 }
 
 /**
+ * What the About section and the footer report button are given: the surface, the request function their problem report
+ * reads its details with, and the report chat opener.
+ * @param ctx - the browser plugin context.
+ * @param fetchImpl - the studio's fetch: on a device, the one that asks for Face ID when the home refuses the details.
+ * @returns the props.
+ */
+export function reportFace(ctx: Context, fetchImpl: HostFetch): { readonly surface: StudioSurface; readonly fetchImpl: HostFetch; readonly startChat: () => void } {
+  return { surface: studioSurface(ctx), fetchImpl, startChat: reportChatStarter(ctx) }
+}
+
+/**
  * Provide `ctx.delorunFaceGrant` and, on a reach device, the Face ID step for every sensitive call (A483): a Remote call
  * or a plugin route the home refuses for want of a grant opens the confirmation and is sent once more
  * (`face-retry.ts`). On the home's own computer nothing is refused, so nothing asks: the service's `fetch` is the page's
@@ -861,7 +873,8 @@ export function applyConsents(ctx: Context, fetch: HostFetch): void {
  * @param ctx - the browser plugin context.
  * @param fetch - the page's request function.
  * @param onComputer - whether the page is the home's own computer.
- * @returns the confirmation's store, which the overlay shows, and the `fetch` the plugin's own sections send through.
+ * @returns the confirmation's store, which the overlay shows, the `fetch` the plugin's own sections send through, and the
+ *   page's confirmation queue.
  */
 export function applyFaceGrant(ctx: Context, fetch: HostFetch, onComputer: boolean): { readonly source: FaceGrantSource; readonly fetch: HostFetch; readonly queue: ConfirmationQueue } {
   const source = createFaceGrantSource()

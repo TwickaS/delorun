@@ -5,7 +5,7 @@
  *
  * - **Remote:** the gateway asks {@link remoteDenialLift} about a call refused with `elevation-required: …`; the grant is
  *   `{ action: <method>, hash: hashArgs(args) }`, with the terminal's or picker's hold for `terminal/create`,
- *   `terminal/retain`, `terminal/attach` and `directoryPicker/list`, and the same call is sent again (the home keeps the grant; nothing travels in a header).
+ *   `terminal/attach` and `directoryPicker/list`, and the same call is sent again (the home keeps the grant; nothing travels in a header).
  * - **Fetch:** {@link grantingFetch} reads a `403 ELEVATION_REQUIRED` answer whose body names its grant `action`; the grant
  *   is `{ action, hash: hashRequest(method, pathname + search, body) }`, and the request is sent again with `Delorun-Grant`.
  *
@@ -17,7 +17,7 @@
  */
 import type { FaceGrant, FaceGrantHold, FaceGrantRequest, GrantingFetch } from '@delorun/plugin-changes/face-grant'
 
-/** The fields of the gateway's `RemoteDenialQuestion` the Face ID step reads: a refused unary Remote call. */
+/** The fields of the gateway's `RemoteDenialQuestion` the Face ID step reads: a refused Remote call or stream open. */
 export interface RefusedRemoteCall {
   /** The refused `<namespace>/<method>`. */
   readonly endpoint: string
@@ -25,6 +25,8 @@ export interface RefusedRemoteCall {
   readonly reason: string | undefined
   /** The call's wire arguments, exactly as they were sent and will be sent again. */
   readonly args: Readonly<Record<string, unknown>>
+  /** The call's cancellation, which skips or closes its confirmation. */
+  readonly signal: AbortSignal
 }
 
 /** A handler for the gateway's `ctx.remote.$liftDenials`: true sends the refused call once more. */
@@ -56,6 +58,7 @@ export const NEVER_ASKED = {
   'dynamicCordisRunner/resolveRequestRun': 'answers the home\'s run request as the last step of a run',
   'dynamicCordisRunner/settleUserRun': 'settles a run as its last step',
   'terminal/watch': 'the chat header opens the roster of the chat\'s terminals on every chat view',
+  'terminal/retain': 'keeps every saved terminal tab alive on load and on reconnect, on screen or not; the terminal view on screen asks through terminal/attach, whose grant opens the hold this call then rides',
 } as const satisfies Readonly<Record<string, string>>
 
 /** One confirmation at a time across the page. */
@@ -87,13 +90,12 @@ export function confirmationQueue(): ConfirmationQueue {
 /**
  * The hold a grant for one Remote call opens.
  * @param endpoint - the method, `<namespace>/<method>`.
- * @param args - the call's wire arguments; `terminal/create` names its terminal in `request.id`, `terminal/attach` and
- *   `terminal/retain` in `id`.
+ * @param args - the call's wire arguments; `terminal/create` names its terminal in `request.id`, `terminal/attach` in `id`.
  * @returns the terminal's or the picker's hold, or undefined for a call that opens none.
  */
 export function holdOfCall(endpoint: string, args: Readonly<Record<string, unknown>>): FaceGrantHold | undefined {
   if (endpoint === 'directoryPicker/list') return { feature: 'picker', id: PICKER_HOLD_ID }
-  if (endpoint !== 'terminal/create' && endpoint !== 'terminal/attach' && endpoint !== 'terminal/retain') return undefined
+  if (endpoint !== 'terminal/create' && endpoint !== 'terminal/attach') return undefined
   const named = endpoint === 'terminal/create' ? args.request : args
   const id: unknown = typeof named === 'object' && named !== null ? Reflect.get(named, 'id') : undefined
   return typeof id === 'string' && id !== '' ? { feature: 'terminal', id } : undefined
@@ -101,13 +103,15 @@ export function holdOfCall(endpoint: string, args: Readonly<Record<string, unkno
 
 /**
  * One confirmation at a time: a request waits for the one before it to settle, so two calls refused together each get
- * their own confirmation instead of the second ending the first.
+ * their own confirmation instead of the second ending the first. A request whose call was cancelled while it waited is
+ * skipped.
  * @param grant - the confirmation.
  * @param queue - the page's queue; a new one by default.
  * @returns the same confirmation, queued.
  */
 export function oneAtATime(grant: FaceGrant, queue: ConfirmationQueue = confirmationQueue()): FaceGrant {
-  return request => queue.run(() => grant(request))
+  // A call cancelled while it waited needs no confirmation.
+  return request => queue.run(async () => request.signal?.aborted === true ? undefined : await grant(request))
 }
 
 /**
@@ -117,10 +121,10 @@ export function oneAtATime(grant: FaceGrant, queue: ConfirmationQueue = confirma
  *   {@link NEVER_ASKED} (which never joins the queue) or a cancelled confirmation.
  */
 export function remoteDenialLift(grant: FaceGrant): RemoteDenialHandler {
-  return async ({ endpoint, reason, args }) => {
+  return async ({ endpoint, reason, args, signal }) => {
     if (reason?.startsWith(ELEVATION_REASON) !== true || Object.hasOwn(NEVER_ASKED, endpoint)) return false
     const hold = holdOfCall(endpoint, args)
-    const request: FaceGrantRequest = { action: endpoint, call: { args }, ...hold === undefined ? {} : { hold } }
+    const request: FaceGrantRequest = { action: endpoint, call: { args }, signal, ...hold === undefined ? {} : { hold } }
     return await grant(request) !== undefined
   }
 }
@@ -162,7 +166,7 @@ export function grantingFetch(fetch: GrantingFetch, grant: FaceGrant, baseOf: ()
     const body = init?.body ?? ''
     if (headers.has(GRANT_HEADER) || typeof body !== 'string') return response
     const url = new URL(input, baseOf())
-    const grantId = await grant({ action, call: { method: (init?.method ?? 'GET').toUpperCase(), path: `${url.pathname}${url.search}`, body } })
+    const grantId = await grant({ action, call: { method: (init?.method ?? 'GET').toUpperCase(), path: `${url.pathname}${url.search}`, body }, ...init?.signal == null ? {} : { signal: init.signal } })
     if (grantId === undefined || init?.signal?.aborted === true) return response
     headers.set(GRANT_HEADER, grantId)
     return fetch(input, { ...init, headers })

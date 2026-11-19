@@ -21,7 +21,8 @@ import type { GrantRequest, PasskeyApi } from '../src/client/face-id-types.ts'
 import type { PinView } from '../src/client/pin-lock.ts'
 import { fakeHost } from './fake-host.ts'
 import { Context } from '@deepseek-ai/cordis'
-import { applyFaceGrant } from '../src/client/index.ts'
+import { applyFaceGrant, reportFace } from '../src/client/index.ts'
+import { loadReportDetails } from '../src/client/report-api.ts'
 import type { HostFetch } from '../src/client/host-api.ts'
 import { setNetwork } from '../src/client/network-api.ts'
 import { acceptServer, setFullAccess, type PendingServer, type WorkspaceAccess } from '../src/client/consents-api.ts'
@@ -127,7 +128,6 @@ describe('a Remote call the home refuses for want of a grant', () => {
   // Without the hold, a reloaded terminal tab asks again for each of its streams.
   it.each([
     ['terminal/attach', { agentId: 's1', id: 'term-2' }],
-    ['terminal/retain', { sessionId: 's1', id: 'term-2' }],
   ] as const)('gives %s the hold of the terminal it reopens', async (endpoint, args) => {
     const { source, grant, api } = world()
     const lifted = remoteDenialLift(grant)(denial(endpoint, args))
@@ -154,6 +154,22 @@ describe('a Remote call the home refuses for want of a grant', () => {
     expect(sent).toEqual({ actions: [{ action: 'pluginManager/installBundle', hash: homeHashArgs(ARGS) }] })
     await new Promise(resolve => setTimeout(resolve, 0))
     expect(source.hooks.pending.getSnapshot()).toBeNull()
+  })
+
+  // Keeping the sheet of a cancelled call mints a grant nothing uses, and a reconnect would queue a second sheet for the same call (review r2 P3-2).
+  it('skips the sheet of a call cancelled while it waited, and closes the sheet of a call cancelled while it shows', async () => {
+    const { source, grant, api } = world()
+    const showing = new AbortController()
+    const waiting = new AbortController()
+    const first = remoteDenialLift(grant)({ ...denial('terminal/attach', { id: 't-1' }), signal: showing.signal })
+    const second = remoteDenialLift(grant)({ ...denial('terminal/attach', { id: 't-2' }), signal: waiting.signal })
+    await waitFor(() => { expect(source.hooks.pending.getSnapshot()).not.toBeNull() })
+    waiting.abort()
+    showing.abort()
+    await expect(first).resolves.toBe(false)
+    await expect(second).resolves.toBe(false)
+    expect(source.hooks.pending.getSnapshot()).toBeNull()
+    expect(api.calls.filter(call => call.name === 'options' || call.name === 'pin')).toEqual([])
   })
 
   // A picker hold id other than the home's would open a hold no later read matches (`face-grants.spec.ts` pins it to the home's).
@@ -286,11 +302,11 @@ describe('the bundle\'s own Fetch surfaces', () => {
 })
 
 describe('the plugin\'s Face ID wiring', () => {
-  async function wired(onComputer: boolean): Promise<{ lifts: unknown[]; ctx: Context; studioFetch: HostFetch; fetch: ReturnType<typeof vi.fn>; source: FaceGrantSource }> {
+  async function wired(onComputer: boolean, refused = 'plugin-packs/add'): Promise<{ lifts: unknown[]; ctx: Context; studioFetch: HostFetch; fetch: ReturnType<typeof vi.fn>; source: FaceGrantSource }> {
     const ctx = new Context()
     const lifts: unknown[] = []
     ctx.provide('remote', { $liftDenials: (lift: unknown) => { lifts.push(lift); return () => {} } } as never)
-    const fetch = vi.fn((_input: string, _init?: RequestInit) => Promise.resolve(refusal('plugin-packs/add')))
+    const fetch = vi.fn((_input: string, _init?: RequestInit) => Promise.resolve(refusal(refused)))
     let applied: ReturnType<typeof applyFaceGrant> | undefined
     await ctx.plugin({ apply: (scope: Context) => { applied = applyFaceGrant(scope, fetch, onComputer) } }).await()
     await new Promise(resolve => setTimeout(resolve, 0))
@@ -323,6 +339,18 @@ describe('the plugin\'s Face ID wiring', () => {
     const second = await answer(source, api, 'faceId')
     await expect(changes).resolves.toEqual(expect.any(String))
     expect(second.title).toContain('Restart Delorun')
+    await ctx.fiber.dispose()
+  })
+
+  // Giving About and the footer report the page's own fetch leaves a phone's report details refused with no sheet (review r2 P3-4).
+  it('reads the problem report\'s details through the granting fetch, so a refusal on a device opens the sheet', async () => {
+    const { ctx, studioFetch, source } = await wired(false, 'bundle-local/report-details')
+    const props = reportFace(ctx, studioFetch)
+    expect(props.fetchImpl).toBe(ctx.get('delorunFaceGrant')?.fetch)
+    const loading = loadReportDetails(props.fetchImpl).catch((_refused: unknown) => undefined)
+    await waitFor(() => { expect(source.hooks.pending.getSnapshot()?.request.action).toBe('bundle-local/report-details') })
+    source.settle(undefined)
+    await loading
     await ctx.fiber.dispose()
   })
 
