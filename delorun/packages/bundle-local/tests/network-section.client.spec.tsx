@@ -140,7 +140,7 @@ describe('the Network section', () => {
     const off: WorkspaceNetwork = { access: 'off', hosts: [] }
     const host = fakeHost({
       [`GET ${NETWORK_ROUTES.list}`]: LIST,
-      [`POST ${NETWORK_ROUTES.set}`]: [{ status: 403, body: { error: 'ELEVATION_REQUIRED', message: 'Unlock first' } }, saved(off)],
+      [`POST ${NETWORK_ROUTES.set}`]: [{ status: 403, body: { error: 'ELEVATION_REQUIRED', message: 'Confirm first', action: 'delorunNetwork.set' } }, saved(off)],
     })
     renderSection(host)
     const alpha = await rowOf('Alpha')

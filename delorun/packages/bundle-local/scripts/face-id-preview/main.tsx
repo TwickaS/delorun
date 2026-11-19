@@ -19,6 +19,8 @@ import { PasskeyDevices } from '../../src/client/PasskeyDevices.tsx'
 import { fakeApi, fakeBrowser } from '../../src/client/face-id-fake.ts'
 import { DevicesSection, type DevicesSectionProps } from '../../src/client/DevicesSection.tsx'
 import { DEVICE_ROUTES, type HostFetch } from '../../src/client/devices-api.ts'
+import { PASSKEY_ROUTES } from '../../src/client/face-id-api.ts'
+import { FaceIdSection, type FaceIdSectionProps } from '../../src/client/FaceIdSection.tsx'
 import { en as devicesEn } from '../../src/client/devices-locales.ts'
 import { en } from '../../src/client/face-id-locales.ts'
 import type { FaceIdAction, PasskeyDevice } from '../../src/client/face-id-types.ts'
@@ -47,9 +49,15 @@ const COMPUTER_DEVICES: readonly PasskeyDevice[] = [
 ]
 const noop = (): void => undefined
 
-/** The home a phone's Devices section reads: reach ready, two approved devices; anything else needs the computer. */
-const PHONE_HOME: HostFetch = (input) => {
+/**
+ * The home a phone's Devices and Face ID sections read: reach ready, two approved devices and this phone's passkeys;
+ * anything else needs the computer.
+ * @param passkey - whether this phone holds a passkey.
+ * @returns the request function.
+ */
+const phoneHome = (passkey: boolean): HostFetch => (input) => {
   const answers: Readonly<Record<string, unknown>> = {
+    [PASSKEY_ROUTES.state]: { passkeys: passkey ? [PASSKEY] : [], ticket: false },
     [DEVICE_ROUTES.reachStatus]: { available: true, hasOwner: true, options: [{ option: 'tailscale-private', state: 'ready', address: 'https://home.example.ts.net' }] },
     // As the home answers a device: no addresses, approvers or first device, with this device's id and running unlocks.
     [DEVICE_ROUTES.devices]: {
@@ -72,17 +80,27 @@ const PHONE_HOME: HostFetch = (input) => {
 const devicesT = ((key: keyof typeof devicesEn, values?: Record<string, string>) =>
   devicesEn[key].replace(/\{(\w+)\}/g, (_match, name: string) => values?.[name] ?? '')) as DevicesSectionProps['t']
 
-/** The Devices section as a paired phone shows it. */
-function PhoneDevices(): ReactNode {
+/**
+ * Settings → Devices and Settings → Face ID as a paired phone on a home with no PIN shows them, one after the other as
+ * the settings page does.
+ * @param props - whether the phone holds a passkey.
+ * @returns the two sections.
+ */
+function PhoneDevices({ passkey }: { passkey: boolean }): ReactNode {
+  const fetch = phoneHome(passkey)
+  const faceId = {
+    t, fetch, close: noop, atComputer: () => false, browser: fakeBrowser(),
+    usePin: select => select({ phase: 'off', secret: 'pin' }),
+  } as FaceIdSectionProps
   const props: DevicesSectionProps = {
-    t: devicesT, fetch: PHONE_HOME, close: noop,
+    t: devicesT, fetch, close: noop,
     useUnlock: select => select({ place: 'device' }),
     usePairing: select => select({ place: 'remote', requests: [], view: undefined, open: undefined, quieted: [] }),
     usePairingForm: select => select({ status: 'ready', value: {}, base: undefined, user: undefined, revision: 1, writable: false }),
     usePairingMutation: select => select({ busy: false, failed: false }),
     startPairing: () => noop, setPairing: noop, openPairingCode: noop, declinePairing: noop,
   } as DevicesSectionProps
-  return <DevicesSection {...props} />
+  return <div style={{ display: 'grid', gap: 32 }}><DevicesSection {...props} /><FaceIdSection {...faceId} /></div>
 }
 
 /**
@@ -121,7 +139,9 @@ function screenOf(screen: string): ReactNode {
       return <PasskeyDevices t={t} api={fakeApi({ devices: COMPUTER_DEVICES })} browser={fakeBrowser()} kind="faceId" atComputer secret="pin" hasPasskey={false}
         onAdd={noop} onAskComputer={noop} />
     case 'devices-phone':
-      return <PhoneDevices />
+      return <PhoneDevices passkey />
+    case 'devices-phone-nokey':
+      return <PhoneDevices passkey={false} />
     default:
       return <p>Unknown screen {screen}</p>
   }
@@ -132,7 +152,7 @@ document.body.style.cssText = 'margin: 0; font-family: var(--dl-font-sans); back
 const query = new URLSearchParams(window.location.search)
 if (query.get('theme') === 'dark') document.body.dataset.dsDarkTheme = ''
 document.documentElement.style.colorScheme = query.get('theme') === 'dark' ? 'dark' : 'light'
-const wrap = query.get('screen')?.startsWith('b4') === true || query.get('screen') === 'code-entry' || query.get('screen') === 'devices-phone'
+const wrap = query.get('screen')?.startsWith('b4') === true || query.get('screen') === 'code-entry' || query.get('screen')?.startsWith('devices-phone') === true
 const screen = screenOf(query.get('screen') ?? '')
 const root = document.getElementById('root')
 if (root === null) throw new Error('no #root')

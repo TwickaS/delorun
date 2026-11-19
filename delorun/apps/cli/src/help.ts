@@ -180,7 +180,7 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     actions: [
       { name: 'list', text: 'The devices you trust.' },
       { name: 'approve', text: 'Approve a device that asked to sign in. Needs a terminal, and Delorun must be running.' },
-      { name: 'elevate', text: 'Let a trusted device do more for a short time. Needs a terminal.' },
+      { name: 'elevate', text: 'Answer a device\'s request for the older code unlock, which no longer admits any action: a device confirms each action with Face ID or its PIN. Needs a terminal.' },
       { name: 'remove <device id>', text: 'Stop trusting a device.' },
       { name: 'code', text: 'Show the code that signs in a new device.' },
       { name: 'pin set', text: 'Turn PIN mode on, or change the PIN or passcode. Asks with the characters hidden; --stdin reads one line instead.' },

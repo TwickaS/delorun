@@ -116,6 +116,9 @@ describe('the Devices section on a device', () => {
     expect(screen.getByText(DEVICE_B.label)).toBeTruthy()
     expect(screen.getByText(DEVICE_A.platform)).toBeTruthy()
     expect(screen.queryByRole('alert')).toBeNull()
+    // Adding a device is computer-only (E1): the phone reads where to do it and gets no button the home would refuse.
+    expect(screen.getByText(en['add.atComputer'])).toBeTruthy()
+    expect(screen.queryByRole('button', { name: en.add })).toBeNull()
   })
 })
 

@@ -2,7 +2,7 @@
 /**
  * The place store and the Devices section's unlock blocks: the store tells a device from the home's own computer, a
  * device's section offers no unlock and says each sensitive action asks for Face ID or the PIN, and the computer's
- * section lists the unlock requests it approves, declines and ends.
+ * section shows a waiting unlock request or a running unlock only to decline or end it, since an unlock admits nothing.
  *
  * Each denial-relevant test's comment names the change whose return makes it fail.
  */
@@ -16,7 +16,7 @@ import {
   type ElevationId, type ElevationRequestId,
 } from '../src/client/devices-api.ts'
 import { en } from '../src/client/devices-locales.ts'
-import { clockTime, DevicesSection, ELEVATE_COMMAND, type DevicesSectionProps } from '../src/client/DevicesSection.tsx'
+import { clockTime, DevicesSection, type DevicesSectionProps } from '../src/client/DevicesSection.tsx'
 import { applyUnlock } from '../src/client/index.ts'
 import { createUnlockSource, type UnlockSource, type UnlockView } from '../src/client/unlock.ts'
 import { AWAY, fakeHost, staticPairing, staticUnlock, type Answer } from './fake-host.ts'
@@ -183,19 +183,35 @@ describe('the Devices section\'s unlock', () => {
     expect(screen.queryByRole('button', { name: 'Show the code' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Lock now' })).toBeNull()
     expect(screen.queryByText(en['unlock.requests.title'])).toBeNull()
-    expect(screen.queryByText(ELEVATE_COMMAND)).toBeNull()
+    expect(screen.queryByText(en['unlock.requests.inert'])).toBeNull()
     expect(host.count(`GET ${ELEVATION_ROUTES.pending}`)).toBe(0)
   })
 
-  it('at the computer, shows the unlock requests and not the Face ID line', async () => {
+  it('while the page\'s place is unknown, never reads or shows the unlock requests', async () => {
+    // Only a page known to be away from any device reads the computer's list; an unknown place may be a phone whose first read failed.
+    const host = computerHost({ pending: [], running: [] })
+    renderSection(host, { place: 'unknown' })
+    await settle()
+    expect(screen.queryByText(en['unlock.requests.title'])).toBeNull()
+    expect(host.count(`GET ${ELEVATION_ROUTES.pending}`)).toBe(0)
+  })
+
+  it('at the computer, shows nothing for no request and says plainly what a waiting request is worth', async () => {
+    // An unlock admits nothing (A483): the computer offers no approval, and an empty block is not shown at all.
     const host = computerHost({ pending: [], running: [] })
     renderSection(host)
     await settle()
-    expect(screen.getByText(en['unlock.requests.title'])).toBeTruthy()
+    expect(screen.queryByText(en['unlock.requests.title'])).toBeNull()
     expect(screen.queryByText(en['unlock.section.faceId'])).toBeNull()
+    host.script[`GET ${ELEVATION_ROUTES.pending}`] = ok({ pending: [{ requestId: 'request-1', deviceId: DEVICE.id, requestedAt: NOW, expiresAt: NOW + 300_000 }], running: [] })
+    await settle(ELEVATION_POLL_MS)
+    expect(screen.getByText(en['unlock.requests.title'])).toBeTruthy()
+    expect(screen.getByText(en['unlock.requests.inert'])).toBeTruthy()
+    expect(screen.queryByRole('textbox')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull()
   })
 
-  it('at the computer, approves a request with the typed code, declines one and ends a running unlock', async () => {
+  it('at the computer, declines a request and ends a running unlock, and offers no approval', async () => {
     const host = computerHost({
       pending: [
         { requestId: 'request-1', deviceId: DEVICE.id, requestedAt: NOW - 10_000, expiresAt: NOW + 290_000 },
@@ -208,12 +224,8 @@ describe('the Devices section\'s unlock', () => {
     const first = document.querySelector('[data-elevation-request-id="request-1"]') as HTMLElement
     expect(within(first).getByText('Pixel 9')).toBeTruthy()
     expect(within(document.querySelector('[data-elevation-request-id="request-2"]') as HTMLElement).getByText(en['unlock.removedDevice'])).toBeTruthy()
-    const approve = within(first).getByRole('button', { name: en['unlock.requests.approve'] }) as HTMLButtonElement
-    expect(approve.disabled).toBe(true)
-    fireEvent.change(within(first).getByRole('textbox', { name: t('unlock.requests.code', { label: 'Pixel 9' }) }), { target: { value: '1234 5678' } })
-    fireEvent.click(approve)
-    await settle()
-    expect(host.received.find(request => request.key === `POST ${ELEVATION_ROUTES.approve}`)?.body).toEqual({ requestId: 'request-1', typedCode: CODE })
+    expect(within(first).queryByRole('textbox')).toBeNull()
+    expect(within(first).getAllByRole('button').map(button => button.textContent)).toEqual([en['unlock.requests.decline']])
     fireEvent.click(within(document.querySelector('[data-elevation-request-id="request-2"]') as HTMLElement).getByRole('button', { name: en['unlock.requests.decline'] }))
     await settle()
     const running = document.querySelector('[data-elevation-id="elevation-1"]') as HTMLElement
@@ -221,20 +233,14 @@ describe('the Devices section\'s unlock', () => {
     fireEvent.click(within(running).getByRole('button', { name: en['unlock.running.end'] }))
     await settle()
     expect(host.received.filter(request => request.key === `POST ${ELEVATION_ROUTES.revoke}`).map(request => request.body)).toEqual([{ id: 'request-2' }, { id: 'elevation-1' }])
-    expect(screen.getAllByText(ELEVATE_COMMAND).length).toBeGreaterThan(0)
+    expect(host.count(`POST ${ELEVATION_ROUTES.approve}`)).toBe(0)
   })
 
-  it('at the computer, says a wrong code in place, keeps reading the list, and hides it without the routes', async () => {
+  it('at the computer, says a failed decline or end in place, keeps reading the list, and hides it without the routes', async () => {
     const host = computerHost({ pending: [{ requestId: 'request-1', deviceId: DEVICE.id, requestedAt: NOW, expiresAt: NOW + 300_000 }], running: [] })
-    host.script[`POST ${ELEVATION_ROUTES.approve}`] = refusal(403, 'APPROVAL_CODE_MISMATCH')
     host.script[`POST ${ELEVATION_ROUTES.revoke}`] = 'unreachable'
     renderSection(host)
     await settle()
-    const row = document.querySelector('[data-elevation-request-id="request-1"]') as HTMLElement
-    fireEvent.change(within(row).getByRole('textbox'), { target: { value: '87654321' } })
-    fireEvent.click(within(row).getByRole('button', { name: en['unlock.requests.approve'] }))
-    await settle()
-    expect(within(document.querySelector('[data-elevation-request-id="request-1"]') as HTMLElement).getByRole('alert').textContent).toBe('APPROVAL_CODE_MISMATCH sentence')
     fireEvent.click(within(document.querySelector('[data-elevation-request-id="request-1"]') as HTMLElement).getByRole('button', { name: en['unlock.requests.decline'] }))
     await settle()
     expect(screen.getByRole('alert').textContent).toBe(en['failed.unreachable'])
@@ -248,7 +254,7 @@ describe('the Devices section\'s unlock', () => {
     expect(screen.getByRole('alert').textContent).toBe(t('loopback', { action: en['action.unlockRevoke'] }))
     host.script[`GET ${ELEVATION_ROUTES.pending}`] = ok({ pending: [], running: [] })
     await settle(ELEVATION_POLL_MS)
-    expect(screen.getByText(en['unlock.requests.none'])).toBeTruthy()
+    expect(screen.queryByText(en['unlock.requests.title'])).toBeNull()
     host.script[`GET ${ELEVATION_ROUTES.pending}`] = 'unreachable'
     await settle(ELEVATION_POLL_MS)
     expect(screen.getByRole('alert').textContent).toBe(en['failed.unreachable'])

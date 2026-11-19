@@ -24,8 +24,10 @@ describe('gateOf', () => {
   })
 
   // Returning an `unlock` kind for a refusal that names no action brings back the Unlock prompt.
-  it('stands for Face ID for an ELEVATION_REQUIRED refusal that names no grant action', () => {
-    expect(gateOf(refused(ELEVATION_REQUIRED))).toEqual({ kind: 'face' })
+  it('leaves an ELEVATION_REQUIRED refusal that names no grant action to its own sentence', () => {
+    // No grant lifts such a refusal (an oversized body, the gate before the grant store), so "Try again" would only fail again.
+    expect(gateOf(refused(ELEVATION_REQUIRED))).toBeUndefined()
+    expect(gateOf(refused(ELEVATION_REQUIRED, { action: '' }))).toBeUndefined()
   })
 })
 
@@ -56,11 +58,17 @@ describe('GateNotice', () => {
 
 describe('GateFailure', () => {
   // Returning the `unlock` gate (its Unlock button and "Unlock this device" sentence) fails this.
-  it('shows no Unlock button for a refusal that names no grant action', () => {
-    render(<GateFailure t={t} error={refused(ELEVATION_REQUIRED)} text="the Host's sentence" />)
+  it('shows no Unlock button for a Face ID refusal', () => {
+    render(<GateFailure t={t} error={refused(ELEVATION_REQUIRED, { action: 'settings/update' })} text="the Host's sentence" />)
     expect(screen.queryByRole('button')).toBeNull()
     expect(screen.getByText(gateEn['gate.face'])).toBeTruthy()
     expect(screen.queryByText(/unlock/i)).toBeNull()
+  })
+
+  it('shows a refusal no grant lifts with its own sentence, not "Try again"', () => {
+    render(<GateFailure t={t} error={refused(ELEVATION_REQUIRED)} text="This request is too large to confirm" />)
+    expect(screen.getByRole('alert').textContent).toBe('This request is too large to confirm')
+    expect(screen.queryByText(gateEn['gate.face'])).toBeNull()
   })
 
   it('shows another failure as an alert with its own sentence', () => {

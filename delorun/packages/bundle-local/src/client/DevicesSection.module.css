@@ -126,4 +126,15 @@
     align-items: stretch;
     gap: 12px;
   }
+
+  .actions > * {
+    flex: 1 1 auto;
+  }
+}
+
+/* A touch target of 44 px for every button of the section. */
+@media (pointer: coarse) {
+  .section button {
+    min-height: 44px;
+  }
 }

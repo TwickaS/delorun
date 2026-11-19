@@ -15,13 +15,18 @@ export type Gate = { readonly kind: 'face' } | { readonly kind: 'computer' }
 /**
  * The state a caught error stands for.
  * @param error - the caught error.
- * @returns `face` for any {@link ELEVATION_REQUIRED} refusal, `computer` for a `LOOPBACK_REQUIRED` one, and undefined
- *   for any other failure, which the caller reports as it did before.
+ * @returns `face` for an {@link ELEVATION_REQUIRED} refusal that names the grant `action` the Face ID step asks for,
+ *   `computer` for a `LOOPBACK_REQUIRED` one, and undefined for any other failure, which the caller reports with the
+ *   failure's own sentence: an {@link ELEVATION_REQUIRED} that names no action, such as a body too large to confirm, is
+ *   one no grant lifts, so trying again would only fail again.
  */
 export function gateOf(error: unknown): Gate | undefined {
   const failure = hostFailureOf(error)
   if (failure.kind !== 'refused') return undefined
-  if (failure.code === ELEVATION_REQUIRED) return { kind: 'face' }
+  if (failure.code === ELEVATION_REQUIRED) {
+    const action = failure.fields?.['action']
+    return typeof action === 'string' && action !== '' ? { kind: 'face' } : undefined
+  }
   if (failure.code === LOOPBACK_REQUIRED) return { kind: 'computer' }
   return undefined
 }

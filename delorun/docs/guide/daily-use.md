@@ -101,7 +101,7 @@ With setup's default **Ask me first**, Delorun asks you once for each workspace 
 - If you choose **Ask less (like DeepSeek Harness)** in `delorun setup prompts`, then a workspace switches to full access without asking each time, as DeepSeek Harness does, after the studio's own confirmation.
 - If a chat was copied from DeepSeek Harness or another home and ran with full access there, then it opens on Workspace Write. Turn full access on for its workspace again.
 - If you pick a folder that Delorun refuses as a workspace, then it names the reason. Refused folders are the filesystem root, your home folder itself, your Delorun home, DeepSeek Harness's home, and a folder that contains either.
-- If you use the studio from a phone, then it cannot grant full access ([Reach the studio from your phone](reach.md)).
+- If you use the studio from a phone, then granting full access asks for Face ID or your PIN each time ([Reach the studio from your phone](reach.md)).
 - If you want full access off again, then use Revoke in Settings → Safety → Permissions, pick Workspace Write in a chat, or run `delorun workspace full-access <folder> off`.
 
 </details>

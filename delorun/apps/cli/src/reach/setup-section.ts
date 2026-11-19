@@ -39,7 +39,7 @@ export function reachSection(tailscale: TailscaleRunner, running: (home: string,
     asks: () => true,
     appliesTo: () => true,
     async ask(io, draft, environment) {
-      io.note('Needs Tailscale installed and signed in. Delorun turns on a private https address; a device you approve here with a code can read and reply to chats, and can never grant full access or change settings.\nChange later: delorun setup reach, or delorun reach off.', 'Phone and other devices')
+      io.note('Needs Tailscale installed and signed in. Delorun turns on a private https address; a device you approve here with a code can read and reply to chats, and asks for Face ID or its PIN for each sensitive action, such as granting full access or changing settings.\nChange later: delorun setup reach, or delorun reach off.', 'Phone and other devices')
       const on = await io.confirm('Open Delorun from your phone or another device over Tailscale?', draft.answers.reach.option === 'tailscale-private' || (draft.answers.useCase === 'remote' && draft.phase !== 'single' && !environment.profileExists))
       if (on === BACK) return BACK
       if (!on) return { answers: { reach: { option: 'none', identityFactor: null } }, status: 'answered' }

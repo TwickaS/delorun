@@ -203,8 +203,8 @@ describe('the Setup versions section', () => {
   it('says each save or switch asks for Face ID or the PIN, without an Unlock button, and keeps the version list', async () => {
     renderSection(fakeHost({
       [LIST]: listing([entry('a', { current: true }), entry('b')]),
-      [SWITCH]: refusal(403, 'ELEVATION_REQUIRED'),
-      [SAVE]: refusal(403, 'ELEVATION_REQUIRED'),
+      [SWITCH]: { status: 403, body: { error: 'ELEVATION_REQUIRED', message: 'Confirm first', action: 'profile-versions/switch' } },
+      [SAVE]: { status: 403, body: { error: 'ELEVATION_REQUIRED', message: 'Confirm first', action: 'profile-versions/save' } },
     }), false)
     fireEvent.click(await screen.findByRole('button', { name: en['switch.action'] }))
     expect(await screen.findByText(en['gate.face'])).toBeTruthy()

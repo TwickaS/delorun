@@ -10,7 +10,7 @@ description: "在此人自己的 tailnet 上远程访问的设计：只在 home 
 
 ## 摘要
 
-reach 让一个人通过自己的 Tailscale tailnet，从自己的手机或笔记本电脑打开自己的 studio，路径上没有任何 Delorun 的服务。新设备只能在 home 所在的电脑上、在此人于那里打开的一个简短的批准窗口期间获得批准。已批准的设备用它的设备密钥登录。远程会话可以观看、回复、开始 chat、批准普通提示并停止运行；它不能授予完全访问、批准或移除设备，也不能更改 reach 或保护。这些要等到此人在电脑旁才行，并且是 home 拒绝它们，而不是远程页面。准入规则见[约定 C4](../contracts/c04-admission.zh.md)，设备批准见[约定 C5](../contracts/c05-device-approval.zh.md)，reach 提供方见[约定 C7](../contracts/c07-reach-providers.zh.md)，身份因子见[约定 C14](../contracts/c14-oidc-passkeys.zh.md)。
+Reach lets a person open their studio from their own phone or laptop over their own Tailscale tailnet, with no Delorun service in the path. A new device is approved only at the home's computer, during a short approval window the person opens there. An approved device signs in with its device key. A remote session can watch, reply, start chats, approve ordinary prompts and stop a run. Each sensitive action, granting full access and removing another device among them, takes Face ID or that device's PIN, once per action. Approving a device and changing reach wait until the person is at the computer. The home enforces both, not the remote page. The admission rules are [contract C4](../contracts/c04-admission.zh.md), device approval [contract C5](../contracts/c05-device-approval.zh.md), the reach providers [contract C7](../contracts/c07-reach-providers.zh.md) and the identity factors [contract C14](../contracts/c14-oidc-passkeys.zh.md).
 
 ## 目录
 
