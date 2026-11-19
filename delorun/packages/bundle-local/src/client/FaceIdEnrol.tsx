@@ -10,6 +10,7 @@ import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PasskeyBrowser } from './face-id-browser.ts'
 import type { FaceIdKind, PasskeyApi, PendingAdd } from './face-id-types.ts'
+import { DelorunBrandMark } from './brand.tsx'
 import css from './FaceId.module.css'
 
 type Translate = PropsLocale<'delorunFaceId'>['t']
@@ -71,6 +72,7 @@ export function FaceIdPairingStep({ t, kind, api, browser, onDone, onSkip }: Fac
     <p className={css.warn}>{t('pair.protection')}</p>
     {failures === 1 ? <p className={css.status} role="alert">{t('pair.failed', { method })}</p> : null}
     {gaveUp ? <p className={css.status} role="alert">{t('pair.later')}</p> : null}
+    <div className={css.glyph} aria-hidden="true"><DelorunBrandMark size={96} /></div>
     {gaveUp
       ? <Button variant="primary" type="button" className={css.confirm} onClick={onSkip}>{t('pair.continue')}</Button>
       : <Button variant="primary" type="button" className={css.confirm} disabled={busy} onClick={() => { void setUp() }}>
@@ -158,6 +160,7 @@ export function AddFaceId({ t, kind, api, browser, onDone, onCancel }: AddFaceId
         <p className={css.body}>{t(state.kind === 'ready' ? 'add.ready' : 'add.body', { method })}</p>
         <p className={css.warn}>{t('pair.protection')}</p>
         {state.kind === 'failed' ? <p className={css.status} role="alert">{t('add.failed')}</p> : null}
+        <div className={css.glyph} aria-hidden="true"><DelorunBrandMark size={96} /></div>
         <Button variant="primary" type="button" className={css.confirm} disabled={state.kind === 'busy'}
           onClick={() => { void (state.kind === 'ready' ? create() : showCode()) }}>
           {t(state.kind === 'busy' ? 'pair.waiting' : state.kind === 'ready' ? 'add.start' : 'add.showCode', { method })}

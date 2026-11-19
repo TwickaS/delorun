@@ -10,6 +10,7 @@ import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PasskeyBrowser } from './face-id-browser.ts'
 import type { FaceIdAction, FaceIdKind, PasskeyApi } from './face-id-types.ts'
+import { DelorunBrandMark } from './brand.tsx'
 import css from './FaceId.module.css'
 
 /** The most items of a batch the sheet lists before it counts the rest. */
@@ -100,6 +101,7 @@ export function FaceIdSheet({ t, action, kind, api, browser, hasPasskey, fallbac
         {listed.map(item => <li key={item}>{item}</li>)}
         {rest > 0 ? <li>{t('sheet.more', { count: String(rest) })}</li> : null}
       </ul>}
+      <div className={css.glyph} aria-hidden="true"><DelorunBrandMark size={96} /></div>
       {status === undefined ? null : <p className={css.status} role="status">{status}</p>}
       {usable
         ? <Button ref={confirmRef} variant="primary" type="button" className={css.confirm} disabled={phase === 'waiting'}

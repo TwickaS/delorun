@@ -5,7 +5,7 @@
   z-index: 100;
   inset: 0;
   display: flex;
-  align-items: flex-end;
+  align-items: stretch;
   justify-content: center;
   background: color-mix(in srgb, var(--dsw-alias-bg-layer-1) 55%, transparent);
   backdrop-filter: blur(2px);
@@ -22,11 +22,11 @@
   box-sizing: border-box;
   display: flex;
   width: 100%;
+  min-height: 100dvh;
   flex-direction: column;
   gap: 12px;
-  padding: 20px 16px calc(env(safe-area-inset-bottom, 0px) + 16px);
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--dsw-radius-lg) var(--dsw-radius-lg) 0 0;
+  padding: calc(env(safe-area-inset-top, 0px) + 24px) 16px calc(env(safe-area-inset-bottom, 0px) + 16px);
+  overflow-y: auto;
   background: var(--dsw-alias-bg-layer-2, var(--dsw-alias-bg-layer-1));
   color: var(--dsw-alias-label-primary);
   animation: rise 200ms ease-out;
@@ -36,6 +36,8 @@
   .sheet {
     width: 480px;
     min-height: 0;
+    max-height: 90dvh;
+    border: 0.5px solid var(--dsw-alias-border-l2);
     padding: 28px;
     border-radius: var(--dsw-radius-lg);
   }
@@ -81,10 +83,23 @@
   line-height: 22px;
 }
 
-/* The main control takes the free height on a phone, so the sheet has no empty band above or below it. */
+/* The glyph takes the free height on a phone, so the screen has no empty band; the dialog and card on a wide screen drop it. */
+.glyph {
+  display: flex;
+  min-height: 96px;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  color: var(--dsw-alias-state-business-primary);
+}
+
+@media (min-width: 480px) {
+  .glyph { display: none; }
+}
+
 .confirm {
   width: 100%;
-  min-height: 80px;
+  min-height: 88px;
   flex: 0 0 auto;
   font-size: 18px;
 }
