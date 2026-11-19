@@ -116,7 +116,7 @@ describe('FaceIdSheet', () => {
     const onOpenDevices = vi.fn()
     sheet({ hasPasskey: false, onOpenDevices })
     expect(screen.queryByRole('button', { name: 'Confirm with Face ID' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Open Devices' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open Face ID settings' }))
     expect(onOpenDevices).toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'Use PIN instead' })).toBeTruthy()
     cleanup()

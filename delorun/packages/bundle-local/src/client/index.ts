@@ -83,6 +83,7 @@ import { createPinSource, type PinSource } from './pin-lock.ts'
 import { en as pinEn, zh as pinZh, type PinLocaleKey } from './pin-locales.ts'
 import { en as faceIdEn, zh as faceIdZh, type FaceIdLocaleKey } from './face-id-locales.ts'
 import { PinLock } from './PinLock.tsx'
+import { FaceIdSection, type FaceIdSectionInjected } from './FaceIdSection.tsx'
 import { en as pinModeEn, zh as pinModeZh, type PinModeLocaleKey } from './pin-mode-locales.ts'
 import { PinModeSection, type PinModeSectionInjected } from './PinModeSection.tsx'
 import { attachPinTriggers } from './pin-triggers.ts'
@@ -227,6 +228,12 @@ export const PIN_NS = 'delorunPin'
 
 /** Dictionary namespace of the Face ID screens. */
 export const FACE_ID_NS = 'delorunFaceId'
+
+/** The `settings.section` id of the Face ID section, which sits just after PIN mode. */
+export const FACE_ID_SECTION_ID = 'delorun-face-id'
+
+/** Where the Face ID section sits among the settings sections. */
+export const FACE_ID_SECTION_ORDER = 21.6
 
 /** Dictionary namespace of the PIN mode settings section. */
 export const PIN_MODE_NS = 'delorunPinMode'
@@ -549,6 +556,16 @@ export function apply(ctx: Context): void {
     locale: PIN_MODE_NS,
     inject: pinModeFace,
   }, PinModeSection))
+  const faceIdT = ctx.locale.bind(FACE_ID_NS)
+  const faceIdFace = (): FaceIdSectionInjected => ({ fetch: browserFetch, atComputer: () => (ctx.get('connection') as ConnectionHandle).isLoopback, hooks: pin.hooks })
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: FACE_ID_SECTION_ID,
+    order: FACE_ID_SECTION_ORDER,
+    label: () => faceIdT('nav'),
+    locale: FACE_ID_NS,
+    inject: faceIdFace,
+  }, FaceIdSection))
   ctx.effect(() => ctx.locale.register(NETWORK_NS, { en: networkEn, zh: networkZh }), 'delorun-network: section dictionaries')
   const networkT = ctx.locale.bind(NETWORK_NS)
   const networkFace = (): NetworkSectionInjected => ({ fetch: browserFetch })
