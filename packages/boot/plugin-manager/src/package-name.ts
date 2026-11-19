@@ -20,7 +20,11 @@ export function specPackageName(spec: string, dependencies: Readonly<Record<stri
   return Object.entries(dependencies).find(([dependency, saved]) => specs.includes(dependencySpec(dependency, saved, profileDir)))?.[0]
 }
 
-/** The package name a local directory declares, or `undefined` without a readable manifest. */
+/**
+ * The package name a local directory declares.
+ * @param dir The local package directory.
+ * @returns The manifest name, or `undefined` without a readable manifest.
+ */
 export function packageName(dir: string): string | undefined {
   try {
     return readProfileManifest('dsh', dir).name
@@ -30,7 +34,11 @@ export function packageName(dir: string): string | undefined {
   }
 }
 
-/** The spec's form, for deciding whether a failed attempt was the registry's; a form the parser refuses has no host of its own. */
+/**
+ * The spec's form, for deciding whether a failed attempt was the registry's; a form the parser refuses has no host of its own.
+ * @param spec The installation spec.
+ * @returns The parsed spec, or a registry spec named by the raw text when the parser refuses it.
+ */
 export function parsedForRegistry(spec: string): ParsedInstallSpec {
   try {
     return parseInstallSpec(spec)

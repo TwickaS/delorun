@@ -2892,7 +2892,7 @@
       "path": "packages/boot/plugin-manager/src/package-name.ts",
       "class": "security",
       "reason": "Install-spec parsing for profile history and audits (`specPackageName`, `packageName`, `parsedForRegistry`): it names the package an install, undo or restore audits. Holds helpers moved out of the plugin entry module so the entry exports only the plugin (verify-plugin-entry-exports, L69); the code is unchanged. Lead verdict (2026-11-17): review4 checks the move.",
-      "sha256": "35177da979c0bfe0252dbd4d2f443cadf851cd7e3f94f2ed4c7e9b58459cf40d"
+      "sha256": "506e4199745b93b6e6e0cae9cb45b0736864b8a1b2108772a7b255080c2ab9f2"
     },
     {
       "path": "packages/experimental/browser-use-playwright-mcp/src/admission.ts",
