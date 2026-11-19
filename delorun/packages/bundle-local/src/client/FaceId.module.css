@@ -127,12 +127,24 @@
 }
 
 @media (min-width: 480px) {
-  .page { min-height: 0; max-width: 34rem; margin: 0 auto; padding: 28px; }
+  .page {
+    min-height: 0;
+    max-width: 34rem;
+    margin: 48px auto;
+    padding: 28px;
+    border: 0.5px solid var(--dsw-alias-border-l2);
+    border-radius: var(--dsw-radius-lg);
+  }
 }
 
 .digits {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
   margin: 0;
-  font-size: 44px;
+  font-family: var(--dl-font-mono);
+  font-size: clamp(36px, 11vw, 56px);
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   letter-spacing: 0.18em;
@@ -164,6 +176,7 @@
 .warn {
   margin: 0;
   padding: 12px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: var(--dsw-radius-md);
   background: var(--dsw-alias-bg-layer-2, var(--dsw-alias-bg-layer-1));
   color: var(--dsw-alias-label-secondary);
@@ -172,6 +185,12 @@
 }
 
 /* Settings → Devices: one card per device on a phone, two columns on desktop. */
+[data-face-id-devices] {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .devices {
   display: grid;
   grid-template-columns: 1fr;
@@ -238,6 +257,16 @@
   gap: 2px;
   padding-top: 8px;
   border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.passkey .action {
+  margin-top: 6px;
+}
+
+/* The computer's code entry is one card, as wide as the pairing page rather than the whole settings pane. */
+[data-face-id-code-entry] {
+  width: 100%;
+  max-width: 34rem;
 }
 
 .action {
