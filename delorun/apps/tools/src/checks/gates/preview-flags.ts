@@ -36,9 +36,11 @@ const DEFINING_PACKAGE = '@delorun/preview-flags'
 
 /**
  * The Host sources that may read a flag, by path relative to `delorun/packages`, each with the reason its read cannot
- * reach a model request. None reads one today.
+ * reach a model request.
  */
-export const HOST_READERS: Readonly<Record<string, string>> = {}
+export const HOST_READERS: Readonly<Record<string, string>> = {
+  'home-auth/src/service.ts': 'it decides whether a device\'s confirmed actions mint and use grants (authentication of device calls); no prompt, tool, tool result or model request field depends on it',
+}
 
 const manifestFields = z.looseObject({
   name: z.string(),
