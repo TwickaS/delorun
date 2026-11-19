@@ -40,11 +40,14 @@ function folders(): { home: string, workspace: string, other: string } {
  */
 /** Chats whose delegation pin a review lifted by appending `approval/policy: ask`. */
 const lifted = new Set<string>()
+/** The `approval/policy` events the reviews appended. */
+const appended: Array<{ id: string, policy: string | undefined, source: string | undefined }> = []
 
 function chat(id: string, cwd: string | undefined, parent?: string): Agent {
   const header = parent === undefined ? { cwd } : { cwd, origin: 'subagent', parentSession: SessionId(parent) }
-  const append = (type: string, data: { policy?: string }): void => {
+  const append = (type: string, data: { policy?: string, source?: string }): void => {
     if (type !== 'approval/policy') return
+    appended.push({ id, policy: data.policy, source: data.source })
     if (data.policy === 'ask') lifted.add(id)
     else lifted.delete(id)
   }
@@ -80,6 +83,7 @@ interface World {
  */
 async function world(mount?: { fullAccessStartsAgents?: boolean }): Promise<World> {
   lifted.clear()
+  appended.length = 0
   const paths = folders()
   const ctx = new Context()
   const state = {
@@ -310,6 +314,43 @@ describe('a seat review at hand-off', () => {
     expect(verdict.kind).toBe('refuse')
     expect(w.asks).toEqual([])
     expect(lifted.has('seat')).toBe(false)
+  })
+
+  it('keeps the delegation source on the lift, so a Host that stops before the answer still reads the chat as pinned', async () => {
+    const w = await world()
+    w.openTurns.clear()
+    w.openTurns.add('seat')
+    w.policies.set('seat', 'never')
+    await w.consent.reviewSeat({ ...seat(w, 'hand-off'), pinned: true })
+    expect(appended).toEqual([{ id: 'seat', policy: 'ask', source: 'delegation' }])
+  })
+
+  it('puts the pin back when the card throws', async () => {
+    const w = await world()
+    w.openTurns.clear()
+    w.openTurns.add('seat')
+    w.policies.set('seat', 'never')
+    ;(w.ctx.get('approval') as { request: unknown }).request = () => Promise.reject(new Error('no open turn'))
+    await expect(w.consent.reviewSeat({ ...seat(w, 'hand-off'), pinned: true })).rejects.toThrow('no open turn')
+    expect(appended.at(-1)).toEqual({ id: 'seat', policy: 'never', source: 'delegation' })
+    expect(lifted.has('seat')).toBe(false)
+  })
+
+  it('leaves a never the person set while the card was open', async () => {
+    const w = await world()
+    w.openTurns.clear()
+    w.openTurns.add('seat')
+    w.policies.set('seat', 'never')
+    w.answer = 'rejected'
+    const approval = w.ctx.get('approval') as { request: (r: ApprovalRequest) => Promise<ApprovalOutcome> }
+    const ask = approval.request
+    approval.request = async (r) => {
+      const outcome = await ask(r)
+      lifted.delete('seat')
+      return outcome
+    }
+    await w.consent.reviewSeat({ ...seat(w, 'hand-off'), pinned: true })
+    expect(appended.filter(event => event.policy === 'never')).toEqual([])
   })
 
   it.for(['rejected', 'cancelled'] as const)('puts the pin back when the start card is %s', async (answer) => {

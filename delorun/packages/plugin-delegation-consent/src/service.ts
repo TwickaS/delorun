@@ -36,7 +36,7 @@ import { sep } from 'node:path'
 import { Service, type Context } from '@deepseek-ai/cordis'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import type { SandboxPolicyService } from '@deepseek-ai/dsh-sandbox-policy'
-import { setApprovalPolicy, type ApprovalService } from '@deepseek-ai/dsh-user-approval'
+import type { ApprovalService } from '@deepseek-ai/dsh-user-approval'
 import { CLAUDE_SANDBOX_INSTALL_COMMAND } from '@deepseek-ai/dsh-subagent'
 import type {
   DelegationConsentService, ExternalDelegationReview, ExternalDelegationVerdict, SubagentSafetyLevel,
@@ -316,14 +316,32 @@ export class DelorunDelegationConsent extends Service implements DelegationConse
     let lifted = false
     if (asked === child && (approval.overrideOf(child.session) ?? approval.config.policy) === 'never') {
       if (review.pinned !== true) return { kind: 'refuse', reason: notApprovedRefusal(provider, 'never', rules.workspace) }
-      setApprovalPolicy(child.session, 'ask')
+      // The lift keeps `source: 'delegation'`, so a Host that stops before the answer still reads the chat as pinned and the
+      // next start lifts and asks again.
+      child.session.append('approval/policy', { policy: 'ask', source: 'delegation' })
       lifted = true
     }
-    const outcome = await this.ask(asked, { provider, workspace: rules.workspace, cwd: rules.cwd, label: review.label, signal: review.signal })
+    let outcome: 'allowed-once' | NotApprovedOutcome
+    try {
+      outcome = await this.ask(asked, { provider, workspace: rules.workspace, cwd: rules.cwd, label: review.label, signal: review.signal })
+    } catch (error: unknown) {
+      this.putPinBack(child, lifted, approval)
+      throw error
+    }
     if (outcome === 'allowed-once') return record('asked')
-    // A card the person did not accept leaves the child as it was: the pin is put back.
-    if (lifted) child.session.append('approval/policy', { policy: 'never', source: 'delegation' })
+    this.putPinBack(child, lifted, approval)
     return { kind: 'refuse', reason: notApprovedRefusal(provider, outcome, rules.workspace) }
+  }
+
+  /**
+   * Put the delegation pin back on a seat child after a start card that was not accepted. A policy the person set while the
+   * card was open (anything but the lifted `ask`) stays theirs.
+   * @param child - the seat child.
+   * @param lifted - whether this review lifted the pin.
+   * @param approval - the approval service.
+   */
+  private putPinBack(child: Agent, lifted: boolean, approval: ApprovalService): void {
+    if (lifted && approval.overrideOf(child.session) === 'ask') child.session.append('approval/policy', { policy: 'never', source: 'delegation' })
   }
 
   /**
