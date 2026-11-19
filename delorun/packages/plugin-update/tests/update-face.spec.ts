@@ -29,6 +29,19 @@ describe('update routes under Face ID', () => {
     expect(update.channel.requests).toEqual([])
   })
 
+  it('update-begin and update-rollback refuse a passkey device with a valid grant while Phone powers is Careful', async () => {
+    // Pins F11: the Careful refusal comes before the grant lookup until Phone powers is removed.
+    const w = world()
+    const update = await serveUpdate({ powers: 'careful', face: w.face })
+    for (const [path, control] of [[UPDATE_PATHS.prepare, 'update-begin'], [UPDATE_PATHS.rollback, 'update-rollback']] as const) {
+      const grant = w.grantFor(path, { chats: 'wait' }, control)
+      const base = fromDevice('fresh', { chats: 'wait' })
+      const reply = await send(update.server.port, path, { ...base, headers: [...base.headers ?? [], `Delorun-Grant: ${grant}`] })
+      expect(json(reply), path).toMatchObject({ code: 'LOOPBACK_REQUIRED' })
+    }
+    expect(update.channel.requests).toEqual([])
+  })
+
   it('stop takes a grant for its body and refuses a grant made for another body', async () => {
     const w = world()
     const update = await serveUpdate({ face: w.face })

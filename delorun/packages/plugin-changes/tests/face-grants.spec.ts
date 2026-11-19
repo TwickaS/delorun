@@ -64,11 +64,22 @@ describe('Changes: face controls', () => {
     }
   })
 
+  it('refuse a Full-set control under Careful even with a valid grant, for a passkey device', async () => {
+    // Pins F11: until Phone powers is removed the Careful refusal comes before the grant lookup, so a grant cannot lift it.
+    const { ctx } = routeHome()
+    const world = faceWorld()
+    const server = await serveRoutes(ctx, { powers: 'careful', face: world.face })
+    for (const { control, path } of [{ control: 'plugin-apply', path: ACTION_PATHS.apply }, { control: 'harness-apply', path: HARNESS_PATHS.apply }]) {
+      const grant = world.grantFor(control, path, { id: 'a' })
+      expect(json(await send(server.port, path, withGrant('fresh', { id: 'a' }, grant))).code, control).toBe('LOOPBACK_REQUIRED')
+    }
+  })
+
   it('admit exactly the call a grant was made for, once', async () => {
     // Pins the body hash and the single use: a grant for body A must not admit body B, and a replay is refused.
     const { ctx } = routeHome()
     const world = faceWorld()
-    const server = await serveRoutes(ctx, { powers: 'careful', face: world.face })
+    const server = await serveRoutes(ctx, { powers: 'full', face: world.face })
     const path = ACTION_PATHS.apply
     const grant = world.grantFor('plugin-apply', path, { id: 'a' })
     const other = await send(server.port, path, withGrant('none', { id: 'b' }, grant))
@@ -82,7 +93,7 @@ describe('Changes: face controls', () => {
   it('refuse a grant for another control or path, and a body with no header naming the grant', async () => {
     const { ctx } = routeHome()
     const world = faceWorld()
-    const server = await serveRoutes(ctx, { powers: 'careful', face: world.face })
+    const server = await serveRoutes(ctx, { powers: 'full', face: world.face })
     const grant = world.grantFor('plugin-apply', ACTION_PATHS.apply, { id: 'a' })
     expect(json(await send(server.port, ACTION_PATHS.undo, withGrant('none', { id: 'a' }, grant))).code).toBe('ELEVATION_REQUIRED')
     expect(json(await send(server.port, ACTION_PATHS.apply, withGrant('none', { id: 'a' }, undefined))).code).toBe('ELEVATION_REQUIRED')

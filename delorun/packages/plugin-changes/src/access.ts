@@ -77,8 +77,9 @@ export function mayUse(actor: ActorView, powers: PhonePowersView['level'], contr
   const level = CONTROL_LEVELS[control]
   if (level === 'free') return { ok: true }
   if (level === 'computer') return { ok: false, needs: 'computer' }
-  if (faceReady) return { ok: false, needs: 'face' }
+  // Until Phone powers is removed, a control of the Full set stays at the computer under Careful for every device, with or without a passkey or a grant.
   if (LEGACY_LEVELS[control] === 'phone-powers' && powers !== 'full') return { ok: false, needs: 'computer' }
+  if (faceReady) return { ok: false, needs: 'face' }
   return actor === 'device-unlocked' ? { ok: true } : { ok: false, needs: 'unlock' }
 }
 

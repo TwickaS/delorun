@@ -495,6 +495,8 @@ async function gate(request: IncomingMessage, admission: { readonly arrival: Stu
   const { device } = requester
   const face = device.face
   const may = mayUse(actorOf(requester), devices.phonePowers().level, control, face?.enabled === true && face.hasPasskey)
+  // A Full-set control under Careful is refused before any grant is looked up (F11), so a grant cannot lift it.
+  if (!may.ok && may.needs === 'computer') throw new RouteRefusal(403, LOOPBACK_REQUIRED, LOOPBACK_REQUIRED_SENTENCE)
   // With the flag on, a grant for exactly this call admits any device; one for another body, path or control does not.
   if (CONTROL_LEVELS[control] === 'face' && face?.enabled === true) {
     const header = request.headers['delorun-grant']
