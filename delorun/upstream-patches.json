@@ -1266,7 +1266,7 @@
       "path": "packages/sandbox/sandbox-local/src/index.ts",
       "class": "security",
       "reason": "Protected home and denied sockets (C1's confinement rules): the validated Config fields `protectedHome` (canonicalised at load, refused when missing, not a directory or `/`), `protectedHomeReadable` (relative entries inside the home, refused without `protectedHome`) and `deniedSockets` (absolute paths); each wrap resolves the protection, refuses a `workspace-write` root that overlaps the home with `HOME_IN_WRITABLE_ROOT` and passes the protection to the selected runner's profile, the `runnerCommand` override included. Re-exports `RUNNER_PROTECTION` and its types. All fields default to none, so the parity composition is unchanged. Lead verdict: approved, after two independent reviews and their fixes (2026-11-10): stricter only. Overrides `protectedHome` with the canonical configured home. Review of #66: refuses at load a denied socket inside a readable entry, and refuses a writable root that overlaps any alias of the home. Adds `aliasCoverage()` on the provider and the exported `pathAliasCoverage(path)` and `ALIAS_UNRELIABLE_FILESYSTEMS`, so setup and verification report alias-dependent rules as unknown rather than enforced. Overrides `protectedReads` with the home, its aliases and the readable entries under each. Adds and validates the `deniedSocketDirectories` Config field (absolute, not the filesystem root). Adds the validated `escapeSocketDirectories` Config field (absolute, not the filesystem root): each entry is denied like a `deniedSocketDirectories` entry, and while one exists a wrap on a runner whose `RUNNER_PROTECTION` cannot deny socket connects (Landlock, windows-acl) refuses with `SANDBOX_UNSUPPORTED_POLICY`; Delorun's start names WSL's interop directory `/run/WSL` there, so no confined command starts a Windows program through the interop sockets. The bwrap invocation is started through `withSeccompFilter` (seccomp.ts) while an escape directory exists or `vsockOffered()` finds `AF_VSOCK` in `/proc/net/protocols` (or cannot read it), with the `vsockOffered` test hook, so confined commands create no vsock socket and no io_uring instance; Landlock applies no filter, and abstract Unix sockets stay open to confined commands. Lead verdict: approved, after an independent review and its fixes (2026-11-10). Adds `protectedHomeToolReadable` (relative entries inside the home, refused without `protectedHome`), reported as `protectedReads.toolReadable` under each root and passed to no runner's profile. Lead verdict (2026-11-11): kept; tool-readable entries admit only the caller's grants and reach no confined command's profile. Refusal advice: only the Landlock escape-directory refusal carries advice. It names installing bubblewrap when no executable `bwrap` is on `PATH`, a probe that did not finish within `probeTimeoutMs` as not finished, and otherwise letting bwrap create user namespaces (Ubuntu's AppArmor restriction). Adds the `bwrapInstalled` internals hook and widens `probeBwrap` to `boolean | 'timed-out'`; which wraps are refused is unchanged. Network (C1 rule 19): a policy's `network` (`off` or `proxy`) is applied through `network.ts`; a runner that cannot express it (Landlock, Seatbelt, windows-acl) refuses the wrap with `SANDBOX_UNSUPPORTED_POLICY` rather than run with the host network. Under `off` and `proxy` the sockets of systemd-resolved, nscd, avahi, the system D-Bus, tailscaled, snapd and CUPS are hidden, so a restricted command cannot reach those daemons; other pathname sockets stay reachable, such as an ssh ControlMaster socket or gpg's `S.dirmngr` under the home. Docker Desktop's WSL sockets, `~/.docker/desktop`, `/run/docker-cli.sock` and tailscaled's sockets are hidden in every policy on machines with a user id. Lead verdict (2026-11-13): approved; stricter only, and the host network is unchanged while no resolver is mounted. Abstract sockets: a wrap that shares the host's network (no `network`, or the new `host` form) on bwrap, Landlock or a Linux `runnerCommand` reads `/proc/net/unix` through `abstract-sockets.ts` and refuses with `SANDBOX_UNSUPPORTED_POLICY` while any abstract name listens or is a bound datagram socket, or the table cannot be read; the `host` form, which only a person's setting produces, runs the wrap with `partial` enforcement and a logged warning. Adds the `readUnixSockets` internals hook. Stricter only for the default, and the `host` form changes nothing a policy without a network did before. The package root also re-exports the pure abstract-socket check (`checkAbstractSockets`, `refuseAbstractSockets`, `AbstractSocketCheck`) so Delorun's in-chat consent (A390) uses the runners' own refusal verdict.",
-      "sha256": "ff6185fabe3ebd8a85b39257363be4765391a537b9755b41788287a1ba0d3777"
+      "sha256": "47f30429c25cf1738c37bf6da518503824e0d92eed8d336cbb24c07aec44d695"
     },
     {
       "path": "packages/sandbox/sandbox-local/src/mounts.ts",
@@ -1278,7 +1278,7 @@
       "path": "packages/sandbox/sandbox-local/src/profiles.ts",
       "class": "security",
       "reason": "Protected home and denied sockets (C1's confinement rules): each dialect's profile builder takes a resolved `Protection`: bwrap binds `/dev/null` over each denied socket's resolved path (never its directory) and mounts an empty tmpfs over the home, binds its readable entries read-only and remounts it read-only; Landlock replaces its `/` read grant, and any write grant containing the home, by grants of every entry beside the way to the home, leaving out entries that resolve to the home, inside it or to its ancestors; Seatbelt appends `deny file-write*` and `deny file-read*` on the home after the write allows, allows its readable entries, and denies `network-outbound` to each socket spelling's `remote unix-socket` path literal. `RUNNER_PROTECTION` reports per runner which rules it expresses (Landlock and Windows cannot express the socket rule; Windows does not confine reads). With no protection every profile is byte-identical to upstream's. Lead verdict pending review: stricter only, and off unless configured. Review of #66: each wrap protects the home's mount and firmlink aliases like the home (bwrap: a read-only tmpfs over each; Landlock: the whole mount that reaches each alias left out, since Landlock rules attach to inodes and that mount's directories are the inodes on the way; Seatbelt: the same denials), shadows each denied socket's mount aliases, drops a readable entry that leads above the home, grants Landlock paths only by resolved path for the launcher's link refusal, and adds `deny file-link file-clone` on the home under Seatbelt. Each wrap's protection carries that alias coverage. Review of #66: `deniedSocketDirectories` denies every socket in Docker Desktop's control-socket directories (the world-writable WSL `host-services/backend.sock` controls the engine): bwrap hides each directory and its mount aliases under a read-only tmpfs, Seatbelt denies each entry present at the wrap, and an unlistable directory fails the wrap closed. Without a protected home the Landlock grants keep upstream's literal `/tmp`; only a protected profile grants resolved paths. Denied socket directories are listed only on macOS, for Seatbelt; bwrap hides them whole and Landlock refuses while they exist, so another local user who pre-creates such a directory cannot block confined commands on Linux. A unit test pins the plain-Linux runtime directory's own `--tmpfs`/`--remount-ro`, and real-bwrap denial tests under WSLg cover `systemd-run --user`, `busctl --user`, tmux, the X server's socket path, the ssh-agent socket and Docker Desktop's sockets; an X server's abstract socket and `dbus-launch` sockets stay reachable. Network: under `proxy` the proxy socket is bound inside the home's tmpfs before its read-only remount when it lies under the protected home, otherwise after every hiding mount and before the final `--remount-ro /tmp`; the network namespace does not cut off filesystem Unix sockets, so only the denied sockets and directories are hidden. Lead verdict (2026-11-13): approved; stricter only, and the host network is unchanged while no resolver is mounted.",
-      "sha256": "7e591a8d01d368489f8573d753752ace808ed609f15e6f37e476438252d6294c"
+      "sha256": "f045d6722a6f335ec5fe460b705579e02e5d98faae6dde83fb42ac9ca7ebcfe7"
     },
     {
       "path": "packages/sandbox/sandbox-policy/src/index.ts",
@@ -1302,7 +1302,7 @@
       "path": "packages/sandbox/sandbox/src/escalation.ts",
       "class": "security",
       "reason": "Container denial marker: adds `environmentDenialMarker()` and `denialMarkers(facts, escalationModes, subject)`, which return upstream's marker and escalation hint for a policy denial and only the environment's marker, with no hint, for an environment denial. Lead verdict: kept; stricter (fewer escalation invitations; the approval prompt is unchanged), permitted. The escalation request to `danger-full-access` also carries `grants: 'full-access'`, the marker the Host's remote answer guard reads to refuse that grant when a remote device answers it; without a guard the marker changes nothing. The escalation approval request of a shell command or operation names the mode it asks for in `escalatesTo` (never a `plugin_manager` request, whose cards keep upstream's buttons); the mode the escalation grants is still decided here, not by the card. Lead verdict (2026-11-13): approved after an independent Opus review of the card answer path and the lead review; the choice answers the card through the same one-shot `answer()` as Allow once, only after the chat's permission projection shows the requested preset and while the card still accepts answers, and never lowers a chat raised meanwhile, and `escalatesTo` never reaches a logged event.",
-      "sha256": "9f4189b42390d7bfdfdd4d2dcd5e0590f6da99968dc6722d948fd0dbe28b6179"
+      "sha256": "ca2d1441dbeb8eb53630e2e29e913215a29aff6144b24973d18f721a00d71a51"
     },
     {
       "path": "packages/sandbox/sandbox/src/index.ts",
@@ -1410,7 +1410,7 @@
       "path": "packages/shell/bash-sandbox/src/index.ts",
       "class": "security",
       "reason": "Container denial marker: foreground and background sandbox facts classify through `denialOf` against the environment signatures fixed at confinement by `ctx.sandboxPolicy.environmentDenialSignatures`, none with the switch off. Runner failure still outranks denial: the foreground still throws `SandboxUnavailableError`, and a background runner failure still forces `denied: false` with `runnerFailed`. Lead verdict: kept; stricter (denial facts gain `deniedBy` only for environment-only matches), permitted.",
-      "sha256": "9925e72de78d9785c0b60b0108ff6a055b2899351cba8c278acc2fbcc57ceea4"
+      "sha256": "a9efe21e788649aa94005a60076a3b0980b2f3e2f411b37de19fd7dc5f856527"
     },
     {
       "path": "packages/shell/pwsh-sandbox/src/helpers.ts",
@@ -1422,7 +1422,7 @@
       "path": "packages/shell/pwsh-sandbox/src/index.ts",
       "class": "security",
       "reason": "Container denial marker: the pwsh twin of the bash executor's foreground and background classification, with the environment signatures fixed at confinement from the switch. Lead verdict: kept; stricter, permitted.",
-      "sha256": "1acd12bab8e9a6565c0ba8c4456a3d11c6bf2d7876e2368d1cccb4c812f2cff5"
+      "sha256": "90116abab5ecbd92ff15680b3e897b182bba3e8e13e2a8365df8f5c876652596"
     },
     {
       "path": "packages/shell/shell/src/types.ts",
@@ -1440,7 +1440,7 @@
       "path": "packages/shell/tool-bash/src/index.ts",
       "class": "security",
       "reason": "Container denial marker: the canonical foreground result carries `sandbox.deniedBy`, and with the switch on the foreground output schema declares it as `{ type: 'string', enum: ['environment'] }`, without which output validation would turn an environment denial into a tool error. With the switch off the schema, which the PTC SDK declares to the model, is upstream's, and no executor reports the field. The E4 promote and E5 result-kind hunks are left out, and the tool description is unchanged. Lead verdict: kept with change; stricter, with the output-schema property and a tool-level spec added.",
-      "sha256": "4c17426939b7bfa46850f7b4d3b09dff1b9601242cb2cc1d9dc882474025f078"
+      "sha256": "87bde9110aadc0bde9f786b896cd964fab7655de0305ed94738f80f0786fb3aa"
     },
     {
       "path": "packages/shell/tool-bash/src/render.ts",
@@ -1458,7 +1458,7 @@
       "path": "packages/shell/tool-pwsh/src/index.ts",
       "class": "security",
       "reason": "Container denial marker: `PwshForegroundResult` and the canonical result carry `sandbox.deniedBy`, and with the switch on the foreground output schema declares it as for bash; with it off the schema is upstream's. The E4 promote and E5 hunks are left out, and the tool description is unchanged. Lead verdict: kept with change; stricter, with the output-schema property and a tool-level spec added.",
-      "sha256": "63721cfdb985a0db6ddd63c0f8b27fff40430875d59d7c8a9bcbc441281edbaf"
+      "sha256": "9a9c824835df6cb3d6c354dc32c18595fee89877fefd54699bdf5f066fd7c255"
     },
     {
       "path": "packages/shell/tool-pwsh/src/render.ts",
@@ -1830,7 +1830,7 @@
       "path": "packages/deliverables/workspace-changes/src/git.ts",
       "class": "security",
       "reason": "Every Host git command over a Session's repository runs with the hardened environment of hardening.ts, the snapshot's add and write-tree with every filter and diff driver switched off, and, when the runner carries a Session confinement, inside that Session's sandbox with a runner failure reported as an unavailable sandbox, so repository state a confined command writes (.git/config, .gitattributes, hooks, a gitfile) starts no program with the Host's authority; output is unchanged. The scratch index is seeded from the repository's index only when it is a regular file opened with O_NOFOLLOW, into a file created exclusively. Lead verdict: approved, after two independent reviews and their fixes (2026-11-10).",
-      "sha256": "f6b3f60ef9146c142d50dffdd6cdbdc2e068300b54a7f0c8bb9c132454d5de26"
+      "sha256": "6c527ffa0dc50605138f832a9c54934ebdb53a91afb769560ec1cb362e86a205"
     },
     {
       "path": "packages/deliverables/workspace-changes/src/index.ts",
@@ -1944,7 +1944,7 @@
       "path": "packages/interaction/user-approval/src/types.ts",
       "class": "security",
       "reason": "An approval request can carry a `grants: 'full-access'` marker the remote answer guard reads; unset, behaviour is upstream's. The marker is the `ApprovalGrant` union, `'full-access'` or `'workspace-management'`; the remote answer guard refuses either when a remote device grants it. Lead verdict (2026-11-11): kept; `grants` comes only from a pre-execute decision or a direct approval request, never from model arguments. Adds `external-agent` to `ApprovalGrant`: the start of an external agent program, which runs outside the sandbox and the approval prompts; the remote answer guard treats it like the other reserved grants. Lead verdict (2026-11-13): approved after the lead review of the merged diff. The request also carries the presentation-only `escalatesTo` (the sandbox mode a sandbox escalation asks for), like `grants` and `displayReason` never copied into `approval/asked` or any logged event, so a card can offer to switch the chat to that mode. Lead verdict (2026-11-13): approved after an independent Opus review of the card answer path and the lead review; the choice answers the card through the same one-shot `answer()` as Allow once, only after the chat's permission projection shows the requested preset and while the card still accepts answers, and never lowers a chat raised meanwhile, and `escalatesTo` never reaches a logged event. Adds `real-browser` to `ApprovalGrant`: the person's own browser, with their sign-ins, for the rest of one chat; the remote answer guard refuses it to a device that holds no running unlock and lets an unlocked device give it (owner ruling 2026-11-17). Awaiting the lead's review.",
-      "sha256": "807417efa1ec6d5ecd5bd9a3947db79e48dc9120b5dbe73de72ce2237166c559"
+      "sha256": "4d175a98bb7f68d3e608dbc060928ae728a241068cf5510985255f5405090a28"
     },
     {
       "path": "packages/api/gateway/src/client/index.ts",
@@ -2082,19 +2082,19 @@
       "path": "packages/client/ui-approval/src/client/ApprovalPanel.tsx",
       "class": "security",
       "reason": "Security entry, same feature and verdict as ApprovalCard.tsx: passes the request's `toolName` and `grants` to the card unchanged and adds no answer path. Passes the request's `escalatesTo` to the card. Lead verdict (2026-11-13): approved after an independent Opus review of the card answer path and the lead review; the choice answers the card through the same one-shot `answer()` as Allow once, only after the chat's permission projection shows the requested preset and while the card still accepts answers, and never lowers a chat raised meanwhile, and `escalatesTo` never reaches a logged event.",
-      "sha256": "b4a8159bbd37f603ae15f66415acade35ec32742c3bd696c181551332256ef2a"
+      "sha256": "a91e86dd1e1769bb6fb8e87e7a1c65efe0e7dcf6cdf1a64bd813e0d77a551e40"
     },
     {
       "path": "packages/client/ui-approval/src/client/contract/slots.ts",
       "class": "security",
       "reason": "Security entry, same feature and verdict as ApprovalCard.tsx: declares the `conversation.approval.action` list slot, the `ApprovalGrant` values of `@deepseek-ai/dsh-user-approval`, and carries `grants` on the pending request unchanged; the action's `allow` is documented as the Allow button's one-shot answer. `ApprovalGrant` gains `external-agent`; `ApprovalActionOwnerProps` gains `answered` and `canAnswer`. Lead verdict (2026-11-13): approved after the lead review of the merged diff. Declares the `conversation.approval.choice` slot and its owner props (`escalatesTo`, `toolName`, `callId`, `allow`, `answered`, `canAnswer`, `offer`). Lead verdict (2026-11-13): approved after an independent Opus review of the card answer path and the lead review; the choice answers the card through the same one-shot `answer()` as Allow once, only after the chat's permission projection shows the requested preset and while the card still accepts answers, and never lowers a chat raised meanwhile, and `escalatesTo` never reaches a logged event. `ApprovalGrant` gains `real-browser`, mirroring `@deepseek-ai/dsh-user-approval`. Awaiting the lead's review.",
-      "sha256": "6832d14597d596551acaa3e704075126eff478ed8259f7f150ddbbbcf7a75913"
+      "sha256": "907edf070af73b7599df0366c6b6651b78313a4392a3f5b7e29038700f09c52e"
     },
     {
       "path": "packages/client/ui-approval/src/client/index.ts",
       "class": "security",
       "reason": "Security entry, same feature and verdict as ApprovalCard.tsx: forwards `grants` from the Remote Event request to the pending approval and registers the action list as a child slot of the card; no answer path is added. Forwards `escalatesTo` from the request to the card input. Lead verdict (2026-11-13): approved after an independent Opus review of the card answer path and the lead review; the choice answers the card through the same one-shot `answer()` as Allow once, only after the chat's permission projection shows the requested preset and while the card still accepts answers, and never lowers a chat raised meanwhile, and `escalatesTo` never reaches a logged event.",
-      "sha256": "b8e079efbbd4874bd8e3ca6493a8de613042024c4f09a5655f4112c6f35887c6"
+      "sha256": "70f6f3c8cdf5088793e473c020fee577bab0eb8c822bcdd024b364620ce10891"
     },
     {
       "path": "apps/cli/src/plugin.ts",
