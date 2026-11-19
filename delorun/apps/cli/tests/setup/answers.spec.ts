@@ -130,6 +130,18 @@ describe('the answers document', () => {
     expect(several).toContain('holds studioAdditions, runtime, desktopAnalytics, which setup no longer asks; remove them from the document')
   })
 
+  // Removing the ignored-keys filter, or its log line, refuses a document an earlier version wrote or loads it without saying the answer is gone.
+  it('reads a document that still holds the removed phonePowers answer, ignores it and says so', () => {
+    const lines: string[] = []
+    const path = write('phone-powers.json', { ...BASE, phonePowers: 'full' })
+    const answers = readAnswersDocument(path, (line) => { lines.push(line) })
+    expect(answers).not.toHaveProperty('phonePowers')
+    expect(lines).toEqual([`delorun setup --config: ${path} holds phonePowers, which Delorun no longer has; it is ignored`])
+    const quiet: string[] = []
+    readAnswersDocument(write('plain.json', BASE), (line) => { quiet.push(line) })
+    expect(quiet).toEqual([])
+  })
+
   it('refuses an unknown key nested in a section without echoing it', () => {
     const nested = refusal(write('nested.json', { ...BASE, profile: { name: null, port: null, token: 'sk-SECRET-VALUE-80' } }))
     expect(nested).toContain('profile holds a field the answers document does not define')

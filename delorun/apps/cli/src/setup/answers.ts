@@ -12,11 +12,11 @@
  *
  * @module @delorun/cli/setup/answers
  */
-import { PHONE_POWERS_LEVELS } from '@delorun/home-auth'
 import { readFileSync } from 'node:fs'
 import { z } from 'zod'
 import {
   IDENTITY_FACTORS,
+  IGNORED_ANSWER_KEYS,
   LEGACY_SETUP_MODE_KEY,
   PAIRING_ASKERS,
   PROMPTS_OPTIONS,
@@ -99,7 +99,6 @@ const answerFields = {
   reach,
   importStockHome: z.boolean(),
   protectChanges: z.boolean().default(SETUP_DEFAULTS.protectChanges),
-  phonePowers: z.enum(PHONE_POWERS_LEVELS).nullable().default(SETUP_DEFAULTS.phonePowers),
 }
 
 const sections = z.array(z.strictObject({ id: z.string().min(1), status: z.enum(SECTION_STATUSES) })).default([])
@@ -197,7 +196,17 @@ export type ParsedAnswers = SetupAnswers & { readonly acceptDangerousMode?: bool
  * @returns zod's result, whose data is current-version answers.
  */
 export function parseAnswers(document: unknown): z.ZodSafeParseResult<ParsedAnswers> {
-  return schemaFor(document).safeParse(withoutLegacyMode(document))
+  return schemaFor(document).safeParse(withoutIgnoredKeys(withoutLegacyMode(document)))
+}
+
+/**
+ * Drop the keys of {@link IGNORED_ANSWER_KEYS}, which an answers document written before their question was removed may hold.
+ * @param document - a parsed JSON value.
+ * @returns the value without those keys; a value that is not an object is returned as it is.
+ */
+function withoutIgnoredKeys(document: unknown): unknown {
+  if (typeof document !== 'object' || document === null || Array.isArray(document)) return document
+  return Object.fromEntries(Object.entries(document).filter(([key]) => !(IGNORED_ANSWER_KEYS as readonly string[]).includes(key)))
 }
 
 /**
@@ -228,10 +237,11 @@ function refusal(path: string, reason: string): CliError {
  * field and never the value; a field the schema does not define is refused with no name echoed, which keeps a
  * credential value written under an unknown key out of the message.
  * @param path - the document's file.
+ * @param note - receives one line when the document holds a key of {@link IGNORED_ANSWER_KEYS}, which is read and ignored.
  * @returns the answers, with every field set.
  * @throws {CliError} `EXIT.failed` for an unreadable, malformed or refused document.
  */
-export function readAnswersDocument(path: string): SetupAnswers {
+export function readAnswersDocument(path: string, note: (line: string) => void = () => {}): SetupAnswers {
   let text: string
   try {
     text = readFileSync(path, 'utf8')
@@ -248,6 +258,8 @@ export function readAnswersDocument(path: string): SetupAnswers {
   if (removed.length > 0) {
     throw new CliError(EXIT.failed, `delorun setup --config: ${path} holds ${removed.join(', ')}, which setup no longer asks; remove ${removed.length === 1 ? 'it' : 'them'} from the document`)
   }
+  const ignored = typeof parsed === 'object' && parsed !== null ? IGNORED_ANSWER_KEYS.filter(key => key in parsed) : []
+  if (ignored.length > 0) note(`delorun setup --config: ${path} holds ${ignored.join(', ')}, which Delorun no longer has; it is ignored`)
   const checked = parseAnswers(parsed)
   if (!checked.success) {
     // A failed parse carries at least one issue.

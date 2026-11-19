@@ -37,7 +37,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import type { StudioAddress } from '@delorun/contract-admission'
 import { DEVICE_APPROVAL_VERSION, type Base64Url } from '@delorun/contract-device-approval'
-import { CREATE_OUTSIDE_WORKSPACES, deviceIdOf, DeviceStore, HomeAuthService, phonePowersRefusal, writePhonePowers, PROTECTED_ROW_REFUSAL, REACH_ALLOWED_ACTIONS, REACH_DENIED_ACTIONS, REACH_ELEVATED_ACTIONS, REACH_EVERYDAY_SETTINGS, REACH_KEY_ACTIONS, reachDevicePrincipal, signInMessage, switchOffRefusal, UNLISTED_COMMAND_REFUSAL } from '@delorun/home-auth'
+import { CREATE_OUTSIDE_WORKSPACES, deviceIdOf, DeviceStore, HomeAuthService, PROTECTED_ROW_REFUSAL, REACH_ALLOWED_ACTIONS, REACH_DENIED_ACTIONS, REACH_ELEVATED_ACTIONS, REACH_EVERYDAY_SETTINGS, REACH_KEY_ACTIONS, reachDevicePrincipal, signInMessage, switchOffRefusal, UNLISTED_COMMAND_REFUSAL } from '@delorun/home-auth'
 import { EXTERNAL_AGENT_CONSENT_SWITCH } from '@delorun/plugin-delegation-consent'
 import { claimOf, recordOf } from '../fixtures/devices.ts'
 import { bootStudio, type Studio } from '../admission/studio.ts'
@@ -166,8 +166,6 @@ beforeAll(async () => {
   // A link the chat's agent could create, to the folder that holds the Delorun home.
   await symlink(directory, join(folder, 'linked'))
   workspaceId = (await ctx.workspaceRegistry.create(folder)).id
-  // The unlock rules below are those of Phone powers' Full level; the Careful level has its own tests.
-  await writePhonePowers(secretsDirectory(), 'full')
 }, 120_000)
 
 /**
@@ -348,7 +346,7 @@ describe('a reach device through the Gateway', () => {
     await expectRefused('account/getState', {})
   })
 
-  it('needs an unlock for a terminal in every workspace at the Full level, whatever a stale terminal switch file, a full-access grant or dangerous mode says', async () => {
+  it('needs a grant for a terminal in every workspace, which an unlock never gives, whatever a stale terminal switch file, a full-access grant or dangerous mode says', async () => {
     const elsewhere = join(directory, 'elsewhere')
     await mkdir(elsewhere, { recursive: true })
     const otherWorkspace = (await studio.ctx.workspaceRegistry.create(elsewhere)).id
@@ -366,8 +364,8 @@ describe('a reach device through the Gateway', () => {
       }
       await expectElevationRequired('terminal/list', { sessionId: granted.sessionId })
       unlock = elevate()
-      await expectAdmitted('terminal/shells', { agentId: ungranted.sessionId })
-      await expectAdmitted('terminal/list', { sessionId: granted.sessionId })
+      await expectElevationRequired('terminal/shells', { agentId: ungranted.sessionId })
+      await expectElevationRequired('terminal/list', { sessionId: granted.sessionId })
     } finally {
       if (unlock !== undefined) studio.ctx.homeAuth.revokeElevation(unlock)
       await dispose()
@@ -413,68 +411,31 @@ describe('a reach device through the Gateway', () => {
   })
 })
 
-/**
- * Assert that Phone powers refuses one call, unlocked or not.
- * @param endpoint - the endpoint.
- * @param args - its named wire arguments.
- * @param as - the Peer that calls.
- */
-async function expectPhonePowersRefused(endpoint: string, args: Record<string, unknown>, as: PeerScope = peer): Promise<void> {
-  expect(await call(endpoint, args, as), endpoint).toMatchObject({
-    ok: false,
-    error: { code: 'remote-access/denied', details: { action: endpoint, reason: phonePowersRefusal(endpoint) } },
-  })
-}
-
-describe('Phone powers', () => {
-  it('keeps a terminal at the computer under Careful, for an unlocked phone in dangerous mode too', async () => {
+describe('a terminal with no grant', () => {
+  // Removing the grant-only return for a terminal in the condition lets an unlocked phone open a shell outside the sandbox; the Face ID flag is off here, so no grant exists.
+  it('is refused to an unlocked phone in dangerous mode too, and its unlock opens the rest', async () => {
     const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
-    await writePhonePowers(secretsDirectory(), 'careful')
     const dispose = studio.ctx.effect(() => studio.ctx.provide('reachFullAccessGrants', { dangerousMode: () => true, onDangerousModeEnd: () => () => {} }), 'test dangerous mode')
     const unlock = elevate()
     try {
-      // Pins FULL_POWERS_ACTIONS in the condition: without it the unlocked phone opens a shell outside the sandbox.
-      await expectPhonePowersRefused('terminal/shells', { agentId: created.sessionId })
-      await expectPhonePowersRefused('terminal/create', { agentId: created.sessionId, request: { id: 'careful-1', cols: 80, rows: 24 } })
-      await expectPhonePowersRefused('terminal/list', { sessionId: created.sessionId })
+      await expectElevationRequired('terminal/shells', { agentId: created.sessionId })
+      await expectElevationRequired('terminal/create', { agentId: created.sessionId, request: { id: 'careful-1', cols: 80, rows: 24 } })
+      await expectElevationRequired('terminal/list', { sessionId: created.sessionId })
       // The rest of what an unlock opens stays open.
       await expectAdmitted('directoryPicker/list', {})
     } finally {
       studio.ctx.homeAuth.revokeElevation(unlock)
       await dispose()
-      await writePhonePowers(secretsDirectory(), 'full')
     }
   })
 
-  it('keeps a terminal at the computer while the home has no choice recorded, or a record it cannot read', async () => {
-    const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
+  // Removing the route's removal leaves a way for a phone to answer: the Phone powers route is gone.
+  it('has no Phone powers route to change, for a phone, unlocked or not', async () => {
     const unlock = elevate()
     try {
-      await rm(join(secretsDirectory(), 'phone-powers.json'))
-      // Pins UNCHOSEN_PHONE_POWERS: a home with no choice applies Careful.
-      await expectPhonePowersRefused('terminal/shells', { agentId: created.sessionId })
-      await writeFile(join(secretsDirectory(), 'phone-powers.json'), JSON.stringify({ v: 1, level: 'full', setAt: 1, extra: true }), { mode: 0o600 })
-      // Pins the reader's refusal: a record it cannot read never widens what a phone may do.
-      await expectPhonePowersRefused('terminal/shells', { agentId: created.sessionId })
-      await writePhonePowers(secretsDirectory(), 'full')
-      await expectAdmitted('terminal/shells', { agentId: created.sessionId })
+      expect((await postAsPhone('/auth/phone-powers', { level: 'full' }, deviceCookie())).status).toBe(404)
     } finally {
       studio.ctx.homeAuth.revokeElevation(unlock)
-      await writePhonePowers(secretsDirectory(), 'full')
-    }
-  })
-
-  it('cannot be changed by a phone, unlocked or not', async () => {
-    const unlock = elevate()
-    try {
-      await writePhonePowers(secretsDirectory(), 'careful')
-      const answer = await postAsPhone('/auth/phone-powers', { level: 'full' }, deviceCookie())
-      // Pins personAtComputer on the route: a phone that could choose Full would hand itself a terminal.
-      expect(answer).toMatchObject({ status: 403, json: { error: 'LOOPBACK_REQUIRED' } })
-      expect(studio.ctx.homeAuth.phonePowers()).toMatchObject({ level: 'careful', chosen: true })
-    } finally {
-      studio.ctx.homeAuth.revokeElevation(unlock)
-      await writePhonePowers(secretsDirectory(), 'full')
     }
   })
 })
@@ -600,13 +561,13 @@ describe('an elevated reach device through the Gateway', () => {
     try {
       // Pins the unlock check through the Gateway: the same calls reach their services once the person approved it.
       await expectAdmitted('dynamicCordisRunner/inventory', {})
-      await expectAdmitted('terminal/shells', { agentId: created.sessionId })
+      await expectElevationRequired('terminal/shells', { agentId: created.sessionId })
       await expectAdmitted('directoryPicker/list', {})
       await expectAdmitted('settings/update', { ns: 'delorun-reach-access-probe', patch: {} })
       await expect(expectAllowed('session/create', { request: { cwd: directory } })).resolves.toMatchObject({ sessionId: expect.any(String) })
-      // Every elevated action is allowed on the global resource, so none is left `resource-unlisted` under an unlock.
+      // Every elevated action but a terminal is allowed on the global resource, so none is left `resource-unlisted` under an unlock; a terminal takes a grant.
       const principal = reachDevicePrincipal(deviceId, LISTENER)
-      for (const action of Object.keys(REACH_ELEVATED_ACTIONS)) {
+      for (const action of Object.keys(REACH_ELEVATED_ACTIONS).filter(name => !name.startsWith('terminal/'))) {
         expect(studio.ctx.remoteAccess.decide({ principal, action: action as `${string}/${string}`, resources: [GLOBAL] }), action).toEqual({ kind: 'allow' })
       }
       // Pins the never table under an unlock: credentials, the account and the computer's own screen.

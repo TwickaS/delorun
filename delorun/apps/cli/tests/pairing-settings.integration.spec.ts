@@ -76,7 +76,7 @@ describe('Settings → Devices writing the pairing section', () => {
       admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: home, unlockModeEnabled: () => false, keyRefs: () => new Set<string>(),
       elevationOf: () => undefined, logElevated: () => {}, liftedSettings: () => undefined,
       computerOnlySwitches: () => ctx.homeAuth.computerOnlySwitches(),
-      protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set(), defaultPermission: () => undefined, phonePowers: () => 'full' as const, dangerousMode: () => false, pageUnlockOf: () => undefined, pinLiftedSettings: () => undefined,
+      protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set(), defaultPermission: () => undefined, dangerousMode: () => false, pageUnlockOf: () => undefined, pinLiftedSettings: () => undefined,
     })
     const condition = policy.bindings(reachDevicePrincipal('device-1' as never, 'reach-tailscale-private'))[0]?.condition
     const write = { action: 'settings/mutate', resource: { kind: 'global' }, args: { ns: 'delorun-home-auth', ops: [{ op: 'set', path: ['pairing', 'mayAskWithoutWindow'], value: 'tailnet' }] } }

@@ -12,7 +12,7 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import type { DeviceId, StudioAddress } from '@delorun/contract-admission'
 import type { RuntimeVersion } from '@delorun/contract-home-layout'
 import type { Base64Url } from '@delorun/contract-device-approval'
-import { HomeAuth, readPhonePowers, recordUpgradePhonePowers, writePhonePowers, type DeviceSummary } from '@delorun/home-auth'
+import { HomeAuth, type DeviceSummary } from '@delorun/home-auth'
 import { acquireHomeLock, newStartId, runDirectory } from '@delorun/home'
 import type { ResponseLine, UnsignedRequest } from '@delorun/home-process'
 import { chooseListenerPort, type TailscaleResult, type TailscaleRunner } from '@delorun/reach'
@@ -718,23 +718,18 @@ describe('setup\'s reach section', () => {
     const notes: string[] = []
     const section = reachSection(tailscale(), () => false)
     expect(section.appliesTo({} as never)).toBe(true)
-    const initials: string[] = []
-    const on = await section.ask(io([true, false, 'careful'], notes, initials), draft, { home: delorunHome, profile: 'default' } as never)
-    expect(on).toEqual({ answers: { reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership', pairing: 'own-user' }, phonePowers: 'careful' }, status: 'answered' })
-    // Pins the default: Careful is selected when the person has not chosen.
-    expect(initials).toEqual(['careful'])
+    const on = await section.ask(io([true, false], notes), draft, { home: delorunHome, profile: 'default' } as never)
+    expect(on).toEqual({ answers: { reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership', pairing: 'own-user' } }, status: 'answered' })
     // Pins the second question: any device on the tailnet may ask only when the person says so, and going back returns.
-    await expect(section.ask(io([true, true, 'full'], notes), draft, { home: delorunHome, profile: 'default' } as never)).resolves.toEqual({ answers: { reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership', pairing: 'tailnet' }, phonePowers: 'full' }, status: 'answered' })
+    await expect(section.ask(io([true, true], notes), draft, { home: delorunHome, profile: 'default' } as never)).resolves.toEqual({ answers: { reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership', pairing: 'tailnet' } }, status: 'answered' })
     await expect(section.ask(io([true, BACK], notes), draft, { home: delorunHome, profile: 'default' } as never)).resolves.toBe(BACK)
-    await expect(section.ask(io([true, false, BACK], notes), draft, { home: delorunHome, profile: 'default' } as never)).resolves.toBe(BACK)
     expect(notes.some(note => note.includes(TRUST_STATEMENT[0]!))).toBe(true)
     const directory = join(delorunHome, 'profiles', 'default')
-    const answers = { reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership', pairing: 'tailnet' }, phonePowers: 'full' } as never
-    expect(section.review?.(answers)).toBe('Remote access: from your phone over Tailscale; any device on your tailnet may ask to pair; Phone powers Full')
-    expect(section.review?.({ reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership' }, phonePowers: null } as never)).toBe('Remote access: from your phone over Tailscale; only your own Tailscale user may ask to pair; Phone powers Careful')
+    const answers = { reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership', pairing: 'tailnet' } } as never
+    expect(section.review?.(answers)).toBe('Remote access: from your phone over Tailscale; any device on your tailnet may ask to pair')
+    expect(section.review?.({ reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership' } } as never)).toBe('Remote access: from your phone over Tailscale; only your own Tailscale user may ask to pair')
     await expect(section.apply({ home: delorunHome, env: {}, directory, secret: undefined }, answers)).resolves.toContain('ask to pair')
     expect(readPairingAt(join(directory, 'cordis.patch.yml')).mayAskWithoutWindow).toBe('tailnet')
-    expect(await readPhonePowers(join(delorunHome, 'secrets', 'home-auth'))).toEqual({ level: 'full', chosen: true })
     const row = readReachRow(delorunHome, 'default')
     expect(row).toEqual({ enabled: true, address: `https://${HOST}`, servePort: 443, listenerPort: expect.any(Number), serveCheckIntervalMs: 60_000, elevationMinutes: 15 })
     // Applying again keeps the port chosen once.
@@ -742,39 +737,9 @@ describe('setup\'s reach section', () => {
     expect(readReachRow(delorunHome, 'default').listenerPort).toBe(row.listenerPort)
   })
 
-  it('starts the Phone powers question on the home\'s recorded level, so Enter keeps it; Careful only without one', async () => {
-    const secrets = join(delorunHome, 'secrets', 'home-auth')
-    mkdirSync(secrets, { recursive: true, mode: 0o700 })
-    const ask = async (powersDraft: unknown = draft): Promise<string[]> => {
-      const initials: string[] = []
-      // Enter takes the selected level: the stand-in answers with it.
-      const enter = { ...io([true, false], [], initials) as object, select: (_message: string, _options: unknown, initial: string) => { initials.push(initial); return Promise.resolve(initial) } } as never
-      const answered = await reachSection(tailscale(), () => false).ask(enter, powersDraft as never, { home: delorunHome, profile: 'new' } as never)
-      expect(answered).toMatchObject({ answers: { phonePowers: initials[0] } })
-      return initials
-    }
-    // A new profile in a home whose person chose Full, or whose first start recorded Full, starts on Full.
-    await writePhonePowers(secrets, 'full')
-    expect(await ask()).toEqual(['full'])
-    rmSync(join(secrets, 'phone-powers.json'))
-    await recordUpgradePhonePowers(secrets, 'full')
-    expect(await ask()).toEqual(['full'])
-    // An earlier answer still comes first.
-    expect(await ask({ ...draft as object, answers: { reach: { option: 'none', identityFactor: null }, phonePowers: 'careful' } })).toEqual(['careful'])
-    // A record that cannot be read never starts above Careful, and neither does a home with none.
-    writeFileSync(join(secrets, 'phone-powers.json'), 'not json', { mode: 0o600 })
-    expect(await ask()).toEqual(['careful'])
-    rmSync(join(secrets, 'phone-powers.json'))
-    expect(await ask()).toEqual(['careful'])
-  })
-
   it('leaves remote access off when the person says no, goes back, or a check fails', async () => {
     const notes: string[] = []
     const off = { answers: { reach: { option: 'none', identityFactor: null } }, status: 'answered' }
-    // Pins the skip: with remote access off, Phone powers is not asked.
-    const initials: string[] = []
-    await reachSection(tailscale(), () => false).ask(io([false], notes, initials), draft, { home: delorunHome, profile: 'default' } as never)
-    expect(initials).toEqual([])
     await expect(reachSection(tailscale(), () => false).ask(io([false], notes), draft, { home: delorunHome, profile: 'default' } as never)).resolves.toEqual(off)
     await expect(reachSection(tailscale(), () => false).ask(io([BACK], notes), draft, { home: delorunHome, profile: 'default' } as never)).resolves.toBe(BACK)
     await expect(reachSection(tailscale({ version: { code: null, stdout: '', stderr: '' } }), () => false).ask(io([true], notes), draft, { home: delorunHome, profile: 'default' } as never)).resolves.toEqual(off)
@@ -785,9 +750,8 @@ describe('setup\'s reach section', () => {
     await expect(reachSection(funnel.run, () => false).ask(io([true], notes), draft, { home: delorunHome, profile: 'default' } as never)).resolves.toEqual(off)
     expect(notes.at(-1)).toContain('tailscale funnel --https=443 off, then try again\nRemote access stays off')
     await expect(reachSection(() => Promise.reject(new Error('broken')), () => false).ask(io([true], notes), draft, { home: delorunHome, profile: 'default' } as never)).rejects.toThrow('broken')
-    const none = { reach: { option: 'none', identityFactor: null }, phonePowers: null } as never
+    const none = { reach: { option: 'none', identityFactor: null } } as never
     expect(reachSection(tailscale(), () => false).review?.(none)).toBe('Remote access: off')
     await expect(reachSection(tailscale(), () => false).apply({ home: delorunHome, env: {}, directory: delorunHome, secret: undefined }, none)).resolves.toBeUndefined()
-    expect(existsSync(join(delorunHome, 'secrets', 'home-auth', 'phone-powers.json'))).toBe(false)
   })
 })
