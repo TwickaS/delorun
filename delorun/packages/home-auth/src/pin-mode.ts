@@ -308,12 +308,63 @@ export class PinModeStore {
    * @throws {HomeAuthError} `PIN_MODE_OFF` when the mode is off.
    */
   check(deviceId: string, presented: string): Promise<PinCheck> {
+    return this.alone(deviceId, () => this.tryOnce(deviceId, presented))
+  }
+
+  /**
+   * Count a failed passkey assertion as a wrong try of the device, in the same counters a wrong PIN uses: the fifth
+   * miss of a device returns `lockout`, and misses across the home pause both factors. Works whether or not PIN mode is on.
+   * @param deviceId - the device whose assertion failed.
+   * @returns `wrong` with the tries left, `lockout` for the device's last try, or `paused`.
+   */
+  miss(deviceId: string): Promise<PinCheck> {
+    return this.alone(deviceId, () => this.missOnce(deviceId))
+  }
+
+  /**
+   * Clear a device's wrong tries after a passkey assertion passed, as a correct PIN does.
+   * @param deviceId - the device.
+   */
+  async clearMisses(deviceId: string): Promise<void> {
+    await this.alone(deviceId, async () => {
+      if (!(deviceId in this.attempts.devices)) return
+      const { [deviceId]: _cleared, ...rest } = this.attempts.devices
+      this.attempts = { ...this.attempts, devices: rest }
+      await this.persist()
+    })
+  }
+
+  /**
+   * Run one change of a device's tries after the ones already queued for it.
+   * @param deviceId - the device.
+   * @param run - the change.
+   * @returns what it returns.
+   */
+  private alone<T>(deviceId: string, run: () => Promise<T>): Promise<T> {
     const previous = this.tries.get(deviceId) ?? Promise.resolve()
-    const run = previous.then(() => this.tryOnce(deviceId, presented))
-    const tail = run.catch(() => undefined)
+    const next = previous.then(run)
+    const tail = next.catch(() => undefined)
     this.tries.set(deviceId, tail)
     void tail.then(() => { if (this.tries.get(deviceId) === tail) this.tries.delete(deviceId) })
-    return run
+    return next
+  }
+
+  /**
+   * One counted miss, run alone for its device.
+   * @param deviceId - the device.
+   * @returns the outcome.
+   */
+  private async missOnce(deviceId: string): Promise<PinCheck> {
+    if (this.attempts.paused) return { kind: 'paused' }
+    const before = this.attempts.devices[deviceId] ?? 0
+    if (before >= PIN_MODE_LIMITS.deviceWrongTries) return { kind: 'lockout' }
+    const at = this.now()
+    const kept = this.attempts.home.filter(time => at - time < PIN_MODE_LIMITS.homeWindowMs)
+    this.attempts = { ...this.attempts, devices: { ...this.attempts.devices, [deviceId]: before + 1 }, home: [...kept, at] }
+    if (this.attempts.home.length >= PIN_MODE_LIMITS.homeWrongTries) this.attempts = { ...this.attempts, paused: true }
+    await this.persist()
+    if (before + 1 >= PIN_MODE_LIMITS.deviceWrongTries) return { kind: 'lockout' }
+    return { kind: 'wrong', triesLeft: PIN_MODE_LIMITS.deviceWrongTries - before - 1 }
   }
 
   /**

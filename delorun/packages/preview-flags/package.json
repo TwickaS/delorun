@@ -17,7 +17,6 @@
   "dependencies": {
     "@deepseek-ai/dsh-brand": "workspace:*",
     "@deepseek-ai/dsh-client-ui-primitives": "workspace:*",
-    "@delorun/home-auth": "workspace:*",
     "zod": "4.6.6"
   },
   "peerDependencies": {

@@ -78,7 +78,7 @@ describe('a route at level F', () => {
    * @returns the part of the service the gate reads.
    */
   const home = (level: 'careful' | 'full' | undefined, grace = false) => ({
-    pinEnabled: () => false, pageUnlockOf: () => undefined, dangerousMode: () => false,
+    unlockModeEnabled: () => false, pageUnlockOf: () => undefined, dangerousMode: () => false,
     elevationOf: () => (grace ? { id: 'unlock-1', grace: true as const } : { id: 'unlock-1' }),
     ...level === undefined ? {} : { phonePowers: () => ({ level, chosen: true }) },
   }) as never

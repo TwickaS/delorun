@@ -50,7 +50,7 @@ function routesOver(grants: RealBrowserGrants, agent: Agent, listener: string | 
   const homeAuth = {
     arrivalOf: () => ({ listener }),
     dangerousMode: () => false,
-    pinEnabled: () => false,
+    unlockModeEnabled: () => false,
     elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : deviceId === 'grace-phone' ? { id: 'g', grace: true } : undefined),
   }
   const ctx = {

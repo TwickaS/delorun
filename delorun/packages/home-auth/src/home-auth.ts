@@ -32,6 +32,9 @@ import {
 } from '@delorun/contract-device-approval'
 import { ELEVATION_LIMITS, TAILNET_MEMBERSHIP_OPTIONS, type ElevationState, type IdentityFactor } from '@delorun/contract-oidc-passkeys'
 import { PinModeStore } from './pin-mode.ts'
+import { GrantStore } from './grants.ts'
+import { PasskeyAuth } from './passkey-auth.ts'
+import { PASSKEYS_FILE, PasskeyStore } from './passkeys.ts'
 import { PinUnlocks, type PinEvent } from './pin-unlocks.ts'
 import { Elevations, isElevationMinutes, type ElevationChange, type ElevationRecord, type PendingElevation } from './elevation.ts'
 import { REACH_OPTION_LISTENERS } from '@delorun/contract-reach-providers'
@@ -226,6 +229,13 @@ export interface HomeAuthOptions {
    * a listener's unlock minutes must not exceed it. Absent, an unlock does not slide.
    */
   readonly unlockCapMinutes?: () => number
+  /** Whether the preview flag for Face ID enrolment and assertion is on, read at each use; off when absent. */
+  readonly passkeysEnabled?: () => boolean
+  /**
+   * Records one operational event of the passkey and grant machinery; the text holds no challenge, key or signature.
+   * @param event - the event line.
+   */
+  readonly log?: (event: string) => void
 }
 
 /**
@@ -274,6 +284,12 @@ export class HomeAuth {
   /** PIN mode: the PIN store and the page unlocks it mints (C14, "PIN mode"). */
   readonly pin: PinUnlocks
   private readonly pinStore: PinModeStore
+  /** The passkeys enrolled on this home. */
+  readonly passkeyStore: PasskeyStore
+  /** The grants and holds a verified assertion or a correct PIN minted, in memory. */
+  readonly grants: GrantStore
+  /** Passkey enrolment and assertion; answers only while the preview flag is on. */
+  readonly passkeys: PasskeyAuth
   private readonly pinListeners = new Set<(event: PinEvent) => void>()
   /** Each rolled session id to the id that continues it, for the 30 seconds its predecessor still admits requests. */
   private readonly successors = new Map<string, string>()
@@ -328,6 +344,18 @@ export class HomeAuth {
       report: (event) => { for (const listener of this.pinListeners) listener(event) },
     })
     this.removalListeners.add((deviceId) => { void this.pinStore.forget(deviceId).catch(() => undefined) })
+    this.passkeyStore = new PasskeyStore({ file: join(options.directory, PASSKEYS_FILE) })
+    this.grants = new GrantStore({ now: this.now, random: this.random })
+    this.passkeys = new PasskeyAuth({
+      store: this.passkeyStore,
+      grants: this.grants,
+      pin: this.pin,
+      now: this.now,
+      random: this.random,
+      sameSession: (presented, bound) => presented === bound || this.successors.get(presented) === bound,
+      enabled: options.passkeysEnabled ?? (() => false),
+      log: options.log ?? (() => undefined),
+    })
     const path = (name: string): string => join(options.directory, name)
     this.ownerCodes = new OwnerCodeStore({ file: path(HOME_AUTH_FILES.ownerCode), secrets: options.secrets, ...timed(options) })
     this.deviceStore = new DeviceStore({ file: path(HOME_AUTH_FILES.devices) })
@@ -352,6 +380,7 @@ export class HomeAuth {
     await mkdir(this.directory, { recursive: true, mode: 0o700 })
     this.homeKey = await loadHomeKey(this.directory, this.secrets)
     await this.pinStore.load()
+    await this.passkeyStore.load()
     await this.refresh()
   }
 
@@ -480,6 +509,8 @@ export class HomeAuth {
       const removed = await this.deviceStore.remove(deviceId)
       const sessions = await this.sessions.revokeDevice(deviceId)
       this.elevations.endDevice(deviceId, 'device-removed')
+      // The device's passkeys, grants and holds go in the same call that removes its record.
+      await this.passkeys.forgetDevice(deviceId)
       this.forget(deviceId)
       for (const listener of this.removalListeners) listener(deviceId)
       const connections = this.closeReachConnections?.({ deviceId }) ?? 0
@@ -663,8 +694,8 @@ export class HomeAuth {
    */
   elevationOf(deviceId: string, listener: ReachListenerId): ElevationRecord | undefined {
     const record = this.elevations.of(deviceId, listener)
-    // With PIN mode on there is no approval grace: the first unlock-needing action asks for the PIN.
-    return record?.grace === true && this.pin.enabled() ? undefined : record
+    // With a PIN or a passkey there is no approval grace: the first unlock-needing action asks for it.
+    return record?.grace === true && this.unlockModeEnabled() ? undefined : record
   }
 
   /**
@@ -674,6 +705,15 @@ export class HomeAuth {
    */
   touchUnlock(elevationId: string): void {
     this.elevations.touch(elevationId)
+  }
+
+  /**
+   * Whether a locked device is refused where an unlock matters: a PIN is set or any passkey is enrolled. It is the only
+   * reading that decides this, so a home that holds a passkey and no PIN refuses as a home with a PIN does.
+   * @returns whether it is on.
+   */
+  unlockModeEnabled(): boolean {
+    return this.pin.enabled() || this.passkeyStore.any()
   }
 
   /**
@@ -845,6 +885,8 @@ export class HomeAuth {
       }
       await this.deviceStore.add(device)
       this.approvals.approved(request)
+      // The approval at the computer also lets this device enrol a passkey, once.
+      this.passkeys.mintTicket(request.deviceId, request.listener)
       // C4: a device approval rotates every session of the home.
       await this.rotateAll()
       return device
@@ -924,7 +966,7 @@ export class HomeAuth {
    */
   private startApprovalGrace(device: DeviceRecord, request: SignInRequest, served: ServedListener, sessionId: SessionId): void {
     const minutes = this.approvalGraceMinutes()
-    if (minutes <= 0 || device.lastSignInAt !== null || request.rotate !== undefined || this.pin.enabled()) return
+    if (minutes <= 0 || device.lastSignInAt !== null || request.rotate !== undefined || this.unlockModeEnabled()) return
     const graceMs = Math.min(minutes, served.elevationMinutes ?? ELEVATION_LIMITS.defaultMinutes) * 60_000
     const endsAt = device.approvedAt + graceMs
     if (this.now() >= endsAt) return
@@ -960,6 +1002,7 @@ export class HomeAuth {
     const at = this.now()
     if (at >= session.expiresAt || at - session.lastUsedAt >= SESSION_LIMITS.reach.idleMs) {
       view.sessions.delete(sessionId)
+      this.grants.endDevice(session.deviceId)
       this.elevations.endSession(sessionId, 'session-ended')
       void this.serial(() => this.sessions.remove([sessionId])).catch(() => undefined)
       return { kind: 'refused', code: 'SESSION_EXPIRED' }
@@ -967,6 +1010,7 @@ export class HomeAuth {
     if (session.rotated) return { kind: 'refused', code: 'ROTATION_REQUIRED' }
     if (session.graceUntil !== undefined && at >= session.graceUntil) {
       view.sessions.delete(sessionId)
+      this.grants.endDevice(session.deviceId)
       this.elevations.endSession(sessionId, 'session-ended')
       void this.serial(() => this.sessions.remove([sessionId])).catch(() => undefined)
       return { kind: 'refused', code: 'NOT_SIGNED_IN' }
@@ -1083,6 +1127,8 @@ export class HomeAuth {
       return
     }
     this.elevations.endSession(sessionId, 'session-ended')
+    // Face ID grants and holds live as long as the device's session; the device's next confirmation starts new ones.
+    if (session !== undefined) this.grants.endDevice(session.deviceId)
     this.closeReachConnections?.({ sessionId })
   }
 
@@ -1094,6 +1140,7 @@ export class HomeAuth {
    */
   private async rotateAll(): Promise<void> {
     this.elevations.endAll('session-ended')
+    this.grants.endAll()
     const view = this.view
     if (view !== undefined) {
       for (const [sessionId, session] of view.sessions) view.sessions.set(sessionId, { ...session, rotated: true })

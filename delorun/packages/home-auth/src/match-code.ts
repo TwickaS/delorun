@@ -65,3 +65,36 @@ export function typedCodeMatches(typed: string, expected: string): boolean {
 export function formatMatchCode(code: string): string {
   return `${code.slice(0, 4)} ${code.slice(4)}`
 }
+
+/** The label of the code that approves adding a passkey to a paired device. */
+export const PASSKEY_CODE_LABEL = 'delorun-passkey-v1'
+
+/** What the code that approves adding a passkey commits to. */
+export interface PasskeyCodeInputs {
+  /** The device that asks, base64url. */
+  readonly deviceId: string
+  /** The session that asks. */
+  readonly sessionId: string
+  /** The home's nonce for this request, base64url. */
+  readonly nonce: string
+  /** The studio address the request was made on. */
+  readonly address: string
+}
+
+/**
+ * The code the person types at the computer to let a paired device add a passkey: 8 decimal digits derived as
+ * {@link matchCode} is, from the label {@link PASSKEY_CODE_LABEL} and the device, session, nonce and address, each
+ * written as a 4-byte big-endian length and its bytes so no two field splits give one input.
+ * @param inputs - what the code commits to.
+ * @returns the 8 digits, with leading zeros and no separator.
+ */
+export function passkeyCode(inputs: PasskeyCodeInputs): string {
+  const hash = createHash('sha256').update(PASSKEY_CODE_LABEL, 'utf8').update(Buffer.of(0))
+  for (const field of [Buffer.from(inputs.deviceId, 'base64url'), Buffer.from(inputs.sessionId, 'utf8'), Buffer.from(inputs.nonce, 'base64url'), Buffer.from(inputs.address, 'utf8')]) {
+    const length = Buffer.alloc(4)
+    length.writeUInt32BE(field.length)
+    hash.update(length).update(field)
+  }
+  const value = hash.digest().readBigUInt64BE(0) % 10n ** BigInt(MATCH_CODE_DIGITS)
+  return value.toString().padStart(MATCH_CODE_DIGITS, '0')
+}

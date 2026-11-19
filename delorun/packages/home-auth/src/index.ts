@@ -70,6 +70,8 @@ export {
   createCondition,
   reachDevicePrincipal,
   reachRefusal,
+  PICKER_HOLD_ID,
+  type FaceGrantFacts,
   type ReachAccessFacts,
   type ReachDevicePrincipal,
 } from './reach-access.ts'
@@ -118,6 +120,11 @@ export {
 } from './routes.ts'
 export { REQUEST_LISTENER, isLoopbackHost, listenerOf, stampListener, type LoopbackPort, type StampedRequest } from '@delorun/home'
 export { hashImage, ICON_FILE_SEGMENTS, readIcon, storeIcon } from './icon-file.ts'
+export { AUTH_CLASSES, AUTH_CLASS_NAMES, authClassOf, checkAuthTable, type AuthClass, type AuthRow, type AuthSurface } from './auth-classes.ts'
+export { GRANT_HEADER, gateByClass, readBodyCapped, type ClassGate, type GateOptions, type GrantGateHome, type LegacyUnlock } from './auth-gate.ts'
+export { GRANT_BODY_CAP_BYTES, GRANT_LIFE_MS, HOLD_ABSOLUTE_MS, HOLD_IDLE_MS, GrantStore, canonicalJson, hashArgs, hashRequest, type GrantEntry, type GrantHolder, type HoldFeature } from './grants.ts'
+export { PASSKEY_DEVICES_ACTION, PASSKEY_PATHS, PASSKEY_REMOVE_ACTION } from './passkey-routes.ts'
+export { PASSKEY_UNLOCK, PREVIEW_FLAGS } from './preview-flags.ts'
 export { admitApprovedDevice, admitKeyDevice, admitUnlockedDevice, gateByUnlock, requireComputer, requireComputerOrDevice, routedPathname, unlockOf, type ComputerRequest, type DangerousModeHome } from './computer-only.ts'
 export {
   LOOPBACK_STUDIO_ADDRESS,

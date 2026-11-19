@@ -33,9 +33,14 @@
     "@delorun/contract-operational-logs": "workspace:*",
     "@delorun/contract-reach-providers": "workspace:*",
     "@delorun/home": "workspace:*",
-    "@delorun/logs": "workspace:*"
+    "@delorun/logs": "workspace:*",
+    "@delorun/preview-flags": "workspace:*",
+    "@simplewebauthn/server": "^14.1.0"
   },
   "delorun": {
-    "state": "shipped"
+    "state": "shipped",
+    "previewFlags": [
+      "unlock.passkeys"
+    ]
   }
 }
