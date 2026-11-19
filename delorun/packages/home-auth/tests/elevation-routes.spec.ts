@@ -23,9 +23,10 @@ import {
   elevationRevokeHandler,
   elevationStateHandler,
 } from '../src/elevation-routes.ts'
-import { DEVICE_REMOVE_PATH, DEVICES_PATH, devicesHandler, removeDeviceHandler, type RouteHandler } from '../src/routes.ts'
+import { DEVICE_REMOVE_ACTION, DEVICE_REMOVE_PATH, DEVICES_PATH, devicesHandler, removeDeviceHandler, type RouteHandler } from '../src/routes.ts'
 import { claimOf, homeFixture, recordOf, STUDIO_COOKIE, testCredential, type Home } from './fixtures/home.ts'
 import { DeviceStore } from '../src/devices.ts'
+import { hashArgs } from '../src/grants.ts'
 import { HOME_AUTH_FILES } from '@delorun/contract-device-approval'
 
 const ADDRESS = brandString<StudioAddress>('https://home.example.ts.net')
@@ -144,6 +145,59 @@ describe('the device list and removal for a signed-in device', () => {
     expect(await send('POST', `${DEVICE_REMOVE_PATH}?reach`, { v: 1, deviceId: other.id })).toMatchObject({ status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
     expect((await home.auth.devices()).devices.map(device => device.id)).toContain(other.id)
     expect((await home.auth.devices()).devices).toHaveLength(2)
+  })
+
+  describe('removing another device while Face ID is on', () => {
+    const body = (deviceId: string): { v: 1; deviceId: string } => ({ v: 1, deviceId })
+    const setup = async (): Promise<{ other: ReturnType<typeof recordOf>; current: string; grant: (message: object) => void }> => {
+      const other = recordOf(9, ADDRESS)
+      await new DeviceStore({ file: join(home.directory, HOME_AUTH_FILES.devices) }).add(other)
+      const current = String((await send('GET', `${DEVICES_PATH}?reach`)).body['current'])
+      return { other, current, grant: (message) => { home.auth.grants.mint({ deviceId: current, listener: LISTENER }, [{ action: DEVICE_REMOVE_ACTION, hash: hashArgs(message) ?? '' }], 'passkey') } }
+    }
+
+    // Removing the hashArgs grant check (or the flag check) lets a phone remove another device without Face ID.
+    it('removes the other device with a grant for exactly the body sent, once', async () => {
+      home.flags.passkeys = true
+      const { other, grant } = await setup()
+      grant(body(other.id))
+      expect(await send('POST', `${DEVICE_REMOVE_PATH}?reach`, body(other.id))).toMatchObject({ status: 200, body: { removed: true } })
+      expect((await home.auth.devices()).devices.map(device => device.id)).not.toContain(other.id)
+    })
+
+    it('is refused with the flag off, even with a grant', async () => {
+      home.flags.passkeys = false
+      const { other, grant } = await setup()
+      grant(body(other.id))
+      expect(await send('POST', `${DEVICE_REMOVE_PATH}?reach`, body(other.id))).toMatchObject({ status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
+      expect((await home.auth.devices()).devices.map(device => device.id)).toContain(other.id)
+    })
+
+    it('is refused with no grant', async () => {
+      home.flags.passkeys = true
+      const { other } = await setup()
+      expect(await send('POST', `${DEVICE_REMOVE_PATH}?reach`, body(other.id))).toMatchObject({ status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
+      expect((await home.auth.devices()).devices.map(device => device.id)).toContain(other.id)
+    })
+
+    // Removing the body hash lets a grant for one device remove another.
+    it('is refused with a grant for another deviceId, and the grant stays', async () => {
+      home.flags.passkeys = true
+      const { other, grant, current } = await setup()
+      grant(body('someone-else'))
+      expect(await send('POST', `${DEVICE_REMOVE_PATH}?reach`, body(other.id))).toMatchObject({ status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
+      expect(home.auth.grants.has({ deviceId: current, listener: LISTENER }, DEVICE_REMOVE_ACTION, hashArgs(body('someone-else')) ?? '')).toBe(true)
+      expect((await home.auth.devices()).devices.map(device => device.id)).toContain(other.id)
+    })
+
+    // Removing the single use lets one confirmation remove a device twice or a replayed body again.
+    it('is refused when the grant was used already', async () => {
+      home.flags.passkeys = true
+      const { other, grant } = await setup()
+      grant(body(other.id))
+      await send('POST', `${DEVICE_REMOVE_PATH}?reach`, body(other.id))
+      expect(await send('POST', `${DEVICE_REMOVE_PATH}?reach`, body(other.id))).toMatchObject({ status: 403 })
+    })
   })
 
   it('refuses an unsigned request', async () => {

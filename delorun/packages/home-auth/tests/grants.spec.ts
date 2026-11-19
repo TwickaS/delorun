@@ -30,6 +30,15 @@ describe('canonical JSON and the hashes', () => {
     expect(hashArgs({ b: 1, a: 2 })).toBe(hashArgs({ a: 2, b: 1 }))
   })
 
+  // Removing the plain-object check hashes two different Dates, or a Map, as `{}`.
+  it('has no form for an object that is not plain, so two Dates never hash alike', () => {
+    expect(() => canonicalJson(new Date(1))).toThrow(TypeError)
+    expect(() => canonicalJson({ at: new Map([[1, 2]]) })).toThrow(TypeError)
+    expect(() => canonicalJson(new Uint8Array([1]))).toThrow(TypeError)
+    expect(hashArgs({ at: new Date(1) })).toBeUndefined()
+    expect(canonicalJson(Object.create(null))).toBe('{}')
+  })
+
   // A client reproduces this vector with crypto.subtle: SHA-256 of the JCS text.
   it('hashes the JCS text with SHA-256 (the vector the client must reproduce)', () => {
     expect(hashArgs({ credentialId: 'abc' })).toBe(createHash('sha256').update('{"credentialId":"abc"}', 'utf8').digest('hex'))
@@ -172,15 +181,16 @@ describe('answer grants', () => {
 
 describe('feature holds', () => {
   const terminal = { feature: 'terminal', id: 't-1' } as const
+  const opened = { ...terminal, scope: 'session:s-1' } as const
 
   // Removing the id check lets a hold on one terminal admit another: the grant would open a feature, not a terminal.
   it('admits exactly the terminal the tapped call opened', () => {
     const { grants } = store()
     grants.mint(PHONE, [{ action: 'terminal/create', hash: BODY_A, hold: terminal }], 'passkey')
-    grants.consume(PHONE, 'terminal/create', BODY_A, terminal)
-    expect(grants.holdAdmits(PHONE, 'terminal', 't-1')).toBe(true)
-    expect(grants.holdAdmits(PHONE, 'terminal', 't-2')).toBe(false)
-    expect(grants.holdAdmits(OTHER_PHONE, 'terminal', 't-1')).toBe(false)
+    grants.consume(PHONE, 'terminal/create', BODY_A, opened)
+    expect(grants.holdAdmits(PHONE, 'terminal', 't-1', 'session:s-1')).toBe(true)
+    expect(grants.holdAdmits(PHONE, 'terminal', 't-2', 'session:s-1')).toBe(false)
+    expect(grants.holdAdmits(OTHER_PHONE, 'terminal', 't-1', 'session:s-1')).toBe(false)
   })
 
   // A client-named hold id that the call does not open (the home read `opens` from the call) opens nothing.
@@ -188,48 +198,48 @@ describe('feature holds', () => {
     const { grants } = store()
     grants.mint(PHONE, [{ action: 'settings/mutate', hash: BODY_A, hold: terminal }], 'passkey')
     grants.consume(PHONE, 'settings/mutate', BODY_A)
-    expect(grants.holdAdmits(PHONE, 'terminal', 't-1')).toBe(false)
+    expect(grants.holdAdmits(PHONE, 'terminal', 't-1', 'session:s-1')).toBe(false)
     grants.mint(PHONE, [{ action: 'terminal/create', hash: BODY_B, hold: terminal }], 'passkey')
-    grants.consume(PHONE, 'terminal/create', BODY_B, { feature: 'terminal', id: 't-9' })
-    expect(grants.holdAdmits(PHONE, 'terminal', 't-1')).toBe(false)
-    expect(grants.holdAdmits(PHONE, 'terminal', 't-9')).toBe(false)
+    grants.consume(PHONE, 'terminal/create', BODY_B, { feature: 'terminal', id: 't-9', scope: 'session:s-1' })
+    expect(grants.holdAdmits(PHONE, 'terminal', 't-1', 'session:s-1')).toBe(false)
+    expect(grants.holdAdmits(PHONE, 'terminal', 't-9', 'session:s-1')).toBe(false)
   })
 
   // Removing the idle cap keeps a forgotten terminal open for ever.
   it('ends after 5 minutes idle, and use renews the idle time', () => {
     const { grants, clock } = store()
     grants.mint(PHONE, [{ action: 'terminal/create', hash: BODY_A, hold: terminal }], 'passkey')
-    grants.consume(PHONE, 'terminal/create', BODY_A, terminal)
+    grants.consume(PHONE, 'terminal/create', BODY_A, opened)
     clock.at += HOLD_IDLE_MS - 1
-    expect(grants.holdAdmits(PHONE, 'terminal', 't-1')).toBe(true)
+    expect(grants.holdAdmits(PHONE, 'terminal', 't-1', 'session:s-1')).toBe(true)
     clock.at += HOLD_IDLE_MS - 1
-    expect(grants.holdAdmits(PHONE, 'terminal', 't-1')).toBe(true)
+    expect(grants.holdAdmits(PHONE, 'terminal', 't-1', 'session:s-1')).toBe(true)
     clock.at += HOLD_IDLE_MS
-    expect(grants.holdAdmits(PHONE, 'terminal', 't-1')).toBe(false)
+    expect(grants.holdAdmits(PHONE, 'terminal', 't-1', 'session:s-1')).toBe(false)
   })
 
   // Removing the absolute cap lets constant use keep a hold for ever.
   it('ends after 60 minutes however busy', () => {
     const { grants, clock } = store()
     grants.mint(PHONE, [{ action: 'terminal/create', hash: BODY_A, hold: terminal }], 'passkey')
-    grants.consume(PHONE, 'terminal/create', BODY_A, terminal)
+    grants.consume(PHONE, 'terminal/create', BODY_A, opened)
     for (let minute = 0; minute < 59; minute++) {
       clock.at += 60_000
-      expect(grants.holdAdmits(PHONE, 'terminal', 't-1')).toBe(true)
+      expect(grants.holdAdmits(PHONE, 'terminal', 't-1', 'session:s-1')).toBe(true)
     }
     clock.at += HOLD_ABSOLUTE_MS - 59 * 60_000
-    expect(grants.holdAdmits(PHONE, 'terminal', 't-1')).toBe(false)
+    expect(grants.holdAdmits(PHONE, 'terminal', 't-1', 'session:s-1')).toBe(false)
   })
 
   it('ends when closed or when the device ends', () => {
     const { grants } = store()
     grants.mint(PHONE, [{ action: 'terminal/create', hash: BODY_A, hold: terminal }], 'passkey')
-    grants.consume(PHONE, 'terminal/create', BODY_A, terminal)
-    expect(grants.holdsAny(PHONE, 'terminal')).toBe(true)
-    grants.closeHold(PHONE, 'terminal', 't-1')
-    expect(grants.holdsAny(PHONE, 'terminal')).toBe(false)
+    grants.consume(PHONE, 'terminal/create', BODY_A, opened)
+    expect(grants.holdsAny(PHONE, 'terminal', 'session:s-1')).toBe(true)
+    grants.closeHold(PHONE, 'terminal', 't-1', 'session:s-1')
+    expect(grants.holdsAny(PHONE, 'terminal', 'session:s-1')).toBe(false)
     grants.mint(PHONE, [{ action: 'terminal/create', hash: BODY_B, hold: terminal }], 'passkey')
-    grants.consume(PHONE, 'terminal/create', BODY_B, terminal)
+    grants.consume(PHONE, 'terminal/create', BODY_B, opened)
     grants.endDevice('phone-1')
     expect(grants.holdCount('phone-1')).toBe(0)
   })

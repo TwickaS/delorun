@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import type { RemoteAccessAction } from '@deepseek-ai/dsh-api-remote-access/types'
 import { gateByClass, GRANT_HEADER, type GrantGateHome } from '../../src/auth-gate.ts'
-import { GrantStore, hashArgs, hashRequest } from '../../src/grants.ts'
+import { answerKey, GrantStore, hashArgs, hashRequest } from '../../src/grants.ts'
 import { createCondition, reachDevicePrincipal, type ReachAccessFacts } from '../../src/reach-access.ts'
 import { REACH_DEVICE } from '../../src/reach-access.ts'
 
@@ -115,7 +115,8 @@ describe('credentials/set on a home with only a passkey', () => {
 })
 
 describe('holds for terminals', () => {
-  const create = { id: 't-1', cols: 80, rows: 24 }
+  // The Remote method takes (agent, request), so the wire arguments nest the request.
+  const create = { request: { id: 't-1', cols: 80, rows: 24 } }
   // Removing the id binding lets a hold for one terminal admit another; removing the opener rule lets any grant open a hold.
   it('admit the terminal the tap opened and no other', () => {
     const { grants, decide } = world()
@@ -123,7 +124,7 @@ describe('holds for terminals', () => {
     expect(decide('terminal/create', create).kind).toBe('allow')
     expect(decide('terminal/attach', { id: 't-1' }).kind).toBe('allow')
     expect(decide('terminal/attach', { id: 't-2' }).kind).toBe('deny')
-    expect(decide('terminal/create', { ...create, id: 't-2' }).kind).toBe('deny')
+    expect(decide('terminal/create', { request: { ...create.request, id: 't-2' } }).kind).toBe('deny')
   })
   // Removing the metadata-only rule lets a hold on terminal A stream the events or output of terminal B.
   it('give no output or events of another terminal: id-less watch needs its own grant, listing rides the hold', () => {
@@ -142,6 +143,137 @@ describe('holds for terminals', () => {
     grants.mint(HOLDER, [{ action: 'settings/update', hash: hashArgs(settings) ?? '', hold: { feature: 'terminal', id: 't-1' } }], 'passkey')
     expect(decide('settings/update', settings).kind).toBe('allow')
     expect(decide('terminal/attach', { id: 't-1' }).kind).toBe('deny')
+  })
+})
+
+describe('an event question (P1-1)', () => {
+  // Removing the `event:` refusal in grantFor lets a locked phone receive the dynamic-plugin and inspect events.
+  it('is refused to a passkey device and to a locked no-passkey device on a PIN home, however it is asked', () => {
+    for (const action of ['event:cordis/dynamic-package', 'event:cordis/request-run', 'event:cordis/inspect-query']) {
+      expect(world({ passkey: true }).decide(action), action).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
+      expect(world({ passkey: false, unlockMode: true }).decide(action), action).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
+    }
+  })
+  it('is still admitted to a no-passkey device that holds a running unlock, and a method listing stays allowed', () => {
+    expect(world({ passkey: false, elevation: true }).decide('event:cordis/dynamic-package').kind).toBe('allow')
+    expect(world().decide('pluginManager/installBundle').kind).toBe('allow')
+  })
+})
+
+describe('holds are bound to the resource and the device (P2-1, P2-2)', () => {
+  const create = { request: { id: 't-1', cols: 80, rows: 24 } }
+  const sessionA = { kind: 'session', id: 'session-a' }
+  const sessionB = { kind: 'session', id: 'session-b' }
+  // Removing the scope from the hold key lets a hold on terminal X of chat A admit terminal X of chat B.
+  it('admit the terminal of the chat the tap opened and not the same id in another chat', () => {
+    const { grants, decide } = world()
+    grants.mint(HOLDER, [{ action: 'terminal/create', hash: hashArgs(create) ?? '', hold: { feature: 'terminal', id: 't-1' } }], 'passkey')
+    expect(decide('terminal/create', create, sessionA).kind).toBe('allow')
+    expect(decide('terminal/attach', { id: 't-1' }, sessionA).kind).toBe('allow')
+    expect(decide('terminal/attach', { id: 't-1' }, sessionB).kind).toBe('deny')
+    expect(decide('terminal/list', {}, sessionB).kind).toBe('deny')
+    expect(decide('terminal/list', {}, sessionA).kind).toBe('allow')
+  })
+  // Removing the endDevice call on a session's end leaves a hold open for 60 minutes after the tab closed.
+  it('end with the device\'s session, and so do its grants', () => {
+    const { grants, decide } = world()
+    grants.mint(HOLDER, [{ action: 'terminal/create', hash: hashArgs(create) ?? '', hold: { feature: 'terminal', id: 't-1' } }, { action: 'pluginManager/installBundle', hash: hashArgs({ id: 'p1' }) ?? '' }], 'passkey')
+    decide('terminal/create', create, sessionA)
+    grants.endDevice('device-1')
+    expect(decide('terminal/attach', { id: 't-1' }, sessionA).kind).toBe('deny')
+    expect(decide('pluginManager/installBundle', { id: 'p1' }).kind).toBe('deny')
+  })
+  // Removing the scope on the picker keeps it a device-wide hold.
+  it('give the folder picker a hold but never a folder write: createDirectory needs its own grant (P3-7)', () => {
+    const { grants, decide } = world()
+    grants.mint(HOLDER, [{ action: 'directoryPicker/list', hash: hashArgs({ path: '/' }) ?? '', hold: { feature: 'picker', id: 'directoryPicker' } }], 'passkey')
+    expect(decide('directoryPicker/list', { path: '/' }).kind).toBe('allow')
+    expect(decide('directoryPicker/list', { path: '/home' }).kind).toBe('allow')
+    expect(decide('directoryPicker/createDirectory', { path: '/home/new' }).kind).toBe('deny')
+    grants.mint(HOLDER, [{ action: 'directoryPicker/createDirectory', hash: hashArgs({ path: '/home/new' }) ?? '' }], 'passkey')
+    expect(decide('directoryPicker/createDirectory', { path: '/home/new' }).kind).toBe('allow')
+    expect(decide('directoryPicker/createDirectory', { path: '/home/new' }).kind).toBe('deny')
+  })
+})
+
+describe('a page unlock made before enrolment (P3-1)', () => {
+  // Removing the passkey check on pageUnlocked lets a PIN page unlock made before enrolment skip the key-write grant.
+  it('does not lift the grant for credentials/set on a device that now holds a passkey', () => {
+    const clock = { at: 5_000_000 }
+    const grants = new GrantStore({ now: () => clock.at, random: size => new Uint8Array(size).fill(7) })
+    const facts: ReachAccessFacts = {
+      admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere',
+      elevationOf: () => undefined, pageUnlockOf: () => ({ id: 'page-1' } as never), unlockModeEnabled: () => true, keyRefs: () => new Set(['DEEPSEEK_API_KEY']),
+      logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined, computerOnlySwitches: () => [],
+      protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set(), defaultPermission: () => undefined,
+      phonePowers: () => 'full' as const, dangerousMode: () => false,
+      faceGrants: () => ({ grants, deviceHasPasskey: () => true }),
+    }
+    const condition = createCondition(facts, reachDevicePrincipal('device-1', LISTENER, 'page-1'))
+    expect(condition({ action: 'credentials/set' as RemoteAccessAction, resource: GLOBAL as never, args: { ref: 'DEEPSEEK_API_KEY', value: 'k' } }).kind).toBe('deny')
+  })
+})
+
+describe('answer grants (P2-3)', () => {
+  const key = (agent: string, callId: string, marker: string): string => answerKey({ agent, callId, grants: marker })
+  // Removing the agent or the marker from the key lets a grant for one prompt answer another that shares its call id.
+  it('keeps two prompts that share a call id apart', () => {
+    const grants = new GrantStore({ now: () => 5_000_000, random: size => new Uint8Array(size).fill(3) })
+    grants.mintAnswer(HOLDER, key('chat-a', 'call_0', 'full-access'), 'allowed-once')
+    expect(grants.consumeAnswer(HOLDER, key('chat-b', 'call_0', 'full-access'), 'allowed-once')).toBeUndefined()
+    expect(grants.consumeAnswer(HOLDER, key('chat-a', 'call_0', 'workspace-management'), 'allowed-once')).toBeUndefined()
+    expect(grants.consumeAnswer(HOLDER, key('chat-a', 'call_0', 'full-access'), 'allowed-once')).toBeDefined()
+  })
+})
+
+describe('Phone powers Careful on a Fetch gate (P2-5, F11)', () => {
+  const ROW = 'route:plugin-packs/src/routes.ts#path (write)'
+  const peer = { principal: DEVICE }
+  const careful = async (options: { passkey: boolean; level: 'careful' | 'full' }): Promise<{ status: number; ran: number }> => {
+    const { grants } = world()
+    let ran = 0
+    const home: GrantGateHome = {
+      passkeysEnabled: () => true, faceGrants: () => grants, deviceHasPasskey: () => options.passkey,
+      arrivalOf: () => ({ listener: LISTENER, host: 'h.ts.net', source: 'test' }), dangerousMode: () => false, elevationOf: () => undefined, pageUnlockOf: () => undefined, unlockModeEnabled: () => true,
+      phonePowers: () => ({ level: options.level }) as never,
+    }
+    const gate = gateByClass(() => home, () => { ran += 1; return Promise.resolve(new Response('ok')) }, { row: ROW, action: 'plugin-packs/enqueue', legacy: { renews: false, phonePowers: 'full' } })
+    const body = '{"pack":"a"}'
+    const hash = hashRequest({ method: 'POST', path: '/api/delorun/packs/enqueue', body: new TextEncoder().encode(body) }) ?? ''
+    const id = grants.mint(HOLDER, [{ action: 'plugin-packs/enqueue', hash }], 'passkey').grantId
+    const request = new Request('https://h.ts.net/api/delorun/packs/enqueue', { method: 'POST', body, headers: { [GRANT_HEADER]: id } })
+    gate.admitPeer(request, peer)
+    const response = await gate.fetch(request)
+    return { status: response.status, ran }
+  }
+  // Removing the Careful check before the grant lookup lets a grant open a route Careful refuses.
+  it('refuses a Full-only route under Careful for a device with a matching grant, passkey or not', async () => {
+    expect(await careful({ passkey: true, level: 'careful' })).toEqual({ status: 403, ran: 0 })
+    expect(await careful({ passkey: false, level: 'careful' })).toEqual({ status: 403, ran: 0 })
+    expect(await careful({ passkey: true, level: 'full' })).toEqual({ status: 200, ran: 1 })
+  })
+})
+
+describe('the Fetch gate hashes the query string (P3-2)', () => {
+  const ROW = 'route:plugin-packs/src/routes.ts#path (write)'
+  // Removing the search from the hashed path lets a grant for one query admit another.
+  it('refuses the same path with another query', async () => {
+    const { grants } = world()
+    const home: GrantGateHome = {
+      passkeysEnabled: () => true, faceGrants: () => grants, deviceHasPasskey: () => true,
+      arrivalOf: () => ({ listener: LISTENER, host: 'h.ts.net', source: 'test' }), dangerousMode: () => false, elevationOf: () => undefined, pageUnlockOf: () => undefined, unlockModeEnabled: () => true,
+    }
+    let ran = 0
+    const gate = gateByClass(() => home, () => { ran += 1; return Promise.resolve(new Response('ok')) }, { row: ROW, action: 'plugin-packs/enqueue', legacy: { renews: true } })
+    const hash = hashRequest({ method: 'POST', path: '/api/delorun/packs/enqueue?pack=a', body: new Uint8Array(0) }) ?? ''
+    const id = grants.mint(HOLDER, [{ action: 'plugin-packs/enqueue', hash }], 'passkey').grantId
+    const other = new Request('https://h.ts.net/api/delorun/packs/enqueue?pack=b', { method: 'POST', headers: { [GRANT_HEADER]: id } })
+    gate.admitPeer(other, { principal: DEVICE })
+    expect((await gate.fetch(other)).status).toBe(403)
+    const same = new Request('https://h.ts.net/api/delorun/packs/enqueue?pack=a', { method: 'POST', headers: { [GRANT_HEADER]: id } })
+    gate.admitPeer(same, { principal: DEVICE })
+    expect((await gate.fetch(same)).status).toBe(200)
+    expect(ran).toBe(1)
   })
 })
 
@@ -209,7 +341,8 @@ describe('the Fetch gate for a face route', () => {
   it('throws at registration for an unlisted row and a computer row', () => {
     const home = (): undefined => undefined
     expect(() => gateByClass(home, () => Promise.resolve(new Response('')), { row: 'route:nothing', action: 'x', legacy: { renews: true } })).toThrow(/does not list/)
-    expect(() => gateByClass(home, () => Promise.resolve(new Response('')), { row: 'auth:/auth/passkey/register', action: 'x', legacy: { renews: true } })).toThrow(/computer-only/)
+    expect(() => gateByClass(home, () => Promise.resolve(new Response('')), { row: 'auth:/auth/passkey/add/approve', action: 'x', legacy: { renews: true } })).toThrow(/computer row/)
+    expect(() => gateByClass(home, () => Promise.resolve(new Response('')), { row: 'auth:/auth/passkey/register', action: 'x', legacy: { renews: true } })).toThrow(/ticket row/)
   })
 
   it('admits only a reach device', () => {

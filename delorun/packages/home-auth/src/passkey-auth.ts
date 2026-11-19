@@ -22,7 +22,7 @@ import type { DeviceId, StudioAddress } from '@delorun/contract-admission'
 import { IDENTITY_LIMITS, PASSKEY_COSE_ALGORITHMS, PASSKEY_REGISTRATION, RELYING_PARTY_NAME } from '@delorun/contract-oidc-passkeys'
 import { HomeAuthError } from './errors.ts'
 import { isRecord } from './files.ts'
-import { HOLD_FEATURES, type GrantEntry, type GrantStore, type HoldFeature } from './grants.ts'
+import { answerKey, HOLD_FEATURES, type GrantEntry, type GrantStore, type HoldFeature } from './grants.ts'
 import { passkeyCode } from './match-code.ts'
 import type { PasskeyRecord, PasskeyStore } from './passkeys.ts'
 import type { PinUnlocks, UnlockAsker } from './pin-unlocks.ts'
@@ -55,7 +55,7 @@ const HASH = /^[0-9a-f]{64}$/
 /** What an assertion is asked for: actions to be used once each, or one answer to one prompt. */
 export type AssertionRequest =
   | { readonly kind: 'actions'; readonly entries: readonly GrantEntry[] }
-  | { readonly kind: 'answer'; readonly requestId: string; readonly answer: string }
+  | { readonly kind: 'answer'; readonly requestKey: string; readonly answer: string }
 
 /** What a passed assertion or PIN minted. */
 export interface PasskeyGrantResult {
@@ -153,11 +153,12 @@ export function parseAssertionRequest(body: Readonly<Record<string, unknown>>): 
   const { actions, answer } = body
   if ((actions === undefined) === (answer === undefined)) throw new HomeAuthError('BAD_REQUEST', 'name either the actions to confirm or one answer, not both')
   if (answer !== undefined) {
-    if (!isRecord(answer) || typeof answer.requestId !== 'string' || typeof answer.value !== 'string' || answer.requestId === '' || answer.value === ''
-      || answer.requestId.length > MAX_NAME_CHARS || answer.value.length > MAX_NAME_CHARS) {
-      throw new HomeAuthError('BAD_REQUEST', 'an answer names its request id and its value')
+    const named = isRecord(answer) ? [answer.agent, answer.callId, answer.grants, answer.value] : []
+    if (named.length !== 4 || !named.every((field): field is string => typeof field === 'string' && field !== '' && field.length <= MAX_NAME_CHARS)) {
+      throw new HomeAuthError('BAD_REQUEST', 'an answer names its agent, call id, grants marker and value')
     }
-    return { kind: 'answer', requestId: answer.requestId, answer: answer.value }
+    const [agent, callId, grants, value] = named
+    return { kind: 'answer', requestKey: answerKey({ agent: agent ?? '', callId: callId ?? '', grants: grants ?? '' }), answer: value ?? '' }
   }
   if (!Array.isArray(actions) || actions.length === 0 || actions.length > MAX_ACTIONS_PER_ASSERTION) throw new HomeAuthError('BAD_REQUEST', `confirm from 1 to ${String(MAX_ACTIONS_PER_ASSERTION)} actions`)
   const entries = actions.map((item: unknown): GrantEntry => {
@@ -394,13 +395,19 @@ export class PasskeyAuth {
   async verify(asker: UnlockAsker, address: string, response: AuthenticationResponseJSON): Promise<PasskeyGrantResult> {
     this.assertEnabled()
     const challengeText = extractChallenge(response.response.clientDataJSON)
+    // A challenge that is unknown, used or expired is a sheet left open or a retried request, not a guess: it costs no try.
+    const issued = this.assertions.get(challengeText)
+    if (issued === undefined || issued.expiresAt <= this.options.now()) {
+      this.assertions.delete(challengeText)
+      throw new HomeAuthError('PASSKEY_ASSERTION_INVALID', 'That confirmation is not current. Try again')
+    }
     const stored = this.takeChallenge(this.assertions, challengeText, asker)
-    if (stored === undefined) return this.options.pin.missed(asker, 'That confirmation is not current')
+    if (stored === undefined) return this.fail(asker, 'That confirmation is not current')
     // The credential must be this device's own: a copy of another device's passkey on this session is refused.
     const credential = this.options.store.find(response.id)
-    if (credential?.deviceId !== asker.deviceId) return this.options.pin.missed(asker, 'That passkey does not belong to this device')
+    if (credential?.deviceId !== asker.deviceId) return this.fail(asker, 'That passkey does not belong to this device')
     const { rpId, origin } = relyingParty(address)
-    if (credential.rpId !== rpId || credential.address !== address) return this.options.pin.missed(asker, 'That passkey belongs to another address')
+    if (credential.rpId !== rpId || credential.address !== address) return this.fail(asker, 'That passkey belongs to another address')
     let verified: Awaited<ReturnType<typeof verifyAuthenticationResponse>>
     try {
       verified = await verifyAuthenticationResponse({
@@ -409,14 +416,31 @@ export class PasskeyAuth {
       })
     } catch (error) {
       const failure = verificationFailure(error)
-      return this.options.pin.missed(asker, failure.detail, failure.code)
+      return this.fail(asker, failure.detail, failure.code)
     }
-    if (!verified.verified || !verified.authenticationInfo.userVerified) return this.options.pin.missed(asker, 'The device did not verify you', 'PASSKEY_USER_VERIFICATION_REQUIRED')
+    if (!verified.verified || !verified.authenticationInfo.userVerified) return this.fail(asker, 'The device did not verify you', 'PASSKEY_USER_VERIFICATION_REQUIRED')
     const info = verified.authenticationInfo
     await this.options.store.recordUse(credential.credentialId, { counter: info.newCounter, backupState: info.credentialBackedUp, lastUsedAt: this.options.now() })
     if (credential.backupState && !info.credentialBackedUp) this.options.log(`home-auth: passkey.backup-state-changed device=${asker.deviceId} from=1 to=0`)
     await this.options.pin.cleared(asker.deviceId)
     return this.mint(asker, stored.request, 'passkey')
+  }
+
+  /**
+   * Count one failed check as a wrong try and record it without the credential, challenge or signature.
+   * @param asker - the device, listener and session.
+   * @param reason - the sentence the person sees.
+   * @param code - the refusal's code.
+   * @returns never: the refusal of {@link PinUnlocks.missed}.
+   */
+  private async fail(asker: UnlockAsker, reason: string, code?: PasskeyFailureCode): Promise<never> {
+    try {
+      return await this.options.pin.missed(asker, reason, code)
+    } catch (error) {
+      const left = error instanceof HomeAuthError ? error.details.triesLeft : undefined
+      this.options.log(`home-auth: passkey.failed device=${asker.deviceId} reason=${code ?? 'PASSKEY_ASSERTION_INVALID'} tries-left=${typeof left === 'number' ? String(left) : 'none'}`)
+      throw error
+    }
   }
 
   /**
@@ -469,7 +493,7 @@ export class PasskeyAuth {
    */
   private mint(asker: UnlockAsker, request: AssertionRequest, factor: 'passkey' | 'pin'): PasskeyGrantResult {
     const holder = { deviceId: asker.deviceId, listener: asker.listener }
-    return request.kind === 'actions' ? this.options.grants.mint(holder, request.entries, factor) : this.options.grants.mintAnswer(holder, request.requestId, request.answer)
+    return request.kind === 'actions' ? this.options.grants.mint(holder, request.entries, factor) : this.options.grants.mintAnswer(holder, request.requestKey, request.answer)
   }
 
   /**
