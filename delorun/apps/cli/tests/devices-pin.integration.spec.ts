@@ -125,6 +125,15 @@ describe('delorun devices pin', () => {
     expect(out.stdout).not.toContain(SECRET)
   })
 
+  it('accepts and ignores the old lock options of set, with one line saying so, so older scripts keep working', async () => {
+    running = await startRunningHome(home, PROFILE, undefined, pinOnlyApproval())
+    const code = await command({ typed: [SECRET, SECRET] }).run(['pin', 'set', '--idle-minutes', '5', '--lock-when-hidden'], context)
+    expect(code).toBe(EXIT.ok)
+    expect(sent).toEqual([{ op: 'pin.set', args: { secret: SECRET } }])
+    expect(out.stderr).toBe('delorun devices pin set: --idle-minutes and --lock-when-hidden have no effect and are ignored: a device confirms each action with Face ID or the PIN, and nothing stays unlocked.\n')
+    expect(out.stdout).toContain('PIN mode is on, with a PIN.')
+  }, 60_000)
+
   it('stores the idle minutes and lock-when-hidden with no secret, says they have no effect, and keeps the PIN', async () => {
     running = await startRunningHome(home, PROFILE, undefined, pinOnlyApproval())
     await command({ typed: [SECRET, SECRET] }).run(['pin', 'set'], context)
@@ -211,14 +220,11 @@ describe('delorun devices pin', () => {
     expect(sent).toEqual([])
   })
 
-  it('never takes the secret from an argument, and set no longer takes the lock options', async () => {
+  it('never takes the secret from an argument', async () => {
     const refused = await command().run(['pin', 'set', SECRET], context).catch((error: unknown) => error)
     expect(refused).toMatchObject({ exit: EXIT.usage })
     expect(String(refused instanceof Error ? refused.message : refused)).not.toContain(SECRET)
     await expect(command().run(['pin', 'set', `--secret=${SECRET}`], context)).rejects.toMatchObject({ exit: EXIT.usage })
-    // Setting a PIN asks nothing about lock options, which would change nothing (F39).
-    await expect(command({ typed: [SECRET, SECRET] }).run(['pin', 'set', '--idle-minutes', '5'], context)).rejects.toMatchObject({ exit: EXIT.usage })
-    await expect(command({ typed: [SECRET, SECRET] }).run(['pin', 'set', '--lock-when-hidden'], context)).rejects.toMatchObject({ exit: EXIT.usage })
     await expect(command().run(['pin', 'later'], context)).rejects.toMatchObject({ exit: EXIT.usage })
     expect(sent).toEqual([])
   })

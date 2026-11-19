@@ -198,8 +198,8 @@ function parseActionOptions<T extends NonNullable<Parameters<typeof parseOptions
  * @returns the parsed values.
  * @throws {CliError} with the usage code and a fixed message for any argument or option `set` does not take.
  */
-function parseSetOptions(options: readonly string[]): ReturnType<typeof parseOptions<{ profile: { type: 'string' }, stdin: { type: 'boolean' } }>> {
-  return parseActionOptions('set', options, { profile: { type: 'string' }, stdin: { type: 'boolean' } })
+function parseSetOptions(options: readonly string[]): ReturnType<typeof parseOptions<{ profile: { type: 'string' }, 'idle-minutes': { type: 'string' }, 'lock-when-hidden': { type: 'boolean' }, stdin: { type: 'boolean' } }>> {
+  return parseActionOptions('set', options, { profile: { type: 'string' }, 'idle-minutes': { type: 'string' }, 'lock-when-hidden': { type: 'boolean' }, stdin: { type: 'boolean' } })
 }
 
 /**
@@ -210,6 +210,10 @@ function parseSetOptions(options: readonly string[]): ReturnType<typeof parseOpt
  */
 async function set(options: readonly string[], where: PinWhere): Promise<ExitCode> {
   const values = parseSetOptions(options)
+  // Older scripts still pass the lock options; they are accepted and ignored, since nothing stays unlocked to lock.
+  if (values['idle-minutes'] !== undefined || values['lock-when-hidden'] === true) {
+    where.context.stderr('delorun devices pin set: --idle-minutes and --lock-when-hidden have no effect and are ignored: a device confirms each action with Face ID or the PIN, and nothing stays unlocked.\n')
+  }
   const presented = await readSecret(values.stdin === true, where)
   if (presented === undefined) return EXIT.failed
   let checked: ReturnType<typeof checkNewSecret>
