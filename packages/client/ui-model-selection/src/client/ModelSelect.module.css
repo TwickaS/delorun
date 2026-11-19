@@ -81,7 +81,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--dsw-alias-label-secondary);
+  color: var(--dsw-alias-label-caption);
 }
 
 /* The Models glyph replaces the text when the composer row cannot fit it. */
@@ -136,7 +136,9 @@
    * Menu.module.css) so every dropdown reads as the same material. */
   border: 0;
   --dsw-elevation-stroke-color: var(--dsw-alias-border-l1);
-  box-shadow: var(--dsw-elevation-prominent);
+  /* The panel elevation is the outline plus a short drop shadow, without the
+     wide soft glow of the prominent one. */
+  box-shadow: var(--dsw-elevation-panel);
   color: var(--dsw-alias-label-primary);
   /* Elevated surface: the scrollbar thumb takes the l2 elevation tokens.
      Declared here rather than on the scrolling `.groups` child so the
@@ -206,10 +208,28 @@
   margin: 2px 0 3px;
 }
 
+.searchRow {
+  display: flex;
+  align-items: center;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 10px;
+  width: 16px;
+  height: 16px;
+  color: var(--dsw-alias-label-caption);
+  pointer-events: none;
+}
+
 .searchRow .search {
   display: flex;
+  flex: 1 1 auto;
+  box-sizing: border-box;
   height: auto;
-  padding: 5px 7px;
+  min-height: 36px;
+  align-items: center;
+  padding: 5px 10px 5px 34px;
   border: 0 solid transparent;
   border-radius: var(--dsw-radius-md);
   background: transparent;
@@ -260,9 +280,25 @@
   line-height: normal;
 }
 
-@media (pointer: coarse) {
+/* Touch and phone widths: a 44px field with 16px text, which stops iOS from
+   zooming the page on focus. */
+@media (pointer: coarse), (max-width: 520px) {
+  .searchRow .search {
+    min-height: 44px;
+  }
+
   .searchRow .search input {
     font-size: 16px;
+  }
+
+  .searchClear {
+    width: 32px;
+    height: 32px;
+    right: 6px;
+  }
+
+  .searchRow .searchWithQuery {
+    padding-right: 44px;
   }
 }
 
@@ -283,7 +319,7 @@
   padding: 8px 10px 4px;
   font-size: 11px;
   line-height: 16px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.02em;
 }
 
@@ -313,6 +349,10 @@
 .option:focus-visible,
 .optionActive:not(:disabled) {
   background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.option:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
 }
 
 .modelOption {
