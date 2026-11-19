@@ -85,6 +85,8 @@ export function apply(ctx: Context): void {
       const endpoint = `delorunChanges/${control}`
       ctx.emit('remote/call-denied', { endpoint, reason: `elevation-required: ${endpoint}` })
     },
+    // Read at the call, so the Face ID service may load after this plugin.
+    faceGrant: () => ctx.get('delorunFaceGrant')?.grant,
   })
   ctx.effect(() => {
     void changes.refresh()

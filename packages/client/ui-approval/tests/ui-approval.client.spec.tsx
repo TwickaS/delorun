@@ -569,6 +569,66 @@ describe('inline grant actions', () => {
     return { renderSlot, owner: () => owner }
   }
 
+  it('runs the gate before an allow answer is sent, and never for Reject', async () => {
+    const pending = new PendingApproval(id('s1'), { toolName: 'workspace', grants: 'full-access' })
+    const answer = vi.spyOn(pending, 'answer')
+    const { owner } = renderGrantAction(pending)
+    const order: string[] = []
+    const gate = vi.fn(async () => { order.push('gate'); return true })
+    answer.mockImplementation(async (outcome) => { order.push(outcome) })
+    owner()!.gateAllow(gate)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Allow once' }))
+    await waitFor(() => { expect(order).toEqual(['gate', 'allowed-once']) })
+    expect(gate).toHaveBeenCalledOnce()
+    pending.abort(new Error('test cleanup'))
+    await pending.result.catch(() => {})
+  })
+
+  it('sends nothing and re-opens the card when the gate is cancelled', async () => {
+    const pending = new PendingApproval(id('s1'), { toolName: 'workspace', grants: 'full-access' })
+    const answer = vi.spyOn(pending, 'answer')
+    const { owner } = renderGrantAction(pending)
+    owner()!.gateAllow(async () => false)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Allow once' }))
+    await waitFor(() => { expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Allow once' }).disabled).toBe(false) })
+    expect(answer).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Reject' }))
+    await expect(pending.result).resolves.toBe('rejected')
+    expect(answer).toHaveBeenCalledExactlyOnceWith('rejected')
+  })
+
+  it('leaves a withdrawn card alone when its gate is cancelled afterwards', async () => {
+    const pending = new PendingApproval(id('s1'), { toolName: 'workspace', grants: 'full-access' })
+    const answer = vi.spyOn(pending, 'answer')
+    const { owner } = renderGrantAction(pending)
+    let cancel: (sent: boolean) => void = () => {}
+    owner()!.gateAllow(() => new Promise<boolean>((resolve) => { cancel = resolve }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Allow once' }))
+    pending.abort(new Error('request withdrawn'))
+    await expect(pending.result).rejects.toThrow('request withdrawn')
+    await act(async () => { cancel(false) })
+
+    expect(answer).not.toHaveBeenCalled()
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Allow once' }).disabled).toBe(true)
+  })
+
+  it('treats a removed gate as none', async () => {
+    const pending = new PendingApproval(id('s1'), { toolName: 'workspace', grants: 'full-access' })
+    const answer = vi.spyOn(pending, 'answer')
+    const { owner } = renderGrantAction(pending)
+    const gate = vi.fn(async () => true)
+    owner()!.gateAllow(gate)
+    owner()!.gateAllow(null)
+
+    await act(async () => { await owner()!.allow() })
+
+    expect(gate).not.toHaveBeenCalled()
+    expect(answer).toHaveBeenCalledExactlyOnceWith('allowed-once')
+  })
+
   it('renders the action list with the request facts for a grant-asking request', () => {
     const pending = new PendingApproval(id('s1'), {
       toolName: 'workspace', callId: 'call-1' as ToolCallId, grants: 'full-access',

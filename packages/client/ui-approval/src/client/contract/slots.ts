@@ -87,6 +87,13 @@ export interface ApprovalDetailOwnerProps {
   callId: ToolCallId
 }
 
+/**
+ * A step an allow answer takes before it is sent, such as a confirmation the host requires for this request.
+ * @returns true to send the answer; false when the person cancelled, which sends nothing and leaves the card answerable.
+ *   A rejection fails the answer like a failed send.
+ */
+export type ApprovalAllowGate = () => Promise<boolean>
+
 /** Request facts and the card's answer handed to an inline grant action. */
 export interface ApprovalActionOwnerProps {
   /** Grant the request asks for. */
@@ -108,6 +115,12 @@ export interface ApprovalActionOwnerProps {
    * accepts one. An action with effects of its own reads it before each effect, because it can change across an await.
    */
   canAnswer: () => boolean
+  /**
+   * Set the gate every allow answer of this card passes before it is sent: the card's Allow button, Enter, and the
+   * `allow` of each action and choice. `null` removes it. At most one gate stands; the last one set wins, and the card
+   * drops it when it unmounts.
+   */
+  gateAllow: (gate: ApprovalAllowGate | null) => void
 }
 
 /** Request facts and the card's answer handed to a choice in the decision row. */

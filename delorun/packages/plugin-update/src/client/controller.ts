@@ -6,6 +6,7 @@
  * @module @delorun/plugin-update/client/controller
  */
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+import { fetchedPath, type FaceGrant } from '@delorun/plugin-changes/face-grant'
 import {
   UPDATE_PATHS,
   type PreparedUpdateView,
@@ -53,7 +54,18 @@ export interface UpdateControllerDeps {
   readonly unlockNeeded: (control: UpdateControl) => void
   /** Reload the page, once the Host runs another release than the loaded one. */
   readonly reload: () => void
+  /**
+   * The page's Face ID confirmation, read at each call, or undefined while the page has no such service. Without it a
+   * control that needs Face ID is sent plain and the home refuses it.
+   */
+  readonly faceGrant?: () => FaceGrant | undefined
 }
+
+/** One request's sender, bound to the control it belongs to. */
+type Send = <V>(path: string, body?: object) => Promise<V>
+
+/** The person cancelled the Face ID confirmation, so the request was not sent. */
+class FaceCancelled extends Error {}
 
 /** The answer of the prepare route: the prepared update under `prepared`. */
 export interface PreparedUpdateAnswer {
@@ -76,13 +88,14 @@ class RouteRefused extends Error {
  * Ask one route, relative to the document so the studio's own origin and path prefix apply.
  * @param path - the route from `wire.ts`.
  * @param body - the JSON body of a `POST`; a `GET` without it.
+ * @param grantId - the Face ID grant the home checks against this exact call, in `Delorun-Grant`.
  * @returns the JSON answer.
  * @throws {RouteRefused} for a non-2xx answer; a network failure rejects with the fetch error.
  */
-async function request<V>(path: string, body?: object): Promise<V> {
+async function request<V>(path: string, body?: object, grantId?: string): Promise<V> {
   const response = await fetch(path.slice(1), body === undefined
     ? { method: 'GET', headers: { accept: 'application/json' } }
-    : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+    : { method: 'POST', headers: { 'content-type': 'application/json', ...(grantId === undefined ? {} : { 'Delorun-Grant': grantId }) }, body: JSON.stringify(body) })
   if (!response.ok) {
     const said = await response.json().catch((): undefined => undefined) as Partial<UpdateRefusal> | undefined
     throw new RouteRefused({ code: said?.code ?? 'UPDATE_FAILED', message: said?.message ?? '' })
@@ -161,17 +174,37 @@ export class UpdateController {
   }
 
   /**
+   * The sender of one control's requests. While the page's state says the control needs Face ID, a `POST` first asks for
+   * a grant covering exactly that call and carries it in `Delorun-Grant`.
+   * @param control - the control the requests belong to.
+   * @returns the sender.
+   * @throws {FaceCancelled} from a send whose grant the person did not give.
+   */
+  #sender(control: UpdateControl): Send {
+    return async <V>(path: string, body?: object): Promise<V> => {
+      const ask = this.deps.faceGrant?.()
+      const load = this.state.getSnapshot()
+      const may = load.status === 'ready' ? load.state.access.may[control] : undefined
+      if (body === undefined || ask === undefined || may === undefined || may.ok || may.needs !== 'face') return await request<V>(path, body)
+      const grantId = await ask({ action: `changes/${control}`, call: { method: 'POST', path: fetchedPath(path), body } })
+      if (grantId === undefined) throw new FaceCancelled()
+      return await request<V>(path, body, grantId)
+    }
+  }
+
+  /**
    * Run one action; a refusal is returned for the screen to word, and an unlock refusal also opens the unlock dialog.
    * @param control - the control the route belongs to.
    * @param run - the request.
    * @returns the answer or the refusal.
    */
-  async #act<V>(control: UpdateControl, run: () => Promise<V>): Promise<Outcome<V>> {
+  async #act<V>(control: UpdateControl, run: (send: Send) => Promise<V>): Promise<Outcome<V>> {
     try {
-      const value = await run()
+      const value = await run(this.#sender(control))
       await this.refresh()
       return { ok: true, value }
     } catch (error) {
+      if (error instanceof FaceCancelled) return { ok: false, refusal: { code: 'FACE_CANCELLED', message: '' } }
       if (!(error instanceof RouteRefused)) throw error
       if (error.refusal.code === ELEVATION_REQUIRED) this.deps.unlockNeeded(control)
       await this.refresh()
@@ -184,7 +217,7 @@ export class UpdateController {
    * @returns the check.
    */
   check(): Promise<Outcome<UpdateCheckedView>> {
-    return this.#act('update-check', () => request<UpdateCheckedView>(UPDATE_PATHS.check, {}))
+    return this.#act('update-check', send => send<UpdateCheckedView>(UPDATE_PATHS.check, {}))
   }
 
   /**
@@ -192,7 +225,7 @@ export class UpdateController {
    * @returns the prepared update, whose handle `apply` takes.
    */
   prepare(): Promise<Outcome<PreparedUpdateAnswer>> {
-    return this.#act('update-begin', () => request<PreparedUpdateAnswer>(UPDATE_PATHS.prepare, {}))
+    return this.#act('update-begin', send => send<PreparedUpdateAnswer>(UPDATE_PATHS.prepare, {}))
   }
 
   /**
@@ -201,7 +234,7 @@ export class UpdateController {
    * @returns the begun update.
    */
   async apply(body: UpdateApplyBody): Promise<Outcome<UpdateBegunView>> {
-    const outcome = await this.#act('update-begin', () => request<UpdateBegunView>(UPDATE_PATHS.apply, body))
+    const outcome = await this.#act('update-begin', send => send<UpdateBegunView>(UPDATE_PATHS.apply, body))
     if (outcome.ok) this.switching.set(true)
     return outcome
   }
@@ -211,7 +244,7 @@ export class UpdateController {
    * @returns whether anything waited.
    */
   cancel(): Promise<Outcome<UpdateCancelView>> {
-    return this.#act('update-cancel', () => request<UpdateCancelView>(UPDATE_PATHS.cancel, {}))
+    return this.#act('update-cancel', send => send<UpdateCancelView>(UPDATE_PATHS.cancel, {}))
   }
 
   /**
@@ -220,7 +253,7 @@ export class UpdateController {
    * @returns the begun rollback.
    */
   async rollback(body: RollbackBody): Promise<Outcome<UpdateBegunView>> {
-    const outcome = await this.#act('update-rollback', () => request<UpdateBegunView>(UPDATE_PATHS.rollback, body))
+    const outcome = await this.#act('update-rollback', send => send<UpdateBegunView>(UPDATE_PATHS.rollback, body))
     if (outcome.ok) this.switching.set(true)
     return outcome
   }
@@ -230,6 +263,6 @@ export class UpdateController {
    * @returns after the record is gone.
    */
   dismiss(): Promise<Outcome<object>> {
-    return this.#act('update-dismiss', () => request<object>(UPDATE_PATHS.dismiss, {}))
+    return this.#act('update-dismiss', send => send<object>(UPDATE_PATHS.dismiss, {}))
   }
 }
