@@ -86,6 +86,11 @@ export interface ApprovalRequestEvent {
   /** Localized presentation only; never persisted in approval audit events. */
   readonly displayReason?: { readonly en: string; readonly [locale: string]: string }
   /**
+   * A localized line the card shows beside the request, kept apart from `reason` and `displayReason` so it is never
+   * read as the asker's own text (a full-access ask after a temporary sandbox fault uses it). Presentation only: never persisted.
+   */
+  readonly notice?: { readonly en: string; readonly [locale: string]: string }
+  /**
    * What an `allowed-once` answer grants beyond an ordinary tool call, when it does ({@link ApprovalGrant}). A Host may
    * refuse a granting answer from a Peer that may not give that grant; a refusal still applies. Never persisted.
    */

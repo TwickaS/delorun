@@ -134,7 +134,7 @@ async function bare(args: readonly string[], context: CommandContext): Promise<C
   const values = parseOptions('', args, { profile: { type: 'string' }, foreground: { type: 'boolean', default: false }, background: { type: 'boolean', default: false } })
   const flags = { foreground: values.foreground === true, background: values.background === true }
   const { foregroundHint, startChoice, startDetached, startForeground } = await import('./start.ts')
-  const { home, profile } = await prepareHome(context, values.profile)
+  const { home, profile } = await prepareHome(context, values.profile, false)
   if (!hasCliProfile(home.path, profile)) {
     startChoice('', flags, profileDirectory(home.path, profile))
     const { runSetup } = await import('./setup/index.ts')

@@ -3182,8 +3182,15 @@ export interface Config {
    * covering the executable runner's own failure dialect.
    */
   runnerFailureSignatures?: string[]
-  /** Positive timeout for each functional probe; zero would mean unbounded to Node. */
+  /** Positive timeout in milliseconds for each functional probe, at most 60 000; zero would mean unbounded to Node. */
   probeTimeoutMs?: number
+  /**
+   * How many times a confined command walks the runner chain before it is refused as unavailable; at least one.
+   * A failed walk is never remembered past the command that ran it.
+   */
+  probeAttempts?: number
+  /** Wait in milliseconds before the second walk; each further wait doubles. Zero retries at once. */
+  probeBackoffMs?: number
   /**
    * Absolute path of an existing directory, such as the harness home, that confined commands can neither write nor
    * read, as far as the selected runner expresses each rule ({@link RUNNER_PROTECTION}). A `workspace-write` call

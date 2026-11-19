@@ -8,7 +8,7 @@
  * @module @deepseek-ai/dsh-sandbox-local/profiles
  */
 
-import { existsSync, readdirSync, realpathSync } from 'node:fs'
+import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { grantArgs as landlockGrantArgs } from '@deepseek-ai/node-addon-system/landlock-run'
 import { SandboxUnsupportedPolicyError, canonicalPath, pathWithin, workspaceWritableRoots, writableRoots } from '@deepseek-ai/dsh-sandbox'
@@ -135,6 +135,7 @@ function touches(path: string, protectedPaths: readonly string[]): boolean {
  * @param settings - the provider's validated protection settings.
  * @param mounts - the mount table; read from this process when omitted.
  * @param dataVolume - where macOS mounts the Data volume that firmlinks point into.
+ * @param bindMountsRoot - the directory of Docker Desktop's bind mounts, hidden whole when it is a directory and a home is protected.
  * @param platform - the operating system, which decides whether alias coverage is checked and whether the entries of
  *   each denied socket directory are listed for Seatbelt's path rules.
  * @returns the protection the profile builders apply.
@@ -146,6 +147,7 @@ export function resolveProtection(
   mounts: readonly MountEntry[] | undefined = undefined,
   dataVolume: string = DATA_VOLUME,
   platform: string = process.platform,
+  bindMountsRoot: string = DOCKER_BIND_MOUNTS_ROOT,
 ): Protection {
   const nothing = settings.home === undefined && settings.deniedSockets.length === 0 && settings.deniedSocketDirectories.length === 0
     && !settings.privateTmp
@@ -213,6 +215,10 @@ export function resolveProtection(
       if (!protectedPaths.some(entry => pathWithin(path, entry))) shadowedSockets.add(path)
     }
   }
+  // Docker Desktop's bind mounts come and go; a tmpfs over one fails when it vanishes before bwrap runs, so a protected
+  // home hides the whole root, whether or not an alias lies under it. Only a directory is hidden: an absent or other
+  // root needs no mount argument.
+  if ((home !== undefined || settings.privateTmp) && isDirectory(bindMountsRoot)) hiddenDirectories.add(bindMountsRoot)
   return {
     home,
     homeAliases,
@@ -226,6 +232,26 @@ export function resolveProtection(
     tmpAliases: settings.privateTmp ? aliasesOf(tmp) : [],
   }
 }
+
+/**
+ * Environment variable this provider sets to `1` inside every bubblewrap command. There bwrap shows its mount-point
+ * parents as mode 0755, so a program that checks directory modes may trust that view only when it carries this marker
+ * and its process 1 is `bwrap`. `@delorun/home` repeats the name (`SANDBOX_VIEW_ENV` in its tree module).
+ */
+export const SANDBOX_VIEW_ENV = 'DELORUN_SANDBOX_VIEW'
+
+/** Whether `path` is an existing directory. */
+function isDirectory(path: string): boolean {
+  try {
+    return statSync(path).isDirectory()
+  } catch {
+    // Absent or unreadable: not a directory a mount can be made over.
+    return false
+  }
+}
+
+/** Docker Desktop's bind mounts in WSL, which appear and vanish while containers start and stop. */
+export const DOCKER_BIND_MOUNTS_ROOT = '/mnt/wsl/docker-desktop-bind-mounts'
 
 /**
  * Build the bwrap profile arguments for one file-effect policy. With a protected home, each denied socket and each of
@@ -243,7 +269,7 @@ export function resolveProtection(
  * @returns profile arguments before the trailing separator and command argv.
  */
 export function bwrapProfileArgs(policy: SandboxPolicy, protection: Protection = NO_PROTECTION): string[] {
-  const args = ['--ro-bind', '/', '/', '--dev', '/dev', '--unshare-pid', '--proc', '/proc', '--die-with-parent', ...bwrapNetworkArgs(policy.network)]
+  const args = ['--ro-bind', '/', '/', '--dev', '/dev', '--unshare-pid', '--proc', '/proc', '--die-with-parent', '--setenv', SANDBOX_VIEW_ENV, '1', ...bwrapNetworkArgs(policy.network)]
   const privateReadOnlyTmp = protection.privateTmp && policy.mode === 'read-only'
   if (policy.mode === 'workspace-write') {
     args.push('--tmpfs', '/tmp')

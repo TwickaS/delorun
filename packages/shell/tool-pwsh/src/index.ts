@@ -33,7 +33,7 @@ import type { JobId, JobRegistry, JobView } from '@deepseek-ai/dsh-jobs'
 import type {} from '@deepseek-ai/dsh-shell-env'
 import type {} from '@deepseek-ai/dsh-user-approval'
 import type { SandboxExecutionPolicy, SandboxMode } from '@deepseek-ai/dsh-sandbox'
-import { ESCALATION_TARGETS, SandboxEscalationError, approveEscalation, sandboxPermissionsDescription, validateEscalationArgs } from '@deepseek-ai/dsh-sandbox'
+import { ESCALATION_TARGETS, SandboxEscalationError, SandboxUnavailableError, approveEscalation, clearSandboxFault, noteSandboxFault, sandboxPermissionsDescription, validateEscalationArgs } from '@deepseek-ai/dsh-sandbox'
 import { subprocessSpawnFailure } from '@deepseek-ai/dsh-subprocess'
 import type { SandboxPolicyService } from '@deepseek-ai/dsh-sandbox-policy'
 import type { ShellExecRequest, ShellExecSpec, ShellExecution, ShellRunResult } from '@deepseek-ai/dsh-shell'
@@ -204,7 +204,8 @@ function toolAborted(): HarnessError {
  * with the original as `cause`; any other value, including a coded error,
  * keeps its own identity.
  */
-function launchFailure(error: unknown, signal: AbortSignal): unknown {
+function launchFailure(error: unknown, signal: AbortSignal, agent?: object): unknown {
+  if (error instanceof SandboxUnavailableError && error.transient) noteSandboxFault(agent)
   return signal.aborted && error === signal.reason ? error : subprocessSpawnFailure(error, 'pwsh')
 }
 
@@ -401,9 +402,10 @@ export function apply(ctx: Context, config: Config = {}): void {
       // projection would have rejected; a kill before the spawn has only its detail.
       if (process === undefined) {
         const failure = attached.failure()
-        throw failure === undefined ? new Error(view.detail) : launchFailure(failure.error, exec.signal)
+        throw failure === undefined ? new Error(view.detail) : launchFailure(failure.error, exec.signal, exec.agent)
       }
-      const result = await process.result().catch((error: unknown) => { throw launchFailure(error, exec.signal) })
+      const result = await process.result().catch((error: unknown) => { throw launchFailure(error, exec.signal, exec.agent) })
+      clearSandboxFault(exec.agent)
       const stopped = attached.stopped()
       return { ...canonicalPwshResult(result, spec.workdir), ...stopped !== undefined ? { stopped } : {} }
     }
@@ -579,9 +581,10 @@ export function apply(ctx: Context, config: Config = {}): void {
         try {
           result = await (await ctx.shell.execute(spec)).result()
         } catch (error) {
-          throw launchFailure(error, exec.signal)
+          throw launchFailure(error, exec.signal, exec.agent)
         }
         if (result.aborted) throw toolAborted()
+        clearSandboxFault(exec.agent)
         return canonicalPwshResult(result, spec.workdir)
       },
       /* jscpd:ignore-end */

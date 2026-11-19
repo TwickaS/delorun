@@ -709,7 +709,7 @@ export async function runChanges(args: readonly string[], context: CommandContex
   // A change needs the person at the terminal before anything is read or written, the home's tree included.
   const reads = action.kind === 'list' || action.kind === 'show' || (action.kind === 'protection' && action.level === undefined)
   const presence = reads ? undefined : attestAtTerminal(dependencies)
-  const { home, profile } = await prepareHome(context, profileFlag)
+  const { home, profile } = await prepareHome(context, profileFlag, true)
   if (!hasCliProfile(home.path, profile)) throw new CliError(EXIT.failed, `delorun changes: the CLI profile ${profile} is not set up in ${home.path}; run: delorun setup`)
   const ctx: ChangesContext = { home: home.path, profile, profileDir: profileDirectory(home.path, profile), ...runningRelease() }
   try {

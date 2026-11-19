@@ -75,7 +75,7 @@ export async function runSetupTransfer(args: readonly string[], context: Command
   } catch (error: unknown) {
     throw parseFailure(`setup ${String(word)}`, error)
   }
-  const { home, profile } = await prepareHome(context, parsed.values.profile)
+  const { home, profile } = await prepareHome(context, parsed.values.profile, false)
   if (!hasCliProfile(home.path, profile)) throw new CliError(EXIT.failed, `delorun setup ${String(word)}: the CLI profile ${profile} is not set up in ${home.path}; run: delorun setup`)
   const ctx: ChangesContext = { home: home.path, profile, profileDir: profileDirectory(home.path, profile), ...runningRelease() }
   if (word === 'export') {

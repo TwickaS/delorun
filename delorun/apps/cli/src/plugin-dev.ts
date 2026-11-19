@@ -341,7 +341,7 @@ export async function runPluginDev(args: readonly string[], context: CommandCont
   if (!existsSync(given)) throw new CliError(EXIT.failed, `delorun plugin dev: ${printable(given)} does not exist`)
   const folder = realpathSync(given)
   const { name, builds } = await devPackage(folder)
-  const { home, profile } = await prepareHome(context, values.profile)
+  const { home, profile } = await prepareHome(context, values.profile, true)
   if (!hasCliProfile(home.path, profile)) throw new CliError(EXIT.failed, `delorun plugin dev: the profile ${profile} is not set up in ${home.path}; run: delorun setup`)
   const profileDir = profileDirectory(home.path, profile)
   const state = linkState(profileDir, name, folder)

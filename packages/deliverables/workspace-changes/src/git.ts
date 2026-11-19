@@ -1,6 +1,6 @@
 /** Git working-tree snapshots, tree diffs, and ignore checks through the subprocess capability. */
 import { join, relative, resolve } from 'node:path'
-import { SandboxUnavailableError, classifyRunnerFailure, type ConfinedSandboxMode, type RunnerFailureRule } from '@deepseek-ai/dsh-sandbox'
+import { SandboxUnavailableError, classifyRunnerFailure, isTransientRunnerFailure, type ConfinedSandboxMode, type RunnerFailureRule } from '@deepseek-ai/dsh-sandbox'
 import type { SubprocessRuntime } from '@deepseek-ai/dsh-subprocess'
 import { copyRegularFile, type PrivateTree } from './files.ts'
 import { DRIVER_LISTING_ARGS, FIXED_GIT_OVERRIDES, driverOverrides, hardenedGitEnvironment } from './hardening.ts'
@@ -90,6 +90,16 @@ export class GitRunner {
    * @throws when the command times out, is aborted, or cannot spawn, or the sandbox could not confine it.
    */
   async run(args: readonly string[], options: GitRunOptions): Promise<GitRunResult> {
+    try {
+      return await this.runOnce(args, options)
+    } catch (error) {
+      // git never ran, so one repeat with a freshly built mount list is safe; any other failure, or a second one, stands.
+      if (!(error instanceof SandboxUnavailableError) || !error.transient) throw error
+      return this.runOnce(args, options)
+    }
+  }
+
+  private async runOnce(args: readonly string[], options: GitRunOptions): Promise<GitRunResult> {
     const timeout = AbortSignal.timeout(this.limits.timeoutMs)
     const signal = AbortSignal.any([options.signal, timeout])
     const argv = [this.executable, ...args]
@@ -116,7 +126,9 @@ export class GitRunner {
     /* v8 ignore stop */
     // A failed confinement means git never ran, so its exit status says nothing about the repository.
     const runnerFailure = confined === undefined ? undefined : classifyRunnerFailure(outcome.exitCode, stderr, confined.runnerFailureRules)
-    if (confined !== undefined && runnerFailure !== undefined) throw new SandboxUnavailableError(confined.mode, runnerFailure.detail)
+    if (confined !== undefined && runnerFailure !== undefined) {
+      throw new SandboxUnavailableError(confined.mode, runnerFailure.detail, { transient: isTransientRunnerFailure(runnerFailure.detail) })
+    }
     return { exitCode: outcome.exitCode, stdout: stdout.text, stderr, truncated: stdout.lossy }
   }
 }

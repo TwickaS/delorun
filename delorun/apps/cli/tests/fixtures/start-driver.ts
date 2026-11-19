@@ -36,7 +36,7 @@ let booted: BootedProfile | undefined
 let root: Context | undefined
 let rowsAtBoot: unknown[] = []
 let sessionLogEnabled: unknown
-const { home, profile } = await prepareHome(context, undefined)
+const { home, profile } = await prepareHome(context, undefined, true)
 const report = (outcome: Record<string, unknown>): void => {
   process.stdout.write(`${JSON.stringify({ ...outcome, rows: rowsAtBoot, sessionLogEnabled })}\n`)
 }

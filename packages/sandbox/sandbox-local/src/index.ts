@@ -21,7 +21,7 @@
  * @module @deepseek-ai/dsh-sandbox-local
  */
 
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { accessSync, constants as fsConstants, existsSync, mkdtempSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, delimiter, dirname, isAbsolute, join, normalize, relative, sep } from 'node:path'
@@ -99,8 +99,15 @@ export interface Config {
    * covering the executable runner's own failure dialect.
    */
   runnerFailureSignatures?: string[]
-  /** Positive timeout for each functional probe; zero would mean unbounded to Node. */
+  /** Positive timeout in milliseconds for each functional probe, at most 60 000; zero would mean unbounded to Node. */
   probeTimeoutMs?: number
+  /**
+   * How many times a confined command walks the runner chain before it is refused as unavailable; at least one.
+   * A failed walk is never remembered past the command that ran it.
+   */
+  probeAttempts?: number
+  /** Wait in milliseconds before the second walk; each further wait doubles. Zero retries at once. */
+  probeBackoffMs?: number
   /**
    * Absolute path of an existing directory, such as the harness home, that confined commands can neither write nor
    * read, as far as the selected runner expresses each rule ({@link RUNNER_PROTECTION}). A `workspace-write` call
@@ -184,11 +191,18 @@ function bwrapOnPath(): boolean {
   })
 }
 
+/** Upper bounds of `probeAttempts` and of each wait of `probeBackoffMs`, which doubles up to the bound. */
+const MAX_PROBE_ATTEMPTS = 5
+const MAX_PROBE_BACKOFF_MS = 2_000
+/** Upper bound of `probeTimeoutMs`. */
+const MAX_PROBE_TIMEOUT_MS = 60_000
+
 /**
  * A `bwrap` probe's verdict: whether bwrap created the profile, or `timed-out` when it did not finish within the
- * provider's `probeTimeoutMs`, which says nothing about whether it can.
+ * provider's `probeTimeoutMs`, or `resource-limit` when the host could not start it (`EAGAIN`, `ENOMEM`); neither says
+ * anything about whether it can.
  */
-type BwrapProbe = boolean | 'timed-out'
+type BwrapProbe = boolean | 'timed-out' | 'resource-limit'
 
 /**
  * The fix the Landlock escape refusal names, by why the Linux chain fell to Landlock.
@@ -198,6 +212,9 @@ type BwrapProbe = boolean | 'timed-out'
  * @returns the refusal's closing advice.
  */
 function bubblewrapAdvice(probe: BwrapProbe | undefined, installed: boolean, timeoutMs: number): string {
+  if (probe === 'resource-limit') {
+    return 'bubblewrap could not start because the computer is out of processes or memory for a moment; start again to check it again'
+  }
   if (probe === 'timed-out') {
     return `bubblewrap's check did not finish within ${String(timeoutMs)} ms, as can happen while the computer is busy; start again to check it again, or raise probeTimeoutMs`
   }
@@ -206,14 +223,42 @@ function bubblewrapAdvice(probe: BwrapProbe | undefined, installed: boolean, tim
     : 'install bubblewrap (the bwrap command, packaged as bubblewrap), then start again'
 }
 
-/** Probe whether `bwrap` can create the profile; the provider caches the bounded result. */
-function defaultProbeBwrap(timeoutMs: number): BwrapProbe {
-  const probe = spawnSync('bwrap', [...bwrapProfileArgs({ mode: 'read-only', workspaceRoot: '/' }), '--', 'true'], {
-    timeout: timeoutMs,
-    stdio: 'ignore',
+/**
+ * Probe whether `bwrap` can create the profile, without blocking the event loop; the provider retries a failed result.
+ * @param timeoutMs - how long bwrap may run before it is killed and the probe reports `timed-out`.
+ * @returns the probe's verdict.
+ */
+function defaultProbeBwrap(timeoutMs: number): Promise<BwrapProbe> {
+  return new Promise<BwrapProbe>((resolve) => {
+    let child: ChildProcess
+    try {
+      child = spawn('bwrap', [...bwrapProfileArgs({ mode: 'read-only', workspaceRoot: '/' }), '--', 'true'], { stdio: 'ignore' })
+    } catch (error) {
+      // spawn throws synchronously for some host limits (ENOMEM); the probe still reports one of its four results.
+      resolve(probeErrorVerdict(error))
+      return
+    }
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL')
+      resolve('timed-out')
+    }, timeoutMs)
+    child.once('error', (error) => {
+      clearTimeout(timer)
+      resolve(probeErrorVerdict(error))
+    })
+    child.once('close', (status, signal) => {
+      clearTimeout(timer)
+      // SIGKILL with no exit status is the kernel's OOM killer, not a verdict on bwrap; another signal (such as
+      // seccomp's SIGSYS) is bwrap failing here, which is lasting.
+      resolve(status === null && signal === 'SIGKILL' ? 'resource-limit' : status === 0)
+    })
   })
-  if (probe.status === 0) return true
-  return (probe.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT' ? 'timed-out' : false
+}
+
+/** Map a failed `bwrap` spawn: host resource exhaustion is `resource-limit`; a missing binary or any other error is `false`. */
+function probeErrorVerdict(error: unknown): BwrapProbe {
+  const code = (error as NodeJS.ErrnoException).code
+  return code === 'EAGAIN' || code === 'ENOMEM' || code === 'EMFILE' || code === 'ENFILE' ? 'resource-limit' : false
 }
 
 /**
@@ -254,6 +299,12 @@ function defaultProbeWindowsAcl(runnerInvocation: string[], timeoutMs: number): 
   return probe.status === 0
 }
 
+/** A selection's outcome: the runner chosen for this command and the `bwrap` verdict that preceded it. */
+interface SelectionResult {
+  selected: SelectedRunner
+  bwrap: BwrapProbe | undefined
+}
+
 /** Test hook: inject probe verdicts / a fake launcher / a platform without real runners. */
 export interface SandboxInternals {
   /** Replaces `process.platform` for chain selection (exercise any platform's chain from any host). */
@@ -265,7 +316,7 @@ export interface SandboxInternals {
   /** Replaces the check whether the kernel offers virtual-machine sockets, which decides bwrap's seccomp filter. */
   vsockOffered?: () => boolean
   /** Replaces the functional `bwrap` probe (the Linux chain's first rung). */
-  probeBwrap?: () => BwrapProbe
+  probeBwrap?: () => BwrapProbe | Promise<BwrapProbe>
   /** Replaces the check whether an executable `bwrap` is on `PATH`, which chooses the escape refusal's advice. */
   bwrapInstalled?: () => boolean
   /** Replaces the functional Landlock launcher probe (the Linux chain's second rung). */
@@ -501,7 +552,9 @@ export class LocalSandboxProvider extends SandboxProvider {
   static Config: z<Config> = z.object({
     runnerCommand: z.array(z.string()).default([]),
     runnerFailureSignatures: z.array(z.string()).default([]),
-    probeTimeoutMs: z.natural().default(5_000),
+    probeTimeoutMs: z.natural().min(1).max(MAX_PROBE_TIMEOUT_MS).default(5_000),
+    probeAttempts: z.natural().max(MAX_PROBE_ATTEMPTS).default(3),
+    probeBackoffMs: z.natural().max(MAX_PROBE_BACKOFF_MS).default(250),
     protectedHome: z.string(),
     protectedHomeReadable: z.array(z.string()).default([]),
     protectedHomeToolReadable: z.array(z.string()).default([]),
@@ -519,6 +572,8 @@ export class LocalSandboxProvider extends SandboxProvider {
   private readonly runnerCommand: string[] | undefined
   private readonly configuredRunnerFailureSignatures: string[]
   private readonly probeTimeoutMs: number
+  private readonly probeAttempts: number
+  private readonly probeBackoffMs: number
   private readonly protection: ProtectionSettings
   /** {@link protection} with the sockets and directories denied to a command whose network is restricted. */
   private readonly networkProtection: ProtectionSettings
@@ -528,10 +583,12 @@ export class LocalSandboxProvider extends SandboxProvider {
   private readonly escapeSocketDirectories: readonly string[]
   /** The last accepted abstract-socket finding that was logged. */
   private lastAcceptedSockets: string | undefined
-  /** Cached chain verdict; undefined until the first confined wrap needs it. */
-  private selectedRunner: SelectedRunner | 'unavailable' | undefined
-  /** The chain walk's `bwrap` probe verdict, which the Landlock escape refusal's advice names; undefined when unprobed. */
-  private bwrapProbe: BwrapProbe | undefined
+  /** Cached usable runner; undefined until a confined wrap finds one. A failed walk is never cached. */
+  private selectedRunner: SelectedRunner | undefined
+  /** The `bwrap` verdict that accompanied {@link selectedRunner}, which the Landlock escape refusal's advice names. */
+  private selectedBwrap: BwrapProbe | undefined
+  /** The selection in flight, shared by commands that arrive before it finishes. */
+  private selecting: Promise<{ selected: SelectedRunner | undefined; bwrap: BwrapProbe | undefined }> | undefined
   /**
    * Server-lifetime write grants (windows-acl rung): the STANDING
    * workspace-root grant per workspace (its ACE is the cross-session reuse
@@ -562,6 +619,9 @@ export class LocalSandboxProvider extends SandboxProvider {
     this.configuredRunnerFailureSignatures = runnerFailureSignatures
     this.probeTimeoutMs = config.probeTimeoutMs as number
     assertPositiveFinite('probeTimeoutMs', this.probeTimeoutMs)
+    this.probeAttempts = config.probeAttempts as number
+    assertPositiveFinite('probeAttempts', this.probeAttempts)
+    this.probeBackoffMs = config.probeBackoffMs as number
     this.protection = protectionSettings(config)
     this.networkProtection = networkProtectionSettings(config, this.protection)
     this.toolReadable = toolReadableEntries(config, this.protection.home)
@@ -656,12 +716,12 @@ export class LocalSandboxProvider extends SandboxProvider {
         runnerFailureRules: [{ fatalSignatures: this.configuredRunnerFailureSignatures }, ...bridgeRules],
       })
     }
-    const selected = this.selectRunner(policy.mode)
+    const { selected, bwrap } = await this.selectRunner(policy.mode)
     const escape = this.escapeSocketDirectories.find(directory => existsSync(directory))
     if (escape !== undefined && !RUNNER_PROTECTION[selected.runner].socketConnect) {
       // Only the Linux chain falls back from bwrap; the advice is about bwrap, so another runner's refusal has none.
       const advice = selected.runner === 'landlock'
-        ? `; ${bubblewrapAdvice(this.bwrapProbe, (this.internals.bwrapInstalled ?? bwrapOnPath)(), this.probeTimeoutMs)}`
+        ? `; ${bubblewrapAdvice(bwrap, (this.internals.bwrapInstalled ?? bwrapOnPath)(), this.probeTimeoutMs)}`
         : ''
       throw new SandboxUnsupportedPolicyError(`the ${selected.runner} sandbox cannot deny the sockets in ${JSON.stringify(escape)}, through which a command could start programs outside the sandbox, so confined commands are refused here${advice}`)
     }
@@ -896,46 +956,79 @@ export class LocalSandboxProvider extends SandboxProvider {
   }
 
   /**
-   * Resolve which runner confines commands, once, for the provider's
-   * lifetime: this platform's chain ({@link PLATFORM_CHAINS}), its sole
-   * candidate selected directly, multiple candidates arbitrated by
-   * functional probes in chain order. Fail closed when the platform has no
-   * chain or no candidate passes — the command never runs.
+   * Resolve which runner confines commands: this platform's chain ({@link PLATFORM_CHAINS}), its sole
+   * candidate selected directly, multiple candidates arbitrated by functional probes in chain order.
+   * A usable runner is remembered for the provider's lifetime. A walk that finds none is retried up to
+   * `probeAttempts` times with doubling backoff on a timer, so the event loop keeps running, and then refused
+   * fail-closed without being remembered: the next command probes again. The refusal is `transient` only when the
+   * last `bwrap` check timed out or hit a resource limit; any other failure is a lasting one.
    */
-  private selectRunner(mode: ConfinedSandboxMode): SelectedRunner {
-    this.selectedRunner ??= this.chainVerdict()
-    if (this.selectedRunner === 'unavailable') throw new SandboxUnavailableError(mode)
-    return this.selectedRunner
+  private selectRunner(mode: ConfinedSandboxMode): Promise<SelectionResult> {
+    if (this.selectedRunner !== undefined) return Promise.resolve({ selected: this.selectedRunner, bwrap: this.selectedBwrap })
+    // Concurrent commands share one walk and its verdict, so one probe's result is never overwritten by another's.
+    this.selecting ??= this.walkChain().finally(() => { this.selecting = undefined })
+    return this.selecting.then((verdict) => {
+      if (verdict.selected === undefined) {
+        throw new SandboxUnavailableError(mode, undefined, { transient: verdict.bwrap === 'timed-out' || verdict.bwrap === 'resource-limit' })
+      }
+      return { selected: verdict.selected, bwrap: verdict.bwrap }
+    })
   }
 
-  /** Walk this platform's chain: sole candidate unprobed, several probed in order, none usable → unavailable. */
-  private chainVerdict(): SelectedRunner | 'unavailable' {
+  /**
+   * One selection: the chain walk, retried up to `probeAttempts` times with doubling backoff while no rung is usable.
+   * The runner is remembered only when no transient `bwrap` result sits above it, so a Landlock fallback after a
+   * timed-out `bwrap` probe serves this command and the next one probes `bwrap` again.
+   */
+  private async walkChain(): Promise<{ selected: SelectedRunner | undefined; bwrap: BwrapProbe | undefined }> {
+    let wait = this.probeBackoffMs
+    let bwrap: BwrapProbe | undefined
+    for (let attempt = 1; ; attempt++) {
+      const walk = await this.chainVerdict()
+      bwrap = walk.bwrap
+      if (walk.selected !== undefined) {
+        const transient = bwrap === 'timed-out' || bwrap === 'resource-limit'
+        if (!transient) {
+          this.selectedRunner = walk.selected
+          this.selectedBwrap = bwrap
+        }
+        return { selected: walk.selected, bwrap }
+      }
+      if (attempt >= this.probeAttempts) break
+      if (wait > 0) await new Promise<void>(resolve => setTimeout(resolve, wait))
+      wait = Math.min(wait * 2, MAX_PROBE_BACKOFF_MS)
+    }
+    return { selected: undefined, bwrap }
+  }
+
+  /** Walk this platform's chain: sole candidate unprobed, several probed in order; `selected` is undefined when none is usable. */
+  private async chainVerdict(): Promise<{ selected: SelectedRunner | undefined; bwrap: BwrapProbe | undefined }> {
     const chain = this.internals.chain ?? PLATFORM_CHAINS[this.internals.platform ?? process.platform] ?? []
     const [first, ...rest] = chain
-    if (first === undefined) return 'unavailable'
+    if (first === undefined) return { selected: undefined, bwrap: undefined }
     // A sole candidate needs no arbitration; its execution-time refusal still fails closed.
-    if (rest.length === 0) return { runner: first, enforcement: STATIC_ENFORCEMENT[first] }
+    if (rest.length === 0) return { selected: { runner: first, enforcement: STATIC_ENFORCEMENT[first] }, bwrap: undefined }
+    let bwrap: BwrapProbe | undefined
     for (const runner of chain) {
-      const enforcement = this.probeRunner(runner)
-      if (enforcement !== 'unusable') return { runner, enforcement }
+      let enforcement: SandboxEnforcement | 'unusable'
+      if (runner === 'bwrap') {
+        const probe = this.internals.probeBwrap ?? (() => defaultProbeBwrap(this.probeTimeoutMs))
+        bwrap = await probe()
+        enforcement = bwrap === true ? 'full' : 'unusable'
+      } else {
+        enforcement = this.probeRunner(runner)
+      }
+      if (enforcement !== 'unusable') return { selected: { runner, enforcement }, bwrap }
     }
-    return 'unavailable'
+    return { selected: undefined, bwrap }
   }
 
-  /** One rung's functional probe (each at most once, via the chain walk). */
-  private probeRunner(runner: SelectedRunner['runner']): SandboxEnforcement | 'unusable' {
-    // bwrap's mount profile and Seatbelt's deny-file-write* profile govern
-    // every promised file effect by construction, so their passing probes
-    // are always full enforcement; the Landlock launcher's probe report
-    // distinguishes full from per-ABI-partial, while windows-acl is always
-    // partial for its documented hard-link, unconfined-read, and
-    // AppContainer-ACL boundaries.
+  /** One non-bwrap rung's functional probe (each at most once, via the chain walk). */
+  private probeRunner(runner: Exclude<SelectedRunner['runner'], 'bwrap'>): SandboxEnforcement | 'unusable' {
+    // Seatbelt's deny-file-write* profile governs every promised file effect by construction, so its passing probe
+    // is full enforcement; the Landlock launcher's probe report distinguishes full from per-ABI-partial, while
+    // windows-acl is always partial for its documented hard-link, unconfined-read, and AppContainer-ACL boundaries.
     switch (runner) {
-      case 'bwrap': {
-        const probe = this.internals.probeBwrap ?? (() => defaultProbeBwrap(this.probeTimeoutMs))
-        this.bwrapProbe = probe()
-        return this.bwrapProbe === true ? 'full' : 'unusable'
-      }
       case 'landlock': {
         const probe = this.internals.probeLandlock ?? (launcher => defaultProbeLandlock(launcher, { timeoutMs: this.probeTimeoutMs }))
         return probe(this.landlockLauncher())

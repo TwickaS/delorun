@@ -138,6 +138,33 @@ describe.skipIf(process.platform === 'win32')('a confined GitRunner', () => {
     await expect((await failing('runner: cannot set up namespaces')).run(['status'], { cwd, signal })).rejects.toThrow(SandboxUnavailableError)
     expect(await (await failing('fatal: not a git repository')).run(['status'], { cwd, signal })).toMatchObject({ exitCode: 1, stderr: 'fatal: not a git repository\n' })
   })
+
+  it('repeats once, with a rebuilt confinement, a command whose mount point could not be made, and stops after the second failure', async () => {
+    const cwd = await scratchDir('dsh-git-confined-', cleanups)
+    const rules = [{ fatalSignatures: ['bwrap: '] }]
+    let calls = 0
+    const flaky = await runner(() => {
+      calls += 1
+      const script = calls === 1 ? "echo \"bwrap: Can't mkdir /mnt/x: Not a directory\" >&2; exit 1" : 'echo ok'
+      return Promise.resolve({ argv: ['/bin/sh', '-c', script], mode: 'read-only', runnerFailureRules: rules })
+    })
+    expect((await flaky.run(['status'], { cwd, signal })).stdout.trim()).toBe('ok')
+    expect(calls).toBe(2)
+    calls = 0
+    const always = await runner(() => {
+      calls += 1
+      return Promise.resolve({ argv: ['/bin/sh', '-c', "echo \"bwrap: Can't mkdir /mnt/x: Not a directory\" >&2; exit 1"], mode: 'read-only', runnerFailureRules: rules })
+    })
+    await expect(always.run(['status'], { cwd, signal })).rejects.toMatchObject({ transient: true })
+    expect(calls).toBe(2)
+    calls = 0
+    const lasting = await runner(() => {
+      calls += 1
+      return Promise.resolve({ argv: ['/bin/sh', '-c', 'echo "bwrap: setting up uid map: Permission denied" >&2; exit 1'], mode: 'read-only', runnerFailureRules: rules })
+    })
+    await expect(lasting.run(['status'], { cwd, signal })).rejects.toMatchObject({ transient: false })
+    expect(calls).toBe(1)
+  })
 })
 
 async function repository(): Promise<string> {

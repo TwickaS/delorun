@@ -164,3 +164,12 @@ describe('denialOf', () => {
     expect(denialOf(1, stderr, ['permission denied'], [])).toEqual({ denied: false })
   })
 })
+
+describe('isTransientRunnerFailure', () => {
+  it('names passing mount and resource faults, not lasting ones', async () => {
+    const { isTransientRunnerFailure } = await import('../src/index.ts')
+    expect(isTransientRunnerFailure("bwrap: Can't mkdir /mnt/wsl/docker-desktop-bind-mounts/Ubuntu/x: Not a directory")).toBe(true)
+    expect(isTransientRunnerFailure('bwrap: fork: Resource temporarily unavailable')).toBe(true)
+    expect(isTransientRunnerFailure('bwrap: setting up uid map: Permission denied')).toBe(false)
+  })
+})

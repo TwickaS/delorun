@@ -281,7 +281,7 @@ export const recoverCommand: CliCommand = {
    */
   async run(args: readonly string[], context: CommandContext): Promise<CommandResult> {
     const { action, profile: profileFlag, json } = requested(args)
-    const { home, profile } = await prepareHome(context, profileFlag)
+    const { home, profile } = await prepareHome(context, profileFlag, false)
     switch (action.kind) {
       case 'rollback':
         return await homeRunning(home.path, profile)

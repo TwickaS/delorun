@@ -54,7 +54,8 @@ describe('bwrap network arguments', () => {
   it('gives an `off` command a network namespace of its own and no proxy environment', () => {
     const args = bwrapProfileArgs(OFF)
     expect(args).toContain('--unshare-net')
-    expect(args).not.toContain('--setenv')
+    expect(args.join('\0')).not.toContain('--setenv\0HTTP')
+    expect(args.filter(arg => arg === '--setenv')).toHaveLength(1)
   })
 
   it('gives a `proxy` command its own namespace, the proxy environment and a bind of the socket after every other mount', () => {

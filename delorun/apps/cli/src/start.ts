@@ -1127,7 +1127,7 @@ export const startCommand: CliCommand = {
   async run(args, context) {
     const values = parseOptions('start', args, { foreground: { type: 'boolean', default: false }, background: { type: 'boolean', default: false }, open: { type: 'boolean', default: false }, profile: { type: 'string' }, patch: { type: 'string', multiple: true }, inspect: { type: 'boolean', default: false }, yes: { type: 'boolean', default: false } })
     if (values.yes === true && values.inspect !== true) throw new CliError(EXIT.usage, 'delorun start: --yes confirms --inspect, and is refused without it')
-    const { home, profile } = await prepareHome(context, values.profile)
+    const { home, profile } = await prepareHome(context, values.profile, false)
     const patchFiles = patchFilesOf(values.patch ?? [])
     const inspect = values.inspect === true
     const choice = startChoice('start', { foreground: values.foreground === true, background: values.background === true }, profileDirectory(home.path, profile))

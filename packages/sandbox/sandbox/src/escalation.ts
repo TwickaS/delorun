@@ -18,7 +18,7 @@
 
 import { HarnessError } from '@deepseek-ai/dsh-error'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
-import { escalationDisplayReason } from './locales.ts'
+import { escalationDisplayReason, sandboxFaultNotice } from './locales.ts'
 import type { SandboxMode } from './index.ts'
 
 /**
@@ -95,6 +95,26 @@ export function validateEscalationArgs(sandboxPermissions: string | undefined, j
   if (justification !== undefined && justification.trim().length === 0) {
     throw new SandboxEscalationError('invalid justification: expected a non-empty sentence', 'SANDBOX_ESCALATION_INVALID_ARGUMENT')
   }
+}
+
+const faulted = new WeakSet<object>()
+
+/**
+ * Remember that a command of this agent was refused for a temporary sandbox fault, so that an escalation it asks
+ * for next is shown as following that fault. Held weakly; the next escalation ask consumes it.
+ * @param agent - the calling agent; an agent-less execution is not remembered.
+ */
+export function noteSandboxFault(agent: object | undefined): void {
+  if (agent !== undefined) faulted.add(agent)
+}
+
+/**
+ * Forget a remembered sandbox fault after this agent's next confined command ran, so a later escalation is not
+ * presented as following the fault.
+ * @param agent - the calling agent.
+ */
+export function clearSandboxFault(agent: object | undefined): void {
+  if (agent !== undefined) faulted.delete(agent)
 }
 
 /**
@@ -264,15 +284,18 @@ export async function approveEscalation<A, C>(request: EscalationRequest, approv
   }
   // Self-contained for the audit trail: approval/asked stores this reason,
   // and the target mode is part of the grant's identity.
+  // The note belongs to a full-access ask only; a chat-scoped allow is not offered after a fault (no `escalatesTo`).
+  const afterFault = faulted.delete(approval.agent as object) && mode === 'danger-full-access'
   const outcome = await approval.approver.request({
     agent: approval.agent,
     toolName: approval.toolName,
     callId: approval.callId,
     reason: `escalate sandbox to ${mode}: ${justification}`,
     displayReason: escalationDisplayReason(mode, justification),
+    ...afterFault ? { notice: sandboxFaultNotice() } : {},
     ...mode === 'danger-full-access' ? { grants: 'full-access' as const } : {},
     // Only command and operation escalations offer the chat-scoped choice; other subjects keep upstream's buttons.
-    ...(subject === 'command' || subject === 'operation') && (mode === 'workspace-write' || mode === 'danger-full-access') ? { escalatesTo: mode } : {},
+    ...!afterFault && (subject === 'command' || subject === 'operation') && (mode === 'workspace-write' || mode === 'danger-full-access') ? { escalatesTo: mode } : {},
     ...approval.signal ? { signal: approval.signal } : {},
   })
   switch (outcome) {
@@ -280,6 +303,12 @@ export async function approveEscalation<A, C>(request: EscalationRequest, approv
     // the check above proved it is strictly wider.
     case 'allowed-once': return mode as SandboxMode
     case 'rejected':
+      if (afterFault) {
+        throw new SandboxEscalationError(
+          `the user declined running this ${subject} without the sandbox, whose fault was temporary; run the same ${subject} again without sandbox_permissions, or use a tool that needs no shell`,
+          'SANDBOX_ESCALATION_REJECTED',
+        )
+      }
       throw new SandboxEscalationError(
         `the user rejected escalating this ${subject} to "${mode}"; it stays denied, so stop and explain instead of working around it`,
         'SANDBOX_ESCALATION_REJECTED',

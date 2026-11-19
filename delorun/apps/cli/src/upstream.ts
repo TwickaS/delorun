@@ -259,7 +259,7 @@ export async function plugin(args: readonly string[], context: CommandContext, d
   // Upstream's parser reads `--profile` under its own, looser rule, so every value it could read is held to C1's first.
   const profile = selectCommandProfile('plugin', withoutBuilds, context.env)
   const taken = takeAllowedAdvisories(withoutBuilds)
-  const { home } = await prepareHome(context, undefined)
+  const { home } = await prepareHome(context, undefined, true)
   const release = await useHomeShared(home.path, 'plugin')
   dependencies.onExit(release)
   try {
@@ -371,7 +371,7 @@ async function operatePlugin(home: string, profile: string, taken: ReturnType<ty
  */
 export async function pluginMirror(args: readonly string[], context: CommandContext, dependencies: Pick<PluginDependencies, 'installAnchor'> = UPSTREAM_PLUGIN): Promise<ExitCode> {
   const profile = selectCommandProfile('plugin mirror', args, context.env)
-  const { home } = await prepareHome(context, undefined)
+  const { home } = await prepareHome(context, undefined, true)
   return runMirror(args, { home: home.path, profile, profileDir: profileDirectory(home.path, profile), installAnchor: await dependencies.installAnchor(), output: context })
 }
 
@@ -434,7 +434,7 @@ export function headlessDependencies(): HeadlessDependencies {
  */
 export async function headless(args: readonly string[], context: CommandContext, dependencies: HeadlessDependencies = headlessDependencies(), onExit: (listener: () => void) => void = (listener) => { process.once('exit', listener) }): Promise<CommandResult> {
   refuseLauncherOptions(args)
-  const { home } = await prepareHome(context, undefined)
+  const { home } = await prepareHome(context, undefined, true)
   onExit(await useHomeShared(home.path, 'headless'))
   return runHeadless({ home: home.path, args, output: context, env: context.env }, dependencies)
 }

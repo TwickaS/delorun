@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DELORUN_HOME_ENTRIES } from '@delorun/contract-home-layout'
-import { checkPrivateDirectory, checkPrivateDirectorySync, checkProtectedFile, checkProtectedFileSync, ensureHomeTree, HomeLayoutError, readProtectedFile, resolveDelorunHome, runDirectory, writeProtectedFile } from '../src/index.ts'
+import { checkPrivateDirectory, checkPrivateDirectorySync, checkProtectedFile, checkProtectedFileSync, ensureHomeTree, HomeLayoutError, insideBwrapSandbox, readProtectedFile, resolveDelorunHome, runDirectory, writeProtectedFile } from '../src/index.ts'
 
 const POSIX = process.platform !== 'win32'
 
@@ -117,6 +117,25 @@ describe.runIf(POSIX)('ensureHomeTree', () => {
     expect(error.code).toBe('HOME_MODE')
     expect(error.fix).toBe(`chmod 700 ${home}`)
     expect(error.message).toContain(`chmod 700 ${home}`)
+  })
+
+  it('refuses a truly 0755 home outside a sandbox, and skips only the mode bits inside bubblewrap', async () => {
+    const home = join(osHome, '.delorun')
+    mkdirSync(home, { mode: 0o700 })
+    chmodSync(home, 0o755)
+    expect((await refusal(checkPrivateDirectory(home, { insideSandbox: false }))).code).toBe('HOME_MODE')
+    await expect(checkPrivateDirectory(home, { insideSandbox: true })).resolves.toBeUndefined()
+    const link = join(osHome, 'link')
+    symlinkSync(home, link)
+    expect((await refusal(checkPrivateDirectory(link, { insideSandbox: true }))).code).toBe('HOME_MODE')
+  })
+
+  it('recognises the Delorun-launched bubblewrap by process 1 plus the launcher marker (a Flatpak-style bwrap without it still refuses), and treats an unreadable /proc as not sandboxed', () => {
+    const marked = { DELORUN_SANDBOX_VIEW: '1' }
+    expect(insideBwrapSandbox(() => 'bwrap\n', marked)).toBe(true)
+    expect(insideBwrapSandbox(() => 'bwrap\n', {})).toBe(false)
+    expect(insideBwrapSandbox(() => 'systemd\n', marked)).toBe(false)
+    expect(insideBwrapSandbox(() => { throw new Error('ENOENT') }, marked)).toBe(false)
   })
 
   it('refuses a laxer secrets/ or run/<profile>/ and a home that is a symbolic link', async () => {
