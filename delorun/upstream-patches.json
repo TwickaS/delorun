@@ -3013,6 +3013,18 @@
       "class": "delorun-feature",
       "feature": "model-prompt",
       "reason": "The per-step time block omits the elapsed line when the elapsed time is unknown instead of printing 'unavailable'."
+    },
+    {
+      "path": "scripts/build.ts",
+      "class": "delorun-feature",
+      "feature": "release-cut",
+      "reason": "Writes the build stamp that lets a cut refuse stale lib/ directories."
+    },
+    {
+      "path": "scripts/build-stamp.ts",
+      "class": "delorun-feature",
+      "feature": "release-cut",
+      "reason": "Records the commit a clean artifact build ran at (only when HEAD and tracked files stayed unchanged across the build), so cut-rc --artifacts existing refuses stale lib/ directories."
     }
   ],
   "retired": []

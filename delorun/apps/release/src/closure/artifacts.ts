@@ -9,6 +9,7 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
+import { readBuildStamp } from '../../../../../scripts/build-stamp.ts'
 
 /** Where the closure's artifacts come from. */
 export type ArtifactSource = 'build' | 'existing'
@@ -62,7 +63,7 @@ function sourcePackages(repository: string): string[] {
 }
 
 /**
- * Why the worktree's artifacts cannot stand for a build of its commit: a tracked file differs from the commit, a package
+ * Why the worktree's artifacts cannot stand for a build of its commit: a tracked file differs from the commit, the build stamp is absent or names another commit, a package
  * whose `main` names a file under `lib/` lacks it, or a package's sources are newer than its `lib/`.
  * @param repository - the worktree's root.
  * @param commit - the commit being built.
@@ -72,6 +73,9 @@ export function artifactProblems(repository: string, commit: string): string[] {
   const problems: string[] = []
   const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repository, encoding: 'utf8' }).trim()
   if (head !== commit) problems.push(`the worktree is at ${head}, not at ${commit}, so its artifacts are not this commit's`)
+  const stamp = readBuildStamp(repository)
+  if (stamp === undefined) problems.push('no build stamp: the artifacts were not written by a clean `pnpm run build:artifacts`; run it, or cut with `--artifacts build`')
+  else if (stamp.commit !== commit) problems.push(`the artifacts were built at ${stamp.commit}, not at ${commit}; run \`pnpm run build:artifacts\` again, or cut with \`--artifacts build\``)
   const dirty = execFileSync('git', ['status', '--porcelain', '--untracked-files=no'], { cwd: repository, encoding: 'utf8' }).trim()
   if (dirty !== '') problems.push('tracked files differ from the commit; commit or restore them before building from existing artifacts')
   for (const directory of sourcePackages(repository)) {
