@@ -1062,6 +1062,16 @@
     },
     {
       "area": "Studio",
+      "section": "Added",
+      "text": "The agent cards for Claude Code and Codex show whether the agent is signed in and on which plan, with a bar for each plan limit and its reset time on your own clock. The same bars are in Settings, Safety, External agents, under Plans and limits, and in a Plans pill beside the cost pill that shows your highest used share. Delorun reads the figures only when you press Check now, add an agent or finish signing in."
+    },
+    {
+      "area": "Studio",
+      "section": "Added",
+      "text": "A live agent's chat, behind the `externalAgents.liveAgents` preview flag, opens with a coloured rule and a card that says the agent runs outside Delorun, with its program, own settings, sandbox state and plan limits. Its commands, searches and edits show as cards, its questions as one approval card with Reject, Allow for this run and Allow once, and its start, plan limit, sign-in and model choice as plain notices."
+    },
+    {
+      "area": "Studio",
       "section": "Changed",
       "text": "The desktop app, the tray and the installed web app use Delorun's hex mark, in the brand colours, as their icon."
     },
@@ -1302,6 +1312,16 @@
     },
     {
       "area": "Studio",
+      "section": "Changed",
+      "text": "The model picker in the composer looks calmer: roomier rows with 44px tap targets on touch screens, a clearer selected model, quieter provider headings, and a menu that fills the width of a phone screen."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "The picker's search field is larger on phones, with a search icon and 16px text so the page does not zoom, and the menu drops its wide glow for a plain shadow."
+    },
+    {
+      "area": "Studio",
       "section": "Fixed",
       "text": "Searching the sidebar now finds words inside chats. Before, the search showed \"Messages could not be searched.\" because the index it reads was switched off. The index is built in memory from your own chats when you first search; it sends nothing anywhere and leaves no copy of your chats on disk."
     },
@@ -1324,6 +1344,51 @@
       "area": "Studio",
       "section": "Fixed",
       "text": "On an iPhone, typing in a field no longer zooms the page in. Every text field, text area, selector and editable region, including the composer, answers, search, Settings and code entry, is at least 16px on touch screens. Pinch zoom still works."
+    },
+    {
+      "area": "Studio",
+      "section": "Fixed",
+      "text": "In Settings → Appearance, choosing a theme tile after Custom now shows that theme. In 0.1.0-preview.1.6 the Soft tile after a custom accent, or any theme tile after a changed contrast, left the studio in Custom; the theme now also puts back Peach for Soft and the default contrast."
+    },
+    {
+      "area": "Studio",
+      "section": "Fixed",
+      "text": "Codex's weekly plan limit is called \"Weekly limit\", as Claude Code's is, instead of \"7-day limit\"."
+    },
+    {
+      "area": "Studio",
+      "section": "Fixed",
+      "text": "A busy computer, or Docker Desktop starting and stopping containers under WSL, no longer makes Delorun think it has no sandbox. When the sandbox's start-up check times out or the computer is briefly out of memory or processes, Delorun checks again a few times without freezing, never remembers a failure beyond the command that met it, and says plainly that the fault is temporary: retry, or use a tool that needs no shell, such as web search. A sandbox that fails to start because a mount point vanished is repeated once with a fresh mount list, and Docker Desktop's changing mount folders are left out of the sandbox's view. A lasting cause, such as a blocked user namespace, still gets the install advice."
+    },
+    {
+      "area": "Studio",
+      "section": "Fixed",
+      "text": "If the agent then asks to run without the sandbox, the approval card shows \"Delorun's sandbox had a problem; this asks to run without it\" as its own line, offers no \"allow for this chat\" choice, and declining tells the agent to retry inside the sandbox. The note clears after the next sandboxed command runs. A command is still never run unconfined because of a failed check."
+    },
+    {
+      "area": "Studio",
+      "section": "Fixed",
+      "text": "Commands run inside a chat's sandbox no longer refuse Delorun's home as \"mode 0755\" when the real folder is private. Only Delorun's own sandbox launcher marks that view as untrustworthy; anywhere else a 0755 home is still refused."
+    },
+    {
+      "area": "Studio",
+      "section": "Fixed",
+      "text": "Delorun's own start, setup and update commands always check that its home is private, even from inside a chat's sandbox."
+    },
+    {
+      "area": "Studio",
+      "section": "Fixed",
+      "text": "When no sandbox can start on a computer at all, the message now speaks to the person who runs Delorun and tells the agent not to ask for full access because of it; it only reports that the sandbox is unavailable."
+    },
+    {
+      "area": "Studio",
+      "section": "Fixed",
+      "text": "Bold text in the studio is drawn in Schibsted Grotesk's and JetBrains Mono's real heavier weights. Both typefaces are variable fonts, but their declared weight range stopped at medium, so the browser thickened the medium face for semibold and bold text; the declared ranges now match the files (Schibsted Grotesk 400 to 900, JetBrains Mono 400 to 800)."
+    },
+    {
+      "area": "Studio",
+      "section": "Fixed",
+      "text": "In Settings → Appearance on a very narrow phone (under 380 px wide), the theme tiles set their names smaller and let them wrap, so a name such as \"Custom\" is read whole instead of being cut to \"Cust…\". The colour of the name is unchanged and keeps at least 4.5:1 against the tile in every theme."
     },
     {
       "area": "Studio",
@@ -1427,6 +1492,11 @@
     },
     {
       "area": "Chats and workspaces",
+      "section": "Changed",
+      "text": "The model now knows it is working in Delorun and which model is answering, and mentions DeepSeek Harness only when you ask how Delorun is built. On an installed copy it no longer receives the program folder or the studio address, and creator chats point to the plugin-authoring skill and the Changes page. Guidance for terminals, workflows and delegation is sent only when those tools are on offer, the file-link rules are shorter, and the time note no longer says the elapsed time is unavailable."
+    },
+    {
+      "area": "Chats and workspaces",
       "section": "Fixed",
       "text": "A code run whose execution process ends on its own now reports that process's own exit status every time. A busy machine no longer replaces it with the termination signal we sent to a process that was already stopping."
     },
@@ -1527,6 +1597,11 @@
     },
     {
       "area": "Safety and privacy",
+      "section": "Added",
+      "text": "When your Claude or ChatGPT plan's limit is reached, Delorun does not start Claude Code or Codex for a chat until the limit resets. The chat is told which limit is reached and when it resets, so it does the task itself or tells you instead. Figures whose reset time has passed never stop a start."
+    },
+    {
+      "area": "Safety and privacy",
       "section": "Changed",
       "text": "Commands the model runs can read, and run scripts in, the approved copies of your profile's plugins, so a plugin that hands the agent the path of its own tool works. They still cannot write those copies, and they cannot read a plugin change that is waiting for your review, another profile's copies or the rest of Delorun's home."
     },
@@ -1594,6 +1669,11 @@
       "area": "Safety and privacy",
       "section": "Fixed",
       "text": "Browser now saves screenshots, downloads and PDFs in a folder Delorun creates for each chat in your cache folder, outside the chat's folder, so a command running in the chat's sandbox can read a saved file but cannot replace the folder or point it somewhere else. Browser only writes there, and a file it uploads from the chat's folder is copied by Delorun first, so a link swapped in at the last moment cannot make Browser read a file the chat could not. Browser also checks each file after it lands; one that ends up outside the chat's folder or the output folder is removed when Delorun can do so safely, and the result is refused with a message. A chat with Full access runs outside the sandbox, so for it this is a refusal, not a barrier."
+    },
+    {
+      "area": "Safety and privacy",
+      "section": "Fixed",
+      "text": "When Browser's output folder would sit inside a folder the chat can write, for example when the workspace is your home folder, a new chat starts normally with Browser's tools off, instead of every new chat failing. The reason is written to Delorun's log, and its advice depends on the cause: the workspace, an extra writable folder, or `XDG_CACHE_HOME`. Browser still never writes to a folder the chat's sandbox can write, and it stays off whenever the file system cannot resolve the folders to check. Any other error in that check still fails the chat's creation."
     },
     {
       "area": "Safety and privacy",
@@ -1972,6 +2052,11 @@
     },
     {
       "area": "Reach",
+      "section": "Added",
+      "text": "A paired phone or second computer needs no unlock to turn protection on, cancel or dismiss an update, run a trust check, list an agent's models, read a clone's progress or a workspace's defaults, or turn the real-browser away permission off, because each of those only reads or tightens."
+    },
+    {
+      "area": "Reach",
       "section": "Changed",
       "text": "The sign-in and pairing pages show the Delorun logo."
     },
@@ -2184,6 +2269,11 @@
       "area": "Plugins",
       "section": "Changed",
       "text": "Settings → Setup versions names a change by what it did, such as `Undid: Turned off reading-list`, instead of its internal id; versions recorded before show without the id too."
+    },
+    {
+      "area": "Plugins",
+      "section": "Changed",
+      "text": "The Plugins screen now shows a title and a sentence for the plugins that guard your consent, fetches and sign-in (such as Fetch guard, Instruction consent, Reach and Device sign-in), where it showed only their package names."
     },
     {
       "area": "Plugins",
@@ -2502,6 +2592,11 @@
     },
     {
       "area": "Commands",
+      "section": "Added",
+      "text": "`delorun agents status` shows whether Claude Code and Codex are signed in, your plan, and how much of each plan limit is used, with when it resets and when Delorun last saw the figures. Without a running Delorun it shows the figures last seen. `--refresh` asks the running Delorun to check now, which starts the agent's own program with no task; `--json` prints the figures for scripts."
+    },
+    {
+      "area": "Commands",
       "section": "Changed",
       "text": "The messages `delorun setup` prints, the studio's starter prompts and the chat refusals use British English, such as \"catalogue\", \"summarise\" and \"organise\", and a check keeps American spellings out of Delorun's own text."
     },
@@ -2612,6 +2707,11 @@
     },
     {
       "area": "Commands",
+      "section": "Fixed",
+      "text": "`delorun agents login claude-code` finds the Claude Code that the agent's plugin brings, instead of saying it is not added. After a sign-in, a running Delorun checks that agent's plan limits."
+    },
+    {
+      "area": "Commands",
       "section": "Security",
       "text": "The release an update starts does not inherit variables that load code into Node, its loader or OpenSSL, such as `NODE_OPTIONS` or `LD_PRELOAD`, even when a `.env` file set them for the running release; the launcher already dropped them from every start."
     },
@@ -2667,6 +2767,128 @@
     }
   ],
   "versions": [
+    {
+      "version": "0.1.0-preview.1.15",
+      "date": "2026-11-19",
+      "preview": true,
+      "areas": [
+        {
+          "area": "Studio",
+          "items": [
+            {
+              "section": "Added",
+              "text": "The agent cards for Claude Code and Codex show whether the agent is signed in and on which plan, with a bar for each plan limit and its reset time on your own clock. The same bars are in Settings, Safety, External agents, under Plans and limits, and in a Plans pill beside the cost pill that shows your highest used share. Delorun reads the figures only when you press Check now, add an agent or finish signing in."
+            },
+            {
+              "section": "Added",
+              "text": "A live agent's chat, behind the `externalAgents.liveAgents` preview flag, opens with a coloured rule and a card that says the agent runs outside Delorun, with its program, own settings, sandbox state and plan limits. Its commands, searches and edits show as cards, its questions as one approval card with Reject, Allow for this run and Allow once, and its start, plan limit, sign-in and model choice as plain notices."
+            },
+            {
+              "section": "Changed",
+              "text": "The model picker in the composer looks calmer: roomier rows with 44px tap targets on touch screens, a clearer selected model, quieter provider headings, and a menu that fills the width of a phone screen."
+            },
+            {
+              "section": "Changed",
+              "text": "The picker's search field is larger on phones, with a search icon and 16px text so the page does not zoom, and the menu drops its wide glow for a plain shadow."
+            },
+            {
+              "section": "Fixed",
+              "text": "In Settings → Appearance, choosing a theme tile after Custom now shows that theme. In 0.1.0-preview.1.6 the Soft tile after a custom accent, or any theme tile after a changed contrast, left the studio in Custom; the theme now also puts back Peach for Soft and the default contrast."
+            },
+            {
+              "section": "Fixed",
+              "text": "Codex's weekly plan limit is called \"Weekly limit\", as Claude Code's is, instead of \"7-day limit\"."
+            },
+            {
+              "section": "Fixed",
+              "text": "A busy computer, or Docker Desktop starting and stopping containers under WSL, no longer makes Delorun think it has no sandbox. When the sandbox's start-up check times out or the computer is briefly out of memory or processes, Delorun checks again a few times without freezing, never remembers a failure beyond the command that met it, and says plainly that the fault is temporary: retry, or use a tool that needs no shell, such as web search. A sandbox that fails to start because a mount point vanished is repeated once with a fresh mount list, and Docker Desktop's changing mount folders are left out of the sandbox's view. A lasting cause, such as a blocked user namespace, still gets the install advice."
+            },
+            {
+              "section": "Fixed",
+              "text": "If the agent then asks to run without the sandbox, the approval card shows \"Delorun's sandbox had a problem; this asks to run without it\" as its own line, offers no \"allow for this chat\" choice, and declining tells the agent to retry inside the sandbox. The note clears after the next sandboxed command runs. A command is still never run unconfined because of a failed check."
+            },
+            {
+              "section": "Fixed",
+              "text": "Commands run inside a chat's sandbox no longer refuse Delorun's home as \"mode 0755\" when the real folder is private. Only Delorun's own sandbox launcher marks that view as untrustworthy; anywhere else a 0755 home is still refused."
+            },
+            {
+              "section": "Fixed",
+              "text": "Delorun's own start, setup and update commands always check that its home is private, even from inside a chat's sandbox."
+            },
+            {
+              "section": "Fixed",
+              "text": "When no sandbox can start on a computer at all, the message now speaks to the person who runs Delorun and tells the agent not to ask for full access because of it; it only reports that the sandbox is unavailable."
+            },
+            {
+              "section": "Fixed",
+              "text": "Bold text in the studio is drawn in Schibsted Grotesk's and JetBrains Mono's real heavier weights. Both typefaces are variable fonts, but their declared weight range stopped at medium, so the browser thickened the medium face for semibold and bold text; the declared ranges now match the files (Schibsted Grotesk 400 to 900, JetBrains Mono 400 to 800)."
+            },
+            {
+              "section": "Fixed",
+              "text": "In Settings → Appearance on a very narrow phone (under 380 px wide), the theme tiles set their names smaller and let them wrap, so a name such as \"Custom\" is read whole instead of being cut to \"Cust…\". The colour of the name is unchanged and keeps at least 4.5:1 against the tile in every theme."
+            }
+          ]
+        },
+        {
+          "area": "Chats and workspaces",
+          "items": [
+            {
+              "section": "Changed",
+              "text": "The model now knows it is working in Delorun and which model is answering, and mentions DeepSeek Harness only when you ask how Delorun is built. On an installed copy it no longer receives the program folder or the studio address, and creator chats point to the plugin-authoring skill and the Changes page. Guidance for terminals, workflows and delegation is sent only when those tools are on offer, the file-link rules are shorter, and the time note no longer says the elapsed time is unavailable."
+            }
+          ]
+        },
+        {
+          "area": "Safety and privacy",
+          "items": [
+            {
+              "section": "Added",
+              "text": "When your Claude or ChatGPT plan's limit is reached, Delorun does not start Claude Code or Codex for a chat until the limit resets. The chat is told which limit is reached and when it resets, so it does the task itself or tells you instead. Figures whose reset time has passed never stop a start."
+            },
+            {
+              "section": "Fixed",
+              "text": "When Browser's output folder would sit inside a folder the chat can write, for example when the workspace is your home folder, a new chat starts normally with Browser's tools off, instead of every new chat failing. The reason is written to Delorun's log, and its advice depends on the cause: the workspace, an extra writable folder, or `XDG_CACHE_HOME`. Browser still never writes to a folder the chat's sandbox can write, and it stays off whenever the file system cannot resolve the folders to check. Any other error in that check still fails the chat's creation."
+            }
+          ]
+        },
+        {
+          "area": "Reach",
+          "items": [
+            {
+              "section": "Added",
+              "text": "A paired phone or second computer needs no unlock to turn protection on, cancel or dismiss an update, run a trust check, list an agent's models, read a clone's progress or a workspace's defaults, or turn the real-browser away permission off, because each of those only reads or tightens."
+            }
+          ]
+        },
+        {
+          "area": "Plugins",
+          "items": [
+            {
+              "section": "Changed",
+              "text": "The Plugins screen now shows a title and a sentence for the plugins that guard your consent, fetches and sign-in (such as Fetch guard, Instruction consent, Reach and Device sign-in), where it showed only their package names."
+            }
+          ]
+        },
+        {
+          "area": "Commands",
+          "items": [
+            {
+              "section": "Added",
+              "text": "`delorun agents status` shows whether Claude Code and Codex are signed in, your plan, and how much of each plan limit is used, with when it resets and when Delorun last saw the figures. Without a running Delorun it shows the figures last seen. `--refresh` asks the running Delorun to check now, which starts the agent's own program with no task; `--json` prints the figures for scripts."
+            },
+            {
+              "section": "Fixed",
+              "text": "`delorun agents login claude-code` finds the Claude Code that the agent's plugin brings, instead of saying it is not added. After a sign-in, a running Delorun checks that agent's plan limits."
+            }
+          ]
+        }
+      ],
+      "fromUpstream": {
+        "ref": "dsh-v0.2.2-rc.3",
+        "items": []
+      },
+      "previews": []
+    },
     {
       "version": "0.1.0-preview.1.14",
       "date": "2026-11-19",
