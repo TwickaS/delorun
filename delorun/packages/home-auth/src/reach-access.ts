@@ -105,7 +105,7 @@ export const REACH_ALLOWED_ACTIONS = {
   'terminal/environment': 'read the size limits a chat\'s terminal can take and the chat\'s working directory, which the chat\'s own state already shows, with no terminal output',
   'terminal/shells': 'read the shells a chat\'s terminal can start, their paths and names, with no terminal output',
   // F31: a reloaded terminal tab lists before it reopens, so listing is free and the reopen takes the one Face ID.
-  'terminal/list': 'list a chat\'s terminals: each one\'s id, title, shell, starting working directory, size, state, exit code, launch error text (which can name paths), who started it, who holds its input and its sandbox mode, never its output or input',
+  'terminal/list': 'list a chat\'s terminals: each one\'s id, title, shell, starting working directory, size, state, exit code, a fixed line in place of any launch error text (the controller withholds that free text from every caller but the computer), who started it, who holds its input and its sandbox mode, never its output or input',
   'session/modelCatalog': 'read the models a chat can run',
   'session/canOpenWorkspacePath': 'read whether the home can open a folder; opening one belongs to the computer',
   'session/create': 'start a chat in a workspace you registered at the computer, with any of your presets; a chat in another folder needs an unlock, and full access still needs the workspace\'s consent at the computer',
