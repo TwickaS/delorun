@@ -86,7 +86,7 @@ Careful writes only in the task folder, and its commands get no internet. Standa
 
 The chip on the approval card shows the level, and one click opens the choice. A level applies from the next task. An approved device can tighten a level; loosening it needs you at the computer. A chat on Full access never changes a level. The levels do not cover MCP tools you set up yourself in Claude Code or Codex.
 
-On Linux, Claude Code's command sandbox needs `bubblewrap` and `socat` (`sudo apt install bubblewrap socat`). Without them Standard still runs, without the sandbox, and the chip reads "Standard · no sandbox". Careful refuses to start, because it promises the confinement.
+On Linux, Claude Code's command sandbox needs `bubblewrap` and `socat` (`sudo apt install bubblewrap socat`). Without them Standard still runs, without the sandbox, and the seat's banner reads "No sandbox". Careful refuses to start, because it promises the confinement.
 
 ## Where the result shows
 
