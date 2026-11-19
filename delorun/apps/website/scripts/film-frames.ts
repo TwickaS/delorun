@@ -4,9 +4,17 @@
  * folder (the folder `SITE_PICTURES_DIR` names) as lossless WebP, named `film-<moment>-<light|dark>` for the wide frames
  * and `film-<moment>-390-<light|dark>` for the phone frames.
  *
- * The one edit is on the `handoff-consent` frames: the card's chip "Claude Code · Standard" is removed. On a wide frame
- * the chip's box is painted with the card's own background; on a phone frame, where the chip sits on its own row, that
- * row is cut out. Nothing else in a frame changes.
+ * The edits are crops, and one fill:
+ *
+ * - `handoff-consent`: the card's chip "Claude Code · Standard" is removed. On a wide frame the chip's box is painted with the
+ *   card's own background; on a phone frame, where the chip sits on its own row, that row is cut out.
+ * - The wide `agent-steps`, `approval`, `agent-finished` and `answer` frames drop the sidebar (the chat column is kept), so the
+ *   film's camera never shows a sliver of it.
+ * - Rows under the header that hold the cut lower half of a line are removed (`approval` wide and phone, `agent-steps` phone,
+ *   `answer` wide), so the chat starts on a whole line.
+ * - `answer` ends at its "Summary line" row; the paragraph below it, which contradicts the run, and the composer are cut off.
+ *
+ * Nothing else in a frame changes. All numbers are 2× pixels.
  *
  * Usage: `node scripts/film-frames.ts --src <film-scripted capture dir> --out <pictures dir>`. Needs `ffmpeg` with libwebp and `ffprobe` on the PATH.
  *
@@ -22,6 +30,21 @@ const MOMENTS = ['handoff-working', 'handoff-consent', 'agent-steps', 'approval'
 
 /** The consent chip's box in a 1440 capture, padded to cover its border, and the rows of its own row in a 390 capture (2× pixels). */
 const CHIP = { wide: { x0: 1310, x1: 1624, y0: 1586, y1: 1650 }, phone: { y0: 1992, y1: 2064 } } as const
+
+/**
+ * How a frame is cropped: the first column kept, rows removed from the middle, the row the frame ends at (before the removals) and
+ * the aspect ratio (width over height) the result is brought to, which the film's stage shows whole: a frame taller than that has a
+ * band of rows between two blank rows removed, and one wider than that loses equal columns on both sides.
+ */
+interface Crop { readonly left?: number; readonly cuts?: readonly (readonly [number, number])[]; readonly bottom?: number; readonly aspect?: number }
+
+/** The crops by moment, for 1440 and 390 captures. The header's rule is at row 151. */
+const CROPS: Readonly<Record<string, { readonly 1440?: Crop; readonly 390?: Crop }>> = {
+  'agent-steps': { 1440: { left: 532, aspect: 1.6 }, 390: { cuts: [[152, 172]] } },
+  approval: { 1440: { left: 532, cuts: [[152, 170]], aspect: 1.6 }, 390: { cuts: [[152, 186]] } },
+  'agent-finished': { 1440: { left: 532, aspect: 1.6 } },
+  answer: { 1440: { left: 532, cuts: [[0, 220]], bottom: 1250, aspect: 1.6 }, 390: { bottom: 930 } },
+}
 
 /** A decoded picture: 8-bit RGB rows. */
 interface Raster { readonly w: number; h: number; data: Buffer }
@@ -95,6 +118,51 @@ function removeChip(r: Raster, width: 1440 | 390): Raster {
   return out
 }
 
+/**
+ * Apply a moment's crop.
+ * @param r - the frame.
+ * @param crop - the crop.
+ * @returns the cropped frame.
+ */
+function applyCrop(r: Raster, crop: Crop): Raster {
+  let out = r
+  if (crop.bottom !== undefined) out = { w: out.w, h: crop.bottom, data: out.data.subarray(0, crop.bottom * out.w * 3) }
+  for (const [y0, y1] of [...crop.cuts ?? []].reverse()) out = cutRows(out, y0, y1)
+  if (crop.left !== undefined) {
+    const w = out.w - crop.left
+    const data = Buffer.alloc(w * out.h * 3)
+    for (let y = 0; y < out.h; y++) out.data.copy(data, y * w * 3, (y * out.w + crop.left) * 3, (y + 1) * out.w * 3)
+    out = { w, h: out.h, data }
+  }
+  if (crop.aspect !== undefined) out = fitAspect(out, crop.aspect)
+  return out
+}
+
+/**
+ * Bring a frame to an aspect ratio without padding it.
+ * @param r - the frame.
+ * @param aspect - width over height.
+ * @returns the frame with rows or columns removed.
+ */
+function fitAspect(r: Raster, aspect: number): Raster {
+  const height = Math.round(r.w / aspect)
+  if (height < r.h) {
+    const excess = r.h - height
+    const blank = (y: number): boolean => {
+      const first = px(r, 2, y)
+      for (let x = 3; x < r.w; x += 1) { const c = px(r, x, y); if (Math.abs(c[0] - first[0]) + Math.abs(c[1] - first[1]) + Math.abs(c[2] - first[2]) > 12) return false }
+      return true
+    }
+    for (let y = 160; y + excess < r.h; y++) if (blank(y) && blank(y + excess)) return cutRows(r, y, y + excess)
+    return cutRows(r, 160, 160 + excess)
+  }
+  const width = Math.round(r.h * aspect)
+  const left = Math.floor((r.w - width) / 2)
+  const data = Buffer.alloc(width * r.h * 3)
+  for (let y = 0; y < r.h; y++) r.data.copy(data, y * width * 3, (y * r.w + left) * 3, (y * r.w + left + width) * 3)
+  return { w: width, h: r.h, data }
+}
+
 const { values } = parseArgs({ options: { src: { type: 'string' }, out: { type: 'string' } } })
 if (values.src === undefined || values.out === undefined) throw new Error('Usage: node scripts/film-frames.ts --src <film-scripted capture dir> --out <pictures dir>')
 const src = resolve(values.src)
@@ -107,6 +175,8 @@ for (const moment of MOMENTS) {
       if (!existsSync(file)) throw new Error(`${file} is missing`)
       let frame = decode(file)
       if (moment === 'handoff-consent') frame = removeChip(frame, width)
+      const crop = CROPS[moment]?.[width]
+      if (crop !== undefined) frame = applyCrop(frame, crop)
       encode(frame, join(out, width === 1440 ? `film-${moment}-${mode}.webp` : `film-${moment}-390-${mode}.webp`))
     }
   }
