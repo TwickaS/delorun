@@ -10,6 +10,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
+import { REACH_DEVICE } from '@delorun/home-auth'
+import { faceWorld } from '../../plugin-changes/tests/face-world.ts'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 import { apply, Config } from '../src/index.ts'
@@ -255,6 +257,69 @@ describe('the routes', () => {
   })
 })
 
+describe('under Face ID', () => {
+  const device = (extra: object = {}) => ({ principal: { kind: REACH_DEVICE, deviceId: 'd1', listener: 'reach', ...extra } })
+
+  /** The service with a `homeAuth` whose Face ID flag is on for device `d1`, which holds a passkey and whatever unlock the options give. */
+  async function underFace(home: { elevation?: { id: string, grace?: true }, page?: boolean } = {}) {
+    const result = await mounted()
+    const world = faceWorld('d1', 'reach')
+    result.ctx.provide('homeAuth', {
+      arrivalOf: () => ({ listener: 'reach' }), dangerousMode: () => false, unlockModeEnabled: () => false, touchUnlock: () => {},
+      ...world.fields,
+      elevationOf: () => home.elevation, pageUnlockOf: () => (home.page === true ? { id: 'p1' } : undefined),
+    } as never)
+    return { ...result, world, set: result.routes.get(NETWORK_SET_PATH)!, list: result.routes.get(NETWORK_LIST_PATH)! }
+  }
+  const setCall = (body: string, grant?: string) => new Request(`http://x${NETWORK_SET_PATH}`, { method: 'POST', headers: grant === undefined ? {} : { 'delorun-grant': grant }, body })
+
+  it('refuses a change to a device with a passkey that holds an unlock, a PIN page unlock, the grace or no grant, and changes nothing', async () => {
+    // Pins `gateByClass`: without the grant check the legacy unlock would admit the first two.
+    for (const home of [{ elevation: { id: 'e1' } }, { page: true }, { elevation: { id: 'g1', grace: true as const } }, {}]) {
+      const { set, network, work } = await underFace(home)
+      const request = setCall(JSON.stringify({ path: work, network: { access: 'off', hosts: [] } }))
+      expect(set.admitPeer!(request, device(home.page === true ? { unlockId: 'live' } : {}))).toBe(true)
+      const refusal = await set.fetch(request)
+      expect([refusal.status, await refusal.json()], JSON.stringify(home)).toEqual([403, expect.objectContaining({ error: 'ELEVATION_REQUIRED' })])
+      expect(network.networkOf(work)).toEqual({ access: 'open', hosts: [] })
+    }
+  })
+
+  it('admits exactly the body a grant was made for, once, and no other body', async () => {
+    // Pins the request hash: without it a grant for one change would apply another.
+    const { set, world, network, work, other } = await underFace()
+    const body = JSON.stringify({ path: work, network: { access: 'off', hosts: [] } })
+    const grant = world.grantFor('plugin-permission-defaults/network-set', { path: NETWORK_SET_PATH, body })
+    const wrong = setCall(JSON.stringify({ path: other, network: { access: 'off', hosts: [] } }), grant)
+    set.admitPeer!(wrong, device())
+    expect((await set.fetch(wrong)).status).toBe(403)
+    expect(network.networkOf(other)).toEqual({ access: 'open', hosts: [] })
+    const exact = setCall(body, grant)
+    set.admitPeer!(exact, device())
+    expect((await set.fetch(exact)).status).toBe(200)
+    expect(network.networkOf(work)).toEqual({ access: 'off', hosts: [] })
+    // Pins the single use: without `consume` the same grant would change the network again.
+    const replay = setCall(body, grant)
+    set.admitPeer!(replay, device())
+    expect((await set.fetch(replay)).status).toBe(403)
+  })
+
+  it('answers the list to a device with no unlock and no grant', async () => {
+    // Pins the `free` class of the list.
+    const { list } = await underFace()
+    const request = new Request(`http://x${NETWORK_LIST_PATH}`)
+    expect(list.admitPeer!(request, device())).toBe(true)
+    expect((await list.fetch(request)).status).toBe(200)
+  })
+
+  it('never asks the owner: a request that skips admitPeer changes the network', async () => {
+    // Pins `principal === undefined`: without it the owner's Peer would be asked for a grant.
+    const { set, network, work } = await underFace()
+    expect((await set.fetch(setCall(JSON.stringify({ path: work, network: { access: 'off', hosts: [] } })))).status).toBe(200)
+    expect(network.networkOf(work)).toEqual({ access: 'off', hosts: [] })
+  })
+})
+
 describe('the route hook', () => {
   /** A request as the Connection's `connection/request` waterfall receives it, and the response it is answered with. */
   function arrival(url: string, host: string): { request: IncomingMessage, response: ServerResponse, writeHead: ReturnType<typeof vi.spyOn>, end: ReturnType<typeof vi.spyOn> } {
@@ -270,14 +335,14 @@ describe('the route hook', () => {
   /** The service mounted with a `homeAuth` that places every request on one listener and reports dangerous mode. */
   async function withListener(listener: string, dangerous = false): Promise<Context> {
     const { ctx } = await mounted()
-    ctx.provide('homeAuth', { arrivalOf: (request: IncomingMessage) => ({ listener, host: request.headers.host, source: 'test' }), dangerousMode: () => dangerous, unlockModeEnabled: () => false, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : deviceId === 'grace-phone' ? { id: 'g', grace: true } : undefined) } as never)
+    ctx.provide('homeAuth', { arrivalOf: (request: IncomingMessage) => ({ listener, host: request.headers.host, source: 'test' }), dangerousMode: () => dangerous, unlockModeEnabled: () => false, passkeysEnabled: () => false, faceGrants: () => undefined, deviceHasPasskey: () => false, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : deviceId === 'grace-phone' ? { id: 'g', grace: true } : undefined) } as never)
     return ctx
   }
 
   it('lets a reach device through the hook, reads for any approved device, and answers a locked device ELEVATION_REQUIRED on the change, in either dangerous mode', async () => {
     const { ctx, routes } = await mounted()
     let dangerous = false
-    ctx.provide('homeAuth', { arrivalOf: (request: IncomingMessage) => ({ listener: 'reach-tailscale-private', host: request.headers.host, source: 'test' }), dangerousMode: () => dangerous, unlockModeEnabled: () => false, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : deviceId === 'grace-phone' ? { id: 'g', grace: true } : undefined) } as never)
+    ctx.provide('homeAuth', { arrivalOf: (request: IncomingMessage) => ({ listener: 'reach-tailscale-private', host: request.headers.host, source: 'test' }), dangerousMode: () => dangerous, unlockModeEnabled: () => false, passkeysEnabled: () => false, faceGrants: () => undefined, deviceHasPasskey: () => false, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : deviceId === 'grace-phone' ? { id: 'g', grace: true } : undefined) } as never)
     const device = (deviceId: string) => ({ principal: { kind: 'reach-device', deviceId, listener: 'reach-tailscale-private' } })
     for (const mode of [false, true]) {
       dangerous = mode

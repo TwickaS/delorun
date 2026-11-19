@@ -9,8 +9,9 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
-import type { HomeAuthService } from '@delorun/home-auth'
+import { REACH_DEVICE, type HomeAuthService } from '@delorun/home-auth'
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
+import { faceWorld, type FaceWorld } from '../../plugin-changes/tests/face-world.ts'
 import {
   ADD_WORKSPACE_PATH, apply, CLONE_PATH, CLONE_STATUS_PATH, Config, CREATE_PATH, DEFAULTS_PATH, inject, MAX_QUERY_LENGTH, name, PLACES_PATH, PREVIEW_PATH,
   SEARCH_PATH, SET_DEFAULTS_PATH,
@@ -49,7 +50,7 @@ function homeAuthOn(listener: Listener | undefined) {
   const touchUnlock = vi.fn()
   const service = {
     arrivalOf: (request: { headers: { host?: string } }) => ({ listener, host: request.headers.host, source: 'test' }),
-    elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'unlock-1' } : undefined),
+    passkeysEnabled: () => false, faceGrants: () => undefined, deviceHasPasskey: () => false, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'unlock-1' } : undefined),
     pageUnlockOf: () => undefined,
     touchUnlock,
   }
@@ -57,7 +58,7 @@ function homeAuthOn(listener: Listener | undefined) {
 }
 
 /** The whole plugin over a stub Connection and, unless `null`, a registry and a `homeAuth` service. */
-async function mount(options: { readonly registry?: boolean; readonly homeAuth?: ReturnType<typeof homeAuthOn> | null } = {}) {
+async function mount(options: { readonly registry?: boolean; readonly homeAuth?: { readonly service: object } | null } = {}) {
   const ctx = new Context()
   const routes = new Map<string, Route>()
   ctx.provide('connection', {
@@ -94,6 +95,8 @@ interface Case {
   readonly body: () => unknown
   readonly status: number
   readonly renews: boolean
+  /** The route is class `free`: any approved device answers it with no unlock. */
+  readonly free?: true
 }
 
 const CASES: readonly Case[] = [
@@ -103,8 +106,8 @@ const CASES: readonly Case[] = [
   { path: ADD_WORKSPACE_PATH, body: () => ({ path: projects }), status: 200, renews: true },
   { path: CREATE_PATH, body: () => ({ parent: projects, name: 'fresh', git: false }), status: 200, renews: true },
   { path: CLONE_PATH, body: () => ({ url: 'file:///etc', parent: projects, name: 'x' }), status: 422, renews: true },
-  { path: CLONE_STATUS_PATH, body: () => ({ job: 'none' }), status: 200, renews: false },
-  { path: DEFAULTS_PATH, body: () => ({ path: projects }), status: 200, renews: false },
+  { path: CLONE_STATUS_PATH, body: () => ({ job: 'none' }), status: 200, renews: false, free: true },
+  { path: DEFAULTS_PATH, body: () => ({ path: projects }), status: 200, renews: false, free: true },
   { path: SET_DEFAULTS_PATH, body: () => ({ path: projects, defaults: {} }), status: 200, renews: true },
 ]
 
@@ -143,7 +146,7 @@ describe('the routes of the plugin', () => {
   })
 })
 
-describe.each(CASES)('the route $path', ({ path, body, status, renews }) => {
+describe.each(CASES)('the route $path', ({ path, body, status, renews, free }) => {
   it('refuses a request under a foreign Host on the loopback listener, before the route', async () => {
     const { ctx } = await mount({ homeAuth: homeAuthOn('loopback') })
     const { request, response, writeHead, end } = arrival(path, 'studio.example')
@@ -176,7 +179,9 @@ describe.each(CASES)('the route $path', ({ path, body, status, renews }) => {
       return route.fetch(call)
     }
     const locked = await asDevice('locked-phone')
-    expect([locked.status, await locked.json()]).toEqual([403, expect.objectContaining({ error: 'ELEVATION_REQUIRED' })])
+    // A free route answers a locked device; every other route is a `face` route and refuses it.
+    if (free === true) expect(locked.status).toBe(status)
+    else expect([locked.status, await locked.json()]).toEqual([403, expect.objectContaining({ error: 'ELEVATION_REQUIRED' })])
     expect(home.touchUnlock).not.toHaveBeenCalled()
     expect((await asDevice('unlocked-phone')).status).toBe(status)
     expect(home.touchUnlock.mock.calls).toEqual(renews ? [['unlock-1']] : [])
@@ -199,6 +204,84 @@ describe.each(CASES)('the route $path', ({ path, body, status, renews }) => {
     const next = vi.fn(async () => {})
     await ctx.waterfall('connection/request', request, response, next)
     expect([next.mock.calls.length, writeHead.mock.calls[0]?.[0]]).toEqual([0, 403])
+  })
+})
+
+describe('under Face ID', () => {
+  const FACE_CASES = CASES.filter(each => each.free !== true)
+  const FREE_CASES = CASES.filter(each => each.free === true)
+  const device = (extra: object = {}) => ({ principal: { kind: REACH_DEVICE, deviceId: 'd1', listener: 'reach', ...extra } })
+  const grantCall = (path: string, text: string, grant?: string) => new Request(`http://harness.test${path}`, { method: 'POST', headers: grant === undefined ? {} : { 'delorun-grant': grant }, body: text })
+
+  /** A `homeAuth` whose Face ID flag is on, for a device with a passkey that holds whatever unlock `home` gives. */
+  function faceHome(face: FaceWorld['fields'], home: { elevation?: { id: string, grace?: true }, page?: boolean } = {}) {
+    return { service: {
+      arrivalOf: () => ({ listener: 'reach' }), touchUnlock: vi.fn(), ...face,
+      elevationOf: () => home.elevation, pageUnlockOf: () => (home.page === true ? { id: 'p1' } : undefined),
+    } }
+  }
+
+  /** Run one request as the Connection does: admit the Peer, then answer it. */
+  async function through(route: Route, request: Request, peer: object = device()): Promise<number | 'refused'> {
+    if (route.admitPeer?.(request, peer) !== true) return 'refused'
+    return (await route.fetch(request)).status
+  }
+
+  it('refuses a device with a passkey that holds an unlock, a PIN page unlock, the grace or no grant, on every route that adds, creates, clones, sets defaults or reads the picker', async () => {
+    // Pins `gateByClass`: without the grant check the unlock of today would admit the first two, and a grace-free legacy the rest.
+    for (const home of [{ elevation: { id: 'e1' } }, { page: true }, { elevation: { id: 'g1', grace: true as const } }, {}]) {
+      const { routes } = await mount({ homeAuth: faceHome(faceWorld('d1', 'reach').fields, home) })
+      for (const { path, body } of FACE_CASES) {
+        const route = routes.get(path)!
+        const request = post(path, body())
+        expect(route.admitPeer!(request, device(home.page === true ? { unlockId: 'live' } : {})), path).toBe(true)
+        // The routes' own answers are 200 or 422, so a 403 ELEVATION_REQUIRED means the handler did not run.
+        const refusal = await route.fetch(request)
+        expect([refusal.status, await refusal.json()], `${path} ${JSON.stringify(home)}`).toEqual([403, expect.objectContaining({ error: 'ELEVATION_REQUIRED' })])
+      }
+    }
+  })
+
+  it('admits exactly the body a grant was made for, once, and no other body', async () => {
+    // Pins the request hash: without it a grant for one folder would add another.
+    const world = faceWorld('d1', 'reach')
+    const { routes } = await mount({ homeAuth: faceHome(world.fields) })
+    const route = routes.get(ADD_WORKSPACE_PATH)!
+    const exact = JSON.stringify({ path: projects })
+    const grant = world.grantFor('plugin-new-workspace/add', { path: ADD_WORKSPACE_PATH, body: exact })
+    expect(await through(route, grantCall(ADD_WORKSPACE_PATH, JSON.stringify({ path: person }), grant))).toBe(403)
+    expect(await through(route, grantCall(ADD_WORKSPACE_PATH, exact, grant))).toBe(200)
+    // Pins the single use: without `consume` the same grant would add again.
+    expect(await through(route, grantCall(ADD_WORKSPACE_PATH, exact, grant))).toBe(403)
+  })
+
+  it('answers the clone status and the defaults to a device with no unlock and no grant', async () => {
+    // Pins the `free` class of these two routes.
+    const { routes } = await mount({ homeAuth: faceHome(faceWorld('d1', 'reach').fields) })
+    for (const { path, body, status } of FREE_CASES) expect(await through(routes.get(path)!, post(path, body())), path).toBe(status)
+  })
+
+  it('lets one grant for the places call admit the picker\'s search and preview with no new grant, and no one else', async () => {
+    // Pins the `hold` option: without it each picker read would ask for its own grant; without `opens` the places grant would open no hold.
+    const world = faceWorld('d1', 'reach')
+    const { routes } = await mount({ homeAuth: faceHome({ ...world.fields, deviceHasPasskey: () => true }) })
+    const search = routes.get(SEARCH_PATH)!
+    const searchBody = JSON.stringify({ query: 'zzz' })
+    expect(await through(search, grantCall(SEARCH_PATH, searchBody))).toBe(403)
+    const opened = world.grantFor('plugin-new-workspace/places', { path: PLACES_PATH, body: '{}' })
+    expect(await through(routes.get(PLACES_PATH)!, grantCall(PLACES_PATH, '{}', opened))).toBe(200)
+    expect(await through(search, grantCall(SEARCH_PATH, searchBody))).toBe(200)
+    expect(await through(routes.get(PREVIEW_PATH)!, grantCall(PREVIEW_PATH, JSON.stringify({ path: projects })))).toBe(200)
+    // The hold belongs to the device that opened it.
+    expect(await through(search, grantCall(SEARCH_PATH, searchBody), { principal: { kind: REACH_DEVICE, deviceId: 'd2', listener: 'reach' } })).toBe(403)
+    // A route outside the picker is not admitted by the hold.
+    expect(await through(routes.get(ADD_WORKSPACE_PATH)!, grantCall(ADD_WORKSPACE_PATH, JSON.stringify({ path: projects })))).toBe(403)
+  })
+
+  it('never asks the computer: a request that skips admitPeer reaches every route', async () => {
+    // Pins `principal === undefined`: without it the owner's Peer would be asked for a grant.
+    const { routes } = await mount({ homeAuth: faceHome(faceWorld('d1', 'reach').fields) })
+    for (const { path, body, status } of CASES) expect((await routes.get(path)!.fetch(post(path, body()))).status, path).toBe(status)
   })
 })
 

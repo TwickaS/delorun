@@ -1,17 +1,21 @@
 /**
  * The studio's routes to the install list ({@link PACK_ROUTES}). Every route answers the computer; an approved device
  * reaches the read, cancel and dismiss routes freely, and the routes that add, retry or remove only while its unlock
- * runs (A408): home-auth's `gateByUnlock` answers a locked device `403 ELEVATION_REQUIRED` before the body is read, and
- * each of those calls renews the sliding unlock; the reads never do.
+ * runs (A408), or, with Face ID on, only with a grant for exactly that call: home-auth's `gateByClass` (class `face`) answers
+ * `403 ELEVATION_REQUIRED` otherwise, and each call renews the sliding unlock a device with no passkey runs under; the
+ * reads never do.
  *
  * @module @delorun/plugin-packs/routes
  */
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: the ctx.connection merge.
 import type {} from '@deepseek-ai/dsh-client-connection'
-import { admitApprovedDevice, gateByUnlock, type DangerousModeHome } from '@delorun/home-auth'
+import { admitApprovedDevice, gateByClass, type GrantGateHome } from '@delorun/home-auth'
 import type { PacksHub } from './hub.ts'
 import { PACK_ROUTES, type PacksResult } from './wire.ts'
+
+/** The `AUTH_CLASSES` row of the routes that add, retry and remove: one registration site serves the reads and these. */
+const PACKS_WRITE_ROW = 'route:plugin-packs/src/routes.ts#path (write)'
 
 /** The most bytes of a request body. */
 const MAX_BODY_BYTES = 8 * 1024
@@ -52,10 +56,10 @@ const nameOk = (value: unknown): value is string => typeof value === 'string' &&
  * @param hub - the pack hub.
  */
 export function registerPackRoutes(ctx: Context, hub: Pick<PacksHub, 'snapshot' | 'enqueue' | 'cancel' | 'dismiss' | 'retry' | 'remove'>): void {
-  const homeAuth = (): DangerousModeHome | undefined => ctx.get('homeAuth')
+  const homeAuth = (): GrantGateHome | undefined => ctx.get('homeAuth')
   const anyDevice = { admitPeer: admitApprovedDevice() }
   type Handle = (body: Readonly<Record<string, unknown>>) => Promise<PacksResult | object> | undefined
-  const route = (path: string, gate: 'read' | 'unlock', handle: Handle): void => {
+  const route = (path: string, gate: 'read' | 'add' | 'retry' | 'remove', handle: Handle): void => {
     const run = async (request: Request): Promise<Response> => {
       const body = await bodyOf(request)
       const answer = body === undefined ? undefined : handle(body)
@@ -64,14 +68,14 @@ export function registerPackRoutes(ctx: Context, hub: Pick<PacksHub, 'snapshot' 
     }
     ctx.effect(() => ctx.connection.fetch.register({
       path, methods: ['POST'], requestBody: 'buffered',
-      ...gate === 'read' ? { ...anyDevice, fetch: run } : gateByUnlock(homeAuth, run, { renews: true }),
+      ...gate === 'read' ? { ...anyDevice, fetch: run } : gateByClass(homeAuth, run, { row: PACKS_WRITE_ROW, action: `plugin-packs/${gate}`, legacy: { renews: true } }),
     }), `plugin-packs: ${path}`)
   }
   const named = (call: (name: string) => Promise<PacksResult>) => (body: Readonly<Record<string, unknown>>) => (nameOk(body.name) ? call(body.name) : undefined)
   route(PACK_ROUTES.list, 'read', () => hub.snapshot())
-  route(PACK_ROUTES.enqueue, 'unlock', body => (Array.isArray(body.names) && body.names.length > 0 && body.names.length <= MAX_NAMES && body.names.every(nameOk) ? hub.enqueue(body.names) : undefined))
+  route(PACK_ROUTES.enqueue, 'add', body => (Array.isArray(body.names) && body.names.length > 0 && body.names.length <= MAX_NAMES && body.names.every(nameOk) ? hub.enqueue(body.names) : undefined))
   route(PACK_ROUTES.cancel, 'read', named(name => hub.cancel(name)))
   route(PACK_ROUTES.dismiss, 'read', named(name => hub.dismiss(name)))
-  route(PACK_ROUTES.retry, 'unlock', named(name => hub.retry(name)))
-  route(PACK_ROUTES.remove, 'unlock', named(name => hub.remove(name)))
+  route(PACK_ROUTES.retry, 'retry', named(name => hub.retry(name)))
+  route(PACK_ROUTES.remove, 'remove', named(name => hub.remove(name)))
 }

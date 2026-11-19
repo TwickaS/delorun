@@ -8,6 +8,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { SessionId, SessionSeq } from '@deepseek-ai/dsh-session'
+import { GrantStore, hashRequest } from '@delorun/home-auth'
 import { describe, expect, it } from 'vitest'
 import { registerGrants, type RealBrowserGrants } from '../src/grant.ts'
 import { registerRealBrowserRoutes } from '../src/routes.ts'
@@ -21,7 +22,7 @@ interface Route {
 interface FakeConnection {
   readonly hook: (request: object, response: ServerResponse, next: () => Promise<void>) => Promise<void>
   /** Run a route as the Connection does: `admitPeer` first for a Peer, then `fetch` with the same request. */
-  readonly call: (path: string, body: unknown, principal?: object) => Promise<Response>
+  readonly call: (path: string, body: unknown, principal?: object, headers?: Record<string, string>) => Promise<Response>
   readonly admits: (path: string, principal: object) => boolean
 }
 
@@ -44,14 +45,14 @@ async function chat(): Promise<{ agent: Agent, grants: RealBrowserGrants }> {
  * @param listener - the listener `homeAuth` reports.
  * @returns the fake Connection.
  */
-function routesOver(grants: RealBrowserGrants, agent: Agent, listener: string | undefined): FakeConnection {
+function routesOver(grants: RealBrowserGrants, agent: Agent, listener: string | undefined, face?: { readonly store: GrantStore, readonly hasPasskey: boolean }): FakeConnection {
   let hook: FakeConnection['hook'] | undefined
   const routes = new Map<string, Route>()
   const homeAuth = {
     arrivalOf: () => ({ listener }),
     dangerousMode: () => false,
     unlockModeEnabled: () => false,
-    elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : deviceId === 'grace-phone' ? { id: 'g', grace: true } : undefined),
+    passkeysEnabled: () => face !== undefined, faceGrants: () => face?.store, deviceHasPasskey: () => face?.hasPasskey ?? false, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : deviceId === 'grace-phone' ? { id: 'g', grace: true } : undefined),
   }
   const ctx = {
     on: (_name: string, registered: FakeConnection['hook']) => { hook = registered },
@@ -59,13 +60,13 @@ function routesOver(grants: RealBrowserGrants, agent: Agent, listener: string | 
     connection: { fetch: { register: (route: Route & { path: string }) => { routes.set(route.path, route) } } },
   }
   registerRealBrowserRoutes(ctx as never, grants, { awayMs: () => 7 * DAY, now: () => 1_000 })
-  const request = (path: string, body: unknown): Request => new Request(`http://localhost${path}`, { method: 'POST', body: typeof body === 'string' ? body : JSON.stringify(body) })
+  const request = (path: string, body: unknown, headers?: Record<string, string>): Request => new Request(`http://localhost${path}`, { method: 'POST', body: typeof body === 'string' ? body : JSON.stringify(body), ...headers === undefined ? {} : { headers } })
   return {
     hook: (incoming, response, next) => hook!(incoming, response, next),
     admits: (path, principal) => routes.get(path)?.admitPeer?.(request(path, {}), { principal }) === true,
-    call: async (path, body, principal) => {
+    call: async (path, body, principal, headers) => {
       const route = routes.get(path)!
-      const incoming = request(path, body)
+      const incoming = request(path, body, headers)
       if (principal !== undefined && route.admitPeer?.(incoming, { principal }) !== true) return new Response('forbidden', { status: 403 })
       return route.fetch(incoming)
     },
@@ -73,6 +74,15 @@ function routesOver(grants: RealBrowserGrants, agent: Agent, listener: string | 
 }
 
 const device = (deviceId: string) => ({ kind: 'reach-device', deviceId, listener: 'reach-tailscale-private' })
+
+/** A grant store and the one grant the away permission's `on: true` call needs. */
+function faceFor(deviceId: string, listener: string, body: string) {
+  const store = new GrantStore({ now: () => 1_000_000, random: size => Uint8Array.from({ length: size }, (_, i) => i + 1) })
+  const hash = hashRequest({ method: 'POST', path: REAL_BROWSER_ROUTES.away, body: Buffer.from(body) })
+  if (hash === undefined) throw new Error('body over the cap')
+  const grantId = store.mint({ deviceId, listener: listener as never }, [{ action: 'browser-use-browse/away', hash }], 'passkey').grantId
+  return { store, grantId }
+}
 
 describe('the real-browser routes', () => {
   it('refuse a request the home cannot place, or a foreign Host on the loopback listener, and let the computer and a reach device through', async () => {
@@ -114,6 +124,25 @@ describe('the real-browser routes', () => {
     expect(grants.view(agent.session).awayUntil).toBeNull()
     expect(routes.admits(REAL_BROWSER_ROUTES.end, device('grace-phone'))).toBe(true)
     expect((await routes.call(REAL_BROWSER_ROUTES.away, { sessionId: 'chat-1', on: true }, device('unlocked-phone'))).status).toBe(200)
+  })
+
+  it('turn the away permission off with no prompt, and on only with a Face ID grant for exactly that body', async () => {
+    // Pins the body-dependent class: `on: false` is free; a body that parses to `on: true`, even one that also says false first, takes the gate.
+    const { agent, grants } = await chat()
+    grants.grant(agent.session, { kind: 'approval', askedSeq: SessionSeq(1) })
+    const on = JSON.stringify({ sessionId: 'chat-1', on: true })
+    const { store, grantId } = faceFor('locked-phone', 'reach-tailscale-private', on)
+    const routes = routesOver(grants, agent, 'reach-tailscale-private', { store, hasPasskey: true })
+    expect((await routes.call(REAL_BROWSER_ROUTES.away, { sessionId: 'chat-1', on: false }, device('locked-phone'))).status).toBe(200)
+    for (const body of [on, '{"sessionId":"chat-1","on":false,"on":true}']) {
+      const refused = await routes.call(REAL_BROWSER_ROUTES.away, body, device('locked-phone'))
+      expect([refused.status, await refused.json()]).toEqual([403, expect.objectContaining({ error: 'ELEVATION_REQUIRED' })])
+    }
+    expect(grants.view(agent.session).awayUntil).toBeNull()
+    const other = await routes.call(REAL_BROWSER_ROUTES.away, '{"sessionId":"chat-1","on":true,"x":1}', device('locked-phone'), { 'delorun-grant': grantId })
+    expect(other.status).toBe(403)
+    expect((await routes.call(REAL_BROWSER_ROUTES.away, on, device('locked-phone'), { 'delorun-grant': grantId })).status).toBe(200)
+    expect((await routes.call(REAL_BROWSER_ROUTES.away, on, device('locked-phone'), { 'delorun-grant': grantId })).status).toBe(403)
   })
 
   it('answer the state, the away permission and the end, and refuse what they cannot do', async () => {

@@ -24,7 +24,7 @@ import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-client-connection'
 // Type-only: the ctx.workspaceRegistry merge.
 import type {} from '@deepseek-ai/dsh-workspace'
-import { admitApprovedDevice, gateByUnlock, requireComputerOrDevice, routedPathname } from '@delorun/home-auth'
+import { admitApprovedDevice, gateByClass, requireComputerOrDevice, routedPathname } from '@delorun/home-auth'
 import { DELORUN_HOME_ENTRIES, PRIVATE_DIR_MODE } from '@delorun/contract-home-layout'
 import { resolveDelorunHome } from '@delorun/home'
 import { AbstractSocketConsent } from './abstract-socket-consent.ts'
@@ -320,9 +320,9 @@ export class CommandNetwork extends Service {
       if ((path === NETWORK_LIST_PATH || path === NETWORK_SET_PATH) && !requireComputerOrDevice(request, response, ctx.get('homeAuth'), NETWORK_ACTION)) return
       await next()
     })
-    // Any approved device reads the network settings; changing one needs an unlock.
+    // Any approved device reads the network settings; changing one is a `face` route.
     ctx.connection.fetch.register({ path: NETWORK_LIST_PATH, methods: ['GET'], requestBody: 'buffered', admitPeer: admitApprovedDevice(), fetch: () => Promise.resolve(json(200, this.list())) })
-    ctx.connection.fetch.register({ path: NETWORK_SET_PATH, methods: ['POST'], requestBody: 'buffered', ...gateByUnlock(() => ctx.get('homeAuth'), request => this.handleSet(request), { grace: false, renews: true }) })
+    ctx.connection.fetch.register({ path: NETWORK_SET_PATH, methods: ['POST'], requestBody: 'buffered', ...gateByClass(() => ctx.get('homeAuth'), request => this.handleSet(request), { row: 'route:plugin-permission-defaults/src/command-network.ts#NETWORK_SET_PATH', action: 'plugin-permission-defaults/network-set', legacy: { grace: false, renews: true } }) })
   }
 
   /**

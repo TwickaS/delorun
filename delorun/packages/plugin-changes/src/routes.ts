@@ -102,7 +102,8 @@ import {
   type WorkStarted,
 } from '@delorun/changes'
 import { isForeignFetchSite, isSameLoopbackOrigin, listenerOf, loopbackAddressOf, type LoopbackPort, type StampedRequest } from '@delorun/home'
-import { mayUse, accessView } from './access.ts'
+import { GRANT_BODY_CAP_BYTES } from '@delorun/home-auth'
+import { accessView, CONTROL_LEVELS, mayUse } from './access.ts'
 import { isProfileSafetyError, readSafeMode, recover } from '@delorun/profile-safety'
 import {
   type AccessView,
@@ -171,6 +172,9 @@ export const LOOPBACK_REQUIRED_SENTENCE = 'This needs you at your computer.'
 
 /** The sentence a paired device without an unlock the person entered is answered with. */
 export const ELEVATION_REQUIRED_SENTENCE = 'Unlock this device first: it needs a code from your computer, or your PIN where PIN mode is on.'
+
+/** The sentence a device reads when a control needs Face ID or a PIN for this call. */
+export const FACE_REQUIRED_SENTENCE = 'Confirm with Face ID or your PIN first.'
 
 /** The sentence that stands for a failure's words when they name the Delorun home's path, which the Host log keeps. */
 export const HOME_WITHHELD_SENTENCE = 'Its details name files Delorun keeps; the Host log has them.'
@@ -270,6 +274,24 @@ export interface RouteDevice {
   readonly unlock: 'fresh' | 'grace' | 'none'
   /** Renew the device's sliding unlock after an action it was needed for. */
   readonly renew: () => void
+  /** The device's Face ID grants. Absent while no `homeAuth` is mounted. */
+  readonly face?: FaceAccess
+}
+
+/** What a route reads of the home's Face ID grants for one device. */
+export interface FaceAccess {
+  /** Whether the Face ID flag is on, so the home asks for a grant. */
+  readonly enabled: boolean
+  /** Whether the device holds a passkey. A device with one is admitted by a grant alone. */
+  readonly hasPasskey: boolean
+  /**
+   * Use up the grant for exactly one call.
+   * @param action - the grant's action name.
+   * @param call - the method, the path as received and the body bytes the route read itself.
+   * @param grantId - the `Delorun-Grant` header's value.
+   * @returns whether a live grant for this action and this method, path and body was used up and the header names it.
+   */
+  readonly take: (action: string, call: { readonly method: string, readonly path: string, readonly body: Uint8Array }, grantId: string | undefined) => boolean
 }
 
 /** What the routes read of paired devices. */
@@ -448,7 +470,15 @@ function actorOf(requester: Requester): ActorView {
 }
 
 /**
- * Decide a `POST` before its body is read: the site, then the control's level, then the proof.
+ * @param requester - where a request came from.
+ * @returns whether the home asks this requester for Face ID: a device on a home whose flag is on and that holds a passkey.
+ */
+function faceReadyOf(requester: Requester): boolean {
+  return requester.kind === 'device' && requester.device.face?.enabled === true && requester.device.face.hasPasskey
+}
+
+/**
+ * Decide a `POST` before its body is parsed: the site, then the control's class, then the proof. A `face` control with the Face ID flag on reads the raw body, at most the grant cap, to check the grant against it.
  * @param request - the request.
  * @param admission - the arrival and the admitted session.
  * @param control - the control the route is.
@@ -462,14 +492,62 @@ async function gate(request: IncomingMessage, admission: { readonly arrival: Stu
   if (requester.kind === 'device' ? isCrossSiteDevice(request) : isCrossSite(request)) throw new RouteRefusal(403, 'CROSS_SITE', 'Another site cannot change what your harness runs.')
   if (requester.kind === 'computer') return { presence: attestStudio(admission.arrival), renew: () => {} }
   if (requester.kind === 'other') throw new RouteRefusal(403, LOOPBACK_REQUIRED, LOOPBACK_REQUIRED_SENTENCE)
-  const may = mayUse(actorOf(requester), devices.phonePowers().level, control)
+  const { device } = requester
+  const face = device.face
+  const may = mayUse(actorOf(requester), devices.phonePowers().level, control, face?.enabled === true && face.hasPasskey)
+  // With the flag on, a grant for exactly this call admits any device; one for another body, path or control does not.
+  if (CONTROL_LEVELS[control] === 'face' && face?.enabled === true) {
+    const header = request.headers['delorun-grant']
+    // A body over the grant cap cannot be hashed, so no grant covers it; its stream is left unread for the route's own limit.
+    if (!(Number(request.headers['content-length'] ?? '0') > GRANT_BODY_CAP_BYTES)) {
+      const bytes = await bodyBytes(request, GRANT_BODY_CAP_BYTES)
+      if (face.take(`changes/${control}`, { method: 'POST', path: new URL(String(request.url), 'http://studio.invalid').pathname, body: bytes }, typeof header === 'string' ? header : undefined)) {
+        return { presence: attestDevice({ remoteSession: true, device: { id: device.id, label: device.label }, freshUnlock: true }), renew: () => {} }
+      }
+    }
+  }
   if (!may.ok) {
     throw may.needs === 'computer'
       ? new RouteRefusal(403, LOOPBACK_REQUIRED, LOOPBACK_REQUIRED_SENTENCE)
-      : new RouteRefusal(403, ELEVATION_REQUIRED, ELEVATION_REQUIRED_SENTENCE)
+      : new RouteRefusal(403, ELEVATION_REQUIRED, may.needs === 'face' ? FACE_REQUIRED_SENTENCE : ELEVATION_REQUIRED_SENTENCE)
   }
-  const { device } = requester
   return { presence: attestDevice({ remoteSession: true, device: { id: device.id, label: device.label }, freshUnlock: device.unlock === 'fresh' }), renew: device.renew }
+}
+
+/** The bodies a gate already read, so the route reads the same bytes the grant was checked against. */
+const READ_BODIES = new WeakMap<IncomingMessage, Buffer>()
+
+/**
+ * Read a request's raw body once, at most `limit` bytes.
+ * @param request - the request.
+ * @param limit - the most bytes the body may hold.
+ * @returns the bytes; a later call for the same request returns the same bytes.
+ * @throws {RouteRefusal} `413 BODY_TOO_LARGE` when the body is larger than `limit`.
+ */
+async function bodyBytes(request: IncomingMessage, limit: number): Promise<Buffer> {
+  const known = READ_BODIES.get(request)
+  if (known !== undefined) {
+    if (known.length > limit) throw tooLarge(limit)
+    return known
+  }
+  const chunks: Buffer[] = []
+  let size = 0
+  for await (const chunk of request as AsyncIterable<Buffer>) {
+    size += chunk.length
+    if (size > limit) throw tooLarge(limit)
+    chunks.push(chunk)
+  }
+  const bytes = Buffer.concat(chunks)
+  READ_BODIES.set(request, bytes)
+  return bytes
+}
+
+/**
+ * @param limit - the limit a body exceeded.
+ * @returns the refusal.
+ */
+function tooLarge(limit: number): RouteRefusal {
+  return new RouteRefusal(413, 'BODY_TOO_LARGE', limit === MAX_BODY_BYTES ? `A request names one change or plugin in at most ${String(MAX_BODY_BYTES)} bytes.` : `A setup file larger than ${String(limit / 1024 / 1024)} MiB is imported with delorun setup import.`)
 }
 
 /**
@@ -480,14 +558,7 @@ async function gate(request: IncomingMessage, admission: { readonly arrival: Stu
  * @throws {RouteRefusal} `413 BODY_TOO_LARGE` or `400 BAD_REQUEST` for a body that is not one JSON object.
  */
 async function readBody(request: IncomingMessage, limit = MAX_BODY_BYTES): Promise<Readonly<Record<string, unknown>>> {
-  const chunks: Buffer[] = []
-  let size = 0
-  for await (const chunk of request as AsyncIterable<Buffer>) {
-    size += chunk.length
-    if (size > limit) throw new RouteRefusal(413, 'BODY_TOO_LARGE', limit === MAX_BODY_BYTES ? `A request names one change or plugin in at most ${String(MAX_BODY_BYTES)} bytes.` : `A setup file larger than ${String(limit / 1024 / 1024)} MiB is imported with delorun setup import.`)
-    chunks.push(chunk)
-  }
-  const text = Buffer.concat(chunks).toString('utf8')
+  const text = (await bodyBytes(request, limit)).toString('utf8')
   if (text.trim() === '') return {}
   let value: unknown
   try {
@@ -776,7 +847,7 @@ async function stateOf(ctx: ChangesContext, requester: Requester, home: HomeWord
   const entries = log?.entries ?? []
   return {
     atComputer: requester.kind === 'computer',
-    access: accessView(actorOf(requester), dependencies.devices.phonePowers()),
+    access: accessView(actorOf(requester), dependencies.devices.phonePowers(), faceReadyOf(requester)),
     profile: ctx.profile,
     ...protection === undefined ? {} : { protection },
     ...safeMode === undefined ? {} : { safeMode: { since: safeMode.since, reason: safeMode.reason, skipped: safeMode.skipped } },
@@ -1529,6 +1600,6 @@ export function changesGate(dependencies: RouteDependencies): ChangesGate {
   return {
     post: (control, run) => decidingRoute(control, dependencies, run),
     open: run => openRoute(dependencies, run),
-    get: read => readingRoute((ctx, _url, requester) => read(ctx, accessView(actorOf(requester), dependencies.devices.phonePowers())), dependencies),
+    get: read => readingRoute((ctx, _url, requester) => read(ctx, accessView(actorOf(requester), dependencies.devices.phonePowers(), faceReadyOf(requester))), dependencies),
   }
 }

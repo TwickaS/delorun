@@ -22,7 +22,7 @@ import { changeId, CHANGE_LOG_SCHEMA, enforceApprovedContent, type HarnessContex
 import { REQUEST_LISTENER } from '@delorun/home'
 import { onTestFinished } from 'vitest'
 import { restartRoutes, type RestartRouteDependencies } from '../src/restart-route.ts'
-import { changesRoutes, type ChangesRoute, type RouteDependencies, type RouteDevice } from '../src/routes.ts'
+import { changesRoutes, type ChangesRoute, type FaceAccess, type RouteDependencies, type RouteDevice } from '../src/routes.ts'
 
 /** The fixture's profile. */
 export const PROFILE = 'default'
@@ -153,7 +153,7 @@ export interface RouteServer {
  *   routes of another plugin over the same dependencies, as `@delorun/plugin-update` does with the Changes gate.
  * @returns the server.
  */
-export async function serveRoutes(ctx: ChangesContext | undefined, options: Partial<RouteDependencies> & { readonly reloadOutcome?: ReloadOutcome, readonly operationResult?: PluginOperationResult, readonly powers?: 'careful' | 'full', readonly restartRoute?: RestartRouteDependencies, readonly extraRoutes?: (dependencies: RouteDependencies) => readonly ChangesRoute[] } = {}): Promise<RouteServer> {
+export async function serveRoutes(ctx: ChangesContext | undefined, options: Partial<RouteDependencies> & { readonly reloadOutcome?: ReloadOutcome, readonly operationResult?: PluginOperationResult, readonly powers?: 'careful' | 'full', readonly face?: FaceAccess, readonly restartRoute?: RestartRouteDependencies, readonly extraRoutes?: (dependencies: RouteDependencies) => readonly ChangesRoute[] } = {}): Promise<RouteServer> {
   let profileReads = 0
   let renewals = 0
   let reloads = 0
@@ -193,7 +193,7 @@ export async function serveRoutes(ctx: ChangesContext | undefined, options: Part
     devices: {
       deviceOf: (peer) => {
         const { unlock } = peer as Partial<RemotePeer>
-        return Promise.resolve(unlock === undefined ? undefined : { ...TEST_DEVICE, unlock, renew: () => { renewals += 1 } })
+        return Promise.resolve(unlock === undefined ? undefined : { ...TEST_DEVICE, unlock, renew: () => { renewals += 1 }, ...options.face === undefined ? {} : { face: options.face } })
       },
       phonePowers: () => ({ level: options.powers ?? 'careful', chosen: options.powers !== undefined }),
     },

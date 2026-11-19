@@ -63,6 +63,7 @@ import { REACH_DEVICE, unlockOf, type ReachDevicePrincipal } from '@delorun/home
 import { recordPluginRequest, type PluginRequest } from '@delorun/changes/install'
 import { loadUpstreamChecks, upstreamPluginOperation } from '@delorun/changes/plugin-operation'
 import type { VersionOutput } from '@delorun/contract-plugin-versions'
+import { faceAccessOf } from './face-access.ts'
 import { LiveAssets, harnessEffectOf } from './live-apply.ts'
 import { restartRoutes, restartStateOf } from './restart-route.ts'
 import { CHANGES_ROUTE_PREFIX, changesGate, changesRoutes, type ChangesGate, type RouteConnection, type RouteDevice, type RouteDevices } from './routes.ts'
@@ -405,6 +406,7 @@ export function routeDevices(scope: Pick<Context, 'get'>): RouteDevices {
         label,
         unlock: unlock === undefined ? 'none' : unlock.grace === true ? 'grace' : 'fresh',
         renew: () => { if (unlock !== undefined) home.touchUnlock(unlock.id) },
+        face: faceAccessOf(home.passkeysEnabled() ? home.faceGrants() : undefined, home.deviceHasPasskey(deviceId), { deviceId, listener: (principal as ReachDevicePrincipal).listener }),
       }
       return device
     },

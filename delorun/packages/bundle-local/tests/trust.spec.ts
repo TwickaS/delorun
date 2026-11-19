@@ -177,18 +177,13 @@ describe('the bill route', () => {
 })
 
 describe('the check route', () => {
-  it('admits a reach device but answers a locked one ELEVATION_REQUIRED, and an unlocked one runs the check', async () => {
-    const { ctx, routes } = await mount({ enabled: true })
+  it('admits a reach device with no unlock, as a free check that writes nothing, and refuses any other Peer', async () => {
+    // Pins the `free` class of the check: a locked paired device runs it, and a share viewer still cannot.
+    const { routes } = await mount({ enabled: true })
     const check = route(routes, TRUST_CHECK_PATH)
-    const home = (unlocked: boolean) => ({ elevationOf: () => (unlocked ? { id: 'e' } : undefined), pageUnlockOf: () => undefined })
-    const asDevice = async (unlocked: boolean) => {
-      ctx.provide('homeAuth', home(unlocked) as never)
-      const call = request(TRUST_CHECK_PATH, 'POST')
-      expect(check.admitPeer?.(call, { principal: { kind: 'reach-device', deviceId: 'phone', listener: 'reach-tailscale-private' } } as never)).toBe(true)
-      return check.fetch(call)
-    }
-    const locked = await asDevice(false)
-    expect([locked.status, await locked.json()]).toEqual([403, expect.objectContaining({ error: 'ELEVATION_REQUIRED' })])
+    const call = request(TRUST_CHECK_PATH, 'POST')
+    expect(check.admitPeer?.(call, { principal: { kind: 'reach-device', deviceId: 'phone', listener: 'reach-tailscale-private' } } as never)).toBe(true)
+    expect((await check.fetch(call)).status).toBe(200)
     expect(check.admitPeer?.(request(TRUST_CHECK_PATH, 'POST'), peer('share-viewer') as never)).toBe(false)
   })
 

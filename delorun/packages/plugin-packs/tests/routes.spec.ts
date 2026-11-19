@@ -1,6 +1,7 @@
 /** The packs routes: which Peers each admits (a locked phone cannot add, retry or remove) and what a body may hold. */
 import { describe, expect, it, vi } from 'vitest'
 import { REACH_DEVICE } from '@delorun/home-auth'
+import { faceWorld, type FaceWorld } from '../../plugin-changes/tests/face-world.ts'
 import { registerPackRoutes } from '../src/routes.ts'
 import { createPacksClient } from '../src/client.ts'
 import { PACK_ELEVATED_ROUTES, PACK_ROUTES } from '../src/wire.ts'
@@ -11,7 +12,7 @@ interface Registered {
   readonly fetch: (request: Request) => Promise<Response>
 }
 
-function setup(home: { elevated?: boolean, page?: Record<string, boolean> } = {}) {
+function setup(home: { elevated?: boolean, page?: Record<string, boolean>, face?: FaceWorld } = {}) {
   const touched: string[] = []
   const routes = new Map<string, Registered>()
   const result = { ok: true as const, value: { supported: true, packs: [], queue: [] } }
@@ -23,6 +24,8 @@ function setup(home: { elevated?: boolean, page?: Record<string, boolean> } = {}
   const ctx = {
     effect: (register: () => unknown) => { register() },
     get: (name: string) => (name === 'homeAuth' ? {
+      passkeysEnabled: () => false, faceGrants: () => undefined, deviceHasPasskey: () => false,
+      ...home.face?.fields ?? {},
       elevationOf: () => (home.elevated === true ? { id: 'e1' } : undefined),
       pageUnlockOf: (id: string) => (home.page?.[id] === true ? { id: 'p1' } : undefined),
       arrivalOf: () => ({ listener: 'reach' }), dangerousMode: () => false, unlockModeEnabled: () => false, touchUnlock: (id: string) => { touched.push(id) },
@@ -82,6 +85,48 @@ describe('who may reach each route', () => {
   it('refuses any Peer that is not a reach device, on every route', async () => {
     const { routes } = setup({ elevated: true })
     for (const path of Object.values(PACK_ROUTES)) expect(await through(routes.get(path)!, { principal: { kind: 'guest' } }), path).toBe('refused')
+  })
+})
+
+describe('under Face ID', () => {
+  const grantHeader = (grantId: string): Request => new Request(`http://x${PACK_ROUTES.enqueue}`, { method: 'POST', headers: { 'content-type': 'application/json', 'delorun-grant': grantId }, body: JSON.stringify({ names: ['a'] }) })
+
+  it('refuses a device with a passkey that holds only an unlock, a PIN page or no grant, on every route that adds, retries or removes', async () => {
+    // Pins `gateByClass`: without the grant check the unlock of today would admit these.
+    const world = faceWorld('d1', 'reach')
+    const { routes, hub } = setup({ elevated: true, page: { live: true }, face: world })
+    for (const path of PACK_ELEVATED_ROUTES) {
+      expect(await through(routes.get(path)!, device()), path).toBe(403)
+      expect(await through(routes.get(path)!, device({ unlockId: 'live' })), path).toBe(403)
+    }
+    expect([hub.enqueue, hub.retry, hub.remove].map(call => call.mock.calls.length)).toEqual([0, 0, 0])
+  })
+
+  it('leaves the reads, cancel and dismiss free, with no unlock and no grant', async () => {
+    const { routes } = setup({ face: faceWorld('d1', 'reach') })
+    for (const path of Object.values(PACK_ROUTES).filter(each => !PACK_ELEVATED_ROUTES.includes(each))) expect(await through(routes.get(path)!, device()), path).toBe(200)
+  })
+
+  it('admits exactly the body a grant was made for, once, and no other body', async () => {
+    const world = faceWorld('d1', 'reach')
+    const { routes, hub } = setup({ face: world })
+    const route = routes.get(PACK_ROUTES.enqueue)!
+    const grant = world.grantFor('plugin-packs/add', { path: PACK_ROUTES.enqueue, body: JSON.stringify({ names: ['a'] }) })
+    const other = new Request(`http://x${PACK_ROUTES.enqueue}`, { method: 'POST', headers: { 'delorun-grant': grant }, body: JSON.stringify({ names: ['b'] }) })
+    route.admitPeer(other, device())
+    expect((await route.fetch(other)).status).toBe(403)
+    const exact = new Request(`http://x${PACK_ROUTES.enqueue}`, { method: 'POST', headers: { 'delorun-grant': grant }, body: JSON.stringify({ names: ['a'] }) })
+    route.admitPeer(exact, device())
+    expect((await route.fetch(exact)).status).toBe(200)
+    expect(hub.enqueue).toHaveBeenCalledWith(['a'])
+    const replay = grantHeader(grant)
+    route.admitPeer(replay, device())
+    expect((await route.fetch(replay)).status).toBe(403)
+  })
+
+  it('never asks the computer', async () => {
+    const { routes } = setup({ face: faceWorld('d1', 'reach') })
+    for (const path of PACK_ELEVATED_ROUTES) expect((await routes.get(path)!.fetch(post({ name: 'a', names: ['a'] }))).status, path).toBe(200)
   })
 })
 

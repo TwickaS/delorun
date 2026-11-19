@@ -18,7 +18,7 @@ import type { ConnectionFetchRoute } from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-plugin-manager'
 import type { ProfileVersionId, VersionAdmission } from '@deepseek-ai/dsh-plugin-manager/history'
 import { discardImportReviews } from '@delorun/plugin-changes'
-import { gateByUnlock, isForeignFetchSite, isSameLoopbackOrigin, REACH_DEVICE, requireComputerOrDevice, routedPathname } from '@delorun/home-auth'
+import { gateByClass, isForeignFetchSite, isSameLoopbackOrigin, REACH_DEVICE, requireComputerOrDevice, routedPathname } from '@delorun/home-auth'
 import {
   HOME_PATCH_COPY_FILENAME, isProfileSafetyError, listProfileVersions, openHistory, planRestore, saveProfileVersion, switchToVersion, UPDATE_REPORT_FILENAME,
   type RestorePlan,
@@ -309,19 +309,19 @@ export function registerVersionRoutes(ctx: Context, service: ProfileVersions): v
   })
   ctx.connection.fetch.register({
     path: PROFILE_VERSION_ROUTES.save, methods: ['POST'], requestBody: 'buffered',
-    ...gateByUnlock(() => ctx.get('homeAuth'), async (request) => {
+    ...gateByClass(() => ctx.get('homeAuth'), async (request) => {
       const body = await parsed(request, SaveBody)
       if (body === undefined) return json(400, { error: 'BAD_REQUEST', message: 'The request must be JSON with an optional name.' })
       return run(() => service.save(body.name))
-    }, { renews: true }),
+    }, { row: 'route:bundle-local/src/profile-versions.ts#PROFILE_VERSION_ROUTES.save', action: 'bundle-local/profile-save', legacy: { renews: true } }),
   })
   ctx.connection.fetch.register({
     path: PROFILE_VERSION_ROUTES.switch, methods: ['POST'], requestBody: 'buffered',
-    ...gateByUnlock(() => ctx.get('homeAuth'), async (request) => {
+    ...gateByClass(() => ctx.get('homeAuth'), async (request) => {
       const body = await parsed(request, SwitchBody)
       if (body === undefined) return json(400, { error: 'BAD_REQUEST', message: 'The request must be JSON with the version.' })
       return run(() => service.switch(body.version))
-    }, { renews: true }),
+    }, { row: 'route:bundle-local/src/profile-versions.ts#PROFILE_VERSION_ROUTES.switch', action: 'bundle-local/profile-switch', legacy: { renews: true } }),
   })
 }
 

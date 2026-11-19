@@ -11,6 +11,7 @@ import { UPDATE_REPORT_SCHEMA, type ReportItem, type UpdateReport } from '@delor
 import type { ResponseLine, UnsignedRequest, UpdateChannelAccess } from '@delorun/home-process'
 import { changesGate } from '@delorun/plugin-changes'
 import { routeHome, serveRoutes, type RouteServer } from '../../plugin-changes/tests/routes-fixture.ts'
+import type { FaceAccess } from '../../plugin-changes/src/routes.ts'
 import { updateRoutes, type UpdateCheckAccess } from '../src/routes.ts'
 
 /** The Host's channel token as the stand-in holds it; no answer may carry it. */
@@ -97,7 +98,7 @@ export interface UpdateServer {
  * @param options - Phone powers, whether the channel exists, and the release check.
  * @returns the server and its stand-ins.
  */
-export async function serveUpdate(options: { readonly powers?: 'careful' | 'full', readonly noChannel?: boolean } = {}): Promise<UpdateServer> {
+export async function serveUpdate(options: { readonly powers?: 'careful' | 'full', readonly noChannel?: boolean, readonly face?: FaceAccess } = {}): Promise<UpdateServer> {
   const { ctx } = routeHome()
   mkdirSync(join(ctx.home, 'run', ctx.profile), { recursive: true, mode: 0o700 })
   const channel = new FakeChannel()
@@ -107,6 +108,7 @@ export async function serveUpdate(options: { readonly powers?: 'careful' | 'full
     channel, home: ctx.home, clock, log, check: undefined,
     server: await serveRoutes(ctx, {
       ...options.powers === undefined ? {} : { powers: options.powers },
+      ...options.face === undefined ? {} : { face: options.face },
       extraRoutes: dependencies => updateRoutes({
         gate: changesGate(dependencies),
         channel: () => options.noChannel === true ? undefined : channel,

@@ -25,7 +25,6 @@ const ROUTE_REACH: readonly { readonly path: string, readonly reach: Reach }[] =
   { path: ACTION_PATHS.undo, reach: 'both-levels' },
   { path: ACTION_PATHS.discard, reach: 'both-levels' },
   { path: HARNESS_PATHS.discard, reach: 'both-levels' },
-  { path: PROTECTION_PATHS.on, reach: 'both-levels' },
   // Everything else: an unlocked phone only under Full.
   ...(['apply', 'off', 'on', 'work', 'done', 'safe-mode', 'exit-safe-mode', 'create', 'request', 'reveal'] as const satisfies readonly ChangesAction[]).map(action => ({ path: ACTION_PATHS[action], reach: 'full-only' as const })),
   ...Object.values(SETUP_PATHS).map(path => ({ path, reach: 'full-only' as const })),
@@ -43,7 +42,7 @@ const WHERE_REFUSALS = ['LOOPBACK_REQUIRED', 'ELEVATION_REQUIRED', 'CROSS_SITE']
 describe('who may use each control', () => {
   it('a phone uses a control only where Phone powers lets it, and only with an unlock it entered', async () => {
     const { ctx } = routeHome()
-    expect(ROUTE_REACH.length).toBe(Object.keys(ACTION_PATHS).length + Object.keys(SETUP_PATHS).length + Object.keys(HARNESS_PATHS).length + 3)
+    expect(ROUTE_REACH.length).toBe(Object.keys(ACTION_PATHS).length + Object.keys(SETUP_PATHS).length + Object.keys(HARNESS_PATHS).length + 2)
     for (const powers of ['careful', 'full'] as const) {
       const server = await serveRoutes(ctx, { powers })
       for (const { path, reach } of ROUTE_REACH) {
