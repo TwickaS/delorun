@@ -81,7 +81,14 @@ import { readVersions } from './versions.ts'
 import { createRemoteNoticeSource, RemoteNotice } from './RemoteNotice.tsx'
 import { createPinSource, type PinSource } from './pin-lock.ts'
 import { en as pinEn, zh as pinZh, type PinLocaleKey } from './pin-locales.ts'
+import { en as faceIdEn, zh as faceIdZh, type FaceIdLocaleKey } from './face-id-locales.ts'
 import { PinLock } from './PinLock.tsx'
+import type { FaceGrantService } from '@delorun/plugin-changes/face-grant'
+import { createFaceGrantSource } from './face-grant.ts'
+import { FaceIdGrantOverlay } from './FaceIdGrantOverlay.tsx'
+import { FaceIdAnswerAction, type FaceIdAnswerInjected } from './FaceIdAnswerAction.tsx'
+import { FaceIdSection, type FaceIdSectionInjected } from './FaceIdSection.tsx'
+import { FaceIdPairingOverlay } from './FaceIdPairingOverlay.tsx'
 import { en as pinModeEn, zh as pinModeZh, type PinModeLocaleKey } from './pin-mode-locales.ts'
 import { PinModeSection, type PinModeSectionInjected } from './PinModeSection.tsx'
 import { attachPinTriggers } from './pin-triggers.ts'
@@ -124,6 +131,7 @@ import { DELEGATION_CONSENT_ROW, type DelegationConsentSettings } from '@delorun
 export type { PrivacyLocaleKey } from './locales.ts'
 export type { DevicesLocaleKey } from './devices-locales.ts'
 export type { PinLocaleKey } from './pin-locales.ts'
+export type { FaceIdLocaleKey } from './face-id-locales.ts'
 export type { PinModeLocaleKey } from './pin-mode-locales.ts'
 export type { PinModeSectionProps } from './PinModeSection.tsx'
 export type { PinOutcome, PinSource, PinView } from './pin-lock.ts'
@@ -197,6 +205,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'delorunDevices': DevicesLocaleKey
     /** The PIN lock screen's copy. */
     'delorunPin': PinLocaleKey
+    /** The Face ID screens' copy: the action sheet, enrolment and the passkey list. */
+    'delorunFaceId': FaceIdLocaleKey
     /** The PIN mode settings section's copy. */
     'delorunPinMode': PinModeLocaleKey
     /** The trust badge's and the trust panel's copy. */
@@ -220,6 +230,24 @@ export const DEVICES_NS = 'delorunDevices'
 
 /** Dictionary namespace of the PIN lock screen. */
 export const PIN_NS = 'delorunPin'
+
+/** Dictionary namespace of the Face ID screens. */
+export const FACE_ID_NS = 'delorunFaceId'
+
+/** The `settings.section` id of the Face ID section, which sits just after PIN mode. */
+export const FACE_ID_SECTION_ID = 'delorun-face-id'
+
+/** The `conversation.approval.action` id of the Face ID step on a granting approval card. */
+export const FACE_ID_ANSWER_ID = 'delorun-face-id-answer'
+
+/** The `shell.overlay` id of the confirmation another plugin's call asks for through `ctx.delorunFaceGrant`. */
+export const FACE_ID_GRANT_ID = 'delorun-face-id-grant'
+
+/** The `shell.overlay` id of the pairing step. */
+export const FACE_ID_OVERLAY_ID = 'delorun-face-id-pairing'
+
+/** Where the Face ID section sits among the settings sections. */
+export const FACE_ID_SECTION_ORDER = 21.6
 
 /** Dictionary namespace of the PIN mode settings section. */
 export const PIN_MODE_NS = 'delorunPinMode'
@@ -490,6 +518,7 @@ export function apply(ctx: Context): void {
   ctx.effect(() => ctx.locale.register(DEVICES_NS, { en: devicesEn, zh: devicesZh }), 'delorun-devices: section dictionaries')
   const devicesT = ctx.locale.bind(DEVICES_NS)
   ctx.effect(() => ctx.locale.register(PIN_NS, { en: pinEn, zh: pinZh }), 'delorun-pin: lock screen dictionaries')
+  ctx.effect(() => ctx.locale.register(FACE_ID_NS, { en: faceIdEn, zh: faceIdZh }), 'delorun-face-id: screen dictionaries')
   // One function for the plugin's lifetime: the section's requests restart when its identity changes.
   const browserFetch: HostFetch = (input, init) => globalThis.fetch(input, init)
   const pin = applyPin(ctx, browserFetch, (ctx.get('connection') as ConnectionHandle).isLoopback)
@@ -541,6 +570,36 @@ export function apply(ctx: Context): void {
     locale: PIN_MODE_NS,
     inject: pinModeFace,
   }, PinModeSection))
+  const faceIdT = ctx.locale.bind(FACE_ID_NS)
+  const faceIdFace = (): FaceIdSectionInjected => ({ fetch: browserFetch, atComputer: () => (ctx.get('connection') as ConnectionHandle).isLoopback, hooks: pin.hooks })
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: FACE_ID_SECTION_ID,
+    order: FACE_ID_SECTION_ORDER,
+    label: () => faceIdT('nav'),
+    locale: FACE_ID_NS,
+    inject: faceIdFace,
+  }, FaceIdSection))
+  const faceGrant = createFaceGrantSource()
+  ctx.provide('delorunFaceGrant', { grant: faceGrant.grant } satisfies FaceGrantService)
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+    name: 'shell.overlay',
+    id: FACE_ID_GRANT_ID,
+    locale: FACE_ID_NS,
+    inject: () => ({ fetch: browserFetch, hooks: { ...pin.hooks, ...faceGrant.hooks }, settle: faceGrant.settle }),
+  }, FaceIdGrantOverlay))
+  ctx.slots.inject('conversation.approval.action', () => ctx.slots.register({
+    name: 'conversation.approval.action',
+    id: FACE_ID_ANSWER_ID,
+    locale: FACE_ID_NS,
+    inject: (sessionId): FaceIdAnswerInjected => ({ ...faceIdFace(), sessionId }),
+  }, FaceIdAnswerAction))
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+    name: 'shell.overlay',
+    id: FACE_ID_OVERLAY_ID,
+    locale: FACE_ID_NS,
+    inject: () => ({ fetch: browserFetch, atComputer: faceIdFace().atComputer }),
+  }, FaceIdPairingOverlay))
   ctx.effect(() => ctx.locale.register(NETWORK_NS, { en: networkEn, zh: networkZh }), 'delorun-network: section dictionaries')
   const networkT = ctx.locale.bind(NETWORK_NS)
   const networkFace = (): NetworkSectionInjected => ({ fetch: browserFetch })

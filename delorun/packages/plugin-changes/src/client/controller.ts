@@ -20,6 +20,7 @@ import {
   WORKSPACES_PATH,
   type ActionView,
   type ChangesControl,
+  type MayView,
   type ChangesStateView,
   type CreatedView,
   type DiscardView,
@@ -46,6 +47,7 @@ import {
   type WorkReviewView,
   type WorkspacesView,
 } from '../wire.ts'
+import { fetchedPath, type FaceGrant } from './face-grant.ts'
 import type { ChangesToastKey } from './locales.ts'
 
 /** What the section shows: the first load, a failed load with nothing to show, or the state. */
@@ -98,6 +100,26 @@ export interface ChangesControllerDeps {
    * @param control - the route refused, such as `harness-apply`.
    */
   readonly unlockNeeded: (control: string) => void
+  /**
+   * The page's Face ID confirmation, read at each call, or undefined while the page has no such service. Without it a control that needs Face ID
+   * is sent plain and the home refuses it.
+   */
+  readonly faceGrant?: () => FaceGrant | undefined
+}
+
+/** One request's sender, bound to the control it belongs to. */
+type Send = <T>(path: string, body?: object) => Promise<T>
+
+/** The person cancelled the Face ID confirmation, so the request was not sent. */
+class FaceCancelled extends Error {}
+
+/**
+ * Whether the home asks for Face ID before this control.
+ * @param may - the state's decision for the control.
+ * @returns true when it needs a grant.
+ */
+function mayNeedsFace(may: MayView): boolean {
+  return !may.ok && may.needs === 'face'
 }
 
 /**
@@ -137,13 +159,14 @@ export class ChangesRequestError extends Error {
  * Ask one route, relative to the document so the studio's own origin and path prefix apply.
  * @param path - the route from `wire.ts`, with its query.
  * @param body - the JSON body of a `POST`; a `GET` without it.
+ * @param grantId - the Face ID grant the home checks against this exact call, in `Delorun-Grant`.
  * @returns the JSON answer.
  * @throws {ChangesRequestError} for a non-2xx answer; a network failure rejects with the fetch error.
  */
-async function request<T>(path: string, body?: object): Promise<T> {
+async function request<T>(path: string, body?: object, grantId?: string): Promise<T> {
   const response = await fetch(path.slice(1), body === undefined
     ? { method: 'GET' }
-    : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+    : { method: 'POST', headers: { 'content-type': 'application/json', ...(grantId === undefined ? {} : { 'Delorun-Grant': grantId }) }, body: JSON.stringify(body) })
   if (!response.ok) {
     const refusal = (await response.json().catch(() => undefined)) as RefusalView | undefined
     throw new ChangesRequestError(response.status, refusal)
@@ -302,7 +325,7 @@ export class ChangesController {
    * @returns the outcome; `confirm` when the route asks the second confirmation.
    */
   async apply(id: string, confirmedRisk: boolean): Promise<ActionOutcome> {
-    return await this.act('plugin-apply', () => request<ActionView>(ACTION_PATHS.apply, confirmedRisk ? { id, confirmedRisk } : { id }),
+    return await this.act('plugin-apply', send => send<ActionView>(ACTION_PATHS.apply, confirmedRisk ? { id, confirmedRisk } : { id }),
       result => reloadNotice(result.reload, 'toast.applied'))
   }
 
@@ -313,7 +336,7 @@ export class ChangesController {
    * @returns the outcome; `confirm` when the route asks the second confirmation.
    */
   async applyRequest(id: string, confirmedRisk: boolean): Promise<ActionOutcome> {
-    return await this.act('plugin-apply', () => request<InstallView>(ACTION_PATHS.apply, confirmedRisk ? { id, confirmedRisk } : { id }), result => installNotice(result.reload))
+    return await this.act('plugin-apply', send => send<InstallView>(ACTION_PATHS.apply, confirmedRisk ? { id, confirmedRisk } : { id }), result => installNotice(result.reload))
   }
 
   /**
@@ -322,7 +345,7 @@ export class ChangesController {
    * @returns the outcome.
    */
   async discard(id: string): Promise<ActionOutcome> {
-    return await this.act('plugin-discard', () => request<DiscardView>(ACTION_PATHS.discard, { id }), () => ({ ok: true, key: 'toast.discarded' }))
+    return await this.act('plugin-discard', send => send<DiscardView>(ACTION_PATHS.discard, { id }), () => ({ ok: true, key: 'toast.discarded' }))
   }
 
   /**
@@ -331,7 +354,7 @@ export class ChangesController {
    * @returns the outcome.
    */
   async undo(id: string): Promise<ActionOutcome> {
-    return await this.act('plugin-undo', () => request<ActionView>(ACTION_PATHS.undo, { id }), result => reloadNotice(result.reload, 'toast.undone'))
+    return await this.act('plugin-undo', send => send<ActionView>(ACTION_PATHS.undo, { id }), result => reloadNotice(result.reload, 'toast.undone'))
   }
 
   /**
@@ -340,7 +363,7 @@ export class ChangesController {
    * @returns the outcome.
    */
   async beginWork(plugin: string): Promise<ActionOutcome> {
-    return await this.act('plugin-other', () => request<StartedView>(ACTION_PATHS.work, { plugin }), started => started.load.kind === 'loaded'
+    return await this.act('plugin-other', send => send<StartedView>(ACTION_PATHS.work, { plugin }), started => started.load.kind === 'loaded'
       ? { ok: true, key: 'toast.workStarted' }
       : { ok: false, key: 'toast.wentBack', values: { failure: started.load.failure } })
   }
@@ -353,7 +376,7 @@ export class ChangesController {
    * @returns the outcome; `confirm` when the route asks the second confirmation.
    */
   async done(plugin: string, version: string, confirmedRisk: boolean): Promise<ActionOutcome> {
-    return await this.act('plugin-other', () => request<DoneView>(ACTION_PATHS.done, confirmedRisk ? { plugin, version, confirmedRisk } : { plugin, version }),
+    return await this.act('plugin-other', send => send<DoneView>(ACTION_PATHS.done, confirmedRisk ? { plugin, version, confirmedRisk } : { plugin, version }),
       result => result.kind === 'ended' ? { ok: true, key: 'toast.workEnded' } : { ok: false, key: 'toast.wentBack', values: { failure: result.failure } })
   }
 
@@ -365,7 +388,7 @@ export class ChangesController {
    * @returns the outcome; `confirm` when the route asks the second confirmation.
    */
   async harnessApply(id: string, to: string, confirmedRisk: boolean): Promise<ActionOutcome> {
-    return await this.act('harness-apply', () => request<HarnessActionView>(HARNESS_PATHS.apply, confirmedRisk ? { id, to, confirmedRisk } : { id, to }),
+    return await this.act('harness-apply', send => send<HarnessActionView>(HARNESS_PATHS.apply, confirmedRisk ? { id, to, confirmedRisk } : { id, to }),
       result => this.decidedSelf(result, 'apply'))
   }
 
@@ -375,7 +398,7 @@ export class ChangesController {
    * @returns the outcome.
    */
   async harnessUndo(id: string): Promise<ActionOutcome> {
-    return await this.act('harness-undo', () => request<HarnessActionView>(HARNESS_PATHS.undo, { id }), result => this.decidedSelf(result, 'undo'))
+    return await this.act('harness-undo', send => send<HarnessActionView>(HARNESS_PATHS.undo, { id }), result => this.decidedSelf(result, 'undo'))
   }
 
   /**
@@ -384,7 +407,7 @@ export class ChangesController {
    * @returns the outcome.
    */
   async harnessDiscard(id: string): Promise<ActionOutcome> {
-    return await this.act('harness-discard', () => request<HarnessDiscardView>(HARNESS_PATHS.discard, { id }), () => ({ ok: true, key: 'toast.discarded' }))
+    return await this.act('harness-discard', send => send<HarnessDiscardView>(HARNESS_PATHS.discard, { id }), () => ({ ok: true, key: 'toast.discarded' }))
   }
 
   /**
@@ -393,7 +416,7 @@ export class ChangesController {
    */
   async makeCopy(): Promise<CopyOutcome> {
     let copy: HarnessCopyView | undefined
-    const outcome = await this.act('make-copy', () => request<HarnessCopyView>(HARNESS_PATHS.copy, {}), (made) => {
+    const outcome = await this.act('make-copy', send => send<HarnessCopyView>(HARNESS_PATHS.copy, {}), (made) => {
       copy = made
       return { ok: true, key: made.created ? 'toast.copy.made' : 'toast.copy.found' }
     })
@@ -405,7 +428,7 @@ export class ChangesController {
    * @returns the outcome.
    */
   async startSafeMode(): Promise<ActionOutcome> {
-    return await this.act('plugin-other', () => request<SafeModeView>(ACTION_PATHS['safe-mode'], {}), () => ({ ok: true, key: 'toast.safeMode.on' }))
+    return await this.act('plugin-other', send => send<SafeModeView>(ACTION_PATHS['safe-mode'], {}), () => ({ ok: true, key: 'toast.safeMode.on' }))
   }
 
   /**
@@ -413,7 +436,7 @@ export class ChangesController {
    * @returns the outcome.
    */
   async exitSafeMode(): Promise<ActionOutcome> {
-    return await this.act('plugin-other', () => request<SafeModeView>(ACTION_PATHS['exit-safe-mode'], {}), () => ({ ok: true, key: 'toast.safeMode.off' }))
+    return await this.act('plugin-other', send => send<SafeModeView>(ACTION_PATHS['exit-safe-mode'], {}), () => ({ ok: true, key: 'toast.safeMode.off' }))
   }
 
   /**
@@ -421,7 +444,7 @@ export class ChangesController {
    * @returns the outcome.
    */
   async protectionOn(): Promise<ActionOutcome> {
-    return await this.act('protection-on', () => request<ProtectionChangedView>(PROTECTION_PATHS.on, {}), () => ({ ok: true, key: 'toast.protection.on' }))
+    return await this.act('protection-on', send => send<ProtectionChangedView>(PROTECTION_PATHS.on, {}), () => ({ ok: true, key: 'toast.protection.on' }))
   }
 
   /**
@@ -430,7 +453,7 @@ export class ChangesController {
    * @returns the outcome; `confirm-protection` with what would load when the route asks the second time.
    */
   async protectionOff(confirmed: boolean): Promise<ActionOutcome> {
-    return await this.act('protection-off', () => request<ProtectionChangedView>(PROTECTION_PATHS.off, confirmed ? { confirmed } : {}), () => ({ ok: true, key: 'toast.protection.off' }))
+    return await this.act('protection-off', send => send<ProtectionChangedView>(PROTECTION_PATHS.off, confirmed ? { confirmed } : {}), () => ({ ok: true, key: 'toast.protection.off' }))
   }
 
   /**
@@ -439,7 +462,7 @@ export class ChangesController {
    * @returns the outcome.
    */
   async noticeSeen(id: string): Promise<ActionOutcome> {
-    return await this.act('notice-seen', () => request<{ readonly dismissed: boolean }>(NOTICE_SEEN_PATH, { id }), () => undefined)
+    return await this.act('notice-seen', send => send<{ readonly dismissed: boolean }>(NOTICE_SEEN_PATH, { id }), () => undefined)
   }
 
   /**
@@ -460,7 +483,7 @@ export class ChangesController {
    */
   async createPlugin(name: string, kind: string, workspace: string): Promise<CreatedView | { readonly refused: string }> {
     try {
-      return await request<CreatedView>(ACTION_PATHS.create, { name, kind, workspace })
+      return await this.sender('plugin-other')<CreatedView>(ACTION_PATHS.create, { name, kind, workspace })
     } catch (error) {
       return this.refusedWords(error)
     }
@@ -473,7 +496,7 @@ export class ChangesController {
    * @returns the outcome.
    */
   async requestPlugin(name: string, workspace: string): Promise<ActionOutcome> {
-    return await this.act('plugin-other', () => request<RequestedView>(ACTION_PATHS.request, { name, workspace }), () => ({ ok: true, key: 'toast.requested' }))
+    return await this.act('plugin-other', send => send<RequestedView>(ACTION_PATHS.request, { name, workspace }), () => ({ ok: true, key: 'toast.requested' }))
   }
 
   /**
@@ -483,7 +506,7 @@ export class ChangesController {
    * @returns the outcome.
    */
   async revealPlugin(name: string, workspace: string): Promise<ActionOutcome> {
-    return await this.act('plugin-other', () => request<RevealedView>(ACTION_PATHS.reveal, { name, workspace }), () => ({ ok: true, key: 'toast.revealed' }))
+    return await this.act('plugin-other', send => send<RevealedView>(ACTION_PATHS.reveal, { name, workspace }), () => ({ ok: true, key: 'toast.revealed' }))
   }
 
   /**
@@ -493,8 +516,8 @@ export class ChangesController {
    * @returns the outcome.
    */
   async restart(stopChats: boolean): Promise<ActionOutcome> {
-    return await this.act('restart', async () => {
-      const begun = await request<RestartBegunView>(RESTART_PATHS.restart, stopChats ? { stopChats } : {})
+    return await this.act('restart', async (send) => {
+      const begun = await send<RestartBegunView>(RESTART_PATHS.restart, stopChats ? { stopChats } : {})
       this.restarting.set(true)
       return begun
     }, () => undefined)
@@ -505,7 +528,7 @@ export class ChangesController {
    * @returns the outcome.
    */
   async cancelRestart(): Promise<ActionOutcome> {
-    return await this.act('restart', () => request<RestartCancelView>(RESTART_PATHS.cancel, {}), (result) => {
+    return await this.act('restart', send => send<RestartCancelView>(RESTART_PATHS.cancel, {}), (result) => {
       if (!result.cancelled) return undefined
       this.restarting.set(false)
       return { ok: true, key: 'toast.restartCancelled' }
@@ -531,17 +554,37 @@ export class ChangesController {
   }
 
   /**
+   * The sender of one control's requests. While the page's state says the control needs Face ID, a `POST` first asks for
+   * a grant covering exactly that call and carries it in `Delorun-Grant`.
+   * @param control - the control the requests belong to.
+   * @returns the sender.
+   * @throws {FaceCancelled} from a send whose grant the person did not give.
+   */
+  private sender(control: ChangesControl): Send {
+    return async <T>(path: string, body?: object): Promise<T> => {
+      const ask = this.deps.faceGrant?.()
+      const load = this.state.getSnapshot()
+      const needsFace = body !== undefined && ask !== undefined && load.status === 'ready' && mayNeedsFace(load.state.access.may[control])
+      if (!needsFace) return await request<T>(path, body)
+      const grantId = await ask({ action: `changes/${control}`, call: { method: 'POST', path: fetchedPath(path), body } })
+      if (grantId === undefined) throw new FaceCancelled()
+      return await request<T>(path, body, grantId)
+    }
+  }
+
+  /**
    * Run one action and report its outcome; a refusal is worded, except the second confirmations the section asks.
    * @param control - the control, which names the route to the unlock dialog.
-   * @param run - the request.
+   * @param run - the request, which sends through the control's own sender.
    * @param notice - the outcome's notice, or undefined for none.
    * @returns the outcome.
    */
-  private async act<T>(control: ChangesControl, run: () => Promise<T>, notice: (result: T) => ChangesNotice | undefined): Promise<ActionOutcome> {
+  private async act<T>(control: ChangesControl, run: (send: Send) => Promise<T>, notice: (result: T) => ChangesNotice | undefined): Promise<ActionOutcome> {
     let result: T
     try {
-      result = await run()
+      result = await run(this.sender(control))
     } catch (error) {
+      if (error instanceof FaceCancelled) return { kind: 'refused' }
       const refusal: ProtectionRefusal | undefined = error instanceof ChangesRequestError ? error.refusal : undefined
       if (refusal?.code === CONFIRM_RISK) return { kind: 'confirm', kinds: refusal.kinds ?? [], notShown: refusal.notShown ?? [] }
       if (refusal?.code === CONFIRM_PROTECTION) return { kind: 'confirm-protection', willLoad: refusal.willLoad ?? { plugins: [], harnessFiles: 0 } }

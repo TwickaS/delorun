@@ -15,6 +15,7 @@ import { en, ja, es, fr, de, ru, pt, zh } from './locales.ts'
 
 export type {
   ApprovalActionOwnerProps,
+  ApprovalAllowGate,
   ApprovalCardInput,
   ApprovalComposerProps,
   ApprovalDecision,
