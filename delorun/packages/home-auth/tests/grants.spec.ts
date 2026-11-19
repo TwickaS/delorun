@@ -9,9 +9,9 @@ import {
   GRANT_BODY_CAP_BYTES, GRANT_LIFE_MS, GRANTS_PER_DEVICE, GrantStore, HOLD_ABSOLUTE_MS, HOLD_IDLE_MS, canonicalJson, hashArgs, hashRequest, holdFeatureOf,
 } from '../src/grants.ts'
 
-const PHONE = { deviceId: 'phone-1', listener: 'tailscale-private' } as const
-const OTHER_PHONE = { deviceId: 'phone-2', listener: 'tailscale-private' } as const
-const FUNNEL = { deviceId: 'phone-1', listener: 'tailscale-funnel' } as const
+const PHONE = { deviceId: 'phone-1', listener: 'reach-tailscale-private' } as const
+const OTHER_PHONE = { deviceId: 'phone-2', listener: 'reach-tailscale-private' } as const
+const FUNNEL = { deviceId: 'phone-1', listener: 'reach-tailscale-funnel' } as const
 
 function store(): { grants: GrantStore; clock: { at: number } } {
   const clock = { at: 1_000_000 }

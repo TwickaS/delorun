@@ -23,7 +23,7 @@ function facts(kind: Kind): ReachAccessFacts {
   return {
     admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere',
     elevationOf: () => (kind === 'code' || kind === 'grace' || kind === 'dangerous' ? UNLOCK : undefined),
-    pageUnlockOf: () => (kind === 'pin-page' ? UNLOCK : undefined), pinEnabled: () => kind === 'pin-page',
+    pageUnlockOf: () => (kind === 'pin-page' ? UNLOCK : undefined), unlockModeEnabled: () => kind === 'pin-page',
     keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
     computerOnlySwitches: () => [], protectedEntryIds: () => new Set(SANDBOX_IDS), computerOnlyEntryIds: () => new Set(SANDBOX_IDS),
     defaultPermission: () => undefined, phonePowers: () => 'full' as const, dangerousMode: () => kind === 'dangerous',
@@ -82,7 +82,7 @@ describe('mcpManager/watch', () => {
 describe('the approval grace while PIN mode is on', () => {
   it('unlocks the device\'s elevated actions as a code does, and not the key actions or the lifts a PIN page alone has', () => {
     // A Peer with no page unlock falls back to the device's own elevation, which the grace is.
-    const grace = { ...facts('grace'), pinEnabled: () => true }
+    const grace = { ...facts('grace'), unlockModeEnabled: () => true }
     const device = reachDevicePrincipal('device-1', LISTENER)
     const condition = createCondition(grace, device)
     expect(condition({ action: 'terminal/create' as never, resource: GLOBAL, args: {} }).kind).toBe('allow')

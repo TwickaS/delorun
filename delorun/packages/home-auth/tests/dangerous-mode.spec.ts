@@ -74,7 +74,7 @@ function facts(mode: boolean, unlocked: boolean): ReachAccessFacts {
     computerOnlySwitches: () => [CONSENT],
     protectedEntryIds: () => new Set([PROTECTED_ROW]), computerOnlyEntryIds: () => new Set([COMPUTER_ONLY_ROW]),
     defaultPermission: () => PERMISSION,
-    pinEnabled: () => false,
+    unlockModeEnabled: () => false,
     phonePowers: () => 'full' as const, dangerousMode: () => mode,
   }
 }
@@ -230,7 +230,7 @@ function recording(): { response: ServerResponse; answered: { status?: number; b
  */
 function home(listener: string | undefined, mode: boolean, unlocked = true, pin = false, pageUnlocked = false) {
   return {
-    pinEnabled: () => pin,
+    unlockModeEnabled: () => pin,
     pageUnlockOf: (id: string) => (pageUnlocked && id === 'page-1' ? { id: 'page-1' } : undefined),
     arrivalOf: () => ({ listener, host: undefined, source: 'unknown' as const }),
     phonePowers: () => 'full' as const, dangerousMode: () => mode,
@@ -418,7 +418,7 @@ describe('the routes that approve a device, sign one in, remove one or change re
     // Pins the split: these route files decide the arrival from the home's core, which has no dangerous-mode input.
     for (const file of ['reach-routes.ts', 'routes.ts', 'elevation-routes.ts', 'sign-in.ts', 'approvals.ts', 'pairing.ts', 'sessions.ts', '../../reach/src/service.ts', '../../reach/src/front.ts', '../../home-process/src/reach.ts', '../../home-process/src/devices-approve.ts']) {
       const source = readFileSync(fileURLToPath(new URL(`../src/${file}`, import.meta.url)), 'utf8')
-      expect(source, file).not.toMatch(/dangerousMode|pinEnabled|pageUnlockOf|requireComputerOrDevice|admitUnlockedDevice/)
+      expect(source, file).not.toMatch(/dangerousMode|pinEnabled|unlockModeEnabled|pageUnlockOf|requireComputerOrDevice|admitUnlockedDevice/)
     }
   })
 })

@@ -54,6 +54,11 @@ import type { UnlockAsker } from './pin-unlocks.ts'
 import { PHONE_POWERS_LEVELS, PhonePowersReader, recordUpgradePhonePowers, writePhonePowers, type PhonePowers } from './phone-powers.ts'
 import { phonePowersHandler } from './phone-powers-routes.ts'
 import { PHONE_POWERS_PATH, type PhonePowersLevel } from './wire.ts'
+// Type-only: the ctx.previewFlags merge.
+import type {} from '@delorun/preview-flags'
+import type { GrantStore } from './grants.ts'
+import { PASSKEY_UNLOCK } from './preview-flags.ts'
+import { PASSKEY_PATHS, passkeyAddRequestHandler, passkeyApproveHandler, passkeyOptionsHandler, passkeyPendingHandler, passkeyPinHandler, passkeyRegisterHandler, passkeyRegisterOptionsHandler, passkeyRemoveHandler, passkeyStateHandler, passkeyVerifyHandler } from './passkey-routes.ts'
 import { PIN_PATHS, pinLockHandler, pinModeHandler, pinOffHandler, pinOptionsHandler, pinResumeHandler, pinSetHandler, pinStateHandler, pinTouchHandler, pinUnlockHandler } from './pin-routes.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -232,6 +237,21 @@ export class HomeAuthService extends Service {
   }
 
   /**
+   * Whether the Face ID preview flag is on; off while the flags service is not mounted or does not know the flag yet.
+   * @returns whether it is on.
+   */
+  private passkeyFlagOn(): boolean {
+    const flags = this.ctx.get('previewFlags')
+    if (flags === undefined) return false
+    try {
+      return flags.isOn(PASSKEY_UNLOCK.id)
+    } catch (_undeclared) {
+      // The flag is declared when this plugin's injection runs; a read before that sees no flag, which is off.
+      return false
+    }
+  }
+
+  /**
    * Create the secrets directory, open the stores and register the routes, all owned by this fiber.
    * @throws Error when the secrets directory is not an absolute path; the filesystem failure of `mkdir`.
    */
@@ -251,7 +271,10 @@ export class HomeAuthService extends Service {
       closeReachConnections: match => this.ctx.get('connection')?.closeReachConnections(match) ?? 0,
       loopbackPort: () => this.ctx.webServer.port,
       secrets: this.ctx.get('delorunSecrets'),
+      passkeysEnabled: () => this.passkeyFlagOn(),
+      log: (event) => { this.ctx.logger.info(event) },
     })
+    this.ctx.inject(['previewFlags'], (scope) => { scope.effect(() => scope.previewFlags.declare(PASSKEY_UNLOCK), 'home-auth: Face ID preview flag') })
     await core.start()
     this.core = core
     const upgraded = await recordUpgradePhonePowers(this.secretsDirectory, this.config.phonePowersOnUpgrade)
@@ -330,6 +353,16 @@ export class HomeAuthService extends Service {
         server.register({ kind: 'exact', path: PIN_PATHS.off, handler: pinOffHandler(core, credential) }),
         server.register({ kind: 'exact', path: PIN_PATHS.options, handler: pinOptionsHandler(core, credential) }),
         server.register({ kind: 'exact', path: PIN_PATHS.resume, handler: pinResumeHandler(core, credential) }),
+        server.register({ kind: 'exact', path: PASSKEY_PATHS.state, handler: passkeyStateHandler(core) }),
+        server.register({ kind: 'exact', path: PASSKEY_PATHS.registerOptions, handler: passkeyRegisterOptionsHandler(core) }),
+        server.register({ kind: 'exact', path: PASSKEY_PATHS.register, handler: passkeyRegisterHandler(core) }),
+        server.register({ kind: 'exact', path: PASSKEY_PATHS.addRequest, handler: passkeyAddRequestHandler(core) }),
+        server.register({ kind: 'exact', path: PASSKEY_PATHS.options, handler: passkeyOptionsHandler(core) }),
+        server.register({ kind: 'exact', path: PASSKEY_PATHS.verify, handler: passkeyVerifyHandler(core) }),
+        server.register({ kind: 'exact', path: PASSKEY_PATHS.pin, handler: passkeyPinHandler(core) }),
+        server.register({ kind: 'exact', path: PASSKEY_PATHS.remove, handler: passkeyRemoveHandler(core) }),
+        server.register({ kind: 'exact', path: PASSKEY_PATHS.pending, handler: passkeyPendingHandler(core, credential) }),
+        server.register({ kind: 'exact', path: PASSKEY_PATHS.approve, handler: passkeyApproveHandler(core, credential) }),
         server.register({ kind: 'exact', path: PHONE_POWERS_PATH, handler: phonePowersHandler(core, credential, { current: () => this.phonePowers(), set: level => this.setPhonePowers(level) }) }),
       ]
       return () => {
@@ -473,6 +506,40 @@ export class HomeAuthService extends Service {
   pinEnabled(): boolean {
     const on = this.core?.pin.enabled() ?? false
     return on
+  }
+
+  /**
+   * Whether a locked device is refused where an unlock matters: a PIN is set or a passkey is enrolled. Every gate that
+   * decides this asks here, so a home with a passkey and no PIN refuses as one with a PIN does.
+   * @returns whether it is; false before the service started.
+   */
+  unlockModeEnabled(): boolean {
+    return this.core?.unlockModeEnabled() ?? false
+  }
+
+  /**
+   * Whether a device holds a passkey.
+   * @param deviceId - the device.
+   * @returns whether it does; false before the service started.
+   */
+  deviceHasPasskey(deviceId: string): boolean {
+    return (this.core?.passkeyStore.forDevice(deviceId).length ?? 0) > 0
+  }
+
+  /**
+   * Whether the Face ID preview flag is on, so grants are minted and the gates use them.
+   * @returns whether it is.
+   */
+  passkeysEnabled(): boolean {
+    return this.passkeyFlagOn()
+  }
+
+  /**
+   * The grants and feature holds a verified assertion or a correct PIN minted.
+   * @returns the store, or undefined before the service started.
+   */
+  faceGrants(): GrantStore | undefined {
+    return this.core?.grants
   }
 
   /**

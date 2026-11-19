@@ -306,7 +306,11 @@ export class HomeAuthAuthenticator extends Authenticator {
         elevationOf: (deviceId, listener) => ctx.homeAuth.elevationOf(deviceId, listener),
         touchUnlock: id => { ctx.homeAuth.touchUnlock(id) },
         pageUnlockOf: unlockId => ctx.homeAuth.pageUnlockOf(unlockId),
-        pinEnabled: () => ctx.homeAuth.pinEnabled(),
+        unlockModeEnabled: () => ctx.homeAuth.unlockModeEnabled(),
+        faceGrants: () => {
+          const grants = ctx.homeAuth.passkeysEnabled() ? ctx.homeAuth.faceGrants() : undefined
+          return grants === undefined ? undefined : { grants, deviceHasPasskey: deviceId => ctx.homeAuth.deviceHasPasskey(deviceId) }
+        },
         keyRefs: () => keyRefsOf(access),
         logElevated: (line) => { ctx.logger.info(line) },
         liftedSettings: lifts => ctx.homeAuth.recordLifts(lifts),
@@ -356,6 +360,14 @@ export class HomeAuthAuthenticator extends Authenticator {
     // `tailnet-membership`.
     const reach = this.reachPeers.get(answer.peer.id)
     if (reach === undefined) return
+    // With Face ID on, the grant the person made for exactly this prompt and this answer admits it, and is used up here.
+    const grants = this.ctx.homeAuth.passkeysEnabled() ? this.ctx.homeAuth.faceGrants() : undefined
+    if (grants !== undefined) {
+      const requestId = Reflect.get(answer.request, 'callId')
+      if (typeof requestId === 'string' && typeof answer.value === 'string' && grants.consumeAnswer({ deviceId: reach.deviceId, listener: reach.listener }, requestId, answer.value) !== undefined) return
+      // A device that holds a passkey is admitted by a grant and by no unlock window.
+      if (this.ctx.homeAuth.deviceHasPasskey(reach.deviceId)) throw new RemoteError('LOOPBACK_REQUIRED', refusal.message, { action: refusal.action })
+    }
     if (refusal.reach === 'unlocked-device') {
       const unlock = unlockOf(this.ctx.homeAuth, reachDevicePrincipal(reach.deviceId, reach.listener, reach.unlockId))
       // The approval grace follows an approval, not a code or PIN typed on the device, so it gives no such grant, in
@@ -409,7 +421,7 @@ export class HomeAuthAuthenticator extends Authenticator {
     // With PIN mode off the token is ignored; with it on, a token that does not name this page's unlock is refused and
     // burned, so the page learns it is locked.
     let unlockId: string | undefined
-    if (this.ctx.homeAuth.pinEnabled() && (presented.token !== undefined || presented.ambiguous)) {
+    if (this.ctx.homeAuth.unlockModeEnabled() && (presented.token !== undefined || presented.ambiguous)) {
       try {
         if (presented.ambiguous || presented.token === undefined) throw new HomeAuthError('UNLOCK_INVALID', 'This page is locked. Unlock it again')
         unlockId = this.ctx.homeAuth.resolvePageUnlock(presented.token, { deviceId: session.deviceId, listener: served.listener, sessionId })
