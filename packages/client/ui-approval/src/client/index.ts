@@ -58,6 +58,7 @@ async function answerApproval(
     ...(request.notice === undefined ? {} : { notice: request.notice }),
     ...(request.grants === undefined ? {} : { grants: request.grants }),
     ...(request.escalatesTo === undefined ? {} : { escalatesTo: request.escalatesTo }),
+    ...('runScope' in request && typeof request.runScope === 'string' ? { runScope: request.runScope } : {}),
     ...(request.signal === undefined ? {} : { signal: request.signal }),
   })
   const completed = Promise.withResolvers<void>()

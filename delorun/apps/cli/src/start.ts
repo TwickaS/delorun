@@ -48,7 +48,8 @@ import type { ReachConfigRows } from '@delorun/contract-reach-providers'
 import { START_WAIT_MS, type ChangesReloadOutcome } from '@delorun/contract-home-process'
 import { localDeviceApproval } from './devices/host.ts'
 import { localConsents } from './consents/host.ts'
-import { CountingChatGate, HomeProcess, HostNotStoppedError, listenProcessSignals, openHomeLog, captureHomeOutput, queryHomeStatus, refuseBootedHost, updateChannelProbe, type HandoverPipe, type HomeLog, type HomeProcessOptions, type LocalConsents, type LocalDeviceApproval, type LocalReach, type RestartControl, type RunningHost, type StudioLinkResult, type UpdateChannelAccess, type UpdateSupport } from '@delorun/home-process'
+import { localAgentAccounts } from './agents/host.ts'
+import { CountingChatGate, HomeProcess, HostNotStoppedError, listenProcessSignals, openHomeLog, captureHomeOutput, queryHomeStatus, refuseBootedHost, updateChannelProbe, type HandoverPipe, type HomeLog, type HomeProcessOptions, type LocalAgentAccounts, type LocalConsents, type LocalDeviceApproval, type LocalReach, type RestartControl, type RunningHost, type StudioLinkResult, type UpdateChannelAccess, type UpdateSupport } from '@delorun/home-process'
 import { appliedReachConfig, localReach, reachRowsOf } from './reach/host.ts'
 import { readReachRow, REACH_ROW_ID, type TailscalePrivateRow } from './reach/row.ts'
 import { resolveSurface, type DelorunLogger } from '@delorun/logs'
@@ -294,6 +295,8 @@ export interface BootedProfile {
   readonly devices?: () => LocalDeviceApproval | undefined
   /** The consents of `@delorun/plugin-permission-defaults` and `@delorun/plugin-mcp-consent`, each read per operation. */
   readonly consents?: () => LocalConsents
+  /** The external agents' account operations of `@delorun/external-agents`, each read per operation. */
+  readonly agents?: () => LocalAgentAccounts
   /** The Config schemas of the Loader's rows, which the secret-field checks read ([secret fields](./secret-fields.ts)). */
   readonly configSchemas: ConfigSchemasOf
   /**
@@ -455,6 +458,7 @@ export async function runUpstreamProfile(options: RunProfileOptions, handlers: U
     watchChats: (gate) => { watchChats(ctx, gate) },
     devices: () => localDeviceApproval(ctx),
     consents: () => localConsents(ctx),
+    agents: () => localAgentAccounts(ctx),
     reach: rows => localReach(ctx, rows),
     watchUpdates: async options => watchUpdates(ctx, options),
     watchTrust: (options) => { watchTrust(ctx, options, TRUST_STAGES) },
@@ -852,6 +856,7 @@ export function runningHost(booted: BootedProfile, request: Pick<StartRequest, '
   const atBootProtection = bootProtectionOf(atBoot, startOnly)
   return {
     ...withDevices(booted),
+    ...booted.agents === undefined ? {} : { agents: booted.agents() },
     ...withReach(booted, request, (option) => { handedRows = withAppliedConfig(handedRows, REACH_ROW_ID, appliedReachConfig(bootReach, option)) }),
     chats,
     studio: () => {

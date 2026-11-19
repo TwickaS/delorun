@@ -17,6 +17,7 @@ Claude Code 和 Codex 是可选的[外部智能体](../reference/glossary.zh.md#
 - [对话如何使用智能体](#how-a-chat-uses-an-agent)
 - [添加智能体](#add-an-agent)
 - [下载大小与登录](#download-size-and-sign-in)
+- [Sign-in and plan limits](#sign-in-and-plan-limits)
 - [第一次](#the-first-time)
 - [智能体能接触什么](#what-the-agent-can-touch)
 - [结果显示在哪里](#where-the-result-shows)
@@ -47,6 +48,28 @@ Claude Code 和 Codex 是可选的[外部智能体](../reference/glossary.zh.md#
 智能体使用你自己的账户登录，登录信息保存在提供方保存它的地方（Claude Code 为 `~/.claude`，Codex 为 `~/.codex`）。卡片会说明 Delorun 是否能看到登录信息。如果缺少登录，卡片会显示 `delorun agents login claude-code` 或 `delorun agents login codex`，并附有“复制”按钮。请在终端中运行它：它会运行 Delorun 所下载副本中智能体自己的登录，因此你不需要另外安装命令。请先添加智能体。
 
 <a id="the-first-time"></a>
+
+## Sign-in and plan limits
+
+Once an agent is added, its card says whether it is signed in and on which plan, such as "Signed in · Max plan". Before Delorun has checked, the card shows what a saved sign-in file suggests. If the agent is not signed in, the card names `delorun agents login claude-code` or `delorun agents login codex`.
+
+Below that, two bars show how much of the agent's plan limits you have used, for example the 5-hour limit and the weekly limit, each with the time it resets on your own clock. A bar turns amber from 80% and red at the limit, and it also says "Near the limit" or "Limit reached" in words. The same bars are in Settings, Safety, External agents, under Plans and limits, and in the Plans pill beside the cost pill, which shows the highest share among your agents and opens the bars for each. The pill appears only while an agent is added.
+
+Delorun reads these figures from the agent's own program. It does not read them just because a card or the pill is on screen. It checks when you add an agent, when you finish signing in, and when you press Check now. Figures are labelled "As of" the time they were read, and "Last seen" once they are old. If a window's reset time has passed, the bar says "Reset at …, not checked since" until you check again. Press Check now to refresh them.
+
+Checking starts the agent's program on your computer, so a phone or another computer must be unlocked first. A locked device sees "Unlock to check" on the button.
+
+To see the same figures at a terminal, run `delorun agents status`. It reads what Delorun has stored and starts nothing. Add `--refresh` to check now, at the computer that runs Delorun.
+
+<details>
+<summary>Edge cases</summary>
+
+- If the agent is not added, there is nothing to check: the card shows only the Add button.
+- If a check cannot be read, the old figures stay and the card says the check did not answer.
+- If two checks come close together, the second says the last check was a moment ago and when the next can run.
+- If a plan reports no figure for a window, the bar says "No figure" instead of a percentage.
+
+</details>
 
 ## 第一次
 

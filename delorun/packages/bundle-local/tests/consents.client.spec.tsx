@@ -1493,7 +1493,8 @@ describe('the External agents section', () => {
   it('says it is loading until the list answers, and that the profile does not ask where the plugin is not mounted', async () => {
     const { unmount } = renderExternalAgents({ fetch: async () => new Promise<Response>(() => {}), received: [], script: {} })
     await settle()
-    expect(screen.getAllByText(en['permissions.loading'])).toHaveLength(1)
+    // One line in the grants list and one in the plans and limits card.
+    expect(screen.getAllByText(en['permissions.loading'])).toHaveLength(2)
     unmount()
     renderExternalAgents(fakeHost())
     await settle()

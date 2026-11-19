@@ -42,6 +42,7 @@
     "typecheck": "tsc -b tsconfig.json && tsc --noEmit -p tsconfig.tests.json && tsc --noEmit -p tsconfig.tests.client.json"
   },
   "dependencies": {
+    "@delorun/bundle-local": "workspace:*",
     "zod": "4.6.6"
   },
   "peerDependencies": {
@@ -69,7 +70,7 @@
     "@deepseek-ai/dsh-session-projection": "workspace:*",
     "@deepseek-ai/dsh-subagent": "workspace:*",
     "@deepseek-ai/schemastery": "workspace:~",
-    "@delorun/bundle-local": "workspace:*",
+    "@delorun/external-agents": "workspace:*",
     "@testing-library/react": "^16.3.3",
     "@types/react": "~18.3.1",
     "react": "^18.2.0",

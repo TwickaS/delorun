@@ -37,6 +37,7 @@ export const KNOWN_SESSION_EVENT_TYPES: ReadonlySet<string> = new Set([
   'delorun-main-chat/handoff',
   'delorun-main-chat/read',
   'developer/message',
+  'external-agent/run-allowed',
   'feedback/message-delete',
   'feedback/message-put',
   'feedback/record',

@@ -465,11 +465,11 @@ describe('git over the local HTTPS fixture', () => {
     const source = join(scratch, 'filtered-source')
     const marker = join(scratch, 'filter-ran')
     const committer = ['-c', 'user.name=Spec', '-c', 'user.email=spec@example.invalid', '-c', 'commit.gpgsign=false']
-    execFileSync('git', ['init', '--quiet', '--initial-branch=main', source], { env: running().env })
+    execFileSync('git', ['init', '--quiet', '--initial-branch=main', source], { env: running().env, timeout: 30_000 })
     await writeFile(join(source, '.gitattributes'), '* filter=probe\n')
     await writeFile(join(source, 'file.txt'), 'content\n')
-    execFileSync('git', ['-C', source, 'add', '.'], { env: running().env })
-    execFileSync('git', ['-C', source, ...committer, 'commit', '--quiet', '-m', 'filtered'], { env: running().env })
+    execFileSync('git', ['-C', source, 'add', '.'], { env: running().env, timeout: 30_000 })
+    execFileSync('git', ['-C', source, ...committer, 'commit', '--quiet', '-m', 'filtered'], { env: running().env, timeout: 30_000 })
     // The probe filter and the redirect to the local repository come from a person's configuration, here as options placed last.
     const configuration = ['-c', `filter.probe.smudge=sh -c 'touch "${marker}"; cat'`, '-c', 'filter.probe.clean=cat', '-c', 'filter.probe.required=false']
     const redirected = [...configuration, '-c', 'protocol.file.allow=always', '-c', `url.${source}.insteadOf=${running().origin}/public.git`]
@@ -481,7 +481,7 @@ describe('git over the local HTTPS fixture', () => {
     }) as SubprocessRuntime
     // Without the template the same configuration runs the filter, which shows the probe is able to fire.
     const control = join(scratch, 'control')
-    execFileSync('git', [...configuration, 'clone', '--quiet', source, control], { env: running().env })
+    execFileSync('git', [...configuration, 'clone', '--quiet', source, control], { env: running().env, timeout: 30_000 })
     expect(existsSync(marker)).toBe(true)
     await rm(marker)
     const directory = await emptyDirectory()

@@ -15,10 +15,12 @@ import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { CostPill, type CostPillInjected } from './CostPill.tsx'
+import { PlansPill, type PlansPillInjected } from './PlansPill.tsx'
 import { en, NS, zh } from './locales.ts'
 
 export { CostBreakdown, splitTokens, type CostBreakdownProps, type CostGroup } from './CostBreakdown.tsx'
 export { CostPill, type CostPillInjected, type CostPillProps } from './CostPill.tsx'
+export { PlansPill, type PlansPillInjected, type PlansPillProps } from './PlansPill.tsx'
 export { addCosts, collectAgents, counted, formatCost, formatExact, formatTokens, NO_COST } from './costs.ts'
 export type { AgentCost, AgentSessionRow, AgentTree, AgentValues, LoadedValues, Translate } from './costs.ts'
 export { en, NS, zh, type CostMeterLocaleKey } from './locales.ts'
@@ -26,6 +28,9 @@ export type { CostMeterView, CostModelRow } from '../view.ts'
 
 /** The dock entry's id and place: after upstream's activity (0) and usage (1) pills. */
 export const DOCK_ENTRY = { id: 'cost', order: 2 } as const
+
+/** The Plans pill's place: right after the cost pill. */
+export const PLANS_ENTRY = { id: 'plans', order: 3 } as const
 
 /** Services every registration needs; `delorunStudio` is injected inside {@link apply}, so the stock look registers nothing. */
 export const inject = ['slots', 'locale', 'sessions']
@@ -56,4 +61,8 @@ export function applyStudio(ctx: Context): void {
   ctx.effect(() => ctx.slots.inject('conversation.composer.dock', () => ctx.slots.register({
     name: 'conversation.composer.dock', ...DOCK_ENTRY, locale: NS, inject: () => injected,
   }, CostPill)), 'delorun-cost-meter: cost pill')
+  const plans: PlansPillInjected = { fetch: (input, init) => globalThis.fetch(input, init) }
+  ctx.effect(() => ctx.slots.inject('conversation.composer.dock', () => ctx.slots.register({
+    name: 'conversation.composer.dock', ...PLANS_ENTRY, locale: NS, inject: () => plans,
+  }, PlansPill)), 'delorun-cost-meter: plans pill')
 }

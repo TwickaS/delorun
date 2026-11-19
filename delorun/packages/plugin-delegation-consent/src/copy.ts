@@ -166,3 +166,35 @@ export function notApprovedRefusal(provider: string, outcome: NotApprovedOutcome
 export function storeRefusal(provider: string, problem: string): string {
   return `${agentName(provider)} was not started: Delorun's record of external-agent approvals cannot be read (${problem}), so no approval counts. Tell the person to repair or remove that file.`
 }
+
+/**
+ * The refusal of a seat at hand-off when no chat has an open turn to show the approval card in.
+ * @param provider - the registered provider name.
+ * @param workspace - the chat's workspace key.
+ * @returns the reason the model reads.
+ */
+export function noOpenTurnRefusal(provider: string, workspace: string): string {
+  const name = agentName(provider)
+  return `${name} was not started: it needs the person's approval in the chat, and the chat has no open turn to ask in. `
+    + `Start ${name} from the chat, or the person allows it for this workspace in Settings or with ${CLI_COMMAND} "${workspace}" ${provider} on.`
+}
+
+/**
+ * The refusal of a seat whose chat, or a chat above it, is archived.
+ * @param provider - the registered provider name.
+ * @returns the reason the model reads.
+ */
+export function archivedRefusal(provider: string): string {
+  return `${agentName(provider)} was not started: this chat or a chat above it is archived.`
+}
+
+/**
+ * The refusal of a seat turn whose approval ended: the chat, its workspace, its folder or the agent changed, or the
+ * approval was revoked.
+ * @param provider - the registered provider name.
+ * @returns the reason the model reads.
+ */
+export function leaseEndedRefusal(provider: string): string {
+  const name = agentName(provider)
+  return `${name} was stopped: the person's approval for it in this chat has ended. Send it a new message to ask the person again.`
+}

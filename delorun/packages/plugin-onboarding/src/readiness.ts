@@ -9,7 +9,7 @@ import { stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { readServeRules, readTailscale, ReachError, serveTarget, type TailscaleRunner } from '@delorun/reach'
-import type { AgentSignIn, Readiness, TailscaleReadiness } from './wire.ts'
+import type { AgentSignIn, Readiness, ReadinessAccount, TailscaleReadiness } from './wire.ts'
 
 /** The port `delorun reach on tailscale` serves the studio on, which the serve probe asks about. */
 const SERVE_PORT = 443
@@ -24,16 +24,27 @@ export interface ReadinessEnvironment {
   readonly platform: NodeJS.Platform
   /** Runs `tailscale` with arguments. */
   readonly tailscale: TailscaleRunner
+  /**
+   * The account store's stored figures per agent; reading never starts a check. Absent where the profile has no store.
+   * @returns the figures.
+   */
+  readonly accounts?: () => Promise<readonly ReadinessAccount[]>
+  /**
+   * The current time, which "reset at" and "as of" compare against.
+   * @returns milliseconds since the epoch.
+   */
+  readonly now?: () => number
 }
 
 /**
  * The environment of this process.
  * @param tailscale - the runner.
+ * @param accounts - reads the account store, when the profile has one.
  * @returns the environment.
  */
-export function processReadinessEnvironment(tailscale: TailscaleRunner): ReadinessEnvironment {
+export function processReadinessEnvironment(tailscale: TailscaleRunner, accounts?: ReadinessEnvironment['accounts']): ReadinessEnvironment {
   // The process environment boundary: Codex's own home is moved by CODEX_HOME, as Codex reads it.
-  return { env: process.env, home: homedir(), platform: process.platform, tailscale }
+  return { env: process.env, home: homedir(), platform: process.platform, tailscale, ...(accounts === undefined ? {} : { accounts }) }
 }
 
 /**
@@ -97,11 +108,26 @@ export async function tailscaleReadiness(run: TailscaleRunner): Promise<Tailscal
 }
 
 /**
+ * The account store's figures, read as stored. This never refreshes: a readiness request starts no program (T12).
+ * @param environment - where to look.
+ * @returns the figures and the time read, or undefined when there is no store or it cannot be read.
+ */
+async function storedAccounts(environment: ReadinessEnvironment): Promise<Readiness['accounts']> {
+  if (environment.accounts === undefined) return undefined
+  try {
+    return { agents: [...await environment.accounts()], now: (environment.now ?? Date.now)() }
+  } catch (_unreadable) {
+    // A store that cannot be read leaves the file hint to stand in; the sign-in line then says what the file shows.
+    return undefined
+  }
+}
+
+/**
  * Run every probe.
  * @param environment - where to look and how to run `tailscale`.
  * @returns what onboarding shows.
  */
 export async function readReadiness(environment: ReadinessEnvironment): Promise<Readiness> {
-  const [claude, codex, tailscale] = await Promise.all([claudeSignIn(environment), codexSignIn(environment), tailscaleReadiness(environment.tailscale)])
-  return { agents: { 'claude-code': claude, 'codex': codex }, tailscale }
+  const [claude, codex, tailscale, stored] = await Promise.all([claudeSignIn(environment), codexSignIn(environment), tailscaleReadiness(environment.tailscale), storedAccounts(environment)])
+  return { agents: { 'claude-code': claude, 'codex': codex }, ...(stored === undefined ? {} : { accounts: stored }), tailscale }
 }

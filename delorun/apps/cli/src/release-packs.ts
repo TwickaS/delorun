@@ -40,7 +40,8 @@ export const NO_RELEASE_PACKS: ReleasePacks = () => Promise.resolve(new Map())
  * @returns the names the verified packs file lists, each with its folder under the running release's packs.
  * @throws {CliError} when the release's manifest or stored packs file does not verify.
  */
-export const runningReleasePacks: ReleasePacks = async ({ home, env }) => {
+export const runningReleasePacks: ReleasePacks = async (request) => {
+  const { home, env } = request
   const environment = await hostPacksEnvironment({ ...env, [DELORUN_HOME_ENV]: home })
   if ('unsupported' in environment) return new Map()
   try {

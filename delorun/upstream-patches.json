@@ -618,13 +618,13 @@
       "path": "packages/client/ui-conversation/src/client/apply.ts",
       "class": "delorun-feature",
       "feature": "studio-seams",
-      "reason": "Declares the conversation.hero.headline slot on the conversation.content factory, so the slot's children are registered with the content."
+      "reason": "Declares the conversation.hero.headline slot on the conversation.content factory, so the slot's children are registered with the content; declares the conversation.session.banner slot on the conversation.session entry."
     },
     {
       "path": "packages/client/ui-conversation/src/client/contract/slots.ts",
       "class": "delorun-feature",
       "feature": "studio-seams",
-      "reason": "Declares the conversation.hero.headline slot, so a product can replace the New Session headline; upstream's headline and Preview badge remain the fallback."
+      "reason": "Declares the conversation.hero.headline slot, so a product can replace the New Session headline; upstream's headline and Preview badge remain the fallback. Declares the conversation.session.banner list slot between the header and the active View, which a live agent's chat uses for its coloured rule and opening card (EA13)."
     },
     {
       "path": "packages/client/ui-conversation/src/client/locales.ts",
@@ -1505,8 +1505,8 @@
     {
       "path": "packages/subprocess/subprocess/src/index.ts",
       "class": "security",
-      "reason": "Ambient credential scrub (H3): `scrubbedParentEnv()` also drops an explicit denylist of ambient authorities and credential carriers (`SSH_AUTH_SOCK`, `DOCKER_HOST`, `KUBECONFIG`, `KRB5CCNAME`, `*_CREDENTIALS`, `AWS_*`, `AZURE_*`, `SLACK_*`, `DISCORD_*`, `*_WEBHOOK*`, `*PASSPHRASE*`, `MYSQL_PWD`, `*_PASSWD`) and any name whose value has a credential shape: URL user information, a user name alone and a password with an empty user name included, a webhook URL, a PEM private key block, a credential-file path or an agent socket. A `*PATH` search list loses only its elements that name a credential file or an agent socket. Ordinary values, `PATH`, locale and proxy variables still survive, and the explicit `env` merge stays the only pass-through. Lead verdict (2026-11-11): kept; child processes lose credential-named variables and URL values with any user information, empty user names included, and a PATH-like list loses only its credential-file and agent-socket elements.",
-      "sha256": "551e61efc95c7715d0b48aa6dd270426d0f42046c391fafed0f2b5e5aede3cac"
+      "reason": "Ambient credential scrub (H3): `scrubbedParentEnv()` also drops an explicit denylist of ambient authorities and credential carriers (`SSH_AUTH_SOCK`, `DOCKER_HOST`, `KUBECONFIG`, `KRB5CCNAME`, `*_CREDENTIALS`, `AWS_*`, `AZURE_*`, `SLACK_*`, `DISCORD_*`, `*_WEBHOOK*`, `*PASSPHRASE*`, `MYSQL_PWD`, `*_PASSWD`) and any name whose value has a credential shape: URL user information, a user name alone and a password with an empty user name included, a webhook URL, a PEM private key block, a credential-file path or an agent socket. A `*PATH` search list loses only its elements that name a credential file or an agent socket. Ordinary values, `PATH`, locale and proxy variables still survive, and the explicit `env` merge stays the only pass-through. Lead verdict (2026-11-11): kept; child processes lose credential-named variables and URL values with any user information, empty user names included, and a PATH-like list loses only its credential-file and agent-socket elements. Also the `SubprocessRuntime` contract doc: a handle names the managed range's leader `pid` and systemd scope `unit` when the provider has them (external agents, review D15, lead decision 8); signals and teardown stay with the provider.",
+      "sha256": "7cf2c5d407b076d310de8b01905aabe2462a1ffd3de27990cfe943da47e281ca"
     },
     {
       "path": "packages/subprocess/subprocess/tests/env.spec.ts",
@@ -2088,13 +2088,13 @@
       "path": "packages/client/ui-approval/src/client/contract/slots.ts",
       "class": "security",
       "reason": "Security entry, same feature and verdict as ApprovalCard.tsx: declares the `conversation.approval.action` list slot, the `ApprovalGrant` values of `@deepseek-ai/dsh-user-approval`, and carries `grants` on the pending request unchanged; the action's `allow` is documented as the Allow button's one-shot answer. `ApprovalGrant` gains `external-agent`; `ApprovalActionOwnerProps` gains `answered` and `canAnswer`. Lead verdict (2026-11-13): approved after the lead review of the merged diff. Declares the `conversation.approval.choice` slot and its owner props (`escalatesTo`, `toolName`, `callId`, `allow`, `answered`, `canAnswer`, `offer`). Lead verdict (2026-11-13): approved after an independent Opus review of the card answer path and the lead review; the choice answers the card through the same one-shot `answer()` as Allow once, only after the chat's permission projection shows the requested preset and while the card still accepts answers, and never lowers a chat raised meanwhile, and `escalatesTo` never reaches a logged event. `ApprovalGrant` gains `real-browser`, mirroring `@deepseek-ai/dsh-user-approval`. Awaiting the lead's review.",
-      "sha256": "907edf070af73b7599df0366c6b6651b78313a4392a3f5b7e29038700f09c52e"
+      "sha256": "8d82ee01cdacefeea1c8fecb2e5d56fafd285d97a097a51946f281f22c5ec4cf"
     },
     {
       "path": "packages/client/ui-approval/src/client/index.ts",
       "class": "security",
       "reason": "Security entry, same feature and verdict as ApprovalCard.tsx: forwards `grants` from the Remote Event request to the pending approval and registers the action list as a child slot of the card; no answer path is added. Forwards `escalatesTo` from the request to the card input. Lead verdict (2026-11-13): approved after an independent Opus review of the card answer path and the lead review; the choice answers the card through the same one-shot `answer()` as Allow once, only after the chat's permission projection shows the requested preset and while the card still accepts answers, and never lowers a chat raised meanwhile, and `escalatesTo` never reaches a logged event.",
-      "sha256": "70f6f3c8cdf5088793e473c020fee577bab0eb8c822bcdd024b364620ce10891"
+      "sha256": "75407a124e838db7ae51fc15784f330f5f15d5ad4aa3f7f9d375cd8772888dcd"
     },
     {
       "path": "apps/cli/src/plugin.ts",
@@ -2820,7 +2820,7 @@
       "path": "packages/core/session/src/known-event-types.ts",
       "class": "delorun-feature",
       "feature": "real-browser",
-      "reason": "Generated by gen-persistence-catalog: lists the `real-browser/granted`, `real-browser/away` and `real-browser/ended` Session events that `browser-use-runtime/src/real-browser.ts` declares, so a reader admits a log that holds them. Acknowledged in docs/persistence-changes/2026-11-17-real-browser-grant-events.md. Also lists `delorun-main-chat/read` and `delorun-main-chat/handoff`, which `delorun/packages/plugin-main-chat` declares (acknowledged in docs/persistence-changes/2026-11-17-main-chat-events.md)."
+      "reason": "Generated by gen-persistence-catalog: lists the `real-browser/granted`, `real-browser/away` and `real-browser/ended` Session events that `browser-use-runtime/src/real-browser.ts` declares, and the `external-agent/run-allowed` event that `subagent/src/descriptor.ts` declares, so a reader admits a log that holds them. Acknowledged in docs/persistence-changes/2026-11-17-real-browser-grant-events.md and docs/persistence-changes/2026-11-17-run-allowed-event.md. Also lists `delorun-main-chat/read` and `delorun-main-chat/handoff`, which `delorun/packages/plugin-main-chat` declares (acknowledged in docs/persistence-changes/2026-11-17-main-chat-events.md)."
     },
     {
       "path": "packages/experimental/browser-use-runtime/src/index.ts",
@@ -3031,6 +3031,66 @@
       "class": "delorun-feature",
       "feature": "sandbox-fault",
       "reason": "Localized notice that an approval after a temporary sandbox fault asks to run without the sandbox."
+    },
+    {
+      "path": "packages/subprocess/subprocess-local/src/linux-scope.ts",
+      "class": "security",
+      "reason": "Process identity for reaping (external agents, review D15, lead decision 8): the scope launch reports the unit it asked `systemd-run` for and the leader's `pid`, so a reaper stops the recorded unit instead of signalling a process group. No launch or teardown change.",
+      "sha256": "33601694694d095bab85bf20dc7f8008d25b9bd6f24bf9c72b7b5b7faaac2a57"
+    },
+    {
+      "path": "packages/subprocess/subprocess-local/src/managed-owner.ts",
+      "class": "security",
+      "reason": "Process identity for reaping (external agents, review D15, lead decision 8): `ManagedProcessLaunch` carries the leader's `pid` and the scope `unit` from each launch to the handle. Data only; no lifecycle change.",
+      "sha256": "e1d4ba558a8d64b07ed8b77adf37427f169ddffb7f7b98db45ea57c2ffda077a"
+    },
+    {
+      "path": "packages/subprocess/subprocess-local/src/spawn.ts",
+      "class": "security",
+      "reason": "Process identity for reaping (external agents, review D15, lead decision 8): the fallback launch passes the detached group leader's `pid` (none on Windows), and `bindManagedProcess` exposes `pid` and `unit` on the handle when the launch has them. No signalling or teardown change.",
+      "sha256": "86a8a29dfff42a15985ae7460b1b2416f7c126ea82149ceed52c9b570d26510f"
+    },
+    {
+      "path": "packages/subprocess/subprocess/src/types.ts",
+      "class": "security",
+      "reason": "Process identity for reaping (external agents, review D15, lead decision 8): `SubprocessHandle` gains the optional `pid` of the managed range's leader and the optional systemd scope `unit`, so Delorun's start gate can record a program's full identity (start time, boot id, executable, unit) and stop only that program after a Host died. Additive and read-only: no provider's behaviour changes, and a provider that cannot name a leader (Windows, remote) leaves both absent.",
+      "sha256": "682abba909a24311b630942999a3b273a975a09e6c5698525baf3240631b1bf4"
+    },
+    {
+      "path": "packages/subagent/subagent/src/descriptor.ts",
+      "class": "delorun-feature",
+      "feature": "external-agents",
+      "reason": "Declares, types only, the `external-agent/run-allowed` Session event next to `subagent/descriptor`: the person chose \"Allow for this run\" on a live agent's question and the start gate kept the rule (upstream's catalog scans only `packages/`). `@delorun/plugin-agent-seats` appends it; no runtime code. Acknowledged in docs/persistence-changes/2026-11-17-run-allowed-event.md."
+    },
+    {
+      "path": "packages/client/ui-conversation/src/client/skeleton/DefaultConversationViews.tsx",
+      "class": "delorun-feature",
+      "feature": "studio-seams",
+      "reason": "Renders the conversation.session.banner slot above the active View, so a plugin can show a full-width entry between the header and the transcript; with no registration it renders nothing."
+    },
+    {
+      "path": "packages/client/ui-subagent/src/client/SubagentHeaderLineage.tsx",
+      "class": "delorun-feature",
+      "feature": "live-agents",
+      "reason": "Renders the optional row and trigger positions of the agents menu (EA13): a leading mark, second-line words and a trailing indicator on each catalog row, and an addition after the trigger's count. With no plugin registered they render nothing, so rows are unchanged. `@delorun/plugin-agent-seats` fills them (monogram, state words, 5-hour ring, Answer button, \"· N outside\")."
+    },
+    {
+      "path": "packages/client/ui-subagent/src/client/index.ts",
+      "class": "delorun-feature",
+      "feature": "live-agents",
+      "reason": "Declares the four row and trigger positions as children of the header-action registration (root conversations only: a slot has one declaring entry) and supplies their availability hook, so the menu renders them only while a plugin contributes."
+    },
+    {
+      "path": "packages/client/ui-subagent/src/client/slots.ts",
+      "class": "delorun-feature",
+      "feature": "live-agents",
+      "reason": "Declares the `conversation.session.header.actions.subagent.row.lead|detail|trail` and `.trigger` list slots and their owner types (EA13)."
+    },
+    {
+      "path": "docs/persistence-changes/2026-11-17-run-allowed-event.schema.json",
+      "class": "delorun-feature",
+      "feature": "external-agents",
+      "reason": "The machine record of the persistence acknowledgement for the `external-agent/run-allowed` Session event, written by `persistence-changes --record` beside its bilingual prose."
     }
   ],
   "retired": []

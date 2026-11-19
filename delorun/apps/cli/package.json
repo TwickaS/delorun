@@ -48,6 +48,7 @@
     "@delorun/contract-setup-answers": "workspace:*",
     "@delorun/contract-update-report": "workspace:*",
     "@delorun/contract-verification-checks": "workspace:*",
+    "@delorun/external-agents": "workspace:*",
     "@delorun/home": "workspace:*",
     "@delorun/home-auth": "workspace:*",
     "@delorun/home-process": "workspace:*",

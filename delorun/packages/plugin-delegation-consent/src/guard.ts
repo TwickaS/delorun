@@ -3,7 +3,8 @@
  * installs or enables a bundle of an external-agent package, or enables or configures a Loader row whose module belongs
  * to one. An external-agent package is a `@deepseek-ai/dsh-subagent-*` or `@deepseek-ai/dsh-experimental-subagent-*`
  * package whose provider has no local child session ({@link isExternalAgentPackage}); `dsh-subagent-acp`, whose
- * `command` runs any program, is one. A target is read the way plugin management reads it (upstream's
+ * `command` runs any program, is one, and so is each of Delorun's live-agent packages, so the model cannot raise the
+ * gate's cap, turn its limit refusal off or reconfigure a driver. A target is read the way plugin management reads it (upstream's
  * `specPackageName`), case-folded and trimmed, and through an npm alias and a relative path's last package segments,
  * so a spelling of one of those packages is refused as the package itself.
  *
@@ -25,6 +26,17 @@ const IN_PROCESS_SUBAGENTS: ReadonlySet<string> = new Set([
   '@deepseek-ai/dsh-subagent-spawn-in-process',
 ])
 
+/**
+ * Delorun's own packages behind live external agents: the start gate and its limits, the two drivers, and the seat
+ * plugin. Their rows are also protected plugins of `@delorun/bundle-local`, which this set backs up.
+ */
+export const DELORUN_EXTERNAL_AGENT_PACKAGES: ReadonlySet<string> = new Set([
+  '@delorun/external-agents',
+  '@delorun/agent-claude-code',
+  '@delorun/agent-codex',
+  '@delorun/plugin-agent-seats',
+])
+
 /** A subagent provider package of DeepSeek Harness, stable or experimental. */
 const SUBAGENT_PACKAGE = /^@deepseek-ai\/dsh-(?:experimental-)?subagent-[a-z0-9._~-]+$/
 
@@ -36,12 +48,12 @@ const PATH_PACKAGE = /(@[^/\\]+[/\\][^/\\]+|[^/\\]+)[/\\]?$/
 
 /**
  * Whether a package name is an external agent's: a subagent provider package of DeepSeek Harness that does not run
- * its child session in this process.
+ * its child session in this process, or one of {@link DELORUN_EXTERNAL_AGENT_PACKAGES}.
  * @param name - the package name, case-folded.
  * @returns true for an external-agent package.
  */
 export function isExternalAgentPackage(name: string): boolean {
-  return SUBAGENT_PACKAGE.test(name) && !IN_PROCESS_SUBAGENTS.has(name)
+  return DELORUN_EXTERNAL_AGENT_PACKAGES.has(name) || (SUBAGENT_PACKAGE.test(name) && !IN_PROCESS_SUBAGENTS.has(name))
 }
 
 /** Where plugin management reads saved dependencies and relative local paths. */

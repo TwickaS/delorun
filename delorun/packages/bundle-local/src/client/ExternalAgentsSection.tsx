@@ -14,6 +14,7 @@ import { Button, Input, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { SettingsCard } from '@delorun/settings-controls'
+import { AgentLimits, signInText, useAccounts, type LimitsTranslate } from './AgentLimits.tsx'
 import { readAgentGrants, readAgentLevels, revokeAgentGrant, type GrantsAnswer, type GrantView } from './consents-api.ts'
 import { AgentLevels } from './AgentLevels.tsx'
 import { formatTime, listLine, readListing, type GroupProps, type Listing, type Translate } from './ConsentListing.tsx'
@@ -99,10 +100,38 @@ export function ExternalAgentsSection({ t, fetch, useAgentSettings, useAgentSett
     {agentSettings.value === undefined || agentSettings.status === 'unavailable' ? null : <AgentLevels t={t} saved={agentSettings.value} views={levels} remote={agents.kind === 'remote'}
       disabled={agentSettingsMutation.busy || agentSettings.status !== 'ready' || !agentSettings.writable} set={(field, level) => setAgentSetting(field, level)} />}
     <AgentSettings t={t} form={agentSettings} mutation={agentSettingsMutation} remote={remote} set={setAgentSetting} />
+    <PlansAndLimits t={t} fetch={fetch} />
     <SettingsCard title={t('agents.allowed.heading')} description={t('agents.allowed.description')} group="external-agents">
       <AgentsGroup t={t} listing={agents} busy={busy} revoke={revokeAgent} />
     </SettingsCard>
   </div>
+}
+
+/**
+ * One row per added agent with its sign-in line, bars and "Check now". Reading the figures starts no check.
+ * @param props - the copy and the request function.
+ * @returns the card, or nothing while the home does not serve the figures.
+ */
+function PlansAndLimits({ t, fetch }: { readonly t: Translate; readonly fetch: HostFetch }): ReactNode {
+  const limitsT: LimitsTranslate = t
+  const { state, check } = useAccounts(fetch, limitsT)
+  if (state.kind === 'unavailable') return null
+  const added = state.kind === 'ready' ? state.accounts.filter(account => account.installed) : []
+  return <SettingsCard title={t('agents.limits.heading')} description={t('agents.limits.description')} group="external-agent-limits">
+    {state.kind === 'loading'
+      ? <p className={css.boxLine}>{t('permissions.loading')}</p>
+      : added.length === 0
+        ? <p className={css.boxLine}>{t('agents.limits.none')}</p>
+        : <ul className={css.list}>
+          {added.map(account => <li key={account.provider} className={css.row} data-agent={account.provider}>
+            <div className={css.details}>
+              <div className={css.title}>{t(`agents.limits.agent.${account.provider}`)}</div>
+              <div className={css.description}>{signInText(limitsT, account) ?? t('limits.signInUnknown')}</div>
+              <AgentLimits account={account} now={state.now} t={limitsT} check={check} />
+            </div>
+          </li>)}
+        </ul>}
+  </SettingsCard>
 }
 
 /**

@@ -82,9 +82,34 @@ export const TailscaleReadiness = z.discriminatedUnion('state', [
 /** {@link TailscaleReadiness}'s parsed value. */
 export type TailscaleReadiness = z.output<typeof TailscaleReadiness>
 
+/** One limit window as the account store keeps it. */
+const ReadinessWindow = z.strictObject({
+  kind: z.string().min(1).max(100),
+  status: z.enum(['allowed', 'near', 'reached', 'unknown']),
+  usedPercent: z.number().min(0).max(100).optional(),
+  resetsAt: z.number().optional(),
+  seenAt: z.number(),
+  source: z.enum(['run', 'probe']),
+})
+
+/** One agent's stored sign-in and plan figures, as the account store answers them. Reading them starts no check. */
+export const ReadinessAccount = z.strictObject({
+  provider: z.enum(['claude-code', 'codex']),
+  installed: z.boolean(),
+  signedIn: z.enum(['yes', 'no', 'unknown']),
+  plan: z.string().max(100).optional(),
+  windows: z.array(ReadinessWindow).max(16),
+  checkedAt: z.number().optional(),
+})
+
+/** {@link ReadinessAccount}'s parsed value. */
+export type ReadinessAccount = z.output<typeof ReadinessAccount>
+
 /** This computer's readiness for the agents and reach steps. */
 export const Readiness = z.strictObject({
   agents: z.strictObject({ 'claude-code': z.enum(AGENT_SIGN_INS), 'codex': z.enum(AGENT_SIGN_INS) }),
+  /** The account store's figures per agent and the time they were read at; absent where the profile has no account store. */
+  accounts: z.strictObject({ agents: z.array(ReadinessAccount).max(2), now: z.number() }).optional(),
   tailscale: TailscaleReadiness,
 })
 

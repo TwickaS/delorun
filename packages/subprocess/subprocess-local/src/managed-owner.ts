@@ -28,6 +28,10 @@ export interface ManagedProcessLaunch {
   control?: Duplex | undefined
   direct: Promise<SubprocessOutcome>
   owner: BoundProcessOwner
+  /** The range leader's process id on POSIX; absent on Windows. */
+  pid?: number | undefined
+  /** The systemd scope unit, when the launch used one. */
+  unit?: string | undefined
 }
 
 /**

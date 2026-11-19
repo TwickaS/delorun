@@ -1,10 +1,17 @@
 /** The copy of the full-access consent, the MCP server review, the approval card's actions, the waiting-server notice, the Permissions section and the External agents section. */
 
+import { limitsEn, limitsZh } from './agent-limits-locales.ts'
 import { gateEn, gateZh } from './gate.ts'
 
 /** English dictionary. */
 export const en = {
   ...gateEn,
+  ...limitsEn,
+  'agents.limits.heading': 'Plans and limits',
+  'agents.limits.description': 'Sign-in and plan limits of the agents you added. Delorun reads these only when you press Check now, when you add an agent, or when you finish signing in.',
+  'agents.limits.none': 'No external agent is added yet.',
+  'agents.limits.agent.claude-code': 'Claude Code',
+  'agents.limits.agent.codex': 'Codex',
   'unlockWhere': 'Unlock is under Settings → Devices.',
   'permissions.nav': 'Permissions',
   'permissions.title': 'Permissions',
@@ -168,6 +175,12 @@ export type ConsentsLocaleKey = keyof typeof en
 /** Chinese dictionary. */
 export const zh: typeof en = {
   ...gateZh,
+  ...limitsZh,
+  'agents.limits.heading': '套餐与额度',
+  'agents.limits.description': '你添加的智能体的登录状态和套餐额度。只有在你点击“立即检查”、添加智能体或完成登录时，Delorun 才会读取。',
+  'agents.limits.none': '尚未添加外部智能体。',
+  'agents.limits.agent.claude-code': 'Claude Code',
+  'agents.limits.agent.codex': 'Codex',
   'unlockWhere': '解锁在“设置 → 设备”中。',
   'permissions.nav': '权限',
   'permissions.title': '权限',

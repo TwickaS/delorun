@@ -26,6 +26,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 
 export type {
   SubagentCatalogActionProps, SubagentCatalogInjected, SubagentCatalogActionInjected, SubagentHeaderLineageProps,
+  SubagentRowSlots,
 } from './SubagentHeaderLineage.tsx'
 export type {
   SubagentReadOnlyComposerProps, SubagentReadOnlyMatch,
@@ -83,6 +84,25 @@ export function apply(ctx: ClientContext): void {
     getSnapshot: () => ctx.slots.entries('conversation.session.header.actions.subagent.footer').length > 0,
     subscribe: (listener: () => void) => ctx.slots.subscribe('conversation.session.header.actions.subagent.footer', listener),
   }
+  const rowSlotKeys = [
+    'conversation.session.header.actions.subagent.row.lead',
+    'conversation.session.header.actions.subagent.row.detail',
+    'conversation.session.header.actions.subagent.row.trail',
+    'conversation.session.header.actions.subagent.trigger',
+  ] as const
+  const rowSlotsAvailable = {
+    getSnapshot: () => rowSlotKeys.some(key => ctx.slots.entries(key).length > 0),
+    subscribe: (listener: () => void) => {
+      const stops = rowSlotKeys.map(key => ctx.slots.subscribe(key, listener))
+      return () => { for (const stop of stops) stop() }
+    },
+  }
+  const rowChildren = {
+    'conversation.session.header.actions.subagent.row.lead': { kind: 'list', scope: 'root', inline: true },
+    'conversation.session.header.actions.subagent.row.detail': { kind: 'list', scope: 'root', inline: true },
+    'conversation.session.header.actions.subagent.row.trail': { kind: 'list', scope: 'root', inline: true },
+    'conversation.session.header.actions.subagent.trigger': { kind: 'list', scope: 'root', inline: true },
+  } as const
   ctx.slots.inject(
     'conversation.session.header.lineage',
     () => ctx.slots.register({
@@ -100,9 +120,12 @@ export function apply(ctx: ClientContext): void {
       order: 10,
       locale: NS,
       inject: (sessionId): SubagentCatalogActionInjected => ({
-        ...catalogActions(sessionId), hooks: { footerAvailable },
+        ...catalogActions(sessionId), hooks: { footerAvailable, rowSlotsAvailable },
       }),
-      children: { 'conversation.session.header.actions.subagent.footer': { kind: 'list', scope: 'session' } },
+      children: {
+        'conversation.session.header.actions.subagent.footer': { kind: 'list', scope: 'session' },
+        ...rowChildren,
+      },
     }, SubagentCatalogAction),
   )
   ctx.slots.inject(

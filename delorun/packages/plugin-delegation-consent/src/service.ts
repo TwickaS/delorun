@@ -7,23 +7,33 @@
  *    composed to tell.
  * 2. A chat without a workspace folder is refused, and so is a run directory outside the chat's workspace.
  * 3. A grants file that cannot be read refuses, so no grant counts.
- * 4. A grant for the provider in the chat's workspace allows the start.
- * 5. A start whose top-level chat is in Full access, with its own logged approval policy `never` and sandbox mode
+ * 4. A plan limit of Claude Code or Codex that the start gate reports reached refuses, while its C16 switch
+ *    `external_agent_limit_refusal` is on.
+ * 5. A grant for the provider in the chat's workspace allows the start.
+ * 6. A start whose top-level chat is in Full access, with its own logged approval policy `never` and sandbox mode
  *    `danger-full-access` together, is allowed without anyone being asked while the `fullAccessStartsAgents` switch is
  *    on; the walk up through the delegation ancestry never takes a child's pinned or inherited values. Any other
  *    chat whose policy is `never` is refused without anyone being asked.
- * 6. Otherwise the person is asked through the composed approval service, with the `external-agent` grant marker,
+ * 7. Otherwise the person is asked through the composed approval service, with the `external-agent` grant marker,
  *    so a reach device cannot give the answer, naming the folder the agent runs in; only `allowed-once` allows the
  *    start, and it records nothing.
  *
  * Every allowed start carries the configured run time limit. The service also names an external provider in its
  * delegation tool's description, and lists, records and revokes the grants the studio and `delorun` show.
  *
+ * A live agent seat is reviewed by `reviewSeat` over the same ordered rules, with read-only checked on the seat's root
+ * chat and its creator and the workspace taken from the root. A seat whose root chat has Full access (approval policy
+ * `never` and sandbox `danger-full-access`) is allowed with no card and no grant while `fullAccessStartsAgents` is on,
+ * and the verdict says so; any other `never` root is refused. An allowed seat
+ * holds a lease in memory until the child,
+ * the root or an ancestor is archived, the person revokes it, the workspace grant is revoked, the consent stops, or a
+ * later review refuses or finds the root, workspace, run folder or agent changed. While the lease holds, no card is
+ * shown again; each seat turn is reviewed without a card.
+ *
  * @module @delorun/plugin-delegation-consent/service
  */
 import { sep } from 'node:path'
 import { Service, type Context } from '@deepseek-ai/cordis'
-import type { Agent } from '@deepseek-ai/dsh-agent'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import type { SandboxPolicyService } from '@deepseek-ai/dsh-sandbox-policy'
 import type { ApprovalService } from '@deepseek-ai/dsh-user-approval'
@@ -31,12 +41,20 @@ import { CLAUDE_SANDBOX_INSTALL_COMMAND } from '@deepseek-ai/dsh-subagent/safety
 import type {
   DelegationConsentService, ExternalDelegationReview, ExternalDelegationVerdict, SubagentSafetyLevel,
 } from '@deepseek-ai/dsh-subagent'
+import type { Session } from '@deepseek-ai/dsh-session'
+import type {} from '@deepseek-ai/dsh-workspace'
+import type { Agent } from '@deepseek-ai/dsh-agent'
+import type {
+  ProgramRunRule, SeatAllowReason, SeatConsent, SeatLease, SeatLeaseEnd, SeatReview, SeatVerdict,
+} from '@delorun/external-agents/contract'
 import { resolveDelorunHome, workspaceLocationHomes, workspaceLocationMessage, workspaceLocationProblem } from '@delorun/home'
 import { NO_WORKSPACE, workspaceKey } from '@delorun/plugin-permission-defaults/workspace'
 import {
-  agentName, askText, askTextZh, describeAgent, noSandboxPolicyRefusal, notApprovedRefusal, noWorkspaceRefusal, outsideRefusal,
-  readOnlyRefusal, storeRefusal,
+  agentName, archivedRefusal, askText, askTextZh, describeAgent, leaseEndedRefusal, noOpenTurnRefusal, noSandboxPolicyRefusal,
+  notApprovedRefusal, noWorkspaceRefusal, outsideRefusal, readOnlyRefusal, storeRefusal,
+  type NotApprovedOutcome,
 } from './copy.ts'
+import { SeatLeases } from './leases.ts'
 import { changeGrantStore, grantOf, grantStorePath, problemOf, readGrantStore, withGrant, withoutGrant, type ExternalAgentGrant } from './store.ts'
 import {
   AGENT_LEVEL_FIELDS, type AgentLevel, type AgentLevelView, type AllowWorkspaceAnswer, type AllowWorkspaceRequest, type DelegationRefusalCode,
@@ -59,7 +77,7 @@ export class DelegationConsentError extends Error {
 export interface ConsentOptions {
   /** The run time limit an allowed start carries, in milliseconds, read at each review. */
   readonly timeoutMs: () => number
-  /** Whether a chat in Full access starts an external agent without asking, read at each review. */
+  /** Whether a Full access root chat starts a live agent with no card (the consent's `fullAccessStartsAgents`), read at each review. */
   readonly fullAccessStartsAgents: () => boolean
   /** The environment the Delorun home is resolved from. */
   readonly env: Readonly<Record<string, string | undefined>>
@@ -91,13 +109,37 @@ function viewOf(grant: ExternalAgentGrant): GrantView {
   return { ...grant, agent: agentName(grant.provider) }
 }
 
+/** The facts the shared rules read. */
+interface RuleFacts {
+  /** The provider the start selects. */
+  readonly provider: string
+  /** Every Session whose read-only mode refuses the start. */
+  readonly readOnlyOf: readonly Session[]
+  /** The Session whose folder is the workspace. */
+  readonly workspaceOf: Session
+  /** The run folder. */
+  readonly cwd: string
+}
+
+/** How the shared rules ended: a refusal, or the workspace and whether a grant allows the start there. */
+type RuleOutcome =
+  | { readonly kind: 'refuse'; readonly reason: string }
+  | { readonly kind: 'pass'; readonly workspace: string; readonly cwd: string; readonly granted: boolean }
+
 /** The `delegationConsent` service of Delorun's external-agent consent. */
-export class DelorunDelegationConsent extends Service implements DelegationConsentService {
+export class DelorunDelegationConsent extends Service implements DelegationConsentService, SeatConsent {
   private readonly options: ConsentOptions
+  private readonly leases: SeatLeases
 
   constructor(ctx: Context, options: ConsentOptions) {
     super(ctx, 'delegationConsent')
     this.options = options
+    this.leases = new SeatLeases((error) => { ctx.logger.error(`delegation-consent: a lease-end listener failed: ${problemOf(error)}`) })
+    // The tables live in this service's memory: a stopped service ends every lease, so the gate stops their programs.
+    ctx.effect(() => () => { this.leases.endWhere(() => true, 'consent-off') }, 'delegation consent: seat leases')
+    ctx.on('workspace/session-archived', ({ sessionId }) => {
+      this.leases.endWhere(lease => lease.child === sessionId || lease.root === sessionId, 'archived')
+    })
   }
 
   describe(provider: string): string {
@@ -134,33 +176,236 @@ export class DelorunDelegationConsent extends Service implements DelegationConse
   async review(review: ExternalDelegationReview): Promise<ExternalDelegationVerdict> {
     const { provider, parent } = review
     const session = parent.session
+    const rules = await this.rules({ provider, readOnlyOf: [session], workspaceOf: session, cwd: review.cwd })
+    if (rules.kind === 'refuse') return rules
+    const limited = await this.limitRefusal(provider)
+    if (limited !== undefined) return { kind: 'refuse', reason: limited }
+    const allowed = { kind: 'allow', timeoutMs: this.options.timeoutMs() } as const
+    if (rules.granted) return allowed
+    const approval = this.ctx.get('approval')
+    const sandbox = this.ctx.get('sandboxPolicy')
+    if (approval !== undefined && sandbox !== undefined && this.options.fullAccessStartsAgents() && this.rootIsFullAccess(parent, approval, sandbox)) return allowed
+    const outcome = await this.ask(parent, { provider, workspace: rules.workspace, cwd: rules.cwd, label: review.label, signal: review.signal })
+    return outcome === 'allowed-once' ? allowed : { kind: 'refuse', reason: notApprovedRefusal(provider, outcome, rules.workspace) }
+  }
+
+  async reviewSeat(review: SeatReview): Promise<SeatVerdict> {
+    const verdict = await this.decideSeat(review)
+    if (verdict.kind === 'refuse') this.leases.end(review.child.id, 'refused')
+    return verdict
+  }
+
+  leaseOf(child: SessionId): SeatLease | undefined {
+    return this.leases.leaseOf(child)
+  }
+
+  endLease(child: SessionId, reason: SeatLeaseEnd): void {
+    this.leases.end(child, reason)
+  }
+
+  onLeaseEnded(listener: (lease: SeatLease, reason: SeatLeaseEnd) => void): () => void {
+    return this.leases.listen(listener)
+  }
+
+  runRules(child: SessionId): readonly ProgramRunRule[] {
+    return this.leases.rulesOf(child)
+  }
+
+  addRunRule(child: SessionId, rule: ProgramRunRule): boolean {
+    return this.leases.addRule(child, rule)
+  }
+
+  /**
+   * The start gate's refusal while the agent's plan limit is reached, for Claude Code and Codex.
+   * @param provider - the provider the start selects.
+   * @returns the sentence, or undefined without the gate, for another provider, or when nothing is reached.
+   */
+  private async limitRefusal(provider: string): Promise<string | undefined> {
+    const gate = this.ctx.get('externalAgents')
+    if (gate === undefined || (provider !== 'claude-code' && provider !== 'codex')) return undefined
+    return gate.limitRefusal(provider)
+  }
+
+  /**
+   * The rules every review runs first, in order: no sandbox policy, read-only, no workspace, a run folder outside it,
+   * an unreadable grants file; then whether a grant allows the start.
+   * @param facts - the Sessions and folder to check.
+   * @returns a refusal, or the workspace and whether a grant allows the start.
+   */
+  private async rules(facts: RuleFacts): Promise<RuleOutcome> {
+    const { provider } = facts
     const sandbox = this.ctx.get('sandboxPolicy')
     if (sandbox === undefined) return { kind: 'refuse', reason: noSandboxPolicyRefusal(provider) }
-    if (sandbox.resolve({ session }).mode === 'read-only') return { kind: 'refuse', reason: readOnlyRefusal(provider) }
-    const workspace = workspaceKey(session.header.cwd ?? '')
+    if (facts.readOnlyOf.some(session => sandbox.resolve({ session }).mode === 'read-only')) return { kind: 'refuse', reason: readOnlyRefusal(provider) }
+    const workspace = workspaceKey(facts.workspaceOf.header.cwd ?? '')
     if (workspace === NO_WORKSPACE) return { kind: 'refuse', reason: noWorkspaceRefusal(provider) }
-    const cwd = workspaceKey(review.cwd)
-    if (!inside(workspace, cwd)) return { kind: 'refuse', reason: outsideRefusal(provider, workspace, review.cwd) }
+    const cwd = workspaceKey(facts.cwd)
+    if (!inside(workspace, cwd)) return { kind: 'refuse', reason: outsideRefusal(provider, workspace, facts.cwd) }
     const read = await readGrantStore(await this.storePath())
     if (read.kind === 'refused') return { kind: 'refuse', reason: storeRefusal(provider, read.problem) }
-    const allowed = { kind: 'allow', timeoutMs: this.options.timeoutMs() } as const
-    if (grantOf(read.grants, workspace, provider) !== undefined) return allowed
+    return { kind: 'pass', workspace, cwd, granted: grantOf(read.grants, workspace, provider) !== undefined }
+  }
+
+  /**
+   * Ask the person through the approval service on one chat's open turn.
+   * @param agent - the chat the card belongs to.
+   * @param facts - what the card names.
+   * @returns the outcome; `never` for a refusal the chat's policy gave without asking, `no-approval` without a service.
+   */
+  private async ask(agent: Agent, facts: { readonly provider: string, readonly workspace: string, readonly cwd: string, readonly label?: string | undefined, readonly signal: AbortSignal }): Promise<'allowed-once' | NotApprovedOutcome> {
     const approval = this.ctx.get('approval')
-    if (approval === undefined) return { kind: 'refuse', reason: notApprovedRefusal(provider, 'no-approval', workspace) }
-    const facts = { provider, workspace, cwd, label: review.label }
+    if (approval === undefined) return 'no-approval'
+    const ask = { provider: facts.provider, workspace: facts.workspace, cwd: facts.cwd, label: facts.label }
     // The approval service answers `rejected` without asking anyone while the chat's policy is `never`.
-    const policy = approval.overrideOf(session) ?? approval.config.policy
-    if (this.options.fullAccessStartsAgents() && this.rootIsFullAccess(parent, approval, sandbox)) return allowed
+    const policy = approval.overrideOf(agent.session) ?? approval.config.policy
     const outcome = await approval.request({
-      agent: parent,
-      toolName: provider,
-      reason: askText(facts),
-      displayReason: { en: askText(facts), zh: askTextZh(facts) },
+      agent,
+      toolName: facts.provider,
+      reason: askText(ask),
+      displayReason: { en: askText(ask), zh: askTextZh(ask) },
       grants: 'external-agent',
-      signal: review.signal,
+      signal: facts.signal,
     })
-    if (outcome === 'allowed-once') return allowed
-    return { kind: 'refuse', reason: notApprovedRefusal(provider, outcome === 'rejected' && policy === 'never' ? 'never' : outcome, workspace) }
+    return outcome === 'rejected' && policy === 'never' ? 'never' : outcome
+  }
+
+  /**
+   * Decide one seat review: the shared rules on the root and the creator, archived chats, the lease, the grant, the
+   * root's policy, then a card at hand-off or resume.
+   * @param review - the facts of the review.
+   * @returns the verdict.
+   */
+  private async decideSeat(review: SeatReview): Promise<SeatVerdict> {
+    const { provider, root, child } = review
+    const rules = await this.rules({ provider, readOnlyOf: [root.session, review.creator.session], workspaceOf: root.session, cwd: review.cwd })
+    if (rules.kind === 'refuse') return rules
+    if (this.archivedAbove(child, root)) return { kind: 'refuse', reason: archivedRefusal(provider) }
+    const allowed = (why: SeatAllowReason): SeatVerdict => ({ kind: 'allow', timeoutMs: this.options.timeoutMs(), why })
+    const listed = this.workspaceListed(rules.workspace)
+    const lease = this.leases.leaseOf(child.id)
+    if (lease !== undefined) {
+      const same = lease.root === root.id && lease.workspace === rules.workspace && lease.cwd === rules.cwd && lease.provider === provider
+      const stillFullAccess = lease.why !== 'full-access' || this.fullAccessRoot(root)
+      if (same && stillFullAccess && (!lease.workspaceListed || listed !== false)) return allowed('lease')
+      this.leases.end(child.id, 'refused')
+    }
+    const record = (why: Exclude<SeatAllowReason, 'lease'>): SeatVerdict => {
+      this.leases.record({
+        child: child.id, root: root.id, workspace: rules.workspace, cwd: rules.cwd, provider, workspaceListed: listed === true, grantedAt: this.options.now(),
+        why,
+      })
+      return allowed(why)
+    }
+    if (rules.granted) return record('granted')
+    if (review.phase === 'turn') return { kind: 'refuse', reason: leaseEndedRefusal(provider) }
+    const approval = this.ctx.get('approval')
+    if (approval === undefined) return { kind: 'refuse', reason: notApprovedRefusal(provider, 'no-approval', rules.workspace) }
+    if ((approval.overrideOf(root.session) ?? approval.config.policy) === 'never') {
+      // Full access starts the seat with no card and no grant (owner, EA28, EA33); any other `never` chat refuses (D10).
+      if (this.fullAccessRoot(root)) return record('full-access')
+      return { kind: 'refuse', reason: notApprovedRefusal(provider, 'never', rules.workspace) }
+    }
+    // With no open turn on the root the card goes to the seat child (D10): a resume, or a start the person's own message in
+    // that chat made. A seat started by another child never asks there, so a grandchild refuses.
+    const askOnChild = review.phase === 'resume' || (review.creator.id === root.id && this.hasOpenTurn(child))
+    const asked = this.hasOpenTurn(root) ? root : askOnChild ? child : undefined
+    if (asked === undefined) return { kind: 'refuse', reason: noOpenTurnRefusal(provider, rules.workspace) }
+    // The child carries the delegation pin (`never`) until the relay lifts it at the program's first question; the start card
+    // is the person's own decision, so only that pin is lifted here (D10, T5). Any other `never` on the child, set by the
+    // person or inherited from the home, refuses the card and stays.
+    let lifted = false
+    if (asked === child && (approval.overrideOf(child.session) ?? approval.config.policy) === 'never') {
+      if (review.pinned !== true) return { kind: 'refuse', reason: notApprovedRefusal(provider, 'never', rules.workspace) }
+      // The lift keeps `source: 'delegation'`, so a Host that stops before the answer still reads the chat as pinned and the
+      // next start lifts and asks again.
+      child.session.append('approval/policy', { policy: 'ask', source: 'delegation' })
+      lifted = true
+    } else if (asked === child && review.pinned === true && approval.overrideOf(child.session) === 'ask') {
+      // A lift of an earlier start that no answer followed (the Host stopped mid-card) is still ours to put back.
+      lifted = true
+    }
+    let outcome: 'allowed-once' | NotApprovedOutcome
+    try {
+      outcome = await this.ask(asked, { provider, workspace: rules.workspace, cwd: rules.cwd, label: review.label, signal: review.signal })
+    } catch (error: unknown) {
+      this.putPinBack(child, lifted, approval)
+      throw error
+    }
+    if (outcome === 'allowed-once') return record('asked')
+    this.putPinBack(child, lifted, approval)
+    return { kind: 'refuse', reason: notApprovedRefusal(provider, outcome, rules.workspace) }
+  }
+
+  /**
+   * Put the delegation pin back on a seat child after a start card that was not accepted. A policy the person set while the
+   * card was open (anything but the lifted `ask`) stays theirs.
+   * @param child - the seat child.
+   * @param lifted - whether this review lifted the pin.
+   * @param approval - the approval service.
+   */
+  private putPinBack(child: Agent, lifted: boolean, approval: ApprovalService): void {
+    if (lifted && approval.overrideOf(child.session) === 'ask') child.session.append('approval/policy', { policy: 'never', source: 'delegation' })
+  }
+
+  /**
+   * Whether a root chat is Full access (lead decision 10): its approval policy is `never`, its sandbox runs
+   * `danger-full-access`, and the consent's `fullAccessStartsAgents` is on.
+   * @param root - the root chat.
+   * @returns true for Full access.
+   */
+  private fullAccessRoot(root: Agent): boolean {
+    if (!this.options.fullAccessStartsAgents()) return false
+    const approval = this.ctx.get('approval')
+    if (approval === undefined || (approval.overrideOf(root.session) ?? approval.config.policy) !== 'never') return false
+    return this.ctx.get('sandboxPolicy')?.resolve({ session: root.session }).mode === 'danger-full-access'
+  }
+
+  /**
+   * Whether a chat has a turn open, so a card can be shown in it.
+   * @param agent - the chat.
+   * @returns true while a turn is open.
+   */
+  private hasOpenTurn(agent: Agent): boolean {
+    return this.ctx.get('agents')?.turnBoundaryOf(agent.session).openTurnStartSeq != null
+  }
+
+  /**
+   * Whether the child, the root or a creator between them is archived. Archiving a chat names only that chat, so a
+   * chat between the root and the child is found here, at the next review.
+   * @param child - the seat child.
+   * @param root - the root chat.
+   * @returns true when any of them is archived.
+   */
+  private archivedAbove(child: Agent, root: Agent): boolean {
+    const archived = this.ctx.get('workspaceRegistry')?.archivedSessionIds
+    if (archived === undefined) return false
+    const seen = new Set<SessionId>([child.id, root.id])
+    let header = child.session.header
+    while (header.origin === 'subagent' && header.parentSession !== undefined && !seen.has(header.parentSession)) {
+      seen.add(header.parentSession)
+      const parent = this.ctx.get('agents')?.get(header.parentSession)
+      if (parent === undefined) break
+      header = parent.session.header
+    }
+    return [...seen].some(id => archived.includes(id))
+  }
+
+  /**
+   * Whether a workspace is in Delorun's workspace list.
+   * @param workspace - the workspace key.
+   * @returns whether it is listed, or undefined without a workspace registry or before its state is read.
+   */
+  private workspaceListed(workspace: string): boolean | undefined {
+    const registry = this.ctx.get('workspaceRegistry')
+    if (registry === undefined) return undefined
+    let paths: readonly string[]
+    try {
+      paths = registry.list().map(entry => entry.path)
+    } catch (_unread) {
+      // The registry throws until its state is read; whether the workspace is listed is then unknown.
+      return undefined
+    }
+    return paths.includes(workspace)
   }
 
   /**
@@ -240,6 +485,7 @@ export class DelorunDelegationConsent extends Service implements DelegationConse
       revoked = next.length !== grants.length
       return next
     })
+    this.leases.endWhere(lease => lease.workspace === request.workspace && lease.provider === request.provider, 'grant-revoked')
     this.ctx.logger.info(`external agent ${request.provider} revoked for a workspace`)
     return { revoked }
   }

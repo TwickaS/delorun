@@ -147,6 +147,8 @@ export interface ApprovalPresentationRequest {
   readonly grants?: ApprovalGrant
   /** The sandbox mode a sandbox escalation asks for, when the request is one. */
   readonly escalatesTo?: ApprovalEscalation
+  /** Set by a requester whose Host listener can honour an "allow for this run" answer; absent on every other request. */
+  readonly runScope?: string
   /** Cancellation projected from the Host waterfall. */
   readonly signal?: AbortSignal
 }
@@ -179,6 +181,8 @@ export class PendingApproval {
   readonly grants: ApprovalGrant | undefined
   /** The sandbox mode an escalation asked for, when the asker declared one. */
   readonly escalatesTo: ApprovalEscalation | undefined
+  /** The run scope the asker declared, when it can honour an "allow for this run" answer. */
+  readonly runScope: string | undefined
   /** Result returned by the Remote Event listener to the Host waterfall. */
   readonly result: Promise<ApprovalDecision>
 
@@ -204,6 +208,7 @@ export class PendingApproval {
     this.notice = request.notice
     this.grants = request.grants
     this.escalatesTo = request.escalatesTo
+    this.runScope = request.runScope
     const completion = Promise.withResolvers<ApprovalDecision>()
     this.result = completion.promise
     this.#resolve = completion.resolve

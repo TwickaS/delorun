@@ -2,7 +2,7 @@
 /** The studio half's registrations: the copy and the dock entry, only under the Delorun look, and nothing left after unload. */
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
-import { apply, CostPill, DOCK_ENTRY, en, inject, NS, zh, type CostPillInjected } from '../src/client/index.ts'
+import { apply, CostPill, DOCK_ENTRY, en, inject, NS, PlansPill, PLANS_ENTRY, zh, type CostPillInjected } from '../src/client/index.ts'
 import { sid } from './fixtures.client.ts'
 
 /** The services the studio half injects, recording what it registers. */
@@ -29,6 +29,7 @@ async function studio(options: { readonly look?: boolean } = {}) {
 }
 
 const DOCK = `conversation.composer.dock#${DOCK_ENTRY.id}`
+const PLANS = `conversation.composer.dock#${PLANS_ENTRY.id}`
 
 describe('the studio half', () => {
   it('registers its dictionaries and the cost pill after the stock pills while the Delorun look is on', async () => {
@@ -47,6 +48,15 @@ describe('the studio half', () => {
     expect(h.refreshProjections.mock.calls).toEqual([[sid('broken')], [sid('ok')]])
   })
 
+  it('registers the Plans pill right after the cost pill, with the browser\'s own fetch', async () => {
+    const h = await studio()
+    const entry = h.entries.get(PLANS)
+    expect(entry?.component).toBe(PlansPill)
+    expect(entry?.slot).toMatchObject({ name: 'conversation.composer.dock', order: PLANS_ENTRY.order, locale: NS })
+    expect(PLANS_ENTRY.order).toBe(DOCK_ENTRY.order + 1)
+    expect(typeof (entry?.slot['inject'] as () => { fetch: unknown })().fetch).toBe('function')
+  })
+
   it('registers nothing under the stock look', async () => {
     const h = await studio({ look: false })
     expect(h.entries.size).toBe(0)
@@ -57,7 +67,7 @@ describe('the studio half', () => {
     const h = await studio({ look: false })
     const look = h.ctx.plugin({ apply: (scope: Context) => { scope.provide('delorunStudio', {} as never) } })
     await look
-    expect(h.entries.size).toBe(1)
+    expect(h.entries.size).toBe(2)
     await look.dispose()
     expect(h.entries.size).toBe(0)
     expect(h.dictionaries.size).toBe(0)
@@ -65,7 +75,7 @@ describe('the studio half', () => {
 
   it('removes the pill and the dictionaries when the plugin unloads', async () => {
     const h = await studio()
-    expect(h.entries.size).toBe(1)
+    expect(h.entries.size).toBe(2)
     await h.fiber.dispose()
     expect(h.entries.size).toBe(0)
     expect(h.dictionaries.size).toBe(0)

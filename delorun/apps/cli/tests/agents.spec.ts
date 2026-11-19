@@ -4,8 +4,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createAgentsCommand, type AgentsDependencies } from '../src/agents/command.ts'
-import { loginProgramFor } from '../src/agents/resolve.ts'
+import { loginProgramFor } from '@delorun/external-agents/locate'
 import { CliError, EXIT } from '../src/exit.ts'
+import { profileDirectory } from '../src/profile.ts'
 
 const roots: string[] = []
 const nodePath = process.env.NODE_PATH
@@ -27,11 +28,13 @@ afterEach(() => {
 
 /**
  * @param files - package files by path under the profile's node_modules.
+ * @param at - the profile directory to fill, or a fresh one.
  * @returns a profile directory holding them.
  */
-function profileWith(files: Readonly<Record<string, string>>): string {
-  const root = mkdtempSync(join(tmpdir(), 'delorun-agents-'))
-  roots.push(root)
+function profileWith(files: Readonly<Record<string, string>>, at?: string): string {
+  const root = at ?? mkdtempSync(join(tmpdir(), 'delorun-agents-'))
+  if (at === undefined) roots.push(root)
+  mkdirSync(root, { recursive: true })
   writeFileSync(join(root, 'package.json'), '{}')
   for (const [path, text] of Object.entries(files)) {
     mkdirSync(join(root, 'node_modules', path, '..'), { recursive: true })
@@ -45,13 +48,16 @@ const LINUX = { platform: 'linux', arch: 'x64' } as const
 
 const CLAUDE_ADDED = {
   '@deepseek-ai/dsh-subagent-claude-code/package.json': manifest('@deepseek-ai/dsh-subagent-claude-code'),
-  '@deepseek-ai/dsh-subagent-claude-code/node_modules/@anthropic-ai/claude-agent-sdk/package.json': manifest('@anthropic-ai/claude-agent-sdk'),
+  // The SDK's manifest exports only its entry, as the published SDK does, so its package.json cannot be resolved.
+  '@deepseek-ai/dsh-subagent-claude-code/node_modules/@anthropic-ai/claude-agent-sdk/package.json': manifest('@anthropic-ai/claude-agent-sdk', { exports: { '.': './index.js' } }),
+  '@deepseek-ai/dsh-subagent-claude-code/node_modules/@anthropic-ai/claude-agent-sdk/index.js': '',
   '@deepseek-ai/dsh-subagent-claude-code/node_modules/@anthropic-ai/claude-agent-sdk/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/package.json': manifest('@anthropic-ai/claude-agent-sdk-linux-x64'),
   '@deepseek-ai/dsh-subagent-claude-code/node_modules/@anthropic-ai/claude-agent-sdk/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude': '#!/bin/sh\n',
 }
 const CODEX_ADDED = {
   '@deepseek-ai/dsh-subagent-codex/package.json': manifest('@deepseek-ai/dsh-subagent-codex'),
   '@deepseek-ai/dsh-subagent-codex/node_modules/@openai/codex/package.json': manifest('@openai/codex', { bin: { codex: 'bin/codex.js' } }),
+  '@deepseek-ai/dsh-subagent-codex/node_modules/@openai/codex/bin/codex.js': '',
 }
 
 describe('finding an added agent\'s sign-in program', () => {
@@ -117,6 +123,9 @@ describe('delorun agents login', () => {
       terminal: true, machine: LINUX,
       find: () => ({ program: '/bundled/claude', args: ['auth', 'login'] }),
       run: vi.fn(() => Promise.resolve(0)),
+      running: () => false,
+      send: vi.fn(),
+      now: () => 0,
       ...change,
     }
     const result = createAgentsCommand(dependencies).run(args, { env: { DELORUN_HOME: mkdtempSync(join(tmpdir(), 'delorun-home-')) }, stdout: text => out.push(text), stderr: () => {} })
@@ -153,6 +162,16 @@ describe('delorun agents login', () => {
     const error: unknown = await result.catch((caught: unknown) => caught)
     expect(error).toBeInstanceOf(CliError)
     expect((error as CliError).exit).toBe(EXIT.usage)
+  })
+
+  it('finds Claude Code in a profile that added it, through the package\'s own locator', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'delorun-home-'))
+    roots.push(home)
+    profileWith(CLAUDE_ADDED, profileDirectory(home, 'default'))
+    const ran = vi.fn(() => Promise.resolve(0))
+    const command = createAgentsCommand({ terminal: true, machine: LINUX, find: loginProgramFor, run: ran, running: () => false, send: vi.fn(), now: () => 0 })
+    await expect(command.run(['login', 'claude-code'], { env: { DELORUN_HOME: home }, stdout: () => {}, stderr: () => {} })).resolves.toBe(EXIT.ok)
+    expect(ran).toHaveBeenCalledExactlyOnceWith({ program: expect.stringMatching(/claude-agent-sdk-linux-x64\/claude$/), args: ['auth', 'login'] }, expect.any(Object))
   })
 
   it('names an unknown agent in one line and offers the two it knows', async () => {
