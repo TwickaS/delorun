@@ -13,10 +13,9 @@ export const ROADMAP_DESKTOP_HREF = `${DOCS_URL}/guide/roadmap#next`
 export const EN = {
   language: 'en-GB',
   siteTitle: 'Delorun',
-  tagline: 'Your harness. No limits.',
-  description: 'Delorun is an open source AI agent for your own computer, in a harness you shape to your work: its look, its plugins, even Delorun itself. Built on DeepSeek Harness.',
+  tagline: 'Bring your own everything.',
+  description: 'Your models and keys. Your plugins. Your look. Your agents. Delorun is an AI agent harness on your own computer, and every part of it is yours to swap.',
   hero: {
-    title: 'Your harness. No limits.',
     subline: 'An AI agent that works on your own computer, in a harness you can reshape: its look, its plugins, even Delorun itself.',
     packageManagerLabel: 'Package manager',
     copyLabel: 'Copy command',
