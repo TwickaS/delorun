@@ -65,6 +65,8 @@ kind: "package-reference"
 
 每个页头入口在树下方声明 footer 插槽。可选 UI 通过该插槽加入同一滚动容器；目录负责打开和关闭。CSS 锚点让面板跟随触发器，并按布局视口限制尺寸。浏览器缩放和平移时面板随页面移动，因此可以超出视觉视口。内部滚动、悬停行为、点击固定展开和焦点恢复保持独立。
 
+四个列表插槽让可选 UI 在不改变目录自身渲染的情况下，向目录行或触发器添加内容。`conversation.session.header.actions.subagent.row.lead` 在行的状态圆点之前添加标记，`.row.detail` 在行的第二行添加文字，`.row.trail` 在指标之后添加指示；每个插槽都会收到一个 `SubagentRowOwner`，包含子 Session 的 id、标签、运行状态、摘要、投影值、待审批标志、token、耗时和一个 `open` 回调。`conversation.session.header.actions.subagent.trigger` 在触发器的计数之后添加文字，并收到包含直接子行的 `SubagentTriggerOwner`。没有贡献内容的插槽不渲染任何东西。
+
 显式激活菜单、展开分支或重试失败读取时，`prepareCatalog` 读取当前目录及其直接子节点。点击祖先标题会导航到该 Session。Session 对象层合并重复读取，并在重连后刷新之前请求过的投影。
 
 面包屑地址从 Provider 所绑定的 Session 地址、已加载的 parent 目录或已列出的 subagent 谱系推导，也包括从未选中过的祖先。

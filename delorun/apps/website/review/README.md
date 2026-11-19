@@ -1,5 +1,7 @@
 # Review pass
 
+English | [中文](README.zh.md)
+
 The scripts that make the evidence for each review pass of the home page: the same pictures and one audit, from a production build. They measure and report; they never change the page.
 
 ## Run a pass
