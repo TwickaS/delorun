@@ -694,8 +694,8 @@ export class HomeAuth {
    */
   elevationOf(deviceId: string, listener: ReachListenerId): ElevationRecord | undefined {
     const record = this.elevations.of(deviceId, listener)
-    // With PIN mode on there is no approval grace: the first unlock-needing action asks for the PIN.
-    return record?.grace === true && this.pin.enabled() ? undefined : record
+    // With a PIN or a passkey there is no approval grace: the first unlock-needing action asks for it.
+    return record?.grace === true && this.unlockModeEnabled() ? undefined : record
   }
 
   /**
@@ -966,7 +966,7 @@ export class HomeAuth {
    */
   private startApprovalGrace(device: DeviceRecord, request: SignInRequest, served: ServedListener, sessionId: SessionId): void {
     const minutes = this.approvalGraceMinutes()
-    if (minutes <= 0 || device.lastSignInAt !== null || request.rotate !== undefined || this.pin.enabled()) return
+    if (minutes <= 0 || device.lastSignInAt !== null || request.rotate !== undefined || this.unlockModeEnabled()) return
     const graceMs = Math.min(minutes, served.elevationMinutes ?? ELEVATION_LIMITS.defaultMinutes) * 60_000
     const endsAt = device.approvedAt + graceMs
     if (this.now() >= endsAt) return
@@ -1002,6 +1002,7 @@ export class HomeAuth {
     const at = this.now()
     if (at >= session.expiresAt || at - session.lastUsedAt >= SESSION_LIMITS.reach.idleMs) {
       view.sessions.delete(sessionId)
+      this.grants.endDevice(session.deviceId)
       this.elevations.endSession(sessionId, 'session-ended')
       void this.serial(() => this.sessions.remove([sessionId])).catch(() => undefined)
       return { kind: 'refused', code: 'SESSION_EXPIRED' }
@@ -1009,6 +1010,7 @@ export class HomeAuth {
     if (session.rotated) return { kind: 'refused', code: 'ROTATION_REQUIRED' }
     if (session.graceUntil !== undefined && at >= session.graceUntil) {
       view.sessions.delete(sessionId)
+      this.grants.endDevice(session.deviceId)
       this.elevations.endSession(sessionId, 'session-ended')
       void this.serial(() => this.sessions.remove([sessionId])).catch(() => undefined)
       return { kind: 'refused', code: 'NOT_SIGNED_IN' }
@@ -1125,6 +1127,8 @@ export class HomeAuth {
       return
     }
     this.elevations.endSession(sessionId, 'session-ended')
+    // Face ID grants and holds live as long as the device's session; the device's next confirmation starts new ones.
+    if (session !== undefined) this.grants.endDevice(session.deviceId)
     this.closeReachConnections?.({ sessionId })
   }
 
@@ -1136,6 +1140,7 @@ export class HomeAuth {
    */
   private async rotateAll(): Promise<void> {
     this.elevations.endAll('session-ended')
+    this.grants.endAll()
     const view = this.view
     if (view !== undefined) {
       for (const [sessionId, session] of view.sessions) view.sessions.set(sessionId, { ...session, rotated: true })

@@ -8,11 +8,13 @@
  *   received ({@link hashArgs}). They live {@link GRANT_LIFE_MS} and are used once. The policy reads one with
  *   {@link GrantStore.has} while it decides and uses it with {@link GrantStore.consume} only after the whole decision
  *   allows, so a refused call or a question without arguments never spends one.
- * - **Answer grants** are keyed by device, listener, request id and the answer value, so Face ID for "Allow once"
- *   never admits a persistent allow.
+ * - **Answer grants** are keyed by device, listener, {@link answerKey} (agent, call id and grants marker of the prompt)
+ *   and the answer value, so Face ID for "Allow once" never admits a persistent allow, and a grant for one prompt never
+ *   answers another that shares its call id.
  * - **Feature holds** are opened when a grant entry that names a terminal or picker id is consumed. A hold admits the
- *   events and reads of that exact id until it idles {@link HOLD_IDLE_MS}, lives {@link HOLD_ABSOLUTE_MS}, its
- *   connection ends or the picker's close route is called. Another id needs a new grant.
+ *   events and reads of that exact id in that exact scope (the Session or global resource the call named) until it idles
+ *   {@link HOLD_IDLE_MS}, lives {@link HOLD_ABSOLUTE_MS}, its device's session ends or the picker's close route is
+ *   called. Another id or another scope needs a new grant.
  *
  * @module @delorun/home-auth/grants
  */
@@ -58,6 +60,35 @@ export function holdFeatureOf(action: string): HoldFeature | undefined {
   return undefined
 }
 
+/** The scope of a call on the global resource, such as the folder picker. */
+export const GLOBAL_SCOPE = 'global'
+
+/**
+ * The scope a hold is bound to: the resource a call names.
+ * @param resource - the resource the question named.
+ * @returns `global`, or `<kind>:<id>` for a resource with an id.
+ */
+export function scopeOf(resource: { readonly kind: string; readonly id?: string }): string {
+  return resource.id === undefined ? resource.kind === 'global' ? GLOBAL_SCOPE : resource.kind : `${resource.kind}:${resource.id}`
+}
+
+/**
+ * The key an answer grant is minted and looked up under.
+ * @param prompt - the Session (agent) id, the call id and the `grants` marker of the approval prompt.
+ * @returns a key that two prompts share only when all three are equal.
+ */
+export function answerKey(prompt: { readonly agent: string; readonly callId: string; readonly grants: string }): string {
+  return JSON.stringify([prompt.agent, prompt.callId, prompt.grants])
+}
+
+/** The terminal or picker a hold is for, in one scope. */
+export interface HoldTarget {
+  readonly feature: HoldFeature
+  readonly id: string
+  /** {@link scopeOf} of the resource the opening call named. */
+  readonly scope: string
+}
+
 /** Which factor minted a grant. */
 export type GrantFactor = 'passkey' | 'pin'
 
@@ -66,7 +97,7 @@ export type GrantFactor = 'passkey' | 'pin'
  * strings as `JSON.stringify` writes them, which is the ECMAScript form JCS names.
  * @param value - a JSON value.
  * @returns the canonical text.
- * @throws {TypeError} for a value JSON cannot hold: a non-finite number, `undefined`, a function or a symbol.
+ * @throws {TypeError} for a value JSON cannot hold: a non-finite number, `undefined`, a function, a symbol, or an object that is not plain, such as a Date or a Map.
  */
 export function canonicalJson(value: unknown): string {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return JSON.stringify(value)
@@ -76,6 +107,8 @@ export function canonicalJson(value: unknown): string {
   }
   if (Array.isArray(value)) return `[${value.map(item => canonicalJson(item)).join(',')}]`
   if (typeof value === 'object') {
+    const prototype: unknown = Object.getPrototypeOf(value)
+    if (prototype !== Object.prototype && prototype !== null) throw new TypeError('only plain objects and arrays have a JSON form')
     const entries = Object.entries(value).filter(([, member]) => member !== undefined).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
     return `{${entries.map(([key, member]) => `${JSON.stringify(key)}:${canonicalJson(member)}`).join(',')}}`
   }
@@ -100,8 +133,8 @@ export function hashArgs(args: unknown): string | undefined {
 
 /**
  * The hash a grant for a Fetch route is keyed by: method, path and the body the home read itself.
- * @param request - the method and absolute path as the home received them, and the body bytes read, at most {@link GRANT_BODY_CAP_BYTES}.
- * @returns the lowercase hex SHA-256 over the method, the path and the body's JCS text when it parses as JSON and its raw bytes otherwise; undefined for a body over the cap.
+ * @param request - the method and the absolute path with its query string as the home received them, and the body bytes read, at most {@link GRANT_BODY_CAP_BYTES}.
+ * @returns the lowercase hex SHA-256 over the method, the path with its query and the body's JCS text when it parses as JSON and its raw bytes otherwise; undefined for a body over the cap.
  */
 export function hashRequest(request: { readonly method: string; readonly path: string; readonly body: Uint8Array }): string | undefined {
   if (request.body.byteLength > GRANT_BODY_CAP_BYTES) return undefined
@@ -148,7 +181,7 @@ interface StoredGrant {
 interface StoredAnswer {
   readonly grantId: string
   readonly holder: GrantHolder
-  readonly requestId: string
+  readonly requestKey: string
   readonly answer: string
   readonly expiresAt: number
   readonly seq: number
@@ -159,6 +192,7 @@ interface StoredHold {
   readonly holder: GrantHolder
   readonly feature: HoldFeature
   readonly id: string
+  readonly scope: string
   readonly openedAt: number
   lastUsedAt: number
 }
@@ -238,31 +272,31 @@ export class GrantStore {
    * @param holder - the device and listener the call arrived on.
    * @param action - the action.
    * @param hash - the hash of the call the home received.
-   * @param opens - the terminal or picker the call itself opens, as the home read it from the call; none for a call that opens nothing.
+   * @param opens - the terminal or picker (and scope) the call itself opens, as the home read it from the call; none for a call that opens nothing.
    * @returns the grant id and factor used, or undefined when none covers the call.
    */
-  consume(holder: GrantHolder, action: string, hash: string, opens?: { readonly feature: HoldFeature; readonly id: string }): { readonly grantId: string; readonly factor: GrantFactor } | undefined {
+  consume(holder: GrantHolder, action: string, hash: string, opens?: HoldTarget): { readonly grantId: string; readonly factor: GrantFactor } | undefined {
     const found = this.find(holder, action, hash)
     if (found === undefined) return undefined
     this.grants = this.grants.filter(stored => stored !== found)
     const hold = found.entry.hold
-    if (hold !== undefined && opens !== undefined && hold.feature === opens.feature && hold.id === opens.id) this.openHold(holder, hold.feature, hold.id)
+    if (hold !== undefined && opens !== undefined && hold.feature === opens.feature && hold.id === opens.id) this.openHold(holder, hold.feature, hold.id, opens.scope)
     return { grantId: found.grantId, factor: found.factor }
   }
 
   /**
    * Mint the grant to answer one prompt one way.
    * @param holder - the device and listener.
-   * @param requestId - the prompt's request id.
+   * @param requestKey - the prompt's {@link answerKey}.
    * @param answer - the answer value the person confirmed, such as `allowed-once`.
    * @returns the grant's id and end.
    */
-  mintAnswer(holder: GrantHolder, requestId: string, answer: string): MintedGrant {
+  mintAnswer(holder: GrantHolder, requestKey: string, answer: string): MintedGrant {
     this.sweep()
     const grantId = newSecret(8, this.random)
     const expiresAt = this.now() + GRANT_LIFE_MS
-    this.answers = this.answers.filter(stored => !(sameHolder(stored.holder, holder) && stored.requestId === requestId && stored.answer === answer))
-    this.answers.push({ grantId, holder, requestId, answer, expiresAt, seq: this.seq++ })
+    this.answers = this.answers.filter(stored => !(sameHolder(stored.holder, holder) && stored.requestKey === requestKey && stored.answer === answer))
+    this.answers.push({ grantId, holder, requestKey, answer, expiresAt, seq: this.seq++ })
     this.limit(holder)
     return { grantId, expiresAt }
   }
@@ -270,13 +304,13 @@ export class GrantStore {
   /**
    * Use the grant that covers one answer.
    * @param holder - the device and listener the answer arrived on.
-   * @param requestId - the prompt's request id.
+   * @param requestKey - the prompt's {@link answerKey}.
    * @param answer - the answer value.
-   * @returns the grant id used, or undefined when no live grant covers exactly this request and answer.
+   * @returns the grant id used, or undefined when no live grant covers exactly this prompt and answer.
    */
-  consumeAnswer(holder: GrantHolder, requestId: string, answer: string): string | undefined {
+  consumeAnswer(holder: GrantHolder, requestKey: string, answer: string): string | undefined {
     const at = this.now()
-    const found = this.answers.find(stored => sameHolder(stored.holder, holder) && stored.requestId === requestId && stored.answer === answer && stored.expiresAt > at)
+    const found = this.answers.find(stored => sameHolder(stored.holder, holder) && stored.requestKey === requestKey && stored.answer === answer && stored.expiresAt > at)
     if (found === undefined) return undefined
     this.answers = this.answers.filter(stored => stored !== found)
     return found.grantId
@@ -287,10 +321,11 @@ export class GrantStore {
    * @param holder - the device and listener.
    * @param feature - the feature.
    * @param id - the terminal or picker id the call names.
-   * @returns whether a live hold for exactly this id exists.
+   * @param scope - {@link scopeOf} of the resource the call names.
+   * @returns whether a live hold for exactly this id in this scope exists.
    */
-  holdAdmits(holder: GrantHolder, feature: HoldFeature, id: string): boolean {
-    const key = holdKey(holder, feature, id)
+  holdAdmits(holder: GrantHolder, feature: HoldFeature, id: string, scope: string): boolean {
+    const key = holdKey(holder, feature, id, scope)
     const hold = this.holds.get(key)
     if (hold === undefined) return false
     const at = this.now()
@@ -307,12 +342,13 @@ export class GrantStore {
    * counts as activity for each hold it finds.
    * @param holder - the device and listener.
    * @param feature - the feature.
-   * @returns whether at least one live hold exists.
+   * @param scope - {@link scopeOf} of the resource the call names.
+   * @returns whether at least one live hold in this scope exists.
    */
-  holdsAny(holder: GrantHolder, feature: HoldFeature): boolean {
+  holdsAny(holder: GrantHolder, feature: HoldFeature, scope: string): boolean {
     let found = false
     for (const hold of [...this.holds.values()]) {
-      if (hold.feature === feature && sameHolder(hold.holder, holder) && this.holdAdmits(holder, feature, hold.id)) found = true
+      if (hold.feature === feature && hold.scope === scope && sameHolder(hold.holder, holder) && this.holdAdmits(holder, feature, hold.id, scope)) found = true
     }
     return found
   }
@@ -322,9 +358,10 @@ export class GrantStore {
    * @param holder - the device and listener.
    * @param feature - the feature.
    * @param id - the terminal or picker id.
+   * @param scope - {@link scopeOf} of the resource it was opened on.
    */
-  closeHold(holder: GrantHolder, feature: HoldFeature, id: string): void {
-    this.holds.delete(holdKey(holder, feature, id))
+  closeHold(holder: GrantHolder, feature: HoldFeature, id: string, scope: string): void {
+    this.holds.delete(holdKey(holder, feature, id, scope))
   }
 
   /**
@@ -335,6 +372,13 @@ export class GrantStore {
     this.grants = this.grants.filter(stored => stored.holder.deviceId !== deviceId)
     this.answers = this.answers.filter(stored => stored.holder.deviceId !== deviceId)
     for (const [key, hold] of [...this.holds]) if (hold.holder.deviceId === deviceId) this.holds.delete(key)
+  }
+
+  /** End every hold and grant of every device: all sessions were rotated. */
+  endAll(): void {
+    this.grants = []
+    this.answers = []
+    this.holds.clear()
   }
 
   /**
@@ -354,9 +398,9 @@ export class GrantStore {
   }
 
   /** Open or refresh the hold of one terminal or picker. */
-  private openHold(holder: GrantHolder, feature: HoldFeature, id: string): void {
+  private openHold(holder: GrantHolder, feature: HoldFeature, id: string, scope: string): void {
     const at = this.now()
-    this.holds.set(holdKey(holder, feature, id), { holder, feature, id, openedAt: at, lastUsedAt: at })
+    this.holds.set(holdKey(holder, feature, id, scope), { holder, feature, id, scope, openedAt: at, lastUsedAt: at })
   }
 
   /** Drop what expired. */
@@ -394,8 +438,9 @@ function sameHolder(left: GrantHolder, right: GrantHolder): boolean {
  * @param holder - the device and listener.
  * @param feature - the feature.
  * @param id - the terminal or picker id.
+ * @param scope - {@link scopeOf} of the resource.
  * @returns the key.
  */
-function holdKey(holder: GrantHolder, feature: HoldFeature, id: string): string {
-  return JSON.stringify([holder.deviceId, holder.listener, feature, id])
+function holdKey(holder: GrantHolder, feature: HoldFeature, id: string, scope: string): string {
+  return JSON.stringify([holder.deviceId, holder.listener, feature, scope, id])
 }

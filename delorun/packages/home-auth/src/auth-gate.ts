@@ -5,19 +5,19 @@
  *
  * - `free`: any approved reach device, no prompt.
  * - `face`: while the Face ID preview flag is on, a reach device passes only with a grant the home keeps for exactly this
- *   call. The home reads the request body itself, up to {@link GRANT_BODY_CAP_BYTES}, and hashes method, path and body
+ *   call. The home reads the request body itself, up to {@link GRANT_BODY_CAP_BYTES}, and hashes method, path with query and body
  *   ({@link hashRequest}); the `Delorun-Grant` header only names the grant id and must equal the id of the grant that hash
  *   finds. The grant is used up just before the route's handler runs, and the header is removed before the handler sees
- *   the request. A device that holds a passkey is admitted by a grant alone; a device without one may also hold the
+ *   the request. Under Careful, a route with `legacy.phonePowers: 'full'` is refused before the grant lookup for every device, until Phone powers is removed. A device that holds a passkey is admitted by a grant alone; a device without one may also hold the
  *   legacy unlock the route declared in `legacy`. While the flag is off, `face` behaves as `gateByUnlock` with `legacy`.
- * - `computer`: not a Fetch gate; such a route registers no `admitPeer`, and the owner's Peer alone reaches it.
+ * - `computer` and `ticket`: not Fetch gates; such a route registers no `admitPeer` of this kind.
  *
  * @module @delorun/home-auth/auth-gate
  */
 import { authClassOf } from './auth-classes.ts'
 import { gateByUnlock, type DangerousModeHome } from './computer-only.ts'
 import { refusalBody } from './errors.ts'
-import { GRANT_BODY_CAP_BYTES, hashRequest, type HoldFeature } from './grants.ts'
+import { GLOBAL_SCOPE, GRANT_BODY_CAP_BYTES, hashRequest, type HoldFeature } from './grants.ts'
 import { REACH_DEVICE, type ReachDevicePrincipal } from './reach-access.ts'
 import type { HomeAuthService } from './service.ts'
 
@@ -108,7 +108,7 @@ export async function readBodyCapped(request: Request, cap: number): Promise<Uin
 export function gateByClass(homeAuth: () => GrantGateHome | undefined, fetch: (request: Request) => Promise<Response>, options: GateOptions): ClassGate {
   const authClass = authClassOf(options.row)
   if (authClass === undefined) throw new Error(`home-auth: gateByClass names the row "${options.row}", which AUTH_CLASSES does not list`)
-  if (authClass === 'computer') throw new Error(`home-auth: the row "${options.row}" is computer-only; a computer route registers no admitPeer`)
+  if (authClass === 'computer' || authClass === 'ticket') throw new Error(`home-auth: the row "${options.row}" is a ${authClass} row; such a route registers no class gate`)
   const principals = new WeakMap<Request, ReachDevicePrincipal>()
   const legacy = gateByUnlock(homeAuth, fetch, { renews: options.legacy.renews, ...options.legacy.grace === undefined ? {} : { grace: options.legacy.grace }, ...options.legacy.phonePowers === undefined ? {} : { phonePowers: options.legacy.phonePowers } })
   const refuse = (message: string): Response => new Response(refusalBody('ELEVATION_REQUIRED', message), { status: 403, headers: REFUSAL_HEADERS })
@@ -125,19 +125,22 @@ export function gateByClass(homeAuth: () => GrantGateHome | undefined, fetch: (r
       const home = homeAuth()
       const grants = home?.passkeysEnabled() === true ? home.faceGrants() : undefined
       if (home === undefined || grants === undefined) return legacy.fetch(request)
+      // Until Phone powers is removed, a Full-only route stays refused under Careful before any grant is looked up, for every device.
+      if (options.legacy.phonePowers === 'full' && home.phonePowers?.().level !== 'full') return legacy.fetch(request)
       const holder = { deviceId: principal.deviceId, listener: principal.listener }
       const passkey = home.deviceHasPasskey(principal.deviceId)
       const body = await readBodyCapped(request.clone(), GRANT_BODY_CAP_BYTES)
       if (body === undefined) return refuse('This request is too large to confirm. Make it smaller')
-      const pathname = new URL(request.url).pathname
+      const url = new URL(request.url)
+      const pathAndQuery = url.pathname + url.search
       const held = options.hold?.idOf(request, body)
       const feature = options.hold?.feature
-      if (feature !== undefined && held !== undefined && grants.holdAdmits(holder, feature, held)) return fetch(withoutGrantHeader(request))
-      const hash = hashRequest({ method: request.method, path: pathname, body })
+      if (feature !== undefined && held !== undefined && grants.holdAdmits(holder, feature, held, GLOBAL_SCOPE)) return fetch(withoutGrantHeader(request))
+      const hash = hashRequest({ method: request.method, path: pathAndQuery, body })
       const named = request.headers.get(GRANT_HEADER)
       const found = hash === undefined ? undefined : grants.peek(holder, options.action, hash)
       if (hash !== undefined && found !== undefined && named === found.grantId) {
-        const opens = options.hold?.opens === true && feature !== undefined && held !== undefined ? { feature, id: held } : undefined
+        const opens = options.hold?.opens === true && feature !== undefined && held !== undefined ? { feature, id: held, scope: GLOBAL_SCOPE } : undefined
         grants.consume(holder, options.action, hash, opens)
         return fetch(withoutGrantHeader(request))
       }

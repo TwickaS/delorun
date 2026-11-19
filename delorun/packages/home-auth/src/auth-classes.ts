@@ -5,7 +5,9 @@
  * - `free`: any approved device, no prompt;
  * - `face`: one Face ID (or one PIN, as a one-action grant) at the moment of the action; the home keeps the grant
  *   ({@link GrantStore}) and the gate uses it up ({@link gateByClass}, the reach policy's condition, `checkAnswer`);
- * - `computer`: only the person at the computer.
+ * - `computer`: only the person at the computer;
+ * - `ticket`: a device route that works only with a single-use enrolment ticket the computer's approval minted, or that
+ *   only shows a code the person types at the computer. No gate admits it by class; the route checks its own ticket.
  *
  * The rows of the Remote methods are listed here from the tables of `./reach-access.ts`; the rows of the plugin Fetch
  * routes and of Changes come from `./route-access.ts`, which lane C maps route by route. {@link checkAuthTable} is the
@@ -20,8 +22,8 @@ import {
 } from './reach-access.ts'
 import { CHANGES_ROUTE_ACCESS, COMPUTER_ONLY, PLUGIN_ROUTE_ACCESS, type RouteAccess, type RouteLevel } from './route-access.ts'
 
-/** The three classes. */
-export const AUTH_CLASS_NAMES = ['free', 'face', 'computer'] as const
+/** The four classes. */
+export const AUTH_CLASS_NAMES = ['free', 'face', 'computer', 'ticket'] as const
 
 /** One of {@link AUTH_CLASS_NAMES}. */
 export type AuthClass = (typeof AUTH_CLASS_NAMES)[number]
@@ -104,15 +106,16 @@ const ANSWER_ROWS: readonly AuthRow[] = [
 /** The `/auth/passkey/*` routes. */
 const PASSKEY_ROWS: readonly AuthRow[] = [
   { id: 'auth:/auth/passkey/state', surface: 'auth', authClass: 'free', reason: 'a device reads its own passkeys and whether a ticket waits' },
-  { id: 'auth:/auth/passkey/register/options', surface: 'auth', authClass: 'computer', reason: 'enrolment needs the single-use ticket the computer\'s approval minted, so the root of the factor is the computer\'s decision' },
-  { id: 'auth:/auth/passkey/register', surface: 'auth', authClass: 'computer', reason: 'enrolment needs the single-use ticket the computer\'s approval minted, so the root of the factor is the computer\'s decision' },
-  { id: 'auth:/auth/passkey/add/request', surface: 'auth', authClass: 'computer', reason: 'the device only shows a code; the person types it at the computer' },
+  { id: 'auth:/auth/passkey/register/options', surface: 'auth', authClass: 'ticket', reason: 'enrolment needs the single-use ticket the computer\'s approval minted, so the root of the factor is the computer\'s decision' },
+  { id: 'auth:/auth/passkey/register', surface: 'auth', authClass: 'ticket', reason: 'enrolment needs the single-use ticket the computer\'s approval minted, so the root of the factor is the computer\'s decision' },
+  { id: 'auth:/auth/passkey/add/request', surface: 'auth', authClass: 'ticket', reason: 'the device only shows a code; the person types it at the computer' },
   { id: 'auth:/auth/passkey/add/pending', surface: 'auth', authClass: 'computer', reason: 'lists the requests the person at the computer may approve' },
   { id: 'auth:/auth/passkey/add/approve', surface: 'auth', authClass: 'computer', reason: 'adding a passkey is approved by a code typed at the computer' },
   { id: 'auth:/auth/passkey/options', surface: 'auth', authClass: 'free', reason: 'asks for a challenge; nothing happens until an assertion verifies' },
   { id: 'auth:/auth/passkey/verify', surface: 'auth', authClass: 'free', reason: 'a failed assertion counts as a wrong try; a passed one mints a one-action grant' },
   { id: 'auth:/auth/passkey/pin', surface: 'auth', authClass: 'free', reason: 'a correct PIN mints a one-action grant; wrong tries count as an unlock does' },
   { id: 'auth:/auth/passkey/devices', surface: 'auth', authClass: 'face', reason: 'it reads the device list and each device\'s passkeys, which is device metadata' },
+  { id: 'auth:/auth/devices/remove', surface: 'auth', authClass: 'face', reason: 'a device removes another device only with a grant for exactly that removal, while Face ID is on; removing itself needs none' },
   { id: 'auth:/auth/passkey/remove', surface: 'auth', authClass: 'face', reason: 'a device removes its own or another device\'s passkey only with a grant for exactly that removal' },
 ]
 

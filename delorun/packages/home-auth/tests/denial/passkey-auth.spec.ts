@@ -177,12 +177,12 @@ describe('assertion', () => {
   })
 
   // Removing the challenge's single use lets an assertion be replayed for a second grant.
-  it('refuses a replayed challenge and counts it as a wrong try', async () => {
+  it('refuses a replayed challenge and counts nothing: a retried request is not a guess', async () => {
     const phone = await enrol()
     const response = phone.get(await options(), { origin: ORIGIN })
     await auth.verify(asker(PHONE), ADDRESS, response)
     expect(await code(() => auth.verify(asker(PHONE), ADDRESS, response))).toBe('PASSKEY_ASSERTION_INVALID')
-    expect(misses).toHaveLength(1)
+    expect(misses).toHaveLength(0)
   })
 
   // Removing the expiry lets an old challenge answer.
@@ -191,6 +191,8 @@ describe('assertion', () => {
     const asked = await options()
     clock.at += 60_001
     expect(await code(() => auth.verify(asker(PHONE), ADDRESS, phone.get(asked, { origin: ORIGIN })))).toBe('PASSKEY_ASSERTION_INVALID')
+    // A sheet left open past its 60 seconds costs no try; a failed signature, user-verification or counter check does.
+    expect(misses).toHaveLength(0)
   })
 
   // Removing the relying-party check lets an assertion for another site count.
@@ -288,8 +290,8 @@ describe('a PIN on a device', () => {
   })
 
   // Face ID for "Allow once" is not a persistent allow.
-  it('mints an answer grant bound to the request id and the value', async () => {
-    await auth.pinGrant(asker(PHONE), '1234', { kind: 'answer', requestId: 'call-1', answer: 'allowed-once' })
+  it('mints an answer grant bound to the prompt and the value', async () => {
+    await auth.pinGrant(asker(PHONE), '1234', { kind: 'answer', requestKey: 'call-1', answer: 'allowed-once' })
     expect(grants.consumeAnswer({ deviceId: PHONE, listener: LISTENER }, 'call-1', 'allowed-always')).toBeUndefined()
     expect(grants.consumeAnswer({ deviceId: PHONE, listener: LISTENER }, 'call-1', 'allowed-once')).toBeDefined()
   })

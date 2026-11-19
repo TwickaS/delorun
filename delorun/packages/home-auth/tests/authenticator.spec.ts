@@ -27,6 +27,7 @@ import { defaultPermissionOf, EXTERNAL_AGENT_REFUSAL, FULL_ACCESS_REFUSAL, HomeA
 import { createReachAccessPolicy, REACH_ALLOWED_ACTIONS, REACH_DENIED_ACTIONS, REACH_ELEVATED_ACTIONS, REACH_KEY_ACTIONS, reachDevicePrincipal, type ReachDevicePrincipal } from '../src/reach-access.ts'
 import { REQUEST_LISTENER } from '@delorun/home'
 import { DeviceStore } from '../src/devices.ts'
+import { answerKey } from '../src/grants.ts'
 import { claimOf, recordOf } from './fixtures/home.ts'
 
 /** The entry id of a row that only the computer changes. */
@@ -227,6 +228,26 @@ describe('the authenticator provider', () => {
     // Pins the guard the Gateway calls: it is the same check.
     expect(() => { ctx.get('remoteAnswerGuard')?.check({ peer: admitted.peer, event: 'approval/request', request: { grants: 'full-access' }, value: 'allowed-once' } as never) })
       .toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
+  })
+
+  // Removing the agent or the grants marker from the answer key lets a grant for one prompt answer another that shares its call id.
+  it('admits a granting answer only for the prompt, the call id and the answer the person confirmed with Face ID, once', async () => {
+    ctx.provide('previewFlags', { isOn: () => true, declare: () => () => {} } as never)
+    ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
+    const admitted = provider().admit(request({ headers: { cookie: `__Host-delorun-session=${await session(2)}` } }), 'reach-tailscale-private')
+    if (admitted.kind !== 'admitted') throw new Error('not admitted')
+    const holder = { deviceId: recordOf(2, ADDRESS).id, listener: 'reach-tailscale-private' } as const
+    const grants = ctx.homeAuth.faceGrants()
+    if (grants === undefined) throw new Error('no grant store')
+    grants.mintAnswer(holder, answerKey({ agent: 'chat-a', callId: 'call_0', grants: 'full-access' }), 'allowed-once')
+    const answer = (agent: string, grantsMarker: string, value: string): void => {
+      provider().checkAnswer({ peer: admitted.peer, event: 'approval/request', request: { agent: { id: agent }, callId: 'call_0', grants: grantsMarker }, value })
+    }
+    expect(() => { answer('chat-b', 'full-access', 'allowed-once') }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
+    expect(() => { answer('chat-a', 'workspace-management', 'allowed-once') }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
+    expect(() => { answer('chat-a', 'full-access', 'allowed-always') }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
+    expect(() => { answer('chat-a', 'full-access', 'allowed-once') }).not.toThrow()
+    expect(() => { answer('chat-a', 'full-access', 'allowed-once') }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
   })
 
   it('lets an unlocked device give full-access, workspace-management and external-agent grants while dangerous mode holds, and no other device', async () => {

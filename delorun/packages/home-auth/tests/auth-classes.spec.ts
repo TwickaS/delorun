@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { AUTH_CLASSES, authClassOf, checkAuthTable, type AuthRow } from '../src/auth-classes.ts'
-import { REACH_ALLOWED_ACTIONS, REACH_DENIED_ACTIONS, REACH_ELEVATED_ACTIONS, REACH_KEY_ACTIONS } from '../src/reach-access.ts'
+import { REACH_ALLOWED_ACTIONS, REACH_DANGEROUS_ACTIONS, REACH_DENIED_ACTIONS, REACH_ELEVATED_ACTIONS, REACH_KEY_ACTIONS } from '../src/reach-access.ts'
 import { CHANGES_ROUTE_ACCESS, PLUGIN_ROUTE_ACCESS } from '../src/route-access.ts'
 
 const rows = (surface: AuthRow['surface']): AuthRow[] => AUTH_CLASSES.filter(row => row.surface === surface)
@@ -29,6 +29,7 @@ describe('AUTH_CLASSES', () => {
     for (const action of Object.keys(REACH_ALLOWED_ACTIONS)) expect(authClassOf(`remote:${action}`), action).toBe('free')
     for (const action of Object.keys(REACH_ELEVATED_ACTIONS)) expect(authClassOf(`remote:${action}`), action).toBe('face')
     for (const action of Object.keys(REACH_DENIED_ACTIONS)) expect(authClassOf(`remote:${action}`), action).toBe('computer')
+    for (const action of Object.keys(REACH_DANGEROUS_ACTIONS)) expect(authClassOf(`remote:${action}`), action).toBe('computer')
     for (const action of Object.keys(REACH_KEY_ACTIONS)) {
       expect(authClassOf(`remote:${action}`), action).toBe(action === 'credentials/set' || action === 'credentials/unset' ? 'face' : 'free')
     }
@@ -62,8 +63,10 @@ describe('AUTH_CLASSES', () => {
 
   // The passkey routes: enrolment stays at the computer, the grant routes are free to ask (a failed try counts), removal is face.
   it('classifies the passkey routes', () => {
-    expect(authClassOf('auth:/auth/passkey/register')).toBe('computer')
+    // The ticket routes work from a device with a single-use ticket or only show a code, so a class gate must not call them computer-only.
+    for (const id of ['register/options', 'register', 'add/request']) expect(authClassOf(`auth:/auth/passkey/${id}`), id).toBe('ticket')
     expect(authClassOf('auth:/auth/passkey/add/approve')).toBe('computer')
+    expect(authClassOf('auth:/auth/devices/remove')).toBe('face')
     expect(authClassOf('auth:/auth/passkey/verify')).toBe('free')
     expect(authClassOf('auth:/auth/passkey/remove')).toBe('face')
   })
