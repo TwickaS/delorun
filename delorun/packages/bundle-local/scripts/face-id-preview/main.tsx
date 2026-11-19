@@ -14,6 +14,7 @@ import { AddFaceId, FaceIdPairingStep, PasskeyCodeEntry } from '../../src/client
 import { answerActionOf } from '../../src/client/FaceIdAnswerAction.tsx'
 import { FaceIdPin } from '../../src/client/FaceIdPin.tsx'
 import { FaceIdSheet } from '../../src/client/FaceIdSheet.tsx'
+import { callActionOf } from '../../src/client/FaceIdGrantOverlay.tsx'
 import { PasskeyDevices } from '../../src/client/PasskeyDevices.tsx'
 import { fakeApi, fakeBrowser } from '../../src/client/face-id-fake.ts'
 import { en } from '../../src/client/face-id-locales.ts'
@@ -33,6 +34,8 @@ const ACTION: FaceIdAction = {
   items: ['Reports 1.2.0', 'Chart helpers 0.4.1', 'Spreadsheet export 2.0.0', 'Slide builder 0.9.3', 'Notes sync 1.1.0'],
   grant: { actions: [{ action: 'plugins/install', hash: 'h1' }] },
 }
+/** The sheet a phone shows when the home refuses a plugin install for want of a grant, as the Face ID step builds it. */
+const INSTALL = await callActionOf(t, { action: 'plugin-packs/add', call: { method: 'POST', path: '/api/delorunPacks.add', body: { names: ['@delorun/reports'] } } })
 const PASSKEY = { credentialId: 'BBBB', createdAt: NOW - 3 * DAY, lastUsedAt: NOW - DAY, synced: true }
 const PHONE_DEVICES: readonly PasskeyDevice[] = [{ deviceId: 'this', label: 'This device', thisDevice: true, passkeys: [PASSKEY] }]
 const COMPUTER_DEVICES: readonly PasskeyDevice[] = [
@@ -50,6 +53,9 @@ function screenOf(screen: string): ReactNode {
   switch (screen) {
     case 'b2-sheet':
       return <FaceIdSheet t={t} action={ACTION} kind="faceId" api={fakeApi()} browser={fakeBrowser()} hasPasskey fallback="pin"
+        onGranted={noop} onCancel={noop} onFallback={noop} />
+    case 'wire-install':
+      return <FaceIdSheet t={t} action={INSTALL} kind="faceId" api={fakeApi()} browser={fakeBrowser()} hasPasskey fallback="pin"
         onGranted={noop} onCancel={noop} onFallback={noop} />
     case 'b2-answer':
       return <FaceIdSheet t={t} action={answerActionOf(t, { sessionId: 'chat-1', callId: 'call-7', grants: 'external-agent', toolName: 'Claude Code' })} kind="faceId"

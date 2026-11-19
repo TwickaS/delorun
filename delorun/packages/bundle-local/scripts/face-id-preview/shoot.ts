@@ -32,6 +32,7 @@ await mkdir(out, { recursive: true })
 const SHOTS: readonly { readonly name: string; readonly screen: string; readonly wide: boolean; readonly tap?: string }[] = [
   { name: 'b2-sheet', screen: 'b2-sheet', wide: true },
   { name: 'b2-answer', screen: 'b2-answer', wide: false },
+  { name: 'wire-install', screen: 'wire-install', wide: false },
   { name: 'b2-cancelled', screen: 'b2-cancelled', wide: false, tap: '[data-face-id-sheet] button' },
   { name: 'b3-pin', screen: 'b3-pin', wide: false },
   { name: 'b1-pairing', screen: 'b1-pairing', wide: true },
