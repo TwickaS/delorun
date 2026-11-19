@@ -15,7 +15,7 @@
 import { useEffect, useState } from 'react'
 import { Button, CommandText, Modal, relativeTime, StateDot, Tag } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { HostObservable, InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type { ChangesStateView, EntryView, FolderView, HarnessCopyView, HarnessEntryView, HarnessPendingView, PendingListView, PendingView, RiskKindView, ShownView, WillLoadView, WorkReviewView } from '../wire.ts'
+import type { ChangesControl, ChangesStateView, EntryView, FolderView, HarnessCopyView, HarnessEntryView, HarnessPendingView, PendingListView, PendingView, RiskKindView, ShownView, WillLoadView, WorkReviewView } from '../wire.ts'
 import { AccessNote } from './AccessNote.tsx'
 import type { ActionOutcome, ChangesLoad, CopyOutcome, HarnessEffects } from './controller.ts'
 import { ChangeDetail } from './ChangeDetail.tsx'
@@ -122,6 +122,16 @@ export interface ChangesSectionInjected {
    */
   readonly makeCopy: () => Promise<CopyOutcome>
   /**
+   * Ask for safe mode at the next start.
+   * @returns the outcome.
+   */
+  readonly startSafeMode: () => Promise<ActionOutcome>
+  /**
+   * End safe mode.
+   * @returns the outcome.
+   */
+  readonly exitSafeMode: () => Promise<ActionOutcome>
+  /**
    * Turn protection on.
    * @returns the outcome.
    */
@@ -172,6 +182,8 @@ type Ask =
   | { readonly kind: 'work', readonly plugin: string }
   | { readonly kind: 'selfUndo', readonly entry: HarnessEntryView }
   | { readonly kind: 'selfDiscard', readonly change: HarnessPendingView }
+  | { readonly kind: 'safeModeOn' }
+  | { readonly kind: 'safeModeOff' }
 
 /** The dialog on display. */
 type Dialog =
@@ -262,6 +274,8 @@ export function ChangesSection(props: ChangesSectionProps) {
         onUndo={(entry) => { setDialog({ kind: 'ask', ask: { kind: 'selfUndo', entry } }) }} />
       <ProtectionNotices notices={state.notices} t={t} busy={busy} onDismiss={(id) => { run(() => props.noticeSeen(id)) }} />
       <Facts state={state} t={t} />
+      <SafeModeCard state={state} t={t} busy={busy} controlOf={controlOf}
+        onChange={(on) => { setDialog({ kind: 'ask', ask: { kind: on ? 'safeModeOn' : 'safeModeOff' } }) }} />
       <WorkCard state={state} t={t} busy={busy}
         onDone={(plugin) => { setDialog({ kind: 'done', plugin }) }}
         onStart={(plugin) => { setDialog({ kind: 'ask', ask: { kind: 'work', plugin } }) }} />
@@ -362,6 +376,8 @@ function Dialogs(props: ChangesSectionProps & {
           case 'work': return run(() => props.beginWork(ask.plugin))
           case 'selfUndo': return run(() => props.harnessUndo(ask.entry.id))
           case 'selfDiscard': return run(() => props.harnessDiscard(ask.change.id))
+          case 'safeModeOn': return run(() => props.startSafeMode())
+          case 'safeModeOff': return run(() => props.exitSafeMode())
         }
       }} />
     case 'protectionOn': return <ProtectionOnDialog loaded={state.unreviewedSinceOff} t={t} busy={busy} onClose={close}
@@ -425,6 +441,29 @@ function Facts({ state, t }: { readonly state: ChangesStateView, readonly t: T }
     {state.problems.map(problem => <p key={problem} className={css.failureText} role="note"><StateDot state="error" />{t('problem', { problem })}</p>)}
     {state.safeMode === undefined ? null : <p className={css.meta} role="note">{t('safeMode')}</p>}
     {failure === undefined ? null : <p className={css.failureText} role="note"><StateDot state="error" />{t('lastStart.failed', { failure })}</p>}
+  </div>
+}
+
+/**
+ * Safe mode: whether it is on, and the button that starts or ends it for the next start.
+ * @param props - the state, the dictionary, whether an action runs, each control's decision and the ask.
+ * @returns the card.
+ */
+function SafeModeCard({ state, t, busy, controlOf, onChange }: {
+  readonly state: ChangesStateView
+  readonly t: T
+  readonly busy: boolean
+  readonly controlOf: (control: ChangesControl) => { readonly disabled: boolean, readonly title: string | undefined }
+  readonly onChange: (on: boolean) => void
+}) {
+  const on = state.safeMode !== undefined
+  const use = controlOf('plugin-other')
+  return <div className={css.facts} data-delorun-safe-mode={on ? 'on' : 'off'}>
+    <div className={css.name}>{t('safeMode.heading')}</div>
+    <p className={css.meta}>{t(on ? 'safeMode.onBody' : 'safeMode.offBody')}</p>
+    <div className={css.actions}>
+      <Button variant="outline" size="sm" disabled={busy || use.disabled} title={use.title} onClick={() => { onChange(!on) }}>{t(on ? 'safeMode.leave' : 'safeMode.start')}</Button>
+    </div>
   </div>
 }
 
@@ -643,5 +682,7 @@ function askCopy(ask: Ask, t: T): { readonly title: string, readonly body: strin
     case 'work': return { title: t('confirm.work.title', { plugin: ask.plugin }), body: t('confirm.work.body'), confirm: t('work.start') }
     case 'selfUndo': return { title: t('confirm.undo.title'), body: t('confirm.selfUndo.body', { file: ask.entry.file }), confirm: t('confirm.undo') }
     case 'selfDiscard': return { title: t('confirm.selfDiscard.title'), body: t('confirm.selfDiscard.body', { file: ask.change.file }), confirm: t('review.discard') }
+    case 'safeModeOn': return { title: t('confirm.safeModeOn.title'), body: t('confirm.safeModeOn.body'), confirm: t('safeMode.start') }
+    case 'safeModeOff': return { title: t('confirm.safeModeOff.title'), body: t('confirm.safeModeOff.body'), confirm: t('safeMode.leave') }
   }
 }

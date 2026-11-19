@@ -607,7 +607,7 @@ describe('on a phone, the steps only the computer can do', () => {
     await forward(titles().indexOf(en['computer.title.pin']))
     expect(heading().textContent).toBe(en['computer.title.pin'])
     expect(screen.getByText(PIN_LEAD)).toBeTruthy()
-    expect(screen.queryByLabelText(en['pin.label'])).toBeNull()
+    expect(screen.queryByLabelText(en['pin.setup.pinLabel'])).toBeNull()
   })
 
   it('records the step as deferred and goes on when the person chooses Do it on my computer', async () => {

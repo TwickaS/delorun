@@ -174,3 +174,16 @@
     justify-content: flex-end;
   }
 }
+
+.setAside {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.subheading {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}

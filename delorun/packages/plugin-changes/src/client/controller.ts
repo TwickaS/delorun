@@ -36,6 +36,7 @@ import {
   type RestartCancelView,
   type RequestedView,
   type RevealedView,
+  type SafeModeView,
   type ReloadView,
   type RiskKindView,
   type ShownView,
@@ -397,6 +398,22 @@ export class ChangesController {
       return { ok: true, key: made.created ? 'toast.copy.made' : 'toast.copy.found' }
     })
     return outcome.kind === 'done' && copy !== undefined ? { kind: 'done', copy } : { kind: 'refused' }
+  }
+
+  /**
+   * Ask for safe mode at the next start: Delorun's own plugins only.
+   * @returns the outcome.
+   */
+  async startSafeMode(): Promise<ActionOutcome> {
+    return await this.act('plugin-other', () => request<SafeModeView>(ACTION_PATHS['safe-mode'], {}), () => ({ ok: true, key: 'toast.safeMode.on' }))
+  }
+
+  /**
+   * End safe mode, so the next start loads the whole profile again.
+   * @returns the outcome.
+   */
+  async exitSafeMode(): Promise<ActionOutcome> {
+    return await this.act('plugin-other', () => request<SafeModeView>(ACTION_PATHS['exit-safe-mode'], {}), () => ({ ok: true, key: 'toast.safeMode.off' }))
   }
 
   /**

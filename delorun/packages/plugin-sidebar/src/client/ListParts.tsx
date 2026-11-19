@@ -66,10 +66,10 @@ export function useScrollFade() {
 
 /**
  * A shelf's header: its name, a rule, its count and a chevron; pressing it folds the shelf.
- * @param props - the shelf, its count, whether it is open, what pressing does, whether it is first and whether a drag is over it.
+ * @param props - the shelf, its count, whether it is open, what pressing does, whether it is first, whether a drag is over it and whether it takes drops.
  * @returns the header.
  */
-export function ShelfHeader({ shelf, label, count, expanded, onToggle, first, over }: {
+export function ShelfHeader({ shelf, label, count, expanded, onToggle, first, over, dropTarget = true }: {
   readonly shelf: Shelf
   readonly label: string
   readonly count: number
@@ -80,9 +80,11 @@ export function ShelfHeader({ shelf, label, count, expanded, onToggle, first, ov
   readonly first: boolean
   /** Whether the dragged chat is over this header. */
   readonly over: boolean
+  /** Whether a dragged chat can land on this header; false outside the draggable list. */
+  readonly dropTarget?: boolean
 }) {
   return (
-    <li data-drag-id={sidebarItemId({ kind: 'marker', marker: `${shelf}-header` })} data-over={over} className={cx(css.shelfItem, first && css.firstShelf)}>
+    <li data-drag-id={dropTarget ? sidebarItemId({ kind: 'marker', marker: `${shelf}-header` }) : undefined} data-over={over} className={cx(css.shelfItem, first && css.firstShelf)}>
       <button type="button" className={css.shelfHeader} aria-expanded={expanded} disabled={onToggle === undefined} onClick={onToggle}>
         <span className={css.shelfLabel}>{label}</span>
         <span className={css.shelfRule} aria-hidden="true" />

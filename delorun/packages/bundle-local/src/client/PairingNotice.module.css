@@ -23,15 +23,6 @@
   overflow-wrap: anywhere;
 }
 
-.code {
-  width: 100%;
-  box-sizing: border-box;
-  /* 16px or more keeps a phone browser from zooming the page into the field. */
-  font-size: 20px;
-  letter-spacing: 0.25em;
-  font-variant-numeric: tabular-nums;
-}
-
 .line {
   margin: 8px 0 0;
   color: var(--dsw-alias-label-secondary);

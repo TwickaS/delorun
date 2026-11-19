@@ -1,6 +1,6 @@
 /**
  * Seamless backgrounds on mobile Safari. Safari paints a fixed element's background behind its status bar and bottom
- * toolbar, so two thin fixed strips, one colour calculated once and applied to the strips, the `html` and `body`
+ * toolbar, and needs 5px of a strip showing on screen to read it, so two fixed strips 12px tall, 7px off screen and above the page, one colour calculated once and applied to the strips, the `html` and `body`
  * backgrounds and the `theme-color` meta tag, make the browser's chrome continue the studio.
  *
  * The top colour is the studio's top edge: the main header at phone width, the sidebar header beside the main column
@@ -87,7 +87,7 @@ export class EdgeController {
     this.sheet = doc.createElement('style')
     this.sheet.setAttribute(EDGE_ATTRIBUTE, 'style')
     this.sheet.textContent = ['top', 'bottom'].map(edge =>
-      `[${EDGE_ATTRIBUTE}="${edge}"]{position:fixed;left:0;right:0;${edge}:0;height:max(12px,env(safe-area-inset-${edge}));pointer-events:none;z-index:-1;background:var(--edge-${edge}-background)}`).join('')
+      `[${EDGE_ATTRIBUTE}="${edge}"]{position:fixed;left:0;right:0;${edge}:-7px;height:max(12px,calc(env(safe-area-inset-${edge}) + 7px));pointer-events:none;z-index:10;background:var(--edge-${edge}-background)}`).join('')
     doc.head.appendChild(this.sheet)
     for (const edge of ['top', 'bottom']) {
       const strip = doc.createElement('div')

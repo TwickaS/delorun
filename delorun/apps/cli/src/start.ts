@@ -52,7 +52,7 @@ import { CountingChatGate, HomeProcess, HostNotStoppedError, listenProcessSignal
 import { appliedReachConfig, localReach, reachRowsOf } from './reach/host.ts'
 import { readReachRow, REACH_ROW_ID, type TailscalePrivateRow } from './reach/row.ts'
 import { resolveSurface, type DelorunLogger } from '@delorun/logs'
-import { afterChangesBoot, changesApprovedContent, recordChangesBoot, repointForSuccessor } from './changes/start.ts'
+import { afterChangesBoot, changesApprovedContent, recordChangesBoot, repointingBoot } from './changes/start.ts'
 import { reloadProfile } from './changes/reload.ts'
 import { runningComposition, type HarnessContext, type RunningComposition } from '@delorun/changes'
 import { checkRunningRuntime, handOffToComposedTree, handsOff, harnessContextOf, processHandOff, startEntry, type HandOff } from './changes/harness-start.ts'
@@ -628,10 +628,9 @@ async function startHomeProcess(request: StartRequest, dependencies: StartDepend
       running,
       startId,
       host: {
-        boot: async (access, controls) => {
-          if (handover !== undefined) await repointForSuccessor(request)
-          return bootProfile(handover === undefined ? startRequest : { ...startRequest, open: false }, tracked, runtime.store ? { version: running, composed: runtime.composed } : undefined, homeLog, retry, { control: controls.restart, running: booted, channel: access })
-        },
+        // A Host booted again after the first, as after a failed switch, finds its active copies pointed at the release
+        // that failed; a successor's first boot finds them pointed at its predecessor's.
+        boot: repointingBoot(request, handover !== undefined, async (access: Parameters<HomeProcessOptions['host']['boot']>[0], controls: Parameters<HomeProcessOptions['host']['boot']>[1]) => bootProfile(handover === undefined ? startRequest : { ...startRequest, open: false }, tracked, runtime.store ? { version: running, composed: runtime.composed } : undefined, homeLog, retry, { control: controls.restart, running: booted, channel: access })),
       },
       ...runtime.store ? { restart: restartSupport(request.home, running, booted) } : {},
       preStart: () => runPreStartSteps(dependencies.preStartSteps, {
