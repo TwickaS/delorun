@@ -21,7 +21,7 @@ import type { GrantRequest, PasskeyApi } from '../src/client/face-id-types.ts'
 import type { PinView } from '../src/client/pin-lock.ts'
 import { fakeHost } from './fake-host.ts'
 import { Context } from '@deepseek-ai/cordis'
-import { applyFaceGrant, reportFace } from '../src/client/index.ts'
+import { applyFaceGrant, registerReportSlots } from '../src/client/index.ts'
 import { loadReportDetails } from '../src/client/report-api.ts'
 import type { HostFetch } from '../src/client/host-api.ts'
 import { setNetwork } from '../src/client/network-api.ts'
@@ -154,6 +154,18 @@ describe('a Remote call the home refuses for want of a grant', () => {
     expect(sent).toEqual({ actions: [{ action: 'pluginManager/installBundle', hash: homeHashArgs(ARGS) }] })
     await new Promise(resolve => setTimeout(resolve, 0))
     expect(source.hooks.pending.getSnapshot()).toBeNull()
+  })
+
+  // Asking about terminal/retain opens one sheet per saved terminal tab on every load, in chats nobody is looking at
+  // (review r2 P2-1, r3 P3-2); the terminal on screen asks through terminal/attach.
+  it('never asks about the window hold a saved terminal tab keeps, and still asks when the terminal on screen attaches', async () => {
+    const { source, grant } = world()
+    await expect(remoteDenialLift(grant)(denial('terminal/retain', { sessionId: 's1', id: 't' }))).resolves.toBe(false)
+    expect(source.hooks.pending.getSnapshot()).toBeNull()
+    const attaching = remoteDenialLift(grant)(denial('terminal/attach', { sessionId: 's1', id: 't' }))
+    await waitFor(() => { expect(source.hooks.pending.getSnapshot()?.request).toMatchObject({ action: 'terminal/attach', hold: { feature: 'terminal', id: 't' } }) })
+    source.settle(undefined)
+    await expect(attaching).resolves.toBe(false)
   })
 
   // Keeping the sheet of a cancelled call mints a grant nothing uses, and a reconnect would queue a second sheet for the same call (review r2 P3-2).
@@ -342,15 +354,22 @@ describe('the plugin\'s Face ID wiring', () => {
     await ctx.fiber.dispose()
   })
 
-  // Giving About and the footer report the page's own fetch leaves a phone's report details refused with no sheet (review r2 P3-4).
-  it('reads the problem report\'s details through the granting fetch, so a refusal on a device opens the sheet', async () => {
-    const { ctx, studioFetch, source } = await wired(false, 'bundle-local/report-details')
-    const props = reportFace(ctx, studioFetch)
-    expect(props.fetchImpl).toBe(ctx.get('delorunFaceGrant')?.fetch)
-    const loading = loadReportDetails(props.fetchImpl).catch((_refused: unknown) => undefined)
-    await waitFor(() => { expect(source.hooks.pending.getSnapshot()?.request.action).toBe('bundle-local/report-details') })
-    source.settle(undefined)
-    await loading
+  // Giving About and the footer report the page's own fetch leaves a phone's report details refused with no sheet (review r2 P3-4, r3 P3-1).
+  it('registers About and the footer report with the granting fetch, so a refused report detail on a device opens the sheet', async () => {
+    const { ctx, source } = await wired(false, 'bundle-local/report-details')
+    const injected: (() => { readonly fetchImpl: HostFetch })[] = []
+    ctx.provide('slots', {
+      inject: (_name: string, register: () => () => void) => register(),
+      register: (slot: { readonly inject: () => { readonly fetchImpl: HostFetch } }) => { injected.push(slot.inject); return () => {} },
+    } as never)
+    registerReportSlots(ctx, () => 'About', undefined)
+    expect(injected).toHaveLength(2)
+    for (const inject of injected) {
+      const loading = loadReportDetails(inject().fetchImpl).catch((_refused: unknown) => undefined)
+      await waitFor(() => { expect(source.hooks.pending.getSnapshot()?.request.action).toBe('bundle-local/report-details') })
+      source.settle(undefined)
+      await loading
+    }
     await ctx.fiber.dispose()
   })
 

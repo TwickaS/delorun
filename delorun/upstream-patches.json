@@ -203,7 +203,7 @@
     {
       "path": "packages/api/gateway/tests/gateway.client.spec.ts",
       "class": "security",
-      "reason": "Reach listener Content Security Policy (C4): the gateway client fixture's ConnectionHandle mocks carry `remoteMedia: 'load'`, the loopback mode of the property the admission seam requires. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end. It also covers the client's refused-answer path: a result the Host refuses with LOOPBACK_REQUIRED emits `remote/answer-refused` and keeps the event stream, while any other refusal still ends the generation. Covers `remote/call-denied`: emitted with the endpoint and reason on `remote-access/denied`, not on other failures, and a throwing listener leaves the call result unchanged. Lead verdict (2026-11-13): approved after the lead review of the merged diff. The fixture's ConnectionHandle mocks also carry `registerRequestExtras`, which the PIN mode page unlock requires. Covers `$liftDenials`: one handler at a time; a refused unary call is sent exactly once more only when the handler resolves true, and the caller receives that second outcome; false, a throwing handler or a withdrawn handler hands the refusal to the caller, and `remote/call-denied` is emitted only for a refusal the caller receives. It also covers the stream lift (a refused stream open is reopened once with the uplink the refused open took, and a declined lift hands the refusal to the stream's reader) and the withdrawn-plugin case (nothing more is sent). Lead verdict: pending (faceid-wire, F30).",
+      "reason": "Reach listener Content Security Policy (C4): the gateway client fixture's ConnectionHandle mocks carry `remoteMedia: 'load'`, the loopback mode of the property the admission seam requires. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end. It also covers the client's refused-answer path: a result the Host refuses with LOOPBACK_REQUIRED emits `remote/answer-refused` and keeps the event stream, while any other refusal still ends the generation. Covers `remote/call-denied`: emitted with the endpoint and reason on `remote-access/denied`, not on other failures, and a throwing listener leaves the call result unchanged. Lead verdict (2026-11-13): approved after the lead review of the merged diff. The fixture's ConnectionHandle mocks also carry `registerRequestExtras`, which the PIN mode page unlock requires. Covers `$liftDenials`: one handler at a time; a refused unary call is sent exactly once more only when the handler resolves true, and the caller receives that second outcome; false, a throwing handler or a withdrawn handler hands the refusal to the caller, and `remote/call-denied` is emitted only for a refusal the caller receives. It also covers the stream lift (a refused stream open is reopened once with the uplink the refused open took, and a declined lift hands the refusal to the stream's reader) and the withdrawn-plugin case (nothing more is sent). Lead verdict: pending (faceid-wire, F30). Also pins the Face ID denial lift (`$liftDenials`): unary and stream lifts, the mount re-check after the lift, and the replay overflow re-checked after the lift (faceid-wire F30, F33).",
       "sha256": "f78bd89b79c18f624a2019e4d5606693f1302a6fe5f38c0837192b53c3e27bd4"
     },
     {
@@ -2748,7 +2748,7 @@
       "path": "packages/api/terminal-controller/src/index.ts",
       "class": "security",
       "reason": "`TerminalController.onTyped` announces each typed write of a terminal attachment (the person's keystrokes, never output, retention, resizes or protocol replies), so a sliding unlock stays alive while the person types: an ended unlock closes the device's terminal stream, and keystrokes are stream traffic the reach policy does not decide. Lead verdict (2026-11-17): approved; it only announces typed writes of already-admitted attachments to a listener, renewing nothing on its own; S14. Also withholds a failed terminal's launch error text from `list` and `watch` frames for any Remote caller whose principal is not the Host's owner (a reach device), sending `LAUNCH_ERROR_WITHHELD` in its place, because the free terminal list would otherwise hand a device free text from the process or its provider (F33). Lead verdict: pending (faceid-wire, F33).",
-      "sha256": "4843dab66afae80033f32db99609c3a4e89991834ea198630d71ccc4fc76840c"
+      "sha256": "bb193575125301952615fdac7348a43e6ef3bef76b510ec0847d91c597b505ff"
     },
     {
       "path": "packages/client/ui-settings-general/src/client/locales.ts",
@@ -2968,9 +2968,27 @@
     },
     {
       "path": "packages/api/terminal-controller/src/client/model.ts",
+      "class": "security",
+      "reason": "Views attach before their hold so only the on-screen terminal asks for Face ID (F33): a terminal view whose window hold (`terminal/retain`) the Host's remote access refuses still attaches, so the refusal reaches `terminal/attach`, the call the person's own terminal view makes, and the hold is asked for again once the attachment delivers its first frame. Any other hold failure fails the view as before. Classed security because it changes how the client acts on `remote-access/denied` (r3). Lead verdict: pending (faceid-wire, r3).",
+      "sha256": "9a26b0ca1823c3092c7e9f3bb4dfaeff6f8550bb187e29a9a7df4e6221061fcb"
+    },
+    {
+      "path": "packages/api/terminal-controller/src/types.ts",
       "class": "delorun-feature",
       "feature": "studio-seams",
-      "reason": "Face ID on a reach device (A483, F33): a terminal view whose window hold (`terminal/retain`) the Host's remote access refuses still attaches, so the refusal reaches `terminal/attach`, the call the person's own terminal view makes, and the hold is asked for again once the attachment delivers its first frame. Any other hold failure fails the view as before. Lead verdict: pending (faceid-wire, F33; class, feature and reason proposed by the lane)."
+      "reason": "Face ID on a reach device (F33, r3): `WebTerminalInfo.errorCode` (`TerminalErrorCode`, `withheld`) marks a failed terminal whose launch error text the Host keeps for its owner, so a client shows its own localised copy instead of the Host's English line. Lead verdict: pending (faceid-wire, r3)."
+    },
+    {
+      "path": "packages/client/ui-sidebar-terminal/src/client/locales.ts",
+      "class": "delorun-feature",
+      "feature": "studio-seams",
+      "reason": "Face ID on a reach device (F33, r3): the terminal body shows the `errorWithheld` copy for a failed terminal whose `errorCode` is `withheld`, instead of the Host's English line; every locale copies the English copy until translation. Lead verdict: pending (faceid-wire, r3)."
+    },
+    {
+      "path": "packages/client/ui-sidebar-terminal/src/client/terminal.tsx",
+      "class": "delorun-feature",
+      "feature": "studio-seams",
+      "reason": "Face ID on a reach device (F33, r3): the terminal body shows the `errorWithheld` copy for a failed terminal whose `errorCode` is `withheld`, instead of the Host's English line; every locale copies the English copy until translation. Lead verdict: pending (faceid-wire, r3)."
     }
   ],
   "retired": []

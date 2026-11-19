@@ -43,7 +43,7 @@ export function TerminalBody({ useTabInfo, useTerminal, useTheme, view, t }: Ter
       {newTerminal}
     </div>
   </section>
-  const error = state.phase === 'disconnected' ? undefined : state.issue === undefined ? state.error ?? state.info?.error : t(state.issue)
+  const error = state.phase === 'disconnected' ? undefined : state.issue === undefined ? state.error ?? (state.info?.errorCode === 'withheld' ? t('errorWithheld') : state.info?.error) : t(state.issue)
   let status: string | undefined
   if (state.phase === 'idle' || state.phase === 'loading') status = t('loading')
   else if (state.phase === 'creating' || state.phase === 'connecting' || state.phase === 'disconnected') status = t(state.phase)

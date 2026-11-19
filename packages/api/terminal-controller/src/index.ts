@@ -17,8 +17,11 @@ import type {
   TerminalScreenPage, TerminalScreenRequest, WebTerminalId, WebTerminalInfo,
 } from './types.ts'
 
-/** The `error` a Remote caller other than the Host's owner receives for a failed terminal in the terminal list. */
-export const LAUNCH_ERROR_WITHHELD = 'The terminal could not start or stopped with an error; the details are on the computer.'
+/**
+ * The `error` a Remote caller other than the Host's owner receives for a failed terminal in the terminal list, beside
+ * `errorCode: 'withheld'`, which a client shows its own copy for.
+ */
+export const LAUNCH_ERROR_WITHHELD = 'The terminal could not start or stopped with an error. The details are on the computer.'
 
 export type * from './types.ts'
 export { AgentTerminalError } from './agent.ts'
@@ -176,7 +179,7 @@ export class TerminalController extends TypertRemoteService {
   /**
    * List retained terminals without resolving or activating an Agent. A failed terminal's `error` is free text from the
    * process or its provider, so only the Host's owner and in-process callers read it; any other Remote caller receives
-   * {@link LAUNCH_ERROR_WITHHELD} in its place.
+   * {@link LAUNCH_ERROR_WITHHELD} in its place, with `errorCode: 'withheld'`.
    * @param sessionId - displayed Session identity, including offline history.
    * @returns terminals retained for this Host lifetime.
    */
@@ -186,7 +189,7 @@ export class TerminalController extends TypertRemoteService {
     if (owner === undefined) return []
     const withheld = this.ctx.invocation !== undefined && this.ctx.invocation.peer.principal.kind !== 'owner'
     return [...owner.terminals.values(), ...owner.allocations.values()]
-      .map(terminal => withheld && terminal.info.error !== undefined ? { ...terminal.info, error: LAUNCH_ERROR_WITHHELD } : terminal.info)
+      .map(terminal => withheld && terminal.info.error !== undefined ? { ...terminal.info, error: LAUNCH_ERROR_WITHHELD, errorCode: 'withheld' as const } : terminal.info)
   }
 
   /**

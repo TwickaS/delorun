@@ -79,13 +79,13 @@ import { overridePluginCopy, overrideSettingsCopy } from './plugin-copy.ts'
 import { ReportFooterAction, reportChatStarter, studioSurface } from './ReportFooterAction.tsx'
 import type { StudioSurface } from './report-url.ts'
 import { overrideTitle } from './title.ts'
-import { readVersions } from './versions.ts'
+import { readVersions, type DelorunVersions } from './versions.ts'
 import { createRemoteNoticeSource, RemoteNotice } from './RemoteNotice.tsx'
 import { createPinSource, type PinSource } from './pin-lock.ts'
 import { en as pinEn, zh as pinZh, type PinLocaleKey } from './pin-locales.ts'
 import { en as faceIdEn, zh as faceIdZh, type FaceIdLocaleKey } from './face-id-locales.ts'
 import { PinLock } from './PinLock.tsx'
-import type { FaceGrantService } from '@delorun/plugin-changes/face-grant'
+import { grantingFetchOf, type FaceGrantService } from '@delorun/plugin-changes/face-grant'
 import { createFaceGrantSource, type FaceGrantSource } from './face-grant.ts'
 import { confirmationQueue, grantingFetch, oneAtATime, remoteDenialLift, type ConfirmationQueue } from './face-retry.ts'
 import { FaceIdGrantOverlay } from './FaceIdGrantOverlay.tsx'
@@ -506,21 +506,7 @@ export function apply(ctx: Context): void {
   // One function for the plugin's lifetime: the section's requests restart when its identity changes.
   const browserFetch: HostFetch = (input, init) => globalThis.fetch(input, init)
   const { source: faceGrant, fetch: studioFetch, queue: faceQueue } = applyFaceGrant(ctx, browserFetch, (ctx.get('connection') as ConnectionHandle).isLoopback)
-  ctx.slots.inject('settings.section', () => ctx.slots.register({
-    name: 'settings.section',
-    id: ABOUT_SECTION_ID,
-    order: ABOUT_SECTION_ORDER,
-    label: () => t('about.nav'),
-    locale: NS,
-    inject: () => ({ ...reportFace(ctx, studioFetch), versions }),
-  }, AboutSection))
-  ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
-    name: 'sidebar.footer.action',
-    id: REPORT_ACTION.id,
-    order: REPORT_ACTION.order,
-    locale: NS,
-    inject: () => reportFace(ctx, studioFetch),
-  }, ReportFooterAction))
+  registerReportSlots(ctx, () => t('about.nav'), versions)
   ctx.effect(() => ctx.locale.register(DEVICES_NS, { en: devicesEn, zh: devicesZh }), 'delorun-devices: section dictionaries')
   const devicesT = ctx.locale.bind(DEVICES_NS)
   ctx.effect(() => ctx.locale.register(PIN_NS, { en: pinEn, zh: pinZh }), 'delorun-pin: lock screen dictionaries')
@@ -855,14 +841,31 @@ export function applyConsents(ctx: Context, fetch: HostFetch): void {
 }
 
 /**
- * What the About section and the footer report button are given: the surface, the request function their problem report
- * reads its details with, and the report chat opener.
+ * Register the About section and the footer report button. Both read the problem report's details through
+ * `ctx.delorunFaceGrant`'s fetch, so on a device a refusal asks for Face ID, and on the computer it is the page's own.
  * @param ctx - the browser plugin context.
- * @param fetchImpl - the studio's fetch: on a device, the one that asks for Face ID when the home refuses the details.
- * @returns the props.
+ * @param aboutLabel - the About section's navigation label.
+ * @param versions - the versions the About section shows.
  */
-export function reportFace(ctx: Context, fetchImpl: HostFetch): { readonly surface: StudioSurface; readonly fetchImpl: HostFetch; readonly startChat: () => void } {
-  return { surface: studioSurface(ctx), fetchImpl, startChat: reportChatStarter(ctx) }
+export function registerReportSlots(ctx: Context, aboutLabel: () => string, versions: DelorunVersions | undefined): void {
+  // One function for the plugin's lifetime: the report's requests restart when its identity changes.
+  const fetchImpl: HostFetch = grantingFetchOf(ctx)
+  const face = (): { readonly surface: StudioSurface; readonly fetchImpl: HostFetch; readonly startChat: () => void } => ({ surface: studioSurface(ctx), fetchImpl, startChat: reportChatStarter(ctx) })
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: ABOUT_SECTION_ID,
+    order: ABOUT_SECTION_ORDER,
+    label: aboutLabel,
+    locale: NS,
+    inject: () => ({ ...face(), versions }),
+  }, AboutSection))
+  ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
+    name: 'sidebar.footer.action',
+    id: REPORT_ACTION.id,
+    order: REPORT_ACTION.order,
+    locale: NS,
+    inject: face,
+  }, ReportFooterAction))
 }
 
 /**

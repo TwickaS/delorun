@@ -319,9 +319,23 @@ describe('TerminalController', () => {
       }
       return agent.ctx.extend({ invocation }).terminalController.list(agent.id)
     }
-    expect(listedBy({ kind: 'reach-device' })).toMatchObject([{ id, state: 'failed', error: LAUNCH_ERROR_WITHHELD }])
+    expect(listedBy({ kind: 'reach-device' })).toMatchObject([{ id, state: 'failed', error: LAUNCH_ERROR_WITHHELD, errorCode: 'withheld' }])
     expect(JSON.stringify(listedBy({ kind: 'reach-device' }))).not.toContain('secrets')
+    expect(listedBy({ kind: 'owner' })).toEqual([expect.not.objectContaining({ errorCode: expect.anything() })])
     expect(listedBy({ kind: 'owner' })).toMatchObject([{ id, state: 'failed', error: 'spawn failed: /home/me/.secrets TOKEN=abc' }])
+    // The roster stream a device watches sends the same withheld line (review r3 P3-3).
+    const watching = new AbortController()
+    const invocation: RemoteInvocation = {
+      request: { namespace: 'terminal', method: 'watch', args: {} }, service: 'terminalController', signal: watching.signal,
+      peer: { id: 'test-peer' as PeerId, ctx: agent.ctx, principal: { kind: 'reach-device' } as never, interactions: 'answer', signal: watching.signal, dispose: async () => {} },
+      uplink: <In>() => inputChannel<In>().source,
+    }
+    const roster = agent.ctx.extend({ invocation }).terminalController.watch(agent.id, watching.signal)[Symbol.asyncIterator]()
+    const first = await roster.next()
+    expect(first.value).toMatchObject([{ id, error: LAUNCH_ERROR_WITHHELD, errorCode: 'withheld' }])
+    expect(JSON.stringify(first.value)).not.toContain('secrets')
+    watching.abort()
+    await roster.return?.(undefined)
     expect(controller.list(agent.id)).toMatchObject([{ error: 'spawn failed: /home/me/.secrets TOKEN=abc' }])
   })
 

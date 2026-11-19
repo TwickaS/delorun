@@ -42,8 +42,8 @@ export function createFaceGrantSource(): FaceGrantSource {
   return {
     hooks: { pending: store },
     grant: (request) => {
-      settle(undefined)
       if (request.signal?.aborted === true) return Promise.resolve(undefined)
+      settle(undefined)
       return new Promise<string | undefined>((done) => {
         const close = (): void => { if (resolve === finish) settle(undefined) }
         const finish = (grantId: string | undefined): void => {

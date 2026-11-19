@@ -223,6 +223,13 @@ it('displays disconnect, close and exit states and offers explicit reconnection 
   expect(h.view.getByRole('status').textContent).toBe(en.unavailable)
 })
 
+// Showing the Host's fixed line puts English product copy in front of a device in any locale.
+it('shows its own copy for launch error text the Host keeps on the computer', () => {
+  const h = mount({ ...idle, info: { ...info, state: 'failed', error: 'host line', errorCode: 'withheld' }, phase: 'connected' })
+  expect(h.view.getByRole('alert').textContent).toContain(en.errorWithheld)
+  expect(h.view.getByRole('alert').textContent).not.toContain('host line')
+})
+
 it('updates screen, cursor and selection colors without replacing the terminal or clearing output', () => {
   const colors = { backgroundColor: 'rgb(255, 255, 255)', color: 'rgb(23, 25, 29)' }
   vi.spyOn(window, 'getComputedStyle').mockImplementation(() => colors as CSSStyleDeclaration)
