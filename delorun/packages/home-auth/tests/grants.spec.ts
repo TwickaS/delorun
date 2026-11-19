@@ -250,3 +250,23 @@ describe('feature holds', () => {
     expect(holdFeatureOf('settings/mutate')).toBeUndefined()
   })
 })
+
+describe('the passkey.used log (P3-3)', () => {
+  // Removing a log call leaves a use of a grant unlogged: the action grant (Fetch gate, device removal) or the answer grant.
+  it('records the device, the action or answer and the grant id after each use, and nothing secret', () => {
+    const lines: string[] = []
+    let counter = 0
+    const grants = new GrantStore({ now: () => 1_000_000, random: size => Uint8Array.from({ length: size }, () => (counter++ % 251) + 1), log: line => lines.push(line) })
+    const minted = grants.mint(PHONE, [{ action: 'pluginManager/installBundle', hash: BODY_A }], 'pin')
+    expect(grants.has(PHONE, 'pluginManager/installBundle', BODY_A)).toBe(true)
+    expect(lines).toEqual([])
+    grants.consume(PHONE, 'pluginManager/installBundle', BODY_A)
+    const answer = grants.mintAnswer(PHONE, 'key-1', 'allowed-once')
+    grants.consumeAnswer(PHONE, 'key-1', 'allowed-once')
+    expect(grants.consume(PHONE, 'pluginManager/installBundle', BODY_A)).toBeUndefined()
+    expect(lines).toEqual([
+      `home-auth: passkey.used device=phone-1 listener=reach-tailscale-private action=pluginManager/installBundle factor=pin grant=${minted.grantId}`,
+      `home-auth: passkey.used device=phone-1 listener=reach-tailscale-private answer=allowed-once grant=${answer.grantId}`,
+    ])
+  })
+})
