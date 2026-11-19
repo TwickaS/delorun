@@ -325,6 +325,17 @@ describe('a seat review at hand-off', () => {
     expect(appended).toEqual([{ id: 'seat', policy: 'ask', source: 'delegation' }])
   })
 
+  it.for(['rejected', 'cancelled'] as const)('puts back the pin of an earlier start\'s lift that no answer followed, when the card is %s', async (answer) => {
+    const w = await world()
+    w.openTurns.clear()
+    w.openTurns.add('seat')
+    lifted.add('seat')
+    w.answer = answer
+    const verdict = await w.consent.reviewSeat({ ...seat(w, 'hand-off'), pinned: true })
+    expect(verdict.kind).toBe('refuse')
+    expect(appended).toEqual([{ id: 'seat', policy: 'never', source: 'delegation' }])
+  })
+
   it('puts the pin back when the card throws', async () => {
     const w = await world()
     w.openTurns.clear()

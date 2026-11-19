@@ -320,6 +320,9 @@ export class DelorunDelegationConsent extends Service implements DelegationConse
       // next start lifts and asks again.
       child.session.append('approval/policy', { policy: 'ask', source: 'delegation' })
       lifted = true
+    } else if (asked === child && review.pinned === true && approval.overrideOf(child.session) === 'ask') {
+      // A lift of an earlier start that no answer followed (the Host stopped mid-card) is still ours to put back.
+      lifted = true
     }
     let outcome: 'allowed-once' | NotApprovedOutcome
     try {
