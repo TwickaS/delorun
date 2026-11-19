@@ -3,7 +3,7 @@
  * holds a passkey, and no unlock, PIN window or approval grace stands in for it; a `free` control needs nothing; the
  * computer is never asked. Each case names the check whose removal makes it fail.
  */
-import { authClassOf, GrantStore, hashRequest, type GrantHolder } from '@delorun/home-auth'
+import { authClassOf, GRANT_BODY_CAP_BYTES, GrantStore, hashRequest, type GrantHolder } from '@delorun/home-auth'
 import { describe, expect, it, vi } from 'vitest'
 import { CONTROL_LEVELS } from '../src/access.ts'
 import { faceAccessOf } from '../src/face-access.ts'
@@ -73,6 +73,50 @@ describe('Changes: face controls', () => {
       const grant = world.grantFor(control, path, { id: 'a' })
       expect(json(await send(server.port, path, withGrant('fresh', { id: 'a' }, grant))).code, control).toBe('LOOPBACK_REQUIRED')
     }
+  })
+
+  it('refuse a Full-set control and setup under Careful even with a valid grant, for a device with no passkey', async () => {
+    // Pins F11 for the legacy device: the Careful refusal comes before the grant lookup whether or not the device holds a passkey.
+    const { ctx } = routeHome()
+    const world = faceWorld({ hasPasskey: false })
+    const server = await serveRoutes(ctx, { powers: 'careful', face: world.face })
+    for (const { control, path } of [{ control: 'plugin-apply', path: ACTION_PATHS.apply }, { control: 'harness-apply', path: HARNESS_PATHS.apply }, { control: 'plugin-other', path: SETUP_PATHS.export }]) {
+      const grant = world.grantFor(control, path, { id: 'a' })
+      expect(json(await send(server.port, path, withGrant('fresh', { id: 'a' }, grant))).code, control).toBe('LOOPBACK_REQUIRED')
+    }
+  })
+
+  it('refuse setup under Careful even with a valid grant, for a passkey device', async () => {
+    const { ctx } = routeHome()
+    const world = faceWorld()
+    const server = await serveRoutes(ctx, { powers: 'careful', face: world.face })
+    const grant = world.grantFor('plugin-other', SETUP_PATHS.export, { list: true })
+    expect(json(await send(server.port, SETUP_PATHS.export, withGrant('fresh', { list: true }, grant))).code).toBe('LOOPBACK_REQUIRED')
+  })
+
+  it('bind the query string a grant was made for', async () => {
+    // Pins the hash over path and query: a grant for one query must not admit the same path with another or none.
+    const { ctx } = routeHome()
+    const world = faceWorld()
+    const server = await serveRoutes(ctx, { powers: 'full', face: world.face })
+    const path = ACTION_PATHS.apply
+    const grant = world.grantFor('plugin-apply', `${path}?a=1`, { id: 'a' })
+    for (const target of [path, `${path}?a=2`, `${path}?a=1&b=2`]) {
+      expect(json(await send(server.port, target, withGrant('none', { id: 'a' }, grant))).code, target).toBe('ELEVATION_REQUIRED')
+    }
+    expect(WHERE_REFUSALS).not.toContain(json(await send(server.port, `${path}?a=1`, withGrant('none', { id: 'a' }, grant))).code)
+  })
+
+  it('refuse a body over the grant cap whatever grant it carries, and leave the grant unused', async () => {
+    // Pins the 1 MiB cap: a body that cannot be hashed is covered by no grant.
+    const { ctx } = routeHome()
+    const world = faceWorld()
+    const server = await serveRoutes(ctx, { powers: 'full', face: world.face })
+    const path = ACTION_PATHS.apply
+    const grant = world.grantFor('plugin-apply', path, { id: 'a' })
+    const oversized = JSON.stringify({ id: 'a', pad: 'x'.repeat(GRANT_BODY_CAP_BYTES) })
+    expect(json(await send(server.port, path, withGrant('none', oversized, grant))).code).toBe('ELEVATION_REQUIRED')
+    expect(WHERE_REFUSALS).not.toContain(json(await send(server.port, path, withGrant('none', { id: 'a' }, grant))).code)
   })
 
   it('admit exactly the call a grant was made for, once', async () => {

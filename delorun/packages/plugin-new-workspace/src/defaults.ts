@@ -8,6 +8,7 @@
  */
 import { resolveDelorunHome } from '@delorun/home'
 import { workspaceKey } from '@delorun/plugin-permission-defaults/workspace'
+import type { WorkspaceRegistry } from '@deepseek-ai/dsh-workspace'
 import type { ModelSelection, SessionStartSource } from '@deepseek-ai/dsh-agent'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm/brand'
 import type { Session } from '@deepseek-ai/dsh-session'
@@ -37,12 +38,14 @@ export async function storePath(deps: DefaultsDeps): Promise<string | undefined>
  * Handle a request for one workspace's defaults.
  * @param request - the `POST` request carrying {@link DefaultsRequest}.
  * @param deps - the environment and the log.
- * @returns 200 `defaults` (empty for a workspace without any), 422 `refused` for a folder Delorun never adds, 400 for a
+ * @param registry - the workspace registry; a path it does not list is answered with empty defaults, never canonicalised or checked.
+ * @returns 200 `defaults` (empty for a workspace without any or one not registered), 422 `refused` for a folder Delorun never adds, 400 for a
  * request that cannot be read, or 500 `failed` when the store cannot be read.
  */
-export async function readDefaultsRoute(request: Request, deps: DefaultsDeps): Promise<Response> {
+export async function readDefaultsRoute(request: Request, deps: DefaultsDeps, registry: Pick<WorkspaceRegistry, 'list'>): Promise<Response> {
   const body = await readBody(request, DefaultsRequest)
   if (body === undefined) return reply(400, { error: 'the request must be JSON with one path' })
+  if (!registry.list().some(workspace => workspace.path === body.path)) return reply(200, { result: 'defaults', defaults: {} } satisfies DefaultsAnswer)
   const problem = await locationProblem(body.path, deps)
   if (problem === 'unresolved') return reply(500, { result: 'failed' } satisfies DefaultsAnswer)
   if (problem !== undefined) return reply(422, { result: 'refused', problem } satisfies DefaultsAnswer)

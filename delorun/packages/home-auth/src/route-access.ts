@@ -126,7 +126,7 @@ export const PLUGIN_ROUTE_ACCESS: Readonly<Record<string, Readonly<Record<string
     CREATE_PATH: UNLOCKED('makes a folder on the computer, runs Git in it and adds it as a workspace'),
     CLONE_PATH: UNLOCKED('cloning writes a repository into a folder on the computer'),
     CLONE_STATUS_PATH: READ('reports the state of a clone by its id, a status read that starts nothing'),
-    DEFAULTS_PATH: READ('reads a workspace\'s model and browser defaults, a read of settings the studio already lists'),
+    DEFAULTS_PATH: READ('reads a registered workspace\'s model and browser defaults, a read of settings the studio already lists; any other path is answered with none, unchecked'),
     SET_DEFAULTS_PATH: UNLOCKED('sets the model and browser every new chat in a workspace starts with'),
   },
   'preview-flags/src/index.ts': {

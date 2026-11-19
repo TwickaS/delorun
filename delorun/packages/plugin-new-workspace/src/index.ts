@@ -123,7 +123,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     })
     child.connection.fetch.register({ path: CLONE_PATH, methods: ['POST'], requestBody: 'buffered', ...faced('CLONE_PATH', 'clone', request => clones.start(request), { renews: true }) })
     child.connection.fetch.register({ path: CLONE_STATUS_PATH, methods: ['POST'], requestBody: 'buffered', ...free(request => clones.status(request)) })
-    child.connection.fetch.register({ path: DEFAULTS_PATH, methods: ['POST'], requestBody: 'buffered', ...free(request => readDefaultsRoute(request, located)) })
+    child.connection.fetch.register({ path: DEFAULTS_PATH, methods: ['POST'], requestBody: 'buffered', ...free(request => readDefaultsRoute(request, located, child.workspaceRegistry)) })
     child.connection.fetch.register({ path: SET_DEFAULTS_PATH, methods: ['POST'], requestBody: 'buffered', ...faced('SET_DEFAULTS_PATH', 'set-defaults', async (request) => {
       const response = await setDefaultsRoute(request, located)
       if (response.ok) await browserAdmission.refresh()

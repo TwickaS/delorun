@@ -39,8 +39,9 @@ function deps() {
 }
 
 /** Ask a route and read its status and body. */
-async function ask(route: typeof readDefaultsRoute, body: unknown, harness = deps()) {
-  const response = await route(new Request('http://harness.test/api', { method: 'POST', body: typeof body === 'string' ? body : JSON.stringify(body) }), harness)
+async function ask(route: typeof readDefaultsRoute, body: unknown, harness = deps(), listed: readonly string[] = [project, person, delorunHome, join(delorunHome, 'secrets'), 'projects']) {
+  const registry = { list: () => listed.map(path => ({ path })) } as never
+  const response = await route(new Request('http://harness.test/api', { method: 'POST', body: typeof body === 'string' ? body : JSON.stringify(body) }), harness, registry)
   const answer: unknown = await response.json()
   return { status: response.status, body: answer, warn: harness.warn }
 }
@@ -81,7 +82,7 @@ describe('recording and reading a workspace\'s defaults', () => {
     await ask(setDefaultsRoute, { path: link, defaults: MODEL })
     expect(Object.keys(JSON.parse(await readFile(storeFile(), 'utf8')).workspaces as object)).toEqual([await realpath(project)])
     expect((await ask(readDefaultsRoute, { path: project })).body).toEqual({ result: 'defaults', defaults: MODEL })
-    expect((await ask(readDefaultsRoute, { path: link })).body).toEqual({ result: 'defaults', defaults: MODEL })
+    expect((await ask(readDefaultsRoute, { path: link }, deps(), [link])).body).toEqual({ result: 'defaults', defaults: MODEL })
   })
 
   it('keeps other workspaces\' defaults when one changes', async () => {
@@ -90,6 +91,17 @@ describe('recording and reading a workspace\'s defaults', () => {
     await ask(setDefaultsRoute, { path: project, defaults: MODEL })
     await ask(setDefaultsRoute, { path: other, defaults: { browser: 'none' } })
     expect((await ask(readDefaultsRoute, { path: project })).body).toEqual({ result: 'defaults', defaults: MODEL })
+  })
+})
+
+describe('a read for a path that is not a registered workspace', () => {
+  it('answers empty defaults without canonicalising the path, checking it or reading the store', async () => {
+    await ask(setDefaultsRoute, { path: project, defaults: MODEL })
+    const harness = deps()
+    for (const path of [project, person, join(project, 'missing', 'deeper'), 'relative', delorunHome]) {
+      expect(await ask(readDefaultsRoute, { path }, harness, [])).toMatchObject({ status: 200, body: { result: 'defaults', defaults: {} } })
+    }
+    expect(harness.warn).not.toHaveBeenCalled()
   })
 })
 

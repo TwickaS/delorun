@@ -116,7 +116,7 @@ export function registerPermissionRoutes(ctx: Context): void {
   const fullAccessGate = gateByClass(() => ctx.get('homeAuth'), async (request) => {
     const body = await bodyOf(request, SetFullAccessBody)
     if (body === undefined) return refusal('INVALID_REQUEST', 'the request must be JSON with the workspace, the review id, on and confirmed')
-    return answered(() => ctx.permissionDefaults.setFullAccess(body, requesters.getStore() ?? 'computer'))
+    return answered(() => ctx.permissionDefaults.setFullAccess(body, requesters.getStore() ?? 'device'))
   }, { row: 'route:plugin-permission-defaults/src/routes.ts#PERMISSION_ROUTES.setFullAccess', action: 'plugin-permission-defaults/set-full-access', legacy: { grace: false, renews: true } })
   const deviceRequests = new WeakSet<Request>()
   // The gate hands its handler a copy of the request (with the grant header removed), so the device mark kept on the original request is read here and carried in async context.
