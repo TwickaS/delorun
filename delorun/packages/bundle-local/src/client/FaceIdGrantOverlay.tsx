@@ -85,16 +85,12 @@ function lastSegment(path: string): string {
 /**
  * The sheet's words and grant for one call.
  * @param t - the copy.
- * @param request - the call, its action, the hold it opens and the further methods the same tap covers.
+ * @param request - the call, its action and the hold it opens.
  * @returns the action, with the grant hashed from the call.
  */
 export async function callActionOf(t: PropsLocale<'delorunFaceId'>['t'], request: FaceGrantRequest): Promise<FaceIdAction> {
   const hash = 'args' in request.call ? await hashArgs(request.call.args) : await hashRequest(request.call)
-  const entries = [
-    { action: request.action, hash, ...request.hold === undefined ? {} : { hold: request.hold } },
-    ...(request.also ?? []).map(action => ({ action, hash })),
-  ]
-  return { ...wordsOf(t, request), grant: { actions: entries } }
+  return { ...wordsOf(t, request), grant: { actions: [{ action: request.action, hash, ...request.hold === undefined ? {} : { hold: request.hold } }] } }
 }
 
 /**

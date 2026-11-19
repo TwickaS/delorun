@@ -13,7 +13,20 @@
  * opens the code-from-your-computer unlock. The home's own computer is never refused, so it never reaches either path.
  * @module @delorun/bundle-local/client/face-retry
  */
-import type { FaceGrant, FaceGrantHold, FaceGrantRequest, GrantingFetch, RemoteDenialLift } from '@delorun/plugin-changes/face-grant'
+import type { FaceGrant, FaceGrantHold, FaceGrantRequest, GrantingFetch } from '@delorun/plugin-changes/face-grant'
+
+/** The fields of the gateway's `RemoteDenialQuestion` the Face ID step reads: a refused unary Remote call. */
+export interface RefusedRemoteCall {
+  /** The refused `<namespace>/<method>`. */
+  readonly endpoint: string
+  /** The policy's reason, such as `elevation-required: terminal/create`; undefined when absent. */
+  readonly reason: string | undefined
+  /** The call's wire arguments, exactly as they were sent and will be sent again. */
+  readonly args: Readonly<Record<string, unknown>>
+}
+
+/** A handler for the gateway's `ctx.remote.$liftDenials`: true sends the refused call once more. */
+export type RemoteDenialHandler = (denial: RefusedRemoteCall) => Promise<boolean>
 
 /** The prefix of a Remote refusal a grant lifts: `elevation-required: <action>`. */
 export const ELEVATION_REASON = 'elevation-required:'
@@ -23,13 +36,6 @@ export const GRANT_HEADER = 'Delorun-Grant'
 
 /** The id of the folder picker's hold: the home's `PICKER_HOLD_ID`, one per device. */
 export const PICKER_HOLD_ID = 'directoryPicker'
-
-/**
- * The terminal's metadata reads that come before `terminal/create` on a device holding no terminal hold in that chat.
- * One confirmation covers them together, with the same arguments, so opening a terminal asks once for them and once
- * for the terminal itself.
- */
-export const TERMINAL_METADATA: readonly string[] = ['terminal/environment', 'terminal/shells', 'terminal/list']
 
 /**
  * The hold a grant for one Remote call opens.
@@ -67,12 +73,11 @@ export function oneAtATime(grant: FaceGrant): FaceGrant {
  * @returns the handler: true once a grant for exactly this call is minted; false for a refusal no grant lifts or a
  *   cancelled confirmation.
  */
-export function remoteDenialLift(grant: FaceGrant): RemoteDenialLift {
+export function remoteDenialLift(grant: FaceGrant): RemoteDenialHandler {
   return async ({ endpoint, reason, args }) => {
     if (reason?.startsWith(ELEVATION_REASON) !== true) return false
     const hold = holdOfCall(endpoint, args)
-    const also = TERMINAL_METADATA.includes(endpoint) ? TERMINAL_METADATA.filter(action => action !== endpoint) : undefined
-    const request: FaceGrantRequest = { action: endpoint, call: { args }, ...hold === undefined ? {} : { hold }, ...also === undefined ? {} : { also } }
+    const request: FaceGrantRequest = { action: endpoint, call: { args }, ...hold === undefined ? {} : { hold } }
     return await grant(request) !== undefined
   }
 }

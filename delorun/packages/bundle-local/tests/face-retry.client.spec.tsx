@@ -16,7 +16,7 @@ import { createFaceGrantSource, type FaceGrantSource } from '../src/client/face-
 import { en } from '../src/client/face-id-locales.ts'
 import { fakeApi, fakeBrowser } from '../src/client/face-id-fake.ts'
 import { callActionOf, FaceIdGrantOverlay, type FaceIdGrantOverlayProps } from '../src/client/FaceIdGrantOverlay.tsx'
-import { GRANT_HEADER, grantingFetch, oneAtATime, PICKER_HOLD_ID, remoteDenialLift, TERMINAL_METADATA } from '../src/client/face-retry.ts'
+import { GRANT_HEADER, grantingFetch, oneAtATime, PICKER_HOLD_ID, remoteDenialLift } from '../src/client/face-retry.ts'
 import type { GrantRequest, PasskeyApi } from '../src/client/face-id-types.ts'
 import type { PinView } from '../src/client/pin-lock.ts'
 import { fakeHost } from './fake-host.ts'
@@ -114,7 +114,7 @@ describe('a Remote call the home refuses for want of a grant', () => {
   })
 
   // Without the hold, every later read of the new terminal would ask again.
-  it('gives terminal/create the hold of the terminal it creates, and covers the terminal\'s metadata reads in one tap', async () => {
+  it('gives terminal/create the hold of the terminal it creates', async () => {
     const { source, grant, api } = world()
     const created = { sessionId: 's1', request: { id: 'term-1', cols: 80, rows: 24 } }
     const lifted = remoteDenialLift(grant)(denial('terminal/create', created))
@@ -122,12 +122,6 @@ describe('a Remote call the home refuses for want of a grant', () => {
     await expect(lifted).resolves.toBe(true)
     expect(title).toContain('Open a terminal')
     expect(sent).toEqual({ actions: [{ action: 'terminal/create', hash: homeHashArgs(created), hold: { feature: 'terminal', id: 'term-1' } }] })
-    const second = world()
-    const read = remoteDenialLift(second.grant)(denial('terminal/environment', { sessionId: 's1' }))
-    const metadata = await answer(second.source, second.api, 'faceId')
-    await expect(read).resolves.toBe(true)
-    const hash = homeHashArgs({ sessionId: 's1' })
-    expect(metadata.sent).toEqual({ actions: TERMINAL_METADATA.map(action => ({ action, hash })) })
   })
 
   // A picker hold id other than the home's would open a hold no later read matches (`face-grants.spec.ts` pins it to the home's).

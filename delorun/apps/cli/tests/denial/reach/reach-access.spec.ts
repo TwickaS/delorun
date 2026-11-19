@@ -364,12 +364,12 @@ describe('a reach device through the Gateway', () => {
     let unlock: string | undefined
     try {
       for (const agentId of [granted.sessionId, ungranted.sessionId]) {
-        await expectElevationRequired('terminal/shells', { agentId })
+        await expectAdmitted('terminal/shells', { agentId })
         await expectElevationRequired('terminal/create', { agentId, request: { id: 'phone-1', cols: 80, rows: 24 } })
       }
       await expectElevationRequired('terminal/list', { sessionId: granted.sessionId })
       unlock = elevate()
-      await expectElevationRequired('terminal/shells', { agentId: ungranted.sessionId })
+      await expectAdmitted('terminal/shells', { agentId: ungranted.sessionId })
       await expectElevationRequired('terminal/list', { sessionId: granted.sessionId })
     } finally {
       if (unlock !== undefined) studio.ctx.homeAuth.revokeElevation(unlock)
@@ -381,7 +381,10 @@ describe('a reach device through the Gateway', () => {
   it('needs an unlock for terminals and the directory picker, and reads the Changes view', async () => {
     const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
     await expectElevationRequired('terminal/list', { sessionId: created.sessionId })
-    await expectElevationRequired('terminal/shells', { agentId: created.sessionId })
+    // F29: a terminal's metadata is free, so a first terminal takes one Face ID, at create.
+    await expectAdmitted('terminal/shells', { agentId: created.sessionId })
+    await expectAdmitted('terminal/environment', { agentId: created.sessionId })
+    await expectElevationRequired('terminal/create', { agentId: created.sessionId, request: { id: 'phone-2', cols: 80, rows: 24 } })
     await expectElevationRequired('directoryPicker/pick', {})
     await expectAdmitted('workspaceFiles/changes', { workspaceFileScopeId: created.sessionId, path: '.' })
   })
@@ -423,7 +426,7 @@ describe('a terminal with no grant', () => {
     const dispose = studio.ctx.effect(() => studio.ctx.provide('reachFullAccessGrants', { dangerousMode: () => true, onDangerousModeEnd: () => () => {} }), 'test dangerous mode')
     const unlock = elevate()
     try {
-      await expectElevationRequired('terminal/shells', { agentId: created.sessionId })
+      await expectAdmitted('terminal/shells', { agentId: created.sessionId })
       await expectElevationRequired('terminal/create', { agentId: created.sessionId, request: { id: 'careful-1', cols: 80, rows: 24 } })
       await expectElevationRequired('terminal/list', { sessionId: created.sessionId })
       // A running unlock opens no other elevated action either (A483); a grant for the call does.
@@ -520,7 +523,7 @@ describe('a reach device in its approval grace', () => {
       // The grace opens no elevated action (A483): it needs a grant for the call, like the unlock.
       await expectElevationRequired('directoryPicker/list', {}, graced.peer)
       // Pins GRACE_REFUSED_ACTIONS in the unlock check: the grace stands for a computer-approved unlock everywhere else.
-      await expectElevationRequired('terminal/shells', { agentId: created.sessionId }, graced.peer)
+      await expectAdmitted('terminal/shells', { agentId: created.sessionId }, graced.peer)
       await expectElevationRequired('terminal/create', { agentId: created.sessionId, request: { id: 'grace-1', cols: 80, rows: 24 } }, graced.peer)
       await expectElevationRequired('terminal/list', { sessionId: created.sessionId }, graced.peer)
     } finally {
@@ -569,7 +572,7 @@ describe('an elevated reach device through the Gateway', () => {
       // Pins the unlock check through the Gateway: the same calls reach their services once the person approved it.
       await expectElevationRequired('dynamicCordisRunner/inventory', {})
       await expectAdmittedWithGrant('dynamicCordisRunner/inventory', {})
-      await expectElevationRequired('terminal/shells', { agentId: created.sessionId })
+      await expectAdmitted('terminal/shells', { agentId: created.sessionId })
       await expectAdmittedWithGrant('directoryPicker/list', {})
       await expectAdmittedWithGrant('settings/update', { ns: 'delorun-reach-access-probe', patch: {} })
       // A chat outside the known workspaces is a face action too: the unlock refuses it and a grant for the call opens it.

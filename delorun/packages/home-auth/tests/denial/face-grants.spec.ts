@@ -151,6 +151,15 @@ describe('holds for terminals', () => {
     expect(decide('terminal/retain', { id: 't-2' }).kind).toBe('deny')
     expect(decide('terminal/attach', { id: 't-2' }).kind).toBe('deny')
   })
+  // F29: moving the metadata reads back to the elevated table makes a first terminal ask for Face ID three times.
+  it('leave a terminal\'s size limits and shells free, and keep listing, attaching and creating behind a hold or grant', () => {
+    const { decide } = world()
+    expect(decide('terminal/environment', { agentId: 'chat-1' }).kind).toBe('allow')
+    expect(decide('terminal/shells', { agentId: 'chat-1' }).kind).toBe('allow')
+    expect(decide('terminal/list', { sessionId: 'chat-1' })).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/list' })
+    expect(decide('terminal/attach', { id: 't-1' })).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/attach' })
+    expect(decide('terminal/create', create)).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/create' })
+  })
   it('are not opened by a grant whose call opens no terminal', () => {
     const { grants, decide } = world()
     const settings = { ns: 'x', patch: {} }

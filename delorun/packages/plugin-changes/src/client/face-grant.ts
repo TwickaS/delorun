@@ -6,8 +6,6 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 
-export type { RemoteDenialLift, RemoteDenialQuestion } from '@deepseek-ai/dsh-api-gateway/client'
-
 /** A Fetch call a grant covers, exactly as the page is about to send it. */
 export interface FaceGrantCall {
   /** The HTTP method. */
@@ -55,11 +53,6 @@ export interface FaceGrantRequest {
   readonly call: FaceGrantCall | RemoteGrantCall
   /** The hold the grant opens, for `terminal/create` and `directoryPicker/list`. */
   readonly hold?: FaceGrantHold | undefined
-  /**
-   * Further Remote methods the same tap covers with the same arguments, such as the terminal's size and shell reads
-   * that come before `terminal/create`; each becomes its own entry of the grant.
-   */
-  readonly also?: readonly string[] | undefined
 }
 
 /**

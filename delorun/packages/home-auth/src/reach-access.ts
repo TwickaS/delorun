@@ -81,7 +81,9 @@ export function reachDevicePrincipal(deviceId: string, listener: ReachListenerId
  * action no riskier than a prompt is allowed. That covers reading chats, workspaces, the redacted settings, the plugins
  * and the files of a chat's own workspace; starting a chat in a known workspace with any preset; replying, stopping a
  * run and answering ordinary prompts; organizing chats and workspaces, the trash included; goals, scheduled follow-ups,
- * the model, and feedback. A read is listed here only when it reaches no secret and no path outside a chat's workspace.
+ * the model, and feedback. A read is listed here only when it reaches no secret and no path outside a chat's workspace, but for a terminal's
+ * metadata (its size limits and the shells it can start), which a first terminal reads before `terminal/create` asks
+ * for Face ID (F29).
  */
 export const REACH_ALLOWED_ACTIONS = {
   'remoteAccess/follow': 'read its own access snapshot, which remote access allows every Peer before any policy',
@@ -98,6 +100,9 @@ export const REACH_ALLOWED_ACTIONS = {
   'session/state': 'read a chat\'s state',
   'session/wait': 'wait on a chat\'s state',
   'session/attachment': 'read an image a chat holds',
+  // F29: a terminal's metadata, with no output, so a first terminal takes one Face ID, at `terminal/create`.
+  'terminal/environment': 'read the size limits a chat\'s terminal can take, metadata with no terminal output',
+  'terminal/shells': 'read the shells a chat\'s terminal can start, their paths and names, with no terminal output',
   'session/modelCatalog': 'read the models a chat can run',
   'session/canOpenWorkspacePath': 'read whether the home can open a folder; opening one belongs to the computer',
   'session/create': 'start a chat in a workspace you registered at the computer, with any of your presets; a chat in another folder needs an unlock, and full access still needs the workspace\'s consent at the computer',
@@ -461,7 +466,7 @@ export const RENEWING_ACTIONS: ReadonlySet<string> = new Set([
  * covers every elevated action, which `tests/unlock-slide.spec.ts` checks, so a new action is classified on purpose.
  */
 export const ELEVATED_READS: ReadonlySet<string> = new Set([
-  'terminal/list', 'terminal/watch', 'terminal/shells', 'terminal/environment', 'terminal/retain', 'terminal/attach',
+  'terminal/list', 'terminal/watch', 'terminal/retain', 'terminal/attach',
   'mcpManager/watch',
   'directoryPicker/list',
   'dynamicCordisRunner/getClientCode', 'dynamicCordisRunner/inventory', 'dynamicCordisRunner/resolveInspectQuery', 'dynamicCordisRunner/syncInspectManifest',
@@ -502,11 +507,9 @@ export const REACH_ELEVATED_ACTIONS = {
   'terminal/attach': TERMINAL,
   'terminal/close': TERMINAL,
   'terminal/create': TERMINAL,
-  'terminal/environment': TERMINAL,
   'terminal/list': TERMINAL,
   'terminal/rename': TERMINAL,
   'terminal/retain': TERMINAL,
-  'terminal/shells': TERMINAL,
   'terminal/watch': TERMINAL,
   'mcpManager/probe': MCP_MANAGEMENT,
   'mcpManager/restart': MCP_MANAGEMENT,
@@ -1320,9 +1323,10 @@ const ALWAYS_GRANTED: ReadonlySet<string> = new Set(['terminal/create', 'directo
 
 /**
  * The id-less terminal actions a live hold of any terminal admits: they return metadata and no output. An id-less
- * `terminal/watch` could stream other terminals' events, so it needs its own grant.
+ * `terminal/watch` could stream other terminals' events, so it needs its own grant. `terminal/environment` and
+ * `terminal/shells` are allowed without any hold (F29).
  */
-const HOLD_METADATA_ACTIONS: ReadonlySet<string> = new Set(['terminal/list', 'terminal/shells', 'terminal/environment'])
+const HOLD_METADATA_ACTIONS: ReadonlySet<string> = new Set(['terminal/list'])
 
 /** The id every `directoryPicker/*` hold carries: the picker has no id of its own, so one device holds one. */
 export const PICKER_HOLD_ID = 'directoryPicker'
