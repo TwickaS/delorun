@@ -26,19 +26,37 @@ export function clearBuildStamp(root: string): void {
 }
 
 /**
- * Record the commit a successful artifact build ran at. A worktree whose tracked files differ from HEAD gets no stamp,
- * because its artifacts are not any commit's.
+ * Read the commit a build is about to run against. Call it before the build starts.
  * @param root - the repository root.
- * @returns the stamp, or undefined when tracked files differ from HEAD.
+ * @returns HEAD, or undefined when tracked files already differ from it.
  */
-export function writeBuildStamp(root: string): BuildStamp | undefined {
+export function captureBuildStart(root: string): string | undefined {
+  return trackedFilesClean(root) ? headCommit(root) : undefined
+}
+
+/**
+ * Record the commit a successful artifact build ran at. No stamp is written, and an older one is removed, when the build
+ * started with edited tracked files, or when HEAD or the tracked files changed while it ran: its artifacts are then no
+ * commit's.
+ * @param root - the repository root.
+ * @param start - the result of {@link captureBuildStart} before the build.
+ * @returns the stamp, or undefined when none was written.
+ */
+export function writeBuildStamp(root: string, start: string | undefined): BuildStamp | undefined {
   clearBuildStamp(root)
-  const dirty = execFileSync('git', ['status', '--porcelain', '--untracked-files=no'], { cwd: root, encoding: 'utf8' }).trim()
-  if (dirty !== '') return undefined
-  const stamp: BuildStamp = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim() }
+  if (start === undefined || headCommit(root) !== start || !trackedFilesClean(root)) return undefined
+  const stamp: BuildStamp = { commit: start }
   mkdirSync(dirname(join(root, BUILD_STAMP_PATH)), { recursive: true })
   writeFileSync(join(root, BUILD_STAMP_PATH), `${JSON.stringify(stamp)}\n`)
   return stamp
+}
+
+function headCommit(root: string): string {
+  return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim()
+}
+
+function trackedFilesClean(root: string): boolean {
+  return execFileSync('git', ['status', '--porcelain', '--untracked-files=no'], { cwd: root, encoding: 'utf8' }).trim() === ''
 }
 
 /**

@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest'
 import { buildClosures } from '../../src/build-closure.ts'
 import { readRecipe } from '../../src/closure/config.ts'
 import { artifactDirectories, artifactProblems, isArtifactSource } from '../../src/closure/artifacts.ts'
-import { BUILD_STAMP_PATH, writeBuildStamp } from '../../../../../scripts/build-stamp.ts'
+import { BUILD_STAMP_PATH, captureBuildStart, writeBuildStamp } from '../../../../../scripts/build-stamp.ts'
 import { scratch, writeTree } from '../support.ts'
 
 const NO_STAMP = 'no build stamp: the artifacts were not written by a clean `pnpm run build:artifacts`; run it, or cut with `--artifacts build`'
@@ -77,7 +77,7 @@ describe('artifactProblems', () => {
     const directory = scratch(test)
     const commit = repository(directory)
     for (const path of ['packages/group/built', 'packages/group/nameless', 'apps/web', 'vendor/tool']) build(directory, path)
-    writeBuildStamp(directory)
+    writeBuildStamp(directory, captureBuildStart(directory))
     expect(artifactProblems(directory, commit)).toEqual([])
   })
 
@@ -85,7 +85,7 @@ describe('artifactProblems', () => {
     const directory = scratch(test)
     const commit = repository(directory)
     for (const path of ['packages/group/built', 'packages/group/nameless', 'apps/web', 'vendor/tool']) build(directory, path)
-    writeBuildStamp(directory)
+    writeBuildStamp(directory, captureBuildStart(directory))
     execFileSync('git', ['commit', '-q', '--allow-empty', '-m', 'next'], { cwd: directory, env: ENV, timeout: 30_000 })
     const next = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: directory, env: ENV, encoding: 'utf8' }).trim()
     expect(artifactProblems(directory, next)).toEqual([`the artifacts were built at ${commit}, not at ${next}; run \`pnpm run build:artifacts\` again, or cut with \`--artifacts build\``])
@@ -106,9 +106,10 @@ describe('artifactProblems', () => {
   it('writes no stamp when tracked files differ from HEAD, and clears an older one', (test) => {
     const directory = scratch(test)
     const commit = repository(directory)
-    expect(writeBuildStamp(directory)?.commit).toBe(commit)
+    expect(writeBuildStamp(directory, captureBuildStart(directory))?.commit).toBe(commit)
     writeFileSync(join(directory, 'vendor/stray.txt'), 'edited\n')
-    expect(writeBuildStamp(directory)).toBeUndefined()
+    expect(captureBuildStart(directory)).toBeUndefined()
+    expect(writeBuildStamp(directory, captureBuildStart(directory))).toBeUndefined()
     expect(artifactProblems(directory, commit)[0]).toBe(NO_STAMP)
   })
 
@@ -116,7 +117,7 @@ describe('artifactProblems', () => {
     const directory = scratch(test)
     const commit = repository(directory)
     for (const path of ['packages/group/built', 'packages/group/nameless', 'apps/web', 'vendor/tool']) build(directory, path)
-    writeBuildStamp(directory)
+    writeBuildStamp(directory, captureBuildStart(directory))
     const later = new Date(Date.now() + 3_600_000)
     utimesSync(join(directory, 'packages/group/built/src/index.ts'), later, later)
     expect(artifactProblems(directory, commit)).toEqual(['@x/built\'s sources are newer than its lib/; run the artifact build again'])
@@ -126,7 +127,7 @@ describe('artifactProblems', () => {
     const directory = scratch(test)
     const commit = repository(directory)
     for (const path of ['packages/group/built', 'packages/group/nameless', 'apps/web', 'vendor/tool']) build(directory, path)
-    writeBuildStamp(directory)
+    writeBuildStamp(directory, captureBuildStart(directory))
     writeFileSync(join(directory, 'vendor/stray.txt'), 'edited\n')
     expect(artifactProblems(directory, commit)).toEqual(['tracked files differ from the commit; commit or restore them before building from existing artifacts'])
     expect(artifactProblems(directory, 'b'.repeat(40))[0]).toContain(`the worktree is at ${commit}, not at ${'b'.repeat(40)}`)
