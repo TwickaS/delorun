@@ -20,8 +20,8 @@ import { PIN_MODE_LIMITS, type PinKind, type PinModeState } from '@delorun/contr
 import type { SecretSink } from '@delorun/contract-operational-logs'
 import { type ElevationChange, type ElevationRecord, type Elevations } from './elevation.ts'
 import { HomeAuthError } from './errors.ts'
-import type { PinModeStore} from './pin-mode.ts';
-import { type PinModeSummary } from './pin-mode.ts'
+import type { PasskeyFailureCode } from './passkey-auth.ts'
+import type { PinCheck, PinModeStore, PinModeSummary } from './pin-mode.ts'
 import { hashSecret, newSecret, type RandomBytes } from './secret.ts'
 
 /** The only listener a PIN unlocks on in v1: the Tailscale private address. */
@@ -135,27 +135,71 @@ export class PinUnlocks {
    *   `PIN_INVALID` for a wrong secret, and for the fifth miss, after the device was removed.
    */
   async unlock(asker: UnlockAsker, secret: string): Promise<PageUnlock> {
+    await this.verify(asker, secret)
+    return this.mint(asker)
+  }
+
+  /**
+   * Check a PIN or passcode for a device without starting an unlock, counting the try as {@link PinUnlocks.unlock} does.
+   * A device that holds a passkey proves a PIN this way to mint a one-action grant.
+   * @param asker - the device, listener and session that asked.
+   * @param secret - what the person typed.
+   * @throws {HomeAuthError} as {@link PinUnlocks.unlock}.
+   */
+  async verify(asker: UnlockAsker, secret: string): Promise<void> {
     if (asker.listener !== PIN_LISTENER) {
       throw new HomeAuthError('PIN_NOT_ALLOWED_ON_ADDRESS', 'A PIN unlocks only on the Tailscale private address. Use the computer on this address')
     }
     const outcome = await this.options.store.check(asker.deviceId, secret)
+    // The comparison awaited: a removal, a session end or a listener stop in that time leaves nothing to unlock.
+    if (outcome.kind === 'ok' && !this.options.stillAdmitted(asker)) throw new HomeAuthError('UNLOCK_INVALID', 'This page is locked. Unlock it again')
+    await this.settle(asker, outcome, left => `That is not right. ${String(left)} ${left === 1 ? 'try' : 'tries'} left before this device is signed out`, 'PIN_INVALID')
+  }
+
+  /**
+   * Count a failed passkey assertion as a wrong try of the device, in the PIN's counters.
+   * @param asker - the device, listener and session whose assertion failed.
+   * @param reason - the sentence the refusal carries when the device keeps its tries.
+   * @param code - the refusal's code.
+   * @throws {HomeAuthError} always: `PASSKEY_ASSERTION_INVALID` with the tries left, `PIN_UNLOCKS_PAUSED` after a home-wide pause, or the removal of the device on its last try.
+   */
+  async missed(asker: UnlockAsker, reason: string, code: PasskeyFailureCode = 'PASSKEY_ASSERTION_INVALID'): Promise<never> {
+    const outcome = await this.options.store.miss(asker.deviceId)
+    await this.settle(asker, outcome, left => `${reason}. ${String(left)} ${left === 1 ? 'try' : 'tries'} left before this device is signed out`, code)
+    throw new HomeAuthError(code, reason)
+  }
+
+  /**
+   * Clear a device's wrong tries after a passkey assertion passed.
+   * @param deviceId - the device.
+   */
+  async cleared(deviceId: DeviceId): Promise<void> {
+    await this.options.store.clearMisses(deviceId)
+  }
+
+  /**
+   * Turn a counted outcome into its report and refusal; `ok` returns.
+   * @param asker - the device that tried.
+   * @param outcome - what the store counted.
+   * @param wrong - the sentence for a wrong try, given the tries left.
+   * @param wrongCode - the refusal code of a wrong try.
+   * @throws {HomeAuthError} for every outcome but `ok`.
+   */
+  private async settle(asker: UnlockAsker, outcome: PinCheck, wrong: (left: number) => string, wrongCode: 'PIN_INVALID' | PasskeyFailureCode): Promise<void> {
     switch (outcome.kind) {
       case 'ok':
-        // The comparison awaited: a removal, a session end or a listener stop in that time leaves nothing to unlock.
-        if (!this.options.stillAdmitted(asker)) throw new HomeAuthError('UNLOCK_INVALID', 'This page is locked. Unlock it again')
-        return this.mint(asker)
+        return
       case 'paused':
         throw new HomeAuthError('PIN_UNLOCKS_PAUSED', 'PIN unlocks are paused after too many wrong tries. Resume them at your computer', { paused: true })
       case 'lockout':
         this.options.report({ kind: 'lockout', deviceId: asker.deviceId })
         if (this.options.store.summary().paused) this.options.report({ kind: 'paused' })
         await this.options.removeDevice(asker.deviceId)
-        throw new HomeAuthError('PIN_INVALID', 'That is the last wrong try. This device is signed out. Approve it again at your computer', { triesLeft: 0, removed: true })
+        throw new HomeAuthError(wrongCode, 'That is the last wrong try. This device is signed out. Approve it again at your computer', { triesLeft: 0, removed: true })
       case 'wrong': {
         this.options.report({ kind: 'wrong', deviceId: asker.deviceId, triesLeft: outcome.triesLeft })
         if (this.options.store.summary().paused) this.options.report({ kind: 'paused' })
-        const left = outcome.triesLeft
-        throw new HomeAuthError('PIN_INVALID', `That is not right. ${String(left)} ${left === 1 ? 'try' : 'tries'} left before this device is signed out`, { triesLeft: left, removed: false })
+        throw new HomeAuthError(wrongCode, wrong(outcome.triesLeft), { triesLeft: outcome.triesLeft, removed: false })
       }
       default:
         return assertNever(outcome)
