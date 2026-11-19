@@ -12,8 +12,8 @@
   en: 1659ce5da47a08b9
   zh: 7278b37aa9a01b41
 /c19-home-process-and-update-handshake/status:
-  en: 2542e8a86d106e35
-  zh: 4c97924651b1c634
+  en: daedca3b6facd45d
+  zh: e0cc806892d1ee21
 /c19-home-process-and-update-handshake/contents:
   en: 39c72aba93cef8a9
   zh: 8a5dcb8b79b5831c
@@ -30,8 +30,8 @@
   en: 7c58071ad07367ad
   zh: e7a8d172d3df05cb
 /c19-home-process-and-update-handshake/the-update-channel:
-  en: e7d4be3be443a871
-  zh: 2b7285fa64dc95c5
+  en: 7810bc8e2b068c90
+  zh: 8180d2e17dc81fae
 /c19-home-process-and-update-handshake/requests-and-responses:
   en: 55577ef04f8ef06c
   zh: 4c37cc9b9c75b55d
@@ -42,8 +42,11 @@
   en: 90c34fbe0ecfb835
   zh: 5f0738793b57399d
 /c19-home-process-and-update-handshake/rollback:
-  en: ef1f90e4179a9db9
-  zh: 02c6266436226976
+  en: d56aa3d917f9006f
+  zh: e79037ea041958e4
+/c19-home-process-and-update-handshake/the-outcome-record:
+  en: fe96363557dabd8b
+  zh: d72f13045dd7d81f
 /c19-home-process-and-update-handshake/the-restart:
   en: 290594787472c7f9
   zh: ca5b32c6c289d8c9
@@ -57,8 +60,8 @@
   en: 8f0516e6b53dcaa1
   zh: 8c799210e5415539
 /c19-home-process-and-update-handshake/consumers:
-  en: 480e03b94384852d
-  zh: 7b0936c4044aa32e
+  en: 449fced136b64733
+  zh: 4d91038a10c59149
 /c19-home-process-and-update-handshake/compatibility:
   en: 3dcb5362406a776e
   zh: 7a760235cae17ca1
