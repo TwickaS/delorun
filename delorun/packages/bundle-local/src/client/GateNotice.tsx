@@ -1,6 +1,6 @@
 /**
- * The notice of a {@link Gate}: the unlock prompt with its minutes and Unlock button, or the line that says the action is
- * done on the computer and why.
+ * The notice of a {@link Gate}: the line that says the action needs Face ID or the PIN each time, the unlock prompt with
+ * its minutes and Unlock button, or the line that says the action is done on the computer and why.
  */
 import { useEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
@@ -26,10 +26,11 @@ export interface GateNoticeProps {
 /**
  * Render the notice.
  * @param props - the state, the copy and the unlock.
- * @returns the unlock prompt for `unlock`, the reason line for `computer`.
+ * @returns the Face ID line for `face`, the unlock prompt for `unlock`, the reason line for `computer`.
  */
 export function GateNotice({ gate, t, minutes, onUnlock, reason }: GateNoticeProps): ReactNode {
   if (gate.kind === 'computer') return <p role="status" data-gate="computer">{t('gate.computer', { reason })}</p>
+  if (gate.kind === 'face') return <p role="status" data-gate="face">{t('gate.face')}</p>
   return <div role="status" data-gate="unlock">
     <p>{unlockSentence(t, minutes)}</p>
     {onUnlock === undefined ? null : <Button variant="primary" size="sm" onClick={onUnlock}>{t('gate.unlockButton')}</Button>}
@@ -46,7 +47,9 @@ export function GateNotice({ gate, t, minutes, onUnlock, reason }: GateNoticePro
 export function GateFailure({ t, error, text, className, retry }: { readonly t: GateTranslate; readonly error: unknown; readonly text: string; readonly className?: string | undefined; readonly retry?: (() => void) | undefined }): ReactNode {
   const { minutes, open, unlocked } = useGateUnlock()
   useRetryOnUnlock(gateOf(error)?.kind === 'unlock', unlocked, retry)
-  if (gateOf(error)?.kind === 'unlock') return <GateNotice gate={{ kind: 'unlock' }} t={t} minutes={minutes} onUnlock={open} reason="" />
+  const gate = gateOf(error)
+  if (gate?.kind === 'face') return <GateNotice gate={gate} t={t} reason="" />
+  if (gate?.kind === 'unlock') return <GateNotice gate={gate} t={t} minutes={minutes} onUnlock={open} reason="" />
   return <p className={className} role="alert">{text}</p>
 }
 

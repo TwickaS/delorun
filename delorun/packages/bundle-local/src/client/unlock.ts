@@ -5,8 +5,8 @@
  * - **Where it applies.** Only on a device: a page the studio serves on the computer's own address (loopback) is `away`
  *   from the start and sends no request, because the route answers that address with `HOST_MISMATCH`; a profile without
  *   the routes answers a device's first read with 404, and the store then stays `away` and shows nothing.
- * - **Asking.** An action remote access refused with `elevation-required:` opens the dialog with the reason; the
- *   Devices section opens it without one. Unlock posts the request and shows the code with its expiry; the store reads
+ * - **Asking.** The Devices section opens the dialog. An action remote access refused with `elevation-required:` never
+ *   opens it: a grant for that one call lifts such a refusal (`face-retry.ts`), and no unlock does. Unlock posts the request and shows the code with its expiry; the store reads
  *   the state every {@link ELEVATION_POLL_MS} until the computer answers or the request expires.
  * - **Honest outcomes.** A request that disappears before its expiry was declined or cancelled at the computer; one that
  *   disappears at its expiry expired; a read that does not complete says the computer cannot be reached and is tried
@@ -53,7 +53,8 @@ export interface UnlockSource {
   /** Read the state again, such as after the connection reset. */
   readonly refresh: () => Promise<void>
   /**
-   * Report a call remote access refused; a reason that needs an unlock opens the dialog on a device.
+   * Report a call remote access refused: the unlock is read again, since a refusal while the banner shows means the
+   * unlock ended. It never opens the dialog.
    * @param reason - the policy's reason, such as `elevation-required: terminal/create`.
    */
   readonly refused: (reason: string | undefined) => void
@@ -162,11 +163,8 @@ export function createUnlockSource(fetch: HostFetch, now: () => number = Date.no
     refresh,
     refused(reason) {
       if (reason?.startsWith(ELEVATION_REQUIRED) !== true || view.place === 'away') return
-      // Under PIN mode the unlock is the PIN, not a code typed at the computer.
-      if (askPin()) return
-      const action = reason.slice(ELEVATION_REQUIRED.length).trim()
-      publish({ dialog: { action: action === '' ? undefined : action, busy: false, outcome: undefined } })
-      // A refusal while the banner shows means the unlock ended where this page did not see it.
+      // Such a refusal is lifted by a Face ID or PIN grant for the call (`face-retry.ts`), never by an unlock (A483), so
+      // the dialog does not open. A refusal while the banner shows still means the unlock ended where this page did not see it.
       void refresh()
     },
     open() {

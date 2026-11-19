@@ -15,8 +15,6 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 // Type-only: the ctx.uiWorkspace merge.
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
-// Type-only: the `remote/call-denied` event.
-import type {} from '@deepseek-ai/dsh-api-gateway/client'
 // Type-only: the ctx.remote merge, whose `session` namespace answers the model catalogue.
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 // Type-only: the ctx.settingsShell merge, which opens a Settings section.
@@ -33,6 +31,7 @@ import { Overlay, type OpenFlow, type OverlayInjected } from './Overlay.tsx'
 import type { BrowserFace } from './screens/BrowserScreen.tsx'
 import type { FolderBrowse } from './screens/FolderScreen.tsx'
 import { DelorunDirectoryFlow, type DirectoryFlowInjected, type DirectoryFlowSource } from './DirectoryFlow.tsx'
+import { grantingFetchOf } from '@delorun/plugin-changes/face-grant'
 
 export { createApi, type ApiFailure, type ApiOptions, type ApiResult, type NewWorkspaceApi } from './api.ts'
 export { en, NS, zh, type NewWorkspaceLocaleKey } from './locales.ts'
@@ -133,13 +132,9 @@ function applyStudio(ctx: Context): void {
     list: async (path, signal) => uiWorkspace().listDirectory(path, signal),
     create: async (parent, name) => uiWorkspace().createDirectory(parent, name),
   }
-  // A refusal until the device is unlocked opens the studio's unlock dialog the way a refused Remote call does.
-  const api = createApi({
-    unlockNeeded: (route) => {
-      const endpoint = route === 'setNetwork' ? 'delorunNetwork/set' : `delorunNewWorkspace/${route}`
-      ctx.emit('remote/call-denied', { endpoint, reason: `elevation-required: ${endpoint}` })
-    },
-  })
+  // On a device each sensitive route asks for Face ID (or the PIN) for that call and is sent once more; a cancelled
+  // confirmation shows the flow's own problem line.
+  const api = createApi({ fetch: grantingFetchOf(ctx) })
   const readModels = async (): Promise<ModelCatalogView | undefined> => {
     const session = ctx.get('remote.session')
     if (session === undefined) return undefined

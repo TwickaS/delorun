@@ -10,9 +10,10 @@
  * It also registers the Devices section, which shows the reach state, manages the devices the home approved and answers
  * their requests to unlock sensitive actions; the Network section, which sets each workspace's network for sandboxed
  * commands and `web_fetch` at the home's own computer; the notice that an answer the home refused, such as a full-access
- * grant from a remote studio, must be given at the home's own computer; and the remote studio's unlock, which turns a
- * call refused with `elevation-required:` into a request to the computer and shows a banner while sensitive actions are
- * unlocked. The consent surfaces of Delorun's two consent plugins come from here too: the full-access consent,
+ * grant from a remote studio, must be given at the home's own computer; the remote studio's unlock, which shows a banner
+ * while sensitive actions are unlocked; and the Face ID step, which turns a call a device sends that the home refused for
+ * want of a grant (a Remote `elevation-required:` refusal or a plugin route's `403 ELEVATION_REQUIRED` naming its
+ * action) into one Face ID or PIN confirmation and sends the call once more (`ctx.delorunFaceGrant`). The consent surfaces of Delorun's two consent plugins come from here too: the full-access consent,
  * which upstream's permission control asks through the `permissionSwitchConsent` service before a chat switches to
  * full access in a workspace without a grant; the approval card's action for a request that asks for full access; the
  * review of a waiting stdio MCP server and the notice that one waits; the Permissions section, which lists every
@@ -84,7 +85,8 @@ import { en as pinEn, zh as pinZh, type PinLocaleKey } from './pin-locales.ts'
 import { en as faceIdEn, zh as faceIdZh, type FaceIdLocaleKey } from './face-id-locales.ts'
 import { PinLock } from './PinLock.tsx'
 import type { FaceGrantService } from '@delorun/plugin-changes/face-grant'
-import { createFaceGrantSource } from './face-grant.ts'
+import { createFaceGrantSource, type FaceGrantSource } from './face-grant.ts'
+import { grantingFetch, oneAtATime, remoteDenialLift } from './face-retry.ts'
 import { FaceIdGrantOverlay } from './FaceIdGrantOverlay.tsx'
 import { FaceIdAnswerAction, type FaceIdAnswerInjected } from './FaceIdAnswerAction.tsx'
 import { FaceIdSection, type FaceIdSectionInjected } from './FaceIdSection.tsx'
@@ -521,6 +523,7 @@ export function apply(ctx: Context): void {
   ctx.effect(() => ctx.locale.register(FACE_ID_NS, { en: faceIdEn, zh: faceIdZh }), 'delorun-face-id: screen dictionaries')
   // One function for the plugin's lifetime: the section's requests restart when its identity changes.
   const browserFetch: HostFetch = (input, init) => globalThis.fetch(input, init)
+  const { source: faceGrant, fetch: studioFetch } = applyFaceGrant(ctx, browserFetch, (ctx.get('connection') as ConnectionHandle).isLoopback)
   const pin = applyPin(ctx, browserFetch, (ctx.get('connection') as ConnectionHandle).isLoopback)
   const unlock = applyUnlock(ctx, browserFetch, (ctx.get('connection') as ConnectionHandle).isLoopback, pin)
   // The unlock banner follows the page's PIN unlock: read the elevation again when the page unlocks or locks.
@@ -580,8 +583,6 @@ export function apply(ctx: Context): void {
     locale: FACE_ID_NS,
     inject: faceIdFace,
   }, FaceIdSection))
-  const faceGrant = createFaceGrantSource()
-  ctx.provide('delorunFaceGrant', { grant: faceGrant.grant } satisfies FaceGrantService)
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({
     name: 'shell.overlay',
     id: FACE_ID_GRANT_ID,
@@ -602,7 +603,7 @@ export function apply(ctx: Context): void {
   }, FaceIdPairingOverlay))
   ctx.effect(() => ctx.locale.register(NETWORK_NS, { en: networkEn, zh: networkZh }), 'delorun-network: section dictionaries')
   const networkT = ctx.locale.bind(NETWORK_NS)
-  const networkFace = (): NetworkSectionInjected => ({ fetch: browserFetch })
+  const networkFace = (): NetworkSectionInjected => ({ fetch: studioFetch })
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: NETWORK_SECTION_ID,
@@ -614,7 +615,7 @@ export function apply(ctx: Context): void {
   ctx.effect(() => ctx.locale.register(VERSIONS_NS, { en: versionsEn, zh: versionsZh }), 'delorun-setup-versions: section dictionaries')
   const versionsT = ctx.locale.bind(VERSIONS_NS)
   const isLoopback = (ctx.get('connection') as ConnectionHandle).isLoopback
-  const versionsFace = (): VersionsSectionInjected => ({ fetch: browserFetch, atComputer: () => isLoopback, saveFile: saveBrowserFile })
+  const versionsFace = (): VersionsSectionInjected => ({ fetch: studioFetch, atComputer: () => isLoopback, saveFile: saveBrowserFile })
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: SETUP_VERSIONS_SECTION_ID,
@@ -629,7 +630,7 @@ export function apply(ctx: Context): void {
   applyNeedsSetup(ctx, browserFetch)
   applyRemoteNotice(ctx)
   applyTrustBadge(ctx, trustApi(browserFetch))
-  applyConsents(ctx, browserFetch)
+  applyConsents(ctx, studioFetch)
 }
 
 /**
@@ -850,6 +851,29 @@ export function applyConsents(ctx: Context, fetch: HostFetch): void {
     locale: CONSENTS_NS,
     inject: externalAgentsFace,
   }, ExternalAgentsSection))
+}
+
+/**
+ * Provide `ctx.delorunFaceGrant` and, on a reach device, the Face ID step for every sensitive call (A483): a Remote call
+ * or a plugin route the home refuses for want of a grant opens the confirmation and is sent once more
+ * (`face-retry.ts`). On the home's own computer nothing is refused, so nothing asks: the service's `fetch` is the page's
+ * and no Remote lift is registered.
+ * @param ctx - the browser plugin context.
+ * @param fetch - the page's request function.
+ * @param onComputer - whether the page is the home's own computer.
+ * @returns the confirmation's store, which the overlay shows, and the `fetch` the plugin's own sections send through.
+ */
+export function applyFaceGrant(ctx: Context, fetch: HostFetch, onComputer: boolean): { readonly source: FaceGrantSource; readonly fetch: HostFetch } {
+  const source = createFaceGrantSource()
+  const queued = oneAtATime(source.grant)
+  const studioFetch: HostFetch = onComputer ? fetch : grantingFetch(fetch, queued)
+  ctx.provide('delorunFaceGrant', { grant: source.grant, fetch: studioFetch } satisfies FaceGrantService)
+  if (!onComputer) {
+    ctx.inject(['remote'], (inner) => {
+      inner.effect(() => inner.remote.$liftDenials(remoteDenialLift(queued)), 'delorun-face-id: a refused Remote call asks for Face ID and is sent once more')
+    })
+  }
+  return { source, fetch: studioFetch }
 }
 
 /**

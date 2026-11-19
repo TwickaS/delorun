@@ -111,12 +111,12 @@ export interface NewWorkspaceApi {
 /** What the client needs from the page. */
 export interface ApiOptions {
   /**
-   * Called when a route was refused until the device is unlocked, so the studio can open its unlock dialog.
+   * Called when a route was refused for want of a grant the person did not give, after the Face ID step of `fetch`.
    * @param route - the route refused, such as `add`.
    */
-  readonly unlockNeeded: (route: string) => void
-  /** The page's `fetch`; read at each call when absent. */
-  readonly fetch?: typeof globalThis.fetch
+  readonly unlockNeeded?: ((route: string) => void) | undefined
+  /** The studio's `fetch` with the Face ID step, or the page's own; the page's own is read at each call when absent. */
+  readonly fetch?: ((input: string, init?: RequestInit) => Promise<Response>) | undefined
 }
 
 /** The Host's error codes for a refused arrival. */
@@ -168,7 +168,7 @@ export function createApi(options: ApiOptions): NewWorkspaceApi {
     if (response.status === 403) {
       const code = await errorCodeOf(response)
       if (code === ELEVATION_REQUIRED) {
-        options.unlockNeeded(route)
+        options.unlockNeeded?.(route)
         return fail(route, 'locked', signal)
       }
       return fail(route, code === LOOPBACK_REQUIRED ? 'refused-arrival' : 'failed', signal)

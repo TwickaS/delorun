@@ -1342,6 +1342,56 @@ describe('Client Typert API', () => {
     }
   })
 
+  it('asks the registered denial lift about a refused call and sends it once more only when the lift agrees', async () => {
+    const denied = { ok: false, error: { code: 'remote-access/denied', message: 'fixture: denied', details: { action: 'probe/create', reason: 'elevation-required: probe/create' } } } as const
+    const call = vi.fn<ConnectionHandle['rpc']['call']>()
+      .mockResolvedValueOnce(denied).mockResolvedValueOnce({ ok: true, value: { ref: 'goal-1' } })
+      .mockResolvedValueOnce(denied)
+      .mockResolvedValueOnce(denied).mockResolvedValueOnce(denied)
+      .mockResolvedValueOnce(denied)
+    const ctx = await bench(call)
+    await ctx.remote.$mount({ package: '@fixture/probe', descriptors: [directDescriptor()] })
+    const denials: unknown[] = []
+    ctx.on('remote/call-denied', (denial) => { denials.push(denial) })
+    const asked: { endpoint: string; reason: string | undefined; args: unknown }[] = []
+    const answers = [true, false, true]
+    const withdraw = ctx.remote.$liftDenials(({ endpoint, reason, args }) => {
+      asked.push({ endpoint, reason, args: { ...args } })
+      const answer = answers.shift()
+      if (answer === undefined) throw new Error('fixture lift failure')
+      return Promise.resolve(answer)
+    })
+    expect(() => ctx.remote.$liftDenials(() => Promise.resolve(true))).toThrow(/already registered/)
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      // Lifted: the same call is sent again and its answer is the caller's; nothing is reported.
+      await expect(ctx.remote.probe.create('agent-1', { objective: 'ship' })).resolves.toEqual({ ok: true, value: { ref: 'goal-1' } })
+      expect(call.mock.calls[1]?.slice(0, 3)).toEqual(call.mock.calls[0]?.slice(0, 3))
+      expect(denials).toEqual([])
+      // Declined: the caller receives the refusal, which is reported, and nothing more is sent.
+      await expect(ctx.remote.probe.create('agent-1', { objective: 'ship' })).resolves.toMatchObject({ ok: false, error: { code: 'remote-access/denied' } })
+      expect(call).toHaveBeenCalledTimes(3)
+      // Lifted but refused again: sent exactly once more, and the second refusal is the caller's.
+      await expect(ctx.remote.probe.create('agent-1', { objective: 'ship' })).resolves.toMatchObject({ ok: false, error: { code: 'remote-access/denied' } })
+      expect(call).toHaveBeenCalledTimes(5)
+      // A throwing lift is contained and answers false.
+      await expect(ctx.remote.probe.create('agent-1', { objective: 'ship' })).resolves.toMatchObject({ ok: false, error: { code: 'remote-access/denied' } })
+      expect(call).toHaveBeenCalledTimes(6)
+      expect(consoleError).toHaveBeenCalledWith('client api: the denial lift threw:', expect.objectContaining({ message: 'fixture lift failure' }))
+      expect(asked).toHaveLength(4)
+      expect(asked[0]).toMatchObject({ endpoint: 'probe/create', reason: 'elevation-required: probe/create' })
+      expect(asked[0]?.args).toEqual({ ...(call.mock.calls[0]?.[2] as { readonly args: object }).args })
+      expect(denials).toHaveLength(3)
+    } finally {
+      consoleError.mockRestore()
+      withdraw()
+    }
+    // Withdrawn: a refusal goes straight to the caller.
+    call.mockResolvedValueOnce(denied)
+    await expect(ctx.remote.probe.create('agent-1', { objective: 'ship' })).resolves.toMatchObject({ ok: false, error: { code: 'remote-access/denied' } })
+    expect(asked).toHaveLength(4)
+  })
+
   it('preserves a __proto__ wire parameter as an own named argument', async () => {
     const call = vi.fn<ConnectionHandle['rpc']['call']>()
       .mockResolvedValue({ ok: true, value: { ref: 'goal-1' } })

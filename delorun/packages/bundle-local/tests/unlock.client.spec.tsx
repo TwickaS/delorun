@@ -154,16 +154,17 @@ describe('the unlock store', () => {
     expect(unlock.hooks.unlock.getSnapshot()).toMatchObject({ place: 'away', dialog: null })
   })
 
-  it('opens the dialog only for a refusal that needs an unlock', async () => {
-    const unlock = createUnlockSource(deviceHost().fetch)
+  it('never opens the dialog for a refusal, since a grant for the call lifts it and no unlock does (A483)', async () => {
+    const host = deviceHost()
+    const unlock = createUnlockSource(host.fetch)
     await unlock.refresh()
-    // Pins the prefix check: a refusal the computer keeps is no request to unlock.
-    for (const reason of [undefined, 'loopback-required: credentials/set', 'resource-unlisted: session/cancel']) unlock.refused(reason)
+    const reads = host.count(`GET ${ELEVATION_ROUTES.state}`)
+    // Pins the face path: a code from the computer can no longer admit any of these, so the dialog would be a dead end.
+    for (const reason of [undefined, 'loopback-required: credentials/set', 'resource-unlisted: session/cancel', 'elevation-required: terminal/create', 'elevation-required: pluginManager/installBundle', 'elevation-required:']) unlock.refused(reason)
     expect(unlock.hooks.unlock.getSnapshot().dialog).toBeNull()
-    unlock.refused('elevation-required: terminal/create')
-    expect(unlock.hooks.unlock.getSnapshot().dialog).toEqual({ action: 'terminal/create', busy: false, outcome: undefined })
-    unlock.refused('elevation-required:')
-    expect(unlock.hooks.unlock.getSnapshot().dialog).toMatchObject({ action: undefined })
+    await settle()
+    // An elevation refusal still reads the unlock again, so a banner of an ended unlock goes.
+    expect(host.count(`GET ${ELEVATION_ROUTES.state}`)).toBeGreaterThan(reads)
     unlock.dispose()
   })
 
@@ -348,11 +349,9 @@ describe('the unlock dialog and banner', () => {
     const unlock = createUnlockSource(host.fetch)
     await unlock.refresh()
     renderOverlay(unlock)
-    act(() => { unlock.refused('elevation-required: terminal/create') })
+    act(() => { unlock.open() })
     const dialog = screen.getByRole('dialog', { name: en['unlock.title'] })
-    expect(dialog.textContent).toContain(en['unlock.needed'])
     expect(dialog.textContent).not.toContain('elevation-required')
-    expect(dialog.textContent).not.toContain('terminal/create')
     fireEvent.click(within(dialog).getByRole('button', { name: en['unlock.start'] }))
     await settle()
     const code = screen.getByText(groupedCode(CODE))
@@ -431,7 +430,7 @@ describe('the unlock dialog and banner', () => {
 })
 
 describe('the plugin\'s unlock', () => {
-  it('opens the dialog on a call refused for an unlock, and reads again after the connection resets', async () => {
+  it('keeps the dialog shut for a call refused for want of a grant, and reads again after the refusal and the connection reset', async () => {
     const host = deviceHost()
     vi.stubGlobal('fetch', host.fetch)
     const ctx = new Context()
@@ -447,9 +446,10 @@ describe('the plugin\'s unlock', () => {
       expect(overlay?.inject?.()).toMatchObject({ hooks: unlock?.hooks })
       await settle()
       expect(host.count(`GET ${ELEVATION_ROUTES.state}`)).toBe(1)
-      // Pins the wiring: upstream reports the refusal, and the store turns it into the request to unlock.
+      // Pins the wiring: upstream reports the refusal and the store reads the unlock again, but a grant lifts such a
+      // refusal and no unlock does, so the dialog stays shut.
       act(() => { ctx.emit('remote/call-denied', { endpoint: 'terminal/create', reason: 'elevation-required: terminal/create' }) })
-      expect(unlock?.hooks.unlock.getSnapshot().dialog).toMatchObject({ action: 'terminal/create' })
+      expect(unlock?.hooks.unlock.getSnapshot().dialog).toBeNull()
       await settle()
       ctx.emit('connection/reset')
       await settle()

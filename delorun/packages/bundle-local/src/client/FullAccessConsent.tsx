@@ -10,7 +10,7 @@ import { useState, type ReactNode } from 'react'
 import { Button, Checkbox, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { HostObservable, InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { FULL_ACCESS_PRESET, readEverywhere, reviewChat, setFullAccess, type WorkspaceAccess } from './consents-api.ts'
-import { ELEVATION_REQUIRED, unlockSentence } from './gate.ts'
+import { ELEVATION_REQUIRED, namesGrantAction, unlockSentence } from './gate.ts'
 import { useRetryOnUnlock } from './GateNotice.tsx'
 import { currentGateUnlock, noteUnlockedAction, useGateUnlock } from './gate-unlock.ts'
 import { hostFailureOf, isRefused, LOOPBACK_REQUIRED, type HostFetch } from './host-api.ts'
@@ -42,7 +42,7 @@ export type FullAccessConsentState = {
 
 /** Why an answer was not recorded: a code the consent words itself, or the home's own sentence. */
 export type ConsentFailure =
-  | { readonly kind: 'stale' | 'remote' | 'unlock' | 'unreachable' | 'unreadable' }
+  | { readonly kind: 'stale' | 'remote' | 'face' | 'unlock' | 'unreachable' | 'unreadable' }
   | { readonly kind: 'refused'; readonly message: string }
 
 /** The store the overlay entry reads, and the questions surfaces ask through it. */
@@ -86,6 +86,8 @@ export function consentFailureOf(error: unknown): ConsentFailure {
     case 'refused':
       if (failure.code === 'STALE_REVIEW') return { kind: 'stale' }
       if (failure.code === LOOPBACK_REQUIRED) return { kind: 'remote' }
+      // A cancelled Face ID confirmation: trying again asks again; no unlock admits it.
+      if (namesGrantAction(failure)) return { kind: 'face' }
       if (failure.code === ELEVATION_REQUIRED) return { kind: 'unlock' }
       return { kind: 'refused', message: failure.message }
     case 'unreachable':
@@ -230,6 +232,7 @@ export function consentFailureText(t: FullAccessConsentProps['t'], failure: Cons
   switch (failure.kind) {
     case 'stale': return t('failed.stale')
     case 'remote': return t('loopback', { action: t(action) })
+    case 'face': return t('gate.face')
     case 'unlock': return `${unlockSentence(t, currentGateUnlock().minutes)} ${t('unlockWhere')}`
     case 'unreachable': return t('failed.unreachable')
     case 'unreadable': return t('failed.unreadable')

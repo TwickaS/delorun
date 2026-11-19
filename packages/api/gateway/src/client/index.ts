@@ -56,6 +56,22 @@ export interface RemoteCallDenial {
   readonly reason: string | undefined
 }
 
+/** A refused unary call, as a {@link RemoteDenialLift} is asked about it. */
+export interface RemoteDenialQuestion extends RemoteCallDenial {
+  /** The call's wire arguments, exactly as they were sent and will be sent again. */
+  readonly args: Readonly<Record<string, unknown>>
+  /** The call's cancellation. */
+  readonly signal: AbortSignal
+}
+
+/**
+ * Decide whether a refused unary call is sent once more: the handler may first obtain what the Host asked for, such as
+ * a confirmation the Host keeps for exactly this call.
+ * @param denial - the refused call.
+ * @returns true to send the same call once more; false to hand the refusal to the caller.
+ */
+export type RemoteDenialLift = (denial: RemoteDenialQuestion) => Promise<boolean>
+
 interface MountToken {
   active: boolean
   readonly abort: AbortController
@@ -123,6 +139,16 @@ export interface ClientRemote extends TypertClientRemote {
    * the latest one afterwards.
    */
   readonly $host: RemoteHostFacts
+  /**
+   * Register the one handler asked about every unary call the Host's remote access refuses with
+   * `remote-access/denied`, before the caller sees the refusal. When it resolves true, the same call with the same
+   * arguments is sent once more and its outcome is the caller's; when it resolves false or throws, the caller receives
+   * the refusal. `remote/call-denied` is emitted only for a refusal the caller receives. Streams are not asked.
+   * @param lift - the handler.
+   * @returns disposer that withdraws it.
+   * @throws {Error} when a handler is already registered.
+   */
+  $liftDenials(lift: RemoteDenialLift): () => void
 }
 
 /** The fixed Host facts exposed on `ctx.remote.$host`. */
@@ -178,6 +204,8 @@ class ClientRemoteService extends Service implements ClientRemote {
   private readonly streams: RemoteStreamMuxClient
   private readonly events: ClientRemoteEvents | undefined
   private mutations = Promise.resolve()
+  // Kept in a record: the Service's caller proxy wraps a function-valued member, so the function itself cannot be compared through `this`.
+  private denialLift: { readonly lift: RemoteDenialLift } | undefined
 
   constructor(ctx: Context) {
     super(ctx, 'remote')
@@ -237,6 +265,13 @@ class ClientRemoteService extends Service implements ClientRemote {
       this.hostFacts = { home, isLoopback: this.connection.isLoopback }
     }
     return this.hostFacts
+  }
+
+  $liftDenials(lift: RemoteDenialLift): () => void {
+    if (this.denialLift !== undefined) throw new Error('client api: a denial lift is already registered')
+    const entry = { lift }
+    this.denialLift = entry
+    return () => { if (this.denialLift === entry) this.denialLift = undefined }
   }
 
   async $mount(contribution: TypertRemoteContribution): ReturnType<TypertClientRemote['$mount']> {
@@ -483,7 +518,11 @@ class ClientRemoteService extends Service implements ClientRemote {
     const connection = this.ownerCtx.get('connection') as ConnectionHandle | undefined
     if (connection === undefined) throw new Error(`client api: ${endpoint} has no active Connection`)
     try {
-      const result = await connection.rpc.call('/api', endpoint, { args: prepared.args }, prepared.signal)
+      const send = (): ReturnType<typeof connection.rpc.call> => connection.rpc.call('/api', endpoint, { args: prepared.args }, prepared.signal)
+      let result = await send()
+      if (!result.ok && result.error.code === 'remote-access/denied' && mountActive(token) && await this.lifted(endpoint, result.error.details, prepared)) {
+        result = await send()
+      }
       if (!mountActive(token)) return withdrawn(endpoint)
       prepared.signal.throwIfAborted()
       if (!result.ok) {
@@ -501,6 +540,19 @@ class ClientRemoteService extends Service implements ClientRemote {
       // round-trip, so it gets the same code the Host would have produced.
       if (prepared.signal.aborted) return cancelledFailure(endpoint, error)
       return carrierFailure(endpoint, error)
+    }
+  }
+
+  /** Ask the registered lift whether to send a refused call once more; no lift, an aborted call or a throwing lift answers false. */
+  private async lifted(endpoint: string, details: object, prepared: PreparedClientInvocation): Promise<boolean> {
+    const lift = this.denialLift?.lift
+    if (lift === undefined || prepared.signal.aborted) return false
+    const reason: unknown = Reflect.get(details, 'reason')
+    try {
+      return await lift({ endpoint, reason: typeof reason === 'string' ? reason : undefined, args: prepared.args, signal: prepared.signal }) && !prepared.signal.aborted
+    } catch (error) {
+      console.error('client api: the denial lift threw:', error)
+      return false
     }
   }
 

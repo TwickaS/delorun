@@ -1,18 +1,30 @@
 /**
  * The service that asks the person to confirm one call with Face ID: `ctx.delorunFaceGrant`, provided by
- * `@delorun/bundle-local`'s browser half and read by the Changes and update controllers. Source-only, so a consumer takes the
- * type without a build of the bundle (which depends on these plugins).
+ * `@delorun/bundle-local`'s browser half and read by the Changes and update controllers and by every plugin that sends its
+ * home requests through {@link grantingFetchOf}. Source-only, so a consumer takes the type without a build of the bundle
+ * (which depends on these plugins).
  */
-import type {} from '@deepseek-ai/cordis'
+import type { Context } from '@deepseek-ai/cordis'
 
-/** The call a grant covers, exactly as the page is about to send it. */
+export type { RemoteDenialLift, RemoteDenialQuestion } from '@deepseek-ai/dsh-api-gateway/client'
+
+/** A Fetch call a grant covers, exactly as the page is about to send it. */
 export interface FaceGrantCall {
   /** The HTTP method. */
-  readonly method: 'POST'
+  readonly method: string
   /** The pathname and query the home receives (see {@link fetchedPath}). */
   readonly path: string
-  /** The JSON body. */
-  readonly body: object
+  /**
+   * The body: a JSON value, or the text as sent. Text that parses as JSON is hashed in its canonical form, any other
+   * text as its bytes, as the home hashes the body it reads; an empty text stands for no body.
+   */
+  readonly body: object | string
+}
+
+/** A Remote method call a grant covers: the argument object as the page sends it on the Remote mux. */
+export interface RemoteGrantCall {
+  /** The call's wire arguments, hashed as `hashArgs`. */
+  readonly args: Readonly<Record<string, unknown>>
 }
 
 /**
@@ -26,12 +38,28 @@ export function fetchedPath(path: string): string {
   return `${url.pathname}${url.search}`
 }
 
+/** The terminal or folder picker a grant opens a hold on when the call that uses it opens that terminal or picker. */
+export interface FaceGrantHold {
+  readonly feature: 'terminal' | 'picker'
+  readonly id: string
+}
+
 /** What a confirmation covers. */
 export interface FaceGrantRequest {
-  /** The grant's action name, such as `changes/plugin-apply`. */
+  /**
+   * The grant's action name: a Remote method (`pluginManager/installBundle`), a Fetch route's action
+   * (`plugin-packs/add`) or a Changes control (`changes/plugin-apply`). The sheet's words are looked up by it.
+   */
   readonly action: string
   /** The call the grant is hashed from. */
-  readonly call: FaceGrantCall
+  readonly call: FaceGrantCall | RemoteGrantCall
+  /** The hold the grant opens, for `terminal/create` and `directoryPicker/list`. */
+  readonly hold?: FaceGrantHold | undefined
+  /**
+   * Further Remote methods the same tap covers with the same arguments, such as the terminal's size and shell reads
+   * that come before `terminal/create`; each becomes its own entry of the grant.
+   */
+  readonly also?: readonly string[] | undefined
 }
 
 /**
@@ -41,10 +69,30 @@ export interface FaceGrantRequest {
  */
 export type FaceGrant = (request: FaceGrantRequest) => Promise<string | undefined>
 
+/** The page's `fetch` as the studio's plugins call it: a path relative to the document, and the request's options. */
+export type GrantingFetch = (input: string, init?: RequestInit) => Promise<Response>
+
 /** What `ctx.delorunFaceGrant` shares. */
 export interface FaceGrantService {
   /** @see FaceGrant */
   readonly grant: FaceGrant
+  /**
+   * The page's `fetch` with the Face ID step: a `403 ELEVATION_REQUIRED` answer that names its grant `action` opens the
+   * confirmation for exactly that request, and a granted request is sent once more with `Delorun-Grant`. A cancelled
+   * confirmation, or any other answer, is returned to the caller as the home sent it. On the home's own computer it is
+   * the page's `fetch`.
+   */
+  readonly fetch: GrantingFetch
+}
+
+/**
+ * The `fetch` a plugin sends its home requests through: the Face ID service's when the studio provides it, read at each
+ * call, otherwise the page's own.
+ * @param ctx - the plugin's browser context.
+ * @returns the function.
+ */
+export function grantingFetchOf(ctx: Context): GrantingFetch {
+  return (input, init) => (ctx.get('delorunFaceGrant')?.fetch ?? ((path: string, options?: RequestInit) => globalThis.fetch(path, options)))(input, init)
 }
 
 declare module '@deepseek-ai/cordis' {

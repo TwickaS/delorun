@@ -475,20 +475,30 @@ describe('the plugin wiring', () => {
 describe('an action that needs an unlock, under PIN mode', () => {
   const READ: Answer = { status: 200, body: { kind: 'none', unlockMinutes: 15 } }
 
-  it('asks the PIN lock screen and opens no code dialog; without PIN mode the code dialog opens', async () => {
+  it('asks the PIN lock screen and opens no code dialog when opened; without PIN mode the code dialog opens', async () => {
     // Fails without: the hand-over to the PIN (the device would ask for a code at the computer under PIN mode), or the code dialog where the PIN does not apply.
     const host = fakeHost({ [key(ELEVATION_ROUTES.state, 'GET')]: READ })
     const asked = vi.fn(() => true)
     const withPin = createUnlockSource(host.fetch, () => NOW, false, asked)
     await withPin.refresh()
-    withPin.refused('elevation-required: terminal/create')
     withPin.open()
-    expect(asked).toHaveBeenCalledTimes(2)
+    expect(asked).toHaveBeenCalledOnce()
     expect(withPin.hooks.unlock.getSnapshot().dialog).toBeNull()
     const withoutPin = createUnlockSource(host.fetch, () => NOW, false, () => false)
     await withoutPin.refresh()
-    withoutPin.refused('elevation-required: terminal/create')
-    expect(withoutPin.hooks.unlock.getSnapshot().dialog).toMatchObject({ action: 'terminal/create' })
+    withoutPin.open()
+    expect(withoutPin.hooks.unlock.getSnapshot().dialog).toMatchObject({ action: undefined })
+  })
+
+  it('asks neither the PIN lock screen nor the code dialog for a refused call: its Face ID or PIN grant does (A483)', async () => {
+    // Fails if a refusal opens a PIN page window or the code dialog, neither of which admits the call.
+    const host = fakeHost({ [key(ELEVATION_ROUTES.state, 'GET')]: READ })
+    const asked = vi.fn(() => true)
+    const withPin = createUnlockSource(host.fetch, () => NOW, false, asked)
+    await withPin.refresh()
+    withPin.refused('elevation-required: terminal/create')
+    expect(asked).not.toHaveBeenCalled()
+    expect(withPin.hooks.unlock.getSnapshot().dialog).toBeNull()
   })
 })
 

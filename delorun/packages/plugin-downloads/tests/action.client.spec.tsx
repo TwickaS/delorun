@@ -46,7 +46,7 @@ describe('the Add action', () => {
     const source = createFakeDownloadsSource([{ key: BROWSER, state: 'waiting-for-unlock', receivedBytes: 0 }])
     const release = provideDownloadsSource(source)
     render(<PackAddAction matched={BROWSER} t={t} />)
-    expect(screen.getByRole('status').textContent).toBe('Waiting for unlock')
+    expect(screen.getByRole('status').textContent).toBe('Not confirmed. Try again to confirm with Face ID or your PIN')
     act(() => { source.update(BROWSER, { state: 'failed', failure: { code: 'offline', message: 'No connection.' } }) })
     expect(screen.getByRole('status').textContent).toContain('No connection.')
     fireEvent.click(screen.getByRole('button', { name: 'Try Browser again' }))

@@ -9,7 +9,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 // Type-only: the ctx.slots merge.
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
-// Type-only: the `remote/call-denied` event.
+// Type-only: the ctx.remote merge.
 import type {} from '@deepseek-ai/dsh-api-gateway/client'
 // Type-only: the Plugins page's 'plugins.bundle.action' slot.
 import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
@@ -19,6 +19,7 @@ import { en, NS, zh, type DownloadsLocaleKey, type Translate } from './locales.t
 import { packNotLoading, packToAdd, PackAddAction, PackNotLoadingAction } from './Action.tsx'
 import { DownloadsSurface } from './Surface.tsx'
 import { createPacksClient } from '@delorun/plugin-packs/client'
+import { grantingFetchOf } from '@delorun/plugin-changes/face-grant'
 import { createRemoteDownloadsSource as createPacksSource } from './remote.ts'
 import { provideDownloadsSource, provideTranslate, provideUninstall, type DownloadsSource } from './source.ts'
 
@@ -41,19 +42,19 @@ export const inject = ['slots', 'locale']
 const POLL_MS = 1500
 
 /**
- * The source over the Host's packs routes. A refusal that asks for an unlock opens the studio's unlock dialog the way a
- * refused Remote call does, through `remote/call-denied`.
+ * The source over the Host's packs routes, sent through the studio's `fetch` with the Face ID step: on a device, an add,
+ * retry or removal asks for Face ID (or the PIN) for that call and is sent once more. A cancelled confirmation leaves the
+ * item marked as not confirmed.
  * @param ctx - the browser plugin context.
  * @returns the source the panel reads.
  */
 export function createRemoteDownloadsSource(ctx: Context): DownloadsSource {
-  return createPacksSource(createPacksClient(), {
+  return createPacksSource(createPacksClient(grantingFetchOf(ctx)), {
     pollMs: POLL_MS,
     follow: (refresh) => {
       const stops = [ctx.on('connection/reset', refresh), ctx.get('remote')?.$on('plugin-manager/install-state', refresh)]
       return () => { for (const stop of stops) stop?.() }
     },
-    unlockNeeded: (action, reason) => { ctx.emit('remote/call-denied', { endpoint: `packs/${action}`, reason }) },
   })
 }
 
