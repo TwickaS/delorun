@@ -13,6 +13,7 @@ const posts: { path: string; grant: string | null }[] = []
 
 beforeEach(() => {
   posts.length = 0
+  vi.stubGlobal('document', { baseURI: 'https://studio.test/' })
   vi.stubGlobal('fetch', vi.fn(async (path: string, init?: RequestInit) => {
     if (init?.method !== 'POST') return new Response('{}', { status: 500 })
     posts.push({ path, grant: new Headers(init.headers).get('Delorun-Grant') })

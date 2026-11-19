@@ -14,7 +14,7 @@ import { httpPasskeyApi } from './face-id-api.ts'
 import { browserPasskeys, faceIdKindOf, type PasskeyBrowser } from './face-id-browser.ts'
 import type { FaceIdAction, PasskeyApi } from './face-id-types.ts'
 import { FaceIdGrantFlow } from './FaceIdGrantFlow.tsx'
-import { flagIsOn } from './FaceIdSection.tsx'
+import { readFlag } from './FaceIdSection.tsx'
 import type { HostFetch } from './host-api.ts'
 import type { PinSource } from './pin-lock.ts'
 
@@ -60,7 +60,6 @@ export function answerActionOf(t: PropsLocale<'delorunFaceId'>['t'], request: { 
  * @returns the sheet or the PIN entry while the person confirms; otherwise nothing.
  */
 export function FaceIdAnswerAction({ t, grants, callId, toolName, gateAllow, sessionId, fetch, atComputer, usePin, browser, api: injectedApi }: FaceIdAnswerProps): ReactNode {
-  const [on, setOn] = useState(false)
   const [hasPasskey, setHasPasskey] = useState(false)
   const [open, setOpen] = useState(false)
   const settle = useRef<((sent: boolean) => void) | null>(null)
@@ -72,18 +71,6 @@ export function FaceIdAnswerAction({ t, grants, callId, toolName, gateAllow, ses
   const computer = atComputer()
   // A prompt without a call id cannot be keyed, so no grant covers it.
   const asks = callId !== undefined && !computer
-  useEffect(() => {
-    if (!asks) return
-    let current = true
-    void flagIsOn(fetch).then(async (flag) => {
-      if (!flag || !current) return
-      const state = await api.state().catch(() => undefined)
-      if (!current) return
-      setHasPasskey((state?.passkeys.length ?? 0) > 0)
-      setOn(true)
-    })
-    return () => { current = false }
-  }, [asks, fetch, api])
   const close = useCallback((sent: boolean): void => {
     setOpen(false)
     const done = settle.current
@@ -91,19 +78,33 @@ export function FaceIdAnswerAction({ t, grants, callId, toolName, gateAllow, ses
     done?.(sent)
   }, [])
   useEffect(() => {
-    if (!on) return
-    gateAllow(() => new Promise<boolean>((resolve) => {
-      settle.current = resolve
-      setOpen(true)
-    }))
+    if (!asks) return
+    let current = true
+    // The gate is in place before the flag is known: an Allow tapped early waits for the read, and a failed read sends nothing.
+    const reading = readFlag(fetch).then(async (flag) => {
+      if (flag !== 'on') return flag
+      const state = await api.state().catch((): undefined => undefined)
+      if (current) setHasPasskey((state?.passkeys.length ?? 0) > 0)
+      return flag
+    })
+    gateAllow(async () => {
+      const flag = await reading
+      if (flag === 'off') return true
+      if (flag === 'unknown' || !current) return false
+      return await new Promise<boolean>((resolve) => {
+        settle.current = resolve
+        setOpen(true)
+      })
+    })
     return () => {
+      current = false
       gateAllow(null)
       const done = settle.current
       settle.current = null
       done?.(false)
     }
-  }, [on, gateAllow])
-  if (!on || !open || callId === undefined) return null
+  }, [asks, fetch, api, gateAllow])
+  if (!open || callId === undefined) return null
   const action = answerActionOf(t, { sessionId, callId, grants, toolName })
   return <FaceIdGrantFlow t={t} action={action} kind={kind} api={api} browser={passkeys} hasPasskey={hasPasskey} secret={secret}
     onGranted={() => { close(true) }} onCancel={() => { close(false) }} />

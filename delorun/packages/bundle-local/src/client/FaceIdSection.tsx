@@ -10,7 +10,7 @@ import { browserPasskeys, faceIdKindOf, type PasskeyBrowser } from './face-id-br
 import { httpPasskeyApi } from './face-id-api.ts'
 import { AddFaceId, PasskeyCodeEntry } from './FaceIdEnrol.tsx'
 import { PasskeyDevices } from './PasskeyDevices.tsx'
-import { call, fields, isBoolean, isString, listOf, type HostFetch } from './host-api.ts'
+import { call, fields, HostRequestError, isBoolean, isString, listOf, type HostFetch } from './host-api.ts'
 import type { PinSource } from './pin-lock.ts'
 import css from './FaceId.module.css'
 
@@ -34,18 +34,28 @@ export interface FaceIdSectionInjected {
 export type FaceIdSectionProps = PropsRuntime<'settings.section'> & PropsLocale<'delorunFaceId'> & InjectFace<FaceIdSectionInjected>
 
 /**
- * Whether the preview flag is on.
+ * Read the preview flag.
  * @param fetch - the request function.
- * @returns true only when the home declares the flag and its profile turns it on.
+ * @returns `on` when the home declares the flag and its profile turns it on; `off` when it does not, including a
+ *   profile without the flags route; `unknown` when the read failed for another reason.
  */
-export async function flagIsOn(fetch: HostFetch): Promise<boolean> {
+export async function readFlag(fetch: HostFetch): Promise<'on' | 'off' | 'unknown'> {
   try {
     const { flags } = await call<{ flags: { id: string; on: boolean }[] }>(fetch, PREVIEW_FLAGS_ROUTE, fields({ flags: listOf(fields({ id: isString, on: isBoolean })) }))
-    return flags.some(flag => flag.id === PASSKEY_FLAG && flag.on)
-  } catch {
-    // A profile without the flags route has the flag off.
-    return false
+    return flags.some(flag => flag.id === PASSKEY_FLAG && flag.on) ? 'on' : 'off'
+  } catch (error) {
+    // A profile without the flags route has the flag off; any other failure leaves it unknown.
+    return error instanceof HostRequestError && error.failure.kind === 'refused' && error.failure.status === 404 ? 'off' : 'unknown'
   }
+}
+
+/**
+ * Whether the preview flag is on.
+ * @param fetch - the request function.
+ * @returns true only when {@link readFlag} says `on`.
+ */
+export async function flagIsOn(fetch: HostFetch): Promise<boolean> {
+  return (await readFlag(fetch)) === 'on'
 }
 
 /**
@@ -88,7 +98,7 @@ export function FaceIdSection({ t, fetch, atComputer, usePin, browser }: FaceIdS
           ? <AddFaceId t={t} kind={kind} api={api} browser={passkeys} onCancel={() => { setAdding(false) }}
             onDone={() => { setAdding(false); setVersion(count => count + 1) }} />
           : <PasskeyDevices key={version} t={t} api={api} browser={passkeys} kind={kind} atComputer={computer} secret={secret} hasPasskey={hasPasskey}
-            onAdd={() => { setAdding(true) }} onAskComputer={() => undefined} />}
+            onAdd={() => { setAdding(true) }} />}
       </>}
   </div>
 }

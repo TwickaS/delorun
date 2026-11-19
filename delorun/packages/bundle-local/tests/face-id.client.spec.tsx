@@ -12,6 +12,7 @@ import { en, zh } from '../src/client/face-id-locales.ts'
 import { faceIdKindOf, fromBase64Url, passkeyFailure, toBase64Url } from '../src/client/face-id-browser.ts'
 import { fakeApi, fakeBrowser } from '../src/client/face-id-fake.ts'
 import { canonicalJson, hashArgs, hashRequest } from '../src/client/face-id-hash.ts'
+import { HostRequestError } from '../src/client/host-api.ts'
 import { FaceIdPin } from '../src/client/FaceIdPin.tsx'
 import { FACE_ID_KINDS, type FaceIdAction, type PasskeyDevice } from '../src/client/face-id-types.ts'
 import { FaceIdSheet } from '../src/client/FaceIdSheet.tsx'
@@ -92,12 +93,21 @@ describe('FaceIdSheet', () => {
     expect(props.onFallback).toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'Try Face ID again' })).toBeTruthy()
   })
-  it('offers Approve at the computer when no PIN is set', async () => {
-    // Without a PIN the way down is the computer.
+  it('says to do it at the computer, without a link, when no PIN is set', async () => {
+    // Nothing can send a request to the computer, so the way down is a plain note.
     sheet({ fallback: 'computer', browser: fakeBrowser({ get: [{ kind: 'failed' }] }) })
     fireEvent.click(await screen.findByRole('button', { name: 'Confirm with Face ID' }))
-    expect(await screen.findByRole('button', { name: 'Approve at the computer' })).toBeTruthy()
+    expect(await screen.findByText('Or do this at your computer.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Or do this at your computer.' })).toBeNull()
     expect(screen.getByText('Face ID did not work.')).toBeTruthy()
+  })
+  it('closes on Escape even when a surrounding card stops the key from bubbling', () => {
+    // The approval card stops Escape at its own element; the sheet listens in the capture phase.
+    const onCancel = vi.fn()
+    const props = { t, action, kind: 'faceId' as const, api: fakeApi(), browser: fakeBrowser(), hasPasskey: true, fallback: 'pin' as const, onGranted: vi.fn(), onCancel, onFallback: vi.fn() }
+    render(<div onKeyDown={(event) => { event.stopPropagation() }}><FaceIdSheet {...props} /></div>)
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Confirm with Face ID' }), { key: 'Escape' })
+    expect(onCancel).toHaveBeenCalled()
   })
   it('fails when the options or the verification are refused', async () => {
     // A refused request must not be reported as a grant.
@@ -304,6 +314,19 @@ describe('FaceIdPin', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
     expect(await screen.findByRole('alert')).toBeTruthy()
   })
+  it.each([
+    ['PIN_INVALID', 'That did not match. Try again.'],
+    ['PIN_UNLOCKS_PAUSED', 'PIN approvals are paused. Resume them at your computer.'],
+    ['PIN_NOT_ALLOWED_ON_ADDRESS', 'The PIN could not be checked. Try again.'],
+  ])('words a %s refusal as its own sentence, not as a wrong PIN', async (code, sentence) => {
+    // A paused or refused PIN must not tell the person the right PIN was wrong.
+    const api = fakeApi()
+    api.pin = async () => { throw new HostRequestError('/auth/passkey/pin', { kind: 'refused', status: 400, code, message: 'm' }) }
+    render(<FaceIdPin t={t} action={action} api={api} secret="passcode" onGranted={vi.fn()} onBack={vi.fn()} />)
+    fireEvent.change(screen.getByLabelText('Passcode'), { target: { value: 'x' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+    expect((await screen.findByRole('alert')).textContent).toBe(sentence)
+  })
   it('shows the keypad for a digit PIN and goes back', () => {
     // A digit PIN uses the shared cells; Back leaves the entry.
     const onBack = vi.fn()
@@ -319,7 +342,7 @@ describe('PasskeyDevices', () => {
   const list = (over: Partial<Parameters<typeof PasskeyDevices>[0]> = {}) => {
     const api = over.api ?? fakeApi({ devices: [phone, laptop] })
     const props = { t, api, browser: fakeBrowser(), kind: 'faceId' as const, atComputer: false, secret: 'pin' as const, hasPasskey: true,
-      onAdd: vi.fn(), onAskComputer: vi.fn(), ...over }
+      onAdd: vi.fn(), ...over }
     render(<PasskeyDevices {...props} />)
     return { ...props, api: api as ReturnType<typeof fakeApi> }
   }
@@ -374,8 +397,40 @@ describe('PasskeyDevices', () => {
     const props = list({ browser: fakeBrowser({ get: [{ kind: 'cancelled' }] }), secret: undefined })
     fireEvent.click(await screen.findByRole('button', { name: 'Remove Face ID' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Confirm with Face ID' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Approve at the computer' }))
-    expect(props.onAskComputer).toHaveBeenCalled()
+    expect(await screen.findByText('Or do this at your computer.')).toBeTruthy()
+    expect(props.api.calls.some(call => call.name === 'removePasskey')).toBe(false)
+  })
+  it('removes this phone\'s own Face ID without naming a placeholder device, and hashes the same body', async () => {
+    // The home looks the passkey up under the caller\'s own device when deviceId is absent; a placeholder id is refused after the grant is spent.
+    const props = list()
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove Face ID' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm with Face ID' }))
+    await waitFor(() => { expect(props.api.calls.some(call => call.name === 'removePasskey')).toBe(true) })
+    expect(props.api.calls.find(call => call.name === 'removePasskey')?.request).toEqual({ credentialId: 'p1', grantId: 'g1' })
+    expect(props.api.calls.filter(call => call.name === 'options').at(-1)?.request).toEqual({ actions: [{ action: 'auth/passkey/remove', hash: await hashArgs({ credentialId: 'p1' }) }] })
+  })
+  it('drops the removed device from the all-devices list without reading it again with the spent grant', async () => {
+    // The removal used up its grant, so a second list read with it would be refused.
+    const props = list()
+    fireEvent.click(await screen.findByRole('button', { name: 'Show all devices' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm with Face ID' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove device' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm with Face ID' }))
+    await waitFor(() => { expect(screen.queryByText('Laptop')).toBeNull() })
+    expect(props.api.calls.filter(call => call.name === 'devices')).toHaveLength(1)
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+  it('offers no PIN for removing another device', async () => {
+    // The home never grants that removal by PIN; the sheet says so instead of offering a keypad.
+    const base = fakeBrowser()
+    let gets = 0
+    list({ browser: { ...base, get: async () => (gets++ === 0 ? await base.get({} as never) : { kind: 'cancelled' as const }) } })
+    fireEvent.click(await screen.findByRole('button', { name: 'Show all devices' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm with Face ID' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove device' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm with Face ID' }))
+    expect(await screen.findByText('This needs Face ID itself. A PIN cannot approve it.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Use PIN instead' })).toBeNull()
   })
   it('at the computer lists everything and removes at once; failures show an alert', async () => {
     // The computer needs no prompt.

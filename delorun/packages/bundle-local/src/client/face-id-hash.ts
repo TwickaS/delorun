@@ -42,7 +42,7 @@ export function hashArgs(args: unknown): Promise<string> {
 
 /**
  * Hash a Fetch route call whose body is JSON.
- * @param request - the method, the path without its query and the JSON body.
+ * @param request - the method, the pathname with its query as the home receives it, and the JSON body.
  * @returns the hex hash of `METHOD NUL path NUL canonical-body`.
  */
 export function hashRequest(request: { readonly method: string; readonly path: string; readonly body: unknown }): Promise<string> {

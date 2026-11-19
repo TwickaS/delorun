@@ -70,4 +70,20 @@ describe('the Face ID grant overlay', () => {
     act(() => { view.rerender(<FaceIdGrantOverlay {...props} />) })
     expect(screen.queryByRole('dialog')).toBeNull()
   })
+  it('never shows the previous request\'s sheet for a new pending request', async () => {
+    // The sheet is kept with the request it was built for; a frame of the old words under a new request would be confirmed by mistake.
+    const source = createFaceGrantSource()
+    const props = {
+      t, fetch: fakeHost({}).fetch, api: fakeApi(), browser: fakeBrowser(), settle: source.settle,
+      usePending: <S,>(select: (pending: ReturnType<typeof source.hooks.pending.getSnapshot>) => S): S => select(source.hooks.pending.getSnapshot()),
+      usePin: <S,>(select: (view: PinView) => S): S => select(pinView('unlocked')),
+    } as FaceIdGrantOverlayProps
+    void source.grant(request)
+    const view = render(<FaceIdGrantOverlay {...props} />)
+    await screen.findByText('Discard this plugin change?')
+    void source.grant({ action: 'changes/unknown', call })
+    act(() => { view.rerender(<FaceIdGrantOverlay {...props} />) })
+    expect(screen.queryByText('Discard this plugin change?')).toBeNull()
+    expect(await screen.findByText('Confirm this change?')).toBeTruthy()
+  })
 })

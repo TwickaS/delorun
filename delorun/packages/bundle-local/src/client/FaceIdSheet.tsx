@@ -28,12 +28,12 @@ export interface FaceIdSheetProps {
   readonly browser: PasskeyBrowser
   /** Whether this device holds a passkey; without one the sheet goes straight to the way down. */
   readonly hasPasskey: boolean
-  /** The way down: the PIN keypad when a PIN is set, otherwise a request the computer approves. */
+  /** The way down: the PIN keypad when a PIN is set and allowed, otherwise a note to do it at the computer. */
   readonly fallback: FaceIdFallback
   /** Called with the grant the home now holds for the action. */
   readonly onGranted: (grantId: string) => void
   readonly onCancel: () => void
-  /** Open the PIN keypad (`fallback` is `pin`) or the computer request (`fallback` is `computer`). */
+  /** Open the PIN keypad; called only when `fallback` is `pin`. */
   readonly onFallback: () => void
   /** Open Settings → Devices, for a device that holds no passkey. */
   readonly onOpenDevices?: () => void
@@ -64,8 +64,9 @@ export function FaceIdSheet({ t, action, kind, api, browser, hasPasskey, fallbac
   useEffect(() => { confirmRef.current?.focus() }, [available])
   useEffect(() => {
     const close = (event: KeyboardEvent): void => { if (event.key === 'Escape') onCancel() }
-    document.addEventListener('keydown', close)
-    return () => { document.removeEventListener('keydown', close) }
+    // Capture phase: a card that holds the sheet stops Escape from bubbling to the document.
+    document.addEventListener('keydown', close, true)
+    return () => { document.removeEventListener('keydown', close, true) }
   }, [onCancel])
   const confirm = useCallback(async (): Promise<void> => {
     setPhase('waiting')
@@ -93,6 +94,7 @@ export function FaceIdSheet({ t, action, kind, api, browser, hasPasskey, fallbac
     : phase === 'cancelled' ? t('sheet.cancelled', { method }) : phase === 'failed' ? t('sheet.failed', { method }) : undefined
   const label = phase === 'waiting' ? t('sheet.waiting', { method }) : phase === 'ready' ? t('sheet.confirm', { method }) : t('sheet.again', { method })
   const showFallback = !usable || phase === 'cancelled' || phase === 'failed'
+  const faceOnly = showFallback && action.noPin === true
   return <div className={css.scrim} data-face-id-sheet={phase}>
     <div className={css.sheet} role="dialog" aria-modal="true" aria-labelledby="delorun-face-id-title">
       <h2 id="delorun-face-id-title" className={css.title}>{action.title}</h2>
@@ -102,6 +104,7 @@ export function FaceIdSheet({ t, action, kind, api, browser, hasPasskey, fallbac
         {rest > 0 ? <li>{t('sheet.more', { count: String(rest) })}</li> : null}
       </ul>}
       <div className={css.glyph} aria-hidden="true"><DelorunBrandMark size={96} /></div>
+      {faceOnly ? <p className={css.status} role="status">{t('sheet.faceOnly', { method })}</p> : null}
       {status === undefined ? null : <p className={css.status} role="status">{status}</p>}
       {usable
         ? <Button ref={confirmRef} variant="primary" type="button" className={css.confirm} disabled={phase === 'waiting'}
@@ -109,10 +112,9 @@ export function FaceIdSheet({ t, action, kind, api, browser, hasPasskey, fallbac
         : !hasPasskey && onOpenDevices !== undefined
           ? <Button variant="primary" type="button" className={css.confirm} onClick={onOpenDevices}>{t('sheet.openDevices')}</Button>
           : null}
-      {showFallback
-        ? <button type="button" className={css.link} data-face-id-fallback={fallback} onClick={onFallback}>
-          {t(fallback === 'pin' ? 'sheet.usePin' : 'sheet.askComputer')}
-        </button> : null}
+      {showFallback && fallback === 'pin'
+        ? <button type="button" className={css.link} data-face-id-fallback="pin" onClick={onFallback}>{t('sheet.usePin')}</button> : null}
+      {showFallback && fallback === 'computer' ? <p className={css.status} data-face-id-fallback="computer">{t('sheet.askComputer')}</p> : null}
       <button type="button" className={css.link} onClick={onCancel}>{t('sheet.cancel')}</button>
     </div>
   </div>

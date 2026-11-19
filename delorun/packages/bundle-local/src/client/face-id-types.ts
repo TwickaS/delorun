@@ -26,6 +26,8 @@ export interface FaceIdAction {
   readonly body: string
   /** The items a batch covers; the sheet shows at most three, then the count of the rest. */
   readonly items?: readonly string[]
+  /** True when the home never grants this action by PIN, so the sheet offers no PIN keypad. */
+  readonly noPin?: true
 }
 
 /** A passkey as the home lists it. */
@@ -168,9 +170,9 @@ export interface PasskeyApi {
   devices(request?: { readonly grantId?: string | undefined }): Promise<readonly PasskeyDevice[]>
   /**
    * Remove one passkey.
-   * @param request - the passkey, its device, and the grant of a Face ID confirmation when the page is a phone.
+   * @param request - the passkey, its device (omitted for this device's own passkey), and the grant of a Face ID confirmation when the page is a phone.
    */
-  removePasskey(request: { readonly credentialId: string; readonly deviceId: string; readonly grantId?: string | undefined }): Promise<void>
+  removePasskey(request: { readonly credentialId: string; readonly deviceId?: string | undefined; readonly grantId?: string | undefined }): Promise<void>
   /**
    * Remove one device with its passkeys.
    * @param request - the device, and the grant of a Face ID confirmation when the page is a phone.

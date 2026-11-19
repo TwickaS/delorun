@@ -47,7 +47,7 @@ import {
   type WorkReviewView,
   type WorkspacesView,
 } from '../wire.ts'
-import type { FaceGrant } from './face-grant.ts'
+import { fetchedPath, type FaceGrant } from './face-grant.ts'
 import type { ChangesToastKey } from './locales.ts'
 
 /** What the section shows: the first load, a failed load with nothing to show, or the state. */
@@ -566,7 +566,7 @@ export class ChangesController {
       const load = this.state.getSnapshot()
       const needsFace = body !== undefined && ask !== undefined && load.status === 'ready' && mayNeedsFace(load.state.access.may[control])
       if (!needsFace) return await request<T>(path, body)
-      const grantId = await ask({ action: `changes/${control}`, call: { method: 'POST', path, body } })
+      const grantId = await ask({ action: `changes/${control}`, call: { method: 'POST', path: fetchedPath(path), body } })
       if (grantId === undefined) throw new FaceCancelled()
       return await request<T>(path, body, grantId)
     }

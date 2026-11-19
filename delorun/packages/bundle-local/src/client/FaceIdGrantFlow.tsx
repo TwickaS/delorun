@@ -35,9 +35,10 @@ export interface FaceIdGrantFlowProps {
  */
 export function FaceIdGrantFlow({ t, action, kind, api, browser, hasPasskey, secret, onGranted, onCancel }: FaceIdGrantFlowProps): ReactNode {
   const [pin, setPin] = useState(false)
-  if (pin && secret !== undefined) {
+  const keypad = secret !== undefined && action.noPin !== true
+  if (pin && keypad) {
     return <FaceIdPin t={t} action={action} api={api} secret={secret} onGranted={onGranted} onBack={() => { setPin(false) }} />
   }
-  return <FaceIdSheet t={t} action={action} kind={kind} api={api} browser={browser} hasPasskey={hasPasskey} fallback={secret === undefined ? 'computer' : 'pin'}
-    onGranted={onGranted} onCancel={onCancel} onFallback={() => { if (secret === undefined) onCancel(); else setPin(true) }} />
+  return <FaceIdSheet t={t} action={action} kind={kind} api={api} browser={browser} hasPasskey={hasPasskey} fallback={keypad ? 'pin' : 'computer'}
+    onGranted={onGranted} onCancel={onCancel} onFallback={() => { setPin(true) }} />
 }

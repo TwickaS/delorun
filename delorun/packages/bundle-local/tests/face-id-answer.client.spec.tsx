@@ -23,8 +23,8 @@ const passkey = { credentialId: 'c1', createdAt: 0, lastUsedAt: null, synced: fa
 const pinView = (phase: PinView['phase']): PinView => ({ phase, secret: 'pin', busy: false, outcome: undefined, paused: false, asked: false })
 
 /** Render the step and hand back the gate it registered. */
-function card(over: { on?: boolean | undefined; computer?: boolean | undefined; callId?: ToolCallId | undefined; grants?: FaceIdAnswerProps['grants'] } = {}) {
-  const host = fakeHost(flags(over.on ?? true))
+function card(over: { on?: boolean | 'unreadable' | undefined; computer?: boolean | undefined; callId?: ToolCallId | undefined; grants?: FaceIdAnswerProps['grants'] } = {}) {
+  const host = fakeHost(over.on === 'unreadable' ? { [FLAGS]: { status: 500, body: { message: 'down' } } } : flags(over.on ?? true))
   const api = fakeApi({ devices: [{ deviceId: 'd', label: 'Phone', thisDevice: true, passkeys: [passkey] }] })
   const gateAllow = vi.fn<(gate: ApprovalAllowGate | null) => void>()
   const props = {
@@ -74,7 +74,6 @@ describe('the approval card\'s Face ID step', () => {
     await expect(sent).resolves.toBe(false)
   })
   it.each([
-    ['the flag is off', { on: false }],
     ['the page is the home\'s own computer', { computer: true }],
     ['the request has no call id', { callId: undefined }],
   ])('registers no gate when %s', async (_name, over) => {
@@ -83,6 +82,21 @@ describe('the approval card\'s Face ID step', () => {
     await new Promise(resolve => setTimeout(resolve, 20))
     expect(gateAllow).not.toHaveBeenCalled()
     expect(api.calls.some(call => call.name === 'options')).toBe(false)
+  })
+  it('lets an Allow through without a prompt when the flag is off, once the flag is read', async () => {
+    // The gate is installed early, so a flag-off home must still answer without a sheet.
+    const { gate, gateAllow, api } = card({ on: false })
+    await waitFor(() => { expect(gateAllow).toHaveBeenCalled() })
+    await expect(gate()()).resolves.toBe(true)
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(api.calls.some(call => call.name === 'options')).toBe(false)
+  })
+  it('sends nothing when the flag cannot be read', async () => {
+    // Failing open would let an answer go without a grant the home needs; the gate stops it.
+    const { gate, gateAllow } = card({ on: 'unreadable' })
+    await waitFor(() => { expect(gateAllow).toHaveBeenCalled() })
+    await expect(gate()()).resolves.toBe(false)
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
   it('removes the gate and settles an open sheet as cancelled when it unmounts', async () => {
     // A withdrawn card must not hold a stale gate.

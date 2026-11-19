@@ -20,6 +20,7 @@ beforeEach(() => {
     posts.push({ path, body: JSON.parse(String(init.body)), grant: headers.get('Delorun-Grant') })
     return new Response('{}', { status: 200 })
   }))
+  vi.stubGlobal('document', { baseURI: 'https://studio.test/' })
   vi.spyOn(console, 'warn').mockImplementation(() => {})
 })
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks() })
@@ -40,6 +41,14 @@ describe('the Changes controller\'s Face ID step', () => {
     expect(await changes.discard('c1')).toEqual({ kind: 'done' })
     expect(grant).toHaveBeenCalledExactlyOnceWith({ action: 'changes/plugin-discard', call: { method: 'POST', path: ACTION_PATHS.discard, body: { id: 'c1' } } })
     expect(posts).toEqual([{ path: ACTION_PATHS.discard.slice(1), body: { id: 'c1' }, grant: 'g1' }])
+  })
+  it('hashes the path the page fetches, including the studio\'s path prefix', async () => {
+    // The home hashes the URL it receives; a studio under /studio/ must name that path or every grant is refused.
+    vi.stubGlobal('document', { baseURI: 'https://studio.test/studio/' })
+    const grant = vi.fn<FaceGrant>(async () => 'g1')
+    const changes = controller({ 'plugin-discard': { ok: false, needs: 'face' } }, () => grant)
+    await changes.discard('c1')
+    expect(grant).toHaveBeenCalledExactlyOnceWith({ action: 'changes/plugin-discard', call: { method: 'POST', path: `/studio${ACTION_PATHS.discard}`, body: { id: 'c1' } } })
   })
   it('sends nothing when the person cancels', async () => {
     // A cancelled sheet must not reach the route.

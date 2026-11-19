@@ -9,10 +9,21 @@ import type {} from '@deepseek-ai/cordis'
 export interface FaceGrantCall {
   /** The HTTP method. */
   readonly method: 'POST'
-  /** The route with its query, as the page asks for it. */
+  /** The pathname and query the home receives (see {@link fetchedPath}). */
   readonly path: string
   /** The JSON body. */
   readonly body: object
+}
+
+/**
+ * The path and query the home receives for a route the page fetches relative to its document, which is what the grant's
+ * hash covers: `path.slice(1)` resolved against the document's base URL, so a path prefix of the studio is included.
+ * @param path - the route from `wire.ts`, with its leading slash and query.
+ * @returns the resolved pathname and search.
+ */
+export function fetchedPath(path: string): string {
+  const url = new URL(path.slice(1), globalThis.document.baseURI)
+  return `${url.pathname}${url.search}`
 }
 
 /** What a confirmation covers. */

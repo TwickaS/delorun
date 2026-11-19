@@ -32,13 +32,11 @@ export interface PasskeyDevicesProps {
   readonly hasPasskey: boolean
   /** Start "Add Face ID" for this page's device. */
   readonly onAdd: () => void
-  /** Called when the sheet's "Approve at the computer" link is tapped. */
-  readonly onAskComputer: () => void
 }
 
 type Target =
   | { readonly kind: 'list' }
-  | { readonly kind: 'passkey'; readonly credentialId: string; readonly deviceId: string; readonly label: string }
+  | { readonly kind: 'passkey'; readonly credentialId: string; readonly deviceId: string | undefined; readonly label: string }
   | { readonly kind: 'device'; readonly deviceId: string; readonly label: string }
 
 type Asked = { readonly target: Target; readonly action: FaceIdAction; readonly pin: boolean }
@@ -67,12 +65,26 @@ async function actionOf(t: Translate, target: Target): Promise<FaceIdAction> {
     return {
       title: t('remove.passkeyTitle', { name: target.label }), body: t('remove.passkeyBody'),
       grant: { actions: [{ action: 'auth/passkey/remove', hash: await hashArgs({ credentialId: target.credentialId, deviceId: target.deviceId }) }] },
+      ...(target.deviceId === undefined ? {} : { noPin: true as const }),
     }
   }
   return {
     title: t('remove.deviceTitle', { name: target.label }), body: t('remove.deviceBody'),
-    grant: { actions: [{ action: 'auth/devices/remove', hash: await hashArgs({ v: 1, deviceId: target.deviceId }) }] },
+    grant: { actions: [{ action: 'auth/devices/remove', hash: await hashArgs({ v: 1, deviceId: target.deviceId }) }] }, noPin: true,
   }
+}
+
+/**
+ * The list without what a removal took away.
+ * @param devices - the devices shown.
+ * @param target - the removed passkey or device.
+ * @returns the remaining devices.
+ */
+function withoutRemoved(devices: readonly PasskeyDevice[] | undefined, target: Target): readonly PasskeyDevice[] | undefined {
+  if (target.kind === 'list' || devices === undefined) return devices
+  if (target.kind === 'device') return devices.filter(device => device.deviceId !== target.deviceId)
+  return devices.map(device => (device.passkeys.some(entry => entry.credentialId === target.credentialId)
+    ? { ...device, passkeys: device.passkeys.filter(entry => entry.credentialId !== target.credentialId) } : device))
 }
 
 /**
@@ -80,7 +92,7 @@ async function actionOf(t: Translate, target: Target): Promise<FaceIdAction> {
  * @param props - see {@link PasskeyDevicesProps}.
  * @returns the cards.
  */
-export function PasskeyDevices({ t, api, browser, kind, atComputer, secret, hasPasskey, onAdd, onAskComputer }: PasskeyDevicesProps): ReactNode {
+export function PasskeyDevices({ t, api, browser, kind, atComputer, secret, hasPasskey, onAdd }: PasskeyDevicesProps): ReactNode {
   const [devices, setDevices] = useState<readonly PasskeyDevice[] | undefined>(undefined)
   const [all, setAll] = useState(atComputer)
   const [failed, setFailed] = useState(false)
@@ -111,8 +123,10 @@ export function PasskeyDevices({ t, api, browser, kind, atComputer, secret, hasP
       setFailed(true)
       return
     }
-    await load(all ? grantId : undefined)
-  }, [api, load, all])
+    // The grant is spent by the removal, so a phone's list drops the removed rows instead of reading the list again.
+    if (atComputer || !all) await load()
+    else setDevices(current => withoutRemoved(current, target))
+  }, [api, load, all, atComputer])
   const ask = async (target: Target): Promise<void> => {
     if (atComputer) { await run(target); return }
     setAsked({ target, action: await actionOf(t, target), pin: false })
@@ -122,7 +136,7 @@ export function PasskeyDevices({ t, api, browser, kind, atComputer, secret, hasP
     setAsked(undefined)
     if (target !== undefined) void run(target, grantId)
   }
-  const fallbackToPin = secret !== undefined
+  const fallbackToPin = secret !== undefined && asked?.action.noPin !== true
   return <div data-face-id-devices>
     {failed ? <p className={css.failed} role="alert">{t('devices.failed')}</p> : null}
     {devices === undefined ? null : <div className={css.devices}>
@@ -134,7 +148,7 @@ export function PasskeyDevices({ t, api, browser, kind, atComputer, secret, hasP
       ? <FaceIdPin t={t} action={asked.action} api={api} secret={secret} onGranted={done} onBack={() => { setAsked({ ...asked, pin: false }) }} />
       : <FaceIdSheet t={t} action={asked.action} kind={kind} api={api} browser={browser} hasPasskey={hasPasskey} fallback={fallbackToPin ? 'pin' : 'computer'}
         onGranted={done} onCancel={() => { setAsked(undefined) }}
-        onFallback={() => { if (fallbackToPin) setAsked({ ...asked, pin: true }); else onAskComputer() }} />}
+        onFallback={() => { setAsked({ ...asked, pin: true }) }} />}
   </div>
 }
 
@@ -149,7 +163,7 @@ function DeviceCard({ t, kind, device, canRemoveDevice, onAdd, onRemove }: {
       {device.thisDevice && device.label !== t('devices.thisDevice') ? <span className={css.tag}>{t('devices.thisDevice')}</span> : null}
     </h3>
     {device.passkeys.map(passkey => <PasskeyRow key={passkey.credentialId} t={t} passkey={passkey} kind={kind}
-      onRemove={() => { onRemove({ kind: 'passkey', credentialId: passkey.credentialId, deviceId: device.deviceId, label: device.label }) }} />)}
+      onRemove={() => { onRemove({ kind: 'passkey', credentialId: passkey.credentialId, deviceId: device.thisDevice ? undefined : device.deviceId, label: device.label }) }} />)}
     {device.passkeys.length === 0 && device.thisDevice
       ? <Button variant="primary" type="button" className={css.action} onClick={onAdd}>{t('devices.add')}</Button> : null}
     {canRemoveDevice

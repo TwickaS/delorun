@@ -6,7 +6,7 @@
  * @module @delorun/plugin-update/client/controller
  */
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
-import type { FaceGrant } from '@delorun/plugin-changes/face-grant'
+import { fetchedPath, type FaceGrant } from '@delorun/plugin-changes/face-grant'
 import {
   UPDATE_PATHS,
   type PreparedUpdateView,
@@ -186,7 +186,7 @@ export class UpdateController {
       const load = this.state.getSnapshot()
       const may = load.status === 'ready' ? load.state.access.may[control] : undefined
       if (body === undefined || ask === undefined || may === undefined || may.ok || may.needs !== 'face') return await request<V>(path, body)
-      const grantId = await ask({ action: `changes/${control}`, call: { method: 'POST', path, body } })
+      const grantId = await ask({ action: `changes/${control}`, call: { method: 'POST', path: fetchedPath(path), body } })
       if (grantId === undefined) throw new FaceCancelled()
       return await request<V>(path, body, grantId)
     }

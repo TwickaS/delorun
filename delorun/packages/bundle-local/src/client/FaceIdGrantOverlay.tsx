@@ -3,7 +3,7 @@
  * Changes or update control. The calling plugin reaches it through `ctx.delorunFaceGrant`; the sheet and the PIN fallback
  * are those of the approval card's step.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { FaceGrantRequest } from '@delorun/plugin-changes/face-grant'
@@ -57,21 +57,22 @@ export async function callActionOf(t: PropsLocale<'delorunFaceId'>['t'], request
  */
 export function FaceIdGrantOverlay({ t, fetch, usePending, usePin, settle, browser, api: injectedApi }: FaceIdGrantOverlayProps): ReactNode {
   const pending = usePending(current => current)
-  const [action, setAction] = useState<FaceIdAction | undefined>(undefined)
+  // The action is kept with the confirmation it was built for, so a new confirmation never shows the previous one's words.
+  const [built, setBuilt] = useState<{ readonly id: number; readonly for: typeof pending; readonly action: FaceIdAction } | undefined>(undefined)
+  const sequence = useRef(0)
   const api = useMemo(() => injectedApi ?? httpPasskeyApi(fetch), [injectedApi, fetch])
   const passkeys = useMemo(() => browser ?? browserPasskeys(), [browser])
   const kind = useMemo(() => faceIdKindOf(globalThis.navigator), [])
   const pin = usePin(view => view)
   const secret = pin.phase === 'off' || pin.phase === 'unknown' ? undefined : pin.secret
   useEffect(() => {
-    setAction(undefined)
     if (pending === null) return
     let current = true
-    void callActionOf(t, pending.request).then((next) => { if (current) setAction(next) })
+    void callActionOf(t, pending.request).then((next) => { if (current) setBuilt({ id: ++sequence.current, for: pending, action: next }) })
     return () => { current = false }
   }, [pending, t])
-  if (pending === null || action === undefined) return null
+  if (pending === null || built?.for !== pending) return null
   // The state said this device holds a passkey before the control asked for Face ID.
-  return <FaceIdGrantFlow key={pending.request.action} t={t} action={action} kind={kind} api={api} browser={passkeys} hasPasskey secret={secret}
+  return <FaceIdGrantFlow key={built.id} t={t} action={built.action} kind={kind} api={api} browser={passkeys} hasPasskey secret={secret}
     onGranted={settle} onCancel={() => { settle(undefined) }} />
 }

@@ -8,6 +8,7 @@ import type { FormEvent, ReactNode } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { CodeCells, Keypad } from '@delorun/brand'
+import { isRefused } from './host-api.ts'
 import type { FaceIdAction, PasskeyApi } from './face-id-types.ts'
 import css from './FaceId.module.css'
 
@@ -35,7 +36,7 @@ export interface FaceIdPinProps {
 export function FaceIdPin({ t, action, api, secret, onGranted, onBack }: FaceIdPinProps): ReactNode {
   const [value, setValue] = useState('')
   const [busy, setBusy] = useState(false)
-  const [wrong, setWrong] = useState(false)
+  const [wrong, setWrong] = useState<'wrong' | 'paused' | 'failed' | undefined>(undefined)
   const isPin = secret === 'pin'
   const ready = !busy && (isPin ? value.length >= MIN_PIN_DIGITS : value !== '')
   const submit = (event?: FormEvent): void => {
@@ -44,10 +45,10 @@ export function FaceIdPin({ t, action, api, secret, onGranted, onBack }: FaceIdP
     const typed = value
     setValue('')
     setBusy(true)
-    setWrong(false)
+    setWrong(undefined)
     api.pin({ ...action.grant, secret: typed }).then(
       ({ grantId }) => { setBusy(false); onGranted(grantId) },
-      () => { setBusy(false); setWrong(true) },
+      (error: unknown) => { setBusy(false); setWrong(isRefused(error, 'PIN_INVALID') ? 'wrong' : isRefused(error, 'PIN_UNLOCKS_PAUSED') ? 'paused' : 'failed') },
     )
   }
   return <div className={css.scrim} data-face-id-pin>
@@ -56,14 +57,14 @@ export function FaceIdPin({ t, action, api, secret, onGranted, onBack }: FaceIdP
       <p className={css.body}>{t(isPin ? 'pin.lead' : 'pin.leadPasscode')}</p>
       {isPin
         ? <>
-          <CodeCells label={t('pin.label')} length={MIN_PIN_DIGITS} open mask value={value} onChange={setValue} error={wrong} disabled={busy}
+          <CodeCells label={t('pin.label')} length={MIN_PIN_DIGITS} open mask value={value} onChange={setValue} error={wrong === 'wrong'} disabled={busy}
             autoComplete="off" name="delorun-grant-pin" />
           <Keypad onKey={(key) => { if (!busy) setValue(current => key === '⌫' ? current.slice(0, -1) : current.length < MAX_SECRET_CHARS ? current + key : current) }}
             deleteLabel={t('pin.delete')} disabled={busy} />
         </>
         : <input className={css.field} type="password" name="delorun-grant-pin" aria-label={t('pin.labelPasscode')} autoComplete="off" autoCorrect="off"
           autoCapitalize="off" spellCheck={false} disabled={busy} value={value} onChange={(event) => { setValue(event.target.value) }} />}
-      {wrong ? <p className={css.failed} role="alert">{t('pin.wrong')}</p> : null}
+      {wrong === undefined ? null : <p className={css.failed} role="alert">{t(`pin.${wrong}`)}</p>}
       <Button variant="primary" type="submit" className={css.confirm} disabled={!ready}>{t(busy ? 'pin.checking' : 'pin.confirm')}</Button>
       <button type="button" className={css.link} onClick={onBack}>{t('pin.back')}</button>
     </form>
