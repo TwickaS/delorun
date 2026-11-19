@@ -82,7 +82,7 @@ Read these pages when the package-level contract is not enough. They move from t
 
 #### What the model sees
 
-Two system-prompt paragraphs at first-party orders 10000 and 10100, after reusable instructions, and two runtime-context lines at context orders 200 and 210. A Session admitted under an earlier release sees its own earlier paragraphs instead of the two below.
+Two system-prompt paragraphs at first-party orders 10000 and 10100, after reusable instructions, and two runtime-context lines at context orders 200 and 210. A Session admitted under an earlier release sees its own earlier paragraphs instead of the two below. The paragraphs and lines below appear only in a real checkout: a git work tree with a pnpm workspace at the installation root, decided once when the plugin loads. On an installed copy the model instead receives the two shorter paragraphs under On an installation, and neither the runtime path nor the studio URL. The optional `sourceRoot` option names the directory to classify, which lets tests exercise both cases.
 
 ##### System-prompt paragraphs
 
@@ -102,15 +102,11 @@ Current Delorun studio URL: "<advertised URL>".
 
 ##### On an installation
 
-The paragraphs above appear only in a real checkout: a git work tree with a pnpm workspace at the installation root, decided once when the plugin loads. On an installed copy the model instead receives two shorter paragraphs, and neither the runtime path nor the studio URL:
-
 ```markdown
 Make or change plugins with the delorun-plugin-authoring skill and review them in Changes (Apply or Undo). Never edit the installed program.
 
 You are interacting with the user through the Delorun studio. When the user refers to "this page", "this GUI", or "this app" without naming another target, they mean the studio. The browser provides no implicit DOM, route, or screenshot context. Do not start a replacement server unless the user asks.
 ```
-
-The optional `sourceRoot` option names the directory to classify, which lets tests exercise both cases.
 
 #### Token effect
 
