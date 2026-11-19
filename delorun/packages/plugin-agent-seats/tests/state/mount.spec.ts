@@ -5,7 +5,7 @@
  */
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { appendPluginRecord, pluginRecordOf, SessionId } from '@deepseek-ai/dsh-session'
+import { appendPluginRecord, pluginRecordOf, SessionId, type Session } from '@deepseek-ai/dsh-session'
 import { GateRefusedError, ProgramOpenError } from '@delorun/external-agents/contract'
 import { describe, expect, it } from 'vitest'
 import {
@@ -13,7 +13,8 @@ import {
   type SeatRoute,
 } from '../../src/state/index.ts'
 import { collect, finishOf } from '../adapter/support.ts'
-import { ScriptedProgram, stateWorld, until, type StateWorld } from './support.ts'
+import { describeSeat, ScriptedProgram, stateWorld, until, type StateWorld } from './support.ts'
+import type { SeatStateOptions } from '../../src/state/index.ts'
 
 const tick = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 0))
 
@@ -570,8 +571,23 @@ describe('what the adapter reports about a program that cannot start', () => {
 })
 
 describe('a seat child whose Session is cold', () => {
+  const PICKER = { offered: [{ id: 'gpt-5.6-terra', label: 'Terra' }], planDefault: 'gpt-5.6-terra' }
+
+  /** A world whose cold child is a stored Session that `prepare` shapes. */
+  async function coldWorld(prepare: (cold: Session) => void, options: Partial<SeatStateOptions> = {}): Promise<StateWorld> {
+    let cold: Session | undefined
+    const w = await stateWorld({ workspaceOf: () => 'workspace-1', inspectCold: (_child, read) => Promise.resolve(cold === undefined ? undefined : read(cold)), ...options })
+    cold = w.ctx.sessions.create()
+    prepare(cold)
+    return w
+  }
+  const needsModel = (cold: Session): void => {
+    describeSeat(cold)
+    appendPluginRecord(cold, SEAT_STATUS_RECORD, { state: 'model-needed', modelPicker: PICKER })
+  }
+
   it('keeps the model pick for the workspace without logging anything in the chat', async () => {
-    const w = await stateWorld()
+    const w = await coldWorld(needsModel)
     const answered = await post(routeOf(w, CHOOSE_MODEL_PATH), { child: 'cold-child', id: 'gpt-5.6-terra' })
     expect(answered.status).toBe(200)
     expect(await answered.json()).toEqual({ ok: true, cold: true })
@@ -579,9 +595,31 @@ describe('a seat child whose Session is cold', () => {
   })
 
   it('refuses a model id that is not shaped like one', async () => {
-    const w = await stateWorld()
+    const w = await coldWorld(needsModel)
     expect((await post(routeOf(w, CHOOSE_MODEL_PATH), { child: 'cold-child', id: 'not a model!' })).status).toBe(409)
     expect(w.mount.choices.get('workspace-1')).toBeUndefined()
+  })
+
+  it('refuses a model its plan does not offer', async () => {
+    const w = await coldWorld(needsModel)
+    expect((await post(routeOf(w, CHOOSE_MODEL_PATH), { child: 'cold-child', id: 'gpt-9-other' })).status).toBe(409)
+    expect(w.mount.choices.get('workspace-1')).toBeUndefined()
+  })
+
+  it('refuses a chat that is not a seat child', async () => {
+    const w = await coldWorld(() => {})
+    expect((await post(routeOf(w, CHOOSE_MODEL_PATH), { child: 'cold-child', id: 'gpt-5.6-terra' })).status).toBe(404)
+    expect(w.mount.choices.get('workspace-1')).toBeUndefined()
+  })
+
+  it('refuses a seat that is not waiting for a model', async () => {
+    const w = await coldWorld(describeSeat)
+    expect((await post(routeOf(w, CHOOSE_MODEL_PATH), { child: 'cold-child', id: 'gpt-5.6-terra' })).status).toBe(409)
+  })
+
+  it('refuses a chat with no stored Session', async () => {
+    const w = await stateWorld({ inspectCold: () => Promise.resolve(undefined) })
+    expect((await post(routeOf(w, CHOOSE_MODEL_PATH), { child: 'cold-child', id: 'gpt-5.6-terra' })).status).toBe(404)
   })
 
   it('answers Resume without changing anything', async () => {
@@ -592,12 +630,12 @@ describe('a seat child whose Session is cold', () => {
   })
 
   it('refuses a pick when the child\'s workspace is unknown', async () => {
-    const w = await stateWorld({ workspaceOf: () => undefined, coldWorkspaceOf: () => Promise.resolve(undefined) })
+    const w = await coldWorld(needsModel, { workspaceOf: () => undefined, coldWorkspaceOf: () => Promise.resolve(undefined) })
     expect((await post(routeOf(w, CHOOSE_MODEL_PATH), { child: 'cold-child', id: 'gpt-5.6-terra' })).status).toBe(409)
   })
 
   it('finds the workspace of a cold child from its stored header', async () => {
-    const w = await stateWorld({ workspaceOf: () => undefined, coldWorkspaceOf: () => Promise.resolve('workspace-cold') })
+    const w = await coldWorld(needsModel, { workspaceOf: () => undefined, coldWorkspaceOf: () => Promise.resolve('workspace-cold') })
     expect((await post(routeOf(w, CHOOSE_MODEL_PATH), { child: 'cold-child', id: 'gpt-5.6-terra' })).status).toBe(200)
     expect(w.mount.choices.get('workspace-cold')).toBe('gpt-5.6-terra')
   })

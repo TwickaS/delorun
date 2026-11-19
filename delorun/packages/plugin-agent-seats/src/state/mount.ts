@@ -4,7 +4,7 @@
  * @module @delorun/plugin-agent-seats/state/mount
  */
 import type { Context } from '@deepseek-ai/cordis'
-import type { SessionId } from '@deepseek-ai/dsh-session'
+import type { Session, SessionId } from '@deepseek-ai/dsh-session'
 // Type-only: the ctx.sessionProjections merge.
 import type {} from '@deepseek-ai/dsh-session-projection'
 import { join } from 'node:path'
@@ -44,6 +44,13 @@ export interface SeatStateOptions {
    * @returns the key, or undefined when the child has no stored Session.
    */
   coldWorkspaceOf?(child: SessionId): Promise<string | undefined>
+  /**
+   * Read a stored Session without loading it, for a child whose Session is not loaded.
+   * @param child - the seat child.
+   * @param read - reads detached data from the stored Session.
+   * @returns the value, or undefined when the child has no stored Session or no reader is available.
+   */
+  inspectCold?<T>(child: SessionId, read: (session: Session) => T): Promise<T | undefined>
   /** Delorun's own folder; the model picks are kept in a file in it. */
   readonly dir: string
   /** Reads a program session's newest message id for parting detection; absent switches the comparison off. */
@@ -235,6 +242,7 @@ export async function mountSeatState(ctx: Context, options: SeatStateOptions): P
 
   const routeOptions = {
     records: store, choices, workspaceOf: options.workspaceOf, coldWorkspaceOf: options.coldWorkspaceOf ?? (child => Promise.resolve(options.workspaceOf(child))), now,
+    coldStateOf: (child: SessionId) => options.inspectCold?.(child, session => handle.stateOf(session)) ?? Promise.resolve(undefined),
   }
   return {
     store,

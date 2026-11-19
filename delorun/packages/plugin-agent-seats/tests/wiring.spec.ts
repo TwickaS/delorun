@@ -180,19 +180,27 @@ describe('a pick for a child whose Session is not loaded', () => {
   const pick = async (mounted: Awaited<ReturnType<typeof mountSeats>>) => mounted.routes.find(route => route.path === CHOOSE_MODEL_PATH)!
     .fetch(new Request('http://delorun.test/', { method: 'POST', body: JSON.stringify({ child: 'cold-child', id: 'gpt-5.6-terra' }) }))
 
-  it('finds the child\'s workspace from its stored header', async () => {
+  it('refuses the pick when the stored Session is not a seat child', async () => {
     const { ctx } = await world(true)
-    ctx.provide('sessionQuery', { inspectSession: (_id: string, read: (session: { header: { cwd: string } }) => string) => Promise.resolve(read({ header: { cwd: '/stored/workspace' } })) } as never)
+    ctx.provide('sessionQuery', { inspectSession: (_id: string, read: (session: unknown) => unknown) => Promise.resolve(read(ctx.sessions.create())) } as never)
     const mounted = await mountSeats(ctx, Config(null))
-    expect((await pick(mounted)).status).toBe(200)
-    expect(mounted.choices.get('/stored/workspace')).toBe('gpt-5.6-terra')
+    expect((await pick(mounted)).status).toBe(404)
+    expect(mounted.choices.get('/stored/workspace')).toBeUndefined()
     await mounted.settled()
   })
 
-  it('refuses the pick when no stored Session names a workspace', async () => {
+  it('refuses the pick when the query cannot read the child', async () => {
+    const { ctx } = await world(true)
+    ctx.provide('sessionQuery', { inspectSession: () => Promise.reject(new Error('no such session')) } as never)
+    const mounted = await mountSeats(ctx, Config(null))
+    expect((await pick(mounted)).status).toBe(404)
+    await mounted.settled()
+  })
+
+  it('refuses the pick when no Session query is available', async () => {
     const { ctx } = await world(true)
     const mounted = await mountSeats(ctx, Config(null))
-    expect((await pick(mounted)).status).toBe(409)
+    expect((await pick(mounted)).status).toBe(404)
   })
 })
 

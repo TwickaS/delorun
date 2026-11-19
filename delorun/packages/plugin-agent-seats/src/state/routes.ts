@@ -6,6 +6,7 @@
  */
 import { SessionId } from '@deepseek-ai/dsh-session'
 import type { SeatModelChoices } from '../adapter/state-port.ts'
+import type { SeatProjectionState } from './fold.ts'
 import type { SeatRecords } from './store.ts'
 
 /** The path of the resume route. */
@@ -46,6 +47,12 @@ export interface SeatRouteOptions {
    * @returns the key, or undefined.
    */
   coldWorkspaceOf(child: SessionId): Promise<string | undefined>
+  /**
+   * The logged state of a child whose Session is not loaded, read from its stored log.
+   * @param child - the seat child.
+   * @returns the fold's state, or undefined when the child has no stored Session.
+   */
+  coldStateOf(child: SessionId): Promise<SeatProjectionState | undefined>
   /** The clock, in epoch milliseconds. */
   now(): number
 }
@@ -100,8 +107,8 @@ export function resumeRoute(options: SeatRouteOptions): SeatRoute {
 const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/u
 
 /**
- * Keep a pick for a child whose Session is cold: the offered list is in the child's log, which is not open, so only the id's
- * form is checked here; the program refuses a model its plan does not offer. Nothing is logged in the child's chat.
+ * Keep a pick for a child whose Session is cold. The child's stored log must name a seat provider and show the model
+ * picker with the id among the offered models, as for a loaded child. Nothing is logged in the child's chat.
  * @param options - what the route needs.
  * @param child - the seat child.
  * @param id - the model id the person picked.
@@ -109,6 +116,11 @@ const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/u
  */
 async function chooseCold(options: SeatRouteOptions, child: SessionId, id: string): Promise<Response> {
   if (!MODEL_ID.test(id)) return answer(409, { error: 'that model is not offered to pick' })
+  const cold = await options.coldStateOf(child)
+  if (cold === undefined || cold.provider === null) return answer(404, { error: 'that chat has no live agent' })
+  if (cold.shown.state !== 'model-needed' || cold.shown.modelPicker?.offered.some(model => model.id === id) !== true) {
+    return answer(409, { error: 'that model is not offered to pick' })
+  }
   const workspace = await options.coldWorkspaceOf(child)
   if (workspace === undefined) return answer(409, { error: 'the agent has no workspace to keep the pick for' })
   options.choices.set(workspace, id)

@@ -91,6 +91,16 @@ export async function mountSeats(ctx: Context, config: Config, options: SeatMoun
       return undefined
     },
     workspaceOf,
+    inspectCold: async (child, read) => {
+      const query = ctx.get('sessionQuery')
+      if (query === undefined) return undefined
+      try {
+        return await query.inspectSession(child, read)
+      } catch (_unstored) {
+        // The query rejects a Session id it cannot read; such a child has no seat to pick a model for.
+        return undefined
+      }
+    },
     coldWorkspaceOf: async child => workspaceOf(child) ?? await ctx.get('sessionQuery')?.inspectSession(child, session => session.header.cwd),
     dir,
     info: agent => programInfo(programVersion(agent, dir)),
