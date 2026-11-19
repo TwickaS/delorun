@@ -262,7 +262,8 @@ export class SeatAdapter extends LlmAdapter {
     }
     for (const result of input.harnessResults) host.deliverHarnessResult?.(child, result)
     // A program that went quiet and closed is started again once, resuming its own session, before the message is given up.
-    // A text is counted as sent only after `send` returns; one that failed is given to the restarted program, never to both.
+    // A text is counted as sent once `send` returns; one whose `send` threw goes to the restarted program. A program that took
+    // the text and then threw would receive it twice, which only repeats the person's own words.
     let sent = 0
     let restarted = false
     for (;;) {
