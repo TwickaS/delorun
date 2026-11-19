@@ -213,8 +213,8 @@ export class CodexDriver implements ExternalAgentDriver {
   }
 
   private async handshake(rpc: CodexRpc, signal: AbortSignal): Promise<void> {
-    await rpc.request('initialize', { clientInfo: CLIENT_INFO, capabilities: { experimentalApi: false, requestAttestation: false } }, this.timeout(signal))
-    rpc.notify('initialized')
+    await rpc.request('initialize', { clientInfo: CLIENT_INFO, capabilities: { experimentalApi: false, requestAttestation: false } }, this.timeout(signal)) // us-spelling: quoted output (Codex JSON-RPC method)
+    rpc.notify('initialized') // us-spelling: quoted output (Codex JSON-RPC method)
   }
 
   private async listModels(rpc: CodexRpc, signal: AbortSignal): Promise<OfferedModel[]> {
