@@ -139,6 +139,8 @@ describe('hashes', () => {
     expect(await hashArgs({})).toBe('44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a')
     // SHA-256 of '{"credentialId":"abc"}' and of 'POST NUL /p NUL {"a":1}', computed with Node's crypto.
     expect(await hashArgs({ credentialId: 'abc' })).toBe('fce492991f0a6c56db05b1835f75f7d9a8fe08df976b0de08e876474f082e571')
+    // The device removal's body, hashed in the same form as /auth/passkey/remove.
+    expect(await hashArgs({ v: 1, deviceId: 'd2' })).toBe('46c43429148fcfe08ab8a3e2567c1088bb50ca8b681cb1a2de9e2aad95feeef5')
     expect(await hashRequest({ method: 'post', path: '/p', body: { a: 1 } })).toBe('d52ced0ec672b9fd47dcfd67064582b53c6936331a2b93a45296078c21cdc7f1')
     expect(() => canonicalJson(Number.NaN)).toThrow(TypeError)
     expect(() => canonicalJson(() => 1)).toThrow(TypeError)
@@ -347,6 +349,7 @@ describe('PasskeyDevices', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Confirm with Face ID' }))
     await waitFor(() => { expect(props.api.calls.some(call => call.name === 'removeDevice')).toBe(true) })
     expect(props.api.calls.find(call => call.name === 'removeDevice')?.request).toEqual({ deviceId: 'd2', grantId: 'g1' })
+    expect(props.api.calls.filter(call => call.name === 'options').at(-1)?.request).toEqual({ actions: [{ action: 'auth/devices/remove', hash: '46c43429148fcfe08ab8a3e2567c1088bb50ca8b681cb1a2de9e2aad95feeef5' }] })
   })
   it('removes a passkey through the sheet, falls back to the PIN, and cancelling removes nothing', async () => {
     // Cancel must leave the list unchanged; the PIN grant is the same kind of grant.

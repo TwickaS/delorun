@@ -9,7 +9,7 @@ import type { ReactNode } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PasskeyBrowser } from './face-id-browser.ts'
-import { hashArgs, hashRequest } from './face-id-hash.ts'
+import { hashArgs } from './face-id-hash.ts'
 import type { FaceIdAction, FaceIdKind, PasskeyApi, PasskeyDevice, PasskeyEntry } from './face-id-types.ts'
 import { FaceIdPin } from './FaceIdPin.tsx'
 import { FaceIdSheet } from './FaceIdSheet.tsx'
@@ -43,9 +43,6 @@ type Target =
 
 type Asked = { readonly target: Target; readonly action: FaceIdAction; readonly pin: boolean }
 
-/** The route a device removal posts to, which its grant is hashed against. */
-const REMOVE_DEVICE_PATH = '/auth/devices/remove'
-
 /**
  * A date as the card shows it.
  * @param t - the copy, whose `time.locale` names the locale.
@@ -74,7 +71,7 @@ async function actionOf(t: Translate, target: Target): Promise<FaceIdAction> {
   }
   return {
     title: t('remove.deviceTitle', { name: target.label }), body: t('remove.deviceBody'),
-    grant: { actions: [{ action: 'auth/devices/remove', hash: await hashRequest({ method: 'POST', path: REMOVE_DEVICE_PATH, body: { v: 1, deviceId: target.deviceId } }) }] },
+    grant: { actions: [{ action: 'auth/devices/remove', hash: await hashArgs({ v: 1, deviceId: target.deviceId }) }] },
   }
 }
 
