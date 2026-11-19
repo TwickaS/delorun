@@ -26,7 +26,6 @@ type FakeState = Omit<ChangesStateView, 'folders'> & {
 /** Every control usable: the person at the computer. */
 const ACCESS_COMPUTER: AccessView = {
   actor: 'computer',
-  phonePowers: { level: 'careful', chosen: false },
   may: {
     'harness-apply': { ok: true }, 'harness-undo': { ok: true }, 'harness-discard': { ok: true },
     'protection-off': { ok: true }, 'protection-on': { ok: true },
@@ -40,20 +39,21 @@ const ACCESS_COMPUTER: AccessView = {
 const UNLOCK: MayView = { ok: false, needs: 'unlock' }
 const COMPUTER: MayView = { ok: false, needs: 'computer' }
 
+const FACE: MayView = { ok: false, needs: 'face' }
+
 /**
- * A paired phone's access at a Phone powers level, as the route computes it: Careful keeps the controls that apply or
- * switch changes at the computer; Full leaves them to a fresh unlock; the phone locked asks an unlock of what it may do.
+ * A paired phone's access, as the route computes it: with the Face ID flag off the controls that change what runs stay at
+ * the computer; with it on they ask Face ID (or a PIN) for the call; the phone locked asks an unlock of the take-back controls.
  * @param actor - the phone's state.
- * @param level - the Phone powers level.
+ * @param flag - whether the Face ID flag is off or on.
  * @returns the access.
  */
-function phoneAccess(actor: ActorView, level: 'careful' | 'full'): AccessView {
+function phoneAccess(actor: ActorView, flag: 'off' | 'on'): AccessView {
   const locked = actor !== 'device-unlocked'
   const fresh: MayView = locked ? UNLOCK : { ok: true }
-  const kept: MayView = level === 'careful' ? COMPUTER : fresh
+  const kept: MayView = flag === 'off' ? COMPUTER : FACE
   return {
     actor,
-    phonePowers: { level, chosen: true },
     may: {
       'harness-apply': kept, 'harness-undo': kept, 'harness-discard': fresh,
       'protection-off': kept, 'protection-on': fresh,
@@ -761,11 +761,11 @@ describe('the Changes section', () => {
     await waitFor(() => { expect(toasts()).toContain(en['toast.safeMode.off']) })
   })
 
-  it('keeps the safe-mode button at the computer for a phone on Careful, and enabled for an unlocked phone on Full', async () => {
-    await openSection(emptyState({ atComputer: false, access: phoneAccess('device-unlocked', 'careful') }))
+  it('keeps the safe-mode button at the computer for a phone with Face ID off, and enabled for a phone with it on', async () => {
+    await openSection(emptyState({ atComputer: false, access: phoneAccess('device-unlocked', 'off') }))
     expect((screen.getByRole('button', { name: en['safeMode.start'] }) as HTMLButtonElement).disabled).toBe(true)
     cleanup()
-    await openSection(emptyState({ atComputer: false, access: phoneAccess('device-unlocked', 'full') }))
+    await openSection(emptyState({ atComputer: false, access: phoneAccess('device-unlocked', 'on') }))
     expect((screen.getByRole('button', { name: en['safeMode.start'] }) as HTMLButtonElement).disabled).toBe(false)
   })
 
@@ -1030,21 +1030,20 @@ describe('the Changes section', () => {
     }
   })
 
-  it('a locked phone sees the changes, the controls Careful keeps at the computer are disabled, and Undo asks it to unlock', async () => {
+  it('a locked phone sees the changes, the controls kept at the computer are disabled, and Undo asks it to unlock', async () => {
     const leftOut = logged({ id: 'c0000000009', state: 'left-out-at-start', plugin: 'broken-plugin', undoable: false })
     const session = { plugin: 'hello-plugin', source: '/work/hello-plugin', startedAt: new Date().toISOString(), endsAt: new Date(Date.now() + HOUR).toISOString() }
     const { fake, page } = await openSection(emptyState({
-      atComputer: false, access: phoneAccess('device-locked', 'careful'), workSession: session, leftOut: [leftOut], pending: [PENDING],
+      atComputer: false, access: phoneAccess('device-locked', 'off'), workSession: session, leftOut: [leftOut], pending: [PENDING],
       requests: [logged({ id: 'c0000000005', kind: 'plugin-install', state: 'pending', undoable: false })], recent: [logged({ id: 'c0000000006' })],
     }))
     const denied: Array<{ endpoint: string, reason?: string | undefined }> = []
     page.ctx.on('remote/call-denied', (denial) => { denied.push(denial) })
     const note = document.querySelector('[data-delorun-changes-remote="device-locked"]')
-    expect(note?.getAttribute('data-phone-powers')).toBe('careful')
     expect(note?.textContent).toContain(en['access.locked.title'])
     expect(note?.textContent).toContain(en['access.locked.body'])
-    expect(note?.textContent).toContain(en['access.careful.body'])
-    // What Careful keeps at the computer is disabled with the reason; the rest stays enabled and says an unlock comes first.
+    expect(note?.textContent).toContain(en['access.device.body'])
+    // What stays at the computer is disabled with the reason; the rest stays enabled and says an unlock comes first.
     for (const name of [en['work.done'], en['leftOut.applyAgain'], en['review.apply']]) {
       for (const button of screen.getAllByRole('button', { name })) {
         expect(button.hasAttribute('disabled'), name).toBe(true)
@@ -1070,35 +1069,33 @@ describe('the Changes section', () => {
   })
 
   it('a phone in its approval grace is told it counts as locked', async () => {
-    await openSection(emptyState({ atComputer: false, access: phoneAccess('device-grace', 'full') }))
+    await openSection(emptyState({ atComputer: false, access: phoneAccess('device-grace', 'on') }))
     const note = document.querySelector('[data-delorun-changes-remote="device-grace"]')
     expect(note?.textContent).toContain(en['access.locked.title'])
-    expect(note?.textContent).toContain(en['access.full.title'])
-    expect(note?.textContent).toContain(en['access.change'])
+    expect(note?.textContent).toContain(en['access.device.body'])
+    expect(note?.textContent).not.toContain('Phone powers')
   })
 
-  it('an unlocked phone under Full powers sees its level and applies a change', async () => {
-    const { fake } = await openSection(emptyState({ atComputer: false, access: phoneAccess('device-unlocked', 'full'), pending: [PENDING] }))
+  it('an unlocked phone with Face ID on sees what it takes without asking and what it confirms, and no Phone powers level', async () => {
+    await openSection(emptyState({ atComputer: false, access: phoneAccess('device-unlocked', 'on'), pending: [PENDING] }))
     const note = document.querySelector('[data-delorun-changes-remote="device-unlocked"]')
-    expect(note?.textContent).toContain(en['access.full.title'])
-    expect(note?.textContent).toContain(en['access.full.body'])
+    expect(note?.textContent).toContain(en['access.device.title'])
+    expect(note?.textContent).toContain(en['access.device.body'])
     expect(note?.textContent).not.toContain(en['access.locked.title'])
+    expect(note?.textContent).not.toContain('Phone powers')
+    expect(note?.hasAttribute('data-phone-powers')).toBe(false)
     fireEvent.click(screen.getByRole('button', { name: en['pending.review'] }))
     const dialog = await screen.findByRole('dialog')
     await within(dialog).findByRole('region', { name: en['review.files'] })
-    const apply = within(dialog).getByRole('button', { name: en['review.apply'] })
-    expect(apply.hasAttribute('disabled')).toBe(false)
-    expect(apply.hasAttribute('title')).toBe(false)
-    fireEvent.click(apply)
-    await waitFor(() => { expect(fake.callsTo(ACTION_PATHS.apply)).toEqual([{ id: PENDING.id }]) })
-    await waitFor(() => { expect(toasts()).toContain(en['toast.applied']) })
+    // Apply asks Face ID for the call, so the button stays enabled; the Face ID sheet itself is covered in face-grant.client.spec.ts.
+    expect(within(dialog).getByRole('button', { name: en['review.apply'] }).hasAttribute('disabled')).toBe(false)
   })
 
-  it('an unlocked phone under Careful powers cannot turn protection off or apply, and the notices wait for the computer', async () => {
+  it('an unlocked phone with Face ID off cannot turn protection off or apply, and the notices wait for the computer', async () => {
     const notice = { id: 'n1', level: 'off', at: new Date().toISOString(), device: 'Ana\'s phone' } as const
-    await openSection(emptyState({ atComputer: false, access: phoneAccess('device-unlocked', 'careful'), notices: [notice], pending: [PENDING] }))
+    await openSection(emptyState({ atComputer: false, access: phoneAccess('device-unlocked', 'off'), notices: [notice], pending: [PENDING] }))
     const note = document.querySelector('[data-delorun-changes-remote="device-unlocked"]')
-    expect(note?.textContent).toContain(en['access.careful.title'])
+    expect(note?.textContent).toContain(en['access.device.title'])
     const protection = screen.getByRole('region', { name: en['protection.heading'] })
     const toggle = within(protection).getByRole('switch', { name: en['protection.switch'] })
     expect(toggle.hasAttribute('disabled')).toBe(true)
@@ -1239,16 +1236,14 @@ describe('the restart', () => {
     await waitFor(() => { expect(fake.callsTo(RESTART_PATHS.restart)).toEqual([{}]) })
   })
 
-  it('keeps Restart at the computer under Careful, and asks a phone under Full to unlock first', async () => {
-    await openSection(emptyState({ atComputer: false, access: phoneAccess('device-unlocked', 'careful'), restart: NEEDED }))
+  it('keeps Restart at the computer with Face ID off, and leaves it enabled for a phone with Face ID on', async () => {
+    await openSection(emptyState({ atComputer: false, access: phoneAccess('device-unlocked', 'off'), restart: NEEDED }))
     const careful = screen.getByRole('button', { name: en['restart.now'] })
     expect(careful.hasAttribute('disabled')).toBe(true)
     expect(careful.getAttribute('title')).toBe(en['access.needsComputer'])
     cleanup()
-    await openSection(emptyState({ atComputer: false, access: phoneAccess('device-locked', 'full'), restart: NEEDED }))
-    const full = screen.getByRole('button', { name: en['restart.now'] })
-    expect(full.hasAttribute('disabled')).toBe(false)
-    expect(full.getAttribute('title')).toBe(en['access.needsUnlock'])
+    await openSection(emptyState({ atComputer: false, access: phoneAccess('device-locked', 'on'), restart: NEEDED }))
+    expect(screen.getByRole('button', { name: en['restart.now'] }).hasAttribute('disabled')).toBe(false)
   })
 
   it('offers to reload the page after a change to the studio\'s own files, and says when a change could not run live and is left out', async () => {

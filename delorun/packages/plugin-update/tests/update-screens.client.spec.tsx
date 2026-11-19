@@ -22,7 +22,7 @@ const OK: UpdateMayView = { ok: true }
 
 /** Every control usable (the computer), with the named ones replaced. */
 function may(replace: Partial<Record<UpdateControl, UpdateMayView>> = {}): UpdateStateView['access'] {
-  return { actor: 'computer', phonePowers: 'careful', may: Object.fromEntries(UPDATE_CONTROLS.map(control => [control, replace[control] ?? OK])) as Record<UpdateControl, UpdateMayView> }
+  return { actor: 'computer', may: Object.fromEntries(UPDATE_CONTROLS.map(control => [control, replace[control] ?? OK])) as Record<UpdateControl, UpdateMayView> }
 }
 
 /** An idle state at the computer. */

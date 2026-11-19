@@ -255,13 +255,6 @@ export interface RestartCancelView {
 /** Where a request came from. A device in its approval grace counts as locked for every Changes write. */
 export type ActorView = 'computer' | 'device-unlocked' | 'device-grace' | 'device-locked'
 
-/** The Phone powers level in force and whether the person chose it. */
-export interface PhonePowersView {
-  readonly level: 'careful' | 'full'
-  /** False while the home has no recorded choice, and `level` is the one it applies. */
-  readonly chosen: boolean
-}
-
 /** One control of the Changes section. */
 export type ChangesControl =
   | 'harness-apply' | 'harness-undo' | 'harness-discard'
@@ -279,7 +272,6 @@ export type MayView =
 /** Who may use what, for the request that read `state`. */
 export interface AccessView {
   readonly actor: ActorView
-  readonly phonePowers: PhonePowersView
   readonly may: Readonly<Record<ChangesControl, MayView>>
 }
 

@@ -40,8 +40,8 @@ export const UPDATE_PATHS = {
  * - `update-check`, `update-cancel` and `update-dismiss`: class `free`, any paired device with no prompt (they read, or only
  *   take back);
  * - `update-begin`, `update-rollback` and `stop`: class `face`, the computer, or a device with a Face ID (or PIN) grant for
- *   exactly that call. While the Face ID flag is off, and for a device with no passkey, the unlock of today applies:
- *   `update-begin` and `update-rollback` while Phone powers is Full, `stop` at either level.
+ *   exactly that call; a device with no passkey takes `update-begin` and `update-rollback` with a PIN grant, and `stop`
+ *   also with an unlock it entered. While the Face ID flag is off, `update-begin` and `update-rollback` stay at the computer.
  */
 export type UpdateControl = 'update-check' | 'update-begin' | 'update-cancel' | 'update-rollback' | 'update-dismiss' | 'stop'
 
@@ -57,8 +57,6 @@ export type UpdateMayView =
 export interface UpdateAccessView {
   /** Where the request came from. */
   readonly actor: 'computer' | 'device-unlocked' | 'device-grace' | 'device-locked'
-  /** The Phone powers level in force. */
-  readonly phonePowers: 'careful' | 'full'
   /** Every control's decision. */
   readonly may: Readonly<Record<UpdateControl, UpdateMayView>>
 }

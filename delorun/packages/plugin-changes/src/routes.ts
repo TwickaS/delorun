@@ -13,9 +13,9 @@
  * loopback origin; from a paired device: an `Origin` that is not the device's own studio address); then the control's
  * level ([access](./access.ts)) decides who may act. The person at the computer is attested with `attestStudio`: the
  * loopback listener under a loopback `Host`, admitted with the credential and not for a remote session. A paired device
- * is attested with `attestDevice` only when the control's level and the Phone powers level let a device use it and the
- * device holds an unlock the person entered (a code or a PIN; the approval grace never counts); otherwise it is answered
- * `403 LOOPBACK_REQUIRED` or `403 ELEVATION_REQUIRED`. Only then is the body read, at most {@link MAX_BODY_BYTES}.
+ * is attested with `attestDevice` only when the control's level lets a device use it and the device holds a grant for
+ * exactly the call or, for a control a device may take with an unlock, an unlock the person entered (a code or a PIN; the
+ * approval grace never counts); otherwise it is answered `403 LOOPBACK_REQUIRED` or `403 ELEVATION_REQUIRED`. Only then is the body read, at most {@link MAX_BODY_BYTES}.
  * A proof is no barrier to code running inside the Host; it records where the person decided.
  *
  * `state` reads only the records: it writes nothing and reads no plugin's folder, so the studio's repeated reads and a
@@ -103,7 +103,7 @@ import {
 } from '@delorun/changes'
 import { isForeignFetchSite, isSameLoopbackOrigin, listenerOf, loopbackAddressOf, type LoopbackPort, type StampedRequest } from '@delorun/home'
 import { GRANT_BODY_CAP_BYTES } from '@delorun/home-auth'
-import { accessView, CONTROL_LEVELS, mayUse } from './access.ts'
+import { accessView, CONTROL_LEVELS, mayUse, type FaceState } from './access.ts'
 import { isProfileSafetyError, readSafeMode, recover } from '@delorun/profile-safety'
 import {
   type AccessView,
@@ -144,7 +144,6 @@ import {
   type InstallView,
   type PendingListView,
   type PendingView,
-  type PhonePowersView,
   type ProtectionChangedView,
   type RequestedView,
   type RestartStateView,
@@ -243,7 +242,7 @@ export interface RouteDependencies {
    * @returns the version.
    */
   readonly delorunVersion: () => string
-  /** The paired devices and the Phone powers level, from the mounted `homeAuth` service. */
+  /** The paired devices, from the mounted `homeAuth` service. */
   readonly devices: RouteDevices
   /**
    * The running runtime's harness, which the home process gives the Host.
@@ -302,11 +301,6 @@ export interface RouteDevices {
    * @returns the device, or undefined for a session that is not a paired device's.
    */
   readonly deviceOf: (peer: object) => Promise<RouteDevice | undefined>
-  /**
-   * The Phone powers level in force.
-   * @returns it; Careful and not chosen while no `homeAuth` is mounted.
-   */
-  readonly phonePowers: () => PhonePowersView
 }
 
 /** Where an admitted request came from. */
@@ -471,10 +465,11 @@ function actorOf(requester: Requester): ActorView {
 
 /**
  * @param requester - where a request came from.
- * @returns whether the home asks this requester for Face ID: a device on a home whose flag is on and that holds a passkey.
+ * @returns what the home asks this requester for Face ID: whether the flag is on, and whether a device holds a passkey.
  */
-function faceReadyOf(requester: Requester): boolean {
-  return requester.kind === 'device' && requester.device.face?.enabled === true && requester.device.face.hasPasskey
+function faceStateOf(requester: Requester): FaceState {
+  const face = requester.kind === 'device' ? requester.device.face : undefined
+  return { enabled: face?.enabled === true, hasPasskey: face?.hasPasskey === true }
 }
 
 /**
@@ -482,7 +477,7 @@ function faceReadyOf(requester: Requester): boolean {
  * @param request - the request.
  * @param admission - the arrival and the admitted session.
  * @param control - the control the route is.
- * @param devices - the paired devices and the Phone powers level.
+ * @param devices - the paired devices.
  * @returns the proof, and a renewal of the device's unlock to run once the action succeeded.
  * @throws {RouteRefusal} `403 CROSS_SITE`; `403 LOOPBACK_REQUIRED` when the control stays at the computer for this
  *   request; `403 ELEVATION_REQUIRED` for a device that holds no unlock the person entered.
@@ -494,8 +489,8 @@ async function gate(request: IncomingMessage, admission: { readonly arrival: Stu
   if (requester.kind === 'other') throw new RouteRefusal(403, LOOPBACK_REQUIRED, LOOPBACK_REQUIRED_SENTENCE)
   const { device } = requester
   const face = device.face
-  const may = mayUse(actorOf(requester), devices.phonePowers().level, control, face?.enabled === true && face.hasPasskey)
-  // A Full-set control under Careful is refused before any grant is looked up (F11), so a grant cannot lift it.
+  const may = mayUse(actorOf(requester), control, faceStateOf(requester))
+  // A control that stays at the computer (the Face ID flag is off) is refused before any grant is looked up.
   if (!may.ok && may.needs === 'computer') throw new RouteRefusal(403, LOOPBACK_REQUIRED, LOOPBACK_REQUIRED_SENTENCE)
   // With the flag on, a grant for exactly this call admits any device; one for another body, path or control does not.
   if (CONTROL_LEVELS[control] === 'face' && face?.enabled === true) {
@@ -858,7 +853,7 @@ async function stateOf(ctx: ChangesContext, requester: Requester, home: HomeWord
   const entries = log?.entries ?? []
   return {
     atComputer: requester.kind === 'computer',
-    access: accessView(actorOf(requester), dependencies.devices.phonePowers(), faceReadyOf(requester)),
+    access: accessView(actorOf(requester), faceStateOf(requester)),
     profile: ctx.profile,
     ...protection === undefined ? {} : { protection },
     ...safeMode === undefined ? {} : { safeMode: { since: safeMode.since, reason: safeMode.reason, skipped: safeMode.skipped } },
@@ -1611,6 +1606,6 @@ export function changesGate(dependencies: RouteDependencies): ChangesGate {
   return {
     post: (control, run) => decidingRoute(control, dependencies, run),
     open: run => openRoute(dependencies, run),
-    get: read => readingRoute((ctx, _url, requester) => read(ctx, accessView(actorOf(requester), dependencies.devices.phonePowers(), faceReadyOf(requester))), dependencies),
+    get: read => readingRoute((ctx, _url, requester) => read(ctx, accessView(actorOf(requester), faceStateOf(requester))), dependencies),
   }
 }

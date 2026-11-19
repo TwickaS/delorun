@@ -1,7 +1,5 @@
 /** The Changes section's, its dialogs', its toasts' and the work-session badge's copy. */
 
-import * as phonePowers from './locales/phone-powers.ts'
-
 /** English dictionary. Plural pairs are chosen by count: `.one` for 1, `.other` otherwise. */
 export const en = {
   'nav': 'Changes',
@@ -12,12 +10,9 @@ export const en = {
   'load.failed': 'Your changes could not be loaded.',
   'load.retry': 'Try again',
   'access.locked.title': 'Unlock this phone to act on your changes',
-  'access.locked.body': 'You can see your changes here. The actions Phone powers allows ask you to unlock this phone first, with a code from your computer or your PIN. The 15 minutes after you approve a phone do not count.',
-  'access.careful.title': 'Phone powers: Careful',
-  'access.careful.body': phonePowers.en.careful,
-  'access.full.title': 'Phone powers: Full',
-  'access.full.body': phonePowers.en.full,
-  'access.change': 'Change this at your computer, in Settings → Devices.',
+  'access.locked.body': 'You can see your changes here. Some actions ask you to unlock this phone first, with a code from your computer or your PIN. The 15 minutes after you approve a phone do not count.',
+  'access.device.title': 'Changes from this phone',
+  'access.device.body': 'Undoing a plugin\'s change, discarding a waiting change and turning protection on need nothing more. Applying a change, turning protection off, making your copy, restarting and changes to Delorun itself ask for Face ID or your PIN each time, and stay at your computer while Face ID is off.',
   'access.needsComputer': 'Needs your computer',
   'access.needsUnlock': 'Unlock this phone first',
   'decidedOn': 'on {device}',
@@ -311,12 +306,9 @@ export const zh: typeof en = {
   'load.failed': '无法加载变更。',
   'load.retry': '重试',
   'access.locked.title': '解锁此手机后才能处理变更',
-  'access.locked.body': '你可以在这里查看变更。手机权限允许的操作会先请你解锁此手机：使用电脑上显示的代码或你的 PIN。批准手机后的 15 分钟不算解锁。',
-  'access.careful.title': '手机权限：谨慎',
-  'access.careful.body': phonePowers.zh.careful,
-  'access.full.title': '手机权限：完全',
-  'access.full.body': phonePowers.zh.full,
-  'access.change': '请在电脑上的“设置 → 设备”中更改。',
+  'access.locked.body': '你可以在这里查看变更。有些操作会先请你解锁此手机：使用电脑上显示的代码或你的 PIN。批准手机后的 15 分钟不算解锁。',
+  'access.device.title': '来自此手机的变更',
+  'access.device.body': '撤销插件的变更、丢弃等待中的变更和开启保护无需更多操作。应用变更、关闭保护、制作你的副本、重启，以及对 Delorun 自身的变更，每次都需要面容 ID 或你的 PIN，并且在面容 ID 关闭时只能在你的电脑上进行。',
   'access.needsComputer': '需要在你的电脑上操作',
   'access.needsUnlock': '请先解锁此手机',
   'decidedOn': '在 {device} 上',

@@ -1,6 +1,6 @@
 /**
- * What the studio decides on its Changes routes and from where: who may use each control at each Phone powers level,
- * changes to Delorun itself (Apply, Undo, Discard, Make my copy), and the protection switch both ways.
+ * What the studio decides on its Changes routes and from where: who may use each control with the Face ID flag off and
+ * on, changes to Delorun itself (Apply, Undo, Discard, Make my copy), and the protection switch both ways.
  *
  * Each test's comment names the check whose removal makes it fail, so the suite is also the mutation record.
  */
@@ -10,28 +10,29 @@ import { harnessCopyDirectory, readChangeLog, readHarnessLog, readNotices, readP
 import { describe, expect, it, vi } from 'vitest'
 import { mayUse } from '../src/access.ts'
 import { ACTION_PATHS, HARNESS_PATHS, NOTICE_SEEN_PATH, PROTECTION_PATHS, SETUP_PATHS, SHOW_PATH, STATE_PATH, type ChangesAction } from '../src/routes.ts'
+import type { FaceAccess } from '../src/routes.ts'
 import type { ActorView, ChangesControl } from '../src/wire.ts'
-import { CREDENTIAL, DEVICE_HOST, fromDevice, get, json, post, routeHarness, routeHome, RUNTIME, RUNTIME_FILE, send, serveRoutes, TEST_DEVICE } from './routes-fixture.ts'
+import { CREDENTIAL, DEVICE_HOST, grantWorld, fromDevice, get, json, post, routeHarness, routeHome, RUNTIME, RUNTIME_FILE, send, serveRoutes, TEST_DEVICE } from './routes-fixture.ts'
 
 // Each case starts a server on a loopback port and writes a temporary home; under a loaded host that takes longer than vitest's default.
 vi.setConfig({ testTimeout: 60_000 })
 
-/** Where an unlocked phone may use a control, as the owner set it (L49). */
-type Reach = 'both-levels' | 'full-only' | 'computer-only'
+/** Where a phone may use a control: with an unlock, with a grant only (the set an unlocked phone could once open), or never. */
+type Reach = 'unlock' | 'grant-only' | 'computer-only'
 
 /** Every `POST` route of the section with where an unlocked phone may use it. */
 const ROUTE_REACH: readonly { readonly path: string, readonly reach: Reach }[] = [
-  // Taking back or tightening: an unlocked phone at either level.
-  { path: ACTION_PATHS.undo, reach: 'both-levels' },
-  { path: ACTION_PATHS.discard, reach: 'both-levels' },
-  { path: HARNESS_PATHS.discard, reach: 'both-levels' },
-  // Everything else: an unlocked phone only under Full.
-  ...(['apply', 'off', 'on', 'work', 'done', 'safe-mode', 'exit-safe-mode', 'create', 'request', 'reveal'] as const satisfies readonly ChangesAction[]).map(action => ({ path: ACTION_PATHS[action], reach: 'full-only' as const })),
-  ...Object.values(SETUP_PATHS).map(path => ({ path, reach: 'full-only' as const })),
-  { path: HARNESS_PATHS.apply, reach: 'full-only' },
-  { path: HARNESS_PATHS.undo, reach: 'full-only' },
-  { path: HARNESS_PATHS.copy, reach: 'full-only' },
-  { path: PROTECTION_PATHS.off, reach: 'full-only' },
+  // Taking back or tightening: an unlocked phone.
+  { path: ACTION_PATHS.undo, reach: 'unlock' },
+  { path: ACTION_PATHS.discard, reach: 'unlock' },
+  { path: HARNESS_PATHS.discard, reach: 'unlock' },
+  // Everything else: a grant for the call, which no unlock stands in for.
+  ...(['apply', 'off', 'on', 'work', 'done', 'safe-mode', 'exit-safe-mode', 'create', 'request', 'reveal'] as const satisfies readonly ChangesAction[]).map(action => ({ path: ACTION_PATHS[action], reach: 'grant-only' as const })),
+  ...Object.values(SETUP_PATHS).map(path => ({ path, reach: 'grant-only' as const })),
+  { path: HARNESS_PATHS.apply, reach: 'grant-only' },
+  { path: HARNESS_PATHS.undo, reach: 'grant-only' },
+  { path: HARNESS_PATHS.copy, reach: 'grant-only' },
+  { path: PROTECTION_PATHS.off, reach: 'grant-only' },
   // Dismissing the notice of a phone's change: the computer only.
   { path: NOTICE_SEEN_PATH, reach: 'computer-only' },
 ]
@@ -40,21 +41,22 @@ const ROUTE_REACH: readonly { readonly path: string, readonly reach: Reach }[] =
 const WHERE_REFUSALS = ['LOOPBACK_REQUIRED', 'ELEVATION_REQUIRED', 'CROSS_SITE']
 
 describe('who may use each control', () => {
-  it('a phone uses a control only where Phone powers lets it, and only with an unlock it entered', async () => {
+  it('a phone uses a control only where its class lets it: an unlock for the take-back controls, a grant for the rest, nothing for the notice', async () => {
     const { ctx } = routeHome()
     expect(ROUTE_REACH.length).toBe(Object.keys(ACTION_PATHS).length + Object.keys(SETUP_PATHS).length + Object.keys(HARNESS_PATHS).length + 2)
-    for (const powers of ['careful', 'full'] as const) {
-      const server = await serveRoutes(ctx, { powers })
+    // The Face ID flag off, and on for a device with no passkey, which a PIN grant serves.
+    for (const flag of ['off', 'on'] as const) {
+      const server = await serveRoutes(ctx, { face: grantWorld({ enabled: flag === 'on', hasPasskey: false }).face })
       for (const { path, reach } of ROUTE_REACH) {
         for (const unlock of ['fresh', 'grace', 'none'] as const) {
-          const cell = `${powers} ${unlock} ${path}`
-          const atComputer = reach === 'computer-only' || (reach === 'full-only' && powers === 'careful')
-          if (atComputer || unlock !== 'fresh') {
-            // Pins the level and the unlock in `gate`, before the body: without them a phone in its grace, or one whose
-            // Phone powers keep the control at the computer, acts.
+          const cell = `flag ${flag} ${unlock} ${path}`
+          // Without the grant, no unlock opens a grant-only control: with the flag off it stays at the computer.
+          const refused = reach === 'computer-only' ? 'LOOPBACK_REQUIRED' : reach === 'grant-only' ? (flag === 'off' ? 'LOOPBACK_REQUIRED' : 'ELEVATION_REQUIRED') : unlock === 'fresh' ? undefined : 'ELEVATION_REQUIRED'
+          if (refused !== undefined) {
+            // Pins the class and the unlock in `gate`, before the body: without them a phone in its grace, or one whose unlock stands in for a grant, acts.
             const reply = await send(server.port, path, fromDevice(unlock, {}, true))
             expect(reply.status, cell).toBe(403)
-            expect(json(reply).code, cell).toBe(atComputer ? 'LOOPBACK_REQUIRED' : 'ELEVATION_REQUIRED')
+            expect(json(reply).code, cell).toBe(refused)
           } else {
             const reply = await send(server.port, path, fromDevice(unlock, {}))
             expect(WHERE_REFUSALS, cell).not.toContain(json(reply).code)
@@ -66,25 +68,32 @@ describe('who may use each control', () => {
 
   it('the state says what each control needs, with the same decisions the routes make', async () => {
     const { ctx } = routeHome()
-    const server = await serveRoutes(ctx, { powers: 'full' })
-    expect(json(await get(server.port, STATE_PATH))).toMatchObject({ atComputer: true, access: { actor: 'computer', phonePowers: { level: 'full', chosen: true }, may: { 'harness-apply': { ok: true }, 'notice-seen': { ok: true } } } })
+    const server = await serveRoutes(ctx)
+    expect(json(await get(server.port, STATE_PATH))).toMatchObject({ atComputer: true, access: { actor: 'computer', may: { 'harness-apply': { ok: true }, 'notice-seen': { ok: true } } } })
     const grace = json(await send(server.port, STATE_PATH, { host: DEVICE_HOST, headers: [CREDENTIAL, 'x-test-remote: 1', 'x-test-unlock: grace'] }))
-    expect(grace).toMatchObject({ atComputer: false, access: { actor: 'device-grace', may: { 'harness-apply': { ok: false, needs: 'unlock' }, 'notice-seen': { ok: false, needs: 'computer' } } } })
+    expect(grace).toMatchObject({ atComputer: false, access: { actor: 'device-grace', may: { 'harness-apply': { ok: false, needs: 'computer' }, 'plugin-undo': { ok: false, needs: 'unlock' }, 'notice-seen': { ok: false, needs: 'computer' } } } })
     const careful = await serveRoutes(ctx)
     const fresh = json(await send(careful.port, STATE_PATH, { host: DEVICE_HOST, headers: [CREDENTIAL, 'x-test-remote: 1', 'x-test-unlock: fresh'] }))
-    expect(fresh).toMatchObject({ access: { actor: 'device-unlocked', phonePowers: { level: 'careful', chosen: false }, may: { 'harness-apply': { ok: false, needs: 'computer' }, 'harness-discard': { ok: true }, 'protection-on': { ok: true } } } })
+    expect(fresh).toMatchObject({ access: { actor: 'device-unlocked', may: { 'harness-apply': { ok: false, needs: 'computer' }, 'harness-discard': { ok: true }, 'protection-on': { ok: true } } } })
     // Each cell of the table, for every actor.
+    const grantOnly = ['plugin-apply', 'protection-off', 'restart'] as const satisfies readonly ChangesControl[]
     for (const actor of ['computer', 'device-unlocked', 'device-grace', 'device-locked'] as const satisfies readonly ActorView[]) {
-      for (const control of ['plugin-apply', 'protection-off', 'restart'] as const satisfies readonly ChangesControl[]) {
-        expect(mayUse(actor, 'careful', control), `${actor} ${control}`).toEqual(actor === 'computer' ? { ok: true } : { ok: false, needs: 'computer' })
-        expect(mayUse(actor, 'full', control), `${actor} ${control}`).toEqual(actor === 'computer' || actor === 'device-unlocked' ? { ok: true } : { ok: false, needs: 'unlock' })
+      for (const control of grantOnly) {
+        // The flag off: no grant exists, so the control stays at the computer.
+        expect(mayUse(actor, control), `${actor} ${control}`).toEqual(actor === 'computer' ? { ok: true } : { ok: false, needs: 'computer' })
+        // The flag on: a grant from every device, a PIN one where it holds no passkey; no unlock changes that.
+        for (const hasPasskey of [false, true]) {
+          expect(mayUse(actor, control, { enabled: true, hasPasskey }), `${actor} ${control} passkey ${String(hasPasskey)}`).toEqual(actor === 'computer' ? { ok: true } : { ok: false, needs: 'face' })
+        }
       }
     }
+    expect(mayUse('device-unlocked', 'plugin-undo')).toEqual({ ok: true })
+    expect(mayUse('device-unlocked', 'plugin-undo', { enabled: true, hasPasskey: true })).toEqual({ ok: false, needs: 'face' })
   })
 
   it('a phone\'s request from another site is refused before its level or its body', async () => {
     const { ctx } = routeHome()
-    const server = await serveRoutes(ctx, { powers: 'full' })
+    const server = await serveRoutes(ctx)
     const own = fromDevice('fresh', {}, true)
     const foreign = [
       [CREDENTIAL, 'x-test-remote: 1', 'x-test-unlock: fresh', 'Origin: https://evil.example'],
@@ -108,10 +117,10 @@ describe('who may use each control', () => {
  * A home whose running runtime has the person's copy, with the start file changed in it and waiting for review.
  * @returns the profile, the harness and the waiting change as `show?pending` lists it.
  */
-async function waitingChange(powers?: 'careful' | 'full') {
+async function waitingChange(face?: FaceAccess) {
   const { root, ctx } = routeHome()
   const harness = routeHarness(ctx.home)
-  const server = await serveRoutes(ctx, { harness: () => harness, ...powers === undefined ? {} : { powers } })
+  const server = await serveRoutes(ctx, { harness: () => harness, ...face === undefined ? {} : { face } })
   const copy = json(await post(server.port, HARNESS_PATHS.copy, {}))
   expect(copy).toEqual({ kind: 'copy', created: true, runtime: RUNTIME, place: `<Delorun home>/changes/harness/${RUNTIME}/copy/app` })
   writeFileSync(join(harnessCopyDirectory(ctx.home, RUNTIME), RUNTIME_FILE), 'export const start = 2\n')
@@ -159,7 +168,7 @@ describe('changes to Delorun itself', () => {
         expect(reply.status, path).toBe(403)
       }
     }
-    // An unlocked phone under Careful: Apply, Undo and Make my copy stay at the computer.
+    // An unlocked phone with the Face ID flag off: Apply, Undo and Make my copy stay at the computer.
     for (const path of [HARNESS_PATHS.apply, HARNESS_PATHS.undo, HARNESS_PATHS.copy]) {
       expect(json(await send(server.port, path, fromDevice('fresh', { id: change.id, to: change.to }, true))), path).toMatchObject({ code: 'LOOPBACK_REQUIRED' })
     }
@@ -167,13 +176,17 @@ describe('changes to Delorun itself', () => {
     expect(server.renewals()).toBe(0)
   })
 
-  it('under Full an unlocked phone applies a harness change, recorded as decided in the studio on that phone', async () => {
-    const { ctx, server, change } = await waitingChange('full')
-    const applied = await send(server.port, HARNESS_PATHS.apply, fromDevice('fresh', { id: change.id, to: change.to }))
+  it('a phone with a PIN grant for the call applies a harness change, recorded as decided in the studio on that phone', async () => {
+    const world = grantWorld({ hasPasskey: false })
+    const { ctx, server, change } = await waitingChange(world.face)
+    const body = { id: change.id, to: change.to }
+    // Pins the grant: an unlock the person entered applies nothing.
+    expect(json(await send(server.port, HARNESS_PATHS.apply, fromDevice('fresh', body)))).toMatchObject({ code: 'ELEVATION_REQUIRED' })
+    const grant = world.grantFor('harness-apply', HARNESS_PATHS.apply, body, 'pin')
+    const base = fromDevice('none', body)
+    const applied = await send(server.port, HARNESS_PATHS.apply, { ...base, headers: [...base.headers ?? [], `Delorun-Grant: ${grant}`] })
     expect(json(applied)).toMatchObject({ kind: 'harness', entry: { id: change.id, state: 'applied', decidedFrom: 'studio', decidedOn: TEST_DEVICE.label } })
     expect((await readHarnessLog(ctx.home)).entries).toMatchObject([{ id: change.id, decidedFrom: 'studio', decidedOn: TEST_DEVICE }])
-    // Pins the renewal: the unlock the action needed slides on.
-    expect(server.renewals()).toBe(1)
     // A later decision at the computer does not keep the phone's name.
     expect(json(await post(server.port, HARNESS_PATHS.undo, { id: change.id }))).toMatchObject({ kind: 'harness', entry: { state: 'undone', decidedFrom: 'studio' } })
     const [undone] = (await readHarnessLog(ctx.home)).entries
@@ -220,15 +233,21 @@ describe('the protection switch', () => {
       // Turning protection on is a `free` control (face-grants.spec.ts), so only off is refused to a phone in its grace.
       if (path === PROTECTION_PATHS.off) expect(json(await send(careful.port, path, fromDevice('grace', { confirmed: true }, true))), path).toMatchObject({ code: 'LOOPBACK_REQUIRED' })
     }
-    // Under Careful an unlocked phone cannot turn protection off.
+    // With the Face ID flag off an unlocked phone cannot turn protection off.
     expect(json(await send(careful.port, PROTECTION_PATHS.off, fromDevice('fresh', { confirmed: true }, true)))).toMatchObject({ code: 'LOOPBACK_REQUIRED' })
     expect(await readProtection(ctx.home)).toBe('on')
-    // Under Full it can, after the second ask; the change is kept as a notice for the computer.
-    const full = await serveRoutes(ctx, { powers: 'full' })
-    expect(json(await send(full.port, PROTECTION_PATHS.off, fromDevice('fresh', {})))).toMatchObject({ code: 'CONFIRM_PROTECTION' })
-    expect(json(await send(full.port, PROTECTION_PATHS.off, fromDevice('fresh', { confirmed: true })))).toEqual({ protection: 'off', unreviewedSinceOff: 0 })
+    // With a PIN grant for the call it can, after the second ask; the change is kept as a notice for the computer.
+    const world = grantWorld({ hasPasskey: false })
+    const full = await serveRoutes(ctx, { face: world.face })
+    const withPin = (body: object) => {
+      const base = fromDevice('none', body)
+      return { ...base, headers: [...base.headers ?? [], `Delorun-Grant: ${world.grantFor('protection-off', PROTECTION_PATHS.off, body, 'pin')}`] }
+    }
+    expect(json(await send(full.port, PROTECTION_PATHS.off, fromDevice('fresh', { confirmed: true })))).toMatchObject({ code: 'ELEVATION_REQUIRED' })
+    expect(json(await send(full.port, PROTECTION_PATHS.off, withPin({})))).toMatchObject({ code: 'CONFIRM_PROTECTION' })
+    expect(json(await send(full.port, PROTECTION_PATHS.off, withPin({ confirmed: true })))).toEqual({ protection: 'off', unreviewedSinceOff: 0 })
     expect((await readChangeLog(ctx.home, ctx.profile)).entries).toMatchObject([{ kind: 'guard-weakening', decidedFrom: 'studio' }])
-    // Turning it on again tightens: an unlocked phone may under Careful.
+    // Turning it on again tightens: an unlocked phone may.
     expect(json(await send(careful.port, PROTECTION_PATHS.on, fromDevice('fresh', {})))).toEqual({ protection: 'on', unreviewedSinceOff: 0 })
     const notices = await readNotices(ctx.home)
     expect(notices).toMatchObject([{ level: 'off', device: TEST_DEVICE.label, deviceId: TEST_DEVICE.id }, { level: 'on', device: TEST_DEVICE.label }])
