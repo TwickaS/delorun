@@ -55,8 +55,7 @@ export function chipsOf(seat: AgentSeatView, t: SeatTranslate, clock: (epochMs: 
   const chips: { text: string; warn: boolean }[] = []
   if (seat.version !== undefined) chips.push({ text: t('chip.version', { agent: name, version: seat.version }), warn: false })
   chips.push({ text: seat.ownSettings === '' ? t('chip.settingsUnknown') : t('chip.settings', { settings: seat.ownSettings }), warn: false })
-  chips.push({ text: t('chip.sandbox'), warn: true })
-  if (seat.sandboxUnavailable === true) chips.push({ text: t('chip.noSandbox'), warn: true })
+  if (seat.sandbox !== undefined) chips.push({ text: seat.sandbox === 'on' ? t('chip.sandboxed') : t('chip.noSandbox'), warn: seat.sandbox === 'off' })
   if (seat.plan !== undefined) chips.push({ text: t('chip.plan', { plan: seat.plan }), warn: false })
   if (seat.fiveHourPercent !== undefined) {
     chips.push({
@@ -185,8 +184,9 @@ export function Banner({ sessionId, useProjection, t, client, copy, clock }: Ban
                 </span>
               )}
               {seat.fiveHourPercent !== undefined && <span className={css.lineText}>{t('line.limit', { percent: String(seat.fiveHourPercent) })}</span>}
-              <span className={`${css.chip} ${css.chipWarn}`}>{t('line.sandboxOff')}</span>
-              {seat.sandboxUnavailable === true && <span className={`${css.chip} ${css.chipWarn}`}>{t('chip.noSandbox')}</span>}
+              {seat.sandbox !== undefined && (
+                <span className={seat.sandbox === 'off' ? `${css.chip} ${css.chipWarn}` : css.chip}>{seat.sandbox === 'on' ? t('chip.sandboxed') : t('chip.noSandbox')}</span>
+              )}
             </button>
           )
           : (

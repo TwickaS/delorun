@@ -35,26 +35,39 @@ function banner(seat: AgentSeatView | undefined, ...given: [] | [SeatClient | un
 describe('the opening card', () => {
   it('shows the facts as chips, with the rule, in the agent\'s chat', () => {
     const { container } = banner(base)
-    for (const text of ['Claude Code 2.3.14', 'Your own settings: accept edits', 'Delorun sandbox: off', 'Plan: Max', '5-hour limit 82% · resets T1410', 'Weekly 46%']) {
+    for (const text of ['Claude Code 2.3.14', 'Your own settings: accept edits', 'No sandbox', 'Plan: Max', '5-hour limit 82% · resets T1410', 'Weekly 46%']) {
       expect(screen.getByText(text)).toBeTruthy()
     }
     expect(container.querySelector('[data-seat-rule]')).not.toBeNull()
     expect(screen.getByText('This agent is Claude Code, running outside Delorun')).toBeTruthy()
   })
 
-  it('says on the card and on the one line that Standard runs without a command sandbox', () => {
-    const { unmount } = banner({ ...base, sandboxUnavailable: true })
-    expect(screen.getByText('Standard · no sandbox')).toBeTruthy()
+  it.for([['on', 'Sandboxed', 'No sandbox'], ['off', 'No sandbox', 'Sandboxed']] as const)('says on the card and on the one line that the agent\'s own sandbox is %s', ([sandbox, shown, hidden]) => {
+    const { unmount } = banner({ ...base, sandbox })
+    expect(screen.getByText(shown)).toBeTruthy()
+    expect(screen.queryByText(hidden)).toBeNull()
     unmount()
-    banner({ ...base, sandboxUnavailable: true, turns: 1 })
-    expect(screen.getByText('Standard · no sandbox')).toBeTruthy()
+    banner({ ...base, sandbox, turns: 1 })
+    expect(screen.getByText(shown)).toBeTruthy()
+    expect(screen.queryByText(hidden)).toBeNull()
+  })
+
+  it('shows no sandbox chip before the program has started', () => {
+    const { sandbox: _unknown, ...unknown } = base
+    const { unmount } = banner(unknown)
+    expect(screen.queryByText('Sandboxed')).toBeNull()
+    expect(screen.queryByText('No sandbox')).toBeNull()
+    unmount()
+    banner({ ...unknown, turns: 1 })
+    expect(screen.queryByText('Sandboxed')).toBeNull()
+    expect(screen.queryByText('No sandbox')).toBeNull()
   })
 
   it('collapses to one line after the first turn and expands again on a click', () => {
     const { container } = banner({ ...base, turns: 1 })
     expect(container.querySelector('[data-seat-line]')).not.toBeNull()
     expect(screen.getByText('Claude Code · outside Delorun')).toBeTruthy()
-    expect(screen.getByText('Sandbox off')).toBeTruthy()
+    expect(screen.getByText('No sandbox')).toBeTruthy()
     expect(screen.queryByText('Your own settings: accept edits')).toBeNull()
     fireEvent.click(screen.getByLabelText('Show what this agent is'))
     expect(screen.getByText('Your own settings: accept edits')).toBeTruthy()
@@ -137,16 +150,16 @@ describe('the opening card chips', () => {
     const { container } = banner({ ...noReset, fiveHourPercent: 40, weeklyPercent: 90 })
     expect(screen.getByText('5-hour limit 40%')).toBeTruthy()
     const warned = [...container.querySelectorAll('li')].filter(item => item.className.includes('chipWarn')).map(item => item.textContent)
-    expect(warned).toEqual(['Delorun sandbox: off', 'Weekly 90%'])
+    expect(warned).toEqual(['No sandbox', 'Weekly 90%'])
   })
 
   it('shows the meter and the figure on the collapsed line only when a 5-hour figure exists', () => {
     const { container, unmount } = banner({ ...base, turns: 1, fiveHourPercent: 150 })
     expect(container.querySelector('[role="img"]')?.querySelector('span')?.getAttribute('style')).toContain('100%')
     unmount()
-    const other = banner({ ...noFigures, turns: 2, sandboxUnavailable: true })
+    const other = banner({ ...noFigures, turns: 2, sandbox: 'off' })
     expect(other.container.querySelector('[role="img"]')).toBeNull()
-    expect(screen.getByText('Standard · no sandbox')).toBeTruthy()
+    expect(screen.getByText('No sandbox')).toBeTruthy()
   })
 })
 

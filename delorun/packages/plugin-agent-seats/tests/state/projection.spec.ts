@@ -70,10 +70,10 @@ describe('the agentSeat view', () => {
     expect(h.view()).toBeNull()
   })
 
-  it('names the agent from the child\'s descriptor, with the sandbox off and no state until the program speaks', async () => {
+  it('names the agent from the child\'s descriptor, with no sandbox claim and no state until the program speaks', async () => {
     const h = await host()
     describeSeat(h.session, 'codex-seat')
-    expect(h.view()).toEqual({ agent: 'codex', ownSettings: DEFAULT_OWN_SETTINGS, sandbox: 'off', state: 'idle' })
+    expect(h.view()).toEqual({ agent: 'codex', ownSettings: DEFAULT_OWN_SETTINGS, state: 'idle' })
   })
 
   it('ignores a descriptor of any other provider', async () => {
@@ -86,9 +86,15 @@ describe('the agentSeat view', () => {
     const h = await host()
     describeSeat(h.session)
     appendPluginRecord(h.session, SEAT_STATUS_RECORD, { state: 'starting', version: '2.1.4', ownSettings: 'accept edits' })
-    expect(h.view()).toEqual({ agent: 'claude-code', version: '2.1.4', ownSettings: 'accept edits', sandbox: 'off', state: 'starting' })
-    appendPluginRecord(h.session, SEAT_STATUS_RECORD, { state: 'working' })
-    expect(h.view()).toMatchObject({ state: 'working', version: '2.1.4', ownSettings: 'accept edits' })
+    expect(h.view()).toEqual({ agent: 'claude-code', version: '2.1.4', ownSettings: 'accept edits', state: 'starting' })
+    appendPluginRecord(h.session, SEAT_STATUS_RECORD, { state: 'working', sandboxed: true })
+    expect(h.view()).toMatchObject({ state: 'working', version: '2.1.4', ownSettings: 'accept edits', sandbox: 'on' })
+    appendPluginRecord(h.session, SEAT_STATUS_RECORD, { state: 'idle' })
+    expect(h.view()).toMatchObject({ sandbox: 'on' })
+    appendPluginRecord(h.session, SEAT_STATUS_RECORD, { state: 'starting' })
+    expect(h.view()?.sandbox).toBeUndefined()
+    appendPluginRecord(h.session, SEAT_STATUS_RECORD, { state: 'working', sandboxed: false })
+    expect(h.view()).toMatchObject({ sandbox: 'off' })
     h.session.append('turn/start', { turn: 1 })
     h.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
     expect(h.view()?.state).toBe('idle')

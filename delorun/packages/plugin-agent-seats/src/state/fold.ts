@@ -11,7 +11,7 @@ import { SEAT_STATE_RECORD, SEAT_STATUS_RECORD, type SeatStateRecordData, type S
 import type { AgentSeatView, SeatAgent, SeatModelPicker, SeatViewState } from './view.ts'
 
 /** The fold's own version; bump it when the state fields or the fold change. */
-export const SEAT_FOLD_VERSION = 5
+export const SEAT_FOLD_VERSION = 6
 
 /** The `ownSettings` the view carries before the program's settings are known; the chat then names no setting. */
 export const DEFAULT_OWN_SETTINGS = ''
@@ -37,8 +37,8 @@ export interface SeatShown {
   readonly weeklyPercent: number | null
   /** When the 5-hour window resets. */
   readonly fiveHourResetAt: number | null
-  /** Whether the program runs without the command sandbox its level wanted. */
-  readonly sandboxUnavailable: boolean
+  /** Whether the program's own sandbox confines it, as of its start; null before it has started. */
+  readonly sandboxed: boolean | null
   /** While `limit`: when the limit lifts. */
   readonly resetAt: number | null
   /** While `ended`: the reason. */
@@ -84,7 +84,7 @@ export const NO_LOGGED: SeatLogged = { programSessionId: null, cursor: null, pro
 
 /** The view's fields before any event. */
 export const NO_SHOWN: SeatShown = {
-  agent: null, state: 'idle', version: null, ownSettings: null, plan: null, fiveHourPercent: null, weeklyPercent: null, fiveHourResetAt: null, sandboxUnavailable: false, resetAt: null, endedReason: null, modelPicker: null, pending: null, lastAnswer: null, turns: 0,
+  agent: null, state: 'idle', version: null, ownSettings: null, plan: null, fiveHourPercent: null, weeklyPercent: null, fiveHourResetAt: null, sandboxed: null, resetAt: null, endedReason: null, modelPicker: null, pending: null, lastAnswer: null, turns: 0,
 }
 
 /**
@@ -138,7 +138,7 @@ function foldStatus(shown: SeatShown, data: Partial<SeatStatusRecordData>): Seat
     fiveHourPercent: count(data.fiveHourPercent) ?? shown.fiveHourPercent,
     weeklyPercent: count(data.weeklyPercent) ?? shown.weeklyPercent,
     fiveHourResetAt: count(data.fiveHourResetAt) ?? shown.fiveHourResetAt,
-    sandboxUnavailable: data.sandboxUnavailable === true || (state !== 'starting' && shown.sandboxUnavailable),
+    sandboxed: typeof data.sandboxed === 'boolean' ? data.sandboxed : state === 'starting' ? null : shown.sandboxed,
     resetAt: count(data.resetAt),
     endedReason: text(data.endedReason),
     modelPicker: pickerOf(data.modelPicker),
@@ -237,8 +237,7 @@ export function viewOf(shown: SeatShown): AgentSeatView | null {
     agent: shown.agent,
     ...shown.version === null ? {} : { version: shown.version },
     ownSettings: shown.ownSettings ?? DEFAULT_OWN_SETTINGS,
-    sandbox: 'off',
-    ...shown.sandboxUnavailable ? { sandboxUnavailable: true } : {},
+    ...shown.sandboxed === null ? {} : { sandbox: shown.sandboxed ? 'on' as const : 'off' as const },
     state: shown.state,
     ...shown.plan === null ? {} : { plan: shown.plan },
     ...shown.fiveHourPercent === null ? {} : { fiveHourPercent: shown.fiveHourPercent },

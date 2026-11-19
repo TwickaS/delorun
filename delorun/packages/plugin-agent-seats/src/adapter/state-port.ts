@@ -80,7 +80,7 @@ export interface SeatAdapterEvents {
    * The program answered the start, so the chat is working.
    * @param child - the seat child.
    */
-  onStarted?(child: SessionId, started: { readonly sandboxUnavailable: boolean }): void
+  onStarted?(child: SessionId, started: { readonly sandboxed: boolean }): void
   /**
    * The start ended without a program, whether the gate refused it or it failed, so the "Starting …" state ends. The
    * turn's own failure follows through {@link onTurnFailure} when it is one the chat shows.

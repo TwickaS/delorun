@@ -142,6 +142,9 @@ export class CodexSession implements ProgramSession {
     return this.threadId
   }
 
+  /** Whether Codex's own sandbox confines the thread at its level; set when the thread opens, see `ProgramSession.sandboxed`. */
+  sandboxed = false
+
   /** Whether a Codex turn is running. */
   get turnRunning(): boolean {
     return this.currentTurn !== undefined || this.starting

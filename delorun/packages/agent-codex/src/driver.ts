@@ -144,6 +144,7 @@ export class CodexDriver implements ExternalAgentDriver {
         throw new ProgramOpenError({ category: 'model-not-offered', configured: opened.model, offered })
       }
       request.onLimits({ ...observationOf({ account, source: 'run' }), offeredModels: offered })
+      session.session.sandboxed = policy.turn?.type === 'workspaceWrite'
       session.session.attach(opened.thread.id, policy.turn)
       return session.session
     } catch (error: unknown) {

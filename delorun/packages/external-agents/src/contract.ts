@@ -212,10 +212,11 @@ export interface ProgramSession {
   /** The program's own session or thread id, which `resume` takes. */
   readonly programSessionId: string
   /**
-   * Whether the level wanted a command sandbox this computer cannot run, so the program runs without one. The seat's
-   * banner then says so; absent means the level's sandbox, if any, is in place.
+   * Whether the program's own OS sandbox confines its commands and file writes at the level it runs at; false, or absent,
+   * means none does (the person's own settings, Unrestricted, or a level whose sandbox tools this computer lacks). The seat's
+   * banner shows it.
    */
-  readonly sandboxUnavailable?: boolean | undefined
+  readonly sandboxed?: boolean | undefined
   /** Whether a program turn is running now. */
   readonly turnRunning: boolean
   /**

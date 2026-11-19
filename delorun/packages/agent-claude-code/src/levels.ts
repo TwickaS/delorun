@@ -20,8 +20,6 @@ export interface ClaudeSeatLevel {
   readonly sandbox?: NonNullable<Options['sandbox']>
   /** Tools the level removes because the command sandbox does not cover them. */
   readonly disallowedTools: readonly string[]
-  /** Whether the level wants a command sandbox that this computer cannot run, so the seat runs without one. */
-  readonly sandboxUnavailable: boolean
 }
 
 /** The failure of Careful when the command sandbox cannot run; the message is the sentence the person reads. */
@@ -58,9 +56,9 @@ export interface LevelMachine {
 export function claudeSeatLevel(level: AgentLevel, cwd: string, machine: LevelMachine): ClaudeSeatLevel {
   switch (level) {
     case 'own':
-      return { disallowedTools: [], sandboxUnavailable: false }
+      return { disallowedTools: [] }
     case 'unrestricted':
-      return { permissionMode: 'bypassPermissions', sandbox: { enabled: false }, disallowedTools: [], sandboxUnavailable: false }
+      return { permissionMode: 'bypassPermissions', sandbox: { enabled: false }, disallowedTools: [] }
     case 'careful': {
       const missing = missingClaudeSandboxTools(machine.platform, machine.path, machine.exists)
       if (missing.length > 0) throw new SandboxUnavailableError(missing)
@@ -72,12 +70,11 @@ export function claudeSeatLevel(level: AgentLevel, cwd: string, machine: LevelMa
         },
         // The sandbox confines commands only; Claude Code's own web tools run in-process.
         disallowedTools: ['WebFetch', 'WebSearch'],
-        sandboxUnavailable: false,
       }
     }
     case 'standard': {
       if (missingClaudeSandboxTools(machine.platform, machine.path, machine.exists).length > 0) {
-        return { permissionMode: 'default', sandbox: { enabled: false }, disallowedTools: [], sandboxUnavailable: true }
+        return { permissionMode: 'default', sandbox: { enabled: false }, disallowedTools: [] }
       }
       return {
         permissionMode: 'auto',
@@ -86,7 +83,6 @@ export function claudeSeatLevel(level: AgentLevel, cwd: string, machine: LevelMa
           filesystem: { allowWrite: [cwd, '/tmp'] }, network: { allowedDomains: ['*'] },
         },
         disallowedTools: [],
-        sandboxUnavailable: false,
       }
     }
     default:

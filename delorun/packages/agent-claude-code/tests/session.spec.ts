@@ -272,6 +272,13 @@ describe('a Claude Code session', () => {
     })
     expect(sdk.last.options.disallowedTools).toEqual(['AskUserQuestion', 'WebFetch', 'WebSearch'])
     expect(sdk.last.options.allowDangerouslySkipPermissions).toBeUndefined()
+    expect(session.sandboxed).toBe(true)
+    await session.close()
+  })
+
+  it.for(['own', 'unrestricted'] as const)('reports no sandbox at the %s level', async (level) => {
+    const session = await driver(new FakeSdk()).open(request({ level }))
+    expect(session.sandboxed).toBe(false)
     await session.close()
   })
 
@@ -284,7 +291,7 @@ describe('a Claude Code session', () => {
   it('runs Standard in the sandbox with the task folder and /tmp writable and the network open', async () => {
     const sdk = new FakeSdk()
     const session = await driver(sdk).open(request({ level: 'standard' }))
-    expect(session.sandboxUnavailable).toBe(false)
+    expect(session.sandboxed).toBe(true)
     expect(sdk.last.options.permissionMode).toBe('auto')
     expect(sdk.last.options.sandbox).toMatchObject({ enabled: true, filesystem: { allowWrite: ['/tmp/task', '/tmp'] }, network: { allowedDomains: ['*'] } })
     expect(sdk.last.options.disallowedTools).toEqual(['AskUserQuestion'])
@@ -294,7 +301,7 @@ describe('a Claude Code session', () => {
   it('states that Standard has no sandbox when its tools are missing, instead of failing', async () => {
     const sdk = new FakeSdk()
     const session = await driver(sdk, () => TOOLS_MISSING).open(request({ level: 'standard' }))
-    expect(session.sandboxUnavailable).toBe(true)
+    expect(session.sandboxed).toBe(false)
     expect(sdk.last.options.sandbox).toEqual({ enabled: false })
     expect(sdk.last.options.permissionMode).toBe('default')
     await session.close()

@@ -632,8 +632,8 @@ class GateSession implements SeatSession {
     return this.inner.programSessionId
   }
 
-  get sandboxUnavailable(): boolean | undefined {
-    return this.inner.sandboxUnavailable
+  get sandboxed(): boolean | undefined {
+    return this.inner.sandboxed
   }
 
   get turnRunning(): boolean {

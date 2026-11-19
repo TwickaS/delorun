@@ -47,8 +47,8 @@ export interface StatusChange extends AccountFigures {
   readonly version?: string
   /** A short name for the program's own settings. */
   readonly ownSettings?: string
-  /** Set when the program started without the command sandbox its level wanted; a `starting` record clears it. */
-  readonly sandboxUnavailable?: boolean
+  /** Whether the program's own sandbox confines it at its level, as of its start; a `starting` record clears it. */
+  readonly sandboxed?: boolean
   /** While `limit`: when the limit lifts, epoch milliseconds. */
   readonly resetAt?: number
   /** While `ended`: the plain-words reason. */

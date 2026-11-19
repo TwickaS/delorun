@@ -48,20 +48,25 @@ const post = (route: SeatRoute | undefined, body: unknown) => {
 const routeOf = (w: StateWorld, path: string) => w.mount.routes.find(route => route.path === path)
 
 describe('while a turn runs', () => {
-  it('records that a program started without the command sandbox its level wanted, and clears it at the next start', async () => {
+  it('records whether the program\'s own sandbox was on at its start, and shows nothing before then', async () => {
     const w = await stateWorld()
     const program = new ScriptedProgram()
-    program.sandboxUnavailable = true
-    w.gate.next = () => program
+    program.sandboxed = true
+    const before: Array<string | undefined> = []
+    w.gate.next = () => {
+      before.push(view(w)?.sandbox)
+      return program
+    }
     const running = collect(w.adapter.stream(w.request([w.say('task')])))
     await tick()
-    expect(view(w)).toMatchObject({ state: 'working', sandboxUnavailable: true })
+    expect(before).toEqual([undefined])
+    expect(view(w)).toMatchObject({ state: 'working', sandbox: 'on' })
     await finishTurn(w, running)
 
     const again = await stateWorld()
     const running2 = collect(again.adapter.stream(again.request([again.say('task')])))
     await tick()
-    expect(view(again)?.sandboxUnavailable).toBeUndefined()
+    expect(view(again)?.sandbox).toBe('off')
     await finishTurn(again, running2)
   })
 
@@ -499,7 +504,7 @@ describe('what the adapter reports about a program that cannot start', () => {
     const plain = w.ctx.sessions.create().header.id
     w.mount.store.write(plain, { programSessionId: 'program-1' })
     w.mount.events.onStarting?.(plain, 'claude-code')
-    w.mount.events.onStarted?.(plain, { sandboxUnavailable: false })
+    w.mount.events.onStarted?.(plain, { sandboxed: false })
     await tick()
     expect(w.warnings).toEqual([])
   })
@@ -509,7 +514,7 @@ describe('what the adapter reports about a program that cannot start', () => {
     w.mount.store.write(w.child, { programSessionId: 'program-1' })
     w.mount.events.onStarting?.(w.child, 'claude-code')
     w.mount.store.write(w.child, {})
-    w.mount.events.onStarted?.(w.child, { sandboxUnavailable: false })
+    w.mount.events.onStarted?.(w.child, { sandboxed: false })
     await tick()
     expect(w.warnings).toEqual([])
   })

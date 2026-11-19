@@ -339,7 +339,7 @@ export class SeatAdapter extends LlmAdapter {
       events?.onStartFailed?.(child)
       throw error
     }
-    events?.onStarted?.(child, { sandboxUnavailable: program.sandboxUnavailable === true })
+    events?.onStarted?.(child, { sandboxed: program.sandboxed === true })
     const run = new SeatRun(program)
     run.cursor = cursor
     if (resume !== program.programSessionId) {

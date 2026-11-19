@@ -33,7 +33,7 @@ export class ScriptedProgram implements SeatSession {
   closed = false
   interruptOutcome: ProgramInterruptOutcome = 'interrupted'
   turnRunning = false
-  sandboxUnavailable: boolean | undefined
+  sandboxed: boolean | undefined
   sendError: Error | undefined
   private readonly queue: ProgramEvent[] = []
   private waiter: PromiseWithResolvers<ProgramEvent> | undefined
