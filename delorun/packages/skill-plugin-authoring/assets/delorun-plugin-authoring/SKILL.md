@@ -1,6 +1,6 @@
 ---
 name: delorun-plugin-authoring
-description: Make or change a Delorun plugin for the person (a tool, an agent preset, a studio page or a bundle) in the current workspace. Load when the person asks for a new plugin or a change to one of their own.
+description: Make or change a Delorun plugin for the person (a tool, an agent preset, a studio page or a bundle) in the current workspace. Load when the person asks for a new plugin or a change to one of their own; use it instead of dsh-doc for plugin work on this install.
 ---
 
 # Making a Delorun plugin

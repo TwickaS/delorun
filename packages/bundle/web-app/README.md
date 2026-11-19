@@ -174,7 +174,7 @@ The catalog is logged at the first step and remains stable until its entries cha
 
 #### What the model sees
 
-The Creator preset adds “You help the user customize DeepSeek Harness itself.” after the shared coding-agent sentence. Plugin implementation and authorization rules remain in the on-demand `dsh-doc` skill.
+The standard presets say “You help the person with coding and knowledge work in their workspace.” after the shared identity line; the Creator preset says “You help the person extend Delorun with plugins.” instead. Plugin work on an installation goes through the `delorun-plugin-authoring` skill; `dsh-doc` covers DeepSeek Harness internals.
 
 #### Token effect
 

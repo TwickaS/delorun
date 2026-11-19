@@ -261,9 +261,15 @@ function compareToolNames(a: ToolSchema, b: ToolSchema): number {
   return compareNames(a.name, b.name)
 }
 
+/** The fixed opener's first sentence. */
+const IDENTITY_PRODUCT = 'You are Delorun, an agent studio.'
+
+/** The fixed opener's closing sentence: when to mention the harness underneath. */
+const IDENTITY_BUILT_ON = 'Delorun is built on DeepSeek Harness; mention that only when the person asks how Delorun is built or how to extend it.'
+
 /** Plugin config: the deployment-authored fragment of the system prompt (see {@link Config.personaPrefix} for its contract). */
 export interface Config {
-  /** Include the fixed DeepSeek Harness identity before the deployment persona (default true). */
+  /** Include the fixed Delorun identity line before the deployment persona (default true). */
   includeHarnessIdentity?: boolean
   /** Include optional runtime-context snapshots in model history (default true); required context remains. */
   includeRuntimeContext?: boolean
@@ -457,7 +463,12 @@ export class SystemPrompt extends Service {
       this.section({
         name: 'harness:identity',
         order: this.getSectionOrder('HARNESS_IDENTITY'),
-        text: 'You are an AI agent powered by DeepSeek Harness.',
+        interpolate: false,
+        text: (context) => {
+          const model = this.resolveVariable('model', context)
+          return [IDENTITY_PRODUCT, model === undefined ? '' : `The model answering right now is ${model}.`, IDENTITY_BUILT_ON]
+            .filter(sentence => sentence.length > 0).join(' ')
+        },
       })
     }
     this.section({
@@ -472,6 +483,21 @@ export class SystemPrompt extends Service {
       text: config.personaSuffix ?? '',
     })
     if (!(config.includeRuntimeContext ?? true)) this.suppressRuntimeContext()
+  }
+
+  /**
+   * The value of a registered prompt variable as one assembly sees it, with scoped providers shadowing globals.
+   * @param name - the variable name.
+   * @param context - the assembly's scope and fields passed to the provider.
+   * @returns the nearest provider's value, or `undefined` when none is registered or it has no value.
+   */
+  private resolveVariable(name: string, context: AssembleContext): string | undefined {
+    let value = this.layers.global.variables.get(name)?.(context)
+    for (const layer of this.layers.chainLayers(context.scope)) {
+      const provider = layer.variables.get(name)
+      if (provider !== undefined) value = provider(context)
+    }
+    return value
   }
 
   /**

@@ -72,7 +72,7 @@ describe('time-context through the production headless profile', () => {
     expect(contextText[0]).toMatch(
       /Time sampled while preparing turn 1, step 1: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+08:00\[Asia\/Shanghai\]/,
     )
-    expect(contextText[0]).toContain('Elapsed since the preceding model-visible message: unavailable.')
+    expect(contextText[0]).not.toContain('Elapsed since')
 
     const headers = events.filter(event => event.type === 'request/header')
     expect(JSON.stringify(headers)).not.toContain('Time sampled while preparing')
