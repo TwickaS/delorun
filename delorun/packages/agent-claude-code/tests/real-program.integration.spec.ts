@@ -91,9 +91,11 @@ async function harness(script: readonly MessagesStep[], signedIn = true, toolWai
   return { driver, fixture, task, handles, argvs, spawn, root }
 }
 
+// The `own` level passes no sandbox and no permission mode, so a command question reaches the card whether or not this computer
+// has bubblewrap and socat; Standard and Careful auto-allow sandboxed commands where those tools exist.
 function openRequest(h: Harness, extra: Partial<ProgramOpenRequest> = {}): ProgramOpenRequest {
   return {
-    sessionId: 'child-1' as SessionId, cwd: h.task, level: 'standard', runRules: [], harnessTools: [], sharesFolder: () => false, spawn: h.spawn,
+    sessionId: 'child-1' as SessionId, cwd: h.task, level: 'own', runRules: [], harnessTools: [], sharesFolder: () => false, spawn: h.spawn,
     onApproval: () => Promise.resolve('reject'), onLimits: () => {}, signal: new AbortController().signal, ...extra,
   }
 }
