@@ -12,7 +12,7 @@ interface Registered {
   readonly fetch: (request: Request) => Promise<Response>
 }
 
-function setup(home: { elevated?: boolean, page?: Record<string, boolean>, face?: FaceWorld } = {}) {
+function setup(home: { elevated?: boolean, grace?: boolean, page?: Record<string, boolean>, face?: FaceWorld } = {}) {
   const touched: string[] = []
   const routes = new Map<string, Registered>()
   const result = { ok: true as const, value: { supported: true, packs: [], queue: [] } }
@@ -26,7 +26,7 @@ function setup(home: { elevated?: boolean, page?: Record<string, boolean>, face?
     get: (name: string) => (name === 'homeAuth' ? {
       passkeysEnabled: () => false, faceGrants: () => undefined, deviceHasPasskey: () => false,
       ...home.face?.fields ?? {},
-      elevationOf: () => (home.elevated === true ? { id: 'e1' } : undefined),
+      elevationOf: () => (home.grace === true ? { id: 'g1', grace: true } : home.elevated === true ? { id: 'e1' } : undefined),
       pageUnlockOf: (id: string) => (home.page?.[id] === true ? { id: 'p1' } : undefined),
       arrivalOf: () => ({ listener: 'reach' }), dangerousMode: () => false, unlockModeEnabled: () => false, touchUnlock: (id: string) => { touched.push(id) },
     } : undefined),
@@ -99,6 +99,12 @@ describe('under Face ID', () => {
       expect(await through(routes.get(path)!, device()), path).toBe(403)
       expect(await through(routes.get(path)!, device({ unlockId: 'live' })), path).toBe(403)
     }
+    expect([hub.enqueue, hub.retry, hub.remove].map(call => call.mock.calls.length)).toEqual([0, 0, 0])
+  })
+
+  it('refuses a device with a passkey that holds only the approval grace, on every route that adds, retries or removes', async () => {
+    const { routes, hub } = setup({ grace: true, face: faceWorld('d1', 'reach') })
+    for (const path of PACK_ELEVATED_ROUTES) expect(await through(routes.get(path)!, device()), path).toBe(403)
     expect([hub.enqueue, hub.retry, hub.remove].map(call => call.mock.calls.length)).toEqual([0, 0, 0])
   })
 

@@ -145,6 +145,24 @@ describe('the real-browser routes', () => {
     expect((await routes.call(REAL_BROWSER_ROUTES.away, on, device('locked-phone'), { 'delorun-grant': grantId })).status).toBe(403)
   })
 
+  it('keep a passkey device\'s unlock, grace and PIN page from turning the away permission on, and let the computer through under the flag', async () => {
+    const { agent, grants } = await chat()
+    grants.grant(agent.session, { kind: 'approval', askedSeq: SessionSeq(1) })
+    const on = JSON.stringify({ sessionId: 'chat-1', on: true })
+    const { store, grantId } = faceFor('unlocked-phone', 'reach-tailscale-private', on)
+    const routes = routesOver(grants, agent, 'reach-tailscale-private', { store, hasPasskey: true })
+    for (const deviceId of ['unlocked-phone', 'grace-phone']) {
+      const refused = await routes.call(REAL_BROWSER_ROUTES.away, on, device(deviceId))
+      expect([deviceId, refused.status, await refused.json()]).toEqual([deviceId, 403, expect.objectContaining({ error: 'ELEVATION_REQUIRED' })])
+    }
+    expect(grants.view(agent.session).awayUntil).toBeNull()
+    // A grant minted for another device does not admit this one.
+    expect((await routes.call(REAL_BROWSER_ROUTES.away, on, device('grace-phone'), { 'delorun-grant': grantId })).status).toBe(403)
+    expect(grants.view(agent.session).awayUntil).toBeNull()
+    const atComputer = routesOver(grants, agent, 'loopback', { store, hasPasskey: true })
+    expect((await atComputer.call(REAL_BROWSER_ROUTES.away, on)).status).toBe(200)
+  })
+
   it('answer the state, the away permission and the end, and refuse what they cannot do', async () => {
     const { agent, grants } = await chat()
     const routes = routesOver(grants, agent, 'loopback')
