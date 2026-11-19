@@ -367,12 +367,31 @@ describe('the platform chains', () => {
     expect(next.argv.join(' ')).toContain('bwrap')
   })
 
+  it('a probe that throws once refuses that command, then the next confines (the shared selection is cleared)', async () => {
+    const probeBwrap = vi.fn<() => BwrapVerdict>().mockImplementationOnce(() => { throw new Error('probe broke') }).mockReturnValue(true)
+    const { sandbox } = await setup({ probeAttempts: 1 }, { platform: 'linux', probeBwrap, probeLandlock: () => 'unusable' })
+    await expect(sandbox.confine(['true'], RO)).rejects.toThrow('probe broke')
+    await expect(sandbox.confine(['true'], RO)).resolves.toMatchObject({ enforcement: 'full' })
+    expect(probeBwrap).toHaveBeenCalledTimes(2)
+  })
+
   it('a plain bwrap failure that falls through to Landlock is cached', async () => {
     const probeBwrap = vi.fn(() => false)
     const { sandbox } = await setup({ probeAttempts: 1 }, { platform: 'linux', probeBwrap, probeLandlock: () => 'full' as const, landlockLauncher: fakeLauncher() })
     await sandbox.confine(['true'], RO)
     await sandbox.confine(['true'], RO)
     expect(probeBwrap).toHaveBeenCalledTimes(1)
+  })
+
+  it('retries without a wait when probeBackoffMs is 0', async () => {
+    const probeBwrap = vi.fn<() => boolean>().mockReturnValueOnce(false).mockReturnValue(true)
+    const { sandbox } = await setup({ probeBackoffMs: 0 }, { platform: 'linux', probeBwrap, probeLandlock: () => 'unusable' })
+    await expect(sandbox.confine(['true'], RO)).resolves.toMatchObject({ enforcement: 'full' })
+    expect(probeBwrap).toHaveBeenCalledTimes(2)
+  })
+
+  it('rejects a probeAttempts of 0, which would never probe', async () => {
+    await expect(setup({ probeAttempts: 0 })).rejects.toThrow('probeAttempts must be a positive finite number')
   })
 
   it('rejects a probeTimeoutMs above 60 000', async () => {
@@ -740,6 +759,14 @@ describe('escape socket directories', () => {
     const refusal = await sandbox.confine(['true'], WW).then(() => undefined, (error: unknown) => error)
     expect(refusal).toMatchObject({ code: 'SANDBOX_UNSUPPORTED_POLICY', message: expect.stringContaining('did not finish within 1234 ms') as string })
     expect((refusal as Error).message).not.toContain('user namespaces')
+  })
+
+  it.each(['timed-out', 'resource-limit'] as const)('the escape-socket refusal after a %s bwrap probe says to start again', async (verdict) => {
+    const dir = escapeDirectory()
+    const { sandbox } = await setup({ escapeSocketDirectories: [dir], probeAttempts: 1 }, { platform: 'linux', probeBwrap: () => verdict, probeLandlock: () => 'full', landlockLauncher: fakeLauncher(), bwrapInstalled: () => true })
+    const refusal = await sandbox.confine(['true'], WW).then(() => undefined, (error: unknown) => error)
+    expect(refusal).toMatchObject({ code: 'SANDBOX_UNSUPPORTED_POLICY' })
+    expect((refusal as Error).message).toContain('start again to check it again')
   })
 
   it('reads the default bwrap probe as timed out when bwrap does not finish within probeTimeoutMs, and as failed when it exits non-zero', async () => {

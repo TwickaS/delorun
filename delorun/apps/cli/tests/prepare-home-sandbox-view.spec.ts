@@ -43,4 +43,11 @@ describe('prepareHome inside a Delorun chat sandbox', () => {
   it.each(['start.ts', 'setup/index.ts', 'update/command.ts', 'main.ts'])('%s passes false so it always checks the mode', file => {
     expect(readFileSync(join(import.meta.dirname, '../src', file), 'utf8')).toContain('prepareHome(context, values.profile, false)')
   })
+
+  it.each([
+    ['changes/setup-transfer.ts', 'prepareHome(context, parsed.values.profile, false)'],
+    ['recover.ts', 'prepareHome(context, profileFlag, false)'],
+  ])('%s passes false: an owner-only command always checks the mode', (file, call) => {
+    expect(readFileSync(join(import.meta.dirname, '../src', file), 'utf8')).toContain(call)
+  })
 })

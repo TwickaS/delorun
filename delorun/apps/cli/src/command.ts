@@ -61,7 +61,7 @@ export interface PreparedHome {
  * changes something runs this before any upstream code.
  * @param context - the command's context.
  * @param profileFlag - the `--profile` value, if given.
- * @param allowSandboxView - whether the home's mode bits are not checked when this process runs inside a Delorun chat sandbox; `start`, `setup`, `update` and the bare `delorun` pass false and always check; a call site passes true only where an agent runs the command inside a chat sandbox.
+ * @param allowSandboxView - whether the home's mode bits are not checked when this process runs inside a Delorun chat sandbox; `start`, `setup`, `update`, `recover`, the setup transfer and the bare `delorun` pass false and always check; a call site passes true only where an agent runs the command inside a chat sandbox.
  * @returns the home and profile.
  * @throws {HomeLayoutError} for a refused home or a laxer home, `secrets/` or `run/<profile>/`.
  * @throws {CliError} for a refused profile name.

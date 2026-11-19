@@ -66,6 +66,11 @@ describe.skipIf(process.platform !== 'linux')('the real bwrap probe', () => {
     expect((await refusal(5_000)).transient).toBe(true)
   })
 
+  it.each(['SIGSYS', 'SIGTERM'])('reports a child killed by %s as a permanent failure', async (signal) => {
+    fakeBwrap(`kill -${signal.slice(3)} $$`)
+    expect((await refusal(5_000)).transient).toBe(false)
+  })
+
   it('reports a missing bwrap as a permanent failure', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'dsh-empty-path-'))
     dirs.push(dir)

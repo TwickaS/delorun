@@ -248,8 +248,9 @@ function defaultProbeBwrap(timeoutMs: number): Promise<BwrapProbe> {
     })
     child.once('close', (status, signal) => {
       clearTimeout(timer)
-      // An exit by signal (status null) is the kernel's OOM killer or similar, not a verdict on bwrap.
-      resolve(status === null && signal !== null ? 'resource-limit' : status === 0)
+      // SIGKILL with no exit status is the kernel's OOM killer, not a verdict on bwrap; another signal (such as
+      // seccomp's SIGSYS) is bwrap failing here, which is lasting.
+      resolve(status === null && signal === 'SIGKILL' ? 'resource-limit' : status === 0)
     })
   })
 }
