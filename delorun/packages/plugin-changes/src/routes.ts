@@ -511,7 +511,7 @@ async function gate(request: IncomingMessage, admission: { readonly arrival: Stu
       ? new RouteRefusal(403, LOOPBACK_REQUIRED, LOOPBACK_REQUIRED_SENTENCE)
       : new RouteRefusal(403, ELEVATION_REQUIRED, may.needs === 'face' ? FACE_REQUIRED_SENTENCE : ELEVATION_REQUIRED_SENTENCE)
   }
-  return { presence: attestDevice({ remoteSession: true, device: { id: device.id, label: device.label }, freshUnlock: device.unlock === 'fresh' }), renew: device.renew }
+  return { presence: attestDevice({ remoteSession: true, device: { id: device.id, label: device.label }, freshUnlock: CONTROL_LEVELS[control] === 'free' || device.unlock === 'fresh' }), renew: device.renew }
 }
 
 /** The bodies a gate already read, so the route reads the same bytes the grant was checked against. */

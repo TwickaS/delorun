@@ -2,24 +2,19 @@
  * The update routes' classes under Face ID: update-begin, update-rollback and stop need a grant for exactly the call;
  * update-cancel, update-dismiss and update-check need nothing; the computer is never asked.
  */
-import { GrantStore, hashRequest, type GrantHolder } from '@delorun/home-auth'
 import { describe, expect, it } from 'vitest'
 import { faceAccessOf } from '../../plugin-changes/src/face-access.ts'
-import { fromDevice, json, post, send } from '../../plugin-changes/tests/routes-fixture.ts'
+import { faceWorld } from '../../plugin-changes/tests/face-world.ts'
+import { fromDevice, json, post, send, TEST_DEVICE } from '../../plugin-changes/tests/routes-fixture.ts'
 import { UPDATE_PATHS } from '../src/wire.ts'
 import { serveUpdate } from './update-fixture.ts'
 
-const HOLDER: GrantHolder = { deviceId: 'device-test-1', listener: 'tailscale-private' as GrantHolder['listener'] }
-
 /** A grant store, the device's access to it, and a way to grant one call. */
 function world() {
-  const store = new GrantStore({ now: () => 1_000_000, random: size => Uint8Array.from({ length: size }, (_, i) => i + 1) })
-  const grantFor = (path: string, body: unknown, control: string): string => {
-    const hash = hashRequest({ method: 'POST', path, body: Buffer.from(JSON.stringify(body)) })
-    if (hash === undefined) throw new Error('body over the cap')
-    return store.mint(HOLDER, [{ action: `changes/${control}`, hash }], 'passkey').grantId
-  }
-  return { face: faceAccessOf(store, true, HOLDER), grantFor }
+  const listener = 'tailscale-private'
+  const faces = faceWorld(TEST_DEVICE.id, listener)
+  const grantFor = (path: string, body: unknown, control: string): string => faces.grantFor(`changes/${control}`, { path, body: JSON.stringify(body) })
+  return { face: faceAccessOf(faces.store, true, { deviceId: TEST_DEVICE.id, listener: listener as Parameters<typeof faceAccessOf>[2]['listener'] }), grantFor }
 }
 
 describe('update routes under Face ID', () => {

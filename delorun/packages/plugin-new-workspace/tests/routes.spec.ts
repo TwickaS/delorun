@@ -9,7 +9,7 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
-import { REACH_DEVICE, type HomeAuthService } from '@delorun/home-auth'
+import { PICKER_HOLD_ID, REACH_DEVICE, type HomeAuthService } from '@delorun/home-auth'
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { faceWorld, type FaceWorld } from '../../plugin-changes/tests/face-world.ts'
 import {
@@ -268,7 +268,7 @@ describe('under Face ID', () => {
     const search = routes.get(SEARCH_PATH)!
     const searchBody = JSON.stringify({ query: 'zzz' })
     expect(await through(search, grantCall(SEARCH_PATH, searchBody))).toBe(403)
-    const opened = world.grantFor('plugin-new-workspace/places', { path: PLACES_PATH, body: '{}' })
+    const opened = world.grantFor('plugin-new-workspace/places', { path: PLACES_PATH, body: '{}' }, { feature: 'picker', id: PICKER_HOLD_ID })
     expect(await through(routes.get(PLACES_PATH)!, grantCall(PLACES_PATH, '{}', opened))).toBe(200)
     expect(await through(search, grantCall(SEARCH_PATH, searchBody))).toBe(200)
     expect(await through(routes.get(PREVIEW_PATH)!, grantCall(PREVIEW_PATH, JSON.stringify({ path: projects })))).toBe(200)

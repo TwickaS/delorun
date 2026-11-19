@@ -14,7 +14,7 @@ export interface FaceWorld {
    * @param call - the method, path and body text the device will send.
    * @returns the `Delorun-Grant` header value for that call.
    */
-  readonly grantFor: (action: string, call: { readonly method?: string, readonly path: string, readonly body: string }) => string
+  readonly grantFor: (action: string, call: { readonly method?: string, readonly path: string, readonly body: string }, hold?: { readonly feature: 'terminal' | 'picker', readonly id: string }) => string
   readonly store: GrantStore
 }
 
@@ -30,10 +30,10 @@ export function faceWorld(deviceId: string, listener: string, hasPasskey = true)
   return {
     store,
     fields: { passkeysEnabled: () => true, faceGrants: () => store, deviceHasPasskey: id => hasPasskey && id === deviceId },
-    grantFor: (action, call) => {
+    grantFor: (action, call, hold) => {
       const hash = hashRequest({ method: call.method ?? 'POST', path: call.path, body: Buffer.from(call.body) })
       if (hash === undefined) throw new Error('body over the cap')
-      return store.mint({ deviceId, listener: listener as never }, [{ action, hash }], 'passkey').grantId
+      return store.mint({ deviceId, listener: listener as never }, [{ action, hash, ...hold === undefined ? {} : { hold } }], 'passkey').grantId
     },
   }
 }

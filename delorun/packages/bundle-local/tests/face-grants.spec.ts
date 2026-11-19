@@ -22,7 +22,6 @@ const NO_CHANGES = {
 /** The `homeAuth` stand-in: Face ID on for device `d1`, which holds a passkey and whatever unlock `home` gives. */
 function homeAuthOf(face: FaceWorld, home: Unlock) {
   return {
-    passkeysEnabled: () => false, faceGrants: () => undefined, deviceHasPasskey: () => false,
     ...face.fields,
     elevationOf: () => home.elevation, pageUnlockOf: () => (home.page === true ? { id: 'p1' } : undefined),
     arrivalOf: () => ({ listener: 'reach' }), touchUnlock: () => {},

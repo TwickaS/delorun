@@ -194,7 +194,7 @@ describe('the add-workspace route on a remote session', () => {
     return { request, response, writeHead, end }
   }
 
-  it.each([ADD_WORKSPACE_PATH, CLONE_PATH, CLONE_STATUS_PATH])('lets a request to %s that a reach listener admitted go on to the unlock check, which refuses a locked device and admits an unlocked one', async (path) => {
+  it.each([ADD_WORKSPACE_PATH, CLONE_PATH])('lets a request to %s that a reach listener admitted go on to the unlock check, which refuses a locked device and admits an unlocked one', async (path) => {
     const { ctx, routes } = await mount(registryFake(), homeAuthOn('reach-tailscale-private'))
     const { request, response, writeHead } = arrival(path, 'home.example.ts.net')
     const next = vi.fn(async () => {})
@@ -210,6 +210,15 @@ describe('the add-workspace route on a remote session', () => {
     expect([locked.status, await locked.json()]).toEqual([403, expect.objectContaining({ error: 'ELEVATION_REQUIRED' })])
     expect((await asDevice('unlocked-phone')).status).not.toBe(403)
     expect(route.admitPeer?.(new Request(`http://harness.test${path}`), { principal: { kind: 'sdk' } })).toBe(false)
+  })
+
+  it('answers a locked device on the free clone-status route, as an approved device with no unlock', async () => {
+    // Pins the `free` class of the status read: it starts nothing, so no unlock stands in front of it.
+    const { routes } = await mount(registryFake(), homeAuthOn('reach-tailscale-private'))
+    const route = routes.get(CLONE_STATUS_PATH)!
+    const call = new Request(`http://harness.test${CLONE_STATUS_PATH}`, { method: 'POST', body: '{}' })
+    expect(route.admitPeer?.(call, { principal: { kind: 'reach-device', deviceId: 'locked-phone', listener: 'reach-tailscale-private' } })).toBe(true)
+    expect((await route.fetch(call)).status).not.toBe(403)
   })
 
   it('refuses every spelling of the path that the Connection routes to it under a foreign Host', async () => {

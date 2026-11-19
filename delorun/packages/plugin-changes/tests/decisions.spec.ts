@@ -217,7 +217,8 @@ describe('the protection switch', () => {
     expect(json(await post(careful.port, PROTECTION_PATHS.on, {}))).toMatchObject({ protection: 'on' })
     for (const path of Object.values(PROTECTION_PATHS)) {
       expect(json(await send(careful.port, path, { method: 'POST', headers: [CREDENTIAL, 'x-test-remote: 1'], body: { confirmed: true }, withholdBody: true })), path).toMatchObject({ code: 'LOOPBACK_REQUIRED' })
-      expect(json(await send(careful.port, path, fromDevice('grace', { confirmed: true }, true))), path).toMatchObject({ code: path === PROTECTION_PATHS.on ? 'ELEVATION_REQUIRED' : 'LOOPBACK_REQUIRED' })
+      // Turning protection on is a `free` control (face-grants.spec.ts), so only off is refused to a phone in its grace.
+      if (path === PROTECTION_PATHS.off) expect(json(await send(careful.port, path, fromDevice('grace', { confirmed: true }, true))), path).toMatchObject({ code: 'LOOPBACK_REQUIRED' })
     }
     // Under Careful an unlocked phone cannot turn protection off.
     expect(json(await send(careful.port, PROTECTION_PATHS.off, fromDevice('fresh', { confirmed: true }, true)))).toMatchObject({ code: 'LOOPBACK_REQUIRED' })
