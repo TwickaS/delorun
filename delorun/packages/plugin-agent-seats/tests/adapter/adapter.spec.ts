@@ -409,6 +409,22 @@ describe('turns that cannot run or end in failure', () => {
     expect(w.states.states.get(CHILD)?.cursor).toBe(more.id)
   })
 
+  it('sends each text of the request to exactly one program when the program goes quiet between two of them', async () => {
+    const w = world()
+    const first = user('task')
+    await turn(w, [first], [{ kind: 'turn-end', outcome: 'completed' }])
+    const quiet = w.gate.latest
+    const accept = quiet.send.bind(quiet)
+    let calls = 0
+    quiet.send = (text, mode) => (++calls === 1 ? accept(text, mode) : Promise.reject(new Error('closed')))
+    const next = collect(w.adapter.stream(request([first, user('one'), user('two')])))
+    await tick()
+    expect(quiet.sent.map(sent => sent.text)).toEqual(['task', 'one'])
+    expect(w.gate.latest.sent.map(sent => sent.text)).toEqual(['two'])
+    w.gate.latest.emit({ kind: 'turn-end', outcome: 'completed' })
+    await next
+  })
+
   it('ends the turn and drops the program when the restarted program no longer accepts input either', async () => {
     const w = world()
     const first = user('task')
