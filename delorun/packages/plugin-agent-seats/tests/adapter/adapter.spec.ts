@@ -347,6 +347,13 @@ describe('turns that cannot run or end in failure', () => {
     expect(w.gate.starts).toEqual([])
   })
 
+  it.for([true, false])('tells the start gate whether the delegation pin is the latest policy (%s)', async (pinned) => {
+    const w = world()
+    w.states.pinned = pinned
+    await turn(w, [user('task')], [{ kind: 'turn-end', outcome: 'completed' }])
+    expect(w.gate.starts[0]?.pinned).toBe(pinned ? true : undefined)
+  })
+
   it('lets a Stop that arrives while the input is sent end the request as a Stop', async () => {
     const w = world()
     const first = user('task')

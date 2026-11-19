@@ -257,7 +257,7 @@ export class ExternalAgentsService extends Service implements ExternalAgentsGate
     let allowedBy: SeatSession['allowedBy'] = 'consent-off'
     if (mode.kind === 'reviewed') {
       const verdict = await mode.consent.reviewSeat({
-        provider: request.provider, ...agents, cwd: request.cwd, phase, signal: request.signal,
+        provider: request.provider, ...agents, cwd: request.cwd, pinned: request.pinned === true, phase, signal: request.signal,
       })
       if (verdict.kind === 'refuse') throw new GateRefusedError({ category: 'consent', reason: verdict.reason })
       timeoutMs = verdict.timeoutMs
@@ -486,7 +486,7 @@ export class ExternalAgentsService extends Service implements ExternalAgentsGate
     // The consent that allowed the program was replaced (its switch turned off and on): the program needs a new review.
     if (serviceObject(this.ctx.get('delegationConsent')) !== serviceObject(consent)) return consentMissingRefusal(request.provider)
     const agents = this.seatAgents(request)
-    const verdict = await consent.reviewSeat({ provider: request.provider, ...agents, cwd: request.cwd, phase: 'turn', signal: request.signal })
+    const verdict = await consent.reviewSeat({ provider: request.provider, ...agents, cwd: request.cwd, pinned: request.pinned === true, phase: 'turn', signal: request.signal })
     return verdict.kind === 'refuse' ? verdict.reason : undefined
   }
 

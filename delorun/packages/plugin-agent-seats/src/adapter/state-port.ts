@@ -28,6 +28,12 @@ export interface SeatStateStore {
    * @param state - the state to keep.
    */
   write(child: SessionId, state: SeatState): void | Promise<void>
+  /**
+   * Whether the child's latest `approval/policy` event is the pin seeded at delegation.
+   * @param child - the seat child's Session id.
+   * @returns true while the pin is the latest policy event; absent means it never is.
+   */
+  delegationPinned?(child: SessionId): boolean
 }
 
 /** The model a person picked for each workspace's agent (EA22), kept apart from the program's own settings. */

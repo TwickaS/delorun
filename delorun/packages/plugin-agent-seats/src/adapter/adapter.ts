@@ -317,6 +317,7 @@ export class SeatAdapter extends LlmAdapter {
         purpose: 'seat', provider, creator, child, cwd,
         ...resume === undefined ? {} : { resume },
         ...model === undefined ? {} : { model },
+        ...states.delegationPinned?.(child) === true ? { pinned: true } : {},
         harnessTools: [],
         onApproval: request => host.approve(child, request, signal),
         signal,

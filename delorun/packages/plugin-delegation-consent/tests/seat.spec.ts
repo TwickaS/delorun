@@ -43,7 +43,11 @@ const lifted = new Set<string>()
 
 function chat(id: string, cwd: string | undefined, parent?: string): Agent {
   const header = parent === undefined ? { cwd } : { cwd, origin: 'subagent', parentSession: SessionId(parent) }
-  const append = (type: string, data: { policy?: string }): void => { if (type === 'approval/policy' && data.policy === 'ask') lifted.add(id) }
+  const append = (type: string, data: { policy?: string }): void => {
+    if (type !== 'approval/policy') return
+    if (data.policy === 'ask') lifted.add(id)
+    else lifted.delete(id)
+  }
   return { id: SessionId(id), session: { id: SessionId(id), header, append } } as never
 }
 
@@ -65,6 +69,8 @@ interface World {
   readonly workspace: string
   readonly other: string
   answer: ApprovalOutcome
+  /** The home default policy is `never`. */
+  homeNever: boolean
 }
 
 /**
@@ -88,6 +94,7 @@ async function world(mount?: { fullAccessStartsAgents?: boolean }): Promise<Worl
     listed: [paths.workspace],
     agents: [] as Agent[],
     answer: 'allowed-once' as ApprovalOutcome,
+    homeNever: false,
   }
   ctx.provide('sandboxPolicy', { resolve: ({ session }: { session: { id: string } }) => ({ mode: state.readOnly.has(session.id) ? 'read-only' : state.fullAccess.has(session.id) ? 'danger-full-access' : 'workspace-write' }) } as never)
   ctx.provide('approval', {
@@ -95,7 +102,7 @@ async function world(mount?: { fullAccessStartsAgents?: boolean }): Promise<Worl
       state.asks.push(request)
       return Promise.resolve(!lifted.has(request.agent.id) && state.policies.get(request.agent.id) === 'never' ? 'rejected' : state.answer)
     },
-    config: { policy: 'ask' },
+    get config() { return { policy: state.homeNever ? 'never' : 'ask' } },
     overrideOf: (session: { id: string }) => lifted.has(session.id) ? 'ask' : state.policies.get(session.id),
   } as never)
   ctx.provide('agents', {
@@ -289,8 +296,32 @@ describe('a seat review at hand-off', () => {
     w.openTurns.clear()
     w.openTurns.add('seat')
     w.policies.set('seat', 'never')
-    await expect(w.consent.reviewSeat(seat(w, 'hand-off'))).resolves.toMatchObject({ kind: 'allow', why: 'asked' })
+    await expect(w.consent.reviewSeat({ ...seat(w, 'hand-off'), pinned: true })).resolves.toMatchObject({ kind: 'allow', why: 'asked' })
     expect(lifted.has('seat')).toBe(true)
+  })
+
+  it.for(['a never the person set on the seat chat', 'a never the home default gives'] as const)('refuses the start for %s and leaves it in place', async (which) => {
+    const w = await world()
+    w.openTurns.clear()
+    w.openTurns.add('seat')
+    if (which.includes('person')) w.policies.set('seat', 'never')
+    else w.homeNever = true
+    const verdict = await w.consent.reviewSeat({ ...seat(w, 'hand-off'), pinned: false })
+    expect(verdict.kind).toBe('refuse')
+    expect(w.asks).toEqual([])
+    expect(lifted.has('seat')).toBe(false)
+  })
+
+  it.for(['rejected', 'cancelled'] as const)('puts the pin back when the start card is %s', async (answer) => {
+    const w = await world()
+    w.openTurns.clear()
+    w.openTurns.add('seat')
+    w.policies.set('seat', 'never')
+    w.answer = answer
+    const verdict = await w.consent.reviewSeat({ ...seat(w, 'hand-off'), pinned: true })
+    expect(verdict.kind).toBe('refuse')
+    expect(w.asks).toHaveLength(1)
+    expect(lifted.has('seat')).toBe(false)
   })
 
   it('does not lift a pin when the card is asked on the root', async () => {

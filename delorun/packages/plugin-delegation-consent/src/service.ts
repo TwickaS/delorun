@@ -311,10 +311,19 @@ export class DelorunDelegationConsent extends Service implements DelegationConse
     const asked = this.hasOpenTurn(root) ? root : askOnChild ? child : undefined
     if (asked === undefined) return { kind: 'refuse', reason: noOpenTurnRefusal(provider, rules.workspace) }
     // The child carries the delegation pin (`never`) until the relay lifts it at the program's first question; the start card
-    // is the person's own decision, so the pin is lifted here, for a seat child only (D10, T5).
-    if (asked === child && (approval.overrideOf(child.session) ?? approval.config.policy) === 'never') setApprovalPolicy(child.session, 'ask')
+    // is the person's own decision, so only that pin is lifted here (D10, T5). Any other `never` on the child, set by the
+    // person or inherited from the home, refuses the card and stays.
+    let lifted = false
+    if (asked === child && (approval.overrideOf(child.session) ?? approval.config.policy) === 'never') {
+      if (review.pinned !== true) return { kind: 'refuse', reason: notApprovedRefusal(provider, 'never', rules.workspace) }
+      setApprovalPolicy(child.session, 'ask')
+      lifted = true
+    }
     const outcome = await this.ask(asked, { provider, workspace: rules.workspace, cwd: rules.cwd, label: review.label, signal: review.signal })
-    return outcome === 'allowed-once' ? record('asked') : { kind: 'refuse', reason: notApprovedRefusal(provider, outcome, rules.workspace) }
+    if (outcome === 'allowed-once') return record('asked')
+    // A card the person did not accept leaves the child as it was: the pin is put back.
+    if (lifted) child.session.append('approval/policy', { policy: 'never', source: 'delegation' })
+    return { kind: 'refuse', reason: notApprovedRefusal(provider, outcome, rules.workspace) }
   }
 
   /**

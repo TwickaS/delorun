@@ -122,6 +122,12 @@ export class ScriptedGate {
 export class MemoryStates implements SeatStateStore {
   readonly states = new Map<SessionId, SeatState>()
   readonly writes: SeatState[] = []
+  /** Whether the pin seeded at delegation is the child's latest policy event. */
+  pinned = false
+
+  delegationPinned(): boolean {
+    return this.pinned
+  }
 
   read(child: SessionId): SeatState | undefined {
     return this.states.get(child)

@@ -322,6 +322,8 @@ export interface SeatStartRequest {
   readonly resume?: string
   /** A model the person picked. */
   readonly model?: string
+  /** Whether the child's latest `approval/policy` event is the pin seeded at delegation; absent means it is not. */
+  readonly pinned?: boolean
   /** Harness tools offered to the program. */
   readonly harnessTools: readonly ProgramHarnessTool[]
   /**
@@ -536,6 +538,8 @@ export interface SeatReview {
   readonly child: Agent
   /** The run folder. */
   readonly cwd: string
+  /** Whether the child's latest `approval/policy` event is the pin seeded at delegation; only such a `never` may be lifted for the start card. */
+  readonly pinned?: boolean
   /** The seat's label, named on the card. */
   readonly label?: string
   /** When the review runs. */
