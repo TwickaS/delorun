@@ -178,6 +178,7 @@ describe('a Delorun CLI profile', () => {
       '@delorun/agent-codex',
       '@delorun/plugin-agent-seats',
       '@delorun/plugin-changes',
+      '@delorun/plugin-update',
       '@delorun/plugin-packs',
       '@delorun/bundle-local/workspace-rename',
       `${LOCAL_BUNDLE}/update-gate`,
