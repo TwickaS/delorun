@@ -448,6 +448,14 @@ describe?(provider: string): string | undefined
  * @returns the verdict.
  */
 review(review: ExternalDelegationReview): Promise<ExternalDelegationVerdict>
+
+/**
+ * The safety level for the next run of one external provider, read at every start so a changed level applies to
+ * the next run. A provider with no answer uses its own configured permission mode.
+ * @param provider - the registered provider name.
+ * @returns the level, or undefined to keep the provider's configured mode.
+ */
+permissionLevel?(provider: string): SubagentSafetyLevel | undefined
 ```
 
 Source: [`packages/subagent/subagent/src/consent.ts`](../../packages/subagent/subagent/src/consent.ts)

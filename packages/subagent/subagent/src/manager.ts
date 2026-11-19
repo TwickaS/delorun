@@ -15,7 +15,7 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import { ReasoningEffortId, contentHasImage, createUserMessage, errorChain } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, MessageId, MessageSource } from '@deepseek-ai/dsh-llm'
 import { SessionLogOffset } from '@deepseek-ai/dsh-session'
-import type { Session, SessionId, SessionEvent, UserMessage } from '@deepseek-ai/dsh-session'
+import type { Session, SessionId, SessionEvent, SessionSeq, TurnEndReason, UserMessage } from '@deepseek-ai/dsh-session'
 import type { SessionPersistence } from '@deepseek-ai/dsh-session-persistence'
 import type { SessionObservation, SessionQueryEngine } from '@deepseek-ai/dsh-session-query'
 import type { ObjectJsonSchema } from '@deepseek-ai/dsh-tools'
@@ -27,7 +27,8 @@ import type { ChildComposition, DelegatedPolicyOverrides } from './child-agent.t
 import {
   createAgentMessage, createSettlementMessage, withResultDeliveryGuidance,
 } from './continuation-messages.ts'
-import { installSubagentArchiveAdmission } from './archive-admission.ts'
+import { installExternalRunArchiveAdmission, installSubagentArchiveAdmission } from './archive-admission.ts'
+import type { ExternalRunHandle } from './archive-admission.ts'
 import { foldSubagentDescriptor, snapshotSubagentDescriptor } from './descriptor.ts'
 import type { SubagentDescriptorData } from './descriptor.ts'
 import { catalogNames, establishCatalogChild, establishExternalCatalogChild } from './catalog.ts'
@@ -152,6 +153,8 @@ export class SubagentManager {
   /** Sibling names held by creations that have not committed their catalog entry. */
   private readonly names = new SiblingNameReservations()
   private draining = false
+  /** Session id → `turn/start` seq of its Agent's latest turn, for attributing external runs to turns. */
+  private readonly turnStarts = new Map<SessionId, SessionSeq>()
 
   /**
    * Build one manager inside the service's Agent-injected context.
@@ -171,7 +174,18 @@ export class SubagentManager {
       const activation = this.resident.get(agent.id)
       return activation !== undefined && activationAgent(activation) === agent ? activation.ancestors : undefined
     }, session => host.identityOf(session))
+    installExternalRunArchiveAdmission(ctx, sessionId => this.externalRunsOf(sessionId))
+    ctx.on('session/event', (session, event) => {
+      if (event.type === 'turn/start') {
+        this.turnStarts.set(session.id, event.seq)
+      } else if (event.type === 'turn/end') {
+        this.stopTurnExternalRuns(session.id, event.data.reason)
+        // A run accepted after this point is outside any turn and records none.
+        this.turnStarts.delete(session.id)
+      }
+    })
     ctx.on('agent/disposed', ({ agent }) => {
+      this.turnStarts.delete(agent.id)
       this.closingRoots.delete(agent)
       const activation = this.resident.get(agent.id)
       if (activation?.kind === 'local' && activation.handle.agent === agent) {
@@ -230,6 +244,37 @@ export class SubagentManager {
       // The settlement observer reports teardown failures.
       void this.dispose(activation).catch(() => undefined)
     }
+  }
+
+  /** Live external runs whose creation ancestors include the Session, as stoppable handles. */
+  private externalRunsOf(sessionId: SessionId): readonly ExternalRunHandle[] {
+    const runs: ExternalRunHandle[] = []
+    for (const activation of this.resident.values()) {
+      if (activation.kind !== 'external' || activation.closing !== undefined || !activation.ancestors.includes(sessionId)) continue
+      runs.push({ id: activation.childId, stop: () => { this.stopExternal(activation, 'parent') } })
+    }
+    return runs
+  }
+
+  /** End the external runs a user, hook, or ancestor cancel took out of the creator's turn. */
+  private stopTurnExternalRuns(creatorId: SessionId, reason: TurnEndReason): void {
+    // A disposed cause is the drain's; later turns are not this turn's runs.
+    if (reason.kind !== 'aborted' || reason.reason.kind === 'disposed' || reason.reason.kind === 'legacy') return
+    const turnStart = this.turnStarts.get(creatorId)
+    if (turnStart === undefined) return
+    for (const activation of this.resident.values()) {
+      if (activation.kind === 'external' && activation.closing === undefined
+        && activation.ancestors.at(-1) === creatorId && activation.turnStart === turnStart) {
+        this.stopExternal(activation, reason.reason.kind)
+      }
+    }
+  }
+
+  /** Abort one external run and release it; the settlement observer reports teardown failures. */
+  private stopExternal(activation: Activation, kind: 'user' | 'parent' | 'hook'): void {
+    if (activation.kind !== 'external') return
+    activation.controller.abort(kind === 'hook' ? { kind, reason: 'hook' } : { kind })
+    void this.dispose(activation).catch(() => undefined)
   }
 
   /**
@@ -806,12 +851,13 @@ export class SubagentManager {
     inputs.signal.throwIfAborted()
     let resource: ActivationResource
     if (inputs.kind === 'external') {
+      const turnStart = this.turnStarts.get(inputs.ancestors.at(-1) as SessionId)
       const controller = new AbortController()
       const cancelStartup = (): void => { controller.abort(inputs.signal.reason) }
       inputs.signal.addEventListener('abort', cancelStartup, { once: true })
       try {
         const run = await inputs.start(controller.signal)
-        resource = { kind: 'external', run, controller }
+        resource = { kind: 'external', run, controller, turnStart }
         void run.result.catch(() => undefined)
         try { this.assertChildIdAvailable(run.id) } catch (error: unknown) {
           await run.dispose()

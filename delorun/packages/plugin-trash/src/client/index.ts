@@ -123,6 +123,7 @@ export function apply(ctx: Context): void {
     restore: itemId => trash.restore(itemId),
     purge: (itemId, clearLogs) => trash.purge(itemId, clearLogs),
     empty: clearLogs => trash.empty(clearLogs),
+    removeSetAside: path => trash.removeSetAside(path),
   }
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section', id: TRASH_SECTION_ID, order: TRASH_SECTION_ORDER, label: () => t('nav'), locale: NS,

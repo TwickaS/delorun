@@ -42,6 +42,7 @@ description: "约定 C14：远程访问地址可使用的身份因子；每个�
   - [tailnet 成员身份](#tailnet-membership)
   - [设备可以调用什么](#what-a-device-may-call)
   - [提权](#elevation)
+  - [手机权限](#phone-powers)
   - [PIN 模式](#pin-mode)
   - [上限](#limits)
   - [错误](#errors)
@@ -189,7 +190,7 @@ description: "约定 C14：远程访问地址可使用的身份因子；每个�
 | 设置写入 | `settings/mutate`、`settings/replace`、`settings/update` | 它们更改 home 的设置。对于可能关闭仅限电脑的开关的写入，条件会拒绝，并给出 `loopback-required: turning <switch> off`，解锁时同样如此：插件在挂载期间用 `HomeAuthService.registerComputerOnlySwitch` 注册这样的开关，`@delorun/plugin-delegation-consent` 注册它的 `enabled` 字段，因此拒绝信息读作 `loopback-required: turning the external-agent consent off`。该字段只能被写成字面量 `true`，`replace` 必须这样写明它，条件无法读取的参数会被拒绝。条件还会拒绝写入权限预设行的 `defaultPreset` 而放宽新 chat 开始时的权限，并给出 `loopback-required: loosening the permission new chats start in`，解锁时同样如此：沙箱模式或批准策略比当前预设更宽松的预设、各行并未持有的预设、删除该字段的写入，或当前预设无法读取时的任何更改；更严格或相同的预设是普通写入。唯一属于设置命名空间的受保护插件行是外部智能体同意的，其开关由条件决定；bash 沙箱的实时字段是执行限制，沙箱模式属于 sandbox-policy 行，它没有这样的字段。 |
 | 斜杠命令 | 对 `REACH_DEVICE_COMMANDS` 所列命令（`compact`、`export`、`goal`、`permission` 和 `plan`）的 `commands/execute` | 每个命令只更改或读取它自己的 chat。条件用命令服务自己的解析器解析该行，并以 `loopback-required: commands/execute of a command a device does not run` 拒绝任何其他命令或未指名任何命令的行，解锁时同样如此，因此插件新增的命令在被列出之前会被拒绝。 |
 | 插件与 profile 历史 | `pluginManager/installBundle`、`updateBundle`、`removeBundle`、`setBundleEnabled`、`setPluginEnabled`、`setVersionExemption`、`cancelInstall`、`undo`、`restore` | 它们添加或启用在沙箱之外于 Host 中运行的代码。受保护的行，即其模块被 `plugin-manager` 行的 `protectedPlugins` 指名的行（同意与防护行、更新闸门与更新检查、home-auth、reach 和沙箱行），从不通过设备更改：条件对其上的 `setPluginEnabled`，或带有无法读取的参数的调用，以 `loopback-required: changing a protected plugin row` 拒绝，解锁时同样如此，列表无法读取时则拒绝每一行。插件管理器以 `management-required` 拒绝任何其他会停用、移除或重新配置受保护行的更改，或恢复到其中某一行不同的 profile 状态，无论是否解锁。 |
-| 终端 | `terminal/*` | 终端是电脑上沙箱之外的 shell。它总是需要解锁：任何开关、完全访问授权或危险模式都不能免除它。 |
+| 终端 | `terminal/*` | 终端是电脑上沙箱之外的 shell。它总是需要[手机权限](#phone-powers)设为 Full 并且解锁：任何开关、完全访问授权或危险模式都不能免除其中任何一项，批准宽限期也不是解锁。 |
 | 外部工具服务器 | `mcpManager/probe`、`restart`、`watch` | 它们启动并观察 home 为其外部工具服务器配置的命令。 |
 | 文件夹 | `directoryPicker/*`、`workspace/create`、位于已知工作区之外文件夹中的 `session/create` | 文件夹决定 chat 的命令可以写入哪里。 |
 | 动态插件代码 | `dynamicCordisRunner/*`、`event:cordis/*` | 它在 Host 中运行模型编写的插件代码。 |
@@ -204,13 +205,28 @@ description: "约定 C14：远程访问地址可使用的身份因子；每个�
 
 - **路由。** 设备在 `GET /auth/elevation` 读取状态（`none` 与 `pending` 带有 `unlockMinutes`，即其监听器上一次解锁持续的分钟数，使工作室在解锁前就能说明时长），在 `POST /auth/elevation/request` 发起请求，在 `POST /auth/elevation/lock` 锁定，每个路由都要求请求到达的远程访问监听器上的有效会话，`POST` 只接受 studio 自己的源。电脑在 `GET /auth/elevation/pending` 列出，在 `POST /auth/elevation/approve` 批准，在 `POST /auth/elevation/revoke` 撤销；设备访问这些路由会以 `LOOPBACK_REQUIRED` 被拒绝。
 - **被放宽的设置。** 危险模式成立期间，已解锁的设备可以放宽默认预设，并关闭 `DANGEROUS_LIFTABLE_SWITCHES` 所列的开关。策略在调用继续之前，把每次这样的写入连同字段的先前值和调用所设的值，记录在 `~/.delorun/secrets/home-auth/reach-dangerous-settings.json` 中。当该模式不再成立时（在第一次发现它已结束的读取时，以及在启动时），home 通过设置服务把先前值写回去，除非该字段已不再保存所记录的设备值，因为本人在电脑上更改了它。失败的写入保留其记录并被重试。
-- **终端。** 每个 `terminal/*` 操作总是需要解锁，对每个 Session 和全局资源都是如此：危险模式、工作区的完全访问授权，以及终端将打开的文件夹，都不起任何作用。早先版本在 `~/.delorun/secrets/home-auth/reach-terminal.json` 中保留一个终端开关；现在没有任何东西读取该文件，仍有该文件的 home 继续工作，该文件可以删除。已打开的终端会一直运行到结束。
+- **终端。** 每个 `terminal/*` 操作总是需要[手机权限](#phone-powers)设为 Full 并且解锁，对每个 Session 和全局资源都是如此：危险模式、工作区的完全访问授权，以及终端将打开的文件夹，都不起任何作用。早先版本在 `~/.delorun/secrets/home-auth/reach-terminal.json` 中保留一个终端开关；现在没有任何东西读取该文件，仍有该文件的 home 继续工作，该文件可以删除。已打开的终端会一直运行到结束。
 - **请求。** 已登录的设备从自己的 studio 发起请求。home 把请求记在该设备、监听器和请求到达的会话名下，设备显示一个 8 位数字代码。请求等待 5 分钟，一个 home 最多保留 5 个，同一设备在同一监听器上的新请求会替换它正在等待的请求。设备持有解锁期间，其状态显示的是解锁而不是代码，因此设备无法延长自己的解锁。
 - **批准。** 只有在 home 电脑前的本人能批准，方法是在 `delorun devices elevate` 中输入设备上的代码（它调用 [C19](c19-home-process.zh.md) 的 `devices.elevate`）、在 studio 的 Settings 的 Devices 中输入，或通过电脑路由；第三次输错会取消请求。批准和撤销是 `LOOPBACK_REQUIRED_ACTIONS` 中的 `elevation-approve` 和 `elevation-revoke`，设备会被拒绝。
 - **时长。** 解锁持续远程访问行的 `elevationMinutes`，默认 15 分钟，最多 60 分钟；更大的值会在监听器开始服务时被拒绝。没有任何操作能延长解锁：新的批准会替换它。
 - **范围。** 解锁绑定到它的设备、监听器和 profile。`reach-device` 主体指明设备及其 Peer 所在的监听器，策略只在该监听器上询问设备的解锁。一个 profile 的 Host 把自己的解锁保存在内存中，从不放在共享的 secrets 目录里，因此另一个 profile 的 Host 看不到任何解锁，重启会结束它们。
 - **检查。** 设备绑定的条件在每个提权操作之前读取解锁，调用与事件、快照或列表筛选一视同仁，并且即使计时器尚未触发，也会拒绝已过期的解锁。解锁准入的每次调用都会连同设备、监听器、操作和解锁 id 记入日志。Gateway 只在流打开时作出决定，因此解锁结束时 home 会关闭该设备的远程访问连接，studio 随后不带解锁地重新连接。
 - **结束。** 解锁在到期时、本人在电脑上撤销时、设备锁定时、新的批准替换时、发起请求的会话结束时（其期限或轮换；滚动会延续它）、设备被移除时、监听器停止时以及 Host 停止时结束。每次开始和结束都会连同设备、监听器、解锁 id 和原因（`ELEVATION_END_REASONS`）记入日志。
+
+<a id="phone-powers"></a>
+### 手机权限
+
+手机权限（Phone powers）决定已解锁的手机可以做多少事。本人在电脑上从两个级别中选择一个；设备从不更改它。
+
+- **Careful** 是默认级别。无论是否解锁、是否处于危险模式，设备都永远得不到 `terminal/*` 操作，[C21](c21-changes.zh.md#who-may-do-what-from-where) 为 Full 列出的 studio Changes 部分的控件也留在电脑上。
+- **Full** 让已解锁的设备可以执行 Careful 留在电脑上的操作。每次使用都需要本人输入的[解锁](#elevation)，即来自电脑的验证码或 PIN。批准宽限期从不算数：它不是这些操作的解锁，处于宽限期的设备会被告知先解锁。「永远不」表中的操作在两个级别下都留在电脑上。
+- **Careful 涵盖什么、不涵盖什么。** Careful 把终端、关闭 Changes 的保护、更改 Delorun 自己的文件以及其他只限 Full 的 Changes 操作留在电脑上。它不涵盖已解锁的手机在上述规则准许处给出的批准：接受 MCP 服务器、允许外部 agent 和给工作区完全访问在两个级别下都可以，而且每一项都仍可能在沙箱之外启动程序。
+- **记录。** 级别保存在 `~/.delorun/secrets/home-auth/` 中的 `phone-powers.json`，模式 0600，内容为 `{"v":1,"level","setAt","chosen"}`：`level` 为 `careful` 或 `full`，`setAt` 是写入时间（毫秒），`chosen` 只在本人选择了该级别时为 true。存在但无法读取的记录（因为其模式比 0600 宽松，或者它不是这种记录）在文件被修复或重写之前应用 Careful。
+- **读取。** Host 在每次访问检查时读取级别，并在文件的标识、大小或修改时间变化时再次读取，因此命令的写入无需重启即可生效。Careful 下的拒绝是 `loopback-required: <action> needs Phone powers set to Full at the computer`，在解锁检查之前决定，因此任何解锁、PIN 页面或模式都不能解除它。
+- **首次启动。** Host 在没有记录的 home 中首次启动时，写入 `@delorun/home-auth` 的 `phonePowersOnUpgrade` 字段所指定的级别（默认 `careful`），带 `chosen: false`，并记录该 home 尚未作出选择。studio 会在电脑上提醒本人，直到他们作出选择。已有记录（无论能否读取）的 home 保留它，因此之后更改该字段不会改变任何已经启动过的 home。
+- **选择。** `delorun setup` 在打开远程访问之后询问级别，预选之前的回答，否则预选 home 记录的级别（因此新的 profile 从其 home 的级别开始），否则预选 Careful，远程访问关闭时什么也不问；`delorun setup --yes --phone-powers <level>`，或 `--config` 文档中的 `phonePowers`，会在无人值守时记录它（[C11](c11-setup-answers.zh.md)），并且只在没有记录、或记录已经是 Full 的 home 中选择 Full，因为级别属于 home，而新的 profile 可能与手机已配对的 home 共用。`delorun devices powers [careful|full]` 在已完成 setup 的 home 上显示或设置级别；在那里设置 Full 需要终端，因此脚本无法扩大手机可以做的事，设置 Careful 则不需要。电脑上的 studio 用 `GET /auth/phone-powers` 读取它，用 `POST /auth/phone-powers {"level"}` 设置它。已登录的设备可以 `GET` 该级别，并以只读方式显示。设备的 `POST` 无论是否解锁都以 `403 LOOPBACK_REQUIRED` 拒绝。
+
+这些表是 [`reach-access.ts`](../../packages/home-auth/src/reach-access.ts) 中的 `FULL_POWERS_ACTIONS` 和 `phonePowersRefusal`，记录是 [`phone-powers.ts`](../../packages/home-auth/src/phone-powers.ts)，路由是 [`phone-powers-routes.ts`](../../packages/home-auth/src/phone-powers-routes.ts)。
 
 <a id="pin-mode"></a>
 ### PIN 模式
@@ -356,13 +372,18 @@ Delo Run 签发方让本人可以用 Delo Run 账户登录，它不属于 Deloru
 | `a device chooses the preset a chat that has not started runs with` | 来自 `reach-device` Peer 的 `agentPresets/select` 返回所选的预设，且该 chat 记录 `agent-preset/selected`；写明完全访问的预设仍然会遇到工作区同意的拒绝，该同意只能在电脑上授予。 |
 | `a device reads the files of its chat's workspace and no path outside it` | `workspaceFiles/list`、`read`、`readBytes` 和 `stat` 对真实路径位于 Session 工作区内的路径成功，对工作区外的路径、经由指向工作区外的符号链接的路径、进入 Delorun 主目录的路径以及不存在的路径，以 `loopback-required: <action> with a path outside the chat's workspace` 被拒绝；`workspaceFiles/changes` 仍被拒绝。 |
 | `a device reads the installed plugins and cannot change them` | `pluginManager/listPlugins`、`listBundles`、`registries`、`history` 和 `pluginInventory/list` 成功，而 `installBundle`、`setPluginEnabled`、`setBundleEnabled`、`removeBundle` 和 `undo` 以 `loopback-required: <action>` 拒绝。 |
+| `needs an unlock for a terminal in every workspace at the Full level, whatever a stale terminal switch file, a full-access grant or dangerous mode says` | 在 Full 级别，没有解锁的设备的每个 `terminal/*` 操作都以 `elevation-required` 拒绝，已解锁的设备则被准许（`delorun/apps/cli/tests/denial/reach/reach-access.spec.ts`）。 |
+| `keeps a terminal at the computer under Careful, for an unlocked phone in dangerous mode too` | 在 Careful 下，无论是否解锁，每个 `terminal/*` 操作都以 `loopback-required` 拒绝（`reach-access.spec.ts`）。 |
+| `cannot be changed by a phone, unlocked or not` | 设备的 `POST /auth/phone-powers` 以 `LOOPBACK_REQUIRED` 拒绝，记录不变（`reach-access.spec.ts`）。 |
+| `applies the unchosen level, Careful, while no choice is recorded`, `applies Careful and says why for a record it cannot read, and reads a repaired one`, `refuses a record whose mode is laxer than 0600` | 不存在、损坏或暴露的记录从不扩大手机可以做的事（`delorun/packages/home-auth/tests/phone-powers.spec.ts`）。 |
+| `records the upgrade level once, as not chosen, and never over an existing record` | 首次启动写入的记录，以及保留的已有记录（`phone-powers.spec.ts`）。 |
 
 <a id="what-this-does-not-prove"></a>
 ### 本约定不能证明的内容
 
 - **`attestation: "none"` 下的用户验证。** home 读取认证器设置的用户已验证标志，但不验证认证器本身，因此该标志的可信程度只取决于作出断言的认证器。
 - **本人的提供方。** OpenID Connect 提供方可以为被固定的主体签发有效令牌，控制本人在该处账户的攻击者也可以用它登录；此时仍然起作用的控制是设备批准。
-- **一部已批准且已解锁的手机。** 在 Tailscale 私有地址上，已批准设备仅凭其密钥即可登录。持有该已解锁设备的人拥有对话，并可以在已被授予的范围内驱动 agent：在电脑上被设为完全访问的工作区仍然可以从它驱动，其中的命令可以做本人用户能做的任何事，包括写入设备记录。防护手段是手机自身的锁、在电脑上移除该设备，以及远程会话 12 小时的空闲上限。
+- **一部已批准且已解锁的手机。** 在 Tailscale 私有地址上，已批准设备仅凭其密钥即可登录。持有该已解锁设备的人拥有对话，并可以在已被授予的范围内驱动 agent：在电脑上被设为完全访问的工作区仍然可以从它驱动，其中的命令可以做本人用户能做的任何事，包括写入设备记录。在[手机权限](#phone-powers)为 Full 时，已解锁的设备还拥有终端以及 Careful 留在电脑上的 Changes 控件，每次使用都需要本人输入的解锁。防护手段是手机自身的锁、在电脑上移除该设备，以及远程会话 12 小时的空闲上限。
 
 - **共享的依赖方 ID。** 在 spike 结果使 `ts.net` 上可以使用通行密钥的情况下，同一台机器的私有地址与 Funnel 地址共享一个依赖方 ID；把它们的通行密钥区分开的是 home 中按地址的绑定，而不是浏览器。
 

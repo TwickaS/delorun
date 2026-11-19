@@ -45,14 +45,17 @@
     "@deepseek-ai/dsh-brand": "workspace:*",
     "@deepseek-ai/dsh-llm-deepseek": "workspace:*",
     "@delorun/brand": "workspace:*",
+    "@delorun/browser-setup": "workspace:*",
     "@delorun/contract-reach-providers": "workspace:*",
     "@delorun/contract-setup-answers": "workspace:*",
     "@delorun/home": "workspace:*",
     "@delorun/home-auth": "workspace:*",
     "@delorun/plugin-delegation-consent": "workspace:*",
-    "@delorun/plugin-packs": "workspace:*",
     "@delorun/plugin-downloads": "workspace:*",
+    "@delorun/plugin-new-workspace": "workspace:*",
+    "@delorun/plugin-packs": "workspace:*",
     "@delorun/plugin-theme": "workspace:*",
+    "@delorun/preview-flags": "workspace:*",
     "@delorun/reach": "workspace:*",
     "zod": "4.6.6"
   },
@@ -104,6 +107,9 @@
     "tsdown": "^0.22.2"
   },
   "delorun": {
-    "state": "shipped"
+    "state": "shipped",
+    "previewFlags": [
+      "onboarding.previewSteps"
+    ]
   }
 }

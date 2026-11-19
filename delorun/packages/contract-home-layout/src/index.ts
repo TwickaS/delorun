@@ -213,6 +213,8 @@ export const RUN_ENTRIES = {
   supervisorSocket: 'supervisor.sock',
   /** The update journal (C19). */
   updateJournal: 'update.json',
+  /** How the last update or rollback of the studio or terminal ended, until the person dismisses it (C19, "The outcome record"). */
+  updateResult: 'update-result.json',
   /** The update check's record (C3, "Update check"). */
   updateCheck: 'update-check.json',
   /** The verified release notes of the update check's newest release (C3, "Update check"). */
@@ -387,6 +389,12 @@ export interface HomeLockRecord {
    * namespace differs from the reader's is never judged dead.
    */
   readonly pidNamespace?: string
+  /**
+   * Present, `true`, while the holder's update channel listens on its socket: the holder writes it once the channel
+   * is bound and removes it before the channel closes (C1, "The home lock"). A handed-over record has none until the
+   * successor's channel listens.
+   */
+  readonly listening?: true
 }
 
 /** A confinement rule that Delorun's sandbox profiles add to upstream's dialects. */

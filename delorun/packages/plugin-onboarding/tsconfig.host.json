@@ -12,16 +12,13 @@
     "src/wire.ts",
     "src/answers.ts",
     "src/deferred.ts",
-    "src/workspace-route.ts",
     "src/agent-models.ts",
-    "src/clone.ts",
-    "src/clone-address.ts",
-    "src/folder-kind.ts",
     "src/key-test.ts",
     "src/local-models.ts",
     "src/readiness.ts",
     "src/recommend.ts",
-    "src/rows.ts"
+    "src/rows.ts",
+    "src/preview-flags.ts"
   ],
   "references": [
     {

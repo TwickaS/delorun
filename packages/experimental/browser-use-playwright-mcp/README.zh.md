@@ -25,7 +25,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用此包
 
-在创建或恢复 Session 前，将以下条目挂载到已提供 Agent、工具、系统提示词和工作目录服务的 profile 组合中。加载或重新加载此提供方不会接管已经活动的 Session。浏览器安装遵循上游运行时；使用 `executablePath` 选择已有 Chromium 安装。固定的 Playwright 所需的 Chromium 版本未安装时，浏览器工具调用会以一条简短消息失败，告诉模型停止尝试，并请用户完成 Browser 设置。
+在创建或恢复 Session 前，将以下条目挂载到已提供 Agent、工具、系统提示词和工作目录服务的 profile 组合中。加载或重新加载此提供方不会接管已经活动的 Session。`browser` 决定启动哪个浏览器：默认值 `auto` 在 Playwright 的 `chrome` 通道查找的位置装有 Google Chrome 时启动它，否则启动 Playwright 自己的 Chromium 版本；`chrome` 和 `chromium` 总是启动对应的那一个。Chrome 使用 Playwright 为本次启动创建的配置文件（`--isolated`）运行，从不使用用户自己的 Chrome 配置文件。只有 Chromium 版本与固定的 Playwright 版本绑定，因此本包更新后，仅在实际启动 Chromium 时才可能需要重新下载 Chromium：即 `chromium`，或没有安装 Chrome 的电脑上的 `auto`。使用 `executablePath` 选择其他 Chromium 安装；在 `auto` 下它保留 Chromium 的启动设置。提供方在加载时决定启动哪个浏览器，因此安装或移除 Chrome 要在 Harness 重启后才生效。开启 `browserAdditions` 时，固定的 Playwright 所需的 Chromium 版本未安装，或设置了 `chrome` 而 Chrome 未安装，浏览器工具调用会以一条简短消息失败，告诉模型停止尝试，并请用户完成 Browser 设置；关闭时，调用以 Playwright 自己的报告失败。
 
 ```yaml
 - name: '@deepseek-ai/dsh-browser-use'
@@ -41,9 +41,12 @@ kind: "package-reference"
 |---|---|---|
 | `mode` | 必填 | `launch` 或 `attach`，在本次提供方激活期间固定 |
 | `headless` | `true` | 启动时不显示窗口 |
+| `browser` | `auto` | `auto` 启动已安装的 Chrome，否则启动 Playwright 的 Chromium 版本；`chrome` 或 `chromium` 强制使用其一。仅用于 launch 模式 |
 | `executablePath` | 上游发现 | 启动使用的 Chromium 可执行文件 |
 | `endpoint` | attach 时必填 | 已有浏览器调试端点 |
 | `toolCallTimeoutMs` | MCP 客户端默认值 | 单次调用超时，单位为毫秒 |
+| `deniedTools` | `[]` | 除始终关闭的 `browser_run_code_unsafe` 之外，另外要关闭的服务器自有工具名称：从不提供给模型，被调用时拒绝 |
+| `browserAdditions` | `false` | Delorun 的附加功能，由 Delorun 的 Browser 套件开启：浏览器未安装时简短的 Browser 设置消息。无论取值如何，关闭的工具、文件夹防护和 MCP root 都保持不变 |
 | `serverDirectory` | `session` | MCP 服务器的运行位置：`session` 为每个 Session 的工作目录，`home` 为所有 Session 共用的 Harness 主目录中的一个文件夹（`browser-use/<服务器名称>`），因此它的命令和文件夹保持不变 |
 
 [配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-experimental-browser-use-playwright-mcp)列出接受的字段。浏览器模式由 profile 或 preset 选择。子进程会清空继承的 `PLAYWRIGHT_MCP_*` 选项，避免其替换该配置。
@@ -82,7 +85,7 @@ kind: "package-reference"
 
 #### 模型可见内容
 
-工具以 `mcp__playwright-mcp__<tool>` 命名，保留上游描述和 JSON schema。文本与截图通过常规工具结果流程进入 Session 日志。服务器保存的文件（如截图和 PDF）位于 Session 工作目录（即它的 MCP root）下的 `.playwright-mcp` 中，工具结果以相对于该目录的路径链接每个文件。截图需要附件存储及支持图片输入的模型路由；其他路由会收到 MCP 图片诊断。MCP 客户端还提供资源工具和注明服务器来源的指导。只有当前 Session 拥有连接后才显示浏览器指导；针对该服务器的资源请求执行相同的所有权检查。
+工具以 `mcp__playwright-mcp__<tool>` 命名，保留上游描述和 JSON schema。`browser_run_code_unsafe` 会在服务器进程中、页面之外、智能体沙箱之外运行模型编写的代码，始终关闭：MCP 客户端从不注册它，因此模型不会得到它，对它的调用也会被拒绝。任何配置都不能重新开启它。它是固定版本服务器中唯一在那里运行此类代码的工具；`deniedTools` 可关闭更多工具。文本与截图通过常规工具结果流程进入 Session 日志。服务器保存的文件，例如截图、下载和 PDF，会放进 Delorun 为每个对话在用户缓存目录中创建的输出文件夹（`$XDG_CACHE_HOME/delorun-browser-output`，macOS 上为 `~/Library/Caches/delorun-browser-output`，Windows 上为 `%LOCALAPPDATA%\delorun-browser-output`），仅所有者可访问，工具结果会说明每个文件的位置。该文件夹位于对话文件夹之外、`/tmp` 之外，也在受保护的 Delorun 主目录之外，因此沙箱对受限命令以只读方式挂载它：对话可以读取其中保存的文件，但不能写入、删除、重命名或替换该文件夹，也不能在其中放置链接。新对话的文件夹不会有 `.playwright-mcp`；对话中已有的那个保持原样，不再有任何内容写入。服务器只在那里写入：提供方会在调用到达服务器之前，拒绝会把 `filename` 写到其他任何位置（包括对话文件夹）的调用，因此任何写入都无法经由对话预先放置的链接进行；模型会读到“Browser saves to its own folder”和该文件夹的路径。服务器要读取的路径（`browser_file_upload`、`browser_drop` 和 `browser_set_storage_state`）不会被直接传递：Host 打开该文件，从已打开的描述符取得其标识，再次解析路径，只有当解析后的路径位于对话文件夹或输出文件夹之内且指向同一个文件时才继续，然后从已打开的描述符把内容复制到输出文件夹中一个仅所有者可访问的新文件，并把副本的路径交给服务器，因此对话在检查之后换入的链接，无法让运行在沙箱之外的服务器读到对话本身读不到的文件。已在输出文件夹中的文件同样会被复制，因此服务器永远不会收到模型写出的路径。每次调用之后，提供方还会检查该调用的 `filename`，以及输出文件夹内的链接所通向的每个文件夹，在不跟随任何链接的前提下删除该调用刚在输出文件夹之外创建的普通文件，并把调用结果替换为拒绝信息，同时写一行日志。拥有完全访问权限的对话运行在沙箱之外，也可以替换输出文件夹；此时该防护是拒绝而不是屏障，与其他所有完全访问操作一样。截图需要附件存储及支持图片输入的模型路由；其他路由会收到 MCP 图片诊断。MCP 客户端还提供资源工具和注明服务器来源的指导。只有当前 Session 拥有连接后才显示浏览器指导；针对该服务器的资源请求执行相同的所有权检查。
 
 #### Token 影响
 
@@ -98,7 +101,7 @@ kind: "package-reference"
 
 本集成保留固定版本服务器的浏览器与工具限制。
 
-- 仅支持 Chromium；不可选择 Firefox 或 WebKit。
+- 仅支持 Chrome 与 Chromium；不可选择 Firefox 或 WebKit。
 - 启动失败或取消会拒绝 Session 创建或恢复，并触发客户端清理。断开的客户端不会重试；修复原因后，创建新 Session，或卸载并恢复已有 Session。
 - 连接独占仅在此提供方实例内有效。其他进程与浏览器用户仍可修改相同页面。
 - 共享资源服务器目录可以显示继承的服务器名称，但不会授予对其他 Session 浏览器的访问权限。

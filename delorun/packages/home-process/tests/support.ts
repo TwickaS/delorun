@@ -34,6 +34,7 @@ import {
   type HostRunner,
   type PreparedRuntime,
   type ProfileSnapshots,
+  type RestartSupport,
   type RollbackSteps,
   type RunningHost,
   type StudioLinkResult,
@@ -79,6 +80,10 @@ export interface FixtureBehaviour {
   readonly protection?: HostProtection
   /** Whether the store's check before a start refuses this version. */
   readonly launchRefused?: boolean
+  /** Whether its Host fails its health check only in a successor's process, so the predecessor's own Host boots again. */
+  readonly unhealthySuccessor?: boolean
+  /** The plugins its Host disables at boot in a successor's process, in place of {@link FixtureBehaviour.disabled}. */
+  readonly successorDisabled?: readonly string[]
   /**
    * Its teardown for a switch, which resolves at once by default.
    * @returns when the teardown has finished.
@@ -581,6 +586,8 @@ export interface StartHomeOptions {
    * @returns when the teardown has finished.
    */
   readonly hostSuspend?: () => Promise<void>
+  /** What a restart needs beyond the home process; none by default, so no restart begins. */
+  readonly restart?: RestartSupport
   /** Runs before the start with the fixture parts and the start id, so a spec can watch a start that fails. */
   readonly configure?: (parts: StartParts) => void
   /** The clock of the hourly log age check. */
@@ -629,6 +636,7 @@ export async function startHome(home: string, options: StartHomeOptions = {}): P
     onSignal: signals.listen,
     exit: (code) => { exits.push(code) },
     ...options.now === undefined ? {} : { now: options.now },
+    ...options.restart === undefined ? {} : { restart: options.restart },
   }
   const started = await HomeProcess.start(homeOptions)
   return { process: started, hosts, store, snapshots, copies, harness, logger, signals, exits, exit: () => { for (const listener of listeners.splice(0)) listener() } }

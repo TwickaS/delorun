@@ -30,16 +30,19 @@ export interface TrashOperationsConfig {
   readonly warn: (message: string) => void
 }
 
+/** The refusal codes an operation throws with. */
+export type TrashOperationCode = 'WORKSPACE_NOT_FOUND' | 'NOT_KEPT_DATA' | 'DATA_IN_USE' | 'KEPT_DATA_UNAVAILABLE'
+
 /** A refusal of a trash operation that names what the person asked for. */
 export class TrashOperationError extends Error {
   /** The refusal code. */
-  readonly code: 'WORKSPACE_NOT_FOUND'
+  readonly code: TrashOperationCode
 
   /**
    * @param code - the refusal code.
    * @param message - one sentence for the log.
    */
-  constructor(code: 'WORKSPACE_NOT_FOUND', message: string) {
+  constructor(code: TrashOperationCode, message: string) {
     super(message)
     this.code = code
     this.name = 'TrashOperationError'

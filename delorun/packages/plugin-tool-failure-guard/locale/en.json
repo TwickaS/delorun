@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Tool failure guard",
+    "description": "Stops a turn that keeps hitting failing tool calls and says so in the chat, so a missing or broken tool does not use up tokens. Send a message to carry on."
+  }
+}

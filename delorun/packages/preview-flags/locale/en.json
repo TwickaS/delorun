@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Preview flags",
+    "description": "Lets a plugin mark a studio feature as not ready for everyone, with one setting that turns it on"
+  }
+}

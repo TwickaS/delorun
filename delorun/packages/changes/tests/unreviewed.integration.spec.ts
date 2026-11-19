@@ -1,11 +1,12 @@
-import { chmodSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
+import { withFileLock } from '@deepseek-ai/dsh-atomic-write'
 import { listChanges, showChange, undoChange, type ChangesContext, type ReloadHost, type ReloadOutcome } from '../src/actions.ts'
 import { openWorkSession, readActiveRecord, readChangeLog, setProtection, writeChangeLog } from '../src/records.ts'
-import { activeDirectory } from '../src/paths.ts'
+import { activeDirectory, versionsDirectory } from '../src/paths.ts'
 import { holdsVersion } from '../src/store.ts'
-import { declinedByPerson, loadUnreviewed, unreviewedFolders, unreviewedWords } from '../src/unreviewed.ts'
+import { declinedByPerson, loadUnreviewed, unreviewedFolders, unreviewedWords, type UnreviewedSync } from '../src/unreviewed.ts'
 import type { ChangeEntry, ContentVersion } from '../src/types.ts'
 import { approvedVersion, folder, history, linkAs, migrated, NOW, PROFILE, start, terminal, type Fixture } from './profile-fixture.ts'
 import { lockOut } from './support.ts'
@@ -83,17 +84,78 @@ describe('a live reload with protection off', () => {
     const host = reloads({ ok: false, error: 'SyntaxError: nope' }, { ok: true })
     const sync = await loadUnreviewed(ctx, 'plug', host.reload)
     expect(sync).toMatchObject({ kind: 'went-back', plugin: 'plug', failure: 'SyntaxError: nope', again: { ok: true }, entry: { state: 'pending', lastFailure: { at: NOW.toISOString(), failure: 'SyntaxError: nope' } } })
+    // The entry goes back to pending with no decision: neither when, where nor on which device, nor a history version.
+    if (sync.kind !== 'went-back') throw new Error(`expected went-back, got ${sync.kind}`)
+    for (const field of ['decidedAt', 'decidedFrom', 'decidedOn', 'historyVersion']) expect(sync.entry, field).not.toHaveProperty(field)
     expect(host.calls()).toBe(2)
     expect(await approvedVersion(fx, 'plug')).toBe(approved)
     expect(await holdsVersion(fx.home, activeDirectory(fx.home, PROFILE, 'plug'), approved)).toBe(true)
     expect(await activeOf(fx, 'plug')).toBe(approved)
-    expect((await history(fx)).slice(0, 2)).toEqual([expect.stringMatching(/^Went back: c[0-9a-f]{10} failed to load$/), `Loaded without review: plug: changes in ${source}`])
+    expect((await history(fx)).slice(0, 2)).toEqual([`Went back: Loaded without review: plug: changes in ${source} failed to load`, `Loaded without review: plug: changes in ${source}`])
     expect((await listChanges(ctx)).pending[0]).toMatchObject({ lastFailure: { failure: 'SyntaxError: nope' } })
     expect(await loadUnreviewed(ctx, 'plug', host.reload)).toEqual({ kind: 'unchanged', plugin: 'plug' })
     expect(host.calls()).toBe(2)
 
     writeFileSync(join(source, 'index.js'), 'export default "fixed"\n')
     expect((await loadUnreviewed(ctx, 'plug', reloads({ ok: true }).reload)).kind).toBe('loaded')
+  })
+
+  /**
+   * Start a load while another writer holds the profile write lock, wait until the folder's content is in the store, run
+   * `meanwhile` still under that lock, then release it.
+   * @param fx - the fixture.
+   * @param reload - the Host's reload.
+   * @param meanwhile - what the other writer does after the read.
+   * @returns what the load did.
+   */
+  async function loadWhileLocked(fx: Fixture, reload: ReloadHost, meanwhile: () => Promise<void>): Promise<UnreviewedSync> {
+    const versions = versionsDirectory(fx.home)
+    const stored = readdirSync(versions).length
+    // The load is returned wrapped: it waits for this lock, so the operation must not wait for it.
+    const { sync } = await withFileLock(join(fx.profileDir, 'package.json'), async () => {
+      const started = loadUnreviewed(contextOf(fx), 'plug', reload)
+      await vi.waitFor(() => { expect(readdirSync(versions)).toHaveLength(stored + 1) }, { timeout: 4_000 })
+      await meanwhile()
+      return { sync: started }
+    })
+    return sync
+  }
+
+  it('reads the folder without the profile write lock and commits once the lock is free', async () => {
+    const { fx, source } = await migrated({ protection: 'off' })
+    writeFileSync(join(source, 'index.js'), 'export default "saved"\n')
+    const host = reloads({ ok: true })
+    const sync = await loadWhileLocked(fx, host.reload, async () => {
+      // Nothing is committed while the other writer holds the lock.
+      await new Promise(resolve => setTimeout(resolve, 50))
+      expect(host.calls()).toBe(0)
+    })
+    expect(sync.kind).toBe('loaded')
+    expect(host.calls()).toBe(1)
+    expect(readFileSync(join(activeDirectory(fx.home, PROFILE, 'plug'), 'index.js'), 'utf8')).toBe('export default "saved"\n')
+  })
+
+  it('decides with the records as they are under the lock, so protection turned on after the read loads nothing', async () => {
+    const { fx, source, approved } = await migrated({ protection: 'off' })
+    writeFileSync(join(source, 'index.js'), 'export default "saved"\n')
+    const host = reloads({ ok: true })
+    const sync = await loadWhileLocked(fx, host.reload, async () => { await setProtection(fx.home, 'on', terminal()) })
+    expect(sync).toEqual({ kind: 'protected', plugin: 'plug' })
+    expect(host.calls()).toBe(0)
+    expect(await approvedVersion(fx, 'plug')).toBe(approved)
+    expect((await readChangeLog(fx.home, PROFILE)).entries.some(entry => entry.decidedFrom === 'unreviewed')).toBe(false)
+  })
+
+  it('leaves a plugin alone when a work session opened on it after the read', async () => {
+    const { fx, source, approved } = await migrated({ protection: 'off' })
+    writeFileSync(join(source, 'index.js'), 'export default "saved"\n')
+    const host = reloads({ ok: true })
+    const sync = await loadWhileLocked(fx, host.reload, async () => {
+      await openWorkSession(fx.home, PROFILE, { plugin: 'plug', source, from: approved, minutes: 60 }, terminal())
+    })
+    expect(sync).toEqual({ kind: 'skipped', plugin: 'plug' })
+    expect(host.calls()).toBe(0)
+    expect(await approvedVersion(fx, 'plug')).toBe(approved)
   })
 
   it('keeps the approved content and logs it when Delorun is not running', async () => {
@@ -211,5 +273,19 @@ describe('unreviewedFolders', () => {
     expect(await unreviewedFolders(contextOf(fx))).toEqual([{ plugin: 'plug', source }, { plugin: 'added', source: added }])
     await setProtection(fx.home, 'on', terminal())
     expect(await unreviewedFolders(contextOf(fx))).toEqual([])
+  })
+  it('leaves out an unpacked plugin pack, which no one edits live and whose load would queue for the profile lock', async () => {
+    const { fx, source } = await migrated({ protection: 'off' })
+    const pack = join(fx.home, 'packs', 'current', 'packed', 'package')
+    mkdirSync(pack, { recursive: true })
+    writeFileSync(join(pack, 'package.json'), '{"name":"packed","version":"1.0.0"}\n')
+    writeFileSync(join(pack, 'index.js'), 'export default "one"\n')
+    linkAs(fx, 'packed', pack)
+    await start(fx)
+    expect(await unreviewedFolders(contextOf(fx))).toEqual([{ plugin: 'plug', source }])
+    writeFileSync(join(pack, 'index.js'), 'export default "two"\n')
+    const host = reloads({ ok: true })
+    expect(await loadUnreviewed(contextOf(fx), 'packed', host.reload)).toEqual({ kind: 'skipped', plugin: 'packed' })
+    expect(host.calls()).toBe(0)
   })
 })

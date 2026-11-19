@@ -1,0 +1,14 @@
+# The person's own browser through browse, with a stand-in `browse mcp` server
+# copied into the workspace: the model asks with use_my_browser, the person
+# allows it, browse starts for this chat and answers one execute call, and the
+# person turns the grant off.
+- insert:
+    - id: use-my-browser-person
+      name: './person.mjs'
+    - id: browser-use-browse
+      name: '../../../delorun/packages/browser-use-browse/src/index.ts'
+      config:
+        enabled: true
+        command: !!js process.execPath
+        args:
+          - !!js "process.cwd() + '/browse-fixture.mjs'"

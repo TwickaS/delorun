@@ -8,10 +8,13 @@
  * 2. A chat without a workspace folder is refused, and so is a run directory outside the chat's workspace.
  * 3. A grants file that cannot be read refuses, so no grant counts.
  * 4. A grant for the provider in the chat's workspace allows the start.
- * 5. Otherwise the person is asked through the composed approval service, with the `external-agent` grant marker,
+ * 5. A start whose top-level chat is in Full access, with its own logged approval policy `never` and sandbox mode
+ *    `danger-full-access` together, is allowed without anyone being asked while the `fullAccessStartsAgents` switch is
+ *    on; the walk up through the delegation ancestry never takes a child's pinned or inherited values. Any other
+ *    chat whose policy is `never` is refused without anyone being asked.
+ * 6. Otherwise the person is asked through the composed approval service, with the `external-agent` grant marker,
  *    so a reach device cannot give the answer, naming the folder the agent runs in; only `allowed-once` allows the
- *    start, and it records nothing. A chat whose approval policy is `never`, the full-access preset's, is refused
- *    without anyone being asked.
+ *    start, and it records nothing.
  *
  * Every allowed start carries the configured run time limit. The service also names an external provider in its
  * delegation tool's description, and lists, records and revokes the grants the studio and `delorun` show.
@@ -20,12 +23,13 @@
  */
 import { sep } from 'node:path'
 import { Service, type Context } from '@deepseek-ai/cordis'
-import type {} from '@deepseek-ai/dsh-agent'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import { SessionId } from '@deepseek-ai/dsh-session'
-import type {} from '@deepseek-ai/dsh-sandbox-policy'
-import type {} from '@deepseek-ai/dsh-user-approval'
+import type { SandboxPolicyService } from '@deepseek-ai/dsh-sandbox-policy'
+import type { ApprovalService } from '@deepseek-ai/dsh-user-approval'
+import { CLAUDE_SANDBOX_INSTALL_COMMAND } from '@deepseek-ai/dsh-subagent/safety-level'
 import type {
-  DelegationConsentService, ExternalDelegationReview, ExternalDelegationVerdict,
+  DelegationConsentService, ExternalDelegationReview, ExternalDelegationVerdict, SubagentSafetyLevel,
 } from '@deepseek-ai/dsh-subagent'
 import { resolveDelorunHome, workspaceLocationHomes, workspaceLocationMessage, workspaceLocationProblem } from '@delorun/home'
 import { NO_WORKSPACE, workspaceKey } from '@delorun/plugin-permission-defaults/workspace'
@@ -34,8 +38,9 @@ import {
   readOnlyRefusal, storeRefusal,
 } from './copy.ts'
 import { changeGrantStore, grantOf, grantStorePath, problemOf, readGrantStore, withGrant, withoutGrant, type ExternalAgentGrant } from './store.ts'
-import type {
-  AllowWorkspaceAnswer, AllowWorkspaceRequest, DelegationRefusalCode, GrantsAnswer, GrantView, RevokeAnswer, RevokeRequest,
+import {
+  AGENT_LEVEL_FIELDS, type AgentLevel, type AgentLevelView, type AllowWorkspaceAnswer, type AllowWorkspaceRequest, type DelegationRefusalCode,
+  type GrantsAnswer, type GrantView, type LevelsAnswer, type RevokeAnswer, type RevokeRequest,
 } from './wire.ts'
 
 /** A surface call that recorded nothing, with the code its route answers. */
@@ -54,10 +59,16 @@ export class DelegationConsentError extends Error {
 export interface ConsentOptions {
   /** The run time limit an allowed start carries, in milliseconds, read at each review. */
   readonly timeoutMs: () => number
+  /** Whether a chat in Full access starts an external agent without asking, read at each review. */
+  readonly fullAccessStartsAgents: () => boolean
   /** The environment the Delorun home is resolved from. */
   readonly env: Readonly<Record<string, string | undefined>>
   /** The clock a new grant records. */
   readonly now: () => number
+  /** The level saved for a provider, read at each start and each listing so a saved change applies from the next run. */
+  readonly levelOf: (provider: keyof typeof AGENT_LEVEL_FIELDS) => AgentLevel
+  /** The tools Claude Code's command sandbox lacks on this computer, none when it can run. */
+  readonly missingSandboxTools: () => readonly string[]
 }
 
 /**
@@ -93,6 +104,33 @@ export class DelorunDelegationConsent extends Service implements DelegationConse
     return describeAgent(provider)
   }
 
+  /**
+   * The level a provider runs at: the saved level of Claude Code or Codex, and `careful`, the strictest, for a provider
+   * registered under any other name, which has no level setting of its own.
+   * @param provider - the provider's registered name.
+   * @returns the level.
+   */
+  permissionLevel(provider: string): SubagentSafetyLevel {
+    return Object.hasOwn(AGENT_LEVEL_FIELDS, provider) ? this.options.levelOf(provider as keyof typeof AGENT_LEVEL_FIELDS) : 'careful'
+  }
+
+  /**
+   * Each external agent's level and, for Claude Code at a level that confines commands, what its sandbox lacks.
+   * @returns the agents, Claude Code first.
+   */
+  levels(): LevelsAnswer {
+    const missing = this.options.missingSandboxTools()
+    const view = (provider: keyof typeof AGENT_LEVEL_FIELDS): AgentLevelView => {
+      const level = this.options.levelOf(provider)
+      const confines = provider === 'claude-code' && (level === 'careful' || level === 'standard')
+      return {
+        provider, agent: agentName(provider), level,
+        ...confines && missing.length > 0 ? { sandboxMissing: { tools: missing, installCommand: CLAUDE_SANDBOX_INSTALL_COMMAND } } : {},
+      }
+    }
+    return { levels: [view('claude-code'), view('codex')] }
+  }
+
   async review(review: ExternalDelegationReview): Promise<ExternalDelegationVerdict> {
     const { provider, parent } = review
     const session = parent.session
@@ -112,6 +150,7 @@ export class DelorunDelegationConsent extends Service implements DelegationConse
     const facts = { provider, workspace, cwd, label: review.label }
     // The approval service answers `rejected` without asking anyone while the chat's policy is `never`.
     const policy = approval.overrideOf(session) ?? approval.config.policy
+    if (this.options.fullAccessStartsAgents() && this.rootIsFullAccess(parent, approval, sandbox)) return allowed
     const outcome = await approval.request({
       agent: parent,
       toolName: provider,
@@ -122,6 +161,32 @@ export class DelorunDelegationConsent extends Service implements DelegationConse
     })
     if (outcome === 'allowed-once') return allowed
     return { kind: 'refuse', reason: notApprovedRefusal(provider, outcome === 'rejected' && policy === 'never' ? 'never' : outcome, workspace) }
+  }
+
+  /**
+   * Whether the top-level chat that this start descends from is in Full access: its own logged approval policy is
+   * `never` and its own sandbox mode is `danger-full-access`, together. A local subagent is always pinned to `never`
+   * and inherits its parent's sandbox, so a child's values never count; an ancestor that cannot be found counts as not
+   * Full access.
+   * @param parent - the agent calling the delegation tool.
+   * @param approval - the composed approval service.
+   * @param sandbox - the composed sandbox policy.
+   * @returns true when the root chat is in Full access.
+   */
+  private rootIsFullAccess(parent: Agent, approval: ApprovalService, sandbox: SandboxPolicyService): boolean {
+    const agents = this.ctx.get('agents')
+    const visited = new Set<SessionId>([parent.id])
+    let root = parent
+    while (root.session.header.origin === 'subagent') {
+      const next = root.session.header.parentSession
+      if (next === undefined || visited.has(next)) return false
+      visited.add(next)
+      const ancestor = agents?.get(next)
+      if (ancestor === undefined) return false
+      root = ancestor
+    }
+    const policy = approval.overrideOf(root.session) ?? approval.config.policy
+    return policy === 'never' && sandbox.resolve({ session: root.session }).mode === 'danger-full-access'
   }
 
   /**

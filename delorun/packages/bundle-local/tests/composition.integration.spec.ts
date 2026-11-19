@@ -26,7 +26,9 @@ const STUDIO_ROWS = [
   { id: 'delorun-chat-states', name: '@delorun/plugin-chat-states' },
   { id: 'delorun-sidebar', name: '@delorun/plugin-sidebar' },
   { id: 'delorun-onboarding', name: '@delorun/plugin-onboarding' },
+  { id: 'delorun-new-workspace', name: '@delorun/plugin-new-workspace' },
   { id: 'delorun-downloads', name: '@delorun/plugin-downloads' },
+  { id: 'delorun-preview-flags', name: '@delorun/preview-flags' },
 ] as const
 
 /** The optional studio plugins `@delorun/bundle-studio` inserts disabled, after the rows above. */
@@ -48,6 +50,7 @@ const MOUNTED_PLUGINS = [
   { id: 'delorun-permission-defaults', name: '@delorun/plugin-permission-defaults' },
   { id: 'delorun-schedule-consent', name: '@delorun/plugin-schedule-consent' },
   { id: 'delorun-fetch-guard', name: '@delorun/plugin-fetch-guard' },
+  { id: 'delorun-tool-failure-guard', name: '@delorun/plugin-tool-failure-guard' },
   { id: 'delorun-delegation-consent', name: '@delorun/plugin-delegation-consent' },
   { id: 'delorun-plugin-changes', name: '@delorun/plugin-changes' },
   { id: 'delorun-reach', name: '@delorun/reach' },
@@ -172,9 +175,11 @@ const UNREACHED_DEFAULTS: Readonly<Record<string, string>> = {
   main_chat: 'the main chat is an experimental plugin that no row of the default composition mounts, and the plugin default is false',
   preset_inspect: 'the module is mounted only inside the agent presets\' plugin lists, which no patch reaches, and the plugin default is false',
   doctor: 'no row of the default composition mounts the module, and the plugin default is false',
-  plugin_manager_read_exemption: 'the top-level tool-plugin-manager row is disabled and sets no key',
+  plugin_manager_read_exemption: 'the top-level tool-plugin-manager row is disabled and sets no key; the Standard and Creator preset rows set it, which no top-level row reads',
   profile_history: 'the top-level tool-plugin-manager row is disabled and sets no key',
   container_denial_marker: 'the sandbox-policy row sets no containerDenialMarker, and the plugin default is false',
+  browser_additions: 'only @delorun/bundle-browser, a pack no default profile lists, mounts the Playwright provider, and its row sets the switch on; the plugin default is false',
+  use_my_browser: 'only @delorun/bundle-real-browser, a pack no default profile lists, mounts the browse driver, and its row sets the switch on; the plugin default is false',
 }
 
 beforeAll(() => { home = createTestHome() })

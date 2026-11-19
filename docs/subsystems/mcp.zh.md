@@ -240,6 +240,28 @@ register(server: string, provider: McpResourceProvider): () => void
 
 Source: [`packages/mcp/mcp-resources/src/index.ts`](../../packages/mcp/mcp-resources/src/index.ts)
 
+<a id="mcp-client-events"></a>
+
+### `mcp-client/*` events
+
+<a id="mcp-clientconsent-accepted--parallel"></a>
+
+#### `mcp-client/consent-accepted` — parallel
+
+The add-time consent accepted one server's start. A provider that mounts the server per Session starts it again in the live Sessions the refusal left without its tools; the consent is still checked at that start.
+
+```ts cordis-catalog
+/**
+ * The add-time consent accepted one server's start. A provider that mounts the server per Session starts it again
+ * in the live Sessions the refusal left without its tools; the consent is still checked at that start.
+ * @param serverName - the accepted server.
+ * @mode parallel
+ */
+'mcp-client/consent-accepted'(serverName: string): void | Promise<void>
+```
+
+Source: [`packages/experimental/browser-use-runtime/src/mcp.ts`](../../packages/experimental/browser-use-runtime/src/mcp.ts)
+
 <a id="mcp-manager-events"></a>
 
 ### `mcp-manager/*` events

@@ -10,9 +10,9 @@
 import type { Readable, Writable } from 'node:stream'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { SubagentResult } from '@deepseek-ai/dsh-subagent'
-import { isAgentSignInFailure } from '@deepseek-ai/dsh-subagent'
+import { isAgentSignInFailure } from '@deepseek-ai/dsh-subagent/out-of-process'
 import { JsonRpcLineTransport } from '@deepseek-ai/dsh-sdk-protocol'
-import type { CodexPermissionMode } from './run.ts'
+import type { CodexRunPermissions } from './run.ts'
 
 type JsonObject = Record<string, unknown>
 
@@ -29,6 +29,10 @@ export interface CodexWireFailureFacts {
     | 'invalid-result'
     | 'unknown'
   readonly httpStatus?: number | undefined
+  /** Unix seconds at which an exhausted plan window resets, when the app-server reported one. */
+  readonly limitResetsAt?: number | undefined
+  /** True when the limit is the person's plan usage or rate limit, not the context window or session budget. */
+  readonly planLimit?: true
 }
 
 /** One model the app-server offers. */
@@ -39,20 +43,57 @@ export interface CodexModelOption {
   readonly displayName: string
 }
 
-/** The most `model/list` pages one listing follows. */
-const MAX_MODEL_PAGES = 10
+/** The most `model/list` pages one listing follows; a listing that reaches it fails instead of reading as complete. */
+const MAX_MODEL_PAGES = 1000
 
-const THREAD_PERMISSION_PARAMS: Readonly<Record<CodexPermissionMode, JsonObject>> = {
+/** The app-server's `model/list` kept returning pages past the ceiling, so which models are offered is unknown. */
+export class CodexModelListIncomplete extends Error {
+  constructor() {
+    super(`Delorun could not read the full model list from Codex; it returned more than ${String(MAX_MODEL_PAGES)} pages. Try again, and report it if it persists.`)
+    this.name = 'CodexModelListIncomplete'
+  }
+}
+
+/**
+ * `thread/start` fields per mode. `sandbox: 'workspace-write'` here would make
+ * Codex append a trusted-folder entry to the person's own `config.toml`, so
+ * `approve-for-me` starts a read-only thread and widens the sandbox per turn
+ * (see {@link turnSandboxPolicy}).
+ */
+const THREAD_PERMISSION_PARAMS: Readonly<Record<CodexRunPermissions, JsonObject>> = {
+  // Safety levels (see `SubagentSafetyLevel`): `own` sends no field, so the person's Codex settings decide.
+  careful: { approvalPolicy: 'never', sandbox: 'read-only' },
+  standard: { approvalPolicy: 'on-request', approvalsReviewer: 'auto_review', sandbox: 'read-only' },
+  own: {},
+  // A thread that starts with full access makes Codex append a trusted-folder entry to the person's `config.toml`.
+  unrestricted: { approvalPolicy: 'never', sandbox: 'read-only' },
   never: { approvalPolicy: 'never' },
   'approve-for-me': {
     approvalPolicy: 'on-request',
     approvalsReviewer: 'auto_review',
-    sandbox: 'workspace-write',
+    sandbox: 'read-only',
   },
   'dangerously-bypass-approvals-and-sandbox': {
     approvalPolicy: 'never',
     sandbox: 'danger-full-access',
   },
+}
+
+/** Per-turn sandbox widening that matches the mode's former thread-level `workspace-write`. */
+function turnSandboxPolicy(mode: CodexRunPermissions, cwd: string): JsonObject | undefined {
+  switch (mode) {
+    case 'approve-for-me':
+      return { sandboxPolicy: { type: 'workspaceWrite', writableRoots: [cwd] } }
+    case 'careful':
+      // Only the task folder is writable and commands have no network; temporary folders stay read-only.
+      return { sandboxPolicy: { type: 'workspaceWrite', writableRoots: [cwd], networkAccess: false, excludeSlashTmp: true, excludeTmpdirEnvVar: true } }
+    case 'unrestricted':
+      return { sandboxPolicy: { type: 'dangerFullAccess' } }
+    case 'standard':
+      return { sandboxPolicy: { type: 'workspaceWrite', writableRoots: [cwd], networkAccess: true } }
+    default:
+      return undefined
+  }
 }
 
 function object(value: unknown, label: string): JsonObject {
@@ -92,6 +133,7 @@ interface ParsedFailureInfo {
   readonly category: CodexWireFailureFacts['category']
   readonly httpStatus?: number | undefined
   readonly maxTokens?: true
+  readonly planLimit?: true
   readonly sandboxFailure?: true
 }
 
@@ -137,8 +179,10 @@ function failureInfo(turn: JsonObject): ParsedFailureInfo {
       case 'contextWindowExceeded':
         return { category: 'limit', maxTokens: true }
       case 'sessionBudgetExceeded':
-      case 'usageLimitExceeded':
         return { category: 'limit' }
+      case 'usageLimitExceeded':
+      case 'rateLimitExceeded':
+        return { category: 'limit', planLimit: true }
       case 'serverOverloaded':
       case 'internalServerError':
         return { category: 'service' }
@@ -170,7 +214,7 @@ function turnErrorMessage(turn: JsonObject): string {
 }
 
 function unattendedDiagnostic(
-  mode: CodexPermissionMode,
+  mode: CodexRunPermissions,
   request: 'command approval' | 'file approval' | 'permission grant' | 'user input' | 'MCP elicitation' | 'command execution' | 'file change' | 'sandbox execution',
   decision: 'cancelled' | 'declined' | 'denied' | 'empty response' | 'failed',
   reason: string,
@@ -231,6 +275,8 @@ export class CodexAppServerWire {
   private lastUnphasedAnswer: string | undefined
   private diagnostic: string | undefined
   private failure: CodexWireFailureFacts | undefined
+  private cwd = ''
+  private limitResetsAt: number | undefined
   private diagnosticOrder = 0
   private observationOrder = 0
   private pendingDiagnostic: {
@@ -246,7 +292,7 @@ export class CodexAppServerWire {
   constructor(
     private readonly input: Readable,
     output: Writable,
-    private readonly permissionMode: CodexPermissionMode,
+    private readonly permissionMode: CodexRunPermissions,
     private readonly model?: string,
   ) {
     this.transport = new JsonRpcLineTransport(input, output)
@@ -307,8 +353,9 @@ export class CodexAppServerWire {
    * Create the run's private ephemeral thread and retain its identity.
    * @param cwd - selected child working directory.
    * @param signal - unpublished-start cancellation.
+   * @returns the model the app-server reports for the thread when the built-in `openai` provider serves it, else undefined.
    */
-  async startThread(cwd: string, signal: AbortSignal): Promise<void> {
+  async startThread(cwd: string, signal: AbortSignal): Promise<string | undefined> {
     const response = object(await this.guarded(this.transport.request('thread/start', {
       cwd,
       ephemeral: true,
@@ -321,6 +368,11 @@ export class CodexAppServerWire {
       throw new Error('subagent-codex: app-server did not create an ephemeral thread')
     }
     this.threadId = id
+    this.cwd = cwd
+    // Only the built-in `openai` provider draws on the plan's `model/list`; a custom provider's models are not in it.
+    return response.modelProvider === 'openai' && typeof response.model === 'string' && response.model !== ''
+      ? response.model
+      : undefined
   }
 
   /**
@@ -344,6 +396,7 @@ export class CodexAppServerWire {
       const response = object(await this.guarded(this.transport.request('turn/start', {
         threadId,
         input: texts.map(text => ({ type: 'text', text, text_elements: [] })),
+        ...turnSandboxPolicy(this.permissionMode, this.cwd),
       }, signal), signal), 'turn/start response')
       const turn = object(response.turn, 'turn/start turn')
       this.commitTurnId(string(turn.id, 'turn/start turn id'))
@@ -375,6 +428,10 @@ export class CodexAppServerWire {
         stage: 'turn',
         category,
         ...parsed.httpStatus === undefined ? {} : { httpStatus: parsed.httpStatus },
+        ...parsed.planLimit === true ? { planLimit: true as const } : {},
+        ...parsed.planLimit === true && this.limitResetsAt !== undefined
+          ? { limitResetsAt: this.limitResetsAt }
+          : {},
       })
       if (parsed.sandboxFailure) {
         this.recordDiagnostic(
@@ -444,12 +501,14 @@ export class CodexAppServerWire {
    * Ask the app-server for the models it offers, following its pages.
    * @param signal - cancellation.
    * @returns each visible model's name for `thread/start` and its display name.
+   * @throws CodexModelListIncomplete when the server still has a next page after the ceiling.
    */
   async listModels(signal: AbortSignal): Promise<CodexModelOption[]> {
     const models: CodexModelOption[] = []
     let cursor: string | null = null
-    // The app-server pages its answer; a bound keeps a server that never ends from holding the caller.
-    for (let page = 0; page < MAX_MODEL_PAGES; page += 1) {
+    // The app-server pages its answer; the ceiling keeps a server whose cursor never ends from holding the caller.
+    for (let page = 0; ; page += 1) {
+      if (page >= MAX_MODEL_PAGES) throw new CodexModelListIncomplete()
       const response: JsonObject = object(await this.guarded(this.transport.request('model/list', {
         ...cursor === null ? {} : { cursor },
       }, signal), signal), 'model/list response')
@@ -464,9 +523,8 @@ export class CodexAppServerWire {
         })
       }
       cursor = typeof response.nextCursor === 'string' ? response.nextCursor : null
-      if (cursor === null) break
+      if (cursor === null) return models
     }
-    return models
   }
 
   /** Detach JSON-RPC listeners and reject outstanding requests. Idempotent. */
@@ -685,6 +743,22 @@ export class CodexAppServerWire {
     }
   }
 
+  /** Remember when an exhausted plan window resets; the update is advisory, so malformed data is ignored. */
+  private observeRateLimits(params: JsonObject): void {
+    const snapshot = params.rateLimits
+    if (snapshot === null || typeof snapshot !== 'object' || Array.isArray(snapshot)) return
+    let latest: number | undefined
+    for (const key of ['primary', 'secondary']) {
+      const window = (snapshot as JsonObject)[key]
+      if (window === null || typeof window !== 'object' || Array.isArray(window)) continue
+      const { usedPercent, resetsAt } = window as JsonObject
+      if (typeof usedPercent !== 'number' || usedPercent < 100) continue
+      if (typeof resetsAt !== 'number' || !Number.isSafeInteger(resetsAt) || resetsAt <= 0) continue
+      latest = latest === undefined ? resetsAt : Math.max(latest, resetsAt)
+    }
+    if (latest !== undefined) this.limitResetsAt = latest
+  }
+
   private handleNotification(
     method: string,
     params: JsonObject,
@@ -697,6 +771,10 @@ export class CodexAppServerWire {
       if (this.turnCompleted !== undefined && this.turnId === undefined) {
         this.observePendingTurnId(string(turn.id, 'turn/started turn id'))
       }
+      return
+    }
+    if (method === 'account/rateLimits/updated') {
+      this.observeRateLimits(params)
       return
     }
     if (method === 'item/completed') {

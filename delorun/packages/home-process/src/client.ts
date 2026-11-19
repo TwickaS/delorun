@@ -113,7 +113,8 @@ export async function queryHomeStatus(home: string, profile: string, timeoutMs: 
 
 /**
  * The holder probe C1's lock uses: a live holder answers when its update channel sends any response line to a
- * `status` request within 2 seconds.
+ * `status` request within 2 seconds. A connection refused by the socket file reads as `refused`, any other failure as
+ * `silent`.
  * @param home - the resolved Delorun home.
  * @param profile - the CLI profile.
  * @returns the probe.
@@ -123,9 +124,10 @@ export function updateChannelProbe(home: string, profile: string): HolderProbe {
     try {
       await queryHomeStatus(home, profile, HOME_STATUS_TIMEOUT_MS)
       return 'answered'
-    } catch (_silent) {
-      // No token file, no socket, a refused connection or no line in time: the holder did not answer.
-      return 'silent'
+    } catch (error) {
+      // A socket file that refuses the connection has no process listening on it; no token file, no socket file or
+      // no line in time: the holder did not answer.
+      return (error as NodeJS.ErrnoException).code === 'ECONNREFUSED' ? 'refused' : 'silent'
     }
   }
 }

@@ -54,7 +54,7 @@
  * @module @delorun/changes/tree
  */
 import { createHash } from 'node:crypto'
-import { constants, type Stats } from 'node:fs'
+import { constants, lstatSync, readdirSync, type Stats } from 'node:fs'
 import { lstat, mkdir, open, readdir, readlink, realpath, stat, type FileHandle } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { brandString } from '@deepseek-ai/dsh-brand'
@@ -83,6 +83,14 @@ export const SCAN_CACHE_SCHEMA = 'delorun.changes-scan-cache/1'
  * window can keep the same recorded times, so its digest is computed again on the next scan.
  */
 export const CACHE_SETTLE_MS = 2000
+
+/**
+ * How long a scan runs before it lets other work on the event loop run, in milliseconds. A scan lists directories and
+ * reads the status of files whose digest the cache holds synchronously, because a copy of Delorun holds tens of
+ * thousands of files and each asynchronous call costs several times more; the pauses keep a Host's other requests
+ * answered meanwhile.
+ */
+const SCAN_SLICE_MS = 20
 
 /** The size of one read while hashing or copying. */
 const CHUNK_SIZE = 64 * 1024
@@ -164,7 +172,7 @@ export interface ScanCacheOptions {
   /**
    * The scan cache file, such as `changes/profiles/<profile>/scan-cache.json`. A file whose device, inode, size and
    * modification and status-change times equal the cached ones is not hashed again. A cache that cannot be read is
-   * ignored, and the file is rewritten after the scan.
+   * ignored. The file is written after the scan unless it holds what the scan records already.
    */
   readonly cache?: string
   /** The wall clock in milliseconds, which decides which files the cache records; defaults to `Date.now`. A test hook. */
@@ -387,22 +395,23 @@ function cacheEntry(value: unknown): CacheEntry | undefined {
 }
 
 /**
- * Read the scan cache. Any failure, including a missing file, a laxer mode or text Delorun did not write, gives an
- * empty cache: the cache only saves hashing, and every entry is checked against the file's status before use.
+ * Read the scan cache. Any failure, including a missing file, a laxer mode or text Delorun did not write, gives no
+ * cache, and an entry without its fields is left out: the cache only saves hashing, and every entry is checked against
+ * the file's status before use.
  * @param path - the cache file.
- * @returns the cached entries by relative path.
+ * @returns the cached entries by relative path, or undefined when the file is not a scan cache Delorun can read.
  */
-async function readCache(path: string): Promise<Map<string, CacheEntry>> {
+async function readCache(path: string): Promise<Map<string, CacheEntry> | undefined> {
   const entries = new Map<string, CacheEntry>()
   let parsed: unknown
   try {
     parsed = JSON.parse((await readProtectedFile(path)).toString('utf8'))
   } catch {
     // Any read or JSON error (a missing file, a refused mode, text Delorun did not write): the cache is ignored and rewritten after the scan.
-    return entries
+    return undefined
   }
   const cache = parsed as Partial<ScanCache> | null
-  if (cache?.schema !== SCAN_CACHE_SCHEMA || typeof cache.files !== 'object' || cache.files === null) return entries
+  if (cache?.schema !== SCAN_CACHE_SCHEMA || typeof cache.files !== 'object' || cache.files === null) return undefined
   for (const [path, value] of Object.entries(cache.files)) {
     const entry = cacheEntry(value)
     if (entry !== undefined) entries.set(path, entry)
@@ -418,6 +427,20 @@ async function readCache(path: string): Promise<Map<string, CacheEntry>> {
  */
 function cacheMatches(entry: CacheEntry, stats: Stats): boolean {
   return entry.dev === stats.dev && entry.ino === stats.ino && entry.size === stats.size && entry.mtimeMs === stats.mtimeMs && entry.ctimeMs === stats.ctimeMs
+}
+
+/**
+ * @param cached - the cache the scan read.
+ * @param recorded - the entries it records.
+ * @returns whether they are the same entries, so the cache file need not be written again.
+ */
+function sameCache(cached: ReadonlyMap<string, CacheEntry>, recorded: ReadonlyMap<string, CacheEntry>): boolean {
+  if (cached.size !== recorded.size) return false
+  for (const [path, entry] of recorded) {
+    const other = cached.get(path)
+    if (other === undefined || other.dev !== entry.dev || other.ino !== entry.ino || other.size !== entry.size || other.mtimeMs !== entry.mtimeMs || other.ctimeMs !== entry.ctimeMs || other.digest !== entry.digest) return false
+  }
+  return true
 }
 
 /** The state one scan carries through its walk. */
@@ -442,6 +465,8 @@ interface Walk {
   readonly limits: ScanLimits
   /** The `node_modules` directories of runtime packages whose own installed packages the walk leaves to the dependency closure. */
   readonly pruned: Set<string>
+  /** When the scan next lets other work run ({@link SCAN_SLICE_MS}), in `performance.now()` milliseconds. */
+  pauseAt: number
   /** The files, links and directories counted so far. */
   count: number
   /** The bytes of the files counted so far. */
@@ -473,6 +498,36 @@ function admit(walk: Walk, bytes: number): void {
   if (walk.bytes > walk.limits.bytes) {
     throw new ChangesError('CONTENT_TOO_LARGE', walk.folder, `${walk.folder}, with the installed packages it links, holds more than ${byteLimitWords(walk.limits.bytes)}, so Delorun does not copy it.${tooLargeAdvice(walk)}`)
   }
+}
+
+/**
+ * Let other work on the event loop run; the scan calls it once it has run for {@link SCAN_SLICE_MS} since it last did.
+ * @param walk - the scan.
+ */
+async function pause(walk: Walk): Promise<void> {
+  await new Promise<void>((resolve) => { setImmediate(resolve) })
+  walk.pauseAt = performance.now() + SCAN_SLICE_MS
+}
+
+/**
+ * Take a regular file's digest from the cache when its status, read without opening it, is the cached one.
+ * @param walk - the scan.
+ * @param source - its absolute path.
+ * @param path - its relative path in the version.
+ * @returns whether the cache gave the digest; false when it holds none for the path or the file's status differs, as
+ *   it does for a file that is no longer regular.
+ */
+function addCachedFile(walk: Walk, source: string, path: string): boolean {
+  const cached = walk.cached.get(path)
+  if (cached === undefined) return false
+  const stats = lstatSync(source)
+  if (!stats.isFile() || !cacheMatches(cached, stats)) return false
+  admit(walk, stats.size)
+  walk.recorded.set(path, cached)
+  const entry: FileEntry = { type: 'file', path, digest: cached.digest, size: cached.size, executable: (stats.mode & 0o100) !== 0 }
+  walk.entries.push(entry)
+  walk.files.push({ entry, source })
+  return true
 }
 
 /**
@@ -894,22 +949,26 @@ async function walkDirectory(walk: Walk, root: string, absolute: string, directo
     return
   }
   admit(walk, 0)
-  const dirents = (await readdir(absolute, { withFileTypes: true })).sort((a, b) => compareCodeUnits(a.name, b.name))
+  const dirents = readdirSync(absolute, { withFileTypes: true }).sort((a, b) => compareCodeUnits(a.name, b.name))
   for (const dirent of dirents) {
+    if (performance.now() >= walk.pauseAt) await pause(walk)
     const path = directory === '' ? dirent.name : `${directory}/${dirent.name}`
+    // The directory's path is normalised and a name holds no separator, so joining them needs no normalising.
+    const child = absolute.endsWith(sep) ? `${absolute}${dirent.name}` : `${absolute}${sep}${dirent.name}`
     if (dirent.name.includes('\\')) {
       // A version path is `/`-separated and cannot hold a backslash, so a file named with one is not content.
       walk.skipped.push(path)
     } else if (dirent.isDirectory()) {
       const nested = dependencies || (dirent.name === DEPENDENCY_DIRECTORY && directory !== '')
-      if (walk.pruned.has(join(absolute, dirent.name))) continue
-      if (directory === '' && dirent.name === DEPENDENCY_DIRECTORY && walk.dependencies === 'include' && await readManifest(root) !== undefined && await holdsInstalledPackages(join(absolute, dirent.name))) {
+      if (walk.pruned.has(child)) continue
+      if (directory === '' && dirent.name === DEPENDENCY_DIRECTORY && walk.dependencies === 'include' && await readManifest(root) !== undefined && await holdsInstalledPackages(child)) {
         await addRuntimeModules(walk, root)
       } else if (dirent.name !== EXCLUDED_DIRECTORY) {
-        await walkDirectory(walk, root, join(absolute, dirent.name), path, nested)
+        await walkDirectory(walk, root, child, path, nested)
       }
     } else if (dirent.isFile()) {
-      await addFile(walk, join(absolute, dirent.name), path)
+      // Most files of a large folder have a cached digest, taken here without opening the file or awaiting a promise.
+      if (!addCachedFile(walk, child, path)) await addFile(walk, child, path)
     } else if (dirent.isSymbolicLink()) {
       await addLink(walk, root, absolute, path, walk.dependencies === 'include' || !dependencies)
     } else {
@@ -931,9 +990,10 @@ async function walkDirectory(walk: Walk, root: string, absolute: string, directo
 export async function scanFolder(folder: string, options: ScanOptions): Promise<ScannedFolder> {
   const now = options.now ?? Date.now
   const root = await realpath(folder)
+  const cached = options.cache === undefined ? undefined : await readCache(options.cache)
   const home = 'home' in options ? await realTarget(resolve(options.home)) ?? resolve(options.home) : undefined
   const walk: Walk = {
-    cached: options.cache === undefined ? new Map() : await readCache(options.cache),
+    cached: cached ?? new Map(),
     recorded: new Map(),
     settledBefore: now() - CACHE_SETTLE_MS,
     entries: [],
@@ -948,11 +1008,13 @@ export async function scanFolder(folder: string, options: ScanOptions): Promise<
     folder,
     limits: options.limits ?? CONTENT_LIMITS,
     pruned: new Set(),
+    pauseAt: performance.now() + SCAN_SLICE_MS,
     count: 0,
     bytes: 0,
   }
   await walkDirectory(walk, root, root, '', false)
-  if (options.cache !== undefined) {
+  // A cache that holds what the scan would record is not written again, so a read of an unchanged folder writes nothing.
+  if (options.cache !== undefined && (cached === undefined || !sameCache(cached, walk.recorded))) {
     const files = Object.fromEntries([...walk.recorded].sort(([a], [b]) => compareCodeUnits(a, b)))
     const cache: ScanCache = { schema: SCAN_CACHE_SCHEMA, files }
     await mkdir(dirname(options.cache), { recursive: true, mode: PRIVATE_DIR_MODE })
@@ -963,4 +1025,68 @@ export async function scanFolder(folder: string, options: ScanOptions): Promise<
     files: walk.files.sort((a, b) => compareCodeUnits(a.entry.path, b.entry.path)),
     skipped: walk.skipped.sort(compareCodeUnits),
   }
+}
+
+/** What {@link scanFile} found at a path of an active directory. */
+export type ScannedPath =
+  /** A regular file, hashed now. */
+  | { readonly kind: 'file', readonly file: ScannedFile }
+  /** Nothing the directory's scan would list as a file: no entry, a directory, or an entry below a link, a file or a `.git` directory. */
+  | { readonly kind: 'absent' }
+  /** An entry the directory's scan would list among its links or skipped entries: a symbolic link, socket, FIFO or device. */
+  | { readonly kind: 'skipped' }
+
+/**
+ * Read one path of an active directory as its scan ({@link scanFolder} with {@link ActiveScanOptions}) would: each
+ * directory above it must be a directory, not a link and not named `.git`, and a regular file is hashed from its bytes,
+ * never taken from a scan cache. The other entries of the directory are not read, so a problem elsewhere in it, or the
+ * directory passing the limits as a whole, is not seen.
+ * @param folder - the active directory.
+ * @param path - the `/`-separated relative path, free of empty, `.` and `..` segments.
+ * @param limits - the limits the one file is held to; {@link CONTENT_LIMITS} by default.
+ * @returns what the path holds.
+ * @throws {ChangesError} `CHANGED_WHILE_READING` when the file is replaced by a link or another kind, or grows, while it
+ *   is read; `CONTENT_TOO_LARGE` when the file passes the byte limit.
+ * @throws the filesystem error, such as `EACCES`, when an entry cannot be read.
+ */
+export async function scanFile(folder: string, path: string, limits: ScanLimits = CONTENT_LIMITS): Promise<ScannedPath> {
+  const segments = path.split('/')
+  for (const [index, segment] of segments.entries()) {
+    if (segment.includes('\\')) return index === segments.length - 1 ? { kind: 'skipped' } : { kind: 'absent' }
+    const absolute = join(folder, ...segments.slice(0, index + 1))
+    let stats: Stats
+    try {
+      stats = await lstat(absolute)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT' || (error as NodeJS.ErrnoException).code === 'ENOTDIR') return { kind: 'absent' }
+      throw error
+    }
+    if (index < segments.length - 1) {
+      if (!stats.isDirectory() || segment === EXCLUDED_DIRECTORY) return { kind: 'absent' }
+    } else if (stats.isDirectory()) {
+      return { kind: 'absent' }
+    } else if (!stats.isFile()) {
+      return { kind: 'skipped' }
+    }
+  }
+  const walk: Walk = {
+    cached: new Map(),
+    recorded: new Map(),
+    settledBefore: Number.NEGATIVE_INFINITY,
+    entries: [],
+    files: [],
+    skipped: [],
+    included: new Map(),
+    dependencies: 'active',
+    home: undefined,
+    runtimeModules: undefined,
+    folder,
+    limits: { entries: 1, bytes: limits.bytes },
+    pruned: new Set(),
+    pauseAt: Number.POSITIVE_INFINITY,
+    count: 0,
+    bytes: 0,
+  }
+  await addFile(walk, join(folder, ...segments), path)
+  return { kind: 'file', file: walk.files[0]! }
 }

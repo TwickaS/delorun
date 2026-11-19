@@ -379,16 +379,17 @@ describe('a key Delorun already has', () => {
 
   it('says where the key came from on the landing, for each source kind', async () => {
     const cases = [
-      [{ kind: 'environment', variable: 'DEEPSEEK_API_KEY' }, 'Connected · from DEEPSEEK_API_KEY in the environment Delorun started with'],
-      [{ kind: 'saved', variable: 'DEEPSEEK_API_KEY' }, 'Connected · saved by Delorun on this computer as DEEPSEEK_API_KEY'],
-      [{ kind: 'project-file', variable: 'DEEPSEEK_API_KEY' }, 'Connected · from DEEPSEEK_API_KEY in the .env file of the folder Delorun started in'],
-      [{ kind: 'home-file', variable: 'DEEPSEEK_API_KEY' }, 'Connected · from DEEPSEEK_API_KEY in the .env file in Delorun\'s home folder'],
-      [{ kind: 'unknown' }, en['providers.connected']],
-      [undefined, en['providers.connected']],
+      [{ kind: 'environment', variable: 'DEEPSEEK_API_KEY' }, 'From DEEPSEEK_API_KEY in the environment Delorun started with'],
+      [{ kind: 'saved', variable: 'DEEPSEEK_API_KEY' }, 'Saved by Delorun on this computer as DEEPSEEK_API_KEY'],
+      [{ kind: 'project-file', variable: 'DEEPSEEK_API_KEY' }, 'From DEEPSEEK_API_KEY in the .env file of the folder Delorun started in'],
+      [{ kind: 'home-file', variable: 'DEEPSEEK_API_KEY' }, 'From DEEPSEEK_API_KEY in the .env file in Delorun\'s home folder'],
+      [{ kind: 'unknown' }, 'Delorun already has a key for this provider'],
+      [undefined, 'Delorun already has a key for this provider'],
     ] as const
     for (const [source, line] of cases) {
       await mount({}, found(source))
       expect(screen.getByText(line)).toBeTruthy()
+      expect(screen.getByText(en['providers.connected'])).toBeTruthy()
       cleanup()
     }
   })
@@ -399,7 +400,7 @@ describe('a key Delorun already has', () => {
       { provider: 'openai', name: 'OpenAI', result: 'works', source: { kind: 'saved', variable: 'OPENAI_API_KEY' } },
     ] })
     expect(screen.getAllByText(en['providers.how'])).toHaveLength(1)
-    expect(screen.getAllByText(/^Connected ·/)).toHaveLength(2)
+    expect(screen.getAllByText(en['providers.connected'])).toHaveLength(2)
   })
 
   it('says it on the key\'s own screen too, in the full sentence', async () => {
@@ -458,7 +459,7 @@ describe('a key Delorun already has', () => {
 
   it('replaces a found key from the landing, then returns to the landing without a summary', async () => {
     const { save } = await mount({}, found({ kind: 'environment', variable: 'DEEPSEEK_API_KEY' }))
-    expect(screen.getByText('Connected · from DEEPSEEK_API_KEY in the environment Delorun started with')).toBeTruthy()
+    expect(screen.getByText('From DEEPSEEK_API_KEY in the environment Delorun started with')).toBeTruthy()
     await click(screen.getByRole('button', { name: en['providers.replace'] }))
     await type(screen.getByLabelText(en['providers.key']), 'sk-new-key')
     await flush(TEST_DELAY_MS)

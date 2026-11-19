@@ -18,8 +18,7 @@ import { READ_MAX_BYTES, READ_MAX_LINE_LENGTH } from './read-render.ts'
 import { applyWriteConsent } from './consent.ts'
 import { FsSandboxController } from './sandbox.ts'
 
-export { FS_CONSENT_DENIED, WriteConsentRefusedError, applyWriteConsent, reviewWriteConsent } from './consent.ts'
-export { protectedReadCheck, refuseProtectedRead } from './read-target.ts'
+export { WriteConsentRefusedError } from './consent.ts'
 export type { WriteConsentArgs, WriteConsentDiff, WriteConsentRequest, WriteConsentReview, WriteConsentService, WriteConsentTool } from './consent.ts'
 
 /** Cordis plugin name used by loader diagnostics. */

@@ -391,7 +391,7 @@ export const ChatRow = memo(function ChatRow(props: ChatRowProps) {
     onPointerDown: drag?.onPointerDown,
   }
   const dropBadge = drag?.verb === null || drag?.verb === undefined ? null : <DropBadge verb={drag.verb} t={t} />
-  const item = { 'data-drag-id': chat.id, 'data-dragging': drag?.dragging === true, 'data-over': drag?.over === true }
+  const item = { 'data-drag-id': drag === undefined ? undefined : chat.id, 'data-dragging': drag?.dragging === true, 'data-over': drag?.over === true }
 
   const details = <ChatDetails chat={chat} color={color} />
   const wrap = (row: ReactNode): ReactNode => (

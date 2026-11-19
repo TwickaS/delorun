@@ -37,12 +37,13 @@ interface Setup {
   readonly failures: Array<readonly [string, unknown]>
 }
 
-async function setup(options: { application?: string, archive?: (signal?: AbortSignal) => Promise<Uint8Array>, tamper?: (bytes: Uint8Array) => Uint8Array } = {}): Promise<Setup> {
+async function setup(options: { application?: string, archive?: (signal?: AbortSignal) => Promise<Uint8Array>, tamper?: (bytes: Uint8Array) => Uint8Array, names?: readonly string[], install?: InstallBundle, verifyCacheMs?: number } = {}): Promise<Setup> {
   await fixture.install('0.1.0')
   const paths = new StorePaths(fixture.home, PLATFORM)
   const manifestBytes = readFileSync(paths.releaseFiles(V1).manifest)
-  const built = await Promise.all(['one', 'two'].map(name => buildPackArchive(`delorun-0.1.0-pack-${name}.any.tar.gz`, [text('package.json', `{"name":"${name}","version":"1.0.0","type":"module"}`)], 1_800_000_000)))
-  const entries = ['one', 'two'].map((name, index) => ({ name, version: '1.0.0', experimental: name === 'two', variants: { any: { ...built[index]!.variant, external: [], peers: [] } } }))
+  const names = options.names ?? ['one', 'two']
+  const built = await Promise.all(names.map(name => buildPackArchive(`delorun-0.1.0-pack-${name}.any.tar.gz`, [text('package.json', `{"name":"${name}","version":"1.0.0","type":"module"}`)], 1_800_000_000)))
+  const entries = names.map((name, index) => ({ name, version: '1.0.0', experimental: name === 'two', variants: { any: { ...built[index]!.variant, external: [], peers: [] } } }))
   const signed = { schema: RELEASE_SCHEMAS.packs, version: '0.1.0', manifest: createHash('sha256').update(manifestBytes).digest('hex'), packs: entries }
   const packsBytes = Buffer.from(`${JSON.stringify(signEnvelope({ signed: toJsonValue(signed), signatures: [] }, [fixture.keys.targets]), undefined, 2)}\n`)
   const served = new Map<string, Uint8Array>([['delorun-0.1.0.packs.json', packsBytes], ['delorun-0.1.0.packs.log.json', Buffer.from('{}')]])
@@ -58,11 +59,11 @@ async function setup(options: { application?: string, archive?: (signal?: AbortS
   const chats = { count: 0 }
   const installBundle: InstallBundle = (spec, opts) => {
     installs.push({ spec, requestId: opts.requestId, expected: opts.expected })
-    return Promise.resolve({ application: options.application ?? 'applied' })
+    return options.install === undefined ? Promise.resolve({ application: options.application ?? 'applied' }) : options.install(spec, opts)
   }
   const file = join(fixture.home, 'run', 'default', 'installs.json')
   const failures: Array<readonly [string, unknown]> = []
-  const hub = new PacksHub({ environment, installBundle, runningChats: () => chats.count, reload: () => { reloads.push(Date.now()); return Promise.resolve() }, file, concurrency: 2, progressIntervalMs: 0, logFailure: (key, error) => { failures.push([key, error]) }, requestId: key => `pack:${key}` })
+  const hub = new PacksHub({ environment, installBundle, runningChats: () => chats.count, reload: () => { reloads.push(Date.now()); return Promise.resolve() }, file, concurrency: 2, progressIntervalMs: 0, verifyCacheMs: options.verifyCacheMs ?? 0, logFailure: (key, error) => { failures.push([key, error]) }, requestId: key => `pack:${key}` })
   return { hub, installs, reloads, file, paths, chats, files, failures }
 }
 
@@ -98,6 +99,33 @@ describe('the pack hub', () => {
     // The link names a pack that matched its signed list; a pack changed since the snapshot has no target after the next one.
     expect(hub.installedTarget('two', '0.1.0')).toBeUndefined()
     expect(hub.installedTarget('two', '0.1.0')).toBeUndefined()
+  })
+
+  it('installs eight packs one at a time through the plugin manager, so none waits out the profile lock', async () => {
+    let held: Promise<void> | undefined
+    let most = 0
+    let running = 0
+    // Each install holds the profile write lock for longer than another install waits for it, as a large pack does.
+    const install: InstallBundle = async () => {
+      if (held !== undefined && !await Promise.race([held.then(() => true), sleep(100).then(() => false)])) {
+        throw new Error('atomic-write: timed out waiting for the writer lock')
+      }
+      running += 1
+      most = Math.max(most, running)
+      const release = sleep(300)
+      held = release
+      await release
+      running -= 1
+      return { application: 'applied' }
+    }
+    const names = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight']
+    const { hub, installs, failures } = await setup({ names, install })
+    await hub.enqueue(names)
+    const snapshot = await until(hub, each => each.queue.length === names.length && each.queue.every(item => item.state === 'ready' || item.state === 'failed'))
+    expect(failures).toEqual([])
+    expect(snapshot.queue.filter(item => item.state !== 'ready')).toEqual([])
+    expect(installs.map(each => each.expected.name).sort()).toEqual([...names].sort())
+    expect(most).toBe(1)
   })
 
   it('refuses a pack whose archive differs from the signed packs file by one byte, installs nothing and asks the plugin manager nothing', async () => {
@@ -173,6 +201,36 @@ describe('the pack hub', () => {
     expect(hub.installedTarget('one', '0.1.0')).toBeUndefined()
   })
 
+  it('reads and hashes a pack\'s files once per cache period, however many snapshots the queue asks for', async () => {
+    const { hub, paths } = await setup({ verifyCacheMs: 60_000 })
+    await hub.enqueue(['one'])
+    await until(hub, each => each.queue[0]?.state === 'ready')
+    makeWritable(paths.pack(V1, 'one'))
+    writeFileSync(join(paths.pack(V1, 'one'), 'package', 'package.json'), '{"name":"one","version":"9.9.9","type":"module"}')
+    // Within the period the earlier check stands; this is what keeps a progress report from hashing every pack again.
+    expect((await hub.snapshot()).packs.find(pack => pack.name === 'one')?.availability).toBe('installed')
+    expect(hub.installedTarget('one', '0.1.0')).toBeDefined()
+  })
+
+  it('checks a pack\'s files afresh for an install, whatever the stored check says, and stops offering a changed pack', async () => {
+    const { hub, paths } = await setup({ verifyCacheMs: 60_000 })
+    await hub.enqueue(['one'])
+    await until(hub, each => each.queue[0]?.state === 'ready')
+    expect(await hub.intactNow('one')).toBe(true)
+    makeWritable(paths.pack(V1, 'one'))
+    writeFileSync(join(paths.pack(V1, 'one'), 'package', 'package.json'), '{"name":"one","version":"9.9.9","type":"module"}')
+    expect(await hub.intactNow('one')).toBe(false)
+    expect(hub.installedTarget('one', '0.1.0')).toBeUndefined()
+    expect(await hub.intactNow('nope')).toBe(false)
+  })
+
+  it('keeps the plugin manager\'s own words when it refuses a pack', async () => {
+    const { hub } = await setup({ install: () => Promise.resolve({ application: 'failed', error: { code: 'operation-error', diagnostic: 'Protection holds this add for review.' } }) })
+    await hub.enqueue(['one'])
+    const snapshot = await until(hub, each => each.queue[0]?.state === 'failed')
+    expect(snapshot.queue[0]?.failure?.message).toBe('Protection holds this add for review.')
+  })
+
   it('refuses an install once an update has switched away from this Host\'s release, changing nothing in the profile', async () => {
     const { hub, paths, installs } = await setup()
     await fixture.install('0.2.0')
@@ -221,7 +279,7 @@ describe('the pack hub', () => {
   })
 
   it('says why a Host without an installed release has no packs', async () => {
-    const hub = new PacksHub({ environment: { unsupported: 'not an installation' }, installBundle: () => Promise.reject(new Error('unused')), runningChats: () => 0, reload: () => Promise.resolve(), file: join(fixture.home, 'run', 'q.json'), concurrency: 1, progressIntervalMs: 0, logFailure: () => undefined, requestId: key => key })
+    const hub = new PacksHub({ environment: { unsupported: 'not an installation' }, installBundle: () => Promise.reject(new Error('unused')), runningChats: () => 0, reload: () => Promise.resolve(), file: join(fixture.home, 'run', 'q.json'), concurrency: 1, progressIntervalMs: 0, verifyCacheMs: 0, logFailure: () => undefined, requestId: key => key })
     expect(await hub.snapshot()).toEqual({ supported: false, reason: 'not an installation', packs: [], queue: [] })
     expect(await hub.enqueue(['one'])).toMatchObject({ ok: false, error: { code: 'unsupported' } })
   })

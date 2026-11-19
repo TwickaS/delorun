@@ -18,14 +18,15 @@ import { chmod, lstat, mkdir, open, readdir, rename, rm } from 'node:fs/promises
 import { dirname, join } from 'node:path'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { PRIVATE_DIR_MODE } from '@delorun/contract-home-layout'
+import { readProtectedFile, writeProtectedFile } from '@delorun/home'
 import { boundedDiff, compareVersions, reviewInputOf } from './diff.ts'
 import { ChangesError, isChangesError } from './errors.ts'
 import { changeId } from './ids.ts'
-import { harnessCopyDirectory, harnessRuntimeDirectory, harnessScanCachePath, versionsDirectory } from './paths.ts'
-import { findEntry, isHarnessPath, readHarnessLog, readHarnessRecord, readProtection, requirePresence, withEntry, withHarnessLock, writeHarnessLog, writeHarnessRecord, type AtComputer } from './records.ts'
+import { harnessCopyDirectory, harnessPendingPath, harnessRuntimeDirectory, harnessScanCachePath, versionsDirectory } from './paths.ts'
+import { decisionOf, findEntry, isHarnessPath, readHarnessLog, readHarnessRecord, readProtection, requirePresence, withEntry, withoutDecision, withHarnessLock, writeHarnessLog, writeHarnessRecord, type AtComputer } from './records.ts'
 import { reviewChange } from './review.ts'
 import { readObject, readVersion, storeEmptyVersion, storeFileVersion } from './store.ts'
-import { byteLimitWords, compareCodeUnits, CONTENT_LIMITS, openRegularFile, readChunks, scanFolder, versionOf, type FileEntry, type ScanLimits, type ScannedFolder } from './tree.ts'
+import { byteLimitWords, compareCodeUnits, CONTENT_LIMITS, openRegularFile, readChunks, scanFile, scanFolder, versionOf, type FileEntry, type ScanLimits, type ScannedFolder, type ScannedPath } from './tree.ts'
 import type { ApprovedHarnessFile, BoundedDiff, ChangeEntry, ChangeId, ChangeLog, ContentVersion, FileChange, HarnessRecord, ObjectDigest, RiskSummary } from './types.ts'
 
 /** One file of the signed release, as its verified signed file list names it. */
@@ -280,6 +281,17 @@ async function expectedOf(home: string, record: HarnessRecord, signed: ReadonlyM
   const file = signed.get(path)
   const approved = Object.hasOwn(record.files, path) ? record.files[path] : undefined
   if (approved !== undefined) return { content: await fileContentOf(home, approved.version), approved: approved.version, ...file === undefined ? {} : { signed: file } }
+  return signedExpected(signed, path)
+}
+
+/**
+ * What the runtime runs for a path the record holds no approved content for: the signed file, or none.
+ * @param signed - the signed files under `app/`.
+ * @param path - the path.
+ * @returns the expected content and where it comes from.
+ */
+function signedExpected(signed: ReadonlyMap<string, SignedFile>, path: string): Expected {
+  const file = signed.get(path)
   return file === undefined ? { content: undefined } : { content: signedContent(file), signed: file }
 }
 
@@ -467,39 +479,133 @@ async function locatePending(ctx: HarnessContext, options: HarnessReadOptions = 
   const skipped = [...scanned.skipped]
   const keptBeside: string[] = []
   const present = new Map<string, { readonly source: string, readonly entry: FileEntry }>()
-  const sources = new Map(scanned.files.map(file => [file.entry.path, file.source]))
-  for (const entry of scanned.entries) {
-    if (entry.type === 'link' || !isHarnessPath(entry.path)) skipped.push(entry.path)
-    else if (entry.path.endsWith(KEPT_BESIDE_SUFFIX)) keptBeside.push(entry.path)
-    else present.set(entry.path, { source: sources.get(entry.path)!, entry })
+  for (const entry of scanned.entries) if (entry.type === 'link') skipped.push(entry.path)
+  for (const file of scanned.files) {
+    const { path } = file.entry
+    if (!isHarnessPath(path)) skipped.push(path)
+    else if (path.endsWith(KEPT_BESIDE_SUFFIX)) keptBeside.push(path)
+    else present.set(path, file)
   }
   const record = await readHarnessRecord(ctx.home, ctx.runtime)
   const signed = appFiles(await ctx.signed())
   const expectedPaths = [...signed.keys()].filter(path => !Object.hasOwn(record.files, path))
   for (const path of Object.keys(record.files)) expectedPaths.push(path)
   const skippedPaths = new Set(skipped)
-  const paths = [...new Set([...present.keys(), ...expectedPaths])].filter(path => !skippedPaths.has(path)).sort(compareCodeUnits)
+  // The copy's files come from its scan in path order, so only the paths it lacks are sorted in.
+  const copied = [...present.keys()].filter(path => !skippedPaths.has(path))
+  const missing = expectedPaths.filter(path => !present.has(path) && !skippedPaths.has(path))
+  const paths = missing.length === 0 ? copied : [...copied, ...missing].sort(compareCodeUnits)
   const located: Located[] = []
   for (const path of paths) {
-    const copied = present.get(path)
-    const expected = await expectedOf(ctx.home, record, signed, path)
-    const current: Content = copied === undefined ? undefined : { digest: copied.entry.digest, size: copied.entry.size, executable: copied.entry.executable }
-    if (sameContent(current, expected.content)) continue
-    const from = versionIdOf(path, expected.content)
-    const to = versionIdOf(path, current)
-    located.push({
-      id: changeId('harness-edit', { file: path, runtime: ctx.runtime }, from, to),
-      kind: 'harness-edit',
-      runtime: ctx.runtime,
-      file: path,
-      status: expected.content === undefined ? 'added' : current === undefined ? 'removed' : 'modified',
-      from,
-      to,
-      expected,
-      ...copied === undefined ? {} : { copied },
-    })
+    // Most paths have no approved content, and reading the store only for those keeps a read of a large copy short.
+    const expected = Object.hasOwn(record.files, path) ? await expectedOf(ctx.home, record, signed, path) : signedExpected(signed, path)
+    const change = locatedOf(ctx, path, expected, present.get(path))
+    if (change !== undefined) located.push(change)
   }
+  if (options.cache !== false) await writePendingFiles(ctx, located)
   return { copy: join(copy, 'app'), changes: located.map(publicChange), located, skipped: skipped.sort(compareCodeUnits), keptBeside }
+}
+
+/**
+ * The change of one file of the copy, or undefined when the copy holds what the runtime runs for it.
+ * @param ctx - the runtime.
+ * @param path - the file.
+ * @param expected - what the runtime runs for it.
+ * @param copied - the copy's file, when the copy holds one.
+ * @returns the change with where its bytes come from.
+ */
+function locatedOf(ctx: HarnessContext, path: string, expected: Expected, copied: Located['copied']): Located | undefined {
+  const current: Content = copied === undefined ? undefined : { digest: copied.entry.digest, size: copied.entry.size, executable: copied.entry.executable }
+  if (sameContent(current, expected.content)) return undefined
+  const from = versionIdOf(path, expected.content)
+  const to = versionIdOf(path, current)
+  return {
+    id: changeId('harness-edit', { file: path, runtime: ctx.runtime }, from, to),
+    kind: 'harness-edit',
+    runtime: ctx.runtime,
+    file: path,
+    status: expected.content === undefined ? 'added' : current === undefined ? 'removed' : 'modified',
+    from,
+    to,
+    expected,
+    ...copied === undefined ? {} : { copied },
+  }
+}
+
+/** Schema tag of the file naming the file of each change the last read of a copy found. */
+export const HARNESS_PENDING_SCHEMA = 'delorun.changes-harness-pending/1'
+
+/**
+ * Name, by change id, the file of each change a read of the copy found, so an action on one change reads that file
+ * alone ({@link locateNamed}). The file is rewritten only when the changes differ from the ones it names. It is a hint
+ * an action checks, so a file that cannot be written leaves the read's answer as it is: an action then reads the whole
+ * copy.
+ * @param ctx - the runtime.
+ * @param located - the changes.
+ */
+async function writePendingFiles(ctx: HarnessContext, located: readonly Located[]): Promise<void> {
+  const path = harnessPendingPath(ctx.home, ctx.runtime)
+  const text = `${JSON.stringify({ schema: HARNESS_PENDING_SCHEMA, files: Object.fromEntries(located.map(change => [change.id, change.file])) })}\n`
+  try {
+    if ((await readProtectedFile(path)).toString('utf8') === text) return
+  } catch {
+    // Any read error (a missing file, a refused mode): the file is written below.
+  }
+  try {
+    await writeProtectedFile(path, text)
+  } catch {
+    // Any write error (a full disk, a directory at the path): the file only spares actions a read of the whole copy, and a stale one names files an action checks again.
+  }
+}
+
+/**
+ * The file the last read of the copy found a change id's change in, as the pending file names it. Any failure to read
+ * it, or text Delorun did not write, gives none.
+ * @param ctx - the runtime.
+ * @param id - the change id.
+ * @returns the file, a harness path, or undefined.
+ */
+async function pendingFileOf(ctx: HarnessContext, id: ChangeId): Promise<string | undefined> {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse((await readProtectedFile(harnessPendingPath(ctx.home, ctx.runtime))).toString('utf8'))
+  } catch {
+    // Any read or JSON error (a missing file, a refused mode, text Delorun did not write): the caller reads the whole copy.
+    return undefined
+  }
+  const pending = parsed as { readonly schema?: unknown, readonly files?: unknown } | null
+  if (pending?.schema !== HARNESS_PENDING_SCHEMA || typeof pending.files !== 'object' || pending.files === null || !Object.hasOwn(pending.files, id)) return undefined
+  const file = (pending.files as Readonly<Record<string, unknown>>)[id]
+  return typeof file === 'string' && isHarnessPath(file) ? file : undefined
+}
+
+/**
+ * The change with an id, located from the one file the pending file names for it ({@link pendingFileOf}): the copy's
+ * file is read and hashed now, never taken from the scan cache, and the change is the id's only when computing it
+ * again gives the id. The rest of the copy is not read, so a change is found though another file of the copy cannot be
+ * read or the copy passes the scan's limits as a whole.
+ * @param ctx - the runtime.
+ * @param id - the change id.
+ * @returns the change, or undefined when the pending file names no file for the id, the file holds another change now,
+ *   or it cannot be read; the caller then reads the whole copy, which reports what it finds.
+ * @throws {ChangesError} `RECORD_UNREADABLE` or `STORE_CORRUPT`, and the signed installation's failure, as reading the whole copy does.
+ */
+async function locateNamed(ctx: HarnessContext, id: ChangeId): Promise<Located | undefined> {
+  const path = await pendingFileOf(ctx, id)
+  if (path === undefined || path.endsWith(KEPT_BESIDE_SUFFIX)) return undefined
+  const copy = harnessCopyDirectory(ctx.home, ctx.runtime)
+  let scanned: ScannedPath | undefined
+  try {
+    scanned = (await lstat(copy)).isDirectory() ? await scanFile(copy, path, ctx.limits) : undefined
+  } catch {
+    // Any error reading the copy (none there, an entry that cannot be read, a file that changed while it was read or passes the limits): the whole copy's read meets it and reports it with its refusal.
+    return undefined
+  }
+  if (scanned === undefined || scanned.kind === 'skipped') return undefined
+  const record = await readHarnessRecord(ctx.home, ctx.runtime)
+  const signed = appFiles(await ctx.signed())
+  const change = locatedOf(ctx, path, await expectedOf(ctx.home, record, signed, path), scanned.kind === 'file' ? scanned.file : undefined)
+  return change?.id === id ? change : undefined
 }
 
 /**
@@ -629,6 +735,8 @@ type Found =
 async function find(ctx: HarnessContext, log: ChangeLog, id: ChangeId): Promise<Found | undefined> {
   const entry = findEntry(log, id)
   if (entry !== undefined && entry.state !== 'discarded') return { kind: 'logged', entry }
+  const named = await locateNamed(ctx, id)
+  if (named !== undefined) return { kind: 'pending', change: named }
   const pending = await locatePending(ctx)
   const change = pending.located.find(candidate => candidate.id === id)
   if (change !== undefined) return { kind: 'pending', change }
@@ -661,7 +769,7 @@ export async function findHarnessChange(ctx: HarnessContext, id: ChangeId): Prom
  * @throws {ChangesError} `CHANGED_WHILE_READING`, `RUNTIME_CHANGED` or `STORE_CORRUPT` as reading both sides does.
  */
 export async function showHarnessChange(ctx: HarnessContext, id: ChangeId): Promise<HarnessReview | undefined> {
-  const change = (await locatePending(ctx)).located.find(candidate => candidate.id === id)
+  const change = await locateNamed(ctx, id) ?? (await locatePending(ctx)).located.find(candidate => candidate.id === id)
   if (change === undefined) return undefined
   await storeSides(ctx, change)
   return reviewHarnessChange(ctx.home, publicChange(change))
@@ -747,15 +855,22 @@ async function currentVersion(ctx: HarnessContext, record: HarnessRecord, path: 
  * @param ctx - the runtime.
  * @param id - the change id the person reviewed.
  * @param presence - proof that the person is at their computer.
+ * @param options - `reviewedTo`, the full content version the review showed as the change's new content; the studio
+ *   sends it, because the id binds that content through a truncated digest only.
  * @returns the change's log entry.
  * @throws {ChangesError} `NOT_AT_COMPUTER` for a proof the attest functions did not issue; `CHANGED_SINCE_REVIEW` when
- *   the copy no longer holds what the id names; `UNKNOWN_CHANGE`; `NOT_ALLOWED` for a change decided already.
+ *   the copy no longer holds what the id names, or the change's new content is not `reviewedTo`; `UNKNOWN_CHANGE`;
+ *   `NOT_ALLOWED` for a change decided already.
  */
-export async function applyHarnessChange(ctx: HarnessContext, id: ChangeId, presence: AtComputer): Promise<ChangeEntry> {
+export async function applyHarnessChange(ctx: HarnessContext, id: ChangeId, presence: AtComputer, options: { readonly reviewedTo?: ContentVersion } = {}): Promise<ChangeEntry> {
   requirePresence(presence, id)
   return withHarnessLock(ctx.home, async () => {
     const log = await readHarnessLog(ctx.home)
     const found = await requireFound(ctx, log, id)
+    const to = found.kind === 'pending' ? found.change.to : found.entry.to
+    if (options.reviewedTo !== undefined && to !== options.reviewedTo) {
+      throw new ChangesError('CHANGED_SINCE_REVIEW', id, `Change ${id} does not hold the content you were shown; look at it again.`)
+    }
     const at = timeOf(ctx)
     if (found.kind === 'logged') {
       const { entry } = found
@@ -765,7 +880,7 @@ export async function applyHarnessChange(ctx: HarnessContext, id: ChangeId, pres
         throw new ChangesError('NOT_ALLOWED', id, `Delorun no longer has what change ${id} applied, so there is nothing to apply again. See the changes: delorun changes list`)
       }
       const { leftOut: _leftOut, lastFailure: _lastFailure, ...applied } = entry
-      const done: ChangeEntry = { ...applied, state: 'applied', decidedAt: at, decidedFrom: presence.kind }
+      const done: ChangeEntry = { ...withoutDecision(applied), state: 'applied', ...decisionOf(at, presence) }
       await writeHarnessLog(ctx.home, withEntry(log, done))
       return done
     }
@@ -773,7 +888,7 @@ export async function applyHarnessChange(ctx: HarnessContext, id: ChangeId, pres
     await storeSides(ctx, change)
     const record = await readHarnessRecord(ctx.home, ctx.runtime)
     await writeHarnessRecord(ctx.home, await approving(ctx, record, change.file, change.to, id, at))
-    const done: ChangeEntry = { ...pendingEntry(change, findEntry(log, id)?.createdAt ?? at), state: 'applied', decidedAt: at, decidedFrom: presence.kind }
+    const done: ChangeEntry = { ...pendingEntry(change, findEntry(log, id)?.createdAt ?? at), state: 'applied', ...decisionOf(at, presence) }
     await writeHarnessLog(ctx.home, withEntry(log, done))
     return done
   })
@@ -878,7 +993,7 @@ async function discardLocated(ctx: HarnessContext, change: Located, at: string, 
   if (expected.approved !== undefined) await putInCopy(ctx.home, copy, change.file, expected.approved)
   else if (expected.signed === undefined) await rm(join(copy, ...change.file.split('/')), { force: true, recursive: true })
   else await writeCopyFile(join(copy, ...change.file.split('/')), await readSignedFile(await ctx.signed(), expected.signed), expected.signed.executable)
-  return { ...pendingEntry(change, findEntry(log, change.id)?.createdAt ?? at), state: 'discarded', decidedAt: at, decidedFrom: presence.kind }
+  return { ...pendingEntry(change, findEntry(log, change.id)?.createdAt ?? at), state: 'discarded', ...decisionOf(at, presence) }
 }
 
 /**
@@ -934,7 +1049,7 @@ async function undoEntry(ctx: HarnessContext, record: HarnessRecord, entry: Chan
   const copy = harnessCopyDirectory(ctx.home, ctx.runtime)
   if (await pathExists(copy)) await putInCopy(ctx.home, copy, file, from)
   const { lastFailure: _lastFailure, ...rest } = entry
-  return { record: next, entry: { ...rest, state: 'undone', decidedAt: at, decidedFrom: presence.kind } }
+  return { record: next, entry: { ...withoutDecision(rest), state: 'undone', ...decisionOf(at, presence) } }
 }
 
 /**
@@ -964,7 +1079,7 @@ export async function discardAllHarnessChanges(ctx: HarnessContext, presence: At
       unread = unreadReason(error)
     }
     for (const change of located) {
-      const entry: ChangeEntry = { ...pendingEntry(change, findEntry(log, change.id)?.createdAt ?? at), state: 'discarded', decidedAt: at, decidedFrom: presence.kind }
+      const entry: ChangeEntry = { ...pendingEntry(change, findEntry(log, change.id)?.createdAt ?? at), state: 'discarded', ...decisionOf(at, presence) }
       discarded.push(entry)
       log = withEntry(log, entry)
     }
@@ -976,7 +1091,7 @@ export async function discardAllHarnessChanges(ctx: HarnessContext, presence: At
       const approved = Object.hasOwn(record.files, file) ? record.files[file] : undefined
       if (approved?.version !== entry.to) continue
       const { lastFailure: _lastFailure, ...rest } = entry
-      undone.push({ ...rest, state: 'undone', decidedAt: at, decidedFrom: presence.kind })
+      undone.push({ ...withoutDecision(rest), state: 'undone', ...decisionOf(at, presence) })
     }
     for (const entry of undone) log = withEntry(log, entry)
     await writeHarnessRecord(ctx.home, { ...record, files: {} })
@@ -1090,4 +1205,16 @@ export function loggedHarnessChange(entry: ChangeEntry): HarnessChange | undefin
   if (entry.kind !== 'harness-edit' || file === undefined || runtime === undefined || entry.from === undefined || entry.to === undefined) return undefined
   const empty = versionOf([])
   return { id: entry.id, kind: 'harness-edit', runtime, file, status: entry.from === empty ? 'added' : entry.to === empty ? 'removed' : 'modified', from: entry.from, to: entry.to }
+}
+
+/**
+ * The running runtime's harness as the home process gives it to the Host (the `changesHarness` service), so the studio's
+ * Changes routes decide changes to Delorun itself against the signed file list the home process verified.
+ */
+export interface ChangesHarnessHost {
+  /**
+   * The running runtime's harness.
+   * @returns it, or undefined when Delorun does not run an installed release from the runtime store.
+   */
+  context(): HarnessContext | undefined
 }

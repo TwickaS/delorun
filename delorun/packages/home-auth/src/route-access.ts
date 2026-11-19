@@ -18,9 +18,12 @@ import { COMPUTER_ONLY_ROW_MODULES } from './reach-access.ts'
  * - `U`: an unlocked device only; a locked one is answered `403 ELEVATION_REQUIRED` (`gateByUnlock`);
  * - `C`: only the computer; a device is refused (`403 LOOPBACK_REQUIRED`) whatever its unlock;
  * - `K`: a device that holds no PIN lock (`admitKeyDevice`): model keys are tested, never shown;
+ * - `F`: an unlocked device only while Phone powers is Full, and only with a code or a PIN unlock (`gateByUnlock` with
+ *   `phonePowers: 'full'`); under Careful a device is refused (`403 LOOPBACK_REQUIRED`). Moving a `U` route to Full is its
+ *   row here and that option at its gate, which `tests/route-access.spec.ts` keeps in step;
  * - `R+U`: one registration serves both levels, by route (see the reason).
  */
-export type RouteLevel = 'R' | 'U' | 'C' | 'K' | 'R+U'
+export type RouteLevel = 'R' | 'U' | 'F' | 'C' | 'K' | 'R+U'
 
 /** One route's level and the reason for it. */
 export interface RouteAccess {
@@ -28,10 +31,17 @@ export interface RouteAccess {
   readonly reason: string
 }
 
-const READ = (reason: string): RouteAccess => ({ level: 'R', reason })
+/**
+ * @param level - a level.
+ * @returns the row builder for that level.
+ */
+const at = <L extends RouteLevel>(level: L) => (reason: string): RouteAccess & { readonly level: L } => ({ level, reason })
+const READ = at('R')
 /** Level `R` for a write that changes only an everyday setting or the person's own organising, so it needs no unlock. */
-const EVERYDAY = (reason: string): RouteAccess => ({ level: 'R', reason })
-const UNLOCKED = (reason: string): RouteAccess => ({ level: 'U', reason })
+const EVERYDAY = at('R')
+const UNLOCKED = at('U')
+const FULL = at('F')
+const COMPUTER = at('C')
 
 /**
  * Every registered plugin Fetch route, by source file (relative to `delorun/packages`) and the expression its `path`
@@ -48,8 +58,14 @@ export const PLUGIN_ROUTE_ACCESS: Readonly<Record<string, Readonly<Record<string
     'MCP_CONSENT_ROUTES.decline': READ('declining only withholds consent'),
     'MCP_CONSENT_ROUTES.revoke': READ('revoking only withdraws consent'),
   },
+  'browser-use-browse/src/routes.ts': {
+    'REAL_BROWSER_ROUTES.state': READ('reads whether a chat may use the person\'s own browser'),
+    'REAL_BROWSER_ROUTES.end': READ('ending the grant only narrows what the agent may reach'),
+    'REAL_BROWSER_ROUTES.away': UNLOCKED('lets runs the person did not start use their own browser, with their sign-ins; the approval grace does not open it, as it does not give the grant'),
+  },
   'plugin-delegation-consent/src/routes.ts': {
     'DELEGATION_CONSENT_ROUTES.grants': READ('lists which agents may work in which workspaces'),
+    'DELEGATION_CONSENT_ROUTES.levels': READ('reads each external agent\'s saved level and what its sandbox lacks; it changes no level, which only a settings write does, and the reach policy ranks that'),
     'DELEGATION_CONSENT_ROUTES.allow': UNLOCKED('allowing lets an external agent work in a workspace'),
     'DELEGATION_CONSENT_ROUTES.revoke': READ('revoking only withdraws a grant'),
   },
@@ -63,6 +79,9 @@ export const PLUGIN_ROUTE_ACCESS: Readonly<Record<string, Readonly<Record<string
   'plugin-permission-defaults/src/command-network.ts': {
     NETWORK_LIST_PATH: READ('reads a workspace\'s network allowlist'),
     NETWORK_SET_PATH: UNLOCKED('a looser allowlist lets commands reach more of the network'),
+  },
+  'bundle-local/src/browse-pairing.ts': {
+    BROWSE_PAIR_ROUTE: { level: 'C', reason: 'pairing runs browse on the computer and shows a code that links the person\'s own Chrome, with their sign-ins' },
   },
   'bundle-local/src/profile-versions.ts': {
     'PROFILE_VERSION_ROUTES.list': READ('lists the saved setup versions'),
@@ -99,11 +118,22 @@ export const PLUGIN_ROUTE_ACCESS: Readonly<Record<string, Readonly<Record<string
   'plugin-packs/src/routes.ts': {
     path: { level: 'R+U', reason: 'listing, cancelling an install and clearing a failed row change nothing installed and need no unlock; adding, retrying and removing a plugin pack write code the Host will run, so they need one' },
   },
-  'plugin-onboarding/src/index.ts': {
-    WORKSPACE_NOTICE_PATH: READ('names the files set aside, not their paths'),
+  'plugin-new-workspace/src/index.ts': {
+    PLACES_PATH: UNLOCKED('lists the computer\'s recent workspaces and folders by path'),
+    SEARCH_PATH: UNLOCKED('walks the computer\'s folders and names them by path'),
+    PREVIEW_PATH: UNLOCKED('names the entries and the Git branch of a folder on the computer'),
     ADD_WORKSPACE_PATH: UNLOCKED('a workspace is what the model may write'),
+    CREATE_PATH: UNLOCKED('makes a folder on the computer, runs Git in it and adds it as a workspace'),
     CLONE_PATH: UNLOCKED('cloning writes a repository into a folder on the computer'),
     CLONE_STATUS_PATH: UNLOCKED('reports the clone the unlocked device started'),
+    DEFAULTS_PATH: UNLOCKED('reads a workspace\'s model and browser defaults by its path'),
+    SET_DEFAULTS_PATH: UNLOCKED('sets the model and browser every new chat in a workspace starts with'),
+  },
+  'preview-flags/src/index.ts': {
+    'PREVIEW_FLAG_ROUTES.list': READ('names the declared preview flags and whether each is on, with no setting or data'),
+  },
+  'plugin-onboarding/src/index.ts': {
+    WORKSPACE_NOTICE_PATH: READ('names the files set aside, not their paths'),
     SETUP_RECORD_PATH: READ('reads which setup steps are done'),
     READINESS_PATH: READ('reads what the computer has installed for setup'),
     KEY_TEST_PATH: { level: 'K', reason: 'tests the model keys and names each provider\'s result, never a key; under PIN mode only an unlocked page' },
@@ -160,17 +190,24 @@ export const COMPUTER_ONLY: readonly ComputerOnlyRow[] = [
   AUTH('/auth/pin/options', 'a phone must not choose the rules of its own unlock secret'),
   AUTH('/auth/pin/off', 'a phone must not turn its own unlock gate off'),
   AUTH('/auth/pin/resume', 'a phone must not lift a brute-force pause on its own unlock'),
-  { kind: 'changes-route', id: '/delorun/changes actions and setup', reason: 'apply, discard, undo and setup attest the person at the computer in the change log; the reveal action opens the computer\'s file manager' },
+  AUTH('/auth/phone-powers (POST)', 'a phone must not widen what a phone may do; any device reads the level'),
+  { kind: 'mode', id: 'terminal/* under Phone powers Careful', reason: 'a terminal is a shell outside the sandbox that runs the same delorun changes commands Careful keeps at the computer' },
+  { kind: 'changes-route', id: '/delorun/changes/notice-seen', reason: 'the notice of a change a phone made is for the person at the computer; a phone must not dismiss it' },
+  { kind: 'changes-route', id: '/delorun/changes actions, harness, protection off and setup under Phone powers Careful', reason: 'applying, turning off, setup and changes to Delorun itself change what runs; Careful keeps them at the computer and lets a phone only take back or tighten' },
 ]
 
+/** How a Changes route answers a paired device, as {@link RouteLevel} says. Every `U` and `F` route of Changes refuses the approval grace. */
+export type ChangesRouteLevel = Extract<RouteLevel, 'R' | 'U' | 'F' | 'C'>
+
 /**
- * The web-server routes of Changes: `/delorun/changes/state`, `show` and `workspaces` are read by any admitted session
- * (R); the action and setup routes are `POST`s that attest the person at the computer before the body is read, so a
- * device is answered `403 LOOPBACK_REQUIRED` (C): their attestation is the record's proof of presence, which a device
- * unlock does not stand for.
+ * The web-server routes of Changes (`plugin-changes`' `access.ts` holds the decision for each control): `state`, `show`
+ * and `workspaces` are read by any admitted session; every `POST` is decided before its body is read, and a device's
+ * proof names the device in the log as decided in the studio.
  */
-export const CHANGES_ROUTE_ACCESS: Readonly<Record<'reads' | 'actions' | 'setup', RouteAccess>> = {
-  reads: READ('what failed and the recent changes, without file contents beyond a shown change'),
-  actions: { level: 'C', reason: 'apply, discard and undo attest the person at the computer in the change log' },
-  setup: { level: 'C', reason: 'a setup file leaves the computer and changes what the profile runs' },
+export const CHANGES_ROUTE_ACCESS: Readonly<Record<'reads' | 'tightening' | 'decisions' | 'setup' | 'notice', RouteAccess & { readonly level: ChangesRouteLevel }>> = {
+  reads: READ('what failed, the recent changes and the waiting ones, without file contents beyond a shown change'),
+  tightening: UNLOCKED('undo of a plugin\'s change, discard of a plugin\'s or a harness change and protection on only take back or tighten'),
+  decisions: FULL('apply, turning plugins off or on, work sessions, safe mode, create, request, reveal, harness apply, undo and Make my copy, protection off and restart change what runs'),
+  setup: FULL('a setup file leaves the computer and changes what the profile runs'),
+  notice: COMPUTER('the notice of a change a phone made is for the person at the computer'),
 }

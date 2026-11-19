@@ -22,18 +22,22 @@
  *
  * Each test's comment names the check whose removal makes that test fail.
  */
+import { generateKeyPairSync, sign } from 'node:crypto'
 import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
+import { request as httpRequest } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { symbols } from '@deepseek-ai/cordis'
 import { brandString } from '@deepseek-ai/dsh-brand'
+import type { ReachListener } from '@deepseek-ai/dsh-client-connection'
 import { API_REMOTE_FORWARDED_EVENTS } from '@deepseek-ai/dsh-api-remotes'
 import { remoteMethods, type PeerScope, type RemoteAccessResource } from '@deepseek-ai/dsh-typert-protocol'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import type { StudioAddress } from '@delorun/contract-admission'
-import { CREATE_OUTSIDE_WORKSPACES, DeviceStore, HomeAuthService, PROTECTED_ROW_REFUSAL, REACH_ALLOWED_ACTIONS, REACH_DENIED_ACTIONS, REACH_ELEVATED_ACTIONS, REACH_EVERYDAY_SETTINGS, REACH_KEY_ACTIONS, reachDevicePrincipal, switchOffRefusal, UNLISTED_COMMAND_REFUSAL } from '@delorun/home-auth'
+import { DEVICE_APPROVAL_VERSION, type Base64Url } from '@delorun/contract-device-approval'
+import { CREATE_OUTSIDE_WORKSPACES, deviceIdOf, DeviceStore, HomeAuthService, phonePowersRefusal, writePhonePowers, PROTECTED_ROW_REFUSAL, REACH_ALLOWED_ACTIONS, REACH_DENIED_ACTIONS, REACH_ELEVATED_ACTIONS, REACH_EVERYDAY_SETTINGS, REACH_KEY_ACTIONS, reachDevicePrincipal, signInMessage, switchOffRefusal, UNLISTED_COMMAND_REFUSAL } from '@delorun/home-auth'
 import { EXTERNAL_AGENT_CONSENT_SWITCH } from '@delorun/plugin-delegation-consent'
 import { claimOf, recordOf } from '../fixtures/devices.ts'
 import { bootStudio, type Studio } from '../admission/studio.ts'
@@ -89,6 +93,7 @@ const ADMITTED_ROUTES: ReadonlySet<string> = new Set([
   '/api/delorunOnboarding.keyTest', '/api/delorunOnboarding.recommend', '/api/delorunOnboarding.setupRecord', '/api/delorunOnboarding.deferStep',
   '/api/delorunOnboarding.readiness', '/api/delorunOnboarding.start', '/api/delorunOnboarding.localModels', '/api/delorunOnboarding.workspaceNotice',
   '/api/delorunMcpConsent.waiting', '/api/delorunBranding.icon', '/api/delorunChatStates.list', '/api/delorunChatStates.set',
+  '/api/delorunPreviewFlags.list',
 ])
 
 /**
@@ -161,9 +166,19 @@ beforeAll(async () => {
   // A link the chat's agent could create, to the folder that holds the Delorun home.
   await symlink(directory, join(folder, 'linked'))
   workspaceId = (await ctx.workspaceRegistry.create(folder)).id
+  // The unlock rules below are those of Phone powers' Full level; the Careful level has its own tests.
+  await writePhonePowers(secretsDirectory(), 'full')
 }, 120_000)
 
+/**
+ * @returns the home-auth secrets directory of the test's home.
+ */
+function secretsDirectory(): string {
+  return join(directory, 'home', 'secrets', 'home-auth')
+}
+
 afterAll(async () => {
+  await reachListener?.close()
   await studio.close()
   await rm(directory, { recursive: true, force: true })
 })
@@ -333,7 +348,7 @@ describe('a reach device through the Gateway', () => {
     await expectRefused('account/getState', {})
   })
 
-  it('needs an unlock for a terminal in every workspace, whatever a stale terminal switch file, a full-access grant or dangerous mode says', async () => {
+  it('needs an unlock for a terminal in every workspace at the Full level, whatever a stale terminal switch file, a full-access grant or dangerous mode says', async () => {
     const elsewhere = join(directory, 'elsewhere')
     await mkdir(elsewhere, { recursive: true })
     const otherWorkspace = (await studio.ctx.workspaceRegistry.create(elsewhere)).id
@@ -395,6 +410,185 @@ describe('a reach device through the Gateway', () => {
     await expect(expectAllowed('workspace/unarchiveSession', { request: { sessionId: created.sessionId } })).resolves.toBeDefined()
     await expect(expectAllowed('workspace/insertSessionBefore', { request: { workspaceId, sessionId: created.sessionId, beforeSessionId: other.sessionId } })).resolves.toBeDefined()
     await expect(expectAllowed('schedule/deleteInactive', {})).resolves.toBeDefined()
+  })
+})
+
+/**
+ * Assert that Phone powers refuses one call, unlocked or not.
+ * @param endpoint - the endpoint.
+ * @param args - its named wire arguments.
+ * @param as - the Peer that calls.
+ */
+async function expectPhonePowersRefused(endpoint: string, args: Record<string, unknown>, as: PeerScope = peer): Promise<void> {
+  expect(await call(endpoint, args, as), endpoint).toMatchObject({
+    ok: false,
+    error: { code: 'remote-access/denied', details: { action: endpoint, reason: phonePowersRefusal(endpoint) } },
+  })
+}
+
+describe('Phone powers', () => {
+  it('keeps a terminal at the computer under Careful, for an unlocked phone in dangerous mode too', async () => {
+    const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
+    await writePhonePowers(secretsDirectory(), 'careful')
+    const dispose = studio.ctx.effect(() => studio.ctx.provide('reachFullAccessGrants', { dangerousMode: () => true, onDangerousModeEnd: () => () => {} }), 'test dangerous mode')
+    const unlock = elevate()
+    try {
+      // Pins FULL_POWERS_ACTIONS in the condition: without it the unlocked phone opens a shell outside the sandbox.
+      await expectPhonePowersRefused('terminal/shells', { agentId: created.sessionId })
+      await expectPhonePowersRefused('terminal/create', { agentId: created.sessionId, request: { id: 'careful-1', cols: 80, rows: 24 } })
+      await expectPhonePowersRefused('terminal/list', { sessionId: created.sessionId })
+      // The rest of what an unlock opens stays open.
+      await expectAdmitted('directoryPicker/list', {})
+    } finally {
+      studio.ctx.homeAuth.revokeElevation(unlock)
+      await dispose()
+      await writePhonePowers(secretsDirectory(), 'full')
+    }
+  })
+
+  it('keeps a terminal at the computer while the home has no choice recorded, or a record it cannot read', async () => {
+    const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
+    const unlock = elevate()
+    try {
+      await rm(join(secretsDirectory(), 'phone-powers.json'))
+      // Pins UNCHOSEN_PHONE_POWERS: a home with no choice applies Careful.
+      await expectPhonePowersRefused('terminal/shells', { agentId: created.sessionId })
+      await writeFile(join(secretsDirectory(), 'phone-powers.json'), JSON.stringify({ v: 1, level: 'full', setAt: 1, extra: true }), { mode: 0o600 })
+      // Pins the reader's refusal: a record it cannot read never widens what a phone may do.
+      await expectPhonePowersRefused('terminal/shells', { agentId: created.sessionId })
+      await writePhonePowers(secretsDirectory(), 'full')
+      await expectAdmitted('terminal/shells', { agentId: created.sessionId })
+    } finally {
+      studio.ctx.homeAuth.revokeElevation(unlock)
+      await writePhonePowers(secretsDirectory(), 'full')
+    }
+  })
+
+  it('cannot be changed by a phone, unlocked or not', async () => {
+    const unlock = elevate()
+    try {
+      await writePhonePowers(secretsDirectory(), 'careful')
+      const answer = await postAsPhone('/auth/phone-powers', { level: 'full' }, deviceCookie())
+      // Pins personAtComputer on the route: a phone that could choose Full would hand itself a terminal.
+      expect(answer).toMatchObject({ status: 403, json: { error: 'LOOPBACK_REQUIRED' } })
+      expect(studio.ctx.homeAuth.phonePowers()).toMatchObject({ level: 'careful', chosen: true })
+    } finally {
+      studio.ctx.homeAuth.revokeElevation(unlock)
+      await writePhonePowers(secretsDirectory(), 'full')
+    }
+  })
+})
+
+/**
+ * @returns the test device's session cookie.
+ */
+function deviceCookie(): string {
+  return `__Host-delorun-session=${deviceToken}`
+}
+
+let reachListener: ReachListener | undefined
+
+/**
+ * Send one JSON `POST` to the reach listener as a phone at the home's address does.
+ * @param path - the target.
+ * @param body - the JSON body.
+ * @param cookie - the session cookie to send, if any.
+ * @returns the status, the first cookie set and the parsed body.
+ */
+async function postAsPhone(path: string, body: unknown, cookie?: string): Promise<{ readonly status: number; readonly cookie: string | undefined; readonly json: Record<string, unknown> }> {
+  reachListener ??= await studio.ctx.connection.openReachListener({ listener: LISTENER, bind: { kind: 'loopback' } })
+  const port = reachListener.address?.port
+  if (port === undefined) throw new Error('the reach listener has no address')
+  const text = JSON.stringify(body)
+  return new Promise((resolve, reject) => {
+    const request = httpRequest({
+      host: '127.0.0.1', port, method: 'POST', path, setHost: false, agent: false,
+      headers: { host: new URL(ADDRESS).host, origin: ADDRESS, 'content-type': 'application/json', 'content-length': String(Buffer.byteLength(text)), ...cookie === undefined ? {} : { cookie } },
+    }, (response) => {
+      let received = ''
+      response.setEncoding('utf8')
+      response.on('data', (chunk: string) => { received += chunk })
+      response.on('end', () => {
+        resolve({ status: response.statusCode ?? 0, cookie: response.headers['set-cookie']?.[0]?.split(';')[0], json: JSON.parse(received || '{}') as Record<string, unknown> })
+      })
+    })
+    request.on('error', reject)
+    request.end(text)
+  })
+}
+
+/**
+ * Approve a phone with a real device key now and sign it in for the first time on the reach listener, which starts
+ * its approval grace.
+ * @param label - the phone's label, unique to the test.
+ * @returns the phone's Peer and the grace's id.
+ */
+async function gracePhone(label: string): Promise<{ readonly peer: PeerScope; readonly graceId: string }> {
+  const ctx = studio.ctx
+  const keys = generateKeyPairSync('ec', { namedCurve: 'P-256' })
+  const exported = keys.publicKey.export({ format: 'jwk' })
+  const publicKey = { kty: 'EC', crv: 'P-256', x: brandString<Base64Url>(exported.x ?? ''), y: brandString<Base64Url>(exported.y ?? '') } as const
+  const id = deviceIdOf(publicKey)
+  await new DeviceStore({ file: join(directory, 'home', 'secrets', 'home-auth', 'devices.json') })
+    .add({ v: DEVICE_APPROVAL_VERSION, id, publicKey, address: ADDRESS, label, platform: '', approvedAt: Date.now(), approvedBy: null, lastSignInAt: null })
+  const challenged = await postAsPhone('/auth/device/challenge', { deviceId: id })
+  const challenge = challenged.json.challenge
+  if (typeof challenge !== 'string') throw new Error(`no sign-in challenge (${String(challenged.status)})`)
+  const signature = sign('sha256', signInMessage(ADDRESS, challenge), { key: keys.privateKey, dsaEncoding: 'ieee-p1363' }).toString('base64url')
+  const signedIn = await postAsPhone('/auth/session', { deviceId: id, challenge, signature })
+  if (signedIn.cookie === undefined) throw new Error(`the sign-in set no session cookie (${String(signedIn.status)})`)
+  const grace = ctx.homeAuth.elevationOf(id, LISTENER)
+  if (grace?.grace !== true) throw new Error('the first sign-in started no approval grace')
+  const admitted = ctx.authenticator.admit({ headers: { cookie: signedIn.cookie }, method: 'GET', url: '/' }, LISTENER)
+  if (admitted.kind !== 'admitted') throw new Error('the phone was not admitted')
+  return { peer: admitted.peer, graceId: grace.id }
+}
+
+describe('a reach device in its approval grace', () => {
+  it('cannot create a terminal even at the Full level, and takes the other elevated actions', async () => {
+    const graced = await gracePhone('Grace phone 1')
+    try {
+      const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
+      // The grace still opens an ordinary elevated action.
+      await expectAdmitted('directoryPicker/list', {}, graced.peer)
+      // Pins GRACE_REFUSED_ACTIONS in the unlock check: the grace stands for a computer-approved unlock everywhere else.
+      await expectElevationRequired('terminal/shells', { agentId: created.sessionId }, graced.peer)
+      await expectElevationRequired('terminal/create', { agentId: created.sessionId, request: { id: 'grace-1', cols: 80, rows: 24 } }, graced.peer)
+      await expectElevationRequired('terminal/list', { sessionId: created.sessionId }, graced.peer)
+    } finally {
+      studio.ctx.homeAuth.revokeElevation(graced.graceId)
+    }
+  })
+
+  it('cannot attach to an existing terminal to write to it, which an unlocked device can', async () => {
+    const graced = await gracePhone('Grace phone 2')
+    const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
+    const unlock = elevate()
+    /**
+     * Open the attachment that carries a terminal's input as one Peer and report the refusal, if any.
+     * @param as - the Peer that opens it.
+     * @returns the refusal's error, or undefined when remote access let it through to the terminal controller.
+     */
+    const attach = async (as: PeerScope): Promise<unknown> => {
+      const abort = new AbortController()
+      try {
+        await studio.ctx.typertGateway.wireStream.open('terminal/attach', { args: { agentId: created.sessionId, id: 'phone-terminal' } }, (async function* () {})(), as, abort.signal)
+        return undefined
+      } catch (error) {
+        return error
+      } finally {
+        abort.abort()
+      }
+    }
+    try {
+      // The unlocked device reaches the terminal controller, which answers for the terminal itself.
+      expect(await attach(peer)).not.toMatchObject({ code: 'remote-access/denied' })
+      // Pins GRACE_REFUSED_ACTIONS for the input stream: under the grace the attachment never opens.
+      expect(await attach(graced.peer)).toMatchObject({ code: 'remote-access/denied', details: { action: 'terminal/attach', reason: 'elevation-required: terminal/attach' } })
+    } finally {
+      studio.ctx.homeAuth.revokeElevation(unlock)
+      studio.ctx.homeAuth.revokeElevation(graced.graceId)
+    }
   })
 })
 
@@ -557,7 +751,7 @@ describe('a reach device and the exact Fetch routes', () => {
     // The routes this rule is about: a file read by path, deliverable actions and change reads.
     expect([...routes.keys()]).toEqual(expect.arrayContaining(['/api/file', '/api/present.open', '/api/changes.summary', '/api/changes.diff', UPLOAD]))
     for (const [path, methods] of routes) {
-      // The upload route, the guide's read routes and key test, the recommended plugins' purposes, the chat states' list and set and the branding icon upload admit an approved device.
+      // The upload route, the guide's read routes and key test, the recommended plugins' purposes, the chat states' list and set, the branding icon upload and the preview flags' list admit an approved device.
       if (path === UPLOAD || ADMITTED_ROUTES.has(path)) continue
       for (const method of methods) {
         // Pins Connection's owner rule for exact routes: a route that declares no `admitPeer` refuses every other Peer.

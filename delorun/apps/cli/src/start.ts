@@ -48,20 +48,24 @@ import type { ReachConfigRows } from '@delorun/contract-reach-providers'
 import { START_WAIT_MS, type ChangesReloadOutcome } from '@delorun/contract-home-process'
 import { localDeviceApproval } from './devices/host.ts'
 import { localConsents } from './consents/host.ts'
-import { CountingChatGate, HomeProcess, HostNotStoppedError, listenProcessSignals, openHomeLog, captureHomeOutput, queryHomeStatus, refuseBootedHost, updateChannelProbe, type HandoverPipe, type HomeLog, type HomeProcessOptions, type LocalConsents, type LocalDeviceApproval, type LocalReach, type RunningHost, type StudioLinkResult, type UpdateSupport } from '@delorun/home-process'
+import { CountingChatGate, HomeProcess, HostNotStoppedError, listenProcessSignals, openHomeLog, captureHomeOutput, queryHomeStatus, refuseBootedHost, updateChannelProbe, type HandoverPipe, type HomeLog, type HomeProcessOptions, type LocalConsents, type LocalDeviceApproval, type LocalReach, type RestartControl, type RunningHost, type StudioLinkResult, type UpdateChannelAccess, type UpdateSupport } from '@delorun/home-process'
 import { appliedReachConfig, localReach, reachRowsOf } from './reach/host.ts'
 import { readReachRow, REACH_ROW_ID, type TailscalePrivateRow } from './reach/row.ts'
 import { resolveSurface, type DelorunLogger } from '@delorun/logs'
-import { afterChangesBoot, changesApprovedContent, recordChangesBoot } from './changes/start.ts'
+import { afterChangesBoot, changesApprovedContent, recordChangesBoot, repointingBoot } from './changes/start.ts'
 import { reloadProfile } from './changes/reload.ts'
-import { checkRunningRuntime, handOffToComposedTree, handsOff, processHandOff, startEntry, type HandOff } from './changes/harness-start.ts'
+import { runningComposition, type HarnessContext, type RunningComposition } from '@delorun/changes'
+import { checkRunningRuntime, handOffToComposedTree, handsOff, harnessContextOf, processHandOff, startEntry, type HandOff } from './changes/harness-start.ts'
+import { provideChangesHarness } from './changes/harness-service.ts'
+import { provideChangesRestart, restartSupport, type RunningHolder } from './changes/restart-service.ts'
+import { provideUpdateChannel } from './update/channel-service.ts'
 import { relaunchForeground, retryDetached, retryForeground, retryHandOff, startRetry, type DetachedOutcome, type ForegroundRelaunch, type StartRetry } from './changes/retry.ts'
 import { CliError, EXIT } from './exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandOutput, type CommandResult } from './command.ts'
 import { holderAlive, HomeLayoutError, isFailClosedStub, newStartId, readHomeLock, runDirectory, type HolderProbe } from '@delorun/home'
 import { DEFAULT_WORKSPACE_ENV, defaultWorkspaceRequest, resolveDefaultWorkspace } from './default-workspace.ts'
 import { NPM_MIRROR_ENV } from '@delorun/bundle-local/profile'
-import { delorunRowIds, inactiveDelorunRows, inactivePackRows, inactivePackWarning, inactiveRowsRefusal, type BootedRow, type RowState } from './delorun-bundles.ts'
+import { delorunRowIds, inactiveDelorunRows, insertedRowsByLayer, inactivePackRows, inactivePackWarning, inactiveRowsRefusal, type BootedRow, type RowState } from './delorun-bundles.ts'
 import { registerHomeProcess } from './home-exclusion.ts'
 import { inspectorConsent, openDebugger, terminalInspectorConfirm } from './inspector.ts'
 import { announceStudio } from './open/announce.ts'
@@ -613,6 +617,7 @@ async function startHomeProcess(request: StartRequest, dependencies: StartDepend
   const unregisterRelease = dependencies.fatalRelease(async () => { await current?.dispose() })
   const tracked: StartDependencies = { ...dependencies, runProfile: async options => (current = await dependencies.runProfile(options)) }
   const retry = startRetry({ home: request.home, profile: request.profile, env: request.env, successor: handover !== undefined, output: request.output, logger: homeLog.logger, ...runtime.store ? { runtime: runtime.version } : {} })
+  const booted: RunningHolder = { current: { kind: 'unknown' }, read: false }
   try {
     const running = handover?.handover.to ?? runtime.version
     // A successor that fails its own start check does not boot, so the predecessor's health check fails and it rolls back.
@@ -623,8 +628,11 @@ async function startHomeProcess(request: StartRequest, dependencies: StartDepend
       running,
       startId,
       host: {
-        boot: () => bootProfile(handover === undefined ? startRequest : { ...startRequest, open: false }, tracked, runtime.store ? { version: running, composed: runtime.composed } : undefined, homeLog, retry),
+        // A Host booted again after the first, as after a failed switch, finds its active copies pointed at the release
+        // that failed; a successor's first boot finds them pointed at its predecessor's.
+        boot: repointingBoot(request, handover !== undefined, async (access: Parameters<HomeProcessOptions['host']['boot']>[0], controls: Parameters<HomeProcessOptions['host']['boot']>[1]) => bootProfile(handover === undefined ? startRequest : { ...startRequest, open: false }, tracked, runtime.store ? { version: running, composed: runtime.composed } : undefined, homeLog, retry, { control: controls.restart, running: booted, channel: access })),
       },
+      ...runtime.store ? { restart: restartSupport(request.home, running, booted) } : {},
       preStart: () => runPreStartSteps(dependencies.preStartSteps, {
         home: request.home,
         profile: request.profile,
@@ -701,17 +709,29 @@ export async function settleSecrets(booted: Pick<BootedProfile, 'settleSecretVal
 /**
  * Run the composed profile as the home process's Host, with the home log attached: the `.env` layers load, their
  * secret-named values are registered with the log's redactor, and the Host's root context receives `ctx.delorunSecrets`,
- * the credential registrations and the Cordis logger exporter before its first entry mounts.
+ * the credential registrations, the Cordis logger exporter, `ctx.changesHarness` and `ctx.changesRestart` before its first entry mounts.
  * @param dependencies - the environment loader and the profile runner.
  * @param homeLog - the home process's log.
  * @param options - the run options except the environment and the preparation hook, which this function supplies.
+ * @param harness - the running runtime's harness, which the studio's Changes routes decide changes to Delorun itself
+ *   against; undefined outside the runtime store.
+ * @param restart - the home process's restart and what this Host boots with, which the studio's Restart route uses;
+ *   undefined, or a control of undefined, outside the runtime store; `channel` is the home process's update channel,
+ *   which the studio's update routes use.
  * @returns the booted profile.
  */
-export function runHost(dependencies: Pick<StartDependencies, 'loadEnvironment' | 'runProfile'>, homeLog: HomeLog, options: Omit<RunProfileOptions, 'environment' | 'prepare'>): Promise<BootedProfile> {
+export function runHost(dependencies: Pick<StartDependencies, 'loadEnvironment' | 'runProfile'>, homeLog: HomeLog, options: Omit<RunProfileOptions, 'environment' | 'prepare'>, harness?: HarnessContext, restart?: { readonly control: RestartControl | undefined, readonly running: RunningComposition, readonly channel?: UpdateChannelAccess }): Promise<BootedProfile> {
   const environment = dependencies.loadEnvironment()
   // The `.env` layers apply their names to this process's environment, so the secret-named values they add are read from it.
   registerEnvironment(process.env, homeLog.redactor)
-  return dependencies.runProfile({ ...options, environment, prepare: (root) => { attachHomeLogs(root, homeLog) } })
+  return dependencies.runProfile({ ...options, environment, prepare: (root) => {
+    attachHomeLogs(root, homeLog)
+    provideChangesHarness(root, harness)
+    if (restart !== undefined) {
+      provideChangesRestart(root, restart.control, restart.running)
+      provideUpdateChannel(root, restart.control === undefined ? undefined : restart.channel)
+    }
+  } })
 }
 
 /**
@@ -725,6 +745,7 @@ export function runHost(dependencies: Pick<StartDependencies, 'loadEnvironment' 
  *   from, which H1 checks too; `undefined` outside the store.
  * @param homeLog - the home process's log: its logger, and its redactor with which the Host registers its secrets.
  * @param retry - what leaves the newest change out when the boot fails or the booted Host is refused.
+ * @param restart - the home process's restart, and the holder this boot records the composition it runs in.
  * @returns the running Host, whose running chats feed the home process's gate and whose health check is C3's.
  * Before the boot it sets {@link DEFAULT_WORKSPACE_ENV} to the studio's first-use workspace folder
  * ([default workspace](./default-workspace.ts)), and {@link NPM_MIRROR_ENV} to the profile's npm mirror setting.
@@ -734,8 +755,17 @@ export function runHost(dependencies: Pick<StartDependencies, 'loadEnvironment' 
  *   values for secret-role fields its patch files hold are moved into the credentials store ({@link settleSecrets}).
  * @throws {HostNotStoppedError} carrying the refusal when that teardown failed or overran.
  */
-async function bootProfile(request: StartRequest, dependencies: StartDependencies, stored: { readonly version: RuntimeVersion, readonly composed: string | undefined } | undefined, homeLog: HomeLog, retry: StartRetry): Promise<RunningHost> {
+async function bootProfile(request: StartRequest, dependencies: StartDependencies, stored: { readonly version: RuntimeVersion, readonly composed: string | undefined } | undefined, homeLog: HomeLog, retry: StartRetry, restart: { readonly control: RestartControl, readonly running: RunningHolder, readonly channel: UpdateChannelAccess }): Promise<RunningHost> {
   const logger = homeLog.logger
+  // What this process runs, read before its first Host boots: its tree never changes, so a Host it boots again after a
+  // failed restart runs the same files. A record that cannot be read leaves it unknown, so every change waits for a restart.
+  if (!restart.running.read) {
+    restart.running.read = true
+    restart.running.current = stored === undefined ? { kind: 'unknown' } : await runningComposition(request.home, stored.version, stored.composed).catch((error: unknown) => {
+      logger.warn(`Delorun could not read which changes to Delorun itself this start runs; the studio counts each as waiting for a restart: ${error instanceof Error ? error.message : String(error)}`)
+      return { kind: 'unknown' } as const
+    })
+  }
   const composed = await composeDelorunProfile({ home: request.home, profile: request.profile, kind: 'cli', output: request.output, env: request.env, ...request.patchFiles === undefined ? {} : { patchFiles: request.patchFiles } }, {
     prepareProfile: dependencies.prepareProfile,
     approvedPluginContent: dependencies.approvedPluginContent,
@@ -762,14 +792,14 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
       patchFiles: composed.patchFiles,
       // The studio opens through the home process's `studio.open-token`, never through upstream's browser handoff.
       args: ['--no-open'],
-    })
+    }, harnessContextOf(request.home, dependencies.runtime(request.home), request.env, logger), stored === undefined ? undefined : { control: restart.control, running: restart.running.current, channel: restart.channel })
   } catch (error) {
     await recordChangesBoot({ home: request.home, profile: request.profile, logger }, [], error)
     await removeSandboxOverlay(request.home, request.profile)
     await retry.afterFailure(error)
     throw new CliError(EXIT.failed, `delorun: the CLI profile ${request.profile} failed to start: ${error instanceof Error ? error.message : String(error)}`)
   }
-  await recordChangesBoot({ home: request.home, profile: request.profile, logger }, booted.rows())
+  await recordChangesBoot({ home: request.home, profile: request.profile, logger }, booted.rows(), undefined, insertedRowsByLayer(composed.resolvedProfile.profile))
   try {
     const inactive = inactiveDelorunRows(booted.rows(), delorunRowIds(composed.resolvedProfile.profile, composed.packBundles), composed.packBundles)
     if (inactive.length > 0) throw inactiveRowsRefusal(request.profile, inactive)

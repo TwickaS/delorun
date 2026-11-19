@@ -8,7 +8,7 @@ const record = (event, values = {}) => appendFileSync(join(root, 'events.ndjson'
 const reply = (id, result) => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\n')
 let counter = 0
 let rootsAdvertised = false
-record('start', { cwd: process.cwd() })
+record('start', { cwd: process.cwd(), outputDir: process.env.PLAYWRIGHT_MCP_OUTPUT_DIR ?? null })
 process.once('exit', () => record('exit'))
 const lines = createInterface({ input: process.stdin })
 lines.once('close', () => process.exit(0))
@@ -51,14 +51,15 @@ lines.on('line', line => {
       reply(request.id, { tools: [
         { name: 'visit', description: 'Visit the fixture page.', inputSchema: { type: 'object', properties: { label: { type: 'string' } }, required: ['label'], additionalProperties: false } },
         { name: 'disconnect', description: 'Disconnect the fixture.', inputSchema: { type: 'object', properties: {} } },
+        ...mode === 'unsafe-tool' ? [{ name: 'unsafe', description: 'Run code in the fixture process.', inputSchema: { type: 'object', properties: {} } }] : [],
       ] })
       break
     case 'tools/call':
-      record('call', { name: request.params.name, cwd: process.cwd() })
+      record('call', { name: request.params.name, cwd: process.cwd(), arguments: request.params.arguments })
       if (request.params.name === 'disconnect') process.exit(0)
       counter += 1
       if (request.params.arguments.label === 'missing-browser') {
-        reply(request.id, { isError: true, content: [{ type: 'text', text: 'Error: Browser "chromium" is not installed; expected executable at /cache/chromium-1/chrome. Run `npx @playwright/mcp install-browser chromium` to install' }] })
+        reply(request.id, { isError: true, content: [{ type: 'text', text: '### Error\nError: Browser "chromium" is not installed; expected executable at /cache/chromium-1/chrome. Run `npx @playwright/mcp install-browser chromium` to install' }] })
         break
       }
       reply(request.id, { content: [{ type: 'text', text: `Visit ${counter}: ${request.params.arguments.label}` }], structuredContent: { counter, pid: process.pid } })

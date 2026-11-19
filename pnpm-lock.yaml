@@ -1397,6 +1397,12 @@ importers:
       '@delorun/plugin-scaffold':
         specifier: workspace:*
         version: link:../../packages/plugin-scaffold
+      '@delorun/plugin-update':
+        specifier: workspace:*
+        version: link:../../packages/plugin-update
+      '@delorun/preview-flags':
+        specifier: workspace:*
+        version: link:../../packages/preview-flags
       '@delorun/profile-safety':
         specifier: workspace:*
         version: link:../../packages/profile-safety
@@ -1623,6 +1629,9 @@ importers:
       '@delorun/contract-update-report':
         specifier: workspace:*
         version: link:../../packages/contract-update-report
+      '@delorun/home':
+        specifier: workspace:*
+        version: link:../../packages/home
       '@delorun/release-formats':
         specifier: workspace:*
         version: link:../../packages/release-formats
@@ -1897,6 +1906,92 @@ importers:
         specifier: ^18.2.0
         version: 18.3.1
 
+  delorun/packages/browser-setup:
+    dependencies:
+      '@deepseek-ai/dsh-client-ui-primitives':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-primitives
+      '@delorun/bundle-local':
+        specifier: workspace:*
+        version: link:../bundle-local
+      '@delorun/preview-flags':
+        specifier: workspace:*
+        version: link:../preview-flags
+    devDependencies:
+      '@testing-library/react':
+        specifier: ^16.3.3
+        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@types/react':
+        specifier: ~18.3.1
+        version: 18.3.31
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
+
+  delorun/packages/browser-use-browse:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+      '@delorun/home-auth':
+        specifier: workspace:*
+        version: link:../home-auth
+      zod:
+        specifier: 4.6.6
+        version: 4.6.6
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: workspace:*
+        version: link:../../../packages/core/agent
+      '@deepseek-ai/dsh-agent-loop':
+        specifier: workspace:*
+        version: link:../../../packages/core/agent-loop
+      '@deepseek-ai/dsh-agent-loop-testkit':
+        specifier: workspace:*
+        version: link:../../../packages/test-support/agent-loop-testkit
+      '@deepseek-ai/dsh-browser-use':
+        specifier: workspace:*
+        version: link:../../../packages/browser-use/browser-use
+      '@deepseek-ai/dsh-client-connection':
+        specifier: workspace:*
+        version: link:../../../packages/client/connection
+      '@deepseek-ai/dsh-experimental-browser-use-runtime':
+        specifier: workspace:*
+        version: link:../../../packages/experimental/browser-use-runtime
+      '@deepseek-ai/dsh-home-paths':
+        specifier: workspace:*
+        version: link:../../../packages/util/home-paths
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:*
+        version: link:../../../packages/llm/llm
+      '@deepseek-ai/dsh-mcp-client':
+        specifier: workspace:*
+        version: link:../../../packages/mcp/mcp-client
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:*
+        version: link:../../../packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: workspace:*
+        version: link:../../../packages/session/session-projection
+      '@deepseek-ai/dsh-system-prompt':
+        specifier: workspace:*
+        version: link:../../../packages/core/system-prompt
+      '@deepseek-ai/dsh-tool-executor-native':
+        specifier: workspace:*
+        version: link:../../../packages/core/tool-executor-native
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:*
+        version: link:../../../packages/core/tools
+      '@deepseek-ai/dsh-user-approval':
+        specifier: workspace:*
+        version: link:../../../packages/interaction/user-approval
+      '@deepseek-ai/dsh-working-directory':
+        specifier: workspace:*
+        version: link:../../../packages/session/working-directory
+
   delorun/packages/bundle-agent-hooks:
     dependencies:
       '@deepseek-ai/dsh-experimental-claude-code-mods':
@@ -1992,18 +2087,30 @@ importers:
       '@delorun/plugin-schedule-consent':
         specifier: workspace:*
         version: link:../plugin-schedule-consent
+      '@delorun/plugin-tool-failure-guard':
+        specifier: workspace:*
+        version: link:../plugin-tool-failure-guard
 
   delorun/packages/bundle-local:
     dependencies:
       '@deepseek-ai/dsh-app-boot':
         specifier: workspace:*
         version: link:../../../packages/boot/app-boot
+      '@deepseek-ai/dsh-home-paths':
+        specifier: workspace:*
+        version: link:../../../packages/util/home-paths
+      '@deepseek-ai/dsh-native-command':
+        specifier: workspace:*
+        version: link:../../../packages/util/native-command
       '@deepseek-ai/dsh-official-bundles':
         specifier: workspace:*
         version: link:../../../packages/util/official-bundles
       '@deepseek-ai/dsh-plugin-manager':
         specifier: workspace:*
         version: link:../../../packages/boot/plugin-manager
+      '@deepseek-ai/dsh-subprocess':
+        specifier: workspace:*
+        version: link:../../../packages/subprocess/subprocess
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
@@ -2052,9 +2159,15 @@ importers:
       '@delorun/plugin-schedule-consent':
         specifier: workspace:*
         version: link:../plugin-schedule-consent
+      '@delorun/plugin-tool-failure-guard':
+        specifier: workspace:*
+        version: link:../plugin-tool-failure-guard
       '@delorun/plugin-trash':
         specifier: workspace:*
         version: link:../plugin-trash
+      '@delorun/plugin-update':
+        specifier: workspace:*
+        version: link:../plugin-update
       '@delorun/profile-safety':
         specifier: workspace:*
         version: link:../profile-safety
@@ -2113,6 +2226,12 @@ importers:
       '@deepseek-ai/dsh-client-ui-approval':
         specifier: workspace:*
         version: link:../../../packages/client/ui-approval
+      '@deepseek-ai/dsh-client-ui-chat':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-chat
+      '@deepseek-ai/dsh-client-ui-conversation':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-conversation
       '@deepseek-ai/dsh-client-ui-permission-presets':
         specifier: workspace:*
         version: link:../../../packages/client/ui-permission-presets
@@ -2143,9 +2262,6 @@ importers:
       '@deepseek-ai/dsh-deepseek-llm-api-extensions':
         specifier: workspace:*
         version: link:../../../packages/llm/deepseek-llm-api-extensions
-      '@deepseek-ai/dsh-home-paths':
-        specifier: workspace:*
-        version: link:../../../packages/util/home-paths
       '@deepseek-ai/dsh-host-product-telemetry-otel':
         specifier: workspace:*
         version: link:../../../packages/host/product-telemetry-otel
@@ -2179,9 +2295,6 @@ importers:
       '@deepseek-ai/dsh-session-log-deepseek':
         specifier: workspace:*
         version: link:../../../packages/session/session-log-deepseek
-      '@deepseek-ai/dsh-subprocess':
-        specifier: workspace:*
-        version: link:../../../packages/subprocess/subprocess
       '@deepseek-ai/dsh-subprocess-local':
         specifier: workspace:*
         version: link:../../../packages/subprocess/subprocess-local
@@ -2222,6 +2335,24 @@ importers:
         specifier: ^0.22.2
         version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
 
+  delorun/packages/bundle-real-browser:
+    dependencies:
+      '@deepseek-ai/dsh-browser-use':
+        specifier: workspace:*
+        version: link:../../../packages/browser-use/browser-use
+      '@deepseek-ai/dsh-experimental-browser-use-runtime':
+        specifier: workspace:*
+        version: link:../../../packages/experimental/browser-use-runtime
+      '@delorun/browser-use-browse':
+        specifier: workspace:*
+        version: link:../browser-use-browse
+      '@delorun/skill-real-browser':
+        specifier: workspace:*
+        version: link:../skill-real-browser
+      '@opencode/browse':
+        specifier: 0.1.1
+        version: 0.1.1
+
   delorun/packages/bundle-studio:
     dependencies:
       '@delorun/plugin-chat-states':
@@ -2233,6 +2364,9 @@ importers:
       '@delorun/plugin-downloads':
         specifier: workspace:*
         version: link:../plugin-downloads
+      '@delorun/plugin-new-workspace':
+        specifier: workspace:*
+        version: link:../plugin-new-workspace
       '@delorun/plugin-onboarding':
         specifier: workspace:*
         version: link:../plugin-onboarding
@@ -2248,6 +2382,9 @@ importers:
       '@delorun/plugin-thinking-rsvp':
         specifier: workspace:*
         version: link:../plugin-thinking-rsvp
+      '@delorun/preview-flags':
+        specifier: workspace:*
+        version: link:../preview-flags
     devDependencies:
       '@delorun/contract-parity-composition':
         specifier: workspace:*
@@ -2612,6 +2749,9 @@ importers:
       '@delorun/home':
         specifier: workspace:*
         version: link:../home
+      '@delorun/home-auth':
+        specifier: workspace:*
+        version: link:../home-auth
       '@delorun/plugin-scaffold':
         specifier: workspace:*
         version: link:../plugin-scaffold
@@ -2628,6 +2768,9 @@ importers:
       '@deepseek-ai/dsh-agent':
         specifier: workspace:*
         version: link:../../../packages/core/agent
+      '@deepseek-ai/dsh-api-gateway':
+        specifier: workspace:*
+        version: link:../../../packages/api/gateway
       '@deepseek-ai/dsh-app-boot':
         specifier: workspace:*
         version: link:../../../packages/boot/app-boot
@@ -3273,6 +3416,109 @@ importers:
         specifier: 2.2.0
         version: 2.2.0(patch_hash=d7144dda019c55ddbaa3a79bd9f518d65584f6cbb38841814af90006591c9ad4)
 
+  delorun/packages/plugin-new-workspace:
+    dependencies:
+      '@deepseek-ai/dsh-home-paths':
+        specifier: workspace:*
+        version: link:../../../packages/util/home-paths
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:*
+        version: link:../../../packages/llm/llm
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+      '@delorun/browser-setup':
+        specifier: workspace:*
+        version: link:../browser-setup
+      '@delorun/contract-home-layout':
+        specifier: workspace:*
+        version: link:../contract-home-layout
+      '@delorun/home':
+        specifier: workspace:*
+        version: link:../home
+      '@delorun/home-auth':
+        specifier: workspace:*
+        version: link:../home-auth
+      '@delorun/plugin-permission-defaults':
+        specifier: workspace:*
+        version: link:../plugin-permission-defaults
+      zod:
+        specifier: 4.6.6
+        version: 4.6.6
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: workspace:*
+        version: link:../../../packages/core/agent
+      '@deepseek-ai/dsh-api-gateway':
+        specifier: workspace:*
+        version: link:../../../packages/api/gateway
+      '@deepseek-ai/dsh-api-remotes':
+        specifier: workspace:*
+        version: link:../../../packages/api/remotes
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:*
+        version: link:../../../packages/boot/app-boot
+      '@deepseek-ai/dsh-client-connection':
+        specifier: workspace:*
+        version: link:../../../packages/client/connection
+      '@deepseek-ai/dsh-client-locale':
+        specifier: workspace:*
+        version: link:../../../packages/client/locale
+      '@deepseek-ai/dsh-client-store':
+        specifier: workspace:*
+        version: link:../../../packages/client/store
+      '@deepseek-ai/dsh-client-test-runtime':
+        specifier: workspace:*
+        version: link:../../../packages/test-support/client-runtime
+      '@deepseek-ai/dsh-client-ui-layout':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-layout
+      '@deepseek-ai/dsh-client-ui-primitives':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-primitives
+      '@deepseek-ai/dsh-client-ui-renderer':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-renderer
+      '@deepseek-ai/dsh-client-ui-settings':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-settings
+      '@deepseek-ai/dsh-client-ui-slots':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-slots
+      '@deepseek-ai/dsh-client-ui-workspace':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-workspace
+      '@deepseek-ai/dsh-experimental-browser-use-playwright-mcp':
+        specifier: workspace:*
+        version: link:../../../packages/experimental/browser-use-playwright-mcp
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:*
+        version: link:../../../packages/core/session
+      '@deepseek-ai/dsh-workspace':
+        specifier: workspace:*
+        version: link:../../../packages/workspace/workspace
+      '@delorun/bundle-local':
+        specifier: workspace:*
+        version: link:../bundle-local
+      '@testing-library/react':
+        specifier: ^16.3.3
+        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@types/react':
+        specifier: ~18.3.1
+        version: 18.3.31
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.2.0
+        version: 18.3.1(react@18.3.1)
+      tsdown:
+        specifier: ^0.22.2
+        version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
+
   delorun/packages/plugin-onboarding:
     dependencies:
       '@deepseek-ai/dsh-brand':
@@ -3287,6 +3533,9 @@ importers:
       '@delorun/brand':
         specifier: workspace:*
         version: link:../brand
+      '@delorun/browser-setup':
+        specifier: workspace:*
+        version: link:../browser-setup
       '@delorun/contract-reach-providers':
         specifier: workspace:*
         version: link:../contract-reach-providers
@@ -3305,12 +3554,18 @@ importers:
       '@delorun/plugin-downloads':
         specifier: workspace:*
         version: link:../plugin-downloads
+      '@delorun/plugin-new-workspace':
+        specifier: workspace:*
+        version: link:../plugin-new-workspace
       '@delorun/plugin-packs':
         specifier: workspace:*
         version: link:../plugin-packs
       '@delorun/plugin-theme':
         specifier: workspace:*
         version: link:../plugin-theme
+      '@delorun/preview-flags':
+        specifier: workspace:*
+        version: link:../preview-flags
       '@delorun/reach':
         specifier: workspace:*
         version: link:../reach
@@ -3652,6 +3907,9 @@ importers:
       '@delorun/contract-update-report':
         specifier: workspace:*
         version: link:../contract-update-report
+      '@delorun/plugin-update':
+        specifier: workspace:*
+        version: link:../plugin-update
       '@delorun/settings-controls':
         specifier: workspace:*
         version: link:../settings-controls
@@ -3871,8 +4129,78 @@ importers:
         specifier: ^0.22.2
         version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
 
+  delorun/packages/plugin-tool-failure-guard:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: workspace:*
+        version: link:../../../packages/core/agent
+      '@deepseek-ai/dsh-agent-loop':
+        specifier: workspace:*
+        version: link:../../../packages/core/agent-loop
+      '@deepseek-ai/dsh-agent-loop-testkit':
+        specifier: workspace:*
+        version: link:../../../packages/test-support/agent-loop-testkit
+      '@deepseek-ai/dsh-client-locale':
+        specifier: workspace:*
+        version: link:../../../packages/client/locale
+      '@deepseek-ai/dsh-client-test-runtime':
+        specifier: workspace:*
+        version: link:../../../packages/test-support/client-runtime
+      '@deepseek-ai/dsh-client-ui-chat':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-chat
+      '@deepseek-ai/dsh-client-ui-conversation':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-conversation
+      '@deepseek-ai/dsh-client-ui-primitives':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-primitives
+      '@deepseek-ai/dsh-client-ui-renderer':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-renderer
+      '@deepseek-ai/dsh-client-ui-slots':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-slots
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:*
+        version: link:../../../packages/llm/llm
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:*
+        version: link:../../../packages/core/session
+      '@deepseek-ai/dsh-tool-testkit':
+        specifier: workspace:*
+        version: link:../../../packages/test-support/tool-testkit
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:*
+        version: link:../../../packages/core/tools
+      '@testing-library/react':
+        specifier: ^16.3.3
+        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@types/react':
+        specifier: ~18.3.1
+        version: 18.3.31
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.2.0
+        version: 18.3.1(react@18.3.1)
+      tsdown:
+        specifier: ^0.22.2
+        version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
+
   delorun/packages/plugin-trash:
     dependencies:
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:*
+        version: link:../../../packages/boot/app-boot
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
@@ -3882,9 +4210,15 @@ importers:
       '@delorun/home-auth':
         specifier: workspace:*
         version: link:../home-auth
+      '@delorun/home-process':
+        specifier: workspace:*
+        version: link:../home-process
       '@delorun/trash':
         specifier: workspace:*
         version: link:../trash
+      '@delorun/update':
+        specifier: workspace:*
+        version: link:../update
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -3950,6 +4284,94 @@ importers:
         specifier: ^0.22.2
         version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
 
+  delorun/packages/plugin-update:
+    dependencies:
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:*
+        version: link:../../../packages/boot/app-boot
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+      '@delorun/contract-home-process':
+        specifier: workspace:*
+        version: link:../contract-home-process
+      '@delorun/contract-update-report':
+        specifier: workspace:*
+        version: link:../contract-update-report
+      '@delorun/home-process':
+        specifier: workspace:*
+        version: link:../home-process
+      '@delorun/plugin-changes':
+        specifier: workspace:*
+        version: link:../plugin-changes
+      '@delorun/update':
+        specifier: workspace:*
+        version: link:../update
+      semver:
+        specifier: ^7.8.5
+        version: 7.8.5
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-api-gateway':
+        specifier: workspace:*
+        version: link:../../../packages/api/gateway
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../../packages/util/brand
+      '@deepseek-ai/dsh-client-connection':
+        specifier: workspace:*
+        version: link:../../../packages/client/connection
+      '@deepseek-ai/dsh-client-locale':
+        specifier: workspace:*
+        version: link:../../../packages/client/locale
+      '@deepseek-ai/dsh-client-store':
+        specifier: workspace:*
+        version: link:../../../packages/client/store
+      '@deepseek-ai/dsh-client-test-runtime':
+        specifier: workspace:*
+        version: link:../../../packages/test-support/client-runtime
+      '@deepseek-ai/dsh-client-ui-layout':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-layout
+      '@deepseek-ai/dsh-client-ui-primitives':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-primitives
+      '@deepseek-ai/dsh-client-ui-renderer':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-renderer
+      '@deepseek-ai/dsh-client-ui-settings':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-settings
+      '@deepseek-ai/dsh-client-ui-sidebar':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-sidebar
+      '@deepseek-ai/dsh-client-ui-slots':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-slots
+      '@deepseek-ai/dsh-host-webserver':
+        specifier: workspace:*
+        version: link:../../../packages/host/webserver
+      '@delorun/contract-release-manifest':
+        specifier: workspace:*
+        version: link:../contract-release-manifest
+      '@testing-library/react':
+        specifier: ^16.3.3
+        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@types/react':
+        specifier: ~18.3.1
+        version: 18.3.31
+      '@types/semver':
+        specifier: ^7.8.0
+        version: 7.8.0
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
+      tsdown:
+        specifier: ^0.22.2
+        version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
+
   delorun/packages/plugin-workspaces:
     dependencies:
       '@deepseek-ai/schemastery':
@@ -3961,6 +4383,9 @@ importers:
       '@delorun/home':
         specifier: workspace:*
         version: link:../home
+      '@delorun/plugin-new-workspace':
+        specifier: workspace:*
+        version: link:../plugin-new-workspace
       zod:
         specifier: 4.6.6
         version: 4.6.6
@@ -3986,6 +4411,43 @@ importers:
       '@deepseek-ai/dsh-workspace':
         specifier: workspace:*
         version: link:../../../packages/workspace/workspace
+
+  delorun/packages/preview-flags:
+    dependencies:
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../../packages/util/brand
+      '@deepseek-ai/dsh-client-ui-primitives':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-primitives
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+      '@delorun/home-auth':
+        specifier: workspace:*
+        version: link:../home-auth
+      zod:
+        specifier: 4.6.6
+        version: 4.6.6
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:*
+        version: link:../../../packages/boot/app-boot
+      '@deepseek-ai/dsh-client-connection':
+        specifier: workspace:*
+        version: link:../../../packages/client/connection
+      '@testing-library/react':
+        specifier: ^16.3.3
+        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@types/react':
+        specifier: ~18.3.1
+        version: 18.3.31
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
 
   delorun/packages/profile-safety:
     dependencies:
@@ -4179,6 +4641,15 @@ importers:
         version: 18.3.1
 
   delorun/packages/skill-plugin-authoring:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-skill':
+        specifier: workspace:*
+        version: link:../../../packages/skill/skill
+
+  delorun/packages/skill-real-browser:
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -11869,6 +12340,9 @@ importers:
       '@deepseek-ai/dsh-experimental-browser-use-runtime':
         specifier: workspace:*
         version: link:../browser-use-runtime
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
       '@playwright/mcp':
         specifier: 0.0.80
         version: 0.0.80
@@ -11894,6 +12368,9 @@ importers:
       '@deepseek-ai/dsh-llm':
         specifier: workspace:*
         version: link:../../llm/llm
+      '@deepseek-ai/dsh-native-command':
+        specifier: workspace:*
+        version: link:../../util/native-command
       '@deepseek-ai/dsh-session':
         specifier: workspace:*
         version: link:../../core/session
@@ -11958,6 +12435,12 @@ importers:
       '@deepseek-ai/dsh-ptc-runtime':
         specifier: workspace:*
         version: link:../../ptc-runtime/ptc-runtime
+      '@deepseek-ai/dsh-sandbox':
+        specifier: workspace:*
+        version: link:../../sandbox/sandbox
+      '@deepseek-ai/dsh-sandbox-policy':
+        specifier: workspace:*
+        version: link:../../sandbox/sandbox-policy
       '@deepseek-ai/dsh-scope':
         specifier: workspace:*
         version: link:../../core/scope
@@ -24190,6 +24673,50 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@opencode/browse-darwin-arm64@0.1.1':
+    resolution: {integrity: sha512-1fIzN9OrxqD3ZGQ0n7K+iZgRQWIZrUZIsma5FWvSi4haWB1QumsmRNfh1kaRzSOsthn863RbUQvLsplO2KAv2g==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@opencode/browse-darwin-x64@0.1.1':
+    resolution: {integrity: sha512-8wsSqYMW0GWXiURTd5puvPG3rmE2aCnbx6fkT/P9TobYfQ1bGu3K7RgLD0wak4UslzZTNCgYVZhwFhT/jqQ6kA==}
+    cpu: [x64]
+    os: [darwin]
+
+  '@opencode/browse-linux-arm64-musl@0.1.1':
+    resolution: {integrity: sha512-diosJYaWLoNs75gE9iiC+YXpgNQbN+UyjcNM3cDAeRaUhWBCrzMt35P+bFI7HXjfuZiR2C1aUqIfWdV2cEb/aw==}
+    cpu: [arm64]
+    os: [linux]
+    libc: [musl]
+
+  '@opencode/browse-linux-arm64@0.1.1':
+    resolution: {integrity: sha512-klF2M7mElXniJQ4pDwhtg6m/8FgAx+EDoWzuNN8QlfA/gtYqrG1Hl2j5DsRXxF0s2JrhdJr/Zld9Q2rg8Ncc2Q==}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  '@opencode/browse-linux-x64-musl@0.1.1':
+    resolution: {integrity: sha512-aU0CYeZGQFmGkvSM7cFFLtYWQwvDFk+GsG8sCmpp3ilUKdBYgjPwBazerPY2fIa7zrwbfkzjG7cKBV/N4WtZUQ==}
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
+
+  '@opencode/browse-linux-x64@0.1.1':
+    resolution: {integrity: sha512-N0dEMW6hBj8Duzv9lF51uHMUg9TAsJGElJ+NMHMK+yl0rW2PGVc44Lsk4rICe2ctXBHvIdbzQybjTvbGdXXyiQ==}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  '@opencode/browse-windows-x64@0.1.1':
+    resolution: {integrity: sha512-hFBDowhYmyDVfy4/Lt1lSDPHMLA2jo3uESRlCG2WIEWJbOq4Oc32oF4S9dbjfNX05dAqpkESLkA+F7mfg8rVlA==}
+    cpu: [x64]
+    os: [win32]
+
+  '@opencode/browse@0.1.1':
+    resolution: {integrity: sha512-AytWqCqD/iinW1nyaFoY9633+Escj6gca6ZBX1MFa85diEuNThSd9h2tEzw1DqTD/cB7r2pShL164XjzD0BPtQ==}
+    engines: {node: '>=22'}
+    hasBin: true
+
   '@opentelemetry/api-logs@0.222.0':
     resolution: {integrity: sha512-9mb1If+IF6u0ZVXkHQ6ogEae5HwA6ajIVUgpSDQyRASxft6BSXHvBvPooRle3yFN/fKnCdSOnuu0OC3PLcF6+g==}
     engines: {node: '>=8.0.0'}
@@ -32106,6 +32633,37 @@ snapshots:
 
   '@openai/codex@0.153.4-win32-x64':
     optional: true
+
+  '@opencode/browse-darwin-arm64@0.1.1':
+    optional: true
+
+  '@opencode/browse-darwin-x64@0.1.1':
+    optional: true
+
+  '@opencode/browse-linux-arm64-musl@0.1.1':
+    optional: true
+
+  '@opencode/browse-linux-arm64@0.1.1':
+    optional: true
+
+  '@opencode/browse-linux-x64-musl@0.1.1':
+    optional: true
+
+  '@opencode/browse-linux-x64@0.1.1':
+    optional: true
+
+  '@opencode/browse-windows-x64@0.1.1':
+    optional: true
+
+  '@opencode/browse@0.1.1':
+    optionalDependencies:
+      '@opencode/browse-darwin-arm64': 0.1.1
+      '@opencode/browse-darwin-x64': 0.1.1
+      '@opencode/browse-linux-arm64': 0.1.1
+      '@opencode/browse-linux-arm64-musl': 0.1.1
+      '@opencode/browse-linux-x64': 0.1.1
+      '@opencode/browse-linux-x64-musl': 0.1.1
+      '@opencode/browse-windows-x64': 0.1.1
 
   '@opentelemetry/api-logs@0.222.0':
     dependencies:

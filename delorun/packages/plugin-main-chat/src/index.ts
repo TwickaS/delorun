@@ -45,7 +45,7 @@ import { MAIN_CHAT_PATHS, MAIN_CHAT_SESSION_ID, REPORT_WAIT_MS, type MainChatRep
 export { chatLines, newestWithin } from './chat-text.ts'
 export { folders, OUTSIDE } from './folders.ts'
 export type { Folders } from './folders.ts'
-export { accountTools, ALWAYS_ASK, READ_RECORD, readThisTurn } from './account-tools.ts'
+export { accountTools, ALWAYS_ASK, READ_EVENT, readThisTurn } from './account-tools.ts'
 export type { AccountLimits, AccountToolDeps } from './account-tools.ts'
 export { newOwnerNoteId, OWNER_NOTES_END, OWNER_NOTES_START, OwnerNotesError, ownerNoteText, parseOwnerNotes, renderOwnerNotes } from './owner-notes.ts'
 export type { NotedFile, OwnerNote } from './owner-notes.ts'

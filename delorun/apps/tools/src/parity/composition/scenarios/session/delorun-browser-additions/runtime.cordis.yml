@@ -1,0 +1,22 @@
+# C16 switch browser_additions on: the Playwright browser provider replaces
+# Playwright's report of a browser build that is not installed with the
+# Browser setup message, and gives .playwright-mcp a .gitignore. Without this
+# row the provider is not mounted; mounted with the switch off, failures read
+# as Playwright reports them. The tool denial, the folder guard and the MCP
+# root hold either way.
+- insert:
+    - id: browser-use
+      name: '@deepseek-ai/dsh-browser-use'
+    - id: browser-use-playwright-mcp
+      name: '@deepseek-ai/dsh-experimental-browser-use-playwright-mcp'
+      config:
+        mode: launch
+        headless: true
+        browserAdditions: true
+# Pins the corpus model. model.cordis.yml pins the model only when a primary Session
+# exists, so a first record needs this row.
+- id: agent-default-model
+  name: '@deepseek-ai/dsh-agent-default-model'
+  config:
+    provider: deepseek-official
+    model: deepseek-v4-flash

@@ -4,7 +4,7 @@
  * `DELORUN_HOME=<scratch home> node_modules/.bin/tsx delorun/packages/plugin-onboarding/scripts/screens.ts <out dir> <prefix>`.
  * Each browser context opens its own one-time studio link (`delorun open --print`), so each starts on the preview
  * notice. The walk presses Continue, and opens the states behind a press that changes nothing (the Models section, an
- * agent's confirmation, the clone form); it never adds a bundle, and only the last run presses the final button, to
+ * agent's confirmation, the Another workspace choice); it never adds a bundle, and only the last run presses the final button, to
  * show the first chat. Then each scheme and width opens the studio again and shows the no-key banner above the
  * message box; `SCREENS_SKIP_WALK=1` runs only that part, on a home whose guide is finished. A development aid, not a test.
  */
@@ -34,7 +34,7 @@ function studioLink(): string {
 
 /**
  * Open the states a step hides behind a press that changes nothing, screenshot each, and close them again: the Models
- * section on Welcome, the first agent's confirmation on Agents, and the clone form on Workspace.
+ * section on Welcome, the first agent's confirmation on Agents, and the Another workspace choice on Workspace.
  * @param page - the page.
  * @param dialog - the onboarding dialog.
  * @param base - the screenshot path without its extension.
@@ -57,11 +57,11 @@ async function extraStates(page: import('playwright').Page, dialog: import('play
     await page.waitForTimeout(600)
     await page.screenshot({ path: `${base}-confirm.png` })
   }
-  const clone = dialog.getByRole('radio', { name: 'Clone from Git' })
-  if (await clone.count() > 0) {
-    await clone.click()
+  const another = dialog.getByRole('radio', { name: 'Another workspace' })
+  if (await another.count() > 0) {
+    await another.click()
     await page.waitForTimeout(600)
-    await page.screenshot({ path: `${base}-clone.png` })
+    await page.screenshot({ path: `${base}-another.png` })
     const fallback = dialog.getByRole('radio', { name: 'Default workspace' })
     if (await fallback.count() > 0) await fallback.click()
   }

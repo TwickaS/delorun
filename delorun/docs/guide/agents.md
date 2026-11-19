@@ -48,19 +48,34 @@ The first time a chat hands an agent a task in a workspace, Delorun asks at the 
 <summary>Edge cases</summary>
 
 - If the chat is on Read Only, then no agent starts — change the chat's permission first.
-- If the chat is on Full access, then every approval is refused without asking, so an agent starts only in a workspace where you allowed it.
-- If you run `delorun headless`, then no one can be asked, so an agent starts only where you allowed it.
+- If the chat is on Full access, then the agent starts without asking, because you already chose to run without prompts, and the chat shows "Started without asking · Full access". To make a Full access chat ask again, turn off **Full access chats start agents without asking** in Settings, Safety, External agents; the agent then starts only in a workspace where you allowed it.
+- If you run `delorun headless`, then no one can be asked, so an agent starts only where you allowed it, or when the run has full access, through a workspace's full-access grant or setup's **Never ask (dangerous)** answer. A run with full access starts agents without asking and without a grant, as a Full access chat does.
+- If you stop a chat, then the tasks it handed off during that turn stop too. A task from an earlier turn keeps running until it finishes, reaches its time limit, or you archive the chat, which stops every task the chat started.
 - If a task needs longer than the time limit, then it stops. The limit is 30 minutes unless you change it under [Advanced options](#advanced-options).
 
 </details>
 
 ## What the agent can touch
 
-An agent works in the chat's workspace. It can read and, where its own settings allow, change files there, and it can reach anywhere else its own settings allow, your Delorun home included. It runs outside Delorun's sandbox and permission prompts. What it may do inside the workspace follows its own settings. When Delorun adds Claude Code it sets Claude Code to accept file edits, so a task can change files in the chat's workspace, and run simple file and read-only commands there, without asking. Anything else, including anything outside the workspace, is refused, because the agent cannot stop to ask you during a task. Codex keeps its own defaults. If you change Claude Code's permission mode afterwards, Delorun keeps your value.
+An agent works in the chat's workspace. It can read and, where its level allows, change files there. It runs outside Delorun's sandbox and permission prompts, so the level you choose for it in Settings, Safety, External agents decides what it may do on its own:
+
+Careful writes only in the task folder, and its commands get no internet. Standard, the default, writes in the task folder and temporary folders with the internet on, and the agent's own reviewer decides the rest. Your own settings means Delorun sets nothing and your own Claude Code or Codex settings decide. Unrestricted has no sandbox and never asks, and you can choose it only at the computer that runs Delorun.
+
+The chip on the approval card shows the level, and one click opens the choice. A level applies from the next task. An approved device can tighten a level; loosening it needs you at the computer. A chat on Full access never changes a level. The levels do not cover MCP tools you set up yourself in Claude Code or Codex.
+
+On Linux, Claude Code's command sandbox needs `bubblewrap` and `socat` (`sudo apt install bubblewrap socat`). Without them Standard still runs, without the sandbox, and the chip reads "Standard · no sandbox". Careful refuses to start, because it promises the confinement.
 
 ## Where the result shows
 
 The result comes back into the chat that handed over the task, as the agent's answer. A task that fails shows why in the same place.
+
+Three Codex failures have their own wording:
+
+- **Your configured model is not offered on your plan.** Codex stops before the task starts and names the model and the models your plan offers, for example "Codex's configured model gpt-5.5 is not offered on your plan. Choose one of: gpt-5.6-luna, gpt-5.5, in your Codex settings." Choose a model under **Advanced options**, or in your Codex settings. Delorun never picks one for you.
+- **Your plan's limit is reached.** The result says so and, when Codex reports it, when the limit resets.
+- **Codex is not signed in.** The result gives the `delorun agents login codex` command.
+
+Delorun's Codex runs never change your own Codex settings file, so a folder you hand to Codex does not become a trusted folder in your terminal Codex.
 
 ## Advanced options
 

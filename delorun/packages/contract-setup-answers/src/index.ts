@@ -92,6 +92,9 @@ export interface ReachAnswer {
   readonly pairing?: PairingAsker | undefined
 }
 
+/** The Phone powers levels, as `@delorun/home-auth` names them: `careful`, the default, and `full`. */
+export type PhonePowersAnswer = 'careful' | 'full'
+
 /**
  * The prompts answers. `safer` keeps Delorun's consent and permission defaults; `stock` sets them to upstream's behaviour;
  * `dangerous` sets them to upstream's behaviour too and makes full access available to every chat without a
@@ -159,6 +162,11 @@ export interface SetupAnswers {
    * setting as it is. Never true in a `--config` document.
    */
   readonly protectChanges: boolean
+  /**
+   * The Phone powers level setup records for the home (contract C14, "Phone powers"), or `null` to leave the home's level
+   * as it is. The terminal asks it only when remote access is turned on; `--yes` takes it from `--phone-powers`.
+   */
+  readonly phonePowers: PhonePowersAnswer | null
   /** Whether Delorun checks the release channel for a newer release; a document may leave it out, which means `true`. */
   readonly updateCheck: boolean
   /** The sections this run showed, in order; the studio's onboarding leaves out what the terminal covered. */
@@ -176,6 +184,7 @@ export const SETUP_DEFAULTS = {
   reach: { option: 'none', identityFactor: null },
   importStockHome: false,
   protectChanges: false,
+  phonePowers: null,
   updateCheck: true,
   sections: [],
 } as const satisfies SetupAnswers

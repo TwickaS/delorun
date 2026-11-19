@@ -5,14 +5,14 @@
  */
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { removeDraftEntries, type DraftStorage } from '@delorun/trash/drafts'
-import { TRASH_PATHS, type EmptyOutcome, type PurgeOutcome, type TrashEntry, type TrashListing } from '../wire.ts'
+import { TRASH_PATHS, type EmptyOutcome, type PurgeOutcome, type SetAsideEntry, type SetAsideListing, type SetAsideRemoved, type TrashEntry, type TrashListing } from '../wire.ts'
 import type { TrashToastKey } from './locales.ts'
 
 /** What the Settings section shows: the first load, a failed load with nothing to show, or the listing. */
 export type TrashState =
   | { readonly status: 'loading' }
   | { readonly status: 'error' }
-  | { readonly status: 'ready'; readonly listing: TrashListing }
+  | { readonly status: 'ready'; readonly listing: TrashListing; readonly setAside: readonly SetAsideEntry[] }
 
 /** One outcome for the toast: the copy to show and whether the action succeeded. */
 export interface TrashNotice {
@@ -80,6 +80,7 @@ const SPECIFIC: Readonly<Partial<Record<string, TrashToastKey>>> = {
   TRASH_ITEM_NOT_FOUND: 'toast.notFound',
   TRASH_RESTORE_CONFLICT: 'toast.restoreConflict',
   WORKSPACE_NOT_FOUND: 'toast.workspaceMissing',
+  DATA_IN_USE: 'toast.setAsideInUse',
 }
 
 /**
@@ -127,7 +128,29 @@ export class TrashController {
       return
     }
     this.sync(listing.items)
-    this.state.set({ status: 'ready', listing })
+    this.state.set({ status: 'ready', listing, setAside: await this.readSetAside() })
+  }
+
+  /**
+   * Read what a rollback set aside. A harness that cannot say (no profile, an old release) shows no list.
+   * @returns the entries, or none.
+   */
+  private async readSetAside(): Promise<readonly SetAsideEntry[]> {
+    try {
+      return (await post<SetAsideListing>(TRASH_PATHS.setAside, {})).entries
+    } catch (error) {
+      console.warn('delorun-trash: the set-aside data was not listed:', error)
+      return []
+    }
+  }
+
+  /**
+   * Delete one set-aside or copied chat-data directory forever.
+   * @param path - the entry's path from the listing.
+   * @returns after the outcome is reported.
+   */
+  async removeSetAside(path: string): Promise<void> {
+    await this.act(() => post<SetAsideRemoved>(TRASH_PATHS.removeSetAside, { path }), 'toast.setAsideRemoved', 'toast.setAsideFailed', () => undefined)
   }
 
   /**

@@ -64,4 +64,28 @@ register(name: BrowserUseProviderName): () => Promise<void>
 ```
 
 Source: [`packages/browser-use/browser-use/src/index.ts`](../../packages/browser-use/browser-use/src/index.ts)
+
+<a id="browser-use-events"></a>
+
+### `browser-use/*` events
+
+<a id="browser-useadmission-changed--parallel"></a>
+
+#### `browser-use/admission-changed` — parallel
+
+A Session's answer from `browserUseAdmission` may have changed; the browser server starts or stops to match.
+
+```ts cordis-catalog
+/**
+ * A Session's answer from `browserUseAdmission` may have changed; the browser server starts or stops to match.
+ * @mode parallel
+ * @param session - the Session.
+ * @returns settles once the Session's server has started or stopped to match.
+ */
+'browser-use/admission-changed'(session: Agent['session']): Promise<void>
+```
+
+Types: [Agent](core.md)
+
+Source: [`packages/experimental/browser-use-playwright-mcp/src/index.ts`](../../packages/experimental/browser-use-playwright-mcp/src/index.ts)
 <!-- END GENERATED cordis-surface -->

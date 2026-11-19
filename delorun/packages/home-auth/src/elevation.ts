@@ -48,7 +48,8 @@ export interface ElevationRecord extends ElevationAsker {
   readonly page?: true
   /**
    * Set on the unlock a newly approved device starts with on its first sign-in (the approval grace). It behaves as a
-   * computer-approved elevation, and the device's own call to end the grace ({@link Elevations.endGraceFor}) ends it.
+   * computer-approved elevation, except that it opens no terminal and no consent or guard row's settings (the reach
+   * policy refuses those under it), and the device's own call to end the grace ({@link Elevations.endGraceFor}) ends it.
    */
   readonly grace?: true
   /**

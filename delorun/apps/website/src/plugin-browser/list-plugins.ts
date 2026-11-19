@@ -117,6 +117,8 @@ export function needPhrase(need: Need): string {
       return `${joinWords((need.os ?? []).map((os) => OS_NAMES[os] ?? os))} as the operating system`
     case 'playwright-browser':
       return `a one-off ${need.browser ?? ''} download`
+    case 'browse-paired':
+      return 'your own browser paired with it'
     default:
       throw new Error(`a pack declares a need of the unknown kind "${need.kind}"`)
   }

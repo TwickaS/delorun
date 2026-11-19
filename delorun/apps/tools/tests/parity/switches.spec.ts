@@ -121,7 +121,7 @@ describe('the real tree', () => {
     // inserted rows, which carry their module as `name`.
     expect([...new Set(covered.map(({ id }) => id))].sort()).toEqual([
       'approved_plugin_write_consent', 'external_agent_consent', 'fetch_guard', 'instruction_layer_consent', 'mcp_add_consent', 'one_time_launch_tokens', 'permission_defaults',
-      'plugin_changes_pending', 'reach', 'rename_workspace_tool', 'scheduled_task_consent', 'studio_additions', 'update_check', 'update_turn_refusal',
+      'plugin_changes_pending', 'reach', 'rename_workspace_tool', 'scheduled_task_consent', 'studio_additions', 'tool_failure_guard', 'update_check', 'update_turn_refusal',
     ])
     for (const { id, value, declared } of covered) expect(value, id).toBe(declared)
     expect(presenceErrors(registry, shipped, parity)).toEqual([])
@@ -159,6 +159,27 @@ describe('the switch fields', () => {
       'const Config: z<{ a: 1 }> = 1',
       'const Config: z<ns.Unrelated> = 1',
       'const { Config } = schemas',
+      '',
+    ].join('\n')
+    expect(switchMarkers('packages/fixture/src/index.ts', text)).toEqual([
+      { path: 'packages/fixture/src/index.ts', line: 3, id: 'fixture_context', key: 'fixtureContext', defaultValue: false },
+    ])
+  })
+
+  it('reads the fields of the interfaces a Config union alias names and of those they extend in the same file', () => {
+    const text = [
+      'export interface Additions {',
+      '  /** C16 switch `fixture_context`: on in Delorun. */',
+      '  fixtureContext: boolean',
+      '}',
+      'export interface Unrelated {',
+      '  /** C16 switch `other_context`. */',
+      '  otherContext?: boolean',
+      '}',
+      'export interface LaunchConfig extends Shared, Additions { mode: \'launch\' }',
+      'export interface AttachConfig extends Shared, Additions { mode: \'attach\' }',
+      'export type Config = LaunchConfig | AttachConfig',
+      'export const Config = Schema.union([Schema.object({ fixtureContext: Schema.boolean().default(false) })])',
       '',
     ].join('\n')
     expect(switchMarkers('packages/fixture/src/index.ts', text)).toEqual([
@@ -473,9 +494,9 @@ describe('the parity overlay', () => {
     expect(overlayErrors(rows, PARITY_SWITCHES)).toEqual([])
     expect(rows).toEqual([{ id: 'tool-plugin-manager', name: '@deepseek-ai/dsh-plugin-manager/tools', config: { readActionsExempt: false, profileHistory: false } }])
     expect(Object.keys(DEFAULT_PARITY).sort()).toEqual([
-      'approved_plugin_write_consent', 'container_denial_marker', 'default_workspace_directory', 'doctor', 'external_agent_consent', 'fetch_guard', 'instruction_layer_consent',
+      'approved_plugin_write_consent', 'browser_additions', 'container_denial_marker', 'default_workspace_directory', 'doctor', 'external_agent_consent', 'fetch_guard', 'instruction_layer_consent',
       'main_chat', 'mcp_add_consent', 'one_time_launch_tokens', 'permission_defaults', 'plugin_changes_pending', 'preset_inspect', 'reach', 'rename_workspace_tool', 'sandbox_protected_reads',
-      'scheduled_task_consent', 'studio_additions', 'update_check', 'update_turn_refusal',
+      'scheduled_task_consent', 'studio_additions', 'tool_failure_guard', 'update_check', 'update_turn_refusal', 'use_my_browser',
     ])
   })
 
@@ -500,6 +521,8 @@ describe('the parity overlay\'s mount of @delorun/bundle-local', () => {
   /** The bundles the plugin-changes row names for safe mode from the studio. */
   const CHANGES_BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', '@delorun/bundle-local', '@delorun/bundle-studio']
   /** The six consent and guard rows in the parity form the overlay's third patch restates them. */
+  /** The tool-failure guard's row config, as the bundle writes it. */
+  const GUARD_CONFIG = { enabled: true, consecutiveFailures: 6, windowSize: 12, windowFailures: 8, reminderAfter: 3, exclude: [] }
   const CONSENT_INSERT = {
     insert: [
       { id: 'delorun-instruction-consent', name: '@delorun/plugin-instruction-consent', config: { enabled: true, approvedPluginWrites: true }, disabled: true },
@@ -507,6 +530,7 @@ describe('the parity overlay\'s mount of @delorun/bundle-local', () => {
       { id: 'delorun-permission-defaults', name: '@delorun/plugin-permission-defaults', config: { enabled: true }, disabled: true },
       { id: 'delorun-schedule-consent', name: '@delorun/plugin-schedule-consent', config: { enabled: true }, disabled: true },
       { id: 'delorun-fetch-guard', name: '@delorun/plugin-fetch-guard', config: { enabled: true }, disabled: true },
+      { id: 'delorun-tool-failure-guard', name: '@delorun/plugin-tool-failure-guard', config: GUARD_CONFIG, disabled: true },
       { id: 'delorun-plugin-authoring', name: '@delorun/skill-plugin-authoring', disabled: true },
       { id: 'delorun-report-problem', name: '@delorun/skill-report-problem', disabled: true },
       { id: 'delorun-delegation-consent', name: '@delorun/plugin-delegation-consent', config: { enabled: true }, disabled: true },
@@ -566,6 +590,7 @@ describe('the parity overlay\'s mount of @delorun/bundle-local', () => {
           { id: 'delorun-permission-defaults', name: '@delorun/plugin-permission-defaults', config: { enabled: true }, disabled: true },
           { id: 'delorun-schedule-consent', name: '@delorun/plugin-schedule-consent', config: { enabled: true }, disabled: true },
           { id: 'delorun-fetch-guard', name: '@delorun/plugin-fetch-guard', config: { enabled: true }, disabled: true },
+          { id: 'delorun-tool-failure-guard', name: '@delorun/plugin-tool-failure-guard', config: GUARD_CONFIG, disabled: true },
           { id: 'delorun-plugin-authoring', name: '@delorun/skill-plugin-authoring', disabled: true },
           { id: 'delorun-report-problem', name: '@delorun/skill-report-problem', disabled: true },
           { id: 'delorun-delegation-consent', name: '@delorun/plugin-delegation-consent', config: { enabled: true }, disabled: true },

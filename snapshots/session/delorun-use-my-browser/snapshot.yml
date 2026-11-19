@@ -1,0 +1,16 @@
+version: 1
+scenario: delorun-use-my-browser
+profile: headless
+composition: default
+recording: authored
+permission: workspace-write
+header:
+  class: delorun-use-my-browser
+  pin: true
+  # The browse tools, and their system-prompt section, join the request when the person allows the ask and leave it
+  # when they turn the grant off.
+  changes: 2
+  promptChanges: 2
+platform: posix
+replay:
+  override: true

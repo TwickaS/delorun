@@ -12,7 +12,7 @@
 
 每行给出一项证据。检查名（如 `parity-switches`）运行 `node_modules/.bin/tsx delorun/apps/tools/src/parity/composition/check-parity-switches.ts`，该检查读取开关注册表、开关字段与对等覆盖层。规格路径指向断言该行的测试文件。以「Manual check:」开头的条目指出审阅者用来确认该行的源码行。
 
-有十一个已构建的开关，其开关开启场景仍待录制：`main_chat`、`rename_workspace_tool`、`permission_defaults`、`fetch_guard`、`scheduled_task_consent`、`instruction_layer_consent`、`mcp_add_consent`、`external_agent_consent`、`sandbox_protected_reads`、`update_turn_refusal` 和 `default_workspace_directory`。`parity-switches` 将它们报告为待录制，而不是通过，因此本页对这些开关不声称任何回放结果。对模型可见的开关 `preset_inspect`、`plugin_manager_read_exemption`、`profile_history` 和 `container_denial_marker` 在 `snapshots/` 之下有已录制的场景，对等回放在覆盖层之下运行它们。
+有十二个已构建的开关，其开关开启场景仍待录制：`browser_additions`、`main_chat`、`rename_workspace_tool`、`permission_defaults`、`fetch_guard`、`scheduled_task_consent`、`instruction_layer_consent`、`mcp_add_consent`、`external_agent_consent`、`sandbox_protected_reads`、`update_turn_refusal` 和 `default_workspace_directory`。`parity-switches` 将它们报告为待录制，而不是通过，因此本页对这些开关不声称任何回放结果。对模型可见的开关 `preset_inspect`、`plugin_manager_read_exemption`、`profile_history`、`container_denial_marker`、`tool_failure_guard` 和 `use_my_browser` 在 `snapshots/` 之下有已录制的场景，对等回放在覆盖层之下运行它们。
 
 ## Liveshare
 
@@ -75,6 +75,7 @@ setup 的提示回答设定下面四个开关：`permission_defaults`、`instruc
 | --- | --- | --- | --- |
 | `preset_inspect` | `dsh-v0.2.2-rc.3`：没有 `preset_inspect` 工具。本树只在 `presetInspect` 开启时注册它，而该开关默认关闭。随附的 Standard、PTC 和 Cordis 预设在没有该开关的情况下挂载工具行，因此本树中没有任何随附预设列出该工具 | 已构建：`preset_inspect`，带已录制的场景 | `packages/preset/agent-preset-registry/tests/tools.spec.ts` |
 | 唯一新的对模型可见的 Delorun 工具 | `dsh-v0.2.2-rc.3`：没有 `preset_inspect` 工具。在本树中，`preset_inspect` 是 Delorun 的注册中唯一带有新名称的工具；`plugin_manager` 的注册是被编辑而不是被添加 | 已构建：`preset_inspect` | Manual check：`git diff --unified=0 dsh-v0.2.2-rc.3 -- packages apps scripts delorun` 在 `packages/preset/agent-preset-registry/src/tools.ts` 中添加了一个带新名称 `preset_inspect` 的工具注册。 |
+| 工具失败守卫 | `dsh-v0.2.2-rc.3`：一个轮次中失败的工具调用没有上限；`repeat-tool-reminder` 只就完全相同的重复调用提醒模型。本树：[`@delorun/plugin-tool-failure-guard`](../../packages/plugin-tool-failure-guard/README.zh.md) 在连续 3 次调用失败后提醒模型，在连续 6 次或最近 12 次中有 8 次失败时停止轮次；`@delorun/bundle-local` 和 `@delorun/bundle-headless` 将它挂载为开启；上游的 profile 不挂载它 | 已构建：`tool_failure_guard` | `delorun/packages/plugin-tool-failure-guard/tests/guard.spec.ts`、`snapshots/session/delorun-tool-failure-guard` 和 `parity-switches` |
 
 ### 数据共享
 
@@ -103,6 +104,14 @@ setup 的提示回答设定下面四个开关：`permission_defaults`、`instruc
 | MCP 添加时同意 | `dsh-v0.2.2-rc.3`：每个 MCP 服务器命令都作为可信代码在 agent 沙箱之外运行。本树：[`@delorun/plugin-mcp-consent`](../../packages/plugin-mcp-consent/README.zh.md) 让 stdio 服务器保持停止，并给出写明其命令和参数的拒绝，直到接受存储持有该启动（命令、其参数、文件夹和环境变量名称，以及它们所解析到的可执行文件和文件夹，因此被更改的文件会再次询问），本人在 home 的电脑上通过 studio 或 `delorun mcp accept` 接受它；在 Delorun 的 CLI profile 和 `delorun headless` 所启动的 profile 中开启挂载，后者的模板不挂载计划任务运行时或 MCP 客户端，因此在那里它只保护本人自己的 profile patch 添加的那一个 | 已构建：`mcp_add_consent` | `packages/mcp/mcp-client/tests/consent.spec.ts`、`delorun/packages/plugin-mcp-consent/tests/consent.spec.ts`、`delorun/packages/plugin-mcp-consent/tests/reviews.spec.ts` 和 `parity-switches` |
 | 外部智能体同意 | `dsh-v0.2.2-rc.3`：模型可以不经询问就启动 Claude Code 或 Codex 之类的外部智能体，它在沙箱之外以本人的账户运行。本树：[`@delorun/plugin-delegation-consent`](../../packages/plugin-delegation-consent/README.zh.md) 在每次运行之前于 home 的电脑上询问，提供「Allow once」和「Allow for this workspace」，拒绝处于 Read Only 的 chat，限制每次运行（默认 30 分钟），并拒绝带入这种智能体的 `plugin_manager` 调用；在 Delorun 的 CLI profile 和 `delorun headless` 所启动的 profile 中开启挂载，无论 setup 的提示问题得到什么回答 | 已构建：`external_agent_consent`（开关开启场景待录制） | `delorun/packages/plugin-delegation-consent/tests/consent.spec.ts` 和 `parity-switches` |
 
+### 浏览器
+
+| 项目 | 基线与本树 | 状态 | 证据 |
+| --- | --- | --- | --- |
+| 浏览器附加功能 | `dsh-v0.2.2-rc.3`：Playwright 浏览器提供方以 Playwright 自己的措辞报告未安装的浏览器版本，并且不给 `.playwright-mcp` 放 `.gitignore`。本树：提供方的 `browserAdditions` 开关由 [`@delorun/bundle-browser`](../../packages/bundle-browser/README.zh.md) 开启，它把该报告替换为一条消息，告诉模型停止尝试，并请本人在“插件”中完成 Browser 设置 | 已构建：`browser_additions`（开关开启场景待录制） | `packages/experimental/browser-use-playwright-mcp/tests/provider.spec.ts` |
+| 你自己的浏览器 | `dsh-v0.2.2-rc.3`：没有任何浏览器工具能用到本人自己的浏览器及其登录状态。本树：[`@delorun/browser-use-browse`](../../packages/browser-use-browse/README.zh.md) 为智能体提供 `use_my_browser` 工具，每个 chat 询问本人一次，并且只为本人已允许的 chat 启动 browse 及其工具；它的 `enabled` 开关由 [`@delorun/bundle-real-browser`](../../packages/bundle-real-browser/README.zh.md) 开启，关闭时该行不挂载任何内容 | 已构建：`use_my_browser` | `delorun/packages/browser-use-browse/tests/plugin.spec.ts`、`snapshots/session/delorun-use-my-browser` 和 `parity-switches` |
+| 浏览器工具拒绝与文件夹防护 | `dsh-v0.2.2-rc.3`：Playwright 提供方提供 `browser_run_code_unsafe`，它在服务器进程中运行模型编写的代码，而服务器按文本把文件参数同它的文件夹比较。本树：MCP 客户端从不注册被拒绝的工具，`browser_run_code_unsafe` 始终被拒绝；提供方拒绝对被拒绝工具的调用，也拒绝 `filename` 或 `paths` 的真实位置在 chat 文件夹之外的调用；服务器被告知该文件夹为它唯一的 MCP root。这些是安全不变量：在所有开关关闭时依然成立，包括 `browser_additions` | 已构建：无开关；`security` 台账条目 | `packages/experimental/browser-use-playwright-mcp/tests/provider.spec.ts` |
+
 ### 限制与容器
 
 | 项目 | 基线与本树 | 状态 | 证据 |
@@ -121,7 +130,7 @@ setup 的提示回答设定下面四个开关：`permission_defaults`、`instruc
 | 工作区重命名工具 | `dsh-v0.2.2-rc.3`：没有 `rename_workspace` 工具；`@delorun/bundle-local` 通过其 `delorun-workspace-rename` 行挂载它 | 已构建：`rename_workspace_tool`（开关开启场景待录制） | `delorun/packages/bundle-local/tests/workspace-rename.spec.ts` |
 | 主 chat | `dsh-v0.2.2-rc.3`：没有主 chat；本树有 `@delorun/plugin-main-chat`，这是没有任何 bundle 挂载的实验性插件 | 已构建：`main_chat`（开关开启场景待录制） | `parity-switches` |
 | 新手引导预设 | `dsh-v0.2.2-rc.3` 与本树：`standard` 是默认预设（`packages/bundle/web-app/cordis.patch.yml` 第 620 行）。计划中：`ptc`，作为 C16 已变更的默认值 `agent-preset-registry.config.default` | 计划中：C16 已变更的默认值；无开关 ID 或工作包 | Manual check：第 620 行设定 `standard`，而 C16 的已变更默认值表写明了计划中的取值。 |
-| `plugin_manager` 的读取豁免 | `dsh-v0.2.2-rc.3`：每个 `plugin_manager` 动作都需要 `danger-full-access` 提权；本树的 `readActionsExempt` 开关默认关闭，且没有随附的行设置它 | 已构建：`plugin_manager_read_exemption`，带已录制的场景 | `packages/boot/plugin-manager/tests/tools.spec.ts` |
+| `plugin_manager` 的读取豁免 | `dsh-v0.2.2-rc.3`：每个 `plugin_manager` 动作都需要 `danger-full-access` 提权；本树的 `readActionsExempt` 开关默认关闭，标准和 Creator 预设的工具行将其打开 | 已构建：`plugin_manager_read_exemption`，带已录制的场景 | `packages/boot/plugin-manager/tests/tools.spec.ts` |
 | `profile_history` | `dsh-v0.2.2-rc.3`：没有 `history`、`read_config`、`configure`、`undo` 或 `restore` 动作；本树的 `profileHistory` 开关默认关闭，且没有随附的行设置它 | 已构建：`profile_history`，带已录制的场景 | `packages/boot/plugin-manager/tests/tools.spec.ts` |
 | 被暂缓等待审查的插件更改 | `dsh-v0.2.2-rc.3`：智能体的 `plugin_manager` 的 `install_bundle` 或 `remove_bundle` 在其完全访问批准给出后运行；本树的 `@delorun/plugin-changes` 开关默认关闭，开启时它把该调用作为待处理更改记录在 profile 的更改日志中并拒绝它，因此在本人用 `delorun changes` 应用它之前不会安装或移除任何内容 | 已构建：`plugin_changes_pending`（开关开启场景待录制） | `delorun/packages/plugin-changes/tests/plugin-changes.spec.ts` |
 | Doctor | `dsh-v0.2.2-rc.3`：没有 doctor 应用；本树的 `doctor` 开关默认关闭，因此该应用不运行任何检查，也没有模型能看到它。`delorun doctor` 是单独的 Delorun 命令，它运行自己的检查，且不触及任何模型 | 已构建：`doctor`（功能开关；无开关开启场景） | `packages/boot/doctor/tests/app.spec.ts` |

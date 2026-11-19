@@ -15,7 +15,8 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { SandboxNetwork } from '@deepseek-ai/dsh-sandbox'
-import { LocalSandboxProvider, SANDBOX_PROXY_PORT, type Config } from '@deepseek-ai/dsh-sandbox-local'
+import { LocalSandboxProvider, type Config } from '@deepseek-ai/dsh-sandbox-local'
+import { SANDBOX_PROXY_PORT } from '../src/network.ts'
 import { bwrapProfileArgs } from '../src/profiles.ts'
 
 const probe = spawnSync('bwrap', [...bwrapProfileArgs({ mode: 'read-only', workspaceRoot: '/', network: { mode: 'off' } }), '--', 'true'], { timeout: 5_000, stdio: 'ignore' })

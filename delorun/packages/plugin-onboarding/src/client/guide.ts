@@ -1,37 +1,25 @@
 /**
  * What the guide's steps share while the dialog is open: this computer's readiness, the key tests, the plugins'
- * connections, the chosen workspace and a running clone, each a store a step subscribes to, so a step that is left and
+ * connections, the chosen workspace and its mode, each a store a step subscribes to, so a step that is left and
  * shown again finds them as they were. Readiness and the key tests are read once when the dialog opens; the
  * recommendations when the plugins step first shows, and from the registry only when the person asks.
  * @module @delorun/plugin-onboarding/client/guide
  */
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
-import type { CloneFailure, CloneProblem, CloneRequest, FolderKind, KeyTestAnswer, Readiness, RecommendAnswer } from '../wire.ts'
+import type { FolderKind, KeyTestAnswer, Readiness, RecommendAnswer } from '../wire.ts'
 import type { AddedFolder, HostFace } from './types.ts'
 
 /** A value read from the harness: still loading, read, or not readable. */
 export type Loadable<T> = { readonly status: 'loading' } | { readonly status: 'ready'; readonly value: T } | { readonly status: 'failed' }
 
-/** The workspace the first chat opens in: the default workspace, or a folder the Workspace step added or cloned. */
+/** The workspace the first chat opens in: the default workspace, or one the new-workspace dialog made. */
 export type WorkspaceChoice =
   | { readonly kind: 'default'; readonly workspaceId: WorkspaceId; readonly path: string }
   | ({ readonly kind: 'added' } & AddedFolder)
 
-/** How the Workspace step finds the folder: the default workspace, a folder on this computer, or a clone from Git. */
-export type WorkspaceMode = 'default' | 'folder' | 'clone'
-
-/** Where a clone the Workspace step started stands; a finished clone becomes the chosen workspace and this returns to `idle`. */
-export type CloneView =
-  | { readonly state: 'idle' }
-  | { readonly state: 'starting' }
-  | { readonly state: 'running'; readonly percent?: number }
-  | { readonly state: 'refused'; readonly problem: CloneProblem }
-  /** `failed` also covers a harness that could not be asked or no longer knows the clone. */
-  | { readonly state: 'failed'; readonly failure: CloneFailure }
-
-/** How often a running clone is asked where it stands, in milliseconds. */
-export const CLONE_POLL_MS = 1000
+/** How the Workspace step finds the workspace: the default workspace, or another one the new-workspace dialog makes. */
+export type WorkspaceMode = 'default' | 'another'
 
 /** Where the providers step stands: the cards, the walk through the ticked providers, or the summary. */
 export type ProvidersPhase = 'landing' | 'walk' | 'summary'
@@ -66,12 +54,8 @@ export interface Guide {
   readonly recommendations: Store<Loadable<RecommendAnswer> | undefined>
   /** The chosen workspace; undefined until one is chosen or the default resolves. */
   readonly workspace: Store<WorkspaceChoice | undefined>
-  /** How the Workspace step finds the folder; `default` until the person picks another way. */
+  /** How the Workspace step finds the workspace; `default` until the person picks another way. */
   readonly mode: Store<WorkspaceMode>
-  /** The Workspace step's clone. */
-  readonly clone: Store<CloneView>
-  /** The footer's primary label a step asks for in place of Continue, such as "Clone and continue"; undefined for the usual one. */
-  readonly continueLabel: Store<string | undefined>
   /** Where the providers step stands, which decides the dialog's own buttons. */
   readonly providersPhase: Store<ProvidersPhase>
   /** What the person did on Phone access, which Ready reports. */
@@ -103,11 +87,6 @@ export interface Guide {
    */
   setGate(key: string, gate: ContinueGate | undefined): void
   /**
-   * Ask for another label on the footer's primary button.
-   * @param label - the label, or undefined for the usual one.
-   */
-  setContinueLabel(label: string | undefined): void
-  /**
    * Ask every hold, in the order set, whether Continue may go on.
    * @returns whether the flow may go on; false as soon as one hold refuses.
    */
@@ -125,17 +104,9 @@ export interface Guide {
    */
   chooseWorkspace(choice: WorkspaceChoice): void
   /**
-   * @param mode - how the Workspace step finds the folder.
+   * @param mode - how the Workspace step finds the workspace.
    */
   setMode(mode: WorkspaceMode): void
-  /**
-   * Clone a repository into a new folder and, once Git finishes and the folder is added, choose it. Nothing starts
-   * while a clone runs.
-   * @param request - the address, the folder to clone into and the new folder's name.
-   */
-  startClone(request: CloneRequest): void
-  /** Stop asking about a running clone, as when the dialog closes; the clone itself runs on in the harness. */
-  dispose(): void
 }
 
 /**
@@ -151,58 +122,26 @@ function fill<T>(store: { set(value: Loadable<T>): void }, load: () => Promise<T
 /**
  * Create the guide's state and start reading readiness and the key tests.
  * @param host - the harness's routes.
- * @param pollMs - how often a running clone is asked where it stands.
  * @returns the state.
  */
-export function createGuide(host: HostFace, pollMs: number = CLONE_POLL_MS): Guide {
+export function createGuide(host: HostFace): Guide {
   const readiness = createSnapshotStore<Loadable<Readiness>>({ status: 'loading' })
   const keys = createSnapshotStore<Loadable<KeyTestAnswer>>({ status: 'loading' })
   const recommendations = createSnapshotStore<Loadable<RecommendAnswer> | undefined>(undefined)
   const workspace = createSnapshotStore<WorkspaceChoice | undefined>(undefined)
   const mode = createSnapshotStore<WorkspaceMode>('default')
-  const clone = createSnapshotStore<CloneView>({ state: 'idle' })
-  const continueLabel = createSnapshotStore<string | undefined>(undefined)
   const providersPhase = createSnapshotStore<ProvidersPhase>('landing')
   const phone = createSnapshotStore<PhoneOutcome>('untouched')
   const stock = createSnapshotStore(false)
   const stockScreen = createSnapshotStore(false)
   const gates = new Map<string, ContinueGate>()
-  let disposed = false
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const poll = (job: string): void => {
-    timer = setTimeout(() => {
-      void host.cloneStatus(job).then((status) => {
-        if (disposed) return
-        switch (status.state) {
-          case 'running':
-            clone.set(status.percent === undefined ? { state: 'running' } : { state: 'running', percent: status.percent })
-            poll(job)
-            return
-          case 'done':
-            clone.set({ state: 'idle' })
-            workspace.set({ kind: 'added', workspaceId: status.workspaceId as WorkspaceId, path: status.path, folder: status.kind })
-            return
-          case 'failed':
-            clone.set({ state: 'failed', failure: status.failure })
-            return
-          case 'unknown':
-            clone.set({ state: 'failed', failure: 'failed' })
-            return
-          /* v8 ignore next 2 -- closed-union default only defends a future widening of CloneStatus */
-          default:
-            assertNever(status)
-        }
-      })
-    }, pollMs)
-  }
   fill(readiness, host.readiness)
   fill(keys, host.keyTest)
   return {
-    readiness, keys, recommendations, workspace, mode, clone, continueLabel, providersPhase, phone, stock, stockScreen,
+    readiness, keys, recommendations, workspace, mode, providersPhase, phone, stock, stockScreen,
     setStock: (chosen) => { stock.set(chosen) },
     setStockScreen: (open) => { stockScreen.set(open) },
     setPhone: (outcome) => { phone.set(outcome) },
-    setContinueLabel: (label) => { continueLabel.set(label) },
     setProvidersPhase: (phase) => { providersPhase.set(phase) },
     setGate: (key, gate) => { if (gate === undefined) gates.delete(key); else gates.set(key, gate) },
     passGates: async () => {
@@ -215,35 +154,7 @@ export function createGuide(host: HostFace, pollMs: number = CLONE_POLL_MS): Gui
     recommend: (registry) => { fill(recommendations, () => host.recommend(registry)) },
     chooseWorkspace: (choice) => { workspace.set(choice) },
     setMode: (next) => { mode.set(next) },
-    startClone: (request) => {
-      const now = clone.getSnapshot().state
-      if (now === 'starting' || now === 'running') return
-      clone.set({ state: 'starting' })
-      void host.cloneStart(request).then((outcome) => {
-        if (disposed) return
-        if (outcome.kind === 'started') {
-          clone.set({ state: 'running' })
-          poll(outcome.job)
-        } else {
-          clone.set(outcome.kind === 'refused' ? { state: 'refused', problem: outcome.problem } : { state: 'failed', failure: 'failed' })
-        }
-      })
-    },
-    dispose: () => {
-      disposed = true
-      clearTimeout(timer)
-    },
   }
-}
-
-/**
- * Close a union the compiler has narrowed to nothing.
- * @param value - the value that cannot occur.
- * @throws always.
- */
-/* v8 ignore next 3 -- reached only when CloneStatus widens without its switch */
-function assertNever(value: never): never {
-  throw new Error(`unhandled clone status ${JSON.stringify(value)}`)
 }
 
 /** The coding agents a sign-in is read for, by connection id. */

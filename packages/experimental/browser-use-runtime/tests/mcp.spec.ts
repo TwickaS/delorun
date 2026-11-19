@@ -1,9 +1,10 @@
 import { executeToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import * as PtcToolExecutor from '@deepseek-ai/dsh-tool-executor-ptc'
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { chmod, mkdir, mkdtemp, readdir, readFile, readlink, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
@@ -28,7 +29,7 @@ import WorkingDirectory from '@deepseek-ai/dsh-working-directory'
 import { bindScopeParent } from '@deepseek-ai/dsh-scope'
 import * as McpClient from '@deepseek-ai/dsh-mcp-client'
 import type { McpConsentDecision, McpServerCommand } from '@deepseek-ai/dsh-mcp-client'
-import { BrowserMcpConfig, mountSessionMcp, validateBrowserMcpConfig } from '../src/mcp.ts'
+import { BrowserMcpConfig, mountSessionMcp, validateBrowserMcpConfig, type BrowserToolCall, type SessionMcpOptions } from '../src/mcp.ts'
 
 const fixture = fileURLToPath(new URL('./mcp-fixture.mjs', import.meta.url))
 const roots: string[] = []
@@ -86,19 +87,46 @@ class PresentationRuntime extends PtcRuntime {
 class RefuseBrowserConsent extends McpClient.McpAddConsent {
   static readonly providesMcpAddConsent = true
   readonly reviewed: string[] = []
+  /** Whether the browser fixture's start is now accepted. */
+  accepted = false
   review(command: McpServerCommand): Promise<McpConsentDecision> {
     this.reviewed.push(command.serverName)
-    return Promise.resolve(command.serverName === 'browser-fixture' ? { allow: false, reason: 'no server is accepted yet' } : { allow: true })
+    return Promise.resolve(command.serverName === 'browser-fixture' && !this.accepted ? { allow: false, reason: 'no server is accepted yet' } : { allow: true })
   }
+}
+
+/** A row that declares the add-time consent and fails to start, so no consent service exists. */
+const FailedConsent = {
+  providesMcpAddConsent: true,
+  apply(): void { throw new Error('the consent row failed to start') },
 }
 
 /** A Loader row of an MCP server outside the browser provider, beside the refused browser server. */
 const OTHER_TOOL = 'mcp__other-fixture__visit'
 
-async function load(
-  exclusive = false, mode?: string, toolCallTimeoutMs?: number, toolOrder?: string[], consent = false,
-  explainFailure?: (message: string) => string | undefined, directory?: string,
-) {
+/** The fixture provider's settings for one {@link load}; each omitted field keeps the mount's default. */
+interface LoadOptions {
+  exclusive?: boolean
+  mode?: string
+  toolCallTimeoutMs?: number
+  toolOrder?: string[]
+  consent?: boolean | 'failed'
+  explainFailure?: (message: string) => string | undefined
+  directory?: string
+  outputFolder?: string
+  outputRoot?: string
+  refuseCall?: SessionMcpOptions['refuseCall']
+  checkResult?: SessionMcpOptions['checkResult']
+  prepareCall?: SessionMcpOptions['prepareCall']
+  registration?: SessionMcpOptions['registration']
+  admission?: SessionMcpOptions['admission']
+  deniedTools?: string[]
+}
+
+async function load(options: LoadOptions = {}) {
+  const { exclusive = false, mode, toolCallTimeoutMs, toolOrder, consent = false } = options
+  const { explainFailure, directory, outputFolder, outputRoot, refuseCall, checkResult, prepareCall } = options
+  const { registration, admission, deniedTools } = options
   const root = await mkdtemp(join(tmpdir(), 'dsh-browser-mcp-'))
   roots.push(root)
   const model = new FixtureModel()
@@ -113,10 +141,16 @@ async function load(
       mountSessionMcp(ctx, {
         name: 'browser-fixture', exclusive, command: process.execPath, args: [fixture, root, ...mode === undefined ? [] : [mode]],
         ...toolCallTimeoutMs === undefined ? {} : { toolCallTimeoutMs, env: {} }, ...explainFailure === undefined ? {} : { explainFailure },
-        ...directory === undefined ? {} : { directory },
+        ...directory === undefined ? {} : { directory }, ...outputFolder === undefined ? {} : { outputFolder },
+        ...outputRoot === undefined ? {} : { outputRoot },
+        ...prepareCall === undefined ? {} : { prepareCall },
+        ...refuseCall === undefined ? {} : { refuseCall }, ...checkResult === undefined ? {} : { checkResult },
+        ...deniedTools === undefined ? {} : { deniedTools },
+        ...registration === undefined ? {} : { registration }, ...admission === undefined ? {} : { admission },
       })
     } }],
-    ...consent ? [['consent', RefuseBrowserConsent], ['other', McpClient]] as const : [],
+    ...consent === true ? [['consent', RefuseBrowserConsent], ['other', McpClient]] as const : [],
+    ...consent === 'failed' ? [['consent', FailedConsent]] as const : [],
   ])
   const otherRoot = join(root, 'other')
   await mkdir(otherRoot)
@@ -153,6 +187,11 @@ function execute(ctx: Context, agent: Agent, name = TOOL) {
   return executeToolFixture(ctx, { agent, name, arguments: name === TOOL ? { label: 'direct' } : {}, callId: ToolCallId('direct'), signal: new AbortController().signal })
 }
 
+function visit(ctx: Context, agent: Agent, label: string) {
+  const signal = new AbortController().signal
+  return executeToolFixture(ctx, { agent, name: TOOL, arguments: { label }, callId: ToolCallId(label), signal })
+}
+
 function resource(ctx: Context, agent: Agent | undefined, name = 'read_mcp_resource', server = 'browser-fixture', callId = name) {
   return executeToolFixture(ctx, {
     ...agent === undefined ? {} : { agent }, name,
@@ -176,7 +215,7 @@ function registerIndependentTool(ctx: Context) {
 }
 
 async function events(root: string) {
-  return (await readFile(join(root, 'events.ndjson'), 'utf8')).trim().split('\n').map(line => JSON.parse(line) as { event: string; pid: number; name?: string; cwd?: string; roots?: { uri: string; name: string }[] })
+  return (await readFile(join(root, 'events.ndjson'), 'utf8')).trim().split('\n').map(line => JSON.parse(line) as { event: string; pid: number; name?: string; cwd?: string; outputDir?: string | null; arguments?: unknown; roots?: { uri: string; name: string }[] })
 }
 
 it('requires a browser mode and validates launch and attachment settings', () => {
@@ -215,7 +254,7 @@ it('waits for SystemPrompt and ToolRuntime before reserving the provider', async
 
 describe('Session MCP Loader composition', () => {
   it('discovers schemas before the first model request and retains distinct state across turns', async () => {
-    const { ctx, root, model, browser } = await load(false, undefined, 5000, [TOOL, '<unlisted-tools>'])
+    const { ctx, root, model, browser } = await load({ toolCallTimeoutMs: 5000, toolOrder: [TOOL, '<unlisted-tools>'] })
     const first = await ctx.agents.create({ sessionId: SessionId('first'), meta: { cwd: root }, agentOptions: { provider: 'fixture', model: 'fixture' } })
     const second = await ctx.agents.create({ sessionId: SessionId('second') })
     expect(ctx.tools.schemas()).toEqual([])
@@ -251,7 +290,7 @@ describe('Session MCP Loader composition', () => {
   })
 
   it('keeps unrelated and child Sessions running without a busy attachment and admits a later owner', async () => {
-    const { ctx, root, model } = await load(true)
+    const { ctx, root, model } = await load({ exclusive: true })
     registerIndependentTool(ctx)
     const first = await ctx.agents.create({ sessionId: SessionId('first') })
     const second = await ctx.agents.create({ sessionId: SessionId('second'), agentOptions: { provider: 'fixture', model: 'fixture' } })
@@ -299,7 +338,7 @@ describe('Session MCP Loader composition', () => {
   })
 
   it('allows another Session to answer while attached-browser discovery is pending', async () => {
-    const { ctx, root, model, browser } = await load(true, 'hold')
+    const { ctx, root, model, browser } = await load({ exclusive: true, mode: 'hold' })
     const first = observeActivation(ctx.agents.create({ sessionId: SessionId('first') }))
     await expect.poll(async () => (await events(root)).some(event => event.event === 'probe')).toBe(true)
     const second = await ctx.agents.create({ sessionId: SessionId('second'), agentOptions: { provider: 'fixture', model: 'fixture' } })
@@ -315,7 +354,7 @@ describe('Session MCP Loader composition', () => {
   })
 
   it('rolls back failed discovery and stops a child when unload interrupts discovery', async () => {
-    const failed = await load(false, 'fail', undefined, [TOOL, '<unlisted-tools>'])
+    const failed = await load({ mode: 'fail', toolOrder: [TOOL, '<unlisted-tools>'] })
     let failedAgent!: Agent
     const laterListener = vi.fn()
     await expect(failed.ctx.agents.create({
@@ -336,7 +375,7 @@ describe('Session MCP Loader composition', () => {
     for (const { pid } of failedEvents.filter(event => event.event === 'start')) {
       expect(() => process.kill(pid, 0)).toThrow(expect.objectContaining({ code: 'ESRCH' }))
     }
-    const held = await load(false, 'hold')
+    const held = await load({ mode: 'hold' })
     const pendingOwner = observeActivation(held.ctx.agents.create({ sessionId: SessionId('pending') }))
     await expect.poll(async () => (await events(held.root)).some(event => event.event === 'probe')).toBe(true)
     await held.browser.dispose()
@@ -347,8 +386,58 @@ describe('Session MCP Loader composition', () => {
     }
   })
 
+  it('starts no server for a Session the admission does not admit, refuses its browser calls, and follows its admission', async () => {
+    const admittedSessions = new Set<string>()
+    const listeners = new Set<(session: Agent['session']) => Promise<void>>()
+    const admission: NonNullable<SessionMcpOptions['admission']> = {
+      admitted: agent => admittedSessions.has(agent.id),
+      changed: (listener) => { listeners.add(listener); return () => { listeners.delete(listener) } },
+    }
+    const { ctx, root } = await load({ registration: 'none', admission })
+    // One `initialize` per Session's server; the client's discovery probe starts a process of its own that never initializes.
+    const starts = async () => (await events(root).catch(() => [])).filter(event => event.event === 'initialize')
+    admittedSessions.add('granted')
+    const granted = await ctx.agents.create({ sessionId: SessionId('granted'), agentOptions: { provider: 'fixture', model: 'fixture' } })
+    const other = await ctx.agents.create({ sessionId: SessionId('other'), agentOptions: { provider: 'fixture', model: 'fixture' } })
+    // Pins admission: only the admitted Session starts a server; the other gets no tools, no prompt section, no process.
+    expect(await starts()).toHaveLength(1)
+    const assembled = await warm(ctx, other.agent)
+    expect(assembled.tools.some(tool => tool.name.startsWith('mcp__browser-fixture__'))).toBe(false)
+    expect(assembled.sections.some(section => section.name === 'mcp:browser-fixture')).toBe(false)
+    expect((await warm(ctx, granted.agent)).tools.map(tool => tool.name)).toContain(TOOL)
+    // Pins the denial: a browser call from a Session that is not admitted is refused before any server sees it.
+    const refused = await execute(ctx, other.agent)
+    expect(refused.isError).toBe(true)
+    expect(JSON.stringify(refused)).toContain('this Session may not use this browser')
+    expect((await events(root)).filter(event => event.event === 'call')).toHaveLength(0)
+    expect((await visit(ctx, granted.agent, 'first')).isError).toBe(false)
+    // Pins the call-time check: once the provider stops admitting a Session, its calls are refused before the change is
+    // reported and its server stopped.
+    admittedSessions.delete('granted')
+    expect((await visit(ctx, granted.agent, 'early')).isError).toBe(true)
+    expect((await events(root)).filter(event => event.event === 'call')).toHaveLength(1)
+    admittedSessions.add('granted')
+    // A change of admission starts the newly admitted Session's server and stops the one no longer admitted.
+    admittedSessions.add('other')
+    admittedSessions.delete('granted')
+    // Each listener settles once the Session's server has started or stopped.
+    await Promise.all([...listeners].flatMap(listener => [listener(other.agent.session), listener(granted.agent.session)]))
+    expect(await starts()).toHaveLength(2)
+    const [first] = await starts()
+    expect(() => process.kill(first!.pid, 0)).toThrow(expect.objectContaining({ code: 'ESRCH' }))
+    expect((await warm(ctx, other.agent)).tools.map(tool => tool.name)).toContain(TOOL)
+    expect((await visit(ctx, other.agent, 'second')).isError).toBe(false)
+    // Pins the end of admission: the Session's calls are refused and reach no server.
+    const callsBefore = (await events(root)).filter(event => event.event === 'call').length
+    expect((await execute(ctx, granted.agent)).isError).toBe(true)
+    expect((await events(root)).filter(event => event.event === 'call')).toHaveLength(callsBefore)
+    expect((await warm(ctx, granted.agent)).tools.some(tool => tool.name.startsWith('mcp__browser-fixture__'))).toBe(false)
+    // Pins the slot: with `registration: 'none'` the mount takes no browser-use slot.
+    expect(ctx.browserUse.providerName).toBeUndefined()
+  })
+
   it('creates the Session without browser tools when the add-time consent refuses the browser server', async () => {
-    const { ctx, root, model, warnings } = await load(false, undefined, undefined, undefined, true)
+    const { ctx, root, model, warnings } = await load({ consent: true })
     const consent = ctx.get('mcpAddConsent') as RefuseBrowserConsent
     const created = await ctx.agents.create({ sessionId: SessionId('refused'), agentOptions: { provider: 'fixture', model: 'fixture' } })
     expect(ctx.agents.get(created.agent.id)).toBe(created.agent)
@@ -373,11 +462,82 @@ describe('Session MCP Loader composition', () => {
     expect(warnings).toHaveLength(2)
   })
 
+  it('starts the browser server in a Session its refusal left without tools only once the consent accepts it', async () => {
+    const { ctx, root } = await load({ consent: true })
+    const consent = ctx.get('mcpAddConsent') as RefuseBrowserConsent
+    const created = await ctx.agents.create({ sessionId: SessionId('refused-then-accepted'), agentOptions: { provider: 'fixture', model: 'fixture' } })
+    await warm(ctx, created.agent)
+    const reviewed = (): number => consent.reviewed.filter(name => name === 'browser-fixture').length
+    expect(reviewed()).toBe(1)
+    // Still refused: the check runs again, nothing starts, and the Session keeps no browser tools.
+    await ctx.parallel('mcp-client/consent-accepted', 'browser-fixture')
+    expect(reviewed()).toBe(2)
+    await expect(readFile(join(root, 'events.ndjson'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+    expect((await warm(ctx, created.agent)).tools.some(tool => tool.name === TOOL)).toBe(false)
+    // Another server's acceptance asks nothing.
+    await ctx.parallel('mcp-client/consent-accepted', 'other-fixture')
+    expect(reviewed()).toBe(2)
+    consent.accepted = true
+    await ctx.parallel('mcp-client/consent-accepted', 'browser-fixture')
+    expect((await warm(ctx, created.agent)).tools.map(tool => tool.name)).toContain(TOOL)
+    expect((await execute(ctx, created.agent, TOOL)).isError).toBe(false)
+  })
+
+  it('starts no server after the consent is accepted in a Session whose admission has ended', async () => {
+    const admittedSessions = new Set<string>(['refused-session'])
+    const admission: NonNullable<SessionMcpOptions['admission']> = {
+      admitted: agent => admittedSessions.has(agent.id),
+      changed: () => () => {},
+    }
+    const { ctx, root } = await load({ consent: true, registration: 'none', admission })
+    const consent = ctx.get('mcpAddConsent') as RefuseBrowserConsent
+    const refused = await ctx.agents.create({ sessionId: SessionId('refused-session'), agentOptions: { provider: 'fixture', model: 'fixture' } })
+    const unadmitted = await ctx.agents.create({ sessionId: SessionId('no-browser'), agentOptions: { provider: 'fixture', model: 'fixture' } })
+    const reviewed = (): number => consent.reviewed.filter(name => name === 'browser-fixture').length
+    // Only the admitted Session asked the consent; the Session of a No browser workspace never did.
+    expect(reviewed()).toBe(1)
+    // The provider stops admitting the refused Session before it reports the change.
+    admittedSessions.delete('refused-session')
+    consent.accepted = true
+    await ctx.parallel('mcp-client/consent-accepted', 'browser-fixture')
+    expect(reviewed()).toBe(1)
+    await expect(readFile(join(root, 'events.ndjson'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+    for (const created of [refused, unadmitted]) {
+      expect((await warm(ctx, created.agent)).tools.some(tool => tool.name === TOOL)).toBe(false)
+      expect((await execute(ctx, created.agent, TOOL)).isError).toBe(true)
+    }
+  })
+
+  it('creates the Session without browser tools when a row declares the add-time consent and did not start', async () => {
+    const { ctx, root, warnings } = await load({ consent: 'failed' })
+    const created = await ctx.agents.create({ sessionId: SessionId('unavailable'), agentOptions: { provider: 'fixture', model: 'fixture' } })
+    expect(ctx.agents.get(created.agent.id)).toBe(created.agent)
+    const assembled = await warm(ctx, created.agent)
+    expect(assembled.tools.some(tool => tool.name === TOOL)).toBe(false)
+    expect(assembled.sections.some(section => section.name === 'mcp:browser-fixture')).toBe(false)
+    expect(warnings).toEqual([expect.stringContaining('browser-fixture: the browser tools are off in Session unavailable until the server\'s start is allowed')])
+    expect(warnings[0]).toContain('declares the add-time consent but did not start, so the server stays stopped')
+    await expect(readFile(join(root, 'events.ndjson'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+    expect((await execute(ctx, created.agent)).isError).toBe(true)
+  })
+
+  it.skipIf(process.platform === 'win32')('narrows an existing fixed directory that others can enter to its owner', async () => {
+    const base = await mkdtemp(join(tmpdir(), 'dsh-browser-mcp-wide-'))
+    roots.push(base)
+    const fixed = join(base, 'fixed')
+    await mkdir(fixed, { mode: 0o755 })
+    await chmod(fixed, 0o755)
+    const { ctx } = await load({ directory: fixed })
+    const { agent } = await ctx.agents.create({ sessionId: SessionId('narrowed') })
+    await warm(ctx, agent)
+    expect((await stat(fixed)).mode & 0o777).toBe(0o700)
+  })
+
   it('starts every Session\'s server in the fixed directory, creating it, whatever each Session\'s working directory', async () => {
     const base = await mkdtemp(join(tmpdir(), 'dsh-browser-mcp-fixed-'))
     roots.push(base)
     const fixed = join(base, 'browser-use', 'browser-fixture')
-    const { ctx, root } = await load(false, undefined, undefined, undefined, false, undefined, fixed)
+    const { ctx, root } = await load({ directory: fixed })
     const first = join(root, 'first'), second = join(root, 'second')
     await Promise.all([mkdir(first), mkdir(second)])
     for (const [id, cwd] of [['fixed-first', first], ['fixed-second', second]] as const) {
@@ -392,7 +552,7 @@ describe('Session MCP Loader composition', () => {
   it('tells each Session\'s server that Session\'s working directory as its one MCP root', async () => {
     const base = await mkdtemp(join(tmpdir(), 'dsh-browser-mcp-roots-'))
     roots.push(base)
-    const { ctx, root } = await load(false, undefined, undefined, undefined, false, undefined, join(base, 'fixed'))
+    const { ctx, root } = await load({ directory: join(base, 'fixed') })
     const first = join(root, 'first'), second = join(root, 'second')
     await Promise.all([mkdir(first), mkdir(second)])
     for (const [id, cwd] of [['roots-first', first], ['roots-second', second]] as const) {
@@ -409,14 +569,197 @@ describe('Session MCP Loader composition', () => {
     ]))
   })
 
+  it('creates the output folder with a .gitignore of * when a Session\'s server starts, and adds one to an existing folder that has none', async () => {
+    const { ctx, root } = await load({ outputFolder: '.fixture-output' })
+    const fresh = join(root, 'fresh'), used = join(root, 'used')
+    await Promise.all([mkdir(fresh), mkdir(join(used, '.fixture-output'), { recursive: true })])
+    await writeFile(join(used, '.fixture-output', 'kept.png'), 'kept')
+    for (const [id, cwd] of [['output-fresh', fresh], ['output-used', used]] as const) {
+      const { agent } = await ctx.agents.create({ sessionId: SessionId(id), meta: { cwd } })
+      expect((await warm(ctx, agent)).tools.map(tool => tool.name)).toContain(TOOL)
+    }
+    expect(await readdir(fresh)).toEqual(['.fixture-output'])
+    expect(await readdir(join(fresh, '.fixture-output'))).toEqual(['.gitignore'])
+    expect(await readFile(join(fresh, '.fixture-output', '.gitignore'), 'utf8')).toBe('*\n')
+    expect(await readdir(used)).toEqual(['.fixture-output'])
+    expect((await readdir(join(used, '.fixture-output'))).sort()).toEqual(['.gitignore', 'kept.png'])
+    expect(await readFile(join(used, '.fixture-output', '.gitignore'), 'utf8')).toBe('*\n')
+    expect(await readFile(join(used, '.fixture-output', 'kept.png'), 'utf8')).toBe('kept')
+  })
+
+  it('gives each Session its own owner-only output folder under the output root, tells the server, and leaves the Session\'s folder without one', async () => {
+    const offered: BrowserToolCall[] = []
+    const { ctx, root } = await load({ outputFolder: '.fixture-output', outputRoot: join(tmpdir(), `dsh-output-root-${process.pid}`), refuseCall: async (call) => { offered.push(call); return undefined } })
+    const outputRoot = join(tmpdir(), `dsh-output-root-${process.pid}`)
+    roots.push(outputRoot)
+    const [first, second] = [join(root, 'first'), join(root, 'second')]
+    await Promise.all([mkdir(first), mkdir(second)])
+    for (const [id, cwd] of [['output-one', first], ['output-two', second]] as const) {
+      const { agent } = await ctx.agents.create({ sessionId: SessionId(id), meta: { cwd } })
+      await warm(ctx, agent)
+      expect((await visit(ctx, agent, id)).isError).toBe(false)
+    }
+    const folders = offered.map(call => call.outputDirectory!)
+    expect(new Set(folders).size).toBe(2)
+    for (const folder of folders) {
+      expect(dirname(folder)).toBe(outputRoot)
+      expect((await stat(folder)).mode & 0o777).toBe(0o700)
+    }
+    expect([...new Set((await events(root)).filter(event => event.event === 'start').map(event => String(event.outputDir)))].sort()).toEqual([...folders].sort())
+    expect(await readdir(first)).toEqual([])
+    expect(await readdir(second)).toEqual([])
+  })
+
+  it('does not start the server when the output folder overlaps a folder the chat can write: its working directory, or a root of its sandbox policy', async () => {
+    const outputRoot = join(tmpdir(), `dsh-overlap-root-${process.pid}`)
+    roots.push(outputRoot)
+    const { ctx, root } = await load({ outputRoot })
+    const start = async (id: string, cwd: string): Promise<void> => {
+      const { agent } = await ctx.agents.create({ sessionId: SessionId(id), meta: { cwd } })
+      await warm(ctx, agent)
+    }
+    // XDG_CACHE_HOME pointing into the workspace: the output folder lies inside the working directory.
+    await expect(start('overlap-inside', tmpdir())).rejects.toThrow('overlaps')
+    const quiet = join(root, 'quiet')
+    await mkdir(quiet)
+    ctx.provide('sandboxPolicy')
+    ctx.set('sandboxPolicy', { resolve: () => ({ mode: 'workspace-write', workspaceRoot: quiet, additionalWritableRoots: [tmpdir()] }) } as never)
+    await expect(start('overlap-extra-root', quiet)).rejects.toThrow('overlaps')
+    // A chat in a subfolder, with the output folder elsewhere in the sandbox's workspace root.
+    const sub = join(root, 'workspace-sub')
+    await mkdir(sub)
+    ctx.set('sandboxPolicy', { resolve: () => ({ mode: 'workspace-write', workspaceRoot: tmpdir() }) } as never)
+    await expect(start('overlap-workspace-root', sub)).rejects.toThrow('overlaps')
+    expect(existsSync(join(root, 'events.ndjson'))).toBe(false)
+  })
+
+  it('never writes through a link or over a person\'s own rules in the output folder', async () => {
+    const { ctx, root, warnings } = await load({ outputFolder: '.fixture-output' })
+    const elsewhere = join(root, 'elsewhere')
+    await mkdir(elsewhere)
+    const linked = join(root, 'linked'), ruled = join(root, 'ruled'), dangling = join(root, 'dangling'), file = join(root, 'file')
+    await Promise.all([mkdir(linked), mkdir(join(ruled, '.fixture-output'), { recursive: true }), mkdir(join(dangling, '.fixture-output'), { recursive: true }), mkdir(file)])
+    await symlink(elsewhere, join(linked, '.fixture-output'))
+    await writeFile(join(ruled, '.fixture-output', '.gitignore'), '!keep.png\n')
+    await symlink(join(elsewhere, 'written-through'), join(dangling, '.fixture-output', '.gitignore'))
+    await writeFile(join(file, '.fixture-output'), 'a file, not a folder')
+    for (const [id, cwd] of [['output-linked', linked], ['output-ruled', ruled], ['output-dangling', dangling], ['output-file', file]] as const) {
+      const { agent } = await ctx.agents.create({ sessionId: SessionId(id), meta: { cwd } })
+      expect((await warm(ctx, agent)).tools.map(tool => tool.name)).toContain(TOOL)
+    }
+    expect(await readdir(elsewhere)).toEqual([])
+    expect(await readFile(join(ruled, '.fixture-output', '.gitignore'), 'utf8')).toBe('!keep.png\n')
+    expect(await readlink(join(dangling, '.fixture-output', '.gitignore'))).toBe(join(elsewhere, 'written-through'))
+    expect(await readFile(join(file, '.fixture-output'), 'utf8')).toBe('a file, not a folder')
+    expect(warnings).toEqual([])
+  })
+
+  it('creates no output folder for a Session whose server the add-time consent refuses', async () => {
+    const { ctx, root } = await load({ consent: true, outputFolder: '.fixture-output' })
+    const cwd = join(root, 'refused')
+    await mkdir(cwd)
+    const { agent } = await ctx.agents.create({ sessionId: SessionId('output-refused'), meta: { cwd } })
+    expect((await warm(ctx, agent)).tools.some(tool => tool.name === TOOL)).toBe(false)
+    expect(await readdir(cwd)).toEqual([])
+  })
+
+  it('keeps the browser tools and logs a warning when the output folder cannot be created', async () => {
+    const { ctx, root, warnings } = await load({ outputFolder: join('absent', 'output') })
+    const cwd = join(root, 'unwritable')
+    await mkdir(cwd)
+    const { agent } = await ctx.agents.create({ sessionId: SessionId('output-failed'), meta: { cwd } })
+    expect((await warm(ctx, agent)).tools.map(tool => tool.name)).toContain(TOOL)
+    expect(await readdir(cwd)).toEqual([])
+    expect(warnings).toEqual([expect.stringContaining('with a .gitignore in Session output-failed\'s folder, so Git may pick up files')])
+    expect(warnings[0]).toMatch(/^browser-fixture: could not create absent[/\\]output .*ENOENT/u)
+  })
+
+  it('never offers a denied server tool to a Session or its model, and a call to it never reaches the server', async () => {
+    const UNSAFE = 'mcp__browser-fixture__unsafe'
+    const open = await load({ mode: 'unsafe-tool' })
+    const offered = await open.ctx.agents.create({ sessionId: SessionId('undenied') })
+    expect((await warm(open.ctx, offered.agent)).tools.map(tool => tool.name)).toContain(UNSAFE)
+
+    const { ctx, root, model } = await load({ mode: 'unsafe-tool', deniedTools: ['unsafe'] })
+    const { agent } = await ctx.agents.create({ sessionId: SessionId('denied'), agentOptions: { provider: 'fixture', model: 'fixture' } })
+    const assembled = await warm(ctx, agent)
+    expect(assembled.tools.map(tool => tool.name)).toContain(TOOL)
+    expect(assembled.tools.some(tool => tool.name === UNSAFE)).toBe(false)
+    expect(ctx.tools.schemas(agent).some(tool => tool.name === UNSAFE)).toBe(false)
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'Use the browser.' }], source: { kind: 'user' } }))
+    await agent.whenIdle()
+    const sent = model.requests.at(-1)?.tools?.map(tool => tool.name) ?? []
+    expect(sent).toContain(TOOL)
+    expect(sent).not.toContain(UNSAFE)
+    const refused = await executeToolFixture(ctx, {
+      agent, name: UNSAFE, arguments: {}, callId: ToolCallId('unsafe'), signal: new AbortController().signal,
+    }).then(result => result.isError, () => true)
+    expect(refused).toBe(true)
+    expect((await visit(ctx, agent, 'allowed')).isError).toBe(false)
+    const reached = (await events(root)).filter(event => event.event === 'call').map(event => event.name)
+    expect(reached).toContain('visit')
+    expect(reached).not.toContain('unsafe')
+  })
+
+  it('fails a call the provider refuses without sending it to the server, and sends every other call', async () => {
+    const offered: BrowserToolCall[] = []
+    const { ctx, root } = await load({ refuseCall: async (call) => {
+      offered.push(call)
+      return (call.arguments as { label: string }).label === 'refused' ? 'This call is refused.' : undefined
+    } })
+    const cwd = join(root, 'guarded')
+    await mkdir(cwd)
+    const { agent } = await ctx.agents.create({ sessionId: SessionId('guarded'), meta: { cwd } })
+    await warm(ctx, agent)
+    const call = (label: string) => visit(ctx, agent, label)
+    const refused = await call('refused')
+    expect(refused).toMatchObject({ isError: true, error: { message: 'This call is refused.' }, content: [{ type: 'text', text: 'Error: This call is refused.' }] })
+    expect((await events(root)).filter(event => event.event === 'call')).toEqual([])
+    expect((await call('allowed')).isError).toBe(false)
+    expect((await events(root)).filter(event => event.event === 'call')).toHaveLength(1)
+    expect(offered).toEqual([
+      { tool: 'visit', arguments: { label: 'refused' }, directory: cwd },
+      { tool: 'visit', arguments: { label: 'allowed' }, directory: cwd },
+    ])
+  })
+
+  it('lets the provider replace a call\'s arguments before the server sees them, or refuse the call', async () => {
+    const { ctx, root } = await load({ prepareCall: async (call) => {
+      const label = (call.arguments as { label: string }).label
+      if (label === 'throws') throw new Error('copy failed')
+      return label === 'refused' ? 'Not readable.' : label === 'copy' ? { arguments: { label: 'copied' }, note: 'Uploaded a copy.' } : undefined
+    } })
+    const { agent } = await ctx.agents.create({ sessionId: SessionId('prepared') })
+    await warm(ctx, agent)
+    expect(await visit(ctx, agent, 'refused')).toMatchObject({ isError: true, error: { message: 'Not readable.' } })
+    const copied = await visit(ctx, agent, 'copy')
+    expect(copied.isError).toBe(false)
+    expect(copied.content.at(-1)).toMatchObject({ type: 'text', text: 'Uploaded a copy.' })
+    expect((await visit(ctx, agent, 'throws')).isError).toBe(true)
+    expect((await visit(ctx, agent, 'same')).isError).toBe(false)
+    expect((await events(root)).filter(event => event.event === 'call').map(event => (event.arguments as { label: string }).label)).toEqual(['copied', 'same'])
+  })
+
+  it('replaces a call\'s result with the provider\'s refusal after the server answered, and keeps it otherwise', async () => {
+    const checked: Array<[BrowserToolCall, boolean]> = []
+    const { ctx, root } = await load({ checkResult: async (call, startedAt) => {
+      checked.push([call, startedAt <= Date.now()])
+      return (call.arguments as { label: string }).label === 'landed-outside' ? 'The file landed outside.' : undefined
+    } })
+    const { agent } = await ctx.agents.create({ sessionId: SessionId('checked') })
+    await warm(ctx, agent)
+    expect(await visit(ctx, agent, 'landed-outside')).toMatchObject({ isError: true, error: { message: 'The file landed outside.' } })
+    expect((await visit(ctx, agent, 'fine')).isError).toBe(false)
+    expect((await events(root)).filter(event => event.event === 'call')).toHaveLength(2)
+    expect(checked.map(([call, timed]) => [(call.arguments as { label: string }).label, timed])).toEqual([['landed-outside', true], ['fine', true]])
+  })
+
   it('replaces a browser failure the provider explains and keeps every other failure and result', async () => {
     const explainFailure = (message: string) => message.includes('is not installed') ? 'Browser needs setup; ask the person.' : undefined
-    const { ctx } = await load(false, undefined, undefined, undefined, false, explainFailure)
+    const { ctx } = await load({ explainFailure })
     const { agent } = await ctx.agents.create({ sessionId: SessionId('explained') })
     await warm(ctx, agent)
-    const call = (label: string) => executeToolFixture(ctx, {
-      agent, name: TOOL, arguments: { label }, callId: ToolCallId(label), signal: new AbortController().signal,
-    })
+    const call = (label: string) => visit(ctx, agent, label)
     const missing = await call('missing-browser')
     expect(missing.isError).toBe(true)
     expect(missing.content).toEqual([{ type: 'text', text: 'Error: Browser needs setup; ask the person.' }])
@@ -468,7 +811,7 @@ describe('Session MCP Loader composition', () => {
   })
 
   it('denies inherited browser resources and instructions while keeping unrelated MCP servers usable', async () => {
-    const { ctx, root } = await load(true)
+    const { ctx, root } = await load({ exclusive: true })
     await ctx.plugin(McpResources)
     ctx.mcpResources.register('docs', { request: async () => ({ contents: [{ uri: 'docs://memo', text: 'Independent document.' }] }) })
     const parent = await ctx.agents.create({ sessionId: SessionId('resource-parent') })
@@ -554,7 +897,7 @@ describe('Session MCP Loader composition', () => {
   })
 
   it('holds an immediate PTC turn until the first SDK includes browser tools', async () => {
-    const { ctx, root, model } = await load(false, 'gate', undefined, ['run_code', '<unlisted-tools>'])
+    const { ctx, root, model } = await load({ mode: 'gate', toolOrder: ['run_code', '<unlisted-tools>'] })
     await ctx.plugin(PresentationRuntime)
     let created = false
     let initializing!: Agent
@@ -584,7 +927,7 @@ describe('Session MCP Loader composition', () => {
   })
 
   it('cancels creation during discovery, closes its process, and releases the attachment', async () => {
-    const { ctx, root, model } = await load(true, 'gate')
+    const { ctx, root, model } = await load({ exclusive: true, mode: 'gate' })
     const controller = new AbortController()
     let initializing!: Agent
     const creation = observeActivation(ctx.agents.create({
@@ -614,7 +957,7 @@ describe('Session MCP Loader composition', () => {
   })
 
   it('closes the discovered client when a later creation listener rejects', async () => {
-    const { ctx, root, model } = await load(false, undefined, undefined, [TOOL, '<unlisted-tools>'])
+    const { ctx, root, model } = await load({ toolOrder: [TOOL, '<unlisted-tools>'] })
     let initializing!: Agent
     await expect(ctx.agents.create({
       sessionId: SessionId('later-listener-failure'), agentOptions: { provider: 'fixture', model: 'fixture' },
@@ -638,7 +981,7 @@ describe('Session MCP Loader composition', () => {
   })
 
   it('cancels before browser discovery without starting a process', async () => {
-    const { ctx, root, model } = await load(false, 'gate')
+    const { ctx, root, model } = await load({ mode: 'gate' })
     const controller = new AbortController()
     await expect(ctx.agents.create({
       sessionId: SessionId('canceled-at-creation'), signal: controller.signal,
@@ -685,7 +1028,7 @@ describe('Session MCP Loader composition', () => {
   })
 
   it('awaits discovery on persisted resume and releases a canceled resume before retry', async () => {
-    const { ctx, root, model } = await load(true, 'gate')
+    const { ctx, root, model } = await load({ exclusive: true, mode: 'gate' })
     await ctx.plugin(JsonlSessionPersistence, { root: join(root, 'sessions') })
     await writeFile(join(root, 'release'), '')
     const sessionId = SessionId('persisted-browser')

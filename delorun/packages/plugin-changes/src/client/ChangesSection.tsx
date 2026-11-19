@@ -1,28 +1,34 @@
 /**
- * The Changes section in Settings: the work session, the changes a start left out, the changes and the agent's
- * requests waiting for review, the recent changes, the changes to Delorun itself and the protection setting, read only
- * with the terminal command that changes it; with protection off, a note says that changes load without review and
- * linked plugins reload live on save. The state, which the page reads every 15 seconds, names the plugins under
- * Changes; the section reads their folders for the changes waiting for review when it opens, after each action and
- * when the person asks. Review opens a change with its diff and risk summary; Apply, Discard, Undo, Apply again, Start
- * working and Done act through the harness's Changes routes, and a change the checks flagged asks a second
- * confirmation that names what they found. An agent's plugin request is applied after a confirmation and the second
- * confirmation the route asks for every request, which names its spec. A change to Delorun itself is reviewed read only,
- * with the terminal commands that decide it and no action. A page that is not at the computer shows everything with
- * every action disabled.
+ * The Changes section in Settings: the notes on who may act and the protection notices, the work session, the changes a
+ * start left out, the changes and the agent's requests waiting for review, the recent changes, the changes to Delorun
+ * itself, and the protection switch; with protection off, a note says that changes load without review and linked
+ * plugins reload live on save. The state, which the page reads every 15 seconds, names the plugins under Changes and
+ * whether the person has a copy of Delorun; the section reads the plugins' folders and the copy for the changes waiting
+ * for review when it opens, after each action and when the person asks. Review opens a change with its diff and risk
+ * summary; Apply, Discard, Undo, Apply again, Start working and Done act through the harness's Changes routes, and a
+ * change the checks flagged asks a second confirmation that names what they found. An agent's plugin request is applied
+ * after a confirmation and the second confirmation the route asks for every request, which names its spec.
+ *
+ * Each control reads the state's `access`: one the Phone powers level keeps at the computer is disabled with a hover
+ * text; one that needs an unlock stays enabled, and the route's refusal opens the studio's unlock dialog.
  */
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState } from 'react'
 import { Button, CommandText, Modal, relativeTime, StateDot, Tag } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { HostObservable, InjectFace, PropsLocale, PropsRuntime, TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
-import type { ChangesStateView, EntryView, FolderView, HarnessEntryView, PendingView, RiskKindView, ShownView, WorkReviewView } from '../wire.ts'
-import type { ActionOutcome, ChangesLoad } from './controller.ts'
+import type { HostObservable, InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { ChangesControl, ChangesStateView, EntryView, FolderView, HarnessCopyView, HarnessEntryView, HarnessPendingView, PendingListView, PendingView, RiskKindView, ShownView, WillLoadView, WorkReviewView } from '../wire.ts'
+import { AccessNote } from './AccessNote.tsx'
+import type { ActionOutcome, ChangesLoad, CopyOutcome, HarnessEffects } from './controller.ts'
 import { ChangeDetail } from './ChangeDetail.tsx'
 import css from './ChangesSection.module.css'
+import { controlUse, Group, LoadLine, pluralKey, SHORT_VERSION, useLoaded, WIDE_DIALOG, type Loaded, type T } from './parts.tsx'
+import { ProtectionGroup, ProtectionNotices, ProtectionOffDialog, ProtectionOnDialog } from './ProtectionGroup.tsx'
+import { RestartCard, RestartDialog } from './RestartCard.tsx'
+import { SelfDialog, SelfGroup, SelfReviewDialog } from './SelfGroup.tsx'
 import { timeOfDay } from './time.ts'
 
 /** The controller's reads and calls the section uses. */
 export interface ChangesSectionInjected {
-  readonly hooks: { readonly changes: HostObservable<ChangesLoad>, readonly refusedRemote: HostObservable<boolean> }
+  readonly hooks: { readonly changes: HostObservable<ChangesLoad>, readonly harnessEffects: HostObservable<HarnessEffects>, readonly restarting: HostObservable<boolean> }
   /**
    * Read the state again without showing the loading state.
    * @returns after the state is current.
@@ -40,10 +46,10 @@ export interface ChangesSectionInjected {
    */
   readonly show: (id: string) => Promise<ShownView>
   /**
-   * Read the plugins' folders for the changes waiting for review.
+   * Read the plugins' folders and the person's copy of Delorun for the changes waiting for review.
    * @returns the changes.
    */
-  readonly listPending: () => Promise<readonly PendingView[]>
+  readonly listPending: () => Promise<PendingListView>
   /**
    * Read the open work session's folder.
    * @param plugin - the plugin.
@@ -90,19 +96,82 @@ export interface ChangesSectionInjected {
    * @returns the outcome.
    */
   readonly done: (plugin: string, version: string, confirmedRisk: boolean) => Promise<ActionOutcome>
+  /**
+   * Apply a change waiting in the person's copy of Delorun.
+   * @param id - the change.
+   * @param to - the content version the review showed.
+   * @param confirmedRisk - whether the person confirmed a second time.
+   * @returns the outcome.
+   */
+  readonly harnessApply: (id: string, to: string, confirmedRisk: boolean) => Promise<ActionOutcome>
+  /**
+   * Undo a change to Delorun itself.
+   * @param id - the change.
+   * @returns the outcome.
+   */
+  readonly harnessUndo: (id: string) => Promise<ActionOutcome>
+  /**
+   * Discard a change waiting in the person's copy of Delorun.
+   * @param id - the change.
+   * @returns the outcome.
+   */
+  readonly harnessDiscard: (id: string) => Promise<ActionOutcome>
+  /**
+   * Make the person's copy of Delorun, or find it.
+   * @returns the copy, or `refused`.
+   */
+  readonly makeCopy: () => Promise<CopyOutcome>
+  /**
+   * Ask for safe mode at the next start.
+   * @returns the outcome.
+   */
+  readonly startSafeMode: () => Promise<ActionOutcome>
+  /**
+   * End safe mode.
+   * @returns the outcome.
+   */
+  readonly exitSafeMode: () => Promise<ActionOutcome>
+  /**
+   * Turn protection on.
+   * @returns the outcome.
+   */
+  readonly protectionOn: () => Promise<ActionOutcome>
+  /**
+   * Turn protection off.
+   * @param confirmed - whether the person confirmed what would load without review.
+   * @returns the outcome; `confirm-protection` until confirmed.
+   */
+  readonly protectionOff: (confirmed: boolean) => Promise<ActionOutcome>
+  /**
+   * Dismiss a notice that a paired device changed the protection setting.
+   * @param id - the notice.
+   * @returns the outcome.
+   */
+  readonly noticeSeen: (id: string) => Promise<ActionOutcome>
+  /**
+   * Restart Delorun so the changes to Delorun itself that wait for a restart run.
+   * @param stopChats - stop the running chats instead of waiting for them.
+   * @returns the outcome.
+   */
+  readonly restart: (stopChats: boolean) => Promise<ActionOutcome>
+  /**
+   * End a restart that still waits for running chats.
+   * @returns the outcome.
+   */
+  readonly cancelRestart: () => Promise<ActionOutcome>
+  /** Load the page again, so a change to the studio's own files shows. */
+  readonly reloadPage: () => void
 }
 
 /** Props the renderer binds for the section. */
 export type ChangesSectionProps = PropsRuntime<'settings.section'> & PropsLocale<'delorunChanges'> & InjectFace<ChangesSectionInjected>
-
-/** The dictionary the section's parts read. */
-type T = TranslateNS<'delorunChanges'>
 
 /** What a second confirmation would send once the person confirms. */
 type Flagged =
   | { readonly kind: 'apply', readonly id: string }
   | { readonly kind: 'applyRequest', readonly id: string, readonly summary: string }
   | { readonly kind: 'done', readonly plugin: string, readonly version: string }
+  | { readonly kind: 'harnessApply', readonly id: string, readonly to: string }
 
 /** A smaller confirmation before an action that needs no review. */
 type Ask =
@@ -111,33 +180,28 @@ type Ask =
   | { readonly kind: 'discardRequest', readonly entry: EntryView }
   | { readonly kind: 'applyRequest', readonly entry: EntryView }
   | { readonly kind: 'work', readonly plugin: string }
+  | { readonly kind: 'selfUndo', readonly entry: HarnessEntryView }
+  | { readonly kind: 'selfDiscard', readonly change: HarnessPendingView }
+  | { readonly kind: 'safeModeOn' }
+  | { readonly kind: 'safeModeOff' }
 
 /** The dialog on display. */
 type Dialog =
   | { readonly kind: 'review', readonly change: PendingView }
+  | { readonly kind: 'selfReview', readonly change: HarnessPendingView }
   | { readonly kind: 'self', readonly entry: HarnessEntryView }
   | { readonly kind: 'done', readonly plugin: string }
   | { readonly kind: 'second', readonly flagged: Flagged, readonly kinds: readonly RiskKindView[], readonly notShown: readonly string[] }
   | { readonly kind: 'ask', readonly ask: Ask }
+  | { readonly kind: 'protectionOn' }
+  | { readonly kind: 'protectionOff', readonly willLoad: WillLoadView }
+  | { readonly kind: 'restart', readonly runningChats: number | undefined }
 
 /** Skeleton rows the first load lays out. */
 const SKELETON_ROWS = [0, 1, 2] as const
 
-/** The review dialogs' classes: wider than a confirmation, with the detail scrolling inside. The module defines both. */
-const WIDE_DIALOG = { className: String(css.wideDialog), contentClassName: String(css.wideContent) }
-
-/** How many hex digits of a version the person reads, as the terminal prints it. */
-const SHORT_VERSION = 7
-
-/**
- * The key of the singular or the plural copy for a count.
- * @param base - the key without its `.one` or `.other` suffix.
- * @param count - the count the copy states.
- * @returns the key to translate.
- */
-function pluralKey<B extends string>(base: B, count: number) {
-  return `${base}.${count === 1 ? 'one' : 'other'}` as const
-}
+/** What `show?pending` answers when there is nothing to read: no plugin under Changes and no copy. */
+const NOTHING_PENDING: PendingListView = { kind: 'pending-list', pending: [], harness: [] }
 
 /**
  * Render the section.
@@ -147,26 +211,40 @@ function pluralKey<B extends string>(base: B, count: number) {
 export function ChangesSection(props: ChangesSectionProps) {
   const { t, reload, retry } = props
   const load = props.useChanges(value => value)
-  const refusedRemote = props.useRefusedRemote(value => value)
+  const effects = props.useHarnessEffects(value => value)
+  const restarting = props.useRestarting(value => value)
   const [dialog, setDialog] = useState<Dialog | undefined>()
   const [busy, setBusy] = useState(false)
-  // Each value is one read of the folders; an action and Read the folders again move to the next.
+  const [copy, setCopy] = useState<HarnessCopyView | undefined>()
+  // Each value is one read of the folders and the copy; an action and Read again move to the next.
   const [folderRead, setFolderRead] = useState(0)
   useEffect(() => { void reload() }, [reload])
   const state = load.status === 'ready' ? load.state : undefined
-  const canAct = state?.atComputer === true && !refusedRemote
+  const hasCopy = state?.harnessAvailable.kind === 'available' && state.harnessAvailable.copy
+  const folders = state?.folders ?? []
+  const readKey = `${String(folderRead)} ${String(hasCopy)} ${folders.map(folder => folder.plugin).join(' ')}`
+  const pending = useLoaded(() => folders.length === 0 && !hasCopy ? Promise.resolve(NOTHING_PENDING) : props.listPending(), readKey)
   const run = (action: () => Promise<ActionOutcome>, flagged?: Flagged): void => {
     setBusy(true)
     void action().then((outcome) => {
-      setDialog(outcome.kind === 'confirm' && flagged !== undefined
-        ? { kind: 'second', flagged, kinds: outcome.kinds, notShown: outcome.notShown }
-        : undefined)
+      if (outcome.kind === 'confirm' && flagged !== undefined) setDialog({ kind: 'second', flagged, kinds: outcome.kinds, notShown: outcome.notShown })
+      else if (outcome.kind === 'confirm-protection') setDialog({ kind: 'protectionOff', willLoad: outcome.willLoad })
+      else setDialog(undefined)
     }).finally(() => {
       setBusy(false)
       setFolderRead(read => read + 1)
     })
   }
-  const disabled = busy || !canAct
+  const makeCopy = (): void => {
+    setBusy(true)
+    void props.makeCopy().then((outcome) => {
+      if (outcome.kind === 'done') setCopy(outcome.copy)
+    }).finally(() => {
+      setBusy(false)
+      setFolderRead(read => read + 1)
+    })
+  }
+  const controlOf = (control: Parameters<typeof controlUse>[1]) => state === undefined ? { disabled: true, title: undefined } : controlUse(state, control, t)
   return <div className={css.section} aria-busy={load.status === 'loading'}>
     <div className={css.header}>
       <h2 className={css.heading}>{t('title')}</h2>
@@ -189,12 +267,16 @@ export function ChangesSection(props: ChangesSectionProps) {
       </div>
       : null}
     {state === undefined ? null : <>
-      {canAct ? null : <div className={css.remote} role="note" data-delorun-changes-remote>
-        <p className={css.remoteTitle}>{t('remote.title')}</p>
-        <p className={css.meta}>{t('remote.body')}</p>
-      </div>}
+      <AccessNote access={state.access} t={t} />
+      <RestartCard state={state} restarting={restarting} t={t} busy={busy}
+        onRestart={(runningChats) => { setDialog({ kind: 'restart', runningChats }) }}
+        onCancel={() => { run(() => props.cancelRestart()) }}
+        onUndo={(entry) => { setDialog({ kind: 'ask', ask: { kind: 'selfUndo', entry } }) }} />
+      <ProtectionNotices notices={state.notices} t={t} busy={busy} onDismiss={(id) => { run(() => props.noticeSeen(id)) }} />
       <Facts state={state} t={t} />
-      <WorkCard state={state} t={t} disabled={disabled}
+      <SafeModeCard state={state} t={t} busy={busy} controlOf={controlOf}
+        onChange={(on) => { setDialog({ kind: 'ask', ask: { kind: on ? 'safeModeOn' : 'safeModeOff' } }) }} />
+      <WorkCard state={state} t={t} busy={busy}
         onDone={(plugin) => { setDialog({ kind: 'done', plugin }) }}
         onStart={(plugin) => { setDialog({ kind: 'ask', ask: { kind: 'work', plugin } }) }} />
       {state.leftOut.length === 0 ? null : <Group heading={t('leftOut.heading')}>
@@ -204,13 +286,12 @@ export function ChangesSection(props: ChangesSectionProps) {
             <p className={css.failureText}><StateDot state="error" />{t('leftOut.body', { plugin: entry.plugin ?? entry.summary, failure: entry.leftOut?.failure ?? '' })}</p>
           </div>
           <div className={css.actions}>
-            <Button variant="outline" size="sm" disabled={disabled} onClick={() => { setDialog({ kind: 'ask', ask: { kind: 'applyAgain', entry } }) }}>{t('leftOut.applyAgain')}</Button>
-            <Button variant="outline" size="sm" disabled={disabled} onClick={() => { setDialog({ kind: 'ask', ask: { kind: 'undo', entry } }) }}>{t('confirm.undo')}</Button>
+            <Button variant="outline" size="sm" disabled={busy || controlOf('plugin-apply').disabled} title={controlOf('plugin-apply').title} onClick={() => { setDialog({ kind: 'ask', ask: { kind: 'applyAgain', entry } }) }}>{t('leftOut.applyAgain')}</Button>
+            <Button variant="outline" size="sm" disabled={busy || controlOf('plugin-undo').disabled} title={controlOf('plugin-undo').title} onClick={() => { setDialog({ kind: 'ask', ask: { kind: 'undo', entry } }) }}>{t('confirm.undo')}</Button>
           </div>
         </li>)}
       </Group>}
-      <PendingGroup key={`${String(folderRead)} ${state.folders.map(folder => folder.plugin).join(' ')}`} folders={state.folders}
-        requests={state.requests.length} t={t} busy={busy} listPending={props.listPending}
+      <PendingGroup folders={folders} pending={pending} requests={state.requests.length} t={t} busy={busy}
         onReview={(change) => { setDialog({ kind: 'review', change }) }}
         onReadAgain={() => { setFolderRead(read => read + 1) }} />
       {state.requests.length === 0 ? null : <Group heading={t('requests.heading')}>
@@ -221,89 +302,106 @@ export function ChangesSection(props: ChangesSectionProps) {
             <CommandText className={css.command} label={t('requests.command')} text={`delorun changes apply ${entry.id}`} />
           </div>
           <div className={css.actions}>
-            <Button variant="outline" size="sm" disabled={disabled} onClick={() => { setDialog({ kind: 'ask', ask: { kind: 'discardRequest', entry } }) }}>{t('review.discard')}</Button>
-            <Button variant="outline" size="sm" disabled={disabled} onClick={() => { setDialog({ kind: 'ask', ask: { kind: 'applyRequest', entry } }) }}>{t('review.apply')}</Button>
+            <Button variant="outline" size="sm" disabled={busy || controlOf('plugin-discard').disabled} title={controlOf('plugin-discard').title} onClick={() => { setDialog({ kind: 'ask', ask: { kind: 'discardRequest', entry } }) }}>{t('review.discard')}</Button>
+            <Button variant="outline" size="sm" disabled={busy || controlOf('plugin-apply').disabled} title={controlOf('plugin-apply').title} onClick={() => { setDialog({ kind: 'ask', ask: { kind: 'applyRequest', entry } }) }}>{t('review.apply')}</Button>
           </div>
         </li>)}
       </Group>}
-      <Recent state={state} t={t} disabled={disabled} onUndo={(entry) => { setDialog({ kind: 'ask', ask: { kind: 'undo', entry } }) }} />
-      <SelfGroup state={state} t={t} busy={busy} onReview={(entry) => { setDialog({ kind: 'self', entry }) }} />
-      <Protection state={state} t={t} />
+      <Recent state={state} t={t} busy={busy} onUndo={(entry) => { setDialog({ kind: 'ask', ask: { kind: 'undo', entry } }) }} />
+      <SelfGroup state={state} t={t} busy={busy} pending={hasCopy ? pending : undefined} effects={effects} copy={copy}
+        onMakeCopy={makeCopy}
+        onReview={(change) => { setDialog({ kind: 'selfReview', change }) }}
+        onDiscard={(change) => { setDialog({ kind: 'ask', ask: { kind: 'selfDiscard', change } }) }}
+        onShow={(entry) => { setDialog({ kind: 'self', entry }) }}
+        onUndo={(entry) => { setDialog({ kind: 'ask', ask: { kind: 'selfUndo', entry } }) }}
+        onReadAgain={() => { setFolderRead(read => read + 1) }}
+        onReloadPage={props.reloadPage} />
+      <ProtectionGroup state={state} t={t} busy={busy}
+        onTurn={(level) => { if (level === 'on') setDialog({ kind: 'protectionOn' }); else run(() => props.protectionOff(false)) }} />
     </>}
-    {dialog?.kind === 'review'
-      ? <ReviewDialog key={dialog.change.id} change={dialog.change} t={t} show={props.show} busy={busy} canAct={canAct}
-        onClose={() => { setDialog(undefined) }}
-        onApply={() => { run(() => props.apply(dialog.change.id, false), { kind: 'apply', id: dialog.change.id }) }}
-        onDiscard={() => { run(() => props.discard(dialog.change.id)) }} />
-      : null}
-    {dialog?.kind === 'self'
-      ? <SelfDialog key={dialog.entry.id} entry={dialog.entry} t={t} show={props.show} onClose={() => { setDialog(undefined) }} />
-      : null}
-    {dialog?.kind === 'done'
-      ? <DoneDialog key={dialog.plugin} plugin={dialog.plugin} t={t} reviewWork={props.reviewWork} busy={busy} canAct={canAct}
-        onClose={() => { setDialog(undefined) }}
-        onApprove={(version) => { run(() => props.done(dialog.plugin, version, false), { kind: 'done', plugin: dialog.plugin, version }) }} />
-      : null}
-    {dialog?.kind === 'second'
-      ? <SecondConfirmation dialog={dialog} t={t} busy={busy} canAct={canAct}
-        onClose={() => { setDialog(undefined) }}
-        onConfirm={() => {
-          const { flagged } = dialog
-          run(() => {
-            switch (flagged.kind) {
-              case 'apply': return props.apply(flagged.id, true)
-              case 'applyRequest': return props.applyRequest(flagged.id, true)
-              case 'done': return props.done(flagged.plugin, flagged.version, true)
-            }
-          })
-        }} />
-      : null}
-    {dialog?.kind === 'ask'
-      ? <AskDialog ask={dialog.ask} t={t} busy={busy} canAct={canAct}
-        onClose={() => { setDialog(undefined) }}
-        onConfirm={() => {
-          const { ask } = dialog
-          switch (ask.kind) {
-            case 'undo': return run(() => props.undo(ask.entry.id))
-            case 'applyAgain': return run(() => props.apply(ask.entry.id, false))
-            case 'discardRequest': return run(() => props.discard(ask.entry.id))
-            case 'applyRequest': return run(() => props.applyRequest(ask.entry.id, false), { kind: 'applyRequest', id: ask.entry.id, summary: ask.entry.summary })
-            case 'work': return run(() => props.beginWork(ask.plugin))
-          }
-        }} />
-      : null}
+    {state === undefined ? null : <Dialogs {...props} state={state} dialog={dialog} busy={busy} run={run} close={() => { setDialog(undefined) }} />}
   </div>
 }
 
 /**
- * One titled list of the section.
- * @param props - the heading and the rows.
- * @returns the group.
+ * The dialog on display, if any, wired to the controller's calls.
+ * @param props - the section's props, the state, the dialog, whether an action runs, the runner and Close.
+ * @returns the dialog, or nothing.
  */
-function Group({ heading, children }: { readonly heading: string, readonly children: ReactNode }) {
-  return <section className={css.group} aria-label={heading}>
-    <h3 className={css.groupHeading}>{heading}</h3>
-    <ul className={css.rows}>{children}</ul>
-  </section>
+function Dialogs(props: ChangesSectionProps & {
+  readonly state: ChangesStateView
+  readonly dialog: Dialog | undefined
+  readonly busy: boolean
+  readonly run: (action: () => Promise<ActionOutcome>, flagged?: Flagged) => void
+  readonly close: () => void
+}) {
+  const { t, state, dialog, busy, run, close } = props
+  switch (dialog?.kind) {
+    case undefined: return null
+    case 'review': return <ReviewDialog key={dialog.change.id} change={dialog.change} state={state} t={t} show={props.show} busy={busy}
+      onClose={close}
+      onApply={() => { run(() => props.apply(dialog.change.id, false), { kind: 'apply', id: dialog.change.id }) }}
+      onDiscard={() => { run(() => props.discard(dialog.change.id)) }} />
+    case 'selfReview': return <SelfReviewDialog key={dialog.change.id} change={dialog.change} state={state} t={t} show={props.show} busy={busy}
+      onClose={close}
+      onApply={(to) => { run(() => props.harnessApply(dialog.change.id, to, false), { kind: 'harnessApply', id: dialog.change.id, to }) }}
+      onDiscard={() => { run(() => props.harnessDiscard(dialog.change.id)) }} />
+    case 'self': return <SelfDialog key={dialog.entry.id} entry={dialog.entry} state={state} t={t} show={props.show} busy={busy}
+      onClose={close} onUndo={() => { run(() => props.harnessUndo(dialog.entry.id)) }} />
+    case 'restart': return <RestartDialog runningChats={dialog.runningChats} t={t} busy={busy} onClose={close}
+      onRestart={(stopChats) => { run(() => props.restart(stopChats)) }} />
+    case 'done': return <DoneDialog key={dialog.plugin} plugin={dialog.plugin} state={state} t={t} reviewWork={props.reviewWork} busy={busy}
+      onClose={close}
+      onApprove={(version) => { run(() => props.done(dialog.plugin, version, false), { kind: 'done', plugin: dialog.plugin, version }) }} />
+    case 'second': return <SecondConfirmation dialog={dialog} t={t} busy={busy} onClose={close}
+      onConfirm={() => {
+        const { flagged } = dialog
+        run(() => {
+          switch (flagged.kind) {
+            case 'apply': return props.apply(flagged.id, true)
+            case 'applyRequest': return props.applyRequest(flagged.id, true)
+            case 'done': return props.done(flagged.plugin, flagged.version, true)
+            case 'harnessApply': return props.harnessApply(flagged.id, flagged.to, true)
+          }
+        })
+      }} />
+    case 'ask': return <AskDialog ask={dialog.ask} t={t} busy={busy} onClose={close}
+      onConfirm={() => {
+        const { ask } = dialog
+        switch (ask.kind) {
+          case 'undo': return run(() => props.undo(ask.entry.id))
+          case 'applyAgain': return run(() => props.apply(ask.entry.id, false))
+          case 'discardRequest': return run(() => props.discard(ask.entry.id))
+          case 'applyRequest': return run(() => props.applyRequest(ask.entry.id, false), { kind: 'applyRequest', id: ask.entry.id, summary: ask.entry.summary })
+          case 'work': return run(() => props.beginWork(ask.plugin))
+          case 'selfUndo': return run(() => props.harnessUndo(ask.entry.id))
+          case 'selfDiscard': return run(() => props.harnessDiscard(ask.change.id))
+          case 'safeModeOn': return run(() => props.startSafeMode())
+          case 'safeModeOff': return run(() => props.exitSafeMode())
+        }
+      }} />
+    case 'protectionOn': return <ProtectionOnDialog loaded={state.unreviewedSinceOff} t={t} busy={busy} onClose={close}
+      onConfirm={() => { run(() => props.protectionOn()) }} />
+    case 'protectionOff': return <ProtectionOffDialog willLoad={dialog.willLoad} t={t} busy={busy} onClose={close}
+      onConfirm={() => { run(() => props.protectionOff(true)) }} />
+  }
 }
 
 /**
- * The changes waiting for review in the plugins' folders, read once per mount; the section mounts it again after each
- * action, when the person asks, and when the plugins under Changes differ.
- * @param props - the plugins under Changes, how many requests wait, the read and Review.
+ * The changes waiting for review in the plugins' folders, from the section's read of `show?pending`.
+ * @param props - the plugins under Changes, the read, how many requests wait, Review and Read again.
  * @returns the group.
  */
-function PendingGroup({ folders, requests, t, busy, listPending, onReview, onReadAgain }: {
+function PendingGroup({ folders, pending: loaded, requests, t, busy, onReview, onReadAgain }: {
   readonly folders: readonly FolderView[]
+  readonly pending: Loaded<PendingListView>
   readonly requests: number
   readonly t: T
   readonly busy: boolean
-  readonly listPending: () => Promise<readonly PendingView[]>
   readonly onReview: (change: PendingView) => void
   readonly onReadAgain: () => void
 }) {
-  const loaded = useLoaded(() => folders.length === 0 ? Promise.resolve([]) : listPending())
-  const pending = folders.length === 0 ? [] : loaded.status === 'ready' ? loaded.value : undefined
+  const pending = folders.length === 0 ? [] : loaded.status === 'ready' ? loaded.value.pending : undefined
   return <Group heading={t('pending.heading')}>
     {pending === undefined && loaded.status === 'loading' ? <li className={css.empty} role="status">{t('pending.reading')}</li> : null}
     {pending === undefined && loaded.status === 'error' ? <li className={css.empty}><p className={css.failureText} role="alert"><StateDot state="error" />{t('pending.unread')}</p></li> : null}
@@ -347,18 +445,42 @@ function Facts({ state, t }: { readonly state: ChangesStateView, readonly t: T }
 }
 
 /**
- * The work session: the plugin worked on with Done, or the plugins of the last start with Start working.
- * @param props - the state, the dictionary, whether actions are disabled and the two actions.
+ * Safe mode: whether it is on, and the button that starts or ends it for the next start.
+ * @param props - the state, the dictionary, whether an action runs, each control's decision and the ask.
  * @returns the card.
  */
-function WorkCard({ state, t, disabled, onDone, onStart }: {
+function SafeModeCard({ state, t, busy, controlOf, onChange }: {
   readonly state: ChangesStateView
   readonly t: T
-  readonly disabled: boolean
+  readonly busy: boolean
+  readonly controlOf: (control: ChangesControl) => { readonly disabled: boolean, readonly title: string | undefined }
+  readonly onChange: (on: boolean) => void
+}) {
+  const on = state.safeMode !== undefined
+  const use = controlOf('plugin-other')
+  return <div className={css.facts} data-delorun-safe-mode={on ? 'on' : 'off'}>
+    <div className={css.name}>{t('safeMode.heading')}</div>
+    <p className={css.meta}>{t(on ? 'safeMode.onBody' : 'safeMode.offBody')}</p>
+    <div className={css.actions}>
+      <Button variant="outline" size="sm" disabled={busy || use.disabled} title={use.title} onClick={() => { onChange(!on) }}>{t(on ? 'safeMode.leave' : 'safeMode.start')}</Button>
+    </div>
+  </div>
+}
+
+/**
+ * The work session: the plugin worked on with Done, or the plugins of the last start with Start working.
+ * @param props - the state, the dictionary, whether an action runs and the two actions.
+ * @returns the card.
+ */
+function WorkCard({ state, t, busy, onDone, onStart }: {
+  readonly state: ChangesStateView
+  readonly t: T
+  readonly busy: boolean
   readonly onDone: (plugin: string) => void
   readonly onStart: (plugin: string) => void
 }) {
   const session = state.workSession
+  const use = controlUse(state, 'plugin-other', t)
   if (session !== undefined) {
     return <Group heading={t('work.heading')}>
       <li className={css.row} data-work-session={session.plugin}>
@@ -368,7 +490,7 @@ function WorkCard({ state, t, disabled, onDone, onStart }: {
           {session.lastError === undefined ? null : <p className={css.failureText} role="alert"><StateDot state="error" />{t('work.lastError', { error: session.lastError.error })}</p>}
         </div>
         <div className={css.actions}>
-          <Button variant="primary" size="sm" disabled={disabled} onClick={() => { onDone(session.plugin) }}>{t('work.done')}</Button>
+          <Button variant="primary" size="sm" disabled={busy || use.disabled} title={use.title} onClick={() => { onDone(session.plugin) }}>{t('work.done')}</Button>
         </div>
       </li>
     </Group>
@@ -382,7 +504,7 @@ function WorkCard({ state, t, disabled, onDone, onStart }: {
         {plugin.loaded ? null : <p className={css.failureText}><StateDot state="error" />{plugin.error ?? t('work.notLoaded')}</p>}
       </div>
       <div className={css.actions}>
-        <Button variant="outline" size="sm" disabled={disabled} onClick={() => { onStart(plugin.plugin) }}>{t('work.start')}</Button>
+        <Button variant="outline" size="sm" disabled={busy || use.disabled} title={use.title} onClick={() => { onStart(plugin.plugin) }}>{t('work.start')}</Button>
       </div>
     </li>)}
   </Group>
@@ -390,11 +512,12 @@ function WorkCard({ state, t, disabled, onDone, onStart }: {
 
 /**
  * The newest decided changes with Undo where one can be undone.
- * @param props - the state, the dictionary, whether actions are disabled and Undo.
+ * @param props - the state, the dictionary, whether an action runs and Undo.
  * @returns the group.
  */
-function Recent({ state, t, disabled, onUndo }: { readonly state: ChangesStateView, readonly t: T, readonly disabled: boolean, readonly onUndo: (entry: EntryView) => void }) {
+function Recent({ state, t, busy, onUndo }: { readonly state: ChangesStateView, readonly t: T, readonly busy: boolean, readonly onUndo: (entry: EntryView) => void }) {
   const now = Date.now()
+  const undo = controlUse(state, 'plugin-undo', t)
   return <Group heading={t('recent.heading')}>
     {state.recent.length === 0 ? <li className={css.empty}>{t('recent.empty')}</li> : null}
     {state.recent.map((entry) => {
@@ -405,11 +528,12 @@ function Recent({ state, t, disabled, onUndo }: { readonly state: ChangesStateVi
           <div className={css.metaRow}>
             <span>{t(`state.${entry.state}`)}</span>
             <span>{t(`recent.at.${at.unit}`, { n: at.n })}</span>
+            {entry.decidedOn === undefined ? null : <span>{t('decidedOn', { device: entry.decidedOn })}</span>}
           </div>
         </div>
         {entry.undoable
           ? <div className={css.actions}>
-            <Button variant="outline" size="sm" disabled={disabled} onClick={() => { onUndo(entry) }}>{t('confirm.undo')}</Button>
+            <Button variant="outline" size="sm" disabled={busy || undo.disabled} title={undo.title} onClick={() => { onUndo(entry) }}>{t('confirm.undo')}</Button>
           </div>
           : null}
       </li>
@@ -418,178 +542,48 @@ function Recent({ state, t, disabled, onUndo }: { readonly state: ChangesStateVi
 }
 
 /**
- * The newest decided changes to Delorun itself with Review and the terminal commands that decide them, and the command that
- * lists the changes waiting in the person's copy of Delorun. It offers no action: only a terminal decides these changes.
- * @param props - the state, the dictionary, whether an action runs, and Review.
- * @returns the group.
- */
-function SelfGroup({ state, t, busy, onReview }: { readonly state: ChangesStateView, readonly t: T, readonly busy: boolean, readonly onReview: (entry: HarnessEntryView) => void }) {
-  const now = Date.now()
-  return <Group heading={t('self.heading')}>
-    {state.harness.length === 0 ? <li className={css.empty}>{t('self.empty')}</li> : null}
-    {state.harness.map((entry) => {
-      const at = relativeTime(Date.parse(entry.decidedAt ?? entry.createdAt), now)
-      const commands = selfCommands(entry)
-      return <li key={entry.id} className={css.row} data-change-id={entry.id}>
-        <div className={css.main}>
-          <div className={`${css.name} ${css.path}`}>{entry.file}</div>
-          <div className={css.metaRow}>
-            <span>{t(`state.${entry.state}`)}</span>
-            <span>{t(`recent.at.${at.unit}`, { n: at.n })}</span>
-            <span>{t('self.version', { version: entry.runtime })}</span>
-          </div>
-          {entry.leftOut === undefined ? null : <p className={css.failureText}><StateDot state="error" />{t('self.leftOut', { failure: entry.leftOut.failure })}</p>}
-          {commands.length === 0 ? null : <>
-            <p className={css.meta}>{t(commands.length === 1 ? 'self.undo' : 'self.applyOrUndo')}</p>
-            {commands.map(command => <CommandText key={command} className={css.command} label={t('self.command')} text={command} />)}
-          </>}
-        </div>
-        <div className={css.actions}>
-          <Button variant="outline" size="sm" disabled={busy} onClick={() => { onReview(entry) }}>{t('pending.review')}</Button>
-        </div>
-      </li>
-    })}
-    <li className={css.empty}>
-      <p className={css.meta}>{t('self.list')}</p>
-      <CommandText className={css.command} label={t('self.command')} text="delorun changes list" />
-    </li>
-  </Group>
-}
-
-/**
- * @param entry - a logged change to Delorun itself.
- * @returns the terminal commands that decide it from where it stands: undo an applied change, apply again or undo a
- *   change left out at a start, none for a change discarded or undone.
- */
-function selfCommands(entry: HarnessEntryView): readonly string[] {
-  switch (entry.state) {
-    case 'applied': return [`delorun changes undo ${entry.id}`]
-    case 'left-out-at-start': return [`delorun changes apply ${entry.id}`, `delorun changes undo ${entry.id}`]
-    case 'discarded':
-    case 'undone': return []
-  }
-}
-
-/**
- * The protection setting, read only, with the terminal command that changes it and no control.
- * @param props - the state and the dictionary.
- * @returns the group, or nothing when the setting cannot be read.
- */
-function Protection({ state, t }: { readonly state: ChangesStateView, readonly t: T }) {
-  if (state.protection === undefined) return null
-  return <Group heading={t('protection.heading')}>
-    <li className={css.row} data-protection={state.protection}>
-      <div className={css.main}>
-        <p className={css.text}>{t(`protection.${state.protection}`)}</p>
-        <p className={css.meta}>{t('protection.change')}</p>
-        <CommandText className={css.command} label={t('protection.command')} text="delorun changes protection on|off" />
-      </div>
-    </li>
-  </Group>
-}
-
-/** A read the dialogs and the pending group wait for: loading, failed, or the answer. */
-type Loaded<V> = { readonly status: 'loading' } | { readonly status: 'error' } | { readonly status: 'ready', readonly value: V }
-
-/**
- * Read once when a dialog or the pending group mounts.
- * @param read - the read.
- * @returns the read's progress.
- */
-function useLoaded<V>(read: () => Promise<V>): Loaded<V> {
-  const [loaded, setLoaded] = useState<Loaded<V>>({ status: 'loading' })
-  useEffect(() => {
-    let live = true
-    read().then(
-      (value) => { if (live) setLoaded({ status: 'ready', value }) },
-      (error: unknown) => {
-        console.warn('delorun-changes: the change was not read:', error)
-        if (live) setLoaded({ status: 'error' })
-      },
-    )
-    return () => { live = false }
-    // One read per mount; the section keys each dialog by its change or plugin and the pending group by its read, so
-    // another reads again.
-  }, [])
-  return loaded
-}
-
-/**
- * The loading line or the failure of a dialog's read.
- * @param props - the progress and its copy.
- * @returns the line, or nothing once read.
- */
-function LoadLine({ loaded, t, loading, failed }: { readonly loaded: Loaded<unknown>, readonly t: T, readonly loading: 'review.loading', readonly failed: 'review.failed' }) {
-  if (loaded.status === 'loading') return <p className={css.meta} role="status">{t(loading)}</p>
-  if (loaded.status === 'error') return <p className={css.failureText} role="alert"><StateDot state="error" />{t(failed)}</p>
-  return null
-}
-
-/**
  * Review one pending change, with Discard and Apply.
- * @param props - the change, the read, the actions and whether they are available.
+ * @param props - the change, the state, the read and the actions.
  * @returns the dialog.
  */
-function ReviewDialog({ change, t, show, busy, canAct, onClose, onApply, onDiscard }: {
+function ReviewDialog({ change, state, t, show, busy, onClose, onApply, onDiscard }: {
   readonly change: PendingView
+  readonly state: ChangesStateView
   readonly t: T
   readonly show: (id: string) => Promise<ShownView>
   readonly busy: boolean
-  readonly canAct: boolean
   readonly onClose: () => void
   readonly onApply: () => void
   readonly onDiscard: () => void
 }) {
   const loaded = useLoaded(() => show(change.id))
   const pending = loaded.status === 'ready' && loaded.value.kind === 'pending' ? loaded.value.change : undefined
-  const disabled = busy || !canAct || pending === undefined
+  const apply = controlUse(state, 'plugin-apply', t)
+  const discard = controlUse(state, 'plugin-discard', t)
   return <Modal open onClose={onClose} title={t('review.title', { plugin: change.plugin })} closeLabel={t('confirm.close')}
     {...WIDE_DIALOG}
     footer={<>
       <Button variant="outline" data-modal-autofocus onClick={onClose}>{t('confirm.cancel')}</Button>
-      <Button variant="outline" className={css.danger} disabled={disabled} onClick={onDiscard}>{t('review.discard')}</Button>
-      <Button variant="primary" disabled={disabled} onClick={onApply}>{t('review.apply')}</Button>
+      <Button variant="outline" className={css.danger} disabled={busy || pending === undefined || discard.disabled} title={discard.title} onClick={onDiscard}>{t('review.discard')}</Button>
+      <Button variant="primary" disabled={busy || pending === undefined || apply.disabled} title={apply.title} onClick={onApply}>{t('review.apply')}</Button>
     </>}>
-    <LoadLine loaded={loaded} t={t} loading="review.loading" failed="review.failed" />
+    <LoadLine loaded={loaded} t={t} />
     {loaded.status === 'ready' && loaded.value.kind === 'logged' ? <p className={css.meta}>{t('review.gone')}</p> : null}
     {pending === undefined ? null : <ChangeDetail change={pending} t={t} />}
   </Modal>
 }
 
 /**
- * Review one logged change to Delorun itself, read only: its files, risk summary and diff, or that Delorun no longer keeps
- * its content. The dialog offers no action; a terminal decides the change.
- * @param props - the change, the read and Close.
- * @returns the dialog.
- */
-function SelfDialog({ entry, t, show, onClose }: {
-  readonly entry: HarnessEntryView
-  readonly t: T
-  readonly show: (id: string) => Promise<ShownView>
-  readonly onClose: () => void
-}) {
-  const loaded = useLoaded(() => show(entry.id))
-  const shown = loaded.status === 'ready' && loaded.value.kind === 'harness' ? loaded.value : undefined
-  return <Modal open onClose={onClose} title={t('self.title', { file: entry.file })} closeLabel={t('confirm.close')}
-    {...WIDE_DIALOG}
-    footer={<Button variant="outline" data-modal-autofocus onClick={onClose}>{t('confirm.close')}</Button>}>
-    <LoadLine loaded={loaded} t={t} loading="review.loading" failed="review.failed" />
-    {loaded.status === 'ready' ? <p className={css.meta}>{t('self.terminal')}</p> : null}
-    {loaded.status !== 'ready' ? null : shown?.review === undefined ? <p className={css.meta}>{t('self.gone')}</p> : <ChangeDetail change={shown.review} t={t} />}
-  </Modal>
-}
-
-/**
  * End the work session: the folder's version and its difference, and approving exactly that version.
- * @param props - the plugin, the read, the action and whether it is available.
+ * @param props - the plugin, the state, the read and the action.
  * @returns the dialog.
  */
-function DoneDialog({ plugin, t, reviewWork, busy, canAct, onClose, onApprove }: {
+function DoneDialog({ plugin, state, t, reviewWork, busy, onClose, onApprove }: {
   readonly plugin: string
+  readonly state: ChangesStateView
   readonly t: T
   readonly reviewWork: (plugin: string) => Promise<WorkReviewView>
   readonly busy: boolean
-  readonly canAct: boolean
   readonly onClose: () => void
   readonly onApprove: (version: string) => void
 }) {
@@ -597,17 +591,18 @@ function DoneDialog({ plugin, t, reviewWork, busy, canAct, onClose, onApprove }:
   const review = loaded.status === 'ready' ? loaded.value : undefined
   const version = review?.version
   const short = version?.slice(0, SHORT_VERSION) ?? ''
+  const use = controlUse(state, 'plugin-other', t)
   return <Modal open onClose={onClose} title={t('done.title', { plugin })} closeLabel={t('confirm.close')}
     {...WIDE_DIALOG}
     footer={<>
       <Button variant="outline" data-modal-autofocus onClick={onClose}>{t('confirm.cancel')}</Button>
       {version === undefined
         ? null
-        : <Button variant="primary" disabled={busy || !canAct} onClick={() => { onApprove(version) }}>
+        : <Button variant="primary" disabled={busy || use.disabled} title={use.title} onClick={() => { onApprove(version) }}>
           {review?.change === undefined ? t('done.end') : t('done.approve', { version: short })}
         </Button>}
     </>}>
-    <LoadLine loaded={loaded} t={t} loading="review.loading" failed="review.failed" />
+    <LoadLine loaded={loaded} t={t} />
     {review === undefined ? null : <>
       {version === undefined
         ? <p className={css.meta}>{t('done.gone')}</p>
@@ -623,21 +618,20 @@ function DoneDialog({ plugin, t, reviewWork, busy, canAct, onClose, onApprove }:
 /**
  * The second confirmation of a change the checks flagged: what they found, each file the diff does not show, and the
  * sentence that the summary is a help and not a protection.
- * @param props - what the route answered, the action and whether it is available.
+ * @param props - what the route answered, whether an action runs, and the action.
  * @returns the dialog.
  */
-function SecondConfirmation({ dialog, t, busy, canAct, onClose, onConfirm }: {
+function SecondConfirmation({ dialog, t, busy, onClose, onConfirm }: {
   readonly dialog: Extract<Dialog, { kind: 'second' }>
   readonly t: T
   readonly busy: boolean
-  readonly canAct: boolean
   readonly onClose: () => void
   readonly onConfirm: () => void
 }) {
   return <Modal open onClose={onClose} title={t(dialog.flagged.kind === 'applyRequest' ? 'confirm.applyRequest.title' : 'second.title')} closeLabel={t('confirm.close')}
     footer={<>
       <Button variant="outline" data-modal-autofocus onClick={onClose}>{t('confirm.cancel')}</Button>
-      <Button variant="primary" disabled={busy || !canAct} onClick={onConfirm}>{t(dialog.flagged.kind === 'done' ? 'second.approve' : 'second.apply')}</Button>
+      <Button variant="primary" disabled={busy} onClick={onConfirm}>{t(dialog.flagged.kind === 'done' ? 'second.approve' : 'second.apply')}</Button>
     </>}>
     {dialog.flagged.kind === 'applyRequest'
       ? <p className={css.confirmText}>{t('second.request', { summary: dialog.flagged.summary })}</p>
@@ -647,20 +641,20 @@ function SecondConfirmation({ dialog, t, busy, canAct, onClose, onConfirm }: {
       <p className={css.confirmText}>{t('second.notShown')}</p>
       <ul className={css.plainList}>{dialog.notShown.map(file => <li key={file}>{file}</li>)}</ul>
     </>}
-    <p className={css.notice} role="note">{t('risk.notice')}</p>
+    <p className={css.notice} role="note">{t(dialog.flagged.kind === 'harnessApply' ? 'self.notice' : 'risk.notice')}</p>
   </Modal>
 }
 
 /**
- * The confirmation before Undo, Apply again, applying or discarding an agent's request and Start working.
- * @param props - what is asked, the action and whether it is available.
+ * The confirmation before Undo, Apply again, applying or discarding an agent's request, Start working, and undoing or
+ * discarding a change to Delorun itself.
+ * @param props - what is asked, whether an action runs, and the action.
  * @returns the dialog.
  */
-function AskDialog({ ask, t, busy, canAct, onClose, onConfirm }: {
+function AskDialog({ ask, t, busy, onClose, onConfirm }: {
   readonly ask: Ask
   readonly t: T
   readonly busy: boolean
-  readonly canAct: boolean
   readonly onClose: () => void
   readonly onConfirm: () => void
 }) {
@@ -668,7 +662,7 @@ function AskDialog({ ask, t, busy, canAct, onClose, onConfirm }: {
   return <Modal open onClose={onClose} title={copy.title} closeLabel={t('confirm.close')}
     footer={<>
       <Button variant="outline" data-modal-autofocus onClick={onClose}>{t('confirm.cancel')}</Button>
-      <Button variant="primary" disabled={busy || !canAct} onClick={onConfirm}>{copy.confirm}</Button>
+      <Button variant="primary" disabled={busy} onClick={onConfirm}>{copy.confirm}</Button>
     </>}>
     <p className={css.confirmText}>{copy.body}</p>
   </Modal>
@@ -686,5 +680,9 @@ function askCopy(ask: Ask, t: T): { readonly title: string, readonly body: strin
     case 'discardRequest': return { title: t('confirm.discardRequest.title'), body: t('confirm.discardRequest.body', { summary: ask.entry.summary }), confirm: t('review.discard') }
     case 'applyRequest': return { title: t('confirm.applyRequest.title'), body: t('confirm.applyRequest.body', { summary: ask.entry.summary }), confirm: t('review.apply') }
     case 'work': return { title: t('confirm.work.title', { plugin: ask.plugin }), body: t('confirm.work.body'), confirm: t('work.start') }
+    case 'selfUndo': return { title: t('confirm.undo.title'), body: t('confirm.selfUndo.body', { file: ask.entry.file }), confirm: t('confirm.undo') }
+    case 'selfDiscard': return { title: t('confirm.selfDiscard.title'), body: t('confirm.selfDiscard.body', { file: ask.change.file }), confirm: t('review.discard') }
+    case 'safeModeOn': return { title: t('confirm.safeModeOn.title'), body: t('confirm.safeModeOn.body'), confirm: t('safeMode.start') }
+    case 'safeModeOff': return { title: t('confirm.safeModeOff.title'), body: t('confirm.safeModeOff.body'), confirm: t('safeMode.leave') }
   }
 }

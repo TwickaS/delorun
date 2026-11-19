@@ -9,6 +9,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { withFileLock } from '@deepseek-ai/dsh-atomic-write'
 import { activeDirectory, attestTerminal, ChangesError, enforceApprovedContent, prepareReload, readApproved, readChangeLog, setProtection, type ReloadHost, type ReloadOutcome, type UnreviewedSync } from '@delorun/changes'
 import type { DelorunLogger } from '@delorun/logs'
 import { openHistory } from '@delorun/profile-safety'
@@ -42,6 +43,23 @@ vi.mock('node:fs', async (importOriginal) => {
       }
       watched.calls.push(call)
       return watcher
+    },
+  }
+})
+
+/** How long each profile-lock acquisition waited, in milliseconds. */
+const lockWaits = vi.hoisted(() => ({ ms: [] as number[] }))
+
+vi.mock('@deepseek-ai/dsh-atomic-write', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@deepseek-ai/dsh-atomic-write')>()
+  return {
+    ...actual,
+    withFileLock: async <T>(filename: string, operation: () => Promise<T>, options?: { readonly waitMs?: number }): Promise<T> => {
+      const asked = Date.now()
+      return actual.withFileLock(filename, () => {
+        lockWaits.ms.push(Date.now() - asked)
+        return operation()
+      }, options)
     },
   }
 })
@@ -107,6 +125,7 @@ beforeEach(async () => {
   hooks.settled = 0
   hooks.beforeLoad = undefined
   hooks.foldersError = undefined
+  lockWaits.ms = []
 })
 
 afterEach(async () => {
@@ -117,11 +136,12 @@ afterEach(async () => {
 /**
  * A plugin folder linked into the profile, as `delorun plugin add link:<folder>` leaves it.
  * @param name - the package name and the folder's name.
+ * @param parent - the folder that holds the plugin's folder.
  * @returns the folder.
  */
-function linkFolder(name: string): string {
-  const folder = join(base, name)
-  mkdirSync(folder)
+function linkFolder(name: string, parent = base): string {
+  const folder = join(parent, name)
+  mkdirSync(folder, { recursive: true })
   writeFileSync(join(folder, 'package.json'), `{"name":"${name}","version":"1.0.0"}\n`)
   writeFileSync(join(folder, 'index.js'), 'export default "one"\n')
   const manifestPath = join(profileDir, 'package.json')
@@ -193,6 +213,42 @@ async function unreviewedEntries(): Promise<Awaited<ReturnType<typeof readChange
 }
 
 describe('a save in a linked plugin\'s folder loads live while protection is off', () => {
+  it('lets several packs install back to back, and a start with them settle, without one profile-lock wait over a second', async () => {
+    const names = ['one', 'two', 'three', 'four']
+    watching(host().reload)
+    await watchedFolder(source)
+    lockWaits.ms = []
+    const started = Date.now()
+    for (const name of names) {
+      // A pack install as the plugin manager runs it: the profile lock held while the link is written and the Host reloads.
+      const pack = linkFolder(name, join(home, 'packs', 'current'))
+      await withFileLock(join(profileDir, 'package.json'), async () => {
+        await enforceApprovedContent({ home, profile: PROFILE, profileDir, lockWaitMs: 1_000 }).catch(() => undefined)
+        await new Promise<void>((resolve) => { setTimeout(resolve, 1_200) })
+      }, { waitMs: 5_000 })
+      writeFileSync(join(pack, 'index.js'), 'export default "later"\n')
+    }
+    // A start's watcher over the same profile.
+    const restarted = watching(host().reload)
+    await new Promise<void>((resolve) => { setTimeout(resolve, DEBOUNCE_MS * 10) })
+    await restarted.close()
+    expect(Math.max(...lockWaits.ms)).toBeLessThan(1_000)
+    expect(Date.now() - started).toBeLessThan(15_000)
+    expect(messages('warn')).toEqual([])
+    expect(hooks.loads.filter(plugin => names.includes(plugin))).toEqual([])
+  })
+
+  it('neither watches nor loads an unpacked plugin pack, so a pack install and a start never queue it for the profile lock', async () => {
+    const pack = linkFolder('packed', join(home, 'packs', 'current'))
+    await enforceApprovedContent({ home, profile: PROFILE, profileDir })
+    watching(host().reload)
+    await watchedFolder(source)
+    writeFileSync(join(pack, 'index.js'), 'export default "two"\n')
+    await new Promise<void>((resolve) => { setTimeout(resolve, DEBOUNCE_MS * 6) })
+    expect(watched.calls.some(call => call.path === pack)).toBe(false)
+    expect(hooks.loads).not.toContain('packed')
+  })
+
   it('reloads the Host and logs an applied change decided unreviewed with one history version', async () => {
     const from = (await readApproved(profileDir)).plugins.plug!.version
     const watcherHost = host()

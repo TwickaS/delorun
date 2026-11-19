@@ -60,6 +60,8 @@ kind: "package-reference"
 
 `startActivation({ provider, label, name?, prompt, parent, signal, delivery })` 返回 `{ childId, name, messageId?, result, dispose }`。提供 `childId` 会选择本地后端，并保证返回 `messageId`。本地子级接受后续消息并支持冷恢复；外部子级只暴露一次执行，拒绝继续输入。`agentOptions` 覆盖后端支持的子级模型设置。`delivery: 'parent'` 提供面向模型的完成通知；`delivery: 'caller'` 让工作流等待结果，不发送父级通知，也不附加初始返回指导。本地父级投递需要持久化，调用方投递可以使用临时本地会话；冷恢复需要持久化与 Session 查询服务。
 
+停止和归档会结束外部运行，但不会结束本地子级。归档某个 Session 会停止所有创建祖先包含它的存活外部运行，并把这些运行列为 `subagent` 活动。用户、hook 或祖先对创建者轮次的取消，会停止该轮启动的外部运行；更早轮次的运行、由另一个 Session 创建的运行，以及因释放而结束的轮次，都不会影响运行。父级轮次被取消时，本地子级继续运行。
+
 `rootOf(agent)` 通过托管本地 Agent 已有的 Activation 解析树根，并校验子级和树根的确切存活实例。中间创建者退出不改变该树根；同 id 替代实例不能继承成员身份。普通存活 Agent 返回自身，非托管的委派 Agent 会被拒绝。查询不会激活 Session。
 
 <a id="agent-names"></a>

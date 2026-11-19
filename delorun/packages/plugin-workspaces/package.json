@@ -13,6 +13,7 @@
   "dependencies": {
     "@delorun/contract-home-layout": "workspace:*",
     "@delorun/home": "workspace:*",
+    "@delorun/plugin-new-workspace": "workspace:*",
     "zod": "4.6.6"
   },
   "peerDependencies": {

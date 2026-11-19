@@ -6,8 +6,6 @@ description: "Changing what Delorun runs: why a plugin you link from a folder ru
 
 English | [中文](changing-your-harness.zh.md)
 
-This page describes how Delorun works today.
-
 ## Summary
 
 You can change what your Delorun runs: plugins you link from a folder, and Delorun's own files. The [protection](../reference/glossary.md#changes-protection) setting decides whether a change loads at once or waits for your review.
@@ -93,7 +91,7 @@ A session that ends without you approves nothing: when Delorun stops, when the n
 
 `delorun plugin dev <folder>` ([Write a plugin for Delorun](plugins.md#run-it-while-you-work-on-it)) follows these rules too. With protection off, each edit it builds loads live. With protection on, an edit waits for your review like any other edit in the folder, and `delorun plugin dev` loads nothing from the folder until you apply it or start `delorun changes work <plugin>`.
 
-Both commands run only in a terminal on your computer; the studio's Changes section does the same in a browser on that computer ([In the studio](#in-the-studio)). A remote session and your agent cannot start or end a work session.
+Both commands run only in a terminal on your computer; the studio's Changes section does the same in a browser on that computer ([In the studio](#in-the-studio)). A phone can start or end a work session only when you chose Full for [Phone powers](reach.md#choose-how-much-an-unlocked-phone-may-do) and unlocked it with a code or your PIN. Your agent cannot start or end one.
 
 ## When your agent changes a plugin
 
@@ -115,7 +113,9 @@ When the agent asks to install, update or remove a plugin with protection on, no
 | `delorun changes undo <id>` | Delorun runs the file as before from its next start. |
 | `delorun changes edit-harness --discard` | Asks, then takes back every change to Delorun itself and removes your copy; the next start runs the installed release unchanged. |
 
-These commands run only in a terminal, and only in an installed Delorun, not in a source checkout. When Delorun fails to start right after you applied a change to it, including when a changed file stops Delorun before it starts, it starts once more without your newest change to it, as it does for a plugin. When it does not start without that change either, it names `delorun changes undo <id>` for your newest applied change and `delorun changes edit-harness --discard`, which takes back every change to Delorun itself. Safe mode, `delorun recover safe-mode`, runs the installed release without any of your changes to it until you leave safe mode. `delorun verify` and `delorun doctor` list the files you changed. Your changes belong to the installed version: after an update, the update report says how each one carries over.
+These commands run only in a terminal, and only in an installed Delorun, not in a source checkout. The studio's Changes section applies, undoes and discards the same changes at your computer, and Make my copy there makes your copy. An unlocked phone can discard a change at either level of Phone powers, and can apply or undo one, or make your copy, only under Full. When Delorun fails to start right after you applied a change to it, including when a changed file stops Delorun before it starts, it starts once more without your newest change to it, as it does for a plugin. When it does not start without that change either, it names `delorun changes undo <id>` for your newest applied change and `delorun changes edit-harness --discard`, which takes back every change to Delorun itself. Safe mode, `delorun recover safe-mode`, runs the installed release without any of your changes to it until you leave safe mode. `delorun verify` and `delorun doctor` list the files you changed. Your changes belong to the installed version: after an update, the update report says how each one carries over.
+
+Your agent can edit your copy for you. In a chat with full access, the `delorun-harness-copy` skill points it at your copy of Delorun, and it works only there. It never applies, undoes or discards a change and never changes protection: those decisions stay yours.
 
 ## Turning one plugin off
 
@@ -142,11 +142,15 @@ The plugin runs the version it ran before the change, or does not run when the c
 
 With protection off, anything that can write a linked plugin's folder can change what Delorun runs before you see it: an agent working with full access, a program you downloaded, any program running as you. Commands in a confined workspace write only where the sandbox allows: a plugin folder inside that workspace, never your Delorun home, so they cannot change your copy of Delorun itself. Turn protection on when you want to review each change first.
 
-`delorun changes protection` prints the setting and what it means. `delorun changes protection on` or `off` changes it, only in a terminal on your computer; the studio cannot change it. Each says what the new setting means, such as "Changes will load without your review." for `off`, and asks you to confirm; the new setting applies at once, without a restart. Full setup also offers to turn protection on.
+`delorun changes protection` prints the setting and what it means. `delorun changes protection on` or `off` changes it in a terminal on your computer, and the studio's Changes section changes it at your computer. An unlocked phone can turn it on, and can turn it off only when you chose Full for [Phone powers](reach.md#choose-how-much-an-unlocked-phone-may-do). Each way says what the new setting means, such as "Changes will load without your review." for `off`, and asks you to confirm; the new setting applies at once, without a restart. Full setup also offers to turn protection on.
+
+Turning protection off asks a second time and names what would then load without review: the plugins whose waiting changes would load at once, and the files of your copy of Delorun that would apply at the next start. That second question stops a slip of the finger. It does not stop someone who is at your computer, because they can answer it too.
+
+When a phone changes the setting, your computer keeps a notice. The studio shows it, and `delorun changes list` prints it under "Changed from a phone:" and clears it once it has printed to a terminal.
 
 ## In the studio
 
-Settings has a Changes section that shows what `delorun changes list` shows: the plugin you are working on, the changes a failed start left out with its error, the changes waiting for your review with their folder, the number of files and what the checks found, your agent's plugin requests, your recent changes, your changes to Delorun itself with their diff and the command that decides each in a terminal, and the protection setting; with protection off it says that changes load without your review and that a linked plugin reloads live each time you save it.
+Settings has a Changes section that shows what `delorun changes list` shows: the plugin you are working on, the changes a failed start left out with its error, the changes waiting for your review with their folder, the number of files and what the checks found, your agent's plugin requests, your recent changes, your changes to Delorun itself with their diff, and the protection setting; with protection off it says that changes load without your review and that a linked plugin reloads live each time you save it.
 
 | Action | What happens |
 | --- | --- |
@@ -156,7 +160,12 @@ Settings has a Changes section that shows what `delorun changes list` shows: the
 | Undo, Apply again | Asks first, then takes back an applied change, or loads a change a failed start left out again. |
 | Start working | Asks first, then loads the plugin's edits live for two hours. While the session lasts, a badge at the foot of the sidebar names the plugin. |
 | Done | Shows your folder's version, such as `3f9a2c1`, with its diff, and approves exactly that version; a flagged version asks a second time. |
+| Make my copy | Makes your copy of Delorun, or finds the one you have, and shows its folder. |
+| Review, then Apply, for a change to Delorun itself | Opens the change waiting in your copy with its diff and the version of the file, such as `9c41e07`, and applies exactly that version. When the file changed again after you opened it, nothing is applied and the studio asks you to look again. The row then says whether the change runs now or after a restart. |
+| Discard, for a change to Delorun itself | Asks first; the file in your copy goes back to the installed release's. |
+| Restart now | Shown when changes to Delorun itself run after a restart. It says which chats are running: Delorun waits for them to finish, starting no new turn meanwhile, or you stop them. The page reconnects by itself after a few seconds. If Delorun does not start with your changes, it keeps running as before, leaves the newest change out and says so, with Undo. Without `delorun start`, the changes run at the next start instead. |
+| The protection switch | Turning it on asks once and says how many changes loaded without review while it was off. Turning it off asks once and names what would then load without review. |
 
-An agent's request to install, update or remove a plugin can be applied, after a second confirmation that says Delorun cannot show what it installs before it runs, or discarded. The protection setting shows with the command that changes it, `delorun changes protection on|off`; the studio has no control for it. Each outcome shows briefly at the bottom of the window, including the error when a change failed to load and Delorun went back to what ran before.
+An agent's request to install, update or remove a plugin can be applied, after a second confirmation that says Delorun cannot show what it installs before it runs, or discarded. The studio also applies, undoes and discards changes to Delorun itself, makes your copy of it, and turns protection on or off, with the second question described above for `off`. Each outcome shows briefly at the bottom of the window, including the error when a change failed to load and Delorun went back to what ran before.
 
-The section acts only in a browser on the computer Delorun runs on. A remote session sees everything, every action is disabled, and the section says "This needs you at your computer."
+At your computer, every action works. On a phone, the section shows everything and works as far as [Phone powers](reach.md#choose-how-much-an-unlocked-phone-may-do) lets it: with an unlock you entered, undo and discard, and turning protection on, at either level, and every other action only under Full. A note at the top of the section names your Phone powers level and what it lets the phone do. A button the phone may not use is greyed out and says "Needs your computer" when you point at it. When the phone is locked, or only in the 15 minutes after you approved it, pressing an action asks you to unlock the phone first. When a phone changed protection, your computer's Changes section shows a notice with the phone's name and the time, until you dismiss it.

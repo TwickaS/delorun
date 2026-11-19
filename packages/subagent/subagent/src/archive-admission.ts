@@ -13,6 +13,13 @@ import type { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionActivity, SessionActivityItem } from '@deepseek-ai/dsh-workspace'
 import type { SubagentIdentityProjection } from './projection-types.ts'
 
+/** A live external run beneath a Session and the way to end it. */
+export interface ExternalRunHandle {
+  readonly id: SessionId
+  /** End the run and release it; teardown failures are reported by the manager. */
+  stop(): void
+}
+
 /**
  * Answer `workspace/session-activity` with the running subagent descendants of
  * the asked Session, and `workspace/session-stop` by cancelling each of them
@@ -52,6 +59,33 @@ export function installSubagentArchiveAdmission(
     return archived !== undefined && ancestorsOf(agent).some(id => archived.includes(id))
       ? Promise.resolve({ kind: 'reject' as const })
       : next()
+  })
+}
+
+/**
+ * List the external runs beneath a Session as `subagent` activity and stop them with it, beside
+ * {@link installSubagentArchiveAdmission}. The listing joins the `subagent` entry that listener prepends, or adds one when
+ * the Session has no running local descendant, so a Session shows one `subagent` entry. All listeners live as long as
+ * `ctx`'s fiber.
+ * @param ctx - context carrying the Workspace registry's events.
+ * @param externalRunsOf - live external runs beneath a Session.
+ */
+export function installExternalRunArchiveAdmission(
+  ctx: Context,
+  externalRunsOf: (sessionId: SessionId) => readonly ExternalRunHandle[],
+): void {
+  // Registered first in the waterfall so the entry of the local descendants is already in `rest` to join.
+  ctx.on('workspace/session-activity', async ({ sessionId }, next) => {
+    const external = externalRunsOf(sessionId)
+    const rest = await next()
+    if (external.length === 0) return rest
+    const items = external.map(run => ({ id: run.id }))
+    const own = rest.findIndex(entry => entry.kind === 'subagent')
+    if (own < 0) return [{ kind: 'subagent' as const, items }, ...rest]
+    return rest.map((entry, index) => index === own ? { ...entry, items: [...entry.items ?? [], ...items] } : entry)
+  }, { prepend: true })
+  ctx.on('workspace/session-stop', ({ sessionId }) => {
+    for (const run of externalRunsOf(sessionId)) run.stop()
   })
 }
 

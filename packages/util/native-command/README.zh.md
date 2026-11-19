@@ -53,6 +53,10 @@ const { stdout, stderr } = await runNativeCommand('osascript', ['-e', script], s
 
 `nativeFileApplications(path, signal)` 返回关联应用、本地化名称、图标和当前默认项。macOS 12 及以上版本使用 LaunchServices，Windows 使用 Shell 关联处理器并在提取前解析打包应用的间接图标引用，Linux 使用 GIO，并共用 XDG 桌面文件和图标读取逻辑。macOS 上 bundle 标识符与显示名都相同的多份拷贝（自更新暂存副本、按版本安装的拷贝）合并为系统默认项，否则保留最高版本；显示名不同的并存安装两项都保留。`openNativeFileApplication(path, application, signal)` 按完整的当前注册列表重新验证关联应用，展示列表中被合并掉的拷贝仍可打开，且不修改系统默认值。Windows 交给 Shell 启动应用，Linux 交给 `gio launch` 展开参数。WSL 转换路径后使用 Windows 适配器。调用方负责验证本地文件路径。原生集成测试分别在相应平台使用独立的 Windows 文件关联和 Linux XDG 目录。
 
+### 查找 Playwright 启动时使用的 Chrome
+
+`@deepseek-ai/dsh-native-command/chrome-channel` 在不运行任何程序的前提下回答：某台电脑上的 Playwright 启动会使用哪个 Chromium 系浏览器。`launchedBrowser(choice)` 接受 `auto`、`chrome` 或 `chromium`：`auto` 在 Playwright 的 `chrome` 通道查找的位置装有 Google Chrome 时回答 `chrome`，否则回答 `chromium`，即 Playwright 自己下载的版本；调用方传入其配置为启动指定的可执行文件时也回答 `chromium`；另外两个值回答其自身。`chromeChannelCandidates` 按 Playwright 的顺序列出路径：Linux 为 `/opt/google/chrome/chrome`，macOS 为 `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`，Windows 为 `LOCALAPPDATA`、`PROGRAMFILES`、`PROGRAMFILES(X86)` 以及 `HOMEDRIVE` 上的 `Program Files` 与 `Program Files (x86)` 之下的 `\Google\Chrome\Application\chrome.exe`；从不搜索 `PATH`。`parseBrowserChoice` 校验从其他插件配置读到的选择，未设置时为 `auto`。提供方的启动参数与安装检查调用同一个函数，因此检查只对实际启动的浏览器报告缺少下载。该子路径只导入 Node 内置模块。
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -70,6 +74,7 @@ const { stdout, stderr } = await runNativeCommand('osascript', ['-e', script], s
 | [`src/index.ts`](src/index.ts) | 命令运行器与路径打开器的公共导出 |
 | [`src/runner.ts`](src/runner.ts) | 无 shell 的 `execFile` 适配器 |
 | [`src/path-opener.ts`](src/path-opener.ts) | 桌面探测、打开意图、浏览器偏好与 WSL 转换 |
+| [`src/chrome-channel.ts`](src/chrome-channel.ts) | Playwright `chrome` 通道的路径与启动所用的浏览器 |
 
 ### execFile 给了运行器什么
 

@@ -161,6 +161,12 @@ export function gatesFor(base: string): readonly GateCheck[] {
       inputs: ['delorun/packages/*/package.json', 'delorun/packages/*/cordis.patch.yml', 'delorun/packages/*/locale/en.json', 'delorun/apps/website/src/plugin-browser/list-plugins.ts', `${GATE_DIR}/plugin-sentences.ts`],
     },
     {
+      id: 'gates:preview-flags',
+      title: 'Every Delorun package lists exactly the preview flags its plugin declares',
+      command: [TSX, `${GATE_DIR}/preview-flags.ts`],
+      inputs: ['delorun/packages/*/package.json', 'delorun/packages/*/src/**/*.ts', 'delorun/packages/*/src/**/*.tsx', `${GATE_DIR}/preview-flags.ts`],
+    },
+    {
       id: 'gates:workspace-graph',
       title: 'Delorun packages have no dependency cycle and the runtime closure carries no release or developer tooling',
       command: [TSX, `${GATE_DIR}/workspace-graph.ts`],

@@ -6,7 +6,7 @@ An estimate of what each chat has cost, shown under the composer, with the chats
 
 ## What it shows
 
-A pill under the message box reads this chat's cost, and reads two figures once a subagent or teammate has cost anything: this chat alone, then this chat with the agents it started. The dialog behind the pill lists each model's requests, tokens and cost, then input, cache write, cache read and output tokens. With agents, each chat the person opened or an agent started has its own row, costliest first, and the row of a chat that runs outside the studio is marked as not counted.
+A pill under the message box reads this chat's cost, and reads two figures once a subagent or teammate has cost anything: this chat alone, then this chat with the agents it started. The dialog behind the pill lists each model's requests, new tokens, cached tokens and cost, then input, cache write, cache read and output tokens. New tokens are the ones the provider processed afresh (input, cache write and output); cached tokens are earlier input it read back from its cache, which costs much less, and the dialog says so when a chat has any. With agents, each chat the person opened or an agent started has its own row, costliest first, and the row of a chat that runs outside the studio is marked as not counted.
 
 ## Prices
 

@@ -6,8 +6,6 @@ description: "Where to customise Delorun: settings, the profile patch, agent pre
 
 English | [中文](customise.zh.md)
 
-This page describes how Delorun works today.
-
 ## Summary
 
 You can reshape Delorun at six levels, from a setting in the studio to the harness's own source. Each level reaches further than the one before it and costs more at each update, so choose the first one that can make your change. None of them edits Delorun's signed release, though the last runs files you changed, and an update shows what it would turn off before it does ([updates never take your work away](trust.md)).
@@ -77,7 +75,7 @@ Some plugins do work most people never need, or need something set up first, so 
 
 | Plugin | What it does | Needs from you | Status |
 | --- | --- | --- | --- |
-| Browser | The agent browses in a Chromium browser on your computer through Playwright. Chrome DevTools and Stagehand are in the same bundle, off, because only one browser provider runs at a time. | The Chromium build its Playwright expects; until it is downloaded, Plugins shows "Needs setup · Chromium download" with the command that downloads it. Stagehand also needs a model of its own. | Experimental |
+| Browser | The agent browses in a browser on your computer through Playwright: Chrome when you have it, in a profile of its own, and otherwise Playwright's Chromium. Chrome DevTools and Stagehand are in the same bundle, off, because only one browser provider runs at a time. | Nothing with Chrome installed. Without Chrome, the Chromium build its Playwright expects; until it is downloaded, Plugins shows "Needs setup · Chromium download" with the command that downloads it. Stagehand also needs a model of its own. | Experimental |
 | Code intelligence | A read-only `lsp` tool: go to definition, find references, find implementations, hover. | `typescript-language-server` on your PATH; until then Plugins shows "Needs setup". Other servers go in your profile patch. | Stable |
 | Claude Code and Codex hooks | Runs the hooks in `~/.claude/settings.json` and `~/.codex/hooks.json` at the same points of a turn, and loads Claude Code mods. | Your own hook files; a missing file registers no hooks. | Experimental |
 | Webhooks | A signed GitHub webhook can start a chat, on `127.0.0.1:3081` behind a proxy or tunnel you provide. | `DELORUN_GITHUB_WEBHOOK_SECRET` in the environment, and a rule of your own; the endpoint row starts off, and Plugins shows "Needs setup" until the secret is set. | Experimental |
@@ -125,4 +123,4 @@ Delorun's own plugins and the rows its protections need, such as the sandbox, ca
 
 ## Edit the harness itself
 
-A change to the plugin loop, the composition or Delorun's protections goes in your own copy of the installed Delorun's program files: `delorun changes edit-harness` makes the copy and prints its folder, and each file you save there is a change to Delorun itself that `delorun changes list` shows and `delorun changes undo` takes back. The installed release is never edited, but Delorun's signature and release log no longer describe the code you run, and `delorun verify` lists the files you changed. [Changing your harness](https://docs.delorun.com/guide/changing-your-harness) covers protection, which waits for your review before a change loads, and the studio's Changes section. Prefer a plugin wherever one can make the change.
+A change to the plugin loop, the composition or Delorun's protections goes in your own copy of the installed Delorun's program files: `delorun changes edit-harness` makes the copy and prints its folder, and each file you save there is a change to Delorun itself that `delorun changes list` shows and `delorun changes undo` takes back. The installed release is never edited, but Delorun's signature and release log no longer describe the code you run, and `delorun verify` lists the files you changed. [Changing your harness](changing-your-harness.md) covers protection, which waits for your review before a change loads, and the studio's Changes section. Prefer a plugin wherever one can make the change.

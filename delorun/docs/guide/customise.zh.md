@@ -87,7 +87,7 @@ description: "在哪里定制 Delorun：设置、profile 补丁、agent 预设�
 
 | 插件 | 作用 | 需要你提供 | 状态 |
 | --- | --- | --- | --- |
-| 浏览器 | 智能体通过 Playwright，在你电脑上的 Chromium 浏览器中浏览。Chrome DevTools 和 Stagehand 在同一个 bundle 中，处于关闭状态，因为同一时间只能运行一个浏览器提供方。 | 它的 Playwright 所需的 Chromium 版本；下载之前，“插件”会显示“需要设置 · 需要下载 Chromium”，并附上下载它的命令。Stagehand 还需要它自己的模型。 | 实验性 |
+| 浏览器 | 智能体通过 Playwright，在你电脑上的浏览器中浏览：装有 Chrome 时使用 Chrome，并使用它自己的配置文件；否则使用 Playwright 的 Chromium。Chrome DevTools 和 Stagehand 在同一个 bundle 中，处于关闭状态，因为同一时间只能运行一个浏览器提供方。 | 装有 Chrome 时无需任何东西。没有 Chrome 时，需要它的 Playwright 所需的 Chromium 版本；下载之前，“插件”会显示“需要设置 · 需要下载 Chromium”，并附上下载它的命令。Stagehand 还需要它自己的模型。 | 实验性 |
 | 代码智能 | 一个只读的 `lsp` 工具：跳转到定义、查找引用、查找实现、悬停信息。 | 你的 PATH 上有 `typescript-language-server`；在此之前“插件”会显示“需要设置”。其他服务器放进你的 profile 补丁。 | 稳定 |
 | Claude Code 与 Codex 钩子 | 在一轮对话的相同时间点运行 `~/.claude/settings.json` 和 `~/.codex/hooks.json` 中的钩子，并加载 Claude Code mod。 | 你自己的钩子文件；文件缺失时不注册任何钩子。 | 实验性 |
 | Webhook | 已签名的 GitHub webhook 可以开始一次对话，监听 `127.0.0.1:3081`，前面需要你自己提供的代理或隧道。 | 环境中的 `DELORUN_GITHUB_WEBHOOK_SECRET`，以及你自己的规则；端点行起初是关闭的，在设置好密钥之前“插件”会显示“需要设置”。 | 实验性 |
@@ -145,4 +145,4 @@ Delorun 自己的插件，以及它的保护所需要的行（例如沙箱），
 
 ## 编辑 harness 本身
 
-对插件循环、组合或 Delorun 的保护的更改，要放在你自己的已安装 Delorun 程序文件的副本中：`delorun changes edit-harness` 制作该副本并打印它的文件夹，你在那里保存的每个文件都是对 Delorun 本身的一项更改，`delorun changes list` 会显示它，`delorun changes undo` 会撤销它。已安装的发布版本从不被编辑，但 Delorun 的签名和发布日志不再描述你所运行的代码，`delorun verify` 会列出你改动过的文件。[修改你的 harness](https://docs.delorun.com/guide/changing-your-harness)涵盖保护（它在更改加载之前等待你的审阅）以及 studio 的 Changes 部分。凡是插件能实现的更改，都应优先使用插件。
+对插件循环、组合或 Delorun 的保护的更改，要放在你自己的已安装 Delorun 程序文件的副本中：`delorun changes edit-harness` 制作该副本并打印它的文件夹，你在那里保存的每个文件都是对 Delorun 本身的一项更改，`delorun changes list` 会显示它，`delorun changes undo` 会撤销它。已安装的发布版本从不被编辑，但 Delorun 的签名和发布日志不再描述你所运行的代码，`delorun verify` 会列出你改动过的文件。[修改你的 harness](changing-your-harness.zh.md)涵盖保护（它在更改加载之前等待你的审阅）以及 studio 的 Changes 部分。凡是插件能实现的更改，都应优先使用插件。

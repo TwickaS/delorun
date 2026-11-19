@@ -23,6 +23,10 @@ export const TRASH_PATHS = {
   purge: '/api/delorunTrash.purge',
   /** `{ clearLogs }` → {@link EmptyOutcome}: every item is deleted forever. */
   empty: '/api/delorunTrash.empty',
+  /** `{}` → {@link SetAsideListing}: what a rollback set aside and the copies an update took. */
+  setAside: '/api/delorunTrash.setAside',
+  /** `{ path }` → {@link SetAsideRemoved}: one entry of {@link SetAsideListing} is deleted forever; needs an unlock. */
+  removeSetAside: '/api/delorunTrash.removeSetAside',
 } as const
 
 /** One item in the trash, as the studio lists it. */
@@ -93,12 +97,39 @@ export interface EmptyOutcome {
   readonly residueMaxDays: number
 }
 
+/** One directory of chat data that a rollback set aside, or that an update copied before it switched. */
+export interface SetAsideEntry {
+  /** The directory's path relative to the home; `removeSetAside` takes it back unchanged. */
+  readonly path: string
+  /** `set-aside`: the chats a rollback moved out of use; `copy`: the chat data an update copied so a rollback can restore it. */
+  readonly kind: 'set-aside' | 'copy'
+  /** The directory's size in bytes. */
+  readonly bytes: number
+}
+
+/** The answer to {@link TRASH_PATHS}.setAside. */
+export interface SetAsideListing {
+  readonly entries: readonly SetAsideEntry[]
+}
+
+/** The answer to {@link TRASH_PATHS}.removeSetAside. */
+export interface SetAsideRemoved {
+  /** The entry that was deleted. */
+  readonly path: string
+}
+
 /** Why a route refused. */
 export type TrashRefusalCode =
   | 'BAD_REQUEST'
   | 'TRASH_ITEM_NOT_FOUND'
   | 'TRASH_RESTORE_CONFLICT'
   | 'WORKSPACE_NOT_FOUND'
+  /** The path names no listed set-aside or copy directory. */
+  | 'NOT_KEPT_DATA'
+  /** A rollback runs, a restore is unfinished, or an update record still needs the copy. */
+  | 'DATA_IN_USE'
+  /** The studio runs no profile whose update record guards the copies. */
+  | 'KEPT_DATA_UNAVAILABLE'
   | 'TRASH_FAILED'
 
 /** The body of a refusal. */

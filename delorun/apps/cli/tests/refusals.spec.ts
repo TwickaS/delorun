@@ -38,9 +38,12 @@ const BENCHMARKS = 'the wait-time benchmark under delorun/apps/benchmarks, which
 /** The exported error classes that never reach `delorun`'s entry point, each with the reason. */
 const OUTSIDE_DELORUN: Readonly<Record<string, string>> = {
   InstallRefusal: 'raised by the install queue inside the home process and reported to the studio\'s downloads panel',
+  RouteRefusal: 'raised by the Changes routes of the changes plugin and answered to the studio with a status, a code and a sentence',
   SetupRefusal: 'raised by the setup routes of the changes plugin and answered to the studio with a status and code',
   PacksRequestError: 'raised by the studio\'s packs client in the browser for a route answer',
   ChangesRequestError: 'the studio\'s Changes section raises it in the browser for a route answer; delorun never calls the routes',
+  BrowsePairError: 'raised by the studio\'s browser-pairing client in the browser for a route answer',
+  DefaultsStoreError: PLUGIN,
   FullAccessConsentRefusedError: PLUGIN,
   FullAccessChangeError: PLUGIN,
   McpReviewError: PLUGIN,
@@ -63,6 +66,7 @@ const OUTSIDE_DELORUN: Readonly<Record<string, string>> = {
   MainChatToolError: PLUGIN,
   RenameToolError: PLUGIN,
   CostMeterConfigError: 'raised while the cost meter loads its price table: the row does not start, and delorun reports it as an inactive Delorun row',
+  ToolFailureGuardConfigError: 'raised while the tool failure guard loads its limits: the row does not start, and delorun reports it as an inactive Delorun row',
   AcceptanceStoreError: PLUGIN,
   FilePinError: PLUGIN,
   BuildRootBusyError: 'raised by the release tooling\'s closure build, which no runtime carries',

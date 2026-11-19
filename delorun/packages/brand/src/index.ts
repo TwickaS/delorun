@@ -17,6 +17,7 @@ export { CARD_ICON_TINTS, CardIcon, cardIconLetter, cardIconTint, type CardIconP
 export { ConfirmAction, type ConfirmActionProps } from './components/ConfirmAction.tsx'
 export { Dialog, type DialogProps } from './components/Dialog.tsx'
 export { Frame, type FrameProps } from './components/Frame.tsx'
+export { CodeCells, type CodeCellsProps } from './components/CodeCells.tsx'
 export { Keypad, type KeypadProps } from './components/Keypad.tsx'
 export { Link } from './components/Link.tsx'
 export { Notice, type NoticeIcon, type NoticeProps, type NoticeTone } from './components/Notice.tsx'

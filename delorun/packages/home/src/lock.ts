@@ -1,8 +1,8 @@
 /**
  * The home lock `run/<profile>/home.lock` (contract C1, "The home lock"): one holder per CLI profile, a JSON record
  * created by exclusive creation at mode 0600, a lock whose holder is dead replaced, and a live holder never taken
- * over. A holder is dead when its process no longer exists or another process has taken its process id, and a holder
- * recorded in another pid namespace is never dead ([holder](./holder.ts)). Creation, takeover guards and removal are the shared lock file's ([lock file](./lock-file.ts)),
+ * over. A holder is dead when it was recorded in an earlier boot, its process no longer exists, or another process has
+ * taken its process id, and a holder recorded in another pid namespace of this boot is never dead ([holder](./holder.ts)). Creation, takeover guards and removal are the shared lock file's ([lock file](./lock-file.ts)),
  * with the record's random `startId` naming its takeover guard `home.lock.takeover-<startId>`.
  *
  * @module @delorun/home/lock
@@ -12,11 +12,14 @@ import { join } from 'node:path'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { RUN_ENTRIES, type HomeLockRecord, type RuntimeVersion, type StartId } from '@delorun/contract-home-layout'
 import { HomeLayoutError } from './errors.ts'
-import { currentHolder, holderAlive, holderIdentity, holderOf, parseHolder, type ProcessHolder } from './holder.ts'
+import { checkHolder, currentHolder, holderAlive, holderIdentity, holderOf, parseHolder, type ProcessHolder } from './holder.ts'
 import { isLockId, LockFile, randomLockId } from './lock-file.ts'
 
-/** Whether a live holder answered the update channel's `status` request in time. */
-export type HolderAnswer = 'answered' | 'silent'
+/**
+ * What asking a holder for its status found: `answered`; `silent` (no answer in time, or a failure other than the
+ * next); `refused` (the update socket file exists and the connection was refused, so no process listens on it).
+ */
+export type HolderAnswer = 'answered' | 'silent' | 'refused'
 
 /**
  * Ask a live lock holder for its status, within C1's two seconds.
@@ -36,6 +39,13 @@ export interface HomeLock {
    * a process `exit` listener can call it; a second call does nothing.
    */
   release(): void
+  /**
+   * Record that this holder's update channel listens (`true`, once it is bound) or is about to close (`false`, before
+   * it closes), by replacing the record atomically with this holder's own fields. Does nothing after
+   * {@link release} or {@link handOver}, or when the file no longer holds this holder's record.
+   * @param listening - whether the channel listens.
+   */
+  setListening(listening: boolean): void
   /**
    * Hand the lock to a successor home process (contract C19, "The update
    * handshake"): the record is replaced atomically with the successor's, with
@@ -58,6 +68,8 @@ export interface AcquireOptions {
   readonly probe: HolderProbe
   /** The start id the record carries, from {@link newStartId}; the holder logs under it from before it takes the lock. */
   readonly startId: StartId
+  /** Receives the one line written when a lock is taken over as stale although its holder's process cannot be looked up. */
+  readonly log?: (line: string) => void
 }
 
 /**
@@ -84,6 +96,7 @@ function parseRecord(record: Readonly<Record<string, unknown>>): HomeLockRecord 
   const holder = parseHolder(record)
   if (holder === undefined || record.v !== 1 || !isLockId(record.startId)) return undefined
   if (typeof record.runtime !== 'string' || typeof record.startedAt !== 'string') return undefined
+  if (record.listening !== undefined && record.listening !== true) return undefined
   return {
     v: 1,
     pid: holder.pid,
@@ -91,6 +104,7 @@ function parseRecord(record: Readonly<Record<string, unknown>>): HomeLockRecord 
     runtime: brandString<RuntimeVersion>(record.runtime),
     startedAt: record.startedAt,
     ...holderIdentity(holder),
+    ...record.listening === true ? { listening: true } : {},
   }
 }
 
@@ -151,6 +165,19 @@ export async function removeStaleLock(runDirectory: string, startId: StartId): P
 }
 
 /**
+ * Whether a holder that cannot be looked up here, because its pid namespace is another of this boot, has left its lock
+ * behind: its record says its update channel listened, and the channel's socket now refuses connections. A live
+ * holder removes `listening` before it closes the channel, so a refusal after `listening` means the holder closed it
+ * and is dying or dead. A record that never reached `listening` keeps the refusal.
+ * @param holder - the lock record.
+ * @returns true when the holder is in another pid namespace of this boot and its record says it listened.
+ */
+function abandoned(holder: HomeLockRecord): boolean {
+  const check = checkHolder(holder)
+  return check.kind === 'unconfirmed' && check.reason === 'other-namespace' && holder.listening === true
+}
+
+/**
  * Take the profile's home lock, replacing one whose holder is dead.
  * @param options - the run directory, the runtime version, the holder probe and the start id.
  * @returns the held lock.
@@ -167,13 +194,18 @@ export async function acquireHomeLock(options: AcquireOptions): Promise<HomeLock
     if (file.create(record)) return heldLock(file, record)
     const found = file.read()
     if (found === undefined) continue
+    let provenDead = false
     if (holderAlive(found)) {
       const answer = await options.probe(found)
-      const holder = `process ${String(found.pid)}, started ${found.startedAt}`
-      if (answer === 'answered') throw new HomeLayoutError('HOME_RUNNING', file.path, `a home process for this profile is already running (${holder})`)
-      throw new HomeLayoutError('HOME_UNRESPONSIVE', file.path, `${holder} holds ${file.path} but did not answer within 2 seconds; stop that process, or remove the file if it is not a delorun process`)
+      provenDead = answer === 'refused' && abandoned(found)
+      if (!provenDead) {
+        const holder = `process ${String(found.pid)}, started ${found.startedAt}`
+        if (answer === 'answered') throw new HomeLayoutError('HOME_RUNNING', file.path, `a home process for this profile is already running (${holder})`)
+        throw new HomeLayoutError('HOME_UNRESPONSIVE', file.path, `${holder} holds ${file.path} but did not answer within 2 seconds. Delorun may be busy: wait a moment and open it again, or quit that process from your system's task list or activity monitor. If that process is not Delorun, delete the file ${file.path} and open Delorun again`)
+      }
+      options.log?.(`taking over ${file.path}: process ${String(found.pid)}, started ${found.startedAt}, is in another pid namespace of this boot, listened on its update socket and no longer does`)
     }
-    if (await file.removeDead(found.startId) === 'done') continue
+    if (await file.removeDead(found.startId, provenDead ? abandoned : undefined) === 'done') continue
     if (Date.now() > deadline) throw new Error(`could not take ${file.path}: another process kept replacing the stale lock for ${String(TAKEOVER_WAIT_MS / 1000)} seconds`)
     await sleep(5 + Math.floor(Math.random() * 20))
   }
@@ -211,6 +243,10 @@ function heldLock(file: LockFile<HomeLockRecord>, record: HomeLockRecord): HomeL
       file.replace(next)
       released = true
       return next
+    },
+    setListening(listening) {
+      if (released || file.read()?.startId !== record.startId) return
+      file.replace(listening ? { ...record, listening: true } : record)
     },
     release() {
       if (released) return

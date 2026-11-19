@@ -75,6 +75,7 @@ function exists(path: string): boolean {
 }
 
 const GATE = /gateByUnlock|unlocked\(|fullAccessGate/
+const FULL_GATE = /phonePowers:\s*'full'/
 const READER = /admitApprovedDevice|anyDevice|admitPeer,|admitsReach|admitsBill/
 
 /**
@@ -86,7 +87,8 @@ const READER = /admitApprovedDevice|anyDevice|admitPeer,|admitsReach|admitsBill/
 function matches(level: RouteLevel, block: string): boolean {
   switch (level) {
     case 'R': return READER.test(block) && !GATE.test(block)
-    case 'U': return GATE.test(block)
+    case 'U': return GATE.test(block) && !FULL_GATE.test(block)
+    case 'F': return block.includes('gateByUnlock') && FULL_GATE.test(block)
     case 'K': return block.includes('admitKeyDevice')
     case 'C': return !block.includes('admitPeer') && !GATE.test(block)
     case 'R+U': return READER.test(block) && GATE.test(block)
@@ -152,6 +154,9 @@ describe('the plugin Fetch routes', () => {
     expect(matches('R', "register({ path: X, ...gateByUnlock(home, fetch) })")).toBe(false)
     expect(matches('C', "register({ path: X, admitPeer: admitApprovedDevice(), fetch })")).toBe(false)
     expect(matches('R', "register({ path: X, fetch })")).toBe(false)
+    expect(matches('F', "register({ path: X, ...gateByUnlock(home, fetch, { renews: true }) })")).toBe(false)
+    expect(matches('U', "register({ path: X, ...gateByUnlock(home, fetch, { renews: true, phonePowers: 'full' }) })")).toBe(false)
+    expect(matches('F', "register({ path: X, ...gateByUnlock(home, fetch, { renews: true, phonePowers: 'full' }) })")).toBe(true)
   })
 })
 

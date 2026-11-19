@@ -9,6 +9,7 @@ import type { Session } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import type { SessionActivity } from '@deepseek-ai/dsh-workspace'
 import SubagentRuntime, { SUBAGENT_DESCRIPTOR_VERSION } from '../src/index.ts'
+import { installExternalRunArchiveAdmission } from '../src/archive-admission.ts'
 import { TestSessionQuery } from './test-session-query.ts'
 
 type CancelCall = [AgentCancelCause, CancelOptions | undefined]
@@ -197,6 +198,16 @@ describe('Subagent archive admission: stopping', () => {
       expect.stringContaining('cancelling "stubborn-child"'),
     ])
   })
+
+  it('leaves a running local child alone when the parent turn is stopped', async () => {
+    const ctx = await harness()
+    const parent = ctx.sessions.create(SessionId('parent'))
+    await liveAgent(ctx, parent, 'running')
+    const child = await liveAgent(ctx, childOf(ctx, 'child', parent.id), 'running')
+    parent.append('turn/start', { turn: 1 })
+    parent.append('turn/end', { turn: 1, reason: { kind: 'aborted', reason: { kind: 'user' } } })
+    expect(child.cancels).toEqual([])
+  })
 })
 
 describe('Subagent archive admission: lifetime', () => {
@@ -277,6 +288,25 @@ describe('Subagent archive admission: lifetime', () => {
     expect(await proposed(ctx, child)).toEqual({ kind: 'reject' })
     await stop(ctx, parent.id)
     expect(child.cancels).toEqual([[{ kind: 'parent' }, undefined]])
+  })
+})
+
+describe('External run archive admission', () => {
+  it('joins the local descendants\' entry, adds its own when there is none, and stops its runs', async () => {
+    const ctx = await harness()
+    const parent = ctx.sessions.create(SessionId('parent'))
+    await liveAgent(ctx, parent, 'idle')
+    const stops: string[] = []
+    const runs = [{ id: SessionId('external'), stop: () => { stops.push('external') } }]
+    installExternalRunArchiveAdmission(ctx, id => id === parent.id ? runs : [])
+    ctx.on('workspace/session-activity', async (_request, next) => [...(await next()), { kind: 'probe' }])
+
+    expect(await ask(ctx, parent.id)).toEqual([{ kind: 'subagent', items: [{ id: 'external' }] }, { kind: 'probe' }])
+    await liveAgent(ctx, childOf(ctx, 'child', parent.id), 'running')
+    expect(await ask(ctx, parent.id)).toEqual([{ kind: 'subagent', items: [{ id: 'child' }, { id: 'external' }] }, { kind: 'probe' }])
+    expect(await ask(ctx, SessionId('other'))).toEqual([{ kind: 'probe' }])
+    await stop(ctx, parent.id)
+    expect(stops).toEqual(['external'])
   })
 })
 

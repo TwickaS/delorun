@@ -32,6 +32,7 @@ import { isJsonObject, LINK_SECTIONS, readLinks, readProfileManifest, type JsonO
 import { activeDirectory, CHANGES_ENTRIES, profileChangesDirectory, versionsDirectory } from './paths.ts'
 import { pluginChange } from './pending.ts'
 import {
+  decisionOf,
   approvedOf,
   findEntry,
   readActiveRecord,
@@ -42,6 +43,7 @@ import {
   requirePresence,
   setProtection,
   withEntry,
+  withoutDecision,
   writeActiveRecord,
   writeApproved,
   writeChangeLog,
@@ -64,6 +66,7 @@ import {
 } from './types.ts'
 import { isPluginRequest } from './install-actions.ts'
 import { leftOutOf } from './left-out.ts'
+import { addProtectionNotice } from './notices.ts'
 import { beginWork, endWork, type WorkDone, type WorkStarted } from './work.ts'
 import { referenceRelease } from './tree.ts'
 
@@ -309,7 +312,7 @@ function summaryOf(change: PluginChange): string {
  * @returns it without the decision's fields and the failure, as a pending change records it.
  */
 function undecided(entry: ChangeEntry): ChangeEntry {
-  const { decidedAt: _decidedAt, decidedFrom: _decidedFrom, historyVersion: _historyVersion, lastFailure: _lastFailure, ...rest } = entry
+  const { historyVersion: _historyVersion, lastFailure: _lastFailure, ...rest } = withoutDecision(entry)
   return rest
 }
 
@@ -514,10 +517,10 @@ export async function applyChange(ctx: ChangesContext, id: ChangeId, presence: A
     const steps = await contentSteps(ctx, state, change.plugin, { source: change.source, version: change.to, approvedAt: at })
     return carryOut(ctx, state.log, options.reload, {
       id,
-      summary: `Applied ${id}: ${summary}`,
-      wentBack: `Went back: ${id} failed to load`,
+      summary: `Applied: ${summary}`,
+      wentBack: `Went back: ${summary} failed to load`,
       ...steps,
-      done: recorded => ({ ...pendingEntry, state: 'applied', decidedAt: at, decidedFrom: presence.kind, ...recorded }),
+      done: recorded => ({ ...pendingEntry, state: 'applied', ...decisionOf(at, presence), ...recorded }),
       failed: lastFailure => ({ ...pendingEntry, lastFailure }),
     })
   })
@@ -557,7 +560,7 @@ export async function discardChange(ctx: ChangesContext, id: ChangeId, presence:
         createdAt: findEntry(state.log, id)?.createdAt ?? at,
       }
     }
-    const entry: ChangeEntry = { ...base, state: 'discarded', decidedAt: at, decidedFrom: presence.kind }
+    const entry: ChangeEntry = { ...withoutDecision(base), state: 'discarded', ...decisionOf(at, presence) }
     await writeChangeLog(ctx.home, ctx.profile, withEntry(state.log, entry))
     return entry
   })
@@ -626,10 +629,10 @@ async function applyLeftOut(ctx: ChangesContext, state: State, entry: ChangeEntr
   const { leftOut: _leftOut, lastFailure: _lastFailure, ...applied } = entry
   return carryOut(ctx, state.log, reload, {
     id: entry.id,
-    summary: `Applied ${entry.id} again: ${entry.summary}`,
-    wentBack: `Went back: ${entry.id} failed to load again`,
+    summary: `Applied again: ${entry.summary}`,
+    wentBack: `Went back: ${entry.summary} failed to load again`,
     ...steps,
-    done: recorded => ({ ...applied, state: 'applied', decidedAt: at, decidedFrom: presence.kind, ...recorded }),
+    done: recorded => ({ ...withoutDecision(applied), state: 'applied', ...decisionOf(at, presence), ...recorded }),
     failed: lastFailure => ({ ...entry, lastFailure }),
   })
 }
@@ -656,10 +659,10 @@ async function undoContent(ctx: ChangesContext, state: State, entry: ChangeEntry
   const steps = await contentSteps(ctx, state, plugin, entry.from === undefined ? undefined : { source: approval.source, version: entry.from, approvedAt: at })
   return carryOut(ctx, state.log, reload, {
     id: entry.id,
-    summary: `Undid ${entry.id}: ${entry.summary}`,
-    wentBack: `Went back: undoing ${entry.id} failed to load`,
+    summary: `Undid: ${entry.summary}`,
+    wentBack: `Went back: undoing ${entry.summary} failed to load`,
     ...steps,
-    done: () => ({ ...withoutFailure(entry), state: 'undone', decidedAt: at, decidedFrom: presence.kind }),
+    done: () => ({ ...withoutDecision(withoutFailure(entry)), state: 'undone', ...decisionOf(at, presence) }),
     failed: lastFailure => ({ ...entry, lastFailure }),
   })
 }
@@ -756,30 +759,32 @@ async function switchBundle(ctx: ChangesContext, state: State, plugin: string, e
   const pendingEntry: ChangeEntry = { id, kind, state: 'pending', subject: { plugin }, summary, createdAt: at }
   return carryOut(ctx, state.log, reload, {
     id,
-    summary: undoing === undefined ? `${summary} (${id})` : `Undid ${id}: ${undoing.summary}`,
-    wentBack: `Went back: ${id} failed to load`,
+    summary: undoing === undefined ? summary : `Undid: ${undoing.summary}`,
+    wentBack: `Went back: ${undoing === undefined ? summary : `undoing ${undoing.summary}`} failed to load`,
     write: () => writeBundles(ctx.profileDir, next),
     revert: () => writeBundles(ctx.profileDir, bundles),
     done: recorded => undoing === undefined
-      ? { ...pendingEntry, state: 'applied', decidedAt: at, decidedFrom: presence.kind, ...recorded }
-      : { ...withoutFailure(undoing), state: 'undone', decidedAt: at, decidedFrom: presence.kind },
+      ? { ...pendingEntry, state: 'applied', ...decisionOf(at, presence), ...recorded }
+      : { ...withoutDecision(withoutFailure(undoing)), state: 'undone', ...decisionOf(at, presence) },
     failed: lastFailure => undoing === undefined ? { ...pendingEntry, lastFailure } : { ...undoing, lastFailure },
   })
 }
 
 /**
- * Change the protection setting. Only a terminal proof changes it. Turning it off is logged in the profile's change log
- * as an applied `guard-weakening` change. A start, the running Host's watcher of the plugins' folders and the Host's
- * plugins read the setting at each decision, so it takes effect without a restart.
+ * Change the protection setting from a terminal or the studio. Turning it off is logged in the profile's change log as
+ * an applied `guard-weakening` change decided where the proof says. A change a paired device made, either way, is also
+ * kept as a notice for the person at the computer ([notices](./notices.ts)). A start, the running Host's watcher of the
+ * plugins' folders and the Host's plugins read the setting at each decision, so it takes effect without a restart.
  * @param ctx - the profile whose log records a weakening.
  * @param level - the new level.
- * @param presence - proof from `attestTerminal`.
+ * @param presence - proof from `attestTerminal`, `attestStudio` or `attestDevice`.
  * @returns the level before and after, and the logged entry when the level is weaker.
- * @throws {ChangesError} `NOT_AT_COMPUTER` for a proof {@link attestTerminal} did not issue.
+ * @throws {ChangesError} `NOT_AT_COMPUTER` for a proof the attest functions did not issue.
  */
 export async function changeProtection(ctx: ChangesContext, level: ProtectionLevel, presence: AtComputer): Promise<ProtectionChange> {
   const before = await readProtection(ctx.home)
   const record = await setProtection(ctx.home, level, presence)
+  if (presence.device !== undefined) await addProtectionNotice(ctx.home, level, presence.device, record.setAt)
   if (PROTECTION_LEVELS.indexOf(level) <= PROTECTION_LEVELS.indexOf(before)) return { before, level }
   const entry: ChangeEntry = {
     id: changeId('guard-weakening', { setting: 'protection' }, undefined, undefined),
@@ -788,8 +793,7 @@ export async function changeProtection(ctx: ChangesContext, level: ProtectionLev
     subject: { setting: 'protection' },
     summary: 'Protection turned off: changes load without review',
     createdAt: record.setAt,
-    decidedAt: record.setAt,
-    decidedFrom: 'terminal',
+    ...decisionOf(record.setAt, presence),
   }
   await locked(ctx, async () => {
     await writeChangeLog(ctx.home, ctx.profile, withEntry(await readChangeLog(ctx.home, ctx.profile), entry))

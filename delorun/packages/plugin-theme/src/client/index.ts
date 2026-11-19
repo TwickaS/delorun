@@ -36,6 +36,7 @@ import { en as pickerEn, zh as pickerZh, type IconPickerLocaleKey } from '@delor
 import { SidebarBrandMark, SidebarBrandName } from './SidebarBrand.tsx'
 import { en as brandEn, zh as brandZh, type BrandLocaleKey } from './brand-locales.ts'
 import { ThemeController } from './controller.ts'
+import { installTouchInputs } from './touch-inputs.ts'
 import { EdgeController } from './edges.ts'
 import { effortBarsCss } from './effort.ts'
 import { composerFocusCss } from './focus.ts'
@@ -276,6 +277,7 @@ function registerStudio(ctx: Context, form: ConfigForm<ThemeSettings>, initial: 
   const edges = new EdgeController(document, window)
   const disposers = [
     ctx.on('theme/change', () => { edges.refresh() }),
+    installTouchInputs(document),
     ctx.locale.register(NS, { en, zh }),
     ctx.locale.register(CONVERSATION.ns, { en: conversationEn, zh: conversationZh }),
     ctx.locale.register(BRAND_NS, { en: brandEn, zh: brandZh }),

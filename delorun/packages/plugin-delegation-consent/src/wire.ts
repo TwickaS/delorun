@@ -12,6 +12,8 @@ export const DELEGATION_CONSENT_ROUTES = {
   allow: '/api/delorunDelegationConsent.allow',
   /** `POST` {@link RevokeRequest}: remove one grant, as {@link RevokeAnswer}. */
   revoke: '/api/delorunDelegationConsent.revoke',
+  /** `GET`: each agent's level and what its sandbox needs on this computer, as {@link LevelsAnswer}. */
+  levels: '/api/delorunDelegationConsent.levels',
 } as const
 
 /** The row id `@delorun/bundle-local` inserts for the plugin, whose fields Settings → Safety → External agents writes. */
@@ -23,7 +25,32 @@ export interface DelegationConsentSettings {
   readonly enabled: boolean
   /** How long one external agent run may take before it is stopped, in whole minutes; a change applies from the next run. */
   readonly runTimeoutMinutes: number
+  /** What Claude Code may do on its own ({@link AgentLevel}); read at each start. */
+  readonly claudeCodeLevel: AgentLevel
+  /** What Codex may do on its own ({@link AgentLevel}); read at each start. */
+  readonly codexLevel: AgentLevel
+  /** Whether a chat in Full access (approval policy `never` and sandbox mode `danger-full-access`) starts an external agent without asking ([`Config`](./index.ts)). */
+  readonly fullAccessStartsAgents: boolean
 }
+
+/**
+ * What an external agent may do on its own, from the most to the least confined; the same names as
+ * `SubagentSafetyLevel` of `@deepseek-ai/dsh-subagent`:
+ * - `careful`: writes only in the task folder; commands get no internet.
+ * - `standard`: writes in the task folder and temporary folders; internet on; the agent's own reviewer decides the rest.
+ * - `own`: Delorun sets nothing; the person's own Claude Code or Codex settings decide.
+ * - `unrestricted`: no sandbox, never asks.
+ */
+export type AgentLevel = 'careful' | 'standard' | 'own' | 'unrestricted'
+
+/** The levels from the most to the least confined; a looser level needs the home's own computer. */
+export const AGENT_LEVELS = ['careful', 'standard', 'own', 'unrestricted'] as const satisfies readonly AgentLevel[]
+
+/** The level an external agent has until a person sets one. */
+export const DEFAULT_AGENT_LEVEL: AgentLevel = 'standard'
+
+/** The row field that holds each external agent's level, by provider name. */
+export const AGENT_LEVEL_FIELDS = { 'claude-code': 'claudeCodeLevel', codex: 'codexLevel' } as const satisfies Readonly<Record<string, keyof DelegationConsentSettings>>
 
 /** The run time limit's bounds and default, in whole minutes: one minute to one day. */
 export const RUN_TIMEOUT_MINUTES = { min: 1, max: 24 * 60, default: 30 } as const
@@ -79,6 +106,27 @@ export interface RevokeRequest {
 export interface RevokeAnswer {
   /** Whether a grant was removed; false when none was recorded. */
   readonly revoked: boolean
+}
+
+/** One external agent's level as a surface shows it. */
+export interface AgentLevelView {
+  /** The provider name, such as `claude-code`. */
+  readonly provider: string
+  /** The name a person knows the agent by, such as `Claude Code`. */
+  readonly agent: string
+  /** The level the next run uses. */
+  readonly level: AgentLevel
+  /**
+   * Set when the level promises a command sandbox this computer cannot run: the tools missing and the command that
+   * installs them. At Standard the run goes ahead without the sandbox; at Careful it is refused.
+   */
+  readonly sandboxMissing?: { readonly tools: readonly string[]; readonly installCommand: string }
+}
+
+/** The answer of the levels route. */
+export interface LevelsAnswer {
+  /** One entry per external agent, Claude Code first. */
+  readonly levels: readonly AgentLevelView[]
 }
 
 /** Why a surface call recorded nothing. */

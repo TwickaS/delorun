@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { Button, Checkbox, Modal, relativeTime, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { HostObservable, InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type { TrashEntry, TrashListing } from '../wire.ts'
+import type { SetAsideEntry, TrashEntry, TrashListing } from '../wire.ts'
 import type { TrashState } from './controller.ts'
 import css from './TrashSection.module.css'
 
@@ -38,6 +38,12 @@ export interface TrashSectionInjected {
    * @returns after the outcome is reported.
    */
   readonly empty: (clearLogs: boolean) => Promise<void>
+  /**
+   * Delete one set-aside or copied chat-data directory forever.
+   * @param path - the entry's path from the listing.
+   * @returns after the outcome is reported.
+   */
+  readonly removeSetAside: (path: string) => Promise<void>
 }
 
 /** Props the renderer binds for the section. */
@@ -66,15 +72,26 @@ function pluralKey<B extends string>(base: B, count: number) {
 }
 
 /**
+ * @param bytes - a size in bytes.
+ * @returns it in KB, MB or GB with one decimal, for the person reading a list.
+ */
+function formatBytes(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${String(Math.max(1, Math.round(bytes / 1024)))} KB`
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`
+  return `${(bytes / 1024 ** 3).toFixed(1)} GB`
+}
+
+/**
  * Render the section. Delete forever and Empty trash ask first, in a dialog that states what is deleted, what may
  * remain in the operational logs, and offers to clear them now.
  * @param props - the dictionary, the trash state and the controller's calls.
  * @returns the section.
  */
 export function TrashSection(props: TrashSectionProps) {
-  const { t, reload, retry, restore, purge, empty } = props
+  const { t, reload, retry, restore, purge, empty, removeSetAside } = props
   const state = props.useTrash(value => value)
   const [asking, setAsking] = useState<Asking | undefined>()
+  const [removing, setRemoving] = useState<SetAsideEntry | undefined>()
   const [clearLogs, setClearLogs] = useState(false)
   const [busy, setBusy] = useState(false)
   useEffect(() => { void reload() }, [reload])
@@ -89,6 +106,7 @@ export function TrashSection(props: TrashSectionProps) {
   const now = Date.now()
   const listing = state.status === 'ready' ? state.listing : NOT_LOADED
   const { items } = listing
+  const setAside = state.status === 'ready' ? state.setAside : []
   const rows = items.map((entry) => {
     const since = relativeTime(entry.deletedAt, now)
     const daysLeft = Math.ceil((entry.expiresAt - now) / DAY_MS)
@@ -140,6 +158,27 @@ export function TrashSection(props: TrashSectionProps) {
       ? null
       : <p className={css.status} role="note">{t(pluralKey('damaged', listing.damaged.length), { n: listing.damaged.length })}</p>}
     {rows.length === 0 ? null : <ul className={css.rows}>{rows}</ul>}
+    {setAside.length === 0 ? null : <section className={css.setAside} aria-labelledby="delorun-trash-set-aside">
+      <h3 id="delorun-trash-set-aside" className={css.subheading}>{t('setAside.heading')}</h3>
+      <p className={css.status}>{t('setAside.intro')}</p>
+      <ul className={css.rows}>{setAside.map(entry => <li key={entry.path} className={css.row} data-set-aside-kind={entry.kind}>
+        <div className={css.main}>
+          <div className={css.name}>{t(`setAside.kind.${entry.kind}`)}</div>
+          <div className={css.meta}><span>{entry.path.split('/').pop()}</span><span>{formatBytes(entry.bytes)}</span></div>
+        </div>
+        <div className={css.actions}>
+          <Button variant="outline" size="sm" className={css.danger} disabled={busy} onClick={() => { setRemoving(entry) }}>{t('setAside.remove')}</Button>
+        </div>
+      </li>)}</ul>
+    </section>}
+    {removing === undefined ? null : <Modal open onClose={() => { setRemoving(undefined) }}
+      title={t('setAside.title')} closeLabel={t('confirm.close')}
+      footer={<>
+        <Button variant="outline" data-modal-autofocus onClick={() => { setRemoving(undefined) }}>{t('confirm.cancel')}</Button>
+        <Button variant="primary" onClick={() => { const path = removing.path; setRemoving(undefined); run(() => removeSetAside(path)) }}>{t('setAside.remove')}</Button>
+      </>}>
+      <p className={css.confirmText}>{t('setAside.body', { name: removing.path.split('/').pop() ?? removing.path })}</p>
+    </Modal>}
     {asking === undefined ? null : <Modal open onClose={() => { setAsking(undefined) }}
       title={t(asking.kind === 'item' ? 'purge.title' : 'emptyAll.title')} closeLabel={t('confirm.close')}
       footer={<>

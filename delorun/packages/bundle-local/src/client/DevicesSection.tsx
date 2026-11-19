@@ -1,6 +1,7 @@
 /**
  * The Devices settings section: the reach state, the approved devices with their removal, the approval of a new
- * device while the approval window is open, and unlocks of sensitive actions. At the home's own computer it lists the
+ * device while the approval window is open, unlocks of sensitive actions, and the Phone powers level, which only the
+ * computer changes. At the home's own computer it lists the
  * devices asking to unlock, each approved by typing the code the device shows or declined, and the running unlocks, each
  * with End. On a device it shows the device's own unlock with Unlock or Lock now, through the unlock store of
  * [`./unlock.ts`](./unlock.ts). Every request goes to the home through the injected `fetch`; the home refuses device
@@ -8,7 +9,8 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button, Input, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { CodeCells } from '@delorun/brand'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import {
   approveDevice, approveElevation, cancelPendingDevice, ELEVATION_POLL_MS, hostFailureOf, LOOPBACK_REQUIRED, openApprovalWindow,
@@ -22,6 +24,7 @@ import type { OptInMutation } from './opt-in.ts'
 import type { PairingSource } from './pairing-source.ts'
 import type { PairingRowSettings } from './pairing-writer.ts'
 import { PairingSettings, type PairingSettingsProps } from './PairingSettings.tsx'
+import { PhonePowers } from './PhonePowers.tsx'
 import type { UnlockSource, UnlockView } from './unlock.ts'
 import { clockTime, ELEVATE_COMMAND } from './UnlockOverlay.tsx'
 import { failureSentence, type Loaded } from './host-api.ts'
@@ -31,7 +34,7 @@ import css from './DevicesSection.module.css'
 export const REACH_ON_COMMAND = 'delorun reach on tailscale'
 
 /** What the section names in a refusal that needs the home's own computer. */
-export type DevicesAction = 'status' | 'list' | 'add' | 'approve' | 'cancel' | 'remove' | 'unlocks' | 'unlockApprove' | 'unlockRevoke'
+export type DevicesAction = 'status' | 'list' | 'add' | 'approve' | 'cancel' | 'remove' | 'unlocks' | 'unlockApprove' | 'unlockRevoke' | 'powers'
 
 /** The request function and the unlock store the plugin supplies. */
 export interface DevicesSectionInjected {
@@ -100,6 +103,8 @@ export function approvalCode(typed: string): string {
 }
 
 /** Whether a typed code is the eight digits a device shows. */
+/** The digits of an approval code. */
+const CODE_LENGTH = 8
 const isCompleteCode = (typed: string): boolean => /^\d{8}$/.test(approvalCode(typed))
 
 /**
@@ -115,6 +120,7 @@ export function DevicesSection({
   const pairingForm = usePairingForm(current => current)
   const pairingMutation = usePairingMutation(current => current)
   useEffect(() => startPairing(), [startPairing])
+  const powersFailure = useCallback((error: unknown) => failureText(t, error, 'powers'), [t])
   const [reach, setReach] = useState<Loaded<ReachStatus | undefined>>({ kind: 'loading' })
   useEffect(() => {
     let current = true
@@ -136,6 +142,7 @@ export function DevicesSection({
         {reach.kind === 'loading' ? null : <PairingSettings t={t} time={at => formatTime(t, at)} state={pairing} form={pairingForm}
           mutation={pairingMutation} set={setPairing} openCode={openPairingCode} decline={declinePairing} />}
         {reach.kind === 'loading' ? null : <DeviceManager t={t} fetch={fetch} hasOwner={reach.kind !== 'ready' || reach.value?.hasOwner !== false} />}
+        {reach.kind === 'loading' ? null : <PhonePowers t={t} fetch={fetch} onDevice={unlock.place === 'unknown' ? undefined : unlock.place === 'device'} failure={powersFailure} />}
       </>}
   </div>
 }
@@ -378,9 +385,7 @@ function PendingRow({ t, request, failure, onApprove, onCancel }: {
       {failure === undefined ? null : <div className={css.failed} role="alert">{failure}</div>}
     </div>
     <form className={css.approve} onSubmit={(event) => { event.preventDefault(); void submit() }}>
-      <Input className={css.code as string} value={typed} inputMode="numeric" autoComplete="off"
-        aria-label={t('pending.code', { label: request.label })} placeholder={t('pending.codePlaceholder')}
-        onChange={(event) => { setTyped(event.target.value) }} />
+      <div className={css.code}><CodeCells label={t('pending.code', { label: request.label })} length={CODE_LENGTH} value={typed} onChange={setTyped} autoComplete="one-time-code" disabled={busy} /></div>
       <Button variant="primary" size="sm" type="submit" disabled={busy || !isCompleteCode(typed)}>{t('pending.approve')}</Button>
       <Button size="sm" type="button" disabled={busy} onClick={() => { void run(onCancel) }}>{t('pending.cancel')}</Button>
     </form>
@@ -502,9 +507,7 @@ function UnlockRequestRow({ t, label, request, failure, onApprove, onDecline }: 
       {failure === undefined ? null : <div className={css.failed} role="alert">{failure}</div>}
     </div>
     <form className={css.approve} onSubmit={(event) => { event.preventDefault(); void run(() => onApprove(typed)) }}>
-      <Input className={css.code as string} value={typed} inputMode="numeric" autoComplete="off"
-        aria-label={t('unlock.requests.code', { label })} placeholder={t('pending.codePlaceholder')}
-        onChange={(event) => { setTyped(event.target.value) }} />
+      <div className={css.code}><CodeCells label={t('unlock.requests.code', { label })} length={CODE_LENGTH} value={typed} onChange={setTyped} autoComplete="one-time-code" disabled={busy} /></div>
       <Button variant="primary" size="sm" type="submit" disabled={busy || !isCompleteCode(typed)}>{t('unlock.requests.approve')}</Button>
       <Button size="sm" type="button" disabled={busy} onClick={() => { void run(onDecline) }}>{t('unlock.requests.decline')}</Button>
     </form>

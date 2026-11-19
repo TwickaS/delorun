@@ -24,7 +24,7 @@ import { locked, timeOf } from './action-support.ts'
 import type { ChangesContext } from './actions.ts'
 import { readLinks } from './link.ts'
 import { activeDirectory } from './paths.ts'
-import { approvedOf, readActiveRecord, readApproved, readChangeLog, readHarnessLog, readHarnessRecord, withEntry, withHarnessLock, writeChangeLog, writeHarnessLog } from './records.ts'
+import { approvedOf, decisionOf, readActiveRecord, readApproved, readChangeLog, readHarnessLog, readHarnessRecord, withEntry, withoutDecision, withHarnessLock, writeChangeLog, writeHarnessLog } from './records.ts'
 import type { ActiveContent, ActiveRecord, ApprovedRecord, ChangeEntry, ChangeKind, ChangeLog, ChangeState } from './types.ts'
 
 /** The most a left-out change's failure keeps, in bytes of UTF-8. */
@@ -182,7 +182,7 @@ export async function leaveOutNewestChange(ctx: ChangesContext, failure: string,
  */
 function leftOutEntry(entry: ChangeEntry, at: string, failure: string): ChangeEntry {
   const { lastFailure: _lastFailure, ...applied } = entry
-  return { ...applied, state: 'left-out-at-start', decidedAt: at, decidedFrom: 'start', leftOut: { at, failure: boundedFailure(failure) } }
+  return { ...withoutDecision(applied), state: 'left-out-at-start', ...decisionOf(at, 'start'), leftOut: { at, failure: boundedFailure(failure) } }
 }
 
 /**
@@ -210,14 +210,43 @@ export async function leaveOutNewestHarnessChange(home: string, runtime: string,
 }
 
 /**
+ * Leave one applied harness change out after a restart or a live load of it failed: under the harness lock, when the
+ * entry is still `applied` for the runtime and the record still holds its content for its file, it becomes
+ * `left-out-at-start` with the failure, decided from `start`. A change decided again meanwhile, or whose file a later
+ * change replaced, is left as it is. Only the harness's log is written; the next composition of the runtime leaves the
+ * change out.
+ * @param home - the Delorun home.
+ * @param runtime - the runtime version.
+ * @param id - the change that failed.
+ * @param failure - what failed; kept to {@link FAILURE_LIMIT_BYTES}.
+ * @param now - the clock; `() => new Date()` by default.
+ * @returns the entry as it now stands, or undefined when it is no longer one to leave out.
+ * @throws {ChangesError} `RECORD_UNREADABLE` when the harness's log or record is not one Delorun wrote.
+ */
+export async function leaveOutHarnessChange(home: string, runtime: string, id: ChangeEntry['id'], failure: string, now: () => Date = () => new Date()): Promise<ChangeEntry | undefined> {
+  return withHarnessLock(home, async () => {
+    const log = await readHarnessLog(home)
+    const entry = log.entries.find(candidate => candidate.id === id)
+    const file = entry?.subject.file
+    if (entry?.kind !== 'harness-edit' || entry.state !== 'applied' || entry.subject.runtime !== runtime || file === undefined) return undefined
+    const files = (await readHarnessRecord(home, runtime)).files
+    if (!Object.hasOwn(files, file) || files[file]!.version !== entry.to) return undefined
+    const left = leftOutEntry(entry, now().toISOString(), failure)
+    await writeHarnessLog(home, withEntry(log, left))
+    return left
+  })
+}
+
+/**
  * The runtime's harness change in state `applied` decided last.
  * @param home - the Delorun home.
  * @param runtime - the runtime version.
+ * @param include - which applied entries count; all by default.
  * @returns the entry, or undefined when the harness's log holds none for the runtime.
  * @throws {ChangesError} `RECORD_UNREADABLE` when the harness's log is not one Delorun wrote.
  */
-export async function newestAppliedHarnessChange(home: string, runtime: string): Promise<ChangeEntry | undefined> {
-  return newestDecided((await readHarnessLog(home)).entries, entry => entry.kind === 'harness-edit' && entry.subject.runtime === runtime && entry.state === 'applied')
+export async function newestAppliedHarnessChange(home: string, runtime: string, include: (entry: ChangeEntry) => boolean = () => true): Promise<ChangeEntry | undefined> {
+  return newestDecided((await readHarnessLog(home)).entries, entry => entry.kind === 'harness-edit' && entry.subject.runtime === runtime && entry.state === 'applied' && include(entry))
 }
 
 /**

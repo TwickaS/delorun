@@ -4601,7 +4601,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
       },
     ],
     ownerProps: [
-      '/** Owner share of an action rendered beside Settings at the sidebar foot. */\nexport interface SidebarFooterActionOwnerProps {\n  /** Whether the sidebar renders wide content (false = 56px rail). */\n  wide: boolean\n  /** Whether the entry sits at the end of the foot\'s one row (`SidebarLayout.setFootRow`) rather than above it. */\n  inline?: boolean\n}',
+      '/** Owner share of an action rendered beside Settings at the sidebar foot. */\nexport interface SidebarFooterActionOwnerProps {\n  /** Whether the sidebar renders wide content (false = 56px rail). */\n  wide: boolean\n  /**\n   * Whether the entry sits in the foot\'s one row (`SidebarLayout.setFootRow`) rather than above it. Inline, an icon\n   * button ends the row after Settings and the panels; a labelled entry whose element carries the\n   * `data-sidebar-foot-line` attribute takes its own full-width line above the row instead.\n   */\n  inline?: boolean\n}',
     ],
     ownerPropsReferences: [
       'SidebarLayout',

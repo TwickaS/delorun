@@ -60,6 +60,7 @@ import { reloadChanges } from './reload.ts'
 import { acceptServer, declineServer, listServers, reloadPermissions, revokeServer } from './consents.ts'
 import { reachApply, reachStatus } from './reach.ts'
 import { launchSupervisor, type LaunchedSupervisor, type SupervisorSetup } from './supervisor-launch.ts'
+import { Restart, type RestartSupport } from './restart.ts'
 
 /** What a home process runs with; `delorun` supplies every value. */
 export interface HomeProcessOptions {
@@ -92,6 +93,8 @@ export interface HomeProcessOptions {
   readonly updates: UpdateSupport | undefined
   /** The supervisor's launch values, or `undefined` when the machine is not set up for Docker. */
   readonly supervisor: SupervisorSetup | undefined
+  /** What a restart needs beyond this process, or `undefined` when the profile cannot restart: no restart begins without it or the runtime store. */
+  readonly restart?: RestartSupport
   /**
    * Registers a listener for this process's exit.
    * @param listener - runs synchronously as the process exits.
@@ -141,6 +144,7 @@ export class HomeProcess implements HandshakeSubject {
   private host: RunningHost | undefined
   private launched: LaunchedSupervisor | undefined
   private readonly handshake: UpdateHandshake | undefined
+  private readonly restarter: Restart
   /** An interrupted update whose target this start's Host checks. */
   private recovering: UpdateJournal | undefined
   /** An interrupted rollback whose runtime rolled back to this start's Host checks. */
@@ -170,6 +174,30 @@ export class HomeProcess implements HandshakeSubject {
   private constructor(options: HomeProcessOptions) {
     this.options = options
     this.handshake = options.updates === undefined ? undefined : new UpdateHandshake(this, options.updates)
+    this.restarter = new Restart({
+      running: options.running,
+      home: options.home,
+      profile: options.profile,
+      journal: journalPath(options.home, options.profile),
+      logger: options.logger,
+      state: () => this.state,
+      setState: (state) => { this.state = state },
+      updating: () => this.handshake?.running() === true,
+      chats: () => this.host?.chats,
+      failedRows: () => this.failedRows(),
+      rows: () => this.rows(),
+      protection: () => this.protection(),
+      suspend: limitS => this.suspend(limitS),
+      resume: () => this.resume(),
+      startSuccessor: handover => this.startSuccessor(handover),
+      handOver: (successor, startId, to) => { this.handOver(successor, startId, to) },
+      finish: successor => this.finishHandover(successor),
+    }, options.updates === undefined ? undefined : options.restart)
+  }
+
+  /** The restart, which the Host's studio and the update channel's `restart` drive. */
+  get restart(): Restart {
+    return this.restarter
   }
 
   /** @inheritdoc */
@@ -224,7 +252,7 @@ export class HomeProcess implements HandshakeSubject {
     const home = new HomeProcess(options)
     try {
       await home.checkDirectories()
-      home.lock = await acquireHomeLock({ runDirectory: runDirectory(options.home, options.profile), runtime: options.running, probe: options.probe, startId: options.startId })
+      home.lock = await acquireHomeLock({ runDirectory: runDirectory(options.home, options.profile), runtime: options.running, probe: options.probe, startId: options.startId, log: (line) => { options.logger.warn(line) } })
       options.onExit(() => { home.cleanUpSync() })
       home.listenSignals()
       home.runAgeChecks()
@@ -305,8 +333,9 @@ export class HomeProcess implements HandshakeSubject {
       await home.listen()
       home.startSupervisor()
       home.enterRunning()
-      await home.settleRecord(handover.to)
-      options.logger.info('took over from the previous runtime', { data: { from: handover.from, to: handover.to } })
+      // A restart's successor runs the same runtime and leaves the update record and the runtimes as they are.
+      if (handover.type === 'handover') await home.settleRecord(handover.to)
+      options.logger.info(handover.type === 'restart' ? 'took over from the previous start of this runtime' : 'took over from the previous runtime', { data: { from: handover.from, to: handover.to } })
       return home
     } catch (error) {
       if (home.stopped) throw error
@@ -350,10 +379,12 @@ export class HomeProcess implements HandshakeSubject {
    * @param mode - how running chats are treated.
    * @param progress - writes progress lines.
    * @returns the final line's fields, with `status` when it could be read; the process ends once the line is sent.
-   * @throws {HomeProcessError} `UPDATE_IN_PROGRESS` while an update or rollback runs.
+   * @throws {HomeProcessError} `UPDATE_IN_PROGRESS` while an update or rollback runs; `RESTART_IN_PROGRESS` while a restart is starting a new Host (a restart that still waits for chats is cancelled first).
    */
   async requestStop(mode: StopMode, progress: (fields: Readonly<Record<string, unknown>>) => void): Promise<Readonly<Record<string, unknown>>> {
     if (this.handshake?.running() === true) throw new HomeProcessError('UPDATE_IN_PROGRESS', 'an update or rollback is running; cancel it or wait for it to end')
+    // A restart that still waits for chats ends first, as the studio's cancel ends it; one that is starting is waited for.
+    if (this.restarter.running && !await this.restarter.cancel()) throw new HomeProcessError('RESTART_IN_PROGRESS', 'Delorun is restarting; wait for it to end')
     if (this.stopped) return this.stopLine()
     if (this.stopping !== undefined) {
       if (mode === 'cancel') await this.cancelChats()
@@ -378,6 +409,7 @@ export class HomeProcess implements HandshakeSubject {
     try {
       await this.closeHost()
       this.removeToken()
+      this.lock?.setListening(false)
       await this.channel?.close()
       this.channel = undefined
       await this.launched?.stop()
@@ -576,6 +608,7 @@ export class HomeProcess implements HandshakeSubject {
       handle: async (request, progress) => this.dispatch(request, progress, check),
       answered: (request) => { this.answered(request) },
     })
+    this.lock?.setListening(true)
     logger.info('update channel listening')
   }
 
@@ -596,8 +629,10 @@ export class HomeProcess implements HandshakeSubject {
         if (this.handshake === undefined) throw new HomeProcessError('REPORT_EXPIRED', 'no update was prepared')
         return this.handshake.apply(request.args.reportId, request.args.wait, request.args.drainTimeoutS, request.args.dataCopy, progress)
       case 'update.cancel':
+        // New turns refused for a restart that waits read as a waiting update, so its cancel ends that wait too.
+        const restartCancelled = await this.restarter.cancel()
         await this.handshake?.cancel()
-        return { status: await this.status() }
+        return { status: await this.status(), ...restartCancelled ? { restartCancelled } : {} }
       case 'rollback':
         this.refuseOutsideRunning()
         if (this.handshake === undefined) throw new HomeProcessError('NO_UPDATE_RECORD', 'this build has no runtime store')
@@ -639,6 +674,7 @@ export class HomeProcess implements HandshakeSubject {
   }
 
   private refuseOutsideRunning(): void {
+    if (this.restarter.running) throw new HomeProcessError('RESTART_IN_PROGRESS', 'Delorun is restarting; wait for it to end')
     if (this.handshake?.running() === true) throw new HomeProcessError('UPDATE_IN_PROGRESS', 'another update or rollback is running')
     if (this.state !== 'running') throw new HomeProcessError('UPDATE_IN_PROGRESS', `the home process is ${this.state}`)
   }
@@ -891,7 +927,7 @@ export class HomeProcess implements HandshakeSubject {
    * @throws {Error} when the process stopped while the Host booted; that Host is closed first.
    */
   private async bootedHost(): Promise<RunningHost> {
-    const host = await this.options.host.boot(this.access)
+    const host = await this.options.host.boot(this.access, { restart: this.restarter })
     if (!this.stopped) return host
     await host.close()
     throw new Error('the home process stopped while its Host booted')
@@ -959,6 +995,7 @@ export class HomeProcess implements HandshakeSubject {
     const failure = outcome === undefined || outcome.stopped || error instanceof HostNotStoppedError ? error : new HostNotStoppedError(error, outcome)
     if (outcome !== undefined && !outcome.stopped) this.logger.error('the failed start\'s Host did not stop', { ...outcome.kind === 'failed' ? { err: outcome.error } : {}, data: { detail: hostStopFailure(outcome) } })
     this.removeToken()
+    this.lock?.setListening(false)
     await this.channel?.close()
     this.channel = undefined
     await this.launched?.stop()

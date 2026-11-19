@@ -5,16 +5,19 @@ import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { LocaleSnapshot } from '@deepseek-ai/dsh-client-locale/client'
 import { vi } from 'vitest'
 import { DEFAULT_SETTINGS, type OnboardingSettings } from '../src/config.ts'
+import type { BrowserReadiness, BrowserSetupStore } from '@delorun/browser-setup'
+import type { TurnOffOutcome } from '../src/client/browser-pack.ts'
 import type { BundleInstaller, BundleView, RowView } from '../src/client/bundles.ts'
 import { en } from '../src/client/locales.ts'
+import { en as devicesEn } from '../../bundle-local/src/client/devices-locales.ts'
 import type { DelegationConsentSettings } from '@delorun/plugin-delegation-consent/wire'
+import type { PreviewFlagsStore, PreviewFlagView } from '@delorun/preview-flags/client'
 import type { ThemeSettings } from '@delorun/plugin-theme'
 import { DEFAULT_SETTINGS as THEME_DEFAULTS } from '../../plugin-theme/src/config.ts'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
-import type { DirectoryListing } from '@deepseek-ai/dsh-api-remotes/client'
-import type { AgentModelsAnswer, CloneStatus, DeferrableStep, KeyTestAnswer, LocalServer, Readiness, RecommendAnswer } from '../src/wire.ts'
+import type { AgentModelsAnswer, DeferrableStep, KeyTestAnswer, LocalServer, Readiness, RecommendAnswer } from '../src/wire.ts'
 import type {
-  AddOutcome, AgentRowSettings, AgentsFace, CustomEndpoint, CloneStartOutcome, FolderBrowse, FolderChoice, HostFace, LanguageFace, NoticeFace, ProvidersFace, ReachState, SchemeFace, SchemePreference, StartFace, StartTarget, StepServices,
+  AgentRowSettings, AgentsFace, BrowserFace, CustomEndpoint, HostFace, LanguageFace, NewWorkspaceOutcome, NoticeFace, ProvidersFace, ReachState, SchemeFace, SchemePreference, StartFace, StartTarget, StepServices,
 } from '../src/client/types.ts'
 import type { DirectoryEntry, KeyProbe } from '../src/client/providers.ts'
 import { DIRECTORY } from './directory.fixture.ts'
@@ -23,6 +26,9 @@ import { DIRECTORY } from './directory.fixture.ts'
 export const t: StepServices['t'] = makeTranslate(en)
 
 /** The theme's labels the look step shows, as the theme words them. */
+/** The Devices section's copy, which the Phone access step's Phone powers choice draws with. */
+export const devices: StepServices['phonePowers']['t'] = makeTranslate(devicesEn)
+
 export const appearance: StepServices['appearance'] = makeTranslate({
   'mode': 'Mode', 'mode.light': 'Light', 'mode.dark': 'Dark', 'mode.system': 'System',
   'palette': 'Theme', 'palette.soft': 'Soft', 'palette.t3-code': 'T3 Code', 'palette.t3-chat': 'T3 Chat', 'palette.grove': 'Grove',
@@ -147,69 +153,45 @@ export function hostFake(change: {
   readonly agentModels?: AgentModelsAnswer
   readonly reach?: ReachState
   readonly localModels?: readonly LocalServer[] | undefined
-  readonly cloneStart?: CloneStartOutcome
-  readonly cloneStatus?: readonly CloneStatus[]
 } = {}) {
   const deferred = new Set<DeferrableStep>()
-  const statuses = [...change.cloneStatus ?? [{ state: 'unknown' } as const]]
   const readiness = vi.fn(() => Promise.resolve('readiness' in change ? change.readiness : READY))
   const keyTest = vi.fn(() => Promise.resolve('keys' in change ? change.keys : KEYS))
   const localModels = vi.fn(() => Promise.resolve('localModels' in change ? change.localModels : []))
   const recommend = vi.fn((_registry: boolean) => Promise.resolve('recommend' in change ? change.recommend : { plugins: [], registry: 'not-asked' as const }))
   const reach = vi.fn(() => Promise.resolve(change.reach ?? 'absent'))
-  const cloneStart = vi.fn((_request: unknown) => Promise.resolve(change.cloneStart ?? { kind: 'started', job: 'job-1' } as const))
-  const cloneStatus = vi.fn((_job: string) => Promise.resolve((statuses.length > 1 ? statuses.shift() : statuses[0]) as CloneStatus))
   const agentModels = vi.fn((_agent: 'claude-code' | 'codex') => Promise.resolve(change.agentModels ?? { state: 'unavailable' as const, reason: 'not-running' as const }))
   const defer = vi.fn((id: DeferrableStep, on: boolean) => {
     if (on) deferred.add(id)
     else deferred.delete(id)
     return Promise.resolve([...deferred] as readonly DeferrableStep[] | undefined)
   })
-  const host: HostFace = { agentModels, readiness, keyTest, localModels, recommend, reach, defer, cloneStart, cloneStatus }
-  return { host, agentModels, readiness, keyTest, localModels, recommend, reach, defer, cloneStart, cloneStatus }
+  const host: HostFace = { agentModels, readiness, keyTest, localModels, recommend, reach, defer }
+  return { host, agentModels, readiness, keyTest, localModels, recommend, reach, defer }
 }
 
 /** The home directory the folder listings start at. */
 export const HOME = '/home/person'
 
 /**
- * One folder's listing as the host gives it: its ancestors from the filesystem root, and its child folders.
- * @param path - the folder, absolute, without a trailing separator except for the root.
- * @param names - the child folders' names; a dot-led name is hidden.
- * @param truncated - whether the host cut the list.
- * @returns the listing.
+ * A start face over a store, recording the dialog opening, the new-workspace dialog and the notice hold.
+ * @param initial - where the chat opens.
+ * @param outcome - how the new-workspace dialog ends, or `absent` for a profile without it.
+ * @param hasWorkspace - whether the studio already holds a workspace.
+ * @returns the face and its spies.
  */
-export function listingOf(path: string, names: readonly string[], truncated = false): DirectoryListing {
-  const parts = path.split('/').filter(part => part !== '')
-  const crumbs = [{ name: '/', path: '/', hidden: false }, ...parts.map((part, index) => ({ name: part, path: `/${parts.slice(0, index + 1).join('/')}`, hidden: false }))]
-  const base = path === '/' ? '' : path
-  return { path, home: HOME, crumbs, entries: names.map(name => ({ name, path: `${base}/${name}`, hidden: name.startsWith('.') })), truncated }
-}
-
-/** A host's folders: the home directory with a few folders, each folder empty unless listed here. */
-export function browseFake(listings: Readonly<Record<string, DirectoryListing>> = { [HOME]: listingOf(HOME, ['.config', 'notes', 'projects']) }) {
-  const list = vi.fn(async (path?: string, _signal?: AbortSignal): Promise<DirectoryListing> => listings[path ?? HOME] ?? listingOf(path ?? HOME, []))
-  const create = vi.fn(async (path: string, name: string): Promise<string> => `${path}/${name}`)
-  const browse: FolderBrowse = { list, create }
-  return { browse, list, create }
-}
-
-/** A start face over a store, recording the dialog opening it, the folder chosen or added, and the notice hold. */
 export function startFace(
   initial: StartTarget = { kind: 'default', workspaceId: DEFAULT_WORKSPACE, path: DEFAULT_PATH },
-  choice: FolderChoice = { kind: 'cancelled' },
-  outcome: AddOutcome = { kind: 'chosen', workspaceId: 'workspace-2' as WorkspaceId, path: `${HOME}/projects`, folder: 'code' },
+  outcome: NewWorkspaceOutcome | 'absent' = { kind: 'cancelled' },
   hasWorkspace = true,
 ) {
   const store = createSnapshotStore<StartTarget>(initial)
   const resolve = vi.fn()
-  const chooseFolder = vi.fn((): Promise<FolderChoice> => Promise.resolve(choice))
-  const addFolder = vi.fn((_path: string): Promise<AddOutcome> => Promise.resolve(outcome))
-  const folders = browseFake()
+  const openNewWorkspace = vi.fn((): Promise<NewWorkspaceOutcome> => Promise.resolve(outcome === 'absent' ? { kind: 'cancelled' } : outcome))
   const release = vi.fn((_told: boolean) => {})
   const holdNotice = vi.fn(() => release)
-  const face: StartFace = { target: store, resolve, chooseFolder, addFolder, browse: folders.browse, holdNotice, hasWorkspace: () => hasWorkspace }
-  return { face, set: store.set, resolve, chooseFolder, addFolder, folders, holdNotice, release }
+  const face: StartFace = { target: store, resolve, openNewWorkspace: outcome === 'absent' ? undefined : openNewWorkspace, holdNotice, hasWorkspace: () => hasWorkspace }
+  return { face, set: store.set, resolve, openNewWorkspace, holdNotice, release }
 }
 
 /** The providers service with every call a spy; each can be replaced. */
@@ -231,8 +213,41 @@ export function providersFake(change: { readonly directory?: readonly DirectoryE
 export function agentsFake(options: { readonly rows?: boolean; readonly minutes?: number } = {}) {
   const claude = liveForm<AgentRowSettings>(options.rows === false ? undefined : {}, { status: options.rows === false ? 'unavailable' : 'ready' })
   const codex = liveForm<AgentRowSettings>(options.rows === false ? undefined : {}, { status: options.rows === false ? 'unavailable' : 'ready' })
-  const limit = liveForm<DelegationConsentSettings>({ enabled: true, runTimeoutMinutes: options.minutes ?? 30 })
+  const limit = liveForm<DelegationConsentSettings>({ enabled: true, runTimeoutMinutes: options.minutes ?? 30, fullAccessStartsAgents: true })
   return { claude, codex, limit, face: { rows: { 'claude-code': claude.form, 'codex': codex.form }, limit: limit.form } satisfies AgentsFace }
+}
+
+/**
+ * Browser's setup over a store: `refresh` answers the queued states in order and then repeats the last.
+ * @param states - where Browser stands at each read; `checking` until the first.
+ * @returns the face, its store's setter and the spies.
+ */
+export function browserFake(...states: readonly BrowserReadiness[]) {
+  const store = createSnapshotStore<BrowserReadiness>({ kind: 'checking' })
+  const queue = [...states.length === 0 ? [{ kind: 'not-added' } as const] : states]
+  const refresh = vi.fn((): Promise<BrowserReadiness> => {
+    const next = (queue.length > 1 ? queue.shift() : queue[0]) as BrowserReadiness
+    store.set(next)
+    return Promise.resolve(next)
+  })
+  const openSettings = vi.fn((_section: string) => {})
+  const setup: BrowserSetupStore = { getSnapshot: store.getSnapshot, subscribe: store.subscribe, refresh }
+  /** How turning Browser off ends; a spec replaces it. */
+  const outcome: { value: TurnOffOutcome } = { value: 'off' }
+  const turnOff = vi.fn(() => Promise.resolve(outcome.value))
+  const face: BrowserFace = { setup, openSettings, turnOff }
+  return { face, set: store.set, refresh, openSettings, turnOff, outcome }
+}
+
+/**
+ * The page's preview flags, already read.
+ * @param on - the flag ids that are declared and on.
+ * @returns the store.
+ */
+export function flagsFake(...on: readonly string[]): PreviewFlagsStore {
+  const flags: PreviewFlagView[] = on.map(id => ({ id, kind: 'boolean', owner: '@delorun/plugin-onboarding', title: { en: id, zh: id }, description: { en: id, zh: id }, on: true }))
+  const snapshot = { status: 'ready' as const, flags }
+  return { getSnapshot: () => snapshot, subscribe: () => () => {}, load: () => Promise.resolve(), refresh: () => Promise.resolve() }
 }
 
 /** Step services with every part faked; each can be replaced. */
@@ -253,6 +268,9 @@ export function stepServices(change: Partial<StepServices> = {}): StepServices &
     renderSection: (id: string) => `section ${id}`,
     resolveText: text => (typeof text === 'string' ? text : text.en),
     pin: { fetch: () => Promise.reject(new Error('no PIN requests in this spec')), openSettings: () => undefined },
+    phonePowers: { t: devices, fetch: () => Promise.resolve(new Response(null, { status: 404 })) },
+    browser: browserFake().face,
+    previewFlags: flagsFake(),
     spies: bundles,
     ...change,
   }

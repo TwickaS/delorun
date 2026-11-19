@@ -1,6 +1,8 @@
 # One browser provider at a time: the browser-use registration is exclusive. Playwright is on. Chrome DevTools is the
 # alternative (turn the Playwright row off first); Stagehand needs a model of its own, so it is off until configured.
 # The MCP servers run in one folder of the home, not in each chat's folder, so one MCP consent covers every chat.
+# `browserAdditions` turns on Delorun's Browser setup message and the output folder's .gitignore (C16 switch
+# browser_additions).
 - insert:
     - id: browser-use
       name: '@deepseek-ai/dsh-browser-use'
@@ -10,6 +12,7 @@
         mode: launch
         headless: true
         serverDirectory: home
+        browserAdditions: true
     - id: browser-use-chrome-devtools-mcp
       name: '@deepseek-ai/dsh-experimental-browser-use-chrome-devtools-mcp'
       disabled: true

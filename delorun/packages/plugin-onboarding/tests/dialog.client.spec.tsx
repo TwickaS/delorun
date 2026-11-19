@@ -1,12 +1,11 @@
 // @vitest-environment jsdom
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
-import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createFakeDownloadsSource, provideDownloadsSource } from '@delorun/plugin-downloads/row'
 import { OnboardingStepEntry, UPSTREAM_KEY_STEP, type OnboardingStepEntryProps } from '../src/client/Onboarding.tsx'
 import { en } from '../src/client/locales.ts'
-import type { FolderChoice, OnboardingStep, ReachState, StartTarget } from '../src/client/types.ts'
+import type { OnboardingStep, ReachState, StartTarget } from '../src/client/types.ts'
 import type { OnboardingSettings } from '../src/config.ts'
 import { NO_RECORD, type Readiness, type SetupRecord } from '../src/wire.ts'
 import { DEFAULT_PATH, DEFAULT_WORKSPACE, hostFake, liveForm, noticeFace, READY, settings, startFace, stepServices, t, THEME } from './fixtures.client.ts'
@@ -54,7 +53,10 @@ async function mountEntry(options: Options = {}) {
     status: options.status ?? 'ready', ...options.writeResult === undefined ? {} : { result: options.writeResult },
   })
   const extra = createSnapshotStore<readonly OnboardingStep[]>(options.extra ?? [])
-  const aside = createSnapshotStore(false)
+  const base = createSnapshotStore(false)
+  // Records what the pause was asked to keep in the home, as the plugin's store does.
+  const set = vi.fn((value: boolean, remember?: boolean) => { void remember; base.set(value) })
+  const aside = { ...base, set }
   const complete = vi.fn()
   const completeStep = vi.fn((_id: string) => {})
   const startChat = vi.fn((_workspaceId?: string, _keepCurrent?: boolean) => Promise.resolve())
@@ -187,19 +189,23 @@ describe('the first run', () => {
     expect(screen.getByRole('dialog')).toBeTruthy()
   })
 
-  it('treats Escape as Complete setup later: the place is kept and the guide sets aside for this visit', async () => {
-    const { progress, complete } = await mountEntry({ notice: noticeFace() })
+  it('closes the guide for this page only on Escape: nothing is kept in the home and the owed notice is not acknowledged', async () => {
+    const notice = noticeFace()
+    const { progress, complete, aside } = await mountEntry({ notice })
     await act(async () => { fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' }) })
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(progress.set).not.toHaveBeenCalled()
+    expect(aside.set).toHaveBeenCalledWith(true, false)
+    expect(notice.acknowledge).not.toHaveBeenCalled()
     expect(complete).toHaveBeenCalled()
   })
 
   it('acknowledges the owed preview notice on Complete setup later, so the separate notice step does not show it again', async () => {
     const notice = noticeFace()
-    await mountEntry({ notice })
-    await act(async () => { fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' }) })
+    const { aside } = await mountEntry({ notice })
+    await click(button(en.later))
     expect(notice.acknowledge).toHaveBeenCalledOnce()
+    expect(aside.set).toHaveBeenCalledWith(true)
   })
 
   it('goes forward and back, saving the step reached, and starts the chat in the default workspace from Ready', async () => {
@@ -397,12 +403,13 @@ describe('the workspace and the last button', () => {
     expect(screen.getByText(DEFAULT_PATH)).toBeTruthy()
   })
 
-  it('starts the chat in a folder the Workspace step added, with what the folder holds', async () => {
-    const start = startFace(undefined, { kind: 'chosen', workspaceId: 'workspace-2' as WorkspaceId, path: '/home/person/app', folder: 'code' })
+  it('starts the chat in a workspace the new-workspace dialog made, with what the folder holds', async () => {
+    const start = startFace(undefined, { kind: 'created', workspaceId: 'workspace-2', path: '/home/person/app', folder: 'code' })
     const { startChat } = await mountEntry({ start })
     await forward(4)
-    await click(screen.getByRole('radio', { name: en['workspace.mode.folder'] }))
-    await click(button(en['workspace.folder.choose']))
+    await click(screen.getByRole('radio', { name: en['workspace.mode.another'] }))
+    await click(button(en['workspace.new']))
+    expect(start.openNewWorkspace).toHaveBeenCalledOnce()
     await settle()
     await forward(1)
     expect(screen.getByText('/home/person/app')).toBeTruthy()
@@ -418,30 +425,28 @@ describe('the workspace and the last button', () => {
   })
 
   it('sends the person back to Workspace from Ready while no folder is chosen and there is no default', async () => {
-    const start = startFace({ kind: 'none' }, { kind: 'chosen', workspaceId: 'workspace-2' as WorkspaceId, path: '/home/person/app', folder: 'empty' })
+    const start = startFace({ kind: 'none' }, { kind: 'created', workspaceId: 'workspace-2', path: '/home/person/app', folder: 'empty' })
     const { startChat, complete } = await mountEntry({ start })
     await forward(5)
     expect(screen.queryByRole('button', { name: en.start })).toBeNull()
     await click(button(en.chooseFolder))
     expect(heading().textContent).toBe(en['step.workspace'])
     expect([startChat.mock.calls.length, complete.mock.calls.length]).toEqual([0, 0])
-    await click(button(en['workspace.folder.choose']))
+    await click(button(en['workspace.new']))
     await settle()
     await forward(1)
     await click(button(en.start))
     expect(startChat).toHaveBeenCalledExactlyOnceWith('workspace-2', false)
   })
 
-  it.each<readonly [string, FolderChoice, string]>([
-    ['refuses the home directory', { kind: 'refused', problem: 'home-directory' }, en['problem.home-directory']],
-    ['cannot add the folder', { kind: 'failed' }, en['problem.failed']],
-  ])('keeps the dialog open and says why when the harness %s', async (_, choice, text) => {
-    const start = startFace({ kind: 'none' }, choice)
+  it('keeps the dialog open and starts no chat when the new-workspace dialog is cancelled', async () => {
+    const start = startFace({ kind: 'none' })
     const { startChat, complete } = await mountEntry({ start })
     await forward(4)
-    await click(button(en['workspace.folder.choose']))
+    await click(button(en['workspace.new']))
     await settle()
-    expect(screen.getByRole('alert').textContent).toBe(`✕${text}`)
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(heading().textContent).toBe(en['step.workspace'])
     expect([startChat.mock.calls.length, complete.mock.calls.length]).toEqual([0, 0])
   })
 
@@ -550,7 +555,7 @@ describe('finishing later and the last step', () => {
   })
 
   it('uses the default workspace when the guide was opened again with no workspace and Workspace is skipped', async () => {
-    const { startChat } = await mountEntry({ explicit: true, start: startFace(undefined, undefined, undefined, false) })
+    const { startChat } = await mountEntry({ explicit: true, start: startFace(undefined, undefined, false) })
     await forward(4)
     expect(heading().textContent).toBe(en['step.workspace'])
     await click(button(en.skip))
@@ -569,7 +574,7 @@ describe('finishing later and the last step', () => {
   })
 
   describe.each<readonly [string, 'skip' | 'done', ReachState, string]>([
-    ['Not now', 'skip', 'off', 'Not set up'],
+    ['Skip step', 'skip', 'off', 'Not set up'],
     ['"I\'ve done this" while reach still reads off', 'done', 'off', en['ready.reach.check']],
     ['"I\'ve done this" once reach reads on', 'done', 'set-up', 'On'],
   ])('phone access with %s', (_, action, reachNow, summary) => {
@@ -579,7 +584,7 @@ describe('finishing later and the last step', () => {
       expect(heading().textContent).toBe(en['step.reach'])
       expect(screen.queryByRole('button', { name: en.continue })).toBeNull()
       host.reach.mockResolvedValue(reachNow)
-      await click(button(action === 'skip' ? en['reach.notNow'] : en['reach.done']))
+      await click(button(action === 'skip' ? en.skip : en['reach.done']))
       await settle()
       await forward(1)
       // A computer reached from the phone adds the PIN and Workspace steps before Ready.
@@ -602,7 +607,7 @@ describe('on a phone, the steps only the computer can do', () => {
     await forward(titles().indexOf(en['computer.title.pin']))
     expect(heading().textContent).toBe(en['computer.title.pin'])
     expect(screen.getByText(PIN_LEAD)).toBeTruthy()
-    expect(screen.queryByLabelText(en['pin.label'])).toBeNull()
+    expect(screen.queryByLabelText(en['pin.setup.pinLabel'])).toBeNull()
   })
 
   it('records the step as deferred and goes on when the person chooses Do it on my computer', async () => {

@@ -11,7 +11,7 @@
  */
 import { resolve } from 'node:path'
 import { readProfileManifest } from '@deepseek-ai/dsh-app-boot'
-import { specPackageName } from '@deepseek-ai/dsh-plugin-manager'
+import { specPackageName } from '@deepseek-ai/dsh-plugin-manager/package-name'
 import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 
 /** The model-facing refusal of a `plugin_manager` call that would bring in an external agent. */

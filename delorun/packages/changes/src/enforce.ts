@@ -221,6 +221,41 @@ export async function prepareReload(request: EnforceRequest): Promise<StartChang
 }
 
 /**
+ * Re-point each active directory's links into the runtime store to the running release's installed packages, without
+ * deciding or approving anything: every directory is made to hold the version `active.json` already records for it, as
+ * a start does in its last step. An update's successor needs this because it takes over without a start's pre-start
+ * steps, and a pack copy written under the previous release names that release's packages, which the load check of the
+ * new release refuses. A directory that already holds its version is left as it is; a plugin with no record is left
+ * alone, and the load check still refuses a stray directory.
+ * @param request - the home, the profile, its directory and the running release.
+ * @returns the plugins whose active directory was rewritten, in record order.
+ * @throws {ChangesError} `STORE_CORRUPT` or `RUNTIME_CHANGED` when the store cannot give a recorded version, and a
+ *   record that cannot be read; the load check then refuses the start as it would have.
+ */
+export async function repointActiveCopies(request: EnforceRequest): Promise<readonly string[]> {
+  const { home, profile, profileDir } = request
+  const release = await referenceRelease(home, request.runningRelease)
+  /** The plugins whose active copy does not hold the version the record names. */
+  const stale = async (): Promise<[string, ActiveContent][]> => {
+    const behind: [string, ActiveContent][] = []
+    for (const [plugin, content] of Object.entries((await readActiveRecord(home, profile)).plugins)) {
+      if (content.version !== undefined && !await holdsVersion(home, activeDirectory(home, profile, plugin), content.version, release)) behind.push([plugin, content])
+    }
+    return behind
+  }
+  // A normal restart finds every copy holding its version and takes no lock, so it never waits for a profile writer.
+  if ((await stale()).length === 0) return []
+  return withFileLock(join(profileDir, 'package.json'), async () => {
+    const rewritten: string[] = []
+    for (const [plugin, content] of await stale()) {
+      await holdContent(home, activeDirectory(home, profile, plugin), content.version, release)
+      rewritten.push(plugin)
+    }
+    return rewritten
+  }, { waitMs: request.lockWaitMs ?? PROFILE_LOCK_WAIT_MS })
+}
+
+/**
  * Who holds the profile write lock, from the process id upstream's lock file records.
  * @param profileDir - the profile directory.
  * @returns `none` without a lock file, `this-process` when it names this process, and `other` otherwise.

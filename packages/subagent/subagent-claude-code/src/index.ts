@@ -27,6 +27,12 @@ import {
   type ClaudeCodePermissionMode,
   type ClaudeCodeRunSpec,
 } from './run.ts'
+import { claudeLevelRun, type ClaudeLevelRun } from './levels.ts'
+
+/** The run spec's part of a resolved safety level. */
+function levelOf(run: ClaudeLevelRun): NonNullable<ClaudeCodeRunSpec['level']> {
+  return { disallowedTools: run.disallowedTools, ...run.sandbox === undefined ? {} : { sandbox: run.sandbox } }
+}
 
 export const name = 'subagent-claude-code'
 export const inject = ['subagents', 'subprocess']
@@ -114,10 +120,20 @@ class ClaudeCodeProvider implements SubagentProvider {
       )
       throw failure
     }
+    const level = this.ctx.get('delegationConsent')?.permissionLevel?.(this.name)
+    let run: ClaudeLevelRun | undefined
+    try {
+      run = level === undefined ? undefined : claudeLevelRun(level, cwd, process.platform, process.env.PATH)
+    } catch (error: unknown) {
+      // The level promised confinement the machine cannot give; the install line reaches the person, not a fixed fact.
+      this.ctx.logger.warn(`subagent-claude-code "${this.name}": ${error instanceof Error ? error.message : String(error)}`)
+      throw error
+    }
     const spec: ClaudeCodeRunSpec = {
       cwd,
       ...this.config.model === undefined ? {} : { model: this.config.model },
-      permissionMode: this.config.permissionMode,
+      permissionMode: run?.permissionMode ?? this.config.permissionMode,
+      ...run === undefined ? {} : { level: levelOf(run) },
       env: this.config.env,
       disposeGraceMs: this.config.disposeGraceMs,
       spawn: spawnSpec => this.ctx.subprocess.spawn(spawnSpec),

@@ -8,7 +8,6 @@ import { join } from 'node:path'
 import type { TailscaleResult, TailscaleRunner } from '@delorun/reach'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { claudeSignIn, codexSignIn, processReadinessEnvironment, readReadiness, tailscaleReadiness, type ReadinessEnvironment } from '../src/readiness.ts'
-import { folderKind } from '../src/folder-kind.ts'
 
 let home = ''
 
@@ -107,34 +106,5 @@ describe('the Tailscale probe', () => {
   it('reads this process\'s environment', () => {
     const run = tailscale().run
     expect(processReadinessEnvironment(run)).toMatchObject({ env: process.env, platform: process.platform, tailscale: run })
-  })
-})
-
-describe('what a folder holds', () => {
-  it.each<readonly [string, readonly string[], string]>([
-    ['nothing visible', ['.DS_Store'], 'empty'],
-    ['a Git directory', ['.git'], 'code'],
-    ['a manifest', ['package.json', 'README.md'], 'code'],
-    ['a .NET project', ['App.csproj'], 'code'],
-    ['a .NET solution', ['App.sln'], 'code'],
-    ['documents', ['notes.md', 'photo.jpg'], 'files'],
-  ])('reads %s as %s', async (_, names, kind) => {
-    const folder = join(home, 'folder')
-    await mkdir(folder)
-    for (const name of names) await (name === '.git' ? mkdir(join(folder, name)) : writeFile(join(folder, name), ''))
-    expect(await folderKind(folder)).toBe(kind)
-  })
-
-  it('reads an empty folder as empty and one it cannot list as files', async () => {
-    await mkdir(join(home, 'empty'))
-    expect(await folderKind(join(home, 'empty'))).toBe('empty')
-    expect(await folderKind(join(home, 'missing'))).toBe('files')
-  })
-
-  it('stops reading a huge folder after the first entries', async () => {
-    const folder = join(home, 'huge')
-    await mkdir(folder)
-    await Promise.all(Array.from({ length: 2100 }, (_, index) => writeFile(join(folder, `f${String(index)}.txt`), '')))
-    expect(await folderKind(folder)).toBe('files')
   })
 })

@@ -34,6 +34,7 @@ import { checkStoredBranding } from '@delorun/brand/branding'
 import { DEFAULT_WORKSPACE_ICON, parseWorkspaceIcon } from '@delorun/brand/workspace-icon'
 import type { ReachListenerId } from '@delorun/contract-admission'
 import type { SettingsLift } from './dangerous-settings.ts'
+import type { PhonePowersLevel } from './phone-powers.ts'
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface PrincipalMap {
@@ -535,6 +536,29 @@ export const REACH_ELEVATED_ACTIONS = {
 } as const satisfies Readonly<Record<RemoteAccessAction, string>>
 
 /**
+ * The elevated actions the approval grace does not open: every `terminal/*` action, a new one included. A terminal is a
+ * shell outside the sandbox, so it needs a code, a PIN page or the unlock the person chose, never the grace a phone
+ * starts with after its approval at the computer.
+ */
+export const GRACE_REFUSED_ACTIONS: ReadonlySet<string> = new Set(Object.keys(REACH_ELEVATED_ACTIONS).filter(action => action.startsWith('terminal/')))
+
+/**
+ * The actions only Phone powers' Full level lets a device take: every `terminal/*` action, a new one included. Under
+ * Careful a terminal stays at the computer, because a shell outside the sandbox runs the same `delorun changes` commands
+ * that Careful keeps there; each is refused with {@link PHONE_POWERS_REFUSAL}, unlocked or not, in every mode.
+ */
+export const FULL_POWERS_ACTIONS: ReadonlySet<string> = GRACE_REFUSED_ACTIONS
+
+/**
+ * The refusal of an action Phone powers keeps at the computer.
+ * @param action - the refused action.
+ * @returns `loopback-required: <action> needs Phone powers set to Full`.
+ */
+export function phonePowersRefusal(action: string): string {
+  return `loopback-required: ${action} needs Phone powers set to Full at the computer`
+}
+
+/**
  * Assert that no action is in two of the tables.
  * @param tables - the allowed, the elevated and the never tables, by name.
  * @throws {TypeError} naming every action two tables list.
@@ -700,9 +724,10 @@ type ReachCondition = (request: {
 }) => RemoteAccessDecision
 
 /**
- * A boolean setting only the home's own computer turns off, such as the external-agent consent: a device's
- * settings write to its namespace is refused, unlocked or not, unless it leaves the field a literal `true`. The plugin
- * that owns the field registers it with `HomeAuthService.registerComputerOnlySwitch` while it is mounted.
+ * A boolean setting only the home's own computer moves away from its safe value, such as the external-agent consent:
+ * a device's settings write to its namespace is refused, unlocked or not, unless it leaves the field a literal
+ * {@link ComputerOnlySwitch.safeValue}. The plugin that owns the field registers it with
+ * `HomeAuthService.registerComputerOnlySwitch` while it is mounted.
  */
 export interface ComputerOnlySwitch {
   /** The settings namespace, the id of the plugin's profile row. */
@@ -711,6 +736,23 @@ export interface ComputerOnlySwitch {
   readonly field: string
   /** What the field turns on, as the refusal names it, such as `the external-agent consent`. */
   readonly label: string
+  /**
+   * The one value a device may write, `true` when omitted. A field whose `true` loosens a restriction, such as the
+   * external-agent consent's `fullAccessStartsAgents`, names `false`, so a device can tighten it and only the computer
+   * can turn it on.
+   */
+  readonly safeValue?: boolean
+  /**
+   * For a field holding one of an ordered list of values, such as an external agent's safety level, instead of a
+   * boolean: a device may write a value of equal or lower rank than the field's current value, and a looser value or a
+   * removal stays at the computer. Dangerous mode never lifts such a switch.
+   */
+  readonly ranked?: {
+    /** The values from the most to the least restricted; a value not listed counts as looser than all of them. */
+    readonly order: readonly string[]
+    /** The value the field holds now, read at each settings write. */
+    readonly current: () => string
+  }
 }
 
 /** The {@link ComputerOnlySwitch.field} that makes the whole namespace computer-only: a device writes none of its fields. */
@@ -724,12 +766,14 @@ export const EVERY_FIELD = '*'
 export const DANGEROUS_LIFTABLE_SWITCHES: ReadonlySet<string> = new Set(['delorun-delegation-consent'])
 
 /**
- * The reason a settings write that would turn a computer-only switch off is refused to a device, unlocked or not.
+ * The reason a settings write that would move a computer-only switch off its safe value is refused to a device,
+ * unlocked or not.
  * @param label - the switch's {@link ComputerOnlySwitch.label}.
- * @returns `loopback-required: turning <label> off`.
+ * @param safeValue - the switch's {@link ComputerOnlySwitch.safeValue}; the refusal names the other direction.
+ * @returns `loopback-required: turning <label> off`, or `on` for a switch whose safe value is `false`.
  */
-export function switchOffRefusal(label: string): string {
-  return `loopback-required: turning ${label} off`
+export function switchOffRefusal(label: string, safeValue = true): string {
+  return `loopback-required: turning ${label} ${safeValue ? 'off' : 'on'}`
 }
 
 /** The settings writes whose arguments the condition reads for a field only the computer lowers. */
@@ -745,24 +789,41 @@ function isObject(value: unknown): value is Readonly<Record<string, unknown>> {
 }
 
 /**
- * Whether one `settings/mutate` operation leaves a switch's field on: an operation on another field, or a `set` that
- * writes a literal `true` to it, directly or in the whole section.
+ * Whether one `settings/mutate` operation leaves a switch's field safe: an operation on another field, or a `set` that
+ * writes the literal safe value to it, directly or in the whole section.
  * @param field - the switch's field.
+ * @param safe - the switch's safe value.
  * @param op - the operation, as the call sent it.
- * @returns whether it keeps the switch on.
+ * @returns whether it keeps the switch safe.
  */
-function opKeepsSwitch(field: string, op: unknown): boolean {
+function opKeepsSwitch(field: string, safe: boolean, op: unknown): boolean {
   if (!isObject(op) || !Array.isArray(op.path)) return false
   const [head, ...rest] = op.path as unknown[]
-  if (head === undefined) return op.op === 'set' && isObject(op.value) && op.value[field] === true
+  if (head === undefined) return op.op === 'set' && isObject(op.value) && op.value[field] === safe
   if (head !== field) return true
-  return rest.length === 0 && op.op === 'set' && op.value === true
+  return rest.length === 0 && op.op === 'set' && op.value === safe
 }
 
 /**
- * Whether a settings write could turn a computer-only switch off. A write to another namespace never does; a write to
- * its namespace does unless its arguments name the field only as a literal `true`, and a `replace`, which rebuilds the
- * section, must name it so. Arguments the condition cannot read count as turning it off.
+ * Whether a settings write could loosen a ranked field: it removes the field, writes a value that is not a string or
+ * ranks above the current value, or has arguments the condition cannot read.
+ * @param action - the settings write.
+ * @param args - the call's arguments.
+ * @param field - the field.
+ * @param ranked - the switch's order and current value.
+ * @returns whether the write is refused to a device.
+ */
+function loosensRanked(action: RemoteAccessAction, args: Readonly<Record<string, unknown>>, field: string, ranked: NonNullable<ComputerOnlySwitch['ranked']>): boolean {
+  const rank = (value: string): number => ranked.order.includes(value) ? ranked.order.indexOf(value) : ranked.order.length
+  const current = rank(ranked.current())
+  return removesField(action, args, field)
+    || fieldWritten(action, args, field).some(value => typeof value !== 'string' || rank(value) > current)
+}
+
+/**
+ * Whether a settings write could move a computer-only switch off its safe value. A write to another namespace never
+ * does; a write to its namespace does unless its arguments name the field only as the literal safe value, and a
+ * `replace`, which rebuilds the section, must name it so. Arguments the condition cannot read count as moving it.
  * @param action - the settings write.
  * @param args - the call's arguments.
  * @param target - the switch.
@@ -771,15 +832,17 @@ function opKeepsSwitch(field: string, op: unknown): boolean {
 function turnsSwitchOff(action: RemoteAccessAction, args: Readonly<Record<string, unknown>>, target: ComputerOnlySwitch): boolean {
   if (args.ns !== target.ns) return false
   const { field } = target
+  const safe = target.safeValue ?? true
   if (field === EVERY_FIELD) return true
+  if (target.ranked !== undefined) return loosensRanked(action, args, field, target.ranked)
   switch (action) {
     case 'settings/mutate':
-      return !Array.isArray(args.ops) || !args.ops.every(op => opKeepsSwitch(field, op))
+      return !Array.isArray(args.ops) || !args.ops.every(op => opKeepsSwitch(field, safe, op))
     case 'settings/update':
-      return !isObject(args.patch) || (field in args.patch && args.patch[field] !== true)
+      return !isObject(args.patch) || (field in args.patch && args.patch[field] !== safe)
     default:
       // `settings/replace`, the only other member of SETTINGS_WRITES.
-      return !isObject(args.section) || args.section[field] !== true
+      return !isObject(args.section) || args.section[field] !== safe
   }
 }
 
@@ -797,7 +860,7 @@ function liftsOf(facts: Pick<ReachAccessFacts, 'computerOnlySwitches'>, action: 
   const lifted = (field: string): SettingsLift => ({
     ns, field, written: fieldWritten(action, args, field).at(-1), ...removesField(action, args, field) ? { unset: true } : {},
   })
-  const switches = facts.computerOnlySwitches().filter(target => DANGEROUS_LIFTABLE_SWITCHES.has(target.ns) && turnsSwitchOff(action, args, target))
+  const switches = facts.computerOnlySwitches().filter(target => DANGEROUS_LIFTABLE_SWITCHES.has(target.ns) && target.ranked === undefined && turnsSwitchOff(action, args, target))
   return [...switches.map(target => lifted(target.field)), ...loosens ? [lifted('defaultPreset')] : []]
 }
 
@@ -1081,8 +1144,9 @@ function createsInKnownWorkspace(facts: Pick<ReachAccessFacts, 'workspaces'>, ar
  * The condition of one device's bindings on one listener, the single place an elevated action is decided. It refuses
  * an action of {@link REACH_ELEVATED_ACTIONS} with `elevation-required: <action>` unless the device holds a running
  * unlock on the principal's listener, for a call and for an event, a snapshot or a list filter alike, and logs each
- * call an unlock admits with the unlock's id. Every `terminal/*` action needs an unlock, always: no switch, workspace grant or
- * dangerous mode waives it.
+ * call an unlock admits with the unlock's id. Every `terminal/*` action needs Phone powers set to Full
+ * ({@link FULL_POWERS_ACTIONS}, refused first with {@link phonePowersRefusal}) and an unlock, always: no switch, workspace
+ * grant or dangerous mode waives either, and the approval grace is not an unlock ({@link GRACE_REFUSED_ACTIONS}).
  * It treats a `session/create` that starts a chat outside the known
  * workspaces (see {@link createsInKnownWorkspace}) the same way, with {@link CREATE_OUTSIDE_WORKSPACES}: a folder
  * decides where the chat's commands may write. It refuses a workspace-file call unless every path it names is one a
@@ -1099,7 +1163,7 @@ function createsInKnownWorkspace(facts: Pick<ReachAccessFacts, 'workspaces'>, ar
  * @returns the condition.
  */
 export function createCondition(
-  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'delorunHome' | 'elevationOf' | 'touchUnlock' | 'logElevated' | 'liftedSettings' | 'computerOnlySwitches' | 'protectedEntryIds' | 'computerOnlyEntryIds' | 'defaultPermission' | 'dangerousMode' | 'pageUnlockOf' | 'pinEnabled' | 'pinLiftedSettings' | 'keyRefs'>,
+  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'delorunHome' | 'elevationOf' | 'touchUnlock' | 'logElevated' | 'liftedSettings' | 'computerOnlySwitches' | 'protectedEntryIds' | 'computerOnlyEntryIds' | 'defaultPermission' | 'dangerousMode' | 'pageUnlockOf' | 'pinEnabled' | 'pinLiftedSettings' | 'keyRefs' | 'phonePowers'>,
   principal: ReachDevicePrincipal,
 ): ReachCondition {
   const { deviceId, listener, unlockId } = principal
@@ -1107,9 +1171,10 @@ export function createCondition(
    * The running unlock this principal's Peer holds: its page's under PIN mode, otherwise the device's.
    * @returns the unlock's id, or undefined.
    */
-  const unlock = (): { readonly id: string } | undefined => unlockId === undefined ? facts.elevationOf(deviceId, listener) : facts.pageUnlockOf(unlockId)
+  const unlock = (): { readonly id: string; readonly grace?: true } | undefined => unlockId === undefined ? facts.elevationOf(deviceId, listener) : facts.pageUnlockOf(unlockId)
   /**
-   * Refuse without an unlock on the principal's listener, and log an admitted call.
+   * Refuse without an unlock on the principal's listener, and log an admitted call. The approval grace does not admit an
+   * action of {@link GRACE_REFUSED_ACTIONS}.
    * @param action - the action.
    * @param reason - the refusal.
    * @param call - whether a call's arguments came with the question.
@@ -1117,7 +1182,7 @@ export function createCondition(
    */
   const unlocked = (action: RemoteAccessAction, reason: string, call: boolean): RemoteAccessDecision | undefined => {
     const elevation = unlock()
-    if (elevation === undefined) return { kind: 'deny', reason }
+    if (elevation === undefined || (elevation.grace === true && GRACE_REFUSED_ACTIONS.has(action))) return { kind: 'deny', reason }
     if (call) {
       facts.logElevated(`home-auth: elevated action: device=${deviceId} listener=${listener} action=${action} elevation=${elevation.id}`)
       // Renewed below, once the whole condition allows the call.
@@ -1127,6 +1192,8 @@ export function createCondition(
   }
   let renew: string | undefined
   const decide: ReachCondition = ({ action, resource, args }) => {
+    // Phone powers keeps a terminal at the computer under Careful: no unlock, PIN page or mode lifts it.
+    if (FULL_POWERS_ACTIONS.has(action) && facts.phonePowers() !== 'full') return { kind: 'deny', reason: phonePowersRefusal(action) }
     // Dangerous mode lifts the four refusals below for an unlocked device: an elevated action is still refused to a
     // locked one, and the unlock check follows. The mode is read per call, so withdrawing the grant restores them.
     const lifts: SettingsLift[] = []
@@ -1140,8 +1207,8 @@ export function createCondition(
       // and a command a device does not run stays unrun, so no unlock admits any of them. The mode lifts a switch only
       // when DANGEROUS_LIFTABLE_SWITCHES lists it: the remote-access settings stay at the computer.
       if (SETTINGS_WRITES.has(action)) {
-        const off = facts.computerOnlySwitches().find(target => !(lifted && DANGEROUS_LIFTABLE_SWITCHES.has(target.ns)) && turnsSwitchOff(action, args, target))
-        if (off !== undefined) return { kind: 'deny', reason: switchOffRefusal(off.label) }
+        const off = facts.computerOnlySwitches().find(target => !(lifted && DANGEROUS_LIFTABLE_SWITCHES.has(target.ns) && target.ranked === undefined) && turnsSwitchOff(action, args, target))
+        if (off !== undefined) return { kind: 'deny', reason: off.ranked === undefined ? switchOffRefusal(off.label, off.safeValue) : `loopback-required: loosening ${off.label}` }
         // The settings of the gate, reach and sandbox rows stay as the computer set them: a write there replaces the row in effect.
         if (settingsOfComputerOnlyRow(facts, args)) return { kind: 'deny', reason: PROTECTED_ROW_REFUSAL }
         // The approval grace never covers a consent or guard row's settings: those need a code or a PIN page.
@@ -1307,6 +1374,12 @@ export interface ReachAccessFacts {
    * @returns whether it holds; false without a permission-defaults service or while its store cannot be read.
    */
   readonly dangerousMode: () => boolean
+  /**
+   * The Phone powers level in force, read on every check: under `careful` every `terminal/*` action is refused to a
+   * device ({@link FULL_POWERS_ACTIONS}).
+   * @returns the level; Careful while the record cannot be read.
+   */
+  readonly phonePowers: () => PhonePowersLevel
 }
 
 /**

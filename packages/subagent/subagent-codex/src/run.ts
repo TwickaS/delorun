@@ -14,12 +14,13 @@ import { dirname, resolve } from 'node:path'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session'
+import { agentSignInFailureText } from '@deepseek-ai/dsh-subagent/out-of-process'
 import {
-  agentSignInFailureText,
   settleRunResult,
   subprocessRunHandle,
   type SubagentResult,
   type SubagentRun,
+  type SubagentSafetyLevel,
   type SubagentStartRequest,
   type SubagentStopReason,
 } from '@deepseek-ai/dsh-subagent'
@@ -30,6 +31,7 @@ import type {
 } from '@deepseek-ai/dsh-subprocess'
 import {
   CodexAppServerWire,
+  CodexModelListIncomplete,
   type CodexModelOption,
   type CodexWireFailureFacts,
 } from './wire.ts'
@@ -60,6 +62,12 @@ export type CodexPermissionMode =
   | 'approve-for-me'
   | 'dangerously-bypass-approvals-and-sandbox'
 
+/**
+ * What one run applies: a profile-selected {@link CodexPermissionMode}, or the safety level the deployment's
+ * delegation consent supplies for this start, which replaces the mode.
+ */
+export type CodexRunPermissions = CodexPermissionMode | SubagentSafetyLevel
+
 /** Native non-interactive Codex modes mapped to official `thread/start` fields. */
 export const CODEX_PERMISSION_MODES = [
   'never',
@@ -83,6 +91,8 @@ interface CodexFailureFacts {
   readonly stage: CodexFailureStage
   readonly category: CodexFailureCategory
   readonly httpStatus?: number | undefined
+  readonly limitResetsAt?: number | undefined
+  readonly planLimit?: true
   readonly outcome?: SubprocessOutcome | undefined
 }
 
@@ -105,11 +115,56 @@ function failureDiagnostic(facts: CodexFailureFacts): string {
   return `Product subagent failure (${fields.join('; ')})`
 }
 
-/** The text the chat shows for a failed run: a sign-in instruction, or the fixed facts. */
+/** UTC wall-clock text for a Unix-seconds reset time, or undefined when it is not a valid date. */
+function resetText(unixSeconds: number): string | undefined {
+  const date = new Date(unixSeconds * 1000)
+  return Number.isNaN(date.getTime())
+    ? undefined
+    : `${date.toISOString().slice(0, 16).replace('T', ' ')} UTC`
+}
+
+/** The chat sentence for a plan limit, naming the reset time when the app-server gave one. */
+function limitFailureText(facts: CodexFailureFacts): string {
+  const reset = facts.limitResetsAt === undefined ? undefined : resetText(facts.limitResetsAt)
+  return reset === undefined
+    ? "Codex stopped because your plan's usage limit is reached. Try again after it resets."
+    : `Codex stopped because your plan's usage limit is reached. It resets at ${reset}.`
+}
+
+/** The text the chat shows for a failed run: a sign-in instruction, a limit sentence, or the fixed facts. */
 function failureText(facts: CodexFailureFacts): string {
-  return facts.category === 'sign-in'
-    ? agentSignInFailureText('Codex', 'codex')
-    : failureDiagnostic(facts)
+  if (facts.category === 'sign-in') return agentSignInFailureText('Codex', 'codex')
+  if (facts.planLimit === true) {
+    return `${limitFailureText(facts)}\n${failureDiagnostic(facts)}`
+  }
+  return failureDiagnostic(facts)
+}
+
+/** A model name safe to show: the app-server's own text is shown only when it looks like a model id. */
+function safeModelName(name: string): string | undefined {
+  return /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,63}$/.test(name) ? name : undefined
+}
+
+/**
+ * The fixed, model-safe sentence for a configured model that the plan does not offer.
+ * @param configured - the model name the configuration asks for.
+ * @param offered - the model ids the app-server lists for the person's plan.
+ * @returns a sentence that shows only names that look like model ids, at most twelve of the offered ones.
+ */
+export function modelNotOfferedText(configured: string, offered: readonly string[]): string {
+  const name = safeModelName(configured)
+  const subject = name === undefined ? 'configured model' : `configured model ${name}`
+  const choices = offered.flatMap(model => safeModelName(model) ?? []).slice(0, 12)
+  return choices.length === 0
+    ? `Codex's ${subject} is not offered on your plan, and Codex lists no models you can choose. Check your Codex sign-in and plan.`
+    : `Codex's ${subject} is not offered on your plan. Choose one of: ${choices.join(', ')}, in your Codex settings.`
+}
+
+class CodexModelNotOffered extends Error {
+  constructor(configured: string, offered: readonly string[]) {
+    super(`subagent-codex: ${modelNotOfferedText(configured, offered)}`)
+    this.name = 'CodexModelNotOffered'
+  }
 }
 
 class CodexRunFailure extends Error {
@@ -152,7 +207,7 @@ export interface CodexRunSpec {
   /** Profile-selected native model; omitted to preserve Codex settings. */
   readonly model?: string
   /** Profile-selected native non-interactive permission mode. */
-  readonly permissionMode: CodexPermissionMode
+  readonly permissionMode: CodexRunPermissions
   /** Explicit deployment/test environment layered after the shared scrub. */
   readonly env: Record<string, string>
   /** Subprocess termination grace passed to the shared managed-range owner. */
@@ -354,7 +409,13 @@ export async function startCodexRun(
     wire.start()
     await Promise.race([wire.initialize(request.signal), processFailure])
     startupStage = 'thread-start'
-    await Promise.race([wire.startThread(spec.cwd, request.signal), processFailure])
+    const reportedModel = await Promise.race([wire.startThread(spec.cwd, request.signal), processFailure])
+    if (reportedModel !== undefined) {
+      const offered = await Promise.race([wire.listModels(request.signal), processFailure])
+      if (!offered.some(option => option.model === reportedModel)) {
+        throw new CodexModelNotOffered(reportedModel, offered.map(option => option.model))
+      }
+    }
   } catch (error: unknown) {
     request.signal.removeEventListener('abort', onAbort)
     const cancelledBeforeCleanup = runAbort.signal.aborted
@@ -363,7 +424,7 @@ export async function startCodexRun(
       // Let an already-exiting process publish those facts before rollback.
       await new Promise<void>((resolve) => { setImmediate(resolve) })
     }
-    const failure = new CodexRunFailure({
+    const failure = error instanceof CodexModelNotOffered || error instanceof CodexModelListIncomplete ? error : new CodexRunFailure({
       stage: startupStage,
       category: 'unknown',
       outcome: error instanceof CodexRunFailure

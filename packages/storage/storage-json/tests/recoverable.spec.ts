@@ -2,7 +2,8 @@ import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
-import { JsonStorageBackend, previousPath, quarantinePath, rotatePrevious, setAsideFile, writeSetAside } from '../src/index.ts'
+import { JsonStorageBackend } from '../src/index.ts'
+import { previousPath, quarantinePath, rotatePrevious, setAsideFile, writeSetAside } from '../src/set-aside.ts'
 
 const roots: string[] = []
 

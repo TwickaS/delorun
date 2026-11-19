@@ -124,7 +124,7 @@ async function harness(enabled: boolean, withProfile = true, profileHistory = fa
   await ctx.plugin(SandboxPolicy, { mode: sandboxMode })
   await ctx.plugin(ApprovalService, { policy: 'ask' })
   await ctx.plugin(tool, { profileHistory })
-  await ctx.plugin(plugin, { enabled, installationBundles: [] })
+  await ctx.plugin(plugin, { enabled, installationBundles: [], restartWaitSeconds: 600 })
   const approval = vi.fn(async () => 'allowed-once' as const)
   ctx.on('approval/request', approval)
   const agent = activeAgent()
@@ -386,8 +386,8 @@ describe('with protection off', () => {
 
 describe('the plugin_changes_pending switch', () => {
   it('defaults to off, the parity value', () => {
-    expect(plugin.Config()).toEqual({ enabled: false, installationBundles: [] })
-    expect(() => plugin.Config({ enabled: true, installationBundles: ['../escape'] })).toThrow()
+    expect(plugin.Config()).toEqual({ enabled: false, installationBundles: [], restartWaitSeconds: 600 })
+    expect(() => plugin.Config({ enabled: true, installationBundles: ['../escape'], restartWaitSeconds: 600 })).toThrow()
   })
 
   it('with the switch at parity the plugin_manager action asks stock\'s approval', async () => {

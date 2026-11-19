@@ -53,6 +53,10 @@ const stateField = z.strictObject({
   // (`@delorun/bundle-local`'s `requirements.ts` owns the form of `requires`).
   pack: z.boolean().optional(),
   requires: z.record(z.string(), z.unknown()).optional(),
+  // The native programs each release platform's variant of a pack carries (`@delorun/release`'s `closure/packs.ts` owns the form).
+  packNatives: z.record(z.string(), z.unknown()).optional(),
+  // The preview flags the package's plugin declares (`@delorun/preview-flags`'s `manifest.ts` owns the form).
+  previewFlags: z.array(z.string()).optional(),
 })
 
 const manifestFields = z.looseObject({

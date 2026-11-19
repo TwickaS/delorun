@@ -71,6 +71,9 @@
     },
     {
       "path": "../plugin-theme/tsconfig.client.json"
+    },
+    {
+      "path": "../plugin-update/tsconfig.client.json"
     }
   ]
 }

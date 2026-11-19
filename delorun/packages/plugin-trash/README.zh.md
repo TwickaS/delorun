@@ -35,6 +35,7 @@ description: "Delorun studio 中的回收站（C8）：chat 和工作区菜单�
 - **将 chat 移到回收站**：通过上游的工作区注册表归档该 chat 并停止其运行中的工作，然后把它的会话目录移入回收站。仍被存活写入方持有的 chat 保持归档状态留在原处，直到下次启动时再移入。
 - **将工作区移到回收站**：以同样方式归档其 chat，把它们移入记录了注册信息的同一个条目，然后移除注册信息。
 - **恢复**：把 chat 移回，重新注册已删除的工作区及其 chat，并取消归档删除时归档的每个 chat。会覆盖原处某个 chat 的恢复，会被以 `TRASH_RESTORE_CONFLICT` 拒绝。
+- **回滚搁置的数据**：`setAside` 列出 `@delorun/update` 的 `listKeptData` 在 home 中找到的目录，即回滚搁置的 chat（`data-set-aside/`）与更新所做的 chat 副本（`data-copies/`），并给出其大小；被搁置的程序存储不在列表中。`removeSetAside` 通过 `discardKeptData` 永久删除其中一个，与 `delorun recover discard` 相同，并需要与清除相同的解锁。对列表未列出的路径，它以 `404 NOT_KEPT_DATA` 拒绝；对更新记录仍引用的副本、回滚运行期间的任何删除，以及数据恢复尚未完成时的任何删除，则以 `409 DATA_IN_USE` 拒绝。两条路由都需要来自 `profileContext` 的已启动 profile 的名称与 home，没有它时以 `503 KEPT_DATA_UNAVAILABLE` 应答。这里没有任何东西按计时器删除。
 - **永久删除与清空**：从 harness 挂载的每个存储中清除该条目：通过 session-query 引擎的 `forgetSessions` 清除全文索引，清除实时投影缓存的 `forget` 及其文档，清除没有其他 chat 引用的附件，清除 spill 存储根目录下的 spill 文件，清除会话各代（generation）以及回收站中的副本。`clearLogs` 接受「现在清除 home 的所有运行日志」的提议；「清空回收站」会在最后一次清除时一并清除这些日志，无法清除的每份日志都会被报告。
 - **启动时**：先移入删除时仍存活的 chat，再清除所有已满 30 天的条目；若时钟落后于某个条目或上一次清理，或跳变超过一年，则不清除，并记录日志。
 

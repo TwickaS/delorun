@@ -30,10 +30,17 @@ function home(mode: unknown, set: () => Response = () => json({ enabled: true })
 const settle = async () => { await act(async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve() }) }
 const type = (label: string, value: string) => { fireEvent.change(screen.getByLabelText(label), { target: { value } }) }
 // There is no Set PIN button: Enter in a field submits, and Continue runs the same step through the guide's gate.
-const submit = async () => { await act(async () => { fireEvent.submit(screen.getByLabelText(en['pin.label']).closest('form') as HTMLFormElement) }); await settle() }
+const submit = async () => { await act(async () => { fireEvent.submit(screen.getByLabelText(en['pin.setup.confirm']).closest('form') as HTMLFormElement) }); await settle() }
 const mount = async (h: ReturnType<typeof home>) => {
   const guide = createGuide(hostFake().host)
   render(<PinStep services={h.services} guide={guide} />)
+  await settle()
+  return guide
+}
+/** Mount and press Continue on the cards, which opens the entry and holds. */
+const mountAtEntry = async (h: ReturnType<typeof home>) => {
+  const guide = await mount(h)
+  await act(async () => { expect(await guide.passGates()).toBe(false) })
   await settle()
   return guide
 }
@@ -46,49 +53,60 @@ describe('the PIN step', () => {
   it('says in plain words what the PIN is for and that it is set at this computer', async () => {
     await mount(home(OFF))
     expect(screen.getByText(en['pin.lead'])).toBeTruthy()
-    expect(en['pin.lead']).toContain('adding plugins')
-    expect(en['pin.lead']).toContain('full access')
-    expect(en['pin.lead']).toContain('only before actions that need an unlock')
+    expect(en['pin.choice.set.1']).toContain('adding plugins')
+    expect(en['pin.choice.set.1']).toContain('full access')
     expect(screen.getByText(en['pin.here'])).toBeTruthy()
   })
 
   it('sends the PIN through the existing route with the home\'s own idle settings, shows PIN mode on, and keeps the secret out of storage', async () => {
     const h = home(OFF)
-    await mount(h)
-    type(en['pin.label'], '824619')
-    type(en['pin.confirm'], '824619')
+    await mountAtEntry(h)
+    type(en['pin.setup.pinLabel'], '824619')
+    type(en['pin.setup.confirm'], '824619')
     await submit()
     expect(h.calls.find(call => call.path.endsWith('/auth/pin/set'))?.body).toEqual({ secret: '824619', idleMinutes: 15, lockWhenHidden: false })
     expect(screen.getByText(en['pin.on'])).toBeTruthy()
-    expect(screen.queryByLabelText(en['pin.label'])).toBeNull()
+    expect(screen.queryByLabelText(en['pin.setup.pinLabel'])).toBeNull()
     expect(writes).not.toHaveBeenCalled()
     expect(JSON.stringify([window.localStorage, window.sessionStorage])).not.toContain('824619')
   })
 
   it('takes a passcode as well', async () => {
     const h = home(OFF)
-    await mount(h)
-    type(en['pin.label'], 'correct horse battery')
-    type(en['pin.confirm'], 'correct horse battery')
+    await mountAtEntry(h)
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: en['pin.setup.usePasscode'] })) })
+    type(en['pin.setup.passLabel'], 'correct horse battery')
+    type(en['pin.setup.confirm'], 'correct horse battery')
     await submit()
     expect(screen.getByText(en['pin.on.passcode'])).toBeTruthy()
   })
 
   it('blocks two entries that differ and sends nothing', async () => {
     const h = home(OFF)
-    await mount(h)
-    type(en['pin.label'], '824619')
-    type(en['pin.confirm'], '824618')
+    await mountAtEntry(h)
+    type(en['pin.setup.pinLabel'], '824619')
+    type(en['pin.setup.confirm'], '824618')
     await submit()
     expect(screen.getByRole('alert').textContent).toBe(en['pin.problem.mismatch'])
     expect(h.calls.some(call => call.path.endsWith('/auth/pin/set'))).toBe(false)
   })
 
+  it('clears a refusal once an entry changes: a valid matching PIN shows no error', async () => {
+    const h = home(OFF)
+    await mountAtEntry(h)
+    await submit()
+    expect(screen.getByRole('alert')).toBeTruthy()
+    type(en['pin.setup.pinLabel'], '824619')
+    type(en['pin.setup.confirm'], '824619')
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByLabelText(en['pin.setup.confirm']).getAttribute('aria-invalid')).toBeNull()
+  })
+
   it('blocks a PIN that is too short with an actionable sentence', async () => {
     const h = home(OFF)
-    await mount(h)
-    type(en['pin.label'], '8246')
-    type(en['pin.confirm'], '8246')
+    await mountAtEntry(h)
+    type(en['pin.setup.pinLabel'], '8246')
+    type(en['pin.setup.confirm'], '8246')
     await submit()
     expect(screen.getByRole('alert').textContent).toBe(en['pin.problem.pinShort'])
     expect(h.calls.some(call => call.path.endsWith('/auth/pin/set'))).toBe(false)
@@ -96,12 +114,12 @@ describe('the PIN step', () => {
 
   it('shows the home\'s refusal away from the computer in place and clears the typed secret', async () => {
     const h = home(OFF, () => json({ error: 'LOOPBACK_REQUIRED', message: 'no' }, 403))
-    await mount(h)
-    type(en['pin.label'], '824619')
-    type(en['pin.confirm'], '824619')
+    await mountAtEntry(h)
+    type(en['pin.setup.pinLabel'], '824619')
+    type(en['pin.setup.confirm'], '824619')
     await submit()
     expect(screen.getByRole('alert').textContent).toBe(en['pin.loopback'])
-    expect((screen.getByLabelText(en['pin.label']) as HTMLInputElement).value).toBe('')
+    expect((screen.getByLabelText(en['pin.setup.pinLabel']) as HTMLInputElement).value).toBe('')
     expect(screen.queryByText(en['pin.on'])).toBeNull()
   })
 
@@ -115,20 +133,20 @@ describe('the PIN step', () => {
     const h = home(ON)
     await mount(h)
     expect(screen.getByText(en['pin.on'])).toBeTruthy()
-    expect(screen.queryByLabelText(en['pin.label'])).toBeNull()
+    expect(screen.queryByLabelText(en['pin.setup.pinLabel'])).toBeNull()
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: en['pin.changeInSettings'] })) })
     expect(h.openSettings).toHaveBeenCalledOnce()
   })
 
   it('sets a typed PIN when Continue is pressed, and holds Continue when it cannot', async () => {
     const h = home(OFF)
-    const guide = await mount(h)
-    type(en['pin.label'], '824619')
-    type(en['pin.confirm'], '824618')
+    const guide = await mountAtEntry(h)
+    type(en['pin.setup.pinLabel'], '824619')
+    type(en['pin.setup.confirm'], '824618')
     await settle()
     expect(await guide.passGates()).toBe(false)
-    type(en['pin.label'], '824619')
-    type(en['pin.confirm'], '824619')
+    type(en['pin.setup.pinLabel'], '824619')
+    type(en['pin.setup.confirm'], '824619')
     await settle()
     let open = false
     await act(async () => { open = await guide.passGates() })
@@ -136,11 +154,35 @@ describe('the PIN step', () => {
     expect(h.calls.filter(call => call.path.endsWith('/auth/pin/set'))).toHaveLength(1)
   })
 
-  it('has no separate Set PIN button, and the note says Continue sets it', async () => {
+  it('shows two cards as one radio group, with Set a PIN chosen and arrow keys moving the choice', async () => {
     await mount(home(OFF))
-    expect(screen.queryByRole('button', { name: /set pin/i })).toBeNull()
-    expect(screen.getByText(en['pin.skipNote'])).toBeTruthy()
-    expect(en['pin.skipNote']).toContain('Continue sets the PIN')
+    const group = screen.getByRole('radiogroup', { name: en['pin.choice.label'] })
+    const [set, later] = Array.from(group.querySelectorAll<HTMLElement>('[role=radio]'))
+    expect(set?.getAttribute('aria-checked')).toBe('true')
+    expect(later?.getAttribute('aria-checked')).toBe('false')
+    expect(later?.getAttribute('tabindex')).toBe('-1')
+    await act(async () => { fireEvent.keyDown(set as HTMLElement, { key: 'ArrowRight' }) })
+    expect(later?.getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('lets Continue go on without a PIN when Not now is chosen, and sends nothing', async () => {
+    const h = home(OFF)
+    const guide = await mount(h)
+    await act(async () => { fireEvent.click(screen.getByRole('radio', { name: new RegExp(en['pin.choice.later.title']) })) })
+    await act(async () => { expect(await guide.passGates()).toBe(true) })
+    expect(h.calls.some(call => call.path.endsWith('/auth/pin/set'))).toBe(false)
+  })
+
+  it('opens the entry on Continue with Set a PIN, shows the checks live and goes back to the cards', async () => {
+    await mountAtEntry(home(OFF))
+    expect(screen.getByText(en['pin.stored.title'])).toBeTruthy()
+    const checks = screen.getByRole('list', { name: en['pin.checks.label'] })
+    expect(checks.querySelectorAll('[data-met]')).toHaveLength(0)
+    type(en['pin.setup.pinLabel'], '824619')
+    type(en['pin.setup.confirm'], '824619')
+    expect(checks.querySelectorAll('[data-met]')).toHaveLength(3)
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: en['pin.setup.back'] })) })
+    expect(screen.getByRole('radiogroup')).toBeTruthy()
   })
 
   it('reads a failed read as an in-place error with a retry', async () => {
@@ -150,7 +192,7 @@ describe('the PIN step', () => {
     expect(screen.getByRole('alert').textContent).toContain(en['pin.loopback'])
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: en['pin.retry'] })) })
     await settle()
-    expect(screen.getByLabelText(en['pin.label'])).toBeTruthy()
+    expect(screen.getByRole('radiogroup')).toBeTruthy()
   })
 })
 

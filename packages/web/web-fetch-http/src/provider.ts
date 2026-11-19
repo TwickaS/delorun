@@ -97,6 +97,7 @@ class PinnedConnections {
     if (route.proxied) return route.dispatcher
     if (this.agent === undefined) {
       const { Agent } = await import('undici')
+      // proxy-exempt: reached only after proxyRouteFor(url) reported a direct route; a proxied hop returned its proxy dispatcher above.
       this.agent = new Agent({ connect: { lookup: pinnedLookup(this.approved) } })
     }
     return this.agent
@@ -252,6 +253,7 @@ export class HttpFetchProvider implements WebFetchProvider {
       // Keep the Node-only transport out of browser-worker startup; a real request loads it here.
       const { fetch } = await import('undici')
       const dispatcher = await pinned.dispatcherFor(url)
+      // proxy-exempt: `dispatcher` comes from pinned.dispatcherFor, which already chose the proxy's dispatcher for a proxied hop.
       return await fetch(url, { method: 'GET', redirect: 'manual', headers, signal, ...dispatcher === undefined ? {} : { dispatcher } })
     } catch (error: unknown) {
       throw translateAbortOrNetwork(error, signal)

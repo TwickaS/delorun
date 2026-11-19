@@ -1,8 +1,9 @@
 /**
- * The `cut-rc.ts` command line and plan: which flags it requires, that every candidate signs its notes, what `--dry-run` prints, and that key material never reaches the plan.
+ * The `cut-rc.ts` command line and plan: which flags it requires, that every candidate signs its notes, what `--dry-run` prints, the closing installed-release smoke, and that key material never reaches the plan.
  */
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { localReleaseArgs, parseCutArgs, planSteps, previousCandidate, printPlan } from '../../scripts/cut-rc.ts'
+import { localReleaseArgs, parseCutArgs, planSteps, previousCandidate, printPlan, smokeArgs } from '../../scripts/cut-rc.ts'
 
 const BASE = ['--version', '0.1.0-rc.2', '--channel', '/c/channel', '--state', '/k/state.json', '--keys', '/k', '--root', '/k/1.root.json', '--commit', 'abc123']
 
@@ -51,7 +52,7 @@ describe('cut-rc plan', () => {
     for (const version of ['0.1.0-preview.1', '0.1.0-preview.2', '0.1.0-rc.1']) {
       const request = parseCutArgs(['--version', version, ...BASE.slice(2)])
       expect(localReleaseArgs(request)).toContain('--notes')
-      expect(planSteps(request).map(step => step.id)).toEqual(['tree', 'changelog', 'highlights', 'clear-stages', 'closure', 'sign', 'verify'])
+      expect(planSteps(request).map(step => step.id)).toEqual(['tree', 'changelog', 'highlights', 'clear-stages', 'closure', 'sign', 'verify', 'smoke'])
     }
   })
 
@@ -77,7 +78,15 @@ describe('cut-rc plan', () => {
   })
 
   it('plans the highlights step and drops the build steps with --closures-from', () => {
-    expect(planSteps(parseCutArgs([...BASE, '--closures-from', '/x'])).map(step => step.id)).toEqual(['tree', 'changelog', 'highlights', 'sign', 'verify'])
+    expect(planSteps(parseCutArgs([...BASE, '--closures-from', '/x'])).map(step => step.id)).toEqual(['tree', 'changelog', 'highlights', 'sign', 'verify', 'smoke'])
+  })
+
+  it('ends with the installed-release smoke against the channel, within its budget, unless --no-smoke', () => {
+    const request = parseCutArgs([...BASE, '--smoke-minutes', '20'])
+    expect(smokeArgs(request)).toEqual(['delorun/apps/release/scripts/installed-smoke.ts', '--channel', request.channel, '--version', '0.1.0-rc.2', '--keys', request.keys, '--budget-minutes', '20', '--log', join(request.work, 'installed-smoke-0.1.0-rc.2.log')])
+    expect(planSteps(request).at(-1)?.title).toContain('at most 20 min')
+    expect(planSteps(parseCutArgs([...BASE, '--no-smoke'])).map(step => step.id)).not.toContain('smoke')
+    expect(() => parseCutArgs([...BASE, '--smoke-minutes', '0'])).toThrow(/--smoke-minutes/u)
   })
 
   it('passes key files by path and prints the by-hand commands in --dry-run', () => {

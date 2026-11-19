@@ -54,7 +54,15 @@ export type ChangeState =
 /** Every {@link ChangeState}. */
 export const CHANGE_STATES: readonly ChangeState[] = ['pending', 'applied', 'discarded', 'left-out-at-start', 'undone']
 
-/** Where a decision about a change was made. Only a person at their computer decides. */
+/** A paired device, as a studio proof and the change log name it. */
+export interface StudioDevice {
+  /** The device's id. */
+  readonly id: string
+  /** The name the person gave it. */
+  readonly label: string
+}
+
+/** Where a decision about a change was made. Only a person at their computer or on an unlocked paired device decides. */
 export type DecidedFrom =
   /** A `delorun changes` command at a terminal. */
   | 'terminal'
@@ -237,6 +245,8 @@ export interface ChangeEntry {
   readonly decidedAt?: string
   /** Where the last decision was made. */
   readonly decidedFrom?: DecidedFrom
+  /** The paired device whose studio made the last decision; absent for a decision at the computer, at a terminal or by Delorun. */
+  readonly decidedOn?: StudioDevice
   /** The profile history version that applied it. */
   readonly historyVersion?: string
   /** Set when a start left the change out. */

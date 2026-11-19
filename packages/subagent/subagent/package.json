@@ -30,6 +30,18 @@
       "types": "./lib/typert.remote-client.d.ts",
       "default": "./lib/typert.remote-client.js"
     },
+    "./consent": {
+      "types": "./lib/types/consent.d.ts",
+      "default": "./lib/types/consent.js"
+    },
+    "./out-of-process": {
+      "types": "./lib/types/out-of-process.d.ts",
+      "default": "./lib/types/out-of-process.js"
+    },
+    "./safety-level": {
+      "types": "./lib/types/safety-level.d.ts",
+      "default": "./lib/types/safety-level.js"
+    },
     "./src/*": "./src/*",
     "./package.json": "./package.json",
     "./locale/*.json": "./locale/*.json"

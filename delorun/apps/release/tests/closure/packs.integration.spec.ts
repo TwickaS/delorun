@@ -23,7 +23,7 @@ const PLATFORMS: RuntimePlatform[] = ['linux-x64', 'linux-arm64']
 const NATIVE = (await buildPackArchive('native.tgz', [{ path: 'package/package.json', mode: '0644', data: Buffer.from('{"name":"native","version":"9.9.9"}') }], 1_800_000_000)).bytes
 const integrity = (bytes: Buffer): string => `sha512-${createHash('sha512').update(bytes).digest('base64')}`
 
-function sources(options: { readonly native: boolean, readonly served?: Buffer, readonly bundledPeer?: string, readonly armOnlyPeer?: boolean, readonly extra?: string, readonly peerDependencies?: Record<string, string>, readonly typescript?: boolean, readonly files?: Record<string, string> }): PackSources {
+function sources(options: { readonly native: boolean, readonly served?: Buffer, readonly bundledPeer?: string, readonly armOnlyPeer?: boolean, readonly extra?: string, readonly peerDependencies?: Record<string, string>, readonly typescript?: boolean, readonly files?: Record<string, string>, readonly locked?: boolean }): PackSources {
   const closure = temp()
   const extra = options.extra
   put(closure, { ...extra === undefined ? {} : { [`node_modules/${extra}/package.json`]: `{"name":"${extra}","version":"2.0.0"}` }, 'node_modules/shared-peer/package.json': '{"name":"shared-peer","version":"2.0.0"}', 'node_modules/arm-peer/package.json': '{"name":"arm-peer","version":"1.0.0"}' })
@@ -50,7 +50,7 @@ function sources(options: { readonly native: boolean, readonly served?: Buffer, 
       })
       await Promise.resolve()
     },
-    locked: (name, _platform) => (name.startsWith('@vendor/native-') ? { version: '9.9.9', integrity: integrity(NATIVE) } : undefined),
+    locked: (name, _platform) => (name.startsWith('@vendor/native-') || (options.locked === true && name === '@vendor/native') ? { version: '9.9.9', integrity: integrity(NATIVE) } : undefined),
     download: () => Promise.resolve(options.served ?? NATIVE),
     declaredPeers: () => Promise.resolve({}),
   }
@@ -142,6 +142,43 @@ describe('building a pack', () => {
     expect(isExternal('@openai/codex-linux-x64', ['@openai/codex-*'])).toBe(true)
     expect(isExternal('@openai/codex', ['@openai/codex-*'])).toBe(false)
     expect(tarballUrl('@openai/codex-linux-x64', '0.153.4')).toBe('https://registry.npmjs.org/@openai/codex-linux-x64/-/codex-linux-x64-0.153.4.tgz')
+  })
+})
+
+describe('the recipe\'s pack externals', () => {
+  const externals = (JSON.parse(readFileSync(join(import.meta.dirname, '../../closure.json'), 'utf8')) as { packExternals: string[] }).packExternals
+
+  it('fetches the Claude Agent SDK package and its platform programs from the publisher, never from Delorun\'s pack', () => {
+    expect(isExternal('@anthropic-ai/claude-agent-sdk', externals)).toBe(true)
+    expect(isExternal('@anthropic-ai/claude-agent-sdk-linux-x64', externals)).toBe(true)
+    expect(isExternal('@anthropic-ai/sdk', externals)).toBe(false)
+  })
+
+  it('pins the SDK\'s own package by URL and SHA-512 and leaves its files out of the archive', async () => {
+    const built = await buildPack('@delorun/demo', '1.0.0', false, '0.1.0', PLATFORMS, 1_800_000_000, ['@vendor/native'], sources({ native: false, files: { 'node_modules/@vendor/native/package.json': '{"name":"@vendor/native","version":"9.9.9"}', 'node_modules/@vendor/native/index.js': 'x\n' }, locked: true }), temp())
+    const variant = built.entry.variants['linux-x64']!
+    expect(variant.external.map(pin => pin.name)).toEqual(['@vendor/native'])
+    expect(variant.files.some(file => file.path.includes('@vendor/native'))).toBe(false)
+  })
+
+  it('refuses a pack that carries an external package nested inside another package, at any depth', async () => {
+    const nested = { 'node_modules/own-dep/node_modules/@vendor/native/package.json': '{"name":"@vendor/native","version":"1.0.0"}' }
+    await expect(buildPack('@delorun/demo', '1.0.0', false, '0.1.0', PLATFORMS, 1_800_000_000, ['@vendor/native'], sources({ native: false, files: nested }), temp()))
+      .rejects.toThrow(/@delorun\/demo for linux-x64 carries @vendor\/native nested inside another package \(node_modules\/own-dep\/node_modules\/@vendor\/native\/package\.json\)/u)
+    const deep = { 'node_modules/own-dep/node_modules/other/node_modules/@vendor/native-linux-x64/index.js': 'x\n' }
+    await expect(buildPack('@delorun/demo', '1.0.0', false, '0.1.0', PLATFORMS, 1_800_000_000, ['@vendor/native-*'], sources({ native: false, files: deep }), temp()))
+      .rejects.toThrow(/carries @vendor\/native-linux-x64 nested inside another package/u)
+  })
+
+  it('passes an external package nested inside a top-level external that is dropped from the pack', async () => {
+    const inside = { 'node_modules/@vendor/native/package.json': '{"name":"@vendor/native","version":"9.9.9"}', 'node_modules/@vendor/native/node_modules/inner-ext/package.json': '{"name":"inner-ext","version":"1.0.0"}', 'node_modules/@vendor/native/node_modules/@vendor/native-linux-x64/index.js': 'x\n' }
+    const built = await buildPack('@delorun/demo', '1.0.0', false, '0.1.0', PLATFORMS, 1_800_000_000, ['@vendor/native', '@vendor/native-*', 'inner-ext'], sources({ native: false, files: inside, locked: true }), temp())
+    const variant = built.entry.variants['linux-x64']!
+    expect(variant.external.map(pin => pin.name)).toEqual(['@vendor/native'])
+    expect(variant.files.some(file => file.path.includes('inner-ext') || file.path.includes('@vendor/native'))).toBe(false)
+    const elsewhere = { ...inside, 'node_modules/own-dep/node_modules/inner-ext/package.json': '{"name":"inner-ext","version":"1.0.0"}' }
+    await expect(buildPack('@delorun/demo', '1.0.0', false, '0.1.0', PLATFORMS, 1_800_000_000, ['@vendor/native', '@vendor/native-*', 'inner-ext'], sources({ native: false, files: elsewhere, locked: true }), temp()))
+      .rejects.toThrow(/carries inner-ext nested inside another package \(node_modules\/own-dep\/node_modules\/inner-ext\/package\.json\)/u)
   })
 })
 

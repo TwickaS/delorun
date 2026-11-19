@@ -19,7 +19,7 @@ description: "约定 C19：持有 CLI profile 锁并运行其 Host 的 home 进�
 home 进程、带令牌检查与固定请求集合的更新通道、握手、被中断的更新与回滚都已构建，并由 `delorun`、`delorun start`、`stop`、`status`、`update` 与 `recover` 使用；监管器的启动、限制探测、登录时启动、studio 的调用方与 Windows 管道尚未构建。
 
 - **已构建并已接入：** 锁；以恒定时间比较的每次启动令牌；Host 的通道令牌与 `studio.open-token`（由 `delorun open`、启动过程与 setup 的结尾使用）；位于 Unix 套接字 `run/<profile>/update.sock` 上、带请求、大小、时间与连接限额的更新通道；带 CLI profile 轮次拒绝的排空；通过继承管道的交接；健康检查与自动回滚；以及在下次启动时完成被中断更新的日志文件。
-- **未构建：** 启动顺序的第 6 步，因为 `delorun start` 不向 home 进程传递监管器（[C9](c09-runtime-supervisor.zh.md)）；第 8 步，即限制探测，以及 `delorun verify` 对其结果的报告；登录时启动、`--at-login` 及其运行的启动器副本；Host 的更新插件，因此 studio 的「Update now」与回滚并不存在，通道只服务 `delorun` 命令；`delorun status --follow`；Windows 上的命名管道：通道在每个平台上都使用同一个套接字路径，没有测试表明它能在 Windows 上打开，windows-acl 也没有拒绝受限命令连接或读取令牌的规则；要求 10 所指的提权提示措辞（[C1](c01-home-layout.zh.md)）。
+- **未构建：** 启动顺序的第 6 步，因为 `delorun start` 不向 home 进程传递监管器（[C9](c09-runtime-supervisor.zh.md)）；第 8 步，即限制探测，以及 `delorun verify` 对其结果的报告；登录时启动、`--at-login` 及其运行的启动器副本；Host 的更新插件已构建，因此 studio 的 Update now、回滚与 Stop 都能抵达该通道；`delorun status --follow`；Windows 上的命名管道：通道在每个平台上都使用同一个套接字路径，没有测试表明它能在 Windows 上打开，windows-acl 也没有拒绝受限命令连接或读取令牌的规则；要求 10 所指的提权提示措辞（[C1](c01-home-layout.zh.md)）。
 - **Delorun 的沙箱规则未覆盖：** 在 `danger-full-access` 下运行的命令（`delorun headless` 任务只有在工作目录记录了完全访问授权时才会到达这种情况），以及 `delorun plugin` 操作所运行的命令，都能在 home 进程运行期间读取启动令牌并连接通道；要求 4 的封闭请求集合仍然适用于它们。
 
 下文中被本列表列为未构建或无任何调用方接入的要求与拒绝测试，在某次变更构建并接入它们之前不保护任何人。
@@ -35,6 +35,7 @@ home 进程、带令牌检查与固定请求集合的更新通道、握手、被
 - [更新握手](#the-update-handshake)
 - [被中断的更新](#interrupted-updates)
 - [回滚](#rollback)
+- [重启](#the-restart)
 - [桌面应用](#the-desktop-app)
 - [限额](#limits)
 - [错误](#errors)
@@ -117,7 +118,7 @@ Host 的启动环境是上游的 `.env` 层（工作目录的与 harness home �
 
 更新通道是 [C1](c01-home-layout.zh.md) 放在 `run/<profile>/update.sock` 的套接字，在 Windows 上则是 [C1](c01-home-layout.zh.md) 命名的命名管道。它承载读取或改变 home 进程状态的每个请求。
 
-- **调用方。** 它服务读取令牌文件的本人的 `delorun` 命令。任何 Host 都不读取另一个 profile 的令牌文件，也不向另一个 profile 的通道发送请求。Host 的更新插件将代表已由 studio 自身认证（上游的回环认证，或远程访问监听器上 C4 的准入）放行的 studio 会话行事，并附上它在内存中持有的令牌，该插件尚未构建，因此没有任何 studio 操作抵达该通道。
+- **调用方。** 它服务读取令牌文件的本人的 `delorun` 命令。任何 Host 都不读取另一个 profile 的令牌文件，也不向另一个 profile 的通道发送请求。Host 的更新插件（`@delorun/plugin-update`）代表已由 studio 自身认证（上游的回环认证，或远程访问监听器上 C4 的准入）放行的 studio 会话行事，并附上它在内存中持有的令牌；它在读取请求之前，依据 Changes 访问表决定谁可以更新、回退或停止，并且从不把令牌或报告 id 交给页面。
 - **调用方规则。** 请求携带的令牌指明其调用方：令牌文件中的令牌指明本人自己的命令，Host 的通道令牌指明 Host。每个操作都接受两者，但 `studio.open-token`、`devices.approve`、`devices.remove`、`devices.elevate`、`pin.set`、`pin.options`、`pin.off`、`pin.resume`、`mcp.accept`、`mcp.decline` 与 `mcp.revoke` 除外，home 进程会在读取其他任何内容之前对 Host 的通道令牌拒绝这些操作（`UNAUTHENTICATED` 与 `LOOPBACK_REQUIRED`），因为 Host 代表每个监听器上的会话行事，包括远程访问会话（[C14](c14-oidc-passkeys.zh.md#tailnet-membership)）。
 - **令牌检查。** 每个连接的第一行是带有 `token` 字段的请求。home 进程以恒定时间把它与当前启动的令牌比较。缺失、格式错误、错误或属于之前某次启动的令牌收到 `UNAUTHENTICATED`，连接随即关闭；该响应不携带其他任何信息。
 - **Host 的通道令牌。** home 进程在每次启动时创建第二个令牌，只把它保存在内存中，并在 Host 启动时通过其收到的 `UpdateChannelAccess` 交给 Host。通道对除 `studio.open-token` 之外的每个操作都接受它，`studio.open-token` 对它回答 `UNAUTHENTICATED`。
@@ -136,7 +137,7 @@ Host 的启动环境是上游的 `.env` 层（工作目录的与 harness home �
 | `status` | 无 | 一行：`state`、`pid`、`startId`、`runtime`（`current`、`previous`、`running`）、`chats`（运行中的数量）、`update`（有更新进行时的阶段与目标） |
 | `update.prepare` | `target`：一个版本，省略时为本人渠道上的最新发布 | 获取与校验该版本期间的进度行，然后是一行 `reportId` 与更新报告（[C3](c03-update-report.zh.md)） |
 | `update.apply` | `reportId`；`wait`：`drain`、`abort-if-busy` 或 `cancel`；`drainTimeoutS`：60 至 86,400，默认 1,800；`dataCopy`：布尔值，即本人对会话数据副本的选择 | 每个阶段的进度行，然后是带 `outcome`（`committed`、`rolled-back`、`aborted` 或 `failed`）与原因代码的最后一行 |
-| `update.cancel` | 无 | 一行；仍处于 `waiting` 的更新回到 `running`，运行时不变 |
+| `update.cancel` | 无 | 一行；仍处于 `waiting` 的更新回到 `running`，运行时不变，仍在等待 chat 的[重启](#the-restart)则结束，此时该行带有 `"restartCancelled":true` |
 | `rollback` | `wait` 与 `drainTimeoutS`，同 `update.apply`；`profileOnly`：布尔值 | 同 `update.apply`，目标为更新记录的 `from`；最终的 `outcome` 为 `rolled-back`、`aborted` 或 `failed` |
 | `stop` | `mode`：`drain` 或 `cancel` | 进度行，然后是进程退出前的最后一行，能读取时带 `status` |
 | `studio.open-token` | `port`，可选：转发到 studio 的回环端口，1 至 65535 | 一行：`url`，即 studio 的回环地址（给出 `port` 时以它代替 studio 自己的端口）以及 Host 为本次请求签发的启动令牌，和 `oneTime`，即该令牌是否只能在 60 秒内使用一次（[C4](c04-admission.zh.md#launch-tokens)）；没有 Host 运行、Host 不提供 studio、其 studio 在回环以外的地址上监听，或它在公共 URL 上发布 studio 时，返回带原因的 `STUDIO_UNAVAILABLE` |
@@ -212,9 +213,28 @@ Host 的启动环境是上游的 `.env` 层（工作目录的与 harness home �
 ## 回滚
 
 - **CLI 运行时。** `delorun recover rollback [--profile-only]` 或 studio 的回滚发送带 `profileOnly` 的 `rollback`。它读取更新记录，需要一个到正在运行版本的 `committed` 更新（否则为 `NO_UPDATE_RECORD`），以记录的 `from` 为目标运行 `reporting`、`waiting`、`switching` 与 `health-check` 阶段，不安装任何内容，并在 `switching` 中、Host 停止之后应用 [C3](c03-update-report.zh.md#rollback) 的回滚表。该表先运行其预检，然后记录被改写为阶段 `rolling-back`，然后数据、profile 快照与运行时按此顺序回退。预检的拒绝（`ROLLBACK_NEEDS_DATA_COPY` 或 `ROLLBACK_TARGET_UNUSABLE`）让一切保持原样，Host 重新运行。之后的任何失败都使回滚以 `failed` 结束：此 Host 不再运行，home 进程停止，下次启动完成回滚。使用 `profileOnly` 时只恢复 profile 快照，记录保持 `committed` 直到此 Host 重新运行，然后被删除。否则，回滚到的版本作为后继启动；一旦它通过健康检查并完成接管，它就删除记录。它未通过健康检查时，指针保持在回滚到的版本上，回滚以 `HEALTH_CHECK_FAILED` 结束为 `failed`，home 进程停止。提交之后，`current` 指向回滚到的版本，`previous` 指向回滚前的版本。没有 home 进程运行时，`delorun recover rollback` 获取 home 锁，在 C1 的 `run/data-users/` 下注册为独占使用方直到结束，当有任何其他使用方（包括另一个 profile 的 home 进程）注册时写明这些进程并拒绝，然后完成被中断的副本恢复，并应用同一张表，把指针从记录的 `to` 切换到其 `from`；在它运行期间启动的 home 进程会发现该独占使用方并拒绝。使用 `--profile-only` 时它不注册任何内容，只恢复 profile 快照，把被中断的副本恢复留给下次启动。
-- **自动回滚。** 更新期间的健康检查失败，或被中断的更新之后启动时的健康检查失败，会应用同一张表，并按握手的规定恢复指针。其记录保持为 `rolling-back`，直到 `from` 再次启动。
+- **自动回滚。** 更新期间的健康检查失败，或被中断的更新之后启动时的健康检查失败，会应用同一张表，并按握手的规定恢复指针。其记录保持为 `rolling-back`，直到 `from` 再次启动。在已启动过一个 Host 的进程中再次启动 Host 时（例如切换失败之后），它先把每个已记录的活动插件副本指向运行时仓库的链接重新指向该进程所运行的发行版，使这些副本在其中加载。
 - **Profile。** [C3](c03-update-report.zh.md) 负责回滚触发条件与 profile 快照的恢复；本约定负责运行时切换。
 - **桌面应用。** 桌面应用的回滚不使用运行时仓库。应用在其更新缓存中保留上一个已签名发布；其更新源拒绝自动降级，但接受本人请求的、回滚到已签名且已记入日志的较早发布（[C2](c02-release-manifest.zh.md)）。回滚从缓存重新安装该发布，并从桌面 profile 的历史恢复它。
+
+<a id="the-outcome-record"></a>
+
+## 结果记录
+
+home 进程在每次更新结束或本人发起的回滚结束时写入 `run/<profile>/update-result.json`（权限 0600）：`{ v: 1, kind: 'update' | 'rollback', outcome: 'committed' | 'rolled-back' | 'aborted' | 'failed', from, to, reason?, criterion?, at }`。`reason` 是拒绝或失败代码，`criterion` 是目标版本未通过的第一条健康判据，例如 `H2-host-ready`。该记录先于最后一行响应写入，在下一次尝试开始时替换上一条记录，并在本人于 studio 中关闭时删除。读取者把缺失、无法读取、更宽松或格式未知的文件视为没有记录：该记录只做报告，不做任何决定。切换、回滚或被拒绝的启动之后运行的 Host 把它提供给 studio，因为页面无法读取它所停止的那次切换的最后一行。
+
+<a id="the-restart"></a>
+
+## 重启
+
+studio 的 Restart（[C21](c21-changes.zh.md#harness-edits)）让 CLI 的 Host 在其所运行的版本上重新启动，使已决定的、对 Delorun 本身文件的非即时生效的更改得以运行。没有通道请求能到达它：home 进程在进程内把重启作为 `changesRestart` 服务交给它所启动的 Host，由 studio 的路由决定谁可以使用它。它按以下步骤运行：
+
+1. **拒绝。** 另一个重启运行期间，重启以 `RESTART_IN_PROGRESS` 被拒绝；更新或回滚运行期间、进程不处于 `running` 期间、或存在阶段不是 `committed` 的更新记录时，以 `UPDATE_IN_PROGRESS` 被拒绝；进程在运行时仓库之外运行时，以 `NO_RUNTIME_STORE` 被拒绝。重启运行期间，每个更新与回滚请求都以 `RESTART_IN_PROGRESS` 被拒绝；`stop` 与 `update.cancel` 会结束仍在等待 chat 的重启，而一旦重启正在启动新 Host，`stop` 就以 `RESTART_IN_PROGRESS` 被拒绝。
+2. **等待。** 与更新的 `waiting` 阶段相同，新的轮次以 `UPDATE_PENDING` 被拒绝，重启等待运行中的 chat 降为零，最多等待 studio 设定的时长；使用 `stopChats` 时，先取消运行中的轮次与作业。因超时而结束的等待让 Host 保持运行且不改变任何内容，studio 的取消、`update.cancel` 与 `stop` 以同样方式结束等待。
+3. **启动。** Host 如同切换时那样停止；未能停止的 Host 重新运行，不启动任何内容。然后 home 进程在同一版本上启动后继进程，交接行的 `type` 为 `restart`，其 `from` 与 `to` 都指向该版本。后继进程的健康检查是针对运行中 Host 的 H1 至 H5：它在启动时禁用了运行中 Host 未禁用的任何插件，则检查失败。通过的后继进程如同 `committed` 那样接管锁，前任退出。
+4. **失败。** 未通过健康检查、退出或未在 120 秒内报告 `ready` 的后继进程，如同更新失败时那样被停止。当运行中的 Host 并未运行运行时最新已应用的 harness 更改，而该更改仍以其内容作为已应用记录在案时（[C21](c21-changes.zh.md#harness-edits)），它被排除在外，前任在它此前运行的文件上重新启动其 Host。
+
+重启不写入指针、更新记录、暂存、会话数据副本或保留：为重启启动的后继进程不会结算任何更新记录。
 
 <a id="the-desktop-app"></a>
 
@@ -260,7 +280,8 @@ Host 的启动环境是上游的 `.env` 层（工作目录的与 harness home �
 | `REQUEST_TIMEOUT` | 5 秒内未收到请求行 |
 | `REQUEST_TOO_LARGE` | 请求行超过 16,384 字节 |
 | `BUSY` | 已打开 8 个连接 |
-| `UPDATE_IN_PROGRESS` | 已有更新或回滚在运行 |
+| `UPDATE_IN_PROGRESS` | 已有更新或回滚在运行；对重启而言，还包括阶段不是 `committed` 的更新记录 |
+| `RESTART_IN_PROGRESS` | 重启运行期间收到更新、回滚或第二次重启的请求，或在重启启动新 Host 期间收到 `stop`（[重启](#the-restart)） |
 | `REPORT_EXPIRED` | `update.apply` 指定的报告未知或已超过 600 秒 |
 | `UPDATE_PENDING` | 因有更新在等待运行中的 chat，新轮次被拒绝 |
 | `CHATS_RUNNING` | `abort-if-busy` 发现有运行中的 chat，或另一个 profile 的 home 进程或其他 chat 数据使用方已注册（[其他 profile](#the-home-process)） |
@@ -298,7 +319,7 @@ Host 的启动环境是上游的 `.env` 层（工作目录的与 harness home �
 - `delorun/apps/cli`：`delorun`、`delorun start`、`open`、`stop`、`status`、`update` 与 `recover` 与 `changes`，以及通过 `studio.open-token` 打开 studio 的 setup 结尾；`delorun devices`，自己写入权限存储且不向运行中的 profile 发送任何内容的 `delorun workspace full-access`，以及 `delorun mcp`。`delorun changes` 在更改 profile 的文件之后发送 `changes.reload`。
 - `delorun/packages/runtime-store`：握手调用的指针写入与安装（[C1](c01-home-layout.zh.md)）。
 - `delorun/packages/logs`：home 进程的运行日志（[C20](c20-operational-logs.zh.md)）。
-- Host 的更新插件、「Update now」与 studio 的回滚，它们尚未构建；没有已发布的组合包挂载更新插件。
+- `delorun/packages/plugin-update`：Host 的更新插件，即 studio 的 Check now、Update now、Go back 与 Stop，由 `@delorun/bundle-local` 挂载。
 - `@delorun/bundle-local` 的 `delorun-update-gate` 行：`delorunTurnGate` 服务，在 CLI 的 chat 闸门保持期间拒绝新轮次。
 - 更新报告及其界面（[C3](c03-update-report.zh.md)），读取各阶段与结果。
 
@@ -308,7 +329,7 @@ Host 的启动环境是上游的 `.env` 层（工作目录的与 harness home �
 
 - 协议版本 `v` 为 1。home 进程对 `v` 未知的请求回答 `SCHEMA_VIOLATION`。删除或重命名某个操作、字段或阶段的变更会提高 `v`，提高它的运行时在一个发布内同时接受两个版本，使上一个发布的 `delorun` 仍能更新它。
 - 新的操作、可选字段与新的错误代码保持 `v` 不变；调用方忽略未知的响应字段。
-- 交接行有自己的 `v`，为 1。后继进程检查它认识的每个字段，并丢弃它不认识的每个字段（顶层、`health`、行与 `previousProtection` 中均如此），因此前驱进程可以添加一个可选字段，只要忽略该字段的后继进程不读它也能安全地完成检查。后继进程为安全检查必须读取的字段，或现有字段含义的改变，都会提高交接行的 `v`；后继进程拒绝 `v` 未知的行，前驱进程随后如同健康检查失败一样回滚。首个发布之前没有已安装的发布会进行交接，因此在此之前的变更保持 `v` 为 1：`health.previousProtection`，以及不再涵盖该行保护的 sandbox 行 `configHash`。
+- 交接行有自己的 `v`，为 1。后继进程检查它认识的每个字段，并丢弃它不认识的每个字段（顶层、`health`、行与 `previousProtection` 中均如此），因此前驱进程可以添加一个可选字段，只要忽略该字段的后继进程不读它也能安全地完成检查。后继进程为安全检查必须读取的字段，或现有字段含义的改变，都会提高交接行的 `v`；后继进程拒绝 `v` 未知的行，前驱进程随后如同健康检查失败一样回滚。`v` 1 包含 `health.previousProtection`，以及不涵盖该行保护的 sandbox 行 `configHash`。其 `type` 为 `handover` 或 `restart`；重启的后继进程运行前任自己的版本，因此总是认识 `restart`。
 - 上述登录项路径与命令参数是外部接口；改变其中任一项都是破坏性变更，需在 `delorun/docs/upgrade-guide/` 下附升级指南。
 - 类型包跟随 Delorun 的版本，并与本页在同一个拉取请求中修改。
 
@@ -352,6 +373,9 @@ Host 的启动环境是上游的 `.env` 层（工作目录的与 harness home �
 | `requester-killed` | 在每个阶段杀死发起请求的终端，home 进程都继续运行，`current` 指向一个完整版本 |
 | `home-killed-mid-switch` | 在 `switching` 与 `health-check` 中杀死 home 进程，`current` 都指向一个完整版本，且 `to` 失败时下次启动回滚到 `from` |
 | `a handed-off successor that hangs at boot is gone, parent and child, after stop()` | 停止一个不响应的后继会结束其进程组：已签名后继所移交的、所组合树中的 `delorun` 随之停止（`delorun/apps/cli/tests/update/successor-stop.integration.spec.ts`） |
+| `restart never runs during an update` | 更新等待期间或存在不是 `committed` 的记录时，重启以 `UPDATE_IN_PROGRESS` 被拒绝；重启等待期间，更新以 `RESTART_IN_PROGRESS` 被拒绝（`delorun/packages/home-process/tests/restart.integration.spec.ts`） |
+| `restart keeps previous and its runtime` | 重启让指针、已 `committed` 的更新记录、暂存与每个已安装的运行时保持原样 |
+| `a failed restart keeps the old Host and leaves the newest harness change out` | 未通过 H2 或禁用了运行中 Host 未禁用的插件的后继进程被停止，运行中 Host 的锁与进程保留，最新已应用的 harness 更改被排除在外 |
 | `health-check-rollback` | 禁用了报告未列出插件的后继被回滚，前任的 Host 在 `from` 上重新运行 |
 | `escalation-prompt-before-full-access` | 为发送更新请求而请求 `danger-full-access` 的受限工作区命令会看到 [C1](c01-home-layout.zh.md) 的提权提示，该提示指明更新通道；提示被拒绝或未作答期间，命令仍受限制，其请求被拒绝或根本未发送 |
 

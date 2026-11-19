@@ -52,7 +52,6 @@ export type CostMeterState = z.infer<typeof costMeterStateSchema>
 
 const viewSchema: z.ZodType<CostMeterView> = z.object({
   usd: z.number().nonnegative(),
-  tokens: count,
   requests: count,
   unpriced: count,
   models: z.array(rowSchema),

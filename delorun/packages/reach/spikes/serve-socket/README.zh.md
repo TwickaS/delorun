@@ -1,5 +1,5 @@
 ---
-description: "WP1.18 的 spike 报告：tailscale serve 是否转发到模式为 0600 的 Unix socket，以及哪些本地进程能够访问该 socket；测量基于 Linux 上的 Tailscale 1.104.5，并记录回退路径的命令、身份请求头的移除以及转发的 Host 值。"
+description: "spike 报告：tailscale serve 是否转发到模式为 0600 的 Unix socket，以及哪些本地进程能够访问该 socket；测量基于 Linux 上的 Tailscale 1.104.5，并记录回退路径的命令、身份请求头的移除以及转发的 Host 值。"
 ---
 
 # Spike：`tailscale serve` 转发到模式为 0600 的 Unix socket
@@ -8,7 +8,7 @@ description: "WP1.18 的 spike 报告：tailscale serve 是否转发到模式为
 
 ## 摘要
 
-本报告记录工作包 WP1.18，对应[约定 C7](../../../../docs/contracts/c07-reach-providers.zh.md#tailscale-serve-target)。在 Linux 与 Tailscale 1.104.5 上，`tailscale serve` 拒绝为非 root 且无法免密运行 `sudo tailscale` 的调用者配置 Unix socket 目标，因此未观察到向该 socket 的转发。模式为 0600 的 socket 可被本人用户的所有未受限进程访问，可被能看到 socket 路径的 `bwrap` 受限进程访问，也可被挂载了 socket 所在目录的 Docker 容器中的 root 进程访问；只有其他用户的进程被拒绝。约定 C7 中的两个条件都会选择回退方案，该方案已是现行约定：在 `127.0.0.1` 上的 TCP 目标，任何监听器都不信任身份请求头，以及用于 tailnet 私有远程访问的身份因子。回退方案的命令按原样运行正常，`tailscaled` 也移除了它所转发请求中伪造的 `Tailscale-*` 请求头。
+本报告支持[约定 C7](../../../../docs/contracts/c07-reach-providers.zh.md#tailscale-serve-target)。在 Linux 与 Tailscale 1.104.5 上，`tailscale serve` 拒绝为非 root 且无法免密运行 `sudo tailscale` 的调用者配置 Unix socket 目标，因此未观察到向该 socket 的转发。模式为 0600 的 socket 可被本人用户的所有未受限进程访问，可被能看到 socket 路径的 `bwrap` 受限进程访问，也可被挂载了 socket 所在目录的 Docker 容器中的 root 进程访问；只有其他用户的进程被拒绝。约定 C7 中的两个条件都会选择回退方案，该方案已是现行约定：在 `127.0.0.1` 上的 TCP 目标，任何监听器都不信任身份请求头，以及用于 tailnet 私有远程访问的身份因子。回退方案的命令按原样运行正常，`tailscaled` 也移除了它所转发请求中伪造的 `Tailscale-*` 请求头。
 
 ## 答案
 
@@ -68,7 +68,7 @@ description: "WP1.18 的 spike 报告：tailscale serve 是否转发到模式为
 
 转发的 `Host` 与约定 C4 对 Tailscale 监听器的规则一致，即配置的地址，端口不是 443 时还附带端口。`tailscaled` 并不把 `Host` 限制为证书中的名称，因此对它进行检查的只有监听器自身的 `Host` 检查。由于来源是带标签的节点，`tailscaled` 未添加身份请求头；对于用户拥有的设备，身份请求头未经测量。端口 443 上的第一个请求耗时约 35 秒，期间 `tailscaled` 在获取证书。
 
-约定 C7 的回退命令按写法运行正常：`tailscale serve --bg --https=443 http://127.0.0.1:<port>` 与 `tailscale serve --https=443 off`，端口 8443 上使用相同的一对命令。Funnel 的一对命令 `tailscale funnel --bg --https=8443 http://127.0.0.1:<port>` 与 `tailscale funnel --https=8443 off` 在 [WP1.19 spike 报告](../../../home-auth/spikes/ts-net-rp-id/README.zh.md)中运行正常。
+约定 C7 的回退命令按写法运行正常：`tailscale serve --bg --https=443 http://127.0.0.1:<port>` 与 `tailscale serve --https=443 off`，端口 8443 上使用相同的一对命令。Funnel 的一对命令 `tailscale funnel --bg --https=8443 http://127.0.0.1:<port>` 与 `tailscale funnel --https=8443 off` 在 [ts-net-rp-id spike 报告](../../../home-auth/spikes/ts-net-rp-id/README.zh.md)中运行正常。
 
 ## 未覆盖的范围
 

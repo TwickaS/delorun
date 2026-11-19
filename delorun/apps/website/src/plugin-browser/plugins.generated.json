@@ -7,7 +7,7 @@
       "state": "shipped",
       "standing": "on",
       "requires": [],
-      "files": 180,
+      "files": 194,
       "folder": "delorun/packages/bundle-local"
     },
     {
@@ -61,13 +61,23 @@
       "folder": "delorun/packages/plugin-fetch-guard"
     },
     {
+      "name": "@delorun/plugin-tool-failure-guard",
+      "title": "Tool failure guard",
+      "sentence": "Stops a turn that keeps hitting failing tool calls and says so in the chat, so a missing or broken tool does not use up tokens. Send a message to carry on.",
+      "state": "shipped",
+      "standing": "on",
+      "requires": [],
+      "files": 23,
+      "folder": "delorun/packages/plugin-tool-failure-guard"
+    },
+    {
       "name": "@delorun/skill-plugin-authoring",
       "title": "Plugin authoring skill",
       "sentence": "Teaches the agent how to make or change a Delorun plugin in your workspace, and leaves turning it on to you",
       "state": "shipped",
       "standing": "on",
       "requires": [],
-      "files": 7,
+      "files": 8,
       "folder": "delorun/packages/skill-plugin-authoring"
     },
     {
@@ -97,8 +107,18 @@
       "state": "shipped",
       "standing": "on",
       "requires": [],
-      "files": 49,
+      "files": 62,
       "folder": "delorun/packages/plugin-changes"
+    },
+    {
+      "name": "@delorun/plugin-update",
+      "title": "Updates",
+      "sentence": "Update Delorun from the studio: check for a newer release, read what it would change, update, and go back, without a terminal",
+      "state": "shipped",
+      "standing": "on",
+      "requires": [],
+      "files": 31,
+      "folder": "delorun/packages/plugin-update"
     },
     {
       "name": "@delorun/plugin-packs",
@@ -107,7 +127,7 @@
       "state": "shipped",
       "standing": "on",
       "requires": [],
-      "files": 16,
+      "files": 17,
       "folder": "delorun/packages/plugin-packs"
     },
     {
@@ -137,7 +157,7 @@
       "state": "shipped",
       "standing": "on",
       "requires": [],
-      "files": 95,
+      "files": 98,
       "folder": "delorun/packages/home-auth"
     },
     {
@@ -157,7 +177,7 @@
       "state": "shipped",
       "standing": "on",
       "requires": [],
-      "files": 93,
+      "files": 95,
       "folder": "delorun/packages/plugin-theme"
     },
     {
@@ -197,8 +217,18 @@
       "state": "shipped",
       "standing": "on",
       "requires": [],
-      "files": 130,
+      "files": 131,
       "folder": "delorun/packages/plugin-onboarding"
+    },
+    {
+      "name": "@delorun/plugin-new-workspace",
+      "title": "New workspace",
+      "sentence": "One guided dialog to start a workspace from a new folder, a folder on this computer or a Git repository, with the places you used last close at hand.",
+      "state": "shipped",
+      "standing": "on",
+      "requires": [],
+      "files": 71,
+      "folder": "delorun/packages/plugin-new-workspace"
     },
     {
       "name": "@delorun/plugin-downloads",
@@ -209,6 +239,16 @@
       "requires": [],
       "files": 38,
       "folder": "delorun/packages/plugin-downloads"
+    },
+    {
+      "name": "@delorun/preview-flags",
+      "title": "Preview flags",
+      "sentence": "Lets a plugin mark a studio feature as not ready for everyone, with one setting that turns it on",
+      "state": "shipped",
+      "standing": "on",
+      "requires": [],
+      "files": 26,
+      "folder": "delorun/packages/preview-flags"
     },
     {
       "name": "@delorun/plugin-cost-meter",
@@ -286,6 +326,18 @@
       ],
       "files": 8,
       "folder": "delorun/packages/bundle-external-agents"
+    },
+    {
+      "name": "@delorun/bundle-real-browser",
+      "title": "Your own browser",
+      "sentence": "In a chat where you allow it, the agent works in your own Chrome, signed in as you, through browse",
+      "state": "experimental",
+      "standing": "pack",
+      "requires": [
+        "your own browser paired with it"
+      ],
+      "files": 8,
+      "folder": "delorun/packages/bundle-real-browser"
     },
     {
       "name": "@delorun/bundle-webhooks",

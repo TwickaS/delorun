@@ -60,7 +60,7 @@ const M = 1_000_000
 describe('the costMeter projection', () => {
   it('prices each request for the route of the latest request header, costliest model first', async () => {
     const h = await host()
-    expect(h.cost()).toEqual({ usd: 0, tokens: 0, requests: 0, unpriced: 0, models: [] })
+    expect(h.cost()).toEqual({ usd: 0, requests: 0, unpriced: 0, models: [] })
     h.route(DEEPSEEK)
     h.message(1, 1, { inputTokens: M, outputTokens: M })
     h.route(OPUS)
@@ -69,7 +69,7 @@ describe('the costMeter projection', () => {
     expect(cost.usd).toBeCloseTo(0.66 + 1.98 + 4 + 0.2 + 5)
     expect(cost.models.map(row => [row.model, row.requests, row.unpriced])).toEqual([[OPUS.model, 1, 0], [DEEPSEEK.model, 1, 0]])
     expect(cost.models[0]).toMatchObject({ provider: 'anthropic', input: M, output: 0, cacheRead: M, cacheWrite: M })
-    expect(cost).toMatchObject({ tokens: 5 * M, requests: 2, unpriced: 0 })
+    expect(cost).toMatchObject({ requests: 2, unpriced: 0 })
   })
 
   it('charges the rates of the hour the request settled', async () => {

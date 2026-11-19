@@ -15,20 +15,32 @@
  * staged closure and checked with Changes' own scan (`./review-copy.ts`); a build whose review copy would miss a need is
  * refused.
  *
+ * A pack that carries native programs names them in its `package.json` under `delorun.packNatives`: for each release
+ * platform, the registry packages its variant must carry, such as `@opencode/browse-linux-x64`. The deploy for that
+ * platform also selects the operating system, processor and C library each listed package declares in the lockfile, so
+ * a variant can carry a program for another system (the linux-x64 variant of Use my browser carries the Windows copy
+ * that WSL runs on the Windows side). Each listed package must be in the deployment at the lockfile's version, and its
+ * files must equal, byte for byte and in their executable bit, the registry tarball whose SHA-512 the lockfile pins; a
+ * variant that lacks one, or carries other bytes, is refused. A pack that declares `packNatives` must list every release
+ * platform.
+ *
  * @module @delorun/release/closure/packs
  */
 import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
+import { gunzipSync } from 'node:zlib'
 import { readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { PackEntry, PackExternal, PackVariant, ReleasePacks, RuntimePlatform, SemanticVersion, Sha512Base64 } from '@delorun/contract-release-manifest'
 import { RELEASE_SCHEMAS } from '@delorun/contract-release-manifest'
 import { brandString } from '@deepseek-ai/dsh-brand'
-import type { ArchiveEntry } from '@delorun/release-formats/archive/entry'
+import { MAX_ARCHIVE_BYTES, type ArchiveEntry } from '@delorun/release-formats/archive/entry'
+import { readTar } from '@delorun/release-formats/archive/tar'
 import { sha256Hex } from '@delorun/release-formats/brands'
 import { buildPackArchive } from '@delorun/release-formats/packs/archive'
 import { parse as parseYaml } from 'yaml'
+import { z } from 'zod'
 import { closureName } from '../rebuild/compare.ts'
 import { transpileDelorunPackage, transpileDelorunPackages } from './delorun.ts'
 import { linkCarriedNeeds, nestedSingleCopies, undeclaredPeerNeeds, type PackLayout } from './pack-imports.ts'
@@ -38,8 +50,15 @@ import { packCandidates, readWorkspacePackages, selectClosurePackages } from './
 
 /** What a pack build reads from the package manager and the registry; tests supply fakes. */
 export interface PackSources {
-  /** Deploy one package with its production dependencies for a platform into an empty directory (hoisted, copied). */
-  deploy(name: string, platform: RuntimePlatform, directory: string): Promise<void>
+  /**
+   * Deploy one package with its production dependencies for a platform into an empty directory (hoisted, copied).
+   * @param name - the package.
+   * @param platform - the platform whose optional dependencies are installed.
+   * @param directory - the empty directory.
+   * @param also - further systems whose optional dependencies are installed too, for a pack's native packages built
+   * for another system than the platform's; empty for most packs.
+   */
+  deploy(name: string, platform: RuntimePlatform, directory: string, also: readonly NativeSystem[]): Promise<void>
   /** The staged closure's `app/node_modules` for a platform. */
   closureNodeModules(platform: RuntimePlatform): string
   /** The lockfile's exact version and `sha512-` integrity of a package for a platform. */
@@ -71,7 +90,23 @@ export interface LockedPackage {
   readonly version: string
   readonly integrity: string
   readonly source?: string
+  /** The systems the package declares it installs on, as the lockfile lists them; absent for a package for any system. */
+  readonly system?: NativeSystem
 }
+
+/** The operating systems, processors and C libraries a package installs on, as npm's `os`, `cpu` and `libc` fields name them. */
+export interface NativeSystem {
+  readonly os?: readonly string[]
+  readonly cpu?: readonly string[]
+  readonly libc?: readonly string[]
+}
+
+const RUNTIME_PLATFORMS = ['linux-x64', 'linux-arm64', 'darwin-x64', 'darwin-arm64', 'win32-x64'] as const satisfies readonly RuntimePlatform[]
+
+/** `delorun.packNatives` of a pack's `package.json`: per release platform, the native registry packages its variant carries. */
+export const PackNatives = z.partialRecord(z.enum(RUNTIME_PLATFORMS), z.array(z.string().regex(/^(?:@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*$/u, 'a package name')).min(1))
+/** Per release platform, the native registry packages a pack's variant carries. */
+export type PackNatives = z.infer<typeof PackNatives>
 
 /**
  * Whether a package name is covered by the recipe's external list.
@@ -81,6 +116,23 @@ export interface LockedPackage {
  */
 export function isExternal(name: string, patterns: readonly string[]): boolean {
   return patterns.some(pattern => (pattern.endsWith('*') ? name.startsWith(pattern.slice(0, -1)) : name === pattern))
+}
+
+/**
+ * The external package a staged path lies inside when that package is nested below the top level of the pack's `node_modules`.
+ * @param path - a staged file's path relative to the pack root.
+ * @param externals - the recipe's `packExternals`.
+ * @returns the nested external package's name, or undefined when the path holds none.
+ */
+export function externalNestedIn(path: string, externals: readonly string[]): string | undefined {
+  const segments = path.split('/')
+  for (let index = 1; index < segments.length - 1; index++) {
+    if (segments[index] !== 'node_modules') continue
+    const first = segments[index + 1]!
+    const name = first.startsWith('@') && index + 2 < segments.length - 1 ? `${first}/${segments[index + 2]!}` : first
+    if (isExternal(name, externals)) return name
+  }
+  return undefined
 }
 
 /**
@@ -110,15 +162,90 @@ export function packArchiveName(release: string, name: string, platform: Runtime
   return archive
 }
 
-async function pinOf(name: string, platform: RuntimePlatform, sources: PackSources, downloaded: Map<string, Buffer>): Promise<PackExternal> {
+/** A registry tarball whose SHA-512 matched the lockfile's integrity. */
+interface PinnedTarball {
+  readonly locked: LockedPackage
+  readonly url: string
+  readonly bytes: Buffer
+  readonly sha512: string
+}
+
+/**
+ * Download the tarball of a package the lockfile pins and check it against the lockfile's integrity.
+ * @param name - the package.
+ * @param platform - the platform the pin is read for.
+ * @param sources - the lockfile and the registry.
+ * @returns the pin and the bytes.
+ * @throws Error when the lockfile does not pin the package or the registry serves other bytes.
+ */
+async function pinnedTarball(name: string, platform: RuntimePlatform, sources: PackSources): Promise<PinnedTarball> {
   const locked = sources.locked(name, platform)
   if (locked === undefined) throw new Error(`the lockfile does not pin ${name} for ${platform}`)
   const url = tarballUrl(locked.source ?? name, locked.version)
   const bytes = await sources.download(url)
-  downloaded.set(url, bytes)
   const sha512 = createHash('sha512').update(bytes).digest('base64')
   if (`sha512-${sha512}` !== locked.integrity) throw new Error(`${url} does not match the lockfile's integrity; the registry served other bytes than the lockfile pins`)
+  return { locked, url, bytes, sha512 }
+}
+
+async function pinOf(name: string, platform: RuntimePlatform, sources: PackSources, downloaded: Map<string, Buffer>): Promise<PackExternal> {
+  const { locked, url, bytes, sha512 } = await pinnedTarball(name, platform, sources)
+  downloaded.set(url, bytes)
   return { name, version: brandString<SemanticVersion>(locked.version), url, sha512: brandString<Sha512Base64>(sha512), length: bytes.byteLength }
+}
+
+/**
+ * The systems beyond the platform's own whose optional dependencies a variant's deploy installs: the lockfile's system
+ * of each native package listed for the platform.
+ * @param natives - the packages listed for the platform.
+ * @param platform - the platform.
+ * @param sources - the lockfile.
+ * @returns one system per listed package that declares one.
+ * @throws Error when the lockfile does not pin a listed package.
+ */
+function nativeSystems(natives: readonly string[], platform: RuntimePlatform, sources: PackSources): NativeSystem[] {
+  return natives.flatMap((native) => {
+    const locked = sources.locked(native, platform)
+    if (locked === undefined) throw new Error(`the lockfile does not pin ${native}, which packNatives lists for ${platform}`)
+    return locked.system === undefined ? [] : [locked.system]
+  })
+}
+
+async function* once(bytes: Buffer): AsyncGenerator<Uint8Array> {
+  yield await Promise.resolve(bytes)
+}
+
+/**
+ * Check a variant's native packages against the lockfile: each is in the deployment at the lockfile's version, and its
+ * files are the pinned registry tarball's, byte for byte, with the same executable bit.
+ * @param name - the pack's package name.
+ * @param platform - the platform.
+ * @param natives - the packages listed for the platform.
+ * @param entries - the variant's files.
+ * @param sources - the lockfile and the registry.
+ * @throws Error naming the package that is missing, at another version, or carries other files than the lockfile pins.
+ */
+async function verifyNatives(name: string, platform: RuntimePlatform, natives: readonly string[], entries: readonly ArchiveEntry[], sources: PackSources): Promise<void> {
+  for (const native of natives) {
+    const prefix = `node_modules/${native}/`
+    const carried = new Map(entries.filter(entry => entry.path.startsWith(prefix)).map(entry => [entry.path.slice(prefix.length), entry]))
+    const manifest = carried.get('package.json')
+    if (manifest === undefined) throw new Error(`${name} for ${platform} does not carry ${native}, which packNatives lists; the deploy did not install it`)
+    const { locked, url, bytes } = await pinnedTarball(native, platform, sources)
+    const version = (JSON.parse(manifest.data.toString('utf8')) as { version?: string }).version
+    if (version !== locked.version) throw new Error(`${name} for ${platform} carries ${native}@${version ?? 'unknown'}, but the lockfile pins ${locked.version}`)
+    const expected = new Map<string, { readonly data: Buffer, readonly executable: boolean }>()
+    for await (const file of readTar(once(gunzipSync(bytes)), MAX_ARCHIVE_BYTES, { foreign: true })) {
+      if (!file.path.startsWith('package/')) throw new Error(`${url} holds ${file.path}, outside its package folder`)
+      expected.set(file.path.slice('package/'.length), { data: file.data, executable: (file.mode & 0o111) !== 0 })
+    }
+    const differing = [...new Set([...expected.keys(), ...carried.keys()])].sort().filter((path) => {
+      const want = expected.get(path)
+      const have = carried.get(path)
+      return want === undefined || have === undefined || !want.data.equals(have.data) || (platform !== 'win32-x64' && want.executable !== (have.mode === '0755'))
+    })
+    if (differing.length > 0) throw new Error(`${name} for ${platform} carries ${native} files that differ from the registry tarball the lockfile pins (${url}): ${differing.slice(0, 5).join(', ')}`)
+  }
 }
 
 /** Third-party libraries that must exist once in a running Delorun: they hold module-level state or classes that plugins compare or pass across the plugin boundary. */
@@ -253,16 +380,21 @@ function isDelorunSource(name: string, path: string): boolean {
  * @param externals - the recipe's `packExternals`.
  * @param sources - the package manager, closure and registry.
  * @param scratch - an empty directory for the deployments.
+ * @param natives - the pack's `delorun.packNatives`; empty for a pack that carries no native program.
  * @returns the entry and the archives; platforms whose files and pins are identical share the `any` variant.
+ * @throws Error when `natives` is not empty and lists nothing for a release platform, and as each check above names.
  */
-export async function buildPack(name: string, version: string, experimental: boolean, releaseVersion: string, platforms: readonly RuntimePlatform[], epoch: number, externals: readonly string[], sources: PackSources, scratch: string): Promise<BuiltPack> {
+export async function buildPack(name: string, version: string, experimental: boolean, releaseVersion: string, platforms: readonly RuntimePlatform[], epoch: number, externals: readonly string[], sources: PackSources, scratch: string, natives: PackNatives = {}): Promise<BuiltPack> {
+  const declaresNatives = Object.keys(natives).length > 0
+  const unlisted = platforms.filter(platform => declaresNatives && natives[platform] === undefined)
+  if (unlisted.length > 0) throw new Error(`${name} lists packNatives but none for ${unlisted.join(', ')}; list each release platform's native packages`)
   const archives = new Map<string, Buffer>()
   // The externals' tarballs, by URL, for the review copy check's install.
   const downloaded = new Map<string, Buffer>()
   const built = new Map<RuntimePlatform, { bytes: Buffer, variant: Omit<PackVariant, 'external' | 'peers'>, external: PackExternal[], peers: string[] }>()
   for (const platform of platforms) {
     const directory = join(scratch, `${name.replaceAll('/', '__')}-${platform}`)
-    await sources.deploy(name, platform, directory)
+    await sources.deploy(name, platform, directory, nativeSystems(natives[platform] ?? [], platform, sources))
     await restoreDeclaredPeers(directory, await sources.declaredPeers(name), sources.closureNodeModules(platform))
     // A Delorun package exports TypeScript sources, which Node does not run from a pack; the closure's are transpiled too.
     await transpilePackPackages(name, directory)
@@ -274,6 +406,9 @@ export async function buildPack(name: string, version: string, experimental: boo
     const entries: ArchiveEntry[] = []
     for (const file of await listStagedTree(directory, platform)) {
       const nested = /^node_modules\/((?:@[^/]+\/)?[^/]+)\//u.exec(file.path)?.[1]
+      // A top-level external's whole subtree is dropped from the pack, so what is nested inside it ships nothing.
+      const deeper = nested !== undefined && isExternal(nested, externals) ? undefined : externalNestedIn(file.path, externals)
+      if (deeper !== undefined) throw new Error(`${name} for ${platform} carries ${deeper} nested inside another package (${file.path}); an external package is fetched from its publisher only when it is at the top level of the pack's node_modules, so a nested copy would ship its files in the pack`)
       if (nested !== undefined && !dropped.has(nested) && !kept.has(nested)) {
         if (isExternal(nested, externals)) {
           dropped.add(nested)
@@ -291,6 +426,7 @@ export async function buildPack(name: string, version: string, experimental: boo
       if (nested !== undefined && dropped.has(nested)) continue
       entries.push({ path: file.path, mode: file.mode, data: await readFile(file.absolute) })
     }
+    await verifyNatives(name, platform, natives[platform] ?? [], entries, sources)
     const untranspiled = entries.map(entry => entry.path).filter(path => isDelorunSource(name, path))
     if (untranspiled.length > 0) throw new Error(`${name} for ${platform} carries TypeScript sources of a Delorun package, which Node does not run from a pack: ${untranspiled.slice(0, 3).join(', ')}`)
     await linkClosureNeeds(name, platform, entries, peers, nestedName => keepsOneCopy(nestedName, packPeers, externals), external, sources)
@@ -406,14 +542,27 @@ export function packsDocument(version: string, packs: readonly PackEntry[]): Rel
 
 /** The lockfile's resolution of one package: `packages` keys are `<name>@<version>`. */
 export function lockedFrom(lockfile: string, name: string): LockedPackage | undefined {
-  const document = parseYaml(lockfile) as { packages?: Record<string, { resolution?: { integrity?: string } }>, snapshots?: Record<string, { optionalDependencies?: Record<string, string>, dependencies?: Record<string, string> }> }
+  const document = parseYaml(lockfile) as { packages?: Record<string, LockfilePackage>, snapshots?: Record<string, { optionalDependencies?: Record<string, string>, dependencies?: Record<string, string> }> }
   const packages = document.packages ?? {}
   const found = Object.entries(packages).filter(([key]) => key.startsWith(`${name}@`) && /^\d/u.test(key.slice(name.length + 1)))
   if (found.length === 0) return aliasedLock(packages, document.snapshots ?? {}, name)
   if (found.length > 1) throw new Error(`the lockfile pins ${name} at ${found.length} versions; a pack external needs exactly one`)
   const [key, value] = found[0]!
   const integrity = value.resolution?.integrity
-  return integrity === undefined ? undefined : { version: key.slice(name.length + 1), integrity }
+  return integrity === undefined ? undefined : { version: key.slice(name.length + 1), integrity, ...systemOf(value) }
+}
+
+/** A `packages` entry of the lockfile, with the fields the build reads. */
+interface LockfilePackage {
+  readonly resolution?: { readonly integrity?: string }
+  readonly os?: readonly string[]
+  readonly cpu?: readonly string[]
+  readonly libc?: readonly string[]
+}
+
+function systemOf(value: LockfilePackage): { readonly system?: NativeSystem } {
+  if (value.os === undefined && value.cpu === undefined && value.libc === undefined) return {}
+  return { system: { ...value.os === undefined ? {} : { os: value.os }, ...value.cpu === undefined ? {} : { cpu: value.cpu }, ...value.libc === undefined ? {} : { libc: value.libc } } }
 }
 
 /** A package the lockfile pins under another registry name (`name: 'real@version'`), as `@openai/codex-<platform>` is. */
@@ -429,6 +578,23 @@ function aliasedLock(packages: Record<string, { resolution?: { integrity?: strin
   if (target === undefined || integrity === undefined) return undefined
   const at = target.lastIndexOf('@')
   return { version: target.slice(at + 1), integrity, source: target.slice(0, at) }
+}
+
+/**
+ * pnpm's platform selection for a variant: the platform's own, plus each further system's operating systems, processors
+ * and C libraries, each flag once.
+ * @param own - the platform's selection, such as `--os=linux --cpu=x64 --libc=glibc`.
+ * @param also - the further systems.
+ * @returns the flags.
+ */
+export function deployTargets(own: readonly string[], also: readonly NativeSystem[]): string[] {
+  const flags = [...own]
+  for (const system of also) {
+    for (const [field, values] of [['os', system.os], ['cpu', system.cpu], ['libc', system.libc]] as const) {
+      for (const value of values ?? []) if (!flags.includes(`--${field}=${value}`)) flags.push(`--${field}=${value}`)
+    }
+  }
+  return flags
 }
 
 /** What a release's pack step needs from the build. */
@@ -484,16 +650,17 @@ export async function buildReleasePacks(request: ReleasePackRequest): Promise<nu
       if (!response.ok) throw new Error(`${url} answered ${String(response.status)}`)
       return Buffer.from(await response.arrayBuffer())
     },
-    deploy: (name, platform, directory) => {
-      execFileSync('pnpm', ['--filter', name, 'deploy', '--prod', '--ignore-scripts', ...request.targets[platform], '--config.allow-unused-patches=true', '--config.node-linker=hoisted', '--config.package-import-method=copy', '--config.link-workspace-packages=true', '--config.hoist-workspace-packages=false', directory], { cwd: request.source, env: request.env, stdio: 'inherit' })
+    deploy: (name, platform, directory, also) => {
+      execFileSync('pnpm', ['--filter', name, 'deploy', '--prod', '--ignore-scripts', ...deployTargets(request.targets[platform], also), '--config.allow-unused-patches=true', '--config.node-linker=hoisted', '--config.package-import-method=copy', '--config.link-workspace-packages=true', '--config.hoist-workspace-packages=false', directory], { cwd: request.source, env: request.env, stdio: 'inherit' })
       // A pack carries no command links: the archive refuses symbolic links and a pack is never run through .bin.
       return removeCommandLinks(directory)
     },
   }
   const entries: PackEntry[] = []
   for (const candidate of packCandidates(packages, selection, carried)) {
-    const manifest = JSON.parse(await readFile(join(request.source, candidate.dir, 'package.json'), 'utf8')) as { version: string }
-    const built = await buildPack(candidate.name, manifest.version, candidate.dir.startsWith('packages/experimental/'), request.version, request.platforms, request.epoch, request.externals, sources, request.scratch)
+    const manifest = JSON.parse(await readFile(join(request.source, candidate.dir, 'package.json'), 'utf8')) as { version: string, delorun?: { packNatives?: unknown } }
+    const natives = PackNatives.parse(manifest.delorun?.packNatives ?? {})
+    const built = await buildPack(candidate.name, manifest.version, candidate.dir.startsWith('packages/experimental/'), request.version, request.platforms, request.epoch, request.externals, sources, request.scratch, natives)
     for (const [name, bytes] of built.archives) await writeFile(join(request.out, name), bytes, { flag: 'wx', mode: 0o644 })
     entries.push(built.entry)
   }

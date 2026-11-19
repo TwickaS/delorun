@@ -1,0 +1,30 @@
+{
+  "name": "@delorun/browser-setup",
+  "description": "The Browser choice the setup guide and the new-workspace flow share: whether agents may use a web browser, whether Browser is ready on this computer, and what it needs when it is not",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client/index.ts",
+    "./locales": "./src/client/locales.ts",
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-client-ui-primitives": "workspace:*",
+    "@delorun/bundle-local": "workspace:*",
+    "@delorun/preview-flags": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "^18.2.0"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.3",
+    "@types/react": "~18.3.1",
+    "react": "^18.2.0"
+  },
+  "delorun": {
+    "state": "shipped"
+  }
+}

@@ -227,6 +227,10 @@ describe('the recovery state and safe mode', () => {
     expect(reply).toMatchObject({ skipped: ['plug'] })
     expect((reply.lines as string[]).join(' ')).toContain('The next start leaves out plug')
     expect(json(await get(server.port, STATE_PATH)).safeMode).toMatchObject({ skipped: ['plug'], reason: 'the person asked for safe mode in the studio' })
+    const left = json(await post(server.port, ACTION_PATHS['exit-safe-mode']))
+    expect((left.lines as string[]).join(' ')).toContain('Safe mode is off')
+    expect(json(await get(server.port, STATE_PATH)).safeMode).toBeUndefined()
+    expect((json(await post(server.port, ACTION_PATHS['exit-safe-mode'])).lines as string[]).join(' ')).toContain('Safe mode was not on')
     writeFileSync(join(ctx.profileDir, 'cordis.patch.yml'), 'not: [a list\n')
     const refused = await post(server.port, ACTION_PATHS['safe-mode'])
     expect(refused.status).toBe(409)
@@ -247,7 +251,7 @@ describe('the plugin\'s routes in the Host', () => {
     host.provide('profileContext', { name: ctx.profile, dir: ctx.profileDir, home: ctx.home } as never)
     let reconciled = 0
     host.provide('hmr', { runExclusive: <T>(operation: () => Promise<T>) => operation(), reconcileProfile: () => { reconciled += 1; return Promise.resolve({}) } } as never)
-    await host.plugin(plugin, { enabled: false, installationBundles: [] })
+    await host.plugin(plugin, { enabled: false, installationBundles: [], restartWaitSeconds: 600 })
     const request = Object.assign(Readable.from([Buffer.from('{"plugin":"plug"}')]), { method: 'POST', url: ACTION_PATHS.off, headers: { host: '127.0.0.1:3080' }, socket: { localAddress: '127.0.0.1', localPort: 3080 } })
     let status = 0
     let text = ''

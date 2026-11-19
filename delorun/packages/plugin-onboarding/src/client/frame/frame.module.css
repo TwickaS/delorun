@@ -43,26 +43,33 @@
 
 .count {
   flex: none;
+  font-variant-numeric: tabular-nums;
   font-size: var(--onb-small-size);
   line-height: var(--onb-small-line);
   color: var(--dsw-alias-label-secondary);
 }
 
+/* One short segment per step: the steps behind and the current one are filled, the rest are a faint track. */
 .bar {
+  display: flex;
   flex: 1;
-  height: 4px;
-  overflow: hidden;
-  border-radius: var(--dsw-radius-xs);
-  background: var(--dsw-alias-border-l2);
+  gap: 4px;
 }
 
 .bar > span {
-  display: block;
-  width: 100%;
-  height: 100%;
+  flex: 1;
+  height: 3px;
+  border-radius: var(--dsw-radius-xs);
+  background: var(--dsw-alias-border-l2);
+  transition: background-color 240ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.bar > [data-state='done'] {
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 55%, transparent);
+}
+
+.bar > [data-state='current'] {
   background: var(--dsw-alias-brand-primary);
-  transform-origin: left;
-  transition: transform 240ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 .scroll {
@@ -142,13 +149,13 @@
   color: var(--dsw-alias-label-primary);
 }
 
-/* On a phone the window is a modal inset from the screen edges, with the dimmed page around it. It fits short content and
-   is centred; long content fills the height the inset leaves, and the body scrolls between the pinned header and footer.
+/* On a phone the window is a modal inset from the screen edges, with the dimmed page around it. It always fills the height
+   the inset leaves, so the header and footer stay where they are from step to step, and the body scrolls between them.
    The height follows the dynamic viewport, so the on-screen keyboard shrinks the window instead of covering Continue. */
 @media (max-width: 767px) {
   .dialog {
     width: calc(100% + 24px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
-    height: auto;
+    height: calc(100dvh - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
     max-height: calc(100dvh - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
     margin: 0 calc(env(safe-area-inset-right, 0px) - 12px) 0 calc(env(safe-area-inset-left, 0px) - 12px);
     align-self: center;
@@ -178,6 +185,8 @@
 
 .titleRow {
   display: flex;
+  /* The row keeps the height of Complete setup later, so the header does not move on Ready, which has none. */
+  min-height: var(--onb-target);
   align-items: center;
   justify-content: space-between;
   gap: var(--onb-gap-2);
@@ -191,12 +200,14 @@
   background: none;
   font: inherit;
   font-size: var(--onb-small-size);
-  color: var(--dsw-alias-label-secondary);
+  color: var(--dsw-alias-label-tertiary);
   cursor: pointer;
+  text-underline-offset: 3px;
 }
 
 .later:hover {
   color: var(--dsw-alias-label-primary);
+  text-decoration: underline;
 }
 
 /* Every button and disclosure in a step is at least 44px each way for a finger. */

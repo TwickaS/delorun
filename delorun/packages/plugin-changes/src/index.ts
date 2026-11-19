@@ -58,11 +58,25 @@ import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-workspace'
 import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
 import z from '@deepseek-ai/schemastery'
-import { PACKAGE_NAME_PATTERN, prepareReload, readProtection, reloadProfile, startNotice, type ChangeEntry, type ChangesContext, type PluginOperation, type ProtectionLevel } from '@delorun/changes'
+import { PACKAGE_NAME_PATTERN, prepareReload, readProtection, reloadProfile, startNotice, type ChangeEntry, type ChangesContext, type ChangesHarnessHost, type ChangesRestartHost, type PluginOperation, type ProtectionLevel } from '@delorun/changes'
+import { REACH_DEVICE, unlockOf, type ReachDevicePrincipal } from '@delorun/home-auth'
 import { recordPluginRequest, type PluginRequest } from '@delorun/changes/install'
 import { loadUpstreamChecks, upstreamPluginOperation } from '@delorun/changes/plugin-operation'
 import type { VersionOutput } from '@delorun/contract-plugin-versions'
-import { CHANGES_ROUTE_PREFIX, changesRoutes, type RouteConnection } from './routes.ts'
+import { LiveAssets, harnessEffectOf } from './live-apply.ts'
+import { restartRoutes, restartStateOf } from './restart-route.ts'
+import { CHANGES_ROUTE_PREFIX, changesGate, changesRoutes, type ChangesGate, type RouteConnection, type RouteDevice, type RouteDevices } from './routes.ts'
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** The running runtime's harness, which `delorun start`'s home process provides for the Changes routes. */
+    changesHarness?: ChangesHarnessHost
+    /** The home process's restart and what this Host booted with, which `delorun start`'s home process provides for the Restart route. */
+    changesRestart?: ChangesRestartHost
+    /** The Changes routes' fence and access table for another plugin's routes, which this plugin provides once the web server and Connection are present. */
+    changesGate?: ChangesGate
+  }
+}
 
 /**
  * The page global upstream's boot page reads the Changes routes' prefix from (`dshRecoveryRoutes` in
@@ -88,12 +102,18 @@ export interface Config {
    * `delorun recover safe-mode`.
    */
   readonly installationBundles: string[]
+  /**
+   * How long the studio's Restart waits for running chats before it gives up and keeps Delorun running as it is, in
+   * seconds. New turns are refused while it waits.
+   */
+  readonly restartWaitSeconds: number
 }
 
 /** Validated configuration. The default is the parity value. */
 export const Config: z<Config> = z.object({
   enabled: z.boolean().default(false),
   installationBundles: z.array(z.string().pattern(PACKAGE_NAME_PATTERN)).default([]),
+  restartWaitSeconds: z.natural().min(10).max(86_400).default(600),
 })
 
 /** The tool registry, whose `tools/pre-execute` event and guards the plugin uses. */
@@ -221,7 +241,23 @@ export function apply(ctx: Context, config: Config): void {
   // Upstream hot reload's `ProfileReconcileCheck`: it awaits `check` before every recomposition of the profile.
   ctx.provide('profileReconcileCheck', { check: (profile: ProfileContext) => checkReload(ctx, profile) })
   ctx.inject(['webServer', 'connection'], (scope) => {
-    const routes = changesRoutes({
+    const restart = (): ChangesRestartHost | undefined => scope.get('changesRestart')
+    const harness = (): ReturnType<ChangesHarnessHost['context']> => scope.get('changesHarness')?.context()
+    // Only a Host a home process runs serves live files: elsewhere every change waits for the next start.
+    const live = restart() === undefined ? undefined : new LiveAssets(scope.webServer, request => scope.connection.requestRejection(request))
+    if (live !== undefined) {
+      scope.effect(() => () => { live.dispose() }, 'plugin-changes: live studio files')
+      // A Host booted again in the same process, after a failed restart or a reload, serves the live files the records
+      // compose at once; one that cannot be read leaves the running tree's file served.
+      const running = restart()
+      const context = harness()
+      if (running !== undefined && context !== undefined) {
+        live.refresh(context, running.running).catch((error: unknown) => {
+          scope.logger.warn(`Delorun serves the studio's own files as this start ran them: ${error instanceof Error ? error.message : String(error)}`)
+        })
+      }
+    }
+    const dependencies = {
       connection: routeConnection(scope.connection),
       profile: () => {
         const profile = scope.get('profileContext')
@@ -244,7 +280,14 @@ export function apply(ctx: Context, config: Config): void {
         if (version === undefined) throw new Error('plugin-changes: this Host was not started by delorun, so it does not know the Delorun version a setup file names.')
         return version
       },
-    })
+      devices: routeDevices(scope),
+      harness,
+      harnessEffect: harnessEffectOf({ restart, harness, live, logger: scope.logger }),
+      restartState: () => restartStateOf(restart(), harness()),
+      clearRestartFailure: () => { restart()?.clearFailure() },
+    } satisfies Parameters<typeof changesRoutes>[0]
+    scope.effect(() => scope.provide('changesGate', changesGate(dependencies)), 'plugin-changes: gate for other plugins\' routes')
+    const routes = [...changesRoutes(dependencies), ...restartRoutes(dependencies, { restart, waitSeconds: config.restartWaitSeconds })]
     scope.effect(() => {
       const registered = routes.map(route => scope.webServer.register(route))
       return () => {
@@ -343,6 +386,36 @@ function showFolder(folder: string): void {
 }
 
 /**
+ * The paired devices and the Phone powers level as the routes read them, from the mounted `homeAuth` service. Without
+ * it no session is a paired device's and the level is Careful, so a remote session acts on nothing.
+ * @param scope - the plugin context, which reads `homeAuth` when a request arrives.
+ * @returns the reads.
+ */
+export function routeDevices(scope: Pick<Context, 'get'>): RouteDevices {
+  return {
+    deviceOf: async (peer) => {
+      const home = scope.get('homeAuth')
+      const principal = (peer as { readonly principal?: { readonly kind: string } }).principal
+      if (home === undefined || principal?.kind !== REACH_DEVICE) return undefined
+      const { deviceId } = principal as ReachDevicePrincipal
+      const unlock = unlockOf(home, principal as ReachDevicePrincipal)
+      const label = (await home.devices()).devices.find(device => device.id === deviceId)?.label ?? ''
+      const device: RouteDevice = {
+        id: deviceId,
+        label,
+        unlock: unlock === undefined ? 'none' : unlock.grace === true ? 'grace' : 'fresh',
+        renew: () => { if (unlock !== undefined) home.touchUnlock(unlock.id) },
+      }
+      return device
+    },
+    phonePowers: () => {
+      const powers = scope.get('homeAuth')?.phonePowers()
+      return powers === undefined ? { level: 'careful', chosen: false } : { level: powers.level, chosen: powers.chosen }
+    },
+  }
+}
+
+/**
  * Connection as the routes use it. `ctx.connection` is Connection's `HostConnectionService`, whose `isReachPeer` the
  * Context's `connection` type does not declare.
  * @param connection - `ctx.connection`.
@@ -411,3 +484,4 @@ function realTarget(path: string): string | undefined {
 }
 
 export { discardImportReviews } from '@delorun/changes/setup-transfer'
+export { changesGate, flag, onlyFields, RouteRefusal, type ChangesGate, type ChangesRoute, type RouteHandler } from './routes.ts'

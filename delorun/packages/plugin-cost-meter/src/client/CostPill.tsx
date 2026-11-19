@@ -13,7 +13,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-subagent/client'
 // Type-only: the costMeter projection merge.
 import type {} from '../view.ts'
-import { CostBreakdown, type CostGroup } from './CostBreakdown.tsx'
+import { CostBreakdown, splitTokens, type CostGroup } from './CostBreakdown.tsx'
 import { addCosts, collectAgents, counted, formatCost, NO_COST, type Translate } from './costs.ts'
 import css from './CostPill.module.css'
 
@@ -137,6 +137,7 @@ export function CostPill({ sessionId, useProjection, useSessions, t, loadCosts }
               {notes.map(note => <li key={note}>{note}</li>)}
             </ul>
           )}
+          {splitTokens(total.models).cached > 0 && <p className={css.estimate}>{t('note.cached')}</p>}
           <p className={css.estimate}>{t('note.estimate')}</p>
         </div>,
         document.body,

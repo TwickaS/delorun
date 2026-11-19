@@ -69,6 +69,7 @@ describe('the plugin list', () => {
   it('words each kind of need and refuses an unknown one', () => {
     expect(needPhrase({ kind: 'platform', os: ['linux', 'darwin'] })).toBe('Linux or macOS as the operating system')
     expect(needPhrase({ kind: 'playwright-browser', browser: 'chromium' })).toBe('a one-off chromium download')
+    expect(needPhrase({ kind: 'browse-paired' })).toBe('your own browser paired with it')
     expect(() => needPhrase({ kind: 'surprise' })).toThrow(/unknown kind/)
   })
 })
@@ -78,9 +79,9 @@ describe('the generated data file', () => {
     expect(readFileSync(DATA_PATH, 'utf8')).toBe(dataText(buildData(ROOT, gitSources)))
   })
 
-  it('lists the six packs and no library', () => {
+  it('lists the seven packs and no library', () => {
     const { plugins, scaffold } = buildData(ROOT, gitSources)
-    expect(plugins.filter((plugin) => plugin.standing === 'pack')).toHaveLength(6)
+    expect(plugins.filter((plugin) => plugin.standing === 'pack')).toHaveLength(7)
     expect(plugins.map((plugin) => plugin.name)).not.toContain('@delorun/plugin-scaffold')
     expect(Object.keys(scaffold)).toEqual(['tool', 'preset', 'ui', 'bundle'])
   })

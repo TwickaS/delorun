@@ -1,5 +1,5 @@
 ---
-description: "Spike report for WP1.19: ts.net on the Public Suffix List, the WebAuthn relying-party IDs a page on a tailscale serve address and on a Funnel address may use, and passkey registration and assertion there in Chromium, with Firefox's relying-party ID checks and the browsers not covered."
+description: "Spike report: ts.net on the Public Suffix List, the WebAuthn relying-party IDs a page on a tailscale serve address and on a Funnel address may use, and passkey registration and assertion there in Chromium, with Firefox's relying-party ID checks and the browsers not covered."
 ---
 
 # Spike: passkey relying-party IDs on `ts.net`
@@ -8,7 +8,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This report records work package WP1.19 for [contract C14](../../../../docs/contracts/c14-oidc-passkeys.md#relying-party-ids). `ts.net` is on the Public Suffix List, in its private section under Tailscale Inc., so `<tailnet>.ts.net` is a registrable domain. A page on the `tailscale serve` address `https://<node>.<tailnet>.ts.net` and a page on the Funnel address `https://<node>.<tailnet>.ts.net:8443` may each use `<node>.<tailnet>.ts.net` or `<tailnet>.ts.net` as the relying-party ID, and browsers refuse `ts.net` and `net`. In Chromium 149 a passkey with the relying-party ID `<node>.<tailnet>.ts.net` registered and asserted on both addresses, with a platform and a security-key virtual authenticator, and a passkey registered on the serve address asserted on the Funnel address. Firefox 151 accepted and refused the same relying-party IDs but had no authenticator to complete a ceremony, and WebKit and Safari were not run. C14's evidence for Firefox and Safari is therefore missing, and its current contract, no passkeys on `ts.net` addresses with OpenID Connect sign-in as their identity factor, stays.
+This report supports [contract C14](../../../../docs/contracts/c14-oidc-passkeys.md#relying-party-ids). `ts.net` is on the Public Suffix List, in its private section under Tailscale Inc., so `<tailnet>.ts.net` is a registrable domain. A page on the `tailscale serve` address `https://<node>.<tailnet>.ts.net` and a page on the Funnel address `https://<node>.<tailnet>.ts.net:8443` may each use `<node>.<tailnet>.ts.net` or `<tailnet>.ts.net` as the relying-party ID, and browsers refuse `ts.net` and `net`. In Chromium 149 a passkey with the relying-party ID `<node>.<tailnet>.ts.net` registered and asserted on both addresses, with a platform and a security-key virtual authenticator, and a passkey registered on the serve address asserted on the Funnel address. Firefox 151 accepted and refused the same relying-party IDs but had no authenticator to complete a ceremony, and WebKit and Safari were not run. C14's evidence for Firefox and Safari is therefore missing, and its current contract, no passkeys on `ts.net` addresses with OpenID Connect sign-in as their identity factor, stays.
 
 ## Answers
 
@@ -33,7 +33,7 @@ Browsers read both sections: Chromium and Firefox refused `ts.net` as a relying-
 
 ## Browser results
 
-The test page was served by `test-page-server.ts` on `127.0.0.1` and published with `tailscale serve --bg --https=443` and `tailscale funnel --bg --https=8443`. The node's own processes do not route through the tailnet in userspace networking, so browsers reached the serve address through `tailnet-connect-proxy.ts` from the [WP1.18 spike](../../../reach/spikes/serve-socket/README.md), which carries each connection through `tailscale nc`. They reached the Funnel address over the public internet with no proxy. Every page load reported `isSecureContext: true` and a defined `PublicKeyCredential`.
+The test page was served by `test-page-server.ts` on `127.0.0.1` and published with `tailscale serve --bg --https=443` and `tailscale funnel --bg --https=8443`. The node's own processes do not route through the tailnet in userspace networking, so browsers reached the serve address through `tailnet-connect-proxy.ts` from the [serve-socket spike](../../../reach/spikes/serve-socket/README.md), which carries each connection through `tailscale nc`. They reached the Funnel address over the public internet with no proxy. Every page load reported `isSecureContext: true` and a defined `PublicKeyCredential`.
 
 `rp-id-probe.ts` called `navigator.credentials.create` with C14's registration options (`residentKey: "required"`, `userVerification: "required"`, `attestation: "none"`, algorithms -8, -7 and -257) once for each candidate relying-party ID, then `navigator.credentials.get` with the relying-party ID `<node>.<tailnet>.ts.net` and `userVerification: "required"`. It checked that the assertion's `rpIdHash` equals the SHA-256 hash of that ID and that the user-present and user-verified flags are set.
 

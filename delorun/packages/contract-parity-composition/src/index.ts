@@ -202,6 +202,25 @@ export const PARITY_SWITCHES = [
     ],
   },
   {
+    id: 'tool_failure_guard',
+    state: 'built',
+    registeredBy: '@delorun/plugin-tool-failure-guard',
+    defaultValue: true,
+    parityValue: false,
+    modelVisible: true,
+    scenario: 'session/delorun-tool-failure-guard',
+    scenarioState: 'recorded',
+    field: {
+      module: '@delorun/plugin-tool-failure-guard',
+      source: 'delorun/packages/plugin-tool-failure-guard/src/index.ts',
+      key: 'enabled',
+    },
+    // The reminder text and the turn stop are registered here; off, the plugin registers no listener.
+    sources: [
+      'delorun/packages/plugin-tool-failure-guard/src/index.ts',
+    ],
+  },
+  {
     id: 'preset_inspect',
     state: 'built',
     registeredBy: 'Delorun edit of upstream preset tools',
@@ -363,10 +382,66 @@ export const PARITY_SWITCHES = [
     },
     // The gate reaches the model through the server start the review holds,
     // not through a registration; these files are the ones whose runtime
-    // behaviour the switch turns off at its parity value.
+    // behaviour the switch turns off at its parity value. In the browser
+    // runtime, a start the consent refuses leaves that Session without the
+    // browser tools; with no consent mounted no start is refused.
     sources: [
+      'packages/experimental/browser-use-runtime/src/mcp.ts',
       'packages/mcp/mcp-client/src/consent.ts',
       'packages/mcp/mcp-client/src/index.ts',
+    ],
+  },
+  {
+    id: 'browser_additions',
+    state: 'built',
+    registeredBy: 'Delorun edit of upstream\'s Playwright browser provider, which @delorun/bundle-browser mounts with the switch on',
+    defaultValue: true,
+    parityValue: false,
+    modelVisible: true,
+    scenario: 'session/delorun-browser-additions',
+    scenarioState: 'pending recording',
+    field: {
+      module: '@deepseek-ai/dsh-experimental-browser-use-playwright-mcp',
+      source: 'packages/experimental/browser-use-playwright-mcp/src/index.ts',
+      key: 'browserAdditions',
+    },
+    // Off, a browser tool failure that reports a browser build which is not
+    // installed reaches the model as Playwright's own text, not the Browser
+    // setup message, and the output folder gets no .gitignore. The scan also
+    // reads, in these files, the security invariants that the switch never
+    // turns off and that hold with every switch off: the MCP client never
+    // registers a denied tool (browser_run_code_unsafe always), the provider
+    // refuses a call to one and a call whose file argument really leads
+    // outside the Session's folder, and the server is told that folder as its
+    // one MCP root, the folder the guard checks against. The provider spec
+    // `keeps the tool denial, the folder guard and the MCP root with
+    // browser_additions off` holds them.
+    sources: [
+      'packages/experimental/browser-use-playwright-mcp/src/index.ts',
+      'packages/experimental/browser-use-runtime/src/mcp.ts',
+      'packages/mcp/mcp-client/src/tools.ts',
+    ],
+  },
+  {
+    id: 'use_my_browser',
+    state: 'built',
+    registeredBy: '@delorun/browser-use-browse, whose row @delorun/bundle-real-browser inserts with the switch on',
+    defaultValue: true,
+    parityValue: false,
+    modelVisible: true,
+    scenario: 'session/delorun-use-my-browser',
+    scenarioState: 'recorded',
+    field: {
+      module: '@delorun/browser-use-browse',
+      source: 'delorun/packages/browser-use-browse/src/config.ts',
+      key: 'enabled',
+    },
+    // Off, the row mounts nothing: no use_my_browser tool, no guard on browse
+    // calls and no browse server, so no browse tool or its system-prompt
+    // section reaches a model request.
+    sources: [
+      'delorun/packages/browser-use-browse/src/index.ts',
+      'delorun/packages/browser-use-browse/src/tool.ts',
     ],
   },
   {

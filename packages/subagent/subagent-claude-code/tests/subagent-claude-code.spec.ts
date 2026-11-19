@@ -670,6 +670,51 @@ describe('task admission and package contracts', () => {
     await ctx.fiber.dispose()
   })
 
+  it.each([
+    ['own', undefined, undefined],
+    ['unrestricted', 'bypassPermissions', { enabled: false }],
+  ] as const)('applies the %s level the delegation consent names at the start', async (level, mode, sandbox) => {
+    const ctx = new Context()
+    await ctx.plugin(SessionProjectionRegistry)
+    await mountWorkingDirectoryFixture(ctx)
+    await ctx.plugin(SubagentRuntime)
+    await ctx.plugin(LocalSubprocessRuntime)
+    ctx.provide('delegationConsent')
+    ctx.set('delegationConsent', { review: () => Promise.resolve({ kind: 'allow' as const }), permissionLevel: () => level })
+    const child = fakeChild()
+    vi.spyOn(ctx.subprocess, 'spawn').mockReturnValue(child.handle)
+    queryMock.mockImplementation(({ options }) => {
+      expect(options.permissionMode).toBe(mode)
+      expect(options.sandbox).toEqual(sandbox)
+      options.spawnClaudeCodeProcess!(sdkSpawnOptions())
+      return queryFrom([success('level answer')])
+    })
+    claudeCode.apply(ctx, { env: {}, disposeGraceMs: 3_000 })
+    const run = await startExternalActivation(ctx, 'claude-code', request())
+    await expect(run.result).resolves.toMatchObject({ stopReason: 'completed' })
+    await run.dispose()
+    await ctx.fiber.dispose()
+  })
+
+  it('refuses a Careful start with the install line when the sandbox tools are missing', async () => {
+    vi.stubEnv('PATH', '/definitely/not/a/dir')
+    const ctx = new Context()
+    await ctx.plugin(SessionProjectionRegistry)
+    await mountWorkingDirectoryFixture(ctx)
+    await ctx.plugin(SubagentRuntime)
+    await ctx.plugin(LocalSubprocessRuntime)
+    ctx.provide('delegationConsent')
+    ctx.set('delegationConsent', { review: () => Promise.resolve({ kind: 'allow' as const }), permissionLevel: () => 'careful' })
+    vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
+    claudeCode.apply(ctx, { env: {}, disposeGraceMs: 3_000 })
+    const expected = process.platform === 'darwin' ? undefined : 'sudo apt install bubblewrap socat'
+    if (expected !== undefined) {
+      await expect(startExternalActivation(ctx, 'claude-code', request())).rejects.toThrow(expected)
+    }
+    await ctx.fiber.dispose()
+    vi.unstubAllEnvs()
+  })
+
   it('starts through the registered provider with its resolved config and diagnostics', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionProjectionRegistry)
@@ -890,6 +935,12 @@ describe('query options and result mapping', () => {
       spawn,
     }
     const controller = new AbortController()
+    const leveled = claudeQueryOptions(
+      { ...spec, level: { sandbox: { enabled: true }, disallowedTools: ['WebFetch'] } },
+      controller, () => {}, () => {},
+    )
+    expect(leveled).toMatchObject({ sandbox: { enabled: true }, disallowedTools: ['AskUserQuestion', 'WebFetch'] })
+    expect(claudeQueryOptions({ ...spec, permissionMode: 'default' }, controller, () => {}, () => {})).not.toHaveProperty('permissionMode')
     const options = claudeQueryOptions(
       spec,
       controller,

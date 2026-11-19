@@ -245,6 +245,8 @@ describe('real @openai/codex 0.153.4 product', () => {
     })
     expect(schema.definitions.ThreadStartParams.required).toBeUndefined()
 
+    const configPath = join(harness.env.CODEX_HOME!, 'config.toml')
+    const configBefore = readFileSync(configPath)
     const run = await startExternalActivation(harness.ctx, 'codex', {
       prompt: [{ type: 'text', text: task }],
       parent: harness.parent,
@@ -255,6 +257,8 @@ describe('real @openai/codex 0.153.4 product', () => {
       stopReason: 'completed',
     })
     await run.dispose()
+    // A writable-sandbox thread would append a trusted-folder entry for the workspace.
+    expect(readFileSync(configPath).equals(configBefore)).toBe(true)
 
     expect(harness.spawnSpecs[0]?.argv).toEqual([
       process.execPath,
@@ -270,6 +274,25 @@ describe('real @openai/codex 0.153.4 product', () => {
     expect(recorded.headers.authorization).toBe('Bearer dsh-fake-openai-key')
     expect(recorded.body.model).toBe('fixture-model')
     expect(responseInputTexts(recorded.body)).toContain(task)
+    await expectQuiescent(harness.handles)
+  }, 60_000)
+
+  it.each(['careful', 'standard', 'own', 'unrestricted'] as const)('leaves the person\'s config.toml byte-identical at the %s level', async (level) => {
+    const sentinel = 'REAL_CODEX_LEVEL_SENTINEL'
+    const { harness } = await realHarness([{ kind: 'complete', text: sentinel }])
+    harness.ctx.provide('delegationConsent')
+    harness.ctx.set('delegationConsent', { review: () => Promise.resolve({ kind: 'allow' as const }), permissionLevel: () => level })
+    const configPath = join(harness.env.CODEX_HOME!, 'config.toml')
+    const configBefore = readFileSync(configPath)
+    const run = await startExternalActivation(harness.ctx, 'codex', {
+      prompt: [{ type: 'text', text: 'Return the fixture sentinel exactly.' }],
+      parent: harness.parent,
+      signal: new AbortController().signal,
+    })
+    await expect(run.result).resolves.toEqual({ output: [{ type: 'text', text: sentinel }], stopReason: 'completed' })
+    await run.dispose()
+    // A thread that starts writable or with full access makes Codex append a trusted-folder entry for the workspace.
+    expect(readFileSync(configPath).equals(configBefore)).toBe(true)
     await expectQuiescent(harness.handles)
   }, 60_000)
 
