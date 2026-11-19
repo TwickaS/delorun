@@ -103,12 +103,14 @@ export async function readBodyCapped(request: Request, cap: number): Promise<Uin
  * @param fetch - the route's own handler.
  * @param options - the route's row, grant action name, legacy unlock and optional hold.
  * @returns the `admitPeer` and `fetch` for `ConnectionFetchRoute`.
- * @throws {Error} when the row is not in `AUTH_CLASSES` or is a `computer` row, which no Fetch gate serves a device.
+ * @throws {Error} when the row is not in `AUTH_CLASSES`, is a `computer` row, which no Fetch gate serves a device, or asks for a `terminal` hold, which needs a per-chat scope the gate does not carry.
  */
 export function gateByClass(homeAuth: () => GrantGateHome | undefined, fetch: (request: Request) => Promise<Response>, options: GateOptions): ClassGate {
   const authClass = authClassOf(options.row)
   if (authClass === undefined) throw new Error(`home-auth: gateByClass names the row "${options.row}", which AUTH_CLASSES does not list`)
   if (authClass === 'computer' || authClass === 'ticket') throw new Error(`home-auth: the row "${options.row}" is a ${authClass} row; such a route registers no class gate`)
+  // A hold needs a scope the route does not carry yet; the Fetch gate pins holds to the global scope, which a terminal's per-chat holds must not share.
+  if (options.hold?.feature === 'terminal') throw new Error(`home-auth: the row "${options.row}" asks for a terminal hold, which gateByClass cannot scope to a chat yet`)
   const principals = new WeakMap<Request, ReachDevicePrincipal>()
   const legacy = gateByUnlock(homeAuth, fetch, { renews: options.legacy.renews, ...options.legacy.grace === undefined ? {} : { grace: options.legacy.grace }, ...options.legacy.phonePowers === undefined ? {} : { phonePowers: options.legacy.phonePowers } })
   const refuse = (message: string): Response => new Response(refusalBody('ELEVATION_REQUIRED', message), { status: 403, headers: REFUSAL_HEADERS })
@@ -127,7 +129,7 @@ export function gateByClass(homeAuth: () => GrantGateHome | undefined, fetch: (r
       if (home === undefined || grants === undefined) return legacy.fetch(request)
       // Until Phone powers is removed, a Full-only route stays refused under Careful before any grant is looked up, for every device.
       if (options.legacy.phonePowers === 'full' && home.phonePowers?.().level !== 'full') return legacy.fetch(request)
-      const holder = { deviceId: principal.deviceId, listener: principal.listener }
+      const holder = { deviceId: principal.deviceId, listener: principal.listener, unlockId: principal.unlockId }
       const passkey = home.deviceHasPasskey(principal.deviceId)
       const body = await readBodyCapped(request.clone(), GRANT_BODY_CAP_BYTES)
       if (body === undefined) return refuse('This request is too large to confirm. Make it smaller')

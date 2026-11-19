@@ -441,6 +441,9 @@ export class HomeAuthAuthenticator extends Authenticator {
     if (peer === undefined) {
       peer = this.ctx.connection.createPeer({ principal: reachDevicePrincipal(session.deviceId, served.listener, unlockId) })
       this.peers.set(key, peer)
+      // The holds a Peer's grants opened end with the Peer.
+      const holder = { deviceId: session.deviceId, listener: served.listener, unlockId }
+      peer.signal.addEventListener('abort', () => { this.ctx.homeAuth.faceGrants()?.endPeer(holder) }, { once: true })
       this.reachPeers.set(peer.id, { deviceId: session.deviceId, listener: served.listener, factor: session.factor, ...unlockId === undefined ? {} : { unlockId } })
     }
     const rolled = admission.rolled

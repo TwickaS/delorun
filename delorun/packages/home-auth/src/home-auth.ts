@@ -345,7 +345,7 @@ export class HomeAuth {
     })
     this.removalListeners.add((deviceId) => { void this.pinStore.forget(deviceId).catch(() => undefined) })
     this.passkeyStore = new PasskeyStore({ file: join(options.directory, PASSKEYS_FILE) })
-    this.grants = new GrantStore({ now: this.now, random: this.random })
+    this.grants = new GrantStore({ now: this.now, random: this.random, ...options.log === undefined ? {} : { log: options.log } })
     this.passkeys = new PasskeyAuth({
       store: this.passkeyStore,
       grants: this.grants,

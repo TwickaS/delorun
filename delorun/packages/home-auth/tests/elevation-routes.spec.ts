@@ -190,6 +190,15 @@ describe('the device list and removal for a signed-in device', () => {
       expect((await home.auth.devices()).devices.map(device => device.id)).toContain(other.id)
     })
 
+    // Removing the holder from the grant key lets a grant minted for another device's holder remove a device.
+    it('is refused with a grant minted for another device\'s holder, and the device stays', async () => {
+      home.flags.passkeys = true
+      const { other } = await setup()
+      home.auth.grants.mint({ deviceId: other.id, listener: LISTENER }, [{ action: DEVICE_REMOVE_ACTION, hash: hashArgs(body(other.id)) ?? '' }], 'passkey')
+      expect(await send('POST', `${DEVICE_REMOVE_PATH}?reach`, body(other.id))).toMatchObject({ status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
+      expect((await home.auth.devices()).devices.map(device => device.id)).toContain(other.id)
+    })
+
     // Removing the single use lets one confirmation remove a device twice or a replayed body again.
     it('is refused when the grant was used already', async () => {
       home.flags.passkeys = true
