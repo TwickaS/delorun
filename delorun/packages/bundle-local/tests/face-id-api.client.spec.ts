@@ -50,7 +50,7 @@ describe('httpPasskeyApi', () => {
     expect(await wrong.approveAdd({ requestId: 'r', code: '1' })).toEqual({ matched: false })
     const right = httpPasskeyApi(fakeHost({ [`POST ${PASSKEY_ROUTES.addApprove}`]: ok({ approved: true }) }).fetch)
     expect(await right.approveAdd({ requestId: 'r', code: '1' })).toEqual({ matched: true })
-    const down = httpPasskeyApi(fakeHost({ [`POST ${PASSKEY_ROUTES.addApprove}`]: 'unreachable' }).fetch)
+    const down = httpPasskeyApi(fakeHost({ [`POST ${PASSKEY_ROUTES.addApprove}`]: 'unreachable' as const }).fetch)
     await expect(down.approveAdd({ requestId: 'r', code: '1' })).rejects.toThrow()
   })
   it('sends the grant header on the device list and the removals, and marks this device', async () => {
