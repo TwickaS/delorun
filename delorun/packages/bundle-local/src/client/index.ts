@@ -84,6 +84,7 @@ import { en as pinEn, zh as pinZh, type PinLocaleKey } from './pin-locales.ts'
 import { en as faceIdEn, zh as faceIdZh, type FaceIdLocaleKey } from './face-id-locales.ts'
 import { PinLock } from './PinLock.tsx'
 import { FaceIdSection, type FaceIdSectionInjected } from './FaceIdSection.tsx'
+import { FaceIdPairingOverlay } from './FaceIdPairingOverlay.tsx'
 import { en as pinModeEn, zh as pinModeZh, type PinModeLocaleKey } from './pin-mode-locales.ts'
 import { PinModeSection, type PinModeSectionInjected } from './PinModeSection.tsx'
 import { attachPinTriggers } from './pin-triggers.ts'
@@ -231,6 +232,9 @@ export const FACE_ID_NS = 'delorunFaceId'
 
 /** The `settings.section` id of the Face ID section, which sits just after PIN mode. */
 export const FACE_ID_SECTION_ID = 'delorun-face-id'
+
+/** The `shell.overlay` id of the pairing step. */
+export const FACE_ID_OVERLAY_ID = 'delorun-face-id-pairing'
 
 /** Where the Face ID section sits among the settings sections. */
 export const FACE_ID_SECTION_ORDER = 21.6
@@ -566,6 +570,12 @@ export function apply(ctx: Context): void {
     locale: FACE_ID_NS,
     inject: faceIdFace,
   }, FaceIdSection))
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+    name: 'shell.overlay',
+    id: FACE_ID_OVERLAY_ID,
+    locale: FACE_ID_NS,
+    inject: () => ({ fetch: browserFetch, atComputer: faceIdFace().atComputer }),
+  }, FaceIdPairingOverlay))
   ctx.effect(() => ctx.locale.register(NETWORK_NS, { en: networkEn, zh: networkZh }), 'delorun-network: section dictionaries')
   const networkT = ctx.locale.bind(NETWORK_NS)
   const networkFace = (): NetworkSectionInjected => ({ fetch: browserFetch })

@@ -38,7 +38,7 @@ export type FaceIdSectionProps = PropsRuntime<'settings.section'> & PropsLocale<
  * @param fetch - the request function.
  * @returns true only when the home declares the flag and its profile turns it on.
  */
-async function flagIsOn(fetch: HostFetch): Promise<boolean> {
+export async function flagIsOn(fetch: HostFetch): Promise<boolean> {
   try {
     const { flags } = await call<{ flags: { id: string; on: boolean }[] }>(fetch, PREVIEW_FLAGS_ROUTE, fields({ flags: listOf(fields({ id: isString, on: isBoolean })) }))
     return flags.some(flag => flag.id === PASSKEY_FLAG && flag.on)
