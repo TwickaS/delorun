@@ -219,10 +219,10 @@ export function passkeyRemoveHandler(auth: HomeAuth): RouteHandler {
     if (typeof credentialId !== 'string' || (deviceId !== undefined && typeof deviceId !== 'string') || Object.keys(rest).length > 0) {
       throw new HomeAuthError('BAD_REQUEST', 'a removal names the passkey and, for another device, its device id')
     }
-    const owner = deviceId ?? device.session.deviceId
-    if (auth.passkeyStore.find(credentialId)?.deviceId !== owner) throw new HomeAuthError('BAD_REQUEST', 'that device has no such passkey')
+    const record = auth.passkeyStore.find(credentialId)
+    if (record === undefined || record.deviceId !== (deviceId ?? device.session.deviceId)) throw new HomeAuthError('BAD_REQUEST', 'that device has no such passkey')
     useGrant(auth, device, PASSKEY_REMOVE_ACTION, message, 'Confirm with Face ID or your PIN to remove this passkey')
-    return { removed: await auth.passkeys.remove(owner, credentialId) }
+    return { removed: await auth.passkeys.remove(record.deviceId, credentialId) }
   })
 }
 
