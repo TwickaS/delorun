@@ -40,7 +40,7 @@ export function runObservation(info: SDKRateLimitInfo): AccountObservation {
 type UsageWindow = { readonly utilization: number | null; readonly resets_at: string | null }
 
 function isUsageWindow(value: unknown): value is UsageWindow {
-  return typeof value === 'object' && value !== null && 'utilization' in value && 'resets_at' in value
+  return typeof value === 'object' && value !== null && 'utilization' in value && 'resets_at' in value // us-spelling: quoted output (Claude usage API field)
 }
 
 /**
