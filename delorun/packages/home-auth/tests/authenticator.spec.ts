@@ -299,6 +299,26 @@ describe('the authenticator provider', () => {
     expect(() => { answer('chat-a', 'full-access', 'allowed-once') }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
   })
 
+  // A live agent's seat card on a phone sends its granting answer only after minting this grant; without the check a phone
+  // would allow a program's question, or turn an Allow once into Allow for this run, with no confirmation (F36 addendum).
+  it('refuses a seat\'s external-agent answer from a device with no grant, and admits one grant for exactly its value, once', async () => {
+    ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
+    const admitted = provider().admit(request({ headers: { cookie: `__Host-delorun-session=${await session(2)}` } }), 'reach-tailscale-private')
+    if (admitted.kind !== 'admitted') throw new Error('not admitted')
+    const holder = { deviceId: recordOf(2, ADDRESS).id, listener: 'reach-tailscale-private' } as const
+    const grants = ctx.homeAuth.faceGrants()
+    if (grants === undefined) throw new Error('no grant store')
+    const answer = (value: string): void => {
+      provider().checkAnswer({ peer: admitted.peer, event: 'approval/request', request: { agent: { id: 'seat-child' }, callId: 'call_7', grants: 'external-agent' }, value })
+    }
+    expect(() => { answer('allowed-once') }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED', details: { action: 'external-agent' } }))
+    grants.mintAnswer(holder, answerKey({ agent: 'seat-child', callId: 'call_7', grants: 'external-agent' }), 'allowed-once')
+    expect(() => { answer('allowed-for-run') }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
+    expect(() => { answer('allowed-once') }).not.toThrow()
+    expect(() => { answer('allowed-once') }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
+    expect(() => { answer('rejected') }).not.toThrow()
+  })
+
   it('lets an unlocked device give full-access, workspace-management and external-agent grants while dangerous mode holds, and no other device', async () => {
     ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
     const admitted = provider().admit(request({ headers: { cookie: `__Host-delorun-session=${await session(2)}` } }), 'reach-tailscale-private')

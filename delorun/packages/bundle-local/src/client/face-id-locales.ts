@@ -157,6 +157,8 @@ export const en = {
   'do.profileSave.body': 'Delorun keeps a copy of how it is set up now.',
   'do.profileSwitch.title': 'Switch to a saved setup',
   'do.profileSwitch.body': 'Delorun changes to how it was set up then, and may restart.',
+  'do.seatAnswer.title': 'Allow the live agent\'s request',
+  'do.seatAnswer.body': 'Claude Code or Codex goes ahead on your computer with what its question asks.',
   'do.generic.title': 'Confirm this action',
   'do.generic.body': 'Delorun asks you to confirm this on this device.',
   'devices.failed': 'The device list could not be read or changed. Try again.',
@@ -176,7 +178,7 @@ export const en = {
 export const CHANGE_CONTROLS = ['plugin-undo', 'plugin-discard', 'harness-discard', 'plugin-apply', 'plugin-other', 'harness-apply', 'harness-undo', 'protection-off', 'make-copy', 'restart', 'update-begin', 'update-rollback', 'stop'] as const
 
 /** The confirmations of other sensitive actions that have their own words: `do.<id>.title` and `do.<id>.body`. */
-export type FaceActionCopy = 'installPlugin' | 'updatePlugin' | 'removePlugin' | 'switchPlugin' | 'changePlugins' | 'openTerminal' | 'browseFolders' | 'newFolder' | 'changeSettings' | 'saveKey' | 'removeKey' | 'addWorkspace' | 'workspaceDefaults' | 'chatOutside' | 'runCommand' | 'mcpServer' | 'pluginCode' | 'fullAccessOn' | 'fullAccessOff' | 'network' | 'mcpAccept' | 'externalAgent' | 'deleteForever' | 'awayBrowser' | 'reportDetails' | 'profileSave' | 'profileSwitch' | 'generic'
+export type FaceActionCopy = 'installPlugin' | 'updatePlugin' | 'removePlugin' | 'switchPlugin' | 'changePlugins' | 'openTerminal' | 'browseFolders' | 'newFolder' | 'changeSettings' | 'saveKey' | 'removeKey' | 'addWorkspace' | 'workspaceDefaults' | 'chatOutside' | 'runCommand' | 'mcpServer' | 'pluginCode' | 'fullAccessOn' | 'fullAccessOff' | 'network' | 'mcpAccept' | 'externalAgent' | 'deleteForever' | 'awayBrowser' | 'reportDetails' | 'profileSave' | 'profileSwitch' | 'seatAnswer' | 'generic'
 
 /**
  * The words of each grant action, by the action's name: a Remote method or a Fetch route's action. An action this map
@@ -184,6 +186,7 @@ export type FaceActionCopy = 'installPlugin' | 'updatePlugin' | 'removePlugin' |
  */
 export const ACTION_COPY: Readonly<Record<string, FaceActionCopy>> = {
   'pluginManager/installBundle': 'installPlugin',
+  'plugin-agent-seats/answer': 'seatAnswer',
   'pluginManager/updateBundle': 'updatePlugin',
   'pluginManager/removeBundle': 'removePlugin',
   'pluginManager/setBundleEnabled': 'switchPlugin',

@@ -45,7 +45,7 @@ function wordsOf(t: PropsLocale<'delorunFaceId'>['t'], request: FaceGrantRequest
     const known = CHANGE_CONTROLS.find(entry => entry === request.action.slice('changes/'.length))
     return known === undefined ? { title: t('change.generic.title'), body: t('change.generic.body') } : { title: t(`change.${known}.title`), body: t(`change.${known}.body`) }
   }
-  const body = 'args' in request.call ? request.call.args : jsonOf(request.call.body)
+  const body = 'args' in request.call ? request.call.args : 'answer' in request.call ? {} : jsonOf(request.call.body)
   let copy: FaceActionCopy = ACTION_COPY[request.action] ?? ACTION_COPY[`${request.action.slice(0, request.action.indexOf('/'))}/*`] ?? 'generic'
   if (copy === 'fullAccessOn' && Reflect.get(body, 'on') === false) copy = 'fullAccessOff'
   const values: Record<string, string> = {}
@@ -89,6 +89,8 @@ function lastSegment(path: string): string {
  * @returns the action, with the grant hashed from the call.
  */
 export async function callActionOf(t: PropsLocale<'delorunFaceId'>['t'], request: FaceGrantRequest): Promise<FaceIdAction> {
+  // An answer grant is bound to its prompt and value, which the home compares itself; it has no hash.
+  if ('answer' in request.call) return { ...wordsOf(t, request), grant: { answer: request.call.answer } }
   const hash = 'args' in request.call ? await hashArgs(request.call.args) : await hashRequest(request.call)
   return { ...wordsOf(t, request), grant: { actions: [{ action: request.action, hash, ...request.hold === undefined ? {} : { hold: request.hold } }] } }
 }

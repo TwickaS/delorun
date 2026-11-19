@@ -83,7 +83,15 @@ export function SeatApproval({ matched, t, reach, clock }: SeatApprovalProps) {
   const send = (decision: ApprovalDecision): void => {
     if (sent || !matched.answerable) return
     setSent(true)
-    void matched.answer(decision).catch(() => { setSent(false) })
+    const confirm = decision === 'rejected' ? undefined : reach?.confirm
+    if (confirm === undefined) {
+      void matched.answer(decision).catch(() => { setSent(false) })
+      return
+    }
+    // A cancelled confirmation sends nothing and leaves the card answerable.
+    void confirm({ sessionId: matched.sessionId, callId: matched.callId, grants: matched.grants ?? 'external-agent', value: decision })
+      .then(ok => ok ? matched.answer(decision) : setSent(false))
+      .catch(() => { setSent(false) })
   }
   const canGrant = standing.kind !== 'locked-phone'
   // Only a request that declared a run scope has a Host listener that can honour the answer.

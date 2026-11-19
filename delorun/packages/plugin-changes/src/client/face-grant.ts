@@ -25,6 +25,20 @@ export interface RemoteGrantCall {
   readonly args: Readonly<Record<string, unknown>>
 }
 
+/** An approval answer a grant covers: the prompt's chat, call and grants marker, and the value the answer sends. */
+export interface AnswerGrantCall {
+  readonly answer: {
+    /** The chat whose approval prompt is answered. */
+    readonly agent: string
+    /** The prompt's call id. */
+    readonly callId: string
+    /** The prompt's grants marker, such as `external-agent`. */
+    readonly grants: string
+    /** The answer's value, such as `allowed-once`. */
+    readonly value: string
+  }
+}
+
 /**
  * The path and query the home receives for a route the page fetches relative to its document, which is what the grant's
  * hash covers: `path.slice(1)` resolved against the document's base URL, so a path prefix of the studio is included.
@@ -49,8 +63,8 @@ export interface FaceGrantRequest {
    * (`plugin-packs/add`) or a Changes control (`changes/plugin-apply`). The sheet's words are looked up by it.
    */
   readonly action: string
-  /** The call the grant is hashed from. */
-  readonly call: FaceGrantCall | RemoteGrantCall
+  /** The call the grant is hashed from, or the approval answer it is bound to. */
+  readonly call: FaceGrantCall | RemoteGrantCall | AnswerGrantCall
   /** The hold the grant opens, for `terminal/create`, `terminal/attach` and `directoryPicker/list`. */
   readonly hold?: FaceGrantHold | undefined
   /** The call's cancellation: a confirmation whose call is cancelled closes as cancelled, or never shows. */

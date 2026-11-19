@@ -22,6 +22,7 @@ import type { PinView } from '../src/client/pin-lock.ts'
 import { fakeHost } from './fake-host.ts'
 import { Context } from '@deepseek-ai/cordis'
 import { applyFaceGrant, registerReportSlots } from '../src/client/index.ts'
+import { provideAgentSeatReach } from '../src/client/agent-seat-reach.ts'
 import { loadReportDetails } from '../src/client/report-api.ts'
 import type { HostFetch } from '../src/client/host-api.ts'
 import { setNetwork } from '../src/client/network-api.ts'
@@ -67,6 +68,54 @@ async function answer(source: FaceGrantSource, api: PasskeyApi & { readonly call
   cleanup()
   return { sent, title }
 }
+
+// A phone whose seat card sent a granting answer with no grant would be refused by the home; Allow must mint the answer grant first (F36 addendum).
+describe('a live agent\'s granting answer on a device', () => {
+  const ANSWER = { sessionId: 'child-1', callId: 'call_7', grants: 'external-agent', value: 'allowed-once' }
+  const SENT = { answer: { agent: 'child-1', callId: 'call_7', grants: 'external-agent', value: 'allowed-once' } }
+  const reachOn = (place: 'computer' | 'device' | 'none', grant: ReturnType<typeof oneAtATime>) => {
+    const ctx = new Context()
+    provideAgentSeatReach(ctx, place, grant)
+    return ctx.get('agentSeatReach')
+  }
+
+  it('shows the granting answers on a device with a passkey, and Allow mints the answer grant with Face ID', async () => {
+    const { source, grant, api } = world()
+    const reach = reachOn('device', grant)
+    expect(reach?.get().kind).not.toBe('locked-phone')
+    const confirming = reach!.confirm(ANSWER)
+    const { sent, title } = await answer(source, api, 'faceId')
+    expect(title).toContain('Allow the live agent')
+    expect(sent).toEqual(SENT)
+    await expect(confirming).resolves.toBe(true)
+  })
+
+  it('opens straight on the PIN keypad on a device with no passkey, and mints the same answer grant', async () => {
+    const { source, grant, api } = world({ passkey: false })
+    const reach = reachOn('device', grant)
+    expect(reach?.get().kind).not.toBe('locked-phone')
+    const confirming = reach!.confirm(ANSWER)
+    const { sent } = await answer(source, api, 'pin')
+    expect(sent).toEqual({ ...SENT, secret: 'correct horse' })
+    await expect(confirming).resolves.toBe(true)
+  })
+
+  it('sends nothing when the sheet is cancelled', async () => {
+    const { source, grant, api } = world()
+    const confirming = reachOn('device', grant)!.confirm(ANSWER)
+    expect((await answer(source, api, 'cancel')).sent).toBeUndefined()
+    await expect(confirming).resolves.toBe(false)
+  })
+
+  it('never asks on the computer, and gives a page that is neither the computer nor an approved device no reach', async () => {
+    const { source, grant } = world()
+    const computer = reachOn('computer', grant)
+    expect(computer?.get()).toEqual({ kind: 'computer' })
+    await expect(computer!.confirm(ANSWER)).resolves.toBe(true)
+    expect(source.hooks.pending.getSnapshot()).toBeNull()
+    expect(reachOn('none', grant)).toBeUndefined()
+  })
+})
 
 const refusal = (action?: string): Response => Response.json({ error: 'ELEVATION_REQUIRED', message: 'Confirm with Face ID or your PIN first', ...action === undefined ? {} : { action } }, { status: 403 })
 

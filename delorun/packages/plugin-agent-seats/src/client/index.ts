@@ -34,7 +34,7 @@ export { agentOfTool, ALLOWED_FOR_RUN, allowedForRunDecision, SeatApproval, sele
 export { recordInput, SeatToolRow, type SeatToolRowProps } from './ToolRow.tsx'
 export { isRecordName, RECORD_PREFIXES, RECORD_TOOL_NAMES, toolCard, type ToolCard, type ToolRecordInput } from './tool-model.ts'
 export { AGENT_NAMES, loginCommand, type AgentSeatView, type SeatAgent, type SeatModelPicker, type SeatState } from './view.ts'
-export type { SeatClient, SeatReach, SeatReachService, SeatReachSource } from './actions.ts'
+export type { SeatAnswerRequest, SeatClient, SeatReach, SeatReachService, SeatReachSource } from './actions.ts'
 export { createSeatClient, SEAT_ROUTES, type SeatFetch } from './host-routes.ts'
 
 /** The Loader row name. */

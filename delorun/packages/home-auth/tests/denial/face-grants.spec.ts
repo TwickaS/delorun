@@ -491,10 +491,10 @@ describe('the Fetch gate for a device with no passkey (A483)', () => {
       const ran: Request[] = []
       const home: GrantGateHome = {
         faceGrants: () => grants, deviceHasPasskey: () => false,
-        arrivalOf: () => ({ listener: LISTENER, host: 'h.ts.net', source: 'test' }), dangerousMode: () => false, elevationOf: () => unlock, pageUnlockOf: () => unlock, unlockModeEnabled: () => true,
+        arrivalOf: () => ({ listener: LISTENER, host: 'h.example.ts.net', source: 'test' }), dangerousMode: () => false, elevationOf: () => unlock, pageUnlockOf: () => unlock, unlockModeEnabled: () => true,
       }
       const gate = gateByClass(() => home, (request) => { ran.push(request); return Promise.resolve(new Response('ok')) }, { row, action, legacy: { renews: true, ...grace === undefined ? {} : { grace } } })
-      const path = 'https://h.ts.net/api/delorun/x'
+      const path = 'https://h.example.ts.net/api/delorun/x'
       const open = new Request(path, { method: 'POST', body: '{}' })
       expect(gate.admitPeer(open, peer)).toBe(true)
       expect((await gate.fetch(open)).status).toBe(403)
