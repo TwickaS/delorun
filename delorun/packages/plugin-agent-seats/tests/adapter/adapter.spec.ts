@@ -249,6 +249,42 @@ describe('Stop', () => {
     expect(finishOf(await next)).toEqual({ kind: 'stop' })
   })
 
+  it('opens the program\'s own session again, and sends the next text once, when Stop left the program closed', async () => {
+    const w = world()
+    const first = user('task')
+    const controller = new AbortController()
+    const running = collect(w.adapter.stream(request([first], { signal: controller.signal })))
+    await tick()
+    const stopped = w.gate.latest
+    controller.abort(new Error('stopped'))
+    await expect(running).rejects.toThrow('stopped')
+    stopped.next = () => Promise.reject(new Error('This session is closed.'))
+    const second = user('again')
+    const next = collect(w.adapter.stream(request([first, second])))
+    await tick()
+    expect(stopped.closed).toBe(true)
+    expect(w.gate.starts.at(-1)).toMatchObject({ resume: stopped.programSessionId })
+    expect(w.gate.latest).not.toBe(stopped)
+    expect(w.gate.latest.sent).toEqual([{ text: 'again', mode: 'start' }])
+    expect(stopped.sent.map(sent => sent.text)).toEqual(['task'])
+    w.gate.latest.emit({ kind: 'turn-end', outcome: 'completed' })
+    expect(finishOf(await next)).toEqual({ kind: 'stop' })
+  })
+
+  it('does not hide a closed program when the next request was aborted itself', async () => {
+    const w = world()
+    const first = user('task')
+    const controller = new AbortController()
+    const running = collect(w.adapter.stream(request([first], { signal: controller.signal })))
+    await tick()
+    controller.abort(new Error('stopped'))
+    await expect(running).rejects.toThrow('stopped')
+    w.gate.latest.next = () => Promise.reject(new Error('closed'))
+    const again = new AbortController()
+    again.abort(new Error('stopped again'))
+    await expect(collect(w.adapter.stream(request([first, user('x')], { signal: again.signal })))).rejects.toThrow('closed')
+  })
+
   it('resumes the program\'s own session on the next message when Stop had to close its process', async () => {
     const w = world()
     const first = user('task')

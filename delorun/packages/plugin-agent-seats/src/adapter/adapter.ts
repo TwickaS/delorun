@@ -222,7 +222,18 @@ export class SeatAdapter extends LlmAdapter {
       this.runs.delete(child)
       run = undefined
     }
-    if (run?.interrupted === true) await run.settleStop(signal)
+    if (run?.interrupted === true) {
+      try {
+        await run.settleStop(signal)
+      } catch (error: unknown) {
+        if (signal.aborted) throw error
+        // Stop ended the program with its turn (the start's signal closes it), so no turn end will arrive: the seat opens
+        // the program's own session again below, as for a program that went quiet.
+        this.runs.delete(child)
+        await run.program.close()
+        run = undefined
+      }
+    }
     const state = run === undefined ? await this.options.states.read(child) : undefined
     const { host } = this.options
     const input = newInput(options.messages, {
