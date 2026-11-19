@@ -105,5 +105,6 @@ export function mayOf(state: ChangesStateView, control: ChangesControl): MayView
 export function controlUse(state: ChangesStateView, control: ChangesControl, t: T): ControlUse {
   const may = mayOf(state, control)
   if (may.ok) return { disabled: false, title: undefined }
-  return may.needs === 'computer' ? { disabled: true, title: t('access.needsComputer') } : { disabled: false, title: t('access.needsUnlock') }
+  if (may.needs === 'computer') return { disabled: true, title: t('access.needsComputer') }
+  return { disabled: false, title: t(may.needs === 'face' ? 'access.needsFace' : 'access.needsUnlock') }
 }

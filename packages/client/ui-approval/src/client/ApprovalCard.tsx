@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { Button, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { FactoryComponentPropsOf } from '@deepseek-ai/dsh-client-ui-slots'
-import type {} from './contract/slots.ts'
+import type { ApprovalAllowGate } from './contract/slots.ts'
 import css from './ApprovalPanel.module.css'
 import { ApprovalWarning } from './ApprovalWarning.tsx'
 
@@ -23,6 +23,8 @@ function ApprovalFlow(props: FactoryComponentPropsOf<'conversation.approval.card
   const [answered, setAnswered] = useState(false)
   const [offered, setOffered] = useState(false)
   const waiting = useRef(false)
+  const gate = useRef<ApprovalAllowGate | null>(null)
+  const setGate = useCallback((next: ApprovalAllowGate | null): void => { gate.current = next }, [])
   const active = useRef(true)
   const composing = useRef(false)
   const compositionEnded = useRef(false)
@@ -43,6 +45,17 @@ function ApprovalFlow(props: FactoryComponentPropsOf<'conversation.approval.card
     })
     return sent
   }
+  // A cancelled gate sends nothing and re-opens the card; a failed one rejects, which `answer` already handles.
+  const allowAnswered = async (): Promise<void> => {
+    if (gate.current !== null && !(await gate.current())) {
+      if (active.current && canAnswer()) {
+        waiting.current = false
+        setAnswered(false)
+      }
+      return
+    }
+    await onAllow()
+  }
   const keydown = (event: KeyboardEvent<HTMLDivElement>): void => {
     const element = event.target as Element
     if (event.defaultPrevented || !event.currentTarget.contains(document.activeElement)
@@ -54,14 +67,14 @@ function ApprovalFlow(props: FactoryComponentPropsOf<'conversation.approval.card
     event.stopPropagation()
     // oxlint-disable-next-line typescript/no-deprecated -- IME 229 covers engines without isComposing.
     if (event.repeat || composing.current || compositionEnded.current || event.nativeEvent.isComposing || event.keyCode === 229) return
-    void answer(event.key === 'Enter' ? onAllow : onReject)
+    void answer(event.key === 'Enter' ? allowAnswered : onReject)
   }
   const grantActions = grants === undefined ? null : props.renderSlot('conversation.approval.action', {
-    grants, toolName: props.toolName, callId: props.callId, allow: () => answer(onAllow),
-    answered, canAnswer: () => !waiting.current && canAnswer(),
+    grants, toolName: props.toolName, callId: props.callId, allow: () => answer(allowAnswered),
+    answered, canAnswer: () => !waiting.current && canAnswer(), gateAllow: setGate,
   })
   const choices = escalatesTo === undefined ? null : props.renderSlot('conversation.approval.choice', {
-    escalatesTo, toolName: props.toolName, callId: props.callId, allow: () => answer(onAllow),
+    escalatesTo, toolName: props.toolName, callId: props.callId, allow: () => answer(allowAnswered),
     answered, canAnswer: () => !waiting.current && canAnswer(),
     offer,
   })
@@ -96,7 +109,7 @@ function ApprovalFlow(props: FactoryComponentPropsOf<'conversation.approval.card
           <Button variant="outline" className={css.reject} disabled={answered} onClick={() => { void answer(onReject) }}>
             {t('reject')}
           </Button>
-          <Button variant={onAlways === undefined && !offered ? 'primary' : 'outline'} disabled={answered} onClick={() => { void answer(onAllow) }}>
+          <Button variant={onAlways === undefined && !offered ? 'primary' : 'outline'} disabled={answered} onClick={() => { void answer(allowAnswered) }}>
             {allowLabel ?? t('allowOnce')}
           </Button>
           {onAlways !== undefined && <Button variant="primary" disabled={answered} onClick={() => { void answer(onAlways) }}>

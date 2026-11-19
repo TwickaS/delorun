@@ -200,9 +200,11 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
       },
     ],
     ownerProps: [
-      '/** Request facts and the card\'s answer handed to an inline grant action. */\nexport interface ApprovalActionOwnerProps {\n  /** Grant the request asks for. */\n  grants: ApprovalGrant\n  /** Tool requesting the decision, when the caller supplied it. */\n  toolName: string | undefined\n  /** Tool call correlated with the request, when supplied. */\n  callId: ToolCallId | undefined\n  /**\n   * Answer the card as its Allow button does, through the same one-shot guard.\n   * Resolves after the answer is sent, or at once without answering when the card already answered or no longer\n   * accepts an answer; rejects with the send failure, after which the card accepts an answer again.\n   */\n  allow: () => Promise<void>\n  /** Whether the card is sending or has sent an answer, as of this render; an action renders disabled while true. */\n  answered: boolean\n  /**\n   * Whether the card accepts an answer now: false while it sends or after it sent one, and once its caller no longer\n   * accepts one. An action with effects of its own reads it before each effect, because it can change across an await.\n   */\n  canAnswer: () => boolean\n}',
+      '/** Request facts and the card\'s answer handed to an inline grant action. */\nexport interface ApprovalActionOwnerProps {\n  /** Grant the request asks for. */\n  grants: ApprovalGrant\n  /** Tool requesting the decision, when the caller supplied it. */\n  toolName: string | undefined\n  /** Tool call correlated with the request, when supplied. */\n  callId: ToolCallId | undefined\n  /**\n   * Answer the card as its Allow button does, through the same one-shot guard.\n   * Resolves after the answer is sent, or at once without answering when the card already answered or no longer\n   * accepts an answer; rejects with the send failure, after which the card accepts an answer again.\n   */\n  allow: () => Promise<void>\n  /** Whether the card is sending or has sent an answer, as of this render; an action renders disabled while true. */\n  answered: boolean\n  /**\n   * Whether the card accepts an answer now: false while it sends or after it sent one, and once its caller no longer\n   * accepts one. An action with effects of its own reads it before each effect, because it can change across an await.\n   */\n  canAnswer: () => boolean\n  /**\n   * Set the gate every allow answer of this card passes before it  /* …truncated — full shape in source */',
     ],
-    ownerPropsReferences: [],
+    ownerPropsReferences: [
+      'ApprovalAllowGate',
+    ],
     standardProps: [
       'useRemoteAccess: (action: RemoteEndpoint) => boolean',
       'useResource: UseResource',

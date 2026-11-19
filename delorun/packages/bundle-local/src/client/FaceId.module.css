@@ -1,0 +1,317 @@
+/* The Face ID screens. The sheet is a bottom sheet on a phone and a centred 480px dialog from 480px; the main control fills the width and is at least 56px tall; motion stops under prefers-reduced-motion. */
+
+.scrim {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-1) 55%, transparent);
+  backdrop-filter: blur(2px);
+  overscroll-behavior: contain;
+}
+
+@media (min-width: 480px) {
+  .scrim {
+    align-items: center;
+  }
+}
+
+.sheet {
+  box-sizing: border-box;
+  display: flex;
+  width: 100%;
+  min-height: 100dvh;
+  flex-direction: column;
+  gap: 12px;
+  padding: calc(env(safe-area-inset-top, 0px) + 24px) 16px calc(env(safe-area-inset-bottom, 0px) + 16px);
+  overflow-y: auto;
+  background: var(--dsw-alias-bg-layer-2, var(--dsw-alias-bg-layer-1));
+  color: var(--dsw-alias-label-primary);
+  animation: rise 200ms ease-out;
+}
+
+@media (min-width: 480px) {
+  .sheet {
+    width: 480px;
+    min-height: 0;
+    max-height: 90dvh;
+    border: 0.5px solid var(--dsw-alias-border-l2);
+    padding: 28px;
+    border-radius: var(--dsw-radius-lg);
+  }
+}
+
+@keyframes rise {
+  from { transform: translateY(24px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet { animation: none; }
+}
+
+.title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 28px;
+}
+
+.body {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 15px;
+  line-height: 22px;
+  overflow-wrap: anywhere;
+}
+
+.items {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 14px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.status {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 15px;
+  line-height: 22px;
+}
+
+/* The glyph takes the free height on a phone, so the screen has no empty band; the dialog and card on a wide screen drop it. */
+.glyph {
+  display: flex;
+  min-height: 96px;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  color: var(--dsw-alias-state-business-primary);
+}
+
+@media (min-width: 480px) {
+  .glyph { display: none; }
+}
+
+.confirm {
+  width: 100%;
+  min-height: 88px;
+  flex: 0 0 auto;
+  font-size: 18px;
+}
+
+@media (min-width: 480px) {
+  .confirm { min-height: 64px; }
+}
+
+.link {
+  min-height: 44px;
+  padding: 0 8px;
+  border: 0;
+  background: none;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 16px;
+  text-align: center;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.link:focus-visible {
+  outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-alias-state-business-primary);
+  outline-offset: 1px;
+}
+
+/* Pairing step and Add Face ID: one large card, filling the screen on a phone. */
+.page {
+  box-sizing: border-box;
+  display: flex;
+  width: 100%;
+  min-height: 100dvh;
+  flex-direction: column;
+  gap: 12px;
+  padding: calc(env(safe-area-inset-top, 0px) + 20px) 16px calc(env(safe-area-inset-bottom, 0px) + 16px);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+}
+
+@media (min-width: 480px) {
+  .page {
+    min-height: 0;
+    max-width: 34rem;
+    margin: 48px auto;
+    padding: 28px;
+    border: 0.5px solid var(--dsw-alias-border-l2);
+    border-radius: var(--dsw-radius-lg);
+  }
+}
+
+.digits {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  font-family: var(--dl-font-mono);
+  font-size: clamp(36px, 11vw, 56px);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.field {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 56px;
+  padding: 0 12px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 20px;
+  letter-spacing: 0.12em;
+  text-align: center;
+}
+
+.field:focus-visible {
+  border-color: var(--dsw-alias-state-business-primary);
+  outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-alias-state-business-primary);
+  outline-offset: 1px;
+}
+
+.warn {
+  margin: 0;
+  padding: 12px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-2, var(--dsw-alias-bg-layer-1));
+  color: var(--dsw-alias-label-secondary);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+/* Settings → Devices: one card per device on a phone, two columns on desktop. */
+[data-face-id-devices] {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.devices {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  width: 100%;
+}
+
+@media (min-width: 900px) {
+  .devices { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.card {
+  box-sizing: border-box;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-layer-2, var(--dsw-alias-bg-layer-1));
+  color: var(--dsw-alias-label-primary);
+}
+
+.cardTitle {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.tag {
+  color: var(--dsw-alias-brand-primary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.meta {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.passkey {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 8px;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.passkey .action {
+  margin-top: 6px;
+}
+
+/* The computer's code entry is one card, as wide as the pairing page rather than the whole settings pane. */
+[data-face-id-code-entry] {
+  width: 100%;
+  max-width: 34rem;
+}
+
+.action {
+  width: 100%;
+  min-height: 48px;
+  font-size: 16px;
+}
+
+.failed {
+  margin: 0;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.choices > * {
+  flex: 1 1 0;
+  min-height: 44px;
+}
+
+.cover {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  overflow-y: auto;
+  background: var(--dsw-alias-bg-layer-0);
+}
