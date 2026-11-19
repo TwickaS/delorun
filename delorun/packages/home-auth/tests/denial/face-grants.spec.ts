@@ -234,6 +234,41 @@ describe('a page unlock made before enrolment (P3-1)', () => {
   })
 })
 
+describe('a model key on a phone with no passkey inside a PIN page window (r2 P1-1)', () => {
+  const KEY = { ref: 'DEEPSEEK_API_KEY', value: 'sk-other' } as const
+  function pinPage(): { grants: GrantStore; decide: (action: string, args: Record<string, unknown>) => { kind: string; reason?: string } } {
+    const grants = new GrantStore({ now: () => 5_000_000, random: size => new Uint8Array(size).fill(9) })
+    const facts: ReachAccessFacts = {
+      admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere',
+      elevationOf: () => undefined, pageUnlockOf: id => (id === 'page-1' ? { id: 'unlock-1' } : undefined), unlockModeEnabled: () => true,
+      keyRefs: () => new Set(['DEEPSEEK_API_KEY']), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
+      computerOnlySwitches: () => [], protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set(), defaultPermission: () => undefined,
+      dangerousMode: () => false,
+      faceGrants: () => ({ grants, deviceHasPasskey: () => false }),
+    }
+    const condition = createCondition(facts, reachDevicePrincipal('device-1', LISTENER, 'page-1'))
+    return { grants, decide: (action, args) => condition({ action: action as RemoteAccessAction, resource: GLOBAL as never, args }) }
+  }
+
+  // Skipping the grant while the page is PIN-unlocked lets that window replace or remove the model key with no PIN typed.
+  it('refuses saving and removing a key without a grant', () => {
+    const { decide } = pinPage()
+    expect(decide('credentials/set', KEY)).toEqual({ kind: 'deny', reason: 'elevation-required: credentials/set' })
+    expect(decide('credentials/unset', { ref: 'DEEPSEEK_API_KEY' })).toEqual({ kind: 'deny', reason: 'elevation-required: credentials/unset' })
+    // Presence stays free.
+    expect(decide('credentials/describe', { refs: ['DEEPSEEK_API_KEY'] }).kind).toBe('allow')
+  })
+
+  // Removing the consume makes one PIN grant save the key again and again.
+  it('admits one save with a PIN grant for exactly that call, once', () => {
+    const { grants, decide } = pinPage()
+    grants.mint({ ...HOLDER, unlockId: 'page-1' }, [{ action: 'credentials/set', hash: hashArgs(KEY) ?? '' }], 'pin')
+    expect(decide('credentials/set', { ...KEY, value: 'sk-third' }).kind).toBe('deny')
+    expect(decide('credentials/set', KEY).kind).toBe('allow')
+    expect(decide('credentials/set', KEY).kind).toBe('deny')
+  })
+})
+
 describe('answer grants (P2-3)', () => {
   const key = (agent: string, callId: string, marker: string): string => answerKey({ agent, callId, grants: marker })
   // Removing the agent or the marker from the key lets a grant for one prompt answer another that shares its call id.
@@ -357,11 +392,29 @@ describe('the Fetch gate for a face route', () => {
   })
 
   // Removing the size cap lets an unbounded body be read to hash it.
-  it('refuses a body over the cap', async () => {
+  it('refuses a body over the cap, naming no action, since no grant covers it', async () => {
     const { gate } = gateWorld()
     const request = call('x'.repeat(1024 * 1024 + 1))
     gate.admitPeer(request, peer)
-    expect((await gate.fetch(request)).status).toBe(403)
+    const reply = await gate.fetch(request)
+    expect(reply.status).toBe(403)
+    expect(await reply.json()).not.toHaveProperty('action')
+  })
+
+  it('names the grant action in a refusal, and nothing secret', async () => {
+    for (const passkey of [true, false]) {
+      const { grants, gate } = gateWorld({ passkey })
+      const id = grantFor(grants, '{"pack":"a"}')
+      const request = call('{"pack":"b"}', { [GRANT_HEADER]: id })
+      gate.admitPeer(request, peer)
+      const reply = await gate.fetch(request)
+      expect(reply.status).toBe(403)
+      const body = await reply.json() as Record<string, unknown>
+      expect(Object.keys(body).sort()).toEqual(['action', 'error', 'message'])
+      expect(body.error).toBe('ELEVATION_REQUIRED')
+      expect(body.action).toBe(ACTION)
+      expect(JSON.stringify(body)).not.toContain(id)
+    }
   })
 
   // A row the table does not list, or a computer row, fails at registration.

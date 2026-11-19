@@ -59,6 +59,11 @@ describe('Changes: face controls', () => {
         expect(json(reply).code, `${unlock} ${path}`).toBe('ELEVATION_REQUIRED')
       }
     }
+    for (const { control, path } of FACE_ROUTES) {
+      // The refusal names the grant's action and nothing secret, so the client knows what to confirm.
+      expect(Object.keys(json(await send(server.port, path, fromDevice('none', {})))).sort(), path).toEqual(['action', 'code', 'message'])
+      expect(json(await send(server.port, path, fromDevice('none', {}))).action, path).toBe(`changes/${control}`)
+    }
     for (const path of Object.values(SETUP_PATHS)) {
       expect(json(await send(server.port, path, fromDevice('fresh', {}))).code, path).toBe('ELEVATION_REQUIRED')
     }
@@ -116,7 +121,10 @@ describe('Changes: face controls', () => {
     const path = ACTION_PATHS.apply
     const grant = world.grantFor('plugin-apply', path, { id: 'a' })
     const oversized = JSON.stringify({ id: 'a', pad: 'x'.repeat(GRANT_BODY_CAP_BYTES) })
-    expect(json(await send(server.port, path, withGrant('none', oversized, grant))).code).toBe('ELEVATION_REQUIRED')
+    const refused = json(await send(server.port, path, withGrant('none', oversized, grant)))
+    expect(refused.code).toBe('ELEVATION_REQUIRED')
+    // No grant can cover it, so the refusal names no action to confirm.
+    expect(refused.action).toBeUndefined()
     expect(WHERE_REFUSALS).not.toContain(json(await send(server.port, path, withGrant('none', { id: 'a' }, grant))).code)
   })
 

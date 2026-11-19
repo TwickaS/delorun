@@ -9,7 +9,9 @@
  *   ({@link hashRequest}); the `Delorun-Grant` header only names the grant id and must equal the id of the grant that hash
  *   finds. The grant is used up just before the route's handler runs, and the header is removed before the handler sees
  *   the request. Every device is admitted by a grant alone, a PIN grant where it holds no passkey (A483); no unlock window,
- *   code or approval grace admits a `face` row. Before the home service starts, `face` behaves as `gateByUnlock` with `legacy`.
+ *   code or approval grace admits a `face` row. Before the home service starts, `face` behaves as `gateByUnlock` with `legacy`;
+ *   no unlock exists before the service starts either, so that fallback admits no device. A refusal a grant can lift is
+ *   `403 ELEVATION_REQUIRED` with `{ action }`, the grant's action name, so the client knows what to confirm.
  * - `computer` and `ticket`: not Fetch gates; such a route registers no `admitPeer` of this kind.
  *
  * @module @delorun/home-auth/auth-gate
@@ -112,7 +114,8 @@ export function gateByClass(homeAuth: () => GrantGateHome | undefined, fetch: (r
   if (options.hold?.feature === 'terminal') throw new Error(`home-auth: the row "${options.row}" asks for a terminal hold, which gateByClass cannot scope to a chat yet`)
   const principals = new WeakMap<Request, ReachDevicePrincipal>()
   const legacy = gateByUnlock(homeAuth, fetch, { renews: options.legacy.renews, ...options.legacy.grace === undefined ? {} : { grace: options.legacy.grace } })
-  const refuse = (message: string): Response => new Response(refusalBody('ELEVATION_REQUIRED', message), { status: 403, headers: REFUSAL_HEADERS })
+  // A refusal a grant can lift names the grant's action, so the client knows what to confirm; the body holds no secret or hash.
+  const refuse = (message: string, liftable: boolean): Response => new Response(refusalBody('ELEVATION_REQUIRED', message, liftable ? { action: options.action } : {}), { status: 403, headers: REFUSAL_HEADERS })
   return {
     admitPeer: (request, peer) => {
       if (peer.principal.kind !== REACH_DEVICE || homeAuth() === undefined) return false
@@ -129,7 +132,7 @@ export function gateByClass(homeAuth: () => GrantGateHome | undefined, fetch: (r
       const holder = { deviceId: principal.deviceId, listener: principal.listener, unlockId: principal.unlockId }
       const passkey = home.deviceHasPasskey(principal.deviceId)
       const body = await readBodyCapped(request.clone(), GRANT_BODY_CAP_BYTES)
-      if (body === undefined) return refuse('This request is too large to confirm. Make it smaller')
+      if (body === undefined) return refuse('This request is too large to confirm. Make it smaller', false)
       const url = new URL(request.url)
       const pathAndQuery = url.pathname + url.search
       const held = options.hold?.idOf(request, body)
@@ -144,7 +147,7 @@ export function gateByClass(homeAuth: () => GrantGateHome | undefined, fetch: (r
         return fetch(withoutGrantHeader(request))
       }
       // A device is admitted by a grant alone: no PIN window, code or approval grace admits a face row (A483).
-      return refuse(passkey ? 'Confirm with Face ID or your PIN first' : 'Confirm with your PIN first')
+      return refuse(passkey ? 'Confirm with Face ID or your PIN first' : 'Confirm with your PIN first', true)
     },
   }
 }

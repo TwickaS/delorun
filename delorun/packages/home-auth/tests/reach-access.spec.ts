@@ -42,6 +42,7 @@ import {
   type ReachAccessFacts,
 } from '../src/reach-access.ts'
 import { keyRefsOf } from '../src/authenticator.ts'
+import { GrantStore } from '../src/grants.ts'
 
 /** The entry id of a row that only the computer changes. */
 const COMPUTER_ONLY_ROW = 'include:delorun-home-auth'
@@ -651,13 +652,23 @@ describe('the model key actions', () => {
     }
   })
 
-  it('refuses a locked page and admits an unlocked one while PIN mode is on', () => {
+  it('refuses a locked page and, before the grant store starts, admits an unlocked one while PIN mode is on', () => {
     const on = facts({ unlockModeEnabled: () => true, pageUnlockOf: id => id === 'page-1' ? { id: 'unlock-1' } : undefined })
     for (const { action, args } of KEY_CALLS) {
       // Pins the PIN check: without it a locked page saves, removes and reads the status of keys.
       expect(createCondition(on, locked)({ action, resource: GLOBAL, args }), action).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
       expect(createCondition(on, { ...locked, unlockId: 'ended' })({ action, resource: GLOBAL, args }), action).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
       expect(createCondition(on, unlockedPage)({ action, resource: GLOBAL, args }), action).toEqual({ kind: 'allow' })
+    }
+  })
+
+  it('refuses an unlocked page a key save or removal without a grant once the grant store exists', () => {
+    const grants = new GrantStore({ now: () => 5_000_000, random: size => new Uint8Array(size).fill(4) })
+    const on = facts({ unlockModeEnabled: () => true, pageUnlockOf: id => id === 'page-1' ? { id: 'unlock-1' } : undefined, faceGrants: () => ({ grants, deviceHasPasskey: () => false }) })
+    // Pins A483 for keys: a PIN page window never stands in for the grant of one save or removal.
+    for (const { action, args } of KEY_CALLS) {
+      expect(createCondition(on, unlockedPage)({ action, resource: GLOBAL, args }), action)
+        .toEqual(action === 'credentials/describe' ? { kind: 'allow' } : { kind: 'deny', reason: `elevation-required: ${action}` })
     }
   })
 })

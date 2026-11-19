@@ -1166,7 +1166,8 @@ export function createCondition(
     const faced = facts.faceGrants?.()
     // A face action is admitted by a grant for exactly this call, from Face ID or, on a device with no passkey, from its PIN (A483); no unlock window, code or approval grace admits it.
     if (faced !== undefined) return grantFor(faced, action, reason, call, scope, args)
-    // Before the grant store starts, a terminal stays refused and any other action falls back to the unlock the person entered.
+    // Before the grant store starts, a terminal stays refused and any other action falls back to the unlock the person
+    // entered; no unlock exists before the home service starts either, so the fallback admits nothing.
     if (GRACE_REFUSED_ACTIONS.has(action)) return { kind: 'deny', reason }
     const elevation = unlock()
     if (elevation === undefined) return { kind: 'deny', reason }
@@ -1244,12 +1245,17 @@ export function createCondition(
       const refused = unlocked(action, `elevation-required: ${action}`, args !== undefined, scope, args)
       if (refused !== undefined) return refused
     }
-    if (KEY_SET.has(action) && facts.unlockModeEnabled() && !pageUnlocked) {
+    if (KEY_SET.has(action) && facts.unlockModeEnabled()) {
       const faced = facts.faceGrants?.()
-      if (faced === undefined) return { kind: 'deny', reason: `elevation-required: ${action}` }
-      // Saving or removing a key needs a grant for this call; presence and its events stay free.
-      const refused = FACE_KEY_ACTIONS.has(action) ? grantFor(faced, action, `elevation-required: ${action}`, args !== undefined, scope, args) : undefined
-      if (refused !== undefined) return refused
+      if (faced !== undefined) {
+        // Saving or removing a key needs a grant for this call, whatever the page's PIN unlock says (A483: never a
+        // window); presence and its events stay free.
+        const refused = FACE_KEY_ACTIONS.has(action) ? grantFor(faced, action, `elevation-required: ${action}`, args !== undefined, scope, args) : undefined
+        if (refused !== undefined) return refused
+      } else if (!pageUnlocked) {
+        // Before the grant store starts, a key action falls back to the page's PIN unlock, which cannot exist yet either.
+        return { kind: 'deny', reason: `elevation-required: ${action}` }
+      }
     }
     if (KEY_SET.has(action) && args !== undefined && !namesOnlyDeclaredRefs(action, args, facts.keyRefs())) return { kind: 'deny', reason: UNDECLARED_KEY_REFUSAL }
     if (ELEVATED_SET.has(action) && !(args !== undefined && isEverydayCall(action, args))) {

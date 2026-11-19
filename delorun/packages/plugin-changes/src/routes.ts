@@ -480,7 +480,8 @@ function faceStateOf(requester: Requester): FaceState {
  * @param devices - the paired devices.
  * @returns the proof, and a renewal of the device's unlock to run once the action succeeded.
  * @throws {RouteRefusal} `403 CROSS_SITE`; `403 LOOPBACK_REQUIRED` when the control stays at the computer for this
- *   request; `403 ELEVATION_REQUIRED` for a device that holds no unlock the person entered.
+ *   request; `403 ELEVATION_REQUIRED` for a device without a grant for this call, with `{ action }` naming the grant's
+ *   action (`changes/<control>`) where a grant can lift it.
  */
 async function gate(request: IncomingMessage, admission: { readonly arrival: StudioArrival, readonly peer: object }, control: ChangesControl, devices: RouteDevices): Promise<{ readonly presence: AtComputer, readonly renew: () => void }> {
   const requester = await requesterOf(admission, devices)
@@ -496,7 +497,7 @@ async function gate(request: IncomingMessage, admission: { readonly arrival: Stu
   if (CONTROL_LEVELS[control] === 'face' && face?.enabled === true) {
     const header = request.headers['delorun-grant']
     // A body over the grant cap cannot be hashed, so no grant covers it; its stream is left unread for the route's own limit.
-    if (!(Number(request.headers['content-length'] ?? '0') > GRANT_BODY_CAP_BYTES)) {
+    if (!oversized(request)) {
       const bytes = await bodyBytes(request, GRANT_BODY_CAP_BYTES)
       if (face.take(`changes/${control}`, { method: 'POST', path: pathAndQueryOf(request), body: bytes }, typeof header === 'string' ? header : undefined)) {
         return { presence: attestDevice({ remoteSession: true, device: { id: device.id, label: device.label }, freshUnlock: true }), renew: () => {} }
@@ -506,9 +507,18 @@ async function gate(request: IncomingMessage, admission: { readonly arrival: Stu
   if (!may.ok) {
     throw may.needs === 'computer'
       ? new RouteRefusal(403, LOOPBACK_REQUIRED, LOOPBACK_REQUIRED_SENTENCE)
-      : new RouteRefusal(403, ELEVATION_REQUIRED, may.needs === 'face' ? FACE_REQUIRED_SENTENCE : ELEVATION_REQUIRED_SENTENCE)
+      // A face refusal names the grant's action, so the client knows what to confirm; the body holds no secret or hash.
+      : may.needs === 'face' ? new RouteRefusal(403, ELEVATION_REQUIRED, FACE_REQUIRED_SENTENCE, oversized(request) ? {} : { action: `changes/${control}` }) : new RouteRefusal(403, ELEVATION_REQUIRED, ELEVATION_REQUIRED_SENTENCE)
   }
   return { presence: attestDevice({ remoteSession: true, device: { id: device.id, label: device.label }, freshUnlock: device.unlock === 'fresh', ...CONTROL_LEVELS[control] === 'free' ? { freeControl: true as const } : {} }), renew: device.renew }
+}
+
+/**
+ * @param request - the request.
+ * @returns whether its declared body is over the grant cap, so no grant can cover it.
+ */
+function oversized(request: IncomingMessage): boolean {
+  return Number(request.headers['content-length'] ?? '0') > GRANT_BODY_CAP_BYTES
 }
 
 /**
