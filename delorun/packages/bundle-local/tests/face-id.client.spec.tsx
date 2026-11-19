@@ -137,10 +137,9 @@ describe('hashes', () => {
     // A hash that differs from the home's means every grant is refused.
     expect(canonicalJson({ b: 1, a: [true, null, 'x'], c: undefined })).toBe('{"a":[true,null,"x"],"b":1}')
     expect(await hashArgs({})).toBe('44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a')
-    const expected = (await import('node:crypto')).createHash('sha256').update('{"credentialId":"abc"}', 'utf8').digest('hex')
-    expect(await hashArgs({ credentialId: 'abc' })).toBe(expected)
-    const request = (await import('node:crypto')).createHash('sha256').update('POST\u0000/p\u0000{"a":1}', 'utf8').digest('hex')
-    expect(await hashRequest({ method: 'post', path: '/p', body: { a: 1 } })).toBe(request)
+    // SHA-256 of '{"credentialId":"abc"}' and of 'POST NUL /p NUL {"a":1}', computed with Node's crypto.
+    expect(await hashArgs({ credentialId: 'abc' })).toBe('fce492991f0a6c56db05b1835f75f7d9a8fe08df976b0de08e876474f082e571')
+    expect(await hashRequest({ method: 'post', path: '/p', body: { a: 1 } })).toBe('d52ced0ec672b9fd47dcfd67064582b53c6936331a2b93a45296078c21cdc7f1')
     expect(() => canonicalJson(Number.NaN)).toThrow(TypeError)
     expect(() => canonicalJson(() => 1)).toThrow(TypeError)
   })

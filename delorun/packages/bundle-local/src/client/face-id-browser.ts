@@ -107,7 +107,7 @@ export function browserPasskeys(scope: { readonly navigator: Navigator; readonly
             challenge: fromBase64Url(options.challenge),
             rpId: options.rpId,
             userVerification: options.userVerification,
-            timeout: options.timeout,
+            ...(options.timeout === undefined ? {} : { timeout: options.timeout }),
             allowCredentials: options.allowCredentials.map(entry => ({ type: entry.type, id: fromBase64Url(entry.id) })),
           },
         })
@@ -143,10 +143,10 @@ export function browserPasskeys(scope: { readonly navigator: Navigator; readonly
             rp: options.rp,
             user: { id: fromBase64Url(options.user.id), name: options.user.name, displayName: options.user.displayName },
             pubKeyCredParams: [...options.pubKeyCredParams],
-            excludeCredentials: options.excludeCredentials?.map(entry => ({ type: entry.type, id: fromBase64Url(entry.id) })),
+            ...(options.excludeCredentials === undefined ? {} : { excludeCredentials: options.excludeCredentials.map(entry => ({ type: entry.type, id: fromBase64Url(entry.id) })) }),
             authenticatorSelection: options.authenticatorSelection,
             attestation: options.attestation,
-            timeout: options.timeout,
+            ...(options.timeout === undefined ? {} : { timeout: options.timeout }),
           },
         })
       } catch (error) {

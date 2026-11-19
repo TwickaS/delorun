@@ -93,9 +93,9 @@ export interface RegistrationResponseJSON {
   readonly id: string
   readonly rawId: string
   readonly type: 'public-key'
-  readonly response: { readonly clientDataJSON: string; readonly attestationObject: string; readonly transports?: readonly string[] }
+  readonly response: { readonly clientDataJSON: string; readonly attestationObject: string; readonly transports?: readonly string[] | undefined }
   readonly clientExtensionResults: Record<string, never>
-  readonly authenticatorAttachment?: string
+  readonly authenticatorAttachment?: string | undefined
 }
 
 /** An assertion, in the base64url JSON the home verifies. */
@@ -103,9 +103,9 @@ export interface AssertionResponseJSON {
   readonly id: string
   readonly rawId: string
   readonly type: 'public-key'
-  readonly response: { readonly clientDataJSON: string; readonly authenticatorData: string; readonly signature: string; readonly userHandle?: string }
+  readonly response: { readonly clientDataJSON: string; readonly authenticatorData: string; readonly signature: string; readonly userHandle?: string | undefined }
   readonly clientExtensionResults: Record<string, never>
-  readonly authenticatorAttachment?: string
+  readonly authenticatorAttachment?: string | undefined
 }
 
 /** The home's passkey routes, one method per route. Each rejects with the home's refusal or an unreachable-host error. */
@@ -165,15 +165,15 @@ export interface PasskeyApi {
    * @param request - the grant, when the page is a phone.
    * @returns the devices.
    */
-  devices(request?: { readonly grantId?: string }): Promise<readonly PasskeyDevice[]>
+  devices(request?: { readonly grantId?: string | undefined }): Promise<readonly PasskeyDevice[]>
   /**
    * Remove one passkey.
    * @param request - the passkey, its device, and the grant of a Face ID confirmation when the page is a phone.
    */
-  removePasskey(request: { readonly credentialId: string; readonly deviceId: string; readonly grantId?: string }): Promise<void>
+  removePasskey(request: { readonly credentialId: string; readonly deviceId: string; readonly grantId?: string | undefined }): Promise<void>
   /**
    * Remove one device with its passkeys.
    * @param request - the device, and the grant of a Face ID confirmation when the page is a phone.
    */
-  removeDevice(request: { readonly deviceId: string; readonly grantId?: string }): Promise<void>
+  removeDevice(request: { readonly deviceId: string; readonly grantId?: string | undefined }): Promise<void>
 }

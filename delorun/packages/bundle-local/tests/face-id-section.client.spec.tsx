@@ -10,7 +10,7 @@ import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { en } from '../src/client/face-id-locales.ts'
 import { fakeBrowser } from '../src/client/face-id-fake.ts'
 import { PASSKEY_ROUTES } from '../src/client/face-id-api.ts'
-import { FaceIdSection } from '../src/client/FaceIdSection.tsx'
+import { FaceIdSection, type FaceIdSectionProps } from '../src/client/FaceIdSection.tsx'
 import { FaceIdPairingOverlay } from '../src/client/FaceIdPairingOverlay.tsx'
 import type { PinView } from '../src/client/pin-lock.ts'
 import { fakeHost } from './fake-host.ts'
@@ -23,7 +23,8 @@ const pinView = (phase: PinView['phase']): PinView => ({ phase, secret: 'pin', b
 
 function section(script: Parameters<typeof fakeHost>[0], over: { computer?: boolean; phase?: PinView['phase'] } = {}) {
   const host = fakeHost(script)
-  render(<FaceIdSection {...({ t, fetch: host.fetch, atComputer: () => over.computer ?? false, usePin: (select: (view: PinView) => unknown) => select(pinView(over.phase ?? 'unlocked')), browser: fakeBrowser() } as never)} />)
+  const props = { t, close: () => {}, fetch: host.fetch, atComputer: () => over.computer ?? false, usePin: <S,>(select: (view: PinView) => S): S => select(pinView(over.phase ?? 'unlocked')), browser: fakeBrowser() } as FaceIdSectionProps
+  render(<FaceIdSection {...props} />)
   return host
 }
 
@@ -68,7 +69,7 @@ describe('FaceIdPairingOverlay', () => {
   const state = (ticket: boolean) => ({ status: 200, body: { passkeys: [], ticket } })
   function overlay(script: Parameters<typeof fakeHost>[0], computer = false) {
     const host = fakeHost(script)
-    render(<FaceIdPairingOverlay {...({ t, fetch: host.fetch, atComputer: () => computer, browser: fakeBrowser() } as never)} />)
+    render(<FaceIdPairingOverlay t={t} fetch={host.fetch} atComputer={() => computer} browser={fakeBrowser()} />)
     return host
   }
   it('offers Set up Face ID once when a ticket waits, and Skip hides it', async () => {
