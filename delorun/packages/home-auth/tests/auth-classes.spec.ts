@@ -4,7 +4,7 @@
  * tables and the table's `face` rows equal. Each test's comment names the check whose removal makes it fail.
  */
 import { describe, expect, it } from 'vitest'
-import { AUTH_CLASSES, authClassOf, checkAuthTable, type AuthRow } from '../src/auth-classes.ts'
+import { AUTH_CLASSES, authClassOf, checkAuthTable, stalePassEntries, type AuthRow } from '../src/auth-classes.ts'
 import { REACH_ALLOWED_ACTIONS, REACH_DANGEROUS_ACTIONS, REACH_DENIED_ACTIONS, REACH_ELEVATED_ACTIONS, REACH_KEY_ACTIONS } from '../src/reach-access.ts'
 import { CHANGES_ROUTE_ACCESS, PLUGIN_ROUTE_ACCESS } from '../src/route-access.ts'
 
@@ -20,8 +20,24 @@ describe('AUTH_CLASSES', () => {
   it('rejects a doubly listed row, a row in two classes and a row with no reason', () => {
     const row: AuthRow = { id: 'remote:x', surface: 'remote', authClass: 'free', reason: 'r' }
     expect(checkAuthTable([row, row])).toEqual(['remote:x is listed twice'])
-    expect(checkAuthTable([row, { ...row, authClass: 'face' }])).toEqual(['remote:x is in two classes (free, face)'])
+    expect(checkAuthTable([row, { ...row, authClass: 'face', pass: 'admits' }])).toEqual(['remote:x is in two classes (free, face)'])
     expect(checkAuthTable([{ ...row, reason: ' ' }])).toEqual(['remote:x has no reason'])
+  })
+
+  // Removing the declaration check lets a new face row fall to a pass with no decision (A499 review P2-3).
+  it('rejects a face row that declares no pass behaviour, and a pass behaviour on a row that is not face', () => {
+    const row: AuthRow = { id: 'remote:x', surface: 'remote', authClass: 'face', reason: 'r' }
+    expect(checkAuthTable([row])).toEqual(['remote:x is a face row that declares no pass behaviour; name it in PASS_ADMITS or PASS_ALWAYS_ASK (./pass-policy.ts)'])
+    expect(checkAuthTable([{ ...row, pass: 'admits' }])).toEqual([])
+    expect(checkAuthTable([{ ...row, authClass: 'free', pass: 'admits' }])).toEqual(['remote:x declares a pass behaviour but is not a face row'])
+    expect(checkAuthTable([{ ...row, pass: 'alwaysAsk' }])).toEqual(['remote:x is always-ask but names no grant action'])
+    expect(AUTH_CLASSES.filter(entry => entry.authClass === 'face' && entry.pass === undefined)).toEqual([])
+  })
+
+  // Removing the stale check keeps a policy entry after its row is renamed, so the renamed row declares nothing.
+  it('names only face rows in the pass policy, each in one list', () => {
+    expect(stalePassEntries(AUTH_CLASSES)).toEqual([])
+    expect(stalePassEntries(AUTH_CLASSES.filter(entry => entry.id !== 'changes:protection-off'))).toEqual(['changes:protection-off is in the pass policy but names no face row'])
   })
 
   // Removing a REACH_* table's rows from the table leaves its actions unclassified.

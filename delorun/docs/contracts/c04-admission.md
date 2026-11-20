@@ -150,7 +150,7 @@ A session past its idle or absolute limit is refused with `401 SESSION_EXPIRED` 
 <a id="page-unlock"></a>
 ### Page unlock
 
-No route mints a page unlock: [PIN mode](c14-oidc-passkeys.md#pin-mode) refuses the unlock to every device, which confirms each action with a one-action grant instead. Admission still strips and checks the token carriers below, so a token a page still sends is refused with `401 UNLOCK_INVALID` and admits nothing. Each part below is a fact of admission, not of the routes.
+No route mints a page unlock: [PIN mode](c14-oidc-passkeys.md#pin-mode) refuses the unlock to every device, which confirms each action with a one-action grant, or a device with a passkey within a Face ID pass, instead. Admission still strips and checks the token carriers below, so a token a page still sends is refused with `401 UNLOCK_INVALID` and admits nothing. Each part below is a fact of admission, not of the routes.
 
 - **Carriers.** The token travels as the `Delorun-Unlock` header on `/api` requests and as the WebSocket subprotocol `delorun-unlock.<token>` on the `/api/remote.mux` upgrade. A query parameter is never read as a token. A page that offers the subprotocol also offers one fixed protocol before it, so the upgrade answer names a protocol the browser accepts.
 - **Stripped.** `admit` removes both carriers from the request, in every header view, before any route, upgrade handler or plugin sees it. With PIN mode off, the token is stripped and ignored.

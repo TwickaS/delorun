@@ -15,7 +15,7 @@
  * page, these and the Changes, Update and approval ones, waits its turn in one {@link ConfirmationQueue}.
  * @module @delorun/bundle-local/client/face-retry
  */
-import type { FaceGrant, FaceGrantHold, FaceGrantRequest, GrantingFetch } from '@delorun/plugin-changes/face-grant'
+import { PASS_GRANT_ID, type FaceGrant, type FaceGrantHold, type FaceGrantRequest, type GrantingFetch } from '@delorun/plugin-changes/face-grant'
 
 /** The fields of the gateway's `RemoteDenialQuestion` the Face ID step reads: a refused Remote call or stream open. */
 export interface RefusedRemoteCall {
@@ -163,9 +163,10 @@ export function grantingFetch(fetch: GrantingFetch, grant: FaceGrant, baseOf: ()
     const action = await liftableActionOf(response)
     if (action === undefined) return response
     const headers = new Headers(init?.headers)
-    // A caller that sends its own grant asked for it itself; a body that is not text cannot be hashed here.
+    // A caller that sends its own grant asked for it itself, except one that relied on the page's Face ID pass: the home
+    // refusing that means the pass ended, so the call is asked with a sheet. A body that is not text cannot be hashed here.
     const body = init?.body ?? ''
-    if (headers.has(GRANT_HEADER) || typeof body !== 'string') return response
+    if ((headers.has(GRANT_HEADER) && headers.get(GRANT_HEADER) !== PASS_GRANT_ID) || typeof body !== 'string') return response
     const url = new URL(input, baseOf())
     const grantId = await grant({ action, call: { method: (init?.method ?? 'GET').toUpperCase(), path: `${url.pathname}${url.search}`, body }, ...init?.signal == null ? {} : { signal: init.signal } })
     if (grantId === undefined || init?.signal?.aborted === true) return response

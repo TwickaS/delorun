@@ -2,8 +2,8 @@
  * The approval card's Face ID step for a request that asks for a grant (full access, workspace management, an external
  * agent or the real browser). On a paired phone the card's allow answers
  * first open the action sheet of [`FaceIdSheet.tsx`](./FaceIdSheet.tsx); the home accepts the answer only with a grant
- * minted for exactly this Session, call, grants marker and the value `allowed-once`. A cancelled sheet sends nothing and
- * leaves the card answerable. Reject, requests that grant nothing and the home's own computer never ask.
+ * minted for exactly this Session, call, grants marker and the value `allowed-once`, or by the device's live Face ID
+ * pass, which sends the answer with no sheet. A cancelled sheet sends nothing and leaves the card answerable. Reject, requests that grant nothing and the home's own computer never ask.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
@@ -17,6 +17,7 @@ import { FaceIdGrantFlow } from './FaceIdGrantFlow.tsx'
 import type { HostFetch } from './host-api.ts'
 import type { PinSource } from './pin-lock.ts'
 import type { ConfirmationQueue } from './face-retry.ts'
+import type { PassSource } from './face-id-pass.ts'
 
 /** What the plugin supplies the action for one chat. */
 export interface FaceIdAnswerInjected {
@@ -34,6 +35,8 @@ export interface FaceIdAnswerInjected {
   readonly api?: PasskeyApi
   /** The page's one-at-a-time queue, so the sheet waits for another confirmation that is showing. */
   readonly queue?: ConfirmationQueue
+  /** The page's Face ID pass mirror: while it covers the answer, Allow sends at once and the home admits it by the pass (A499). */
+  readonly pass?: Pick<PassSource, 'covers' | 'refresh'>
 }
 
 /** Props the renderer binds for the action. */
@@ -62,7 +65,7 @@ export function answerActionOf(t: PropsLocale<'delorunFaceId'>['t'], request: { 
  * @param props - the card's request and gate, the chat, the page's passkey calls and the copy.
  * @returns the sheet or the PIN entry while the person confirms; otherwise nothing.
  */
-export function FaceIdAnswerAction({ t, grants, callId, toolName, gateAllow, sessionId, fetch, atComputer, usePin, browser, api: injectedApi, queue }: FaceIdAnswerProps): ReactNode {
+export function FaceIdAnswerAction({ t, grants, callId, toolName, gateAllow, sessionId, fetch, atComputer, usePin, browser, api: injectedApi, queue, pass }: FaceIdAnswerProps): ReactNode {
   const [hasPasskey, setHasPasskey] = useState(false)
   const [open, setOpen] = useState(false)
   const settle = useRef<((sent: boolean) => void) | null>(null)
@@ -88,6 +91,12 @@ export function FaceIdAnswerAction({ t, grants, callId, toolName, gateAllow, ses
       if (current) setHasPasskey((state?.passkeys.length ?? 0) > 0)
     })
     const confirm = async (): Promise<boolean> => {
+      // A granting answer is never always-ask, so a live pass covers it. The pass is read from the home first, so an
+      // Allow tapped again after the home refused the answer (the pass ended) opens the sheet.
+      if (pass?.covers(`answer/${grants}`) === true) {
+        await pass.refresh()
+        if (current && pass.covers(`answer/${grants}`)) return true
+      }
       await reading
       if (!current) return false
       return await new Promise<boolean>((resolve) => {
@@ -103,7 +112,7 @@ export function FaceIdAnswerAction({ t, grants, callId, toolName, gateAllow, ses
       settle.current = null
       done?.(false)
     }
-  }, [asks, api, gateAllow, queue])
+  }, [asks, api, gateAllow, queue, pass, grants])
   if (!open || callId === undefined) return null
   const action = answerActionOf(t, { sessionId, callId, grants, toolName })
   return <FaceIdGrantFlow t={t} action={action} kind={kind} api={api} browser={passkeys} hasPasskey={hasPasskey} secret={secret}

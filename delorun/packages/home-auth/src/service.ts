@@ -52,7 +52,8 @@ import {
 } from './elevation-routes.ts'
 import type { UnlockAsker } from './pin-unlocks.ts'
 import type { GrantStore } from './grants.ts'
-import { PASSKEY_PATHS, passkeyAddRequestHandler, passkeyApproveHandler, passkeyDevicesHandler, passkeyOptionsHandler, passkeyPendingHandler, passkeyPinHandler, passkeyRegisterHandler, passkeyRegisterOptionsHandler, passkeyRemoveHandler, passkeyStateHandler, passkeyVerifyHandler } from './passkey-routes.ts'
+import { PASS_MINUTES, PASS_MINUTES_DEFAULT, type PassMinutes } from './pass-setting.ts'
+import { PASSKEY_PATHS, passkeyAddRequestHandler, passkeyApproveHandler, passkeyDevicesHandler, passkeyLockHandler, passkeyPassHandler, passkeyOptionsHandler, passkeyPendingHandler, passkeyPinHandler, passkeyRegisterHandler, passkeyRegisterOptionsHandler, passkeyRemoveHandler, passkeyStateHandler, passkeyVerifyHandler } from './passkey-routes.ts'
 import { PIN_PATHS, pinLockHandler, pinModeHandler, pinOffHandler, pinOptionsHandler, pinResumeHandler, pinSetHandler, pinStateHandler, pinTouchHandler, pinUnlockHandler } from './pin-routes.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -76,6 +77,8 @@ export interface ConfigInput {
   readonly approvalGraceMinutes?: number
   /** The most minutes one unlock lasts from its start; see {@link Config.unlockCapMinutes}. */
   readonly unlockCapMinutes?: number
+  /** How long one Face ID opens a pass for until the person chooses; see {@link Config.faceIdPassMinutes}. */
+  readonly faceIdPassMinutes?: PassMinutes
 }
 
 /** The service's configuration: where the home keeps the sign-in records. */
@@ -112,6 +115,12 @@ export interface Config {
    * It must be at least the unlock minutes of every listener, or the listener is refused at start.
    */
   readonly unlockCapMinutes: number
+  /**
+   * The deployment's default Face ID pass length in minutes (A499): one of 0, 5, 15, 30 and 60; 15 by default, so never
+   * more than 60. 0 is "Every time": no pass opens. The person's choice in Settings, kept in `face-id-pass.json`,
+   * replaces it; a value outside the set fails the load.
+   */
+  readonly faceIdPassMinutes: PassMinutes
 }
 
 /** The bounds and default of {@link Config.pinSetBackRetrySeconds}. */
@@ -161,6 +170,8 @@ export const Config: schema<ConfigInput, Config> = schema.object({
   }).default({}).description('The sign-in challenge limits. Out-of-bounds values fail the load.'),
   unlockCapMinutes: schema.number().step(1).min(1).max(1440).default(480)
     .description('The most minutes one unlock approved at the computer lasts from its start, from 1 to 1440; 480 (8 hours) by default. An unlock lasts its minutes after the last action that needed it, and this cap ends it however much it is used. It must be at least the unlock minutes.'),
+  faceIdPassMinutes: schema.union(PASS_MINUTES).default(PASS_MINUTES_DEFAULT)
+    .description('Minutes one Face ID on a device lets strong actions go without asking again, until the person chooses in Settings: 0 (every time), 5, 15, 30 or 60; 15 by default. Adding or removing devices and passkeys, the Face ID settings and remote access always ask.'),
   approvalGraceMinutes: schema.number().step(1).min(0).max(60).default(15)
     .description('Minutes after a device is approved during which its first sign-in starts an unlock, from 0 to 60; 15 by default, and never more than the unlock minutes. 0 turns it off.'),
 })
@@ -231,6 +242,7 @@ export class HomeAuthService extends Service {
       challengeLimits: this.config.challenges,
       approvalGraceMinutes: () => this.config.approvalGraceMinutes,
       unlockCapMinutes: () => this.config.unlockCapMinutes,
+      passDefaultMinutes: () => this.config.faceIdPassMinutes,
       closeReachConnections: match => this.ctx.get('connection')?.closeReachConnections(match) ?? 0,
       loopbackPort: () => this.ctx.webServer.port,
       secrets: this.ctx.get('delorunSecrets'),
@@ -323,6 +335,8 @@ export class HomeAuthService extends Service {
         server.register({ kind: 'exact', path: PASSKEY_PATHS.devices, handler: passkeyDevicesHandler(core) }),
         server.register({ kind: 'exact', path: PASSKEY_PATHS.pending, handler: passkeyPendingHandler(core, credential) }),
         server.register({ kind: 'exact', path: PASSKEY_PATHS.approve, handler: passkeyApproveHandler(core, credential) }),
+        server.register({ kind: 'exact', path: PASSKEY_PATHS.lock, handler: passkeyLockHandler(core) }),
+        server.register({ kind: 'exact', path: PASSKEY_PATHS.pass, handler: passkeyPassHandler(core, credential) }),
       ]
       return () => {
         for (const off of registered) off()

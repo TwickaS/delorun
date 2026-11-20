@@ -395,5 +395,7 @@ export function grantWorld(options: { readonly hasPasskey?: boolean, readonly en
     if (hash === undefined) throw new Error('body over the cap')
     return store.mint(FACE_HOLDER, [{ action: `changes/${control}`, hash }], factor).grantId
   }
-  return { face, grantFor }
+  /** Open a Face ID pass for the device's Peer, as a verified Face ID does when the setting is above 0. */
+  const openPass = (minutes = 15): void => { store.openPass(FACE_HOLDER, minutes) }
+  return { face, grantFor, openPass, clock }
 }
