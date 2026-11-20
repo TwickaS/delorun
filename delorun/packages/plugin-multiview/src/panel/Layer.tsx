@@ -5,7 +5,8 @@
  * the pane header and body slots, each inside the agent chat's own `multiviewPane` session reference, held here so that moving,
  * paging or hiding a pane never closes its chat.
  */
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { SessionReference } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
@@ -54,10 +55,19 @@ type Frame = Pick<LayerProps, 'SessionProvider' | 'renderSlot' | 'useSessions' |
  * @returns the content as it is while Multiview is closed or has nothing pinned, otherwise the layout or the pager.
  */
 export function MultiviewLayer(props: LayerProps) {
-  const { sessionId, multiview, children } = props
+  const { sessionId, multiview, children, ...rest } = props
   const open = useObservable(multiview.of(sessionId ?? NO_CHAT)).open
+  // The content is a new element on every event of the main chat. It reaches the main pane through this store, so the layer and the
+  // agent panes, which are memoised on everything else, do not render again for each streamed chunk.
+  const [content] = useState(() => createSnapshotStore<ReactNode>(children))
+  useLayoutEffect(() => { content.set(children) })
   if (sessionId === undefined || !open) return <>{children}</>
-  return <ChatMultiview {...props} main={sessionId} />
+  return <ChatMultiview {...rest} sessionId={sessionId} multiview={multiview} main={sessionId} content={content} />
+}
+
+/** The main content in the main pane or page: it alone renders again when the main chat's content changes. */
+function MainContent({ content }: { readonly content: SnapshotStore<ReactNode> }) {
+  return <>{useSyncExternalStore(content.subscribe, content.getSnapshot)}</>
 }
 
 /** The chat key of a content that has no chat: nothing is ever stored under it. */
@@ -68,8 +78,9 @@ function useObservable<T>(source: { subscribe(listener: () => void): () => void;
   return useSyncExternalStore(listener => source.subscribe(listener), () => source.getSnapshot())
 }
 
-function ChatMultiview(props: LayerProps & { readonly main: SessionId }) {
-  const { main, multiview, sessions, openFull, clock, dots, t, SessionProvider, renderSlot, useSessions, useSessionStatus, children } = props
+const ChatMultiview = memo(function ChatMultiview(props: Omit<LayerProps, 'children'> & { readonly main: SessionId; readonly content: SnapshotStore<ReactNode> }) {
+  const { main, content, multiview, sessions, openFull, clock, dots, t, SessionProvider, renderSlot, useSessions, useSessionStatus } = props
+  const mainContent = useMemo(() => <MainContent content={content} />, [content])
   const state = useObservable(multiview.of(main))
   const settings = useObservable(multiview.settings)
   const limits = useMemo(() => limitsOf(settings), [settings])
@@ -117,7 +128,7 @@ function ChatMultiview(props: LayerProps & { readonly main: SessionId }) {
           }}
         />
       )}
-      renderPane={pane => <BodySlot frame={frame} reference={references.get(pane)} content={pane === main ? children : undefined} compact={settings.compactComposer} waiting={waitingPanes.has(pane)} />}
+      renderPane={pane => <BodySlot frame={frame} reference={references.get(pane)} content={pane === main ? mainContent : undefined} compact={settings.compactComposer} waiting={waitingPanes.has(pane)} />}
     />
   )
   const hidden = fitted.hidden.length === 0 ? null : (
@@ -125,14 +136,14 @@ function ChatMultiview(props: LayerProps & { readonly main: SessionId }) {
   )
   const ids = useMemo(() => pageOrder(main, state.pins), [main, state.pins])
   const phone = (
-    <Pager frame={frame} main={main} content={children} ids={ids} references={references} active={active} onActive={setActive} stop={stop} compact={settings.compactComposer} waiting={waitingPanes} />
+    <Pager frame={frame} main={main} content={mainContent} ids={ids} references={references} active={active} onActive={setActive} stop={stop} compact={settings.compactComposer} waiting={waitingPanes} />
   )
   return (
     <div className={css.root} data-multiview-panel={main}>
       <PhoneSwitch phone={phone} split={<>{hidden}<div className={css.layout}>{split}</div></>} />
     </div>
   )
-}
+})
 
 /** The layout's tab label for a pane that shares a leaf: the chat's name. */
 function TabLabel({ useSessions, pane }: Pick<LayerProps, 'useSessions'> & { readonly pane: PaneId }) {

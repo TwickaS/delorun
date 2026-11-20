@@ -34,6 +34,9 @@ interface FakeReference {
   readonly release: ReturnType<typeof vi.fn>
 }
 
+/** How many times each chat's pane body rendered. */
+const bodyRenders = new Map<string, number>()
+
 const ChatContext = createContext<FakeReference | undefined>(undefined)
 
 function setup(options: { settings?: { compactComposer?: boolean; maxPanes?: number }; pins?: readonly string[]; waiting?: readonly string[]; open?: boolean } = {}) {
@@ -84,10 +87,20 @@ function Probe({ slot, owner, owners }: { slot: string; owner: object; owners: {
   }
   const body = owner as PaneBodyOwnerProps
   owners.body.set(chat, body)
+  bodyRenders.set(chat, (bodyRenders.get(chat) ?? 0) + 1)
   return <div data-body={chat} data-compact={body.compact} />
 }
 
 describe('the multiview layer', () => {
+  it('renders the main content again without rendering the agent panes again', () => {
+    bodyRenders.clear()
+    const h = setup()
+    const before = [...bodyRenders.entries()]
+    act(() => { h.view.rerender(<MultiviewLayer {...({ ...h.props, children: <div data-main-content data-changed /> } as never as LayerProps)} />) })
+    expect(document.querySelector('[data-main-content]')!.hasAttribute('data-changed')).toBe(true)
+    expect([...bodyRenders.entries()]).toEqual(before)
+  })
+
   it('leaves the main content as it is while Multiview is closed', () => {
     const h = setup({ open: false })
     expect(document.querySelector('[data-main-content]')).not.toBeNull()

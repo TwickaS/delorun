@@ -108,6 +108,28 @@ function metricDelta(before: ChromiumMetrics, after: ChromiumMetrics, wallMs: nu
   }
 }
 
+/** Print the functions with the most self time of a CPU profile, grouped by name and script. */
+interface CpuProfile {
+  nodes: Array<{ id: number; callFrame: { functionName: string; url: string; lineNumber: number } }>
+  samples?: number[]
+  timeDeltas?: number[]
+}
+
+function printProfile(profile: CpuProfile): void {
+  const byId = new Map(profile.nodes.map(node => [node.id, node]))
+  const self = new Map<string, number>()
+  const samples = profile.samples ?? []
+  const deltas = profile.timeDeltas ?? []
+  samples.forEach((id, index) => {
+    const frame = byId.get(id)?.callFrame
+    if (frame === undefined) return
+    const key = `${frame.functionName || '(anonymous)'} ${frame.url.split('/').slice(-2).join('/')}:${String(frame.lineNumber)}`
+    self.set(key, (self.get(key) ?? 0) + (deltas[index] ?? 0) / 1000)
+  })
+  const top = [...self.entries()].sort((left, right) => right[1] - left[1]).slice(0, 30)
+  console.log(`CPU PROFILE (self ms)\n${top.map(([key, ms]) => `${ms.toFixed(0).padStart(6)}  ${key}`).join('\n')}`)
+}
+
 async function measure<T>(cdp: CDPSession, action: () => Promise<T>): Promise<{ measurement: Measurement; value: T }> {
   const before = await chromiumMetrics(cdp)
   const started = performance.now()
@@ -371,7 +393,10 @@ describe('manual web performance: Multiview panes', () => {
       })
       expect(opened.value).toBeLessThanOrEqual(MOUNTED_TURN_LIMIT)
       const closedState = await retainedState(cdp, page)
+      const profileClosed = process.env.MV_PROFILE === 'closed'
+      if (profileClosed) { await cdp.send('Profiler.enable'); await cdp.send('Profiler.setSamplingInterval', { interval: 200 }); await cdp.send('Profiler.start') }
       const closedStream = await measure(cdp, () => streamOnce(scaffold, page, 'MV_STREAM_CLOSED'))
+      if (profileClosed) printProfile((await cdp.send('Profiler.stop')).profile)
 
       await page.getByRole('button', { name: `${String(AGENT_COUNT)} subagents` }).click()
       for (const label of AGENT_LABELS) await page.getByRole('button', { name: `Pin ${label} to Multiview` }).click()
@@ -393,7 +418,33 @@ describe('manual web performance: Multiview panes', () => {
       const mounted: Record<string, number> = {}
       for (const id of paneIds) mounted[id] = await mountedTurns(page, `[data-pane="${id}"]`)
       const openState = await retainedState(cdp, page)
+      // MV_PROFILE=1 samples the CPU during the six-pane stream and prints the functions with the most self time; MV_PROFILE=closed does
+      // the same for the closed stream, and MV_PROFILE=trace prints the largest style recalculations and what invalidated them.
+      const profiling = process.env.MV_PROFILE === '1'
+      const tracing = process.env.MV_PROFILE === 'trace'
+      const traced: Array<{ name: string; dur?: number; args?: Record<string, unknown> }> = []
+      if (tracing) {
+        cdp.on('Tracing.dataCollected', (chunk: { value: typeof traced }) => { traced.push(...chunk.value) })
+        await cdp.send('Tracing.start', { traceConfig: { includedCategories: ['devtools.timeline', 'disabled-by-default-devtools.timeline.invalidationTracking'] } } as never)
+      }
+      if (profiling) { await cdp.send('Profiler.enable'); await cdp.send('Profiler.setSamplingInterval', { interval: 200 }); await cdp.send('Profiler.start') }
       const openStream = await measure(cdp, () => streamOnce(scaffold, page, 'MV_STREAM_OPEN'))
+      if (profiling) printProfile((await cdp.send('Profiler.stop')).profile)
+      if (tracing) {
+        const done = new Promise<void>((resolve) => { cdp.once('Tracing.tracingComplete', () => { resolve() }) })
+        await cdp.send('Tracing.end')
+        await done
+        const recalcs = traced.filter(event => event.name === 'UpdateLayoutTree' && event.dur !== undefined).sort((left, right) => (right.dur ?? 0) - (left.dur ?? 0)).slice(0, 8)
+        console.log(`BIGGEST UpdateLayoutTree (ms, elements)\n${recalcs.map(event => `${((event.dur ?? 0) / 1000).toFixed(0)} ${JSON.stringify(event.args)}`).join('\n')}`)
+        const reasons = new Map<string, number>()
+        for (const event of traced) {
+          if (event.name !== 'StyleRecalcInvalidationTracking') continue
+          const data = (event.args as { data?: Record<string, unknown> }).data ?? {}
+          const key = `${String(data.reason)} ${String(data.invalidationSet ?? '')} ${String(data.changedAttribute ?? data.changedClass ?? data.changedId ?? '')} <${String(data.nodeName ?? '')}> ${String(data.extraData ?? '')}`
+          reasons.set(key, (reasons.get(key) ?? 0) + 1)
+        }
+        console.log(`INVALIDATIONS\n${[...reasons.entries()].sort((left, right) => right[1] - left[1]).slice(0, 15).map(([key, count]) => `${String(count).padStart(6)} ${key}`).join('\n')}`)
+      }
 
       // Structure: six panes, and each pane mounts only the newest part of its chat.
       expect(await region.locator('[data-pane-header]').count()).toBe(paneIds.length)
@@ -435,6 +486,8 @@ describe('manual web performance: Multiview panes', () => {
         row('stream 120 chunks, closed: first chunk (ms)', closedStream.value.firstChunkMs),
         row('stream 120 chunks, six panes: wall (ms)', openStream.measurement.wallMs),
         row('stream 120 chunks, six panes: script (ms)', openStream.measurement.scriptMs),
+        row('stream 120 chunks, closed: layout (ms)', closedStream.measurement.layoutMs),
+        row('stream 120 chunks, six panes: layout (ms)', openStream.measurement.layoutMs),
         row('stream 120 chunks, six panes: style recalc (ms)', openStream.measurement.recalcStyleMs),
         row('stream 120 chunks, six panes: first chunk (ms)', openStream.value.firstChunkMs),
       ].join('\n')
