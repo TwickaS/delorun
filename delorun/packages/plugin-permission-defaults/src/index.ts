@@ -502,9 +502,9 @@ export class PermissionDefaults extends Service {
    * so the chat the person answered in stops asking. The change is written to the store before it is remembered, and
    * one line without the folder's path goes to the Host's log.
    * @param request - the workspace the consent named, the review id it was shown with, on or off, and the answer.
-   * @param from - who answered: `computer` for the loopback studio, `device` for an unlocked reach device while dangerous
-   *   mode holds. A grant a device mints is recorded as the device's and withdrawn when the mode ends; a grant the
-   *   computer made, or one the workspace already held, stays.
+   * @param from - who answered: `computer` for the loopback studio, `device` for a reach device (with its one-action Face
+   *   ID or PIN grant). A grant a device mints while dangerous mode holds is recorded as the device's and withdrawn when
+   *   the mode ends; one it mints outside the mode, one the computer made, or one the workspace already held, stays.
    * @returns the workspace's full access after the change, and how many open chats were set back.
    * @throws {FullAccessChangeError} `UNCONFIRMED` without the person's answer, `UNKNOWN_WORKSPACE` for a folder no
    *   surface shows or, when turning full access on, a folder Delorun never adds as a workspace (a filesystem root, the
@@ -529,14 +529,16 @@ export class PermissionDefaults extends Service {
         if (workspaceAccessOf(this.grantedEntries(entries), workspace).reviewId !== request.reviewId) {
           throw new FullAccessChangeError('STALE_REVIEW', 'this workspace\'s full access changed after the consent was shown; look at it again before you answer')
         }
-        const mintedByDevice = request.on && from === 'device' && !fullAccessGranted(entries, workspace)
+        // Only a grant a device makes while dangerous mode holds ends with the mode; one it makes outside the mode, with its
+        // one-action Face ID or PIN grant (F13), stays like the computer's.
+        const mintedByDevice = request.on && from === 'device' && this.everywhereOn() && !fullAccessGranted(entries, workspace)
         // Recorded before the grant, so a grant that is written is never missing from the record.
         await this.markDeviceGrant(workspace, mintedByDevice ? 'add' : 'remove')
         await this.write(entries, workspace, request.on ? FULL_ACCESS_PRESET : SAFER_PRESET)
       })
       const chats = request.on ? this.switchChat(chat) : this.withdrawOpenChats(workspace)
       const grants = [...this.entries.values()].filter(entry => entry.fullAccessGrantedAt !== null).length
-      this.ctx.logger.info(`permission-defaults: full access turned ${request.on ? 'on' : 'off'} for one workspace at the home's computer; ${String(grants)} workspace(s) hold a grant`)
+      this.ctx.logger.info(`permission-defaults: full access turned ${request.on ? 'on' : 'off'} for one workspace ${from === 'device' ? 'from a device' : 'at the home\'s computer'}; ${String(grants)} workspace(s) hold a grant`)
       return { access: workspaceAccessOf(this.grantedEntries(), workspace, this.titleOf(workspace)), chats }
     })
   }

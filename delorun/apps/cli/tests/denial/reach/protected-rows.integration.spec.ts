@@ -27,7 +27,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import type { StudioAddress } from '@delorun/contract-admission'
 import {
-  COMPUTER_ONLY_ROW_MODULES, DEFAULT_PERMISSION_REFUSAL, DeviceStore, HOME_AUTH_SWITCH, PROTECTED_ROW_REFUSAL, protectedEntryIdsOf, protectedPluginsIn, REACH_DEVICE_COMMANDS, REACH_SWITCH, switchOffRefusal, UNLISTED_COMMAND_REFUSAL,
+  COMPUTER_ONLY_ROW_MODULES, DEFAULT_PERMISSION_REFUSAL, DeviceStore, hashArgs, HOME_AUTH_SWITCH, PROTECTED_ROW_REFUSAL, protectedEntryIdsOf, protectedPluginsIn, REACH_DEVICE_COMMANDS, REACH_SWITCH, switchOffRefusal, UNLISTED_COMMAND_REFUSAL,
 } from '@delorun/home-auth'
 import { EXTERNAL_AGENT_CONSENT_SWITCH } from '@delorun/plugin-delegation-consent'
 import { DELEGATION_CONSENT_ROW } from '@delorun/plugin-delegation-consent/wire'
@@ -48,6 +48,7 @@ let studio: Studio
 let peer: PeerScope
 let workspaceId: WorkspaceId
 let elevation: string
+let deviceIdOfPhone: ReturnType<typeof recordOf>['id']
 let rpc = 0
 
 /**
@@ -84,6 +85,8 @@ async function expectDenied(endpoint: string, args: Record<string, unknown>, rea
  * @returns the call's result.
  */
 async function expectAdmitted(endpoint: string, args: Record<string, unknown>): Promise<Result> {
+  // The device holds an unlock, which opens no face action (A483); a one-action PIN grant for exactly this call is what admits it.
+  studio.ctx.homeAuth.faceGrants()?.mint({ deviceId: deviceIdOfPhone, listener: LISTENER }, [{ action: endpoint, hash: hashArgs(args) ?? '' }], 'pin')
   const result = await call(endpoint, args)
   expect(result.ok ? undefined : result.error.code, endpoint).not.toBe('remote-access/denied')
   return result
@@ -118,6 +121,7 @@ beforeAll(async () => {
   ctx.homeAuth.serve({ listener: LISTENER, address: ADDRESS, factor: 'tailnet-membership' })
   await ctx.homeAuth.claim(claimOf((await ctx.homeAuth.issueOwnerCode()).code, { address: brandString<StudioAddress>('http://127.0.0.1:3080') }))
   const record = recordOf(2, ADDRESS)
+  deviceIdOfPhone = record.id
   await new DeviceStore({ file: join(studio.home, 'secrets', 'home-auth', 'devices.json') }).add(record)
   const opened = await ctx.homeAuth.openSession({ deviceId: record.id, listener: LISTENER, address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: 60 * 60 * 1000 })
   const admitted = ctx.authenticator.admit({ headers: { cookie: `__Host-delorun-session=${opened.token}` }, method: 'GET', url: '/' }, LISTENER)

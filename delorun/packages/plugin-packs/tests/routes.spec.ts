@@ -24,7 +24,7 @@ function setup(home: { elevated?: boolean, grace?: boolean, page?: Record<string
   const ctx = {
     effect: (register: () => unknown) => { register() },
     get: (name: string) => (name === 'homeAuth' ? {
-      passkeysEnabled: () => false, faceGrants: () => undefined, deviceHasPasskey: () => false,
+      faceGrants: () => undefined, deviceHasPasskey: () => false,
       ...home.face?.fields ?? {},
       elevationOf: () => (home.grace === true ? { id: 'g1', grace: true } : home.elevated === true ? { id: 'e1' } : undefined),
       pageUnlockOf: (id: string) => (home.page?.[id] === true ? { id: 'p1' } : undefined),

@@ -113,7 +113,7 @@ export async function readEverywhere(fetch: HostFetch): Promise<EverywhereAnswer
 }
 
 /**
- * Turn dangerous mode off by removing its grant file; the computer and an unlocked device may call it.
+ * Turn dangerous mode off by removing its grant file; the computer and a device that confirms with Face ID or its PIN may call it.
  * @param fetch - the request function.
  * @returns the state after the change.
  * @throws {HostRequestError} for a refusal, an unreachable Host or an unreadable answer.

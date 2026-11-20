@@ -10,7 +10,6 @@ import type { BrowserInstallAnswer, BrowserTestAnswer } from '@delorun/bundle-lo
 import type { TurnOffOutcome } from '../src/client/browser-pack.ts'
 import type { BundleInstaller, BundleView, RowView } from '../src/client/bundles.ts'
 import { en } from '../src/client/locales.ts'
-import { en as devicesEn } from '../../bundle-local/src/client/devices-locales.ts'
 import type { DelegationConsentSettings } from '@delorun/plugin-delegation-consent/wire'
 import type { PreviewFlagsStore, PreviewFlagView } from '@delorun/preview-flags/client'
 import type { ThemeSettings } from '@delorun/plugin-theme'
@@ -27,8 +26,6 @@ import { DIRECTORY } from './directory.fixture.ts'
 export const t: StepServices['t'] = makeTranslate(en)
 
 /** The theme's labels the look step shows, as the theme words them. */
-/** The Devices section's copy, which the Phone access step's Phone powers choice draws with. */
-export const devices: StepServices['phonePowers']['t'] = makeTranslate(devicesEn)
 
 export const appearance: StepServices['appearance'] = makeTranslate({
   'mode': 'Mode', 'mode.light': 'Light', 'mode.dark': 'Dark', 'mode.system': 'System',
@@ -140,6 +137,13 @@ export const DEFAULT_WORKSPACE = 'workspace-1' as WorkspaceId
 /** The default workspace's folder in the specs. */
 export const DEFAULT_PATH = '/home/person/Delorun'
 
+/**
+ * A text matcher for a path the card breaks into parts after each slash.
+ * @param path - the whole path.
+ * @returns a matcher for `getByText` that finds the element holding the whole path.
+ */
+export const pathText = (path: string) => (_content: string, element: Element | null): boolean => element?.textContent === path
+
 /** A computer with both agents signed in and Tailscale ready. */
 export const READY: Readiness = { agents: { 'claude-code': 'found', 'codex': 'found' }, tailscale: { state: 'ready', dnsName: 'box.example.ts.net' } }
 
@@ -214,7 +218,7 @@ export function providersFake(change: { readonly directory?: readonly DirectoryE
 export function agentsFake(options: { readonly rows?: boolean; readonly minutes?: number } = {}) {
   const claude = liveForm<AgentRowSettings>(options.rows === false ? undefined : {}, { status: options.rows === false ? 'unavailable' : 'ready' })
   const codex = liveForm<AgentRowSettings>(options.rows === false ? undefined : {}, { status: options.rows === false ? 'unavailable' : 'ready' })
-  const limit = liveForm<DelegationConsentSettings>({ enabled: true, runTimeoutMinutes: options.minutes ?? 30, fullAccessStartsAgents: true })
+  const limit = liveForm<DelegationConsentSettings>({ enabled: true, runTimeoutMinutes: options.minutes ?? 30, fullAccessStartsAgents: true, claudeCodeLevel: 'standard', codexLevel: 'standard' })
   return { claude, codex, limit, face: { rows: { 'claude-code': claude.form, 'codex': codex.form }, limit: limit.form } satisfies AgentsFace }
 }
 
@@ -287,7 +291,6 @@ export function stepServices(change: Partial<StepServices> = {}): StepServices &
     renderSection: (id: string) => `section ${id}`,
     resolveText: text => (typeof text === 'string' ? text : text.en),
     pin: { fetch: () => Promise.reject(new Error('no PIN requests in this spec')), openSettings: () => undefined },
-    phonePowers: { t: devices, fetch: () => Promise.resolve(new Response(null, { status: 404 })) },
     browser: browserFake().face,
     previewFlags: flagsFake(),
     spies: bundles,

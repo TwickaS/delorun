@@ -1,6 +1,7 @@
 /**
  * The store behind `ctx.delorunFaceGrant`: one pending confirmation at a time, shown by the overlay of
- * [`FaceIdGrantOverlay.tsx`](./FaceIdGrantOverlay.tsx). A second request while one shows ends the first as cancelled.
+ * [`FaceIdGrantOverlay.tsx`](./FaceIdGrantOverlay.tsx). A second request while one shows ends the first as cancelled, and so
+ * does cancelling the call it was asked for.
  */
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
@@ -41,10 +42,17 @@ export function createFaceGrantSource(): FaceGrantSource {
   return {
     hooks: { pending: store },
     grant: (request) => {
+      if (request.signal?.aborted === true) return Promise.resolve(undefined)
       settle(undefined)
       return new Promise<string | undefined>((done) => {
-        resolve = done
+        const close = (): void => { if (resolve === finish) settle(undefined) }
+        const finish = (grantId: string | undefined): void => {
+          request.signal?.removeEventListener('abort', close)
+          done(grantId)
+        }
+        resolve = finish
         store.set({ request })
+        request.signal?.addEventListener('abort', close, { once: true })
       })
     },
     settle,

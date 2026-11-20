@@ -288,10 +288,9 @@ describe('reach on the Tailscale private address', () => {
         type: 'client-request', rpcId: 'reach-row', method: 'pluginManager/setPluginEnabled', payload: { args: { id: 'delorun-reach', enabled: false } },
       })
       expect(switched.status).toBe(200)
-      // This fixture mounts the reach and home-auth plugins directly, so the Loader holds no `delorun-reach` row for the policy to
-      // name; the call reaches the plugin manager, which changes nothing of an unknown row. The policy's refusal of the real
-      // composed rows (`remote-access/denied`, PROTECTED_ROW_REFUSAL) is pinned by `protected-rows.integration.spec.ts`.
-      expect(json(switched).result).toMatchObject({ ok: true, value: { changed: false, error: { code: 'unknown-plugin' } } })
+      // A phone holding an unlock still has no grant for the call, so the policy refuses it before the plugin manager sees it (A483). The refusal of
+      // the real composed rows (`remote-access/denied`, PROTECTED_ROW_REFUSAL) is pinned by `protected-rows.integration.spec.ts`.
+      expect(json(switched).result).toMatchObject({ ok: false, error: { code: 'remote-access/denied' } })
       expect(studio.ctx.reach.status()[0]?.state).toBe('ready')
       expect(calls.filter(call => call.at(-1) === 'off')).toEqual([])
     })
@@ -302,7 +301,7 @@ describe('reach on the Tailscale private address', () => {
       expect(guard).toBeDefined()
       const answer = (request: object, value: unknown, by: PeerScope): void => { guard?.check({ peer: by, event: 'approval/request', request, value }) }
       expect(() => { answer({ toolName: 'bash', grants: 'full-access' }, 'allowed-once', peer) }).toThrow(RemoteError)
-      expect(() => { answer({ toolName: 'permission', grants: 'full-access' }, 'allowed-once', peer) }).toThrow(/needs you at your computer/)
+      expect(() => { answer({ toolName: 'permission', grants: 'full-access' }, 'allowed-once', peer) }).toThrow(/needs your confirmation: granting full access/)
       // Refusing the same prompt from the phone, and answering any other prompt, apply.
       expect(() => { answer({ toolName: 'bash', grants: 'full-access' }, 'rejected', peer) }).not.toThrow()
       expect(() => { answer({ toolName: 'bash' }, 'allowed-once', peer) }).not.toThrow()
@@ -314,7 +313,7 @@ describe('reach on the Tailscale private address', () => {
       const guard = studio.ctx.get('remoteAnswerGuard')
       expect(guard).toBeDefined()
       const answer = (request: object, value: unknown, by: PeerScope): void => { guard?.check({ peer: by, event: 'approval/request', request, value }) }
-      expect(() => { answer({ toolName: 'claude-code', grants: 'external-agent' }, 'allowed-once', peer) }).toThrow(/needs you at your computer: starting an external agent/)
+      expect(() => { answer({ toolName: 'claude-code', grants: 'external-agent' }, 'allowed-once', peer) }).toThrow(/needs your confirmation: starting an external agent/)
       // Declining from the phone applies, and the studio on the home's computer can allow the start.
       expect(() => { answer({ toolName: 'claude-code', grants: 'external-agent' }, 'rejected', peer) }).not.toThrow()
       expect(() => { answer({ toolName: 'claude-code', grants: 'external-agent' }, 'allowed-once', studio.ctx.connection.browserPeer) }).not.toThrow()

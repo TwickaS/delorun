@@ -1,26 +1,33 @@
 // @vitest-environment jsdom
 /**
- * A refused action is one of three states on a device: unlock (the notice states the minutes and offers Unlock), the
+ * A refused action is one of two states on a device: Face ID or the PIN (the notice says each call asks), or the
  * computer (the notice says why), or neither, which the caller reports as before.
  */
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { ELEVATION_REQUIRED, gateEn, gateOf, gateZh, unlockSentence, type GateTranslate } from '../src/client/gate.ts'
-import { GateNotice } from '../src/client/GateNotice.tsx'
+import { afterEach, describe, expect, it } from 'vitest'
+import { cleanup, render, screen } from '@testing-library/react'
+import { ELEVATION_REQUIRED, gateEn, gateOf, gateZh, type GateTranslate } from '../src/client/gate.ts'
+import { GateFailure, GateNotice } from '../src/client/GateNotice.tsx'
 import { HostRequestError, LOOPBACK_REQUIRED } from '../src/client/host-api.ts'
 
 afterEach(cleanup)
 
-const refused = (code: string) => new HostRequestError('/x', { kind: 'refused', status: 403, code, message: 'no' })
+const refused = (code: string, fields?: Record<string, unknown>) => new HostRequestError('/x', { kind: 'refused', status: 403, code, message: 'no', ...fields === undefined ? {} : { fields } })
 const t: GateTranslate = (key, values) => Object.entries(values ?? {}).reduce((text, [name, value]) => text.replace(`{${name}}`, value), gateEn[key])
 
 describe('gateOf', () => {
-  it('names the unlock and computer refusals and nothing else', () => {
-    expect(gateOf(refused(ELEVATION_REQUIRED))).toEqual({ kind: 'unlock' })
+  it('names the Face ID and computer refusals and nothing else', () => {
+    expect(gateOf(refused(ELEVATION_REQUIRED, { action: 'settings/update' }))).toEqual({ kind: 'face' })
     expect(gateOf(refused(LOOPBACK_REQUIRED))).toEqual({ kind: 'computer' })
     expect(gateOf(refused('BAD_REQUEST'))).toBeUndefined()
     expect(gateOf(new HostRequestError('/x', { kind: 'unreadable', status: 500 }))).toBeUndefined()
     expect(gateOf(new Error('x'))).toBeUndefined()
+  })
+
+  // Returning an `unlock` kind for a refusal that names no action brings back the Unlock prompt.
+  it('leaves an ELEVATION_REQUIRED refusal that names no grant action to its own sentence', () => {
+    // No grant lifts such a refusal (an oversized body, the gate before the grant store), so "Try again" would only fail again.
+    expect(gateOf(refused(ELEVATION_REQUIRED))).toBeUndefined()
+    expect(gateOf(refused(ELEVATION_REQUIRED, { action: '' }))).toBeUndefined()
   })
 })
 
@@ -29,24 +36,16 @@ describe('the gate copy', () => {
     expect(Object.keys(gateZh)).toEqual(Object.keys(gateEn))
   })
 
-  it('states the unlock minutes, singular and unknown included', () => {
-    expect(unlockSentence(t, 15)).toContain('15 minutes')
-    expect(unlockSentence(t, 1)).toContain('1 minute ')
-    expect(unlockSentence(t, undefined)).toBe(gateEn['gate.unlockUnknown'])
+  it('names no unlock', () => {
+    expect(Object.keys(gateEn).filter(key => key.startsWith('gate.unlock'))).toEqual([])
+    expect(Object.values(gateEn).filter(text => /unlock/i.test(text))).toEqual([])
   })
 })
 
 describe('GateNotice', () => {
-  it('prompts for the unlock with its minutes and opens the dialog', () => {
-    const open = vi.fn()
-    render(<GateNotice gate={{ kind: 'unlock' }} t={t} minutes={15} onUnlock={open} reason="why" />)
-    expect(screen.getByText(/15 minutes/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: gateEn['gate.unlockButton'] }))
-    expect(open).toHaveBeenCalledOnce()
-  })
-
-  it('offers no button where no unlock can be opened', () => {
-    render(<GateNotice gate={{ kind: 'unlock' }} t={t} minutes={15} reason="why" />)
+  it('says each call needs Face ID or the PIN, without a button', () => {
+    render(<GateNotice gate={{ kind: 'face' }} t={t} reason="why" />)
+    expect(screen.getByText(gateEn['gate.face'])).toBeTruthy()
     expect(screen.queryByRole('button')).toBeNull()
   })
 
@@ -54,5 +53,26 @@ describe('GateNotice', () => {
     render(<GateNotice gate={{ kind: 'computer' }} t={t} reason="only there" />)
     expect(screen.getByText('Do this on your computer: only there')).toBeTruthy()
     expect(screen.queryByRole('button')).toBeNull()
+  })
+})
+
+describe('GateFailure', () => {
+  // Returning the `unlock` gate (its Unlock button and "Unlock this device" sentence) fails this.
+  it('shows no Unlock button for a Face ID refusal', () => {
+    render(<GateFailure t={t} error={refused(ELEVATION_REQUIRED, { action: 'settings/update' })} text="the Host's sentence" />)
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(screen.getByText(gateEn['gate.face'])).toBeTruthy()
+    expect(screen.queryByText(/unlock/i)).toBeNull()
+  })
+
+  it('shows a refusal no grant lifts with its own sentence, not "Try again"', () => {
+    render(<GateFailure t={t} error={refused(ELEVATION_REQUIRED)} text="This request is too large to confirm" />)
+    expect(screen.getByRole('alert').textContent).toBe('This request is too large to confirm')
+    expect(screen.queryByText(gateEn['gate.face'])).toBeNull()
+  })
+
+  it('shows another failure as an alert with its own sentence', () => {
+    render(<GateFailure t={t} error={refused('BAD_REQUEST')} text="the Host's sentence" />)
+    expect(screen.getByRole('alert').textContent).toBe('the Host\'s sentence')
   })
 })

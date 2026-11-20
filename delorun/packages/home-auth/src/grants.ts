@@ -15,7 +15,8 @@
  *   events and reads of that exact id in that exact scope (the Session or global resource the call named) for the Peer
  *   that opened it, until it idles {@link HOLD_IDLE_MS}, lives {@link HOLD_ABSOLUTE_MS}, its device's session ends or
  *   that Peer is disposed ({@link GrantStore.endPeer}). A Peer is one device on one listener and one page unlock, so
- *   closing a browser tab that shares it does not end the hold. Another id, scope or Peer needs a new grant.
+ *   every page and tab of the device shares it: a reload or a second tab showing the same terminal rides the hold, and
+ *   closing a tab does not end it. Another id, scope or Peer needs a new grant.
  *
  * @module @delorun/home-auth/grants
  */
@@ -45,12 +46,14 @@ export const HOLD_FEATURES = ['terminal', 'picker'] as const
 export type HoldFeature = (typeof HOLD_FEATURES)[number]
 
 /**
- * The actions whose grant opens a hold, by the feature the hold is for: `terminal/create` opens the terminal it creates
- * and `directoryPicker/list` opens the picker. The other actions of the feature are admitted by a live hold of the
- * device (`./grants.ts`).
+ * The actions whose grant opens a hold, by the feature the hold is for: `terminal/create` opens the terminal it creates,
+ * `terminal/retain` and `terminal/attach` the existing terminal they name (so a reloaded terminal tab confirms once,
+ * whichever of its streams opens first), and `directoryPicker/list` opens the picker. The other actions of the feature are admitted by a live hold of the device (`./grants.ts`).
  */
 export const HOLD_OPENERS: Readonly<Record<string, HoldFeature>> = {
   'terminal/create': 'terminal',
+  'terminal/retain': 'terminal',
+  'terminal/attach': 'terminal',
   'directoryPicker/list': 'picker',
 }
 

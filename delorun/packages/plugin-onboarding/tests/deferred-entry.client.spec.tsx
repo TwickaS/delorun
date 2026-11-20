@@ -102,6 +102,13 @@ describe('the Finish setup entry', () => {
     expect(entry.hasAttribute('data-sidebar-foot-line')).toBe(false)
   })
 
+  it('shows no count in the rail while the guide is unfinished and no step waits', async () => {
+    await mount(services({ done: false }), false)
+    const entry = screen.getByRole('button', { name: en.finishSetup })
+    expect(entry.textContent).toBe('')
+    expect(entry.getAttribute('data-delorun-finish-setup-left')).toBe('0')
+  })
+
   it('is absent at zero, once the work is done and away from the computer', async () => {
     await mount(services())
     expect(screen.queryByRole('button')).toBeNull()

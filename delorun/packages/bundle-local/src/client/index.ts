@@ -8,11 +8,11 @@
  * or `npmMirror`, through upstream's configuration form, into the active profile's `cordis.patch.yml`.
  *
  * It also registers the Devices section, which shows the reach state, manages the devices the home approved and answers
- * their requests to unlock sensitive actions; the Network section, which sets each workspace's network for sandboxed
+ * their requests to unlock sensitive actions at the computer; the Network section, which sets each workspace's network for sandboxed
  * commands and `web_fetch` at the home's own computer; the notice that an answer the home refused, such as a full-access
- * grant from a remote studio, must be given at the home's own computer; and the remote studio's unlock, which turns a
- * call refused with `elevation-required:` into a request to the computer and shows a banner while sensitive actions are
- * unlocked. The consent surfaces of Delorun's two consent plugins come from here too: the full-access consent,
+ * grant from a remote studio, needs Face ID or the PIN, or the home's own computer; and the Face ID step, which turns a call a device sends that the home refused for
+ * want of a grant (a Remote `elevation-required:` refusal or a plugin route's `403 ELEVATION_REQUIRED` naming its
+ * action) into one Face ID or PIN confirmation and sends the call once more (`ctx.delorunFaceGrant`). The consent surfaces of Delorun's two consent plugins come from here too: the full-access consent,
  * which upstream's permission control asks through the `permissionSwitchConsent` service before a chat switches to
  * full access in a workspace without a grant; the approval card's action for a request that asks for full access; the
  * review of a waiting stdio MCP server and the notice that one waits; the Permissions section, which lists every
@@ -32,8 +32,6 @@
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: the 'connection/reset' event merge and the connection service's type.
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
-import { installGateUnlock } from './gate-unlock.ts'
-import { applyUnlockConnection } from './unlock-connection.ts'
 // Type-only: the Chat node slot and its keyed data map.
 import type {} from '@deepseek-ai/dsh-client-ui-chat/client'
 // Type-only: the ctx.uiConversation Context merge.
@@ -76,25 +74,24 @@ import { VersionsRow, type VersionsRowInjected } from './VersionsRow.tsx'
 import { AboutSection } from './AboutSection.tsx'
 import { overridePluginCopy, overrideSettingsCopy } from './plugin-copy.ts'
 import { ReportFooterAction, reportChatStarter, studioSurface } from './ReportFooterAction.tsx'
+import type { StudioSurface } from './report-url.ts'
 import { overrideTitle } from './title.ts'
-import { readVersions } from './versions.ts'
+import { readVersions, type DelorunVersions } from './versions.ts'
 import { createRemoteNoticeSource, RemoteNotice } from './RemoteNotice.tsx'
 import { createPinSource, type PinSource } from './pin-lock.ts'
-import { en as pinEn, zh as pinZh, type PinLocaleKey } from './pin-locales.ts'
 import { en as faceIdEn, zh as faceIdZh, type FaceIdLocaleKey } from './face-id-locales.ts'
-import { PinLock } from './PinLock.tsx'
-import type { FaceGrantService } from '@delorun/plugin-changes/face-grant'
-import { createFaceGrantSource } from './face-grant.ts'
+import { grantingFetchOf, type FaceGrantService } from '@delorun/plugin-changes/face-grant'
+import { createFaceGrantSource, type FaceGrantSource } from './face-grant.ts'
+import { confirmationQueue, grantingFetch, oneAtATime, remoteDenialLift, type ConfirmationQueue } from './face-retry.ts'
 import { FaceIdGrantOverlay } from './FaceIdGrantOverlay.tsx'
 import { FaceIdAnswerAction, type FaceIdAnswerInjected } from './FaceIdAnswerAction.tsx'
 import { FaceIdSection, type FaceIdSectionInjected } from './FaceIdSection.tsx'
 import { FaceIdPairingOverlay } from './FaceIdPairingOverlay.tsx'
 import { en as pinModeEn, zh as pinModeZh, type PinModeLocaleKey } from './pin-mode-locales.ts'
 import { PinModeSection, type PinModeSectionInjected } from './PinModeSection.tsx'
-import { attachPinTriggers } from './pin-triggers.ts'
 import { provideAgentSeatReach } from './agent-seat-reach.ts'
+import { watchSessionRotation } from './session-rotation.ts'
 import { createUnlockSource, type UnlockSource } from './unlock.ts'
-import { UnlockOverlay } from './UnlockOverlay.tsx'
 import { trustApi, TrustStore, type TrustApi } from './trust-api.ts'
 import { TrustBadge, type TrustBadgeInjected } from './TrustBadge.tsx'
 import { en as trustEn, zh as trustZh, type TrustLocaleKey } from './trust-locales.ts'
@@ -131,12 +128,10 @@ import { DELEGATION_CONSENT_ROW, type DelegationConsentSettings } from '@delorun
 
 export type { PrivacyLocaleKey } from './locales.ts'
 export type { DevicesLocaleKey } from './devices-locales.ts'
-export type { PinLocaleKey } from './pin-locales.ts'
 export type { FaceIdLocaleKey } from './face-id-locales.ts'
 export type { PinModeLocaleKey } from './pin-mode-locales.ts'
 export type { PinModeSectionProps } from './PinModeSection.tsx'
-export type { PinOutcome, PinSource, PinView } from './pin-lock.ts'
-export type { PinLockProps } from './PinLock.tsx'
+export type { PinSource, PinView } from './pin-lock.ts'
 export type { TrustLocaleKey } from './trust-locales.ts'
 export type { TrustBadgeInjected, TrustBadgeProps } from './TrustBadge.tsx'
 export { badgeLabel, formatTime, rowStateLabel, TrustBadge, VERIFY_COMMAND } from './TrustBadge.tsx'
@@ -168,8 +163,7 @@ export type { UpdateCheckRowInjected, UpdateCheckRowProps } from './UpdateCheckR
 export type { VersionsRowInjected, VersionsRowProps } from './VersionsRow.tsx'
 export type { AboutSectionProps } from './AboutSection.tsx'
 export type { DevicesSectionInjected, DevicesSectionProps } from './DevicesSection.tsx'
-export type { UnlockDialog, UnlockOutcome, UnlockSource, UnlockView } from './unlock.ts'
-export type { UnlockOverlayProps } from './UnlockOverlay.tsx'
+export type { UnlockSource, UnlockView } from './unlock.ts'
 export type { NetworkSectionInjected, NetworkSectionProps } from './NetworkSection.tsx'
 export {
   DEVICE_ROUTES, HostRequestError, readReachStatus, REACH_STATES,
@@ -204,8 +198,6 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'delorunPrivacy': PrivacyLocaleKey
     /** The Devices section's copy and the remote studio's refused-answer notice. */
     'delorunDevices': DevicesLocaleKey
-    /** The PIN lock screen's copy. */
-    'delorunPin': PinLocaleKey
     /** The Face ID screens' copy: the action sheet, enrolment and the passkey list. */
     'delorunFaceId': FaceIdLocaleKey
     /** The PIN mode settings section's copy. */
@@ -228,9 +220,6 @@ export const NS = 'delorunPrivacy'
 
 /** Dictionary namespace of the Devices section and the remote refused-answer notice. */
 export const DEVICES_NS = 'delorunDevices'
-
-/** Dictionary namespace of the PIN lock screen. */
-export const PIN_NS = 'delorunPin'
 
 /** Dictionary namespace of the Face ID screens. */
 export const FACE_ID_NS = 'delorunFaceId'
@@ -258,9 +247,6 @@ export const PIN_MODE_SECTION_ID = 'delorun-pin-mode'
 
 /** The PIN mode section's place in the Settings navigation: right after Devices. */
 export const PIN_MODE_SECTION_ORDER = 21.5
-
-/** The `shell.overlay` id of the PIN lock screen. */
-export const PIN_LOCK_OVERLAY_ID = 'delorun-pin-lock'
 
 /** Dictionary namespace of the Network section. */
 export const NETWORK_NS = 'delorunNetwork'
@@ -339,8 +325,6 @@ export const SETUP_VERSIONS_SECTION_ORDER = 24.5
 /** The `shell.overlay` id of the remote studio's refused-answer notice. */
 export const REMOTE_NOTICE_ID = 'delorun-remote-full-access'
 
-/** The `shell.overlay` id of the remote studio's unlock dialog, banner and locked-again notice. */
-export const UNLOCK_OVERLAY_ID = 'delorun-unlock'
 
 /** Dictionary namespace of the "Needs setup" state in Plugins. */
 export const REQUIREMENTS_NS = 'delorunRequirements'
@@ -403,7 +387,6 @@ export const inject = ['slots', 'locale', 'configForms', 'sessions', 'connection
  * @param ctx - the browser plugin context.
  */
 export function apply(ctx: Context): void {
-  applyUnlockConnection(ctx)
   const t = ctx.locale.bind(NS)
   ctx.provide('delorunNotice', { acknowledged: () => noticeAcknowledged(), acknowledge: () => { acknowledgeNotice() } } satisfies DelorunNoticeService)
   ctx.effect(() => overrideTitle(ctx.locale), 'delorun-privacy: the product name as the document title')
@@ -501,45 +484,27 @@ export function apply(ctx: Context): void {
     locale: NS,
     inject: installsFace,
   }, PluginInstallsSection))
-  ctx.slots.inject('settings.section', () => ctx.slots.register({
-    name: 'settings.section',
-    id: ABOUT_SECTION_ID,
-    order: ABOUT_SECTION_ORDER,
-    label: () => t('about.nav'),
-    locale: NS,
-    inject: () => ({ surface: studioSurface(ctx), startChat: reportChatStarter(ctx), versions }),
-  }, AboutSection))
-  ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
-    name: 'sidebar.footer.action',
-    id: REPORT_ACTION.id,
-    order: REPORT_ACTION.order,
-    locale: NS,
-    inject: () => ({ surface: studioSurface(ctx), startChat: reportChatStarter(ctx) }),
-  }, ReportFooterAction))
-  ctx.effect(() => ctx.locale.register(DEVICES_NS, { en: devicesEn, zh: devicesZh }), 'delorun-devices: section dictionaries')
-  const devicesT = ctx.locale.bind(DEVICES_NS)
-  ctx.effect(() => ctx.locale.register(PIN_NS, { en: pinEn, zh: pinZh }), 'delorun-pin: lock screen dictionaries')
-  ctx.effect(() => ctx.locale.register(FACE_ID_NS, { en: faceIdEn, zh: faceIdZh }), 'delorun-face-id: screen dictionaries')
   // One function for the plugin's lifetime: the section's requests restart when its identity changes.
   const browserFetch: HostFetch = (input, init) => globalThis.fetch(input, init)
+  const { source: faceGrant, fetch: studioFetch, queue: faceQueue } = applyFaceGrant(ctx, browserFetch, (ctx.get('connection') as ConnectionHandle).isLoopback)
+  registerReportSlots(ctx, () => t('about.nav'), versions)
+  ctx.effect(() => ctx.locale.register(DEVICES_NS, { en: devicesEn, zh: devicesZh }), 'delorun-devices: section dictionaries')
+  const devicesT = ctx.locale.bind(DEVICES_NS)
+  ctx.effect(() => ctx.locale.register(FACE_ID_NS, { en: faceIdEn, zh: faceIdZh }), 'delorun-face-id: screen dictionaries')
   const pin = applyPin(ctx, browserFetch, (ctx.get('connection') as ConnectionHandle).isLoopback)
-  const unlock = applyUnlock(ctx, browserFetch, (ctx.get('connection') as ConnectionHandle).isLoopback, pin)
-  // The unlock banner follows the page's PIN unlock: read the elevation again when the page unlocks or locks.
-  let pinPhase = pin.hooks.pin.getSnapshot().phase
-  ctx.effect(() => pin.hooks.pin.subscribe(() => {
-    const phase = pin.hooks.pin.getSnapshot().phase
-    if (phase !== pinPhase) void unlock.refresh()
-    pinPhase = phase
-  }), 'delorun-pin: the unlock banner reads the elevation again when the page unlocks or locks')
-  ctx.effect(() => installGateUnlock(unlock), 'delorun-devices: gate notices open the unlock dialog')
-  provideAgentSeatReach(ctx, pin, unlock, (ctx.get('connection') as ConnectionHandle).isLoopback)
+  const unlock = applyUnlock(ctx, browserFetch, (ctx.get('connection') as ConnectionHandle).isLoopback)
+  provideAgentSeatReach(ctx, (ctx.get('connection') as ConnectionHandle).isLoopback ? 'computer' : studioSurface(ctx) === 'approved device' ? 'device' : 'none', oneAtATime(faceGrant.grant, faceQueue))
+  // A reach page whose session a device approval, removal or passkey enrolment rotated (C4) reloads, so the sign-in page signs it in again.
+  if (!(ctx.get('connection') as ConnectionHandle).isLoopback) {
+    const link = ctx.get('connection') as ConnectionHandle
+    ctx.effect(() => watchSessionRotation(link.state, async () => (await browserFetch('/', { method: 'HEAD', cache: 'no-store' })).status, () => { globalThis.location.reload() }),
+      'delorun-devices: sign in again after a session rotation')
+  }
   const pairing = createPairingSource(browserFetch)
   const pairingWriter = new PairingWriter(ctx.configForms.get<PairingRowSettings>(HOME_AUTH_ROW))
   const devicesFace = (): DevicesSectionInjected => ({
     fetch: browserFetch,
     hooks: { unlock: unlock.hooks.unlock, pairing: pairing.hooks.pairing, pairingForm: pairingWriter.form, pairingMutation: pairingWriter.state },
-    openUnlock: unlock.open,
-    lockUnlock: unlock.lock,
     startPairing: pairing.start,
     setPairing: (field, value) => pairingWriter.set(field, value),
     openPairingCode: pairing.openCode,
@@ -582,8 +547,6 @@ export function apply(ctx: Context): void {
     locale: FACE_ID_NS,
     inject: faceIdFace,
   }, FaceIdSection))
-  const faceGrant = createFaceGrantSource()
-  ctx.provide('delorunFaceGrant', { grant: faceGrant.grant } satisfies FaceGrantService)
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({
     name: 'shell.overlay',
     id: FACE_ID_GRANT_ID,
@@ -594,7 +557,7 @@ export function apply(ctx: Context): void {
     name: 'conversation.approval.action',
     id: FACE_ID_ANSWER_ID,
     locale: FACE_ID_NS,
-    inject: (sessionId): FaceIdAnswerInjected => ({ ...faceIdFace(), sessionId }),
+    inject: (sessionId): FaceIdAnswerInjected => ({ ...faceIdFace(), sessionId, queue: faceQueue }),
   }, FaceIdAnswerAction))
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({
     name: 'shell.overlay',
@@ -604,7 +567,7 @@ export function apply(ctx: Context): void {
   }, FaceIdPairingOverlay))
   ctx.effect(() => ctx.locale.register(NETWORK_NS, { en: networkEn, zh: networkZh }), 'delorun-network: section dictionaries')
   const networkT = ctx.locale.bind(NETWORK_NS)
-  const networkFace = (): NetworkSectionInjected => ({ fetch: browserFetch })
+  const networkFace = (): NetworkSectionInjected => ({ fetch: studioFetch })
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: NETWORK_SECTION_ID,
@@ -616,7 +579,7 @@ export function apply(ctx: Context): void {
   ctx.effect(() => ctx.locale.register(VERSIONS_NS, { en: versionsEn, zh: versionsZh }), 'delorun-setup-versions: section dictionaries')
   const versionsT = ctx.locale.bind(VERSIONS_NS)
   const isLoopback = (ctx.get('connection') as ConnectionHandle).isLoopback
-  const versionsFace = (): VersionsSectionInjected => ({ fetch: browserFetch, atComputer: () => isLoopback, saveFile: saveBrowserFile })
+  const versionsFace = (): VersionsSectionInjected => ({ fetch: studioFetch, atComputer: () => isLoopback, saveFile: saveBrowserFile })
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: SETUP_VERSIONS_SECTION_ID,
@@ -631,7 +594,7 @@ export function apply(ctx: Context): void {
   applyNeedsSetup(ctx, browserFetch)
   applyRemoteNotice(ctx)
   applyTrustBadge(ctx, trustApi(browserFetch))
-  applyConsents(ctx, browserFetch)
+  applyConsents(ctx, studioFetch)
 }
 
 /**
@@ -746,7 +709,7 @@ export function applyConsents(ctx: Context, fetch: HostFetch): void {
   const t = ctx.locale.bind(CONSENTS_NS)
   const consent = createFullAccessConsentSource(fetch)
   ctx.provide('permissionSwitchConsent', {
-    confirm: (sessionId, preset) => confirmPermissionSwitch(fetch, consent, sessionId, preset),
+    confirm: async (sessionId, preset) => await confirmPermissionSwitch(fetch, consent, sessionId, preset) === 'submit',
     ownsConfirmation: ownsPermissionConfirmation,
   } satisfies PermissionSwitchConsent)
   ctx.effect(() => () => { consent.cancel() }, 'delorun-consents: an open consent answers no once the plugin unloads')
@@ -855,55 +818,88 @@ export function applyConsents(ctx: Context, fetch: HostFetch): void {
 }
 
 /**
- * Register the remote studio's unlock: its store, which reads this device's unlock now, after each connection reset and
- * after each call remote access refused with `elevation-required:`, and its `shell.overlay` entry. On the home's own
- * computer the store reads nothing and the entry renders nothing.
+ * Register the About section and the footer report button. Both read the problem report's details through
+ * `ctx.delorunFaceGrant`'s fetch, so on a device a refusal asks for Face ID, and on the computer it is the page's own.
+ * @param ctx - the browser plugin context.
+ * @param aboutLabel - the About section's navigation label.
+ * @param versions - the versions the About section shows.
+ */
+export function registerReportSlots(ctx: Context, aboutLabel: () => string, versions: DelorunVersions | undefined): void {
+  // One function for the plugin's lifetime: the report's requests restart when its identity changes.
+  const fetchImpl: HostFetch = grantingFetchOf(ctx)
+  const face = (): { readonly surface: StudioSurface; readonly fetchImpl: HostFetch; readonly startChat: () => void } => ({ surface: studioSurface(ctx), fetchImpl, startChat: reportChatStarter(ctx) })
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: ABOUT_SECTION_ID,
+    order: ABOUT_SECTION_ORDER,
+    label: aboutLabel,
+    locale: NS,
+    inject: () => ({ ...face(), versions }),
+  }, AboutSection))
+  ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
+    name: 'sidebar.footer.action',
+    id: REPORT_ACTION.id,
+    order: REPORT_ACTION.order,
+    locale: NS,
+    inject: face,
+  }, ReportFooterAction))
+}
+
+/**
+ * Provide `ctx.delorunFaceGrant` and, on a reach device, the Face ID step for every sensitive call (A483): a Remote call
+ * or a plugin route the home refuses for want of a grant opens the confirmation and is sent once more
+ * (`face-retry.ts`). On the home's own computer nothing is refused, so nothing asks: the service's `fetch` is the page's
+ * and no Remote lift is registered.
+ * @param ctx - the browser plugin context.
+ * @param fetch - the page's request function.
+ * @param onComputer - whether the page is the home's own computer.
+ * @returns the confirmation's store, which the overlay shows, the `fetch` the plugin's own sections send through, and the
+ *   page's confirmation queue.
+ */
+export function applyFaceGrant(ctx: Context, fetch: HostFetch, onComputer: boolean): { readonly source: FaceGrantSource; readonly fetch: HostFetch; readonly queue: ConfirmationQueue } {
+  const source = createFaceGrantSource()
+  const queue = confirmationQueue()
+  const queued = oneAtATime(source.grant, queue)
+  const studioFetch: HostFetch = onComputer ? fetch : grantingFetch(fetch, queued)
+  ctx.provide('delorunFaceGrant', { grant: queued, fetch: studioFetch } satisfies FaceGrantService)
+  if (!onComputer) {
+    ctx.inject(['remote'], (inner) => {
+      inner.effect(() => inner.remote.$liftDenials(remoteDenialLift(queued)), 'delorun-face-id: a refused Remote call asks for Face ID and is sent once more')
+    })
+  }
+  return { source, fetch: studioFetch, queue }
+}
+
+/**
+ * Register the place store that tells the Devices section whether this page is a device: it reads the device's unlock
+ * route now and after each connection reset. It registers no overlay: a device holds no unlock, and each sensitive
+ * action is confirmed with Face ID or the keypad in the grant sheet. On the home's own computer the store reads nothing.
  * @param ctx - the browser plugin context.
  * @param fetch - the request function.
  * @param onComputer - whether the page is on the home's own computer ({@link createUnlockSource}).
- * @param pin - PIN mode's source; when it holds an unlock, Lock ends that instead of the device's elevation.
- * @returns the store, which the Devices section reads too.
+ * @returns the store, which the Devices section reads.
  */
-export function applyUnlock(ctx: Context, fetch: HostFetch, onComputer = false, pin?: PinSource): UnlockSource {
-  const unlock = createUnlockSource(fetch, Date.now, onComputer, () => pin?.ask() === true)
-  // Lock now ends the page's PIN unlock when it holds one, and the device's elevation otherwise.
-  const lock = async (): Promise<void> => {
-    if (pin?.holdsUnlock() === true) await pin.lock()
-    else await unlock.lock()
-  }
-  ctx.effect(() => () => { unlock.dispose() }, 'delorun-devices: the unlock\'s timers stop once the plugin unloads')
-  ctx.on('remote/call-denied', (denial) => { unlock.refused(denial.reason) })
+export function applyUnlock(ctx: Context, fetch: HostFetch, onComputer = false): UnlockSource {
+  const unlock = createUnlockSource(fetch, onComputer)
   ctx.on('connection/reset', () => { void unlock.refresh() })
   void unlock.refresh()
-  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
-    name: 'shell.overlay',
-    id: UNLOCK_OVERLAY_ID,
-    locale: DEVICES_NS,
-    inject: () => ({ hooks: unlock.hooks, request: unlock.request, cancel: unlock.cancel, lock, dismissEnded: unlock.dismissEnded }),
-  }, UnlockOverlay))
   return unlock
 }
 
 /**
- * Register PIN mode's lock screen: its store, the page events that keep the unlock alive or lock it, and its
- * `shell.overlay` entry. Where PIN mode does not apply the store settles on `off` and the entry renders nothing.
+ * Register PIN mode's state for this device: the store the Face ID sheets read to know whether the PIN keypad applies,
+ * read now and after each connection reset. It registers no overlay: a device holds no PIN unlock, and each sensitive
+ * action is confirmed with Face ID or the keypad in the grant sheet. Where PIN mode does not apply the store settles on `off`.
  * @param ctx - the browser plugin context.
  * @param fetch - the request function.
  * @param onComputer - whether the page is on the home's own computer ({@link createPinSource}).
- * @returns the store, which the unlock banner's Lock now reads too.
+ * @returns the store.
  */
 export function applyPin(ctx: Context, fetch: HostFetch, onComputer = false): PinSource {
-  const pin = createPinSource(fetch, Date.now, onComputer)
-  ctx.effect(() => pin.dispose, 'delorun-pin: the lock\'s timers stop once the plugin unloads')
-  ctx.effect(() => attachPinTriggers(pin), 'delorun-pin: input, visibility and page events keep the unlock alive or lock it')
+  const pin = createPinSource(fetch, onComputer)
+  ctx.effect(() => pin.dispose, 'delorun-pin: the state read\'s retry timer stops once the plugin unloads')
   ctx.on('connection/reset', () => { void pin.refresh() })
   void pin.refresh()
-  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
-    name: 'shell.overlay',
-    id: PIN_LOCK_OVERLAY_ID,
-    locale: PIN_NS,
-    inject: () => ({ hooks: pin.hooks, unlock: pin.unlock, dismiss: pin.dismiss }),
-  }, PinLock))
   return pin
 }
 

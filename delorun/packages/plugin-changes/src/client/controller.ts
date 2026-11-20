@@ -96,11 +96,6 @@ export interface ChangesControllerDeps {
    */
   readonly report: (notice: ChangesNotice) => void
   /**
-   * Called when a route refused this device until it is unlocked, so the studio opens its unlock dialog.
-   * @param control - the route refused, such as `harness-apply`.
-   */
-  readonly unlockNeeded: (control: string) => void
-  /**
    * The page's Face ID confirmation, read at each call, or undefined while the page has no such service. Without it a control that needs Face ID
    * is sent plain and the home refuses it.
    */
@@ -538,7 +533,6 @@ export class ChangesController {
   private refusedWords(error: unknown): { readonly refused: string } {
     console.warn('delorun-changes: the plugin was not created:', error)
     const refusal = error instanceof ChangesRequestError ? error.refusal : undefined
-    if (refusal?.code === ELEVATION_REQUIRED) this.deps.unlockNeeded('plugin-other')
     return { refused: refusal?.message ?? '' }
   }
 
@@ -592,7 +586,6 @@ export class ChangesController {
       if (refusal?.code === LOOPBACK_REQUIRED) {
         this.deps.report({ ok: false, key: 'toast.remote' })
       } else if (refusal?.code === ELEVATION_REQUIRED) {
-        this.deps.unlockNeeded(control)
         this.deps.report({ ok: false, key: 'toast.unlock' })
       } else if (refusal?.code === CHANGED_SINCE_REVIEW) {
         this.deps.report({ ok: false, key: 'toast.changedSinceReview' })

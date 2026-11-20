@@ -54,8 +54,6 @@ export interface Home {
    * reproducible and no two draws ever collide.
    */
   readonly random: (size: number) => Uint8Array
-  /** The Face ID preview flag of this home, off until a spec turns it on. */
-  readonly flags: { passkeys: boolean }
   /** A home-auth instance over this directory and clock. */
   readonly auth: HomeAuth
   /** The port the fixture names as the loopback listener's; a spec's server sets it once it is bound. */
@@ -90,7 +88,6 @@ export async function homeFixture(options: { readonly fill?: number; readonly no
   }
   const closed: { readonly deviceId?: string; readonly sessionId?: string }[] = []
   const loopback: { port: number | undefined } = { port: undefined }
-  const flags = { passkeys: false }
   const { pairing } = options
   const auth = new HomeAuth({
     loopbackPort: () => loopback.port,
@@ -99,7 +96,6 @@ export async function homeFixture(options: { readonly fill?: number; readonly no
     ...(options.approvalGraceMinutes === undefined ? {} : { approvalGraceMinutes: () => options.approvalGraceMinutes ?? 0 }),
     ...(options.unlockCapMinutes === undefined ? {} : { unlockCapMinutes: () => options.unlockCapMinutes ?? 0 }),
     directory,
-    passkeysEnabled: () => flags.passkeys,
     now: options.now ?? clock.read,
     random,
     closeReachConnections: (match: { readonly deviceId?: string; readonly sessionId?: string }) => {
@@ -109,7 +105,7 @@ export async function homeFixture(options: { readonly fill?: number; readonly no
   })
   await auth.start()
   return {
-    directory, clock, random, auth, loopback, closed, flags,
+    directory, clock, random, auth, loopback, closed,
     dispose: async () => {
       await auth.stop()
       await rm(directory, { recursive: true, force: true })

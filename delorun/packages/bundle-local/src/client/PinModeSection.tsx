@@ -5,14 +5,14 @@
  * pause. On a device it shows one read-only line, because a device never sets or changes the
  * PIN. The typed secret lives in this component's state only until the request is sent and is never stored.
  */
-import { useCallback, useEffect, useId, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
-import { Button, IconChevronDownOutlineRegular, IconPauseOutlineRegular, IconShieldOutlineRegular, IconWarningOutlineRegular, Input, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconChevronDownOutlineRegular, IconPauseOutlineRegular, IconShieldOutlineRegular, IconWarningOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { failureSentence, LOOPBACK_REQUIRED, type HostFetch, type Loaded } from './host-api.ts'
 import { gateOf } from './gate.ts'
 import { GateNotice } from './GateNotice.tsx'
-import { PIN_MAX_IDLE_MINUTES, readPinMode, resumePin, setPinMode, setPinOptions, turnPinOff, type PinMode } from './pin-api.ts'
+import { readPinMode, resumePin, setPinMode, turnPinOff, type PinMode } from './pin-api.ts'
 import { secretPairProblem } from './pin-rules.ts'
 import { ConfirmAction, Notice, SecretPair, StatusCard } from '@delorun/brand'
 import { cardCss, SettingsCard } from '@delorun/settings-controls'
@@ -112,8 +112,7 @@ function ReadOnly({ t, mode }: { t: Translate; mode: PinMode }): ReactNode {
     <SettingsCard title={t('card.status')} group="pin-status">
       <div className={cardCss.block}>
         <StatusCard Icon={IconShieldOutlineRegular} on={mode.enabled} titleAttribute={mode.enabled ? 'on' : 'off'} pill={t(mode.enabled ? 'pill.on' : 'pill.off')}
-          title={t(mode.enabled ? (mode.kind === 'passcode' ? 'state.passcode' : 'state.pin') : 'state.off')}
-          detail={mode.enabled ? `${t('state.settings', { minutes: String(mode.idleMinutes) })}${mode.lockWhenHidden ? ` ${t('state.hidden')}` : ''}` : undefined} />
+          title={t(mode.enabled ? (mode.kind === 'passcode' ? 'state.passcode' : 'state.pin') : 'state.off')} />
       </div>
     </SettingsCard>
     <p className={css.line}><GateNotice gate={{ kind: 'computer' }} t={t} reason={t('computerReason')} /></p>
@@ -126,11 +125,8 @@ function ReadOnly({ t, mode }: { t: Translate; mode: PinMode }): ReactNode {
  * @returns the controls.
  */
 function Controls({ t, fetch, mode, onChanged }: { t: Translate; fetch: HostFetch; mode: PinMode; onChanged: () => Promise<void> }): ReactNode {
-  const id = useId()
   const [secret, setSecret] = useState('')
   const [again, setAgain] = useState('')
-  const [idle, setIdle] = useState(String(mode.idleMinutes))
-  const [hidden, setHidden] = useState(mode.lockWhenHidden)
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | undefined>()
   const [changingPin, setChangingPin] = useState(false)
@@ -150,16 +146,6 @@ function Controls({ t, fetch, mode, onChanged }: { t: Translate; fetch: HostFetc
     await onChanged()
   }
 
-  /** The idle minutes typed, or undefined after saying why they are wrong. */
-  const idleMinutes = (): number | undefined => {
-    const minutes = Number(idle)
-    if (!/^[0-9]+$/.test(idle) || minutes < 1 || minutes > PIN_MAX_IDLE_MINUTES) {
-      setProblem(t('problem.idle'))
-      return undefined
-    }
-    return minutes
-  }
-
   /** The secret typed twice, or undefined after saying why it is wrong. */
   const checkedSecret = (): string | undefined => {
     const wrong = secretPairProblem(secret, again)
@@ -168,54 +154,29 @@ function Controls({ t, fetch, mode, onChanged }: { t: Translate; fetch: HostFetc
     return undefined
   }
 
-  /** Send the secret and forget it, whatever the answer. */
-  const sendSecret = (typed: string, minutes: number, lock: boolean): void => {
+  /** Send the secret and forget it, whatever the answer; the stored lock options go with it unchanged. */
+  const sendSecret = (typed: string): void => {
     setSecret('')
     setAgain('')
     setChangingPin(false)
-    void run(() => setPinMode(fetch, { secret: typed, idleMinutes: minutes, lockWhenHidden: lock }))
+    void run(() => setPinMode(fetch, { secret: typed, idleMinutes: mode.idleMinutes, lockWhenHidden: mode.lockWhenHidden }))
   }
 
   const turnOn = (event: FormEvent): void => {
     event.preventDefault()
     const typed = checkedSecret()
-    const minutes = idleMinutes()
-    if (typed === undefined || minutes === undefined) return
-    sendSecret(typed, minutes, hidden)
+    if (typed !== undefined) sendSecret(typed)
   }
 
-  const saveOptions = (event: FormEvent): void => {
-    event.preventDefault()
-    const minutes = idleMinutes()
-    if (minutes === undefined) return
-    setProblem(undefined)
-    void run(() => setPinOptions(fetch, { idleMinutes: minutes, lockWhenHidden: hidden }))
-  }
 
   const changePin = (event: FormEvent): void => {
     event.preventDefault()
     const typed = checkedSecret()
-    // A new PIN keeps the saved options, not edits not yet saved.
-    if (typed !== undefined) sendSecret(typed, mode.idleMinutes, mode.lockWhenHidden)
+    if (typed !== undefined) sendSecret(typed)
   }
 
   const secretFields = <SecretPair label={t('secret.label')} confirmLabel={t('secret.confirm')} help={t('secret.hint')}
     secret={secret} again={again} disabled={busy} onSecret={setSecret} onAgain={setAgain} />
-  const optionFields = <>
-    <div className={css.fieldRow}>
-      <label className={cardCss.title} htmlFor={`${id}-idle`}>{t('idle.label')}</label>
-      <p className={css.hint}>{t('idle.hint')}</p>
-      <Input id={`${id}-idle`} className={css.field ?? ''} type="text" inputMode="numeric" autoComplete="off"
-        value={idle} disabled={busy} onChange={(event) => { setIdle(event.target.value) }} />
-    </div>
-    <div className={css.check}>
-      <div className={css.checkText}>
-        <span className={cardCss.title}>{t('hidden.label')}</span>
-        <span className={css.hint}>{t('hidden.hint')}</span>
-      </div>
-      <Switch checked={hidden} label={t('hidden.label')} disabled={busy} onChange={setHidden} />
-    </div>
-  </>
   const failure = problem === undefined ? null : <p className={css.failed} role="alert">{problem}</p>
   const waiting = mode.setBackWaiting ?? []
 
@@ -223,8 +184,7 @@ function Controls({ t, fetch, mode, onChanged }: { t: Translate; fetch: HostFetc
     <SettingsCard title={t('card.status')} group="pin-status">
       <div className={cardCss.block}>
         <StatusCard Icon={IconShieldOutlineRegular} on={mode.enabled} titleAttribute={mode.enabled ? 'on' : 'off'} pill={t(mode.enabled ? 'pill.on' : 'pill.off')}
-          title={t(mode.enabled ? (mode.kind === 'passcode' ? 'state.passcode' : 'state.pin') : 'state.off')}
-          detail={mode.enabled ? `${t('state.settings', { minutes: String(mode.idleMinutes) })}${mode.lockWhenHidden ? ` ${t('state.hidden')}` : ''}` : undefined} />
+          title={t(mode.enabled ? (mode.kind === 'passcode' ? 'state.passcode' : 'state.pin') : 'state.off')} />
       </div>
     </SettingsCard>
     {waiting.length > 0
@@ -242,15 +202,6 @@ function Controls({ t, fetch, mode, onChanged }: { t: Translate; fetch: HostFetc
       : null}
     {mode.enabled
       ? <>
-        <SettingsCard title={t('card.options')} group="pin-options">
-          <form className={`${cardCss.block} ${css.form}`} onSubmit={saveOptions} noValidate data-pin-mode-options>
-            {optionFields}
-            {changingPin ? null : failure}
-            <div className={css.actions}>
-              <Button type="submit" variant="primary" size="sm" disabled={busy}>{t('change')}</Button>
-            </div>
-          </form>
-        </SettingsCard>
         <SettingsCard title={t('card.secret')} group="pin-secret">
           <div className={cardCss.block}>
             <button type="button" className={css.disclosure} aria-expanded={changingPin} disabled={busy}
@@ -282,7 +233,6 @@ function Controls({ t, fetch, mode, onChanged }: { t: Translate; fetch: HostFetc
       : <SettingsCard title={t('card.on')} description={t('card.on.lead')} group="pin-on">
         <form className={`${cardCss.block} ${css.form}`} onSubmit={turnOn} noValidate>
           {secretFields}
-          {optionFields}
           {failure}
           <div className={css.actions}>
             <Button type="submit" variant="primary" size="sm" disabled={busy}>{t('on')}</Button>

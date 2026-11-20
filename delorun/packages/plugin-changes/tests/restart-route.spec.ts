@@ -1,7 +1,7 @@
 /**
  * The studio's Restart routes: Apply's fence and level decide before the body is read and before the home process's
- * restart is asked, by every request a remote, locked or cross-site caller can make; a phone restarts only under Phone
- * powers Full with an unlock it entered; the home process's refusals keep their codes; and `state` names a restart as
+ * restart is asked, by every request a remote, locked or cross-site caller can make; a phone restarts only with a grant
+ * for the call (a PIN grant where it holds no passkey), and never with no grant store; the home process's refusals keep their codes; and `state` names a restart as
  * needed only for a decided change the running Host does not run in a file that is not live.
  */
 import { writeFileSync } from 'node:fs'
@@ -10,7 +10,8 @@ import { harnessCopyDirectory, type ChangesRestartHost, type HarnessRestartView,
 import { describe, expect, it } from 'vitest'
 import { restartStateOf } from '../src/restart-route.ts'
 import { HARNESS_PATHS, RESTART_PATHS, SHOW_PATH } from '../src/wire.ts'
-import { CREDENTIAL, fromDevice, get, json, post, routeHarness, routeHome, RUNTIME, RUNTIME_FILE, send, serveRoutes } from './routes-fixture.ts'
+import type { FaceAccess } from '../src/routes.ts'
+import { CREDENTIAL, grantWorld, fromDevice, get, json, post, routeHarness, routeHome, RUNTIME, RUNTIME_FILE, send, serveRoutes } from './routes-fixture.ts'
 
 /** A stand-in for the home process's restart that records what it was asked. */
 class FakeRestart implements ChangesRestartHost {
@@ -50,16 +51,16 @@ class FakeRestart implements ChangesRestartHost {
   }
 }
 
-async function restartServer(powers?: 'careful' | 'full', withRestart = true) {
+async function restartServer(face?: FaceAccess, withRestart = true) {
   const restart = withRestart ? new FakeRestart() : undefined
   const { ctx } = routeHome()
-  const server = await serveRoutes(ctx, { restartRoute: { restart: () => restart, waitSeconds: 600 }, ...powers === undefined ? {} : { powers } })
+  const server = await serveRoutes(ctx, { restartRoute: { restart: () => restart, waitSeconds: 600 }, ...face === undefined ? {} : { face } })
   return { server, restart }
 }
 
 describe('the studio\'s Restart', () => {
   it('a cross-site request cannot restart', async () => {
-    const { server, restart } = await restartServer('full')
+    const { server, restart } = await restartServer()
     for (const path of Object.values(RESTART_PATHS)) {
       for (const headers of [['Sec-Fetch-Site: cross-site'], ['Origin: https://elsewhere.example'], ['Origin: null']]) {
         const reply = await send(server.port, path, { method: 'POST', headers: [CREDENTIAL, ...headers], body: {}, withholdBody: true })
@@ -76,19 +77,19 @@ describe('the studio\'s Restart', () => {
   })
 
   it('a remote or locked session cannot restart', async () => {
-    for (const powers of ['careful', 'full'] as const) {
-      const { server, restart } = await restartServer(powers)
+    for (const flag of ['off', 'on'] as const) {
+      const { server, restart } = await restartServer(grantWorld({ enabled: flag === 'on', hasPasskey: false }).face)
       for (const path of Object.values(RESTART_PATHS)) {
-        // No paired device's session, a locked phone and a phone in its approval grace, at either level: under Careful
-        // a phone is sent to the computer whatever its unlock; under Full a locked phone or one in its grace must unlock.
+        // No paired device's session, a locked phone and a phone in its approval grace, with and without a grant store: with
+        // no grant store a phone is sent to the computer whatever its unlock; with one a phone needs a grant, which no unlock replaces.
         const noDevice = await send(server.port, path, { method: 'POST', headers: [CREDENTIAL, 'x-test-remote: 1'], body: {}, withholdBody: true })
-        expect(noDevice.status, `${powers} ${path}`).toBe(403)
-        expect(json(noDevice), `${powers} ${path}`).toMatchObject({ code: 'LOOPBACK_REQUIRED' })
-        const locked = powers === 'careful' ? 'LOOPBACK_REQUIRED' : 'ELEVATION_REQUIRED'
+        expect(noDevice.status, `${flag} ${path}`).toBe(403)
+        expect(json(noDevice), `${flag} ${path}`).toMatchObject({ code: 'LOOPBACK_REQUIRED' })
+        const locked = flag === 'off' ? 'LOOPBACK_REQUIRED' : 'ELEVATION_REQUIRED'
         for (const unlock of ['none', 'grace'] as const) {
-          const reply = await send(server.port, path, fromDevice(unlock, {}, true))
-          expect(reply.status, `${powers} ${path} ${unlock}`).toBe(403)
-          expect(json(reply), `${powers} ${path} ${unlock}`).toMatchObject({ code: locked })
+          const reply = await send(server.port, path, fromDevice(unlock, {}, flag === 'off'))
+          expect(reply.status, `${flag} ${path} ${unlock}`).toBe(403)
+          expect(json(reply), `${flag} ${path} ${unlock}`).toMatchObject({ code: locked })
         }
       }
       expect(restart?.begun).toEqual([])
@@ -97,19 +98,28 @@ describe('the studio\'s Restart', () => {
     }
   })
 
-  it('under Careful an unlocked phone cannot restart; under Full it can, and its unlock is renewed', async () => {
-    const careful = await restartServer('careful')
+  // Removing the `grant` row of `restart` in LEGACY_LEVELS lets a running unlock restart Delorun from a phone with no passkey.
+  it('an unlocked phone cannot restart, whatever the grant store; a PIN grant for the call restarts, once', async () => {
+    const off = await restartServer(grantWorld({ enabled: false }).face)
     for (const path of Object.values(RESTART_PATHS)) {
-      expect(json(await send(careful.server.port, path, fromDevice('fresh', {}, true))), path).toMatchObject({ code: 'LOOPBACK_REQUIRED' })
+      expect(json(await send(off.server.port, path, fromDevice('fresh', {}, true))), path).toMatchObject({ code: 'LOOPBACK_REQUIRED' })
     }
-    expect(careful.restart?.begun).toEqual([])
+    expect(off.restart?.begun).toEqual([])
 
-    const full = await restartServer('full')
-    const reply = await send(full.server.port, RESTART_PATHS.restart, fromDevice('fresh', {}))
+    const world = grantWorld({ hasPasskey: false })
+    const on = await restartServer(world.face)
+    for (const path of Object.values(RESTART_PATHS)) {
+      expect(json(await send(on.server.port, path, fromDevice('fresh', {}))), path).toMatchObject({ code: 'ELEVATION_REQUIRED' })
+    }
+    expect(on.restart?.begun).toEqual([])
+    const base = fromDevice('none', {})
+    const withGrant = { ...base, headers: [...base.headers ?? [], `Delorun-Grant: ${world.grantFor('restart', RESTART_PATHS.restart, {}, 'pin')}`] }
+    const reply = await send(on.server.port, RESTART_PATHS.restart, withGrant)
     expect(reply.status).toBe(200)
     expect(json(reply)).toEqual({ kind: 'restarting', runningChats: 2 })
-    expect(full.restart?.begun).toEqual([{ stopChats: false, drainTimeoutS: 600 }])
-    expect(full.server.renewals()).toBe(1)
+    expect(on.restart?.begun).toEqual([{ stopChats: false, drainTimeoutS: 600 }])
+    // The grant is used up: the same request again is refused.
+    expect(json(await send(on.server.port, RESTART_PATHS.restart, withGrant)), 'replay').toMatchObject({ code: 'ELEVATION_REQUIRED' })
   })
 
   it('at the computer begins a restart, stops chats only when asked and cancels a waiting one', async () => {

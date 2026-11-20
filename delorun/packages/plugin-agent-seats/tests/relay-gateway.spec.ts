@@ -17,6 +17,7 @@ import TypertRegistry from '@deepseek-ai/dsh-typert-registry'
 import type { ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
 import type { StudioAddress } from '@delorun/contract-admission'
 import { HomeAuthAuthenticator, HomeAuthService } from '@delorun/home-auth'
+import { answerKey } from '../../home-auth/src/grants.ts'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { claimOf, recordOf } from '../../home-auth/tests/fixtures/home.ts'
 import { DeviceStore } from '../../home-auth/src/devices.ts'
@@ -40,7 +41,7 @@ beforeEach(async () => {
     await ctx.plugin(RemoteAccessService)
     await ctx.plugin(TypertGatewayService)
     await ctx.plugin({ inject: [...connectionInject], apply: applyConnection })
-    await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'secrets', 'home-auth'), phonePowersOnUpgrade: 'full' })
+    await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'secrets', 'home-auth') })
     await new Promise<void>((resolve) => { ctx.inject(['authenticator'], () => { resolve() }) })
     ctx.homeAuth.serve({ listener: LISTENER, address: ADDRESS, factor: 'tailnet-membership' })
     bridge(ctx)
@@ -169,7 +170,8 @@ describe('the seat relay on the real Gateway and the real reach guard', () => {
     expect(w.events(w.child, 'approval/decided')).toMatchObject([{ outcome: 'rejected' }])
   })
 
-  it('gives allow-once, with no run mark, when a PIN page\'s Allow once came before the computer\'s Allow for this run', async () => {
+  // Pins A483 for seats on the real Gateway: with the page-unlock lift back, a PIN page's Allow once applies with no grant.
+  it('refuses a PIN page\'s Allow once without its grant, then applies it with one, and the computer\'s later Allow for this run changes nothing', async () => {
     const peer = await phone(2)
     const reach = authenticator()['reachPeers'].get(peer.id as never)
     if (reach === undefined) throw new Error('no reach Peer')
@@ -178,6 +180,11 @@ describe('the seat relay on the real Gateway and the real reach guard', () => {
     const computer = await connect(w.ctx.connection.browserPeer)
     const page = await connect(peer)
     const { result, eventId } = await ask(computer, page)
+    expect(await answer(page, eventId, 'allowed-once')).toMatchObject(denied)
+    expect(w.relay.pendingOf(w.child.id)).toBe(true)
+    const grants = w.ctx.homeAuth.faceGrants()
+    if (grants === undefined) throw new Error('no grant store')
+    grants.mintAnswer({ deviceId: reach.deviceId, listener: reach.listener }, answerKey({ agent: w.child.id, callId: 'call-1', grants: 'external-agent' }), 'allowed-once')
     expect(await answer(page, eventId, 'allowed-once')).toMatchObject(applied)
     await expect(result).resolves.toBe('allow-once')
     // The computer's later answer reaches a finished event and changes nothing.

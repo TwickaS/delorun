@@ -10,7 +10,7 @@ import { installedCatalog } from '../../src/setup/providers.ts'
 const DEEPSEEK = { id: 'deepseek-official', credential: { source: 'environment', name: 'DEEPSEEK_API_KEY' }, baseURL: null, model: null }
 
 const BASE = {
-  schemaVersion: 4,
+  schemaVersion: 5,
   modelProvider: DEEPSEEK,
   prompts: 'safer',
   background: true,
@@ -69,23 +69,23 @@ describe('the answers document', () => {
     expect(refusal(write('text.json', { ...BASE, updateCheck: 'no' }))).toContain('updateCheck is not a value the answers document accepts')
   })
 
-  it('reads a version-2 document as version 4 with the check on, and refuses the release-check answer in one', () => {
+  it('reads a version-2 document as version 5 with the check on, and refuses the release-check answer in one', () => {
     const version2 = { ...BASE, schemaVersion: 2, modelProvider: { id: 'deepseek-official', credential: DEEPSEEK.credential } }
-    expect(readAnswersDocument(write('version-2.json', version2))).toMatchObject({ schemaVersion: 4, updateCheck: true, prompts: 'safer', modelProvider: DEEPSEEK })
-    expect(refusal(write('version-2-off.json', { ...version2, updateCheck: false }))).toBe('delorun setup --config: updateCheck needs schemaVersion 4')
+    expect(readAnswersDocument(write('version-2.json', version2))).toMatchObject({ schemaVersion: 5, updateCheck: true, prompts: 'safer', modelProvider: DEEPSEEK })
+    expect(refusal(write('version-2-off.json', { ...version2, updateCheck: false }))).toBe('delorun setup --config: updateCheck needs schemaVersion 5')
     expect(refusal(write('version-2-unknown.json', { ...version2, apiKey: 'sk-SECRET-VALUE-81' }))).toContain('the document holds a field the answers document does not define')
   })
 
   it('reads a version-3 document\'s provider as DeepSeek with the profile\'s default model, as setup of that version applied it', () => {
     const version3 = { ...BASE, schemaVersion: 3, updateCheck: false, modelProvider: { id: 'deepseek-official', credential: { source: 'environment', name: 'OTHER_KEY' } } }
-    expect(readAnswersDocument(write('version-3.json', version3))).toMatchObject({ schemaVersion: 4, updateCheck: false, modelProvider: { ...DEEPSEEK, credential: { source: 'environment', name: 'OTHER_KEY' } } })
-    expect(refusal(write('version-3-model.json', { ...version3, modelProvider: { ...version3.modelProvider, model: 'x' } }))).toBe('delorun setup --config: modelProvider needs schemaVersion 4 to name a base URL or a model')
+    expect(readAnswersDocument(write('version-3.json', version3))).toMatchObject({ schemaVersion: 5, updateCheck: false, modelProvider: { ...DEEPSEEK, credential: { source: 'environment', name: 'OTHER_KEY' } } })
+    expect(refusal(write('version-3-model.json', { ...version3, modelProvider: { ...version3.modelProvider, model: 'x' } }))).toBe('delorun setup --config: modelProvider needs schemaVersion 5 to name a base URL or a model')
   })
 
-  it('refuses a version-2 or version-3 document that names another provider, which only version 4 sets up', () => {
+  it('refuses a version-2 or version-3 document that names another provider, which only version 5 sets up', () => {
     for (const schemaVersion of [2, 3]) {
       const earlier = { ...BASE, schemaVersion, modelProvider: { id: 'anthropic', credential: { source: 'environment', name: 'ANTHROPIC_API_KEY' } } }
-      expect(refusal(write(`version-${String(schemaVersion)}-other.json`, earlier))).toBe('delorun setup --config: modelProvider.id needs schemaVersion 4 to name a provider other than deepseek-official')
+      expect(refusal(write(`version-${String(schemaVersion)}-other.json`, earlier))).toBe('delorun setup --config: modelProvider.id needs schemaVersion 5 to name a provider other than deepseek-official')
     }
   })
 
@@ -130,6 +130,20 @@ describe('the answers document', () => {
     expect(several).toContain('holds studioAdditions, runtime, desktopAnalytics, which setup no longer asks; remove them from the document')
   })
 
+  // Removing the ignored-keys filter, or its log line, refuses a document an earlier version wrote or loads it without saying the answer is gone.
+  it('reads a version-4 document that still holds the removed phonePowers answer as version 5, ignores it and says so; a version-5 document with it is refused', () => {
+    const lines: string[] = []
+    const path = write('phone-powers.json', { ...BASE, schemaVersion: 4, phonePowers: 'full' })
+    const answers = readAnswersDocument(path, (line) => { lines.push(line) })
+    expect(answers).toMatchObject({ schemaVersion: 5 })
+    expect(answers).not.toHaveProperty('phonePowers')
+    expect(refusal(write('phone-powers-5.json', { ...BASE, phonePowers: 'full' }))).toContain('holds a field the answers document does not define')
+    expect(lines).toEqual([`delorun setup --config: ${path} holds phonePowers, which Delorun no longer has; it is ignored`])
+    const quiet: string[] = []
+    readAnswersDocument(write('plain.json', BASE), (line) => { quiet.push(line) })
+    expect(quiet).toEqual([])
+  })
+
   it('refuses an unknown key nested in a section without echoing it', () => {
     const nested = refusal(write('nested.json', { ...BASE, profile: { name: null, port: null, token: 'sk-SECRET-VALUE-80' } }))
     expect(nested).toContain('profile holds a field the answers document does not define')
@@ -140,8 +154,8 @@ describe('the answers document', () => {
     const unknown = refusal(write('unknown.json', { ...BASE, apiKey: 'sk-SECRET-VALUE-78' }))
     expect(unknown).toContain('holds a field the answers document does not define')
     expect(unknown).not.toContain('sk-SECRET-VALUE-78')
-    expect(refusal(write('version.json', { ...BASE, schemaVersion: 1 }))).toContain('schemaVersion must be 4, or 2 or 3 for an earlier document; setup refuses any other version')
-    expect(refusal(write('future.json', { ...BASE, schemaVersion: 5 }))).toContain('schemaVersion must be 4')
+    expect(refusal(write('version.json', { ...BASE, schemaVersion: 1 }))).toContain('schemaVersion must be 5, or 2 or 3 or 4 for an earlier document; setup refuses any other version')
+    expect(refusal(write('future.json', { ...BASE, schemaVersion: 6 }))).toContain('schemaVersion must be 5')
   })
 
   it('refuses reach, a prompted key, a sections record, a bad profile name and a port out of range', () => {

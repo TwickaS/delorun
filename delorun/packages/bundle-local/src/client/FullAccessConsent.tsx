@@ -10,9 +10,7 @@ import { useState, type ReactNode } from 'react'
 import { Button, Checkbox, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { HostObservable, InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { FULL_ACCESS_PRESET, readEverywhere, reviewChat, setFullAccess, type WorkspaceAccess } from './consents-api.ts'
-import { ELEVATION_REQUIRED, unlockSentence } from './gate.ts'
-import { useRetryOnUnlock } from './GateNotice.tsx'
-import { currentGateUnlock, noteUnlockedAction, useGateUnlock } from './gate-unlock.ts'
+import { ELEVATION_REQUIRED } from './gate.ts'
 import { hostFailureOf, isRefused, LOOPBACK_REQUIRED, type HostFetch } from './host-api.ts'
 import css from './ConsentSections.module.css'
 
@@ -42,8 +40,15 @@ export type FullAccessConsentState = {
 
 /** Why an answer was not recorded: a code the consent words itself, or the home's own sentence. */
 export type ConsentFailure =
-  | { readonly kind: 'stale' | 'remote' | 'unlock' | 'unreachable' | 'unreadable' }
+  | { readonly kind: 'stale' | 'remote' | 'face' | 'unreachable' | 'unreadable' }
   | { readonly kind: 'refused'; readonly message: string }
+
+/**
+ * How a switch to full access was answered: `cancelled` leaves the chat's preset unchanged; `submit` leaves the switch
+ * to the surface; `switched` means recording the workspace's grant already switched the chat, so the surface submits
+ * nothing more (on a device, submitting it would ask for Face ID or the PIN a second time).
+ */
+export type SwitchAnswer = 'cancelled' | 'submit' | 'switched'
 
 /** The store the overlay entry reads, and the questions surfaces ask through it. */
 export interface FullAccessConsentSource {
@@ -65,10 +70,12 @@ export interface FullAccessConsentSource {
    *   workspace that holds a grant, asks only to switch this chat.
    * @param wanted - whether the asker still wants the switch, read when the person confirms: false closes the consent
    *   without recording anything, as an approval card that can no longer be answered does.
-   * @returns true once the person confirmed and, for a missing grant, the grant is recorded; false when cancelled or
-   *   the asker no longer wants the switch.
+   * @param chat - the chat the switch belongs to: recording a missing grant also switches it, in the same call, so a
+   *   device confirms the tap once.
+   * @returns `switched` once a missing grant is recorded and the chat switched with it; `submit` once the person
+   *   confirmed and nothing switched the chat; `cancelled` when cancelled or the asker no longer wants the switch.
    */
-  readonly askSwitch: (access: WorkspaceAccess | undefined, wanted?: () => boolean) => Promise<boolean>
+  readonly askSwitch: (access: WorkspaceAccess | undefined, wanted?: () => boolean, chat?: string) => Promise<SwitchAnswer>
   /** Record the grant for the open consent, or accept the switch of the `switch` form; a refusal keeps the consent open with its failure. */
   readonly confirm: () => void
   /** Close the open consent without recording anything. */
@@ -86,7 +93,8 @@ export function consentFailureOf(error: unknown): ConsentFailure {
     case 'refused':
       if (failure.code === 'STALE_REVIEW') return { kind: 'stale' }
       if (failure.code === LOOPBACK_REQUIRED) return { kind: 'remote' }
-      if (failure.code === ELEVATION_REQUIRED) return { kind: 'unlock' }
+      // A cancelled Face ID confirmation: trying again asks again; no unlock admits it.
+      if (failure.code === ELEVATION_REQUIRED) return { kind: 'face' }
       return { kind: 'refused', message: failure.message }
     case 'unreachable':
     case 'unreadable':
@@ -105,19 +113,19 @@ export function consentFailureOf(error: unknown): ConsentFailure {
 export function createFullAccessConsentSource(fetch: HostFetch): FullAccessConsentSource {
   let state: FullAccessConsentState = null
   let seq = 0
-  let settle: ((granted: boolean) => void) | undefined
+  let settle: ((answer: SwitchAnswer) => void) | undefined
   let stillWanted: (() => boolean) | undefined
   const listeners = new Set<() => void>()
   const publish = (next: FullAccessConsentState): void => {
     state = next
     for (const listener of listeners) listener()
   }
-  const close = (granted: boolean): void => {
+  const close = (answer: SwitchAnswer): void => {
     const done = settle
     settle = undefined
     stillWanted = undefined
     publish(null)
-    done?.(granted)
+    done?.(answer)
   }
   return {
     hooks: {
@@ -131,45 +139,46 @@ export function createFullAccessConsentSource(fetch: HostFetch): FullAccessConse
     },
     ask(access, chat, wanted) {
       // A second ask answers the first as cancelled: one consent is open at a time.
-      close(false)
+      close('cancelled')
       stillWanted = wanted
       publish({ seq: ++seq, form: access === undefined ? 'remote' : 'grant', ...access === undefined ? {} : { access }, acknowledge: false, ...chat === undefined ? {} : { chat }, busy: false })
-      return new Promise<boolean>((resolve) => { settle = resolve })
+      return new Promise<SwitchAnswer>((resolve) => { settle = resolve }).then(answer => answer !== 'cancelled')
     },
-    askSwitch(access, wanted) {
-      close(false)
+    askSwitch(access, wanted, chat) {
+      close('cancelled')
       stillWanted = wanted
       const grant = access !== undefined && access.grantedAt === null
-      publish({ seq: ++seq, form: grant ? 'grant' : 'switch', ...grant ? { access } : {}, acknowledge: true, busy: false })
-      return new Promise<boolean>((resolve) => { settle = resolve })
+      publish({ seq: ++seq, form: grant ? 'grant' : 'switch', ...grant ? { access, ...chat === undefined ? {} : { chat } } : {}, acknowledge: true, busy: false })
+      return new Promise<SwitchAnswer>((resolve) => { settle = resolve })
     },
     confirm() {
       const open = state
       if (open === null || open.form === 'remote' || open.busy) return
       if (stillWanted?.() === false) {
-        close(false)
+        close('cancelled')
         return
       }
       if (open.form === 'switch') {
-        close(true)
+        close('submit')
         return
       }
       if (open.access === undefined) return
       publish({ ...open, busy: true })
       setFullAccess(fetch, open.access, true, open.chat).then(
-        () => { noteUnlockedAction(); if (state?.seq === open.seq) close(true) },
+        ({ chats }) => { if (state?.seq === open.seq) close(chats > 0 ? 'switched' : 'submit') },
         (error: unknown) => { if (state?.seq === open.seq) publish({ ...open, busy: false, failure: consentFailureOf(error) }) },
       )
     },
     cancel() {
-      close(false)
+      close('cancelled')
     },
   }
 }
 
 /**
  * The `permissionSwitchConsent` question of the composer's permission control: a switch to full access in a chat whose
- * workspace holds no grant shows the consent first, and is submitted only once the grant is recorded. Every other
+ * workspace holds no grant shows the consent first, whose recorded grant switches the chat itself, in the same call, so the
+ * surface submits nothing more and a device confirms once. Every other
  * switch, every switch in a profile that does not ask for full access per workspace, and every switch to full access
  * while dangerous mode is on, is submitted at once.
  * @param fetch - the request function.
@@ -177,24 +186,27 @@ export function createFullAccessConsentSource(fetch: HostFetch): FullAccessConse
  * @param sessionId - the chat the switch belongs to.
  * @param preset - the preset the person picked.
  * @param wanted - whether the asker still wants the switch, read when the person confirms.
- * @returns whether the surface submits the switch.
+ * @returns `submit` when the surface submits the switch, `switched` when the recorded grant already switched the chat,
+ *   `cancelled` when nothing is to change.
  * @throws {HostRequestError} when the home cannot answer the review; the control then submits nothing.
  */
-export async function confirmPermissionSwitch(fetch: HostFetch, consent: Pick<FullAccessConsentSource, 'ask' | 'askSwitch'>, sessionId: string, preset: string, wanted?: () => boolean): Promise<boolean> {
-  if (preset !== FULL_ACCESS_PRESET) return true
+export async function confirmPermissionSwitch(fetch: HostFetch, consent: Pick<FullAccessConsentSource, 'ask' | 'askSwitch'>, sessionId: string, preset: string, wanted?: () => boolean): Promise<SwitchAnswer> {
+  if (preset !== FULL_ACCESS_PRESET) return 'submit'
   // Dangerous mode (chosen in `delorun setup`) makes full access available everywhere without a dialog, on a remote studio too.
-  if ((await readEverywhere(fetch)).on) return true
+  if ((await readEverywhere(fetch)).on) return 'submit'
   let access: WorkspaceAccess | undefined
   try {
     access = await reviewChat(fetch, sessionId)
   } catch (error) {
-    if (isRefused(error, LOOPBACK_REQUIRED)) return consent.ask(undefined)
+    // The remote form offers no way to grant, so it only ever answers cancelled.
+    if (isRefused(error, LOOPBACK_REQUIRED)) return await consent.ask(undefined) ? 'submit' : 'cancelled'
     // A chat with no folder has no per-workspace permission: it still asks, in the short form, and the home's guard answers the switch with its own reason.
     if (isRefused(error, 'NO_WORKSPACE')) return wanted === undefined ? consent.askSwitch(undefined) : consent.askSwitch(undefined, wanted)
     throw error
   }
   // A profile without the per-workspace consent answers no review: the short form is then the only question the person sees.
-  return wanted === undefined ? consent.askSwitch(access) : consent.askSwitch(access, wanted)
+  // The grant names the chat, so the home switches it in the same call and the surface submits nothing more.
+  return consent.askSwitch(access, wanted, sessionId)
 }
 
 /**
@@ -230,7 +242,7 @@ export function consentFailureText(t: FullAccessConsentProps['t'], failure: Cons
   switch (failure.kind) {
     case 'stale': return t('failed.stale')
     case 'remote': return t('loopback', { action: t(action) })
-    case 'unlock': return `${unlockSentence(t, currentGateUnlock().minutes)} ${t('unlockWhere')}`
+    case 'face': return t('gate.face')
     case 'unreachable': return t('failed.unreachable')
     case 'unreadable': return t('failed.unreadable')
     case 'refused': return failure.message
@@ -241,16 +253,13 @@ export function consentFailureText(t: FullAccessConsentProps['t'], failure: Cons
 }
 
 /**
- * A failure's line: its sentence, with an Unlock button when the device can open the unlock dialog.
- * @param props - the consents copy and the failure.
+ * A failure's line.
+ * @param props - the consents copy, the failure and the phrase a remote refusal names.
  * @returns the alert line.
  */
-export function ConsentFailureLine({ t, failure, action, retry }: { readonly t: FullAccessConsentProps['t']; readonly failure: ConsentFailure; readonly action?: Parameters<typeof consentFailureText>[2]; readonly retry?: (() => void) | undefined }): ReactNode {
-  const { open, unlocked } = useGateUnlock()
-  useRetryOnUnlock(failure.kind === 'unlock', unlocked, retry)
+export function ConsentFailureLine({ t, failure, action }: { readonly t: FullAccessConsentProps['t']; readonly failure: ConsentFailure; readonly action?: Parameters<typeof consentFailureText>[2] }): ReactNode {
   return <div className={css.failed} role="alert">
     <p>{consentFailureText(t, failure, action)}</p>
-    {failure.kind === 'unlock' && open !== undefined ? <Button variant="primary" size="sm" onClick={open}>{t('gate.unlockButton')}</Button> : null}
   </div>
 }
 
@@ -298,7 +307,7 @@ function OpenConsent({ consent, confirm, cancel, t }: OpenConsentProps): ReactNo
       ? <div className={css.consent}>
         <p className={css.text}>{t('switch.risk')}</p>
         {acknowledge}
-        {consent.failure === undefined ? null : <ConsentFailureLine t={t} failure={consent.failure} retry={confirm} />}
+        {consent.failure === undefined ? null : <ConsentFailureLine t={t} failure={consent.failure} />}
       </div>
       : access === undefined
       ? <p className={css.text}>{t('consent.remote')} <code className={css.command}>{FULL_ACCESS_COMMAND}</code></p>
@@ -320,7 +329,7 @@ function OpenConsent({ consent, confirm, cancel, t }: OpenConsentProps): ReactNo
           </ul>
           <p className={css.text}>{t('consent.scope')}</p>
         </details>
-        {consent.failure === undefined ? null : <ConsentFailureLine t={t} failure={consent.failure} retry={confirm} />}
+        {consent.failure === undefined ? null : <ConsentFailureLine t={t} failure={consent.failure} />}
       </div>}
   </Modal>
 }

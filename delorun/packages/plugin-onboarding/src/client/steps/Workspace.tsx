@@ -7,12 +7,13 @@ import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
+import { BreakablePath } from '../ui/BreakablePath.tsx'
 import { Card } from '../ui/Card.tsx'
 import { ChipGroup } from '@delorun/brand'
 import { StateLine } from '../ui/StateLine.tsx'
 import { Explain } from '../ui/Explain.tsx'
 import type { Store, WorkspaceMode } from '../guide.ts'
-import type { StepProps } from './shared.ts'
+import { folderName, type StepProps } from './shared.ts'
 import type { StartTarget, StepServices } from '../types.ts'
 import css from './steps.module.css'
 
@@ -46,13 +47,13 @@ function Chosen({ services, guide, focus = false }: StepProps & { readonly focus
  * @returns the card.
  */
 function FolderCard({ path, note, name: given, focus = false, t }: { readonly path: string; readonly note?: string; readonly name?: string; readonly focus?: boolean; readonly t: StepServices['t'] }): ReactNode {
-  const name = given ?? path.split(/[\\/]/).filter(part => part !== '').pop() ?? path
+  const name = given ?? folderName(path)
   const box = useRef<HTMLDivElement>(null)
   useEffect(() => { if (focus) box.current?.focus({ preventScroll: true }) }, [focus])
   return (
     <div ref={box} tabIndex={-1} className={css.focusable}>
       <Card title={name} labels={{ more: t('more'), less: t('less') }}>
-        <span className={css.path}>{path}</span>
+        <span className={css.path}><BreakablePath path={path} /></span>
         {note !== undefined && <span className={css.hint}>{note}</span>}
       </Card>
     </div>

@@ -232,7 +232,7 @@ If something looks wrong: delorun doctor.
 
   ```json setup-answers-example
   {
-    "schemaVersion": 4,
+    "schemaVersion": 5,
     "useCase": "local",
     "modelProvider": { "id": "deepseek-official", "credential": { "source": "environment", "name": "DEEPSEEK_API_KEY" }, "baseURL": null, "model": null },
     "prompts": "safer",
@@ -241,7 +241,6 @@ If something looks wrong: delorun doctor.
     "reach": { "option": "none", "identityFactor": null },
     "importStockHome": false,
     "protectChanges": false,
-    "phonePowers": null,
     "updateCheck": true,
     "sections": []
   }

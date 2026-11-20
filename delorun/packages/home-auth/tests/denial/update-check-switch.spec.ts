@@ -56,9 +56,9 @@ async function mounted(withRow: boolean, facts: { unlocked?: boolean, dangerous?
   access.remoteAccess.registerPolicy(REACH_DEVICE, createReachAccessPolicy({
     admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere',
     elevationOf: () => (facts.unlocked === false ? undefined : ELEVATION as never), unlockModeEnabled: () => false, keyRefs: () => new Set<string>(), pageUnlockOf: () => (facts.unlocked === false ? undefined : {}) as never, logElevated: () => {},
-    liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
+    liftedSettings: () => undefined,
     computerOnlySwitches: () => homeAuth.computerOnlySwitches(),
-    protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set([COMPUTER_ONLY_ROW]), defaultPermission: () => undefined, phonePowers: () => 'full' as const, dangerousMode: () => facts.dangerous === true,
+    protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set([COMPUTER_ONLY_ROW]), defaultPermission: () => undefined, dangerousMode: () => facts.dangerous === true,
   }))
   return (principal: Parameters<RemoteAccessService['decide']>[0]['principal'], action: RemoteAccessAction, args: Record<string, unknown>) =>
     access.remoteAccess.decide({ principal, action, resources: [{ kind: 'global' }], args })

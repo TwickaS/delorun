@@ -1,7 +1,7 @@
 /**
  * Settings → Updates: the release that runs, when it was last checked with Check now, the newer release if one is
  * known with its kind and the plugins it turns off, and Update now…, which opens the report dialog. Go back is the
- * rollback panel's. Each control reads the state's `access`: one the Phone powers level keeps at the computer is
+ * rollback panel's. Each control reads the state's `access`: one that stays at the computer is
  * disabled with a hover text; one that needs an unlock stays enabled, and the route's refusal opens the unlock dialog.
  * The progress and outcome cards are frame-wide (see `UpdateOverlay`), so they show here and wherever the person is.
  */

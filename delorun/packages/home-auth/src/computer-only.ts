@@ -36,7 +36,7 @@ export function requireComputer(request: ComputerRequest, response: ServerRespon
 }
 
 /** What {@link requireComputerOrDevice}, {@link unlockOf} and {@link gateByUnlock} read of the home. */
-export type DangerousModeHome = Pick<HomeAuthService, 'arrivalOf' | 'dangerousMode' | 'elevationOf' | 'pageUnlockOf' | 'unlockModeEnabled'> & Partial<Pick<HomeAuthService, 'phonePowers' | 'touchUnlock'>>
+export type DangerousModeHome = Pick<HomeAuthService, 'arrivalOf' | 'dangerousMode' | 'elevationOf' | 'pageUnlockOf' | 'unlockModeEnabled'> & Partial<Pick<HomeAuthService, 'touchUnlock'>>
 
 /**
  * The running unlock a reach device's Peer holds: its page's unlock when the Peer carries one (PIN mode), otherwise the
@@ -68,11 +68,8 @@ export function requireComputerOrDevice(request: ComputerRequest, response: Serv
   return requireComputer(request, response, homeAuth, action)
 }
 
-/** The sentence a locked device reads when a route needs an unlock. */
-const ELEVATION_REQUIRED_SENTENCE = 'Unlock this device first: it needs a code from your computer, or your PIN where PIN mode is on'
-
-/** The sentence a device reads when a route needs Phone powers Full and the home is Careful. */
-const PHONE_POWERS_SENTENCE = 'This needs you at your computer while Phone powers is Careful: choose Full at the computer to do it from a phone'
+/** The sentence a device reads when a route needs its confirmation for that call. */
+const ELEVATION_REQUIRED_SENTENCE = 'Confirm this with Face ID or your PIN when asked, or do it at your computer'
 
 /**
  * The reach-device half of a route that needs an unlock (level U): its `admitPeer` admits a reach device and records
@@ -84,33 +81,24 @@ const PHONE_POWERS_SENTENCE = 'This needs you at your computer while Phone power
  * @param options - `grace: false` for a route that loosens a consent or guard row: the approval grace does not open it, only
  *   a code or a PIN unlock does. The grace opens the route by default. `renews` is explicit for every route: true for a deliberate,
  *   state-changing call, which renews a sliding unlock; false for a route the studio polls or that only reads.
- *   `phonePowers: 'full'` for a level-F route: while Phone powers is not Full, a device is answered `403 LOOPBACK_REQUIRED`
- *   whatever its unlock, and under Full only a code or a PIN unlock opens it, never the grace.
  * @returns the `admitPeer` and `fetch` for `ConnectionFetchRoute`.
  */
-export function gateByUnlock(homeAuth: () => DangerousModeHome | undefined, fetch: (request: Request) => Promise<Response>, options: { readonly grace?: boolean; readonly renews: boolean; readonly phonePowers?: 'full' }): {
+export function gateByUnlock(homeAuth: () => DangerousModeHome | undefined, fetch: (request: Request) => Promise<Response>, options: { readonly grace?: boolean; readonly renews: boolean }): {
   readonly admitPeer: (request: Request, peer: { readonly principal: { readonly kind: string } }) => boolean
   readonly fetch: (request: Request) => Promise<Response>
 } {
   const locked = new WeakSet<Request>()
-  const careful = new WeakSet<Request>()
   return {
     admitPeer: (request, peer) => {
       const home = homeAuth()
       if (home === undefined || peer.principal.kind !== REACH_DEVICE) return false
-      // A home that cannot say its Phone powers level is treated as Careful.
-      if (options.phonePowers === 'full' && home.phonePowers?.().level !== 'full') {
-        careful.add(request)
-        return true
-      }
       const unlock = unlockOf(home, peer.principal as ReachDevicePrincipal)
-      if (unlock === undefined || (unlock.grace === true && (options.grace === false || options.phonePowers === 'full'))) locked.add(request)
+      if (unlock === undefined || (unlock.grace === true && options.grace === false)) locked.add(request)
       // The route needs an unlock, so the call renews the unlock it ran under.
       else if (options.renews) home.touchUnlock?.(unlock.id)
       return true
     },
     fetch: (request) => {
-      if (careful.has(request)) return Promise.resolve(new Response(refusalBody('LOOPBACK_REQUIRED', PHONE_POWERS_SENTENCE), { status: 403, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } }))
       if (!locked.has(request)) return fetch(request)
       return Promise.resolve(new Response(refusalBody('ELEVATION_REQUIRED', ELEVATION_REQUIRED_SENTENCE), { status: 403, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } }))
     },
@@ -134,7 +122,8 @@ export function admitUnlockedDevice(homeAuth: () => DangerousModeHome | undefine
 
 /**
  * The `admitPeer` of a route that adds or tests model keys: it admits a reach device (an approved device holds a
- * session; no unlock is needed) and, while PIN mode is on, only the Peer of an unlocked page. The owner's Peer never
+ * session; no unlock is needed) until a PIN or any passkey exists (`unlockModeEnabled`). From then on it admits only the
+ * Peer of a running page unlock, and no route mints one (A483), so no device is admitted. The owner's Peer never
  * reaches `admitPeer`.
  * @param homeAuth - a way to the mounted `homeAuth` service, read when a request arrives.
  * @returns the function for `ConnectionFetchRoute.admitPeer`.

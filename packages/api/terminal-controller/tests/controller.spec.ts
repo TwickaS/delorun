@@ -10,7 +10,7 @@ import type { SandboxExecutionPolicy, SandboxMode } from '@deepseek-ai/dsh-sandb
 import { SubprocessExecutableNotFoundError, type SubprocessRuntime, type SubprocessSpawnSpec, type SubprocessTerminalEnvironment, type SubprocessTerminalHandle } from '@deepseek-ai/dsh-subprocess'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { TerminalController, type Config } from '../src/index.ts'
+import { LAUNCH_ERROR_WITHHELD, TerminalController, type Config } from '../src/index.ts'
 import { inputChannel } from './input.ts'
 import type { RemoteInvocation, PeerId } from '@deepseek-ai/dsh-typert-protocol'
 import { resolveShell } from '../src/shells.ts'
@@ -301,6 +301,42 @@ describe('TerminalController', () => {
     const first = await creating
     expect(await controller.create(agent, request, signal())).toBe(first)
     expect(subprocess.spawnTerminal).toHaveBeenCalledOnce()
+  })
+
+  // Sending the launch error to a device hands it free text from the process or its provider, which can name paths or
+  // secrets, through a list a reach device reads with no confirmation (Face ID review r2, F33).
+  it('withholds a failed terminal\'s launch error text from a Remote caller other than the Host\'s owner', async () => {
+    const { controller, agent, subprocess, handle } = fixture({ maxTerminals: 1 })
+    const abort = new AbortController()
+    subprocess.spawnTerminal.mockImplementationOnce(async () => { abort.abort('spawn failed: /home/me/.secrets TOKEN=abc'); return handle })
+    handle.terminate.mockRejectedValueOnce(new Error('still alive'))
+    await expect(controller.create(agent, request, abort.signal)).rejects.toThrow('cleanup failed')
+    const listedBy = (principal: { readonly kind: string }): ReturnType<typeof controller.list> => {
+      const invocation: RemoteInvocation = {
+        request: { namespace: 'terminal', method: 'list', args: {} }, service: 'terminalController', signal: signal(),
+        peer: { id: 'test-peer' as PeerId, ctx: agent.ctx, principal: principal as never, interactions: 'answer', signal: signal(), dispose: async () => {} },
+        uplink: <In>() => inputChannel<In>().source,
+      }
+      return agent.ctx.extend({ invocation }).terminalController.list(agent.id)
+    }
+    expect(listedBy({ kind: 'reach-device' })).toMatchObject([{ id, state: 'failed', error: LAUNCH_ERROR_WITHHELD, errorCode: 'withheld' }])
+    expect(JSON.stringify(listedBy({ kind: 'reach-device' }))).not.toContain('secrets')
+    expect(listedBy({ kind: 'owner' })).toEqual([expect.not.objectContaining({ errorCode: expect.anything() })])
+    expect(listedBy({ kind: 'owner' })).toMatchObject([{ id, state: 'failed', error: 'spawn failed: /home/me/.secrets TOKEN=abc' }])
+    // The roster stream a device watches sends the same withheld line (review r3 P3-3).
+    const watching = new AbortController()
+    const invocation: RemoteInvocation = {
+      request: { namespace: 'terminal', method: 'watch', args: {} }, service: 'terminalController', signal: watching.signal,
+      peer: { id: 'test-peer' as PeerId, ctx: agent.ctx, principal: { kind: 'reach-device' } as never, interactions: 'answer', signal: watching.signal, dispose: async () => {} },
+      uplink: <In>() => inputChannel<In>().source,
+    }
+    const roster = agent.ctx.extend({ invocation }).terminalController.watch(agent.id, watching.signal)[Symbol.asyncIterator]()
+    const first = await roster.next()
+    expect(first.value).toMatchObject([{ id, error: LAUNCH_ERROR_WITHHELD, errorCode: 'withheld' }])
+    expect(JSON.stringify(first.value)).not.toContain('secrets')
+    watching.abort()
+    await roster.return?.(undefined)
+    expect(controller.list(agent.id)).toMatchObject([{ error: 'spawn failed: /home/me/.secrets TOKEN=abc' }])
   })
 
   it('keeps failed allocations reserved until their cleanup succeeds', async () => {

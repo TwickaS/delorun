@@ -13,8 +13,19 @@ export const FACE_ID_KINDS: readonly FaceIdKind[] = ['faceId', 'touchId', 'windo
 
 /** What the grant covers: the calls one tap makes, or one prompt answer, keyed by the approval request's Session id, call id and grants marker. */
 export type GrantRequest =
-  | { readonly actions: readonly { readonly action: string; readonly hash: string }[] }
+  | { readonly actions: readonly { readonly action: string; readonly hash: string; readonly hold?: { readonly feature: 'terminal' | 'picker'; readonly id: string } }[] }
   | { readonly answer: { readonly agent: string; readonly callId: string; readonly grants: string; readonly value: string } }
+
+/** The glyphs of the sheet's header, one per kind of strong action; `shield` is the plain fallback. */
+export type FaceIconKey = 'terminal' | 'shield' | 'download' | 'check' | 'folder' | 'settings' | 'plugin' | 'trash' | 'globe' | 'refresh'
+
+/** Where an action happens, as the request names it; each line shows only when known. */
+export interface FaceIdContext {
+  /** The workspace the action belongs to. */
+  readonly workspace?: string
+  /** The chat the action belongs to. */
+  readonly chat?: string
+}
 
 /** What a sensitive action is, in the words its own description gives the person. */
 export interface FaceIdAction {
@@ -26,6 +37,12 @@ export interface FaceIdAction {
   readonly body: string
   /** The items a batch covers; the sheet shows at most three, then the count of the rest. */
   readonly items?: readonly string[]
+  /** The glyph by the title; the sheet uses the plain shield when absent. */
+  readonly icon?: FaceIconKey
+  /** What the action leaves in place after the one confirmation, in a sentence; absent when nothing lasts. */
+  readonly stays?: string
+  /** The workspace and chat the action belongs to, when the request names them. */
+  readonly context?: FaceIdContext
   /** True when the home never grants this action by PIN, so the sheet offers no PIN keypad. */
   readonly noPin?: true
 }
@@ -113,10 +130,10 @@ export interface AssertionResponseJSON {
 /** The home's passkey routes, one method per route. Each rejects with the home's refusal or an unreachable-host error. */
 export interface PasskeyApi {
   /**
-   * What this device holds, and whether an enrolment ticket waits.
-   * @returns the passkeys and the ticket flag.
+   * This device's id, what it holds, and whether an enrolment ticket waits.
+   * @returns the device id, the passkeys and the ticket flag.
    */
-  state(): Promise<{ readonly passkeys: readonly PasskeyEntry[]; readonly ticket: boolean }>
+  state(): Promise<{ readonly deviceId: string; readonly passkeys: readonly PasskeyEntry[]; readonly ticket: boolean }>
   /**
    * Ask for the options of one assertion.
    * @param request - the calls the tap covers, or one prompt answer.

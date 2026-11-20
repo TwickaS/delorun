@@ -1,5 +1,7 @@
-/* A heading and a row of small cards that share the remaining height of the step. */
+/* A heading and a row of small cards that share the remaining height of the step. The container is measured so that an odd
+   last card can fill a two-column row. */
 .explain {
+  container-type: inline-size;
   display: flex;
   flex: 1 0 auto;
   flex-direction: column;
@@ -21,6 +23,14 @@
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+/* Where the grid holds two columns (three cards need 3 x 160px and two gaps), an odd last card spans the row instead of
+   standing at half width beside blank space. */
+@container (max-width: 511px) {
+  .card:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
 }
 
 .card {

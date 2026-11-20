@@ -52,7 +52,7 @@ function routesOver(grants: RealBrowserGrants, agent: Agent, listener: string | 
     arrivalOf: () => ({ listener }),
     dangerousMode: () => false,
     unlockModeEnabled: () => false,
-    passkeysEnabled: () => face !== undefined, faceGrants: () => face?.store, deviceHasPasskey: () => face?.hasPasskey ?? false, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : deviceId === 'grace-phone' ? { id: 'g', grace: true } : undefined),
+    faceGrants: () => face?.store, deviceHasPasskey: () => face?.hasPasskey ?? false, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : deviceId === 'grace-phone' ? { id: 'g', grace: true } : undefined),
   }
   const ctx = {
     on: (_name: string, registered: FakeConnection['hook']) => { hook = registered },

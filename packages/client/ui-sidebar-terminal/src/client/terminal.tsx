@@ -43,7 +43,7 @@ export function TerminalBody({ useTabInfo, useTerminal, useTheme, view, t }: Ter
       {newTerminal}
     </div>
   </section>
-  const error = state.phase === 'disconnected' ? undefined : state.issue === undefined ? state.error ?? state.info?.error : t(state.issue)
+  const error = state.phase === 'disconnected' ? undefined : state.issue === undefined ? state.error ?? (state.info?.errorCode === 'withheld' ? t('errorWithheld') : state.info?.error) : t(state.issue)
   let status: string | undefined
   if (state.phase === 'idle' || state.phase === 'loading') status = t('loading')
   else if (state.phase === 'creating' || state.phase === 'connecting' || state.phase === 'disconnected') status = t(state.phase)
@@ -64,7 +64,8 @@ export function TerminalBody({ useTabInfo, useTerminal, useTheme, view, t }: Ter
         {ended && newTerminal}
       </div>}
       {state.info !== undefined && <TerminalScreen state={state} model={model} visible={tab.visible} label={t('title')} theme={theme} />}
-      {error !== undefined && <p className={css.error} role="alert">{t('failed', { message: error })}</p>}
+      {/* A creation the person did not confirm is no error: it says so plainly, beside Retry, which asks again. */}
+      {error !== undefined && <p className={css.error} role="alert">{state.issue === 'notConfirmed' ? error : t('failed', { message: error })}</p>}
     </section>
   )
 }

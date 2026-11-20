@@ -278,10 +278,6 @@ export function applyStudio(ctx: Context): void {
       // Looked up on click, as for the Models link above.
       openSettings: () => { ctx.get('settingsShell')?.openSection(PIN_MODE_SECTION_ID) },
     },
-    phonePowers: {
-      t: ctx.locale.bind('delorunDevices'),
-      fetch: (input, init) => globalThis.fetch(input, init),
-    },
     browser: browserFace,
     previewFlags,
   })

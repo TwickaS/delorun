@@ -187,7 +187,7 @@ export { DEVICE_REMOVE_ACTION }
 export function removeDeviceHandler(auth: HomeAuth, credential: LoopbackCredential): RouteHandler {
   return async (request, response) => {
     // A signed-in device may remove itself, which is its own sign-out. Removing another device stays at the computer
-    // unless Face ID is on and the device holds a grant for exactly this body: a stolen unlocked phone must not lock the
+    // unless the device holds a grant for exactly this body: a stolen unlocked phone must not lock the
     // person out of their other devices without a Face ID or PIN confirmation of that removal.
     if (isReachArrival(auth, request)) {
       const device = deviceSession(auth, request, response, 'POST')
@@ -200,10 +200,11 @@ export function removeDeviceHandler(auth: HomeAuth, credential: LoopbackCredenti
           return
         }
         if (message.deviceId !== device.session.deviceId) {
-          // While Face ID is on, a confirmation for exactly this body lets a device remove another one (it only shrinks access).
+          // A confirmation for exactly this body lets a device remove another one (it only shrinks access).
           const hash = hashArgs(message)
           const holder = { deviceId: device.session.deviceId, listener: device.listener }
-          if (!auth.passkeys.enabled() || hash === undefined || auth.grants.consume(holder, DEVICE_REMOVE_ACTION, hash) === undefined) {
+          // Only a grant a passkey minted removes another device: a PIN seen on a stolen phone must not lock the owner out of the rest.
+          if (hash === undefined || auth.grants.peek(holder, DEVICE_REMOVE_ACTION, hash)?.factor !== 'passkey' || auth.grants.consume(holder, DEVICE_REMOVE_ACTION, hash) === undefined) {
             sendError(response, new HomeAuthError('LOOPBACK_REQUIRED', 'Removing another device needs you at your computer: open the studio on the home\'s own computer'))
             return
           }

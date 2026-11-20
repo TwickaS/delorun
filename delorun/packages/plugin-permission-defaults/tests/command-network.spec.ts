@@ -260,7 +260,7 @@ describe('the routes', () => {
 describe('under Face ID', () => {
   const device = (extra: object = {}) => ({ principal: { kind: REACH_DEVICE, deviceId: 'd1', listener: 'reach', ...extra } })
 
-  /** The service with a `homeAuth` whose Face ID flag is on for device `d1`, which holds a passkey and whatever unlock the options give. */
+  /** The service with a `homeAuth` whose grant store exists for device `d1`, which holds a passkey and whatever unlock the options give. */
   async function underFace(home: { elevation?: { id: string, grace?: true }, page?: boolean } = {}) {
     const result = await mounted()
     const world = faceWorld('d1', 'reach')
@@ -335,14 +335,14 @@ describe('the route hook', () => {
   /** The service mounted with a `homeAuth` that places every request on one listener and reports dangerous mode. */
   async function withListener(listener: string, dangerous = false): Promise<Context> {
     const { ctx } = await mounted()
-    ctx.provide('homeAuth', { arrivalOf: (request: IncomingMessage) => ({ listener, host: request.headers.host, source: 'test' }), dangerousMode: () => dangerous, unlockModeEnabled: () => false, passkeysEnabled: () => false, faceGrants: () => undefined, deviceHasPasskey: () => false, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : deviceId === 'grace-phone' ? { id: 'g', grace: true } : undefined) } as never)
+    ctx.provide('homeAuth', { arrivalOf: (request: IncomingMessage) => ({ listener, host: request.headers.host, source: 'test' }), dangerousMode: () => dangerous, unlockModeEnabled: () => false, faceGrants: () => undefined, deviceHasPasskey: () => false, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : deviceId === 'grace-phone' ? { id: 'g', grace: true } : undefined) } as never)
     return ctx
   }
 
   it('lets a reach device through the hook, reads for any approved device, and answers a locked device ELEVATION_REQUIRED on the change, in either dangerous mode', async () => {
     const { ctx, routes } = await mounted()
     let dangerous = false
-    ctx.provide('homeAuth', { arrivalOf: (request: IncomingMessage) => ({ listener: 'reach-tailscale-private', host: request.headers.host, source: 'test' }), dangerousMode: () => dangerous, unlockModeEnabled: () => false, passkeysEnabled: () => false, faceGrants: () => undefined, deviceHasPasskey: () => false, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : deviceId === 'grace-phone' ? { id: 'g', grace: true } : undefined) } as never)
+    ctx.provide('homeAuth', { arrivalOf: (request: IncomingMessage) => ({ listener: 'reach-tailscale-private', host: request.headers.host, source: 'test' }), dangerousMode: () => dangerous, unlockModeEnabled: () => false, faceGrants: () => undefined, deviceHasPasskey: () => false, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : deviceId === 'grace-phone' ? { id: 'g', grace: true } : undefined) } as never)
     const device = (deviceId: string) => ({ principal: { kind: 'reach-device', deviceId, listener: 'reach-tailscale-private' } })
     for (const mode of [false, true]) {
       dangerous = mode

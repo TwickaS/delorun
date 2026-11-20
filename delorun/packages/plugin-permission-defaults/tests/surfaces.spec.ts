@@ -294,7 +294,7 @@ function routesOver(defaults: PermissionDefaults, listener: string | undefined, 
   const routes = new Map<string, { fetch: (request: Request) => Promise<Response> | Response, admitPeer?: (request: Request, peer: { principal: { kind: string, deviceId?: string, listener?: string } }) => boolean }>()
   const ctx = {
     on: (_name: string, listener: FakeConnection['hook']) => { hook = listener },
-    get: (name: string) => (name === 'homeAuth' ? { arrivalOf: () => ({ listener }), dangerousMode: () => dangerous, unlockModeEnabled: () => false, passkeysEnabled: () => false, faceGrants: () => undefined, deviceHasPasskey: () => false, elevationOf: (deviceId: string) => (unlocked.includes(deviceId) ? { id: 'e', ...deviceId === 'grace-phone' ? { grace: true } : {} } : undefined) } : undefined),
+    get: (name: string) => (name === 'homeAuth' ? { arrivalOf: () => ({ listener }), dangerousMode: () => dangerous, unlockModeEnabled: () => false, faceGrants: () => undefined, deviceHasPasskey: () => false, elevationOf: (deviceId: string) => (unlocked.includes(deviceId) ? { id: 'e', ...deviceId === 'grace-phone' ? { grace: true } : {} } : undefined) } : undefined),
     connection: { fetch: { register: (route: { path: string, fetch: (request: Request) => Promise<Response>, admitPeer?: (request: Request, peer: { principal: { kind: string, deviceId?: string, listener?: string } }) => boolean }) => { routes.set(route.path, route) } } },
     permissionDefaults: defaults,
   }
@@ -374,8 +374,8 @@ describe('the routes', () => {
     expect(reached).toBe(2)
   })
 
-  it('record a full access an unlocked device grants as the device\'s, and the owner\'s as the computer\'s', async () => {
-    const { harness, defaults, home, workspace } = await mounted()
+  it('record a full access a device grants while dangerous mode holds as the device\'s, and the owner\'s as the computer\'s', async () => {
+    const { harness, defaults, home, workspace } = await mounted(undefined, undefined, 'row', true)
     await harness.create(SessionId('chat-origin'), {}, { cwd: workspace })
     const device = routesOver(defaults, 'tailscale-private', ['unlocked-phone'], true)
     const phone = { kind: 'reach-device', deviceId: 'unlocked-phone', listener: 'tailscale-private' }
@@ -388,6 +388,18 @@ describe('the routes', () => {
     const owner = routesOver(defaults, 'loopback')
     await owner.fetchAs(PERMISSION_ROUTES.setFullAccess, { method: 'POST', body: body(false, access.reviewId) }, { kind: 'owner' })
     expect(existsSync(deviceGrantsPath(home))).toBe(false)
+  })
+
+  it('record nothing as the device\'s for a full access a device grants with its Face ID outside dangerous mode', async () => {
+    // Recorded, it counted as no grant at a read and was withdrawn at the next reload, so a phone's consent never took effect.
+    const { harness, defaults, home, workspace } = await mounted()
+    await harness.create(SessionId('chat-face-origin'), {}, { cwd: workspace })
+    const device = routesOver(defaults, 'tailscale-private', ['unlocked-phone'], true)
+    const shown = defaults.reviewChat('chat-face-origin')
+    const granted = await device.fetchAs(PERMISSION_ROUTES.setFullAccess, { method: 'POST', body: JSON.stringify({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true }) }, { kind: 'reach-device', deviceId: 'unlocked-phone', listener: 'tailscale-private' })
+    expect(granted.status).toBe(200)
+    expect(existsSync(deviceGrantsPath(home))).toBe(false)
+    expect(defaults.granted(workspace)).toBe(true)
   })
 
   it('turn full access on for a confirmed, current review, and refuse an unconfirmed or stale one with its code', async () => {

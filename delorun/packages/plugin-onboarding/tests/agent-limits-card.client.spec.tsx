@@ -98,10 +98,12 @@ describe('the agent card\'s sign-in line and limits', () => {
     expect(fetch.mock.calls[0]?.[1]?.body).toBe(JSON.stringify({ provider: 'claude-code' }))
   })
 
-  it('says "Unlock to check" after a locked device is refused', async () => {
-    const fetch = (): Promise<Response> => Promise.resolve(new Response(JSON.stringify({ error: 'ELEVATION_REQUIRED', message: 'Unlock first.' }), { status: 403 }))
+  // Pointing a refusal at an unlock sends the person to a dialog that no longer opens a check (F36).
+  it('says the check was not confirmed after a refusal, and keeps "Check now"', async () => {
+    const fetch = (): Promise<Response> => Promise.resolve(new Response(JSON.stringify({ error: 'ELEVATION_REQUIRED', message: 'Confirm first.' }), { status: 403 }))
     const card = await show(withAccounts(stored()), fetch)
     fireEvent.click(within(card).getByRole('button', { name: 'Check now' }))
-    await waitFor(() => { expect(within(card).getByRole('button', { name: 'Unlock to check' })).toBeTruthy() })
+    await waitFor(() => { expect(within(card).getByText(/^Not confirmed, so nothing was checked\./)).toBeTruthy() })
+    expect(within(card).getByRole('button', { name: 'Check now' })).toBeTruthy()
   })
 })

@@ -221,11 +221,9 @@ describe('state cards without actions to press', () => {
 
 describe('the approval card', () => {
   const pending = (answer = vi.fn(() => Promise.resolve())) => ({ kind: 'approval', grants: 'external-agent', toolName: 'claude_code.Bash', runScope: 'external-agent-run', reason: 'git push origin fix', answerable: true, answer }) as never
-  const reach = (kind: 'computer' | 'locked-phone' | 'unlocked-phone') => {
-    const standing = kind === 'unlocked-phone' ? { kind, until: 1402 } as const : { kind } as const
-    return {
-    get: () => standing, subscribe: () => () => undefined, openUnlock: vi.fn(),
-    }
+  const reach = (kind: 'computer' | 'device') => {
+    const standing = { kind } as const
+    return { get: () => standing, subscribe: () => () => undefined }
   }
 
   it('elects only a seat child\'s external-agent approval', () => {
@@ -239,52 +237,42 @@ describe('the approval card', () => {
 
   it('answers Allow for this run with the run answer through the approval\'s own answer', () => {
     const answer = vi.fn(() => Promise.resolve())
-    render(<SeatApproval matched={pending(answer)} t={t} reach={reach('computer')} clock={clock} />)
+    render(<SeatApproval matched={pending(answer)} t={t} reach={reach('computer')} />)
     fireEvent.click(screen.getByText('Allow for this run'))
     expect(answer).toHaveBeenCalledWith(allowedForRunDecision())
     expect(answer).toHaveBeenCalledWith('allowed-for-run')
   })
 
   it('hides Allow for this run when the request declared no run scope', () => {
-    render(<SeatApproval matched={{ ...(pending() as object), runScope: undefined } as never} t={t} reach={reach('computer')} clock={clock} />)
+    render(<SeatApproval matched={{ ...(pending() as object), runScope: undefined } as never} t={t} reach={reach('computer')} />)
     expect(screen.queryByText('Allow for this run')).toBeNull()
     expect(screen.getByText('Allow once')).toBeTruthy()
   })
 
   it('answers Allow once with allowed-once', () => {
     const answer = vi.fn(() => Promise.resolve())
-    render(<SeatApproval matched={pending(answer)} t={t} reach={reach('computer')} clock={clock} />)
+    render(<SeatApproval matched={pending(answer)} t={t} reach={reach('computer')} />)
     fireEvent.click(screen.getByText('Allow once'))
     expect(answer).toHaveBeenCalledWith('allowed-once')
   })
 
   it('answers once per card', () => {
     const answer = vi.fn(() => Promise.resolve())
-    render(<SeatApproval matched={pending(answer)} t={t} reach={reach('computer')} clock={clock} />)
+    render(<SeatApproval matched={pending(answer)} t={t} reach={reach('computer')} />)
     fireEvent.click(screen.getByText('Reject'))
     fireEvent.click(screen.getByText('Allow once'))
     expect(answer).toHaveBeenCalledTimes(1)
     expect(answer).toHaveBeenCalledWith('rejected')
   })
 
-  it('offers a locked phone Reject and an unlock, never an allow', () => {
-    const source = reach('locked-phone')
-    render(<SeatApproval matched={pending()} t={t} reach={source} clock={clock} />)
-    expect(screen.queryByText('Allow once')).toBeNull()
-    expect(screen.queryByText('Allow for this run')).toBeNull()
-    expect(screen.getByText('Reject')).toBeTruthy()
-    fireEvent.click(screen.getByText('Unlock to answer'))
-    expect(source.openUnlock).toHaveBeenCalled()
-  })
-
   it('offers Reject only without a reach source, and names Codex records', () => {
     const answer = vi.fn(() => Promise.resolve())
     const codex = { ...(pending(answer) as object), toolName: 'codex.commandExecution', reason: undefined } as never
-    const { unmount } = render(<SeatApproval matched={codex} t={t} reach={undefined} clock={clock} />)
+    const { unmount } = render(<SeatApproval matched={codex} t={t} reach={undefined} />)
     expect(screen.getByText('Reject')).toBeTruthy()
     expect(screen.queryByText('Allow once')).toBeNull()
     expect(screen.queryByText('Allow for this run')).toBeNull()
-    expect(screen.queryByText('Unlock to answer')).toBeNull()
+    expect(screen.getByText('Allow this at your computer. A phone can reject it.')).toBeTruthy()
     expect(screen.queryByText('git push origin fix')).toBeNull()
     expect(agentOfTool('codex.commandExecution')).toBe('codex')
     expect(agentOfTool('claude_code.Bash')).toBe('claude-code')
@@ -293,29 +281,74 @@ describe('the approval card', () => {
 
   it('lets a person answer again when the answer fails, and sends nothing for an unanswerable card', async () => {
     const failing = vi.fn(() => Promise.reject(new Error('gone')))
-    const { unmount } = render(<SeatApproval matched={pending(failing)} t={t} reach={reach('computer')} clock={clock} />)
+    const { unmount } = render(<SeatApproval matched={pending(failing)} t={t} reach={reach('computer')} />)
     fireEvent.click(screen.getByText('Allow once'))
     await waitFor(() => { expect((screen.getByText('Allow once').closest('button') as HTMLButtonElement).disabled).toBe(false) })
     fireEvent.click(screen.getByText('Allow once'))
     expect(failing).toHaveBeenCalledTimes(2)
     unmount()
     const quiet = vi.fn(() => Promise.resolve())
-    render(<SeatApproval matched={{ ...(pending(quiet) as object), answerable: false } as never} t={t} reach={reach('computer')} clock={clock} />)
+    render(<SeatApproval matched={{ ...(pending(quiet) as object), answerable: false } as never} t={t} reach={reach('computer')} />)
     fireEvent.click(screen.getByText('Reject'))
     expect(quiet).not.toHaveBeenCalled()
   })
 
-  it('says nothing about the end of an unlock that has none', () => {
-    const standing = { kind: 'unlocked-phone' } as const
-    const open = { get: () => standing, subscribe: () => () => undefined, openUnlock: vi.fn() }
-    render(<SeatApproval matched={pending()} t={t} reach={open} clock={clock} />)
-    expect(screen.queryByText(/unlocked until/)).toBeNull()
+  // Sending a phone's granting answer before its confirmation lets the card answer with no grant, which the home refuses (F36).
+  it('confirms a granting answer through the reach before it sends it, and never a Reject', async () => {
+    const answer = vi.fn(() => Promise.resolve())
+    const confirm = vi.fn(() => Promise.resolve(true))
+    const standing = { kind: 'device' } as const
+    const device = { get: () => standing, subscribe: () => () => undefined, confirm }
+    const matched = { ...(pending(answer) as object), sessionId: 'child-1', callId: 'call_7' } as never
+    const { unmount } = render(<SeatApproval matched={matched} t={t} reach={device} />)
+    expect(screen.getByText('Allow for this run')).toBeTruthy()
+    fireEvent.click(screen.getByText('Allow once'))
+    expect(answer).not.toHaveBeenCalled()
+    await waitFor(() => { expect(answer).toHaveBeenCalledWith('allowed-once') })
+    expect(confirm).toHaveBeenCalledWith({ sessionId: 'child-1', callId: 'call_7', grants: 'external-agent', value: 'allowed-once' })
+    unmount()
+    const rejectAnswer = vi.fn(() => Promise.resolve())
+    render(<SeatApproval matched={{ ...(pending(rejectAnswer) as object), sessionId: 'child-1', callId: 'call_8' } as never} t={t} reach={device} />)
+    fireEvent.click(screen.getByText('Reject'))
+    expect(rejectAnswer).toHaveBeenCalledWith('rejected')
+    expect(confirm).toHaveBeenCalledTimes(1)
   })
 
-  it('tells an unlocked phone when its unlock ends and offers every answer', () => {
-    render(<SeatApproval matched={pending()} t={t} reach={reach('unlocked-phone')} clock={clock} />)
-    expect(screen.getByText('This phone is unlocked until T1402.')).toBeTruthy()
+  // Sending after a cancelled confirmation answers with no grant; disabling the card for good strands the question.
+  it('sends nothing when the confirmation is cancelled, and lets the person answer again', async () => {
+    const answer = vi.fn(() => Promise.resolve())
+    const confirm = vi.fn(() => Promise.resolve(false))
+    const standing = { kind: 'device' } as const
+    const device = { get: () => standing, subscribe: () => () => undefined, confirm }
+    render(<SeatApproval matched={{ ...(pending(answer) as object), sessionId: 'child-1', callId: 'call_7' } as never} t={t} reach={device} />)
+    fireEvent.click(screen.getByText('Allow for this run'))
+    await waitFor(() => { expect((screen.getByText('Allow for this run').closest('button') as HTMLButtonElement).disabled).toBe(false) })
+    expect(confirm).toHaveBeenCalledWith(expect.objectContaining({ value: 'allowed-for-run' }))
+    expect(answer).not.toHaveBeenCalled()
+  })
+
+  it('offers a device every answer, with nothing about an unlock', () => {
+    render(<SeatApproval matched={pending()} t={t} reach={reach('device')} />)
     expect(screen.getByText('Allow for this run')).toBeTruthy()
+    expect(screen.getByText('Allow once')).toBeTruthy()
+    expect(screen.queryByText(/unlock/i)).toBeNull()
+  })
+
+  // Sending an answer for a prompt the grant cannot name answers with no grant, which the home refuses (P3-4).
+  it('says Not confirmed when the confirmation does not go through, and clears it on the next answer', async () => {
+    const answer = vi.fn(() => Promise.resolve())
+    let ok = false
+    const confirm = vi.fn(() => Promise.resolve(ok))
+    const standing = { kind: 'device' } as const
+    const device = { get: () => standing, subscribe: () => () => undefined, confirm }
+    render(<SeatApproval matched={{ ...(pending(answer) as object), sessionId: 'child-1', callId: undefined } as never} t={t} reach={device} />)
+    fireEvent.click(screen.getByText('Allow once'))
+    await waitFor(() => { expect(screen.getByText('Not confirmed. Nothing was sent.')).toBeTruthy() })
+    expect(answer).not.toHaveBeenCalled()
+    ok = true
+    fireEvent.click(screen.getByText('Allow once'))
+    expect(screen.queryByText('Not confirmed. Nothing was sent.')).toBeNull()
+    await waitFor(() => { expect(answer).toHaveBeenCalledWith('allowed-once') })
   })
 })
 

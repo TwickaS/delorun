@@ -15,16 +15,13 @@ import { COMPUTER_ONLY_ROW_MODULES } from './reach-access.ts'
 /**
  * How a route answers a paired device:
  * - `R`: any approved device, with no unlock (`admitApprovedDevice`);
- * - `U`: class `face`: a device needs Face ID for exactly this call, or, with the Face ID flag off and for a device with no
- *   passkey, an unlock; a device with neither is answered `403 ELEVATION_REQUIRED` (`gateByClass`, or `gateByUnlock`);
+ * - `U`: class `face`: a device needs a grant alone for exactly this call (Face ID, or the PIN on a device with no
+ *   passkey); without one it is answered `403 ELEVATION_REQUIRED` (`gateByClass`, or `gateByUnlock`);
  * - `C`: only the computer; a device is refused (`403 LOOPBACK_REQUIRED`) whatever its unlock;
- * - `K`: a device that holds no PIN lock (`admitKeyDevice`): model keys are tested, never shown;
- * - `F`: an unlocked device only while Phone powers is Full, and only with a code or a PIN unlock (`gateByUnlock` with
- *   `phonePowers: 'full'`); under Careful a device is refused (`403 LOOPBACK_REQUIRED`). Moving a `U` route to Full is its
- *   row here and that option at its gate, which `tests/route-access.spec.ts` keeps in step;
+ * - `K`: a device until a PIN or any passkey exists (`admitKeyDevice`): model keys are tested, never shown;
  * - `R+U`: one registration serves both levels, by route (see the reason).
  */
-export type RouteLevel = 'R' | 'U' | 'F' | 'C' | 'K' | 'R+U'
+export type RouteLevel = 'R' | 'U' | 'C' | 'K' | 'R+U'
 
 /** One route's level and the reason for it. */
 export interface RouteAccess {
@@ -70,7 +67,8 @@ export const PLUGIN_ROUTE_ACCESS: Readonly<Record<string, Readonly<Record<string
     'DELEGATION_CONSENT_ROUTES.revoke': READ('revoking only withdraws a grant'),
   },
   'plugin-agent-seats/src/mount.ts': {
-    'route.path': UNLOCKED('resuming an agent after its plan limit and picking its model change what the person\'s own program runs next; both go through the unlock gate'),
+    'RESUME_PATH': READ('resuming an agent after its plan limit only flips the seat\'s status; the next message the person sends is what spends plan usage'),
+    'CHOOSE_MODEL_PATH': READ('picking the model the person\'s own program runs for a seat changes no permission, sandbox or tool the program has'),
   },
   'external-agents/src/accounts/routes.ts': {
     'ACCOUNT_ROUTES.accounts': READ('reads each agent\'s sign-in, plan and limit figures, which hold no personal data; reading starts no check'),
@@ -147,7 +145,7 @@ export const PLUGIN_ROUTE_ACCESS: Readonly<Record<string, Readonly<Record<string
     WORKSPACE_NOTICE_PATH: READ('names the files set aside, not their paths'),
     SETUP_RECORD_PATH: READ('reads which setup steps are done'),
     READINESS_PATH: READ('reads what the computer has installed for setup'),
-    KEY_TEST_PATH: { level: 'K', reason: 'tests the model keys and names each provider\'s result, never a key; under PIN mode only an unlocked page' },
+    KEY_TEST_PATH: { level: 'K', reason: 'tests the model keys and names each provider\'s result, never a key; once a PIN or any passkey exists, no device' },
     START_PATH: READ('a random id naming this start of the home, with no setting or data'),
     DEFER_STEP_PATH: READ('notes that a setup step waits for the computer: ids from a closed list, no setting changes'),
     AGENT_MODELS_PATH: READ('lists an agent\'s models by starting the agent\'s own program under a timeout; it is bounded and changes nothing'),
@@ -201,10 +199,9 @@ export const COMPUTER_ONLY: readonly ComputerOnlyRow[] = [
   AUTH('/auth/pin/options', 'a phone must not choose the rules of its own unlock secret'),
   AUTH('/auth/pin/off', 'a phone must not turn its own unlock gate off'),
   AUTH('/auth/pin/resume', 'a phone must not lift a brute-force pause on its own unlock'),
-  AUTH('/auth/phone-powers (POST)', 'a phone must not widen what a phone may do; any device reads the level'),
-  { kind: 'mode', id: 'terminal/* under Phone powers Careful', reason: 'a terminal is a shell outside the sandbox that runs the same delorun changes commands Careful keeps at the computer' },
+  { kind: 'mode', id: 'terminal/* without a grant', reason: 'a terminal is a shell outside the sandbox: a device needs a grant for the call, from a passkey or a PIN, and no unlock opens it' },
   { kind: 'changes-route', id: '/delorun/changes/notice-seen', reason: 'the notice of a change a phone made is for the person at the computer; a phone must not dismiss it' },
-  { kind: 'changes-route', id: '/delorun/changes actions, harness, protection off and setup under Phone powers Careful', reason: 'applying, turning off, setup and changes to Delorun itself change what runs; Careful keeps them at the computer and lets a phone only take back or tighten' },
+  { kind: 'changes-route', id: '/delorun/changes actions, harness, protection off and setup without a grant', reason: 'applying, turning off, setup and changes to Delorun itself change what runs; a device needs a grant for the call, from a passkey or a PIN, and may take back or tighten without one' },
 ]
 
 /**

@@ -387,8 +387,8 @@ function showFolder(folder: string): void {
 }
 
 /**
- * The paired devices and the Phone powers level as the routes read them, from the mounted `homeAuth` service. Without
- * it no session is a paired device's and the level is Careful, so a remote session acts on nothing.
+ * The paired devices as the routes read them, from the mounted `homeAuth` service. Without it no session is a paired
+ * device's, so a remote session acts on nothing.
  * @param scope - the plugin context, which reads `homeAuth` when a request arrives.
  * @returns the reads.
  */
@@ -406,13 +406,9 @@ export function routeDevices(scope: Pick<Context, 'get'>): RouteDevices {
         label,
         unlock: unlock === undefined ? 'none' : unlock.grace === true ? 'grace' : 'fresh',
         renew: () => { if (unlock !== undefined) home.touchUnlock(unlock.id) },
-        face: faceAccessOf(home.passkeysEnabled() ? home.faceGrants() : undefined, home.deviceHasPasskey(deviceId), { deviceId, listener: (principal as ReachDevicePrincipal).listener }),
+        face: faceAccessOf(home.faceGrants(), home.deviceHasPasskey(deviceId), { deviceId, listener: (principal as ReachDevicePrincipal).listener }),
       }
       return device
-    },
-    phonePowers: () => {
-      const powers = scope.get('homeAuth')?.phonePowers()
-      return powers === undefined ? { level: 'careful', chosen: false } : { level: powers.level, chosen: powers.chosen }
     },
   }
 }

@@ -37,13 +37,13 @@ type Translate = NetworkSectionProps['t']
  * The sentence for a failed request.
  * @param t - the section's copy.
  * @param error - the caught error.
- * @param dangerous - whether dangerous mode holds, when the sentence says to unlock this device instead of going to the computer.
+ * @param dangerous - whether dangerous mode holds, when the sentence says each change asks for Face ID or the PIN instead of going to the computer.
  * @returns the localized `LOOPBACK_REQUIRED` sentence, the Host's own sentence for another refusal, or the localized
  *   sentence for an unreachable Host or an unreadable answer.
  */
 export function networkFailureText(t: Translate, error: unknown, dangerous = false): string {
   return failureSentence(error, {
-    refused: (code, message) => code === LOOPBACK_REQUIRED ? t(dangerous ? 'loopbackUnlock' : 'loopback') : message,
+    refused: (code, message) => code === LOOPBACK_REQUIRED ? t(dangerous ? 'loopbackConfirm' : 'loopback') : message,
     unreachable: t('failed.unreachable'),
     unreadable: t('failed.unreadable'),
   })
@@ -140,7 +140,6 @@ function WorkspaceRow({ t, fetch, workspace, defaultNetwork, locked, onSaved }: 
   const [offering, setOffering] = useState(false)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<unknown>()
-  const [retryDraft, setRetryDraft] = useState<{ network: WorkspaceNetwork | undefined; confirmed: boolean } | undefined>()
   const dangerous = useDangerousMode(fetch)
   const [confirming, setConfirming] = useState<PendingLoosening | undefined>()
   const draft: WorkspaceNetwork = { access, hosts: hostLines(hostsText), ...access === 'open' && accept ? { acceptAbstractSockets: true } : {} }
@@ -163,7 +162,6 @@ function WorkspaceRow({ t, fetch, workspace, defaultNetwork, locked, onSaved }: 
         setConfirming({ network, text: looseningText(t, workspace.title, workspace.network, network ?? defaultNetwork) })
       } else {
         setFailure(error)
-        setRetryDraft({ network, confirmed })
         revert()
       }
       return
@@ -234,7 +232,7 @@ function WorkspaceRow({ t, fetch, workspace, defaultNetwork, locked, onSaved }: 
         {offering ? <p className={css.description}>{t('common.hint')}</p> : null}
       </> : null}
     </div>
-    {failure === undefined ? null : <GateFailure t={t} error={failure} text={networkFailureText(t, failure, dangerous)} className={css.failed} retry={() => { if (retryDraft !== undefined) void save(retryDraft.network, retryDraft.confirmed) }} />}
+    {failure === undefined ? null : <GateFailure t={t} error={failure} text={networkFailureText(t, failure, dangerous)} className={css.failed} />}
     {workspace.own ? <div className={css.actions}>
       <Button variant="outline" size="sm" disabled={locked || busy}
         onClick={() => { void save(undefined, false) }}>{t('useDefault')}</Button>

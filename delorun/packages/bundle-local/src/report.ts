@@ -157,7 +157,7 @@ export function detailsResponse(config: Config, where: { readonly home: string, 
 }
 
 /**
- * Mount the route once the Connection is up. The excerpt can hold home paths, so a device reads it only with a Face ID grant for the call, or, while the Face ID flag is off or with no passkey, while unlocked.
+ * Mount the route once the Connection is up. The excerpt can hold home paths, so a device reads it only with a Face ID grant for the call, or, with no passkey, while unlocked.
  * @param ctx - the row's scope.
  * @param config - the row's configuration.
  * @throws {TypeError} when `issueUrl` is not an https://github.com URL.

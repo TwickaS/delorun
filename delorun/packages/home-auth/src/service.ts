@@ -51,13 +51,7 @@ import {
   elevationStateHandler,
 } from './elevation-routes.ts'
 import type { UnlockAsker } from './pin-unlocks.ts'
-import { PHONE_POWERS_LEVELS, PhonePowersReader, recordUpgradePhonePowers, writePhonePowers, type PhonePowers } from './phone-powers.ts'
-import { phonePowersHandler } from './phone-powers-routes.ts'
-import { PHONE_POWERS_PATH, type PhonePowersLevel } from './wire.ts'
-// Type-only: the ctx.previewFlags merge.
-import type {} from '@delorun/preview-flags'
 import type { GrantStore } from './grants.ts'
-import { PASSKEY_UNLOCK } from './preview-flags.ts'
 import { PASSKEY_PATHS, passkeyAddRequestHandler, passkeyApproveHandler, passkeyDevicesHandler, passkeyOptionsHandler, passkeyPendingHandler, passkeyPinHandler, passkeyRegisterHandler, passkeyRegisterOptionsHandler, passkeyRemoveHandler, passkeyStateHandler, passkeyVerifyHandler } from './passkey-routes.ts'
 import { PIN_PATHS, pinLockHandler, pinModeHandler, pinOffHandler, pinOptionsHandler, pinResumeHandler, pinSetHandler, pinStateHandler, pinTouchHandler, pinUnlockHandler } from './pin-routes.ts'
 
@@ -82,8 +76,6 @@ export interface ConfigInput {
   readonly approvalGraceMinutes?: number
   /** The most minutes one unlock lasts from its start; see {@link Config.unlockCapMinutes}. */
   readonly unlockCapMinutes?: number
-  /** The Phone powers level an existing home gets; see {@link Config.phonePowersOnUpgrade}. */
-  readonly phonePowersOnUpgrade?: PhonePowersLevel
 }
 
 /** The service's configuration: where the home keeps the sign-in records. */
@@ -120,12 +112,6 @@ export interface Config {
    * It must be at least the unlock minutes of every listener, or the listener is refused at start.
    */
   readonly unlockCapMinutes: number
-  /**
-   * The Phone powers level the Host's first start records, as not chosen, in a home that has no Phone powers record:
-   * a home that existed before Phone powers, or one whose setup did not ask. `careful` by default. A home that already
-   * has a record keeps it, so changing this setting changes only homes that have not started since.
-   */
-  readonly phonePowersOnUpgrade: PhonePowersLevel
 }
 
 /** The bounds and default of {@link Config.pinSetBackRetrySeconds}. */
@@ -175,8 +161,6 @@ export const Config: schema<ConfigInput, Config> = schema.object({
   }).default({}).description('The sign-in challenge limits. Out-of-bounds values fail the load.'),
   unlockCapMinutes: schema.number().step(1).min(1).max(1440).default(480)
     .description('The most minutes one unlock approved at the computer lasts from its start, from 1 to 1440; 480 (8 hours) by default. An unlock lasts its minutes after the last action that needed it, and this cap ends it however much it is used. It must be at least the unlock minutes.'),
-  phonePowersOnUpgrade: schema.union(PHONE_POWERS_LEVELS).default('careful')
-    .description('The Phone powers level the first start records in a home that has none, as not chosen: careful (the default) keeps the terminal, turning protection off and applying changes at the computer; full lets an unlocked phone do them. A home that has a record keeps it.'),
   approvalGraceMinutes: schema.number().step(1).min(0).max(60).default(15)
     .description('Minutes after a device is approved during which its first sign-in starts an unlock, from 0 to 60; 15 by default, and never more than the unlock minutes. 0 turns it off.'),
 })
@@ -197,9 +181,6 @@ export const REACH_SWITCH: ComputerOnlySwitch = { ns: 'delorun-reach', field: EV
 /** The refusal of a device's settings write whose dangerous-mode record could not be saved. */
 const RECORD_REFUSAL = 'loopback-required: the home could not record this change to be set back when dangerous mode ends; make it at the home\'s computer'
 
-/** The refusal of a PIN page's settings write whose record could not be saved. */
-const PIN_RECORD_REFUSAL = 'loopback-required: the home could not record this change to be set back when PIN mode turns off; make it at the home\'s computer'
-
 /** The `homeAuth` service. */
 export class HomeAuthService extends Service {
   static inject = ['webServer']
@@ -212,9 +193,6 @@ export class HomeAuthService extends Service {
   private pinLifts: DangerousSettingsLedger | undefined
   /** Retries the PIN set-back while a lift waits; absent otherwise. */
   private pinRetry: NodeJS.Timeout | undefined
-
-  /** The Phone powers record's reader, made at the first read. */
-  private powers: PhonePowersReader | undefined
 
   /** The computer-only switches the mounted plugins registered, which the reach policy reads per call. */
   private readonly switches = new Set<ComputerOnlySwitch>()
@@ -237,21 +215,6 @@ export class HomeAuthService extends Service {
   }
 
   /**
-   * Whether the Face ID preview flag is on; off while the flags service is not mounted or does not know the flag yet.
-   * @returns whether it is on.
-   */
-  private passkeyFlagOn(): boolean {
-    const flags = this.ctx.get('previewFlags')
-    if (flags === undefined) return false
-    try {
-      return flags.isOn(PASSKEY_UNLOCK.id)
-    } catch (_undeclared) {
-      // The flag is declared when this plugin's injection runs; a read before that sees no flag, which is off.
-      return false
-    }
-  }
-
-  /**
    * Create the secrets directory, open the stores and register the routes, all owned by this fiber.
    * @throws Error when the secrets directory is not an absolute path; the filesystem failure of `mkdir`.
    */
@@ -271,14 +234,10 @@ export class HomeAuthService extends Service {
       closeReachConnections: match => this.ctx.get('connection')?.closeReachConnections(match) ?? 0,
       loopbackPort: () => this.ctx.webServer.port,
       secrets: this.ctx.get('delorunSecrets'),
-      passkeysEnabled: () => this.passkeyFlagOn(),
       log: (event) => { this.ctx.logger.info(event) },
     })
-    this.ctx.inject(['previewFlags'], (scope) => { scope.effect(() => scope.previewFlags.declare(PASSKEY_UNLOCK), 'home-auth: Face ID preview flag') })
     await core.start()
     this.core = core
-    const upgraded = await recordUpgradePhonePowers(this.secretsDirectory, this.config.phonePowersOnUpgrade)
-    if (upgraded !== undefined) this.ctx.logger.info(`home-auth: this home had no Phone powers choice; ${upgraded.level === 'careful' ? 'Careful applies, so a phone cannot open a terminal' : 'Full applies'}. Choose at the computer: delorun devices powers careful|full, or the studio's Settings.`)
     this.lifts = new DangerousSettingsLedger(join(this.secretsDirectory, HOME_AUTH_FILES.reachDangerousSettings))
     await this.lifts.load()
     this.pinLifts = new DangerousSettingsLedger(join(this.secretsDirectory, HOME_AUTH_FILES.reachPinSettings), 'PIN mode settings')
@@ -364,7 +323,6 @@ export class HomeAuthService extends Service {
         server.register({ kind: 'exact', path: PASSKEY_PATHS.devices, handler: passkeyDevicesHandler(core) }),
         server.register({ kind: 'exact', path: PASSKEY_PATHS.pending, handler: passkeyPendingHandler(core, credential) }),
         server.register({ kind: 'exact', path: PASSKEY_PATHS.approve, handler: passkeyApproveHandler(core, credential) }),
-        server.register({ kind: 'exact', path: PHONE_POWERS_PATH, handler: phonePowersHandler(core, credential, { current: () => this.phonePowers(), set: level => this.setPhonePowers(level) }) }),
       ]
       return () => {
         for (const off of registered) off()
@@ -479,28 +437,6 @@ export class HomeAuthService extends Service {
   }
 
   /**
-   * The Phone powers level in force, read from its record on every call; the reach policy and the Changes routes ask it
-   * before an action Careful keeps at the computer.
-   * @returns the level, whether the person chose it, and why the record cannot be read when it cannot (the level is then Careful).
-   */
-  phonePowers(): PhonePowers {
-    this.powers ??= new PhonePowersReader(this.secretsDirectory)
-    return this.powers.current()
-  }
-
-  /**
-   * Record the person's Phone powers choice. Only the computer's route calls it; a device never does.
-   * @param level - the level chosen.
-   * @returns the level now in force.
-   * @throws the failure of the protected write.
-   */
-  async setPhonePowers(level: PhonePowersLevel): Promise<PhonePowers> {
-    const powers = await writePhonePowers(this.secretsDirectory, level)
-    this.ctx.logger.info(`home-auth: Phone powers set to ${level} at the computer`)
-    return powers
-  }
-
-  /**
    * Whether PIN mode is on.
    * @returns whether it is; false before the service started.
    */
@@ -525,14 +461,6 @@ export class HomeAuthService extends Service {
    */
   deviceHasPasskey(deviceId: string): boolean {
     return (this.core?.passkeyStore.forDevice(deviceId).length ?? 0) > 0
-  }
-
-  /**
-   * Whether the Face ID preview flag is on, so grants are minted and the gates use them.
-   * @returns whether it is.
-   */
-  passkeysEnabled(): boolean {
-    return this.passkeyFlagOn()
   }
 
   /**
@@ -628,22 +556,6 @@ export class HomeAuthService extends Service {
     } catch (error) {
       this.ctx.logger.warn(`home-auth: the record of dangerous-mode settings could not be saved, so a device's settings write was refused: ${error instanceof Error ? error.message : String(error)}`)
       return RECORD_REFUSAL
-    }
-  }
-
-  /**
-   * Record the settings an unlocked PIN page is about to loosen, with the values they have now.
-   * @param lifts - the fields and the values the call sets.
-   * @returns undefined once the record is saved to disk, or the refusal the page's write meets when it cannot be.
-   */
-  recordPinLifts(lifts: readonly SettingsLift[]): string | undefined {
-    if (this.pinLifts === undefined) return PIN_RECORD_REFUSAL
-    try {
-      this.pinLifts.record(lifts, (ns, field) => this.settingsFields().read(ns, field))
-      return undefined
-    } catch (error) {
-      this.ctx.logger.warn(`home-auth: the record of PIN mode settings could not be saved, so a page's settings write was refused: ${error instanceof Error ? error.message : String(error)}`)
-      return PIN_RECORD_REFUSAL
     }
   }
 

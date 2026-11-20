@@ -1,26 +1,24 @@
 // @vitest-environment jsdom
 /**
- * The remote studio's unlock: the unlock routes' requests, the store's states (asking, waiting with the code, unlocked,
- * and the honest outcomes: expired, declined, unreachable, the home's limit), the dialog and the banner it drives, the
- * plugin's wiring to `remote/call-denied` and `connection/reset`, and the Devices section's unlock blocks on a device
- * and at the computer.
+ * The place store and the Devices section's unlock blocks: the store tells a device from the home's own computer, a
+ * device's section offers no unlock and says each sensitive action asks for Face ID or the PIN, and the computer's
+ * section shows a waiting unlock request or a running unlock only to decline or end it, since an unlock admits nothing.
  *
- * Each denial-relevant test's comment names the check whose removal makes it fail.
+ * Each denial-relevant test's comment names the change whose return makes it fail.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { Context } from '@deepseek-ai/cordis'
-import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
+import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import {
-  approveElevation, DEVICE_ROUTES, ELEVATED_POLL_MS, ELEVATION_POLL_MS, ELEVATION_ROUTES, lockElevation, readElevation,
-  readElevationsAtComputer, requestElevation, revokeElevation, type ElevationId, type ElevationRequestId,
+  approveElevation, DEVICE_ROUTES, ELEVATION_POLL_MS, ELEVATION_ROUTES, readElevation, readElevationsAtComputer, revokeElevation,
+  type ElevationId, type ElevationRequestId,
 } from '../src/client/devices-api.ts'
-import { en, zh } from '../src/client/devices-locales.ts'
-import { DevicesSection, type DevicesSectionProps } from '../src/client/DevicesSection.tsx'
-import { applyUnlock, UNLOCK_OVERLAY_ID } from '../src/client/index.ts'
+import { en } from '../src/client/devices-locales.ts'
+import { clockTime, DevicesSection, type DevicesSectionProps } from '../src/client/DevicesSection.tsx'
+import { applyUnlock } from '../src/client/index.ts'
 import { createUnlockSource, type UnlockSource, type UnlockView } from '../src/client/unlock.ts'
-import { clockTime, ELEVATE_COMMAND, groupedCode, UnlockOverlay } from '../src/client/UnlockOverlay.tsx'
 import { AWAY, fakeHost, staticPairing, staticUnlock, type Answer } from './fake-host.ts'
 
 const NOW = Date.UTC(2026, 10, 12, 14, 0, 0)
@@ -47,77 +45,19 @@ const settle = (ms = 0): Promise<void> => act(async () => {
   for (let turn = 0; turn < 10; turn++) await vi.advanceTimersByTimeAsync(0)
 })
 
-/**
- * A device's home: its unlock state answers `state`, a request answers the pending state.
- * @param state - the state `GET /auth/elevation` answers first.
- * @returns the fake home.
- */
-function deviceHost(state: unknown = NONE) {
-  return fakeHost({
-    [`GET ${ELEVATION_ROUTES.state}`]: ok(state),
-    [`POST ${ELEVATION_ROUTES.request}`]: ok(PENDING, 201),
-    [`POST ${ELEVATION_ROUTES.lock}`]: ok(NONE),
-  })
-}
-
-/**
- * Render the overlay over a store.
- * @param unlock - the store.
- * @returns the render result.
- */
-function renderOverlay(unlock: UnlockSource, translate = t) {
-  return render(<UnlockOverlay t={translate} useUnlock={bindSnapshotSelector(unlock.hooks.unlock)} request={unlock.request}
-    cancel={unlock.cancel} lock={unlock.lock} dismissEnded={unlock.dismissEnded} />)
-}
-
-describe('the unlock copy', () => {
-  /** An open ask dialog over a home that answers `state`. */
-  async function askDialog(state: unknown): Promise<void> {
-    const unlock = createUnlockSource(deviceHost(state).fetch)
-    await unlock.refresh()
-    act(() => { unlock.open() })
-    renderOverlay(unlock)
-  }
-
-  it('states the configured length before an unlock, in minutes', async () => {
-    await askDialog({ kind: 'none', unlockMinutes: 45 })
-    expect(screen.getByText(/Stays unlocked while you use it; locks after 45 minutes without a sensitive action\./u)).toBeTruthy()
-  })
-
-  it('says one minute in the singular', async () => {
-    await askDialog({ kind: 'none', unlockMinutes: 1 })
-    expect(screen.getByText(/Stays unlocked while you use it; locks after 1 minute without a sensitive action\./u)).toBeTruthy()
-  })
-
-  it('keeps the sentence without a length when the home does not send one', async () => {
-    await askDialog(NONE)
-    expect(screen.getByText(/The unlock ends on its own; the time shows once your computer approves it\./u)).toBeTruthy()
-  })
-
-  it('has the same keys in Chinese', () => {
-    expect(zh['unlock.lasts']).toContain('{minutes}')
-    expect(zh['unlock.lastsOne']).toBeTruthy()
-    expect(zh['unlock.lastsUnknown']).toBeTruthy()
-  })
-})
-
 describe('the unlock routes', () => {
-  it('read, ask, lock, list, approve and revoke with the routes\' JSON', async () => {
+  it('read, list, approve and revoke with the routes\' JSON', async () => {
     const host = fakeHost({
       [`GET ${ELEVATION_ROUTES.state}`]: ok(ELEVATED),
-      [`POST ${ELEVATION_ROUTES.request}`]: ok(PENDING, 201),
-      [`POST ${ELEVATION_ROUTES.lock}`]: ok(NONE),
       [`GET ${ELEVATION_ROUTES.pending}`]: ok({ pending: [{ requestId: 'r', deviceId: 'd', requestedAt: NOW, expiresAt: NOW + 1 }], running: [] }),
       [`POST ${ELEVATION_ROUTES.approve}`]: ok({ id: 'e', deviceId: 'd', listener: 'reach-tailscale-private', sessionId: 's', startedAt: NOW, endsAt: NOW + 1 }),
       [`POST ${ELEVATION_ROUTES.revoke}`]: ok({ revoked: true }),
     })
     await expect(readElevation(host.fetch)).resolves.toEqual(ELEVATED)
-    await expect(requestElevation(host.fetch)).resolves.toEqual(PENDING)
-    await expect(lockElevation(host.fetch)).resolves.toEqual(NONE)
     await expect(readElevationsAtComputer(host.fetch)).resolves.toMatchObject({ pending: [{ requestId: 'r' }], running: [] })
     await expect(approveElevation(host.fetch, 'r' as ElevationRequestId, CODE)).resolves.toMatchObject({ id: 'e' })
     await expect(revokeElevation(host.fetch, 'e' as ElevationId)).resolves.toBe(true)
-    expect(host.received.filter(request => request.key.startsWith('POST')).map(request => request.body)).toEqual([{}, {}, { requestId: 'r', typedCode: CODE }, { id: 'e' }])
+    expect(host.received.filter(request => request.key.startsWith('POST')).map(request => request.body)).toEqual([{ requestId: 'r', typedCode: CODE }, { id: 'e' }])
   })
 
   it('read no device where no device unlocks, and refuse an answer that is not a state', async () => {
@@ -132,307 +72,49 @@ describe('the unlock routes', () => {
   })
 })
 
-describe('the unlock store', () => {
+describe('the place store', () => {
   it('is away from the start on the computer and sends no request', async () => {
     const host = fakeHost({ [`GET ${ELEVATION_ROUTES.state}`]: refusal(421, 'HOST_MISMATCH') })
-    const unlock = createUnlockSource(host.fetch, Date.now, true)
-    expect(unlock.hooks.unlock.getSnapshot()).toMatchObject({ place: 'away', dialog: null })
+    const unlock = createUnlockSource(host.fetch, true)
+    expect(unlock.hooks.unlock.getSnapshot()).toEqual({ place: 'away' })
     await unlock.refresh()
-    unlock.refused('elevation-required: terminal/create')
-    unlock.open()
-    await settle()
-    expect(unlock.hooks.unlock.getSnapshot()).toMatchObject({ place: 'away', dialog: null })
-    expect(host.count(`GET ${ELEVATION_ROUTES.state}`)).toBe(0)
+    expect(host.received).toEqual([])
   })
 
-  it('stays away on the computer, where a refusal opens nothing', async () => {
-    const unlock = createUnlockSource(fakeHost({ [`GET ${ELEVATION_ROUTES.state}`]: refusal(421, 'HOST_MISMATCH') }).fetch)
-    await unlock.refresh()
-    unlock.refused('elevation-required: terminal/create')
-    unlock.open()
-    await settle()
-    expect(unlock.hooks.unlock.getSnapshot()).toMatchObject({ place: 'away', dialog: null })
-  })
-
-  it('opens the dialog only for a refusal that needs an unlock', async () => {
-    const unlock = createUnlockSource(deviceHost().fetch)
-    await unlock.refresh()
-    // Pins the prefix check: a refusal the computer keeps is no request to unlock.
-    for (const reason of [undefined, 'loopback-required: credentials/set', 'resource-unlisted: session/cancel']) unlock.refused(reason)
-    expect(unlock.hooks.unlock.getSnapshot().dialog).toBeNull()
-    unlock.refused('elevation-required: terminal/create')
-    expect(unlock.hooks.unlock.getSnapshot().dialog).toEqual({ action: 'terminal/create', busy: false, outcome: undefined })
-    unlock.refused('elevation-required:')
-    expect(unlock.hooks.unlock.getSnapshot().dialog).toMatchObject({ action: undefined })
-    unlock.dispose()
-  })
-
-  it('asks, waits with the code, and closes once the computer approves', async () => {
-    const host = deviceHost()
-    const unlock = createUnlockSource(host.fetch)
-    await unlock.refresh()
-    unlock.open()
-    await unlock.request()
-    expect(unlock.hooks.unlock.getSnapshot()).toMatchObject({ state: PENDING, dialog: { busy: false, outcome: undefined } })
-    host.script[`GET ${ELEVATION_ROUTES.state}`] = ok(ELEVATED)
-    await settle(ELEVATION_POLL_MS)
-    expect(unlock.hooks.unlock.getSnapshot()).toMatchObject({ state: ELEVATED, dialog: null })
-    unlock.dispose()
-  })
-
-  it('tells a declined request from an expired one, and an unreachable computer from both', async () => {
-    const host = deviceHost()
-    const unlock = createUnlockSource(host.fetch)
-    await unlock.refresh()
-    unlock.open()
-    await unlock.request()
-    host.script[`GET ${ELEVATION_ROUTES.state}`] = 'unreachable'
-    await settle(ELEVATION_POLL_MS)
-    expect(unlock.hooks.unlock.getSnapshot()).toMatchObject({ state: PENDING, dialog: { outcome: 'unreachable' } })
-    host.script[`GET ${ELEVATION_ROUTES.state}`] = ok(PENDING)
-    await settle(ELEVATION_POLL_MS)
-    expect(unlock.hooks.unlock.getSnapshot().dialog).toMatchObject({ outcome: undefined })
-    // Gone before its expiry: the computer declined it or it was cancelled there.
-    host.script[`GET ${ELEVATION_ROUTES.state}`] = ok(NONE)
-    await settle(ELEVATION_POLL_MS)
-    expect(unlock.hooks.unlock.getSnapshot()).toMatchObject({ state: NONE, dialog: { outcome: 'declined' } })
-    // Asked again and left until its expiry.
-    host.script[`GET ${ELEVATION_ROUTES.state}`] = ok(PENDING)
-    await unlock.request()
-    await settle(PENDING.expiresAt - Date.now() - 1)
-    host.script[`GET ${ELEVATION_ROUTES.state}`] = ok(NONE)
-    await settle(ELEVATION_POLL_MS)
-    expect(unlock.hooks.unlock.getSnapshot()).toMatchObject({ state: NONE, dialog: { outcome: 'expired' } })
-    unlock.dispose()
-  })
-
-  it('discards a read that started before the device asked, which would otherwise call the new request declined', async () => {
-    const host = deviceHost()
-    const unlock = createUnlockSource(host.fetch)
-    await unlock.refresh()
-    // Pins the change count in refresh: the read answers `none` only after the request answered `pending`.
-    let answer = (_value: { status: number; body: unknown }): void => {}
-    host.script[`GET ${ELEVATION_ROUTES.state}`] = new Promise(resolve => { answer = resolve })
-    const late = unlock.refresh()
-    await unlock.request()
-    answer({ status: 200, body: NONE })
-    await late
-    expect(unlock.hooks.unlock.getSnapshot().state).toEqual(PENDING)
-    let fail = (_reason: Error): void => {}
-    host.script[`GET ${ELEVATION_ROUTES.state}`] = new Promise((_resolve, reject) => { fail = reject })
-    const failing = unlock.refresh()
-    await unlock.lock()
-    fail(new TypeError('Failed to fetch'))
-    await failing
-    expect(unlock.hooks.unlock.getSnapshot().state).toEqual(NONE)
-    unlock.dispose()
-  })
-
-  it('says when the home holds its limit, when the computer is unreachable and when the request fails', async () => {
-    const host = deviceHost()
-    const unlock = createUnlockSource(host.fetch)
-    await unlock.refresh()
-    unlock.open()
-    for (const [answer, outcome] of [[refusal(429, 'APPROVAL_PENDING_LIMIT'), 'limit'], ['unreachable', 'unreachable'], [refusal(403, 'ORIGIN_MISMATCH'), 'failed']] as const) {
-      host.script[`POST ${ELEVATION_ROUTES.request}`] = answer
-      await unlock.request()
-      expect(unlock.hooks.unlock.getSnapshot().dialog).toEqual({ action: undefined, busy: false, outcome })
-    }
-    unlock.dispose()
-  })
-
-  it('withdraws a waiting request on cancel, even when the computer does not answer', async () => {
-    const host = deviceHost()
-    const unlock = createUnlockSource(host.fetch)
-    await unlock.refresh()
-    unlock.open()
-    await unlock.request()
-    await unlock.cancel()
-    expect(unlock.hooks.unlock.getSnapshot()).toMatchObject({ state: NONE, dialog: null })
-    expect(host.count(`POST ${ELEVATION_ROUTES.lock}`)).toBe(1)
-    unlock.open()
-    await unlock.request()
-    host.script[`POST ${ELEVATION_ROUTES.lock}`] = 'unreachable'
-    await unlock.cancel()
-    expect(unlock.hooks.unlock.getSnapshot()).toMatchObject({ state: NONE, dialog: null })
-    // With nothing waiting, cancel only closes the dialog.
-    unlock.open()
-    await unlock.cancel()
-    expect(host.count(`POST ${ELEVATION_ROUTES.lock}`)).toBe(2)
-    unlock.dispose()
-  })
-
-  it('locks from the device, says when the lock did not reach the computer, and notices an unlock ended elsewhere', async () => {
-    const host = deviceHost(ELEVATED)
-    const unlock = createUnlockSource(host.fetch)
-    await unlock.refresh()
-    expect(unlock.hooks.unlock.getSnapshot()).toMatchObject({ place: 'device', state: ELEVATED })
-    host.script[`POST ${ELEVATION_ROUTES.lock}`] = 'unreachable'
-    await unlock.lock()
-    expect(unlock.hooks.unlock.getSnapshot()).toMatchObject({ state: ELEVATED, lockFailed: true })
-    host.script[`POST ${ELEVATION_ROUTES.lock}`] = ok(NONE)
-    await unlock.lock()
-    expect(unlock.hooks.unlock.getSnapshot()).toMatchObject({ state: NONE, ended: 1, lockFailed: false })
-    unlock.dismissEnded()
-    expect(unlock.hooks.unlock.getSnapshot().ended).toBe(0)
-    // An unlock the computer ends shows up at the next read.
-    host.script[`GET ${ELEVATION_ROUTES.state}`] = ok(ELEVATED)
-    await unlock.refresh()
-    host.script[`GET ${ELEVATION_ROUTES.state}`] = ok(NONE)
-    await settle(ELEVATED_POLL_MS)
-    expect(unlock.hooks.unlock.getSnapshot()).toMatchObject({ state: NONE, ended: 2 })
-    // A read that fails while unlocked keeps the state and tries again.
-    host.script[`GET ${ELEVATION_ROUTES.state}`] = ok(ELEVATED)
-    await unlock.refresh()
-    host.script[`GET ${ELEVATION_ROUTES.state}`] = refusal(401, 'SESSION_EXPIRED')
-    await settle(ELEVATED_POLL_MS)
-    expect(unlock.hooks.unlock.getSnapshot().state).toEqual(ELEVATED)
-    unlock.dispose()
-    await settle(ELEVATED_POLL_MS)
-  })
-
-  it('keeps reading while unlocked when Lock now fails during a read', async () => {
-    const host = deviceHost(ELEVATED)
-    const unlock = createUnlockSource(host.fetch)
-    await unlock.refresh()
-    // Pins the schedule after a failed lock: the overtaken read is discarded and must not end the polling.
-    let answer = (_value: { status: number; body: unknown }): void => {}
-    host.script[`GET ${ELEVATION_ROUTES.state}`] = new Promise(resolve => { answer = resolve })
-    // The timer's own read is on its way, so no timer is armed while it waits.
-    await settle(ELEVATED_POLL_MS)
-    host.script[`POST ${ELEVATION_ROUTES.lock}`] = 'unreachable'
-    await unlock.lock()
-    answer({ status: 200, body: ELEVATED })
-    await settle()
-    host.script[`GET ${ELEVATION_ROUTES.state}`] = ok(NONE)
-    const before = host.count(`GET ${ELEVATION_ROUTES.state}`)
-    await settle(ELEVATED_POLL_MS)
-    expect(host.count(`GET ${ELEVATION_ROUTES.state}`)).toBe(before + 1)
-    expect(unlock.hooks.unlock.getSnapshot().state).toEqual(NONE)
-    unlock.dispose()
-  })
-
-  it('arms no read when a request answers after the plugin unloaded', async () => {
-    const host = deviceHost()
-    let answer = (_value: { status: number; body: unknown }): void => {}
-    host.script[`POST ${ELEVATION_ROUTES.request}`] = new Promise(resolve => { answer = resolve })
-    const unlock = createUnlockSource(host.fetch)
-    await unlock.refresh()
-    const asking = unlock.request()
-    unlock.dispose()
-    answer({ status: 201, body: PENDING })
-    await asking
-    await settle(ELEVATION_POLL_MS)
-    expect(host.count(`GET ${ELEVATION_ROUTES.state}`)).toBe(1)
-  })
-
-  it('reads nothing more once disposed', async () => {
-    const host = deviceHost(PENDING)
-    const unlock = createUnlockSource(host.fetch)
-    const reading = unlock.refresh()
-    unlock.dispose()
-    await reading
+  it('is a device when the home answers its unlock state, and tells its subscribers once', async () => {
+    const unlock = createUnlockSource(fakeHost({ [`GET ${ELEVATION_ROUTES.state}`]: ok(NONE) }).fetch)
     expect(unlock.hooks.unlock.getSnapshot().place).toBe('unknown')
-    const failing = createUnlockSource(fakeHost({ [`GET ${ELEVATION_ROUTES.state}` as const]: 'unreachable' as const }).fetch)
-    const failed = failing.refresh()
-    failing.dispose()
-    await failed
-    await settle(ELEVATED_POLL_MS)
-    expect(host.count(`GET ${ELEVATION_ROUTES.state}`)).toBe(1)
+    const listener = vi.fn()
+    unlock.hooks.unlock.subscribe(listener)
+    await unlock.refresh()
+    await unlock.refresh()
+    expect(unlock.hooks.unlock.getSnapshot().place).toBe('device')
+    expect(listener).toHaveBeenCalledOnce()
   })
-})
 
-describe('the unlock dialog and banner', () => {
-  it('asks with friendly words and never the raw refusal, then shows the code and where to type it', async () => {
-    const host = deviceHost()
+  it('is away where the home answers HOST_MISMATCH or has no route', async () => {
+    const mismatch = createUnlockSource(fakeHost({ [`GET ${ELEVATION_ROUTES.state}`]: refusal(421, 'HOST_MISMATCH') }).fetch)
+    await mismatch.refresh()
+    expect(mismatch.hooks.unlock.getSnapshot().place).toBe('away')
+    const absent = createUnlockSource(fakeHost().fetch)
+    await absent.refresh()
+    expect(absent.hooks.unlock.getSnapshot().place).toBe('away')
+  })
+
+  it('stays as it was when the read does not complete, and reads again later', async () => {
+    const host = fakeHost({ [`GET ${ELEVATION_ROUTES.state}` as const]: 'unreachable' as const })
     const unlock = createUnlockSource(host.fetch)
     await unlock.refresh()
-    renderOverlay(unlock)
-    act(() => { unlock.refused('elevation-required: terminal/create') })
-    const dialog = screen.getByRole('dialog', { name: en['unlock.title'] })
-    expect(dialog.textContent).toContain(en['unlock.needed'])
-    expect(dialog.textContent).not.toContain('elevation-required')
-    expect(dialog.textContent).not.toContain('terminal/create')
-    fireEvent.click(within(dialog).getByRole('button', { name: en['unlock.start'] }))
-    await settle()
-    const code = screen.getByText(groupedCode(CODE))
-    expect(code.getAttribute('aria-label')).toBe('1 2 3 4 5 6 7 8')
-    expect(document.activeElement).toBe(code)
-    expect(screen.getByRole('dialog').textContent).toContain(ELEVATE_COMMAND)
-    expect(screen.getByRole('status').textContent).toBe(t('unlock.waiting', { time: clockTime(t, PENDING.expiresAt) }))
-    host.script[`GET ${ELEVATION_ROUTES.state}`] = 'unreachable'
-    await settle(ELEVATION_POLL_MS)
-    expect(screen.getByRole('status').textContent).toBe(en['unlock.unreachable'])
-    fireEvent.click(screen.getByRole('button', { name: en['unlock.cancel'] }))
-    await settle()
-    expect(screen.queryByRole('dialog')).toBeNull()
-    unlock.dispose()
-  })
-
-  it('shows an outcome with Try again, and closes with Not now', async () => {
-    const host = deviceHost()
-    host.script[`POST ${ELEVATION_ROUTES.request}`] = refusal(429, 'APPROVAL_PENDING_LIMIT')
-    const unlock = createUnlockSource(host.fetch)
+    expect(unlock.hooks.unlock.getSnapshot().place).toBe('unknown')
+    host.script[`GET ${ELEVATION_ROUTES.state}`] = ok(NONE)
     await unlock.refresh()
-    renderOverlay(unlock)
-    act(() => { unlock.open() })
-    expect(screen.getByRole('dialog').textContent).not.toContain(en['unlock.needed'])
-    fireEvent.click(screen.getByRole('button', { name: en['unlock.start'] }))
-    await settle()
-    expect(screen.getByRole('alert').textContent).toBe(en['unlock.limit'])
-    fireEvent.click(screen.getByRole('button', { name: en['unlock.retry'] }))
-    await settle()
-    // The footer's Close, after the header's close button of the same name.
-    fireEvent.click(screen.getAllByRole('button', { name: en['unlock.close'] }).at(-1) as HTMLElement)
-    await settle()
-    expect(screen.queryByRole('dialog')).toBeNull()
-    act(() => { unlock.open() })
-    fireEvent.click(screen.getByRole('button', { name: en['unlock.notNow'] }))
-    await settle()
-    expect(screen.queryByRole('dialog')).toBeNull()
-    unlock.dispose()
+    expect(unlock.hooks.unlock.getSnapshot().place).toBe('device')
   })
-
-  it('keeps the dialog open while the request is on its way', async () => {
-    const host = deviceHost()
-    let answer = (_value: { status: number; body: unknown }): void => {}
-    host.script[`POST ${ELEVATION_ROUTES.request}`] = new Promise(resolve => { answer = resolve })
-    const unlock = createUnlockSource(host.fetch)
-    await unlock.refresh()
-    renderOverlay(unlock)
-    act(() => { unlock.open() })
-    fireEvent.click(screen.getByRole('button', { name: en['unlock.start'] }))
-    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
-    await settle()
-    expect(screen.getByRole('dialog')).toBeTruthy()
-    answer({ status: 201, body: PENDING })
-    await settle()
-    expect(screen.getByText(groupedCode(CODE))).toBeTruthy()
-    unlock.dispose()
-  })
-
-  it('shows no banner or countdown while unlocked, and says once that sensitive actions are locked again', async () => {
-    const host = deviceHost(ELEVATED)
-    const unlock = createUnlockSource(host.fetch)
-    await unlock.refresh()
-    renderOverlay(unlock)
-    expect(screen.queryByRole('status')).toBeNull()
-    expect(screen.queryByText(/until|至/)).toBeNull()
-    host.script[`POST ${ELEVATION_ROUTES.lock}`] = ok(NONE)
-    await unlock.lock()
-    await settle()
-    expect(screen.getByText(en['unlock.ended'])).toBeTruthy()
-    await settle(60_000)
-    expect(screen.queryByText(en['unlock.ended'])).toBeNull()
-    expect(unlock.hooks.unlock.getSnapshot().ended).toBe(0)
-    unlock.dispose()
-  })
-
 })
 
 describe('the plugin\'s unlock', () => {
-  it('opens the dialog on a call refused for an unlock, and reads again after the connection resets', async () => {
-    const host = deviceHost()
+  it('registers no overlay and reads the place now and after each connection reset', async () => {
+    const host = fakeHost({ [`GET ${ELEVATION_ROUTES.state}`]: ok(NONE) })
     vi.stubGlobal('fetch', host.fetch)
     const ctx = new Context()
     await ctx.plugin(SlotRegistry).await()
@@ -442,18 +124,17 @@ describe('the plugin\'s unlock', () => {
       slots.register({ name: 'root', children: { 'shell.overlay': { kind: 'list', scope: 'root' } }, inject: () => ({}) }, ({ renderSlot }) => <>{renderSlot('shell.overlay', {})}</>)
       let unlock: UnlockSource | undefined
       await ctx.plugin({ inject: ['slots'], apply: (scope: Context) => { unlock = applyUnlock(scope, host.fetch) } }).await()
-      const [overlay] = slots.entries('shell.overlay')
-      expect(overlay?.options).toMatchObject({ id: UNLOCK_OVERLAY_ID })
-      expect(overlay?.inject?.()).toMatchObject({ hooks: unlock?.hooks })
+      // Pins the removal of the unlock dialog and its overlay: a device holds no unlock to ask for or to end.
+      expect(slots.entries('shell.overlay')).toEqual([])
       await settle()
+      expect(unlock?.hooks.unlock.getSnapshot().place).toBe('device')
       expect(host.count(`GET ${ELEVATION_ROUTES.state}`)).toBe(1)
-      // Pins the wiring: upstream reports the refusal, and the store turns it into the request to unlock.
+      // A call refused for want of a grant is lifted by a Face ID or PIN grant, so it does not read the place again.
       act(() => { ctx.emit('remote/call-denied', { endpoint: 'terminal/create', reason: 'elevation-required: terminal/create' }) })
-      expect(unlock?.hooks.unlock.getSnapshot().dialog).toMatchObject({ action: 'terminal/create' })
       await settle()
       ctx.emit('connection/reset')
       await settle()
-      expect(host.count(`GET ${ELEVATION_ROUTES.state}`)).toBe(3)
+      expect(host.count(`GET ${ELEVATION_ROUTES.state}`)).toBe(2)
     } finally {
       await ctx.fiber.dispose()
       vi.unstubAllGlobals()
@@ -465,12 +146,12 @@ describe('the plugin\'s unlock', () => {
  * The Devices section with a fixed unlock view.
  * @param host - the fake home.
  * @param view - the unlock view.
- * @returns the render result and the action spies.
+ * @returns the render result.
  */
 function renderSection(host: ReturnType<typeof fakeHost>, view: UnlockView = AWAY) {
   const unlock = staticUnlock(view)
   const props = { t, close: () => {}, fetch: host.fetch, ...unlock, ...staticPairing() } as DevicesSectionProps
-  return { ...render(<DevicesSection {...props} />), ...unlock }
+  return render(<DevicesSection {...props} />)
 }
 
 const DEVICE = {
@@ -491,31 +172,46 @@ function computerHost(list: unknown) {
 }
 
 describe('the Devices section\'s unlock', () => {
-  it('on a device, offers Unlock, shows the waiting code, and locks a running unlock', async () => {
-    const host = fakeHost({ [`GET ${DEVICE_ROUTES.reachStatus}`]: READY, [`GET ${DEVICE_ROUTES.devices}`]: refusal(403, 'LOOPBACK_REQUIRED') })
-    const device = (state: UnlockView['state']): UnlockView => ({ ...AWAY, place: 'device', state })
-    const none = renderSection(host, device({ kind: 'none' }))
+  it('on a device, offers no Unlock, Show the code or Lock now and says each action asks for Face ID or the PIN', async () => {
+    // The device list reads, so only the place keeps the computer's unlock requests off a device.
+    const host = computerHost({ pending: [], running: [] })
+    renderSection(host, { place: 'device' })
     await settle()
-    expect(screen.getByText(en['unlock.section.locked'])).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: en['unlock.start'] }))
-    expect(none.openUnlock).toHaveBeenCalledOnce()
-    cleanup()
-    const pending = renderSection(host, device(PENDING as UnlockView['state']))
-    await settle()
-    expect(screen.getByText(en['unlock.section.pending'])).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: en['unlock.section.show'] }))
-    expect(pending.openUnlock).toHaveBeenCalledOnce()
-    cleanup()
-    const elevated = renderSection(host, device(ELEVATED as UnlockView['state']))
-    await settle()
-    expect(screen.getByText(t('unlock.section.unlocked', { time: clockTime(t, ELEVATED.endsAt) }))).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: en['unlock.lockNow'] }))
-    expect(elevated.lockUnlock).toHaveBeenCalledOnce()
-    // The computer's list is never read on a device, whose device list is refused.
+    // Pins the removal of the device's code unlock (A483): bringing back its buttons or its dialog opener fails this.
+    expect(screen.getByText(en['unlock.section.faceId'])).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Unlock' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Show the code' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Lock now' })).toBeNull()
+    expect(screen.queryByText(en['unlock.requests.title'])).toBeNull()
+    expect(screen.queryByText(en['unlock.requests.inert'])).toBeNull()
     expect(host.count(`GET ${ELEVATION_ROUTES.pending}`)).toBe(0)
   })
 
-  it('at the computer, approves a request with the typed code, declines one and ends a running unlock', async () => {
+  it('while the page\'s place is unknown, never reads or shows the unlock requests', async () => {
+    // Only a page known to be away from any device reads the computer's list; an unknown place may be a phone whose first read failed.
+    const host = computerHost({ pending: [], running: [] })
+    renderSection(host, { place: 'unknown' })
+    await settle()
+    expect(screen.queryByText(en['unlock.requests.title'])).toBeNull()
+    expect(host.count(`GET ${ELEVATION_ROUTES.pending}`)).toBe(0)
+  })
+
+  it('at the computer, shows nothing for no request and says plainly what a waiting request is worth', async () => {
+    // An unlock admits nothing (A483): the computer offers no approval, and an empty block is not shown at all.
+    const host = computerHost({ pending: [], running: [] })
+    renderSection(host)
+    await settle()
+    expect(screen.queryByText(en['unlock.requests.title'])).toBeNull()
+    expect(screen.queryByText(en['unlock.section.faceId'])).toBeNull()
+    host.script[`GET ${ELEVATION_ROUTES.pending}`] = ok({ pending: [{ requestId: 'request-1', deviceId: DEVICE.id, requestedAt: NOW, expiresAt: NOW + 300_000 }], running: [] })
+    await settle(ELEVATION_POLL_MS)
+    expect(screen.getByText(en['unlock.requests.title'])).toBeTruthy()
+    expect(screen.getByText(en['unlock.requests.inert'])).toBeTruthy()
+    expect(screen.queryByRole('textbox')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull()
+  })
+
+  it('at the computer, declines a request and ends a running unlock, and offers no approval', async () => {
     const host = computerHost({
       pending: [
         { requestId: 'request-1', deviceId: DEVICE.id, requestedAt: NOW - 10_000, expiresAt: NOW + 290_000 },
@@ -525,16 +221,11 @@ describe('the Devices section\'s unlock', () => {
     })
     renderSection(host)
     await settle()
-    expect(screen.queryByText(en['unlock.section.title'])).toBeNull()
     const first = document.querySelector('[data-elevation-request-id="request-1"]') as HTMLElement
     expect(within(first).getByText('Pixel 9')).toBeTruthy()
     expect(within(document.querySelector('[data-elevation-request-id="request-2"]') as HTMLElement).getByText(en['unlock.removedDevice'])).toBeTruthy()
-    const approve = within(first).getByRole('button', { name: en['unlock.requests.approve'] }) as HTMLButtonElement
-    expect(approve.disabled).toBe(true)
-    fireEvent.change(within(first).getByRole('textbox', { name: t('unlock.requests.code', { label: 'Pixel 9' }) }), { target: { value: '1234 5678' } })
-    fireEvent.click(approve)
-    await settle()
-    expect(host.received.find(request => request.key === `POST ${ELEVATION_ROUTES.approve}`)?.body).toEqual({ requestId: 'request-1', typedCode: CODE })
+    expect(within(first).queryByRole('textbox')).toBeNull()
+    expect(within(first).getAllByRole('button').map(button => button.textContent)).toEqual([en['unlock.requests.decline']])
     fireEvent.click(within(document.querySelector('[data-elevation-request-id="request-2"]') as HTMLElement).getByRole('button', { name: en['unlock.requests.decline'] }))
     await settle()
     const running = document.querySelector('[data-elevation-id="elevation-1"]') as HTMLElement
@@ -542,20 +233,14 @@ describe('the Devices section\'s unlock', () => {
     fireEvent.click(within(running).getByRole('button', { name: en['unlock.running.end'] }))
     await settle()
     expect(host.received.filter(request => request.key === `POST ${ELEVATION_ROUTES.revoke}`).map(request => request.body)).toEqual([{ id: 'request-2' }, { id: 'elevation-1' }])
-    expect(screen.getAllByText(ELEVATE_COMMAND).length).toBeGreaterThan(0)
+    expect(host.count(`POST ${ELEVATION_ROUTES.approve}`)).toBe(0)
   })
 
-  it('at the computer, says a wrong code in place, keeps reading the list, and hides it without the routes', async () => {
+  it('at the computer, says a failed decline or end in place, keeps reading the list, and hides it without the routes', async () => {
     const host = computerHost({ pending: [{ requestId: 'request-1', deviceId: DEVICE.id, requestedAt: NOW, expiresAt: NOW + 300_000 }], running: [] })
-    host.script[`POST ${ELEVATION_ROUTES.approve}`] = refusal(403, 'APPROVAL_CODE_MISMATCH')
     host.script[`POST ${ELEVATION_ROUTES.revoke}`] = 'unreachable'
     renderSection(host)
     await settle()
-    const row = document.querySelector('[data-elevation-request-id="request-1"]') as HTMLElement
-    fireEvent.change(within(row).getByRole('textbox'), { target: { value: '87654321' } })
-    fireEvent.click(within(row).getByRole('button', { name: en['unlock.requests.approve'] }))
-    await settle()
-    expect(within(document.querySelector('[data-elevation-request-id="request-1"]') as HTMLElement).getByRole('alert').textContent).toBe('APPROVAL_CODE_MISMATCH sentence')
     fireEvent.click(within(document.querySelector('[data-elevation-request-id="request-1"]') as HTMLElement).getByRole('button', { name: en['unlock.requests.decline'] }))
     await settle()
     expect(screen.getByRole('alert').textContent).toBe(en['failed.unreachable'])
@@ -569,7 +254,7 @@ describe('the Devices section\'s unlock', () => {
     expect(screen.getByRole('alert').textContent).toBe(t('loopback', { action: en['action.unlockRevoke'] }))
     host.script[`GET ${ELEVATION_ROUTES.pending}`] = ok({ pending: [], running: [] })
     await settle(ELEVATION_POLL_MS)
-    expect(screen.getByText(en['unlock.requests.none'])).toBeTruthy()
+    expect(screen.queryByText(en['unlock.requests.title'])).toBeNull()
     host.script[`GET ${ELEVATION_ROUTES.pending}`] = 'unreachable'
     await settle(ELEVATION_POLL_MS)
     expect(screen.getByRole('alert').textContent).toBe(en['failed.unreachable'])

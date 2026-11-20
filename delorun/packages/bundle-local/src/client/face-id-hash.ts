@@ -41,10 +41,28 @@ export function hashArgs(args: unknown): Promise<string> {
 }
 
 /**
- * Hash a Fetch route call whose body is JSON.
- * @param request - the method, the pathname with its query as the home receives it, and the JSON body.
- * @returns the hex hash of `METHOD NUL path NUL canonical-body`.
+ * The body text a Fetch call's hash covers: the canonical text of JSON, and any other text as it is sent.
+ * @param body - a JSON value, or the text as sent (empty for no body).
+ * @returns the text.
+ */
+function hashedBody(body: unknown): string {
+  if (typeof body !== 'string') return canonicalJson(body)
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(body)
+  } catch (_notJson) {
+    // Text that is not JSON is hashed as the bytes the home receives.
+    return body
+  }
+  return canonicalJson(parsed)
+}
+
+/**
+ * Hash a Fetch route call.
+ * @param request - the method, the pathname with its query as the home receives it, and the body: a JSON value, or the
+ *   text as sent, which is hashed in canonical form when it parses as JSON.
+ * @returns the hex hash of `METHOD NUL path NUL body`.
  */
 export function hashRequest(request: { readonly method: string; readonly path: string; readonly body: unknown }): Promise<string> {
-  return sha256Hex(`${request.method.toUpperCase()}\u0000${request.path}\u0000${canonicalJson(request.body)}`)
+  return sha256Hex(`${request.method.toUpperCase()}\u0000${request.path}\u0000${hashedBody(request.body)}`)
 }

@@ -13,8 +13,8 @@ describe('setup answers defaults', () => {
   it('defaults the release check on, at schema version 4, reading versions 2 and 3 too, and names the row it writes', () => {
     expect(SETUP_DEFAULTS.updateCheck).toBe(true)
     expect(SETUP_DEFAULTS.schemaVersion).toBe(SETUP_ANSWERS_SCHEMA_VERSION)
-    expect(SETUP_ANSWERS_SCHEMA_VERSION).toBe(4)
-    expect(SETUP_ANSWERS_EARLIER_SCHEMA_VERSIONS).toEqual([2, 3])
+    expect(SETUP_ANSWERS_SCHEMA_VERSION).toBe(5)
+    expect(SETUP_ANSWERS_EARLIER_SCHEMA_VERSIONS).toEqual([2, 3, 4])
     expect(SETUP_UPDATE_CHECK_ROW).toBe('delorun-update-check')
   })
 

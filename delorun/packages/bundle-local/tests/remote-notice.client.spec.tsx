@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 /**
  * When upstream's Client Remote service reports that the home refused this page's answer with `LOOPBACK_REQUIRED`
- * (`remote/answer-refused`), the plugin shows the notice that names the refused action and says to answer at the
- * home's own computer.
+ * (`remote/answer-refused`), the plugin shows the notice that names the refused action: for an action a device can
+ * confirm with Face ID or its PIN it asks to answer again and confirm, for any other it says to answer at the home's
+ * own computer.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
@@ -43,12 +44,22 @@ describe('the refused-answer notice', () => {
       render(<RemoteNotice t={makeTranslate(en)} useNotice={bindSnapshotSelector(face.hooks.notice)} dismiss={face.dismiss} />)
       expect(screen.queryByRole('alert')).toBeNull()
 
+      // Returning `remote.refused` for these four actions tells a device to go to the computer for an answer it can confirm.
       act(() => { ctx.emit('remote/answer-refused', refusal('full-access-escalation')) })
       expect(screen.getByRole('alert').textContent).toContain(
-        'This needs you at your computer: granting full access. Answer this prompt in the studio on the home\'s computer.')
+        'Not confirmed: granting full access. Answer again and confirm with Face ID or your PIN, or answer at your computer.')
       fireEvent.click(screen.getByRole('button', { name: en['remote.dismiss'] }))
       expect(screen.queryByRole('alert')).toBeNull()
 
+      for (const [action, phrase] of [
+        ['workspace-management', 'managing workspaces and their instructions'],
+        ['external-agent', 'starting an external agent such as Claude Code or Codex'],
+        ['real-browser', 'using your real browser'],
+      ] as const) {
+        act(() => { ctx.emit('remote/answer-refused', refusal(action)) })
+        expect(screen.getByRole('alert').textContent).toContain(`Not confirmed: ${phrase}. Answer again and confirm with Face ID or your PIN, or answer at your computer.`)
+      }
+      // `device-remove` stays at the computer.
       act(() => { ctx.emit('remote/answer-refused', refusal('device-remove')) })
       expect(screen.getByRole('alert').textContent).toContain('This needs you at your computer: the action “device-remove”.')
       act(() => { ctx.emit('remote/answer-refused', refusal(undefined)) })
@@ -63,6 +74,7 @@ describe('the refused-answer notice', () => {
     expect(t('remote.refused', { action: refusedActionText(t, 'full-access-escalation') }))
       .toBe('这需要你在电脑前操作：授予完全访问权限。请在主机所在电脑上的 studio 中回答这个提示')
     expect(refusedActionText(t, 'device-remove')).toBe('操作“device-remove”')
+    expect(refusedActionText(makeTranslate(en), 'real-browser')).toBe('using your real browser')
     expect(refusedActionText(t, 'workspace-management')).toBe('管理工作区及其指令')
     expect(refusedActionText(makeTranslate(en), 'workspace-management')).toBe('managing workspaces and their instructions')
     expect(refusedActionText(makeTranslate(en), 'external-agent')).toBe('starting an external agent such as Claude Code or Codex')

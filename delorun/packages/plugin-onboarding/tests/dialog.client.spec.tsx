@@ -8,7 +8,7 @@ import { en } from '../src/client/locales.ts'
 import type { OnboardingStep, ReachState, StartTarget } from '../src/client/types.ts'
 import type { OnboardingSettings } from '../src/config.ts'
 import { NO_RECORD, type Readiness, type SetupRecord } from '../src/wire.ts'
-import { DEFAULT_PATH, DEFAULT_WORKSPACE, hostFake, liveForm, noticeFace, READY, settings, startFace, stepServices, t, THEME } from './fixtures.client.ts'
+import { DEFAULT_PATH, pathText, DEFAULT_WORKSPACE, hostFake, liveForm, noticeFace, READY, settings, startFace, stepServices, t, THEME } from './fixtures.client.ts'
 import type { ThemeSettings } from '@delorun/plugin-theme'
 
 afterEach(() => {
@@ -219,7 +219,7 @@ describe('the first run', () => {
     await forward(4)
     expect(heading().textContent).toBe(en['step.ready'])
     expect(screen.queryByRole('button', { name: en.continue })).toBeNull()
-    expect(screen.getByText(DEFAULT_PATH)).toBeTruthy()
+    expect(screen.getByText(pathText(DEFAULT_PATH))).toBeTruthy()
     expect(startChat).not.toHaveBeenCalled()
     await click(button(en.start))
     expect(progress.value()).toMatchObject({ done: true, step: '' })
@@ -400,7 +400,7 @@ describe('the workspace and the last button', () => {
     await forward(4)
     expect(screen.getByText(en['start.lead.checking'])).toBeTruthy()
     await act(async () => { start.set({ kind: 'default', workspaceId: DEFAULT_WORKSPACE, path: DEFAULT_PATH }) })
-    expect(screen.getByText(DEFAULT_PATH)).toBeTruthy()
+    expect(screen.getByText(pathText(DEFAULT_PATH))).toBeTruthy()
   })
 
   it('starts the chat in a workspace the new-workspace dialog made, with what the folder holds', async () => {
@@ -412,7 +412,7 @@ describe('the workspace and the last button', () => {
     expect(start.openNewWorkspace).toHaveBeenCalledOnce()
     await settle()
     await forward(1)
-    expect(screen.getByText('/home/person/app')).toBeTruthy()
+    expect(screen.getByText(pathText('/home/person/app'))).toBeTruthy()
     await click(button(en.start))
     expect(startChat).toHaveBeenCalledExactlyOnceWith('workspace-2', false)
   })
@@ -559,7 +559,7 @@ describe('finishing later and the last step', () => {
     await forward(4)
     expect(heading().textContent).toBe(en['step.workspace'])
     await click(button(en.skip))
-    expect(screen.getByText(DEFAULT_PATH)).toBeTruthy()
+    expect(screen.getByText(pathText(DEFAULT_PATH))).toBeTruthy()
     await click(button(en.start))
     expect(startChat).toHaveBeenCalledExactlyOnceWith(DEFAULT_WORKSPACE, false)
   })

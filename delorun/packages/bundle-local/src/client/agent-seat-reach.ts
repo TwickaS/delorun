@@ -1,49 +1,70 @@
 /**
- * The page's reach for a live agent's approvals, from the unlock state this plugin already holds. The computer's own
- * page may grant; a phone may grant only while its page holds a PIN unlock; a phone with a code unlock, or none, may
- * only reject (decision D1). It is provided as `agentSeatReach` for `@delorun/plugin-agent-seats`.
+ * The page's reach for a live agent's approvals. The computer's own page and an approved device's page show the granting
+ * answers; on a device each one first takes a Face ID confirmation, or the PIN keypad on a device with no passkey, which
+ * mints the answer grant the home requires (A483). A page that is neither gets no reach service, and its cards offer
+ * Reject only. It is provided as `agentSeatReach` for `@delorun/plugin-agent-seats`.
  * @module @delorun/bundle-local/client/agent-seat-reach
  */
 import type { Context } from '@deepseek-ai/cordis'
-import type { PinSource } from './pin-lock.ts'
-import type { UnlockSource } from './unlock.ts'
+import type { FaceGrant } from '@delorun/plugin-changes/face-grant'
 
 /** What the live-agent chat reads: the same shape as `SeatReachSource` in `@delorun/plugin-agent-seats/client`. */
-type Reach = { readonly kind: 'computer' } | { readonly kind: 'unlocked-phone' } | { readonly kind: 'locked-phone' }
+type Reach = { readonly kind: 'computer' } | { readonly kind: 'device' }
+
+/** One granting answer of a seat's approval, as `SeatAnswerRequest` in `@delorun/plugin-agent-seats/client`. */
+interface SeatAnswer {
+  readonly sessionId: string
+  readonly callId: string | undefined
+  readonly grants: string
+  readonly value: string
+}
 
 const COMPUTER: Reach = { kind: 'computer' }
-const UNLOCKED: Reach = { kind: 'unlocked-phone' }
-const LOCKED: Reach = { kind: 'locked-phone' }
+const DEVICE: Reach = { kind: 'device' }
 
-/** The service, read by `@delorun/plugin-agent-seats` through `ctx.get('agentSeatReach')`. */
+/** The grant action whose words the Face ID sheet shows for a seat's answer. */
+export const SEAT_ANSWER_ACTION = 'plugin-agent-seats/answer'
+
+/** The service the live-agent chat reads. */
 export interface AgentSeatReachService {
   /** The current reach; the same object until the reach changes. */
   readonly get: () => Reach
   /** Listen for a change; returns the disposer. */
   readonly subscribe: (listener: () => void) => () => void
-  /** Open the page's PIN lock screen, or the unlock dialog where PIN mode is off. */
-  readonly openUnlock: () => void
+  /**
+   * Confirm one granting answer before it is sent.
+   * @param answer - the prompt and the answer's value.
+   * @returns true when the answer may go: always on the computer; on a device once the answer grant is minted, and never
+   *   for a prompt without a call id, which no grant can name.
+   */
+  readonly confirm: (answer: SeatAnswer) => Promise<boolean>
 }
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
-    /** This page's reach for a live agent's approvals. */
+    /** This page's reach for a live agent's approvals; absent on a page that is neither the computer nor an approved device. */
     agentSeatReach: AgentSeatReachService
   }
 }
 
 /**
- * Provide the service.
+ * Provide the service on the home's computer and on an approved device; on any other page provide nothing.
  * @param ctx - the browser plugin context.
- * @param pin - PIN mode's source.
- * @param unlock - the unlock source, whose dialog the Unlock to answer button opens.
- * @param onComputer - whether the page is on the home's own computer.
+ * @param place - where the page is.
+ * @param grant - the page's queued Face ID confirmation.
  */
-export function provideAgentSeatReach(ctx: Context, pin: PinSource, unlock: UnlockSource, onComputer: boolean): void {
-  const get = (): Reach => onComputer ? COMPUTER : pin.hooks.pin.getSnapshot().phase === 'unlocked' ? UNLOCKED : LOCKED
+export function provideAgentSeatReach(ctx: Context, place: 'computer' | 'device' | 'none', grant: FaceGrant): void {
+  if (place === 'none') return
+  const reach = place === 'computer' ? COMPUTER : DEVICE
   ctx.provide('agentSeatReach', {
-    get,
-    subscribe: listener => pin.hooks.pin.subscribe(listener),
-    openUnlock: () => { if (!pin.ask()) unlock.open() },
+    get: () => reach,
+    // The page's place never changes.
+    subscribe: () => () => undefined,
+    confirm: async ({ sessionId, callId, grants, value }) => {
+      if (place === 'computer') return true
+      // No grant can name a prompt without a call id, and the home refuses a device's answer without one.
+      if (callId === undefined) return false
+      return await grant({ action: SEAT_ANSWER_ACTION, call: { answer: { agent: sessionId, callId, grants, value } } }) !== undefined
+    },
   })
 }

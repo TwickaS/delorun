@@ -39,7 +39,7 @@ export interface ControlUse {
 }
 
 /**
- * Decide a control's button from the state: one the Phone powers level keeps at the computer is disabled with a hover
+ * Decide a control's button from the state: one that stays at the computer is disabled with a hover
  * text; one that needs an unlock stays enabled, and the route's refusal opens the studio's unlock dialog.
  * @param state - the update state.
  * @param control - the control.

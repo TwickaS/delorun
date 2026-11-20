@@ -6,7 +6,7 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { CREDENTIAL, fromDevice, get, json, post, send } from '../../plugin-changes/tests/routes-fixture.ts'
+import { CREDENTIAL, fromDevice, get, grantWorld, json, post, send } from '../../plugin-changes/tests/routes-fixture.ts'
 import { UPDATE_PATHS } from '../src/wire.ts'
 import { readStopped, stoppedPath, withStoppedLock, writeStopped } from '../src/stopped.ts'
 import { serveUpdate, updateWaiting, writeResult, type UpdateServer } from './update-fixture.ts'
@@ -17,21 +17,23 @@ const RUNNING = [{ sessionId: 's-1', title: 'First chat' }, { sessionId: 's-2', 
 const recordPath = (update: UpdateServer): string => stoppedPath(join(update.home, 'run', 'default'))
 
 describe('the stop-chats route', () => {
-  it('is refused from another site, and a phone without the strong access, before anything is stopped', async () => {
-    const update = await serveUpdate({ powers: 'full' })
-    updateWaiting(update)
-    update.chats.running = [...RUNNING]
-    const cross = await send(update.server.port, UPDATE_PATHS.stopChats, { method: 'POST', headers: [CREDENTIAL, 'Sec-Fetch-Site: cross-site'], body: {}, withholdBody: true })
+  // stop-chats uses update-begin, class `face` (A483): only a one-action grant opens it for a phone, and no unlock does.
+  it('is refused from another site, and a phone without a grant for it, before anything is stopped', async () => {
+    const noStore = await serveUpdate()
+    updateWaiting(noStore)
+    noStore.chats.running = [...RUNNING]
+    const cross = await send(noStore.server.port, UPDATE_PATHS.stopChats, { method: 'POST', headers: [CREDENTIAL, 'Sec-Fetch-Site: cross-site'], body: {}, withholdBody: true })
     expect(cross.status).toBe(403)
-    for (const unlock of ['none', 'grace'] as const) {
-      const refused = await send(update.server.port, UPDATE_PATHS.stopChats, fromDevice(unlock, {}))
-      expect(json(refused)).toMatchObject({ code: 'ELEVATION_REQUIRED' })
+    for (const unlock of ['none', 'grace', 'fresh'] as const) {
+      expect(json(await send(noStore.server.port, UPDATE_PATHS.stopChats, fromDevice(unlock, {}))), unlock).toMatchObject({ code: 'LOOPBACK_REQUIRED' })
     }
-    const careful = await serveUpdate({ powers: 'careful' })
-    updateWaiting(careful)
-    careful.chats.running = [...RUNNING]
-    expect(json(await send(careful.server.port, UPDATE_PATHS.stopChats, fromDevice('fresh', {})))).toMatchObject({ code: 'LOOPBACK_REQUIRED' })
-    for (const each of [update, careful]) {
+    const faceOn = await serveUpdate({ face: grantWorld({ hasPasskey: false }).face })
+    updateWaiting(faceOn)
+    faceOn.chats.running = [...RUNNING]
+    for (const unlock of ['none', 'grace', 'fresh'] as const) {
+      expect(json(await send(faceOn.server.port, UPDATE_PATHS.stopChats, fromDevice(unlock, {}))), unlock).toMatchObject({ code: 'ELEVATION_REQUIRED' })
+    }
+    for (const each of [noStore, faceOn]) {
       expect(each.chats.cancelled).toBe(0)
       expect(existsSync(recordPath(each))).toBe(false)
     }

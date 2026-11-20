@@ -1,5 +1,5 @@
 /**
- * Vite configuration of the Face ID screen preview: serves `index.html` on 127.0.0.1:19115 with the repository's
+ * Vite configuration of the Face ID screen preview: serves `index.html` on 127.0.0.1:19115 (or `FACE_ID_PREVIEW_PORT`) with the repository's
  * tsconfig paths, so the client packages resolve to their sources, as the client specs do.
  * @module @delorun/bundle-local/scripts/face-id-preview/vite.config
  */
@@ -18,5 +18,5 @@ export default defineConfig({
   plugins: [tsconfigPaths({ projects: [join(repository, 'tsconfig.base.json')] })],
   // The client packages hold React and react-dom; every import resolves to that one copy.
   resolve: { alias: { 'react-dom': dirname(clientRequire.resolve('react-dom/package.json')), react: dirname(clientRequire.resolve('react/package.json')) } },
-  server: { host: '127.0.0.1', port: 19115, strictPort: true, fs: { allow: [repository] } },
+  server: { host: '127.0.0.1', port: Number(process.env.FACE_ID_PREVIEW_PORT ?? 19115), strictPort: true, fs: { allow: [repository] } },
 })

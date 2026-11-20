@@ -89,7 +89,7 @@ export function McpWaitingNotice({ fetch, review, notify, t }: McpWaitingNoticeP
   const names = shown.map(server => server.serverName).join(', ')
   const dismiss = (): void => { setDismissed(new Set([...dismissed, ...shown.map(dismissKey)])) }
   if (waiting.kind === 'remote') {
-    return <Toast key={names} text={t(dangerous ? 'mcp.notice.phoneUnlock' : 'mcp.notice.phone', { servers: names })} icon={<IconWarningOutlineRegular />} holdMs={NOTICE_HOLD_MS}
+    return <Toast key={names} text={t(dangerous ? 'mcp.notice.phoneConfirm' : 'mcp.notice.phone', { servers: names })} icon={<IconWarningOutlineRegular />} holdMs={NOTICE_HOLD_MS}
       actions={[{ label: t('mcp.notice.dismiss'), prefix: ' ', onClick: dismiss }]} onDone={dismiss} />
   }
   const first = waiting.servers.find(server => !dismissed.has(dismissKey(server)))

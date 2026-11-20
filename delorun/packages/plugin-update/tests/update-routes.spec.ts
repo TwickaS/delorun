@@ -5,7 +5,7 @@
  * refusals keep their codes; and the outcome record reaches the page.
  */
 import { describe, expect, it } from 'vitest'
-import { CREDENTIAL, fromDevice, get, json, post, send, type Reply } from '../../plugin-changes/tests/routes-fixture.ts'
+import { CREDENTIAL, fromDevice, get, grantWorld, json, post, send, type Reply } from '../../plugin-changes/tests/routes-fixture.ts'
 import { UPDATE_PATHS } from '../src/wire.ts'
 import { CHANNEL_TOKEN, CONFLICTED_HARNESS, DATA_ITEM, DISABLED_PLUGIN, REPORT_ID, report, serveUpdate, writeResult, type UpdateServer } from './update-fixture.ts'
 
@@ -27,7 +27,7 @@ const CONTROL_PATHS = [UPDATE_PATHS.prepare, UPDATE_PATHS.apply, UPDATE_PATHS.ca
 
 describe('the update routes\' fence and levels', () => {
   it('update-begin-refused-from-other-site: a cross-site request asks the home process nothing', async () => {
-    const update = await serveUpdate({ powers: 'full' })
+    const update = await serveUpdate()
     for (const path of CONTROL_PATHS) {
       for (const headers of [['Sec-Fetch-Site: cross-site'], ['Origin: https://elsewhere.example'], ['Origin: null']]) {
         const reply = await send(update.server.port, path, { method: 'POST', headers: [CREDENTIAL, ...headers], body: {}, withholdBody: true })
@@ -38,8 +38,8 @@ describe('the update routes\' fence and levels', () => {
     expect(update.channel.requests).toEqual([])
   })
 
-  it('update-begin-refused-careful-phone and update-rollback-refused-careful-phone: even an unlocked phone updates and goes back at the computer', async () => {
-    const update = await serveUpdate({ powers: 'careful' })
+  it('update-begin-refused-no-grant-store-phone and update-rollback-refused-no-grant-store-phone: with no grant store even an unlocked phone updates and goes back at the computer', async () => {
+    const update = await serveUpdate()
     for (const path of [UPDATE_PATHS.prepare, UPDATE_PATHS.apply, UPDATE_PATHS.rollback]) {
       const reply = await send(update.server.port, path, fromDevice('fresh', { chats: 'wait', handle: 'x', profileOnly: false }))
       expect(reply.status, path).toBe(403)
@@ -48,36 +48,49 @@ describe('the update routes\' fence and levels', () => {
     expect(update.channel.requests).toEqual([])
   })
 
-  it('update-begin-refused-phone-without-unlock, update-begin-refused-phone-approval-grace-only and update-rollback-refused-phone-without-unlock: Full needs an unlock the person entered', async () => {
-    const update = await serveUpdate({ powers: 'full' })
-    for (const unlock of ['none', 'grace'] as const) {
-      for (const path of [UPDATE_PATHS.prepare, UPDATE_PATHS.apply, UPDATE_PATHS.rollback, UPDATE_PATHS.stop]) {
+  // Removing the `grant` rows of update-begin and update-rollback in LEGACY_LEVELS lets an unlock the person entered open them for a phone with no passkey.
+  it('update-begin-refused-phone-with-unlock-only and update-rollback-refused-phone-with-unlock-only: Face ID on, no passkey, no grant: no unlock opens them', async () => {
+    const update = await serveUpdate({ face: grantWorld({ hasPasskey: false }).face })
+    for (const unlock of ['none', 'grace', 'fresh'] as const) {
+      for (const path of [UPDATE_PATHS.prepare, UPDATE_PATHS.apply, UPDATE_PATHS.rollback]) {
         const reply = await send(update.server.port, path, fromDevice(unlock, { chats: 'wait', handle: 'x', profileOnly: false }))
         expect(reply.status, `${path} ${unlock}`).toBe(403)
         expect(json(reply), `${path} ${unlock}`).toMatchObject({ code: 'ELEVATION_REQUIRED' })
       }
     }
+    for (const unlock of ['none', 'grace'] as const) {
+      const reply = await send(update.server.port, UPDATE_PATHS.stop, fromDevice(unlock, { chats: 'wait' }))
+      expect(json(reply), `stop ${unlock}`).toMatchObject({ code: 'ELEVATION_REQUIRED' })
+    }
     expect(update.channel.requests).toEqual([])
   })
 
-  it('a phone with an unlock under Full may prepare, apply, go back and stop; under Careful it may only cancel, dismiss and stop', async () => {
-    const full = await serveUpdate({ powers: 'full' })
+  it('a phone with no passkey may prepare, apply, go back and stop with a PIN grant for each call; with no grant store it may only cancel and dismiss', async () => {
+    const world = grantWorld({ hasPasskey: false })
+    const full = await serveUpdate({ face: world.face })
+    const withPin = (control: string, path: string, body: object) => {
+      const base = fromDevice('none', body)
+      return { ...base, headers: [...base.headers ?? [], `Delorun-Grant: ${world.grantFor(control, path, body, 'pin')}`] }
+    }
     preparing(full)
-    const prepare = await send(full.server.port, UPDATE_PATHS.prepare, fromDevice('fresh'))
+    const prepare = await send(full.server.port, UPDATE_PATHS.prepare, withPin('update-begin', UPDATE_PATHS.prepare, {}))
     expect(prepare.status, prepare.body).toBe(200)
     const handle = (json(prepare).prepared as { handle: string }).handle
-    expect((await send(full.server.port, UPDATE_PATHS.apply, fromDevice('fresh', { handle, chats: 'wait', dataCopy: true, acknowledged: [] }))).status).toBe(200)
-    expect((await send(full.server.port, UPDATE_PATHS.rollback, fromDevice('fresh', { chats: 'stop', profileOnly: false }))).status).toBe(200)
-    expect((await send(full.server.port, UPDATE_PATHS.stop, fromDevice('fresh', { chats: 'wait' }))).status).toBe(200)
-    const careful = await serveUpdate({ powers: 'careful' })
-    expect((await send(careful.server.port, UPDATE_PATHS.cancel, fromDevice('fresh'))).status).toBe(200)
-    expect((await send(careful.server.port, UPDATE_PATHS.dismiss, fromDevice('fresh'))).status).toBe(200)
-    expect((await send(careful.server.port, UPDATE_PATHS.stop, fromDevice('fresh', { chats: 'wait' }))).status).toBe(200)
-    expect(careful.channel.ops()).toEqual(['status', 'update.cancel', 'status', 'stop'])
+    const apply = { handle, chats: 'wait', dataCopy: true, acknowledged: [] }
+    expect((await send(full.server.port, UPDATE_PATHS.apply, withPin('update-begin', UPDATE_PATHS.apply, apply))).status).toBe(200)
+    const rollback = { chats: 'stop', profileOnly: false }
+    expect((await send(full.server.port, UPDATE_PATHS.rollback, withPin('update-rollback', UPDATE_PATHS.rollback, rollback))).status).toBe(200)
+    expect((await send(full.server.port, UPDATE_PATHS.stop, fromDevice('fresh', { chats: 'wait' }))).status).toBe(403)
+    expect((await send(full.server.port, UPDATE_PATHS.stop, withPin('stop', UPDATE_PATHS.stop, { chats: 'wait' }))).status).toBe(200)
+    const off = await serveUpdate()
+    expect((await send(off.server.port, UPDATE_PATHS.cancel, fromDevice('fresh'))).status).toBe(200)
+    expect((await send(off.server.port, UPDATE_PATHS.dismiss, fromDevice('fresh'))).status).toBe(200)
+    expect(json(await send(off.server.port, UPDATE_PATHS.stop, fromDevice('fresh', { chats: 'wait' })))).toMatchObject({ code: 'LOOPBACK_REQUIRED' })
+    expect(off.channel.ops()).toEqual(['status', 'update.cancel'])
   })
 
   it('the release check is open to a locked phone, but not to another site or a session that is no paired device\'s', async () => {
-    const update = await serveUpdate({ powers: 'careful' })
+    const update = await serveUpdate()
     update.check = { state: () => Promise.resolve(undefined), checkNow: () => Promise.resolve({ checked: 5 }) }
     const locked = await send(update.server.port, UPDATE_PATHS.check, fromDevice('none'))
     expect(locked.status, locked.body).toBe(200)
@@ -187,7 +200,7 @@ describe('prepare and apply', () => {
   })
 
   it('update-token-never-leaves-host: no answer carries the channel token or the home process\'s report id', async () => {
-    const update = await serveUpdate({ powers: 'full' })
+    const update = await serveUpdate()
     const replies: Reply[] = []
     preparing(update)
     replies.push(await post(update.server.port, UPDATE_PATHS.prepare))
@@ -231,7 +244,7 @@ describe('rollback, cancel, stop and state', () => {
   })
 
   it('update-result-survives-switch: the outcome record reaches the page until the person dismisses it', async () => {
-    const update = await serveUpdate({ powers: 'careful' })
+    const update = await serveUpdate()
     writeResult(update.home, { v: 1, kind: 'update', outcome: 'rolled-back', from: '0.1.0', to: '0.1.1', reason: 'HEALTH_CHECK_FAILED', criterion: 'H2-host-ready', at: '2026-11-17T12:00:00.000Z' })
     expect(json(await get(update.server.port, UPDATE_PATHS.state)).result).toEqual({ kind: 'update', outcome: 'rolled-back', from: '0.1.0', to: '0.1.1', reason: 'HEALTH_CHECK_FAILED', criterion: 'H2-host-ready', at: '2026-11-17T12:00:00.000Z' })
     expect((await post(update.server.port, UPDATE_PATHS.dismiss)).status).toBe(200)
@@ -239,13 +252,13 @@ describe('rollback, cancel, stop and state', () => {
   })
 
   it('state names every control\'s decision, and hides the report from a request that may not begin an update', async () => {
-    const update = await serveUpdate({ powers: 'careful' })
+    const update = await serveUpdate()
     const handle = await prepared(update, report([DISABLED_PLUGIN]))
     const computer = json(await get(update.server.port, UPDATE_PATHS.state))
     expect(computer.prepared).toMatchObject({ handle })
     expect(computer.access).toMatchObject({ actor: 'computer', may: { 'update-begin': { ok: true }, 'update-rollback': { ok: true }, stop: { ok: true } } })
     const phone = json(await send(update.server.port, UPDATE_PATHS.state, { method: 'GET', host: 'studio.example.ts.net', headers: [CREDENTIAL, 'x-test-remote: 1', 'x-test-unlock: fresh'] }))
-    expect(phone.access).toMatchObject({ actor: 'device-unlocked', phonePowers: 'careful', may: { 'update-check': { ok: true }, 'update-begin': { ok: false, needs: 'computer' }, 'update-rollback': { ok: false, needs: 'computer' }, 'update-cancel': { ok: true }, stop: { ok: true } } })
+    expect(phone.access).toMatchObject({ actor: 'device-unlocked', may: { 'update-check': { ok: true }, 'update-begin': { ok: false, needs: 'computer' }, 'update-rollback': { ok: false, needs: 'computer' }, 'update-cancel': { ok: true }, stop: { ok: false, needs: 'computer' } } })
     expect(phone.prepared).toBeUndefined()
     expect(JSON.stringify(phone)).not.toContain('@x/plug')
   })

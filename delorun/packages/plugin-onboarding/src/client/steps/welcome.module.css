@@ -119,6 +119,10 @@
   color: var(--dsw-alias-label-primary);
 }
 
+.more {
+  display: none;
+}
+
 .box {
   margin-top: auto;
   padding: 8px 10px;
@@ -135,5 +139,20 @@
 
   .preview {
     grid-template-columns: minmax(96px, 38%) 1fr;
+  }
+
+  /* The phone has room for more of the conversation, so the picture is full of chat, with the message box at its foot. */
+  .more {
+    display: block;
+  }
+}
+
+@media (max-width: 479px) {
+  .preview {
+    grid-template-columns: 1fr;
+  }
+
+  .side {
+    display: none;
   }
 }
