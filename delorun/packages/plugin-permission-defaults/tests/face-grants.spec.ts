@@ -84,6 +84,19 @@ describe('under Face ID', () => {
     expect(defaults.setFullAccess).toHaveBeenCalledTimes(1)
   })
 
+  // Moving setFullAccess into PASS_ADMITS, or a route that passes the wrong row to gateByClass, lets a picked-up phone in a pass turn on full access (F48).
+  it('still asks for full access during a Face ID pass, and admits it with its own grant', async () => {
+    const world = faceWorld('d1', 'reach')
+    world.store.openPass({ deviceId: 'd1', listener: 'reach' as never }, 60)
+    const { routes, defaults } = setup({ face: world })
+    const route = routes.get(PERMISSION_ROUTES.setFullAccess)!
+    expect(await through(route, call(PERMISSION_ROUTES.setFullAccess, ON_BODY))).toBe(403)
+    expect(defaults.setFullAccess).not.toHaveBeenCalled()
+    const grant = world.grantFor('plugin-permission-defaults/set-full-access', { path: PERMISSION_ROUTES.setFullAccess, body: ON_BODY })
+    expect(await through(route, call(PERMISSION_ROUTES.setFullAccess, ON_BODY, grant))).toBe(200)
+    expect(defaults.setFullAccess).toHaveBeenCalledTimes(1)
+  })
+
   it('answers everywhere, everywhereOff, workspaces and review to a device with no unlock and no grant', async () => {
     // Pins the `free` class: gating them like setFullAccess would refuse a locked phone its reads and its tightening calls.
     const root = mkdtempSync(join(tmpdir(), 'dpd-'))

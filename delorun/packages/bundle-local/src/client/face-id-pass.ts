@@ -34,10 +34,11 @@ export const PASS_SETTING_ACTION = 'auth/passkey/pass'
 /**
  * The grant actions no pass covers, as the home's `ALWAYS_ASK_ACTIONS` lists them (`@delorun/home-auth`, pinned equal by
  * `tests/face-grants.spec.ts`): adding or removing a device or a passkey, the Face ID settings, the pass setting, turning
- * Changes protection off and a workspace's full access.
+ * Changes protection off, a workspace's full access, and an approval answer that grants full access (`answer/full-access`).
  */
 export const ALWAYS_ASK_ACTIONS: ReadonlySet<string> = new Set([
   'auth/devices/remove', 'auth/passkey/devices', 'auth/passkey/remove', PASS_SETTING_ACTION, 'changes/protection-off', 'plugin-permission-defaults/set-full-access',
+  'answer/full-access',
 ])
 
 /** The window event that asks every pass source to read the pass again: a Face ID verified, or the setting changed. */

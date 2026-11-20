@@ -171,6 +171,19 @@ describe('no sheet under a pass', () => {
     await expect(asked).resolves.toBeUndefined()
   })
 
+  // Removing the answer's own action check lets a seat's full-access answer skip the sheet, which the home refuses (F48).
+  it('asks for a seat\'s full-access answer under a pass, though the seat\'s action is covered', async () => {
+    const { pass } = await source(START + 10 * MINUTE)
+    const sheets = createFaceGrantSource()
+    const grant = passAware(sheets.grant, pass)
+    const call = (grants: string) => ({ action: 'plugin-agent-seats/answer', call: { answer: { agent: 'chat-1', callId: 'c1', grants, value: 'allowed-once' } } })
+    await expect(grant(call('external-agent'))).resolves.toBe(PASS_GRANT_ID)
+    const asked = grant(call('full-access'))
+    await vi.waitFor(() => { expect(sheets.hooks.pending.getSnapshot()?.request.action).toBe('plugin-agent-seats/answer') })
+    sheets.settle(undefined)
+    await expect(asked).resolves.toBeUndefined()
+  })
+
   // Removing the read before the skip trusts a stale mirror after the pass ended at the home (review P3-3).
   it('asks with a sheet when the home says the pass ended, though the page still showed it', async () => {
     const { pass, host } = await source(START + 10 * MINUTE)
@@ -206,7 +219,7 @@ describe('no sheet under a pass', () => {
     const gateAllow = vi.fn<(gate: ApprovalAllowGate | null) => void>()
     const api = fakeApi({ devices: [{ deviceId: 'd', label: 'Phone', thisDevice: true, passkeys: [{ credentialId: 'c1', createdAt: 0, lastUsedAt: null, synced: false }] }] })
     const props = {
-      t, grants: 'full-access', callId: 'call-7' as ToolCallId, toolName: 'x', allow: async () => {}, answered: false, canAnswer: () => true, gateAllow,
+      t, grants: 'workspace-management', callId: 'call-7' as ToolCallId, toolName: 'x', allow: async () => {}, answered: false, canAnswer: () => true, gateAllow,
       sessionId: 'chat-1', fetch: fakeHost({}).fetch, api, browser: fakeBrowser(), atComputer: () => false, pass,
       usePin: <S,>(select: (view: PinView) => S): S => select({ phase: 'on', secret: 'pin' }),
     } as FaceIdAnswerProps
@@ -220,6 +233,23 @@ describe('no sheet under a pass', () => {
     expect(api.calls.some(call => call.name === 'options')).toBe(false)
   })
 
+  // Removing answer/full-access from the always-ask list lets Allow on a full-access prompt skip the sheet under a pass (F48).
+  it('opens the sheet for a full-access answer while the pass is live', async () => {
+    const { pass } = await source(START + 10 * MINUTE)
+    const gateAllow = vi.fn<(gate: ApprovalAllowGate | null) => void>()
+    const api = fakeApi({ devices: [{ deviceId: 'd', label: 'Phone', thisDevice: true, passkeys: [{ credentialId: 'c1', createdAt: 0, lastUsedAt: null, synced: false }] }] })
+    const props = {
+      t, grants: 'full-access', callId: 'call-8' as ToolCallId, toolName: 'x', allow: async () => {}, answered: false, canAnswer: () => true, gateAllow,
+      sessionId: 'chat-1', fetch: fakeHost({}).fetch, api, browser: fakeBrowser(), atComputer: () => false, pass,
+      usePin: <S,>(select: (view: PinView) => S): S => select({ phase: 'on', secret: 'pin' }),
+    } as FaceIdAnswerProps
+    render(<FaceIdAnswerAction {...props} />)
+    await vi.waitFor(() => { expect(gateAllow).toHaveBeenCalled() })
+    const gate = gateAllow.mock.calls.findLast(([next]) => next !== null)?.[0]
+    act(() => { void gate?.() })
+    await vi.waitFor(() => { expect(screen.getByRole('dialog')).toBeTruthy() })
+  })
+
   // Removing the read in the card lets Allow skip the sheet on a stale mirror, so the home refuses the answer (review P3-3).
   it('opens the sheet for an approval answer once the home says the pass ended', async () => {
     const { pass, host } = await source(START + 10 * MINUTE)
@@ -227,7 +257,7 @@ describe('no sheet under a pass', () => {
     const gateAllow = vi.fn<(gate: ApprovalAllowGate | null) => void>()
     const api = fakeApi({ devices: [{ deviceId: 'd', label: 'Phone', thisDevice: true, passkeys: [{ credentialId: 'c1', createdAt: 0, lastUsedAt: null, synced: false }] }] })
     const props = {
-      t, grants: 'full-access', callId: 'call-7' as ToolCallId, toolName: 'x', allow: async () => {}, answered: false, canAnswer: () => true, gateAllow,
+      t, grants: 'workspace-management', callId: 'call-7' as ToolCallId, toolName: 'x', allow: async () => {}, answered: false, canAnswer: () => true, gateAllow,
       sessionId: 'chat-1', fetch: fakeHost({}).fetch, api, browser: fakeBrowser(), atComputer: () => false, pass,
       usePin: <S,>(select: (view: PinView) => S): S => select({ phase: 'on', secret: 'pin' }),
     } as FaceIdAnswerProps

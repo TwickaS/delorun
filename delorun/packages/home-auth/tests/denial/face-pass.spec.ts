@@ -107,10 +107,13 @@ describe('the pass in the store', () => {
     expect(grants.passOf(HOLDER)?.remainingMs).toBe(12 * MINUTE)
   })
 
-  // Removing the assertion lets a pass be keyed on a page unlock, which the device's own calls would never match (review P3-5).
-  it('is opened only for a device and listener, never for a page unlock', () => {
+  // Keying the pass on the holder as given lets a page unlock into the key, so the device's own calls would never match it (review P3-5).
+  it('is keyed on the device and listener alone, never on a page unlock', () => {
     const { grants } = store()
-    expect(() => grants.openPass({ ...HOLDER, unlockId: 'page-1' }, 15)).toThrow(/never for a page unlock/)
+    const withUnlock: GrantHolder = { ...HOLDER, unlockId: 'page-1' }
+    grants.openPass(withUnlock, 15)
+    expect(grants.passOf(HOLDER)).toBeDefined()
+    expect(grants.passOf(withUnlock)).toBeUndefined()
   })
 
   // Removing the device or listener from the pass key lets one device's pass admit another device, listener or page.
@@ -173,11 +176,12 @@ describe('the always-ask rows', () => {
   // The column is the gate: these are the rows the owner named (A499), and the check fails on any drift.
   it('are exactly devices, passkeys, the Face ID settings, the pass setting, protection off and full access', () => {
     expect(AUTH_CLASSES.filter(row => row.pass === 'alwaysAsk').map(row => row.id).sort()).toEqual([
-      'auth:/auth/devices/remove', 'auth:/auth/passkey/devices', 'auth:/auth/passkey/pass (write)', 'auth:/auth/passkey/remove',
+      'answer:full-access', 'auth:/auth/devices/remove', 'auth:/auth/passkey/devices', 'auth:/auth/passkey/pass (write)', 'auth:/auth/passkey/remove',
       'changes:protection-off', 'route:plugin-permission-defaults/src/routes.ts#PERMISSION_ROUTES.setFullAccess',
     ])
     expect([...ALWAYS_ASK_ACTIONS].sort()).toEqual([
       DEVICE_REMOVE_ACTION, PASSKEY_DEVICES_ACTION, PASS_SETTING_ACTION, PASSKEY_REMOVE_ACTION, 'changes/protection-off', 'plugin-permission-defaults/set-full-access',
+      'answer/full-access',
     ].sort())
   })
 

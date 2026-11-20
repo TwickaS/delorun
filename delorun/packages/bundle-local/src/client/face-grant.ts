@@ -64,7 +64,7 @@ export { PASS_GRANT_ID } from '@delorun/plugin-changes/face-grant'
 
 /**
  * The proactive confirmation for callers that ask before they send (Changes, Update, a seat's answer): while this page's
- * Face ID pass covers the action, it reads the pass from the home once more and, if it still covers it, resolves with
+ * Face ID pass covers the action (and, for an approval answer, `answer/<grants marker>`), it reads the pass from the home once more and, if it still covers it, resolves with
  * {@link PASS_GRANT_ID} and shows no sheet; otherwise it asks. A request the home refuses although it carried
  * {@link PASS_GRANT_ID} (the pass ended in between) is asked again with a sheet by `grantingFetch`.
  * @param grant - the queued confirmation.
@@ -73,7 +73,9 @@ export { PASS_GRANT_ID } from '@delorun/plugin-changes/face-grant'
  */
 export function passAware(grant: FaceGrant, pass: { readonly covers: (action: string) => boolean; readonly refresh: () => Promise<void> }): FaceGrant {
   return async (request) => {
-    const live = (): boolean => request.signal?.aborted !== true && pass.covers(request.action)
+    // An answer is also checked under its own action, `answer/<grants marker>`, so a seat's full-access answer asks.
+    const answer = 'answer' in request.call ? `answer/${request.call.answer.grants}` : undefined
+    const live = (): boolean => request.signal?.aborted !== true && pass.covers(request.action) && (answer === undefined || pass.covers(answer))
     if (live()) {
       await pass.refresh()
       if (live()) return PASS_GRANT_ID

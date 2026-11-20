@@ -6,7 +6,8 @@
  * - **Admits:** while the device holds a live pass, the row needs no grant for the call.
  * - **Always asks:** the row needs a one-action grant for the call even during a pass, and a Face ID that confirms its
  *   grant action opens no pass: adding or removing devices and passkeys, the Face ID settings, the pass setting, turning
- *   Changes protection off and a workspace's full access.
+ *   Changes protection off, a workspace's full access, and an approval answer that grants full access (whose Face ID,
+ *   confirming an answer rather than actions, still opens a pass).
  *
  * @module @delorun/home-auth/pass-policy
  */
@@ -20,6 +21,8 @@ export const PASS_ALWAYS_ASK: Readonly<Record<string, string>> = {
   'auth:/auth/passkey/pass (write)': PASS_SETTING_ACTION,
   'changes:protection-off': 'changes/protection-off',
   'route:plugin-permission-defaults/src/routes.ts#PERMISSION_ROUTES.setFullAccess': 'plugin-permission-defaults/set-full-access',
+  // An answer's action is `answer/<grants marker>`, as the studio names it; a Face ID on an answer still opens a pass.
+  'answer:full-access': 'answer/full-access',
 }
 
 /** The `face` rows a live pass admits with no grant for the call. */
@@ -104,7 +107,6 @@ export const PASS_ADMITS: ReadonlySet<string> = new Set([
   'changes:update-rollback',
   'changes:stop',
   'changes:setup',
-  'answer:full-access',
   'answer:workspace-management',
   'answer:external-agent',
   'answer:real-browser',

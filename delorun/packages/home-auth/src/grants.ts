@@ -490,19 +490,19 @@ export class GrantStore {
   /**
    * Open a pass for one device on one listener after a verified Face ID assertion. A pass that is already live stays as
    * it is: a pass is fixed from the Face ID that opened it and never slides.
-   * @param holder - the device and listener the assertion came from; a device holds no page unlock.
+   * @param holder - the device and listener the assertion came from. A device holds no page unlock, so the pass is keyed
+   *   without one; a call that carries a page unlock matches no pass.
    * @param minutes - the pass setting; 0 opens none.
    * @returns the live pass, or undefined when the setting is 0.
-   * @throws {Error} for a holder with a page unlock: a pass keyed on one would stop matching the device's calls.
    */
-  openPass(holder: GrantHolder, minutes: number): PassView | undefined {
-    if (holder.unlockId !== undefined) throw new Error('home-auth: a Face ID pass is opened for a device and listener, never for a page unlock')
-    const live = this.passOf(holder)
+  openPass(holder: Pick<GrantHolder, 'deviceId' | 'listener'>, minutes: number): PassView | undefined {
+    const device = { deviceId: holder.deviceId, listener: holder.listener }
+    const live = this.passOf(device)
     if (live !== undefined) return live
     if (!(minutes > 0)) return undefined
     const startedAt = this.now()
-    const pass: StoredPass = { holder: { deviceId: holder.deviceId, listener: holder.listener }, startedAt, endsAt: startedAt + minutes * 60_000, lastSeenAt: startedAt }
-    this.passes.set(peerKey(holder), pass)
+    const pass: StoredPass = { holder: device, startedAt, endsAt: startedAt + minutes * 60_000, lastSeenAt: startedAt }
+    this.passes.set(peerKey(device), pass)
     this.log(`home-auth: pass.started device=${holder.deviceId} listener=${holder.listener} minutes=${String(minutes)}`)
     return viewOf(pass, startedAt)
   }

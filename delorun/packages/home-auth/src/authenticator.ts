@@ -364,7 +364,7 @@ export class HomeAuthAuthenticator extends Authenticator {
     const agentId: unknown = typeof agent === 'object' && agent !== null ? Reflect.get(agent, 'id') : undefined
     if (grants !== undefined && typeof callId === 'string' && typeof agentId === 'string' && typeof marker === 'string' && typeof answer.value === 'string'
       && grants.consumeAnswer({ deviceId: reach.deviceId, listener: reach.listener }, answerKey({ agent: agentId, callId, grants: marker }), answer.value) !== undefined) return
-    // The Peer's live Face ID pass admits a granting answer too (A499): it is bound to this device, listener and page unlock.
+    // The device's live Face ID pass on this listener admits a granting answer whose row allows it (A499); a full-access answer is always-ask (F48).
     if (grants !== undefined && typeof marker === 'string' && passAdmitsRow(grants, { deviceId: reach.deviceId, listener: reach.listener, unlockId: reach.unlockId }, `answer:${marker}`)) {
       this.ctx.logger.info(`home-auth: pass.used device=${reach.deviceId} listener=${reach.listener} answer=${answer.value} grants=${marker}`)
       return

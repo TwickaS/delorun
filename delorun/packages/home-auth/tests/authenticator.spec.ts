@@ -310,11 +310,29 @@ describe('the authenticator provider', () => {
       provider().checkAnswer({ peer: admitted.peer, event: 'approval/request', request: { agent: { id: 'chat-a' }, callId: 'call_3', grants: marker }, value: 'allowed-once' })
     }
     grants.openPass({ deviceId: recordOf(3, ADDRESS).id, listener: 'reach-tailscale-private' }, 15)
-    expect(() => { answer('full-access') }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
+    expect(() => { answer('workspace-management') }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
     grants.openPass({ deviceId: recordOf(2, ADDRESS).id, listener: 'reach-tailscale-private' }, 15)
-    for (const marker of ['full-access', 'workspace-management', 'external-agent', 'real-browser']) expect(() => { answer(marker) }, marker).not.toThrow()
+    for (const marker of ['workspace-management', 'external-agent', 'real-browser']) expect(() => { answer(marker) }, marker).not.toThrow()
     grants.endPass({ deviceId: recordOf(2, ADDRESS).id, listener: 'reach-tailscale-private' }, 'lock-now')
-    expect(() => { answer('full-access') }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
+    expect(() => { answer('workspace-management') }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
+  })
+
+  // Moving answer:full-access back into PASS_ADMITS lets a picked-up phone in a pass turn on full access with one tap (F48).
+  it('still refuses a full-access answer under a live pass without its own grant, and admits it with one', async () => {
+    ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
+    const admitted = provider().admit(request({ headers: { cookie: `__Host-delorun-session=${await session(2)}` } }), 'reach-tailscale-private')
+    if (admitted.kind !== 'admitted') throw new Error('not admitted')
+    const grants = ctx.homeAuth.faceGrants()
+    if (grants === undefined) throw new Error('no grant store')
+    const holder = { deviceId: recordOf(2, ADDRESS).id, listener: 'reach-tailscale-private' } as const
+    const answer = (): void => {
+      provider().checkAnswer({ peer: admitted.peer, event: 'approval/request', request: { agent: { id: 'chat-a' }, callId: 'call_4', grants: 'full-access' }, value: 'allowed-once' })
+    }
+    grants.openPass(holder, 60)
+    expect(() => { answer() }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
+    grants.mintAnswer(holder, answerKey({ agent: 'chat-a', callId: 'call_4', grants: 'full-access' }), 'allowed-once')
+    expect(() => { answer() }).not.toThrow()
+    expect(() => { answer() }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
   })
 
   // Removing endPeer's pass ending leaves a pass live after its Peer is gone.
