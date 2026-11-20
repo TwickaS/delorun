@@ -234,3 +234,55 @@ export function reconcileLayout(model: LayoutModel | undefined, main: PaneId, pa
   for (const pane of wanted) if (!hasPane(result, pane)) result = layoutOf(insertDefault(result.root, pane))
   return result
 }
+
+/** One place a pane can go, for a "Move to…" menu: the drop target and the pane it is relative to. */
+export interface MoveOption {
+  readonly target: PaneTarget
+}
+
+/**
+ * List where a pane can be moved, for a menu that does what a drag does: beside each other pane (left, right, above, below), into
+ * each other pane's tabs, and along each edge of the layout. This is the keyboard route to moving a pane, because the library's
+ * grip is pointer and touch only.
+ * @param model - the layout.
+ * @param pane - the pane to move.
+ * @returns the options in reading order of the other panes, then the four edges; empty when the pane is the only one.
+ */
+export function moveOptions(model: LayoutModel, pane: PaneId): readonly MoveOption[] {
+  const others = panesOf(model).filter(candidate => candidate !== pane)
+  if (others.length === 0) return []
+  const regions = ['left', 'right', 'top', 'bottom', 'center'] as const
+  const edges = ['left', 'right', 'top', 'bottom'] as const
+  return [
+    ...others.flatMap(other => regions.map((region): MoveOption => ({ target: { kind: 'pane', pane: other, region } }))),
+    ...edges.map((edge): MoveOption => ({ target: { kind: 'edge', edge } })),
+  ]
+}
+
+/** A layout cut to what fits, and what was left out. */
+export interface FittedLayout {
+  /** The layout to draw: the first panes in reading order that fit, the main chat always among them. */
+  readonly model: LayoutModel
+  /** The panes left out, still pinned, in reading order. */
+  readonly hidden: readonly PaneId[]
+}
+
+/**
+ * Cut a layout to `capacity` panes for drawing, so a saved layout restored in a smaller window does not squeeze its panes below the
+ * least size. The saved layout is not changed: pass the stored model here and keep storing it; hidden panes reappear when room returns.
+ * @param model - the layout.
+ * @param main - the main chat's pane, which is never left out.
+ * @param capacity - how many panes fit, from `paneCapacity`.
+ * @returns the layout to draw and the panes left out.
+ */
+export function fitLayout(model: LayoutModel, main: PaneId, capacity: number): FittedLayout {
+  const order = panesOf(model)
+  const room = Math.max(1, Math.floor(capacity))
+  if (order.length <= room) return { model, hidden: [] }
+  const keep = new Set<PaneId>([main])
+  for (const pane of order) if (keep.size < room) keep.add(pane)
+  const hidden = order.filter(pane => !keep.has(pane))
+  let root: LayoutNode | undefined = model.root
+  for (const pane of hidden) if (root !== undefined) root = removeFrom(root, pane)
+  return { model: layoutOf(root ?? leafOf([main])), hidden }
+}

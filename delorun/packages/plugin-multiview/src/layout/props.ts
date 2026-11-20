@@ -8,7 +8,7 @@
 import type { ReactNode } from 'react'
 import type { LayoutLimits } from './limits.ts'
 import type { LayoutArea, LayoutModel, PaneId, PaneTarget } from './model.ts'
-import type { LayoutResult } from './ops.ts'
+import type { LayoutResult, MoveOption } from './ops.ts'
 import type { LayoutPreset } from './presets.ts'
 
 /** Why the layout changed, for the consumer's own bookkeeping (what to persist, whether to refocus). */
@@ -66,6 +66,8 @@ export interface PaneHeaderControls {
   readonly actions: PaneLayoutActions
   /** The other panes this pane can swap places with, in reading order. */
   readonly swapCandidates: readonly PaneId[]
+  /** Where this pane can go, for a "Move to…" menu: the keyboard route to what dragging the grip does. */
+  readonly moveOptions: readonly MoveOption[]
   /** Whether Close is offered: false for the main chat. */
   readonly canClose: boolean
 }
@@ -78,8 +80,8 @@ export interface PaneLayoutLabels {
   readonly region: string
   /** Names the tab strip of a leaf with several panes. */
   readonly tabList: string
-  /** Names the drag preview and the drop hints, given the pane's own name. */
-  readonly dragging: (paneName: string) => string
+  /** Names the grip a pane is dragged by, for example "Move pane". */
+  readonly grip: string
 }
 
 /** What the adapter takes. The layout is controlled: the consumer owns `model` and the adapter reports changes. */
@@ -114,7 +116,7 @@ export interface PaneLayoutProps {
    * @param pane - the pane.
    */
   readonly renderTab: (pane: PaneId) => ReactNode
-  /** The pane that holds keyboard focus, if any; the adapter focuses its header when it changes. */
+  /** The pane that holds keyboard focus, if any; it is passed to its body and header as {@link PaneState.focused}. */
   readonly focusedPane?: PaneId | undefined
   /**
    * Called when a pane takes focus by pointer or keyboard.

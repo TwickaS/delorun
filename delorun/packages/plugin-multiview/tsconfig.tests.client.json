@@ -11,6 +11,8 @@
   "include": [
     "tests/**/*.spec.ts",
     "tests/**/*.spec.tsx",
+    "tests/layout/harness.tsx",
+    "tests/layout/browser/*.tsx",
     "src/client",
     "src/layout",
     "src/store",
