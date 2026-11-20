@@ -33,7 +33,7 @@ describe('compositeOver', () => {
 })
 
 describe('edgeSurfaceOf', () => {
-  const rect = (width: number, height: number) => ({ width, height }) as DOMRect
+  const rect = (width: number, height: number, top = 0) => ({ width, height, top, bottom: top + height }) as DOMRect
   const element = (background: string, size: DOMRect): HTMLElement => {
     const node = document.createElement('div')
     node.getBoundingClientRect = () => size
@@ -43,10 +43,12 @@ describe('edgeSurfaceOf', () => {
   }
 
   it('takes the background of a surface that fills an opaque viewport, and the mask for a card', () => {
-    document.body.style.setProperty('--dsw-alias-bg-mask-1', 'rgba(0, 0, 0, 0.3)')
-    const win = { ...window, innerWidth: 390, innerHeight: 800, getComputedStyle: window.getComputedStyle.bind(window) } as Window
+    document.body.style.setProperty('--dsw-alias-bg-mask-1', '#0000004d')
+    const win = { innerWidth: 390, innerHeight: 800, getComputedStyle: window.getComputedStyle.bind(window) }
     expect(edgeSurfaceOf(element('rgb(10, 20, 30)', rect(390, 800)), win)).toEqual({ top: 'rgb(10, 20, 30)', bottom: 'rgb(10, 20, 30)' })
-    expect(edgeSurfaceOf(element('rgb(10, 20, 30)', rect(380, 300)), win)).toEqual({ dim: 'rgba(0, 0, 0, 0.3)' })
+    expect(edgeSurfaceOf(element('rgb(10, 20, 30)', rect(390, 792, 4)), win)).toEqual({ top: 'rgb(10, 20, 30)', bottom: 'rgb(10, 20, 30)' })
+    expect(edgeSurfaceOf(element('rgb(10, 20, 30)', rect(380, 300)), win)).toEqual({ dim: expect.stringMatching(/^rgba\(0, 0, 0, 0\.3/) })
+    expect(edgeSurfaceOf(element('rgb(10, 20, 30)', rect(300, 800)), win, true)).toEqual({ top: 'rgb(10, 20, 30)', bottom: 'rgb(10, 20, 30)' })
     document.body.style.removeProperty('--dsw-alias-bg-mask-1')
     expect(edgeSurfaceOf(element('rgb(10, 20, 30)', rect(380, 300)), win)).toBeUndefined()
   })

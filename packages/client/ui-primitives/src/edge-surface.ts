@@ -29,15 +29,14 @@ interface Registry {
   readonly listeners: Set<() => void>
 }
 
-const registries = new WeakMap<Document, Registry>()
+/** The document property that holds the registry, so plugin bundles that each carry this module share one stack. */
+const REGISTRY_KEY = Symbol.for('@deepseek-ai/dsh-client-ui-primitives/edge-surfaces')
+type WithRegistry = Document & { [REGISTRY_KEY]?: Registry }
 
 function registryOf(doc: Document): Registry {
-  let registry = registries.get(doc)
-  if (registry === undefined) {
-    registry = { entries: [], listeners: new Set() }
-    registries.set(doc, registry)
-  }
-  return registry
+  const holder: WithRegistry = doc
+  holder[REGISTRY_KEY] ??= { entries: [], listeners: new Set() }
+  return holder[REGISTRY_KEY]
 }
 
 /**
@@ -98,31 +97,57 @@ export function compositeOver(overlay: string, base: string): string {
   return `rgb(${mix(1)}, ${mix(2)}, ${mix(3)})`
 }
 
+/** A surface whose box reaches within this many pixels of the top and bottom of the viewport covers the strips, as the strips show 5px. */
+const EDGE_REACH = 5
+
+/** The share of the viewport width a surface needs, with the strips' height, to count as covering them.
+ * A phone dialog may leave a few pixels at the sides. */
+const MOSTLY_WIDE = 0.9
+
 /** The token a dialog mask takes its colour from. */
 const MASK_TOKEN = '--dsw-alias-bg-mask-1'
+
+/**
+ * Resolve a CSS colour to the browser's `rgb()` or `rgba()` form, which hex and named colours do not use as written.
+ * @param doc - the document that resolves the colour.
+ * @param win - its window.
+ * @param colour - any CSS colour.
+ * @returns the computed colour.
+ */
+function normalisedColour(doc: Document, win: Pick<Window, 'getComputedStyle'>, colour: string): string {
+  const probe = doc.createElement('span')
+  probe.style.color = colour
+  doc.body.appendChild(probe)
+  const resolved = win.getComputedStyle(probe).color
+  probe.remove()
+  return resolved
+}
 
 /**
  * Choose the edge entry for an open surface: a surface that fills the viewport with an opaque background puts that
  * background at both edges, and any other surface is a card on a mask, so the mask tints the edges.
  * @param element - the surface's own element.
  * @param win - its window.
+ * @param solid - take the element's own opaque background even when it does not fill the viewport, as a side drawer does.
  * @returns the entry, or undefined when the surface needs none because the mask token is empty.
  */
-export function edgeSurfaceOf(element: HTMLElement, win: Window): EdgeSurface | undefined {
+export function edgeSurfaceOf(element: HTMLElement, win: Pick<Window, 'innerWidth' | 'innerHeight' | 'getComputedStyle'>, solid = false): EdgeSurface | undefined {
   const rect = element.getBoundingClientRect()
   const background = win.getComputedStyle(element).backgroundColor
   const opaque = /^rgb\(/.test(background) || /^rgba\(.*,\s*1\)$/.test(background)
-  if (opaque && rect.width >= win.innerWidth - 1 && rect.height >= win.innerHeight - 1) return { top: background, bottom: background }
-  const dim = win.getComputedStyle(element.ownerDocument.body).getPropertyValue(MASK_TOKEN).trim()
-  return dim === '' ? undefined : { dim }
+  const coversStrips = rect.width >= win.innerWidth * MOSTLY_WIDE && rect.top <= EDGE_REACH && rect.bottom >= win.innerHeight - EDGE_REACH
+  if (opaque && (solid || coversStrips)) return { top: background, bottom: background }
+  const token = win.getComputedStyle(element.ownerDocument.body).getPropertyValue(MASK_TOKEN).trim()
+  return token === '' ? undefined : { dim: normalisedColour(element.ownerDocument, win, token) }
 }
 
 /**
  * Hold a full-screen surface or a dialog on the edge stack while it is open, so the browser's bars take its colour.
  * @param element - a ref to the surface's own element.
  * @param open - whether the surface is showing.
+ * @param solid - take the element's own opaque background even when it does not fill the viewport, as a side drawer does.
  */
-export function useSurfaceEdges(element: RefObject<HTMLElement | null>, open: boolean): void {
+export function useSurfaceEdges(element: RefObject<HTMLElement | null>, open: boolean, solid = false): void {
   useLayoutEffect(() => {
     const target = element.current
     if (!open || target === null) return undefined
@@ -131,7 +156,7 @@ export function useSurfaceEdges(element: RefObject<HTMLElement | null>, open: bo
     let release: (() => void) | undefined
     const apply = (): void => {
       release?.()
-      const surface = edgeSurfaceOf(target, win)
+      const surface = edgeSurfaceOf(target, win, solid)
       release = surface === undefined ? undefined : pushEdgeSurface(target.ownerDocument, surface)
     }
     apply()
@@ -140,5 +165,5 @@ export function useSurfaceEdges(element: RefObject<HTMLElement | null>, open: bo
       win.removeEventListener('resize', apply)
       release?.()
     }
-  }, [element, open])
+  }, [element, open, solid])
 }
