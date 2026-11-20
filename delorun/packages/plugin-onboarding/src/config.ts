@@ -45,7 +45,7 @@ export interface OnboardingSettings {
   /** How long adding a package may run before its card says it is still working, in seconds. */
   addWaitSeconds: number
   /** What the person chose for Browser: `on` or `off`; empty while they never chose, which counts as on. */
-  browser: string
+  browser: '' | 'on' | 'off'
 }
 
 /** The settings of a profile that has not started onboarding. */
@@ -59,7 +59,7 @@ export interface Config {
   optionalRows: Volatile<string[]>
   pausedStart: Volatile<string>
   addWaitSeconds: Volatile<number>
-  browser: Volatile<string>
+  browser: Volatile<'' | 'on' | 'off'>
   registry: string
   registryTimeoutMs: number
   keyTestTimeoutMs: number

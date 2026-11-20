@@ -227,9 +227,10 @@ describe('the test', () => {
   })
 
   // Pins the ready check: a browser that is not ready has nothing to test, and the download comes first.
-  it('is held until Browser is ready', async () => {
+  it('is not offered until Browser is ready', async () => {
     await show({ browser: browserFake(DOWNLOAD) })
-    expect((screen.getByRole('button', { name: en['page.test'] }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.queryByRole('button', { name: en['page.test'] })).toBeNull()
+    expect(screen.queryByText(en['page.asks'])).toBeNull()
   })
 
   it('is held on a phone, which says where to run it', async () => {
