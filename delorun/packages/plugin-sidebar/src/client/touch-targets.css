@@ -6,7 +6,7 @@
  */
 :root {
   --delorun-touch-target: 44px;
-  --delorun-stepper-arrow-width: 28px;
+  --delorun-stepper-arrow-width: 20px;
   --delorun-stepper-arrow-height: 16px;
 }
 
@@ -93,6 +93,10 @@
 
   [class*='_footRow']:has(> [class*='_footerActionsInline']) > :is([class*='_settingsArea'], [class*='_footPanels'], [class*='_footSpacer']) {
     display: contents;
+  }
+
+  [class*='_footRow']:has(> [class*='_footerActionsInline']) [class*='_triggerRow'] {
+    justify-content: center;
   }
 
   [class*='_footRow']:has(> [class*='_footerActionsInline']) [data-sidebar-foot-line] {
