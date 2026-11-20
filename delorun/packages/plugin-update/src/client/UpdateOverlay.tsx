@@ -5,17 +5,20 @@
  * outlive the Settings dialog, so a person who closed Settings still sees the update finish.
  */
 import { useState } from 'react'
-import { Button, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, StateDot, ToastSlot } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { HostObservable, InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { UpdateResultView, UpdateStateView } from '../wire.ts'
 import type { UpdateLoad } from './controller.ts'
+import { UpdateProgress, usePhone, type ConnectionState } from './UpdateProgress.tsx'
+import { NotesHighlights } from './NotesSheet.tsx'
 import { UpdateDialog, type UpdateDialogActions } from './UpdateDialog.tsx'
 import css from './UpdatePanel.module.css'
-import { controlUse, pluralKey, type T } from './parts.tsx'
+import { controlUse, keepVersions, localTime, type T } from './parts.tsx'
 
 /** What the overlay reads and does. */
 export interface UpdateOverlayInjected {
-  readonly hooks: { readonly load: HostObservable<UpdateLoad>, readonly switching: HostObservable<boolean>, readonly dialog: HostObservable<boolean> }
+  readonly hooks: { readonly load: HostObservable<UpdateLoad>, readonly switching: HostObservable<boolean>, readonly dialog: HostObservable<boolean>, readonly connection: HostObservable<ConnectionState> }
+  readonly reconnect: () => void
   readonly actions: UpdateDialogActions
   readonly cancel: () => Promise<unknown>
   readonly dismiss: () => Promise<unknown>
@@ -32,19 +35,24 @@ export type UpdateOverlayProps = PropsRuntime<'shell.overlay'> & PropsLocale<'de
  * @returns the cards and the dialog, or nothing.
  */
 export function UpdateOverlay(props: UpdateOverlayProps) {
-  const { t, actions, cancel, dismiss, closeDialog, openChanges } = props
+  const { t, actions, cancel, dismiss, closeDialog, openChanges, reconnect } = props
+  const connection = props.useConnection(value => value)
   const load = props.useLoad(value => value)
   const switching = props.useSwitching(value => value)
   const dialog = props.useDialog(value => value)
-  return <UpdateCards t={t} load={load} switching={switching} dialog={dialog} actions={actions} cancel={cancel} dismiss={dismiss} closeDialog={closeDialog} openChanges={openChanges} />
+  return <UpdateCards t={t} load={load} switching={switching} dialog={dialog} actions={actions} cancel={cancel} dismiss={dismiss} closeDialog={closeDialog} openChanges={openChanges} reconnect={reconnect} connection={connection} />
 }
 
 /** What {@link UpdateCards} draws, read from the hooks. */
-export interface UpdateCardsProps extends Omit<UpdateOverlayInjected, 'hooks'> {
+export interface UpdateCardsProps extends Omit<UpdateOverlayInjected, 'hooks' | 'reconnect'> {
+  /** Reconnect now; the connection's alert shows it. */
+  readonly reconnect?: (() => void) | undefined
   readonly t: T
   readonly load: UpdateLoad
   readonly switching: boolean
   readonly dialog: boolean
+  /** The connection's state. */
+  readonly connection?: ConnectionState | undefined
 }
 
 /**
@@ -52,57 +60,17 @@ export interface UpdateCardsProps extends Omit<UpdateOverlayInjected, 'hooks'> {
  * @param props - the values, the actions and the dictionary.
  * @returns the cards and the dialog, or nothing.
  */
-export function UpdateCards({ t, load, switching, dialog, actions, cancel, dismiss, closeDialog, openChanges }: UpdateCardsProps) {
+export function UpdateCards({ t, load, switching, dialog, actions, cancel, dismiss, closeDialog, openChanges, reconnect, connection }: UpdateCardsProps) {
   const state = load.status === 'ready' ? load.state : undefined
   const reconnecting = load.status === 'ready' && load.reconnecting
+  const phone = usePhone()
   return <>
-    {state === undefined ? null : <div className={css.overlay}>
-      <ProgressCard state={state} switching={switching} reconnecting={reconnecting} t={t} cancel={cancel} />
-      {state.result === undefined || state.progress.kind !== 'idle' ? null : <OutcomeCard state={state} result={state.result} t={t} dismiss={dismiss} />}
-    </div>}
+    {state === undefined ? null : phone ? <UpdateProgress variant="toast" state={state} switching={switching} reconnecting={reconnecting} t={t} cancel={cancel} connection={connection} reconnect={reconnect} /> : null}
+    {state === undefined || state.result === undefined || state.progress.kind !== 'idle' ? null : <OutcomeCard state={state} result={state.result} notes={state.notes} t={t} dismiss={dismiss} />}
     {dialog && state !== undefined
       ? <UpdateDialog state={state} t={t} actions={actions} onClose={closeDialog} openChanges={openChanges} />
       : null}
   </>
-}
-
-/**
- * The card while an update or a rollback runs: waiting for chats with Cancel, or switching and reconnecting.
- * @param props - the state, whether this page began a switch, whether the Host is out of reach, and Cancel.
- * @returns the card, or nothing.
- */
-function ProgressCard({ state, switching, reconnecting, t, cancel }: {
-  readonly state: UpdateStateView
-  readonly switching: boolean
-  readonly reconnecting: boolean
-  readonly t: T
-  readonly cancel: () => Promise<unknown>
-}) {
-  const [busy, setBusy] = useState(false)
-  const progress = state.progress
-  const use = controlUse(state, 'update-cancel', t)
-  if (progress.kind === 'applying' || progress.kind === 'rolling-back') {
-    const waiting = progress.phase === 'waiting'
-    const text = waiting
-      ? progress.runningChats === 0 ? t('progress.waiting.zero') : t(pluralKey('progress.waiting', progress.runningChats), { count: progress.runningChats })
-      : t(progress.kind === 'applying' ? 'progress.switching' : 'progress.rollback.switching', { version: progress.target })
-    return <div className={`${css.card} ${css.warn}`} role="status" data-update-progress={progress.phase}>
-      <div className={css.cardRow}>
-        <div className={css.main}>
-          <p className={css.title}><StateDot state="ongoing" />{text}</p>
-        </div>
-        {waiting ? <div className={css.actions}>
-          <Button variant="outline" size="sm" disabled={busy || use.disabled} title={use.title} onClick={() => { setBusy(true); void cancel().finally(() => { setBusy(false) }) }}>{t('progress.cancel')}</Button>
-        </div> : null}
-      </div>
-    </div>
-  }
-  if (reconnecting || (switching && progress.kind === 'idle' && state.result === undefined)) {
-    return <div className={`${css.card} ${css.warn}`} role="status" data-update-progress="reconnecting">
-      <p className={css.title}><StateDot state="ongoing" />{t('progress.reconnecting')}</p>
-    </div>
-  }
-  return null
 }
 
 /**
@@ -137,9 +105,10 @@ const REASONS: Readonly<Record<string, true>> = {
  * @param props - the state, the record, the dictionary and Dismiss.
  * @returns the card.
  */
-function OutcomeCard({ state, result, t, dismiss }: {
+function OutcomeCard({ state, result, notes, t, dismiss }: {
   readonly state: UpdateStateView
   readonly result: UpdateResultView
+  readonly notes: UpdateStateView['notes']
   readonly t: T
   readonly dismiss: () => Promise<unknown>
 }) {
@@ -152,11 +121,12 @@ function OutcomeCard({ state, result, t, dismiss }: {
   const [title, body] = result.outcome === 'committed' || result.outcome === 'rolled-back'
     ? [t(`outcome.${result.kind}.${result.outcome}`, values), t(`outcome.${result.kind}.${result.outcome}.body`, values)] as const
     : [t(`outcome.${result.outcome}`, values), t(`outcome.${result.outcome}.body`, values)] as const
-  return <div className={`${css.card} ${good ? '' : css.bad}`} role={good ? 'status' : 'alert'} data-update-outcome={result.outcome} data-update-kind={result.kind}>
+  return <ToastSlot width={420}><div className={`${css.card} ${css.floating} ${good ? '' : css.bad}`} role={good ? 'status' : 'alert'} data-update-outcome={result.outcome} data-update-kind={result.kind}>
     <div className={css.cardRow}>
       <div className={css.main}>
-        <p className={css.title}><StateDot state={good ? 'done' : 'error'} />{title}</p>
-        <p className={css.body}>{body}</p>
+        <p className={css.title}><StateDot state={good ? 'done' : 'error'} /><span>{keepVersions(title, [result.to, result.from])}</span></p>
+        <p className={css.body}>{keepVersions(body, [result.to, result.from])}</p>
+        {good ? <NotesHighlights notes={notes} t={t} /> : null}
       </div>
       <div className={css.actions}>
         <Button variant="outline" size="sm" aria-expanded={details} onClick={() => { setDetails(value => !value) }}>{t(details ? 'outcome.details.hide' : 'outcome.details')}</Button>
@@ -166,7 +136,7 @@ function OutcomeCard({ state, result, t, dismiss }: {
     {details ? <div data-update-details>
       {result.reason === undefined ? null : <p className={css.meta}>{t('outcome.details.reason', { reason: result.reason })}</p>}
       {result.criterion === undefined ? null : <p className={css.meta}>{t('outcome.details.criterion', { criterion: result.criterion })}</p>}
-      <p className={css.meta}>{t('outcome.details.at', { at: result.at })}</p>
+      <p className={css.meta}>{t('outcome.details.at', { at: localTime(result.at) })}</p>
     </div> : null}
-  </div>
+  </div></ToastSlot>
 }

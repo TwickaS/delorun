@@ -7,15 +7,19 @@
  *
  * @module @delorun/plugin-update/routes
  */
+import { dirname } from 'node:path'
 import type { HomeStatus } from '@delorun/contract-home-process'
 import type { UpdateNotice } from '@delorun/contract-update-report'
 import { journalPath, readJournal, readUpdateResult, removeUpdateResult, updateResultPath, type ResponseLine, type UpdateChannelAccess } from '@delorun/home-process'
 import { flag, onlyFields, RouteRefusal, type ChangesGate, type RouteHandler } from '@delorun/plugin-changes'
 import { begin, finish } from './home-channel.ts'
+import { notesBetween } from './notes.ts'
+import type { UpdateChats } from './chats.ts'
+import { clearStopped, readStopped, stoppedPath, stoppedView, withStoppedLock, writeStopped } from './stopped.ts'
 import { hold, holds, isUpdateReport, missingTicks, viewOf, type HeldUpdate } from './report-view.ts'
 import {
-  UPDATE_PATHS,
-  type ChatChoice, type RollbackStateView, type StopBegunView, type UpdateAccessView, type UpdateBegunView, type UpdateCancelView, type UpdateCheckedView,
+  canContinueByHand, UPDATE_PATHS,
+  type ChatChoice, type ContinueChatView, type RollbackStateView, type RunningChatView, type StoppedChatState, type StopBegunView, type StopChatsView, type UpdateAccessView, type UpdateBegunView, type UpdateCancelView, type UpdateCheckedView,
   type UpdatePhaseView, type UpdateProgressView, type UpdateResultView, type UpdateStateView,
 } from './wire.ts'
 
@@ -42,6 +46,18 @@ export interface UpdateRouteDependencies {
   readonly logger: { info(message: string): void, warn(message: string): void }
   /** The time, in milliseconds since the epoch. */
   readonly now: () => number
+  /** Read the installed release's `changelog.json`, parsed; `undefined` when it is absent or unreadable. */
+  readonly changelog?: () => Promise<unknown>
+  /** The Host's running chats; `undefined` while no Host source is attached. */
+  readonly chats?: () => UpdateChats | undefined
+  /** Whether stopped chats continue by themselves after an update (the setting now). */
+  readonly continueAutomatically: () => boolean
+  /**
+   * Send the one continue message to a chat.
+   * @param sessionId - the chat.
+   * @returns how it stands afterwards: `continued`, `skipped-missing`, `skipped-running` or `failed`.
+   */
+  readonly sendContinue: (sessionId: string) => Promise<StoppedChatState>
 }
 
 /** The release check as the routes use it. */
@@ -94,6 +110,15 @@ function ticksOf(value: unknown): readonly string[] {
 }
 
 /**
+ * @param home - the Delorun home.
+ * @param profile - the profile's name.
+ * @returns the path of the record of the chats an update stopped, beside the update result record.
+ */
+function stoppedFile(home: string, profile: string): string {
+  return stoppedPath(dirname(updateResultPath(home, profile)))
+}
+
+/**
  * Build the update routes.
  * @param dependencies - what the routes reach.
  * @returns every route: `state` and the controls.
@@ -129,7 +154,7 @@ export function updateRoutes(dependencies: UpdateRouteDependencies): readonly Up
     const may = accessView.may
     const view: UpdateAccessView = {
       actor: accessView.actor, phonePowers: accessView.phonePowers.level,
-      may: { 'update-check': may['update-check'], 'update-begin': may['update-begin'], 'update-cancel': may['update-cancel'], 'update-rollback': may['update-rollback'], 'update-dismiss': may['update-dismiss'], stop: may.stop },
+      may: { 'update-check': may['update-check'], 'update-begin': may['update-begin'], 'update-cancel': may['update-cancel'], 'update-rollback': may['update-rollback'], 'update-dismiss': may['update-dismiss'], 'update-continue': may['update-continue'], stop: may.stop },
     }
     const channelOpen = channel()
     const checked = await check()?.state()
@@ -158,6 +183,18 @@ export function updateRoutes(dependencies: UpdateRouteDependencies): readonly Up
       ...resultRecord.reason === undefined ? {} : { reason: resultRecord.reason },
       ...resultRecord.criterion === undefined ? {} : { criterion: resultRecord.criterion },
     }
+    const notes = result?.kind === 'update' && result.outcome === 'committed' && dependencies.changelog !== undefined
+      ? notesBetween(await dependencies.changelog().catch(() => undefined), result.from, result.to)
+      : undefined
+    const stoppedRecord = await readStopped(stoppedFile(ctx.home, ctx.profile))
+    const mayBegin = may['update-begin'].ok
+    // An attempt that ended without a restart (cancelled, or stopped waiting for chats) leaves its chats to continue now, not at a later start.
+    if (stoppedRecord?.automatic === true && progress.kind === 'idle' && begun === undefined && result !== undefined && result.to === stoppedRecord.to
+      && (result.outcome === 'aborted' || result.outcome === 'failed') && stoppedRecord.chats.some(chat => chat.state === 'stopped')) {
+      settleStopped(stoppedFile(ctx.home, ctx.profile)).catch((error: unknown) => { logger.warn(`the chats the update stopped were not continued: ${error instanceof Error ? error.message : String(error)}`) })
+    }
+    const stopped = stoppedRecord === undefined ? undefined : stoppedView(mayBegin ? stoppedRecord : { ...stoppedRecord, chats: stoppedRecord.chats.map(chat => ({ ...chat, title: '' })) })
+    const runningChats = mayBegin && progress.kind === 'applying' && progress.phase === 'waiting' ? dependencies.chats?.()?.list() : undefined
     const journal = await readJournal(journalPath(ctx.home, ctx.profile)).catch(() => undefined)
     const running = release()
     const rollback: RollbackStateView = journal?.phase === 'committed' && journal.to === running.delorun && channelOpen !== undefined
@@ -171,8 +208,35 @@ export function updateRoutes(dependencies: UpdateRouteDependencies): readonly Up
       release: running, available: channelOpen !== undefined, access: view, check: checkView, progress, rollback,
       ...prepared === undefined ? {} : { prepared },
       ...result === undefined ? {} : { result },
+      ...notes === undefined ? {} : { notes },
+      ...stopped === undefined ? {} : { stopped },
+      ...runningChats === undefined ? {} : { runningChats, runningJobs: dependencies.chats?.()?.jobs() ?? 0 },
+      continueStopped: dependencies.continueAutomatically(),
     }
     return answer
+  })
+
+  /**
+   * Act on the record of stopped chats once their update attempt has ended without a Host restart: with the setting on
+   * when they were stopped, each chat gets its continue message (after it has gone idle) and leaves the record; a chat
+   * that could not be continued stays in it for its Continue button. With the setting off the record stays whole.
+   * @param path - the record's path.
+   */
+  const settleStopped = (path: string): Promise<void> => withStoppedLock(path, async () => {
+    const record = await readStopped(path)
+    if (record === undefined || !record.automatic) return
+    let chats = record.chats
+    for (const chat of record.chats) {
+      if (chat.state !== 'stopped') continue
+      chats = chats.map(each => each.sessionId === chat.sessionId ? { ...each, state: 'continued' as const } : each)
+      await writeStopped(path, { ...record, chats })
+      const state = await dependencies.sendContinue(chat.sessionId)
+      if (state !== 'continued') chats = chats.map(each => each.sessionId === chat.sessionId ? { ...each, state } : each)
+    }
+    // A chat that no longer exists is gone; a chat still running or not continued keeps its Continue button.
+    chats = chats.filter(chat => chat.state !== 'continued' && chat.state !== 'skipped-missing')
+    if (chats.length === 0) await clearStopped(path)
+    else await writeStopped(path, { ...record, chats })
   })
 
   const checkRoute = gate.open(async (body) => {
@@ -248,11 +312,13 @@ export function updateRoutes(dependencies: UpdateRouteDependencies): readonly Up
     return { kind: 'update-begun', target: update.report.to.delorun, runningChats: status?.chats ?? 0 }
   })
 
-  const cancelRoute = gate.post('update-cancel', async (body): Promise<UpdateCancelView> => {
+  const cancelRoute = gate.post('update-cancel', async (body, ctx): Promise<UpdateCancelView> => {
     onlyFields(body, [])
     const status = await statusOf()
     const waiting = status.update !== undefined
     await finish(access(), { op: 'update.cancel' })
+    // The Host stays up, so the chats the update stopped cannot wait for a later start: settle them now.
+    if (waiting) await settleStopped(stoppedFile(ctx.home, ctx.profile))
     return { cancelled: waiting }
   })
 
@@ -273,7 +339,69 @@ export function updateRoutes(dependencies: UpdateRouteDependencies): readonly Up
   const dismissRoute = gate.post('update-dismiss', async (body, ctx) => {
     onlyFields(body, [])
     await removeUpdateResult(updateResultPath(ctx.home, ctx.profile))
+    const path = stoppedFile(ctx.home, ctx.profile)
+    await withStoppedLock(path, () => clearStopped(path))
     return {}
+  })
+
+  // Class `update-begin`: ending running chats is what lets the update go on, so it needs what beginning the update needs.
+  const stopChatsRoute = gate.post('update-begin', async (body, ctx, presence): Promise<StopChatsView> => {
+    onlyFields(body, [])
+    access()
+    const path = stoppedFile(ctx.home, ctx.profile)
+    const stopped = await withStoppedLock(path, async (): Promise<readonly RunningChatView[]> => {
+      const status = await statusOf()
+      if (status.update === undefined || status.update.phase !== 'waiting' || begun === 'rollback') {
+        throw new RouteRefusal(409, 'NO_UPDATE_PENDING', 'No update is waiting for chats, so there is nothing to stop.')
+      }
+      const source = dependencies.chats?.()
+      const chats = source?.list() ?? []
+      logger.info(`stop of ${String(chats.length)} running chat(s) for the update asked from ${actorOf(presence)}`)
+      if (source === undefined || chats.length === 0) return []
+      // Recorded before anything is cancelled: the update restarts the Host, and a stop that left no record would lose the chats.
+      const before = await readStopped(path)
+      const kept = (before?.chats ?? []).filter(chat => !chats.some(running => running.sessionId === chat.sessionId))
+      await writeStopped(path, {
+        v: 1, to: status.update.target, automatic: dependencies.continueAutomatically(), at: new Date().toISOString(),
+        chats: [...kept, ...chats.map(chat => ({ ...chat, state: 'stopped' as const }))],
+      })
+      await source.cancelAll()
+      return chats
+    })
+    // A cancel that landed while the chats were being recorded ended the update first: settle them now.
+    if (stopped.length > 0 && (await statusOf().then(answer => answer, () => undefined))?.update === undefined) await settleStopped(path)
+    return { chats: stopped }
+  })
+
+  // Class `update-continue` (free): it sends one fixed message to a chat the update itself stopped, at most once per chat.
+  const continueChatRoute = gate.post('update-continue', async (body, ctx): Promise<ContinueChatView> => {
+    onlyFields(body, ['sessionId'])
+    if (typeof body.sessionId !== 'string' || body.sessionId.length > 200) throw new RouteRefusal(400, 'BAD_REQUEST', 'sessionId names a chat the update stopped.')
+    const sessionId = body.sessionId
+    const path = stoppedFile(ctx.home, ctx.profile)
+    // The chats are still being stopped, and a new turn is refused while the update waits or applies.
+    if (begun !== undefined || preparing !== undefined || applying) throw new RouteRefusal(409, 'UPDATE_IN_PROGRESS', 'The update is still running. Continue the chat once it has ended.')
+    // Fails closed: a status that cannot be read is not "no update".
+    const status = await statusOf().then(answer => answer, () => undefined)
+    if (status === undefined) throw new RouteRefusal(409, 'CHANNEL_UNREACHABLE', 'Delorun could not tell whether the update has ended. Try again in a moment.')
+    if (status.update !== undefined) throw new RouteRefusal(409, 'UPDATE_IN_PROGRESS', 'The update is still running. Continue the chat once it has ended.')
+    const change = (state: StoppedChatState) => async (): Promise<boolean> => {
+      const record = await readStopped(path)
+      const entry = record?.chats.find(chat => chat.sessionId === sessionId)
+      if (record === undefined || entry === undefined || !canContinueByHand(record.automatic, entry.state)) return false
+      await writeStopped(path, { ...record, chats: record.chats.map(chat => chat.sessionId === sessionId ? { ...chat, state } : chat) })
+      return true
+    }
+    // Marked before the send, under the record's lock: a second press, or the start's own continuation, finds it taken.
+    if (!await withStoppedLock(path, change('continued'))) throw new RouteRefusal(409, 'NOT_STOPPED_BY_UPDATE', 'The update did not stop this chat, it continues by itself, or it was already continued.')
+    const state = await dependencies.sendContinue(sessionId)
+    if (state !== 'continued') {
+      await withStoppedLock(path, async () => {
+        const record = await readStopped(path)
+        if (record !== undefined) await writeStopped(path, { ...record, chats: record.chats.map(chat => chat.sessionId === sessionId ? { ...chat, state } : chat) })
+      })
+    }
+    return { state }
   })
 
   const stopRoute = gate.post('stop', async (body, _ctx, presence): Promise<StopBegunView> => {
@@ -296,5 +424,7 @@ export function updateRoutes(dependencies: UpdateRouteDependencies): readonly Up
     { kind: 'exact', path: UPDATE_PATHS.rollback, handler: rollbackRoute },
     { kind: 'exact', path: UPDATE_PATHS.dismiss, handler: dismissRoute },
     { kind: 'exact', path: UPDATE_PATHS.stop, handler: stopRoute },
+    { kind: 'exact', path: UPDATE_PATHS.stopChats, handler: stopChatsRoute },
+    { kind: 'exact', path: UPDATE_PATHS.continueChat, handler: continueChatRoute },
   ]
 }

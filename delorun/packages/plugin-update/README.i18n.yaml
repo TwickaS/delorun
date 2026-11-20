@@ -12,20 +12,23 @@
   en: 0f339a98d6e6b44b
   zh: d2f3879c5b7acf91
 /delorun-plugin-update/contents:
-  en: 2afdba7078f10128
-  zh: 5fd634f284fdf32b
+  en: 97507fbd47d9921a
+  zh: 4c2bb5227e1e7eb1
 /delorun-plugin-update/routes:
-  en: 894a675718a4080f
-  zh: 584651565580f3ef
+  en: 624248563810d93e
+  zh: cf62eb297ae7747a
 /delorun-plugin-update/who-may-use-each-control:
-  en: e3a949807ff93da5
-  zh: 46ca72abf3116413
+  en: c5904e5a9330ba40
+  zh: 3e0804328588a48c
+/delorun-plugin-update/chats-stopped-for-an-update:
+  en: 4aad0972d2f0ae8f
+  zh: 4a8de2b6292e198c
 /delorun-plugin-update/what-the-host-keeps:
   en: ca5ef9e18d0cd028
   zh: 42ab577cf0c8d526
 /delorun-plugin-update/configuration:
-  en: ac419722c837bdf5
-  zh: 7b2b8ea673311d75
+  en: cd42a11cf060c2f2
+  zh: 2bf158fd26d0d2f1
 /delorun-plugin-update/tests:
   en: 8eef7724f8895409
   zh: 061924383a29e312

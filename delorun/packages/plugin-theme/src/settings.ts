@@ -49,6 +49,15 @@ export const EFFORT_DISPLAYS = ['label', 'bars'] as const
 /** One effort display. */
 export type EffortDisplay = typeof EFFORT_DISPLAYS[number]
 
+/** Where toasts stack, in the order the Toast position control draws its zones: the top row, then the bottom row. */
+export const TOAST_POSITIONS = ['top-left', 'top-centre', 'top-right', 'bottom-left', 'bottom-centre', 'bottom-right'] as const
+
+/** One toast position. */
+export type ToastPosition = typeof TOAST_POSITIONS[number]
+
+/** The root attribute that carries the position; the studio's toast area reads it, and a phone width pins toasts to the top whatever it says. */
+export const TOAST_POSITION_ATTRIBUTE = 'data-toast-position'
+
 /** The contrast slider, T3 Code's: quiet text and rules move towards the page below 100 and towards primary text above it. */
 export const CONTRAST = { min: 50, max: 200, step: 5, default: 100 } as const
 
@@ -70,6 +79,8 @@ export interface ThemeSettings {
   contrast: number
   /** How reasoning effort shows in the model picker. */
   effort: EffortDisplay
+  /** Where toasts stack on a screen wider than a phone. */
+  toastPosition: ToastPosition
   /** The person's own branding; every field is validated again where it is read. */
   branding: StoredBranding
 }
@@ -79,7 +90,7 @@ export interface ThemeSettings {
  * this order before it adds the keys a change writes for the first time; `tests/settings.spec.ts` keeps it equal to the
  * schema.
  */
-export const SETTING_KEYS = ['accent', 'customAccent', 'typeface', 'density', 'studioAdditions', 'palette', 'effort', 'branding', 'contrast'] as const satisfies readonly (keyof ThemeSettings)[]
+export const SETTING_KEYS = ['accent', 'customAccent', 'typeface', 'density', 'studioAdditions', 'palette', 'effort', 'toastPosition', 'branding', 'contrast'] as const satisfies readonly (keyof ThemeSettings)[]
 
 /** The values the custom theme holds; the rest of the settings belong to no palette. */
 export type CustomValues = Pick<ThemeSettings, 'accent' | 'customAccent' | 'contrast'>
