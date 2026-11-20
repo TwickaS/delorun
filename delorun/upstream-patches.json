@@ -3091,6 +3091,12 @@
       "class": "delorun-feature",
       "feature": "external-agents",
       "reason": "The machine record of the persistence acknowledgement for the `external-agent/run-allowed` Session event, written by `persistence-changes --record` beside its bilingual prose."
+    },
+    {
+      "path": "packages/client/ui-user-questions/src/client/QuestionComposer.module.css",
+      "class": "delorun-feature",
+      "feature": "studio-seams",
+      "reason": "Tightens the question card's padding and keeps an expanded option or question's collapse button at the end of its last text line, so phones show more choices and the button never takes a line of its own; adds 44px rows and 16px answer text on touch."
     }
   ],
   "retired": []

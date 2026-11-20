@@ -4,7 +4,7 @@
 .frame {
   display: flex;
   justify-content: center;
-  padding: 6px calc(var(--dsh-composer-side-clearance) + 16px) 10px;
+  padding: 4px calc(var(--dsh-composer-side-clearance) + 16px) 8px;
 }
 
 /* Figma Input 973:36348 body over the 1019:36938 header: no banner strip —
@@ -18,7 +18,7 @@
      hidden): cap the card against the viewport and scroll the option list
      so header and footer actions stay reachable on long batches. */
   max-height: min(60vh, 520px);
-  padding: 0 0 10px;
+  padding: 0 0 6px;
   border: 0;
   --dsw-elevation-stroke-color: var(--dsw-alias-border-l2-darkmode-thin);
   border-radius: var(--dsw-radius-xl);
@@ -82,7 +82,7 @@
   justify-content: space-between;
   gap: 16px;
   flex-shrink: 0;
-  padding: 20px 16px 0 24px;
+  padding: 14px 12px 0 20px;
 }
 
 .headingBlock {
@@ -116,12 +116,12 @@
 .questionTitle {
   position: relative;
   flex-shrink: 0;
-  margin: 5px 24px 0;
+  margin: 2px 20px 0;
   timeline-scope: --question-copy;
 }
 
-.questionTitle[data-expanded] {
-  padding-bottom: 24px;
+.questionTitle[data-expanded] .titlePreview {
+  padding-right: 28px;
 }
 
 .titlePreview {
@@ -168,7 +168,7 @@
 
 .detail {
   flex-shrink: 0;
-  margin: 0 24px 8px;
+  margin: 0 20px 4px;
 }
 
 .footerActions {
@@ -234,9 +234,9 @@
 .options {
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  margin: 8px 0 0;
-  padding: 4px 12px;
+  gap: 0;
+  margin: 2px 0 0;
+  padding: 2px 8px;
 }
 
 .optionRow {
@@ -259,7 +259,7 @@
   width: 100%;
   min-width: 0;
   min-height: 40px;
-  padding: 8px 12px 8px 8px;
+  padding: 6px 10px 6px 8px;
   border: 0;
   background: transparent;
   color: inherit;
@@ -416,9 +416,11 @@
   animation-timeline: --description-copy;
 }
 
-/* Expanded copy keeps its collapse button on a line of its own below the text. */
-.optionRow[data-expanded] .option {
-  padding-bottom: 32px;
+/* Expanded copy keeps its collapse button at the right end of the last text
+   line: the description gives up a 32px gutter instead of the row growing a
+   line for the button. */
+.optionRow[data-expanded] .description {
+  padding-right: 32px;
 }
 
 .questionTitle[data-expanded] .titlePreview,
@@ -482,7 +484,7 @@
   /* Same reason as .option: the custom row is scroll content, and shrinking
      it pushes the inline input past the footer. */
   flex-shrink: 0;
-  padding: 8px 12px 8px 8px;
+  padding: 6px 10px 6px 8px;
   border: 0.5px solid transparent;
   border-radius: var(--dsw-radius-md);
   transition: background-color 120ms ease, border-color 120ms ease;
@@ -587,8 +589,8 @@
   justify-content: space-between;
   gap: 12px;
   flex-shrink: 0;
-  margin-top: 12px;
-  padding: 0 10px 0 18px;
+  margin-top: 6px;
+  padding: 0 8px 0 16px;
 }
 
 .feedback {
@@ -606,11 +608,16 @@
   }
 
   .header {
-    padding: 10px 12px 0 18px;
+    padding: 10px 8px 0 14px;
+  }
+
+  .questionTitle,
+  .detail {
+    margin-inline: 14px;
   }
 
   .options {
-    padding: 4px 8px;
+    padding: 2px 4px;
   }
 
   .title {
@@ -620,7 +627,7 @@
 
   .option,
   .customRow {
-    padding: 8px 6px;
+    padding: 6px 6px;
   }
 
   .descriptionToggle {
@@ -629,11 +636,23 @@
 
   .footer {
     align-items: flex-end;
-    padding: 0 10px;
+    padding: 0 6px 0 10px;
   }
 
   .footerActions {
     flex-shrink: 0;
+  }
+}
+
+/* Touch: 44px rows, and 16px answer text so the browser does not zoom on focus. */
+@media (pointer: coarse) {
+  .option,
+  .customRow {
+    min-height: 44px;
+  }
+
+  .field > * {
+    font-size: 16px;
   }
 }
 

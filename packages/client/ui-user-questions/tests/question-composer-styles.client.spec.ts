@@ -88,6 +88,12 @@ describe('QuestionComposer long-copy layout', () => {
       .toEqual(['visibility: visible', 'animation: none'])
   })
 
+  it('keeps the expanded toggle on the last text line instead of a line of its own', () => {
+    expect(declarations('.optionRow[data-expanded] .description')).toEqual(['padding-right: 32px'])
+    expect(declarations('.questionTitle[data-expanded] .titlePreview')).toEqual(['padding-right: 28px'])
+    expect(stylesheet).not.toMatch(/\.optionRow\[data-expanded\] \.option\s*\{/)
+  })
+
   it('names timelines through longhands that the bundled CSS keeps apart', () => {
     // lightningcss merges `animation` with `animation-timeline` into a shorthand browsers reject.
     const timed = [...stylesheet.matchAll(/\{([^{}]*animation-timeline[^{}]*)\}/g)].map(match => match[1] ?? '')
