@@ -3,7 +3,7 @@
  * over the phone pager. Every pane (the main chat's too) is the real chat rendered through the pane slots, each inside its own
  * `multiviewPane` session reference, held here so that moving, paging or hiding a pane never closes its chat.
  */
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import type { SessionReference } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
