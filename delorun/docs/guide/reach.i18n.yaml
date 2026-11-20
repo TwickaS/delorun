@@ -4,7 +4,7 @@
 #   pnpm run verify-translation-pairing --write delorun/docs/guide/reach.md
 /:
   en: 04cd32140c511c70
-  zh: 04cd32140c511c70
+  zh: 6faa5e32603802ac
 /reach-the-studio-from-your-phone:
   en: 227986754ccf6f3c
   zh: aeaf01bc2440c430
@@ -13,7 +13,7 @@
   zh: 0140fa230691fd75
 /reach-the-studio-from-your-phone/contents:
   en: a37ccfc10cd8b358
-  zh: e8d9f834417ad558
+  zh: b56b3b14e8c70fb9
 /reach-the-studio-from-your-phone/what-you-need:
   en: aa43e85d943b46de
   zh: e4c02624fef53747
@@ -31,16 +31,16 @@
   zh: 67f6f28531c3328e
 /reach-the-studio-from-your-phone/what-an-approved-phone-can-and-cannot-do:
   en: 299b54b8871953d9
-  zh: c3807d8b9eb2cd68
+  zh: 5d81e07f06f639ae
 /reach-the-studio-from-your-phone/confirm-with-face-id:
   en: 0b92722f42c87f56
-  zh: b828739d84681e0e
+  zh: 63a180fd3c3cfa6a
 /reach-the-studio-from-your-phone/confirm-with-a-pin:
   en: 565d073d88bdb953
-  zh: 441eef37c6afef40
+  zh: 5f6a813818155a16
 /reach-the-studio-from-your-phone/remove-a-device:
   en: b96680bae01a0e7f
-  zh: fd8e84ff0af42c5c
+  zh: 00120dc544c97d4d
 /reach-the-studio-from-your-phone/turn-remote-access-off:
   en: 12c1653216d43a86
   zh: 8b8718e439ad378f

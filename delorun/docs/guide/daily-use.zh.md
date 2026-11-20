@@ -109,7 +109,7 @@ description: "日常使用 Delorun：启动、打开和停止 studio，status、
 - 如果你在 `delorun setup prompts` 中选择 **Ask less (like DeepSeek Harness)**，那么工作区会像 DeepSeek Harness 那样不再每次询问，在 studio 自己的确认之后切换为完全访问。
 - 如果某个 chat 是从 DeepSeek Harness 或另一个 home 复制来的，并在那里以完全访问运行，那么它会以 Workspace Write 打开。请再次为它的工作区开启完全访问。
 - 如果你选择了 Delorun 拒绝作为工作区的文件夹，那么它会指出原因。被拒绝的文件夹包括文件系统根目录、你的用户主目录本身、你的 Delorun home、DeepSeek Harness 的 home，以及包含其中任一个的文件夹。
-- If you use the studio from a phone, then granting full access asks for Face ID or your PIN each time ([Reach the studio from your phone](reach.zh.md)).
+- 如果你在手机上使用 studio，那么授予完全访问每次都会要求 Face ID 或你的 PIN，除非 Face ID 通行期（pass）已开启（见[用手机访问 studio](reach.zh.md)）。
 - 如果你想再次关闭完全访问，请使用“设置”→“安全”→“权限”中的 Revoke，在 chat 中选择 Workspace Write，或运行 `delorun workspace full-access <folder> off`。
 
 </details>
@@ -203,7 +203,7 @@ delorun recover exit-safe-mode   # once it works: the next start loads everythin
 <details>
 <summary>边界情况</summary>
 
-- 如果某个 headless 任务通过 `--permission-mode` 或其环境变量，在没有完全访问授权的文件夹中请求完全访问，那么 `delorun headless` 会拒绝它。请先在这台电脑上用 `delorun workspace full-access <folder> on` 授予完全访问。
+- 如果某个 headless 任务通过 `--permission-mode` 或其环境变量，在没有完全访问授权凭证（grant）的文件夹中请求完全访问，那么 `delorun headless` 会拒绝它。请先在这台电脑上用 `delorun workspace full-access <folder> on` 授予完全访问。
 
 </details>
 

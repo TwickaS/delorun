@@ -17,7 +17,7 @@ Claude Code 和 Codex 是可选的[外部智能体](../reference/glossary.zh.md#
 - [对话如何使用智能体](#how-a-chat-uses-an-agent)
 - [添加智能体](#add-an-agent)
 - [下载大小与登录](#download-size-and-sign-in)
-- [Sign-in and plan limits](#sign-in-and-plan-limits)
+- [登录与套餐限额](#sign-in-and-plan-limits)
 - [第一次](#the-first-time)
 - [智能体能接触什么](#what-the-agent-can-touch)
 - [结果显示在哪里](#where-the-result-shows)
@@ -47,29 +47,31 @@ Claude Code 和 Codex 是可选的[外部智能体](../reference/glossary.zh.md#
 
 智能体使用你自己的账户登录，登录信息保存在提供方保存它的地方（Claude Code 为 `~/.claude`，Codex 为 `~/.codex`）。卡片会说明 Delorun 是否能看到登录信息。如果缺少登录，卡片会显示 `delorun agents login claude-code` 或 `delorun agents login codex`，并附有“复制”按钮。请在终端中运行它：它会运行 Delorun 所下载副本中智能体自己的登录，因此你不需要另外安装命令。请先添加智能体。
 
-<a id="the-first-time"></a>
+<a id="sign-in-and-plan-limits"></a>
 
-## Sign-in and plan limits
+## 登录与套餐限额
 
-Once an agent is added, its card says whether it is signed in and on which plan, such as "Signed in · Max plan". Before Delorun has checked, the card shows what a saved sign-in file suggests. If the agent is not signed in, the card names `delorun agents login claude-code` or `delorun agents login codex`.
+添加智能体后，它的卡片会说明它是否已登录以及使用哪个套餐，例如“已登录 · Max 套餐”。在 Delorun 检查之前，卡片显示的是已保存的登录文件所提示的内容。如果智能体未登录，卡片会给出 `delorun agents login claude-code` 或 `delorun agents login codex`。
 
-Below that, two bars show how much of the agent's plan limits you have used, for example the 5-hour limit and the weekly limit, each with the time it resets on your own clock. A bar turns amber from 80% and red at the limit, and it also says "Near the limit" or "Limit reached" in words. The same bars are in Settings, Safety, External agents, under Plans and limits, and in the Plans pill beside the cost pill, which shows the highest share among your agents and opens the bars for each. The pill appears only while an agent is added.
+卡片下方有两条进度条，显示你已用掉智能体套餐限额的多少，例如 5 小时限额和每周限额，并按你自己的时钟显示各自的重置时间。进度条从 80% 起变为琥珀色，达到限额时变为红色，同时用文字写明“接近限额”或“已达限额”。同样的进度条也在“设置”“安全”“外部智能体”的“套餐与限额”下，以及成本标签旁的“套餐”标签中；该标签显示你的各个智能体中最高的占比，并可打开每个智能体的进度条。只有在已添加智能体时才会出现该标签。
 
-Delorun reads these figures from the agent's own program. It does not read them just because a card or the pill is on screen. It checks when you add an agent, when you finish signing in, and when you press Check now. Figures are labelled "As of" the time they were read, and "Last seen" once they are old. If a window's reset time has passed, the bar says "Reset at …, not checked since" until you check again. Press Check now to refresh them.
+Delorun 从智能体自己的程序读取这些数字。卡片或标签显示在屏幕上并不会触发读取。Delorun 在你添加智能体、完成登录以及按下“立即检查”时检查。数字标注为读取时间“截至”，数据变旧后标注“上次看到”。如果某个窗口的重置时间已过，进度条会显示“重置于 …，此后未检查”，直到你再次检查。按“立即检查”可刷新它们。
 
-Checking starts the agent's program on your computer, so a phone or another computer asks for Face ID or your PIN each time you press **Check now**. If you cancel, it says "Not confirmed" and nothing is checked.
+检查会在你的电脑上启动智能体的程序，因此除非 Face ID 通行期（pass）已开启，否则每次按**立即检查**时，手机或另一台电脑都会要求 Face ID 或你的 PIN。如果你取消，会显示“未确认”，且不会检查任何内容。
 
-To see the same figures at a terminal, run `delorun agents status`. It reads what Delorun has stored and starts nothing. Add `--refresh` to check now, at the computer that runs Delorun.
+要在终端中查看同样的数字，请运行 `delorun agents status`。它读取 Delorun 已存储的内容，不启动任何程序。加上 `--refresh` 可在运行 Delorun 的电脑上立即检查。
 
 <details>
-<summary>Edge cases</summary>
+<summary>边界情况</summary>
 
-- If the agent is not added, there is nothing to check: the card shows only the Add button.
-- If a check cannot be read, the old figures stay and the card says the check did not answer.
-- If two checks come close together, the second says the last check was a moment ago and when the next can run.
-- If a plan reports no figure for a window, the bar says "No figure" instead of a percentage.
+- 如果智能体尚未添加，就没有可检查的内容：卡片只显示“添加”按钮。
+- 如果无法读取某次检查的结果，旧数字保留，卡片会说明检查没有响应。
+- 如果两次检查间隔很近，第二次会说明上次检查就在刚才，以及下一次何时可以运行。
+- 如果某个套餐对某个窗口没有给出数字，进度条显示“无数据”而不是百分比。
 
 </details>
+
+<a id="the-first-time"></a>
 
 ## 第一次
 
@@ -80,7 +82,7 @@ To see the same figures at a terminal, run `delorun agents status`. It reads wha
 
 - 如果对话处于“只读”，则不会启动任何智能体——请先更改该对话的权限。
 - 如果对话处于“完全访问”，则智能体不询问就会启动，因为你已选择在没有提示的情况下运行，对话会显示“已启动，未经询问 · 完全访问”。要让完全访问的对话重新询问，请在“设置”“安全”“外部智能体”中关闭**完全访问的对话无需询问即可启动智能体**；此后智能体只有在你已允许的工作区才会启动。
-- 如果你运行 `delorun headless`，则没有人可以询问，因此只有在你已允许的工作区才会启动智能体，或者在该次运行具有完全访问权限时启动，即通过工作区的完全访问授权，或 setup 的**从不询问（危险）**答案。具有完全访问权限的运行与完全访问的对话一样，不询问也不需要授权就会启动智能体。
+- 如果你运行 `delorun headless`，则没有人可以询问，因此只有在你已允许的工作区才会启动智能体，或者在该次运行具有完全访问权限时启动，即通过工作区的完全访问授权凭证（grant），或 setup 的**从不询问（危险）**答案。具有完全访问权限的运行与完全访问的对话一样，不询问也不需要授权就会启动智能体。
 - 如果你停止某个对话，则它在该轮交出的任务也会停止。更早轮次的任务会继续运行，直到完成、达到时间限制，或你归档该对话（归档会停止该对话启动的每个任务）。
 - 如果任务所需时间超过时间限制，则任务会停止。除非你在[高级选项](#advanced-options)中更改，限制为 30 分钟。
 
@@ -96,7 +98,7 @@ To see the same figures at a terminal, run `delorun agents status`. It reads wha
 
 批准卡片上的标签显示该级别，点击一次即可打开选项。级别从下一个任务起生效。已批准的设备可以收紧级别；放宽则需要你在电脑前操作。处于“完全访问”的对话从不更改级别。这些级别不涵盖你自己在 Claude Code 或 Codex 中设置的 MCP 工具。
 
-在 Linux 上，Claude Code 的命令沙箱需要 `bubblewrap` 和 `socat`（`sudo apt install bubblewrap socat`）。没有它们时，“标准”仍会运行，但没有沙箱，标签显示“标准 · 无沙箱”。“谨慎”会拒绝启动，因为它承诺了隔离。
+在 Linux 上，Claude Code 的命令沙箱需要 `bubblewrap` 和 `socat`（`sudo apt install bubblewrap socat`）。没有它们时，“标准”仍会运行，但没有沙箱，席位的横幅显示“无沙箱”。“谨慎”会拒绝启动，因为它承诺了隔离。
 
 <a id="where-the-result-shows"></a>
 

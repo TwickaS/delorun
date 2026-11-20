@@ -14,7 +14,7 @@ description: "@delorun/plugin-update 包，面向 delorun 的维护者：/deloru
 
 - [路由](#routes)
 - [谁可以使用每个操作](#who-may-use-each-control)
-- [Chats stopped for an update](#chats-stopped-for-an-update)
+- [为更新而停止的 chat](#chats-stopped-for-an-update)
 - [Host 保存什么](#what-the-host-keeps)
 - [配置](#configuration)
 - [测试](#tests)
@@ -33,9 +33,9 @@ description: "@delorun/plugin-update 包，面向 delorun 的维护者：/deloru
 | `apply` | 开始更新已准备的报告。正文给出句柄、对运行中 chat 的 `wait` 或 `stop`、数据复制的选择，以及此人已接受的勾选键。 |
 | `cancel` | 结束仍在等待 chat 的更新或回滚。 |
 | `rollback` | 从已提交的更新回退；没有 chat 数据的副本时为 `profileOnly`。 |
-| `dismiss` | 删除结果记录。 |
-| `stop-chats` | While an update waits for chats, records the running top-level chats, then stops them the way their Stop button does, keeping their work. Refused with `NO_UPDATE_PENDING` unless an update waits. |
-| `continue-chat` | Sends one fixed message, "Continue where you stopped before the update.", to a chat the update stopped. Refused while an update runs, for a chat the Host continues by itself, and for a chat already continued. |
+| `dismiss` | 删除结果记录，以及更新所停止的 chat 的记录。 |
+| `stop-chats` | 更新等待 chat 时，记录运行中的顶层 chat，再按其 Stop 按钮的方式停止它们，保留它们的工作。除非有更新在等待，否则以 `NO_UPDATE_PENDING` 拒绝。 |
+| `continue-chat` | 向更新所停止的 chat 发送一条固定消息“Continue where you stopped before the update.”。更新运行期间、对 Host 自行继续的 chat、以及对已继续过的 chat，均予以拒绝。 |
 | `stop` | 停止 Delorun。studio 中没有任何东西会再次启动它。 |
 
 线路类型见 [`src/wire.ts`](src/wire.ts)。`apply`、`rollback` 与 `stop` 在 Host 停止之前应答，与 Restart 相同；页面轮询 `state`，并在 Host 的发行版与其所加载的不同时重新加载一次。
@@ -44,20 +44,20 @@ description: "@delorun/plugin-update 包，面向 delorun 的维护者：/deloru
 
 ## 谁可以使用每个操作
 
-The controls are entries of the Changes access table ([`@delorun/plugin-changes`](../plugin-changes/README.zh.md)), and the routes are built with its gate, so the site fence, the control's class and the device's grant are decided before a body is read.
+这些操作是 Changes 访问表（[`@delorun/plugin-changes`](../plugin-changes/README.zh.md)）中的条目，路由用它的门构建，因此站点围栏、操作的类别和设备的授权凭证在读取正文之前就已决定。
 
-| Control | Computer | Phone |
+| 操作 | 电脑 | 手机 |
 | --- | --- | --- |
-| `update-check`, `update-cancel`, `update-dismiss`, `update-continue` (`continue-chat`) | yes | yes, no prompt (class `free`) |
-| `update-begin` (also `stop-chats`), `update-rollback`, `stop` | yes | yes, with a one-action grant for the request (class `face`) |
+| `update-check`、`update-cancel`、`update-dismiss`、`update-continue`（`continue-chat`） | 是 | 是，无提示（类别 `free`） |
+| `update-begin`（也包括 `stop-chats`）、`update-rollback`、`stop` | 是 | 是，需针对该请求的一次一个操作的授权凭证（类别 `face`） |
 
-A grant is a Face ID confirmation or the device's PIN for that one request; the approval grace does not count. `state` shows the prepared report, which names plugins and harness diffs, only to a request that may begin an update.
+授权凭证是针对那一个请求的 Face ID 确认或该设备的 PIN；批准宽限期不算。`state` 只向可以开始更新的请求显示已准备的报告，该报告列出插件与 harness 的差异。
 
 <a id="chats-stopped-for-an-update"></a>
 
-## Chats stopped for an update
+## 为更新而停止的 chat
 
-`stop-chats` needs what beginning the update needs, because ending running chats is what lets the update go on. It writes the stopped chats, with the update's target version and the `continueStoppedChats` setting as it stands, to `update-stopped-chats.json` in the profile's run folder before it cancels anything, because the update restarts the Host. Every write to that record runs under one lock that re-reads it, and each chat is marked before its message is sent, so a chat gets at most one message. The updated Host continues the recorded chats once, only when the setting was on and the update's outcome record names the same target. An update cancelled, or ended without a restart, settles its chats at once: each gets its message after it has gone idle, and a chat that could not be continued keeps its Continue button. Background jobs stop with the chats and are never continued. The message is a user message with the source kind `delorun-update`.
+`stop-chats` 所需的条件与开始更新相同，因为结束运行中的 chat 正是让更新得以继续的条件。它在取消任何内容之前，先把已停止的 chat 连同更新的目标版本和 `continueStoppedChats` 设置的当前值，写入 profile 运行文件夹中的 `update-stopped-chats.json`，因为更新会重启 Host。对该记录的每次写入都在同一把锁下运行，并重新读取记录；每个 chat 在其消息发送之前先被标记，因此一个 chat 至多收到一条消息。更新后的 Host 只在该设置已开启、且更新的结果记录指明同一目标时，才把记录中的 chat 继续一次。被取消或未重启即结束的更新会立即处理其 chat：每个 chat 在空闲之后收到它的消息，未能继续的 chat 保留其 Continue 按钮。后台任务随 chat 一起停止，且从不继续。该消息是来源类型为 `delorun-update` 的用户消息。
 
 <a id="what-the-host-keeps"></a>
 
@@ -70,11 +70,11 @@ A grant is a Face ID confirmation or the device's PIN for that one request; the 
 ## 配置
 
 - `waitSeconds`：更新或回滚等待运行中 chat 的时间，60 到 86,400 秒，默认 1,800。
-- `continueStoppedChats`: whether chats stopped for an update continue by themselves after it, on by default; Settings → Updates changes it. With it off, each stopped chat shows a Continue button.
+- `continueStoppedChats`：更新所停止的 chat 在更新之后是否自行继续，默认开启；在 Settings → Updates 中更改。关闭后，每个已停止的 chat 显示一个 Continue 按钮。
 - `checkGapSeconds`：两次到达网络的发行版检查之间的最短时间，1 到 3,600 秒，默认 10。一次检查运行期间的请求会并入它；间隔之内的请求得到上一次的答案。
 
 <a id="tests"></a>
 
 ## 测试
 
-`tests/update-routes.spec.ts` holds the denial specs: other site, phone without a grant or with only the approval grace, a page-supplied or expired report, a restart or update in progress, missing ticks, a conflicted report, and the channel token and report id never reaching an answer.
+`tests/update-routes.spec.ts` 存放拒绝测试：其他站点、没有授权凭证或只有批准宽限期的手机、页面提供的或已过期的报告、正在进行的重启或更新、缺失的勾选、冲突的报告，以及通道令牌和报告 id 永远不会进入应答。

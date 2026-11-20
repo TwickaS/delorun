@@ -23,7 +23,7 @@ kind: "package-bundle"
 
 ## 约定
 
-- **The ask.** `use_my_browser` takes the task in one line and raises an approval card with the `real-browser` grant marker ([copy](src/copy.ts)). `@delorun/home-auth` accepts an answer from the home's own computer, or from an approved device that confirms that answer with Face ID or its PIN; a device answer without that confirmation is refused and the card stays open. Allow records `approval/decided` and then `real-browser/granted`, which names the `approval/asked` it answers. Any other answer records no grant, and the model is told to carry on with the isolated browser. A chat whose approval policy is `never` has the ask rejected without anyone being asked.
+- **请求。** `use_my_browser` 接收一行任务说明，并弹出带 `real-browser` 授权标记的审批卡片（[文案](src/copy.ts)）。`@delorun/home-auth` 接受来自本机的回答，或来自已批准设备的回答，该设备须以 Face ID 或其 PIN 确认该回答；没有这一确认的设备回答会被拒绝，卡片保持待答。允许会先记录 `approval/decided`，再记录 `real-browser/granted`，后者指明它回答的 `approval/asked`。其他回答都不记录许可，并告诉模型继续使用隔离浏览器。审批策略为 `never` 的对话会直接拒绝请求，不询问任何人。
 - **许可。** `realBrowserGrant` 投影（[grant](src/grant.ts)）从对话自己的日志折叠 `real-browser/granted`、`real-browser/away` 和 `real-browser/ended`，因此恢复的对话保留许可，分叉的对话不继承父对话的许可。关闭许可会追加 `real-browser/ended`，同时结束“不在时”许可。
 - **谁可以使用。** browse 调用只在由本人自己的提示（`user` 或 `retry`）发起的轮次中运行，或在“不在时”许可有效期间的任何轮次中运行；其他调用都会在服务器收到之前以一句话被拒绝（[guard](src/tool.ts)）。在本人没有发起的轮次中，以及在委派会话中（其提示来自委派它的智能体），`use_my_browser` 都不会弹出卡片。没有许可的运行（例如普通的 `delorun headless` 任务）保持使用隔离浏览器，并会被告知。
 - **“不在时”许可。** `real-browser/away` 记录许可的结束时间，即给出后 `awayDays` 天，并带 `cause: 'person'`；再次给出会续期，关闭则记录 `until: null`。非本人发起的运行中的 browse 调用因许可到期被拒绝时，会以 `until: null` 和 `cause: 'expired'` 记录一次到期。
@@ -51,7 +51,7 @@ kind: "package-bundle"
 ## 界面
 
 - **审批卡片。** `real-browser` 卡片以中英文显示智能体的任务及其能访问的内容。
-- **Routes.** `POST /api/delorunRealBrowser.state` and `.end` read and end a chat's grant from any approved device; `.away` turns the away permission off from any approved device, and turns it on from the computer or from a device that confirms that call with Face ID or its PIN ([routes](src/routes.ts), [messages](src/wire.ts)). A request the home cannot place is refused with `LOOPBACK_REQUIRED` before its body is read.
+- **路由。** `POST /api/delorunRealBrowser.state` 和 `.end` 可由任何已批准的设备读取和结束对话的许可；`.away` 可由任何已批准的设备关闭“不在时”许可，由电脑、或以 Face ID 或其 PIN 确认该调用的设备打开（[routes](src/routes.ts)，[messages](src/wire.ts)）。home 无法确定来源的请求会在读取正文之前以 `LOOPBACK_REQUIRED` 拒绝。
 
 <a id="known-limitations"></a>
 
