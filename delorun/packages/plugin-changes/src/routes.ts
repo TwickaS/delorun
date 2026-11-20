@@ -1442,7 +1442,7 @@ async function confirmProtectionOff(ctx: ChangesContext, harness: HarnessContext
       if (!isChangesError(error) || (error.code !== 'HARNESS_COPY_UNREADABLE' && error.code !== 'CHANGED_WHILE_READING')) throw error
     }
   }
-  return new RouteRefusal(409, CONFIRM_PROTECTION, 'With protection off, saved changes to your linked plugins load at once, your copy of Delorun applies at the next start, and the agent installs plugins with the full-access approval alone. Confirm again to turn it off.', { willLoad: { plugins, harnessFiles } })
+  return new RouteRefusal(409, CONFIRM_PROTECTION, 'With protection off, saved changes to your linked plugins load at once, your copy of Delorun applies at the next start, and the agent installs, removes, turns on, configures, undoes and restores plugins with the full-access approval alone. Confirm again to turn it off.', { willLoad: { plugins, harnessFiles } })
 }
 
 /**

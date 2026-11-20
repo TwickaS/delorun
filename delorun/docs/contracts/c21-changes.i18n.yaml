@@ -12,14 +12,14 @@
   en: 433bc3bbd886df99
   zh: 64125cf2279911d3
 /c21-changes/contents:
-  en: aef4c714f7953615
-  zh: 87ca0752f3fc111f
+  en: e16b2674f981ab4a
+  zh: 09d0337b7622115d
 /c21-changes/the-home-s-changes-directory:
   en: d6cf5ed99824adb1
   zh: 17b0edba7a9e4900
 /c21-changes/change-kinds-and-states:
-  en: eca63c2806c1d3e5
-  zh: 65630425c118227a
+  en: 26d51a46f3f0e844
+  zh: acb4e9d5ce9fa118
 /c21-changes/loading-approved-content:
   en: 1855f11eebe7f79e
   zh: e9ddbd799cb736cd
@@ -54,8 +54,11 @@
   en: 8c5243b26a8ce44d
   zh: 5f5a809c5b8ccff5
 /c21-changes/the-agent-and-plugins:
-  en: 6c281b74dec9a6f4
-  zh: 860c65ccdd6ed5df
+  en: f89c6f272cc9ab00
+  zh: 3304d3f5248b4c10
+/c21-changes/the-agent-s-plugin-actions-with-protection-off:
+  en: d3c72f65c6b8bbac
+  zh: d3c72f65c6b8bbac
 /c21-changes/who-may-do-what-from-where:
   en: d44acfb0fe15a84d
   zh: 0f3f8a7375325a1e
@@ -84,8 +87,8 @@
   en: 7e457c1062b8e661
   zh: 7efb118317baaa44
 /c21-changes/security/denial-tests:
-  en: 1c5e3be800c6eb40
-  zh: 076eef73183a942e
+  en: ab648e07a1f40913
+  zh: b8db268835fbdc08
 /c21-changes/security/what-this-does-not-prove:
   en: 385e9419e8c5b306
   zh: e1f213e4292ccf86

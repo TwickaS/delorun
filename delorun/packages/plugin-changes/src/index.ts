@@ -14,17 +14,17 @@
  * their computer with `delorun changes` or in the studio. The tool offers no update action: the agent asks for an update
  * by installing a version of a plugin the profile has, which records a `plugin-update`.
  *
- * With protection off, the default, every such call passes to upstream as with the switch off, except the starts below: the listener
- * calls `next()`, and upstream's full-access approval alone decides. An install from a folder (`link:<folder>`) that
- * ran comes under Changes at the recomposition it causes: the check below links the plugin to its active directory and
- * logs the folder's content as an applied change decided `unreviewed`. A registry install or a removal is not under
- * Changes; the profile history upstream records for it is its record, and this plugin logs nothing for it.
+ * With protection off, the default, every such call goes to upstream as with the switch off: the listener reads what
+ * the call changes from the profile's history and dependencies, calls `next()`, and upstream's full-access approval
+ * alone decides. After the tool ran, a `tools/post-execute` listener records the action in the profile's change log
+ * when the profile's history moved: an applied change decided `unreviewed` with the history version upstream wrote and
+ * the one before it, which `delorun changes undo` and the studio bring back ([agent actions](../../changes/src/agent-actions.ts)).
+ * An action that ran but could not be recorded is reported to the model as unrecorded, and one whose records cannot be
+ * read before it runs is denied. A plugin the agent installs from a folder or links reloads on save, and the check
+ * below logs its folder's content as an unreviewed change as it does for the person's.
  *
- * At every level a chat never starts a plugin that is not running: an install is recorded, and a turn-on (`enabled`
- * anything but the boolean `false`), an `undo` and a `restore`, which can bring a plugin back, are denied with the
- * words that the person makes them at their computer, in the studio or with `delorun plugin` or `delorun changes`.
- *
- * A protection record that cannot be read holds every such call: it is denied, naming that the setting cannot be read.
+ * A protection record that cannot be read holds every such call as protection on does: it is denied, naming that the
+ * setting cannot be read; an unreadable setting is never read as off.
  *
  * A tool guard backs the listener: a `pre-execute` listener that allowed such a call without calling `next()` would
  * skip the listener, and the guard, which runs after every listener and cannot be overruled, denies every such call the
@@ -246,9 +246,8 @@ function unplanned(action: string, detail: string): PreToolDecision {
  * changes while protection is on: every `plugin_manager` install, update or removal is recorded as a pending change in
  * the profile the Host runs and denied with the change's id, one that cannot be recorded is denied too, and every other
  * action that changes what the profile runs is denied as one the person makes at their computer. With protection off,
- * a removal, a turn-off or another action goes on to upstream, but an install is still recorded and a turn-on of a bundle
- * or a plugin is still denied as the person's at their computer, because turning a plugin on is never the agent's step;
- * with a protection record that cannot be read every such call is denied. With the switch off, only
+ * every such call goes on to upstream, and an action that changed the profile is recorded in Changes afterwards; with a
+ * protection record that cannot be read every such call is denied. With the switch off, only
  * the check is provided.
  * @param ctx - the plugin context.
  * @param config - the switch, defaulted by the schema above.

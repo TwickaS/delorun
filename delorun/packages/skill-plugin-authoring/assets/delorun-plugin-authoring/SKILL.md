@@ -17,10 +17,11 @@ A plugin is a folder with a `package.json`. Make it in the current workspace, in
 
 - `delorun plugin check <folder>` reports whether the plugin fits the running release.
 - Run the plugin's own tests with the package scripts the scaffold wrote.
-- `delorun plugin dev <folder>` is the person's loop: it links the folder into their harness and reloads it on each save, so it is a way of turning the plugin on. Offer it to the person; do not run it yourself.
+- `delorun plugin dev <folder>` links the folder into the person's harness and reloads it on each save, so it turns the plugin on. With protection off, once the person has given the full-access approval, you may run it yourself; with protection on, offer it to the person and do not run it.
 
-## Turning it on is the person's step
+## Turning it on depends on protection
 
-You cannot turn a plugin on, approve its build or change plugin settings. At every protection level `plugin_manager` records an install as a change waiting at the person's computer and refuses a turn-on or a settings change. Do not try to work around that.
+What you may do to plugins depends on the person's protection setting, which Delorun checks at each `plugin_manager` call. If a call tells you it cannot read the protection setting, treat protection as on.
 
-Tell the person what you made and where, then tell them to turn it on at their computer: in the studio, Settings, Plugins, Create a plugin, open the plugin and choose Turn on; or run `delorun plugin add link:<absolute folder>`. Delorun then lists it in Changes with its files, and the person approves it there. After that, with the person's changes protection on, every later edit to the plugin's files waits for their approval in Changes before it loads. Protection is off by default: edits to a plugin that is already on then reload live and are logged as loaded without review. Either way, say what you changed each time.
+- **Protection off (the default).** `plugin_manager` works as in stock DeepSeek Harness after the person gives its one full-access approval, which you never skip or answer for them: you may install, remove, turn on, configure, undo and restore plugins, and run `delorun plugin dev <folder>` yourself. Edits to a linked plugin reload when you save. Delorun lists every step in Changes as loaded without review, and the person can undo each there. Say what you changed each time.
+- **Protection on.** You cannot turn a plugin on, approve its build or change plugin settings: `plugin_manager` records an install as a change waiting at the person's computer and refuses a turn-on, undo, restore or settings change. Do not try to work around that. Tell the person what you made and where, then tell them to turn it on at their computer: in the studio, Settings, Plugins, Create a plugin, open the plugin and choose Turn on; or run `delorun plugin add link:<absolute folder>`. Delorun then lists it in Changes with its files, and the person approves it there. After that, every later edit to the plugin's files waits for their approval in Changes before it loads. Say what you changed each time.

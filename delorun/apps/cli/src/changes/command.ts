@@ -308,7 +308,7 @@ function print(write: (text: string) => void, lines: readonly string[]): void {
 /** What each protection setting means, in the person's words. */
 const PROTECTION_MEANING: Readonly<Record<ProtectionLevel, string>> = {
   on: "a changed plugin, an edit of Delorun itself and the agent's plugin installs and removals load only after you apply them, and the agent asks before it first changes an approved plugin in a chat",
-  off: "changes load without your review and are still recorded: a changed plugin loads at the next start and when you save while Delorun runs, edits of Delorun itself apply at the next start, and the agent installs and removes plugins with the full-access approval alone; see and undo each with delorun changes list",
+  off: "changes load without your review and are still recorded: a changed plugin loads at the next start and when you save while Delorun runs, edits of Delorun itself apply at the next start, and the agent installs, removes, turns on, configures, undoes and restores plugins with the full-access approval alone; see and undo each with delorun changes list",
 }
 
 /**
