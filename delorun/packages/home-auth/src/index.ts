@@ -52,6 +52,7 @@ export {
   REACH_DEVICE_COMMANDS,
   DANGEROUS_LIFTABLE_SWITCHES,
   DEFAULT_PERMISSION_REFUSAL,
+  GRACE_PROTECTED_ROW_REFUSAL,
   PROTECTED_ROW_REFUSAL,
   UNLISTED_COMMAND_REFUSAL,
   protectedPluginsIn,
@@ -63,8 +64,6 @@ export {
   type PermissionLevel,
   CREATE_OUTSIDE_WORKSPACES,
   GRACE_REFUSED_ACTIONS,
-  FULL_POWERS_ACTIONS,
-  phonePowersRefusal,
   assertDisjoint,
   createReachAccessPolicy,
   createCondition,
@@ -84,19 +83,6 @@ export { ELEVATION_PATHS } from './elevation-routes.ts'
 export type { ReachFullAccessGrants } from './full-access-grants.ts'
 export { isElevationMinutes } from './elevation.ts'
 export { PIN_PATHS } from './pin-routes.ts'
-export {
-  PHONE_POWERS_FILE,
-  PHONE_POWERS_VERSION,
-  PhonePowersReader,
-  UNCHOSEN_PHONE_POWERS,
-  isPhonePowersLevel,
-  phonePowersPath,
-  readPhonePowers,
-  recordUpgradePhonePowers,
-  writePhonePowers,
-  type PhonePowers,
-} from './phone-powers.ts'
-export { PHONE_POWERS_LEVELS, PHONE_POWERS_PATH, type PhonePowersLevel, type PhonePowersView } from './wire.ts'
 export { UNLOCK_HEADER, UNLOCK_SUBPROTOCOL_PREFIX } from './unlock-token.ts'
 export { readPinSetBacks } from './pin-set-backs.ts'
 export type { LiftField } from './dangerous-settings.ts'
@@ -124,7 +110,6 @@ export { AUTH_CLASSES, AUTH_CLASS_NAMES, authClassOf, checkAuthTable, type AuthC
 export { GRANT_HEADER, gateByClass, readBodyCapped, type ClassGate, type GateOptions, type GrantGateHome, type LegacyUnlock } from './auth-gate.ts'
 export { GRANT_BODY_CAP_BYTES, GRANT_LIFE_MS, HOLD_ABSOLUTE_MS, HOLD_IDLE_MS, GrantStore, canonicalJson, hashArgs, hashRequest, type GrantEntry, type GrantHolder, type HoldFeature } from './grants.ts'
 export { PASSKEY_DEVICES_ACTION, PASSKEY_PATHS, PASSKEY_REMOVE_ACTION } from './passkey-routes.ts'
-export { PASSKEY_UNLOCK, PREVIEW_FLAGS } from './preview-flags.ts'
 export { admitApprovedDevice, admitKeyDevice, admitUnlockedDevice, gateByUnlock, requireComputer, requireComputerOrDevice, routedPathname, unlockOf, type ComputerRequest, type DangerousModeHome } from './computer-only.ts'
 export {
   LOOPBACK_STUDIO_ADDRESS,

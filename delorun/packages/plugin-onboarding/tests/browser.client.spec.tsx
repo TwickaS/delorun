@@ -131,7 +131,7 @@ describe('the Browser step', () => {
     await show({ browser: browser.face, bundles: pack('installed').installer })
     expect(checked()).toEqual([true, false])
     expect(screen.getByText(en['browser.ready'])).toBeTruthy()
-    expect(screen.getByText(en['browser.expect.asks.text']).textContent).toBe('The first chat that uses Browser asks you to allow its browser tool, playwright-mcp. Allow it once and Delorun does not ask again.')
+    expect(screen.getByText(en['browser.expect.asks.text']).textContent).toBe('The first chat that uses Browser asks you to allow its browser tool. Allow it once and Delorun does not ask again.')
   })
 
   it('shows the Host\'s reason as "Needs setup · reason" with its command, and opens the Settings section a need is met in', async () => {

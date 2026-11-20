@@ -56,7 +56,7 @@ export function PermissionsSection({ t, fetch, ask, review }: PermissionsSection
   const [outcome, setOutcome] = useState<{ readonly text: string; readonly failed: boolean } | undefined>()
 
   const refresh = useCallback(async (): Promise<void> => {
-    // Dangerous mode is read on its own route, which a remote studio with a running unlock may read too.
+    // Dangerous mode is read on its own route, which a remote studio may read too.
     const [nextWorkspaces, nextServers, nextEverywhere] = await Promise.all([readListing(t, () => readWorkspaces(fetch)), readListing(t, () => readServers(fetch)), readEverywhere(fetch)])
     setEverywhere(nextEverywhere)
     setWorkspaces(nextWorkspaces)
@@ -107,7 +107,7 @@ export function PermissionsSection({ t, fetch, ask, review }: PermissionsSection
   return <div className={css.section}>
     <h2 className={css.heading}>{t('permissions.title')}</h2>
     {outcome === undefined ? null : <p className={outcome.failed ? css.failed : css.line} role={outcome.failed ? 'alert' : 'status'}>{outcome.text}</p>}
-    {remote && everywhere.on ? <p className={css.line} role="status">{t('unlockHere')}</p> : null}
+    {remote && everywhere.on ? <p className={css.line} role="status">{t('confirmHere')}</p> : null}
     {remote && !everywhere.on
       ? <p className={css.line} role="status">{t('permissions.remote')} <code className={css.command}>{FULL_ACCESS_COMMAND}</code> <code className={css.command}>{MCP_COMMAND}</code></p>
       : null}

@@ -158,7 +158,7 @@ export const en = {
   'problem.not-absolute': 'That is not a full folder path.',
   'problem.outside-roots': 'Delorun is set to use folders inside your home folder only.',
   'problem.failed': 'Something went wrong. Try again.',
-  'problem.locked': 'Unlock this device, then try again.',
+  'problem.locked': 'This needs Face ID, or your PIN, each time. Try again to confirm it.',
   'problem.refusedArrival': 'This needs you at the computer Delorun runs on.',
 
   'new.name': 'Name',
@@ -363,7 +363,7 @@ export const zh: Record<NewWorkspaceLocaleKey, string> = {
   'problem.not-absolute': '这不是完整的文件夹路径。',
   'problem.outside-roots': 'Delorun 已设置为只使用主文件夹内的文件夹。',
   'problem.failed': '出了点问题。请重试。',
-  'problem.locked': '请先解锁此设备，然后重试。',
+  'problem.locked': 'This needs Face ID, or your PIN, each time. Try again to confirm it.',
   'problem.refusedArrival': '这需要你在运行 Delorun 的电脑前操作。',
 
   'new.name': '名称',

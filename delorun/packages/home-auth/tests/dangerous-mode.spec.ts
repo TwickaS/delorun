@@ -70,12 +70,12 @@ function facts(mode: boolean, unlocked: boolean): ReachAccessFacts {
     delorunHome: '/nowhere',
     elevationOf: () => (unlocked ? UNLOCK : undefined),
     pageUnlockOf: () => undefined,
-    keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
+    keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined,
     computerOnlySwitches: () => [CONSENT],
     protectedEntryIds: () => new Set([PROTECTED_ROW]), computerOnlyEntryIds: () => new Set([COMPUTER_ONLY_ROW]),
     defaultPermission: () => PERMISSION,
     unlockModeEnabled: () => false,
-    phonePowers: () => 'full' as const, dangerousMode: () => mode,
+    dangerousMode: () => mode,
   }
 }
 
@@ -233,7 +233,7 @@ function home(listener: string | undefined, mode: boolean, unlocked = true, pin 
     unlockModeEnabled: () => pin,
     pageUnlockOf: (id: string) => (pageUnlocked && id === 'page-1' ? { id: 'page-1' } : undefined),
     arrivalOf: () => ({ listener, host: undefined, source: 'unknown' as const }),
-    phonePowers: () => 'full' as const, dangerousMode: () => mode,
+    dangerousMode: () => mode,
     elevationOf: () => (unlocked ? { id: 'elevation-1' } : undefined),
   } as never
 }

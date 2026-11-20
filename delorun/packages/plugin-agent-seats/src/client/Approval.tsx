@@ -50,8 +50,6 @@ export function agentOfTool(toolName: string): SeatAgent {
 export interface ApprovalInjected {
   /** This page's reach for approvals; absent means the page cannot tell, which offers Reject only. */
   readonly reach: SeatReachSource | undefined
-  /** Format an epoch-millisecond time of day. */
-  readonly clock: (epochMs: number) => string
 }
 
 /** Props of the composer entry. */
@@ -62,13 +60,16 @@ export interface SeatApprovalProps extends ApprovalInjected {
   readonly t: SeatTranslate
 }
 
-const UNKNOWN: SeatReach = { kind: 'locked-phone' }
+const UNSUBSCRIBED = (): (() => void) => () => undefined
+const NO_REACH = (): undefined => undefined
 
-function useReach(source: SeatReachSource | undefined): SeatReach {
-  return useSyncExternalStore(
-    source?.subscribe ?? (() => () => undefined),
-    source?.get ?? (() => UNKNOWN),
-  )
+/**
+ * Read the page's reach.
+ * @param source - the studio's reach service, when it provides one.
+ * @returns the reach, or undefined without a service.
+ */
+function useReach(source: SeatReachSource | undefined): SeatReach | undefined {
+  return useSyncExternalStore(source?.subscribe ?? UNSUBSCRIBED, source?.get ?? NO_REACH)
 }
 
 /**
@@ -76,16 +77,31 @@ function useReach(source: SeatReachSource | undefined): SeatReach {
  * @param props - the pending approval, the studio's reach source and the dictionary.
  * @returns the card.
  */
-export function SeatApproval({ matched, t, reach, clock }: SeatApprovalProps) {
+export function SeatApproval({ matched, t, reach }: SeatApprovalProps) {
   const standing = useReach(reach)
   const [sent, setSent] = useState(false)
+  const [unconfirmed, setUnconfirmed] = useState(false)
   const agent = AGENT_NAMES[agentOfTool(matched.toolName)]
   const send = (decision: ApprovalDecision): void => {
     if (sent || !matched.answerable) return
     setSent(true)
-    void matched.answer(decision).catch(() => { setSent(false) })
+    setUnconfirmed(false)
+    const confirm = decision === 'rejected' ? undefined : reach?.confirm
+    if (confirm === undefined) {
+      void matched.answer(decision).catch(() => { setSent(false) })
+      return
+    }
+    // A cancelled confirmation sends nothing and leaves the card answerable.
+    void confirm({ sessionId: matched.sessionId, callId: matched.callId, grants: matched.grants ?? 'external-agent', value: decision })
+      .then((ok) => {
+        if (ok) return matched.answer(decision)
+        setSent(false)
+        setUnconfirmed(true)
+        return undefined
+      })
+      .catch(() => { setSent(false) })
   }
-  const canGrant = standing.kind !== 'locked-phone'
+  const canGrant = standing !== undefined
   // Only a request that declared a run scope has a Host listener that can honour the answer.
   const canRun = matched.runScope !== undefined
   return (
@@ -94,17 +110,14 @@ export function SeatApproval({ matched, t, reach, clock }: SeatApprovalProps) {
       <span className={css.approvalTitle}>{t('approval.title', { agent })}</span>
       {matched.reason !== undefined && <div className={css.command}>{matched.reason}</div>}
       <p className={css.text}>{t('approval.note', { agent })}</p>
-      {standing.kind === 'unlocked-phone' && standing.until !== undefined && <p className={css.text}>{t('approval.unlockedUntil', { time: clock(standing.until) })}</p>}
-      {standing.kind === 'locked-phone' && <p className={css.text}>{t('approval.locked')}</p>}
+      {!canGrant && <p className={css.text}>{t('approval.locked')}</p>}
+      {unconfirmed && <p className={css.text} role="status">{t('approval.notConfirmed')}</p>}
       <div className={css.actions}>
         <Button variant="outline" disabled={sent} onClick={() => { send('rejected') }}>{t('approval.reject')}</Button>
         {canGrant && canRun && (
           <Button variant="outline" disabled={sent} onClick={() => { send(allowedForRunDecision()) }}>{t('approval.forRun')}</Button>
         )}
         {canGrant && <Button variant="primary" disabled={sent} onClick={() => { send('allowed-once') }}>{t('approval.once')}</Button>}
-        {!canGrant && reach !== undefined && (
-          <Button variant="primary" onClick={() => { reach.openUnlock() }}>{t('approval.unlock')}</Button>
-        )}
       </div>
     </div>
   )

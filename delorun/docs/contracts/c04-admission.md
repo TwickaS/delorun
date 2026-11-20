@@ -150,16 +150,16 @@ A session past its idle or absolute limit is refused with `401 SESSION_EXPIRED` 
 <a id="page-unlock"></a>
 ### Page unlock
 
-While [PIN mode](c14-oidc-passkeys.md#pin-mode) is on, a page may prove an unlock it holds in memory. Each part below is a fact of admission, not of the routes.
+No route mints a page unlock: [PIN mode](c14-oidc-passkeys.md#pin-mode) refuses the unlock to every device, which confirms each action with a one-action grant instead. Admission still strips and checks the token carriers below, so a token a page still sends is refused with `401 UNLOCK_INVALID` and admits nothing. Each part below is a fact of admission, not of the routes.
 
 - **Carriers.** The token travels as the `Delorun-Unlock` header on `/api` requests and as the WebSocket subprotocol `delorun-unlock.<token>` on the `/api/remote.mux` upgrade. A query parameter is never read as a token. A page that offers the subprotocol also offers one fixed protocol before it, so the upgrade answer names a protocol the browser accepts.
 - **Stripped.** `admit` removes both carriers from the request, in every header view, before any route, upgrade handler or plugin sees it. With PIN mode off, the token is stripped and ignored.
 - **Checked.** After the session is admitted, the token must name an unlock bound to that session's device, listener and session (a session rolled within the last 30 seconds counts as the same session). A request without a token is admitted as today, to the device's locked Peer. A token that is unknown, ended, repeated or bound to anything else is refused with `401 UNLOCK_INVALID`, and an unlock bound to another device, listener or session ends: a token that moved has leaked.
-- **Per-page Peers.** A device holds one locked Peer per listener and one Peer for each running page unlock, whose principal carries the unlock's `unlockId`. The Peer decides what its page may do, so a locked tab cannot answer a grant that a sibling tab could, and an unlock never admits another page.
+- **Per-page Peers.** A device holds one locked Peer per listener and one Peer for each running page unlock, whose principal carries the unlock's `unlockId`. The Peer decides what its page may do; no Peer answers a reserved prompt or takes a `face` action without a grant of its own, and an unlock never admits another page.
 - **Ending.** When an unlock ends, its Peer is disposed and the reach connections of its session close. The device's other pages reconnect with their own tokens.
 - **Caching.** The reach index answers `Cache-Control: no-store`, so a restored page is not served from the cache.
 
-**Grants (Face ID).** While the `unlock.passkeys` preview flag is on, a confirmed action does not travel as a token: the home keeps a grant per device, listener, action and call hash (C14, "Face ID unlock"). A plugin Fetch route of class `face` names its grant in the `Delorun-Grant` header, which the home reads and removes before the route runs, as it does `Delorun-Unlock`; the header holds only the grant id and the home checks the hash of the request it received. A Remote call and a prompt answer carry nothing: the policy and the answer guard look the grant up. A terminal's or folder picker's hold is bound to that id and to the connection.
+**Grants (Face ID).** A confirmed action does not travel as a token: the home keeps a grant per device, listener, action and call hash (C14, "Face ID unlock"). A plugin Fetch route of class `face` names its grant in the `Delorun-Grant` header, which the home reads and removes before the route runs, as it does `Delorun-Unlock`; the header holds only the grant id and the home checks the hash of the request it received. A Remote call and a prompt answer carry nothing: the policy and the answer guard look the grant up. A terminal's or folder picker's hold is bound to that id and to the connection.
 
 
 <a id="launch-tokens"></a>

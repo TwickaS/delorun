@@ -53,14 +53,26 @@ const ROUTES: readonly (readonly [string, string])[] = [
   ['exact', PIN_PATHS.options],
   ['exact', PIN_PATHS.resume],
   ...Object.values(PASSKEY_PATHS).map((path): ['exact', string] => ['exact', path]),
-  ['exact', PHONE_POWERS_PATH],
 ]
 import { ELEVATION_PATHS } from '../src/elevation-routes.ts'
 import { PASSKEY_PATHS } from '../src/passkey-routes.ts'
 import { PIN_PATHS } from '../src/pin-routes.ts'
-import { PHONE_POWERS_PATH } from '../src/wire.ts'
 import { deviceIdOf } from '../src/records.ts'
 import { claimOf, keyOf } from './fixtures/home.ts'
+
+/** One settings field a PIN page loosened, as the PIN set-back ledger records it. */
+interface PinLift { readonly ns: string; readonly field: string; readonly written: unknown }
+
+/**
+ * Record PIN-mode settings lifts the way a page unlock did, so the set-back on PIN mode turning off is exercised.
+ * @param ctx - the context whose `homeAuth` service holds the ledger.
+ * @param lifts - the fields and the values they were set to.
+ */
+function seedPinLift(ctx: Context, lifts: readonly PinLift[]): void {
+  const ledger: { record: (lifts: readonly PinLift[], previousOf: (ns: string, field: string) => unknown) => void } | undefined = ctx.homeAuth['pinLifts']
+  if (ledger === undefined) throw new Error('the PIN set-back ledger is not loaded')
+  ledger.record(lifts, (ns, field) => ctx.homeAuth['settingsFields']().read(ns, field))
+}
 
 const ADDRESS = brandString<StudioAddress>('http://127.0.0.1:3080')
 const HOUR = 60 * 60 * 1000
@@ -109,6 +121,8 @@ describe('the homeAuth service', () => {
     try {
       expect(mounted.ctx.get('homeAuth')).toBeInstanceOf(HomeAuthService)
       expect(mounted.registered.map(route => [route.kind, route.path])).toEqual(ROUTES)
+      // The Phone powers route is gone: nothing answers it, so a request for it is a 404 (A2, owner decision L92).
+      expect(mounted.registered.map(route => route.path)).not.toContain('/auth/phone-powers')
     } finally {
       await mounted.fiber.dispose()
       await rm(mounted.directory, { recursive: true, force: true })
@@ -321,7 +335,8 @@ describe('the homeAuth service', () => {
         update: (_ns: string, patch: Record<string, unknown>) => { calls.push(patch); Object.assign(values, patch); return Promise.resolve() },
       } as never)
       await ctx.homeAuth.setPin('739150', {})
-      expect(ctx.homeAuth.recordPinLifts([{ ns: 'delorun-delegation-consent', field: 'enabled', written: false }])).toBeUndefined()
+      // A record a PIN page unlock left before the window was removed (A483); nothing records one now.
+      seedPinLift(ctx, [{ ns: 'delorun-delegation-consent', field: 'enabled', written: false }])
       values.enabled = false
       const file = join(directory, 'secrets', 'home-auth', 'reach-pin-settings.json')
       // Pins the file and its mode: the record is a protected write like the other reach files.
@@ -346,7 +361,8 @@ describe('the homeAuth service', () => {
         update: (_ns: string, patch: Record<string, unknown>) => { Object.assign(values, patch); return Promise.resolve() },
       } as never)
       await ctx.homeAuth.setPin('739150', {})
-      expect(ctx.homeAuth.recordPinLifts([{ ns: 'delorun-delegation-consent', field: 'enabled', written: false }])).toBeUndefined()
+      // A record a PIN page unlock left before the window was removed (A483); nothing records one now.
+      seedPinLift(ctx, [{ ns: 'delorun-delegation-consent', field: 'enabled', written: false }])
       values.enabled = false
       rows = []
       await ctx.homeAuth.turnPinOff()
@@ -379,7 +395,8 @@ describe('the homeAuth service', () => {
       }
       ctx.provide('settings', settings as never)
       await ctx.homeAuth.setPin('739150', {})
-      expect(ctx.homeAuth.recordPinLifts([{ ns: 'delorun-delegation-consent', field: 'enabled', written: false }])).toBeUndefined()
+      // A record a PIN page unlock left before the window was removed (A483); nothing records one now.
+      seedPinLift(ctx, [{ ns: 'delorun-delegation-consent', field: 'enabled', written: false }])
       values.enabled = false
       await ctx.homeAuth.turnPinOff()
       await ctx.homeAuth.endPinSettings()
@@ -406,7 +423,8 @@ describe('the homeAuth service', () => {
       const describe = vi.fn(() => [{ ns: 'delorun-delegation-consent', value: values }])
       ctx.provide('settings', { describe, update: () => Promise.reject(new Error('down')) } as never)
       await ctx.homeAuth.setPin('739150', {})
-      expect(ctx.homeAuth.recordPinLifts([{ ns: 'delorun-delegation-consent', field: 'enabled', written: false }])).toBeUndefined()
+      // A record a PIN page unlock left before the window was removed (A483); nothing records one now.
+      seedPinLift(ctx, [{ ns: 'delorun-delegation-consent', field: 'enabled', written: false }])
       values.enabled = false
       await ctx.homeAuth.turnPinOff()
       await ctx.homeAuth.endPinSettings()
@@ -429,7 +447,8 @@ describe('the homeAuth service', () => {
       const values = { enabled: true }
       ctx.provide('settings', { describe: () => [{ ns: 'delorun-delegation-consent', value: values }], update: () => Promise.reject(new Error('down')) } as never)
       await ctx.homeAuth.setPin('739150', {})
-      expect(ctx.homeAuth.recordPinLifts([{ ns: 'delorun-delegation-consent', field: 'enabled', written: false }])).toBeUndefined()
+      // A record a PIN page unlock left before the window was removed (A483); nothing records one now.
+      seedPinLift(ctx, [{ ns: 'delorun-delegation-consent', field: 'enabled', written: false }])
       values.enabled = false
       await ctx.homeAuth.turnPinOff()
       await ctx.homeAuth.endPinSettings()

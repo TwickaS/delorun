@@ -24,6 +24,7 @@ import { TrashLeave } from './leave.ts'
 import { en, zh, type TrashLocaleKey } from './locales.ts'
 import { createTrashToastSource, TrashToast } from './TrashToast.tsx'
 import { TrashSection, type TrashSectionInjected } from './TrashSection.tsx'
+import { grantingFetchOf } from '@delorun/plugin-changes/face-grant'
 
 export type { TrashLocaleKey } from './locales.ts'
 export type { TrashState } from './controller.ts'
@@ -70,6 +71,7 @@ export function apply(ctx: Context): void {
     hide: sessionId => ctx.uiWorkspace.hideSession(SessionId(sessionId)),
     drafts: localDrafts,
     report: toast.report,
+    fetch: grantingFetchOf(ctx),
   })
   ctx.effect(() => {
     void trash.refresh()

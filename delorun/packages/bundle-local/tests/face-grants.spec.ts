@@ -1,6 +1,7 @@
 /** The Setup versions and report routes under Face ID: saving, switching and reading the report's details need a grant for that exact call; listing versions and their changes stay free. */
 import { describe, expect, it, vi } from 'vitest'
-import { REACH_DEVICE } from '@delorun/home-auth'
+import { PICKER_HOLD_ID, REACH_DEVICE } from '@delorun/home-auth'
+import { PICKER_HOLD_ID as CLIENT_PICKER_HOLD_ID } from '../src/client/face-retry.ts'
 import { faceWorld, type FaceWorld } from '../../plugin-changes/tests/face-world.ts'
 import { PROFILE_VERSION_ROUTES } from '../src/client/versions-api.ts'
 import { REPORT_ROUTE } from '../src/client/report-api.ts'
@@ -148,5 +149,12 @@ describe('the report details route under Face ID', () => {
     // Pins `principal === undefined`: without it the owner's Peer would be asked for a grant.
     const route = report(faceWorld('d1', 'reach'))
     expect((await route.fetch(get(REPORT_ROUTE))).status).toBe(200)
+  })
+})
+
+describe('the client\'s picker hold id', () => {
+  // A picker hold id other than the home's would open a hold no later picker read matches.
+  it('is the home\'s', () => {
+    expect(CLIENT_PICKER_HOLD_ID).toBe(PICKER_HOLD_ID)
   })
 })

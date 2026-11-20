@@ -104,6 +104,6 @@ export function ExternalAgentAction({ grants, toolName, allow, answered, canAnsw
   return <div className={css.action} data-external-agent-action="allow">
     <Button variant="outline" size="sm" disabled={busy || answered || !canAnswer()} onClick={() => { void run() }}>{t('action.allowAgent')}</Button>
     {chip}
-    {failure === undefined ? null : <ConsentFailureLine t={t} failure={failure} action="action.changeAgent" retry={() => { void run() }} />}
+    {failure === undefined ? null : <ConsentFailureLine t={t} failure={failure} action="action.changeAgent" />}
   </div>
 }

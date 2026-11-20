@@ -261,6 +261,20 @@ describe('dangerous mode with the row and the grant file', () => {
     expect(defaults.grantedFolders()).toEqual([workspaceKey(workspace)])
   })
 
+  it('keeps a grant a device made outside the mode, and switches the chat it names at once', async () => {
+    // A phone's Face ID consent counted as a dangerous-mode grant: the chat stayed on the safer preset and the next reload withdrew the grant.
+    const { ctx, harness, defaults, workspace, home } = await mounted({ everywhere: false, grant: 'none' })
+    const chat = await harness.create(SessionId('chat-face'), {}, { cwd: workspace })
+    const review = defaults.reviewChat('chat-face')
+    const change = await defaults.setFullAccess({ workspace, reviewId: review.reviewId, on: true, confirmed: true, chat: 'chat-face' }, 'device')
+    expect(change.chats).toBe(1)
+    expect(presetOf(ctx, chat.session)).toBe(FULL_ACCESS_PRESET)
+    expect(existsSync(deviceGrantsPath(home))).toBe(false)
+    await defaults.reload()
+    expect(defaults.granted(workspace)).toBe(true)
+    expect(presetOf(ctx, chat.session)).toBe(FULL_ACCESS_PRESET)
+  })
+
   it('withdraws a device-made grant at start when the mode is off', async () => {
     const { defaults, workspace, home } = await mounted({ everywhere: true, grant: 'valid' })
     const store = permissionStorePath(home)

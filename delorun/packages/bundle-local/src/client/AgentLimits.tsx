@@ -3,6 +3,8 @@
  * pill's popover show them. Showing them reads stored figures only; a check starts only from the button (T12).
  * @module @delorun/bundle-local/client/AgentLimits
  */
+import type { Context } from '@deepseek-ai/cordis'
+import { grantingFetchOf } from '@delorun/plugin-changes/face-grant'
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -133,10 +135,19 @@ export function outcomeNote(t: LimitsTranslate, outcome: RefreshOutcome, now: nu
   }
 }
 
+/**
+ * The request function a surface outside the bundle reads the figures and runs "Check now" with: the studio's Face ID
+ * fetch, so a check refused on a device asks for Face ID or the PIN, and on the computer the page's own.
+ * @param ctx - the browser plugin context.
+ * @returns the function.
+ */
+export function limitsFetchOf(ctx: Context): HostFetch {
+  return grantingFetchOf(ctx)
+}
+
 /** What one "Check now" came to. */
 export type CheckResult =
   | { readonly kind: 'done'; readonly note: CheckNote; readonly record: AccountView; readonly now: number }
-  | { readonly kind: 'unlock' }
   | { readonly kind: 'failed'; readonly note: CheckNote }
 
 /**
@@ -144,14 +155,15 @@ export type CheckResult =
  * @param fetch - the request function.
  * @param t - the copy.
  * @param provider - the agent.
- * @returns the note to show and, when the home answered, the figures after the check; `unlock` for a locked device.
+ * @returns the note to show and, when the home answered, the figures after the check. A refusal that reaches here on a
+ *   device means the person did not confirm the check: the fetch asked for Face ID or the PIN, and they cancelled.
  */
 export async function runCheck(fetch: HostFetch, t: LimitsTranslate, provider: AccountView['provider']): Promise<CheckResult> {
   try {
     const answer = await checkAccount(fetch, provider)
     return { kind: 'done', note: outcomeNote(t, answer.outcome, answer.now), record: answer.record, now: answer.now }
   } catch (error) {
-    if (isRefused(error, ELEVATION_REQUIRED)) return { kind: 'unlock' }
+    if (isRefused(error, ELEVATION_REQUIRED)) return { kind: 'failed', note: { text: t('limits.notConfirmed'), failed: false } }
     const failure = hostFailureOf(error)
     return { kind: 'failed', note: { text: failure.kind === 'refused' ? failure.message : failure.kind === 'unreachable' ? t('limits.unreachable') : t('limits.unreadable'), failed: true } }
   }
@@ -172,9 +184,9 @@ export interface AccountsHandle {
   /**
    * Check one agent now and fold the answer in.
    * @param provider - the agent.
-   * @returns the note to show, or `unlock` when a locked device was refused.
+   * @returns the note to show.
    */
-  readonly check: (provider: AccountView['provider']) => Promise<CheckNote | 'unlock'>
+  readonly check: (provider: AccountView['provider']) => Promise<CheckNote>
 }
 
 /**
@@ -197,7 +209,7 @@ export function useAccounts(fetch: HostFetch, t: LimitsTranslate, enabled = true
     }
   }, [fetch, t])
   useEffect(() => { if (enabled) void reload() }, [enabled, reload])
-  const check = useCallback(async (provider: AccountView['provider']): Promise<CheckNote | 'unlock'> => {
+  const check = useCallback(async (provider: AccountView['provider']): Promise<CheckNote> => {
     const result = await runCheck(fetch, t, provider)
     if (result.kind === 'done') {
       const { record, now } = result
@@ -206,7 +218,7 @@ export function useAccounts(fetch: HostFetch, t: LimitsTranslate, enabled = true
         : previous)
       return result.note
     }
-    return result.kind === 'unlock' ? 'unlock' : result.note
+    return result.note
   }, [fetch, t])
   return { state, reload, check }
 }
@@ -226,25 +238,18 @@ export interface AgentLimitsProps {
 }
 
 /**
- * The bars with "Check now" and its outcome. A locked device that is refused sees "Unlock to check" from then on.
+ * The bars with "Check now" and its outcome.
  * @param props - the figures, the copy and the check.
  * @returns the block.
  */
 export function AgentLimits({ account, now, t, check, signIn = false }: AgentLimitsProps): ReactNode {
   const [busy, setBusy] = useState(false)
-  const [locked, setLocked] = useState(false)
   const [note, setNote] = useState<CheckNote | undefined>()
   const run = async (): Promise<void> => {
     setBusy(true)
     setNote(undefined)
     const result = await check(account.provider)
     setBusy(false)
-    if (result === 'unlock') {
-      setLocked(true)
-      setNote({ text: t('limits.unlockNeeded'), failed: false })
-      return
-    }
-    setLocked(false)
     setNote(result)
   }
   const line = signIn ? signInText(t, account) : undefined
@@ -254,7 +259,7 @@ export function AgentLimits({ account, now, t, check, signIn = false }: AgentLim
       <LimitBars account={account} now={now} t={t} />
       <div className={css.actions}>
         <Button variant="outline" size="sm" disabled={busy || !account.installed} onClick={() => { void run() }}>
-          {busy ? t('limits.checking') : locked ? t('limits.unlockToCheck') : t('limits.check')}
+          {busy ? t('limits.checking') : t('limits.check')}
         </Button>
       </div>
       {note !== undefined && <p className={css.note} data-failed={note.failed} role={note.failed ? 'alert' : 'status'}>{note.text}</p>}

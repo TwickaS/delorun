@@ -1,11 +1,8 @@
 /**
- * Phone access: what it does and the command that turns it on, the Phone powers choice, and the Tailscale checks under
+ * Phone access: what it does and the command that turns it on, and the Tailscale checks under
  * More.
  */
 import { TAILSCALE_OPERATOR_COMMAND } from '@delorun/contract-reach-providers'
-import { failureSentence, LOOPBACK_REQUIRED } from '@delorun/bundle-local/host-api'
-import { PhonePowers } from '@delorun/bundle-local/phone-powers'
-import { useCallback } from 'react'
 import type { ReactNode } from 'react'
 import type { TailscaleReadiness } from '../../wire.ts'
 import type { StepServices } from '../types.ts'
@@ -68,20 +65,13 @@ function TailscaleChecks({ tailscale, t }: { readonly tailscale: TailscaleReadin
 }
 
 /**
- * Phone access, while reach is not set up: one sentence on what it does and the command that turns it on; the Phone
- * powers choice of Settings → Devices, where the home serves it; the Tailscale checks and the approval command sit
- * under More; the PIN step follows once reach is on. A studio opened from a phone has no such step.
+ * Phone access, while reach is not set up: one sentence on what it does and the command that turns it on; the Tailscale
+ * checks and the approval command sit under More; the PIN step follows once reach is on. A studio opened from a phone has no such step.
  * @param props - the services and the guide.
  * @returns the step body.
  */
 export function ReachStep({ services, guide }: StepProps): ReactNode {
-  const { t, phonePowers } = services
-  const devices = phonePowers.t
-  const powersFailure = useCallback((error: unknown): string => failureSentence(error, {
-    refused: (code, message) => code === LOOPBACK_REQUIRED ? devices('loopback', { action: devices('action.powers') }) : message,
-    unreachable: devices('failed.unreachable'),
-    unreadable: devices('failed.unreadable'),
-  }), [devices])
+  const { t } = services
   const readiness = useStore(guide.readiness)
   const tailscale = readiness.status === 'ready' ? readiness.value.tailscale : undefined
   return (
@@ -91,7 +81,6 @@ export function ReachStep({ services, guide }: StepProps): ReactNode {
       <CommandRow command={REACH_COMMAND} t={t} />
       <Explain heading={t('reach.how')} numbered cards={REACH_HOW.map(n => ({ key: n, title: t(`reach.how.${n}.title`), text: t(`reach.how.${n}.text`) }))} />
       <Explain heading={t('reach.uses')} cards={REACH_USES.map(n => ({ key: n, title: t(`reach.uses.${n}.title`), text: t(`reach.uses.${n}.text`) }))} />
-      <PhonePowers t={devices} fetch={phonePowers.fetch} onDevice={services.remote} failure={powersFailure} />
       <details className={more.details}>
         <summary className={`${chevron.summary} ${more.summary}`}>{t('reach.more')}</summary>
         <div className={more.more}>

@@ -37,7 +37,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import type { StudioAddress } from '@delorun/contract-admission'
 import { DEVICE_APPROVAL_VERSION, type Base64Url } from '@delorun/contract-device-approval'
-import { CREATE_OUTSIDE_WORKSPACES, deviceIdOf, DeviceStore, HomeAuthService, phonePowersRefusal, writePhonePowers, PROTECTED_ROW_REFUSAL, REACH_ALLOWED_ACTIONS, REACH_DENIED_ACTIONS, REACH_ELEVATED_ACTIONS, REACH_EVERYDAY_SETTINGS, REACH_KEY_ACTIONS, reachDevicePrincipal, signInMessage, switchOffRefusal, UNLISTED_COMMAND_REFUSAL } from '@delorun/home-auth'
+import { CREATE_OUTSIDE_WORKSPACES, deviceIdOf, DeviceStore, hashArgs, HomeAuthService, PROTECTED_ROW_REFUSAL, REACH_ALLOWED_ACTIONS, REACH_DENIED_ACTIONS, REACH_ELEVATED_ACTIONS, REACH_EVERYDAY_SETTINGS, REACH_KEY_ACTIONS, reachDevicePrincipal, signInMessage, switchOffRefusal, UNLISTED_COMMAND_REFUSAL } from '@delorun/home-auth'
 import { EXTERNAL_AGENT_CONSENT_SWITCH } from '@delorun/plugin-delegation-consent'
 import { claimOf, recordOf } from '../fixtures/devices.ts'
 import { bootStudio, type Studio } from '../admission/studio.ts'
@@ -93,7 +93,7 @@ const ADMITTED_ROUTES: ReadonlySet<string> = new Set([
   '/api/delorunOnboarding.keyTest', '/api/delorunOnboarding.recommend', '/api/delorunOnboarding.setupRecord', '/api/delorunOnboarding.deferStep',
   '/api/delorunOnboarding.readiness', '/api/delorunOnboarding.start', '/api/delorunOnboarding.localModels', '/api/delorunOnboarding.workspaceNotice',
   '/api/delorunMcpConsent.waiting', '/api/delorunBranding.icon', '/api/delorunChatStates.list', '/api/delorunChatStates.set',
-  '/api/delorunPreviewFlags.list',
+  '/api/delorunPreviewFlags.list', '/api/delorunNewWorkspace.cloneStatus', '/api/delorunNewWorkspace.defaults', '/api/delorunOnboarding.agentModels', '/api/delorunTrust.check',
 ])
 
 /**
@@ -118,6 +118,18 @@ async function expectElevationRequired(endpoint: string, args: Record<string, un
 async function expectAdmitted(endpoint: string, args: Record<string, unknown>, as: PeerScope = peer): Promise<void> {
   const result = await call(endpoint, args, as)
   expect(result.ok ? undefined : result.error.code, endpoint).not.toBe('remote-access/denied')
+}
+
+/**
+ * Assert that a one-action PIN grant for exactly this call lets it through to its service, as a device with no passkey gets by typing its PIN (A483).
+ * @param endpoint - the endpoint.
+ * @param args - its named wire arguments, hashed as the policy hashes them.
+ */
+async function expectAdmittedWithGrant(endpoint: string, args: Record<string, unknown>): Promise<void> {
+  const grants = studio.ctx.homeAuth.faceGrants()
+  if (grants === undefined) throw new Error('the home keeps no grant store')
+  grants.mint({ deviceId, listener: LISTENER }, [{ action: endpoint, hash: hashArgs(args) ?? '' }], 'pin')
+  await expectAdmitted(endpoint, args)
 }
 
 /**
@@ -166,16 +178,7 @@ beforeAll(async () => {
   // A link the chat's agent could create, to the folder that holds the Delorun home.
   await symlink(directory, join(folder, 'linked'))
   workspaceId = (await ctx.workspaceRegistry.create(folder)).id
-  // The unlock rules below are those of Phone powers' Full level; the Careful level has its own tests.
-  await writePhonePowers(secretsDirectory(), 'full')
 }, 120_000)
-
-/**
- * @returns the home-auth secrets directory of the test's home.
- */
-function secretsDirectory(): string {
-  return join(directory, 'home', 'secrets', 'home-auth')
-}
 
 afterAll(async () => {
   await reachListener?.close()
@@ -348,7 +351,7 @@ describe('a reach device through the Gateway', () => {
     await expectRefused('account/getState', {})
   })
 
-  it('needs an unlock for a terminal in every workspace at the Full level, whatever a stale terminal switch file, a full-access grant or dangerous mode says', async () => {
+  it('needs a grant for a terminal in every workspace, which an unlock never gives, whatever a stale terminal switch file, a full-access grant or dangerous mode says', async () => {
     const elsewhere = join(directory, 'elsewhere')
     await mkdir(elsewhere, { recursive: true })
     const otherWorkspace = (await studio.ctx.workspaceRegistry.create(elsewhere)).id
@@ -361,10 +364,10 @@ describe('a reach device through the Gateway', () => {
     let unlock: string | undefined
     try {
       for (const agentId of [granted.sessionId, ungranted.sessionId]) {
-        await expectElevationRequired('terminal/shells', { agentId })
+        await expectAdmitted('terminal/shells', { agentId })
         await expectElevationRequired('terminal/create', { agentId, request: { id: 'phone-1', cols: 80, rows: 24 } })
       }
-      await expectElevationRequired('terminal/list', { sessionId: granted.sessionId })
+      await expectAdmitted('terminal/list', { sessionId: granted.sessionId })
       unlock = elevate()
       await expectAdmitted('terminal/shells', { agentId: ungranted.sessionId })
       await expectAdmitted('terminal/list', { sessionId: granted.sessionId })
@@ -377,8 +380,11 @@ describe('a reach device through the Gateway', () => {
 
   it('needs an unlock for terminals and the directory picker, and reads the Changes view', async () => {
     const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
-    await expectElevationRequired('terminal/list', { sessionId: created.sessionId })
-    await expectElevationRequired('terminal/shells', { agentId: created.sessionId })
+    await expectAdmitted('terminal/list', { sessionId: created.sessionId })
+    // F29: a terminal's metadata is free, so a first terminal takes one Face ID, at create.
+    await expectAdmitted('terminal/shells', { agentId: created.sessionId })
+    await expectAdmitted('terminal/environment', { agentId: created.sessionId })
+    await expectElevationRequired('terminal/create', { agentId: created.sessionId, request: { id: 'phone-2', cols: 80, rows: 24 } })
     await expectElevationRequired('directoryPicker/pick', {})
     await expectAdmitted('workspaceFiles/changes', { workspaceFileScopeId: created.sessionId, path: '.' })
   })
@@ -413,68 +419,33 @@ describe('a reach device through the Gateway', () => {
   })
 })
 
-/**
- * Assert that Phone powers refuses one call, unlocked or not.
- * @param endpoint - the endpoint.
- * @param args - its named wire arguments.
- * @param as - the Peer that calls.
- */
-async function expectPhonePowersRefused(endpoint: string, args: Record<string, unknown>, as: PeerScope = peer): Promise<void> {
-  expect(await call(endpoint, args, as), endpoint).toMatchObject({
-    ok: false,
-    error: { code: 'remote-access/denied', details: { action: endpoint, reason: phonePowersRefusal(endpoint) } },
-  })
-}
-
-describe('Phone powers', () => {
-  it('keeps a terminal at the computer under Careful, for an unlocked phone in dangerous mode too', async () => {
+describe('a terminal with no grant', () => {
+  // Removing the grant-only return for a terminal in the condition lets an unlocked phone open a shell outside the sandbox; while the home keeps no grant store, so no grant exists.
+  it('is refused to an unlocked phone in dangerous mode too, and its unlock opens nothing: only a grant for the call does', async () => {
     const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
-    await writePhonePowers(secretsDirectory(), 'careful')
     const dispose = studio.ctx.effect(() => studio.ctx.provide('reachFullAccessGrants', { dangerousMode: () => true, onDangerousModeEnd: () => () => {} }), 'test dangerous mode')
     const unlock = elevate()
     try {
-      // Pins FULL_POWERS_ACTIONS in the condition: without it the unlocked phone opens a shell outside the sandbox.
-      await expectPhonePowersRefused('terminal/shells', { agentId: created.sessionId })
-      await expectPhonePowersRefused('terminal/create', { agentId: created.sessionId, request: { id: 'careful-1', cols: 80, rows: 24 } })
-      await expectPhonePowersRefused('terminal/list', { sessionId: created.sessionId })
-      // The rest of what an unlock opens stays open.
-      await expectAdmitted('directoryPicker/list', {})
+      await expectAdmitted('terminal/shells', { agentId: created.sessionId })
+      await expectElevationRequired('terminal/create', { agentId: created.sessionId, request: { id: 'careful-1', cols: 80, rows: 24 } })
+      await expectAdmitted('terminal/list', { sessionId: created.sessionId })
+      // A running unlock opens no other elevated action either (A483); a grant for the call does.
+      await expectElevationRequired('directoryPicker/list', {})
+      await expectAdmittedWithGrant('directoryPicker/list', {})
     } finally {
       studio.ctx.homeAuth.revokeElevation(unlock)
       await dispose()
-      await writePhonePowers(secretsDirectory(), 'full')
     }
   })
 
-  it('keeps a terminal at the computer while the home has no choice recorded, or a record it cannot read', async () => {
-    const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
+  // Removing the route's removal leaves a way for a phone to answer: the Phone powers route is gone.
+  it('has no Phone powers route to change, for a phone, unlocked or not', async () => {
     const unlock = elevate()
     try {
-      await rm(join(secretsDirectory(), 'phone-powers.json'))
-      // Pins UNCHOSEN_PHONE_POWERS: a home with no choice applies Careful.
-      await expectPhonePowersRefused('terminal/shells', { agentId: created.sessionId })
-      await writeFile(join(secretsDirectory(), 'phone-powers.json'), JSON.stringify({ v: 1, level: 'full', setAt: 1, extra: true }), { mode: 0o600 })
-      // Pins the reader's refusal: a record it cannot read never widens what a phone may do.
-      await expectPhonePowersRefused('terminal/shells', { agentId: created.sessionId })
-      await writePhonePowers(secretsDirectory(), 'full')
-      await expectAdmitted('terminal/shells', { agentId: created.sessionId })
+      // Nothing is registered at the address; the web server answers a POST there with 404 or 405, never with a level.
+      expect([404, 405]).toContain((await postAsPhone('/auth/phone-powers', { level: 'full' }, deviceCookie())).status)
     } finally {
       studio.ctx.homeAuth.revokeElevation(unlock)
-      await writePhonePowers(secretsDirectory(), 'full')
-    }
-  })
-
-  it('cannot be changed by a phone, unlocked or not', async () => {
-    const unlock = elevate()
-    try {
-      await writePhonePowers(secretsDirectory(), 'careful')
-      const answer = await postAsPhone('/auth/phone-powers', { level: 'full' }, deviceCookie())
-      // Pins personAtComputer on the route: a phone that could choose Full would hand itself a terminal.
-      expect(answer).toMatchObject({ status: 403, json: { error: 'LOOPBACK_REQUIRED' } })
-      expect(studio.ctx.homeAuth.phonePowers()).toMatchObject({ level: 'careful', chosen: true })
-    } finally {
-      studio.ctx.homeAuth.revokeElevation(unlock)
-      await writePhonePowers(secretsDirectory(), 'full')
     }
   })
 })
@@ -545,22 +516,22 @@ async function gracePhone(label: string): Promise<{ readonly peer: PeerScope; re
 }
 
 describe('a reach device in its approval grace', () => {
-  it('cannot create a terminal even at the Full level, and takes the other elevated actions', async () => {
+  it('cannot create a terminal even at the Full level, and takes no other elevated action either', async () => {
     const graced = await gracePhone('Grace phone 1')
     try {
       const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
-      // The grace still opens an ordinary elevated action.
-      await expectAdmitted('directoryPicker/list', {}, graced.peer)
+      // The grace opens no elevated action (A483): it needs a grant for the call, like the unlock.
+      await expectElevationRequired('directoryPicker/list', {}, graced.peer)
       // Pins GRACE_REFUSED_ACTIONS in the unlock check: the grace stands for a computer-approved unlock everywhere else.
-      await expectElevationRequired('terminal/shells', { agentId: created.sessionId }, graced.peer)
+      await expectAdmitted('terminal/shells', { agentId: created.sessionId }, graced.peer)
       await expectElevationRequired('terminal/create', { agentId: created.sessionId, request: { id: 'grace-1', cols: 80, rows: 24 } }, graced.peer)
-      await expectElevationRequired('terminal/list', { sessionId: created.sessionId }, graced.peer)
+      await expectAdmitted('terminal/list', { sessionId: created.sessionId }, graced.peer)
     } finally {
       studio.ctx.homeAuth.revokeElevation(graced.graceId)
     }
   })
 
-  it('cannot attach to an existing terminal to write to it, which an unlocked device can', async () => {
+  it('cannot attach to an existing terminal to write to it, and neither can an unlocked device without a grant', async () => {
     const graced = await gracePhone('Grace phone 2')
     const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
     const unlock = elevate()
@@ -581,8 +552,8 @@ describe('a reach device in its approval grace', () => {
       }
     }
     try {
-      // The unlocked device reaches the terminal controller, which answers for the terminal itself.
-      expect(await attach(peer)).not.toMatchObject({ code: 'remote-access/denied' })
+      // A terminal takes a grant: an unlocked device is refused too, and while the home keeps no grant store, so no grant exists.
+      expect(await attach(peer)).toMatchObject({ code: 'remote-access/denied', details: { action: 'terminal/attach', reason: 'elevation-required: terminal/attach' } })
       // Pins GRACE_REFUSED_ACTIONS for the input stream: under the grace the attachment never opens.
       expect(await attach(graced.peer)).toMatchObject({ code: 'remote-access/denied', details: { action: 'terminal/attach', reason: 'elevation-required: terminal/attach' } })
     } finally {
@@ -593,20 +564,24 @@ describe('a reach device in its approval grace', () => {
 })
 
 describe('an elevated reach device through the Gateway', () => {
-  it('takes the elevated actions while the unlock runs, and never a never action', async () => {
+  it('takes an elevated action only with a grant for the call, whatever unlock runs, and never a never action', async () => {
     const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
     await expectElevationRequired('dynamicCordisRunner/inventory', {})
     const id = elevate()
     try {
       // Pins the unlock check through the Gateway: the same calls reach their services once the person approved it.
-      await expectAdmitted('dynamicCordisRunner/inventory', {})
+      await expectElevationRequired('dynamicCordisRunner/inventory', {})
+      await expectAdmittedWithGrant('dynamicCordisRunner/inventory', {})
       await expectAdmitted('terminal/shells', { agentId: created.sessionId })
-      await expectAdmitted('directoryPicker/list', {})
-      await expectAdmitted('settings/update', { ns: 'delorun-reach-access-probe', patch: {} })
+      await expectAdmittedWithGrant('directoryPicker/list', {})
+      await expectAdmittedWithGrant('settings/update', { ns: 'delorun-reach-access-probe', patch: {} })
+      // A chat outside the known workspaces is a face action too: the unlock refuses it and a grant for the call opens it.
+      expect(await call('session/create', { request: { cwd: directory } })).toMatchObject({ ok: false, error: { code: 'remote-access/denied', details: { reason: CREATE_OUTSIDE_WORKSPACES } } })
+      studio.ctx.homeAuth.faceGrants()?.mint({ deviceId, listener: LISTENER }, [{ action: 'session/create', hash: hashArgs({ request: { cwd: directory } }) ?? '' }], 'pin')
       await expect(expectAllowed('session/create', { request: { cwd: directory } })).resolves.toMatchObject({ sessionId: expect.any(String) })
-      // Every elevated action is allowed on the global resource, so none is left `resource-unlisted` under an unlock.
+      // Every elevated action but a terminal is allowed on the global resource, so none is left `resource-unlisted` under an unlock; a terminal takes a grant.
       const principal = reachDevicePrincipal(deviceId, LISTENER)
-      for (const action of Object.keys(REACH_ELEVATED_ACTIONS)) {
+      for (const action of Object.keys(REACH_ELEVATED_ACTIONS).filter(name => !name.startsWith('terminal/') && !name.startsWith('event:'))) {
         expect(studio.ctx.remoteAccess.decide({ principal, action: action as `${string}/${string}`, resources: [GLOBAL] }), action).toEqual({ kind: 'allow' })
       }
       // Pins the never table under an unlock: credentials, the account and the computer's own screen.
@@ -649,11 +624,11 @@ describe('an elevated reach device through the Gateway', () => {
       await expectConsentKept('settings/replace', { ns, section: { enabled: false, runTimeoutMinutes: 30 } })
       await expectConsentKept('settings/replace', { ns, section: { runTimeoutMinutes: 30 } })
       // The run time limit and turning the consent on reach the settings service.
-      await expectAdmitted('settings/mutate', { ns, ops: [{ op: 'set', path: ['runTimeoutMinutes'], value: 45 }] })
-      await expectAdmitted('settings/update', { ns, patch: { runTimeoutMinutes: 45 } })
-      await expectAdmitted('settings/mutate', { ns, ops: [{ op: 'set', path: ['enabled'], value: true }] })
-      await expectAdmitted('settings/update', { ns, patch: { enabled: true } })
-      await expectAdmitted('settings/replace', { ns, section: { enabled: true, runTimeoutMinutes: 45 } })
+      await expectAdmittedWithGrant('settings/mutate', { ns, ops: [{ op: 'set', path: ['runTimeoutMinutes'], value: 45 }] })
+      await expectAdmittedWithGrant('settings/update', { ns, patch: { runTimeoutMinutes: 45 } })
+      await expectAdmittedWithGrant('settings/mutate', { ns, ops: [{ op: 'set', path: ['enabled'], value: true }] })
+      await expectAdmittedWithGrant('settings/update', { ns, patch: { enabled: true } })
+      await expectAdmittedWithGrant('settings/replace', { ns, section: { enabled: true, runTimeoutMinutes: 45 } })
     } finally {
       studio.ctx.homeAuth.revokeElevation(id)
       unregister()
@@ -674,7 +649,7 @@ describe('an elevated reach device through the Gateway', () => {
     const id = elevate()
     try {
       await expectUnlisted()
-      await expectAdmitted('commands/execute', { agentId: created.sessionId, line: '/plan', submittedAttachments: [] })
+      await expectAdmittedWithGrant('commands/execute', { agentId: created.sessionId, line: '/plan', submittedAttachments: [] })
     } finally {
       studio.ctx.homeAuth.revokeElevation(id)
     }
@@ -697,7 +672,7 @@ describe('an elevated reach device through the Gateway', () => {
     try {
       // Pins the device binding: device A's unlock admits nothing device B asks for.
       await expectElevationRequired('dynamicCordisRunner/inventory', {}, admitted.peer)
-      await expectAdmitted('dynamicCordisRunner/inventory', {})
+      await expectAdmittedWithGrant('dynamicCordisRunner/inventory', {})
     } finally {
       studio.ctx.homeAuth.revokeElevation(id)
     }
@@ -839,7 +814,8 @@ describe('the reach access tables', () => {
       decision: Object.hasOwn(REACH_ALLOWED_ACTIONS, action)
         ? 'allow'
         : Object.hasOwn(REACH_KEY_ACTIONS, action) ? 'allow' // PIN mode is off here
-        : Object.hasOwn(REACH_ELEVATED_ACTIONS, action) ? `elevation-required: ${action}` : `loopback-required: ${action}`,
+        // A question without arguments lists a method and never spends a grant; a call needs the grant, and an event never has one.
+        : Object.hasOwn(REACH_ELEVATED_ACTIONS, action) ? (action.startsWith('event:') ? `elevation-required: ${action}` : 'allow') : `loopback-required: ${action}`,
     })))
   })
 })

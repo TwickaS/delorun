@@ -407,7 +407,7 @@ describe('the routes', () => {
 
   it('admit a reach device to every route and no other Peer, and answer a locked device ELEVATION_REQUIRED on deleting forever only', async () => {
     await mount()
-    harness.ctx.provide('homeAuth', { passkeysEnabled: () => false, faceGrants: () => undefined, deviceHasPasskey: () => false, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : undefined), pageUnlockOf: () => undefined } as never)
+    harness.ctx.provide('homeAuth', { faceGrants: () => undefined, deviceHasPasskey: () => false, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : undefined), pageUnlockOf: () => undefined } as never)
     const device = (deviceId: string) => ({ kind: 'reach-device', deviceId, listener: 'reach-tailscale-private' })
     const asDevice = async (path: string, deviceId: string) => {
       const request = new Request(`http://localhost${path}`, { method: 'POST', body: '{}' })
@@ -442,7 +442,7 @@ describe('the routes under Face ID', () => {
   const FACE_PATHS = [TRASH_PATHS.purge, TRASH_PATHS.empty, TRASH_PATHS.removeSetAside]
   const request = (path: string, text: string, grant?: string): Request => new Request(`http://localhost${path}`, { method: 'POST', headers: grant === undefined ? {} : { 'delorun-grant': grant }, body: text })
 
-  /** Provide a `homeAuth` whose Face ID flag is on for device `d1`, which holds a passkey and whatever unlock `home` holds when asked. */
+  /** Provide a `homeAuth` whose grant store exists for device `d1`, which holds a passkey and whatever unlock `home` holds when asked. */
   function underFace(home: { elevation?: { id: string, grace?: true }, page?: boolean } = {}) {
     const world = faceWorld('d1', 'reach')
     harness.ctx.provide('homeAuth', {

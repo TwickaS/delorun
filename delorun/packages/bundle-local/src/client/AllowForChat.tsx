@@ -95,11 +95,13 @@ export function AllowForChat({ escalatesTo, allow, answered, canAnswer, offer, s
     setFailure(undefined)
     try {
       if (!atRequestedMode()) {
-        if (fullAccess && !await confirmPermissionSwitch(fetch, consent, sessionId, FULL_ACCESS_PRESET, canAnswer)) return
+        const answer = fullAccess ? await confirmPermissionSwitch(fetch, consent, sessionId, FULL_ACCESS_PRESET, canAnswer) : 'submit'
+        if (answer === 'cancelled') return
         // The person may have answered the card, or its request ended, while the dialog was open.
         if (!canAnswer()) return
-        // The chat may have been raised while the dialog was open, so the mode is checked again right before the switch.
-        if (!atRequestedMode()) await switchTo(escalatesTo)
+        // A grant that switched the chat needs no second switch, which a device would confirm again. The chat may also
+        // have been raised while the dialog was open, so the mode is checked again right before the switch.
+        if (answer === 'submit' && !atRequestedMode()) await switchTo(escalatesTo)
       }
       // The raised permission stays when the card was answered elsewhere, or its request ended, during the switch.
       if (!canAnswer()) return

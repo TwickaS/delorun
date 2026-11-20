@@ -49,11 +49,6 @@ export type Outcome<V> =
 
 /** What the controller needs from the page. */
 export interface UpdateControllerDeps {
-  /**
-   * Called when a route refused this device until it is unlocked, so the studio opens its unlock dialog.
-   * @param control - the control that was refused.
-   */
-  readonly unlockNeeded: (control: UpdateControl) => void
   /** Reload the page, once the Host runs another release than the loaded one. */
   readonly reload: () => void
   /**
@@ -195,7 +190,7 @@ export class UpdateController {
   }
 
   /**
-   * Run one action; a refusal is returned for the screen to word, and an unlock refusal also opens the unlock dialog.
+   * Run one action; a refusal is returned for the screen to word.
    * @param control - the control the route belongs to.
    * @param run - the request.
    * @returns the answer or the refusal.
@@ -208,7 +203,6 @@ export class UpdateController {
     } catch (error) {
       if (error instanceof FaceCancelled) return { ok: false, refusal: { code: 'FACE_CANCELLED', message: '' } }
       if (!(error instanceof RouteRefused)) throw error
-      if (error.refusal.code === ELEVATION_REQUIRED) this.deps.unlockNeeded(control)
       await this.refresh()
       return { ok: false, refusal: error.refusal }
     }

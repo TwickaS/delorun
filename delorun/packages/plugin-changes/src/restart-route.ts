@@ -2,8 +2,8 @@
  * The studio's Restart (contract C21, "Routes and the recovery screen"; contract C19, "The restart"): the routes that
  * restart Delorun on the release it runs, so the changes to Delorun itself that wait for a restart run, and the
  * `restart` part of `state`. Both routes are built with {@link decidingRoute} for the control `restart`, so they have
- * Apply's fence and level: a request from another site is refused before anything else, a paired device needs the
- * level Phone powers gives it and an unlock it entered, and only then is the body read. The restart itself is the home
+ * Apply's fence and level: a request from another site is refused before anything else, a paired device needs a grant
+ * for the call (a PIN grant where it holds no passkey), and only then is the body read. The restart itself is the home
  * process's (the `changesRestart` service): it waits for running chats, or cancels them with `stopChats`, starts a new
  * Host and keeps this one when the new one fails. The answer comes before this Host stops.
  *

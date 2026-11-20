@@ -19,7 +19,7 @@ function world() {
 
 describe('update routes under Face ID', () => {
   it('update-begin, update-rollback and stop refuse a passkey device with no grant, whatever its unlock', async () => {
-    const update = await serveUpdate({ powers: 'full', face: world().face })
+    const update = await serveUpdate({ face: world().face })
     for (const unlock of ['fresh', 'grace', 'none'] as const) {
       for (const path of [UPDATE_PATHS.prepare, UPDATE_PATHS.apply, UPDATE_PATHS.rollback, UPDATE_PATHS.stop]) {
         const reply = await send(update.server.port, path, fromDevice(unlock, { chats: 'wait' }))
@@ -29,15 +29,14 @@ describe('update routes under Face ID', () => {
     expect(update.channel.requests).toEqual([])
   })
 
-  it('update-begin and update-rollback refuse a passkey device with a valid grant while Phone powers is Careful', async () => {
-    // Pins F11: the Careful refusal comes before the grant lookup until Phone powers is removed.
-    const w = world()
-    const update = await serveUpdate({ powers: 'careful', face: w.face })
-    for (const [path, control] of [[UPDATE_PATHS.prepare, 'update-begin'], [UPDATE_PATHS.rollback, 'update-rollback']] as const) {
-      const grant = w.grantFor(path, { chats: 'wait' }, control)
-      const base = fromDevice('fresh', { chats: 'wait' })
-      const reply = await send(update.server.port, path, { ...base, headers: [...base.headers ?? [], `Delorun-Grant: ${grant}`] })
-      expect(json(reply), path).toMatchObject({ code: 'LOOPBACK_REQUIRED' })
+  // Removing the grant-store check for the `grant` set in `mayUse` sends update-begin and update-rollback to the unlock path with no grant store, where no grant can exist.
+  it('update-begin and update-rollback stay at the computer with no grant store, whatever unlock the device holds', async () => {
+    const update = await serveUpdate()
+    for (const unlock of ['fresh', 'grace', 'none'] as const) {
+      for (const path of [UPDATE_PATHS.prepare, UPDATE_PATHS.apply, UPDATE_PATHS.rollback]) {
+        const reply = await send(update.server.port, path, fromDevice(unlock, { chats: 'wait' }))
+        expect(json(reply), `${path} ${unlock}`).toMatchObject({ code: 'LOOPBACK_REQUIRED' })
+      }
     }
     expect(update.channel.requests).toEqual([])
   })

@@ -76,6 +76,8 @@ export interface PasskeySummary {
 
 /** What a device sees of its passkeys and of enrolment. */
 export interface PasskeyState {
+  /** The asking device's own id, which it signs in with; the studio keys what it remembers per device by it. */
+  readonly deviceId: DeviceId
   /** The device's passkeys. */
   readonly passkeys: readonly PasskeySummary[]
   /** Whether a ticket for this device is waiting, so the studio may offer "Set up Face ID". */
@@ -134,8 +136,6 @@ export interface PasskeyAuthOptions {
   readonly random: RandomBytes
   /** Whether two session ids are one session, a roll's successor included. */
   readonly sameSession: (presented: string, bound: string) => boolean
-  /** Whether the preview flag that turns enrolment and assertion on is on. */
-  readonly enabled: () => boolean
   /**
    * Record one operational event; the text holds no challenge, public key or signature.
    * @param event - the event line.
@@ -194,26 +194,10 @@ export class PasskeyAuth {
   private readonly assertions = new Map<string, AssertionChallenge>()
 
   /**
-   * @param options - the stores, the clock, the random source and the flag.
+   * @param options - the stores, the clock, the random source.
    */
   constructor(options: PasskeyAuthOptions) {
     this.options = options
-  }
-
-  /**
-   * Whether the preview flag is on.
-   * @returns whether enrolment and assertion answer.
-   */
-  enabled(): boolean {
-    return this.options.enabled()
-  }
-
-  /**
-   * Refuse unless the flag is on.
-   * @throws {HomeAuthError} `PASSKEY_UNAVAILABLE` while it is off.
-   */
-  assertEnabled(): void {
-    if (!this.options.enabled()) throw new HomeAuthError('PASSKEY_UNAVAILABLE', 'Face ID is not turned on for this home')
   }
 
   /**
@@ -223,7 +207,6 @@ export class PasskeyAuth {
    * @param listener - the listener its sessions will live on.
    */
   mintTicket(deviceId: DeviceId, listener: UnlockAsker['listener']): void {
-    if (!this.options.enabled()) return
     this.tickets.set(deviceId, { deviceId, listener, expiresAt: this.options.now() + ENROL_TICKET_MS, sessionId: undefined })
   }
 
@@ -235,7 +218,7 @@ export class PasskeyAuth {
   stateOf(deviceId: DeviceId): PasskeyState {
     const passkeys = this.options.store.forDevice(deviceId).map(record => ({ credentialId: record.credentialId, createdAt: record.createdAt, lastUsedAt: record.lastUsedAt, synced: record.backupEligible }))
     const ticket = this.tickets.get(deviceId)
-    return { passkeys, ticket: ticket !== undefined && ticket.expiresAt > this.options.now() }
+    return { deviceId, passkeys, ticket: ticket !== undefined && ticket.expiresAt > this.options.now() }
   }
 
   /**
@@ -252,10 +235,8 @@ export class PasskeyAuth {
    * @param asker - the device, listener and session.
    * @param address - the studio address the session is bound to.
    * @returns the request id and the code to show.
-   * @throws {HomeAuthError} `PASSKEY_UNAVAILABLE` while the flag is off.
    */
   requestAdd(asker: UnlockAsker, address: string): { readonly requestId: string; readonly code: string; readonly expiresAt: number } {
-    this.assertEnabled()
     const at = this.options.now()
     for (const [id, request] of this.adds) if (request.expiresAt <= at || request.asker.deviceId === asker.deviceId) this.adds.delete(id)
     const requestId = newSecret(8, this.options.random)
@@ -279,10 +260,9 @@ export class PasskeyAuth {
    * The person at the computer types the code a device shows; a match mints the device's ticket.
    * @param requestId - the request.
    * @param typedCode - what the person typed.
-   * @throws {HomeAuthError} `PASSKEY_UNAVAILABLE` while the flag is off; `BAD_REQUEST` for an unknown or expired request or a wrong code, which ends the request after {@link ADD_REQUEST_WRONG_CODES} of them.
+   * @throws {HomeAuthError} `BAD_REQUEST` for an unknown or expired request or a wrong code, which ends the request after {@link ADD_REQUEST_WRONG_CODES} of them.
    */
   approveAdd(requestId: string, typedCode: string): void {
-    this.assertEnabled()
     const request = this.adds.get(requestId)
     if (request === undefined || request.expiresAt <= this.options.now()) {
       this.adds.delete(requestId)
@@ -304,10 +284,9 @@ export class PasskeyAuth {
    * @param address - the studio address the session is bound to.
    * @param label - the device's name, shown by the authenticator.
    * @returns the options for `navigator.credentials.create`.
-   * @throws {HomeAuthError} `PASSKEY_UNAVAILABLE` while the flag is off; `ELEVATION_REQUIRED` without a live ticket for this device, listener and session.
+   * @throws {HomeAuthError} `ELEVATION_REQUIRED` without a live ticket for this device, listener and session.
    */
   async registrationOptions(asker: UnlockAsker, address: string, label: string): Promise<PublicKeyCredentialCreationOptionsJSON> {
-    this.assertEnabled()
     const ticket = this.liveTicket(asker)
     ticket.sessionId ??= asker.sessionId
     const { rpId } = relyingParty(address)
@@ -330,10 +309,9 @@ export class PasskeyAuth {
    * @param address - the studio address the session is bound to.
    * @param response - the credential `navigator.credentials.create` returned, as JSON.
    * @returns the passkey's summary.
-   * @throws {HomeAuthError} `PASSKEY_UNAVAILABLE` while the flag is off; `ELEVATION_REQUIRED` without a live ticket; `PASSKEY_ASSERTION_INVALID` for a challenge that is unknown, used, expired or another device's, a wrong relying party or origin, or a credential that does not verify; `PASSKEY_USER_VERIFICATION_REQUIRED` when the authenticator did not verify the user.
+   * @throws {HomeAuthError} `ELEVATION_REQUIRED` without a live ticket; `PASSKEY_ASSERTION_INVALID` for a challenge that is unknown, used, expired or another device's, a wrong relying party or origin, or a credential that does not verify; `PASSKEY_USER_VERIFICATION_REQUIRED` when the authenticator did not verify the user.
    */
   async register(asker: UnlockAsker, address: string, response: RegistrationResponseJSON): Promise<PasskeySummary> {
-    this.assertEnabled()
     const ticket = this.liveTicket(asker)
     const challenge = this.takeChallenge(this.registrations, extractChallenge(response.response.clientDataJSON), asker)
     if (challenge === undefined) throw new HomeAuthError('PASSKEY_ASSERTION_INVALID', 'This enrolment is not current. Start it again')
@@ -365,10 +343,9 @@ export class PasskeyAuth {
    * @param address - the studio address the session is bound to.
    * @param request - the actions or the answer to confirm.
    * @returns the options for `navigator.credentials.get`.
-   * @throws {HomeAuthError} `PASSKEY_UNAVAILABLE` while the flag is off or the device holds no passkey.
+   * @throws {HomeAuthError} `PASSKEY_UNAVAILABLE` when the device holds no passkey.
    */
   async assertionOptions(asker: UnlockAsker, address: string, request: AssertionRequest): Promise<PublicKeyCredentialRequestOptionsJSON> {
-    this.assertEnabled()
     // A passkey enrolled on another address has another relying-party id: it cannot assert here, and the device sets Face ID up again.
     const mine = this.options.store.forDevice(asker.deviceId).filter(record => record.address === address)
     if (mine.length === 0) throw new HomeAuthError('PASSKEY_UNAVAILABLE', 'This device has no Face ID set up for this address')
@@ -390,10 +367,9 @@ export class PasskeyAuth {
    * @param address - the studio address the session is bound to.
    * @param response - the assertion `navigator.credentials.get` returned, as JSON.
    * @returns the grant minted.
-   * @throws {HomeAuthError} `PASSKEY_UNAVAILABLE` while the flag is off; `PASSKEY_ASSERTION_INVALID`, `PASSKEY_USER_VERIFICATION_REQUIRED` or `PASSKEY_COUNTER_REGRESSED` for a failed check, each with the tries left; `PIN_UNLOCKS_PAUSED` after a home-wide pause.
+   * @throws {HomeAuthError} `PASSKEY_ASSERTION_INVALID`, `PASSKEY_USER_VERIFICATION_REQUIRED` or `PASSKEY_COUNTER_REGRESSED` for a failed check, each with the tries left; `PIN_UNLOCKS_PAUSED` after a home-wide pause.
    */
   async verify(asker: UnlockAsker, address: string, response: AuthenticationResponseJSON): Promise<PasskeyGrantResult> {
-    this.assertEnabled()
     const challengeText = extractChallenge(response.response.clientDataJSON)
     // A challenge that is unknown, used or expired is a sheet left open or a retried request, not a guess: it costs no try.
     const issued = this.assertions.get(challengeText)
@@ -449,12 +425,11 @@ export class PasskeyAuth {
    * @param secret - the PIN or passcode.
    * @param request - the actions or the answer to confirm.
    * @returns the grant minted.
-   * @throws {HomeAuthError} `PASSKEY_UNAVAILABLE` while the flag is off, `LOOPBACK_REQUIRED` for a request that names {@link DEVICE_REMOVE_ACTION} from a device that holds no passkey, and the refusals of {@link PinUnlocks.verify}.
+   * @throws {HomeAuthError} `LOOPBACK_REQUIRED` for a request that names {@link DEVICE_REMOVE_ACTION} from any device, and the refusals of {@link PinUnlocks.verify}.
    */
   async pinGrant(asker: UnlockAsker, secret: string, request: AssertionRequest): Promise<PasskeyGrantResult> {
-    this.assertEnabled()
-    // Removing another device needs a passkey: a PIN seen on a stolen phone must not lock the owner out of the rest.
-    if (request.kind === 'actions' && request.entries.some(entry => entry.action === DEVICE_REMOVE_ACTION) && this.options.store.forDevice(asker.deviceId).length === 0) {
+    // Removing another device needs the passkey factor: a PIN seen on a stolen phone must not lock the owner out of the rest.
+    if (request.kind === 'actions' && request.entries.some(entry => entry.action === DEVICE_REMOVE_ACTION)) {
       throw new HomeAuthError('LOOPBACK_REQUIRED', 'Removing another device needs Face ID on this device, or you at your computer')
     }
     await this.options.pin.verify(asker, secret)

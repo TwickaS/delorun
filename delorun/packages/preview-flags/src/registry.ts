@@ -62,6 +62,12 @@ export interface CreatedPreviewFlags {
 const ROW = 'delorun-preview-flags'
 
 /**
+ * Flag ids a release retired because their behaviour ships on for everyone. A home that set one still loads its row: the id is ignored with one
+ * notice, so the other flags keep their state. Never remove an id from this list while an earlier release could have set it.
+ */
+export const RETIRED_FLAG_IDS: ReadonlySet<string> = new Set(['unlock.passkeys'])
+
+/**
  * Create the flags and check the configured ones.
  * @param source - the row's `flags`, the index and the plugins' state.
  * @returns the flags and the notices.
@@ -69,7 +75,8 @@ const ROW = 'delorun-preview-flags'
  */
 export function createPreviewFlags(source: PreviewFlagsSource): CreatedPreviewFlags {
   const { configured, index, pluginOff, reindex } = source
-  const ids = Object.keys(configured)
+  const retired = Object.keys(configured).filter(id => RETIRED_FLAG_IDS.has(id))
+  const ids = Object.keys(configured).filter(id => !RETIRED_FLAG_IDS.has(id))
   if (index === undefined && ids.length > 0) throw new Error(`${ROW}: flags are set (${knownList(ids)}), but there is no profile whose plugins could be read to check them against`)
   let listed: FlagIndex['owners'] = index?.owners ?? new Map()
   /** Whether the index lists a flag, reading it again once on a miss. */
@@ -82,12 +89,13 @@ export function createPreviewFlags(source: PreviewFlagsSource): CreatedPreviewFl
     throw new Error(`${ROW}: ${unknown.map(id => `"${id}"`).join(', ')} ${unknown.length === 1 ? 'is' : 'are'} set, but no plugin of this profile declares ${unknown.length === 1 ? 'it' : 'them'}. `
       + `Known flags: ${knownList(listed.keys())}. Remove ${unknown.length === 1 ? 'it' : 'each'} with: delorun preview off <flag>`)
   }
-  const notices = ids.filter(id => configured[id] === true).flatMap((id) => {
+  const retiredNotices = retired.map(id => `${ROW}: "${id}" is retired and ignored, because its behaviour is now always on. Remove it with: delorun preview off ${id}`)
+  const notices = [...retiredNotices, ...ids.filter(id => configured[id] === true).flatMap((id) => {
     const owner = index?.owners.get(id as PreviewFlagId)
     return owner !== undefined && pluginOff(owner)
       ? [`${ROW}: "${id}" is on, but ${owner}, which declares it, is off in this profile, so the flag changes nothing`]
       : []
-  })
+  })]
   const declared = new Map<PreviewFlagId, PreviewFlagDeclaration>()
   const flags: PreviewFlags = {
     declare(flag) {

@@ -90,7 +90,6 @@ setup 按此顺序询问这些问题。本人接受默认值时，默认值生�
 | Prompts | `prompts` | Ask me first（`safer`）、Ask less（`stock`），或 Never ask（dangerous）；`--yes` 从不选择 dangerous。 | Ask me first |
 | Keep running in the background | `background` | 是或否。 | 是；`automation` 为否，且不询问。 |
 | Open Delorun from your phone or another device over Tailscale? | `reach` | 是或否。 | 否；对于 `remote`，该问题起始为是。 |
-| What may an unlocked phone do? | `reach` | Careful，或 Full；Full 增加终端、关闭保护以及更改 Delorun 自身，每次都需要在手机上输入的解锁。只在打开远程访问之后询问。 | Careful；重新运行时为本人之前选择的级别。 |
 | Hold changes to your plugins and to Delorun itself for your review before they load? | `changes-protection` | 是或否。否保持 home 的设置不变，setup 从不关闭保护。 | 否；保护已开启时为是。 |
 | Profile name and port | `profile` | profile 名称和 1024 至 65535 中的一个空闲端口。 | 所选的 profile 和 3080。 |
 
@@ -130,7 +129,7 @@ setup 提供下列提供方，按名称排列，不让任何一家排在另一�
 
 ```json
 {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "useCase": "local",
   "modelProvider": { "id": "anthropic", "credential": { "source": "environment", "name": "ANTHROPIC_API_KEY" }, "baseURL": null, "model": "claude-sonnet-5" },
   "prompts": "safer",
@@ -139,7 +138,6 @@ setup 提供下列提供方，按名称排列，不让任何一家排在另一�
   "reach": { "option": "none", "identityFactor": null },
   "importStockHome": false,
   "protectChanges": false,
-  "phonePowers": null,
   "updateCheck": true,
   "sections": [{ "id": "privacy", "status": "seen" }, { "id": "key", "status": "answered" }]
 }
@@ -147,7 +145,7 @@ setup 提供下列提供方，按名称排列，不让任何一家排在另一�
 
 | 字段 | 类型与取值 | 默认值 | 规则 |
 | --- | --- | --- | --- |
-| `schemaVersion` | 整数 `4`，对于在提供方问题之前写入的文档为 `2` 或 `3`。 | `4` | setup 拒绝任何其他值。版本 2 的文档没有 `updateCheck`，读作 `true`，带有它时被拒绝。版本 2 或版本 3 文档的 `modelProvider` 只含 `id` 和 `credential`，读作 `deepseek-official`，带有其凭据和 profile 的默认模型，因为这些版本的 setup 只应用 DeepSeek 的密钥而不应用任何其他提供方。指名其他 id 的文档会被拒绝，并提示它需要 schema 版本 4。 |
+| `schemaVersion` | Integer `5`, or `2`, `3` or `4` for a document written earlier. | `5` | Setup refuses any other value. A version-2, version-3 or version-4 document that holds `phonePowers` is read with that key ignored and a line on standard error saying so; a version-5 document that holds it is refused as an unknown field (`IGNORED_ANSWER_KEYS` in `@delorun/contract-setup-answers`). A version-2 document has no `updateCheck`, reads as `true`, and is refused when it carries one. A version-2 or version-3 document's `modelProvider` holds `id` and `credential` only, and reads as `deepseek-official` with its credential and the profile's default model, because setup of those versions applied DeepSeek's key and no other provider. One that names another id is refused with a message that it needs schema version 4. |
 | `useCase` | `local`、`remote` 或 `automation`。 | `local` | 本人如何使用 Delorun。交互形式据此设定默认值和问题；`--yes` 和 `--config` 存储它而不问任何问题。`remote` 文档不能启用 reach，因此远程访问用 `delorun setup reach` 开启。在使用场景问题之前写入的记录没有它，读作 `local`；其 `mode` 键（询问过 Quick 或 Full 的 setup 所写的 `quick` 或 `full`）被读取并忽略，任何其他 `mode` 值会被拒绝。 |
 | `modelProvider` | 带有下面四个字段的对象，或表示没有提供方的 `null`。 | 在终端中为带有各字段默认值的对象；使用 `--yes` 时为 `null`，除非给出 `--provider`。 | `null` 不写入任何提供方行，并保留已有的行，因此新 chat 保持 profile 所选的模型；setup 会说明这一点。 |
 | `modelProvider.id` | [模型提供方](#model-providers)中的一个 id。 | `deepseek-official` | 任何其他 id 都被拒绝，并写明 setup 接受的 id。 |
@@ -161,7 +159,6 @@ setup 提供下列提供方，按名称排列，不让任何一家排在另一�
 | `reach.option` | `none`、`tailscale-private`、`tailscale-funnel` 或 `self-hosted-relay`。 | `none` | `none` 以外的任何值只在交互形式中被接受。 |
 | `reach.identityFactor` | `passkey`、`oidc`、`tailnet`、`tailnet-membership` 或 `null`。 | `null` | 方式为 `none` 时为 `null`。已构建的 `reach` 节为 `tailscale-private` 记录 `tailnet-membership`。`tailscale-funnel` 和 `self-hosted-relay` 为 `passkey` 或 `oidc`。`tailscale-private` 为 `passkey`、`oidc` 或 `tailnet`。`tailnet` 只在 C7 的套接字变体下可用（[C7](c07-reach-providers.zh.md#tailscale-serve-target)）；否则 setup 以 `TAILNET_IDENTITY_UNAVAILABLE` 拒绝它。`ts.net` 地址上的 `passkey` 只在 C14 使通行密钥在那里可用时才可用（[C14](c14-oidc-passkeys.zh.md#relying-party-ids)）；否则 setup 以 `PASSKEY_UNAVAILABLE` 拒绝它。 |
 | `importStockHome` | 布尔值。 | `false` | 由 import 节设置。`--config` 拒绝 `true`，因为导入先显示其预览再询问。 |
-| `phonePowers` | `careful`、`full` 或 `null`。 | `null` | 由 `reach` 节设置，它只在打开远程访问时询问，预选之前的回答，否则预选 home 记录的级别，否则预选 Careful。`--yes` 从 `--phone-powers` 取得它，文档也可以指明它。`null` 保持 home 的级别不变；缺少该字段时读作 `null`。 |
 | `protectChanges` | 布尔值。 | `false` | 由 `changes-protection` 节设置；缺失的字段读作 `false`。`--config` 拒绝 `true`，因为只有终端证明才能更改保护设置（[C21](c21-changes.zh.md)）。 |
 | `updateCheck` | 布尔值；可选。 | `true` | Delorun 是否向发布通道检查更新的发布。`--no-update-check` 在每种形式中为整次 setup 运行将其设为 `false`；`delorun setup <section>` 拒绝它，而 `delorun setup privacy` 改为询问该问题。 |
 | `sections` | `{ "id", "status" }` 的列表，按流程顺序。 | `[]` | 由 setup 写入，从不由文档写入。`seen` 是已显示的说明，`answered` 是已回答的问题，`skipped` 是未被询问而采用其默认值的节。studio 的新手引导略过终端已涵盖的内容。 |
@@ -187,7 +184,6 @@ setup 提供下列提供方，按名称排列，不让任何一家排在另一�
 | `reach.identityFactor` | 针对远程访问地址的注册请求。没有配置行。 | home-auth 状态，遵循身份约定。 |
 | `importStockHome` | [C8](c08-archive-and-trash.zh.md#the-stock-home-import) 的 stock home 导入的数据：恰好是该节的预览所显示的计划，在每个 profile 的 home 锁之下执行。此后已更改的 stock 文件、此后新增了 chat 的 Delorun home，或没有显示预览的运行都会使其被拒绝。 | home。 |
 | `protectChanges` | `true` 写入级别为 `on` 的 `changes/protection.json`，模式 0600，位于模式 0700 的 `changes/` 之下，经由 `delorun changes protection on` 使用的终端证明，该证明取自 setup 自己的标准输入和输出。保护已开启或回答为 `false` 时不写入任何内容。当任一流不是终端时，setup 在写入之前停止并写明如何完成：在终端中运行 `delorun setup` 会恢复这一步，或运行 `delorun changes protection on` 开启它。 | home。 |
-| `phonePowers` | 一个级别会把 `secrets/home-auth/phone-powers.json` 写为本人的选择，模式 0600（[C14](c14-oidc-passkeys.zh.md#phone-powers)），无论远程访问是否打开；`null` 不写入任何内容。 | home。 |
 | `updateCheck` | `false` 按 Settings → General → Updates 保存的方式写入 `delorun-update-check` 行：其 id、其插件名称，以及带 `enabled: false` 的 bundle 配置。`true` 在该行上不留任何配置，因此应用 bundle 的 `enabled: true`。 | profile 的 `cordis.patch.yml`，在 Delorun 首次启动之前。 |
 | `sections` | 记录在 `setup-answers.json` 中。 | profile 目录。 |
 
@@ -196,7 +192,7 @@ setup 提供下列提供方，按名称排列，不让任何一家排在另一�
 <a id="yes-and-config-forms"></a>
 ### --yes 与 --config 形式
 
-`--yes` 保持 `local` 使用场景，接受除提供方之外的每个默认值，并且除默认值、提供方标志、`--prompts`、`--phone-powers` 和 `--no-update-check` 之外不应用任何回答。`--phone-powers careful|full` 记录该手机权限级别，只适用于 `--yes`。级别属于 home，因此无人值守的运行（`--yes` 或 `--config`）只在没有手机权限记录、或记录已经是 Full 的 home 中选择 Full，否则在写入任何内容之前停止，并指出在终端中运行 `delorun devices powers full`；Careful 则总会被记录。没有 `--provider` 时，无论环境中有什么密钥，它都不设置任何提供方，并打印如何添加：在终端中或带提供方标志的 `delorun setup key`，或 studio 的 Settings → Agent → Models。`--provider <id>` 指名[模型提供方](#model-providers)中的一家提供方，`--model <id>` 指名其模型（除 DeepSeek 之外的每家提供方都需要），`--base-url <url>` 指名 `openai-compatible` 的端点且不用于任何其他提供方，`--key-env <NAME>` 指名每次启动时读取密钥的变量，默认为提供方的密钥变量。命令行从不接受密钥，不是变量名的 `--key-env` 值会被拒绝且不回显。变量未设置时，setup 以写明它的带类型错误停止。`delorun setup key` 在已设置好的 profile 上接受相同的标志，然后什么也不问。没有提供方的 `--check-key` 以用法代码被拒绝。
+`--yes` keeps the `local` use case, accepts every default but the provider, and applies no answer other than the defaults, the provider flags, `--prompts` and `--no-update-check`. Without `--provider` it sets up no provider, whatever keys the environment holds, and prints how to add one: `delorun setup key` in a terminal or with the provider flags, or the studio's Settings → Agent → Models. `--provider <id>` names a provider of [Model providers](#model-providers), `--model <id>` its model, which every provider but DeepSeek needs, `--base-url <url>` the endpoint of `openai-compatible` and of no other provider, and `--key-env <NAME>` the variable the key is read from at each start, which defaults to the provider's key variable. A key is never accepted on the command line, and a `--key-env` value that is not a variable name is refused without being echoed. When the variable is unset, setup stops with a typed error that names it. `delorun setup key` takes the same flags on a profile that is set up and then asks nothing. `--check-key` without a provider is refused with the usage code.
 
 `--config <file>` 读取符合上述 schema 的回答文档，并按与 `--yes` 相同的规则应用其回答；其提供方是 `modelProvider` 所指名的那一个，提供方标志在它旁边被拒绝；无论文档怎么说，`--no-update-check` 都会关闭发布检查。`reach.option` 不是 `none` 的文档，以及 `importStockHome` 或 `protectChanges` 为 `true` 的文档，都会被拒绝，并返回写明该字段的带类型错误。两种形式都不更改保护设置。带有已移除键的文档会被拒绝，拒绝信息写明已移除的键。任何字段中带有凭据取值的文档会被拒绝，且不回显该取值。
 
@@ -227,7 +223,7 @@ setup 在每次终端运行开始时显示隐私说明，并在无人值守的�
 <a id="compatibility"></a>
 ## 兼容性
 
-回答 schema 通过 `schemaVersion` 标记版本，其值为 `4`。若新增的问题带有安全的默认值，且忽略该新字段的旧读取者写入的 profile 相同，则该变更保持版本不变；`useCase` 就是这样的字段，因为它所设定的回答与它一起存储，而 profile 文件并不依赖它。改变既有回答含义，或删除字段，都会递增版本；版本 2 删除了五个字段。版本 3 增加了 `updateCheck`：忽略 `false` 的读取者会让发布检查保持开启，因此版本递增。版本 4 赋予 `modelProvider.id` 含义，并增加了 `baseURL`、`model` 和 `null`：版本 3 的读取者忽略该 id，会把 Anthropic 的密钥存储为 DeepSeek 的，因此版本递增。setup 如[回答 schema](#answer-schema) 所述，把版本 2 或版本 3 的文档读作版本 4，并将其记录为版本 4。setup 拒绝其版本它不认识的回答文档。
+The answers schema is versioned by `schemaVersion`, which is `5`. A change that adds a question with a safe default keeps the version when an older reader that ignores the new field writes the same profile; `useCase` is such a field, because the answers it sets are stored beside it and the profile files do not depend on it. A change that alters the meaning of an existing answer, or that removes a field, increments the version; version 2 removed five fields. Version 3 added `updateCheck`: a reader that ignored `false` would leave the release check on, so the version increments. Version 4 gave `modelProvider.id` its meaning and added `baseURL`, `model` and `null`: a version-3 reader ignores the id and would store an Anthropic key as DeepSeek's, so the version increments. Version 5 removed `phonePowers`, so the version increments. Setup reads a version-2, version-3 or version-4 document as version 5, as [Answer schema](#answer-schema) describes, and records it as version 5. Setup refuses an answers document whose version it does not know.
 
 上游新增的选择加入项，以默认关闭的问题形式加入，并在同一次变更中把其 profile 行加入映射表。
 
@@ -256,9 +252,6 @@ setup 在每次终端运行开始时显示隐私说明，并在无人值守的�
 | `refuses a document that asks for the stock-home import, which shows its preview in a terminal first` | `importStockHome` 为 `true` 的文档，会被拒绝，并返回写明该字段的带类型的错误。 |
 | `refuses a document that turns changes protection on, which only a terminal changes, and reads an absent answer as no` | `protectChanges` 为 `true` 的文档，会被拒绝，并返回写明该字段的带类型的错误。 |
 | `stops a yes before it writes, naming how to finish, and a run at a terminal resumes it` | 标准输出不是终端的 yes 不写入保护记录。 |
-| `takes --phone-powers only with --yes and only a level` | 没有 `--yes` 的 `--phone-powers`，或值不是级别的 `--phone-powers`，以用法错误码拒绝。 |
-| `an unattended run for a new profile cannot choose Full on a home that already has a level` | 在记录为 Careful（无论是否已选择）或无法读取的 home 中指明 Full 的 `--yes` 或 `--config` 会停止，并保持记录不变；Full 覆盖 Full 以及任何时候的 Careful 都会被记录。 |
-| `is not asked when remote access is off, and the home keeps no level` | 关闭远程访问的终端运行不会询问手机权限，也不写入记录。 |
 | `config file with a removed key is refused` | 带有已移除键的文档会被拒绝，并返回写明已移除的键且不含任何取值的带类型的错误。 |
 | `config file carrying a credential value is refused` | 任何字段中带有凭据取值的文档会被拒绝，且不回显该取值。 |
 | `live key check sends the key to the provider origin only` | 对每家提供方，检查的请求只发往一个源，拒绝重定向，且密钥不出现在任何 URL、消息或输出中；重定向到另一个源会失败，且该源什么也收不到。 |
@@ -287,7 +280,7 @@ setup 在每次终端运行开始时显示隐私说明，并在无人值守的�
 <a id="decided-values"></a>
 ## 决定的取值
 
-- 回答 schema 的版本为 `4`；setup 也读取版本 2 和 3。
+- The answers schema version is `5`; setup also reads versions 2, 3 and 4.
 - 提供方问题在终端中起始为 `deepseek-official`，`--yes` 不设置任何提供方，除非 `--provider` 指名一家。
 - 使用场景默认为 `local`；`remote` 和 `automation` 由本人选择，从不作为默认值。
 - 默认值为：「Ask me first」提示，后台运行开启，端口 3080，远程访问 `none`，stock home 导入关闭（导入节显示时也预选为否），发布检查开启。

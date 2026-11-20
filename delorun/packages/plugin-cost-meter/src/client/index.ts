@@ -14,6 +14,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 // Type-only: the ctx.slots merge.
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import { limitsFetchOf } from '@delorun/bundle-local/agent-limits'
 import { CostPill, type CostPillInjected } from './CostPill.tsx'
 import { PlansPill, type PlansPillInjected } from './PlansPill.tsx'
 import { en, NS, zh } from './locales.ts'
@@ -61,7 +62,7 @@ export function applyStudio(ctx: Context): void {
   ctx.effect(() => ctx.slots.inject('conversation.composer.dock', () => ctx.slots.register({
     name: 'conversation.composer.dock', ...DOCK_ENTRY, locale: NS, inject: () => injected,
   }, CostPill)), 'delorun-cost-meter: cost pill')
-  const plans: PlansPillInjected = { fetch: (input, init) => globalThis.fetch(input, init) }
+  const plans: PlansPillInjected = { fetch: limitsFetchOf(ctx) }
   ctx.effect(() => ctx.slots.inject('conversation.composer.dock', () => ctx.slots.register({
     name: 'conversation.composer.dock', ...PLANS_ENTRY, locale: NS, inject: () => plans,
   }, PlansPill)), 'delorun-cost-meter: plans pill')

@@ -16,7 +16,7 @@ import { signInMessage } from '../src/sign-in.ts'
 import { deviceIdOf } from '../src/records.ts'
 import type { ElevationChange } from '../src/elevation.ts'
 import type { HomeAuth } from '../src/home-auth.ts'
-import { createCondition, createReachAccessPolicy, GRACE_REFUSED_ACTIONS, PROTECTED_ROW_REFUSAL, REACH_ELEVATED_ACTIONS, reachDevicePrincipal, type ReachAccessFacts } from '../src/reach-access.ts'
+import { createCondition, createReachAccessPolicy, GRACE_PROTECTED_ROW_REFUSAL, GRACE_REFUSED_ACTIONS, PROTECTED_ROW_REFUSAL, REACH_ELEVATED_ACTIONS, reachDevicePrincipal, type ReachAccessFacts } from '../src/reach-access.ts'
 import { HOME_AUTH_SWITCH, REACH_SWITCH } from '../src/service.ts'
 import { homeFixture, type Home } from './fixtures/home.ts'
 
@@ -233,14 +233,16 @@ describe('the approval grace and PIN mode', () => {
     const facts = (elevation: { readonly id: string; readonly grace?: true } | undefined): ReachAccessFacts => ({
       admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere',
       elevationOf: () => elevation, pageUnlockOf: () => undefined, unlockModeEnabled: () => false,
-      keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
+      keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined,
       computerOnlySwitches: () => [], protectedEntryIds: () => new Set(['include:delorun-mcp-consent', 'delorun-mcp-consent']), computerOnlyEntryIds: () => new Set(),
-      defaultPermission: () => undefined, phonePowers: () => 'full' as const, dangerousMode: () => false,
+      defaultPermission: () => undefined, dangerousMode: () => false,
     })
     const call = { action: 'settings/update' as const, resource: { kind: 'global' } as const, args: { ns: 'delorun-mcp-consent', patch: {} } }
     const principal = reachDevicePrincipal(phone.id, LISTENER)
-    // Pins the grace flag: the same write under a code is the unlock's to allow.
-    expect(createCondition(facts(grace), principal)(call)).toEqual({ kind: 'deny', reason: 'elevation-required: settings/update' })
+    // Pins the grace flag: the same write under a code is the unlock's to allow. The refusal names no grant action, so a
+    // phone's Face ID step does not ask for a grant no rule would accept (review P3-1).
+    expect(createCondition(facts(grace), principal)(call)).toEqual({ kind: 'deny', reason: GRACE_PROTECTED_ROW_REFUSAL })
+    expect(GRACE_PROTECTED_ROW_REFUSAL.startsWith('elevation-required:')).toBe(false)
     expect(createCondition(facts({ id: 'code' }), principal)(call).kind).toBe('allow')
     // An ordinary write is the grace's to allow.
     expect(createCondition(facts(grace), principal)({ ...call, args: { ns: 'delorun-cost-meter', patch: {} } }).kind).toBe('allow')
@@ -256,9 +258,9 @@ describe('the approval grace and PIN mode', () => {
     const facts = (elevation: { readonly id: string; readonly grace?: true } | undefined, page?: { readonly id: string }): ReachAccessFacts => ({
       admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere',
       elevationOf: () => elevation, pageUnlockOf: () => page, unlockModeEnabled: () => page !== undefined,
-      keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
+      keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined,
       computerOnlySwitches: () => [], protectedEntryIds: () => new Set(), computerOnlyEntryIds: () => new Set(),
-      defaultPermission: () => undefined, phonePowers: () => 'full' as const, dangerousMode: () => false,
+      defaultPermission: () => undefined, dangerousMode: () => false,
     })
     const principal = reachDevicePrincipal(phone.id, LISTENER)
     const resource = { kind: 'global' } as const
@@ -269,9 +271,9 @@ describe('the approval grace and PIN mode', () => {
       // Pins GRACE_REFUSED_ACTIONS in the unlock check, for a call and for a question without arguments alike.
       expect(createCondition(facts(grace), principal)({ action, resource, args: {} }), action).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
       expect(createCondition(facts(grace), principal)({ action, resource }), action).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
-      // A code from the computer and an unlocked PIN page open it.
-      expect(createCondition(facts({ id: 'code' }), principal)({ action, resource, args: {} }).kind, action).toBe('allow')
-      expect(createCondition(facts(undefined, { id: 'page' }), { ...principal, unlockId: 'page' })({ action, resource, args: {} }).kind, action).toBe('allow')
+      // Neither a code from the computer nor an unlocked PIN page opens it: a terminal takes a grant, and no grant exists here.
+      expect(createCondition(facts({ id: 'code' }), principal)({ action, resource, args: {} }), action).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
+      expect(createCondition(facts(undefined, { id: 'page' }), { ...principal, unlockId: 'page' })({ action, resource, args: {} }), action).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
     }
     // Every other elevated action stays the grace's to allow.
     for (const action of Object.keys(REACH_ELEVATED_ACTIONS).filter(action => !action.startsWith('terminal/'))) {
@@ -289,9 +291,9 @@ describe('the approval grace and the computer-only table', () => {
     const facts = (dangerous: boolean): ReachAccessFacts => ({
       admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere',
       elevationOf: (deviceId, listener) => served.auth.elevationOf(deviceId, listener), pageUnlockOf: () => undefined, unlockModeEnabled: () => false,
-      keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
+      keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined,
       computerOnlySwitches: () => [HOME_AUTH_SWITCH, REACH_SWITCH], protectedEntryIds: () => new Set(['include:home-auth']), computerOnlyEntryIds: () => new Set(['include:home-auth']),
-      defaultPermission: () => undefined, phonePowers: () => 'full' as const, dangerousMode: () => dangerous,
+      defaultPermission: () => undefined, dangerousMode: () => dangerous,
     })
     const principal = reachDevicePrincipal(phone.id, LISTENER)
     for (const dangerous of [false, true]) {
@@ -302,7 +304,7 @@ describe('the approval grace and the computer-only table', () => {
       expect(condition({ action: 'settings/update', resource, args: { ns: REACH_SWITCH.ns, patch: { enabled: false } } })).toMatchObject({ kind: 'deny' })
       expect(condition({ action: 'settings/update', resource, args: { ns: HOME_AUTH_SWITCH.ns, patch: { pairing: {} } } })).toMatchObject({ kind: 'deny' })
       for (const binding of createReachAccessPolicy(facts(dangerous)).bindings(principal)) expect(binding.role.actions).not.toContain('account/startSignIn')
-      // And what an unlock does is open to it, except a terminal (GRACE_REFUSED_ACTIONS), in either mode.
+      // And what an unlock does is open to it, except a terminal (GRACE_REFUSED_ACTIONS, which takes a grant), in either mode.
       expect(condition({ action: 'directoryPicker/list', resource, args: {} })).toEqual({ kind: 'allow' })
       expect(condition({ action: 'terminal/create', resource, args: {} })).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/create' })
     }

@@ -78,7 +78,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       await next()
     })
     const row = (expression: string): string => `route:plugin-new-workspace/src/index.ts#${expression}`
-    // A `face` route: Face ID for the call (or, with the flag off or no passkey, an unlock). One Face ID opens the folder picker
+    // A `face` route: Face ID for the call (or, with no passkey, an unlock). One Face ID opens the folder picker
     // for the three reads that name the computer's paths; a live hold on `PICKER_HOLD_ID` admits the rest of that picker's reads.
     const faced = (expression: string, action: string, fetch: (request: Request) => Promise<Response>, options: { readonly renews: boolean, readonly picker?: true }) => gateByClass(() => child.get('homeAuth'), fetch, {
       row: row(expression), action: `plugin-new-workspace/${action}`, legacy: { renews: options.renews },

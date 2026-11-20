@@ -163,12 +163,16 @@ describe('the studio services the dialog reads', () => {
     expect(askForWorkspace).toHaveBeenCalledExactlyOnceWith(`${HOME}/src/site`)
   })
 
-  it('names the home\'s network route when a network change needs the unlock', async () => {
+  it('sends a network change through the studio\'s Face ID fetch, and opens no unlock', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
-    stubHost({ '/api/delorunNetwork.set': () => Response.json({ error: 'ELEVATION_REQUIRED' }, { status: 403 }) })
-    const { entries, denied } = await harness()
+    const { ctx, entries, denied } = await harness()
+    // Pins the wiring: a plugin route a device needs a grant for goes through the Face ID step, never the unlock dialog.
+    const sent = vi.fn((_input: string, _init?: RequestInit) => Promise.resolve(Response.json({ error: 'ELEVATION_REQUIRED', action: 'plugin-permission-defaults/network-set' }, { status: 403 })))
+    ctx.provide('delorunFaceGrant', { grant: () => Promise.resolve(undefined), fetch: sent })
     await injected(entries).api.setNetwork('/x', { access: 'off', hosts: [] })
-    expect(denied).toEqual([{ endpoint: 'delorunNetwork/set', reason: 'elevation-required: delorunNetwork/set' }])
+    expect(sent).toHaveBeenCalledOnce()
+    expect(sent.mock.calls[0]?.[0]).toBe('api/delorunNetwork.set')
+    expect(denied).toEqual([])
   })
 })
 
@@ -250,14 +254,14 @@ describe('the service', () => {
     expect(screen.getByRole('option', { name: 'src' })).toBeTruthy()
   })
 
-  it('asks the studio for the unlock when the Host wants one, so its PIN prompt appears', async () => {
+  it('shows its own line after a cancelled Face ID confirmation, and opens no unlock', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
-    stubHost({ [PLACES_PATH]: () => Response.json({ error: 'ELEVATION_REQUIRED' }, { status: 403 }) })
+    stubHost({ [PLACES_PATH]: () => Response.json({ error: 'ELEVATION_REQUIRED', action: 'plugin-new-workspace/places' }, { status: 403 }) })
     const { ctx, entries, denied } = await harness()
     mountOverlay(entries)
     void service(ctx).open()
     await settle()
-    expect(denied).toEqual([{ endpoint: 'delorunNewWorkspace/places', reason: 'elevation-required: delorunNewWorkspace/places' }])
+    expect(denied).toEqual([])
     expect(screen.getByRole('alert').textContent).toBe(en['problem.locked'])
   })
 })

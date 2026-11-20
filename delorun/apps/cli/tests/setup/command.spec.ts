@@ -94,6 +94,11 @@ describe('delorun setup', { timeout: 60_000 }, () => {
     expect((await refusal(['--yes', '--provider', 'acme'])).exit).toBe(EXIT.usage)
   })
 
+  // Putting the flag back makes setup accept it and write a phone level again.
+  it('no longer has a --phone-powers flag: it is refused with the usage code', async () => {
+    expect((await refusal(['--yes', '--phone-powers', 'full'])).exit).toBe(EXIT.usage)
+  })
+
   it('sets the provider of a profile that is set up with delorun setup key and the flags, without a terminal', async () => {
     expect(await setupCommand.run(['--yes'], context)).toBe(EXIT.ok)
     context = { ...context, env: { ...context.env, LOCAL_KEY: 'command-spec-local' } }
@@ -112,7 +117,7 @@ describe('delorun setup', { timeout: 60_000 }, () => {
 
   it('names the document\'s modelProvider, not the flags, when --config --check-key has no provider', async () => {
     const document = join(osHome, 'none.json')
-    writeFileSync(document, JSON.stringify({ schemaVersion: 4, modelProvider: null, prompts: 'safer', background: true, profile: { name: null, port: null }, reach: { option: 'none', identityFactor: null }, importStockHome: false }))
+    writeFileSync(document, JSON.stringify({ schemaVersion: 5, modelProvider: null, prompts: 'safer', background: true, profile: { name: null, port: null }, reach: { option: 'none', identityFactor: null }, importStockHome: false }))
     expect((await refusal(['--config', document, '--check-key'])).message).toBe('delorun setup --config: --check-key checks the chosen provider\'s key; name a provider in the document\'s modelProvider')
   })
 

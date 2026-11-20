@@ -160,15 +160,15 @@ export interface DeviceArrival {
 
 /**
  * Attest that a paired device's studio request comes from the person, with an unlock they entered. Only the studio's
- * Changes routes (`@delorun/plugin-changes`) call it, and only for an action the person's Phone powers level lets a
- * device take; the proof is recorded as `studio`.
+ * Changes routes (`@delorun/plugin-changes`) call it, and only for an action a device may take with that unlock or a
+ * grant; the proof is recorded as `studio`.
  * @param facts - the device and its unlock.
  * @returns the proof, naming the device.
  * @throws {ChangesError} `NOT_AT_COMPUTER` unless the device holds a fresh unlock or the control is free.
  */
 export function attestDevice(facts: DeviceArrival): AtComputer {
   if (facts.remoteSession !== true || (facts.freshUnlock !== true && facts.freeControl !== true) || facts.device.id === '') {
-    throw new ChangesError('NOT_AT_COMPUTER', 'studio', 'Unlock this device first: it needs a code from your computer, or your PIN where PIN mode is on.')
+    throw new ChangesError('NOT_AT_COMPUTER', 'studio', 'Confirm this with Face ID or your PIN when asked, or do it at your computer.')
   }
   return issue('studio', facts.device)
 }

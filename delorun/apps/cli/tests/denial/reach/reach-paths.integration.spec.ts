@@ -38,12 +38,13 @@ const STATIC = 'upstream\'s frontend-static fallback: the studio page, its built
 const CHANGES = '@delorun/plugin-changes: reads for any signed-in device'
 /**
  * Why the Changes controls of `@delorun/plugin-changes` are reached by a device: each action, setup and protection route
- * decides by its control's level in `access.ts` before it reads the body. Undo and Discard of a plugin's change, Discard
- * of a change to Delorun and turning protection on need an unlocked device at either Phone powers level; every other
- * action, setup included, Apply and Undo of a change to Delorun, Make my copy and turning protection off need an unlocked
- * device and Phone powers Full; dismissing the notice of a device's change is the computer's alone.
+ * decides by its control's level in `access.ts` before it reads the body. Undo and Discard of a plugin's change and Discard
+ * of a change to Delorun take a grant, or an unlock on a device with no passkey; turning protection on needs nothing; every
+ * other action, setup included, Apply and Undo of a change to Delorun, Make my copy and turning protection off take a grant
+ * from every device (a PIN grant where it holds no passkey) and stay at the computer with no grant store;
+ * dismissing the notice of a device's change is the computer's alone.
  */
-const CHANGES_CONTROLS = '@delorun/plugin-changes: a device only as the control\'s level and Phone powers allow, with an unlock it entered; the notice of a device\'s change only at the computer'
+const CHANGES_CONTROLS = '@delorun/plugin-changes: a device only as the control\'s level allows, with a grant or an unlock it entered; the notice of a device\'s change only at the computer'
 /** Why the routes of `@delorun/home-auth` are reached by a device. */
 const HOME_AUTH = '@delorun/home-auth: sign-in and the device routes, which refuse a reach session where C5 reserves them'
 
@@ -63,6 +64,7 @@ const REACHED: Readonly<Record<string, string>> = {
   'exact /delorun/changes/create': CHANGES_CONTROLS,
   'exact /delorun/changes/discard': CHANGES_CONTROLS,
   'exact /delorun/changes/done': CHANGES_CONTROLS,
+  'exact /delorun/changes/exit-safe-mode': CHANGES_CONTROLS,
   'exact /delorun/changes/off': CHANGES_CONTROLS,
   'exact /delorun/changes/on': CHANGES_CONTROLS,
   'exact /delorun/changes/request': CHANGES_CONTROLS,
@@ -115,7 +117,17 @@ const REACHED: Readonly<Record<string, string>> = {
   'exact /auth/pin/off': HOME_AUTH,
   'exact /auth/pin/options': HOME_AUTH,
   'exact /auth/pin/resume': HOME_AUTH,
-  'exact /auth/phone-powers': '@delorun/home-auth: a signed-in device reads the Phone powers level; setting it answers only the person at the computer, so a phone never changes what a phone may do',
+  'exact /auth/passkey/state': HOME_AUTH,
+  'exact /auth/passkey/options': HOME_AUTH,
+  'exact /auth/passkey/verify': HOME_AUTH,
+  'exact /auth/passkey/pin': HOME_AUTH,
+  'exact /auth/passkey/register/options': HOME_AUTH,
+  'exact /auth/passkey/register': HOME_AUTH,
+  'exact /auth/passkey/add/request': HOME_AUTH,
+  'exact /auth/passkey/add/pending': HOME_AUTH,
+  'exact /auth/passkey/add/approve': HOME_AUTH,
+  'exact /auth/passkey/devices': HOME_AUTH,
+  'exact /auth/passkey/remove': HOME_AUTH,
 }
 
 /**
@@ -136,6 +148,16 @@ interface FetchDecision {
 const UNLOCKED = (reason: string): FetchDecision => ({ device: 'unlock', reason })
 const READ = (reason: string, answers?: number): FetchDecision => ({ device: 'read', reason, ...answers === undefined ? {} : { answers } })
 const OPEN = (reason: string, answers?: number): FetchDecision => ({ device: 'admitted', reason, ...answers === undefined ? {} : { answers } })
+/**
+ * The `unlock` routes that are face rows (`gateByClass`): a running unlock, a PIN window or the approval grace never opens them (A483); a device needs a
+ * one-action grant, a PIN grant where it holds no passkey.
+ */
+const FACE_ROUTES: ReadonlySet<string> = new Set([
+  '/api/delorunDelegationConsent.allow', '/api/delorunExternalAgents.refresh', '/api/delorunMcpConsent.accept', '/api/delorunNetwork.set', '/api/delorunNewWorkspace.add', '/api/delorunNewWorkspace.clone',
+  '/api/delorunNewWorkspace.create', '/api/delorunNewWorkspace.places', '/api/delorunNewWorkspace.preview', '/api/delorunNewWorkspace.search', '/api/delorunNewWorkspace.setDefaults',
+  '/api/delorunPacks.enqueue', '/api/delorunPacks.remove', '/api/delorunPacks.retry', '/api/delorunPermission.setFullAccess', '/api/delorunReport.details',
+  '/api/delorunTrash.empty', '/api/delorunTrash.purge', '/api/delorunTrash.removeSetAside', '/api/delorunVersions.save', '/api/delorunVersions.switch',
+])
 const UPSTREAM_OWNER_ONLY = 'upstream declares no device admission, so only the owner reaches it'
 
 /**
@@ -154,14 +176,14 @@ const FETCH_ROUTES: Readonly<Record<string, FetchDecision>> = {
   '/api/delorunNewWorkspace.add': UNLOCKED('adds a folder as a workspace, which is what the model may write'),
   '/api/delorunNewWorkspace.create': UNLOCKED('makes a folder, runs Git in it and adds it as a workspace'),
   '/api/delorunNewWorkspace.clone': UNLOCKED('runs Git as the person and adds the clone as a workspace'),
-  '/api/delorunNewWorkspace.cloneStatus': UNLOCKED('reports a clone an unlocked device started'),
-  '/api/delorunNewWorkspace.defaults': UNLOCKED('reads a workspace\'s model and browser defaults by its path'),
+  '/api/delorunNewWorkspace.cloneStatus': OPEN('reports a clone\'s progress; reading only, so no unlock is needed', 400),
+  '/api/delorunNewWorkspace.defaults': OPEN('reads a workspace\'s model and browser defaults by its path; reading only', 400),
   '/api/delorunNewWorkspace.setDefaults': UNLOCKED('sets the model and browser every new chat in a workspace starts with'),
   '/api/delorunOnboarding.workspaceNotice': READ('names the workspace record files the registry set aside at start-up'),
   '/api/delorunOnboarding.setupRecord': READ('what setup recorded serves onboarding on a phone'),
   '/api/delorunNetwork.list': READ('lists each workspace\'s network setting'),
   '/api/delorunNetwork.set': UNLOCKED('a looser network setting lets commands reach more of the network'),
-  '/api/delorunOnboarding.agentModels': UNLOCKED('starts the agent\'s own process to list its models'),
+  '/api/delorunOnboarding.agentModels': OPEN('lists an agent\'s models; reading only, so no unlock is needed', 400),
   '/api/delorunOnboarding.start': READ('a random id naming this start of the home, with no setting or data'),
   '/api/delorunPacks.list': OPEN('an approved phone reads which plugin packs the release offers and how far each install is; names and progress only', 400),
   '/api/delorunPacks.cancel': OPEN('cancelling a queued or running install only tightens', 400),
@@ -179,7 +201,7 @@ const FETCH_ROUTES: Readonly<Record<string, FetchDecision>> = {
   '/api/delorunMainChat.open': OPEN('opens the main chat, which exists to be opened; the probe\'s composition cannot create it, so the route answers 502 past its admission', 502),
   '/api/delorunMainChat.reports': READ('a count for the main chat\'s sidebar mark'),
   '/api/delorunTrust.bill': READ('the trust badge shows on every studio page, a device\'s included (C15); the bill names what runs and what was checked, and no secret'),
-  '/api/delorunTrust.check': UNLOCKED('Check now hashes the runtime and runs the release-log check on the computer'),
+  '/api/delorunTrust.check': OPEN('Check now only checks; it changes nothing, so no unlock is needed', 415),
   '/api/delorunVersions.list': READ('the setup versions screen lists the saved versions and which one runs; it names no secret'),
   '/api/delorunVersions.changes': READ('the setup versions screen compares a saved version with the running one; the probe names no version, so the route answers 400 BAD_REQUEST', 400),
   '/api/delorunReport.details': UNLOCKED('the report holds an excerpt of the home\'s log, which can name paths of the home'),
@@ -192,6 +214,8 @@ const FETCH_ROUTES: Readonly<Record<string, FetchDecision>> = {
   '/api/delorunTrash.deleteChat': OPEN('moving a chat to the trash is reversible', 400),
   '/api/delorunTrash.deleteWorkspace': OPEN('moving a workspace to the trash is reversible', 400),
   '/api/delorunTrash.restore': OPEN('restoring from the trash is reversible', 400),
+  '/api/delorunTrash.setAside': OPEN('lists the set-aside and copy directories an update kept; reading only', 400),
+  '/api/delorunTrash.removeSetAside': UNLOCKED('deleting set-aside data is for good'),
   '/api/delorunTrash.purge': UNLOCKED('deleting from the trash is for good'),
   '/api/delorunTrash.empty': UNLOCKED('emptying the trash is for good'),
   '/api/delorunPermission.workspaces': READ('lists the workspaces and their full access'),
@@ -207,6 +231,8 @@ const FETCH_ROUTES: Readonly<Record<string, FetchDecision>> = {
   '/api/delorunDelegationConsent.levels': READ('reads each external agent\'s saved level and what its sandbox lacks; it changes no level, which only a settings write does, and the reach policy ranks that'),
   '/api/delorunDelegationConsent.allow': UNLOCKED('allowing an external agent for a workspace starts a program outside the sandbox without asking'),
   '/api/delorunDelegationConsent.revoke': OPEN('revoking only withdraws a grant', 400),
+  '/api/delorunExternalAgents.accounts': READ('reads each agent\'s sign-in, plan and limit figures, which hold no personal data; reading starts no check'),
+  '/api/delorunExternalAgents.refresh': UNLOCKED('a check starts the person\'s own Claude Code or Codex program on the computer'),
   '/api/delorunMcpConsent.waiting': READ('the names of the servers waiting for the person\'s OK, without their commands'),
   '/api/session/uploadFileBinary': { device: 'per-call', reason: 'upstream asks remote access for fileUploads/upload, which the reach-device policy allows' },
   '/api/session.export': { device: 'refused', reason: UPSTREAM_OWNER_ONLY },
@@ -419,7 +445,7 @@ describe('the routes a signed-in device reaches', () => {
     }
   })
 
-  it('runs the unlock routes for an unlocked device, with the approval grace or a code from the computer, and again refuses them once it is locked', async () => {
+  it('runs the unlock routes for an unlocked device but never a face route, and again refuses them once it is locked', async () => {
     const { homeAuth } = studio.ctx
     const admitted = homeAuth.admitToken(session.slice(session.indexOf('=') + 1), LISTENER)
     if (admitted.kind !== 'admitted') throw new Error('the device was not admitted')
@@ -431,9 +457,12 @@ describe('the routes a signed-in device reaches', () => {
       expect(unlockRoutes.length).toBeGreaterThan(8)
       for (const route of unlockRoutes) {
         const reply = await asPhone(route.path, { method: route.methods[0] ?? 'GET' })
-        // Pins the gate's other half: an unlocked device reaches the route, which answers past the admission.
         const error = reply.status === 403 ? (JSON.parse(reply.body || '{}') as { readonly error?: unknown }).error : undefined
-        expect.soft({ path: route.path, status: reply.status, error }).toEqual({ path: route.path, status: reply.status, error: undefined })
+        // Pins A483: an unlocked device is still refused every face route; removing a route from FACE_ROUTES, or the grant-only refusal, fails here.
+        // Pins the gate's other half: every other unlock route runs for an unlocked device, which answers past the admission.
+        expect.soft({ path: route.path, status: reply.status, error }).toEqual(FACE_ROUTES.has(route.path)
+          ? { path: route.path, status: 403, error: 'ELEVATION_REQUIRED' }
+          : { path: route.path, status: reply.status, error: undefined })
       }
     } finally {
       homeAuth.lockElevation(deviceId, LISTENER)

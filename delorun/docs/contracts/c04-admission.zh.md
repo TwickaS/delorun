@@ -152,12 +152,12 @@ home 的 Host 运行一个回环监听器；在远程访问开启期间，还为
 <a id="page-unlock"></a>
 ### 页面解锁
 
-[PIN 模式](c14-oidc-passkeys.zh.md#pin-mode)开启期间，页面可以证明它在内存中持有的解锁。下面每一项都是准入的事实，而不是路由的事实。
+No route mints a page unlock: [PIN mode](c14-oidc-passkeys.zh.md#pin-mode) refuses the unlock to every device, which confirms each action with a one-action grant instead. Admission still strips and checks the token carriers below, so a token a page still sends is refused with `401 UNLOCK_INVALID` and admits nothing. Each part below is a fact of admission, not of the routes.
 
 - **载体。** 令牌在 `/api` 请求中作为 `Delorun-Unlock` 头传送，在 `/api/remote.mux` 升级请求中作为 WebSocket 子协议 `delorun-unlock.<token>` 传送。查询参数从不被读作令牌。提供该子协议的页面会在它之前再提供一个固定协议，使升级应答写明浏览器接受的协议。
 - **剥离。** `admit` 在任何路由、升级处理器或插件看到请求之前，从请求的每个头视图中移除这两种载体。PIN 模式关闭时，令牌被剥离并被忽略。
 - **检查。** 会话被准入之后，令牌必须写明一个绑定到该会话的设备、监听器与会话的解锁（最近 30 秒内被滚动更新的会话视为同一会话）。没有令牌的请求照常被准入，归属于该设备的锁定 Peer。未知、已结束、重复或绑定到其他对象的令牌会被拒绝并返回 `401 UNLOCK_INVALID`，绑定到其他设备、监听器或会话的解锁随之结束：移动过的令牌已经泄露。
-- **每页 Peer。** 设备在每个监听器上有一个锁定 Peer，每个运行中的页面解锁各有一个 Peer，其 principal 携带该解锁的 `unlockId`。Peer 决定其页面可以做什么，因此锁定的标签页无法回应兄弟标签页可以回应的授权，解锁也从不准入另一个页面。
+- **Per-page Peers.** A device holds one locked Peer per listener and one Peer for each running page unlock, whose principal carries the unlock's `unlockId`. The Peer decides what its page may do; no Peer answers a reserved prompt or takes a `face` action without a grant of its own, and an unlock never admits another page.
 - **结束。** 解锁结束时，其 Peer 被 dispose，其会话的远程访问连接被关闭。设备的其他页面以各自的令牌重新连接。
 - **缓存。** 远程访问首页以 `Cache-Control: no-store` 应答，因此恢复的页面不会从缓存提供。
 

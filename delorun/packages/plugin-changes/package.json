@@ -13,7 +13,6 @@
     },
     "./wire": "./src/wire.ts",
     "./face-grant": "./src/client/face-grant.ts",
-    "./phone-powers-locales": "./src/client/locales/phone-powers.ts",
     "./package.json": "./package.json",
     "./locale/*.json": "./locale/*.json"
   },

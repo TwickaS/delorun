@@ -1,0 +1,9 @@
+/* One part of a path: whole, so the line breaks only between parts. */
+.part {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  white-space: nowrap;
+}

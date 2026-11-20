@@ -25,7 +25,7 @@ const OK: UpdateMayView = { ok: true }
 
 /** Every control usable (the computer), with the named ones replaced. */
 function may(replace: Partial<Record<UpdateControl, UpdateMayView>> = {}): UpdateStateView['access'] {
-  return { actor: 'computer', phonePowers: 'careful', may: Object.fromEntries(UPDATE_CONTROLS.map(control => [control, replace[control] ?? OK])) as Record<UpdateControl, UpdateMayView> }
+  return { actor: 'computer', may: Object.fromEntries(UPDATE_CONTROLS.map(control => [control, replace[control] ?? OK])) as Record<UpdateControl, UpdateMayView> }
 }
 
 /** An idle state at the computer. */
@@ -382,7 +382,7 @@ describe('the controller', () => {
     const answers = [stateOf(), stateOf({ release: { delorun: '0.1.3', dsh: '0.2.2' } })]
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(JSON.stringify(answers.shift()), { status: 200 }))))
     const reload = vi.fn()
-    const controller = new UpdateController({ unlockNeeded: vi.fn(), reload })
+    const controller = new UpdateController({ reload })
     await controller.refresh()
     expect(reload).not.toHaveBeenCalled()
     await controller.refresh()
@@ -390,16 +390,15 @@ describe('the controller', () => {
     controller.dispose()
   })
 
-  it('opens the unlock dialog for an unlock refusal and sends nothing but the handle and the ticks', async () => {
+  it('returns an unlock refusal for the screen and sends nothing but the handle and the ticks', async () => {
     const fetch = vi.fn((path: string, _init?: RequestInit) => Promise.resolve(path.endsWith('/apply')
       ? new Response(JSON.stringify({ code: 'ELEVATION_REQUIRED', message: 'unlock' }), { status: 403 })
       : new Response(JSON.stringify(stateOf()), { status: 200 })))
     vi.stubGlobal('fetch', fetch)
-    const unlockNeeded = vi.fn()
-    const controller = new UpdateController({ unlockNeeded, reload: vi.fn() })
+    const controller = new UpdateController({ reload: vi.fn() })
     const outcome = await controller.apply({ handle: 'h1', chats: 'wait', dataCopy: true, acknowledged: [] })
     expect(outcome.ok).toBe(false)
-    expect(unlockNeeded).toHaveBeenCalledWith('update-begin')
+    expect(outcome.ok === false && outcome.refusal.code).toBe('ELEVATION_REQUIRED')
     const call = fetch.mock.calls.find(([path]) => path === UPDATE_PATHS.apply.slice(1))
     expect(JSON.parse(String(call?.[1]?.body))).toEqual({ handle: 'h1', chats: 'wait', dataCopy: true, acknowledged: [] })
     controller.dispose()

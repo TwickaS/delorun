@@ -7,7 +7,7 @@
  */
 import { describe, expect, it, vi } from 'vitest'
 import { PERMISSION_ROUTES } from '@delorun/plugin-permission-defaults/wire'
-import type { FullAccessConsentSource } from '../src/client/FullAccessConsent.tsx'
+import type { FullAccessConsentSource, SwitchAnswer } from '../src/client/FullAccessConsent.tsx'
 import type { WorkspaceAccess } from '../src/client/consents-api.ts'
 import type { HostFetch } from '../src/client/host-api.ts'
 import { askForWorkspace } from '../src/client/index.ts'
@@ -39,7 +39,7 @@ function home(answer: { readonly status: number, readonly body: unknown }) {
  */
 function consent(answer: boolean) {
   const ask = vi.fn(async (_access: WorkspaceAccess | undefined) => answer)
-  const askSwitch = vi.fn(async () => answer)
+  const askSwitch = vi.fn(async (): Promise<SwitchAnswer> => answer ? 'submit' : 'cancelled')
   return { source: { ask, askSwitch } as Pick<FullAccessConsentSource, 'ask' | 'askSwitch'> as FullAccessConsentSource, ask, askSwitch }
 }
 

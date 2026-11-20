@@ -228,6 +228,15 @@
   overflow-wrap: anywhere;
 }
 
+/* The workspace's path under its folder name: secondary text that wraps only after a slash. */
+.checkPath {
+  display: block;
+  margin-top: 2px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
 .ideas {
   display: flex;
   flex-direction: column;

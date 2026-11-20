@@ -102,10 +102,10 @@ export interface UpdateServer {
 
 /**
  * Serve the update routes over the Changes gate.
- * @param options - Phone powers, whether the channel exists, and the release check.
+ * @param options - whether the channel exists, the Face ID access of the paired device, and the release check.
  * @returns the server and its stand-ins.
  */
-export async function serveUpdate(options: { readonly powers?: 'careful' | 'full', readonly noChannel?: boolean, readonly face?: FaceAccess } = {}): Promise<UpdateServer> {
+export async function serveUpdate(options: { readonly noChannel?: boolean, readonly face?: FaceAccess } = {}): Promise<UpdateServer> {
   const { ctx } = routeHome()
   mkdirSync(join(ctx.home, 'run', ctx.profile), { recursive: true, mode: 0o700 })
   const channel = new FakeChannel()
@@ -115,7 +115,6 @@ export async function serveUpdate(options: { readonly powers?: 'careful' | 'full
     channel, home: ctx.home, clock, log, check: undefined,
     chats: { running: [], cancelled: 0, jobs: 0 }, sent: { ids: [], answer: 'continued', answers: {}, hold: undefined }, setting: { automatic: true },
     server: await serveRoutes(ctx, {
-      ...options.powers === undefined ? {} : { powers: options.powers },
       ...options.face === undefined ? {} : { face: options.face },
       extraRoutes: dependencies => updateRoutes({
         gate: changesGate(dependencies),

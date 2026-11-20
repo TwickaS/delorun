@@ -37,37 +37,12 @@
   gap: 12px;
 }
 
-.fieldRow {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-/* 16 px keeps iOS from zooming the page when a field takes focus. */
-.field input {
-  font-size: 16px;
-}
-
 .hint {
   margin: 0;
   color: var(--dsw-alias-label-secondary);
   font-size: 12px;
   line-height: 18px;
   overflow-wrap: anywhere;
-}
-
-.check {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.checkText {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 2px;
 }
 
 .failed {

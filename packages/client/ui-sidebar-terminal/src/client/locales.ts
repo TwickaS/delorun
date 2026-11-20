@@ -27,6 +27,8 @@ export const zh = {
   'badge.sandbox': '沙箱',
   'badge.readOnlyHint': '命令在 Agent 的只读沙箱里运行，包括你在这里输入的命令。',
   'badge.workspaceWriteHint': '命令在 Agent 的工作区沙箱里运行，包括你在这里输入的命令。',
+  errorWithheld: 'The terminal could not start or stopped with an error. The details are on the computer.',
+  notConfirmed: 'Not confirmed. The terminal did not start.',
 } satisfies Record<string, string>
 
 /** English terminal copy. */
@@ -49,6 +51,8 @@ export const en = {
   'badge.sandbox': 'Sandbox',
   'badge.readOnlyHint': "Commands run in the agent's read-only sandbox, including commands you type here.",
   'badge.workspaceWriteHint': "Commands run in the agent's workspace sandbox, including commands you type here.",
+  errorWithheld: 'The terminal could not start or stopped with an error. The details are on the computer.',
+  notConfirmed: 'Not confirmed. The terminal did not start.',
 } satisfies Record<keyof typeof zh, string>
 
 /** Japanese copy, checked against the English keys. */
@@ -86,6 +90,8 @@ export const ja = {
   'badge.sandbox': 'サンドボックス',
   'badge.readOnlyHint': 'コマンドはエージェントの読み取り専用サンドボックスで実行されます（ここで入力したコマンドも含みます）。',
   'badge.workspaceWriteHint': 'コマンドはエージェントのワークスペースサンドボックスで実行されます（ここで入力したコマンドも含みます）。',
+  errorWithheld: 'The terminal could not start or stopped with an error. The details are on the computer.',
+  notConfirmed: 'Not confirmed. The terminal did not start.',
 } satisfies Record<keyof typeof en, string>
 
 /** Spanish dictionary, checked against the English keys. */
@@ -108,6 +114,8 @@ export const es = {
   'badge.sandbox': 'Sandbox',
   'badge.readOnlyHint': 'Los comandos se ejecutan en el sandbox de solo lectura del agente, incluidos los que escriba aquí.',
   'badge.workspaceWriteHint': 'Los comandos se ejecutan en el sandbox del espacio de trabajo del agente, incluidos los que escriba aquí.',
+  errorWithheld: 'The terminal could not start or stopped with an error. The details are on the computer.',
+  notConfirmed: 'Not confirmed. The terminal did not start.',
 } satisfies Record<keyof typeof en, string>
 
 /** French dictionary, checked against the English keys. */
@@ -130,6 +138,8 @@ export const fr = {
   'badge.sandbox': 'Sandbox',
   'badge.readOnlyHint': 'Les commandes s’exécutent dans le sandbox en lecture seule de l’agent, y compris celles que vous saisissez ici.',
   'badge.workspaceWriteHint': 'Les commandes s’exécutent dans le sandbox de l’espace de travail de l’agent, y compris celles que vous saisissez ici.',
+  errorWithheld: 'The terminal could not start or stopped with an error. The details are on the computer.',
+  notConfirmed: 'Not confirmed. The terminal did not start.',
 } satisfies Record<keyof typeof en, string>
 
 /** German dictionary, checked against the English keys. */
@@ -152,6 +162,8 @@ export const de = {
   'badge.sandbox': 'Sandbox',
   'badge.readOnlyHint': 'Befehle laufen in der schreibgeschützten Sandbox des Agenten, auch Befehle, die Sie hier eingeben.',
   'badge.workspaceWriteHint': 'Befehle laufen in der Arbeitsbereich-Sandbox des Agenten, auch Befehle, die Sie hier eingeben.',
+  errorWithheld: 'The terminal could not start or stopped with an error. The details are on the computer.',
+  notConfirmed: 'Not confirmed. The terminal did not start.',
 } satisfies Record<keyof typeof en, string>
 
 /** Russian dictionary, checked against the English keys. */
@@ -174,6 +186,8 @@ export const ru = {
   'badge.sandbox': 'Песочница',
   'badge.readOnlyHint': 'Команды выполняются в песочнице агента только для чтения, включая команды, которые вы вводите здесь.',
   'badge.workspaceWriteHint': 'Команды выполняются в песочнице рабочей области агента, включая команды, которые вы вводите здесь.',
+  errorWithheld: 'The terminal could not start or stopped with an error. The details are on the computer.',
+  notConfirmed: 'Not confirmed. The terminal did not start.',
 } satisfies Record<keyof typeof en, string>
 
 /** Portuguese dictionary, checked against the English keys. */
@@ -196,4 +210,6 @@ export const pt = {
   'badge.sandbox': 'Sandbox',
   'badge.readOnlyHint': 'Os comandos são executados no sandbox somente leitura do agente, incluindo os que você digitar aqui.',
   'badge.workspaceWriteHint': 'Os comandos são executados no sandbox do espaço de trabalho do agente, incluindo os que você digitar aqui.',
+  errorWithheld: 'The terminal could not start or stopped with an error. The details are on the computer.',
+  notConfirmed: 'Not confirmed. The terminal did not start.',
 } satisfies Record<keyof typeof en, string>

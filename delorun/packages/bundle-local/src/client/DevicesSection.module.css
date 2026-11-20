@@ -126,85 +126,15 @@
     align-items: stretch;
     gap: 12px;
   }
+
+  .actions > * {
+    flex: 1 1 auto;
+  }
 }
 
-/* Phone powers: two choices as cards, each a radio with its name and what it lets an unlocked phone do. */
-.powers {
-  display: flex;
-  flex-direction: column;
-}
-
-.powersNotice {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  margin: 0 0 12px;
-  border: 0.5px solid var(--dsw-alias-state-warning-primary, var(--dsw-alias-settings-card-stroke));
-  border-radius: var(--dsw-radius-xl);
-  padding: 12px 14px;
-  background: var(--dsw-alias-settings-card-fill);
-}
-
-.powersNotice .line {
-  margin: 0;
-}
-
-.powerChoices {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin: 0 0 8px;
-}
-
-.powerChoice {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  min-width: 0;
-  border: 0.5px solid var(--dsw-alias-settings-card-stroke);
-  border-radius: var(--dsw-radius-xl);
-  padding: 12px 14px;
-  background: var(--dsw-alias-settings-card-fill);
-  cursor: pointer;
-}
-
-.powerChoice[data-selected='true'] {
-  border-color: var(--dsw-alias-label-primary);
-}
-
-.powerChoice:has(input:disabled) {
-  cursor: default;
-}
-
-.powerChoice input {
-  margin: 3px 0 0;
-  accent-color: var(--dsw-alias-label-primary);
-}
-
-.powerText {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-
-.powerName {
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 500;
-}
-
-.powerBody {
-  color: var(--dsw-alias-label-secondary);
-  font-size: 13px;
-  line-height: 20px;
-  overflow-wrap: anywhere;
-}
-
-/* The two choices stack on a narrow page. */
-@media (max-width: 520px) {
-  .powerChoices {
-    grid-template-columns: minmax(0, 1fr);
+/* A touch target of 44 px for every button of the section. */
+@media (pointer: coarse) {
+  .section button {
+    min-height: 44px;
   }
 }

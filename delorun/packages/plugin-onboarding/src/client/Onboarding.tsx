@@ -85,7 +85,7 @@ interface Loaded {
  */
 async function readPinOn(fetch: HostFetch): Promise<boolean> {
   try {
-    return (await readPinState(fetch, null))?.kind === 'on'
+    return (await readPinState(fetch))?.kind === 'on'
   } catch (error) {
     // The PIN step then shows, which is safe: deferring it only leaves a reminder at the computer.
     console.warn('delorun onboarding: PIN mode was not read', error)

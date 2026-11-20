@@ -8,7 +8,7 @@
  * upstream's behaviour.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { ConfigForm, ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -20,7 +20,7 @@ import { HostRequestError, type HostFetch } from '../src/client/host-api.ts'
 import { readServers, type WorkspaceAccess } from '../src/client/consents-api.ts'
 import {
   confirmPermissionSwitch, consentFailureText, ownsPermissionConfirmation, createFullAccessConsentSource, FullAccessConsent, FULL_ACCESS_COMMAND,
-  workspaceName, type FullAccessConsentProps, type FullAccessConsentSource,
+  workspaceName, type FullAccessConsentProps, type FullAccessConsentSource, type SwitchAnswer,
 } from '../src/client/FullAccessConsent.tsx'
 import { AllowForChat, ChatSwitchRefused, type AllowForChatProps } from '../src/client/AllowForChat.tsx'
 import { FullAccessAction, type FullAccessActionProps } from '../src/client/FullAccessAction.tsx'
@@ -32,8 +32,6 @@ import { AGENTS_COMMAND, ExternalAgentsSection, type ExternalAgentsSectionProps 
 import { MCP_COMMAND, PermissionsSection, type PermissionsSectionProps } from '../src/client/PermissionsSection.tsx'
 import { OptIn } from '../src/client/opt-in.ts'
 import { switchChat } from '../src/client/index.ts'
-import { installGateUnlock } from '../src/client/gate-unlock.ts'
-import type { UnlockSource, UnlockView } from '../src/client/unlock.ts'
 
 afterEach(() => {
   cleanup()
@@ -81,7 +79,8 @@ describe('the question upstream\'s permission control asks', () => {
   it('submits every switch but full access at once, without asking the home', async () => {
     const host = fakeHost()
     const ask = vi.fn(async () => true)
-    await expect(confirmPermissionSwitch(host.fetch, { ask, askSwitch: ask }, 'chat-1', 'workspace-write')).resolves.toBe(true)
+    const askSwitch = vi.fn(async (): Promise<SwitchAnswer> => 'submit')
+    await expect(confirmPermissionSwitch(host.fetch, { ask, askSwitch }, 'chat-1', 'workspace-write')).resolves.toBe('submit')
     expect(host.received).toEqual([])
     expect(ask).not.toHaveBeenCalled()
   })
@@ -90,19 +89,20 @@ describe('the question upstream\'s permission control asks', () => {
     const unmounted = fakeHost()
     const granted = fakeHost({ [`POST ${PERMISSION_ROUTES.review}`]: { status: 200, body: { access: ON } } })
     const nowhere = fakeHost({ [`POST ${PERMISSION_ROUTES.review}`]: refusal(422, 'NO_WORKSPACE') })
-    for (const [host, access] of [[unmounted, undefined], [granted, ON], [nowhere, undefined]] as const) {
-      const askSwitch = vi.fn(async () => true)
-      await expect(confirmPermissionSwitch(host.fetch, { ask: vi.fn(), askSwitch }, 'chat-1', 'danger-full-access')).resolves.toBe(true)
-      expect(askSwitch).toHaveBeenCalledWith(access)
+    // A chat with no folder names no chat for the home to switch; the other two name it, though only a missing grant switches it.
+    for (const [host, args] of [[unmounted, [undefined, undefined, 'chat-1']], [granted, [ON, undefined, 'chat-1']], [nowhere, [undefined]]] as const) {
+      const askSwitch = vi.fn(async (): Promise<SwitchAnswer> => 'submit')
+      await expect(confirmPermissionSwitch(host.fetch, { ask: vi.fn(), askSwitch }, 'chat-1', 'danger-full-access')).resolves.toBe('submit')
+      expect(askSwitch.mock.calls).toEqual([args])
     }
   })
 
   it('shows the grant form for a workspace without a grant, and submits only what the person confirms', async () => {
     const host = fakeHost({ [`POST ${PERMISSION_ROUTES.review}`]: { status: 200, body: { access: OFF } } })
-    for (const confirmed of [true, false]) {
-      const askSwitch = vi.fn(async () => confirmed)
-      await expect(confirmPermissionSwitch(host.fetch, { ask: vi.fn(), askSwitch }, 'chat-1', 'danger-full-access')).resolves.toBe(confirmed)
-      expect(askSwitch).toHaveBeenCalledWith(OFF)
+    for (const answer of ['switched', 'submit', 'cancelled'] as const) {
+      const askSwitch = vi.fn(async (): Promise<SwitchAnswer> => answer)
+      await expect(confirmPermissionSwitch(host.fetch, { ask: vi.fn(), askSwitch }, 'chat-1', 'danger-full-access')).resolves.toBe(answer)
+      expect(askSwitch).toHaveBeenCalledWith(OFF, undefined, 'chat-1')
     }
     expect(host.received.find(entry => entry.key === `POST ${PERMISSION_ROUTES.review}`)?.body).toEqual({ sessionId: 'chat-1' })
   })
@@ -110,7 +110,7 @@ describe('the question upstream\'s permission control asks', () => {
   it('shows a remote studio the consent without a way to grant, and submits nothing', async () => {
     const host = fakeHost({ [`POST ${PERMISSION_ROUTES.review}`]: REMOTE })
     const ask = vi.fn(async () => false)
-    await expect(confirmPermissionSwitch(host.fetch, { ask, askSwitch: vi.fn() }, 'chat-1', 'danger-full-access')).resolves.toBe(false)
+    await expect(confirmPermissionSwitch(host.fetch, { ask, askSwitch: vi.fn() }, 'chat-1', 'danger-full-access')).resolves.toBe('cancelled')
     expect(ask).toHaveBeenCalledWith(undefined)
   })
 
@@ -165,8 +165,21 @@ describe('the full-access consent', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: en['consent.acknowledge'] }))
     expect(confirm.disabled).toBe(false)
     fireEvent.click(confirm)
-    await expect(answered).resolves.toBe(true)
+    await expect(answered).resolves.toBe('submit')
     expect(host.received).toEqual([{ key: `POST ${PERMISSION_ROUTES.setFullAccess}`, body: { workspace: OFF.workspace, reviewId: OFF.reviewId, on: true, confirmed: true } }])
+  })
+
+  it('records the grant and switches the chat in one call, and then leaves the composer nothing to submit', async () => {
+    // Submitting the switch again sent `/permission` through commands/execute, which a device confirmed a second time (F-2).
+    const host = fakeHost({ [`POST ${PERMISSION_ROUTES.setFullAccess}`]: { status: 200, body: { access: ON, chats: 1 } } })
+    const source = createFullAccessConsentSource(host.fetch)
+    const answered = confirmPermissionSwitch(fakeHost({ [`POST ${PERMISSION_ROUTES.review}`]: { status: 200, body: { access: OFF } } }).fetch, source, 'chat-1', 'danger-full-access')
+    await waitFor(() => { expect(source.hooks.consent.getSnapshot()).not.toBeNull() })
+    renderConsent(source)
+    fireEvent.click(screen.getByRole('checkbox', { name: en['consent.acknowledge'] }))
+    fireEvent.click(screen.getByRole('button', { name: en['consent.confirm'] }))
+    await expect(answered).resolves.toBe('switched')
+    expect(host.received).toEqual([{ key: `POST ${PERMISSION_ROUTES.setFullAccess}`, body: { workspace: OFF.workspace, reviewId: OFF.reviewId, on: true, confirmed: true, chat: 'chat-1' } }])
   })
 
   it('answers no and records nothing when the asker no longer wants the switch at the confirm', async () => {
@@ -177,7 +190,7 @@ describe('the full-access consent', () => {
       renderConsent(source)
       fireEvent.click(screen.getByRole('checkbox'))
       fireEvent.click(screen.getByRole('button', { name: access === OFF ? en['consent.confirm'] : en['switch.confirm'] }))
-      await expect(answered).resolves.toBe(false)
+      await expect(answered).resolves.toBe('cancelled')
       expect(host.received).toEqual([])
       cleanup()
     }
@@ -185,10 +198,10 @@ describe('the full-access consent', () => {
 
   it('hands the asker\'s wish to the consent it opens', async () => {
     const wanted = () => true
-    const askSwitch = vi.fn(async () => true)
+    const askSwitch = vi.fn(async (): Promise<SwitchAnswer> => 'submit')
     await confirmPermissionSwitch(fakeHost({ [`POST ${PERMISSION_ROUTES.review}`]: { status: 200, body: { access: OFF } } }).fetch, { ask: vi.fn(), askSwitch }, 'chat-1', 'danger-full-access', wanted)
     await confirmPermissionSwitch(fakeHost({ [`POST ${PERMISSION_ROUTES.review}`]: refusal(422, 'NO_WORKSPACE') }).fetch, { ask: vi.fn(), askSwitch }, 'chat-1', 'danger-full-access', wanted)
-    expect(askSwitch.mock.calls).toEqual([[OFF, wanted], [undefined, wanted]])
+    expect(askSwitch.mock.calls).toEqual([[OFF, wanted, 'chat-1'], [undefined, wanted]])
   })
 
   it('asks the short form without recording anything, and answers no when cancelled', async () => {
@@ -202,10 +215,10 @@ describe('the full-access consent', () => {
     expect(confirm.disabled).toBe(true)
     fireEvent.click(screen.getByRole('checkbox'))
     fireEvent.click(confirm)
-    await expect(confirmed).resolves.toBe(true)
+    await expect(confirmed).resolves.toBe('submit')
     const cancelled = source.askSwitch(undefined)
     source.cancel()
-    await expect(cancelled).resolves.toBe(false)
+    await expect(cancelled).resolves.toBe('cancelled')
     expect(host.received).toEqual([])
   })
 
@@ -421,7 +434,7 @@ function choiceProps(host: ReturnType<typeof fakeHost>, overrides: Partial<Allow
   return {
     t: makeTranslate(en), escalatesTo: 'danger-full-access', toolName: 'bash', callId: undefined, allow: vi.fn(async () => {}), offer: vi.fn(),
     answered: false, canAnswer: () => true, sessionId: 'chat-1', fetch: host.fetch,
-    consent: { ask: vi.fn(async () => true), askSwitch: vi.fn(async () => true) },
+    consent: { ask: vi.fn(async () => true), askSwitch: vi.fn(async (): Promise<SwitchAnswer> => 'submit') },
     currentPreset: () => 'read-only', switchTo: vi.fn(async () => {}), ...overrides,
   } as AllowForChatProps
 }
@@ -448,13 +461,24 @@ describe('the approval card\'s "Allow for this chat" choice', () => {
     await settle()
     fireEvent.click(allowForChat())
     await settle()
-    expect(props.consent.askSwitch).toHaveBeenCalledWith(OFF, props.canAnswer)
+    expect(props.consent.askSwitch).toHaveBeenCalledWith(OFF, props.canAnswer, 'chat-1')
     expect(props.switchTo).toHaveBeenCalledWith('danger-full-access')
     expect(props.allow).toHaveBeenCalledTimes(1)
   })
 
+  it('answers the card without a second switch when the grant already switched the chat', async () => {
+    // A second switch goes through commands/execute, which a device confirms again (F-2).
+    const props = choiceProps(fakeHost(REVIEWED_OFF), { consent: { ask: vi.fn(), askSwitch: vi.fn(async (): Promise<SwitchAnswer> => 'switched') } })
+    render(<AllowForChat {...props} />)
+    await settle()
+    fireEvent.click(allowForChat())
+    await settle()
+    expect(props.switchTo).not.toHaveBeenCalled()
+    expect(props.allow).toHaveBeenCalledTimes(1)
+  })
+
   it('leaves the card waiting when the person cancels the dialog', async () => {
-    const props = choiceProps(fakeHost(REVIEWED_OFF), { consent: { ask: vi.fn(), askSwitch: vi.fn(async () => false) } })
+    const props = choiceProps(fakeHost(REVIEWED_OFF), { consent: { ask: vi.fn(), askSwitch: vi.fn(async (): Promise<SwitchAnswer> => 'cancelled') } })
     render(<AllowForChat {...props} />)
     await settle()
     fireEvent.click(allowForChat())
@@ -530,7 +554,7 @@ describe('the approval card\'s "Allow for this chat" choice', () => {
 
   it('does not switch a chat when the card stopped accepting an answer while the dialog was open', async () => {
     let answerable = true
-    const askSwitch = vi.fn(async () => { answerable = false; return true })
+    const askSwitch = vi.fn(async (): Promise<SwitchAnswer> => { answerable = false; return 'submit' })
     const props = choiceProps(fakeHost(REVIEWED_OFF), { canAnswer: () => answerable, consent: { ask: vi.fn(), askSwitch } })
     render(<AllowForChat {...props} />)
     await settle()
@@ -1515,17 +1539,19 @@ describe('dangerous mode', () => {
   it('asks the dialog as before while the home says it is off, and when a locked device cannot read the state', async () => {
     for (const read of [{ status: 200, body: { on: false } }, refusal(403, 'LOOPBACK_REQUIRED'), undefined]) {
       const host = fakeHost({ ...REVIEWED_OFF, ...read === undefined ? {} : { [EVERYWHERE_ROUTE]: read } })
-      const ask = vi.fn(async () => true)
-      await expect(confirmPermissionSwitch(host.fetch, { ask, askSwitch: ask }, 'chat-1', 'danger-full-access')).resolves.toBe(true)
-      expect(ask).toHaveBeenCalledTimes(1)
+      const askSwitch = vi.fn(async (): Promise<SwitchAnswer> => 'submit')
+      await expect(confirmPermissionSwitch(host.fetch, { ask: vi.fn(), askSwitch }, 'chat-1', 'danger-full-access')).resolves.toBe('submit')
+      expect(askSwitch).toHaveBeenCalledTimes(1)
     }
   })
 
   it('submits the switch to full access with no dialog while it is on, also where the home refuses the review', async () => {
     const host = fakeHost({ [EVERYWHERE_ROUTE]: EVERYWHERE_ON, [`POST ${PERMISSION_ROUTES.review}`]: REMOTE })
     const ask = vi.fn(async () => true)
-    await expect(confirmPermissionSwitch(host.fetch, { ask, askSwitch: ask }, 'chat-1', 'danger-full-access')).resolves.toBe(true)
+    const askSwitch = vi.fn(async (): Promise<SwitchAnswer> => 'submit')
+    await expect(confirmPermissionSwitch(host.fetch, { ask, askSwitch }, 'chat-1', 'danger-full-access')).resolves.toBe('submit')
     expect(ask).not.toHaveBeenCalled()
+    expect(askSwitch).not.toHaveBeenCalled()
   })
 
   it('offers Allow for this chat on a remote studio and hides the approve-at-the-computer line while it is on', async () => {
@@ -1567,26 +1593,26 @@ describe('dangerous mode', () => {
     expect(screen.getByText(en['everywhere.on'])).toBeTruthy()
   })
 
-  it('offers the unlock, not the computer, on a remote studio that cannot list its workspaces while the mode is on', async () => {
+  it('offers the Face ID confirmation, not the computer, on a remote studio that cannot list its workspaces while the mode is on', async () => {
     const host = fakeHost({ [`GET ${PERMISSION_ROUTES.workspaces}`]: REMOTE, [EVERYWHERE_ROUTE]: EVERYWHERE_ON })
     renderPermissions(host, {})
     await settle()
     // Pins the mode check in the section: with the mode off the same refusal shows the computer line.
-    expect(screen.getByText(en.unlockHere)).toBeTruthy()
+    expect(screen.getByText(en.confirmHere)).toBeTruthy()
     expect(screen.queryByText(en['permissions.remote'], { exact: false })).toBeNull()
   })
 
-  it('offers the unlock in External agents and the MCP notice while the mode is on, and the computer line while it is off', async () => {
+  it('offers the Face ID confirmation in External agents and the MCP notice while the mode is on, and the computer line while it is off', async () => {
     for (const mode of [true, false]) {
       const everywhere = { status: 200, body: mode ? { on: true } : { on: false } }
       const agents = renderExternalAgents(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: REMOTE, [EVERYWHERE_ROUTE]: everywhere }))
       await settle()
-      expect(screen.queryByText(en.unlockHere) !== null, `agents, mode ${String(mode)}`).toBe(mode)
+      expect(screen.queryByText(en.confirmHere) !== null, `agents, mode ${String(mode)}`).toBe(mode)
       expect(screen.queryByText(en['agents.remote'], { exact: false }) !== null, `agents, mode ${String(mode)}`).toBe(!mode)
       agents.unmount()
       const notice = renderNotice(fakeHost({ [`GET ${MCP_CONSENT_ROUTES.pending}`]: REMOTE, [`GET ${MCP_CONSENT_ROUTES.waiting}`]: { status: 200, body: { servers: [{ serverName: 'files', change: 'new' }] } }, [EVERYWHERE_ROUTE]: everywhere }))
       await settle()
-      expect(screen.queryByText('MCP tools are off until you allow files. Unlock this device to review it here.') !== null, `notice, mode ${String(mode)}`).toBe(mode)
+      expect(screen.queryByText('MCP tools are off until you allow files. You can review it here; allowing asks for Face ID or your PIN.') !== null, `notice, mode ${String(mode)}`).toBe(mode)
       notice.unmount()
     }
   })
@@ -1598,55 +1624,25 @@ describe('dangerous mode', () => {
   })
 })
 
-describe('a refusal that needs the device unlocked', () => {
-  const REFUSAL: Answer = { status: 403, body: { error: 'ELEVATION_REQUIRED', message: 'Unlock this device first' } }
+describe('a refusal that needs Face ID or the PIN', () => {
+  const REFUSAL: Answer = { status: 403, body: { error: 'ELEVATION_REQUIRED', message: 'Confirm first' } }
 
-  /** An unlock store for a device whose unlock lasts 15 minutes. */
-  function unlockStore() {
-    const view: UnlockView = { place: 'device', state: { kind: 'none', unlockMinutes: 15 }, dialog: null, ended: 0, lockFailed: false }
-    const open = vi.fn()
-    const noop = async (): Promise<void> => {}
-    const source: UnlockSource = { hooks: { unlock: { getSnapshot: () => view, subscribe: () => () => {} } }, refresh: noop, refused: () => {}, open, request: noop, cancel: noop, lock: noop, dismissEnded: () => {}, dispose: () => {} }
-    return { source, open }
-  }
-
-  it('is worded as an unlock that states the minutes, where an unlock can be opened', () => {
-    const { source } = unlockStore()
-    const dispose = installGateUnlock(source)
-    try {
-      const text = consentFailureText(makeTranslate(en), { kind: 'unlock' })
-      expect(text).toContain('15 minutes')
-      expect(text).toContain(en.unlockWhere)
-    } finally {
-      dispose()
-    }
+  it('is worded as a Face ID confirmation, never an unlock', () => {
+    const text = consentFailureText(makeTranslate(en), { kind: 'face' })
+    expect(text).toBe(en['gate.face'])
+    expect(text).not.toMatch(/unlock/i)
   })
 
-  it('says the unlock without minutes where the home has not said how long it lasts', () => {
-    expect(consentFailureText(makeTranslate(en), { kind: 'unlock' })).toContain(en['gate.unlockUnknown'])
-  })
-
-  it('shows the full-access dialog an Unlock button that opens the unlock dialog, and keeps the dialog open', async () => {
-    const { source, open } = unlockStore()
-    const dispose = installGateUnlock(source)
-    try {
-      const host = fakeHost({ [`POST ${PERMISSION_ROUTES.setFullAccess}`]: REFUSAL })
-      const consent = createFullAccessConsentSource(host.fetch)
-      void consent.ask(OFF)
-      consent.confirm()
-      await settle()
-      renderConsent(consent)
-      expect(screen.getByRole('alert').textContent).toContain('15 minutes')
-      fireEvent.click(screen.getByRole('button', { name: en['gate.unlockButton'] }))
-      expect(open).toHaveBeenCalledOnce()
-      expect(screen.getByRole('dialog')).toBeTruthy()
-    } finally {
-      dispose()
-    }
-  })
-
-  it('has the same unlock copy in Chinese', () => {
-    expect(zh['gate.unlock']).toContain('{minutes}')
-    expect(zh.unlockWhere).not.toBe(en.unlockWhere)
+  // Returning the `unlock` failure kind brings back the Unlock button and its sentence in the full-access dialog.
+  it('shows the full-access dialog the Face ID line, with no Unlock button, and keeps the dialog open', async () => {
+    const host = fakeHost({ [`POST ${PERMISSION_ROUTES.setFullAccess}`]: REFUSAL })
+    const consent = createFullAccessConsentSource(host.fetch)
+    void consent.ask(OFF)
+    consent.confirm()
+    await settle()
+    renderConsent(consent)
+    expect(screen.getByRole('alert').textContent).toBe(en['gate.face'])
+    expect(screen.queryByRole('button', { name: /unlock/i })).toBeNull()
+    expect(screen.getByRole('dialog')).toBeTruthy()
   })
 })

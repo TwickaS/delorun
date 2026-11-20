@@ -179,8 +179,8 @@ describe('the add-workspace route on a remote session', () => {
   type ListenerId = NonNullable<ReturnType<HomeAuthService['arrivalOf']>['listener']>
 
   /** The `homeAuth` service's answer for a request: the listener it says admitted it, as the mounted service reads its stamp. */
-  function homeAuthOn(listener: ListenerId | undefined): Pick<HomeAuthService, 'arrivalOf' | 'elevationOf' | 'pageUnlockOf' | 'passkeysEnabled' | 'faceGrants' | 'deviceHasPasskey'> {
-    return { arrivalOf: request => ({ listener, host: request.headers.host, source: 'test' }), passkeysEnabled: () => false, faceGrants: () => undefined, deviceHasPasskey: () => false, elevationOf: deviceId => (deviceId === 'unlocked-phone' ? { id: 'e' } as never : undefined), pageUnlockOf: () => undefined }
+  function homeAuthOn(listener: ListenerId | undefined): Pick<HomeAuthService, 'arrivalOf' | 'elevationOf' | 'pageUnlockOf' | 'faceGrants' | 'deviceHasPasskey'> {
+    return { arrivalOf: request => ({ listener, host: request.headers.host, source: 'test' }), faceGrants: () => undefined, deviceHasPasskey: () => false, elevationOf: deviceId => (deviceId === 'unlocked-phone' ? { id: 'e' } as never : undefined), pageUnlockOf: () => undefined }
   }
 
   /** A request as the Connection's `connection/request` waterfall receives it, and the response it is answered with. */

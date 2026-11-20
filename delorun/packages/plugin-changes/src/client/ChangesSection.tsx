@@ -9,7 +9,7 @@
  * change the checks flagged asks a second confirmation that names what they found. An agent's plugin request is applied
  * after a confirmation and the second confirmation the route asks for every request, which names its spec.
  *
- * Each control reads the state's `access`: one the Phone powers level keeps at the computer is disabled with a hover
+ * Each control reads the state's `access`: one that stays at the computer is disabled with a hover
  * text; one that needs an unlock stays enabled, and the route's refusal opens the studio's unlock dialog.
  */
 import { useEffect, useState } from 'react'

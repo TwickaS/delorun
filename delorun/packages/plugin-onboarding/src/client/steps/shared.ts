@@ -18,6 +18,25 @@ export interface StepProps {
 export type Tone = 'done' | 'attention' | undefined
 
 /**
+ * Keep "sign-in" on one line: word joiners on both sides of its hyphen forbid a break there, which a narrow line would
+ * otherwise take, leaving "sign-" at the end of one line and "in" on the next.
+ * @param text - the copy.
+ * @returns the copy with the hyphen of each "sign-in" unbreakable.
+ */
+export function keepSignInTogether(text: string): string {
+  return text.replaceAll('sign-in', 'sign\u2060-\u2060in')
+}
+
+/**
+ * The folder's name: the last part of its path, or the whole path for a root.
+ * @param path - the folder's path.
+ * @returns the name.
+ */
+export function folderName(path: string): string {
+  return path.split(/[\\/]/).filter(part => part !== '').pop() ?? path
+}
+
+/**
  * @param store - a store.
  * @returns its current value, re-rendering on change.
  */

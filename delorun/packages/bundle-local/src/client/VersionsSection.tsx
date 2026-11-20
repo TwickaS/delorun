@@ -10,7 +10,6 @@ import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
 import { SettingsCard } from '@delorun/settings-controls'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { GateFailure, GateNotice } from './GateNotice.tsx'
-import { noteUnlockedAction } from './gate-unlock.ts'
 import { failureSentence, LOOPBACK_REQUIRED, type HostFetch, type Loaded } from './host-api.ts'
 import {
   readSetupChanges, readSetupVersions, saveSetupVersion, switchSetupVersion,
@@ -125,7 +124,6 @@ function SaveSetup({ t, fetch, onSaved }: { t: Translate; fetch: HostFetch; onSa
     setBusy(true)
     try {
       const saved = await saveSetupVersion(fetch, name)
-      noteUnlockedAction()
       setName('')
       await onSaved(t(saved.created ? 'save.saved' : 'save.unchanged'))
     } catch (error) {
@@ -141,7 +139,7 @@ function SaveSetup({ t, fetch, onSaved }: { t: Translate; fetch: HostFetch; onSa
         onChange={(event) => { setName(event.target.value) }} />
     </label>
     <Button variant="primary" size="sm" type="submit" disabled={busy}>{t('save.action')}</Button>
-    {failure === undefined ? null : <GateFailure t={t} error={failure} text={versionsFailureText(t, failure)} className={css.failed} retry={() => { void save() }} />}
+    {failure === undefined ? null : <GateFailure t={t} error={failure} text={versionsFailureText(t, failure)} className={css.failed} />}
   </form>
 }
 
@@ -203,7 +201,6 @@ function VersionRow({ t, fetch, version, count, onSwitched }: {
     setBusy(true)
     try {
       const switched = await switchSetupVersion(fetch, version.id)
-      noteUnlockedAction()
       await onSwitched(t(switched.restartNeeded ? 'switch.done' : 'switch.doneSame'))
     } catch (error) {
       setFailure(error)
@@ -226,7 +223,7 @@ function VersionRow({ t, fetch, version, count, onSwitched }: {
       </div>
     </div>
     {changes === undefined ? null : <ChangesPanel t={t} changes={changes} />}
-    {failure === undefined ? null : <GateFailure t={t} error={failure} text={versionsFailureText(t, failure)} className={css.failed} retry={() => { void switchTo() }} />}
+    {failure === undefined ? null : <GateFailure t={t} error={failure} text={versionsFailureText(t, failure)} className={css.failed} />}
   </li>
 }
 

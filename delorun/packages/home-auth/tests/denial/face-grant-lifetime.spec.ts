@@ -47,6 +47,17 @@ function openHold(auth: Home['auth'], who: { readonly deviceId: string; readonly
 }
 
 describe('Face ID grants and holds', () => {
+  // Removing the endDevice call in admit leaves a live action grant after the idle session expired (A1 round-3 P3-2). The grant is minted 20 s before the end, inside its 30 s life, so expiry alone cannot end it.
+  it('end a live action grant when the device\'s session expires from idleness', () => {
+    home.clock.advance(SESSION_LIMITS.reach.idleMs - 20_000)
+    const hash = hashArgs({ id: 'live' }) ?? ''
+    home.auth.grants.mint(holder, [{ action: 'pluginManager/installBundle', hash }], 'passkey')
+    expect(home.auth.grants.has(holder, 'pluginManager/installBundle', hash)).toBe(true)
+    home.clock.advance(21_000)
+    expect(home.auth.admitToken(token, LISTENER).kind).toBe('refused')
+    expect(home.auth.grants.has(holder, 'pluginManager/installBundle', hash)).toBe(false)
+  })
+
   // Removing the endDevice call in admit leaves a hold open after the idle session expired.
   it('end when the device\'s session expires from idleness', () => {
     expect(home.auth.grants.holdAdmits(holder, 'terminal', 't-1', 'session:s-1')).toBe(true)
@@ -66,9 +77,11 @@ describe('Face ID grants and holds', () => {
 })
 
 describe('Face ID grants and holds, through home-auth', () => {
-  // Removing the endDevice call from the device's removal leaves its holds and grants after the device is gone.
-  it('end when the device is removed', async () => {
+  // Removing the endDevice call from revokeDevice fails the spy: rotateAll's endAll would end the same holds and grants, so the outcome alone cannot show it (A1 round-3 P3-1).
+  it('end when the device is removed, by endDevice for that device', async () => {
+    const ended = vi.spyOn(home.auth.grants, 'endDevice')
     await home.auth.revokeDevice(deviceId)
+    expect(ended).toHaveBeenCalledWith(deviceId)
     expect(home.auth.grants.holdAdmits(holder, 'terminal', 't-1', 'session:s-1')).toBe(false)
     expect(home.auth.grants.has(holder, 'pluginManager/installBundle', hashArgs({ id: 'p' }) ?? '')).toBe(false)
   })

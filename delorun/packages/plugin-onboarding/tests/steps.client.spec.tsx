@@ -5,7 +5,9 @@ import { AGENT_BUNDLES, AGENTS_GUIDE_URL, AgentsStep } from '../src/client/steps
 import { LookStep } from '../src/client/steps/Look.tsx'
 import { connectionName, PluginsStep, readableName } from '../src/client/steps/Plugins.tsx'
 import { APPROVE_COMMAND, REACH_COMMAND, ReachStep } from '../src/client/steps/Reach.tsx'
-import { middleEllipsis, ReadyStep } from '../src/client/steps/Ready.tsx'
+import { BreakablePath } from '../src/client/ui/BreakablePath.tsx'
+import { keepSignInTogether } from '../src/client/steps/shared.ts'
+import { ReadyStep } from '../src/client/steps/Ready.tsx'
 import { WelcomeStep } from '../src/client/steps/Welcome.tsx'
 import { CommandRow as Command } from '../src/client/ui/CommandRow.tsx'
 import { createGuide, type Guide } from '../src/client/guide.ts'
@@ -15,10 +17,8 @@ import { ACCENT_PRESETS, PALETTE_CHOICES } from '../src/client/previews.ts'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import { TAILSCALE_OPERATOR_COMMAND } from '@delorun/contract-reach-providers'
-import { PHONE_POWERS_PATH } from '@delorun/home-auth/wire'
-import { en as devicesEn } from '../../bundle-local/src/client/devices-locales.ts'
 import type { Readiness, TailscaleReadiness } from '../src/wire.ts'
-import { agentsFake, DEFAULT_PATH, DEFAULT_WORKSPACE, hostFake, installerFake, KEYS, languageFace, liveForm, LOCALES, noticeFace, devices, READY, schemeFace, stepServices, THEME } from './fixtures.client.ts'
+import { agentsFake, DEFAULT_PATH, DEFAULT_WORKSPACE, hostFake, installerFake, KEYS, languageFace, liveForm, LOCALES, noticeFace, READY, schemeFace, stepServices, THEME } from './fixtures.client.ts'
 import type { HostFace, StartTarget, StepServices } from '../src/client/types.ts'
 import type { ThemeSettings } from '@delorun/plugin-theme'
 
@@ -299,15 +299,21 @@ describe('the agents step', () => {
     expect(screen.getByText('Downloads about 320 MB when you add it.')).toBeTruthy()
   })
 
-  it('shows the default path on each card: how a chat uses the agent, the risk warning and one Add, with no choice', () => {
+  it('shows the default path on each card: how a chat uses the agent, the risk warning and one Add, with no choice', async () => {
     const [claude, codex] = AGENT_BUNDLES
     const fake = installerFake({ [claude.name]: { state: 'available' }, [codex.name]: { state: 'available' } })
     render(<AgentsStep services={stepServices({ bundles: fake.installer })} guide={guideOf()} />)
     const cardOf = (title: string): HTMLElement => screen.getByRole('heading', { level: 4, name: title }).closest('li') as HTMLElement
     const claudeCard = cardOf('Claude Code')
     const codexCard = cardOf('Codex')
-    expect(within(claudeCard).getByText(en['agents.claude.how'], { exact: false })).toBeTruthy()
-    expect(within(codexCard).getByText(en['agents.codex.how'], { exact: false })).toBeTruthy()
+    expect(within(claudeCard).getByText(keepSignInTogether(en['agents.claude.how']), { exact: false })).toBeTruthy()
+    expect(within(codexCard).getByText(keepSignInTogether(en['agents.codex.how']), { exact: false })).toBeTruthy()
+    // The rest of the permissions copy is folded under a disclosure until it is opened, with its copy kept.
+    for (const [card, key] of [[claudeCard, 'claude'], [codexCard, 'codex']] as const) {
+      expect(within(card).queryByText(keepSignInTogether(en[`agents.${key}.permissions`]), { exact: false })).toBeNull()
+    }
+    await click(within(claudeCard).getByRole('button', { name: en['agents.permissions'] }))
+    expect(within(claudeCard).getByText(en['agents.claude.permissions'], { exact: false })).toBeTruthy()
     expect(within(claudeCard).getByText('Downloads about 206 MB when you add it.')).toBeTruthy()
     expect(within(codexCard).getByText('Downloads about 320 MB when you add it.')).toBeTruthy()
     expect(within(claudeCard).getByText(en['agents.claude.risk'])).toBeTruthy()
@@ -316,7 +322,7 @@ describe('the agents step', () => {
     expect(en['agents.claude.risk']).toContain('A home internet connection works best; avoid VPNs, proxies and cloud servers.')
     expect(within(codexCard).queryByText(/home internet/)).toBeNull()
     for (const card of [claudeCard, codexCard]) {
-      expect(within(card).getAllByRole('button').map(each => each.textContent)).toEqual([en['bundle.add'], en['agents.advanced']])
+      expect(within(card).getAllByRole('button').map(each => each.textContent)).toEqual([en['bundle.add'], en['agents.permissions'], en['agents.advanced']])
       expect(within(card).getByRole('button', { name: en['agents.advanced'] }).getAttribute('aria-expanded')).toBe('false')
       expect(within(card).queryByRole('radio')).toBeNull()
       expect(within(card).getByRole('link', { name: en['agents.guide'] }).getAttribute('href')).toBe(AGENTS_GUIDE_URL)
@@ -684,32 +690,12 @@ describe('the phone access step', () => {
     expect(en['reach.lead']).not.toMatch(/\b(reach|tailnet|serve|PIN mode)\b/i)
   })
 
-  it('offers the Phone powers choice of Settings, Devices, and keeps a level nobody chose until the person keeps or changes it', async () => {
-    const posted: unknown[] = []
-    const fetch = vi.fn((input: string, init?: RequestInit) => {
-      expect(input).toBe(PHONE_POWERS_PATH)
-      if (init?.method === 'POST') {
-        posted.push(JSON.parse(String(init.body)))
-        return Promise.resolve(Response.json({ level: 'full', chosen: true }))
-      }
-      return Promise.resolve(Response.json({ level: 'careful', chosen: false }))
-    })
-    render(<ReachStep services={stepServices({ phonePowers: { t: devices, fetch } })} guide={guideOf(reachWith({ state: 'not-installed' } as TailscaleReadiness))} />)
-    await settle()
-    const group = screen.getByRole('radiogroup', { name: devicesEn['powers.title'] })
-    expect(screen.getByText(devicesEn['powers.unchosen.careful'])).toBeTruthy()
-    expect(within(group).getByRole('radio', { name: new RegExp(devicesEn['powers.careful']) })).toHaveProperty('checked', true)
-    fireEvent.click(within(group).getByRole('radio', { name: new RegExp(devicesEn['powers.full']) }))
-    await settle()
-    expect(posted).toEqual([{ level: 'full' }])
-    expect(within(group).getByRole('radio', { name: new RegExp(devicesEn['powers.full']) })).toHaveProperty('checked', true)
-    expect(screen.queryByText(devicesEn['powers.unchosen.careful'])).toBeNull()
-  })
-
-  it('shows no Phone powers choice where the home does not serve it', async () => {
+  // Removing the Phone powers block from the step brings back a choice for a level that no longer exists.
+  it('offers no Phone powers choice', async () => {
     render(<ReachStep services={stepServices()} guide={guideOf(reachWith({ state: 'not-installed' } as TailscaleReadiness))} />)
     await settle()
     expect(screen.queryByRole('radiogroup')).toBeNull()
+    expect(document.body.textContent).not.toMatch(/Phone powers/i)
   })
 
   it('leaves the PIN to its own step instead of offering it under More', async () => {
@@ -737,11 +723,11 @@ describe('the phone access step', () => {
     expect(screen.getByText(APPROVE_COMMAND).tagName).toBe('CODE')
   })
 
-  it('names the commands run at this computer, that a phone is approved there and Phone powers sets the rest, and no relay', async () => {
+  it('names the commands run at this computer, that a phone is approved there and the phone confirms the rest, and no relay', async () => {
     render(<ReachStep services={stepServices()} guide={guideOf()} />)
     await settle()
     expect([REACH_COMMAND, APPROVE_COMMAND]).toEqual(['delorun reach on tailscale', 'delorun devices approve'])
-    expect(document.body.textContent).toContain('A phone is approved only at this computer, and Phone powers above sets how much an unlocked phone may do.')
+    expect(document.body.textContent).toContain('A phone is approved only at this computer, and the sensitive things it does are confirmed on the phone itself.')
     for (const [key, text] of Object.entries(en)) if (key.startsWith('reach.')) expect(text).not.toMatch(/relay|中继/i)
   })
 })
@@ -749,12 +735,15 @@ describe('the phone access step', () => {
 describe('the ready step', () => {
   const ready = (guide: Guide, options: { readonly target?: StartTarget; readonly reach?: 'absent' | 'set-up' | 'off'; readonly services?: StepServices } = {}) =>
     render(<ReadyStep services={options.services ?? stepServices()} guide={guide} reach={options.reach ?? 'off'} target={options.target ?? { kind: 'checking' }} keepCurrent={false} />)
-  const rows = () => [...document.querySelectorAll('dt')].map(each => [each.textContent, each.nextElementSibling?.textContent, each.nextElementSibling?.getAttribute('data-tone') ?? undefined])
+  // A value's own text; the workspace's path sits in a span under its folder name.
+  const rows = () => [...document.querySelectorAll('dt')].map(each => [each.textContent, each.nextElementSibling?.firstChild?.textContent, each.nextElementSibling?.getAttribute('data-tone') ?? undefined])
+  const workspacePath = () => document.querySelector('dd > span')?.textContent
 
   it('shows the default workspace as a plain value when the Workspace step was skipped', async () => {
     ready(guideOf(), { target: { kind: 'default', workspaceId: DEFAULT_WORKSPACE, path: DEFAULT_PATH } })
     await settle()
-    expect(rows().find(row => row[0] === 'Workspace')).toEqual(['Workspace', DEFAULT_PATH, undefined])
+    expect(rows().find(row => row[0] === 'Workspace')).toEqual(['Workspace', 'Delorun', undefined])
+    expect(workspacePath()).toBe(DEFAULT_PATH)
   })
 
   it('lists what the guide set and the starting prompts that fit the chosen folder', async () => {
@@ -770,8 +759,9 @@ describe('the ready step', () => {
       ['Agents', 'Claude Code', undefined],
       ['Plugins', '1 added', undefined],
       ['Phone access', 'On', undefined],
-      ['Workspace', '/home/person/app', undefined],
+      ['Workspace', 'app', undefined],
     ])
+    expect(workspacePath()).toBe('/home/person/app')
     expect(screen.getByText(en['ready.ideas'])).toBeTruthy()
     expect(screen.getAllByRole('listitem').map(each => each.textContent)).toEqual(['code.1', 'code.2', 'code.3'].map(key => `${en[`starter.${key}.label` as 'starter.code.1.label']}${en[`starter.${key}.prompt` as 'starter.code.1.prompt']}${en.copy}`))
   })
@@ -821,7 +811,7 @@ describe('the ready step', () => {
     guide.chooseWorkspace({ kind: 'default', workspaceId: DEFAULT_WORKSPACE, path: DEFAULT_PATH })
     ready(guide, { target: { kind: 'default', workspaceId: DEFAULT_WORKSPACE, path: DEFAULT_PATH } })
     await settle()
-    expect(rows().at(-1)).toEqual(['Workspace', DEFAULT_PATH, undefined])
+    expect(rows().at(-1)).toEqual(['Workspace', 'Delorun', undefined])
     expect(KEYS.providers).toHaveLength(1)
   })
 })
@@ -908,14 +898,15 @@ describe('what the guide shows after the audit', () => {
     expect(screen.getAllByRole('radio').map(each => each.textContent)).toEqual([`English${en['welcome.language.own']}`, `中文${zh['welcome.language.own']}`])
   })
 
-  it('shortens a long path in the middle and keeps its start and end', () => {
-    expect(middleEllipsis('/home/person/app')).toBe('/home/person/app')
-    const long = `/home/person/${'deeply/'.repeat(10)}project`
-    const shown = middleEllipsis(long)
-    expect(shown.length).toBeLessThan(long.length)
-    expect(shown.startsWith('/home/')).toBe(true)
-    expect(shown.endsWith('project')).toBe(true)
-    expect(shown).toContain('…')
+  it('lets a path break only after a slash, keeping each folder name whole', () => {
+    const { container } = render(<span><BreakablePath path="/tmp/polish2-home/work" /></span>)
+    expect([...container.querySelectorAll('span > span > span')].map(each => each.textContent)).toEqual(['/', 'tmp/', 'polish2-home/', 'work'])
+    expect(container.querySelectorAll('wbr')).toHaveLength(4)
+  })
+
+  it('keeps "sign-in" unbreakable and leaves other copy alone', () => {
+    expect(keepSignInTogether('with its own sign-in.')).toBe('with its own sign\u2060-\u2060in.')
+    expect(keepSignInTogether('Nothing to keep.')).toBe('Nothing to keep.')
   })
 
   it('reads one key state on Ready and Models: a found key the test could not reach is named, not called missing', async () => {

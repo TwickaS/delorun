@@ -4,12 +4,14 @@
  * `fetch` of a `ConnectionFetchRoute`.
  *
  * - `free`: any approved reach device, no prompt.
- * - `face`: while the Face ID preview flag is on, a reach device passes only with a grant the home keeps for exactly this
+ * - `face`: a reach device passes only with a grant the home keeps for exactly this
  *   call. The home reads the request body itself, up to {@link GRANT_BODY_CAP_BYTES}, and hashes method, path with query and body
  *   ({@link hashRequest}); the `Delorun-Grant` header only names the grant id and must equal the id of the grant that hash
  *   finds. The grant is used up just before the route's handler runs, and the header is removed before the handler sees
- *   the request. Under Careful, a route with `legacy.phonePowers: 'full'` is refused before the grant lookup for every device, until Phone powers is removed. A device that holds a passkey is admitted by a grant alone; a device without one may also hold the
- *   legacy unlock the route declared in `legacy`. While the flag is off, `face` behaves as `gateByUnlock` with `legacy`.
+ *   the request. Every device is admitted by a grant alone, a PIN grant where it holds no passkey (A483); no unlock window,
+ *   code or approval grace admits a `face` row. Before the home service starts, `face` behaves as `gateByUnlock` with `legacy`;
+ *   no unlock exists before the service starts either, so that fallback admits no device. A refusal a grant can lift is
+ *   `403 ELEVATION_REQUIRED` with `{ action }`, the grant's action name, so the client knows what to confirm.
  * - `computer` and `ticket`: not Fetch gates; such a route registers no `admitPeer` of this kind.
  *
  * @module @delorun/home-auth/auth-gate
@@ -25,13 +27,12 @@ import type { HomeAuthService } from './service.ts'
 export const GRANT_HEADER = 'delorun-grant'
 
 /** What a gate reads of the home. */
-export type GrantGateHome = DangerousModeHome & Pick<HomeAuthService, 'passkeysEnabled' | 'faceGrants' | 'deviceHasPasskey'>
+export type GrantGateHome = DangerousModeHome & Pick<HomeAuthService, 'faceGrants' | 'deviceHasPasskey'>
 
-/** The unlock a `face` route keeps while the preview flag is off, and for a device with no passkey: the options of `gateByUnlock`. */
+/** The unlock a `face` route reads only before the home service starts, when no unlock exists either: the options of `gateByUnlock`. */
 export interface LegacyUnlock {
   readonly grace?: boolean
   readonly renews: boolean
-  readonly phonePowers?: 'full'
 }
 
 /** What {@link gateByClass} is configured with. */
@@ -43,7 +44,7 @@ export interface GateOptions {
    * describes; the route's own name in the form `<package>/<route>` (for example `plugin-packs/add`).
    */
   readonly action: string
-  /** The unlock a `face` route keeps while the flag is off. */
+  /** The unlock a `face` route reads before the home service starts; once it starts, a grant alone (Face ID, or the PIN on a device with no passkey) admits a call. */
   readonly legacy: LegacyUnlock
   /**
    * For a route that opens or reads inside a terminal or picker: the feature, how the call names the one it concerns, and
@@ -112,8 +113,9 @@ export function gateByClass(homeAuth: () => GrantGateHome | undefined, fetch: (r
   // A hold needs a scope the route does not carry yet; the Fetch gate pins holds to the global scope, which a terminal's per-chat holds must not share.
   if (options.hold?.feature === 'terminal') throw new Error(`home-auth: the row "${options.row}" asks for a terminal hold, which gateByClass cannot scope to a chat yet`)
   const principals = new WeakMap<Request, ReachDevicePrincipal>()
-  const legacy = gateByUnlock(homeAuth, fetch, { renews: options.legacy.renews, ...options.legacy.grace === undefined ? {} : { grace: options.legacy.grace }, ...options.legacy.phonePowers === undefined ? {} : { phonePowers: options.legacy.phonePowers } })
-  const refuse = (message: string): Response => new Response(refusalBody('ELEVATION_REQUIRED', message), { status: 403, headers: REFUSAL_HEADERS })
+  const legacy = gateByUnlock(homeAuth, fetch, { renews: options.legacy.renews, ...options.legacy.grace === undefined ? {} : { grace: options.legacy.grace } })
+  // A refusal a grant can lift names the grant's action, so the client knows what to confirm; the body holds no secret or hash.
+  const refuse = (message: string, liftable: boolean): Response => new Response(refusalBody('ELEVATION_REQUIRED', message, liftable ? { action: options.action } : {}), { status: 403, headers: REFUSAL_HEADERS })
   return {
     admitPeer: (request, peer) => {
       if (peer.principal.kind !== REACH_DEVICE || homeAuth() === undefined) return false
@@ -125,14 +127,12 @@ export function gateByClass(homeAuth: () => GrantGateHome | undefined, fetch: (r
       const principal = principals.get(request)
       if (authClass === 'free' || principal === undefined) return fetch(request)
       const home = homeAuth()
-      const grants = home?.passkeysEnabled() === true ? home.faceGrants() : undefined
+      const grants = home?.faceGrants()
       if (home === undefined || grants === undefined) return legacy.fetch(request)
-      // Until Phone powers is removed, a Full-only route stays refused under Careful before any grant is looked up, for every device.
-      if (options.legacy.phonePowers === 'full' && home.phonePowers?.().level !== 'full') return legacy.fetch(request)
       const holder = { deviceId: principal.deviceId, listener: principal.listener, unlockId: principal.unlockId }
       const passkey = home.deviceHasPasskey(principal.deviceId)
       const body = await readBodyCapped(request.clone(), GRANT_BODY_CAP_BYTES)
-      if (body === undefined) return refuse('This request is too large to confirm. Make it smaller')
+      if (body === undefined) return refuse('This request is too large to confirm. Make it smaller', false)
       const url = new URL(request.url)
       const pathAndQuery = url.pathname + url.search
       const held = options.hold?.idOf(request, body)
@@ -146,9 +146,8 @@ export function gateByClass(homeAuth: () => GrantGateHome | undefined, fetch: (r
         grants.consume(holder, options.action, hash, opens)
         return fetch(withoutGrantHeader(request))
       }
-      // A device with no passkey may still hold the unlock a code or its PIN started; one with a passkey is admitted by a grant alone.
-      if (!passkey) return legacy.fetch(request)
-      return refuse('Confirm with Face ID or your PIN first')
+      // A device is admitted by a grant alone: no PIN window, code or approval grace admits a face row (A483).
+      return refuse(passkey ? 'Confirm with Face ID or your PIN first' : 'Confirm with your PIN first', true)
     },
   }
 }

@@ -15,8 +15,11 @@ import type {
 /** The generated terminal namespace's browser-facing operations. */
 export type TerminalRemote = ClientRemote['terminal']
 
-/** Product error identifiers translated by the terminal UI. */
-export type TerminalViewIssue = 'missingTerminal' | 'inputFull' | 'attachmentEnded' | 'invalidOutput' | 'terminalLimit'
+/**
+ * Product error identifiers translated by the terminal UI. `notConfirmed` is a creation the Host's remote access refused
+ * for want of the person's confirmation (`elevation-required:`), which the page's denial lift did not obtain.
+ */
+export type TerminalViewIssue = 'missingTerminal' | 'inputFull' | 'attachmentEnded' | 'invalidOutput' | 'terminalLimit' | 'notConfirmed'
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface RemoteErrorDetailsMap {
@@ -76,6 +79,10 @@ export class TerminalView {
   private pendingRender: { revision: number; resolve: () => void } | undefined
   private revision = 0
   private creation: Promise<void> | undefined
+  /** Ends the creation under way when the view leaves the DOM, so no confirmation outlives the panel that asked. */
+  private creationAbort: AbortController | undefined
+  /** Times the view has left the DOM; discovery compares it to skip an allocation for a view that left meanwhile. */
+  private unmounts = 0
   private loading: Promise<void> | undefined
   private closing: Promise<void> | undefined
   private readonly detaching = new Set<Promise<void>>()
@@ -88,7 +95,9 @@ export class TerminalView {
    * @param id - Host terminal identity, reused when recovering an item from its Session list.
    * @param createWhenMissing - allow allocation only for a new tab, never a listed terminal.
    * @param shellPath - explicit shell chosen at the guide; omission uses the remembered available shell.
-   * @param retain - window hold acknowledgement required before output attachment.
+   * @param retain - window hold acknowledgement required before output attachment. A hold the Host's remote access
+   *   refuses does not stop the view: it attaches anyway, so the refusal reaches the attach the person asked for, and
+   *   asks for the hold again once the attachment delivers its first frame.
    */
   constructor(
     private readonly sessionId: SessionId,
@@ -112,6 +121,8 @@ export class TerminalView {
     else if (state.info !== undefined && state.phase !== 'failed' && state.phase !== 'closed') this.connect()
     return () => {
       this.mounted = false
+      this.unmounts += 1
+      this.creationAbort?.abort()
       this.detach()
     }
   }
@@ -126,6 +137,7 @@ export class TerminalView {
     if (this.loading !== undefined) return this.loading
     if (this.closing !== undefined || this.lifetime.signal.aborted) return Promise.resolve()
     const retry = this.state.getSnapshot().phase !== 'idle'
+    const unmounts = this.unmounts
     this.patch({ phase: 'loading', error: undefined, issue: undefined })
     this.loading = (async () => {
       const [environment, available] = await Promise.all([
@@ -145,37 +157,60 @@ export class TerminalView {
         }
         if (this.stopped()) return
         if (path !== undefined) rememberShell(path)
+        // A view that left the DOM during discovery allocates nothing: a refused allocation would ask for a confirmation
+        // no panel shows. It starts again on its next mount. A view the controller starts before its first mount allocates.
+        if (!this.mounted && this.unmounts !== unmounts) { this.patch({ phase: 'idle', error: undefined, issue: undefined }); return }
         await this.create(valueOf(environment), path)
       }
       else throw new TerminalViewError('missingTerminal')
-    })().catch((error: unknown) => { this.fail(error) }).finally(() => { this.loading = undefined })
+    })().catch((error: unknown) => { this.fail(error) }).finally(() => {
+      this.loading = undefined
+      // An allocation cancelled by leaving the DOM leaves the view idle; a remount that came meanwhile starts it again.
+      if (this.mounted && !this.stopped() && this.state.getSnapshot().phase === 'idle') void this.refresh()
+    })
     return this.loading
   }
 
   private stopped(): boolean { return this.lifetime.signal.aborted || this.closing !== undefined }
 
+  /**
+   * Allocate the terminal. Leaving the DOM cancels the allocation, and with it any confirmation the Host's remote access
+   * asked for: the view returns to idle and allocates again on its next mount, which the Host's idempotent identity
+   * makes safe even if the cancelled allocation committed.
+   */
   private async create(environment: TerminalEnvironment, shellPath?: string): Promise<void> {
     this.patch({ phase: 'creating', error: undefined, issue: undefined })
+    const abort = new AbortController()
+    this.creationAbort = abort
+    const signal = AbortSignal.any([this.lifetime.signal, abort.signal])
     this.creation = (async () => {
       const info = valueOf(await this.remote.create(this.sessionId, {
         id: this.id, ...shellPath === undefined ? {} : { shellPath },
         cols: Math.min(80, environment.maxCols), rows: Math.min(24, environment.maxRows),
-      }, this.lifetime.signal))
-      if (!this.lifetime.signal.aborted) {
+      }, signal))
+      if (!signal.aborted) {
         this.inventory.update(info)
         this.adopt(info)
       }
-    })().catch((error: unknown) => { this.fail(error) }).finally(() => { this.creation = undefined })
+    })().catch((error: unknown) => {
+      if (abort.signal.aborted && !this.lifetime.signal.aborted) return
+      this.fail(error)
+    }).finally(() => { this.creation = undefined; if (this.creationAbort === abort) this.creationAbort = undefined })
     await this.creation
+    if (abort.signal.aborted && !this.stopped()) this.patch({ phase: 'idle', error: undefined, issue: undefined })
   }
 
   private adopt(info: WebTerminalInfo): void {
     this.createWhenMissing = false
     this.patch({ info, title: info.title })
     if (this.retain === undefined) { if (this.mounted && this.closing === undefined) this.connect(); return }
-    void this.retain(this.lifetime.signal).then(() => {
-      if (this.mounted && this.closing === undefined) this.connect()
-    }).catch((error: unknown) => { if (!this.stopped()) this.fail(error) })
+    void this.retain(this.lifetime.signal).then(() => true, (error: unknown) => {
+      if (accessRefused(error)) return true
+      if (!this.stopped()) this.fail(error)
+      return false
+    }).then((connect) => {
+      if (connect && this.mounted && this.closing === undefined) this.connect()
+    })
   }
 
   /** Reattach with a fresh screen and regain input control. */
@@ -186,7 +221,7 @@ export class TerminalView {
     const stream = this.gateway.$stream<TerminalFrame>({
       name: 'Browser terminal output',
       open: async function* (this: TerminalView, signal: AbortSignal) {
-        await this.retain?.(signal)
+        let retained = await this.retainUnlessRefused(signal)
         signal.throwIfAborted()
         const handle = this.remote.attach(this.sessionId, info.id, signal)
         const attachment: TerminalInputAttachment = {
@@ -198,6 +233,8 @@ export class TerminalView {
         try {
           for await (const frame of handle) {
             if (frame.type === 'snapshot') attachment.window = frame.inputWindow
+            // The admitted attachment opened what the refused hold needed; the hold follows it.
+            if (!retained) { retained = true; void this.retainUnlessRefused(signal).catch((_ended: unknown) => undefined) }
             yield frame
           }
         }
@@ -398,6 +435,21 @@ export class TerminalView {
     }
   }
 
+  /**
+   * Wait for the window hold, unless the Host's remote access refuses it.
+   * @param signal - the attachment's lifetime.
+   * @returns true once the hold is acknowledged, false when remote access refused it.
+   */
+  private async retainUnlessRefused(signal: AbortSignal): Promise<boolean> {
+    try {
+      await this.retain?.(signal)
+      return true
+    } catch (error) {
+      if (accessRefused(error)) return false
+      throw error
+    }
+  }
+
   private patch(patch: Partial<TerminalViewState>): void {
     if (this.lifetime.signal.aborted) return
     this.state.set({ ...this.state.getSnapshot(), ...patch })
@@ -405,10 +457,33 @@ export class TerminalView {
 
   private fail(error: unknown): void {
     const failure = remoteErrorOf(error)
-    const issue = failure?.code === 'terminal/view' ? failure.details.issue : failure?.code === 'terminal/limit-reached' ? 'terminalLimit' : failure?.code === 'terminal/unavailable' ? 'missingTerminal' : undefined
+    const issue = failure?.code === 'terminal/view' ? failure.details.issue : failure?.code === 'terminal/limit-reached' ? 'terminalLimit' : failure?.code === 'terminal/unavailable' ? 'missingTerminal' : unconfirmed(error) ? 'notConfirmed' : undefined
     if (!this.stopped() && issue === 'missingTerminal') this.inventory.remove(this.id)
     this.patch({ phase: error instanceof RemoteStreamCarrierError ? 'disconnected' : 'failed', writable: false, issue, error: error instanceof Error ? error.message : String(error) })
   }
+}
+
+/**
+ * Whether the Host's remote access refused a call, a failure the person's own action may lift (a reach device's grant).
+ * @param error - a caught failure.
+ * @returns true for `remote-access/denied`.
+ */
+function accessRefused(error: unknown): boolean {
+  // The Host declares the code by merging the failure map, which this Client program does not see.
+  const code: string | undefined = remoteErrorOf(error)?.code
+  return code === 'remote-access/denied'
+}
+
+/**
+ * Whether the Host's remote access refused a call for want of the person's confirmation, which the page's denial lift
+ * did not obtain (cancelled, or no lift is registered).
+ * @param error - a caught failure.
+ * @returns true for `remote-access/denied` whose reason starts with `elevation-required:`.
+ */
+function unconfirmed(error: unknown): boolean {
+  if (!accessRefused(error)) return false
+  const reason: unknown = Reflect.get(remoteErrorOf(error)?.details ?? {}, 'reason')
+  return typeof reason === 'string' && reason.startsWith('elevation-required:')
 }
 
 function valueOf<T>(result: RemoteResult<T>): T {

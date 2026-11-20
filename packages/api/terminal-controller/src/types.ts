@@ -49,6 +49,9 @@ export type TerminalParty = 'user' | 'agent'
  */
 export type TerminalSandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access'
 
+/** Why a failed terminal's `error` is not its own text; a client shows its own copy for the code. */
+export type TerminalErrorCode = 'withheld'
+
 /** Host-owned terminal state; process exit never creates a replacement shell. */
 export interface WebTerminalInfo {
   readonly id: WebTerminalId
@@ -61,6 +64,8 @@ export interface WebTerminalInfo {
   readonly state: 'running' | 'exited' | 'failed'
   readonly exitCode: number | null
   readonly error?: string
+  /** `withheld` when `error` is the Host's fixed line in place of launch error text kept for the Host's owner. */
+  readonly errorCode?: TerminalErrorCode
   /** Party that created the terminal. */
   readonly origin: TerminalParty
   /** Input owner; an agent terminal passes to the user on the user's first typed input and never returns. */

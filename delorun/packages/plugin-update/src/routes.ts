@@ -153,7 +153,7 @@ export function updateRoutes(dependencies: UpdateRouteDependencies): readonly Up
   const stateRoute = gate.get(async (ctx, accessView) => {
     const may = accessView.may
     const view: UpdateAccessView = {
-      actor: accessView.actor, phonePowers: accessView.phonePowers.level,
+      actor: accessView.actor,
       may: { 'update-check': may['update-check'], 'update-begin': may['update-begin'], 'update-cancel': may['update-cancel'], 'update-rollback': may['update-rollback'], 'update-dismiss': may['update-dismiss'], 'update-continue': may['update-continue'], stop: may.stop },
     }
     const channelOpen = channel()

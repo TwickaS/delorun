@@ -88,7 +88,7 @@ export function ExternalAgentsSection({ t, fetch, useAgentSettings, useAgentSett
   }
 
   const dangerous = useDangerousMode(fetch)
-  // While dangerous mode holds, a remote studio offers the actions; the unlock the home asks for decides them.
+  // While dangerous mode holds, a remote studio offers the actions; each asks for Face ID or the PIN.
   const remote = agents.kind === 'remote' && !dangerous
 
   return <div className={css.section}>
@@ -96,7 +96,7 @@ export function ExternalAgentsSection({ t, fetch, useAgentSettings, useAgentSett
     {outcome === undefined ? null : <p className={outcome.failed ? css.failed : css.line} role={outcome.failed ? 'alert' : 'status'}>{outcome.text}</p>}
     {remote
       ? <p className={css.line} role="status">{t('agents.remote')} <code className={css.command}>{AGENTS_COMMAND}</code></p>
-      : agents.kind === 'remote' ? <p className={css.line} role="status">{t('unlockHere')}</p> : null}
+      : agents.kind === 'remote' ? <p className={css.line} role="status">{t('confirmHere')}</p> : null}
     {agentSettings.value === undefined || agentSettings.status === 'unavailable' ? null : <AgentLevels t={t} saved={agentSettings.value} views={levels} remote={agents.kind === 'remote'}
       disabled={agentSettingsMutation.busy || agentSettings.status !== 'ready' || !agentSettings.writable} set={(field, level) => setAgentSetting(field, level)} />}
     <AgentSettings t={t} form={agentSettings} mutation={agentSettingsMutation} remote={remote} set={setAgentSetting} />
