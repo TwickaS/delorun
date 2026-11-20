@@ -30,7 +30,9 @@ This package is the Host half of the studio's update ([update and rollback](../.
 | `apply` | Begins the update of the prepared report. The body names the handle, `wait` or `stop` for running chats, the data copy choice and the tick keys the person accepted. |
 | `cancel` | Ends an update or a rollback that still waits for chats. |
 | `rollback` | Goes back from the committed update, `profileOnly` when no copy of the chat data exists. |
-| `dismiss` | Removes the outcome record. |
+| `dismiss` | Removes the outcome record and the record of the chats the update stopped. |
+| `stop-chats` | While an update waits for chats, records the running top-level chats, then stops them the way their Stop button does, keeping their work. Refused with `NO_UPDATE_PENDING` unless an update waits. |
+| `continue-chat` | Sends one fixed message, "Continue where you stopped before the update.", to a chat the update stopped. Refused while an update runs, for a chat the Host continues by itself, and for a chat already continued. |
 | `stop` | Stops Delorun. Nothing in the studio starts it again. |
 
 The wire types are [`src/wire.ts`](src/wire.ts). `apply`, `rollback` and `stop` answer before the Host stops, as Restart does; the page polls `state` and reloads once when the Host's release differs from the one it loaded.
@@ -42,10 +44,14 @@ The controls are entries of the Changes access table ([`@delorun/plugin-changes`
 | Control | Computer | Phone, Full | Phone, Careful |
 | --- | --- | --- | --- |
 | `update-check` | yes | yes, unlocked or not | yes, unlocked or not |
-| `update-begin`, `update-rollback` | yes | yes, with an unlock the person entered | no: at the computer |
-| `update-cancel`, `update-dismiss`, `stop` | yes | yes, with an unlock | yes, with an unlock |
+| `update-begin` (also `stop-chats`), `update-rollback` | yes | yes, with an unlock the person entered | no: at the computer |
+| `update-cancel`, `update-dismiss`, `update-continue` (`continue-chat`), `stop` | yes | yes, with an unlock | yes, with an unlock |
 
 An unlock is a code or a PIN the person entered; the approval grace does not count. `state` shows the prepared report, which names plugins and harness diffs, only to a request that may begin an update.
+
+## Chats stopped for an update
+
+`stop-chats` needs what beginning the update needs, because ending running chats is what lets the update go on. It writes the stopped chats, with the update's target version and the `continueStoppedChats` setting as it stands, to `update-stopped-chats.json` in the profile's run folder before it cancels anything, because the update restarts the Host. Every write to that record runs under one lock that re-reads it, and each chat is marked before its message is sent, so a chat gets at most one message. The updated Host continues the recorded chats once, only when the setting was on and the update's outcome record names the same target. An update cancelled, or ended without a restart, settles its chats at once: each gets its message after it has gone idle, and a chat that could not be continued keeps its Continue button. Background jobs stop with the chats and are never continued. The message is a user message with the source kind `delorun-update`.
 
 ## What the Host keeps
 
@@ -54,6 +60,7 @@ The report and the home process's report id stay in Host memory; the page holds 
 ## Configuration
 
 - `waitSeconds`: how long an update or rollback waits for running chats, from 60 to 86,400 seconds, 1,800 by default.
+- `continueStoppedChats`: whether chats stopped for an update continue by themselves after it, on by default; Settings → Updates changes it. With it off, each stopped chat shows a Continue button.
 - `checkGapSeconds`: the shortest time between two release checks that reach the network, from 1 to 3,600 seconds, 10 by default. A request while one check runs joins it; a request inside the gap gets the last answer.
 
 ## Tests
