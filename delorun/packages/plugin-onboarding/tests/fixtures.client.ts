@@ -211,7 +211,7 @@ export function providersFake(change: { readonly directory?: readonly DirectoryE
 export function agentsFake(options: { readonly rows?: boolean; readonly minutes?: number } = {}) {
   const claude = liveForm<AgentRowSettings>(options.rows === false ? undefined : {}, { status: options.rows === false ? 'unavailable' : 'ready' })
   const codex = liveForm<AgentRowSettings>(options.rows === false ? undefined : {}, { status: options.rows === false ? 'unavailable' : 'ready' })
-  const limit = liveForm<DelegationConsentSettings>({ enabled: true, runTimeoutMinutes: options.minutes ?? 30, fullAccessStartsAgents: true })
+  const limit = liveForm<DelegationConsentSettings>({ enabled: true, runTimeoutMinutes: options.minutes ?? 30, fullAccessStartsAgents: true, claudeCodeLevel: 'standard', codexLevel: 'standard' })
   return { claude, codex, limit, face: { rows: { 'claude-code': claude.form, 'codex': codex.form }, limit: limit.form } satisfies AgentsFace }
 }
 
