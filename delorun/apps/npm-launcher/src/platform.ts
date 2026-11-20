@@ -52,7 +52,7 @@ export function hostRefusal(platform: string, version?: string): string | undefi
     case 'win32':
       return `${name} runs in WSL2, not on native Windows. Nothing was downloaded. Open a WSL2 terminal and run it there: ${WSL_GUIDE}`
     case 'darwin':
-      return `${name} does not run on macOS yet; macOS joins in a later release. Nothing was downloaded. It runs on Linux, and on Windows through WSL2: ${WSL_GUIDE}`
+      return `${name} does not run on macOS. Nothing was downloaded. It runs on Linux (x64 and arm64), and on Windows through WSL2: ${WSL_GUIDE}`
     default:
       return undefined
   }

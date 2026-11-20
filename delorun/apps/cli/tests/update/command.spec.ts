@@ -249,7 +249,7 @@ describe('runUpdate', () => {
     return runUpdate(args, context, answers, { runtime: () => ({ version: brandString<RuntimeVersion>('1.0.0'), store: true }) })
   }
 
-  it.each([['win32', /runs in WSL2, not on native Windows\. Nothing was downloaded\./u], ['darwin', /macOS joins in a later release\. Nothing was downloaded\./u]])('stops on %s before it asks the home process for anything', async (platform, message) => {
+  it.each([['win32', /runs in WSL2, not on native Windows\. Nothing was downloaded\./u], ['darwin', /does not run on macOS\. Nothing was downloaded\./u]])('stops on %s before it asks the home process for anything', async (platform, message) => {
     const real = Object.getOwnPropertyDescriptor(process, 'platform')!
     Object.defineProperty(process, 'platform', { ...real, value: platform })
     try {

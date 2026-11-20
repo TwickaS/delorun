@@ -1,12 +1,10 @@
 /**
  * The Browser choice: whether agents may use a web browser, as one group of radios, with whether Browser is ready
- * under it while the isolated browser is chosen. The planned third choice, "Use my browser", shows only when the
- * caller asks for it and can never be chosen. The component is presentational: it reads nothing and writes nothing,
+ * under it while the isolated browser is chosen. The component is presentational: it reads nothing and writes nothing,
  * and the caller holds the choice, reads the readiness and decides what a choice does.
  * @module @delorun/browser-setup/client/BrowserChoices
  */
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
-import { PreviewChip } from '@delorun/preview-flags/client'
 import { useId, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { BrowserReadiness, RequirementFix } from '../index.ts'
@@ -16,9 +14,8 @@ import css from './BrowserChoices.module.css'
 /** What a person can choose: agents use the isolated browser, or none. */
 export type BrowserChoice = 'isolated' | 'none'
 
-/** The rows the group draws: the two choices, and the planned one. */
+/** The rows the group draws. */
 const CHOICES = ['isolated', 'none'] as const
-const PLANNED = 'mine'
 
 /**
  * The caller's bound translate function, whose dictionaries include this package's (`@delorun/browser-setup/locales`).
@@ -45,8 +42,6 @@ export interface BrowserChoicesProps {
   readonly disabled?: boolean | undefined
   /** Whether Browser is ready, drawn while the isolated browser is chosen. */
   readonly readiness: BrowserReadiness
-  /** Whether to show the planned third choice, "Use my browser": a disabled radio with the Preview chip. */
-  readonly planned: boolean
   /** What to draw in place of the readiness while Browser is not in the profile, such as where adding it stands. */
   readonly notAdded?: ReactNode
   /** Read the readiness again, after a read that failed. */
@@ -168,7 +163,7 @@ function Readiness({ readiness, t, notAdded, onRetry, onOpenSettings }: Pick<Bro
  * @param props - see {@link BrowserChoicesProps}.
  * @returns the group, and the readiness under it while the isolated browser is chosen.
  */
-export function BrowserChoices({ t, heading, choice, onChoice, disabled = false, readiness, planned, notAdded, onRetry, onOpenSettings }: BrowserChoicesProps): ReactNode {
+export function BrowserChoices({ t, heading, choice, onChoice, disabled = false, readiness, notAdded, onRetry, onOpenSettings }: BrowserChoicesProps): ReactNode {
   const id = useId()
   return (
     <section className={css.choices} aria-labelledby={`${id}-label`}>
@@ -182,18 +177,6 @@ export function BrowserChoices({ t, heading, choice, onChoice, disabled = false,
             <span id={`${id}-${option}-text`} className={css.optionText}>{t(`browser.choice.${option}.text`)}</span>
           </div>
         ))}
-        {planned && (
-          // Not built: the radio is disabled and has no change handler, so it can never be chosen.
-          <div className={css.option} data-disabled="" data-planned="">
-            <input type="radio" className={css.radio} name={id} value={PLANNED} checked={false} disabled readOnly
-              aria-labelledby={`${id}-${PLANNED}-title`} aria-describedby={`${id}-${PLANNED}-text`} />
-            <span className={css.optionTitle}>
-              <span id={`${id}-${PLANNED}-title`} className={css.dimmed}>{t('browser.choice.mine.title')}</span>
-              <span className={css.chip}><PreviewChip t={t} tooltip={t('browser.choice.mine.preview')} /></span>
-            </span>
-            <span id={`${id}-${PLANNED}-text`} className={`${css.optionText} ${css.dimmed}`}>{t('browser.choice.mine.text')}</span>
-          </div>
-        )}
       </div>
       {choice === 'isolated' && (
         <div className={css.readiness} aria-live="polite">

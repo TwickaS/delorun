@@ -20,9 +20,9 @@ describe('the platform a machine installs', () => {
 })
 
 describe('the hosts Delorun refuses before any download', () => {
-  it('names the launcher\'s own version, WSL2 for native Windows, a later release for macOS, and the guide for both', () => {
+  it('names the launcher\'s own version, WSL2 for native Windows, its Linux and WSL2 hosts for macOS, and the guide for both', () => {
     expect(hostRefusal('win32', '0.1.0-preview.2')).toMatch(/^Delorun 0\.1\.0-preview\.2 runs in WSL2, not on native Windows\. Nothing was downloaded\..*#windows-through-wsl2$/u)
-    expect(hostRefusal('darwin', '0.1.0-preview.2')).toMatch(/^Delorun 0\.1\.0-preview\.2 does not run on macOS yet; macOS joins in a later release\..*It runs on Linux.*#windows-through-wsl2$/u)
+    expect(hostRefusal('darwin', '0.1.0-preview.2')).toMatch(/^Delorun 0\.1\.0-preview\.2 does not run on macOS\. Nothing was downloaded\..*It runs on Linux.*#windows-through-wsl2$/u)
   })
 
   it('names no version when the launcher\'s own version does not read', () => {

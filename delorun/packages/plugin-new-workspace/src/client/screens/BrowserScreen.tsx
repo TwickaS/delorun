@@ -83,7 +83,7 @@ export function BrowserScreen({ t, browser, choice, busy, problem, canCreateNow,
   )
   return (
     <div className={css.screen}>
-      <BrowserChoices t={t} heading={t('browser.heading')} choice={choice} onChoice={onChoice} disabled={busy} readiness={readiness} planned
+      <BrowserChoices t={t} heading={t('browser.heading')} choice={choice} onChoice={onChoice} disabled={busy} readiness={readiness}
         notAdded={notAdded} onRetry={() => { void setup.refresh() }} onOpenSettings={(section) => { settings.open(section) }} />
       {problem !== undefined && <p className={css.failure} role="alert">{problemText(t, problem)}</p>}
       <DialogFooter back={{ label: t('back'), onClick: onBack, disabled: busy }}
