@@ -149,7 +149,7 @@ Approval is meant for you, at your computer. Three facts help you keep it that w
 
 ## What an approved phone can and cannot do
 
-An approved phone is you: it can already ask the model to do things, so it can do everything that is no riskier than a message. A few sensitive actions ask you to confirm each one, with Face ID or your PIN, and a few things never work from a phone.
+An approved phone is you: it can already ask the model to do things, so it can do everything that is no riskier than a message. A few sensitive actions ask you to confirm, with Face ID or your PIN, either one at a time or within a Face ID pass, and a few things never work from a phone.
 
 ![The studio at phone width: a chat about laying out raised beds, with the assistant's reply and a JSON block above the message box.](pictures/phone-chat.webp)
 
@@ -167,7 +167,7 @@ Without asking, the phone can:
 - give feedback on a chat or a message;
 - answer ordinary prompts and questions the model asks, and stop a run or a background job.
 
-After you confirm each one with Face ID or your PIN, the phone can also:
+After you confirm each one with Face ID or your PIN, or while a Face ID pass is open, the phone can also:
 
 - change settings;
 - run the slash commands that change only the chat: `/compact`, `/export`, `/goal`, `/permission` and `/plan`; the phone runs no other slash command;
@@ -192,7 +192,7 @@ Only your computer, whatever the phone confirms:
 
 The phone shows these as "Do this on your computer" with the reason.
 
-The phone can also open a terminal, turn protection off, apply changes to your plugins or to Delorun's own files, turn a plugin off or on, start a work session, create a plugin, move a setup file in or out, or restart Delorun. Each of these takes its own confirmation, with [Face ID](#confirm-with-face-id) or your PIN.
+The phone can also open a terminal, turn protection off, apply changes to your plugins or to Delorun's own files, turn a plugin off or on, start a work session, create a plugin, move a setup file in or out, or restart Delorun. Each of these takes its own confirmation, with [Face ID](#confirm-with-face-id) or your PIN, unless a Face ID pass is open.
 
 Never, whatever the phone confirms:
 
@@ -210,7 +210,7 @@ A workspace that you already put on full access at your computer can still be dr
 <details>
 <summary>Edge cases</summary>
 
-- If a workspace is on full access, then the phone still confirms with Face ID or your PIN to open or attach to a terminal there, and so does dangerous mode: a terminal is a shell with your authority, so the phone confirms each terminal it opens.
+- If a workspace is on full access, then the phone still confirms with Face ID or your PIN to open or attach to a terminal there, and so does dangerous mode: a terminal is a shell with your authority, so the phone confirms each terminal it opens, unless a Face ID pass is open.
 - If a phone's session is idle for 12 hours, or 14 days have passed since it signed in, then the session ends and its open connections close — the phone signs in again from the sign-in page with its own key.
 - If you approve or remove any device, then every phone's open connections close — each phone signs in again by itself.
 - If a reply shows an image as a file on your computer, or you preview a file, then it does not show on the phone — images attached to messages do show.
@@ -233,10 +233,23 @@ Face ID is how an approved phone confirms one sensitive action at the moment it 
 Every action a phone can take is in one of three groups:
 
 - **Never asks.** Reading, following a chat, replying, attaching files, stopping a run, and the other actions listed above as working without asking.
-- **Asks every time.** The actions listed above as asking each time: opening a terminal, turning protection off, applying changes to your plugins or to Delorun's own files, restarting Delorun, saving or removing a provider key, and answering a prompt that grants full access. The phone shows a sheet that names the action, and you confirm with Face ID, or with your PIN on a phone without it. One confirmation covers that one action, once, within 30 seconds.
+- **Asks.** The actions listed above as asking each time: opening a terminal, turning protection off, applying changes to your plugins or to Delorun's own files, restarting Delorun, saving or removing a provider key, and answering a prompt that grants full access. The phone shows a sheet that names the action, and you confirm with Face ID, or with your PIN on a phone without it. One confirmation covers that one action, once, within 30 seconds, unless a Face ID pass is open (see below). Some always ask, even while a pass is open: removing another device, removing a passkey, **Show all devices** in the Face ID settings, and changing **Ask again after** from a phone. Each takes Face ID for that one action, even while a pass is open, and a Face ID that confirms one of them opens no pass. Removing another device and changing **Ask again after** never accept the PIN.
 - **Only at your computer.** Approving or removing devices, setting the PIN, turning remote access on or off, and the other actions listed above as staying at your computer. Face ID never opens these.
 
-No phone holds an unlock for a while: neither a code from your computer, your PIN nor a new phone's first sign-in opens one, so each sensitive action asks again. A terminal you opened with Face ID stays open for its own follow-up work, so you are not asked for every keystroke. It ends after 5 minutes idle, 60 minutes in all, or when the phone signs out. Another terminal needs its own confirmation.
+Neither a code from your computer, your PIN nor a new phone's first sign-in opens a window in which a phone asks less: a phone without Face ID confirms each sensitive action with one PIN. A terminal you opened with Face ID stays open for its own follow-up work, so you are not asked for every keystroke. It ends after 5 minutes idle, 60 minutes in all, or when the phone signs out, and a pass ending does not close it. Another terminal needs its own confirmation, or an open pass.
+
+**Ask again after.** One Face ID on a phone can open a pass for that phone. While the pass is open, the phone does the actions in the **Asks** group without a Face ID sheet each time. Choose the length in Settings, Face ID, **Ask again after**: Every time, 5, 15, 30 or 60 minutes. The default is 15 minutes. **Every time** means one Face ID for each action, with no pass.
+
+
+**The chip.** While a pass is open, the studio on the phone shows "Unlocked · 14 min" above the open chat, counting down in whole minutes, with a **Lock now** button. The chip goes at the end of the pass. Your computer never shows it.
+
+**It does not slide.** The pass ends the chosen number of minutes after the Face ID, however much you use the phone. Changing the setting applies to the next pass.
+
+**What always asks.** The actions above that always ask still ask for Face ID while a pass is open. Reach settings, PIN mode settings and the other actions that stay at your computer stay there.
+
+**What does not open a pass.** Your PIN, whether the phone has no Face ID or Face ID failed; a code from your computer; the first minutes after you approve a phone; dangerous mode. A phone without Face ID confirms one PIN for each action.
+
+**What ends it.** The end of its time; **Lock now**; the studio page hidden for 5 minutes; the phone signing out or its session ending; removing the phone; Delorun rotating every session; restarting Delorun. A pass is kept in memory, so a restart closes it.
 
 **Set up Face ID.**
 
@@ -254,7 +267,7 @@ Cancelling the phone's own sheet counts for nothing. A wrong passkey or a wrong 
 **What Face ID does not do.**
 
 - It does not sign a phone in. The phone's own key and your approval still do that.
-- It does not let a phone do what only your computer may do.
+- It does not let a phone do what only your computer may do, and a pass does not either.
 - It does not make a stolen, unlocked phone safe by itself. On an iPhone, turn on **Stolen Device Protection** in Settings, Face ID & Passcode, so that someone who learns the phone's passcode still cannot use Face ID, change the passcode or turn the protection off away from your usual places without waiting an hour.
 - It does not work in a browser that cannot make a platform passkey. Some versions of Firefox, and other browsers without one, say "This browser cannot use Face ID here"; that phone confirms actions with its PIN, or you take them at your computer. Safari on an iPhone and Chrome on Android work in the browsers tried.
 
