@@ -5,7 +5,7 @@
  * disabled with a hover text; one that needs an unlock stays enabled, and the route's refusal opens the unlock dialog.
  * The progress and outcome cards are frame-wide (see `UpdateOverlay`), so they show here and wherever the person is.
  */
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { Button, Checkbox, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { HostObservable, InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -108,7 +108,8 @@ export function UpdatePanel(props: UpdatePanelProps) {
  * @returns the row.
  */
 function ContinueSetting({ settings, t }: { readonly settings: ConfigForm<UpdateSettings>, readonly t: T }) {
-  const snapshot = useSyncExternalStore(settings.subscribe, settings.getSnapshot)
+  /* The form's methods read their own state, so they are called on it, not handed over detached. */
+  const snapshot = useSyncExternalStore(useCallback(listener => settings.subscribe(listener), [settings]), () => settings.getSnapshot())
   const [failed, setFailed] = useState(false)
   const value = snapshot.value?.continueStoppedChats ?? true
   return <div className={css.card} data-update-continue-setting>
