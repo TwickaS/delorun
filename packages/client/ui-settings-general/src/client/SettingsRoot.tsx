@@ -17,7 +17,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useSta
 import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 import {
-  ConnectionIndicator, Tooltip, useModalLayer,
+  ConnectionIndicator, Tooltip, useModalLayer, useSurfaceEdges,
   IconAgentPresetOutlineMedium, IconArchiveOutlineMedium, IconChevronLeftOutlineRegular, IconCloseOutlineRegular, IconDataOutlineMedium,
   IconPersonalizationOutlineMedium, IconSearchOutlineRegular, IconSettingsOutlineMedium, IconUserOutlineMedium,
 } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -120,6 +120,7 @@ function SettingsPanel({ rows, nav, renderSlot, activeId, onSelect, onClose, bac
 
   const panel = useRef<HTMLDivElement>(null)
   useModalLayer(panel, true, onClose)
+  useSurfaceEdges(panel, true)
 
   // Focus follows the view: the back arrow when a page opens, the page's row when the list returns, and the panel when a
   // width change removes the focused control.
@@ -433,7 +434,10 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
           </button>
         </Tooltip> })}
         <ConnectionIndicator
-          state={wide && desktopUpdate.presentation?.phase !== 'installing' ? connectionIndicator : undefined}
+          // A plugin that shows the connection's state elsewhere (Delorun's pinned alert) marks the root, which withdraws this pill.
+          state={wide && desktopUpdate.presentation?.phase !== 'installing' && !document.documentElement.hasAttribute('data-delorun-connection-alert')
+            ? connectionIndicator
+            : undefined}
           disconnectedLabel={t('connection.error')}
           connectingLabel={t('connection.connecting')}
           recoveredLabel={t('connection.connected')}

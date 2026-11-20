@@ -115,7 +115,7 @@ describe('where a new folder goes by default', () => {
 
 /** The preview reader's dependencies. */
 function previewDeps(extra: Partial<PreviewDeps> = {}): PreviewDeps {
-  return { roots: ['~'], timeMs: 2_000, env: process.env, warn: vi.fn(), ...extra }
+  return { roots: ['~'], timeMs: 2_000, env: process.env, warn: vi.fn(), git: async () => undefined, ...extra }
 }
 
 /** Make a folder under the home directory holding the given files and folders (a name ending in `/` is a folder). */
@@ -132,7 +132,7 @@ describe('previewing a folder', () => {
     const answer = PreviewAnswer.parse(await previewFolder(folder, previewDeps()))
     expect(answer).toEqual({
       result: 'folder', kind: 'files', git: false, agentsFile: false, more: false,
-      entries: [{ name: 'Alpha', folder: true }, { name: 'beta', folder: true }, { name: 'alpha.txt', folder: false }, { name: 'zeta.txt', folder: false }],
+      entries: [{ name: 'Alpha', folder: true }, { name: 'beta', folder: true }, { name: 'alpha.txt', folder: false, size: 0 }, { name: 'zeta.txt', folder: false, size: 0 }],
     })
   })
 
@@ -192,6 +192,60 @@ describe('previewing a folder', () => {
     const now = (): number => (++calls <= 2 ? 0 : 10_000)
     const answer = await previewFolder(folder, previewDeps({ now, timeMs: 100 })) as { entries: unknown[]; more: boolean }
     expect([answer.entries.length, answer.more]).toEqual([1, true])
+  })
+})
+
+describe('previewing a project folder', () => {
+  it('names the stacks the marker files mark, once each, and omits the field when none is found', async () => {
+    const folder = await folderWith('stacks', ['package.json', 'tsconfig.json', 'pyproject.toml', 'setup.py', 'App.csproj', 'go.mod', 'constructor'])
+    expect(await previewFolder(folder, previewDeps())).toMatchObject({ stack: ['node', 'typescript', 'python', 'go', 'dotnet'] })
+    expect(await previewFolder(await folderWith('plain', ['notes.txt']), previewDeps())).not.toHaveProperty('stack')
+  })
+
+  it('gives a file its size in bytes and a folder none', async () => {
+    const folder = await folderWith('sized', ['dir/'])
+    await writeFile(join(folder, 'five.txt'), 'hello')
+    expect((await previewFolder(folder, previewDeps()) as { entries: unknown[] }).entries).toEqual([{ name: 'dir', folder: true }, { name: 'five.txt', folder: false, size: 5 }])
+  })
+
+  it('gives no size to a link', async () => {
+    const folder = await folderWith('linked', [])
+    await writeFile(join(person, 'target.txt'), 'hello')
+    await symlink(join(person, 'target.txt'), join(folder, 'link.txt'))
+    expect((await previewFolder(folder, previewDeps()) as { entries: unknown[] }).entries).toEqual([{ name: 'link.txt', folder: false }])
+  })
+
+  it('asks Git for the latest commit of a repository whose .git is a folder', async () => {
+    const folder = await folderWith('repo', ['.git/'])
+    const git = vi.fn(async () => `${Date.UTC(2026, 0, 2) / 1000}\tfix: the thing`)
+    const answer = PreviewAnswer.parse(await previewFolder(folder, previewDeps({ git })))
+    expect(answer).toMatchObject({ lastCommit: { subject: 'fix: the thing', at: '2026-01-02T00:00:00.000Z' } })
+    expect(git).toHaveBeenCalledOnce()
+  })
+
+  it('does not run Git for a folder without a repository, or where .git is a file or a link', async () => {
+    const git = vi.fn(async () => '0\tx')
+    const none = await folderWith('none', [])
+    const file = await folderWith('file', ['.git'])
+    const link = await folderWith('link', [])
+    await mkdir(join(person, 'elsewhere'))
+    await symlink(join(person, 'elsewhere'), join(link, '.git'))
+    for (const folder of [none, file, link]) expect(await previewFolder(folder, previewDeps({ git }))).not.toHaveProperty('lastCommit')
+    expect(git).not.toHaveBeenCalled()
+  })
+
+  it('does not run Git for a repository that names other folders to read objects from', async () => {
+    const git = vi.fn(async () => '0\tx')
+    const folder = await folderWith('shared', ['.git/'])
+    await mkdir(join(folder, '.git', 'objects', 'info'), { recursive: true })
+    await writeFile(join(folder, '.git', 'objects', 'info', 'alternates'), '/elsewhere/objects\n')
+    expect(await previewFolder(folder, previewDeps({ git }))).not.toHaveProperty('lastCommit')
+    expect(git).not.toHaveBeenCalled()
+  })
+
+  it('leaves the commit out when Git gives none, as for a repository with no commits', async () => {
+    const folder = await folderWith('fresh', ['.git/'])
+    expect(await previewFolder(folder, previewDeps())).not.toHaveProperty('lastCommit')
   })
 })
 

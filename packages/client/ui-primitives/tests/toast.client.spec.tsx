@@ -61,21 +61,21 @@ describe('Toast', () => {
     }
   })
 
-  it('centers over its anchor and re-measures on window resize', () => {
-    vi.useFakeTimers()
-    try {
-      const anchor = document.createElement('div')
-      document.body.appendChild(anchor)
-      anchor.getBoundingClientRect = () => ({ left: 100, width: 400 }) as DOMRect
-      const view = render(<Toast text="anchored" anchor={anchor} onDone={vi.fn()} />)
-      expect(view.getByRole('alert').style.left).toBe('300px')
-      anchor.getBoundingClientRect = () => ({ left: 200, width: 400 }) as DOMRect
-      fireEvent(window, new Event('resize'))
-      expect(view.getByRole('alert').style.left).toBe('400px')
-      anchor.remove()
-    } finally {
-      vi.useRealTimers()
-    }
+  it('renders every toast into the one toast area, oldest first so the newest is last', () => {
+    const view = render(<><Toast text="first" onDone={vi.fn()} /><Toast text="second" onDone={vi.fn()} /></>)
+    const areas = document.querySelectorAll('[data-toast-area]')
+    expect(areas).toHaveLength(1)
+    expect([...areas[0]!.querySelectorAll('[role="alert"]')].map(node => node.textContent)).toEqual(['first', 'second'])
+    view.unmount()
+  })
+
+  it('shows at most three toasts, hiding the oldest, and shows it again when a newer one leaves', () => {
+    const view = render(<>{['one', 'two', 'three', 'four'].map(text => <Toast key={text} text={text} onDone={vi.fn()} />)}</>)
+    const hidden = (): string[] => [...document.querySelectorAll<HTMLElement>('[role="alert"]')].filter(node => node.hidden).map(node => node.textContent ?? '')
+    expect(hidden()).toEqual(['one'])
+    view.rerender(<>{['one', 'two', 'three'].map(text => <Toast key={text} text={text} onDone={vi.fn()} />)}</>)
+    expect(hidden()).toEqual([])
+    view.unmount()
   })
 
   it('flows prefixed actions inline as one sentence and hands each press to the owner', () => {

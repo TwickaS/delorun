@@ -12,7 +12,7 @@ import { isRefused } from './host-api.ts'
 import type { FaceIdAction, PasskeyApi } from './face-id-types.ts'
 import { FaceIdIcon } from './face-id-icons.tsx'
 import { faceIdLastsLine } from './face-id-lasts.ts'
-import { FaceIdLayer } from './FaceIdLayer.tsx'
+import { FaceIdLayer, FaceIdSheetBox } from './FaceIdLayer.tsx'
 import css from './FaceId.module.css'
 
 /** The digits a PIN has at least; the home's own rule is the authority. */
@@ -85,6 +85,6 @@ export function FaceIdPinBody({ t, action, api, secret, onGranted, onBack }: Omi
  */
 export function FaceIdPin(props: FaceIdPinProps): ReactNode {
   return <FaceIdLayer labelledBy="delorun-face-id-pin-title" attributes={{ 'data-face-id-pin': '' }} onEscape={props.onBack} onClosed={props.onCancel}>
-    <div className={css.sheet}><FaceIdPinBody {...props} /></div>
+    <FaceIdSheetBox><FaceIdPinBody {...props} /></FaceIdSheetBox>
   </FaceIdLayer>
 }

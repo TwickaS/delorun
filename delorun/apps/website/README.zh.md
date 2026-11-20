@@ -10,7 +10,7 @@
 
 | 路由 | 内容 |
 | --- | --- |
-| `/` | Delorun 是什么、一张 studio 图片（`public/hero-studio.webp`，演示主目录的截图；`src/site/config.ts` 中的 `HERO_IMAGE_PATH` 指向它）、安装命令及其下方的第一个设置问题、预览版状态、六个各链接一页指南的简短小节、路线图的三个阶段、一行“面向团队”，已有汇编版本时还有来自变更记录的“最新动态”小节 |
+| `/` | 首页：以 Delorun 标志的形状拼成的真实 studio 截图马赛克，配有承诺和安装命令；放大进入一段真实任务的影片；写给喜欢拆开工具的人的理由；展示每张截图的墙；以及订阅。见 [`DESIGN.md`](DESIGN.md) |
 | `/blog` | `content/blog/` 中的文章，最新的在前；没有文章时显示一行说明。只有在至少发布了一篇文章后，页眉、页脚和站点地图才链接它 |
 | `/sitemap.xml`、`/robots.txt` | 站点地图，由构建根据现有页面写出；以及 `public/` 中指向它的 robots 文件 |
 | `/privacy` | 站点收集什么、主机记录什么，以及程序发送的内容该去哪里阅读 |
@@ -48,7 +48,11 @@ node scripts/export-subscribers.ts --stage prod > subscribers.csv  # email, firs
 
 设计令牌、Delorun 标志、页脚和变更记录视图位于 [`delorun/packages/site-design`](../../packages/site-design/src/tokens.css)，本站点和文档站点按路径导入（`tsconfig.json` 中的 `@design/*`）。该目录没有 `package.json`：每个站点都是有自己锁文件的独立工作区，都无法安装工作区包。每个站点的 `vite.config.ts` 把设计中的 `fumadocs-ui/css/` 导入指向自己的安装。
 
-站点跟随设备的浅色或深色设置。它不加载远程字体或脚本，也不设置 cookie。
+站点跟随设备的浅色或深色设置。它不加载远程字体，也不设置 cookie。Cloudflare 的 Turnstile 脚本只在访客第一次使用订阅表单时，才从 `challenges.cloudflare.com` 加载。
+
+## 图片
+
+首页展示工作室的真实截图，这些截图不在仓库中。`SITE_PICTURES_DIR` 指定源图片所在的文件夹，每张图片一个 `<picture id>.webp`；该变量未设置或文件夹缺失时，构建会失败并给出点名该变量的信息。`scripts/wall-shots.ts <capture folder>` 从一组截图中挑出墙面图片并写入该文件夹（`ingest-owner-shots.ts` 添加经过审核的所有者本人的图片），随后 `shot-colours.ts`、`mosaic-plans.ts` 和 `lod.ts --write` 重新生成 `src/home/` 中已提交的清单。`pnpm run build` 会运行 `scripts/lod.ts`，它在 `public/lod/` 中生成细节层级金字塔（AVIF 与 WebP，文件名由其输入哈希得出，由 `public/_headers` 缓存为 immutable），并在清单过期时失败。它需要 PATH 上有带 libaom-av1 和 libwebp 的 `ffmpeg`。
 
 ## 命令
 
@@ -56,7 +60,7 @@ node scripts/export-subscribers.ts --stage prod > subscribers.csv  # email, firs
 
 ```sh
 (cd delorun/apps && pnpm --dir website install --frozen-lockfile)  # installs the site's dependencies from its own lockfile
-(cd delorun/apps && pnpm --dir website run build)                  # builds into out/, typechecks the site and runs the dead-link check
+(cd delorun/apps && SITE_PICTURES_DIR=<pictures folder> pnpm --dir website run build)  # builds the pictures and into out/, typechecks the site and runs the dead-link check
 (cd delorun/apps && pnpm --dir website run preview)                # serves the built out/ on 127.0.0.1:4173 as a static host would
 ```
 

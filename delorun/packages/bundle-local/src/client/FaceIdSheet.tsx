@@ -15,7 +15,7 @@ import type { FaceIdAction, FaceIdKind, PasskeyApi } from './face-id-types.ts'
 import { faceIdLastsLine } from './face-id-lasts.ts'
 import { FaceIdGlyph } from './face-id-glyph.tsx'
 import { FaceIdIcon } from './face-id-icons.tsx'
-import { FaceIdLayer } from './FaceIdLayer.tsx'
+import { FaceIdLayer, FaceIdSheetBox } from './FaceIdLayer.tsx'
 import css from './FaceId.module.css'
 
 /** The most items of a batch the sheet lists before it counts the rest. */
@@ -151,6 +151,6 @@ export function FaceIdSheetBody({ t, action, kind, api, browser, hasPasskey, fal
  */
 export function FaceIdSheet(props: FaceIdSheetProps): ReactNode {
   return <FaceIdLayer labelledBy="delorun-face-id-title" attributes={{ 'data-face-id-sheet': '' }} onEscape={props.onCancel} onClosed={props.onCancel}>
-    <div className={css.sheet}><div className={css.pane}><FaceIdSheetBody {...props} /></div></div>
+    <FaceIdSheetBox><div className={css.pane}><FaceIdSheetBody {...props} /></div></FaceIdSheetBox>
   </FaceIdLayer>
 }

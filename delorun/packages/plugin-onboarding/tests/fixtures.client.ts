@@ -76,7 +76,7 @@ export function liveForm<T extends object>(initial: T | undefined, options: { re
 
 /** Delorun's look with its defaults, as the theme's host half stores it. */
 export const THEME: ThemeSettings = {
-  accent: 'peach', customAccent: '#E5734A', typeface: 'delorun', density: 'comfortable', studioAdditions: true, palette: 'soft', contrast: 100, effort: 'label', branding: THEME_DEFAULTS.branding,
+  accent: 'peach', customAccent: '#E5734A', typeface: 'delorun', density: 'comfortable', studioAdditions: true, palette: 'soft', contrast: 100, effort: 'label', toastPosition: 'bottom-left', branding: THEME_DEFAULTS.branding,
 }
 
 /** The row's settings with some fields changed. */

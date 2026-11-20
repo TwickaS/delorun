@@ -25,7 +25,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-随附的 Web bundle 以 `harness-dev-context` 行挂载此插件。不希望 agent 得知 harness checkout 或 GUI URL 时，在 profile patch 中禁用该行。插件唯一的选项是测试接口 `sourceRoot`，只在每个注入服务都存在时激活：`systemPrompt`、`sessionProjections`，以及 Web 运行时的 `webApp` 服务，因此 `--help` 与非 Web 组合永远不会挂载它。
+随附的 Web bundle 以 `harness-dev-context` 行挂载此插件。不希望 agent 得知 harness checkout 或 GUI URL 时，在 profile patch 中禁用该行。插件不接受配置，只在每个注入服务都存在时激活：`systemPrompt`、`sessionProjections`，以及 Web 运行时的 `webApp` 服务，因此 `--help` 与非 Web 组合永远不会挂载它。
 
 ### 模型得到什么
 
@@ -82,7 +82,7 @@ kind: "package-reference"
 
 #### 模型看到什么
 
-两个系统提示词段落，位于可复用指令之后的第一方顺序 10000 与 10100；两行运行时上下文，位于上下文顺序 200 与 210。在早期版本下提交过提示词的会话看到的是自己的早期段落，而不是下面两段。
+两个系统提示词段落，位于可复用指令之后的第一方顺序 10000 与 10100；两行运行时上下文，位于上下文顺序 200 与 210。在早期版本下提交过提示词的会话看到的是自己的早期段落，而不是下面两段。下面的段落与行只在真正的 checkout 中出现：安装根目录是 git 工作树且含 pnpm workspace，插件加载时一次性判定。已安装的副本里，模型改为收到「在已安装的程序上」下的两个更短的段落，既不含运行时路径，也不含 studio URL。可选的 `sourceRoot` 选项指定要判定的目录，测试借此覆盖两种情况。
 
 ##### 系统提示词段落
 
@@ -102,15 +102,11 @@ Current Delorun studio URL: "<advertised URL>".
 
 ##### 在已安装的程序上
 
-以上段落只在真正的 checkout 中出现：安装根目录是 git 工作树且含 pnpm workspace，插件加载时一次性判定。已安装的副本里，模型改为收到两个更短的段落，既不含运行时路径，也不含 studio URL：
-
 ```markdown
 Make or change plugins with the delorun-plugin-authoring skill and review them in Changes (Apply or Undo). Never edit the installed program.
 
 You are interacting with the user through the Delorun studio. When the user refers to "this page", "this GUI", or "this app" without naming another target, they mean the studio. The browser provides no implicit DOM, route, or screenshot context. Do not start a replacement server unless the user asks.
 ```
-
-可选的 `sourceRoot` 选项指定要判定的目录，测试借此覆盖两种情况。
 
 #### Token 影响
 

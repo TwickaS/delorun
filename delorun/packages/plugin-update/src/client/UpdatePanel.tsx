@@ -5,13 +5,14 @@
  * disabled with a hover text; one that needs an unlock stays enabled, and the route's refusal opens the unlock dialog.
  * The progress and outcome cards are frame-wide (see `UpdateOverlay`), so they show here and wherever the person is.
  */
-import { useEffect, useState } from 'react'
-import { Button, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
+import { useEffect, useState, useSyncExternalStore } from 'react'
+import { Button, Checkbox, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { HostObservable, InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { RollbackBody } from '../wire.ts'
 import type { Outcome, UpdateLoad } from './controller.ts'
 import css from './UpdatePanel.module.css'
-import { controlUse, pluralKey, refusalText } from './parts.tsx'
+import { controlUse, pluralKey, refusalText, type T } from './parts.tsx'
 import { RollbackPanel } from './RollbackPanel.tsx'
 
 /** What the panel reads and does. */
@@ -21,6 +22,14 @@ export interface UpdatePanelInjected {
   readonly check: () => Promise<Outcome<unknown>>
   readonly openDialog: () => void
   readonly rollback: (body: RollbackBody) => Promise<Outcome<unknown>>
+  /** The plugin's stored settings. */
+  readonly settings: ConfigForm<UpdateSettings>
+}
+
+/** The studio's update settings. */
+export interface UpdateSettings {
+  /** Whether chats stopped for an update continue by themselves afterwards. */
+  continueStoppedChats: boolean
 }
 
 /** Props of the `settings.section` entry. */
@@ -88,6 +97,24 @@ export function UpdatePanel(props: UpdatePanelProps) {
           </div>
         </div>
       </div>}
+    <ContinueSetting settings={props.settings} t={t} />
     <RollbackPanel state={state} t={t} rollback={props.rollback} />
+  </div>
+}
+
+/**
+ * The setting that decides whether stopped chats continue after an update.
+ * @param props - the settings form and the dictionary.
+ * @returns the row.
+ */
+function ContinueSetting({ settings, t }: { readonly settings: ConfigForm<UpdateSettings>, readonly t: T }) {
+  const snapshot = useSyncExternalStore(settings.subscribe, settings.getSnapshot)
+  const [failed, setFailed] = useState(false)
+  const value = snapshot.value?.continueStoppedChats ?? true
+  return <div className={css.card} data-update-continue-setting>
+    <Checkbox checked={value} disabled={!snapshot.writable} label={t('continue.setting')}
+      onChange={() => { setFailed(false); void settings.set('continueStoppedChats', !value).then((saved) => { setFailed(!saved) }, () => { setFailed(true) }) }} />
+    <p className={css.meta}>{t('continue.setting.lead')}</p>
+    {failed ? <p className={css.meta} role="alert">{t('settings.failed')}</p> : null}
   </div>
 }

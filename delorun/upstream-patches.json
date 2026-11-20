@@ -846,7 +846,7 @@
       "path": "packages/client/ui-settings-general/src/client/SettingsRoot.tsx",
       "class": "delorun-feature",
       "feature": "studio-seams",
-      "reason": "Renders the grouped Settings navigation and search and keeps the flat list when no layout is registered; grouped icons come from the section icon registration. Onboarding steps get `renderSection`, which draws one registered `settings.section` inside a step with a `close` that does nothing, and `completeStep`, which marks another step complete while the page is open. At 600px and below outside the desktop windows (`data-phone` on the panel) it shows the grouped list first, a page under a back arrow and the page title, and moves focus to the arrow and back to the opened row."
+      "reason": "Renders the grouped Settings navigation and search and keeps the flat list when no layout is registered; grouped icons come from the section icon registration. Onboarding steps get `renderSection`, which draws one registered `settings.section` inside a step with a `close` that does nothing, and `completeStep`, which marks another step complete while the page is open. At 600px and below outside the desktop windows (`data-phone` on the panel) it shows the grouped list first, a page under a back arrow and the page title, and moves focus to the arrow and back to the opened row. The connection pill is also withdrawn from the foot row while a plugin marks the root with data-delorun-connection-alert (Delorun's pinned update and connection alert shows the state instead), so the foot row never wraps."
     },
     {
       "path": "packages/client/ui-settings-general/src/client/index.ts",
@@ -3127,6 +3127,54 @@
       "class": "delorun-feature",
       "feature": "studio-seams",
       "reason": "phone layout of Choose shell (Face ID e2e F-3)"
+    },
+    {
+      "path": "packages/client/ui-user-questions/src/client/QuestionComposer.module.css",
+      "class": "delorun-feature",
+      "feature": "studio-seams",
+      "reason": "Tightens the question card's padding and keeps an expanded option or question's collapse button at the end of its last text line, so phones show more choices and the button never takes a line of its own; adds 44px rows and 16px answer text on touch."
+    },
+    {
+      "path": "packages/client/ui-primitives/src/Modal.tsx",
+      "class": "delorun-feature",
+      "feature": "studio-seams",
+      "reason": "Holds the dialog mask on the edge stack while a dialog is open, so the browser's status and bottom bars take the dimmed page colour on a phone and restore it, in order, as nested dialogs close."
+    },
+    {
+      "path": "packages/client/ui-primitives/src/edge-surface.ts",
+      "class": "delorun-feature",
+      "feature": "studio-seams",
+      "reason": "The per-document stack of open full-screen surfaces and dialogs, with the hook that registers one, which the theme plugin's edge controller reads so the phone browser's bars follow the surface on top and restore in order."
+    },
+    {
+      "path": "packages/client/ui-agent-preset/src/client/AgentPresetSeat.tsx",
+      "class": "delorun-feature",
+      "feature": "studio-seams",
+      "reason": "The refusal toast no longer centres over the composer card: every toast renders in the one toast area, so the anchor prop is dropped."
+    },
+    {
+      "path": "packages/client/ui-conversation/src/client/skeleton/InputBar.tsx",
+      "class": "delorun-feature",
+      "feature": "studio-seams",
+      "reason": "The composer's toast no longer centres over the composer card: every toast renders in the one toast area, so the anchor prop is dropped."
+    },
+    {
+      "path": "packages/client/ui-message-feedback/src/client/FeedbackDialog.tsx",
+      "class": "delorun-feature",
+      "feature": "studio-seams",
+      "reason": "The feedback toasts no longer centre over the composer card: every toast renders in the one toast area, so the card probe and the anchor prop are dropped."
+    },
+    {
+      "path": "packages/client/ui-primitives/src/Toast.module.css",
+      "class": "delorun-feature",
+      "feature": "studio-seams",
+      "reason": "One toast area, bottom left by default and at the top at full width on a phone, with a root attribute that moves it to any corner or centre; the toast itself no longer positions itself, and a slot holds persistent cards."
+    },
+    {
+      "path": "packages/client/ui-primitives/src/Toast.tsx",
+      "class": "delorun-feature",
+      "feature": "studio-seams",
+      "reason": "Every toast renders into one toast area with the newest nearest the edge and at most three visible; adds the slot that persistent plugin cards (downloads, update progress) use, and drops the anchor prop."
     }
   ],
   "retired": []

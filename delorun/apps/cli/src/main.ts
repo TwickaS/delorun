@@ -51,6 +51,7 @@ import { asksForHelp, commandHelp } from './help.ts'
 import { closestMatch } from './output.ts'
 import { pruneLogsAtStart } from './logs/startup.ts'
 import { mainHelp } from './main-help.ts'
+import { sandboxHomeFailure } from './sandbox-home.ts'
 import { styleOf } from './style.ts'
 import { applyDelorunVersionEnvironment, delorunVersion, versionCommand } from './version.ts'
 
@@ -185,7 +186,7 @@ export async function main(argv: readonly string[], context: CommandContext = {
     // Every failure reaches the person in the refusal format, redacted and without a stack: `delorun` keeps no log of
     // its own failures, so the message is all a person has.
     const { cliRefusal } = await import('./refusals.ts')
-    const refusal = cliRefusal(error, argv)
+    const refusal = cliRefusal(sandboxHomeFailure(error, context.env), argv)
     context.stderr(refusal.text)
     return refusal.exit
   }

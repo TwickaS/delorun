@@ -223,6 +223,7 @@ export const CHANGES_ROUTE_ACCESS: Readonly<Record<string, RouteAccess>> = {
   'update-rollback': UNLOCKED('a rollback replaces the release the home runs'),
   'update-cancel': READ('cancelling an update that has not begun only takes back'),
   'update-dismiss': READ('dismissing the record of an update only hides a message'),
+  'update-continue': READ('continuing a chat the update stopped sends it one fixed message the person asked for in Settings, to that chat only, once'),
   stop: UNLOCKED('stopping the home ends every chat that is running'),
   setup: UNLOCKED('a setup file leaves the computer and changes what the profile runs'),
   'notice-seen': COMPUTER('the notice of a change a phone made is for the person at the computer'),

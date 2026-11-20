@@ -4,28 +4,31 @@
 #   pnpm run verify-translation-pairing --write delorun/packages/plugin-update/README.md
 /:
   en: c854e4d47f5687b8
-  zh: c854e4d47f5687b8
+  zh: 8816c6bdc5e2e7db
 /delorun-plugin-update:
   en: 9660b8eeb02fb79d
-  zh: e55b250b2b09a5dd
+  zh: b90dd0fa4f444e40
 /delorun-plugin-update/summary:
   en: 0f339a98d6e6b44b
-  zh: 0f339a98d6e6b44b
+  zh: d2f3879c5b7acf91
 /delorun-plugin-update/contents:
-  en: 2afdba7078f10128
-  zh: 2afdba7078f10128
+  en: 97507fbd47d9921a
+  zh: 4c2bb5227e1e7eb1
 /delorun-plugin-update/routes:
-  en: 894a675718a4080f
-  zh: 894a675718a4080f
+  en: 624248563810d93e
+  zh: cf62eb297ae7747a
 /delorun-plugin-update/who-may-use-each-control:
-  en: 992d788a330235fa
-  zh: 992d788a330235fa
+  en: c6dc58694e99c548
+  zh: f4a8f1156152b086
+/delorun-plugin-update/chats-stopped-for-an-update:
+  en: 4aad0972d2f0ae8f
+  zh: 4a8de2b6292e198c
 /delorun-plugin-update/what-the-host-keeps:
   en: ca5ef9e18d0cd028
-  zh: ca5ef9e18d0cd028
+  zh: 42ab577cf0c8d526
 /delorun-plugin-update/configuration:
-  en: ac419722c837bdf5
-  zh: ac419722c837bdf5
+  en: cd42a11cf060c2f2
+  zh: 2bf158fd26d0d2f1
 /delorun-plugin-update/tests:
   en: d6ee8bc71dca8618
-  zh: d6ee8bc71dca8618
+  zh: 14c9414308b2532c

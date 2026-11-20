@@ -8,7 +8,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
-import { ICON_SYMBOLS } from '@deepseek-ai/dsh-client-ui-primitives'
+import { edgeSurfaces, ICON_SYMBOLS } from '@deepseek-ai/dsh-client-ui-primitives'
 import { ANSWER_ICON, CHANGE_ICON, COPY_ICON } from '../src/client/face-id-icon-keys.ts'
 import { FaceIdIcon } from '../src/client/face-id-icons.tsx'
 import { en } from '../src/client/face-id-locales.ts'
@@ -37,6 +37,19 @@ function flow(over: Partial<Parameters<typeof FaceIdGrantFlow>[0]> = {}) {
 }
 
 describe('the shared action sheet', () => {
+  // The phone's bars take the scrim's tint while the sheet shows, and lose it when it closes (fix/p2-edges).
+  it('holds the sheet on the edge stack while it shows, and releases it when it closes', () => {
+    document.body.style.setProperty('--dsw-alias-bg-mask-1', 'rgba(0, 0, 0, 0.4)')
+    try {
+      flow()
+      expect(edgeSurfaces(document)).toHaveLength(1)
+      cleanup()
+      expect(edgeSurfaces(document)).toEqual([])
+    } finally {
+      document.body.style.removeProperty('--dsw-alias-bg-mask-1')
+    }
+  })
+
   // Moving focus to Confirm on open drew the blue ring the owner called ugly (A498).
   it('leaves focus on the dialog itself when it opens, not on a button', () => {
     flow()

@@ -8,6 +8,7 @@
  */
 import { useEffect, useLayoutEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
+import { useSurfaceEdges } from '@deepseek-ai/dsh-client-ui-primitives'
 import css from './FaceId.module.css'
 
 /** Props of the layer. */
@@ -65,4 +66,16 @@ export function FaceIdLayer({ labelledBy, attributes, onEscape, onClosed, childr
     onCancel={(event) => { event.preventDefault(); handlers.current.onEscape() }} onKeyDown={(event) => { event.stopPropagation() }}>
     {children}
   </dialog>
+}
+
+/**
+ * The sheet's card inside the layer, held on the edge stack while it shows, so the phone's bars take the scrim's tint.
+ * @param props - the card's content.
+ * @param props.children - the sheet or keypad panes.
+ * @returns the card.
+ */
+export function FaceIdSheetBox({ children }: { readonly children: ReactNode }): ReactNode {
+  const card = useRef<HTMLDivElement>(null)
+  useSurfaceEdges(card, true)
+  return <div ref={card} className={css.sheet}>{children}</div>
 }

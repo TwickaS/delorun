@@ -9,7 +9,7 @@ import type { ReactNode } from 'react'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PasskeyBrowser } from './face-id-browser.ts'
 import type { FaceIdAction, FaceIdKind, PasskeyApi } from './face-id-types.ts'
-import { FaceIdLayer } from './FaceIdLayer.tsx'
+import { FaceIdLayer, FaceIdSheetBox } from './FaceIdLayer.tsx'
 import { FaceIdPinBody } from './FaceIdPin.tsx'
 import { FaceIdSheetBody } from './FaceIdSheet.tsx'
 import css from './FaceId.module.css'
@@ -47,7 +47,7 @@ export function FaceIdGrantFlow({ t, action, kind, api, browser, hasPasskey, sec
   const back = (): void => { if (hasPasskey) setView(current => ({ ...current, keypad: false })); else onCancel() }
   return <FaceIdLayer labelledBy={onKeypad ? 'delorun-face-id-pin-title' : 'delorun-face-id-title'}
     attributes={onKeypad ? { 'data-face-id-pin': '' } : { 'data-face-id-sheet': '' }} onEscape={onKeypad ? back : onCancel} onClosed={onCancel}>
-    <div className={css.sheet}>
+    <FaceIdSheetBox>
       {hasPasskey || !keypad
         ? <div className={view.round > 0 ? `${css.pane} ${css.slideBack}` : css.pane} hidden={onKeypad}>
           <FaceIdSheetBody t={t} action={action} kind={kind} api={api} browser={browser} hasPasskey={hasPasskey} fallback={keypad ? 'pin' : 'computer'}
@@ -57,6 +57,6 @@ export function FaceIdGrantFlow({ t, action, kind, api, browser, hasPasskey, sec
       {onKeypad
         ? <div className={css.slide}><FaceIdPinBody key={view.round} t={t} action={action} api={api} secret={secret} onGranted={onGranted} onBack={back} /></div>
         : null}
-    </div>
+    </FaceIdSheetBox>
   </FaceIdLayer>
 }

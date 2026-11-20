@@ -1,12 +1,15 @@
 /**
- * Screen 2a: a folder on this computer, and the place picker the other screens' Change button opens. A search field and
- * suggested folders on top, the crumbs of the listed folder, and a two-column browser: the folders on the left, and on
- * the right a preview of the selected folder. On a phone the browser shows one column at a time.
+ * Screen 2a: a folder on this computer, and the place picker the other screens' Change button opens. One top row holds
+ * the clickable crumbs of the listed folder, the folder search and a New folder icon button. Below it the folders fill
+ * the width until a folder is selected (or the listed folder is not the home folder); then a project summary of that
+ * folder takes the right of the browser: its stack, Git branch and latest commit, top-level files with sizes, and a Use
+ * button. On a phone the browser shows one column at a time, the summary as its own step with a way back.
  */
 import {
-  Button, IconChevronLeftOutlineRegular, IconFolderCloseRegular, IconSearchOutlineRegular, Input,
+  Button, IconBranchOutlineRegular, IconChevronLeftOutlineRegular, IconChevronRightOutlineRegular, IconFolderCloseRegular,
+  IconPlusOutlineRegular, IconSearchOutlineRegular, Input,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent, ReactNode } from 'react'
 import { isFolderName } from '../../clone-address.ts'
 import { MAX_SEARCH_RESULTS, type PreviewAnswer, type SearchAnswer, type SuggestedPlace } from '../../wire.ts'
@@ -15,7 +18,7 @@ import { DialogFooter } from '../footer.tsx'
 import { problemOfFailure } from '../create.ts'
 import type { Problem } from '../flow.ts'
 import type { Translate } from '../locales.ts'
-import { baseName, displayPath } from '../paths.ts'
+import { baseName, displayPath, formatSize, relativeTime } from '../paths.ts'
 import { problemText } from '../problems.ts'
 import css from './screens.module.css'
 
@@ -59,6 +62,8 @@ export interface FolderScreenProps {
   readonly browse: FolderBrowse
   /** The home folder, which paths show as `~`. */
   readonly home: string
+  /** The current time in milliseconds, for how long ago the latest commit was. */
+  readonly now: number
   /** The folders offered as places to look. */
   readonly suggested: readonly SuggestedPlace[]
   /** Where the browser opens; the home folder when absent or when it cannot be listed. */
@@ -81,11 +86,23 @@ export interface FolderScreenProps {
 /** How long typing pauses before a search runs, in milliseconds. */
 const SEARCH_DELAY_MS = 250
 
+/** How many of a listing's folders are read for the hints under their names. */
+const MAX_HINTS = 24
+
+/** How many hint reads run at once. */
+const HINT_WORKERS = 3
+
+/** The most stack labels one hint names. */
+const MAX_HINT_STACKS = 3
+
 /** How long moving through the list pauses before the folder is previewed, in milliseconds. */
 const PREVIEW_DELAY_MS = 150
 
 /** How each key moves the selection in a list: a step, or to the first or last item. */
 const LIST_KEYS: Readonly<Record<string, -1 | 1 | 'first' | 'last'>> = { ArrowDown: 1, ArrowUp: -1, Home: 'first', End: 'last' }
+
+/** A previewed folder's answer, as the hint under a folder's name reads it. */
+type PreviewFolder = Extract<PreviewAnswer, { readonly result: 'folder' }>
 
 /** What the preview column shows. */
 type PreviewState =
@@ -112,8 +129,9 @@ interface Row {
  * @param props - the services, where to start and what the screen returns.
  * @returns the screen.
  */
-export function FolderScreen({ t, api, browse, home, suggested, startPath, picking, busy, problem, onBack, onUse }: FolderScreenProps): ReactNode {
+export function FolderScreen({ t, api, browse, home, now, suggested, startPath, picking, busy, problem, onBack, onUse }: FolderScreenProps): ReactNode {
   const nameId = useId()
+  const rowId = useId()
   const [listing, setListing] = useState<FolderListing | undefined>()
   const [listFailed, setListFailed] = useState(false)
   const [requested, setRequested] = useState<string | undefined>(startPath)
@@ -121,12 +139,14 @@ export function FolderScreen({ t, api, browse, home, suggested, startPath, picki
   const [query, setQuery] = useState('')
   const [search, setSearch] = useState<SearchState>({ status: 'idle' })
   const [preview, setPreview] = useState<PreviewState>({ status: 'none' })
+  const [hints, setHints] = useState<ReadonlyMap<string, PreviewFolder>>(new Map())
   const [naming, setNaming] = useState(false)
   const [newName, setNewName] = useState('')
   const [newFailed, setNewFailed] = useState(false)
   const [newInvalid, setNewInvalid] = useState(false)
   const [phoneView, setPhoneView] = useState<'list' | 'preview'>('list')
   const list = useRef<HTMLUListElement>(null)
+  const crumbNav = useRef<HTMLElement>(null)
   const nameInput = useRef<HTMLInputElement>(null)
   /** Whether the list takes focus once the next level shows. */
   const refocus = useRef(false)
@@ -177,6 +197,12 @@ export function FolderScreen({ t, api, browse, home, suggested, startPath, picki
     target?.focus()
   }, [listing])
 
+  // A deep path scrolls the crumbs so the listed folder, the last one, stays in view.
+  useLayoutEffect(() => {
+    const nav = crumbNav.current
+    if (nav !== null) nav.scrollLeft = nav.scrollWidth
+  }, [listing])
+
   // The new folder's name field takes focus when it opens.
   useEffect(() => { if (naming) nameInput.current?.focus() }, [naming])
 
@@ -199,6 +225,29 @@ export function FolderScreen({ t, api, browse, home, suggested, startPath, picki
   }, [api, text])
 
   const folders = listing?.entries.filter(entry => !entry.hidden) ?? []
+
+  // Each listed folder gets a hint (its stack or kind, and its Git branch) read a few at a time; a new listing cancels the reads.
+  useEffect(() => {
+    setHints(new Map())
+    if (listing === undefined) return undefined
+    const controller = new AbortController()
+    const paths = listing.entries.filter(entry => !entry.hidden).slice(0, MAX_HINTS).map(entry => entry.path)
+    let next = 0
+    const work = async (): Promise<void> => {
+      while (next < paths.length && !controller.signal.aborted) {
+        const path = paths[next++] as string
+        const result = await api.preview(path, controller.signal)
+        if (controller.signal.aborted) return
+        if (result.ok && result.value.result === 'folder') {
+          const answer = result.value
+          setHints(known => new Map(known).set(path, answer))
+        }
+      }
+    }
+    for (let worker = 0; worker < HINT_WORKERS; worker++) void work()
+    return () => { controller.abort() }
+  }, [api, listing])
+
   // The folder the screen would use: the one selected, else the one listed, but never the home folder on its own.
   const target = selected ?? (listing !== undefined && listing.path !== home ? listing.path : undefined)
 
@@ -284,38 +333,37 @@ export function FolderScreen({ t, api, browse, home, suggested, startPath, picki
   }
 
   const refused = preview.status === 'answer' && (preview.answer.result === 'refused' || preview.answer.result === 'unreadable')
-  const crumbs = crumbsOf(listing, home)
+  const crumbs = crumbsOf(listing, home, t('folder.home'))
   const name = target === undefined ? undefined : baseName(target)
-  const homeChip: SuggestedPlace = { path: home, name: t('folder.home') }
-  const chips = [homeChip, ...suggested]
 
   return (
     <div className={css.screen}>
-      <div className={css.searchRow}>
-        <Input className={css.input as string} icon={<IconSearchOutlineRegular />} value={query} aria-label={t('folder.search')} placeholder={t('folder.searchHint')}
+      <div className={css.topBar}>
+        <nav ref={crumbNav} className={css.crumbs} aria-label={t('folder.crumbs')}>
+          {crumbs.map((crumb, index) => (
+            <span key={crumb.path} className={css.crumbItem}>
+              {index > 0 && <span className={css.crumbSeparator} aria-hidden="true"><IconChevronRightOutlineRegular size={12} /></span>}
+              <button type="button" className={css.crumb} aria-current={index === crumbs.length - 1 ? 'location' : undefined}
+                onClick={() => { setQuery(''); void open(crumb.path) }}>{crumb.name}</button>
+            </span>
+          ))}
+        </nav>
+        <Input className={css.filter as string} icon={<IconSearchOutlineRegular />} value={query} aria-label={t('folder.search')} placeholder={t('folder.searchHint')}
           autoComplete="off" spellCheck={false} data-modal-autofocus
           onChange={(event) => { setQuery(event.target.value) }} onKeyDown={onSearchKey} />
-        <Button variant="outline" size="sm" disabled={listing === undefined || naming || searching} onClick={() => { setNaming(true); setNewFailed(false); setNewInvalid(false) }}>
-          {t('folder.newFolder')}
-        </Button>
+        <Button variant="outline" size="sm" className={css.iconButton} icon={<IconPlusOutlineRegular size={16} />} aria-label={t('folder.newFolder')} title={t('folder.newFolder')}
+          disabled={listing === undefined || naming || searching} onClick={() => { setNaming(true); setNewFailed(false); setNewInvalid(false) }} />
       </div>
-      <div className={css.chips} role="group" aria-label={t('folder.suggested')}>
-        {chips.map(chip => (
-          <button key={chip.path} type="button" className={css.chip} onClick={() => { setQuery(''); void open(chip.path, { focusList: true }) }}>
-            {chip.path === home ? chip.name : displayPath(chip.path, home)}
-          </button>
-        ))}
-      </div>
-      <nav className={css.crumbs} aria-label={t('folder.crumbs')}>
-        {crumbs.map((crumb, index) => (
-          <span key={crumb.path} className={css.crumbItem}>
-            {index > 0 && <span className={css.crumbSeparator} aria-hidden="true">/</span>}
-            <button type="button" className={css.crumb} aria-current={index === crumbs.length - 1 ? 'location' : undefined}
-              onClick={() => { setQuery(''); void open(crumb.path) }}>{crumb.name}</button>
-          </span>
-        ))}
-      </nav>
-      <div className={css.columns} data-view={phoneView}>
+      {suggested.length > 0 && (
+        <div className={css.chips} role="group" aria-label={t('folder.suggested')}>
+          {suggested.map(chip => (
+            <button key={chip.path} type="button" className={css.chip} onClick={() => { setQuery(''); void open(chip.path, { focusList: true }) }}>
+              {displayPath(chip.path, home)}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className={css.columns} data-view={phoneView} data-detail={target === undefined ? 'none' : 'summary'}>
         <div className={css.listColumn}>
           {naming && !searching && (
             <form className={css.newFolderForm} onSubmit={createFolder}>
@@ -328,17 +376,26 @@ export function FolderScreen({ t, api, browse, home, suggested, startPath, picki
           )}
           {newInvalid && <p className={css.failure} role="alert">{t('folder.newInvalid')}</p>}
           {newFailed && <p className={css.failure} role="alert">{t('folder.newFailed')}</p>}
+          {!searching && target === undefined && folders.length > 0 && <p className={css.hint}>{t('folder.pickHint')}</p>}
           <ul ref={list} className={css.folders} role="listbox" aria-busy={listing === undefined}
             aria-label={searching ? t('folder.results') : t('folder.list', { folder: listing?.crumbs.at(-1)?.name ?? '' })} onKeyDown={onListKey}>
-            {rows.map((row, index) => (
-              <li key={row.path} role="option" aria-selected={row.path === selected} className={css.folder}
-                tabIndex={row.path === selected || (selected === undefined && index === 0) ? 0 : -1}
-                onClick={() => { select(row.path) }} onDoubleClick={searching ? undefined : () => { void open(row.path, { focusList: true }) }}>
-                <span className={css.folderIcon}><IconFolderCloseRegular size={16} /></span>
-                <span className={css.folderName}>{row.name}</span>
-                {searching && <span className={css.folderPath}>{displayPath(row.path, home)}</span>}
-              </li>
-            ))}
+            {rows.map((row, index) => {
+              const hint = searching ? undefined : hints.get(row.path)
+              const id = `${rowId}${String(index)}`
+              return (
+                <li key={row.path} role="option" aria-selected={row.path === selected} className={css.folder}
+                  aria-labelledby={hint === undefined ? undefined : `${id}n`} aria-describedby={hint === undefined ? undefined : `${id}h`}
+                  tabIndex={row.path === selected || (selected === undefined && index === 0) ? 0 : -1}
+                  onClick={() => { select(row.path) }} onDoubleClick={searching ? undefined : () => { void open(row.path, { focusList: true }) }}>
+                  <span className={css.folderIcon}><IconFolderCloseRegular size={16} /></span>
+                  <span className={css.folderText}>
+                    <span id={`${id}n`} className={css.folderName}>{row.name}</span>
+                    {hint !== undefined && <span id={`${id}h`} className={css.folderHint}>{hintOf(t, hint)}</span>}
+                  </span>
+                  {searching && <span className={css.folderPath}>{displayPath(row.path, home)}</span>}
+                </li>
+              )
+            })}
           </ul>
           {searching ? <SearchNote t={t} search={search} count={found.length} /> : (
             <>
@@ -353,20 +410,30 @@ export function FolderScreen({ t, api, browse, home, suggested, startPath, picki
             </div>
           )}
         </div>
-        <section className={css.previewColumn} aria-label={name === undefined ? t('folder.none') : t('preview.title', { name })}>
-          <div className={css.previewHeader}>
-            <button type="button" className={css.phoneBack} aria-label={t('folder.backToList')} onClick={() => { setPhoneView('list') }}>
-              <IconChevronLeftOutlineRegular size={16} />
-            </button>
-            <h4 className={css.previewName}>{name ?? t('folder.none')}</h4>
-            {selected !== undefined && !searching && (
-              <Button variant="outline" size="sm" onClick={() => { void open(selected, { focusList: true }) }}>{t('folder.open')}</Button>
+        {target !== undefined && name !== undefined && (
+          <section className={css.previewColumn} aria-label={t('preview.title', { name })}>
+            <div className={css.previewHeader}>
+              <button type="button" className={css.phoneBack} aria-label={t('folder.backToList')} onClick={() => { setPhoneView('list') }}>
+                <IconChevronLeftOutlineRegular size={16} />
+              </button>
+              <span className={css.previewIcon}><IconFolderCloseRegular size={20} /></span>
+              <div className={css.previewTitle}>
+                <h4 className={css.previewName}>{name}</h4>
+                <p className={css.previewPath}>{displayPath(target, home)}</p>
+              </div>
+              {selected !== undefined && !searching && (
+                <Button variant="outline" size="sm" onClick={() => { void open(selected, { focusList: true }) }}>{t('folder.open')}</Button>
+              )}
+            </div>
+            <PreviewBody t={t} preview={preview} now={now} />
+            {!picking && (
+              <div className={css.paneActions}>
+                <Button variant="primary" disabled={busy || refused} onClick={() => { onUse(target) }}>{t('folder.useNone')}</Button>
+              </div>
             )}
-          </div>
-          <PreviewBody t={t} preview={preview} />
-        </section>
+          </section>
+        )}
       </div>
-      {target !== undefined && <div role="group" aria-label={t('folder.selected')}><p className={css.selectedPath}>{displayPath(target, home)}</p></div>}
       {problem !== undefined && <p className={css.failure} role="alert">{problemText(t, problem)}</p>}
       <DialogFooter back={{ label: t('back'), onClick: onBack, disabled: busy }}
         primary={{
@@ -382,12 +449,24 @@ export function FolderScreen({ t, api, browse, home, suggested, startPath, picki
  * The crumbs of the listed folder, from the home folder when it lies inside it.
  * @param listing - the listed folder.
  * @param home - the home folder.
- * @returns the crumbs, the home folder written as `~`; nothing about the computer above the home folder.
+ * @param homeName - what the home folder's crumb says.
+ * @returns the crumbs; nothing about the computer above the home folder.
  */
-function crumbsOf(listing: FolderListing | undefined, home: string): readonly { readonly name: string, readonly path: string }[] {
+function crumbsOf(listing: FolderListing | undefined, home: string, homeName: string): readonly { readonly name: string, readonly path: string }[] {
   if (listing === undefined) return []
   const at = listing.crumbs.findIndex(crumb => crumb.path === home)
-  return at < 0 ? listing.crumbs : [{ name: displayPath(home, home), path: home }, ...listing.crumbs.slice(at + 1)]
+  return at < 0 ? listing.crumbs : [{ name: homeName, path: home }, ...listing.crumbs.slice(at + 1)]
+}
+
+/**
+ * The hint under a folder's name: what kind of project it is, then its Git branch.
+ * @param t - this plugin's copy.
+ * @param folder - the folder's preview.
+ * @returns the hint, such as `Node.js, TypeScript · main`.
+ */
+function hintOf(t: Translate, folder: PreviewFolder): string {
+  const kind = folder.stack === undefined ? t(`preview.kind.${folder.kind}`) : folder.stack.slice(0, MAX_HINT_STACKS).map(stack => t(`preview.stack.${stack}`)).join(', ')
+  return folder.branch === undefined ? kind : `${kind} · ${folder.branch}`
 }
 
 /**
@@ -409,11 +488,11 @@ function SearchNote({ t, search, count }: { readonly t: Translate, readonly sear
 }
 
 /**
- * What the preview column says about the folder.
- * @param props - the copy and the preview state.
+ * What the summary pane says about the folder: its labels, Git state, and top-level files with their sizes.
+ * @param props - the copy, the preview state and the current time.
  * @returns the body.
  */
-function PreviewBody({ t, preview }: { readonly t: Translate, readonly preview: PreviewState }): ReactNode {
+function PreviewBody({ t, preview, now }: { readonly t: Translate, readonly preview: PreviewState, readonly now: number }): ReactNode {
   switch (preview.status) {
     case 'none': return null
     case 'loading': return <p className={css.hint} role="status">{t('preview.loading')}</p>
@@ -422,15 +501,43 @@ function PreviewBody({ t, preview }: { readonly t: Translate, readonly preview: 
       const { answer } = preview
       if (answer.result === 'refused') return <p className={css.failure} role="alert">{problemText(t, { kind: 'place', problem: answer.problem })}</p>
       if (answer.result === 'unreadable') return <p className={css.failure} role="alert">{t('preview.unreadable')}</p>
-      const facts = [t(`preview.kind.${answer.kind}`), ...answer.git ? [t('preview.git')] : [], ...answer.branch === undefined ? [] : [answer.branch]]
+      const labels = answer.stack === undefined ? [t(`preview.kind.${answer.kind}`)] : answer.stack.map(stack => t(`preview.stack.${stack}`))
+      const commitTime = answer.lastCommit === undefined ? undefined : relativeTime(answer.lastCommit.at, now, t)
       return (
         <div className={css.previewBody}>
-          <p className={css.previewFacts}>{facts.join(' · ')}</p>
-          {answer.agentsFile && <p className={css.previewFacts}>{t('preview.agents')}</p>}
-          <ul className={css.previewNames}>
-            {answer.entries.map(entry => <li key={entry.name} data-folder={entry.folder ? '' : undefined}>{entry.name}</li>)}
+          <ul className={css.tags} aria-label={t('preview.labels')}>
+            {labels.map(label => <li key={label} className={css.tag}>{label}</li>)}
+            {answer.agentsFile && <li className={css.tag}>{t('preview.agents')}</li>}
           </ul>
-          {answer.more && <p className={css.hint}>{t('preview.more')}</p>}
+          {answer.git && (
+            <div className={css.git}>
+              <span className={css.gitBranch}>
+                <IconBranchOutlineRegular size={14} />
+                {answer.branch ?? t('preview.git')}
+              </span>
+              {answer.lastCommit !== undefined && (
+                <span className={css.commit}>
+                  <span className={css.commitSubject}>{answer.lastCommit.subject}</span>
+                  {commitTime !== undefined && <span className={css.commitTime}>{commitTime}</span>}
+                </span>
+              )}
+            </div>
+          )}
+          {answer.entries.length === 0 ? <p className={css.hint}>{t('preview.empty')}</p> : (
+            <>
+              <h5 className={css.previewSection}>{t('preview.contents')}</h5>
+              <ul className={css.files}>
+                {answer.entries.map(entry => (
+                  <li key={entry.name} className={css.file} data-folder={entry.folder ? '' : undefined}>
+                    <span className={css.fileIcon}>{entry.folder && <IconFolderCloseRegular size={14} />}</span>
+                    <span className={css.fileName}>{entry.name}</span>
+                    {entry.size !== undefined && <span className={css.fileSize}>{formatSize(entry.size)}</span>}
+                  </li>
+                ))}
+              </ul>
+              {answer.more && <p className={css.hint}>{t('preview.more')}</p>}
+            </>
+          )}
         </div>
       )
     }

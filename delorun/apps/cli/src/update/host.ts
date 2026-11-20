@@ -18,6 +18,7 @@ import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@delorun/bundle-local/update-gate'
 import type {} from '@delorun/plugin-packs'
+import type {} from '@delorun/plugin-update'
 import { protectedPluginsIn } from '@delorun/home-auth'
 import type { BootRow, CountingChatGate, HealthExpectations, HealthVerdict, HostProtection } from '@delorun/home-process'
 import { bundleListOf } from '@delorun/profile-safety'
@@ -46,6 +47,7 @@ export const STOP_REASON = 'Delorun is stopping or updating'
  */
 export function watchChats(ctx: Context, gate: CountingChatGate): void {
   const ends = new Map<Agent, () => void>()
+  const jobs = new Map<JobId, () => void>()
   ctx.on('agent/status', ({ agent, status }) => {
     if (status === 'running') {
       if (!ends.has(agent)) ends.set(agent, gate.track(() => { agent.cancel({ kind: 'hook', reason: STOP_REASON }) }))
@@ -56,7 +58,6 @@ export function watchChats(ctx: Context, gate: CountingChatGate): void {
     ctx.get('delorunChatGate')?.chatEnded()
   })
   ctx.inject(['jobs'], (scope) => {
-    const jobs = new Map<JobId, () => void>()
     scope.effect(() => scope.jobs.events.subscribe({ owners: 'all' }, (event) => {
       if (event.type === 'registered') {
         const { id, owner } = event.job
@@ -78,6 +79,15 @@ export function watchChats(ctx: Context, gate: CountingChatGate): void {
       for (const end of jobs.values()) end()
       jobs.clear()
     })
+  })
+  // The chats the studio's "Stop running chats and update" names and stops: the sessions of the running agents.
+  ctx.inject(['delorunUpdateChats'], (scope) => {
+    scope.effect(() => scope.delorunUpdateChats.attach({
+      // Top-level chats only: a subagent's session is not a chat the person can continue.
+      list: () => [...new Set([...ends.keys()].filter(agent => agent.session.header.origin !== 'subagent').map(agent => agent.session.id))],
+      cancelAll: () => gate.cancelAll(),
+      jobs: () => jobs.size,
+    }))
   })
   ctx.inject(['delorunTurnGate'], (scope) => {
     scope.effect(() => scope.delorunTurnGate.attach(() => gate.held))

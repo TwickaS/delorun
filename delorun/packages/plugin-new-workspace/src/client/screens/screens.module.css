@@ -211,14 +211,23 @@
   cursor: pointer;
 }
 
-.searchRow {
+.topBar {
   display: flex;
+  flex: none;
   align-items: center;
   gap: var(--nw-gap-1);
+  min-width: 0;
 }
 
-.searchRow > .input {
-  flex: 1;
+.topBar > .filter {
+  flex: 0 1 280px;
+  width: auto;
+  min-width: 160px;
+}
+
+.iconButton {
+  flex: none;
+  min-width: 32px;
 }
 
 .chips {
@@ -247,24 +256,35 @@
 
 .crumbs {
   display: flex;
-  flex-wrap: wrap;
+  flex: 1 1 0;
   align-items: center;
   gap: var(--delorun-space-1);
-  font-size: var(--dsw-font-xs-13-font-size);
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  white-space: nowrap;
+  font-size: var(--dsw-font-s-14-font-size);
+}
+
+.crumbs::-webkit-scrollbar {
+  display: none;
 }
 
 .crumbItem {
   display: inline-flex;
+  flex: none;
   align-items: center;
   gap: var(--delorun-space-1);
 }
 
 .crumbSeparator {
+  display: inline-flex;
   color: var(--dsw-alias-label-secondary);
 }
 
 .crumb {
-  padding: 0 var(--delorun-space-2);
+  min-height: 28px;
+  padding: 0 var(--delorun-space-3);
   border: 0;
   border-radius: var(--dsw-radius-xs);
   background: none;
@@ -275,6 +295,7 @@
 
 .crumb[aria-current='location'] {
   color: var(--dsw-alias-label-primary);
+  font-weight: 500;
 }
 
 @media (hover: hover) {
@@ -283,16 +304,20 @@
   }
 }
 
-/* The folder browser: the folders and the preview of the selected folder as two columns of one browser. */
+/* The folder browser: the folders fill the width until a summary of the selected folder takes the right of it. */
 .columns {
   display: grid;
   flex: 1 1 280px;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  grid-template-columns: minmax(0, 1fr);
   min-height: 240px;
   overflow: hidden;
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: var(--dsw-radius-md);
   background: var(--dsw-alias-bg-layer-1);
+}
+
+.columns[data-detail='summary'] {
+  grid-template-columns: minmax(200px, 0.8fr) minmax(0, 1.4fr);
 }
 
 .listColumn,
@@ -302,7 +327,7 @@
   gap: var(--delorun-space-3);
   min-width: 0;
   min-height: 0;
-  padding: var(--delorun-space-3);
+  padding: var(--delorun-space-4);
 }
 
 .previewColumn {
@@ -341,18 +366,55 @@
   display: none;
 }
 
+/* With no summary beside it, the list is a grid of folders that fills the width. */
+.columns[data-detail='none'] {
+  flex: 0 1 auto;
+}
+
+.columns[data-detail='none'] .folders {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  align-content: start;
+  gap: var(--delorun-space-3);
+}
+
+.columns[data-detail='none'] .folder {
+  min-height: 64px;
+  padding: var(--delorun-space-4) var(--delorun-space-5);
+  border: 0.5px solid var(--dsw-alias-border-l1);
+  font-size: var(--dsw-font-s-14-font-size);
+}
+
+.columns[data-detail='none'] .folderIcon {
+  color: var(--dsw-alias-brand-primary);
+}
+
 .folder {
   display: flex;
   align-items: center;
   gap: var(--delorun-space-4);
   min-height: 36px;
   box-sizing: border-box;
-  padding: 0 var(--delorun-space-5);
+  padding: var(--delorun-space-2) var(--delorun-space-5);
   border-radius: var(--dsw-radius-sm);
   font-size: var(--dsw-font-xs-13-font-size);
   line-height: var(--dsw-font-xs-13-line-height);
   color: var(--dsw-alias-label-primary);
   cursor: pointer;
+}
+
+.folderText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.folderHint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-secondary);
 }
 
 .folder[aria-selected='true'] {
@@ -387,54 +449,163 @@
 
 .previewHeader {
   display: flex;
+  flex: none;
   align-items: center;
-  gap: var(--delorun-space-3);
+  gap: var(--delorun-space-4);
+}
+
+.previewIcon {
+  display: inline-flex;
+  flex: none;
+  color: var(--dsw-alias-brand-primary);
+}
+
+.previewTitle {
+  flex: 1;
+  min-width: 0;
 }
 
 .previewName {
-  flex: 1;
-  min-width: 0;
   margin: 0;
   overflow-wrap: anywhere;
-  font-size: var(--dsw-font-s-14-font-size);
+  font-size: var(--dsw-font-l-20-font-size);
   font-weight: 500;
-  line-height: var(--dsw-font-s-14-line-height);
+  line-height: var(--dsw-font-l-20-line-height);
 }
 
-.previewBody {
-  display: flex;
-  flex-direction: column;
-  gap: var(--delorun-space-3);
-}
-
-.previewFacts {
+.previewPath {
   margin: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--dsw-font-mono);
   font-size: var(--dsw-font-xs-13-font-size);
   line-height: var(--dsw-font-xs-13-line-height);
   color: var(--dsw-alias-label-secondary);
 }
 
-.previewNames {
+.previewBody {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--delorun-space-4);
+  min-height: 0;
+}
+
+.tags {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--delorun-space-2) var(--delorun-space-5);
+  gap: var(--delorun-space-2);
   margin: 0;
   padding: 0;
   list-style: none;
-  font-family: var(--dsw-font-mono);
-  font-size: var(--dsw-font-xs-13-font-size);
 }
 
-.previewNames > [data-folder]::after {
-  content: '/';
-}
-
-.selectedPath {
-  margin: 0;
-  overflow-wrap: anywhere;
-  font-family: var(--dsw-font-mono);
+.tag {
+  padding: 2px var(--delorun-space-4);
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
   font-size: var(--dsw-font-xs-13-font-size);
   line-height: var(--dsw-font-xs-13-line-height);
+  color: var(--dsw-alias-label-primary);
+}
+
+.git {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delorun-space-1);
+  padding: var(--delorun-space-4);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-interactive-bg-hover);
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+}
+
+.gitBranch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--delorun-space-2);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--dsw-font-mono);
+  font-weight: 500;
+}
+
+.commit {
+  display: flex;
+  align-items: baseline;
+  gap: var(--delorun-space-4);
+  min-width: 0;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.commitSubject {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.commitTime {
+  flex: none;
+}
+
+.previewSection {
+  margin: 0;
+  font-size: var(--dsw-font-xs-13-font-size);
+  font-weight: 500;
+  line-height: var(--dsw-font-xs-13-line-height);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.files {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+}
+
+.file {
+  display: flex;
+  align-items: center;
+  gap: var(--delorun-space-3);
+  min-height: 28px;
+  padding: 0 var(--delorun-space-3);
+  border-bottom: 0.5px solid var(--dsw-alias-border-l1);
+}
+
+.fileIcon {
+  display: inline-flex;
+  flex: none;
+  width: 14px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.fileName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--dsw-font-mono);
+}
+
+.fileSize {
+  flex: none;
+  color: var(--dsw-alias-label-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.paneActions {
+  display: flex;
+  flex: none;
+  justify-content: flex-end;
+  margin-top: auto;
 }
 
 .phoneBack {
@@ -564,13 +735,28 @@
     min-height: 0;
   }
 
-  .columns {
+  .columns,
+  .columns[data-detail='summary'] {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .columns[data-view='list'] .previewColumn,
   .columns[data-view='preview'] .listColumn {
     display: none;
+  }
+
+  .columns[data-detail='none'] .folders {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .folder {
+    min-height: 48px;
+    font-size: var(--dsw-font-s-14-font-size);
+  }
+
+  .paneActions > button {
+    flex: 1;
+    min-height: 44px;
   }
 
   .previewColumn {
@@ -593,12 +779,35 @@
     flex: 1;
   }
 
-  .searchRow,
+  /* The crumbs take a row above the search; the search and the New folder button share the next. A text input is 16px so the
+     phone does not zoom into it. */
+  .topBar {
+    flex-wrap: wrap;
+  }
+
+  .crumbs {
+    flex: 1 1 100%;
+  }
+
+  .topBar > .filter {
+    flex: 1 1 0;
+    min-height: 44px;
+  }
+
+  .iconButton {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .topBar input,
+  .newFolderForm input {
+    font-size: 16px;
+  }
+
   .newFolderForm {
     flex-wrap: wrap;
   }
 
-  .searchRow > .input,
   .newFolderForm > .input {
     flex: 1 1 100%;
   }

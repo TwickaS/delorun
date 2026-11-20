@@ -250,7 +250,7 @@ export function NewWorkspaceDialog({ t, api, browse, readModels, fullAccess, bro
       break
     case 'folder':
       screen = (
-        <FolderScreen t={t} api={api} browse={browse} home={home} suggested={ready?.suggested ?? []}
+        <FolderScreen t={t} api={api} browse={browse} home={home} now={now()} suggested={ready?.suggested ?? []}
           startPath={picking === undefined || choice === undefined || choice.kind === 'existing' ? undefined : choice.parent}
           picking={picking !== undefined} busy={busy} problem={problem} onBack={() => { dispatch({ type: 'back' }) }}
           onUse={(path) => {
@@ -303,7 +303,7 @@ export function NewWorkspaceDialog({ t, api, browse, readModels, fullAccess, bro
   const close = done === undefined ? onClose : () => { onCreated(done.workspace) }
 
   return (
-    <Modal open title={heading} onClose={close} headless className={css.dialog as string}>
+    <Modal open title={heading} onClose={close} headless className={step === 'folder' ? css.dialog as string : `${css.dialog as string} ${css.compact as string}`}>
       <FooterContext.Provider value={target}>
         <div className={css.frame} data-from={from}>
           <header className={css.header}>

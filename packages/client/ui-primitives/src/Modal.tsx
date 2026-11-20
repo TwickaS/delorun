@@ -3,6 +3,7 @@ import type { KeyboardEventHandler, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 import { IconCloseOutlineRegular, IconWarningOutlineRegular } from './icons/index.tsx'
+import { useSurfaceEdges } from './edge-surface.ts'
 import { useModalLayer } from './useModalLayer.ts'
 import css from './Modal.module.css'
 
@@ -53,6 +54,7 @@ export function Modal({
 }: ModalProps) {
   const dialog = useRef<HTMLDivElement>(null)
   useModalLayer(dialog, open, onClose)
+  useSurfaceEdges(dialog, open)
 
   if (!open) return null
 
