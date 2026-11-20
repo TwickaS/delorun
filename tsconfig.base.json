@@ -446,6 +446,7 @@
       "@deepseek-ai/dsh-native-command/chrome-channel": ["./packages/util/native-command/src/chrome-channel.ts"],
       "@deepseek-ai/dsh-message-quotes/client": ["./packages/session/message-quotes/src/client/index.ts"],
       "@deepseek-ai/dsh-ptc-runtime-node/configuration": ["./packages/ptc-runtime/ptc-runtime-node/src/configuration.ts"],
+      "@delorun/bundle-local/update-check": ["./delorun/packages/bundle-local/src/update-check.ts"],
       // BEGIN generated package aliases — pnpm run gen-tsconfig-paths
       "@deepseek-ai/dsh-acp": ["./packages/acp/acp/src"],
       "@deepseek-ai/dsh-acp-app": ["./packages/bundle/acp-app/src"],
