@@ -1,7 +1,7 @@
 ---
 area: Reach
 section: Added
-waits: the device sign-in library mounted in a shipped profile and delorun setup printing the owner code; nothing imports the library and setup prints no code today
+waits: something a person can use to redeem the owner code: `delorun devices code` prints one, but `delorun setup` prints none and no command or studio screen sends it to the home, so a home cannot be claimed
 ---
 
 - The first device to claim your Delorun home becomes its owner, using the one-time code that `delorun setup` prints: the code works once, expires ten minutes after it was printed, and a freshly printed code replaces it. A home nobody has claimed says so when you ask for its devices, instead of acting as if it had none.
