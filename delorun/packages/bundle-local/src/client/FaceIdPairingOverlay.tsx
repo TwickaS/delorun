@@ -14,17 +14,18 @@ import { FaceIdPairingStep } from './FaceIdEnrol.tsx'
 import type { FaceIdSectionInjected } from './FaceIdSection.tsx'
 import css from './FaceId.module.css'
 
-/** The local storage key that records a skipped pairing step on this browser. */
+/** The local storage key that records, by device id, the device that skipped the pairing step on this browser. */
 export const PAIRING_SKIP_STORAGE_KEY = 'delorun.faceId.pairingSkipped'
 
 /**
- * Whether this browser skipped the pairing step.
+ * Whether this device skipped the pairing step on this browser; a browser paired again as a new device is offered it.
+ * @param deviceId - the device's id, from the home's passkey state.
  * @param storage - the browser's local storage, or undefined where none exists.
- * @returns true when a skip is recorded; false when none is, or when storage cannot be read.
+ * @returns true when this device's skip is recorded; false otherwise, or when storage cannot be read.
  */
-export function pairingSkipped(storage: Storage | undefined = globalThis.localStorage): boolean {
+export function pairingSkipped(deviceId: string, storage: Storage | undefined = globalThis.localStorage): boolean {
   try {
-    return storage?.getItem(PAIRING_SKIP_STORAGE_KEY) === '1'
+    return storage?.getItem(PAIRING_SKIP_STORAGE_KEY) === deviceId
   } catch {
     // Storage blocked (for example a private window): the step is offered again on the next load.
     return false
@@ -32,12 +33,13 @@ export function pairingSkipped(storage: Storage | undefined = globalThis.localSt
 }
 
 /**
- * Record that this browser skipped the pairing step.
+ * Record that this device skipped the pairing step on this browser.
+ * @param deviceId - the device's id, from the home's passkey state.
  * @param storage - the browser's local storage, or undefined where none exists.
  */
-export function rememberPairingSkip(storage: Storage | undefined = globalThis.localStorage): void {
+export function rememberPairingSkip(deviceId: string, storage: Storage | undefined = globalThis.localStorage): void {
   try {
-    storage?.setItem(PAIRING_SKIP_STORAGE_KEY, '1')
+    storage?.setItem(PAIRING_SKIP_STORAGE_KEY, deviceId)
   } catch {
     // Storage blocked: the skip is not remembered and the step is offered again on the next load.
   }
@@ -55,23 +57,24 @@ export type FaceIdPairingOverlayProps = PropsLocale<'delorunFaceId'> & InjectFac
  * @returns the pairing step over the studio, or nothing.
  */
 export function FaceIdPairingOverlay({ t, fetch, atComputer, browser }: FaceIdPairingOverlayProps): ReactNode {
-  const [shown, setShown] = useState(false)
+  const [shown, setShown] = useState<string | undefined>(undefined)
   const api = useMemo(() => httpPasskeyApi(fetch), [fetch])
   const passkeys = useMemo(() => browser ?? browserPasskeys(), [browser])
   const kind = useMemo(() => faceIdKindOf(globalThis.navigator), [])
   const computer = atComputer()
   useEffect(() => {
-    if (computer || pairingSkipped()) return undefined
+    if (computer) return undefined
     let current = true
     void api.state().then(
-      (state) => { if (current && state?.ticket === true) setShown(true) },
+      (state) => { if (current && state.ticket && !pairingSkipped(state.deviceId)) setShown(state.deviceId) },
       () => undefined,
     )
     return () => { current = false }
   }, [computer, api])
-  if (!shown) return null
+  if (shown === undefined) return null
+  const deviceId = shown
   return <div className={css.cover} data-face-id-pairing>
-    <FaceIdPairingStep t={t} kind={kind} api={api} browser={passkeys} onDone={() => { setShown(false) }}
-      onSkip={() => { rememberPairingSkip(); setShown(false) }} />
+    <FaceIdPairingStep t={t} kind={kind} api={api} browser={passkeys} onDone={() => { setShown(undefined) }}
+      onSkip={() => { rememberPairingSkip(deviceId); setShown(undefined) }} />
   </div>
 }

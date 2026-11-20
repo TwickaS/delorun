@@ -82,7 +82,8 @@ export function fakeApi(script: FakeApiScript = {}): FakeApi {
     state: async () => {
       note('state', undefined)
       const tickets = script.ticket ?? [false]
-      return { passkeys: devices.find(device => device.thisDevice)?.passkeys ?? [], ticket: tickets[Math.min(polls++, tickets.length - 1)] ?? false }
+      const self = devices.find(device => device.thisDevice)
+      return { deviceId: self?.deviceId ?? 'd-this', passkeys: self?.passkeys ?? [], ticket: tickets[Math.min(polls++, tickets.length - 1)] ?? false }
     },
     options: async (request) => {
       note('options', request)

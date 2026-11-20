@@ -31,18 +31,18 @@ afterEach(cleanup)
 describe('FaceIdSection', () => {
   it('on a phone, lists this device and offers Add Face ID when it has none', async () => {
     // The phone's section starts from its own passkeys.
-    section({ [`GET ${PASSKEY_ROUTES.state}`]: { status: 200, body: { passkeys: [], ticket: false } } })
+    section({ [`GET ${PASSKEY_ROUTES.state}`]: { status: 200, body: { deviceId: 'd-this', passkeys: [], ticket: false } } })
     fireEvent.click(await screen.findByRole('button', { name: 'Add Face ID' }))
     expect(await screen.findByRole('button', { name: 'Show the code' })).toBeTruthy()
   })
   it('on a phone with a passkey, lists it', async () => {
     // A device with a passkey shows it with its added date.
-    section({ [`GET ${PASSKEY_ROUTES.state}`]: { status: 200, body: { passkeys: [entry], ticket: false } } }, { phase: 'off' })
+    section({ [`GET ${PASSKEY_ROUTES.state}`]: { status: 200, body: { deviceId: 'd-this', passkeys: [entry], ticket: false } } }, { phase: 'off' })
     expect(await screen.findByText('Added 18 Nov · this device only')).toBeTruthy()
   })
   it('offers Confirm for Show all devices on a phone with a passkey while its first passkey read is still on its way', async () => {
     // A section that took "no passkey" until its read answered showed a passkey phone "nothing to confirm with" (F-5).
-    const host = fakeHost({ [`GET ${PASSKEY_ROUTES.state}`]: { status: 200, body: { passkeys: [entry], ticket: false } } })
+    const host = fakeHost({ [`GET ${PASSKEY_ROUTES.state}`]: { status: 200, body: { deviceId: 'd-this', passkeys: [entry], ticket: false } } })
     let held = true
     const fetch: typeof host.fetch = (input, init) => (held && String(input).includes(PASSKEY_ROUTES.state) ? new Promise<Response>(() => {}) : host.fetch(input, init))
     const props = { t, close: () => {}, fetch, atComputer: () => false, usePin: <S,>(select: (view: PinView) => S): S => select(pinView('off')), browser: fakeBrowser() } as FaceIdSectionProps
@@ -57,14 +57,14 @@ describe('FaceIdSection', () => {
     section({
       [`GET ${PASSKEY_ROUTES.addPending}`]: { status: 200, body: { pending: [] } },
       [`GET ${PASSKEY_ROUTES.devices}`]: { status: 200, body: { devices: [] } },
-      [`GET ${PASSKEY_ROUTES.state}`]: { status: 200, body: { passkeys: [], ticket: false } },
+      [`GET ${PASSKEY_ROUTES.state}`]: { status: 200, body: { deviceId: 'd-this', passkeys: [], ticket: false } },
     }, { computer: true })
     expect(await screen.findByLabelText('Code from the device')).toBeTruthy()
   })
 })
 
 describe('FaceIdPairingOverlay', () => {
-  const state = (ticket: boolean) => ({ status: 200, body: { passkeys: [], ticket } })
+  const state = (ticket: boolean) => ({ status: 200, body: { deviceId: 'd-this', passkeys: [], ticket } })
   afterEach(() => { localStorage.removeItem(PAIRING_SKIP_STORAGE_KEY) })
   function overlay(script: Parameters<typeof fakeHost>[0], computer = false) {
     const host = fakeHost(script)
@@ -83,16 +83,22 @@ describe('FaceIdPairingOverlay', () => {
     overlay({ [`GET ${PASSKEY_ROUTES.state}`]: state(true) })
     fireEvent.click(await screen.findByRole('button', { name: 'Skip for now' }))
     cleanup()
-    const reloaded = overlay({ [`GET ${PASSKEY_ROUTES.state}`]: state(true) })
+    overlay({ [`GET ${PASSKEY_ROUTES.state}`]: state(true) })
     await new Promise(resolve => setTimeout(resolve, 20))
     expect(document.querySelector('[data-face-id-pairing]')).toBeNull()
-    expect(reloaded.received).toHaveLength(0)
+  })
+  it('offers the step again to a browser paired again as a new device', async () => {
+    // The skip is the device's: a new pairing on this browser has a new device id and its own ticket.
+    rememberPairingSkip('d-before')
+    overlay({ [`GET ${PASSKEY_ROUTES.state}`]: state(true) })
+    expect(await screen.findByRole('button', { name: 'Set up your device' })).toBeTruthy()
+    expect(localStorage.getItem(PAIRING_SKIP_STORAGE_KEY)).toBe('d-before')
   })
   it('offers the step again when local storage cannot be read', async () => {
     const fail = (): never => { throw new Error('blocked') }
     const blocked: Storage = { length: 0, clear: fail, key: fail, removeItem: fail, getItem: fail, setItem: fail }
-    expect(pairingSkipped(blocked)).toBe(false)
-    expect(() => { rememberPairingSkip(blocked) }).not.toThrow()
+    expect(pairingSkipped('d-this', blocked)).toBe(false)
+    expect(() => { rememberPairingSkip('d-this', blocked) }).not.toThrow()
   })
   it('shows nothing without a ticket or at the computer', async () => {
     // No ticket, no step; the computer page asks nothing.

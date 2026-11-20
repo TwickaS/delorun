@@ -76,6 +76,8 @@ export interface PasskeySummary {
 
 /** What a device sees of its passkeys and of enrolment. */
 export interface PasskeyState {
+  /** The asking device's own id, which it signs in with; the studio keys what it remembers per device by it. */
+  readonly deviceId: DeviceId
   /** The device's passkeys. */
   readonly passkeys: readonly PasskeySummary[]
   /** Whether a ticket for this device is waiting, so the studio may offer "Set up Face ID". */
@@ -216,7 +218,7 @@ export class PasskeyAuth {
   stateOf(deviceId: DeviceId): PasskeyState {
     const passkeys = this.options.store.forDevice(deviceId).map(record => ({ credentialId: record.credentialId, createdAt: record.createdAt, lastUsedAt: record.lastUsedAt, synced: record.backupEligible }))
     const ticket = this.tickets.get(deviceId)
-    return { passkeys, ticket: ticket !== undefined && ticket.expiresAt > this.options.now() }
+    return { deviceId, passkeys, ticket: ticket !== undefined && ticket.expiresAt > this.options.now() }
   }
 
   /**

@@ -38,7 +38,7 @@ function deviceHome() {
     'GET /auth/pin/state': PIN_ON,
     [`GET ${ELEVATION_ROUTES.state}`]: ok({ kind: 'none' }),
     [`POST ${ELEVATION_ROUTES.request}`]: ok({ kind: 'pending', requestId: 'request-1', code: '12345678', expiresAt: Date.now() + 300_000 }, 201),
-    [`GET ${PASSKEY_ROUTES.state}`]: ok({ passkeys: [], ticket: false }),
+    [`GET ${PASSKEY_ROUTES.state}`]: ok({ deviceId: 'd-this', passkeys: [], ticket: false }),
     [`POST ${PASSKEY_ROUTES.pin}`]: ok({ grantId: 'g1', expiresAt: Date.now() + 60_000 }),
   })
 }

@@ -60,7 +60,7 @@ const noop = (): void => undefined
  */
 const phoneHome = (passkey: boolean): HostFetch => (input) => {
   const answers: Readonly<Record<string, unknown>> = {
-    [PASSKEY_ROUTES.state]: { passkeys: passkey ? [PASSKEY] : [], ticket: false },
+    [PASSKEY_ROUTES.state]: { deviceId: 'd-this', passkeys: passkey ? [PASSKEY] : [], ticket: false },
     [DEVICE_ROUTES.reachStatus]: { available: true, hasOwner: true, options: [{ option: 'tailscale-private', state: 'ready', address: 'https://home.example.ts.net' }] },
     // As the home answers a device: no addresses, approvers or first device, with this device's id and running unlocks.
     [DEVICE_ROUTES.devices]: {

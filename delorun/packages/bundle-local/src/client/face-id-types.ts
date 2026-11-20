@@ -113,10 +113,10 @@ export interface AssertionResponseJSON {
 /** The home's passkey routes, one method per route. Each rejects with the home's refusal or an unreachable-host error. */
 export interface PasskeyApi {
   /**
-   * What this device holds, and whether an enrolment ticket waits.
-   * @returns the passkeys and the ticket flag.
+   * This device's id, what it holds, and whether an enrolment ticket waits.
+   * @returns the device id, the passkeys and the ticket flag.
    */
-  state(): Promise<{ readonly passkeys: readonly PasskeyEntry[]; readonly ticket: boolean }>
+  state(): Promise<{ readonly deviceId: string; readonly passkeys: readonly PasskeyEntry[]; readonly ticket: boolean }>
   /**
    * Ask for the options of one assertion.
    * @param request - the calls the tap covers, or one prompt answer.
