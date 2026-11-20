@@ -22,7 +22,6 @@
   background: transparent;
   color: var(--dsw-alias-label-tertiary);
   font: inherit;
-  font-variant-numeric: tabular-nums;
   line-height: inherit;
   white-space: nowrap;
 }
@@ -60,4 +59,12 @@ button.pill[aria-expanded='true'] {
 .sep {
   color: var(--dsw-alias-separator-primary);
   margin: 0 6px;
+}
+
+/* A phone shows the first reading (counts, or token total) and the context ring; the second reading stays in the tooltip and dialog. */
+@media (max-width: 480px) {
+  .sep,
+  .second {
+    display: none;
+  }
 }

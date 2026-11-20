@@ -3,11 +3,10 @@
   --zone-min: 44px;
   display: grid;
   grid-template-columns: repeat(3, minmax(var(--zone-min), 1fr));
-  grid-template-rows: repeat(2, minmax(var(--zone-min), 1fr));
+  grid-template-rows: repeat(2, 56px);
   gap: 4px;
   box-sizing: border-box;
-  width: min(100%, 264px);
-  aspect-ratio: 16 / 9;
+  width: 100%;
   padding: 6px;
   border: 1px solid var(--dsw-alias-border-l1);
   border-radius: var(--dsw-radius-sm);
@@ -72,4 +71,11 @@
 .zone:disabled {
   cursor: default;
   opacity: 0.55;
+}
+
+/* A phone always shows toasts at the top, so there is nothing to place. */
+@media (max-width: 767px) {
+  .screen {
+    display: none;
+  }
 }
