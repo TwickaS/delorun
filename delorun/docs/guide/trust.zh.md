@@ -94,7 +94,7 @@ Delorun 尚未经过外部安全评审。维护者自己的评审、移除保护
 | Tailscale Funnel（不提供） | 互联网上任何人都能打开该地址。Tailscale 的 Funnel 服务器与协调服务能看到你电脑的名称、你的电脑与每台连接设备的 IP 地址、连接时间与流量大小。Funnel 把加密流量转交给你的电脑，由 Tailscale 的软件在那里解密。除非开启 Tailnet Lock，Tailscale 可以向你的 tailnet 添加设备，并为该地址获取证书。 |
 | 你自己域名上的自托管中继（不提供） | 你的中继能看到该地址、你的电脑与每台设备的 IP 地址、连接时间与流量大小。它可以拒绝或断开连接。只要你域名的 DNS 仅允许你的电脑为其获取证书，且你的电脑自行应答证书挑战，它转交的就是它无法读取、只有你的电脑才能解密的加密流量。Let's Encrypt 与你的 DNS 提供方仍可能影响你域名的证书。 |
 
-无论哪个选项，设备都只有在你于电脑上批准之后才能打开你的聊天。Delorun 也不提供通行密钥或自带登录提供方的登录方式。
+无论哪个选项，设备都只有在你于电脑上批准之后才能打开你的聊天。Delorun 也不提供通行密钥或自带登录提供方的登录方式。 A phone can still confirm a strong action with a passkey (Face ID), which confirms one action and does not sign the phone in ([Confirm with Face ID](reach.zh.md#confirm-with-face-id)).
 
 <details>
 <summary>边界情况</summary>

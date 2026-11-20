@@ -87,7 +87,7 @@ The table also describes two options that Delorun does not offer, so you can com
 | Tailscale Funnel (not offered) | Anyone on the internet can open the address. Tailscale's Funnel servers and coordination service see your computer's name, the IP addresses of your computer and of each device that connects, connection times and traffic volume. Funnel passes encrypted traffic to your computer, where Tailscale's software decrypts it. Tailscale can add a device to your tailnet unless Tailnet Lock is on, and it obtains the address's certificate. |
 | A relay you host on your own domain (not offered) | Your relay sees the address, the IP addresses of your computer and of each device, connection times and traffic volume. It can refuse or drop connections. It passes encrypted traffic it cannot read, which only your computer decrypts, as long as your domain's DNS lets only your computer obtain certificates for it and your computer answers its own certificate challenges. Let's Encrypt and your DNS provider can still affect certificates for your domain. |
 
-Whatever the option, a device opens your chats only after you approve it at your computer. Delorun offers no sign-in with a passkey or your own sign-in provider either.
+Whatever the option, a device opens your chats only after you approve it at your computer. Delorun offers no sign-in with a passkey or your own sign-in provider either. A phone can still confirm a strong action with a passkey (Face ID), which confirms one action and does not sign the phone in ([Confirm with Face ID](reach.md#confirm-with-face-id)).
 
 <details>
 <summary>Edge cases</summary>

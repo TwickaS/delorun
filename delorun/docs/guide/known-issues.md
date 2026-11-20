@@ -21,6 +21,8 @@ This page lists the rough edges you may meet in the preview. Each one says what 
 - [Commands refused with an open network](#commands-refused-with-an-open-network)
 - [Commands refused without bubblewrap](#commands-refused-without-bubblewrap)
 - [The Docker warning in doctor](#the-docker-warning-in-doctor)
+- [Face ID on phones](#face-id-on-phones)
+- [Several agents at once](#several-agents-at-once)
 - [Installing a plugin](#installing-a-plugin)
 - [Documentation languages](#documentation-languages)
 
@@ -85,6 +87,26 @@ This page lists the rough edges you may meet in the preview. Each one says what 
 **What happens.** On a computer without Docker, `delorun doctor` prints `warn docker: Docker is not installed; the Docker shapes stay unavailable, and native workspaces are unaffected.` Delorun offers no Docker workspaces, so the warning describes nothing you need.
 
 **What to do.** Nothing. Docker is optional.
+
+## Face ID on phones
+
+**What happens.** Face ID has three rough edges.
+
+- A browser that cannot make a platform passkey, such as some versions of Firefox, says "This browser cannot use Face ID here" and gets no passkey.
+- If you change your reach address, the passkeys made on the old address stop working. The phone says to set Face ID up again, and the old passkeys stay listed.
+- While no PIN is set and no passkey is enrolled, an approved phone can still save or remove a model key with no extra check.
+
+**What to do.** In a browser without a platform passkey, confirm actions with the PIN or at your computer. After a change of address, set Face ID up again on each phone. To make a phone confirm model-key changes, set a PIN or enrol a passkey ([Confirm with Face ID](reach.md#confirm-with-face-id)).
+
+## Several agents at once
+
+**What happens.** Multiview has three rough edges.
+
+- With six busy panes, the main chat's first words can take up to about twice as long to appear.
+- A notice from an agent, such as a refused question, is recorded in the agent's log but not yet shown in the chat.
+- A Claude Code or Codex chat still shows upstream's own text for the hand-off, and a failure can appear as two red lines.
+
+**What to do.** Pin fewer agents if the main chat feels slow. The extra text and the doubled line change nothing about the run ([Watch several agents at once](agents.md#watch-several-agents-at-once)).
 
 ## Installing a plugin
 

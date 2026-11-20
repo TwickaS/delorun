@@ -12,8 +12,8 @@
   en: a842818431de962e
   zh: 65f76f8d7302cbbd
 /known-issues/contents:
-  en: aa909ef871c466bd
-  zh: e16a98189d1f0166
+  en: 9bde38cdd754b000
+  zh: 695c3d471b1b9a72
 /known-issues/where-delorun-runs:
   en: 3b558c1809beffab
   zh: 8706ea6cb8937a55
@@ -40,7 +40,13 @@
   zh: bfeb12add4f96a51
 /known-issues/the-docker-warning-in-doctor:
   en: bfeb799854f52ae6
-  zh: 9f0e2631fdb29b7b
+  zh: b3cb3d66ec7d5ef2
+/known-issues/face-id-on-phones:
+  en: 645d75fa01000a21
+  zh: 645d75fa01000a21
+/known-issues/several-agents-at-once:
+  en: 58dd211ed52bdd79
+  zh: d2a9b768abe68f85
 /known-issues/installing-a-plugin:
   en: e2725152050aece5
   zh: 144143fff4ccab79
