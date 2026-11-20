@@ -10,7 +10,7 @@
  */
 import { execFile } from 'node:child_process'
 import { devNull } from 'node:os'
-import { dirname } from 'node:path'
+import { delimiter, dirname } from 'node:path'
 import { MAX_COMMIT_SUBJECT, STACKS, type LastCommit, type Stack } from './wire.ts'
 
 /** The stack each marker file name belongs to; `.csproj` and `.sln` files are matched by suffix in {@link stacksOf}. */
@@ -103,9 +103,13 @@ export const runGit: GitReader = limitGit((args, env) => new Promise((resolve) =
  * @param read - runs Git; the installed `git` outside tests.
  * @param environment - the process environment the run takes `PATH` and `HOME` from.
  * @returns the subject and time of `HEAD`, or undefined for a repository with no commit, a missing `git`, a repository
- * Git refuses to read, or output that does not parse.
+ * Git refuses to read, a folder whose parent path holds the list separator of `GIT_CEILING_DIRECTORIES`, or output that
+ * does not parse.
  */
 export async function lastCommitOf(folder: string, read: GitReader = runGit, environment: NodeJS.ProcessEnv = process.env): Promise<LastCommit | undefined> {
+  // `GIT_CEILING_DIRECTORIES` is a list split on the path delimiter and has no escape, so a parent path that holds the
+  // delimiter would leave Git free to search above the folder.
+  if (dirname(folder).includes(delimiter)) return undefined
   // Nothing outside the repository's own folder applies: no system or user configuration, no replacement refs, no lazy
   // fetch from a remote the repository names (which would start its `core.sshCommand`), no transport, and no search for a
   // repository above the folder. The arguments override the repository's settings that could run a program.

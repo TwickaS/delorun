@@ -1,8 +1,8 @@
 /** The latest commit read by the installed `git`: from a real repository, a non-repository and a missing `git`. */
 import { execFile } from 'node:child_process'
-import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { delimiter, join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { previewFolder } from '../src/places.ts'
@@ -63,6 +63,35 @@ describe('the latest commit from the installed git', () => {
     const answer = await previewFolder(child, { roots: ['~'], timeMs: 2000, env: { ...process.env, HOME: home }, warn: vi.fn() })
     expect(answer).toMatchObject({ result: 'folder', git: true })
     expect(answer).not.toHaveProperty('lastCommit')
+  })
+
+  it.skipIf(process.platform === 'win32')('does not read a repository above a folder whose parent path holds the ceiling list separator', async () => {
+    const { home } = await repo('par')
+    const child = join(home, 'par', `a${delimiter}b`, 'child')
+    await mkdir(join(child, '.git'), { recursive: true })
+    const env = { ...process.env, HOME: home }
+    expect(await lastCommitOf(child, runGit, env)).toBeUndefined()
+    const answer = await previewFolder(child, { roots: ['~'], timeMs: 2000, env, warn: vi.fn() })
+    expect(answer).toMatchObject({ result: 'folder', git: true })
+    expect(answer).not.toHaveProperty('lastCommit')
+  })
+
+  it.skipIf(process.platform === 'win32')('starts no program to check the signature of a signed HEAD commit, whatever the repository sets', async () => {
+    const { folder, env, run } = await repo('signed')
+    const marker = join(scratch, 'gpg-ran')
+    const program = join(scratch, 'gpg.sh')
+    await writeFile(program, `#!/bin/sh\ntouch ${marker}\nexit 1\n`)
+    await chmod(program, 0o755)
+    const tree = await run('rev-parse', 'HEAD^{tree}')
+    const commit = `tree ${tree}\nauthor T <t@t> 86400 +0000\ncommitter T <t@t> 86400 +0000\ngpgsig -----BEGIN PGP SIGNATURE-----\n \n x\n -----END PGP SIGNATURE-----\n\nsigned subject\n`
+    const hashing = promisify(execFile)('git', ['hash-object', '-t', 'commit', '-w', '--stdin'], { cwd: folder, env })
+    hashing.child.stdin?.end(commit)
+    const hash = (await hashing).stdout.trim()
+    await run('update-ref', 'HEAD', hash)
+    await run('config', 'log.showSignature', 'true')
+    await run('config', 'gpg.program', program)
+    expect(await lastCommitOf(folder, runGit, env)).toMatchObject({ subject: 'signed subject' })
+    await expect(stat(marker)).rejects.toThrow()
   })
 
   it('does not treat a folder with a bare repository\'s files and an empty .git as a bare repository', async () => {
