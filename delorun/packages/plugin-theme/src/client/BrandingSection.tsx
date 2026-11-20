@@ -10,7 +10,7 @@ import { IconPicker } from '@delorun/brand/icon-picker'
 import type { IconPickerLocaleKey } from '@delorun/brand/icon-picker-locales'
 import { checkGreeting, checkImageBytes, checkName, checkUpload, DEFAULT_GREETING, STUDIO_ICON_UPLOAD_PATH, ICON_TYPE_HEADER, DEFAULT_STORED_BRANDING, GREETING_PRESETS, resolveBranding, type StoredBranding } from '@delorun/brand/branding'
 import { cardCss, ChoiceGroup, RadioList, SettingHeading, SettingsCard } from '@delorun/settings-controls'
-import { useState, type ChangeEvent } from 'react'
+import { useRef, useState, type ChangeEvent } from 'react'
 import { DEFAULT_SETTINGS, type ThemeSettings } from '../config.ts'
 import { BrandIcon, readPicked } from './BrandIcon.tsx'
 import { publishBranding, useBranding } from './branding-store.ts'
@@ -61,6 +61,7 @@ export function BrandingSection({ t, settings, pickerT }: BrandingSectionProps) 
   const stored = (snapshot.value ?? DEFAULT_SETTINGS).branding
   const view = useBranding()
   const [problem, setProblem] = useState<{ readonly field: 'name' | 'greeting' | 'icon'; readonly text: string } | undefined>()
+  const fileInput = useRef<HTMLInputElement | null>(null)
   const [picking, setPicking] = useState(false)
   const [customGreeting, setCustomGreeting] = useState(false)
   const write = (next: Partial<StoredBranding>): void => {
@@ -146,10 +147,8 @@ export function BrandingSection({ t, settings, pickerT }: BrandingSectionProps) 
         </div>
         <div className={css.iconActions}>
           <Button variant="secondary" disabled={disabled} onClick={() => { setPicking(true) }}>{t('icon.pick')}</Button>
-          <label className={css.file}>
-            <span>{t('icon.choose')}</span>
-            <input type="file" accept="image/png,image/jpeg,image/webp" disabled={disabled} onChange={(event) => { void upload(event) }} />
-          </label>
+          <Button variant="secondary" disabled={disabled} onClick={() => { fileInput.current?.click() }}>{t('icon.choose')}</Button>
+          <input ref={fileInput} hidden type="file" accept="image/png,image/jpeg,image/webp" disabled={disabled} onChange={(event) => { void upload(event) }} />
         </div>
         {problem?.field === 'icon' && <p className={cardCss.failure} role="alert">{problem.text}</p>}
       </section>
@@ -189,7 +188,9 @@ export function BrandingSection({ t, settings, pickerT }: BrandingSectionProps) 
       </section>
       <section className={cardCss.block} aria-labelledby="delorun-branding-signin">
         <SettingHeading id="delorun-branding-signin" title={t('signin')} lead={t('signin.lead')} />
-        <Button variant="ghost" disabled={disabled} onClick={() => { setProblem(undefined); setCustomGreeting(false); write({ ...DEFAULT_STORED_BRANDING }) }}>{t('reset')}</Button>
+        <div className={css.iconActions}>
+          <Button variant="secondary" disabled={disabled} onClick={() => { setProblem(undefined); setCustomGreeting(false); write({ ...DEFAULT_STORED_BRANDING }) }}>{t('reset')}</Button>
+        </div>
       </section>
       {failed && <p className={cardCss.failure} role="alert">{t('saveFailed')}</p>}
       {picking && (

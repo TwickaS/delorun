@@ -39,9 +39,9 @@
   display: flex;
   flex-direction: column;
   padding: 0 var(--delorun-space-7);
-  border: 0.5px solid var(--dsw-alias-border-l1);
+  border: 0.5px solid var(--dsw-alias-settings-card-stroke);
   border-radius: var(--dsw-radius-lg);
-  background: var(--dsw-alias-bg-layer-1);
+  background: var(--dsw-alias-settings-card-fill);
   font-size: var(--dsw-font-xs-13-font-size);
   line-height: var(--dsw-font-xs-13-line-height);
   color: var(--dsw-alias-label-primary);

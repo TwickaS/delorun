@@ -310,6 +310,17 @@ describe('PluginManagerPage', () => {
     expect(document.querySelector('[data-plugin-bar]')).toBeNull()
   })
 
+  it('starts every view at the top of the shared scrolling page', () => {
+    const { navigation, hidePage } = renderTab({ packages: [pkg()] })
+    const body = document.querySelector('[data-plugin-body]')!
+    act(() => { body.scrollTop = 291; fireEvent.scroll(body) })
+    act(() => { navigation.actions.setView({ kind: 'package', name: pkg().name }) })
+    expect(body.scrollTop).toBe(0)
+    hidePage()
+    act(() => { navigation.actions.setView({ kind: 'list' }) })
+    expect(document.querySelector('[data-plugin-body]')).toBeNull()
+  })
+
   it('keeps the Installed tab panel through loading and the More list out of the tabs, and returns a More plugin opened from Discover to Discover', () => {
     const inspector = '@deepseek-ai/dsh-experimental-inspector-profile'
     const { navigation, set } = renderTab({ status: 'loading', packages: [] }, {}, {
@@ -548,7 +559,7 @@ describe('PluginManagerPage', () => {
     const facts = (): string[] => [...document.querySelectorAll('[data-plugin-source] dt, [data-plugin-source] dd')].map(node => node.textContent)
     act(() => { b.navigation.actions.setView({ kind: 'package', name: 'dsh-better-sidebar' }) })
     expect(within(document.querySelector('[data-plugin-source]') as HTMLElement).getByRole('heading').textContent).toBe(en.sourceTitle)
-    expect(facts()).toEqual([en.sourceSpec, 'github:someone/dsh-better-sidebar', en.sourceVersion, '0.16.0'])
+    expect(facts()).toEqual([en.sourceSpec, 'github:someone/dsh-better-sidebar'])
     act(() => { b.navigation.actions.setView({ kind: 'package', name: 'dsh-official' }) })
     expect(facts()).toEqual([en.sourceSpec, en.sourceBuiltIn])
     // A profile dependency the installation also supplies loads the installation's copy.
@@ -1227,11 +1238,11 @@ describe('PluginManagerPage', () => {
     fireEvent.click(screen.getByRole('button', { name: en.openDetail.replace('{name}', 'dsh-better-sidebar') }))
     const listed = document.querySelector('[data-plugin-row="include:sidebar"]') as HTMLElement
     expect(within(listed).getByText('Sidebar component')).toBeTruthy()
-    expect(within(listed).getByText('sidebar', { selector: 'code' })).toBeTruthy()
+    expect(within(listed).getByText('Sidebar component').getAttribute('title')).toBe(`sidebar\n${moduleName}`)
     setLanguage(zh)
     expect(within(listed).getAllByText('sidebar')).toHaveLength(1)
     expect(within(listed).queryByText('sidebar', { selector: 'code' })).toBeNull()
-    expect(within(listed).getByText(moduleName, { selector: 'code' })).toBeTruthy()
+    expect(within(listed).getByText('sidebar').getAttribute('title')).toBe(moduleName)
 
     fireEvent.click(within(listed).getByRole('button', { name: zh.configureRow.replace('{name}', 'sidebar') }))
     const detail = document.querySelector('[data-plugin-row-detail="dsh-better-sidebar#sidebar"]') as HTMLElement
@@ -1271,8 +1282,7 @@ describe('PluginManagerPage', () => {
       expect(document.querySelectorAll('[data-plugin-row]')).toHaveLength(1)
       expect(screen.getByRole('button', { name: zh.configureRow.replace('{name}', '导航组件') })).toBeTruthy()
     }
-    expect(screen.getByText('sidebar')).toBeTruthy()
-    expect(screen.getByText('@acme/dsh-sidebar-widget')).toBeTruthy()
+    expect(screen.getByText('导航组件').getAttribute('title')).toBe('sidebar\n@acme/dsh-sidebar-widget')
     expect(screen.getByText('侧边导航')).toBeTruthy()
     expect(screen.getByText(zh.metadataError.replace('{error}', error))).toBeTruthy()
     const toggle = screen.getByRole('switch', { name: zh.partToggle.replace('{name}', '导航组件') })

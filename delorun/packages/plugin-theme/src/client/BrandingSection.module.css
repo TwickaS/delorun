@@ -25,25 +25,3 @@
   flex-wrap: wrap;
   margin-top: var(--dsw-space-3, 12px);
 }
-
-.file {
-  display: inline-flex;
-  align-items: center;
-  min-height: 36px;
-  padding: 0 var(--dsw-space-3, 12px);
-  border: 1px solid var(--dsw-color-border-default, currentColor);
-  border-radius: var(--dsw-radius-m, 8px);
-  cursor: pointer;
-}
-
-.file input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-}
-
-.file:focus-within {
-  outline: 2px solid var(--dsw-alias-brand-primary, currentColor);
-  outline-offset: 2px;
-}

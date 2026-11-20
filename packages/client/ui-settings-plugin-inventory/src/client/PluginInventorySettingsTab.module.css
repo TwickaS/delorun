@@ -168,14 +168,10 @@
   min-width: 0;
 }
 
-.cardTitle,
-.cardIdentity {
+.cardTitle {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.cardTitle {
   flex: 1;
   min-width: 0;
   font-size: 14px;
@@ -199,32 +195,11 @@
   display: block;
 }
 
-/* The entry id is metadata, not prose: a code chip in the card's bottom-left
-   corner whose left edge lines up with the title. */
-.cardMeta {
-  display: flex;
-  margin-top: auto;
-  padding-top: 8px;
-}
-
-/* The Loader entry id keeps one size in the card chip and the row it expands into;
-   the collapsed chip stays on the quieter label tier, while the expanded row carries
-   the card's primary value. */
-.cardIdentity,
+/* The Loader entry id appears in the expanded card, not on the collapsed one. */
 .entryValue {
   font-family: var(--ds-font-family-code);
   font-size: 12px;
   line-height: 18px;
-}
-
-.cardIdentity {
-  display: block;
-  box-sizing: border-box;
-  max-width: 100%;
-  border-radius: var(--dsw-radius-xs);
-  padding: 1px 6px;
-  background: var(--dsw-alias-bg-module-platform);
-  color: var(--dsw-alias-label-secondary);
 }
 
 .cardTrailing {
