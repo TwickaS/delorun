@@ -63,7 +63,7 @@ Delorun 把一切都保存在一个文件夹 `~/.delorun` 中，只有你能打�
 <details>
 <summary>边界情况</summary>
 
-- 如果你运行的是 macOS，那么启动器会在下载任何东西之前停止，并说明 Delorun 尚不能在 macOS 上运行。请使用 Linux，或通过 WSL2 使用 Windows。
+- 如果你运行的是 macOS，那么启动器会在下载任何东西之前停止，并说明 Delorun 不能在 macOS 上运行。请使用 Linux，或通过 WSL2 使用 Windows。
 - 如果你运行的是原生 Windows，那么启动器会在下载任何东西之前停止，并说明 Delorun 在 WSL2 中运行。请按照[通过 WSL2 使用 Windows](#windows-through-wsl2) 操作。
 - 如果你的电脑运行的是发布版本未列出的其他系统或处理器，那么启动器会以 `PLATFORM_NOT_RELEASED` 停止，且不安装任何东西。
 - 如果你的 Node 低于 24.9，那么启动器会以 `Delorun needs Node 24.9 or newer to start` 停止，并指出你的版本。请从 [nodejs.org](https://nodejs.org/en/download) 安装较新的 Node，然后再次运行 `npx delorun`。
