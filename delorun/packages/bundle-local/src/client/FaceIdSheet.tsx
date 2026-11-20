@@ -112,7 +112,7 @@ export function FaceIdSheetBody({ t, action, kind, api, browser, hasPasskey, fal
     ...action.context?.workspace === undefined ? [] : [[t('sheet.workspace'), action.context.workspace] as const],
     ...action.context?.chat === undefined ? [] : [[t('sheet.chat'), action.context.chat] as const],
     [t('sheet.allows'), action.body],
-    [t('sheet.lasts'), faceIdLastsLine(t, action)],
+    [t('sheet.lasts'), faceIdLastsLine(t, action, usable ? 'passkey' : 'pin')],
   ]
   return <>
     <header className={css.header}>
