@@ -187,7 +187,7 @@ function continueSender(scope: Context, idleWaitMs: number): (sessionId: string)
  */
 export async function continueAfterUpdate(scope: Context, send: (sessionId: string) => Promise<StoppedChatState>, automatic: boolean): Promise<void> {
   const profile = scope.get('profileContext')
-  if (profile === undefined || !automatic) return
+  if (profile === undefined) return
   const path = stoppedPath(dirname(updateResultPath(profile.home, profile.name)))
   await withStoppedLock(path, async () => {
     const record = await readStopped(path)
@@ -196,7 +196,8 @@ export async function continueAfterUpdate(scope: Context, send: (sessionId: stri
     const outcome = await readUpdateResult(updateResultPath(profile.home, profile.name)).catch(() => undefined)
     if (outcome === undefined || outcome.to !== record.to) return
     // Only an update that restarted the Host continues the chats by itself; any other end leaves each chat its Continue button.
-    if (outcome.outcome !== 'committed' && outcome.outcome !== 'rolled-back') {
+    // The setting switched off since the stop, or any end but a restart: each chat gets its Continue button and nothing is sent.
+    if (!automatic || (outcome.outcome !== 'committed' && outcome.outcome !== 'rolled-back')) {
       await writeStopped(path, { ...record, chats: record.chats.map(chat => chat.state === 'stopped' ? { ...chat, state: 'skipped-running' as const } : chat) })
       return
     }

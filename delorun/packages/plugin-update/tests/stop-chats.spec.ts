@@ -288,12 +288,13 @@ describe('the updated Host continuing the stopped chats', () => {
     expect((await readStopped(recordPath(update)))?.chats).toEqual([{ ...RUNNING[0], state: 'skipped-running' }])
   })
 
-  it('sends nothing while the setting is off, or when the record was made with it off, and leaves the chats stopped for the Continue button', async () => {
+  it('with the setting switched off since the stop, sends nothing and gives each chat its Continue button; a record made with it off is left whole', async () => {
     const off = await after(true, {}, false)
     await off.run()
+    expect(off.sent).toEqual([])
+    expect((await readStopped(recordPath(off.update)))?.chats.map(chat => chat.state)).toEqual(['skipped-running', 'skipped-running'])
     const recordedOff = await after(false)
     await recordedOff.run()
-    expect(off.sent).toEqual([])
     expect(recordedOff.sent).toEqual([])
     expect((await readStopped(recordPath(recordedOff.update)))?.chats.map(chat => chat.state)).toEqual(['stopped', 'stopped'])
   })
