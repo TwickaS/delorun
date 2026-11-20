@@ -75,3 +75,16 @@
     padding: 0 var(--delorun-space-4);
   }
 }
+
+/* On a phone the tiles are narrow: the chosen tile is marked by its accent border alone, so the label has the whole foot, and the specimen sentence goes. */
+@media (max-width: 480px) {
+  .typeTiles,
+  .densityTiles {
+    --delorun-tile-mark: none;
+    --delorun-tile-label-align: center;
+  }
+
+  .specimenLine {
+    display: none;
+  }
+}

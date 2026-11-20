@@ -6,6 +6,8 @@
  */
 :root {
   --delorun-touch-target: 44px;
+  --delorun-stepper-arrow-width: 20px;
+  --delorun-stepper-arrow-height: 16px;
 }
 
 @media (pointer: coarse), (max-width: 767px) {
@@ -51,6 +53,13 @@
   [data-settings-anchor] :is(button:not([role='switch']), [role='tab'], summary, input[type='range']) {
     min-height: var(--delorun-touch-target);
   }
+
+  /* The stepper's two arrows share the 36px pill, so each is as tall as the pill allows instead of 44px. */
+  [data-settings-anchor] [class*='_arrows'] button {
+    width: var(--delorun-stepper-arrow-width);
+    height: var(--delorun-stepper-arrow-height);
+    min-height: var(--delorun-stepper-arrow-height);
+  }
 }
 
 @media (pointer: coarse), (max-width: 767px) {
@@ -66,5 +75,32 @@
     width: max(100%, var(--delorun-touch-target));
     height: max(100%, var(--delorun-touch-target));
     transform: translate(-50%, -50%);
+  }
+}
+
+/*
+ * The foot's icon buttons are 44px on a phone, and six of them do not fit the 256px drawer in one row. They sit in three
+ * even columns instead, so the second row is not a short row hugging the left edge. The foot's wrappers give up their
+ * own boxes so every button becomes a grid item; a labelled foot line keeps a full row.
+ */
+@media (max-width: 767px) {
+  [class*='_footRow']:has(> [class*='_footerActionsInline']) {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    justify-items: center;
+    gap: 0;
+  }
+
+  [class*='_footRow']:has(> [class*='_footerActionsInline']) > :is([class*='_settingsArea'], [class*='_footPanels'], [class*='_footSpacer']) {
+    display: contents;
+  }
+
+  [class*='_footRow']:has(> [class*='_footerActionsInline']) [class*='_triggerRow'] {
+    justify-content: center;
+  }
+
+  [class*='_footRow']:has(> [class*='_footerActionsInline']) [data-sidebar-foot-line] {
+    grid-column: 1 / -1;
+    justify-self: stretch;
   }
 }

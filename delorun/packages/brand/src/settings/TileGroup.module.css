@@ -69,9 +69,7 @@
   min-width: 0;
   /* A page that hides the radio mark can centre the label: `--delorun-tile-label-align: center`. */
   text-align: var(--delorun-tile-label-align, start);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: break-word;
 }
 
 /* A radio mark: a ring, filled with the accent when chosen. A page can hide it where the chosen tile is marked another way:

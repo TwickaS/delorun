@@ -18,7 +18,6 @@
   color: var(--dsw-alias-label-tertiary);
   font-family: inherit;
   font-size: var(--dsh-content-font-size-secondary, 13px);
-  font-variant-numeric: tabular-nums;
   line-height: calc(20px + var(--dsh-content-font-delta-secondary, 0px));
   white-space: nowrap;
   cursor: pointer;
@@ -93,7 +92,6 @@
 .figures {
   margin-left: auto;
   font-weight: 500;
-  font-variant-numeric: tabular-nums;
   color: var(--dsw-alias-label-primary);
 }
 
@@ -171,7 +169,6 @@
 
 .row dd {
   margin: 0;
-  font-variant-numeric: tabular-nums;
   color: var(--dsw-alias-label-primary);
 }
 

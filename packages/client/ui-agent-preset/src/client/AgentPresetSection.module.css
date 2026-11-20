@@ -239,9 +239,9 @@
    tech, and the card offers it on hover when it is actually cut off. The
    description does not grow to fill the card — `-webkit-line-clamp` on a
    flex-stretched box leaves the clamp height and the box height disagreeing,
-   so auto margins center the text between the header and footer instead. */
+   so the text sits directly under the title and the footer takes the spare height. */
 .cardDesc {
-  margin-block: auto;
+  margin-block: 0 auto;
   font-size: 13px;
   line-height: 1.55;
   color: var(--dsw-alias-label-secondary);
