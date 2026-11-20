@@ -47,7 +47,7 @@ import { refuseMachinePaths, stabilizeDeployedSpecifiers } from './pack-specifie
 import { linkCarriedNeeds, nestedSingleCopies, undeclaredPeerNeeds, type PackLayout } from './pack-imports.ts'
 import { installedReviewCopyProblems } from './review-copy.ts'
 import { listStagedTree, unsignedEnvelopeText } from './tree.ts'
-import { packCandidates, readWorkspacePackages, selectClosurePackages } from './plugin-set.ts'
+import { packCandidates, readWorkspacePackages, selectClosurePackages, type WorkspacePackage } from './plugin-set.ts'
 
 /** What a pack build reads from the package manager and the registry; tests supply fakes. */
 export interface PackSources {
@@ -625,21 +625,16 @@ export interface ReleasePackRequest {
 }
 
 /**
- * Build every pack of a release and write the archives and the unsigned packs file beside the closures.
+ * The pack step's sources for a release: `pnpm deploy` in the exported source tree, the lockfile's pins and the staged
+ * closure's `node_modules`.
  * @param request - the build facts.
- * @returns the number of packs built.
+ * @param packages - the source tree's workspace packages.
+ * @param lockfile - the text of the source tree's `pnpm-lock.yaml`.
+ * @returns the sources {@link buildPack} reads.
  */
-export async function buildReleasePacks(request: ReleasePackRequest): Promise<number> {
-  const packages = readWorkspacePackages(request.source)
-  const selection = selectClosurePackages(packages)
-  const carried = new Set<string>()
-  for (const scope of await readdir(join(request.stage(request.platforms[0]!), 'app', 'node_modules'))) {
-    if (scope.startsWith('@')) for (const name of await readdir(join(request.stage(request.platforms[0]!), 'app', 'node_modules', scope))) carried.add(`${scope}/${name}`)
-    else carried.add(scope)
-  }
-  const lockfile = await readFile(join(request.source, 'pnpm-lock.yaml'), 'utf8')
+export function releasePackSources(request: Pick<ReleasePackRequest, 'source' | 'env' | 'targets' | 'stage'>, packages: readonly WorkspacePackage[], lockfile: string): PackSources {
   const directories = new Map(packages.map(each => [each.name, each.dir]))
-  const sources: PackSources = {
+  return {
     declaredPeers: async (name) => {
       const directory = directories.get(name)
       if (directory === undefined) throw new Error(`${name} is not a workspace package`)
@@ -659,6 +654,22 @@ export async function buildReleasePacks(request: ReleasePackRequest): Promise<nu
       return removeCommandLinks(directory)
     },
   }
+}
+
+/**
+ * Build every pack of a release and write the archives and the unsigned packs file beside the closures.
+ * @param request - the build facts.
+ * @returns the number of packs built.
+ */
+export async function buildReleasePacks(request: ReleasePackRequest): Promise<number> {
+  const packages = readWorkspacePackages(request.source)
+  const selection = selectClosurePackages(packages)
+  const carried = new Set<string>()
+  for (const scope of await readdir(join(request.stage(request.platforms[0]!), 'app', 'node_modules'))) {
+    if (scope.startsWith('@')) for (const name of await readdir(join(request.stage(request.platforms[0]!), 'app', 'node_modules', scope))) carried.add(`${scope}/${name}`)
+    else carried.add(scope)
+  }
+  const sources = releasePackSources(request, packages, await readFile(join(request.source, 'pnpm-lock.yaml'), 'utf8'))
   const entries: PackEntry[] = []
   for (const candidate of packCandidates(packages, selection, carried)) {
     const manifest = JSON.parse(await readFile(join(request.source, candidate.dir, 'package.json'), 'utf8')) as { version: string, delorun?: { packNatives?: unknown } }

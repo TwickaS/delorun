@@ -46,6 +46,7 @@ import { semanticVersion } from '@delorun/release-formats/brands'
 import { pruneForeignPrebuilds } from './closure/prune.ts'
 import { archiveClosure, type ClosureFiles } from './closure/archive-closure.ts'
 import { buildReleasePacks } from './closure/packs.ts'
+import { DEPLOY_METADATA } from './closure/pack-specifiers.ts'
 import { artifactDirectories, artifactProblems, isArtifactSource, type ArtifactSource } from './closure/artifacts.ts'
 import { claimBuildRoot } from './closure/build-root.ts'
 import { writeDataFormats } from './closure/data-formats.ts'
@@ -58,14 +59,11 @@ import { isWithin, outputRefs } from './rebuild/record.ts'
 import { readImagesRecipe } from './images/build.ts'
 import { writeReleaseSbom } from './sbom/release-sbom.ts'
 
-/** pnpm's deploy metadata, which the closure does not carry: it names local paths and install times. */
-const DEPLOY_METADATA = ['pnpm-workspace.yaml', 'node_modules/.modules.yaml', 'node_modules/.pnpm-workspace-state-v1.json', 'node_modules/.pnpm']
-
 /** What the closure keeps of the deployed root package: its dependency manifest, lockfile and dependencies. */
 const ROOT_PACKAGE_KEPT = ['package.json', 'pnpm-lock.yaml', 'node_modules']
 
-/** pnpm's `--os`, `--cpu` and `--libc` selection of each platform's optional dependencies. */
-const TARGETS: Readonly<Record<RuntimePlatform, readonly string[]>> = {
+/** pnpm's `--os`, `--cpu` and `--libc` selection of each platform's optional dependencies; the pack probe uses it too. */
+export const TARGETS: Readonly<Record<RuntimePlatform, readonly string[]>> = {
   'linux-x64': ['--os=linux', '--cpu=x64', '--libc=glibc'],
   'linux-arm64': ['--os=linux', '--cpu=arm64', '--libc=glibc'],
   'darwin-x64': ['--os=darwin', '--cpu=x64'],

@@ -25,8 +25,10 @@ const integrity = (bytes: Buffer): string => `sha512-${createHash('sha512').upda
 
 /**
  * What `pnpm deploy` writes for a workspace package it injects: `file:///` specifiers and lockfile keys that name the
- * deployment's folder, a `directory` relative to it, and a workspace file listing a patch by path. The path is derived
- * from the deployment's own folder, so two builds in different temporary folders write different text.
+ * deployment's folder, a `directory` relative to it, a workspace file listing a patch by path, and the install state
+ * (`.modules.yaml`, `.pnpm-workspace-state-v1.json` and `.pnpm/lock.yaml`) holding the deployment's folder, a store
+ * folder and a timestamp. Each is derived from the deployment's own folder and the clock, so two builds in different
+ * temporary folders write different text.
  */
 function injectedByPnpm(directory: string): Record<string, string> {
   const source = `${dirname(directory)}/source/packages/util/brand`
@@ -34,6 +36,9 @@ function injectedByPnpm(directory: string): Record<string, string> {
   return {
     'package.json': JSON.stringify({ name: '@delorun/demo', version: '1.0.0', dependencies: { '@deepseek-ai/dsh-brand': injected, 'own-dep': '1.0.0' } }, null, 2),
     'node_modules/@deepseek-ai/dsh-brand/package.json': '{"name":"@deepseek-ai/dsh-brand","version":"0.2.2-rc.3"}',
+    'node_modules/.modules.yaml': `prunedAt: ${new Date().toISOString()}\nstoreDir: ${dirname(directory)}/store/v11\n`,
+    'node_modules/.pnpm-workspace-state-v1.json': JSON.stringify({ lastValidatedTimestamp: Date.now(), projects: { [directory]: {} } }),
+    'node_modules/.pnpm/lock.yaml': `packages:\n  '${injected}':\n    resolution: {directory: ../..${source}, type: directory}\n`,
     'pnpm-workspace.yaml': `patchedDependencies:\n  x@1.0.0: >-\n    ../../..${source}.patch\n`,
     'pnpm-lock.yaml': `lockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    dependencies:\n      '@deepseek-ai/dsh-brand':\n        specifier: '${injected}'\n        version: '${injected}'\n      own-dep:\n        specifier: 1.0.0\n        version: 1.0.0\n\npackages:\n\n  '${injected}':\n    resolution: {directory: ../..${source}, type: directory}\n\n  own-dep@1.0.0:\n    resolution: {integrity: sha512-AAAA}\n\nsnapshots:\n\n  '${injected}': {}\n\n  own-dep@1.0.0: {}\n`,
   }
@@ -182,8 +187,10 @@ describe('a pack\'s metadata', () => {
     expect(lock).toContain("'@deepseek-ai/dsh-brand@0.2.2-rc.3':")
     expect(lock).toContain('resolution: { directory: node_modules/@deepseek-ai/dsh-brand, type: directory }')
     expect(lock).not.toMatch(/file:|\/tmp|delorun-pack-build/u)
-    expect(existsSync(join(deployed, 'pnpm-workspace.yaml'))).toBe(false)
-    expect(built.entry.variants.any!.files.map(file => file.path)).not.toContain('pnpm-workspace.yaml')
+    for (const path of ['pnpm-workspace.yaml', 'node_modules/.modules.yaml', 'node_modules/.pnpm-workspace-state-v1.json', 'node_modules/.pnpm']) {
+      expect(existsSync(join(deployed, path))).toBe(false)
+      expect(built.entry.variants.any!.files.map(file => file.path).filter(file => file === path || file.startsWith(`${path}/`))).toEqual([])
+    }
   })
 
   it.each([
@@ -191,9 +198,23 @@ describe('a pack\'s metadata', () => {
     ['a dependency naming a path outside the pack', { 'package.json': JSON.stringify({ name: '@delorun/demo', version: '1.0.0', optionalDependencies: { 'own-dep': 'link:../own' } }) }, /package\.json optionalDependencies\.own-dep: link:\.\.\/own/u],
     ['a lockfile key naming a home folder', { 'pnpm-lock.yaml': "packages:\n  'x@file:/home/someone/source/x':\n    resolution: {integrity: sha512-AAAA}\n" }, /pnpm-lock\.yaml packages > x@file:\/home\/someone\/source\/x: x@file:\/home\/someone\/source\/x/u],
     ['a lockfile directory outside the pack', { 'pnpm-lock.yaml': "packages:\n  x@1.0.0:\n    resolution: {directory: ../../../tmp/build/x, type: directory}\n" }, /pnpm-lock\.yaml packages > x@1\.0\.0 > resolution > directory: \.\.\/\.\.\/\.\.\/tmp\/build\/x/u],
+    ['a lockfile directory under a CI checkout', { 'pnpm-lock.yaml': "packages:\n  x@1.0.0:\n    resolution: {directory: /builds/ci/x, type: directory}\n" }, /pnpm-lock\.yaml packages > x@1\.0\.0 > resolution > directory: \/builds\/ci\/x/u],
+    ['a dependency naming a folder outside the usual roots', { 'package.json': JSON.stringify({ name: '@delorun/demo', version: '1.0.0', dependencies: { 'own-dep': '/__w/repo/own' } }) }, /package\.json dependencies\.own-dep: \/__w\/repo\/own/u],
+    ['a bundled dependency naming a build folder', { 'package.json': JSON.stringify({ name: '@delorun/demo', version: '1.0.0', bundleDependencies: ['delorun-release-build-x'] }) }, /package\.json bundleDependencies\.0: delorun-release-build-x/u],
     ['a Delorun package inside the pack naming a temporary folder', { 'node_modules/@delorun/inner/package.json': JSON.stringify({ name: '@delorun/inner', version: '1.0.0', dependencies: { 'own-dep': 'file:///tmp/y' } }), 'node_modules/@delorun/inner/index.js': 'export {}\n' }, /node_modules\/@delorun\/inner\/package\.json dependencies\.own-dep: file:\/\/\/tmp\/y/u],
   ])('refuses %s, naming the pack and the field', async (_label, stray, message) => {
     await expect(buildPack('@delorun/demo', '1.0.0', false, '0.1.0', PLATFORMS, 1_800_000_000, [], sources({ native: false, stray }), temp())).rejects.toThrow(message)
+  })
+
+  it('keeps the peer suffix of an injected package\'s lockfile entries, so two variants stay two entries', async () => {
+    const scratch = temp()
+    const injected = '@deepseek-ai/dsh-brand@file:///var/tmp/delorun-release-build-ab/source/brand'
+    const lock = `lockfileVersion: '9.0'\n\npackages:\n\n  '${injected}(react@18.0.0)':\n    resolution: {directory: ../../brand, type: directory}\n\n  '${injected}(react@19.0.0)':\n    resolution: {directory: ../../brand, type: directory}\n`
+    const stray = { ...injectedByPnpm(join(scratch, '@delorun__demo-linux-x64')), 'pnpm-lock.yaml': lock }
+    await buildPack('@delorun/demo', '1.0.0', false, '0.1.0', PLATFORMS, 1_800_000_000, [], sources({ native: false, stray }), scratch)
+    const written = readFileSync(join(scratch, '@delorun__demo-linux-x64', 'pnpm-lock.yaml'), 'utf8')
+    expect(written).toContain("'@deepseek-ai/dsh-brand@0.2.2-rc.3(react@18.0.0)':")
+    expect(written).toContain("'@deepseek-ai/dsh-brand@0.2.2-rc.3(react@19.0.0)':")
   })
 
   it('refuses an injected package the deployment does not carry, as it has no version to write', async () => {

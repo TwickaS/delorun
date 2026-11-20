@@ -6,9 +6,12 @@
  * different bytes and Changes showed a dependency change after every update.
  *
  * {@link stabilizeDeployedSpecifiers} rewrites those specifiers to the exact version of the package the pack carries in
- * its own `node_modules`, and deletes `pnpm-workspace.yaml` as the closure deletes its pnpm deploy metadata.
- * {@link machinePathProblems} then refuses any pack metadata that still names an absolute path, a `file://` URL, a path
- * outside the pack or a temporary or home folder.
+ * its own `node_modules`, and deletes {@link DEPLOY_METADATA}, the pnpm install state the closure deletes too: it holds
+ * the deployment's folder, the pnpm store's folder and timestamps, and a second lockfile with the `file:///` keys.
+ * {@link machinePathProblems} then refuses a pack that still carries any of it, or whose metadata still names an
+ * absolute path, a `file://` URL, a path outside the pack or a temporary or home folder. A lockfile `directory` is
+ * rewritten to `node_modules/<name>`, which is a folder the pack does not carry when that package is dropped from the pack as
+ * a closure peer; no pnpm runs on a pack, so the lockfile is documentation only.
  *
  * @module @delorun/release/closure/pack-specifiers
  */
@@ -19,19 +22,31 @@ import { isMap, isPair, isScalar, parseDocument, Scalar, visit } from 'yaml'
 /** The `package.json` fields whose values are dependency specifiers. */
 const DEPENDENCY_FIELDS = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'] as const
 
-/** A specifier or lockfile key `pnpm deploy` wrote for an injected package: `<name>@file:///<absolute path>`. */
-const INJECTED = /^(@[^@/]+\/[^@/]+|[^@/]+)@file:\/\/\/.+$/u
+/** The `package.json` fields that hold specifiers or bundled names and are checked too. */
+const OTHER_FIELDS = ['bundledDependencies', 'bundleDependencies', 'overrides', 'resolutions', 'pnpm'] as const
 
-/** pnpm's deploy metadata at a pack's root: it lists the source's patch files by path, so a pack does not carry it. */
-const WORKSPACE_FILE = 'pnpm-workspace.yaml'
+/**
+ * A specifier or lockfile key `pnpm deploy` wrote for an injected package: `<name>@file:///<absolute path>`, followed in
+ * a lockfile by the peer suffix `(<peer>@<version>)` of a variant. Groups: the name and the suffix.
+ */
+const INJECTED = /^(@[^@/]+\/[^@/]+|[^@/]+)@file:\/\/\/[^(]+((?:\(.*\))?)$/u
+
+/**
+ * What `pnpm deploy` leaves besides the deployed files, by path from the deployment (a folder takes everything under
+ * it): the workspace file lists the source's patch files by path, `.modules.yaml` and `.pnpm-workspace-state-v1.json`
+ * hold the deployment's and the store's absolute paths and timestamps, and `.pnpm` holds a second lockfile. The runtime
+ * closure and every pack delete them, because they differ per build and nothing reads them from an installed copy.
+ */
+export const DEPLOY_METADATA: readonly string[] = ['pnpm-workspace.yaml', 'node_modules/.modules.yaml', 'node_modules/.pnpm-workspace-state-v1.json', 'node_modules/.pnpm']
 
 /** Package scopes whose own `package.json` files a pack carries from the workspace, so their specifiers are checked too. */
-const OWN_PACKAGE_JSON = /^node_modules\/@(?:deepseek-ai|delorun)\/[^/]+\/package\.json$/u
+const OWN_PACKAGE_JSON = /(?:^|\/)node_modules\/@(?:deepseek-ai|delorun)\/[^/]+\/package\.json$/u
 
 /** Text that names a place on the build machine or outside the pack. Each entry is a description and a pattern. */
 const MACHINE_PATHS: readonly (readonly [string, RegExp])[] = [
   ['a file: or link: specifier that does not name a folder inside the pack', /(?:^|@|\s)(?:file|link|portal):(?!(?:\.\/)?node_modules\/)/u],
-  ['an absolute path', /(?<![\w.~:/-])\/(?:home|Users|root|tmp|var|private|mnt|opt|usr|etc|run|srv)\//u],
+  ['a file:// URL', /file:\/\//u],
+  ['an absolute path', /(?:^|@)\//u],
   ['a Windows drive path', /(?:^|[^\w])[A-Za-z]:[\\/]/u],
   ['a path outside the pack', /(?:^|[^\w.])\.\.[\\/]/u],
   ['a release build folder', /delorun-release-build/u],
@@ -63,7 +78,7 @@ async function bundledVersion(directory: string, name: string): Promise<string> 
  * @param directory - the deployment.
  */
 export async function stabilizeDeployedSpecifiers(directory: string): Promise<void> {
-  await rm(join(directory, WORKSPACE_FILE), { force: true })
+  for (const path of DEPLOY_METADATA) await rm(join(directory, path), { recursive: true, force: true })
   const manifestPath = join(directory, 'package.json')
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as Record<string, unknown>
   const versions = new Map<string, string>()
@@ -108,11 +123,16 @@ export async function stabilizeDeployedSpecifiers(directory: string): Promise<vo
       const name = typeof node.value === 'string' ? INJECTED.exec(node.value)?.[1] : undefined
       if (name === undefined) return
       const version = versions.get(name)!
-      node.value = key === 'key' ? `${name}@${version}` : version
+      const suffix = INJECTED.exec(node.value as string)![2]!
+      node.value = key === 'key' ? `${name}@${version}${suffix}` : `${version}${suffix}`
       node.type = Scalar.PLAIN
     },
   })
-  await writeFile(lockPath, document.toString({ lineWidth: 0, singleQuote: true }))
+  const rewritten = document.toString({ lineWidth: 0, singleQuote: true })
+  // Two peer variants of one injected package that differ only by a path the rewrite removed would become one key twice.
+  const duplicates = parseDocument(rewritten).errors
+  if (duplicates.length > 0) throw new Error(`rewriting the injected specifiers in ${lockPath} made the lockfile invalid: ${duplicates[0]!.message}`)
+  await writeFile(lockPath, rewritten)
 }
 
 /** One string found to name a machine path: where it is, what it is and why it is refused. */
@@ -142,7 +162,7 @@ function jsonProblems(file: string, value: unknown, field: string, out: MachineP
 
 function manifestProblems(file: string, text: string, out: MachinePathProblem[]): void {
   const manifest = JSON.parse(text) as Record<string, unknown>
-  for (const field of [...DEPENDENCY_FIELDS, 'bundledDependencies', 'overrides', 'resolutions', 'pnpm']) {
+  for (const field of [...DEPENDENCY_FIELDS, ...OTHER_FIELDS]) {
     if (manifest[field] !== undefined) jsonProblems(file, manifest[field], field, out)
   }
 }
@@ -165,17 +185,17 @@ function lockfileProblems(file: string, text: string, out: MachinePathProblem[])
 /**
  * The strings in a pack's metadata files that name a machine path: an absolute path, a `file://` URL, a path outside
  * the pack, or a temporary or home folder. The checked files are the pack's `package.json` dependency fields, the
- * `package.json` of each Delorun or vendor package the pack carries, `pnpm-lock.yaml` and `pnpm-workspace.yaml`.
+ * `package.json` of each Delorun or vendor package the pack carries, including nested copies, and `pnpm-lock.yaml`.
+ * Any file of {@link DEPLOY_METADATA} is a problem in itself.
  * @param entries - the pack's files by path.
  * @returns each offending string with its file and field; empty for a pack whose metadata is path-free.
  */
 export function machinePathProblems(entries: readonly { readonly path: string, readonly data: Buffer }[]): MachinePathProblem[] {
   const problems: MachinePathProblem[] = []
   for (const entry of entries) {
-    const text = entry.data.toString('utf8')
-    if (entry.path === 'package.json' || OWN_PACKAGE_JSON.test(entry.path)) manifestProblems(entry.path, text, problems)
-    else if (entry.path === 'pnpm-lock.yaml') lockfileProblems(entry.path, text, problems)
-    else if (entry.path === WORKSPACE_FILE) problems.push({ file: entry.path, field: '', value: text.slice(0, 80), names: 'pnpm deploy metadata, which a pack does not carry' })
+    if (entry.path === 'package.json' || OWN_PACKAGE_JSON.test(entry.path)) manifestProblems(entry.path, entry.data.toString('utf8'), problems)
+    else if (entry.path === 'pnpm-lock.yaml') lockfileProblems(entry.path, entry.data.toString('utf8'), problems)
+    if (DEPLOY_METADATA.some(path => entry.path === path || entry.path.startsWith(`${path}/`))) problems.push({ file: entry.path, field: '', value: entry.data.toString('utf8', 0, 80), names: 'pnpm deploy metadata, which holds paths and timestamps of the build and which a pack does not carry' })
   }
   return problems
 }
