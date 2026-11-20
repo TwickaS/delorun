@@ -1,0 +1,35 @@
+{
+  "extends": "../../../tsconfig.base.client.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rewriteRelativeImportExtensions": false,
+    "composite": false,
+    "incremental": false,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": [
+    "tests/**/*.spec.ts",
+    "tests/**/*.spec.tsx",
+    "tests/layout/harness.tsx",
+    "tests/layout/browser/*.tsx",
+    "src/client",
+    "src/layout",
+    "src/store",
+    "src/css-modules.d.ts"
+  ],
+  "references": [
+    {
+      "path": "../../../packages/test-support/client-runtime"
+    },
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../../packages/client/store"
+    },
+    {
+      "path": "../../../packages/core/session"
+    }
+  ]
+}
