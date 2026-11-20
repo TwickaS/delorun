@@ -1,0 +1,34 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/packages/plugin-multiview/README.md
+/:
+  en: 0197ed938602c22e
+  zh: 0197ed938602c22e
+/delorun-plugin-multiview:
+  en: d501bd90e9579fa0
+  zh: d3cbb6da68829df0
+/delorun-plugin-multiview/summary:
+  en: ab999f686f8f0827
+  zh: ab999f686f8f0827
+/delorun-plugin-multiview/contents:
+  en: b31330b88153d44a
+  zh: b31330b88153d44a
+/delorun-plugin-multiview/using-it:
+  en: 5d5519fc16124ae3
+  zh: 5d5519fc16124ae3
+/delorun-plugin-multiview/panes:
+  en: 8fb29d4cc6ae8a7b
+  zh: 8fb29d4cc6ae8a7b
+/delorun-plugin-multiview/configuration:
+  en: 055d059ed2ea31f5
+  zh: 055d059ed2ea31f5
+/delorun-plugin-multiview/contract:
+  en: 5aefe7466f9ae01a
+  zh: 5aefe7466f9ae01a
+/delorun-plugin-multiview/limits:
+  en: 707fe6e287a05070
+  zh: 707fe6e287a05070
+/delorun-plugin-multiview/tests:
+  en: c1fc331e45134130
+  zh: c1fc331e45134130
