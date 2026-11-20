@@ -12,8 +12,8 @@
   en: 433bc3bbd886df99
   zh: 64125cf2279911d3
 /c21-changes/contents:
-  en: e16b2674f981ab4a
-  zh: 09d0337b7622115d
+  en: 2ef58a9b26cd6cba
+  zh: 7895a9bd79bb39b1
 /c21-changes/the-home-s-changes-directory:
   en: 42f0c06f3aa521da
   zh: b9bebbdd344c6651
@@ -28,13 +28,16 @@
   zh: d098b2adebc64174
 /c21-changes/harness-edits/live-changes-and-restart:
   en: 71a0937929f24f6c
-  zh: 103dad22a81cd782
+  zh: 64d22513365f0488
+/c21-changes/plugin-packs-across-an-update:
+  en: ae5e9e74ed20f591
+  zh: ae5e9e74ed20f591
 /c21-changes/reloads-and-restores:
   en: aefca49cc311cf15
-  zh: ed75b1273a203a59
+  zh: 1373ec783d8c74c9
 /c21-changes/collecting-the-store:
   en: 7de0a75e85d1debf
-  zh: 5f03ad75b5ae71c8
+  zh: 32e4d80be9d88ac6
 /c21-changes/the-first-start-under-changes:
   en: 90a98f9a264f0229
   zh: 0fdcf256e850b435
@@ -87,8 +90,8 @@
   en: 7e457c1062b8e661
   zh: 7efb118317baaa44
 /c21-changes/security/denial-tests:
-  en: 3639cb951f084f0a
-  zh: 6557cca2d183d28f
+  en: ca239423cbff0927
+  zh: 55590d47a9e4fd91
 /c21-changes/security/what-this-does-not-prove:
   en: 385e9419e8c5b306
   zh: e1f213e4292ccf86

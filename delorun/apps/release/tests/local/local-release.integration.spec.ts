@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { devNull } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { RELEASE_REPOSITORY_URL, type RuntimePlatform } from '@delorun/contract-release-manifest'
 import type { BuildRequest } from '../../src/build-closure.ts'
@@ -81,12 +81,27 @@ async function request(test: Parameters<typeof scratch>[0], directory: string, t
     logAttempts: 1,
     logWait: () => Promise.resolve(),
     closures: fixtureClosure(test, version),
+    // The fixture closure's `node/bin/node` names this process's Node, which may lie under the real user's home.
+    builder: { home: '/home/no-such-builder', username: 'no-such-builder' },
     now: new Date(),
     ...change,
   }
 }
 
 describe('a local release', () => {
+  it('refuses, before signing anything, a closure that names the building user\'s home directory, and signs it with a warning naming the file when told to allow that', async (test) => {
+    const directory = scratch(test)
+    const trusted = trust()
+    // The fixture's `node/bin/node` wrapper names this process's Node, so its folder is a home directory the archive holds.
+    const builder = { home: dirname(process.execPath), username: 'no-such-builder' }
+    await expect(buildLocalRelease(await request(test, directory, trusted, '0.1.0', { builder }))).rejects.toThrow(/1 file of the release name the builder's own paths[^]*delorun-0\.1\.0-linux-x64\.tar\.gz!node\/bin\/node: the building user's home directory/u)
+    expect(existsSync(join(directory, 'channel', 'timestamp.json'))).toBe(false)
+    expect(existsSync(releaseDirectory(join(directory, 'channel'), '0.1.0'))).toBe(false)
+    const warnings: string[] = []
+    await expect(buildLocalRelease(await request(test, directory, trusted, '0.1.0', { builder, allowBuilderPaths: true, warn: line => warnings.push(line) }))).resolves.toMatchObject({ manifestName: 'delorun-0.1.0.manifest.json' })
+    expect(warnings).toEqual([expect.stringMatching(/^warning: .*delorun-0\.1\.0-linux-x64\.tar\.gz!node\/bin\/node: the building user's home directory/u)])
+  })
+
   it('writes a channel a client verifies: the signed manifest, its file list, its log bundle and the timestamp that names it', async (test) => {
     const directory = scratch(test)
     const trusted = trust()
@@ -356,7 +371,7 @@ describe('the local-release command', () => {
     const trusted = trust()
     const log = await serveLog(test, trusted)
     writeKey(directory, trusted)
-    const args = ['--version', version, '--summary', 'A local fixture release.', '--out', join(directory, 'channel'), '--root', join(directory, 'root.json'), '--targets-key', join(directory, 'targets.pem'), '--timestamp-key', join(directory, 'timestamp.pem'), '--state', join(directory, 'state.json'), '--log-submit', log.endpoints.submit, '--log-checkpoint', log.endpoints.checkpoint, '--log-tiles', log.endpoints.tiles, ...extra]
+    const args = ['--version', version, '--summary', 'A local fixture release.', '--out', join(directory, 'channel'), '--root', join(directory, 'root.json'), '--targets-key', join(directory, 'targets.pem'), '--timestamp-key', join(directory, 'timestamp.pem'), '--state', join(directory, 'state.json'), '--log-submit', log.endpoints.submit, '--log-checkpoint', log.endpoints.checkpoint, '--log-tiles', log.endpoints.tiles, '--allow-builder-paths', ...extra]
     return { directory, args }
   }
 
@@ -431,7 +446,7 @@ describe('the local-release command', () => {
     const log = await serveLog(test, trusted, { uncosignedPolls: 2 })
     writeKey(directory, trusted)
     vi.spyOn(console, 'log').mockImplementation(() => undefined)
-    const args = ['--version', '0.1.0', '--summary', 'A local fixture release.', '--out', join(directory, 'channel'), '--root', join(directory, 'root.json'), '--targets-key', join(directory, 'targets.pem'), '--timestamp-key', join(directory, 'timestamp.pem'), '--state', join(directory, 'state.json'), '--log-submit', log.endpoints.submit, '--log-checkpoint', log.endpoints.checkpoint, '--log-tiles', log.endpoints.tiles, '--closures-from', closures]
+    const args = ['--version', '0.1.0', '--summary', 'A local fixture release.', '--out', join(directory, 'channel'), '--root', join(directory, 'root.json'), '--targets-key', join(directory, 'targets.pem'), '--timestamp-key', join(directory, 'timestamp.pem'), '--state', join(directory, 'state.json'), '--log-submit', log.endpoints.submit, '--log-checkpoint', log.endpoints.checkpoint, '--log-tiles', log.endpoints.tiles, '--closures-from', closures, '--allow-builder-paths']
     expect(await main([...args, '--log-poll-seconds', '0'])).toBe(0)
   })
 

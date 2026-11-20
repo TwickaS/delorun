@@ -54,6 +54,7 @@ import { appliedReachConfig, localReach, reachRowsOf } from './reach/host.ts'
 import { readReachRow, REACH_ROW_ID, type TailscalePrivateRow } from './reach/row.ts'
 import { resolveSurface, type DelorunLogger } from '@delorun/logs'
 import { afterChangesBoot, changesApprovedContent, recordChangesBoot, repointingBoot } from './changes/start.ts'
+import { updateSource } from './changes/update-baseline.ts'
 import { reloadProfile } from './changes/reload.ts'
 import { runningComposition, type HarnessContext, type RunningComposition } from '@delorun/changes'
 import { checkRunningRuntime, handOffToComposedTree, handsOff, harnessContextOf, processHandOff, startEntry, type HandOff } from './changes/harness-start.ts'
@@ -607,6 +608,7 @@ async function startHomeProcess(request: StartRequest, dependencies: StartDepend
   // A successor reads its handover first: the start id it logs and locks under is the one the predecessor chose.
   const handover = await dependencies.handover()
   const startId = handover?.handover.startId ?? newStartId()
+  const updatedFrom = updateSource(handover?.handover)
   const homeLog = openHomeLog({ home: request.home, profile: request.profile, startId, level: HOME_LOG_LEVEL, onFailure: () => {} })
   const restoreOutput = dependencies.captureOutput(homeLog)
   const dropEnvironment = registerEnvironment(request.env, homeLog.redactor)
@@ -631,11 +633,9 @@ async function startHomeProcess(request: StartRequest, dependencies: StartDepend
       profile: request.profile,
       running,
       startId,
-      host: {
-        // A Host booted again after the first, as after a failed switch, finds its active copies pointed at the release
-        // that failed; a successor's first boot finds them pointed at its predecessor's.
-        boot: repointingBoot(request, handover !== undefined, async (access: Parameters<HomeProcessOptions['host']['boot']>[0], controls: Parameters<HomeProcessOptions['host']['boot']>[1]) => bootProfile(handover === undefined ? startRequest : { ...startRequest, open: false }, tracked, runtime.store ? { version: running, composed: runtime.composed } : undefined, homeLog, retry, { control: controls.restart, running: booted, channel: access })),
-      },
+      // A Host booted again after the first, as after a failed switch, finds its active copies pointed at the release
+      // that failed; a successor's first boot finds them pointed at its predecessor's.
+      host: repointingBoot({ home: request.home, profile: request.profile, ...updatedFrom === undefined ? {} : { updatedFrom }, write: text => { homeLog.logger.info(text.trimEnd()) } }, handover !== undefined, async (access: Parameters<HomeProcessOptions['host']['boot']>[0], controls: Parameters<HomeProcessOptions['host']['boot']>[1]) => bootProfile(handover === undefined ? startRequest : { ...startRequest, open: false }, tracked, runtime.store ? { version: running, composed: runtime.composed } : undefined, homeLog, retry, { control: controls.restart, running: booted, channel: access })),
       ...runtime.store ? { restart: restartSupport(request.home, running, booted) } : {},
       preStart: () => runPreStartSteps(dependencies.preStartSteps, {
         home: request.home,

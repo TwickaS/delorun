@@ -6,7 +6,7 @@
  * `tsx delorun/apps/release/scripts/cut-rc.ts --version <0.1.0-preview.N[.M]|0.1.0-rc.N[.M]> --channel <dir> --state <signer state file> --keys <dir>
  * --root <root file> --commit <sha> [--highlights <file>] [--summary <text>] [--work <dir>] [--closures-from <dir>]
  * [--artifacts build|existing] [--platform <platform>]... [--log-submit <url> --log-checkpoint <url> --log-tiles <url>]
- * [--log-poll-seconds <n>] [--smoke-minutes <n>] [--no-smoke] [--dry-run]`
+ * [--log-poll-seconds <n>] [--smoke-minutes <n>] [--no-smoke] [--allow-builder-paths] [--dry-run]`
  *
  * `--keys` is a directory holding `targets.pem` and `timestamp.pem`; their contents are passed to no log and no output,
  * only their paths reach the signing command. `--highlights` is where the release-notes file is written (default
@@ -15,6 +15,11 @@
  * which every step's output goes; a step that fails names the log. The log endpoints default to the public Rekor v2
  * instance the release runbook names. `--closures-from` signs closure files an earlier run built and skips the build,
  * which is also how to rerun after a timestamp or logging failure without rebuilding.
+ *
+ * Signing refuses closure or pack files that name the building user's home directory, user name as a folder or a unique
+ * build root. A public cut uses `--artifacts build`, which embeds none of them. `--artifacts existing` (the default) embeds
+ * the worktree's paths, so it is refused too unless `--allow-builder-paths` is given, for a local iteration candidate;
+ * the signing step then prints each offending file as a warning.
  *
  * The last step is the installed-release smoke (`installed-smoke.ts`): it installs the candidate from the channel into a
  * scratch home with a launcher built for a scratch origin, adds every pack, restarts twice and creates a chat, within
@@ -91,6 +96,8 @@ export interface CutRequest {
   readonly closuresFrom: string | undefined
   /** `build-closure.ts`'s artifact source. */
   readonly artifacts: 'build' | 'existing'
+  /** Whether signing may take closure files that name the building user's paths (`--allow-builder-paths`). */
+  readonly allowBuilderPaths: boolean
   /** The platforms to carry. */
   readonly platforms: readonly RuntimePlatform[]
   /** The release log endpoints. */
@@ -132,6 +139,7 @@ export function parseCutArgs(argv: readonly string[]): CutRequest {
       'log-poll-seconds': { type: 'string', default: '30' },
       'smoke-minutes': { type: 'string', default: '30' },
       'no-smoke': { type: 'boolean', default: false },
+      'allow-builder-paths': { type: 'boolean', default: false },
       'dry-run': { type: 'boolean', default: false },
     },
   })
@@ -170,6 +178,7 @@ export function parseCutArgs(argv: readonly string[]): CutRequest {
     work,
     closuresFrom: values['closures-from'] === undefined ? undefined : resolve(values['closures-from']),
     artifacts: values.artifacts,
+    allowBuilderPaths: values['allow-builder-paths'],
     platforms,
     log: { submit: values['log-submit']!, checkpoint: values['log-checkpoint']!, tiles: values['log-tiles']! },
     logPollSeconds: values['log-poll-seconds']!,
@@ -236,6 +245,7 @@ export function localReleaseArgs(request: CutRequest): string[] {
     ...request.platforms.flatMap(platform => ['--platform', platform]),
     '--log-submit', request.log.submit, '--log-checkpoint', request.log.checkpoint, '--log-tiles', request.log.tiles, '--log-poll-seconds', request.logPollSeconds,
     '--notes', request.highlights,
+    ...request.allowBuilderPaths ? ['--allow-builder-paths'] : [],
   ]
 }
 

@@ -34,7 +34,9 @@ function optionsOf(startId: HomeProcessOptions['startId'], running: RuntimeVersi
   const { log, redactor, logger } = openHomeLog({ home, profile, startId, level: 'debug', onFailure: () => {} })
   const snapshots = new FixtureSnapshots()
   process.on('exit', () => { log.close() })
+  const { successorDeadlineMs } = behaviourOf(home, running)
   return {
+    ...successorDeadlineMs === undefined || mode !== 'successor' ? {} : { successorDeadlineMs },
     home, profile, running, startId, host: new FixtureHostRunner(() => successorBehaviour(behaviourOf(home, running))), preStart: () => Promise.resolve(), probe: updateChannelProbe(home, profile), logger, redactor,
     updates: { store: new FixtureStore(home, profile), snapshots, copies: new FixtureCopies(snapshots), harness: new FixtureHarness() }, supervisor: undefined,
     onExit: (listener) => { process.on('exit', listener) },

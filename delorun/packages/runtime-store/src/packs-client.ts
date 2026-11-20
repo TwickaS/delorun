@@ -13,7 +13,7 @@ import { RELEASE_FILE_SIZE_LIMITS, type PackEntry, type PackExternal, type Relea
 import { PackRefusal } from '@delorun/release-formats/packs/archive'
 import { verifyPacks } from '@delorun/release-formats/sign/verify'
 import { STORE_FILE_MODE, writeStoreFile } from './files.ts'
-import { installPack, packVariantFor } from './packs.ts'
+import { installPack, packVariantFor, signedPackFiles, type SignedPackFiles } from './packs.ts'
 import type { StorePaths } from './paths.ts'
 
 /**
@@ -107,6 +107,35 @@ export async function readStoredPacks(release: InstalledRelease): Promise<Releas
   if (packsBytes === undefined) return undefined
   if (bundleBytes === undefined) throw new PackRefusal('the stored packs file has no release-log bundle', 'PACKS_FILE_REFUSED')
   return verified(release, packsBytes, bundleBytes)
+}
+
+/** One installed release's verified packs file, whose packs' files are read only when asked ({@link openSignedPacks}). */
+export interface SignedPacks {
+  /**
+   * The files one pack lists, hashing the installed pack and its externals to see whether they match.
+   * @param name - the pack's package name.
+   * @returns its signed files; `undefined` when the release lists no such pack for this platform.
+   */
+  files(name: string): Promise<SignedPackFiles | undefined>
+}
+
+/**
+ * The stored packs file of an installed release, for Changes to tell the release's own files from a person's. The packs
+ * file is verified again under the root and the release-log record, as every use does; no pack is read until
+ * {@link SignedPacks.files} asks for it, because reading one hashes every file of its installed copy.
+ * @param release - the installed release.
+ * @returns the verified packs; `undefined` when the release stored no packs file.
+ * @throws PackRefusal or VerificationError when the stored files no longer verify.
+ */
+export async function openSignedPacks(release: InstalledRelease): Promise<SignedPacks | undefined> {
+  const packs = await readStoredPacks(release)
+  if (packs === undefined) return undefined
+  return {
+    files: async (name) => {
+      const entry = packs.packs.find(each => each.name === name)
+      return entry === undefined ? undefined : signedPackFiles(release.paths, release.version, entry, release.paths.platform)
+    },
+  }
 }
 
 /**

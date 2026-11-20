@@ -18,5 +18,6 @@ The formats of a Delorun release, in one place that both sides use: the release 
 - `log/entry`, `log/bundle`, `log/note`, `log/merkle` and `log/tiles`: the Rekor v2 entry with its Ed25519ph signature, the offline bundle check in C18's five steps, C2SP signed notes and cosignatures, RFC 6962 proofs, and proofs computed from `tlog-tiles`.
 - `archive/*`: the deterministic tar, gzip and ZIP writers and readers, the archive entry rules, the inspection of the deterministic form, and the PE normalisation the rebuild comparison uses (`archive/pe`).
 - `brands`: the semantic-version and SHA-256 brands.
+- `gate/home-paths`: the scan for the building user's home directory, user name as a folder and unique build root in a directory's files and archives, which the release build and the launcher build run over their output and refuse on.
 
-The specs live beside the release tooling that writes these formats, under `delorun/apps/release/tests/{sign,log,archive}`.
+The specs of `sign`, `log` and `archive` live beside the release tooling that writes these formats, under `delorun/apps/release/tests/{sign,log,archive}`; the specs of `gate/home-paths` live in this package's `tests/`.

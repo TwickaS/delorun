@@ -29,6 +29,13 @@ describe('the handover line', () => {
     expect(parseHandoverLine(line()).health).not.toHaveProperty('previousProtection')
   })
 
+  it('reads the purpose of a handover, and a line from a predecessor that names none', () => {
+    expect(parseHandoverLine(line({ purpose: 'rollback' })).purpose).toBe('rollback')
+    expect(parseHandoverLine(line({ purpose: 'update' })).purpose).toBe('update')
+    expect(parseHandoverLine(line())).not.toHaveProperty('purpose')
+    expect(() => parseHandoverLine(line({ purpose: 'downgrade' }))).toThrow('the handover line is not valid at purpose')
+  })
+
   it('drops a field this release does not know, at the top, in the health expectations and in a row', () => {
     const read = parseHandoverLine(line({ later: 1 }, { laterHealth: true, previousRows: [{ id: 'a', name: 'p', generated: false, laterRow: 'x' }], previousProtection: { ...PROTECTION, laterProtection: [] } }))
     expect(read).not.toHaveProperty('later')

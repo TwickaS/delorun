@@ -3,11 +3,23 @@ import { createHash } from 'node:crypto'
 import http from 'node:http'
 import https from 'node:https'
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { homedir, tmpdir, userInfo } from 'node:os'
+import { join, sep } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { expect, it, onTestFinished, vi } from 'vitest'
 import { buildFrontend } from '../scripts/devtools/vite.ts'
 import { frontendSourceRoot } from '../scripts/devtools/inputs.ts'
+
+/** Lists every file below a directory as a slash-separated relative path. */
+async function filesBelow(root: string, prefix = ''): Promise<string[]> {
+  const files: string[] = []
+  for (const item of await readdir(join(root, prefix), { withFileTypes: true })) {
+    const path = prefix ? `${prefix}/${item.name}` : item.name
+    if (item.isDirectory()) files.push(...await filesBelow(root, path))
+    else files.push(path)
+  }
+  return files
+}
 
 async function sourceHash(root: string): Promise<string> {
   const hash = createHash('sha256')
@@ -57,4 +69,23 @@ it('builds from fixed installed sources with network APIs blocked and includes M
   expect(html).not.toContain('importmap')
   expect(html.indexOf('./connect.js')).toBeLessThan(html.indexOf('./entrypoints/devtools_app/devtools_app.js'))
   await expect(readdir(join(root, 'core/i18n/locales'))).rejects.toMatchObject({ code: 'ENOENT' })
+})
+
+it('publishes no build-machine path: home directory, user name segment or checkout root', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'dsh-devtools-paths-'))
+  onTestFinished(() => rm(root, { recursive: true, force: true }))
+  await buildFrontend(root)
+  const checkout = fileURLToPath(new URL('../../../../', import.meta.url)).replace(/[\\/]$/u, '')
+  const escape = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
+  const literals = [...new Set([homedir(), checkout, checkout.split(sep).join('/')])]
+  const segment = new RegExp(`[/\\\\]${escape(userInfo().username)}[/\\\\]`, 'u')
+  const files = await filesBelow(root)
+  expect(files.length).toBeGreaterThan(100)
+  const leaks: string[] = []
+  for (const file of files) {
+    const text = (await readFile(join(root, file))).toString('latin1')
+    for (const literal of literals) if (text.includes(literal)) leaks.push(`${file}: ${literal}`)
+    if (segment.test(text)) leaks.push(`${file}: user name path segment`)
+  }
+  expect(leaks).toEqual([])
 })

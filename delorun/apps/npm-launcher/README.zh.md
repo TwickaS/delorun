@@ -130,6 +130,7 @@ node_modules/.bin/tsx delorun/apps/npm-launcher/src/build.ts --root <root.json>.
 - 每个 `--root` 在用其自身的根签名校验通过后，复制为 `roots/<n>.root.json`，以该根自身的版本命名。这些根合起来必须是连续的版本；没有 `--root` 的构建会被拒绝，因为由此生成的启动器会以 `NO_TRUSTED_ROOT` 拒绝每次安装。
 - `--channel-origin` 与 `--log-origin` 成为打包器写入代码的构建常量；此后没有任何设置、参数或环境变量能改变它们。不提供它们时，构建出的是生产启动器：频道为 `releases.delorun.com`，并以 GitHub Releases 和 `releases.delo.run` 作为约定 C1 主机列表下的镜像，日志是受信任根所指的日志：根的 `log.origin` 是日志的主机，启动器读取 `https://<host>/api/v2/checkpoint` 以及 `https://<host>/api/v2/` 之下的 tile，即 Rekor v2 的布局。origin 为不带路径的 `https:`，或本机回环地址上的 `http:`，因此本地频道与日志可以为一个构建提供服务。频道 origin 提供 `timestamp.json`、`root/<n>.root.json` 与 `releases/download/v<version>/<file>`，即 `apps/release/src/local-release.ts` 写出的布局；下载器随后只允许该 origin 的主机。
 - 该包先暂存在 `<out>/package`，再由 `npm pack` 打包为 `<out>/delorun-<version>.tgz`。`--package-version` 设置版本，默认使用本包自身的版本。
+- Before it packs, the build scans the whole output folder, the staged package and anything else in `<out>`, for the building user's home directory, the user name as a folder (`/<name>/` or `\<name>\`) and a unique build root `delorun-release-build-*`, and refuses with every offending file named, so no tarball is written. Nothing skips the scan (`@delorun/release-formats/gate/home-paths`, the gate the release build runs over its closures).
 
 <a id="exit-codes"></a>
 

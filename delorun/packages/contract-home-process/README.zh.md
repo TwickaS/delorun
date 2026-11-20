@@ -36,5 +36,5 @@ import { REQUEST_MAX_BYTES, type UpdateChannelRequest } from '@delorun/contract-
 - **协议：** `UPDATE_PROTOCOL_VERSION`，请求类型 `StatusRequest`、`UpdatePrepareRequest`、`UpdateApplyRequest`、`UpdateCancelRequest`、`RollbackRequest`、`StopRequest` 及其联合类型 `UpdateChannelRequest`，以及 `DrainArgs`、`UpdateChannelResponse` 与 `HomeStatus`。
 - **状态与阶段：** `HomeProcessState`、`UpdatePhase`、`UpdateOutcome`、`DrainPolicy` 与 `StopMode` 类型。
 - **记录：** `UpdateJournal` 与 `HandoverMessage` 类型，以及 `HANDOVER_FD`。
-- **限额：** `HOME_PROCESSES_PER_PROFILE`、`START_WAIT_MS`、`REQUEST_MAX_BYTES`、`REQUEST_DEADLINE_MS`、`MAX_CONNECTIONS`、`AUTH_FAILURE_LOG_LINES_PER_SECOND`、`REPORT_LIFETIME_MS`、`DRAIN_TIMEOUT_MIN_S`、`DRAIN_TIMEOUT_MAX_S`、`DRAIN_TIMEOUT_DEFAULT_S`、`HEALTH_CHECK_TIMEOUT_MS`、`LOGIN_RESTART_LIMIT`、`LOGIN_RESTART_WINDOW_MS` 与 `STATUS_EXIT_NOT_RUNNING`。
+- **限额：** `HOME_PROCESSES_PER_PROFILE`、`START_WAIT_MS`、`REQUEST_MAX_BYTES`、`REQUEST_DEADLINE_MS`、`MAX_CONNECTIONS`、`AUTH_FAILURE_LOG_LINES_PER_SECOND`、`REPORT_LIFETIME_MS`、`DRAIN_TIMEOUT_MIN_S`、`DRAIN_TIMEOUT_MAX_S`、`DRAIN_TIMEOUT_DEFAULT_S`、`HEALTH_CHECK_TIMEOUT_MS`、`SUCCESSOR_DEADLINE_MS`、`LOGIN_RESTART_LIMIT`、`LOGIN_RESTART_WINDOW_MS` 与 `STATUS_EXIT_NOT_RUNNING`。
 - **错误：** `HomeProcessErrorCode` 类型。

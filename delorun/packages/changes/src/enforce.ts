@@ -42,9 +42,10 @@ import { leftOutContent, leftOutFact, leftOutWords, leftOutOf, type LeftOutFact 
 import { pointLinkAt, readLinks } from './link.ts'
 import { activeDirectory, CHANGES_ENTRIES, profileChangesDirectory } from './paths.ts'
 import { approvedOf, findEntry, migratesAtUpgrade, readActiveRecord, readApproved, readChangeLog, readProtection, readWorkSession, withEntry, writeActiveRecord, writeApproved, writeChangeLog } from './records.ts'
-import { holdsVersion, materialize, storeEmptyVersion, storeFolder } from './store.ts'
+import { holdsVersion, materialize, readVersion, storeEmptyVersion, storeFolder } from './store.ts'
 import { referenceRelease, versionOf } from './tree.ts'
 import { ACTIVE_RECORD_SCHEMA, type ActiveContent, type ApprovedRecord, type ChangeEntry, type ChangeId, type ChangeLog, type ContentVersion, type ProtectionLevel } from './types.ts'
+import { inPackStore, supersededByUpdate, type UpdateBaseline } from './update-baseline.ts'
 import { approvedWith, declinedByPerson, unreviewedEntry, unreviewedWords, type UnreviewedLoad } from './unreviewed.ts'
 import { endWorkWithoutPerson, workFinishedLine, workSessionExpired, type WorkFinished } from './work.ts'
 
@@ -79,6 +80,12 @@ export interface EnforceRequest {
    * the new one's. When absent, as from a source checkout, both use the release `runtimes/current` names.
    */
   readonly runningRelease?: string
+  /**
+   * Set only by the start of an update's successor, which verified both releases' packs files itself
+   * ({@link UpdateBaseline}): a pack's approved content that differs from its folder only by the release's own files is
+   * replaced by the folder's, as an applied change decided `update`. A start without it never replaces approved content.
+   */
+  readonly updateBaseline?: UpdateBaseline
 }
 
 /** A plugin the first start under Changes approved as it was. */
@@ -86,6 +93,14 @@ export interface ApprovedAtUpgrade {
   readonly plugin: string
   /** Its folder. */
   readonly source: string
+}
+
+/** A pack whose approved content an update replaced with the release's own files. */
+export interface ReplacedByUpdate {
+  readonly id: ChangeId
+  readonly plugin: string
+  /** The release the update installed. */
+  readonly to: string
 }
 
 /** A change waiting for review whose content this start does not load. */
@@ -104,6 +119,8 @@ export interface StartChanges {
   readonly pending: readonly PendingAtStart[]
   /** Under `off`, the folder content this start approved without review. */
   readonly unreviewed: readonly UnreviewedLoad[]
+  /** The packs whose approved content this start replaced with the update's release files, logged as applied changes. */
+  readonly replacedByUpdate?: readonly ReplacedByUpdate[]
   /** The plugin whose folder loads live, when a work session is open for a plugin of the profile. */
   readonly workSession?: { readonly plugin: string }
   /** The work session this start ended without the person because its end time had passed. */
@@ -256,6 +273,102 @@ export async function repointActiveCopies(request: EnforceRequest): Promise<read
 }
 
 /**
+ * Make each active copy that loads approved content hold what the profile's approved record names now, for a Host
+ * that boots again after a failed switch. A failed health check rolls the profile's files back, approved record
+ * included, but not `active.json`, which still names what the failed release's start decided; with protection on, the
+ * load check refuses that, so the previous release could not resume. This never reads a folder and never approves
+ * anything: each such plugin is set to its approved version, or to nothing when it has none, and
+ * {@link repointActiveCopies} then fills the directories. A copy for a work session or left out of a failed start is
+ * not touched.
+ * @param request - the home, the profile and its directory.
+ * @returns the plugins whose record was changed, in record order.
+ * @throws {ChangesError} when a record cannot be read or written.
+ */
+export async function followApprovedContent(request: EnforceRequest): Promise<readonly string[]> {
+  const { home, profile, profileDir } = request
+  /** The records that name approved content other than the approved record's version, with the version to hold instead. */
+  const stale = async (): Promise<readonly (readonly [string, ContentVersion | undefined])[]> => {
+    const approved = await readApproved(profileDir)
+    return Object.entries((await readActiveRecord(home, profile)).plugins)
+      .filter(([plugin, content]) => content.kind === 'approved' && content.version !== approvedOf(approved, plugin)?.version)
+      .map(([plugin]) => [plugin, approvedOf(approved, plugin)?.version] as const)
+  }
+  // A boot after a failed switch whose records agree takes no lock, as a restart of the same release does.
+  if ((await stale()).length === 0) return []
+  return withFileLock(join(profileDir, 'package.json'), async () => {
+    const behind = await stale()
+    const plugins: Record<string, ActiveContent> = { ...(await readActiveRecord(home, profile)).plugins }
+    for (const [plugin, version] of behind) {
+      if (version === undefined) delete plugins[plugin]
+      else plugins[plugin] = { version, kind: 'approved' }
+    }
+    if (behind.length > 0) await writeActiveRecord(home, profile, { schema: ACTIVE_RECORD_SCHEMA, plugins })
+    return behind.map(([plugin]) => plugin)
+  }, { waitMs: request.lockWaitMs ?? PROFILE_LOCK_WAIT_MS })
+}
+
+/** What the approved record and `active.json` name for a profile at one moment ({@link recordsOf}). */
+export interface DecisionRecords {
+  /** The profile's approved record. */
+  readonly approved: ApprovedRecord
+  /** `active.json`'s plugins. */
+  readonly active: Readonly<Record<string, ActiveContent>>
+}
+
+/**
+ * Read the two records a start decides, for {@link revertDecisions}.
+ * @param request - the home, the profile and its directory.
+ * @returns the approved record and the active record's plugins now.
+ * @throws {ChangesError} when a record cannot be read.
+ */
+export async function recordsOf(request: Pick<EnforceRequest, 'home' | 'profile' | 'profileDir'>): Promise<DecisionRecords> {
+  return { approved: await readApproved(request.profileDir), active: (await readActiveRecord(request.home, request.profile)).plugins }
+}
+
+/**
+ * Undo what one start decided in the approved record and `active.json`, for an update's successor whose health check
+ * failed: the release it left may predate {@link followApprovedContent}, and with protection on it refuses to resume
+ * when `active.json` names a version the restored approved record does not. Only a plugin whose entry still equals
+ * `after` goes back to its `before` entry (or loses it when it had none), so an entry changed since, by a person or
+ * another writer, is kept; each active directory of an entry put back holds that entry's content again, or nothing. The
+ * change log and the history are not touched.
+ * @param request - the home, the profile and its directory.
+ * @param before - the records before the start.
+ * @param after - the records the start left.
+ * @returns the plugins whose approved entry or active entry was put back, in record order.
+ * @throws {ChangesError} when a record cannot be read or written.
+ */
+export async function revertDecisions(request: Pick<EnforceRequest, 'home' | 'profile' | 'profileDir' | 'lockWaitMs'>, before: DecisionRecords, after: DecisionRecords): Promise<readonly string[]> {
+  const { home, profile, profileDir } = request
+  const same = (left: unknown, right: unknown): boolean => JSON.stringify(left) === JSON.stringify(right)
+  /** The names whose entry differs between `before` and `after`. */
+  const changed = <T>(from: Readonly<Record<string, T>>, to: Readonly<Record<string, T>>): string[] => [...new Set([...Object.keys(from), ...Object.keys(to)])].filter(name => !same(from[name], to[name]))
+  if (changed(before.approved.plugins, after.approved.plugins).length === 0 && changed(before.active, after.active).length === 0) return []
+  return withFileLock(join(profileDir, 'package.json'), async () => {
+    const now = await recordsOf(request)
+    const touched = new Set<string>()
+    /** `now` with each changed entry that still equals `after`'s put back to `before`'s. */
+    const reverted = <T>(was: Readonly<Record<string, T>>, left: Readonly<Record<string, T>>, still: Readonly<Record<string, T>>): Record<string, T> => {
+      const entries: Record<string, T> = { ...still }
+      for (const name of changed(was, left)) {
+        if (!same(still[name], left[name])) continue
+        if (was[name] === undefined) delete entries[name]
+        else entries[name] = was[name]
+        touched.add(name)
+      }
+      return entries
+    }
+    const approvedPlugins = reverted(before.approved.plugins, after.approved.plugins, now.approved.plugins)
+    const activePlugins = reverted(before.active, after.active, now.active)
+    if (!same(approvedPlugins, now.approved.plugins)) await writeApproved(profileDir, { ...now.approved, plugins: approvedPlugins })
+    if (!same(activePlugins, now.active)) await writeActiveRecord(home, profile, { schema: ACTIVE_RECORD_SCHEMA, plugins: activePlugins })
+    // An entry the start added is gone from the record, and one it moved names another version: the directory must hold what the record says, or the predecessor's invariant refuses it.
+    for (const name of changed(now.active, activePlugins)) await holdContent(home, activeDirectory(home, profile, name), activePlugins[name]?.version)
+    return [...touched]
+  }, { waitMs: request.lockWaitMs ?? PROFILE_LOCK_WAIT_MS })
+}
+
+/**
  * Who holds the profile write lock, from the process id upstream's lock file records.
  * @param profileDir - the profile directory.
  * @returns `none` without a lock file, `this-process` when it names this process, and `other` otherwise.
@@ -349,6 +462,7 @@ async function bringUnderChanges(request: EnforceRequest, at: string, pass: 'sta
   const upgraded: string[] = []
   const awaiting: string[] = []
   const unreviewed: UnreviewedLoad[] = []
+  const replaced: ReplacedByUpdate[] = []
   const failed: PluginFailure[] = []
   const stored = new Map<string, FolderContent>()
   let approvalsChanged = false
@@ -427,6 +541,15 @@ async function bringUnderChanges(request: EnforceRequest, at: string, pass: 'sta
     } else if (left !== undefined && (protection === 'on' || folder === undefined || left.kind === 'plugin-on' || left.to === folder.version)) {
       decided.set(plugin, leftOutContent(left))
       leftOut.push(leftOutFact(left))
+    } else if (pass === 'start' && request.updateBaseline !== undefined && folder !== undefined && approvedVersion !== undefined && folder.version !== approvedVersion
+      && inPackStore(home, folder.source) && !declinedByPerson(log, plugin, folder.version)
+      && await replacesApproved(request.updateBaseline, home, plugin, approvedVersion, folder.version)) {
+      const entry = replacedEntry(log, { plugin, source: folder.source, from: approvedVersion, to: folder.version }, request.updateBaseline.to, at)
+      approved = approvedWith(approved, plugin, folder.source, folder.version, at)
+      approvalsChanged = true
+      log = withEntry(log, entry)
+      replaced.push({ id: entry.id, plugin, to: request.updateBaseline.to })
+      decided.set(plugin, { version: folder.version, kind: 'approved' })
     } else if (protection === 'on' || folder === undefined || folder.version === approvedVersion || declinedByPerson(log, plugin, folder.version)) {
       decided.set(plugin, approvedVersion === undefined ? undefined : { version: approvedVersion, kind: 'approved' })
       if (folder !== undefined && folder.version !== approvedVersion) {
@@ -480,11 +603,11 @@ async function bringUnderChanges(request: EnforceRequest, at: string, pass: 'sta
   if (pass === 'start') {
     // An approval at upgrade without a history version, which an earlier start could not record, is recorded now.
     const unrecorded = log.entries.flatMap(entry => entry.decidedFrom === 'upgrade' && entry.historyVersion === undefined && entry.subject.plugin !== undefined ? [entry.subject.plugin] : [])
-    const summary = historySummary(unrecorded, awaiting, unreviewed.map(({ plugin }) => plugin), moved.map(({ plugin }) => plugin))
+    const summary = historySummary(unrecorded, awaiting, unreviewed.map(({ plugin }) => plugin), moved.map(({ plugin }) => plugin), replaced.map(({ plugin }) => plugin), request.updateBaseline?.to)
     historyVersion = summary === undefined ? undefined : await openHistory({ profileDir }).record(summary, { kind: 'person' })
   }
 
-  const loadedNow = new Set(unreviewed.map(({ id }) => id))
+  const loadedNow = new Set([...unreviewed, ...replaced].map(({ id }) => id))
   const shown: ApprovedAtUpgrade[] = []
   const entries = log.entries.map((entry): ChangeEntry => {
     let next = entry
@@ -505,6 +628,7 @@ async function bringUnderChanges(request: EnforceRequest, at: string, pass: 'sta
     approvedAtUpgrade: shown,
     pending,
     unreviewed,
+    ...replaced.length === 0 ? {} : { replacedByUpdate: replaced },
     ...session === undefined ? {} : { workSession: session },
     ...workEnded === undefined ? {} : { workEnded },
     ...historyVersion === undefined ? {} : { historyVersion },
@@ -534,6 +658,7 @@ export function startNotice(changes: StartChanges): string {
       ? `${plugin} is not loaded until you review it: delorun changes show ${id}`
       : `${plugin} has changes waiting for your review and loads without them: delorun changes show ${id}`)
   }
+  for (const { id, plugin, to } of changes.replacedByUpdate ?? []) lines.push(`${plugin} now holds the files of the update to ${to}, which Delorun checked against the signed release: delorun changes show ${id}`)
   for (const load of changes.unreviewed) lines.push(unreviewedWords(load))
   for (const { plugin, underHome } of changes.linkedDependencies ?? []) {
     lines.push(`${plugin} is too large to copy with its installed packages, so it loads them from where they are installed${underHome ? ', inside your home folder, where commands the agent runs can change them' : ''}.`)
@@ -642,20 +767,68 @@ export async function namesDirectory(path: string): Promise<boolean> {
 }
 
 /**
+ * Whether an update replaces a pack's approved content with its folder's ({@link supersededByUpdate}). Approved content
+ * the store no longer holds is not replaced: the start reports it as it does without an update.
+ * @param baseline - what the successor verified.
+ * @param home - the Delorun home.
+ * @param plugin - the package name.
+ * @param approved - the approved content.
+ * @param folder - the folder's content.
+ * @returns whether the difference is only the release's own files.
+ */
+async function replacesApproved(baseline: UpdateBaseline, home: string, plugin: string, approved: ContentVersion, folder: ContentVersion): Promise<boolean> {
+  try {
+    return await supersededByUpdate(home, baseline, { plugin, before: await readVersion(home, approved), after: await readVersion(home, folder) })
+  } catch (error) {
+    // A version the store cannot give is a content problem the rest of the start reports; nothing is replaced for it.
+    if (isChangesError(error) && error.code === 'STORE_CORRUPT') return false
+    throw error
+  }
+}
+
+/**
+ * The applied change that records a pack's approved content replaced by the update's release files.
+ * @param log - the change log, whose entry with the same id gives its creation time.
+ * @param change - the plugin, its folder, the approved content before and the folder's content.
+ * @param to - the release the update installed.
+ * @param at - when, ISO 8601.
+ * @returns the entry, applied and decided `update`.
+ */
+function replacedEntry(log: ChangeLog, change: { readonly plugin: string, readonly source: string, readonly from: ContentVersion, readonly to: ContentVersion }, to: string, at: string): ChangeEntry {
+  const subject = { plugin: change.plugin, source: change.source }
+  const id = changeId('plugin-edit', subject, change.from, change.to)
+  return {
+    id,
+    kind: 'plugin-edit',
+    state: 'applied',
+    subject,
+    from: change.from,
+    to: change.to,
+    summary: `Replaced by the update to ${to}: ${change.plugin}`,
+    createdAt: findEntry(log, id)?.createdAt ?? at,
+    decidedAt: at,
+    decidedFrom: 'update',
+  }
+}
+
+/**
  * The subject of the profile history version a start records.
  * @param upgraded - the plugins approved at the upgrade whose approval no history version holds yet.
  * @param awaiting - the plugins added since, which wait for review.
  * @param unreviewed - the plugins whose folder content this start approved without review.
  * @param moved - every plugin whose spec this start moved to its active directory.
+ * @param replaced - the packs whose approved content the update replaced.
+ * @param to - the release the update installed.
  * @returns the summary, or undefined when the start changed none of the profile's files.
  */
-function historySummary(upgraded: readonly string[], awaiting: readonly string[], unreviewed: readonly string[], moved: readonly string[]): string | undefined {
-  if (moved.length === 0 && upgraded.length === 0 && unreviewed.length === 0) return undefined
+function historySummary(upgraded: readonly string[], awaiting: readonly string[], unreviewed: readonly string[], moved: readonly string[], replaced: readonly string[], to: string | undefined): string | undefined {
+  if (moved.length === 0 && upgraded.length === 0 && unreviewed.length === 0 && replaced.length === 0) return undefined
   const parts: string[] = []
   if (upgraded.length > 0) parts.push(`approved at upgrade ${upgraded.join(', ')}`)
   if (awaiting.length > 0) parts.push(`${awaiting.join(', ')} ${awaiting.length === 1 ? 'waits' : 'wait'} for your review`)
   if (unreviewed.length > 0) parts.push(`loaded without review ${unreviewed.join(', ')}`)
-  const relinked = moved.filter(plugin => !upgraded.includes(plugin) && !awaiting.includes(plugin) && !unreviewed.includes(plugin))
+  if (replaced.length > 0) parts.push(`replaced by the update to ${to ?? 'the new release'} ${replaced.join(', ')}`)
+  const relinked = moved.filter(plugin => !upgraded.includes(plugin) && !awaiting.includes(plugin) && !unreviewed.includes(plugin) && !replaced.includes(plugin))
   if (relinked.length > 0) parts.push(`${relinked.join(', ')} linked to Delorun's copy again`)
   return `Changes: ${parts.join('; ')}`
 }

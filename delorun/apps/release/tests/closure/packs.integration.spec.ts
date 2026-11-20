@@ -23,7 +23,28 @@ const PLATFORMS: RuntimePlatform[] = ['linux-x64', 'linux-arm64']
 const NATIVE = (await buildPackArchive('native.tgz', [{ path: 'package/package.json', mode: '0644', data: Buffer.from('{"name":"native","version":"9.9.9"}') }], 1_800_000_000)).bytes
 const integrity = (bytes: Buffer): string => `sha512-${createHash('sha512').update(bytes).digest('base64')}`
 
-function sources(options: { readonly native: boolean, readonly served?: Buffer, readonly bundledPeer?: string, readonly armOnlyPeer?: boolean, readonly extra?: string, readonly peerDependencies?: Record<string, string>, readonly typescript?: boolean, readonly files?: Record<string, string>, readonly locked?: boolean }): PackSources {
+/**
+ * What `pnpm deploy` writes for a workspace package it injects: `file:///` specifiers and lockfile keys that name the
+ * deployment's folder, a `directory` relative to it, a workspace file listing a patch by path, and the install state
+ * (`.modules.yaml`, `.pnpm-workspace-state-v1.json` and `.pnpm/lock.yaml`) holding the deployment's folder, a store
+ * folder and a timestamp. Each is derived from the deployment's own folder and the clock, so two builds in different
+ * temporary folders write different text.
+ */
+function injectedByPnpm(directory: string): Record<string, string> {
+  const source = `${dirname(directory)}/source/packages/util/brand`
+  const injected = `@deepseek-ai/dsh-brand@file://${source}`
+  return {
+    'package.json': JSON.stringify({ name: '@delorun/demo', version: '1.0.0', dependencies: { '@deepseek-ai/dsh-brand': injected, 'own-dep': '1.0.0' } }, null, 2),
+    'node_modules/@deepseek-ai/dsh-brand/package.json': '{"name":"@deepseek-ai/dsh-brand","version":"0.2.2-rc.3"}',
+    'node_modules/.modules.yaml': `prunedAt: ${new Date().toISOString()}\nstoreDir: ${dirname(directory)}/store/v11\n`,
+    'node_modules/.pnpm-workspace-state-v1.json': JSON.stringify({ lastValidatedTimestamp: Date.now(), projects: { [directory]: {} } }),
+    'node_modules/.pnpm/lock.yaml': `packages:\n  '${injected}':\n    resolution: {directory: ../..${source}, type: directory}\n`,
+    'pnpm-workspace.yaml': `patchedDependencies:\n  x@1.0.0: >-\n    ../../..${source}.patch\n`,
+    'pnpm-lock.yaml': `lockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    dependencies:\n      '@deepseek-ai/dsh-brand':\n        specifier: '${injected}'\n        version: '${injected}'\n      own-dep:\n        specifier: 1.0.0\n        version: 1.0.0\n\npackages:\n\n  '${injected}':\n    resolution: {directory: ../..${source}, type: directory}\n\n  own-dep@1.0.0:\n    resolution: {integrity: sha512-AAAA}\n\nsnapshots:\n\n  '${injected}': {}\n\n  own-dep@1.0.0: {}\n`,
+  }
+}
+
+function sources(options: { readonly native: boolean, readonly served?: Buffer, readonly bundledPeer?: string, readonly armOnlyPeer?: boolean, readonly extra?: string, readonly peerDependencies?: Record<string, string>, readonly typescript?: boolean, readonly files?: Record<string, string>, readonly locked?: boolean, readonly injected?: boolean, readonly stray?: Record<string, string> }): PackSources {
   const closure = temp()
   const extra = options.extra
   put(closure, { ...extra === undefined ? {} : { [`node_modules/${extra}/package.json`]: `{"name":"${extra}","version":"2.0.0"}` }, 'node_modules/shared-peer/package.json': '{"name":"shared-peer","version":"2.0.0"}', 'node_modules/arm-peer/package.json': '{"name":"arm-peer","version":"1.0.0"}' })
@@ -46,7 +67,9 @@ function sources(options: { readonly native: boolean, readonly served?: Buffer, 
         'node_modules/shared-peer/index.js': 'peer\n',
         'node_modules/own-dep/package.json': '{"name":"own-dep","version":"1.0.0"}',
         ...options.native ? { [`node_modules/@vendor/native-${platform}/package.json`]: '{}' } : {},
+        ...options.injected === true ? injectedByPnpm(directory) : {},
         ...options.files,
+        ...options.stray,
       })
       await Promise.resolve()
     },
@@ -142,6 +165,61 @@ describe('building a pack', () => {
     expect(isExternal('@openai/codex-linux-x64', ['@openai/codex-*'])).toBe(true)
     expect(isExternal('@openai/codex', ['@openai/codex-*'])).toBe(false)
     expect(tarballUrl('@openai/codex-linux-x64', '0.153.4')).toBe('https://registry.npmjs.org/@openai/codex-linux-x64/-/codex-linux-x64-0.153.4.tgz')
+  })
+})
+
+describe('a pack\'s metadata', () => {
+  it('is byte for byte the same when the same sources are built in two different temporary folders', async () => {
+    const first = await buildPack('@delorun/demo', '1.0.0', false, '0.1.0', PLATFORMS, 1_800_000_000, [], sources({ native: false, injected: true }), temp())
+    const second = await buildPack('@delorun/demo', '1.0.0', false, '0.1.0', PLATFORMS, 1_800_000_000, [], sources({ native: false, injected: true }), temp())
+    expect(first.entry).toEqual(second.entry)
+    expect([...first.archives.values()].map(bytes => bytes.toString('hex'))).toEqual([...second.archives.values()].map(bytes => bytes.toString('hex')))
+    expect(first.entry.variants.any!.files.map(file => file.path)).toEqual(expect.arrayContaining(['package.json', 'pnpm-lock.yaml']))
+  })
+
+  it('names an injected workspace package by the version the pack carries, with no path, and drops pnpm\'s workspace file', async () => {
+    const scratch = temp()
+    const built = await buildPack('@delorun/demo', '1.0.0', false, '0.1.0', PLATFORMS, 1_800_000_000, [], sources({ native: false, injected: true }), scratch)
+    const deployed = join(scratch, '@delorun__demo-linux-x64')
+    expect(JSON.parse(readFileSync(join(deployed, 'package.json'), 'utf8')).dependencies).toEqual({ '@deepseek-ai/dsh-brand': '0.2.2-rc.3', 'own-dep': '1.0.0' })
+    const lock = readFileSync(join(deployed, 'pnpm-lock.yaml'), 'utf8')
+    expect(lock).toContain("specifier: 0.2.2-rc.3")
+    expect(lock).toContain("'@deepseek-ai/dsh-brand@0.2.2-rc.3':")
+    expect(lock).toContain('resolution: { directory: node_modules/@deepseek-ai/dsh-brand, type: directory }')
+    expect(lock).not.toMatch(/file:|\/tmp|delorun-pack-build/u)
+    for (const path of ['pnpm-workspace.yaml', 'node_modules/.modules.yaml', 'node_modules/.pnpm-workspace-state-v1.json', 'node_modules/.pnpm']) {
+      expect(existsSync(join(deployed, path))).toBe(false)
+      expect(built.entry.variants.any!.files.map(file => file.path).filter(file => file === path || file.startsWith(`${path}/`))).toEqual([])
+    }
+  })
+
+  it.each([
+    ['a dependency naming an absolute path', { 'package.json': JSON.stringify({ name: '@delorun/demo', version: '1.0.0', dependencies: { 'own-dep': 'file:/var/tmp/delorun-release-build-abc/source/own' } }) }, /@delorun\/demo for linux-x64.*package\.json dependencies\.own-dep: file:\/var\/tmp\/delorun-release-build-abc/u],
+    ['a dependency naming a path outside the pack', { 'package.json': JSON.stringify({ name: '@delorun/demo', version: '1.0.0', optionalDependencies: { 'own-dep': 'link:../own' } }) }, /package\.json optionalDependencies\.own-dep: link:\.\.\/own/u],
+    ['a lockfile key naming a home folder', { 'pnpm-lock.yaml': "packages:\n  'x@file:/home/someone/source/x':\n    resolution: {integrity: sha512-AAAA}\n" }, /pnpm-lock\.yaml packages > x@file:\/home\/someone\/source\/x: x@file:\/home\/someone\/source\/x/u],
+    ['a lockfile directory outside the pack', { 'pnpm-lock.yaml': "packages:\n  x@1.0.0:\n    resolution: {directory: ../../../tmp/build/x, type: directory}\n" }, /pnpm-lock\.yaml packages > x@1\.0\.0 > resolution > directory: \.\.\/\.\.\/\.\.\/tmp\/build\/x/u],
+    ['a lockfile directory under a CI checkout', { 'pnpm-lock.yaml': "packages:\n  x@1.0.0:\n    resolution: {directory: /builds/ci/x, type: directory}\n" }, /pnpm-lock\.yaml packages > x@1\.0\.0 > resolution > directory: \/builds\/ci\/x/u],
+    ['a dependency naming a folder outside the usual roots', { 'package.json': JSON.stringify({ name: '@delorun/demo', version: '1.0.0', dependencies: { 'own-dep': '/__w/repo/own' } }) }, /package\.json dependencies\.own-dep: \/__w\/repo\/own/u],
+    ['a bundled dependency naming a build folder', { 'package.json': JSON.stringify({ name: '@delorun/demo', version: '1.0.0', bundleDependencies: ['delorun-release-build-x'] }) }, /package\.json bundleDependencies\.0: delorun-release-build-x/u],
+    ['a Delorun package inside the pack naming a temporary folder', { 'node_modules/@delorun/inner/package.json': JSON.stringify({ name: '@delorun/inner', version: '1.0.0', dependencies: { 'own-dep': 'file:///tmp/y' } }), 'node_modules/@delorun/inner/index.js': 'export {}\n' }, /node_modules\/@delorun\/inner\/package\.json dependencies\.own-dep: file:\/\/\/tmp\/y/u],
+  ])('refuses %s, naming the pack and the field', async (_label, stray, message) => {
+    await expect(buildPack('@delorun/demo', '1.0.0', false, '0.1.0', PLATFORMS, 1_800_000_000, [], sources({ native: false, stray }), temp())).rejects.toThrow(message)
+  })
+
+  it('keeps the peer suffix of an injected package\'s lockfile entries, so two variants stay two entries', async () => {
+    const scratch = temp()
+    const injected = '@deepseek-ai/dsh-brand@file:///var/tmp/delorun-release-build-ab/source/brand'
+    const lock = `lockfileVersion: '9.0'\n\npackages:\n\n  '${injected}(react@18.0.0)':\n    resolution: {directory: ../../brand, type: directory}\n\n  '${injected}(react@19.0.0)':\n    resolution: {directory: ../../brand, type: directory}\n`
+    const stray = { ...injectedByPnpm(join(scratch, '@delorun__demo-linux-x64')), 'pnpm-lock.yaml': lock }
+    await buildPack('@delorun/demo', '1.0.0', false, '0.1.0', PLATFORMS, 1_800_000_000, [], sources({ native: false, stray }), scratch)
+    const written = readFileSync(join(scratch, '@delorun__demo-linux-x64', 'pnpm-lock.yaml'), 'utf8')
+    expect(written).toContain("'@deepseek-ai/dsh-brand@0.2.2-rc.3(react@18.0.0)':")
+    expect(written).toContain("'@deepseek-ai/dsh-brand@0.2.2-rc.3(react@19.0.0)':")
+  })
+
+  it('refuses an injected package the deployment does not carry, as it has no version to write', async () => {
+    const stray = { 'package.json': JSON.stringify({ name: '@delorun/demo', version: '1.0.0', dependencies: { 'missing-dep': 'missing-dep@file:///var/tmp/x/missing' } }) }
+    await expect(buildPack('@delorun/demo', '1.0.0', false, '0.1.0', PLATFORMS, 1_800_000_000, [], sources({ native: false, stray }), temp())).rejects.toThrow(/missing-dep by a file: path but does not carry it/u)
   })
 })
 

@@ -186,7 +186,7 @@ export async function publish(trust: RunTrust, log: JourneyLog, channel: string,
     '--version', version, '--summary', `Journey release ${version}`, '--out', channel, '--root', trust.rootPath,
     '--targets-key', trust.targetsKey, '--timestamp-key', trust.timestampKey, '--state', trust.state,
     '--log-submit', log.endpoints.submit, '--log-checkpoint', log.endpoints.checkpoint, '--log-tiles', log.endpoints.tiles,
-    '--log-poll-seconds', '0', '--closures-from', closures,
+    '--log-poll-seconds', '0', '--closures-from', closures, '--allow-builder-paths',
   ])
   if (signed.status !== 0) throw new Error(`local-release.ts --version ${version} failed: ${signed.stderr}`)
 }

@@ -5,7 +5,8 @@
  * the real `local-release.ts`.
  */
 import { execFile } from 'node:child_process'
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { cutRelease, parseCutArgs, verifyChannel, type CutDeps, type RunResult } from '../../scripts/cut-rc.ts'
@@ -14,54 +15,62 @@ import { fixtureClosure, keyFile, serveLog, trust } from './support.ts'
 
 const NOTES = 'What is new in this candidate:\n- The studio opens faster.\n'
 
+/** A scratch channel with throwaway keys and a stand-in log, and a `cut` that signs one fixture candidate into it. */
+async function cutter(test: Parameters<typeof scratch>[0]): Promise<{ directory: string, lines: string[], cut: (version: string, closureEntry: string, extra?: readonly string[]) => Promise<number> }> {
+  const directory = scratch(test)
+  const trusted = trust()
+  const log = await serveLog(test, trusted)
+  const keys = join(directory, 'keys')
+  mkdirSync(keys, { mode: 0o700 })
+  keyFile(keys, 'targets.pem', trusted.keys.targets)
+  keyFile(keys, 'timestamp.pem', trusted.keys.timestamp)
+  const root = join(keys, '1.root.json')
+  writeFileSync(root, trusted.root)
+  const commit = 'b'.repeat(40)
+  const lines: string[] = []
+  const real = (await new Promise<string>((done, failed) => execFile('git', ['rev-parse', 'HEAD'], { cwd: REPO }, (error, stdout) => error === null ? done(stdout.trim()) : failed(error)))).trim()
+
+  const cut = async (version: string, closureEntry: string, extra: readonly string[] = []): Promise<number> => {
+    const closures = join(directory, `closure-${version}`)
+    rmSync(closures, { recursive: true, force: true })
+    mkdirSync(closures)
+    await fixtureClosure(test, version, { entrySuffix: closureEntry })(closures)
+    const request = parseCutArgs([
+      '--version', version, '--channel', join(directory, 'channel'), '--state', join(keys, 'state.json'), '--keys', keys, '--root', root,
+      '--commit', real, '--work', join(directory, 'work'), '--closures-from', closures,
+      '--log-submit', log.endpoints.submit, '--log-checkpoint', log.endpoints.checkpoint, '--log-tiles', log.endpoints.tiles, '--log-poll-seconds', '0', '--no-smoke', ...extra,
+    ])
+    const deps: CutDeps = {
+      repository: REPO,
+      hasChangelogEntry: () => true,
+      say: line => lines.push(line),
+      now: () => Date.now(),
+      run: (command, args, logFile) => new Promise<RunResult>((done) => {
+        appendFileSync(logFile, `$ ${command} ${args.join(' ')}\n`)
+        if (command === 'git') {
+          done({ status: 0, stdout: args[0] === 'status' ? '' : `${commit}\n` })
+        } else if (args[0]?.endsWith('assemble.ts')) {
+          writeFileSync(args[args.indexOf('--highlights') + 1]!, NOTES)
+          done({ status: 0, stdout: '' })
+        } else {
+          execFile(command, [...args], { cwd: REPO, env: { ...process.env, CI: '' } }, (error, stdout, stderr) => {
+            appendFileSync(logFile, stdout + stderr)
+            done({ status: error === null ? 0 : typeof error.code === 'number' ? error.code : null, stdout })
+          })
+        }
+      }),
+    }
+    const outcome = await cutRelease({ ...request, commit: commit }, { ...deps, run: (command, args, logFile) => deps.run(command, args.map(arg => arg === commit ? real : arg), logFile) })
+    return outcome.code
+  }
+  return { directory, lines, cut }
+}
+
 describe('cutting two candidates', () => {
   it('signs each candidate\'s notes, cuts a private iteration between two previews and offers each update from the one before', async (test) => {
-    const directory = scratch(test)
-    const trusted = trust()
-    const log = await serveLog(test, trusted)
-    const keys = join(directory, 'keys')
-    mkdirSync(keys, { mode: 0o700 })
-    keyFile(keys, 'targets.pem', trusted.keys.targets)
-    keyFile(keys, 'timestamp.pem', trusted.keys.timestamp)
-    const root = join(keys, '1.root.json')
-    writeFileSync(root, trusted.root)
-    const commit = 'b'.repeat(40)
-    const lines: string[] = []
-    const real = (await new Promise<string>((done, failed) => execFile('git', ['rev-parse', 'HEAD'], { cwd: REPO }, (error, stdout) => error === null ? done(stdout.trim()) : failed(error)))).trim()
-
-    const cut = async (version: string, closureEntry: string): Promise<number> => {
-      const closures = join(directory, `closure-${version}`)
-      mkdirSync(closures)
-      await fixtureClosure(test, version, { entrySuffix: closureEntry })(closures)
-      const request = parseCutArgs([
-        '--version', version, '--channel', join(directory, 'channel'), '--state', join(keys, 'state.json'), '--keys', keys, '--root', root,
-        '--commit', real, '--work', join(directory, 'work'), '--closures-from', closures,
-        '--log-submit', log.endpoints.submit, '--log-checkpoint', log.endpoints.checkpoint, '--log-tiles', log.endpoints.tiles, '--log-poll-seconds', '0', '--no-smoke',
-      ])
-      const deps: CutDeps = {
-        repository: REPO,
-        hasChangelogEntry: () => true,
-        say: line => lines.push(line),
-        now: () => Date.now(),
-        run: (command, args, logFile) => new Promise<RunResult>((done) => {
-          appendFileSync(logFile, `$ ${command} ${args.join(' ')}\n`)
-          if (command === 'git') {
-            done({ status: 0, stdout: args[0] === 'status' ? '' : `${commit}\n` })
-          } else if (args[0]?.endsWith('assemble.ts')) {
-            writeFileSync(args[args.indexOf('--highlights') + 1]!, NOTES)
-            done({ status: 0, stdout: '' })
-          } else {
-            execFile(command, [...args], { cwd: REPO, env: { ...process.env, CI: '' } }, (error, stdout, stderr) => {
-              appendFileSync(logFile, stdout + stderr)
-              done({ status: error === null ? 0 : typeof error.code === 'number' ? error.code : null, stdout })
-            })
-          }
-        }),
-      }
-      const outcome = await cutRelease({ ...request, commit: commit }, { ...deps, run: (command, args, logFile) => deps.run(command, args.map(arg => arg === commit ? real : arg), logFile) })
-      return outcome.code
-    }
-
+    const { directory, lines, cut: cutWith } = await cutter(test)
+    // The fixture closure names this process's Node, which may lie under the real user's home, so these cuts allow the builder's paths.
+    const cut = (version: string, closureEntry: string): Promise<number> => cutWith(version, closureEntry, ['--allow-builder-paths'])
     expect(await cut('0.1.0-preview.1', '')).toBe(0)
     const first = verifyChannel(join(directory, 'channel'), '0.1.0-preview.1', Math.floor(Date.now() / 1000))
     expect(first.notes?.toString()).toBe(NOTES)
@@ -79,6 +88,18 @@ describe('cutting two candidates', () => {
     expect(existsSync(join(directory, 'channel', 'releases', 'download', 'v0.1.0-preview.2', 'delorun-0.1.0-preview.2.notes.txt'))).toBe(true)
     expect(readFileSync(join(directory, 'work', 'cut-rc-0.1.0-preview.2.log'), 'utf8')).not.toContain('PRIVATE KEY')
     expect(lines.join('\n')).toContain('signed notes')
+  }, 120_000)
+
+  it('refuses a closure that names the building user\'s home directory unless --allow-builder-paths is given, and then warns naming the file', async (test) => {
+    const { directory, lines, cut } = await cutter(test)
+    const planted = `\n// built in ${homedir()}/work\n`
+    expect(await cut('0.1.0-preview.1', planted)).toBe(1)
+    expect(lines.join('\n')).toContain('signing or logging failed')
+    expect(existsSync(join(directory, 'channel', 'releases', 'download', 'v0.1.0-preview.1'))).toBe(false)
+    const log = join(directory, 'work', 'cut-rc-0.1.0-preview.1.log')
+    expect(readFileSync(log, 'utf8')).toContain("delorun-0.1.0-preview.1-linux-x64.tar.gz!app/node_modules/@delorun/cli/src/bin.js: the building user's home directory")
+    expect(await cut('0.1.0-preview.1', planted, ['--allow-builder-paths'])).toBe(0)
+    expect(readFileSync(log, 'utf8')).toContain("warning: the closure files name the building user's paths")
   }, 120_000)
 
   it('refuses rc.2 without rc.1 in the channel and a dirty tree', async (test) => {

@@ -25,7 +25,9 @@
  * is at the commit, that tracked files are clean and that each package's `lib/` exists and is newer than its sources;
  * the native step then replaces any copied native addon binaries, and the closure embeds the worktree's paths, so the
  * build takes a fresh directory beside the fixed root and removes it when it ends, and is for a local release only.
- * `--write-pins` records the native files found instead of checking them, for a
+ * When every file is written, a build from source refuses any output file that holds the building user's home
+ * directory, user name as a folder or the unique build root, naming each file (`@delorun/release-formats/gate/home-paths`); a build from
+ * existing artifacts prints the same findings as warnings. `--write-pins` records the native files found instead of checking them, for a
  * reviewed change of `prebuilt-pins.json`. On the targets-key holder's machine, `--attestation-key` and
  * `--attestation` write an HMAC over the version, commit and every file in `--out`, keyed with the holder's secret,
  * which signing checks; the attestation file lies outside `--out`.
@@ -46,6 +48,8 @@ import { semanticVersion } from '@delorun/release-formats/brands'
 import { pruneForeignPrebuilds } from './closure/prune.ts'
 import { archiveClosure, type ClosureFiles } from './closure/archive-closure.ts'
 import { buildReleasePacks } from './closure/packs.ts'
+import { DEPLOY_METADATA } from './closure/pack-specifiers.ts'
+import { gateBuildOutput } from '@delorun/release-formats/gate/home-paths'
 import { artifactDirectories, artifactProblems, isArtifactSource, type ArtifactSource } from './closure/artifacts.ts'
 import { claimBuildRoot } from './closure/build-root.ts'
 import { writeDataFormats } from './closure/data-formats.ts'
@@ -58,14 +62,11 @@ import { isWithin, outputRefs } from './rebuild/record.ts'
 import { readImagesRecipe } from './images/build.ts'
 import { writeReleaseSbom } from './sbom/release-sbom.ts'
 
-/** pnpm's deploy metadata, which the closure does not carry: it names local paths and install times. */
-const DEPLOY_METADATA = ['pnpm-workspace.yaml', 'node_modules/.modules.yaml', 'node_modules/.pnpm-workspace-state-v1.json', 'node_modules/.pnpm']
-
 /** What the closure keeps of the deployed root package: its dependency manifest, lockfile and dependencies. */
 const ROOT_PACKAGE_KEPT = ['package.json', 'pnpm-lock.yaml', 'node_modules']
 
-/** pnpm's `--os`, `--cpu` and `--libc` selection of each platform's optional dependencies. */
-const TARGETS: Readonly<Record<RuntimePlatform, readonly string[]>> = {
+/** pnpm's `--os`, `--cpu` and `--libc` selection of each platform's optional dependencies; the pack probe uses it too. */
+export const TARGETS: Readonly<Record<RuntimePlatform, readonly string[]>> = {
   'linux-x64': ['--os=linux', '--cpu=x64', '--libc=glibc'],
   'linux-arm64': ['--os=linux', '--cpu=arm64', '--libc=glibc'],
   'darwin-x64': ['--os=darwin', '--cpu=x64'],
@@ -220,6 +221,7 @@ async function buildIn(buildRoot: string, repository: string, recipe: Recipe, re
     stage: platform => join(buildRoot, 'stage', platform), targets: TARGETS, out: request.out, scratch: await mkdtemp(join(buildRoot, 'packs-')),
   })
   console.log(`build-closure: built ${String(packCount)} plugin packs`)
+  await gateBuildOutput(request.out, existing ? 'existing' : 'build', line => console.warn(`build-closure: warning: ${line}`))
   if (recipe.closure.platforms.every(platform => results.has(platform))) console.log(`build-closure: wrote ${await writeReleaseSbom(request.out, request.version, recipe.closure.platforms, recipe.toolchain, readImagesRecipe().base)}`)
   return results
 }

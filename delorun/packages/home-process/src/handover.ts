@@ -24,6 +24,12 @@ import type { HealthExpectations, HomeCommand } from './seams.ts'
 export interface HandoverLine {
   /** The line's kind: `restart` when `from` and `to` are the version this process runs. */
   readonly type: 'handover' | 'restart'
+  /**
+   * Why a `handover` runs a different release: `update`, or `rollback` to the release the update left. A predecessor
+   * that writes none is an update's, and an older predecessor writes none. Only an update's successor may treat the
+   * files its release installed as the baseline for Changes.
+   */
+  readonly purpose?: 'update' | 'rollback'
   /** Record version. */
   readonly v: 1
   /** The resolved Delorun home. */
@@ -54,6 +60,7 @@ const version = z.string().regex(new RegExp(RUNTIME_VERSION_PATTERN))
 const bootRow = z.object({ id: z.string(), name: z.string(), generated: z.boolean(), configHash: z.string().regex(/^[0-9a-f]{64}$/u).optional() })
 const handoverSchema = z.object({
   type: z.enum(['handover', 'restart']),
+  purpose: z.enum(['update', 'rollback']).optional(),
   v: z.literal(1),
   home: z.string().min(1),
   profile: z.string().min(1),
@@ -266,8 +273,9 @@ export function parseHandoverLine(text: string): HandoverLine {
   // The schema checked the versions' and start id's form; the brands are the contracts' own types.
   const data = parsed.data
   const { bundles, bundleRows, previousProtection, ...health } = data.health
+  const { purpose, ...line } = data
   return {
-    ...data, from: brandString<RuntimeVersion>(data.from), to: brandString<RuntimeVersion>(data.to), startId: brandString<StartId>(data.startId),
+    ...line, ...purpose === undefined ? {} : { purpose }, from: brandString<RuntimeVersion>(data.from), to: brandString<RuntimeVersion>(data.to), startId: brandString<StartId>(data.startId),
     health: { ...health, ...bundles === undefined ? {} : { bundles }, ...bundleRows === undefined ? {} : { bundleRows }, ...previousProtection === undefined ? {} : { previousProtection } },
   }
 }

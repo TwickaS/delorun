@@ -41,6 +41,7 @@ import {
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { semanticVersion, sha256Hex } from '@delorun/release-formats/brands'
 import { closureFileNames } from '../closure/tree.ts'
+import { homePathProblems, refuseHomePaths, type BuilderIdentity } from '@delorun/release-formats/gate/home-paths'
 import { logEntryName, packsLogName, packsName } from '@delorun/release-formats/log/bundle'
 import { logRelease, type LogEndpoints } from '../log/client.ts'
 import { entryRequest, readEntryRequest } from '@delorun/release-formats/log/entry'
@@ -111,6 +112,16 @@ export interface LocalReleaseRequest {
    * directory.
    */
   readonly closures: (directory: string) => Promise<void>
+  /**
+   * Sign closure files that name the building user's own paths, warning for each file instead of refusing. A release
+   * built from existing artifacts embeds the worktree's paths, so only a local candidate sets this; absent or false, the
+   * signing is refused before anything is signed (`@delorun/release-formats/gate/home-paths`).
+   */
+  readonly allowBuilderPaths?: boolean
+  /** Receives each warning of an allowed build; `console.warn` by default. */
+  readonly warn?: (line: string) => void
+  /** The user the scan looks for in the closure files; this computer's user by default. */
+  readonly builder?: BuilderIdentity
   /** The signing time. */
   readonly now: Date
 }
@@ -224,7 +235,7 @@ async function replaceFile(path: string, bytes: Uint8Array | string): Promise<vo
  *   root file, a key a root lists, the targets key or the timestamp key is production trust material, the version is
  *   already in the channel, the closure build did not write its files, the targets key is not the newest root's
  *   active targets key, the log gives no
- *   witnessed checkpoint, or any signed file fails the verification the client will run. The channel's timestamp is replaced last, so a failed build leaves the channel
+ *   witnessed checkpoint, the closure files name the building user's paths without `allowBuilderPaths`, or any signed file fails the verification the client will run. The channel's timestamp is replaced last, so a failed build leaves the channel
  *   serving the release it served before.
  */
 export async function buildLocalRelease(request: LocalReleaseRequest): Promise<LocalRelease> {
@@ -255,6 +266,12 @@ export async function buildLocalRelease(request: LocalReleaseRequest): Promise<L
   const work = await mkdtemp(join(request.channel, 'releases', 'download', '.building-'))
   try {
     await request.closures(work)
+    // Every shipped closure and pack file is final here and nothing is signed yet.
+    if (request.allowBuilderPaths === true) {
+      for (const problem of await homePathProblems(work, request.builder)) (request.warn ?? console.warn)(`warning: the closure files name the building user's paths, which a public release never does: ${problem.file}: ${problem.found}`)
+    } else {
+      await refuseHomePaths(work, request.builder)
+    }
     const runtime = new Map<RuntimePlatform, { readonly archive: FileRef, readonly files: FileRef }>()
     for (const platform of request.platforms) {
       const names = closureFileNames(request.version, platform)

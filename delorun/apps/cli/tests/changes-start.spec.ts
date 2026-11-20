@@ -325,15 +325,53 @@ describe('repointsBeforeBoot', () => {
 describe('repointingBoot', () => {
   it('re-points before a successor\'s first boot, and before a second boot of a process that failed a switch, never before a fresh first boot', async () => {
     const calls: string[] = []
-    const repoint = (): Promise<void> => { calls.push('repoint'); return Promise.resolve() }
-    const fresh = repointingBoot({ home, profile: 'default' }, false, () => { calls.push('boot'); return Promise.resolve(1) }, repoint)
+    const repoint = (_request: unknown, afterFailedSwitch: boolean): Promise<undefined> => { calls.push(afterFailedSwitch ? 'repoint-after-failed-switch' : 'repoint'); return Promise.resolve(undefined) }
+    const fresh = repointingBoot({ home, profile: 'default' }, false, () => { calls.push('boot'); return Promise.resolve(1) }, repoint).boot
     await fresh()
     await fresh()
-    expect(calls).toEqual(['boot', 'repoint', 'boot'])
+    expect(calls).toEqual(['boot', 'repoint-after-failed-switch', 'boot'])
     calls.length = 0
-    const successor = repointingBoot({ home, profile: 'default' }, true, () => { calls.push('boot'); return Promise.resolve(1) }, repoint)
+    const successor = repointingBoot({ home, profile: 'default' }, true, () => { calls.push('boot'); return Promise.resolve(1) }, repoint).boot
     await successor()
-    expect(calls).toEqual(['repoint', 'boot'])
+    await successor()
+    expect(calls).toEqual(['repoint', 'boot', 'repoint-after-failed-switch', 'boot'])
+  })
+
+  it('abandons by running the first boot\'s undo once, and does nothing when that boot gave none', async () => {
+    const calls: string[] = []
+    const undo = (): Promise<void> => { calls.push('undo'); return Promise.resolve() }
+    const applied = repointingBoot({ home, profile: 'default' }, true, () => Promise.resolve(1), (_request, afterFailedSwitch) => Promise.resolve(afterFailedSwitch ? undefined : undo))
+    await applied.abandon()
+    await applied.boot()
+    await applied.boot()
+    await applied.abandon()
+    await applied.abandon()
+    expect(calls).toEqual(['undo'])
+    const none = repointingBoot({ home, profile: 'default' }, true, () => Promise.resolve(1), () => Promise.resolve(undefined))
+    await none.boot()
+    await expect(none.abandon()).resolves.toBeUndefined()
+  })
+})
+
+describe('repointingBoot abandoned while the baseline is being applied', () => {
+  it('waits for the baseline, then undoes it, so a successor that gives up during it leaves nothing advanced', async () => {
+    const calls: string[] = []
+    let finish: (undo: () => Promise<void>) => void = () => undefined
+    const slow = new Promise<() => Promise<void>>((resolve) => { finish = resolve })
+    const runner = repointingBoot({ home, profile: 'default' }, true, () => Promise.resolve(1), () => slow)
+    const booting = runner.boot()
+    const abandoned = runner.abandon().then(() => calls.push('abandoned'))
+    await Promise.resolve()
+    expect(calls).toEqual([])
+    finish(() => { calls.push('undo'); return Promise.resolve() })
+    await Promise.all([booting, abandoned])
+    expect(calls).toEqual(['undo', 'abandoned'])
+  })
+
+  it('abandons without undoing when the baseline throws, which has undone itself', async () => {
+    const runner = repointingBoot({ home, profile: 'default' }, true, () => Promise.resolve(1), () => Promise.reject(new Error('the copies cannot be re-pointed')))
+    await expect(runner.boot()).rejects.toThrow('re-pointed')
+    await expect(runner.abandon()).resolves.toBeUndefined()
   })
 })
 

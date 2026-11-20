@@ -11,7 +11,7 @@
  * ([install actions](./install-actions.ts), also the entry `@delorun/changes/install`), the agent's plugin actions that ran with protection off ([agent actions](./agent-actions.ts)), reloading the running Host
  * ([reload](./reload.ts)), and the person's changes to the harness itself with the composed tree a start runs
  * ([harness](./harness.ts), [harness tree](./harness-tree.ts)), and what loads without review while protection is off
- * ([unreviewed](./unreviewed.ts)). Ending a work session because Delorun
+ * ([unreviewed](./unreviewed.ts)), and pack content an update installed from the signed release ([update baseline](./update-baseline.ts)). Ending a work session because Delorun
  * stops is the separate entry `@delorun/changes/stop` ([stop](./stop.ts)).
  *
  * @module @delorun/changes
@@ -61,5 +61,6 @@ export * from './reload.ts'
 export * from './harness.ts'
 export * from './harness-tree.ts'
 export * from './unreviewed.ts'
+export * from './update-baseline.ts'
 export * from './notices.ts'
 export * from './harness-live.ts'

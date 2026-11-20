@@ -237,6 +237,47 @@ export async function packProblems(paths: StorePaths, release: RuntimeVersion, e
   return problems
 }
 
+/** The top-level files of a pack whose text {@link signedPackFiles} reads, for Changes' comparison of an older build of the pack. */
+const TEXT_FILES = ['package.json', 'pnpm-lock.yaml'] as const
+
+/** What one release's verified packs file lists for one pack, and what its install record adds. */
+export interface SignedPackFiles {
+  /** The pack's package name. */
+  readonly name: string
+  /** The release whose verified packs file lists it. */
+  readonly release: RuntimeVersion
+  /** Every file the pack holds: the signed list, plus the external packages' files when the installed pack is intact. */
+  readonly files: ReadonlyMap<string, { readonly sha256: string, readonly executable: boolean }>
+  /** The packages of the runtime the install links into the pack, as `node_modules/<peer>`. */
+  readonly peers: readonly string[]
+  /** The text of the signed `package.json` and `pnpm-lock.yaml`, read from the installed pack when it is intact. */
+  readonly texts: ReadonlyMap<string, string>
+}
+
+/**
+ * What a verified packs file lists for one pack, with the install record's external files and the signed text files
+ * when the installed pack matches the list and the record byte for byte.
+ * @param paths - the store's paths.
+ * @param release - the release the entry belongs to.
+ * @param entry - the pack's entry, from a packs file that verified.
+ * @param platform - this computer's platform.
+ * @returns the pack's signed files; `undefined` when the release publishes the pack for neither this platform nor `any`.
+ */
+export async function signedPackFiles(paths: StorePaths, release: RuntimeVersion, entry: PackEntry, platform: RuntimePlatform): Promise<SignedPackFiles | undefined> {
+  const variant = entry.variants[platform] ?? entry.variants.any
+  if (variant === undefined) return undefined
+  const files = new Map<string, { sha256: string, executable: boolean }>(variant.files.map(file => [file.path, { sha256: file.sha256, executable: file.mode === '0755' }]))
+  const texts = new Map<string, string>()
+  const intact = await exists(paths.pack(release, entry.name)) && (await packProblems(paths, release, entry, platform)).length === 0
+  if (intact) {
+    for (const file of (await readRecord(paths, release, entry.name))?.externals ?? []) files.set(file.path, { sha256: file.sha256, executable: file.mode === '0755' })
+    for (const path of TEXT_FILES) {
+      if (files.has(path)) texts.set(path, await readFile(join(paths.pack(release, entry.name), 'package', path), 'utf8'))
+    }
+  }
+  return { name: entry.name, release, files, peers: variant.peers, texts }
+}
+
 /**
  * Refuse an installed pack that no longer matches what was installed.
  * @param paths - the store's paths.

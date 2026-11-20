@@ -18,9 +18,11 @@
  */
 import { resolve } from 'node:path'
 import { getDelorunRuntimeVersion } from '@deepseek-ai/dsh-app-boot'
-import { checkChangesInvariants, enforceApprovedContent, isChangesError, markShownAtUpgrade, PROFILE_LOCK_WAIT_MS, repointActiveCopies, startNotice, workFinishedLine, writeBootRecord, type BootRow, type ReloadHost, type StartChanges } from '@delorun/changes'
+import { checkChangesInvariants, enforceApprovedContent, followApprovedContent, isChangesError, markShownAtUpgrade, PROFILE_LOCK_WAIT_MS, recordsOf, repointActiveCopies, revertDecisions, startNotice, workFinishedLine, writeBootRecord, type BootRow, type DecisionRecords, type ReloadHost, type StartChanges, type UpdateBaseline } from '@delorun/changes'
 import { finishWorkWithoutPerson } from '@delorun/changes/stop'
+import type { RuntimeVersion } from '@delorun/contract-home-layout'
 import type { DelorunLogger } from '@delorun/logs'
+import { hostPacksEnvironment } from '@delorun/plugin-packs/environment'
 import { RuntimeStoreError } from '@delorun/runtime-store'
 import type { CompositionDraft } from '../compose.ts'
 import { carriedPackageDirectory } from '../delorun-bundles.ts'
@@ -28,6 +30,7 @@ import { CliError, EXIT } from '../exit.ts'
 import type { PreStartContext, StoredRuntime } from '../pre-start.ts'
 import { hasCliProfile, profileDirectory } from '../profile.ts'
 import { printable, printableText } from '../terminal-text.ts'
+import { updateBaselineOf } from './update-baseline.ts'
 import { watchUnreviewed } from './unreviewed-watch.ts'
 import { watchWork } from './work-watch.ts'
 
@@ -51,6 +54,12 @@ export interface ChangesStartRequest {
    * the log only, so its start shows nothing.
    */
   readonly terminal?: boolean
+  /**
+   * The signed pack files of an update's two releases, set only by {@link repointForSuccessor} for the first boot of the
+   * successor of an update to a newer release ([update baseline](./update-baseline.ts)): a pack whose approved content
+   * differs from its folder only by the release's own files is replaced, not left waiting.
+   */
+  readonly updateBaseline?: UpdateBaseline
 }
 
 /**
@@ -105,7 +114,7 @@ export async function startChanges(request: ChangesStartRequest, output: (text: 
   try {
     const ended = request.ownsHome === true ? await finishWorkWithoutPerson({ home, profile, profileDir }, 'stopped') : undefined
     if (ended !== undefined) notice = `Your work session on ${ended.plugin} ended when Delorun stopped. ${workFinishedLine(ended)}\n`
-    enforced = await enforceApprovedContent({ home, profile, profileDir, harnessLink: isCarriedPackage, ...runningRelease() })
+    enforced = await enforceApprovedContent({ home, profile, profileDir, harnessLink: isCarriedPackage, ...runningRelease(), ...request.updateBaseline === undefined ? {} : { updateBaseline: request.updateBaseline } })
   } catch (error) {
     const detail = isChangesError(error) ? error.detail : String(error)
     throw new CliError(EXIT.failed, `delorun: the profile ${profile} was not started, because the plugins it links from folders could not be prepared: ${detail}`)
@@ -135,37 +144,112 @@ export function repointsBeforeBoot(successor: boolean, bootsBefore: number): boo
 }
 
 /**
- * Wrap a profile's Host boot so that it re-points the active copies first when {@link repointsBeforeBoot} says so.
- * @param request - the home and the profile.
+ * Wrap a profile's Host boot so that it re-points the active copies first when {@link repointsBeforeBoot} says so, and
+ * on a boot after the first, first makes them follow the approved record ({@link followApprovedContent}). The wrapper
+ * also gives the Host runner's `abandon`, which undoes what an update's baseline advanced
+ * ({@link repointForSuccessor}).
+ * @param request - the home and the profile, and for an update's successor the release it left.
  * @param successor - whether this process is an update's successor.
  * @param boot - boots the Host.
  * @param repoint - re-points the copies; {@link repointForSuccessor} by default.
- * @returns the wrapped boot, which counts the boots it has run.
+ * @returns the Host runner: the wrapped boot, which counts the boots it has run, and the undo of the first boot's
+ *   baseline, which waits for a baseline still being applied and does nothing when the boot applied none or after it ran once.
  */
-export function repointingBoot<A extends unknown[], T>(request: { readonly home: string, readonly profile: string }, successor: boolean, boot: (...args: A) => Promise<T>, repoint: (request: { readonly home: string, readonly profile: string }) => Promise<void> = repointForSuccessor): (...args: A) => Promise<T> {
+export function repointingBoot<A extends unknown[], T>(request: SuccessorRequest, successor: boolean, boot: (...args: A) => Promise<T>, repoint: (request: SuccessorRequest, afterFailedSwitch: boolean) => Promise<UndoBaseline | undefined> = repointForSuccessor): { readonly boot: (...args: A) => Promise<T>, readonly abandon: () => Promise<void> } {
   let booted = 0
-  return async (...args) => {
-    if (repointsBeforeBoot(successor, booted++)) await repoint(request)
-    return boot(...args)
+  let undo: UndoBaseline | undefined
+  let repointing: Promise<unknown> | undefined
+  return {
+    boot: async (...args) => {
+      const afterFailedSwitch = booted > 0
+      if (repointsBeforeBoot(successor, booted++) && undo === undefined) {
+        const started = repoint(request, afterFailedSwitch)
+        repointing = started
+        undo = await started
+      }
+      return boot(...args)
+    },
+    abandon: async () => {
+      // A successor's own deadline can end its boot while the baseline is still being applied; its undo exists only once that ends.
+      await repointing?.catch(() => undefined)
+      const run = undo
+      undo = undefined
+      repointing = undefined
+      await run?.()
+    },
   }
 }
 
+/** Undoes what an update's baseline advanced in Changes' records ({@link repointForSuccessor}). */
+export type UndoBaseline = () => Promise<void>
+
+/** What re-pointing a successor's active copies needs to know about the start. */
+export interface SuccessorRequest {
+  /** The Delorun home. */
+  readonly home: string
+  /** The profile about to boot. */
+  readonly profile: string
+  /** The release an update left, set only for the successor of an update ({@link updateSource}). */
+  readonly updatedFrom?: RuntimeVersion
+  /** Where the lines about the update's pack files go; the home process's log. */
+  readonly write?: (text: string) => void
+}
+
 /**
- * An update's successor boots without the pre-start steps, so before its Host boots it re-points each recorded active
- * copy's links into the runtime store to its own release ({@link repointActiveCopies}); otherwise a plugin pack copy
- * written under the previous release fails the load check of the new one and the update rolls back.
- * @param request - the home and the profile about to boot.
- * @returns when the copies name this release's packages; immediately for a home without the profile.
- * @throws {CliError} when a copy cannot be re-pointed: the successor does not boot, so the update rolls back.
+ * An update's successor boots without the pre-start steps, so before its first Host boots it runs Changes' part of a
+ * start for the profile ({@link startChanges}) with the signed pack files of the update, which replaces a pack's
+ * approved content that differs from its folder only by the release's own files ({@link verifiedUpdateBaseline}); then
+ * it re-points each recorded active copy's links into the runtime store to its own release
+ * ({@link repointActiveCopies}); otherwise a plugin pack copy written under the previous release fails the load check of
+ * the new one and the update rolls back. The baseline is applied once per update: a boot after a failed switch, which
+ * the predecessor or a restarted successor makes, never applies it, and first makes the copies that load approved
+ * content follow the approved record, which the failed switch's rollback restored while `active.json` kept the failed
+ * release's decision ({@link followApprovedContent}); with protection on, the previous release would otherwise refuse
+ * to resume.
+ *
+ * The same update's failed health check leaves the records of the baseline behind, and a predecessor older than
+ * {@link followApprovedContent} cannot follow them back: the successor then reports the failure only after it has put
+ * every approved-record and `active.json` entry the baseline changed back to what the predecessor left
+ * ({@link revertDecisions}, through the Host runner's `abandon`), so the predecessor's rollback and resume find nothing
+ * advanced. The same undo runs when the boot's own steps throw after the baseline applied.
+ * @param request - the home and the profile about to boot, and the release an update left.
+ * @param afterFailedSwitch - whether a Host of this process booted before.
+ * @returns the undo of what the baseline advanced in the approved record and `active.json`, which the Host runner's
+ *   `abandon` runs when the successor's health check fails ({@link repointingBoot}); `undefined` when no baseline applied or
+ *   for a home without the profile.
+ * @throws {CliError} when Changes cannot prepare the profile or a copy cannot be re-pointed: the successor does not
+ *   boot, so the update rolls back.
  */
-export async function repointForSuccessor(request: { readonly home: string, readonly profile: string }): Promise<void> {
+export async function repointForSuccessor(request: SuccessorRequest, afterFailedSwitch = false): Promise<UndoBaseline | undefined> {
   const { home, profile } = request
-  if (!hasCliProfile(home, profile)) return
+  if (!hasCliProfile(home, profile)) return undefined
+  const enforce = { home, profile, profileDir: profileDirectory(home, profile), harnessLink: isCarriedPackage, ...runningRelease() }
+  const write = request.write ?? (() => undefined)
+  const updateBaseline = afterFailedSwitch || request.updatedFrom === undefined ? undefined : await verifiedUpdateBaseline(request.updatedFrom, write)
+  // Without a verified baseline there is nothing to apply, and the successor boots as it did before.
+  const before = updateBaseline === undefined ? undefined : await recordsOf(enforce)
+  let after: DecisionRecords | undefined
+  const undo: UndoBaseline | undefined = before === undefined ? undefined : async () => { await revertDecisions(enforce, before, after ?? await recordsOf(enforce)) }
   try {
-    await repointActiveCopies({ home, profile, profileDir: profileDirectory(home, profile), harnessLink: isCarriedPackage, ...runningRelease() })
+    if (updateBaseline !== undefined) {
+      try {
+        await startChanges({ home, profile, updateBaseline }, write)
+      } finally {
+        after = await recordsOf(enforce)
+      }
+    }
+    try {
+      if (afterFailedSwitch) await followApprovedContent(enforce)
+      await repointActiveCopies(enforce)
+    } catch (error) {
+      throw new CliError(EXIT.failed, `delorun: the profile ${profile} was not started, because its plugin copies could not be pointed at this release: ${isChangesError(error) ? error.detail : String(error)}`)
+    }
   } catch (error) {
-    throw new CliError(EXIT.failed, `delorun: the profile ${profile} was not started, because its plugin copies could not be pointed at this release: ${isChangesError(error) ? error.detail : String(error)}`)
+    // The Host does not boot, so no health check reports it: the predecessor resumes at once, and it needs the records as it left them.
+    await undo?.().catch((undoError: unknown) => { write(`Delorun could not put the plugin records back after the update's pack files were applied: ${printable(isChangesError(undoError) ? undoError.detail : String(undoError))}\n`) })
+    throw error
   }
+  return undo
 }
 
 /**
@@ -178,17 +262,36 @@ export async function repointForSuccessor(request: { readonly home: string, read
  * @returns when the profile's linked plugins load what Changes allows.
  * @throws {CliError} as {@link startChanges} does.
  */
-export function changesPreStartStep(context: PreStartContext): Promise<void> {
+export async function changesPreStartStep(context: PreStartContext): Promise<void> {
   const { home, profile, kind, successor, output, storedRuntime } = context
+  const write = (text: string): void => {
+    if (kind === 'headless') output.stderr(text)
+    else output.stdout(text)
+  }
   return startChanges({
     home,
     profile,
     ...storedRuntime === undefined ? {} : { runtime: storedRuntime },
     ...kind === 'cli' && !successor ? { ownsHome: true } as const : {},
-  }, (text) => {
-    if (kind === 'headless') output.stderr(text)
-    else output.stdout(text)
-  })
+  }, write)
+}
+
+/**
+ * The signed pack files of the update this process is the successor of ({@link repointForSuccessor} asks for them). A release whose files cannot be verified
+ * replaces nothing: its packs' changes wait for review as they would without an update.
+ * @param from - the release the update left.
+ * @param write - where the line about a failed check goes.
+ * @returns the baseline, or `undefined` when there is none to use.
+ */
+async function verifiedUpdateBaseline(from: RuntimeVersion, write: (text: string) => void): Promise<UpdateBaseline | undefined> {
+  try {
+    const environment = await hostPacksEnvironment(process.env)
+    if ('unsupported' in environment) return undefined
+    return await updateBaselineOf(environment, from, (name, error) => { write(`Delorun could not read the pack ${name} of the update against the signed release, so changes to it wait for your review: ${printable(error instanceof Error ? error.message : String(error))}\n`) })
+  } catch (error) {
+    write(`Delorun could not check the plugin packs of the update against the signed release, so changes to them wait for your review: ${printable(error instanceof Error ? error.message : String(error))}\n`)
+    return undefined
+  }
 }
 
 /**
