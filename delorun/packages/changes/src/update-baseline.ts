@@ -16,7 +16,7 @@ import { resolve, sep } from 'node:path'
 import { DELORUN_HOME_ENTRIES } from '@delorun/contract-home-layout'
 import type { SignedPackFiles } from '@delorun/runtime-store'
 import { readObject } from './store.ts'
-import type { VersionEntry, VersionManifest } from './types.ts'
+import type { ApprovedRecord, VersionEntry, VersionManifest } from './types.ts'
 
 export type { SignedPackFiles }
 
@@ -26,6 +26,12 @@ export interface UpdateBaseline {
   readonly from: string
   /** The release this process runs. */
   readonly to: string
+  /**
+   * Whether either release's verified packs file lists a pack; reads no installed file.
+   * @param name - the pack's package name.
+   * @returns true when `from` or `to` lists a pack of that name.
+   */
+  lists(name: string): boolean
   /**
    * The signed files of one pack in `from` and in `to`, from their verified packs files; each release that lists the pack
    * gives one entry. Reading a pack hashes its installed files, so a pack is asked for only when a waiting change touches
@@ -44,7 +50,20 @@ export interface UpdateBaseline {
  * @returns the baseline, which answers each pack from `packs`.
  */
 export function baselineOfPacks(from: string, to: string, packs: readonly SignedPackFiles[]): UpdateBaseline {
-  return { from, to, packsFor: name => Promise.resolve(packs.filter(pack => pack.name === name)) }
+  return { from, to, lists: name => packs.some(pack => pack.name === name), packsFor: name => Promise.resolve(packs.filter(pack => pack.name === name)) }
+}
+
+/**
+ * Whether an update's baseline can replace anything: some plugin the profile has approved is linked from the pack
+ * store and is a pack one of the two releases lists. Without one, no waiting change is about a release's own files,
+ * and the successor has nothing to read.
+ * @param home - the Delorun home.
+ * @param approved - the profile's approved plugins.
+ * @param baseline - what the successor verified.
+ * @returns true when {@link supersededByUpdate} may be asked about some approved plugin.
+ */
+export function baselineMayApply(home: string, approved: ApprovedRecord, baseline: Pick<UpdateBaseline, 'lists'>): boolean {
+  return Object.entries(approved.plugins).some(([plugin, { source }]) => inPackStore(home, source) && baseline.lists(plugin))
 }
 
 /**
@@ -105,43 +124,42 @@ export function withoutBuildFolder(text: string): string {
 }
 
 /**
- * @param entry - an entry of the folder's content.
+ * @param entry - an entry of a folder's content.
  * @param pack - a pack's signed files.
- * @returns whether the entry is exactly one of the pack's signed files or runtime links.
+ * @returns whether the entry is a regular file whose digest and execute bit are the pack's signed ones.
  */
-function listed(entry: VersionEntry, pack: SignedPackFiles): boolean {
-  if (entry.type === 'link') return entry.runtime === true && entry.outside && pack.peers.some(peer => entry.path === `node_modules/${peer}` && entry.target === peer)
-  const signed = pack.files.get(entry.path)
-  return signed !== undefined && signed.sha256 === entry.digest && signed.executable === entry.executable
+function signedFile(entry: VersionEntry, pack: SignedPackFiles | undefined): boolean {
+  const signed = entry.type === 'file' ? pack?.files.get(entry.path) : undefined
+  return entry.type === 'file' && signed !== undefined && signed.sha256 === entry.digest && signed.executable === entry.executable
 }
 
 /**
- * @param after - the folder's content now.
- * @param pack - the pack's signed files in the release this process runs.
- * @returns whether the folder holds exactly those files and links: each entry is listed, and each listed file and link is present.
+ * @param left - an entry of the approved content, or none.
+ * @param right - an entry of the folder's content, or none.
+ * @returns whether both are absent or both are the same file or link.
  */
-function isExactly(after: VersionManifest, pack: SignedPackFiles): boolean {
-  const present = new Set(after.entries.map(entry => entry.path))
-  return after.entries.every(entry => listed(entry, pack))
-    && [...pack.files.keys()].every(path => present.has(path))
-    && pack.peers.every(peer => present.has(`node_modules/${peer}`))
+function sameEntry(left: VersionEntry | undefined, right: VersionEntry | undefined): boolean {
+  if (left === undefined || right === undefined) return left === right
+  return left.type === 'file'
+    ? right.type === 'file' && right.digest === left.digest && right.executable === left.executable
+    : right.type === 'link' && right.target === left.target && right.runtime === left.runtime
 }
 
 /**
  * @param home - the Delorun home, whose store holds the approved content's objects.
- * @param entry - an entry of the approved content.
- * @param pools - the packs of the two releases.
- * @returns whether the entry is a file or link some pack lists; a `package.json` or `pnpm-lock.yaml` also counts when it
- *   equals a listed one apart from the build folder names ({@link withoutBuildFolder}).
+ * @param entry - an approved entry that the folder no longer holds as it is.
+ * @param origin - the pack of the release the update left.
+ * @param buildPaths - whether that release may carry the build's folder names ({@link leftReleaseWithBuildPaths}).
+ * @returns whether the entry is a file the release the update left signed; a `package.json` or `pnpm-lock.yaml` also
+ *   counts when it equals the text of that release's installed, signed one apart from the build folder names ({@link withoutBuildFolder}).
  */
-async function isReleaseEntry(home: string, entry: VersionEntry, pools: readonly SignedPackFiles[], buildPaths: boolean): Promise<boolean> {
-  if (pools.some(pack => listed(entry, pack))) return true
-  if (!buildPaths || entry.type !== 'file' || !BUILD_PATH_FILES.has(entry.path) || entry.executable) return false
-  const text = withoutBuildFolder((await readObject(home, entry.digest)).toString('utf8'))
-  return pools.some(pack => {
-    const signed = pack.texts.get(entry.path)
-    return signed !== undefined && withoutBuildFolder(signed) === text
-  })
+async function signedBefore(home: string, entry: VersionEntry, origin: SignedPackFiles | undefined, buildPaths: boolean): Promise<boolean> {
+  if (entry.type !== 'file' || origin === undefined) return false
+  if (signedFile(entry, origin)) return true
+  // The signed file must be the same kind of file the approved one is, as the digest rule requires.
+  if (!buildPaths || !BUILD_PATH_FILES.has(entry.path) || origin.files.get(entry.path)?.executable !== entry.executable) return false
+  const signed = await origin.text(entry.path)
+  return signed !== undefined && withoutBuildFolder(signed) === withoutBuildFolder((await readObject(home, entry.digest)).toString('utf8'))
 }
 
 /** What {@link supersededByUpdate} compares. */
@@ -155,31 +173,38 @@ export interface SupersedeRequest {
 }
 
 /**
- * Whether the difference between a plugin's approved content and its folder is only the release's own files: the
- * folder holds exactly what the verified packs file of the release this process runs lists for the pack (no other
- * file, link or byte), and every approved file or link that differs from the folder's is one a pack of either
- * release lists. A `package.json` or `pnpm-lock.yaml` approved from a release up to {@link LAST_RELEASE_WITH_BUILD_PATHS} also counts
- * when it equals a listed one apart from the build's temporary folder names. A difference that holds any other
- * edit, or a folder that is not the signed pack, is a person's change and is not superseded.
+ * Whether the difference between a plugin's approved content and its folder is only the release's own files. Only
+ * the entries that differ are judged, by what the signed data vouches for: an entry the folder holds now must be a file
+ * with the digest and execute bit the verified packs file of the release this process runs lists for it, and an
+ * approved entry the folder no longer holds as it is must be a file the packs file of the release the update left
+ * lists; an entry the approved content lacks must not be listed by that release either. A `package.json` or `pnpm-lock.yaml` approved from a release up to {@link LAST_RELEASE_WITH_BUILD_PATHS} also
+ * counts when it equals that release's installed, signed one apart from the build's temporary folder names. A link, an entry the
+ * signed lists do not vouch for, a signed file the folder lacks, or a person's edit among the differing entries
+ * means the change is not superseded and waits for review. The digests are the ones the scans of the approved
+ * content and the folder already hold; no installed pack is hashed.
  * @param home - the Delorun home.
  * @param baseline - what the update's successor verified.
  * @param request - the plugin, its approved content and its folder's content.
- * @returns true when the update replaces the approved content with the release's own.
+ * @returns true when the update replaces the approved content with the folder's.
  * @throws {ChangesError} `STORE_CORRUPT` when an object of the approved content is missing or altered.
  */
 export async function supersededByUpdate(home: string, baseline: UpdateBaseline, request: SupersedeRequest): Promise<boolean> {
   const { plugin, before, after } = request
   const pools = (await baseline.packsFor(plugin)).filter(pack => pack.name === plugin && (pack.release === baseline.from || pack.release === baseline.to))
   const target = pools.find(pack => pack.release === baseline.to)
-  if (target === undefined || !isExactly(after, target)) return false
+  if (target === undefined) return false
+  const origin = pools.find(pack => pack.release === baseline.from)
   const buildPaths = leftReleaseWithBuildPaths(baseline.from)
+  const was = new Map(before.entries.map(entry => [entry.path, entry]))
   const now = new Map(after.entries.map(entry => [entry.path, entry]))
-  for (const entry of before.entries) {
-    const kept = now.get(entry.path)
-    const same = kept !== undefined && (entry.type === 'file'
-      ? kept.type === 'file' && kept.digest === entry.digest && kept.executable === entry.executable
-      : kept.type === 'link' && kept.target === entry.target && kept.runtime === entry.runtime)
-    if (!same && !await isReleaseEntry(home, entry, pools, buildPaths)) return false
+  for (const path of new Set([...was.keys(), ...now.keys()])) {
+    const approved = was.get(path)
+    const folder = now.get(path)
+    if (sameEntry(approved, folder)) continue
+    // The folder holds a file the release signs, or lacks a file it does not sign.
+    if (folder === undefined ? target.files.has(path) : !signedFile(folder, target)) return false
+    // An added entry must be absent from the release the update left too: a file it signs that the person deleted is the person's decision.
+    if (approved === undefined ? origin === undefined || origin.files.has(path) : !await signedBefore(home, approved, origin, buildPaths)) return false
   }
   return true
 }

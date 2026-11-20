@@ -40,7 +40,7 @@ vi.mock('@delorun/runtime-store', async importOriginal => {
     ...actual,
     openSignedPacks: (release: { readonly version: string }) => {
       const packs = hooks.signed.get(release.version)
-      return Promise.resolve(packs === undefined ? undefined : { files: (name: string) => Promise.resolve(packs.find(pack => pack.name === name)) })
+      return Promise.resolve(packs === undefined ? undefined : { lists: (name: string) => packs.some(pack => pack.name === name), files: (name: string) => Promise.resolve(packs.find(pack => pack.name === name)) })
     },
   }
 })
@@ -96,7 +96,7 @@ const oldFiles = { 'package.json': '{"name":"pkg","version":"1"}\n', 'index.js':
 const newFiles = { 'package.json': '{"name":"pkg","version":"2"}\n', 'index.js': 'export default "two"\n' }
 
 function signed(release: string, files: Readonly<Record<string, string>>): SignedPackFiles {
-  return { name: 'pkg', release: v(release), files: new Map(Object.entries(files).map(([path, body]) => [path, { sha256: sha(body), executable: false }])), peers: [], texts: new Map(Object.entries(files).filter(([path]) => path === 'package.json')) }
+  return { name: 'pkg', release: v(release), files: new Map(Object.entries(files).map(([path, body]) => [path, { sha256: sha(body), executable: false }])), peers: [], text: path => Promise.resolve(path === 'package.json' ? files[path] : undefined) }
 }
 
 /** Both releases' stored packs files, as `openSignedPacks` reads them. */

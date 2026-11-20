@@ -379,6 +379,25 @@ describe('health-check-rollback', TIMEOUT, () => {
     }
   })
 
+  it('a successor whose boot changed nothing sets no deadline of its own: a boot that outlasts it still commits', async () => {
+    const marker = join(tmpdir(), `delorun-nodeadline-${String(process.pid)}-${String(Date.now())}`)
+    const gate = `${marker}.gate`
+    try {
+      const home = await setUp({ abandonMarker: marker, bootGate: gate, successorDeadlineMs: 1_000, nothingAdvanced: true })
+      await start(home)
+      const applying = sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'drain', dataCopy: false } })
+      // The successor's deadline passes while its boot still waits; with nothing to undo it must not report a failure.
+      await new Promise(resolve => setTimeout(resolve, 3_000))
+      writeFileSync(gate, '')
+      expect(final(await applying)).toEqual({ ok: true, outcome: 'committed' })
+      expect(existsSync(marker)).toBe(false)
+      expect(readPointer(home, 'current')).toBe(V2)
+    } finally {
+      rmSync(marker, { force: true })
+      rmSync(gate, { force: true })
+    }
+  })
+
   it('a successor that fails its health check abandons what its boot changed before the predecessor rolls back, and a runner that cannot still reports the failure', async () => {
     const marker = join(tmpdir(), `delorun-abandon-${String(process.pid)}-${String(Date.now())}`)
     try {

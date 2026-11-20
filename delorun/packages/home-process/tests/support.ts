@@ -90,6 +90,8 @@ export interface FixtureBehaviour {
   readonly abandonMarker?: string
   /** Whether its runner's `abandon` throws after creating the marker, as a runner that cannot undo its changes does. */
   readonly abandonFails?: boolean
+  /** Whether its runner reports that its boot changed no profile file, so there is nothing for `abandon` to undo. */
+  readonly nothingAdvanced?: boolean
   /**
    * Its teardown for a switch, which resolves at once by default.
    * @returns when the teardown has finished.
@@ -518,6 +520,10 @@ export class FixtureHostRunner implements HostRunner {
     const host = new FixtureHost(behaviour, access)
     this.booted.push(host)
     return host
+  }
+
+  advanced(): Promise<boolean> {
+    return Promise.resolve(this.behaviour().nothingAdvanced !== true)
   }
 
   abandon(): Promise<void> {

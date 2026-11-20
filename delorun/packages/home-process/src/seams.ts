@@ -366,6 +366,13 @@ export interface HostRunner {
    * @returns when the files are as the predecessor left them, as far as this runner changed them.
    */
   abandon?(): Promise<void>
+  /**
+   * Whether booting changed profile files that {@link abandon} would put back. A successor asks it when its own
+   * deadline passes: with nothing changed, it leaves the failure to the predecessor, which stops it at the health-check
+   * limit and resumes unchanged. A runner without it counts as having changed something.
+   * @returns true when {@link abandon} has something to undo; waits for a baseline still being applied.
+   */
+  advanced?(): Promise<boolean>
 }
 
 /** A studio link, or the reason the Host cannot make one that reaches the studio from this computer. */

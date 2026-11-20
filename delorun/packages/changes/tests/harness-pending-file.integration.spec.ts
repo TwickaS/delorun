@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, renameSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { applyHarnessChange, createHarnessCopy, discardHarnessChange, harnessChanges, HARNESS_PENDING_SCHEMA, showHarnessChange, type HarnessContext } from '../src/harness.ts'
@@ -117,7 +117,7 @@ describe('a file changed outside Delorun after its change was read', () => {
     const stats = lstatSync(inCopy(ctx, START_FILE))
     const claimed = 'export const start = 9\n'
     const cache = harnessScanCachePath(ctx.home, ctx.runtime)
-    writeFileSync(cache, JSON.stringify({ schema: SCAN_CACHE_SCHEMA, files: { [START_FILE]: { dev: stats.dev, ino: stats.ino, size: stats.size, mtimeMs: stats.mtimeMs, ctimeMs: stats.ctimeMs, digest: sha(claimed) } } }))
+    writeFileSync(cache, JSON.stringify({ schema: SCAN_CACHE_SCHEMA, folders: { [realpathSync(harnessCopyDirectory(ctx.home, ctx.runtime))]: { [START_FILE]: { dev: stats.dev, ino: stats.ino, size: stats.size, mtimeMs: stats.mtimeMs, ctimeMs: stats.ctimeMs, digest: sha(claimed) } } } }))
     chmodSync(cache, 0o600)
     const listed = (await harnessChanges(ctx)).changes.find(candidate => candidate.file === START_FILE)!
     expect(listed.to).toBe(fileVersion(START_FILE, claimed))

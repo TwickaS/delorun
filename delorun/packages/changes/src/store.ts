@@ -18,7 +18,7 @@ import { HomeLayoutError, readProtectedFile, writeProtectedFile } from '@delorun
 import { parseRuntimeVersion } from '@delorun/runtime-store'
 import { ChangesError } from './errors.ts'
 import { CHANGES_ENTRIES, changesDirectory, objectsDirectory, versionsDirectory } from './paths.ts'
-import { activeRuntimeModules, compareCodeUnits, DEPENDENCY_DIRECTORY, isDigest, manifestOf, openRegularFile, readChunks, scanFolder, versionOf, type DependencyMode, type ScanOptions } from './tree.ts'
+import { activeRuntimeModules, compareCodeUnits, DEPENDENCY_DIRECTORY, isDigest, manifestOf, openRegularFile, readChunks, scanFolder, versionOf, type DependencyMode, type ScanMemo, type ScanOptions } from './tree.ts'
 import { VERSION_MANIFEST_SCHEMA, type ContentVersion, type ObjectDigest, type VersionEntry, type VersionManifest } from './types.ts'
 
 /** The mode of an active file whose owner execute bit is set. */
@@ -525,11 +525,12 @@ async function isInstalledDirectory(path: string): Promise<boolean> {
  * @param target - the directory.
  * @param version - the version id.
  * @param release - the release whose installed packages its `runtime` links must name; `runtimes/current` when omitted.
+ * @param memo - the digests of this boot's earlier scans, for a caller that only decides whether to rewrite; none reads every file.
  * @returns whether a scan of it gives the version; false when it does not exist.
  */
-export async function holdsVersion(home: string, target: string, version: ContentVersion, release?: string): Promise<boolean> {
+export async function holdsVersion(home: string, target: string, version: ContentVersion, release?: string, memo?: ScanMemo): Promise<boolean> {
   try {
-    return versionOf((await scanFolder(target, { ...ACTIVE_SCAN, runtimeHome: home, ...release === undefined ? {} : { runtimeRelease: release } })).entries) === version
+    return versionOf((await scanFolder(target, { ...ACTIVE_SCAN, runtimeHome: home, ...release === undefined ? {} : { runtimeRelease: release }, ...memo === undefined ? {} : { memo } })).entries) === version
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
     throw error

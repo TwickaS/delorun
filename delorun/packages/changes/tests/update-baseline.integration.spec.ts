@@ -11,9 +11,10 @@ import { enforceApprovedContent, followApprovedContent, prepareReload, recordsOf
 import { checkLoadedContent } from '../src/invariants.ts'
 import { readActiveRecord, readApproved, readChangeLog, writeActiveRecord, writeApproved, writeChangeLog } from '../src/records.ts'
 import { activeDirectory } from '../src/paths.ts'
-import { ACTIVE_RECORD_SCHEMA } from '../src/types.ts'
+import { manifestOf } from '../src/tree.ts'
+import { ACTIVE_RECORD_SCHEMA, type ObjectDigest, type VersionEntry, type VersionManifest } from '../src/types.ts'
 import { storeFolder } from '../src/store.ts'
-import { baselineOfPacks, LAST_RELEASE_WITH_BUILD_PATHS, leftReleaseWithBuildPaths, supersededByUpdate, withoutBuildFolder, type SignedPackFiles, type UpdateBaseline } from '../src/update-baseline.ts'
+import { baselineMayApply, baselineOfPacks, LAST_RELEASE_WITH_BUILD_PATHS, leftReleaseWithBuildPaths, supersededByUpdate, withoutBuildFolder, type SignedPackFiles, type UpdateBaseline } from '../src/update-baseline.ts'
 import { approvedVersion, fixture, history, linkAs, NOW, PROFILE, start, type Fixture } from './profile-fixture.ts'
 import { writeFiles } from './support.ts'
 
@@ -34,7 +35,7 @@ function signed(release: string, files: Files, texts: readonly string[] = ['pack
     release: parseRuntimeVersion(release)!,
     files: new Map(Object.entries(files).map(([path, body]) => [path, { sha256: sha(body), executable: false }])),
     peers: [],
-    texts: new Map(Object.entries(files).filter(([path]) => texts.includes(path))),
+    text: path => Promise.resolve(texts.includes(path) ? files[path] : undefined),
   }
 }
 
@@ -169,6 +170,23 @@ describe('what an update never replaces', () => {
     expect(await approvedVersion(fx, 'pkg')).toBe(approved)
   })
 
+  it('compares the build folder allowance with the previous release\'s text only', async () => {
+    const folder = { ...released22, 'package.json': manifest('Qqqqqq'), 'pnpm-lock.yaml': lock('Qqqqqq') }
+    const { fx, approved } = await updated({ ...released21, 'package.json': manifest('Xxxxxx'), 'pnpm-lock.yaml': lock('Xxxxxx') }, folder)
+    // The approved texts equal the new release's apart from the build folder, but the previous release signed other texts.
+    const previous = { ...released21, 'package.json': manifest('Yyyyyy').replace('"1.0.0"', '"0.9.0"'), 'pnpm-lock.yaml': lock('Yyyyyy').replace('importers', 'other') }
+    expect((await enforceApprovedContent(request(fx, baselineOf(previous, folder)))).pending).toHaveLength(1)
+    expect(await approvedVersion(fx, 'pkg')).toBe(approved)
+  })
+
+  it('applies the build folder allowance only to a file with the execute bit the previous release signed', async () => {
+    const { fx, approved } = await updated({ ...released21, 'package.json': manifest('Xxxxxx'), 'pnpm-lock.yaml': lock('Xxxxxx') }, released22)
+    const previous = signed('0.1.0-preview.2.1', released21)
+    const executable: SignedPackFiles = { ...previous, files: new Map([...previous.files].map(([path, file]) => [path, { ...file, executable: path === 'package.json' }])) }
+    expect((await enforceApprovedContent(request(fx, baselineOfPacks('0.1.0-preview.2.1', '2.2.0', [executable, signed('2.2.0', released22)])))).pending).toHaveLength(1)
+    expect(await approvedVersion(fx, 'pkg')).toBe(approved)
+  })
+
   it('does not close a change that mixes release files with an edit, and the whole change keeps waiting', async () => {
     const { fx, approved } = await updated({ ...released21, 'package.json': manifest('Xxxxxx'), 'extra.js': 'planted\n' }, released22)
     const changes = await enforceApprovedContent(request(fx, baselineOf(released21, released22)))
@@ -257,6 +275,78 @@ describe('supersededByUpdate', () => {
     const stored = await storeFolder(fx.home, source)
     const baseline: UpdateBaseline = baselineOfPacks('0.1.0-preview.2.1', '2.2.0', [{ ...signed('2.2.0', released22), name: 'another' }])
     expect(await supersededByUpdate(fx.home, baseline, { plugin: 'pkg', before: stored.manifest, after: stored.manifest })).toBe(false)
+  })
+})
+
+/** The entries of a content version, from files by path and body, and optional extra entries. */
+function content(files: Files, extra: readonly VersionEntry[] = []): VersionManifest {
+  return manifestOf([...Object.entries(files).map(([path, body]): VersionEntry => ({ type: 'file', path, digest: sha(body) as ObjectDigest, size: body.length, executable: false })), ...extra])
+}
+
+const binary: VersionEntry = { type: 'file', path: 'node_modules/ext/bin', digest: sha('an external package\'s binary') as ObjectDigest, size: 1, executable: true }
+const runtimeLink: VersionEntry = { type: 'link', path: 'node_modules/peer', target: 'peer', outside: true, runtime: true }
+
+describe('the entries that differ decide, as the agent packs of 2.1 to 2.2 show', () => {
+  // What the real pair held: package.json and pnpm-lock.yaml replaced by the new release's signed ones, pnpm-workspace.yaml dropped
+  // by it, and entries no signed list holds (an external package's binary, the runtime links) unchanged on both sides.
+  const from = { ...released21, 'pnpm-workspace.yaml': 'packages: []\n' }
+  const to = released22
+  const baseline = baselineOf(from, to)
+  const unchanged = [binary, runtimeLink]
+
+  it('closes when every differing entry is a signed file or a file the release dropped, whatever else is unchanged', async () => {
+    expect(await supersededByUpdate('/h', baseline, { plugin: 'pkg', before: content(from, unchanged), after: content(to, unchanged) })).toBe(true)
+  })
+
+  it('waits when a link differs, or a file the release signs is not what the folder holds', async () => {
+    const moved: VersionEntry = { ...runtimeLink, target: 'another' }
+    expect(await supersededByUpdate('/h', baseline, { plugin: 'pkg', before: content(from, [binary, runtimeLink]), after: content(to, [binary, moved]) })).toBe(false)
+    expect(await supersededByUpdate('/h', baseline, { plugin: 'pkg', before: content(from, [binary]), after: content(to, [binary, runtimeLink]) })).toBe(false)
+    expect(await supersededByUpdate('/h', baseline, { plugin: 'pkg', before: content(from, unchanged), after: content({ ...to, 'index.js': 'tampered\n' }, unchanged) })).toBe(false)
+  })
+
+  it('waits for an entry that differs only in its execute bit, an unsigned new file, or an external binary that changed', async () => {
+    const executable: VersionEntry = { type: 'file', path: 'index.js', digest: sha(to['index.js']) as ObjectDigest, size: 1, executable: true }
+    const withoutIndex = { ...to }
+    delete (withoutIndex as Record<string, string>)['index.js']
+    expect(await supersededByUpdate('/h', baseline, { plugin: 'pkg', before: content(from, unchanged), after: content(withoutIndex, [...unchanged, executable]) })).toBe(false)
+    expect(await supersededByUpdate('/h', baseline, { plugin: 'pkg', before: content(from, unchanged), after: content({ ...to, 'new.js': 'unsigned\n' }, unchanged) })).toBe(false)
+    expect(await supersededByUpdate('/h', baseline, { plugin: 'pkg', before: content(from, unchanged), after: content(to, [{ ...binary, digest: sha('another binary') as ObjectDigest }, runtimeLink]) })).toBe(false)
+  })
+
+  it('closes a removal only when the release the update left lists the file with the approved digest and this release does not list it', async () => {
+    const dropped = { ...from }
+    const kept = { ...to, 'pnpm-workspace.yaml': from['pnpm-workspace.yaml'] }
+    // The folder lacks pnpm-workspace.yaml, which the release this process runs does not list: closes.
+    expect(await supersededByUpdate('/h', baseline, { plugin: 'pkg', before: content(dropped, unchanged), after: content(to, unchanged) })).toBe(true)
+    // The approved file is not the digest the previous release signed, or the previous release does not list it: waits.
+    expect(await supersededByUpdate('/h', baseline, { plugin: 'pkg', before: content({ ...dropped, 'pnpm-workspace.yaml': 'packages: [edited]\n' }, unchanged), after: content(to, unchanged) })).toBe(false)
+    expect(await supersededByUpdate('/h', baselineOf(released21, to), { plugin: 'pkg', before: content(dropped, unchanged), after: content(to, unchanged) })).toBe(false)
+    // The release this process runs still lists it, and the folder lacks it (a person deleted it): waits.
+    const stillListed = baselineOf(from, kept)
+    expect(await supersededByUpdate('/h', stillListed, { plugin: 'pkg', before: content(dropped, unchanged), after: content(to, unchanged) })).toBe(false)
+  })
+
+  it('closes an added entry only when it was absent before and the folder holds exactly what this release signs for it', async () => {
+    const added = { ...to, 'added.js': 'export const added = 1\n' }
+    const withAdded = baselineOf(from, added)
+    expect(await supersededByUpdate('/h', withAdded, { plugin: 'pkg', before: content(from, unchanged), after: content(added, unchanged) })).toBe(true)
+    expect(await supersededByUpdate('/h', withAdded, { plugin: 'pkg', before: content(from, unchanged), after: content({ ...to, 'added.js': 'another\n' }, unchanged) })).toBe(false)
+    expect(await supersededByUpdate('/h', baseline, { plugin: 'pkg', before: content(from, unchanged), after: content(added, unchanged) })).toBe(false)
+  })
+
+  it('waits for an entry the approved content lacks when the release the update left signs it: the person deleted it', async () => {
+    const hook = { ...from, 'hook.js': 'export const hook = 1\n' }
+    const deleted = baselineOf(hook, { ...to, 'hook.js': hook['hook.js'] })
+    // The person deleted hook.js and approved that; this release signs it again with the same digest.
+    expect(await supersededByUpdate('/h', deleted, { plugin: 'pkg', before: content(from, unchanged), after: content({ ...to, 'hook.js': hook['hook.js'] }, unchanged) })).toBe(false)
+    // Without the previous release listing a pack at all, nothing about the approved side is vouched for.
+    const onlyNew = baselineOfPacks('0.1.0-preview.2.1', '2.2.0', [signed('2.2.0', { ...to, 'added.js': 'x\n' })])
+    expect(await supersededByUpdate('/h', onlyNew, { plugin: 'pkg', before: content(from, unchanged), after: content({ ...to, 'added.js': 'x\n' }, unchanged) })).toBe(false)
+  })
+
+  it('waits when an approved entry that differs is not what the release the update left signed', async () => {
+    expect(await supersededByUpdate('/h', baseline, { plugin: 'pkg', before: content({ ...from, 'index.js': 'edited\n' }, unchanged), after: content(to, unchanged) })).toBe(false)
   })
 })
 
@@ -359,5 +449,20 @@ describe('undoing a start\'s decisions', () => {
     expect(await revertDecisions(request(fx), before, started)).toEqual(['extra'])
 
     expect((await readActiveRecord(fx.home, PROFILE)).plugins).toEqual({ pkg: later })
+  })
+})
+
+describe('baselineMayApply', () => {
+  const baseline = baselineOfPacks('1.0.0', '2.0.0', [signed('1.0.0', { 'package.json': '{}' })])
+  const approved = (source: string, name = 'pkg'): Parameters<typeof baselineMayApply>[1] => ({ schema: 'delorun.changes-approved/1', plugins: { [name]: { source, version: sha('v') as never, approvedAt: NOW.toISOString() } } })
+
+  it('applies for an approved plugin linked from the pack store that a release lists', () => {
+    expect(baselineMayApply('/h', approved('/h/packs/current/pkg/package'), baseline)).toBe(true)
+  })
+
+  it('does not apply for a plugin outside the pack store, a pack no release lists, or no plugin', () => {
+    expect(baselineMayApply('/h', approved('/elsewhere/pkg'), baseline)).toBe(false)
+    expect(baselineMayApply('/h', approved('/h/packs/current/other/package', 'other'), baseline)).toBe(false)
+    expect(baselineMayApply('/h', { schema: 'delorun.changes-approved/1', plugins: {} }, baseline)).toBe(false)
   })
 })
