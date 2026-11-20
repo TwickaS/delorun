@@ -19,7 +19,7 @@ Choose the evidence with `dsh-pre-push-checks`, then run it through Delorun's ch
 
 | Situation | Command |
 | --- | --- |
-| Before a commit or push, in seconds | `node_modules/.bin/tsx delorun/apps/tools/src/run-checks.ts --preflight`: the commit standard, the changelog fragment, whitespace (`gates/whitespace.ts --base origin/main --fix` repairs it), secrets and identifiers, the JSDoc rules, and the changed packages' typecheck |
+| Before a commit or push, in seconds | `node_modules/.bin/tsx delorun/apps/tools/src/run-checks.ts --preflight`: the commit standard, the changelog fragment, whitespace (`delorun/apps/tools/src/checks/gates/whitespace.ts --base origin/main --fix` repairs it), secrets and identifiers, the JSDoc rules, and the changed packages' typecheck |
 | While working | `pnpm check`: the agent tier, which leaves out the replays, the web lane and the Docker lane |
 | The selection and its reasons, without running it | `pnpm check -- --plan` |
 | One package or file | `node_modules/.bin/tsx delorun/apps/tools/src/run-checks.ts <path>…` |
@@ -39,6 +39,8 @@ The test lanes, by what they need:
 | `tests:snapshots` | upstream's recorded-session replay | upstream-owned code changes |
 | `tests:upstream-changed` | the specs of changed upstream packages and their direct dependents | an upstream package changes |
 
+Run a Delorun spec directly with `pnpm exec vitest run --config delorun/vitest.config.ts <spec>`; the root vitest config does not include Delorun's specs. Integration specs and session readers load built `lib/`, so a stale `lib/` fails them: `--only build:delorun` rebuilds it, and a spec never builds a package itself.
+
 A new spec goes in its package's `tests/` directory. Name it `*.integration.spec.ts` when it runs git, Node or `tsx` children, a real profile, a release build or many durable writes to a real file tree; `gates:spec-lanes` refuses a unit spec that starts a process, and every `spawnSync` or `execFileSync` in a spec needs a `timeout`. `--only tests:fork` runs both phases.
 
 A spec that fixes "now" fixes every time it compares against, file modification times included (`utimesSync`), or injects the clock into the code under test; a fixed date beside a time the clock or the file system supplies starts failing on the day the real clock passes it. `--only tests:moved-clock` runs the unit specs with the clock moved forward and names such a test; run it after adding dated fixtures.
@@ -55,14 +57,14 @@ A spec that fixes "now" fixes every time it compares against, file modification 
 
 ## Commit
 
-1. A change people can perceive adds one fragment per feature under [`delorun/changelog/unreleased/`](../../../delorun/changelog/README.md); a later change to the same feature edits its fragment instead of adding another, and `assemble.ts --list-unreleased` shows where a change belongs.
+1. A change people can perceive adds one fragment per feature under [`delorun/changelog/unreleased/`](../../../delorun/changelog/README.md); a later change to the same feature edits its fragment instead of adding another, and `assemble.ts --list-unreleased` shows where a change belongs. A fragment's section is one of Security, Added, Changed, Fixed, Removed or From upstream. A feature a person cannot reach yet goes in `delorun/changelog/pending/` with a `waits:` line naming what must be wired first. A release summary is one plain line of at most 200 characters.
 2. `git commit -s` with a Conventional Commits subject; a change nobody can perceive ends with `Changelog: none (<reason>)`.
 3. The `commit-msg` hook checks the message against the commit standard; the pre-push gate checks what changed since the remote branch's tip. Merging by fast-forward after the branch push does not rerun the gate, because the tree pass record covers the same commit ([tools README](../../../delorun/apps/tools/README.md#local-checks)).
 4. Open the pull request with `dsh-pr-description`.
 
 ## Tools
 
-- `gh` defaults to the upstream remote in this repository: pass `--repo` with the Delorun repository on every call.
+- `gh` can default to the upstream remote in a clone that has one: pass `--repo` with the Delorun repository on every call.
 - Upstream's plugin-manager specs run through `pnpm exec vitest`; a bare `vitest` finds a global pnpm and fails the spec that needs the workspace's pnpm.
 - Heavy runs of `run-checks.ts` share the machine's CPU slots, memory and disk-heavy places, first come, first served; a waiting run prints why it waits, its position and how long it has waited, and `run-checks.ts --queue` shows who holds slots. A run of a few small checks takes none, and the lead's trunk push sets `DELORUN_GATE_PRIORITY=trunk` to go ahead of waiting runs.
 - Run your own heavy commands (a build, `tsc`, a focused `vitest` run) inside the same budget: `node_modules/.bin/tsx delorun/apps/tools/src/with-slots.ts --slots 4 -- <command>`, with `--disk` for an install, a build or the fork suite; a test runner takes `--maxWorkers=$DELORUN_SLOTS`. Never start one beside the budget.
