@@ -143,6 +143,9 @@ async function ask(...clients: Client[]): Promise<{ readonly result: ReturnType<
   return { result, eventId }
 }
 
+/** What the delegation gate does after an allow-run answer: keep the program's rule beside the seat's lease. */
+const keepRule = (): void => { (w.consent as { addRunRule(child: string, rule: typeof RULE): boolean }).addRunRule(w.child.id, RULE) }
+
 const denied = { result: { ok: false, error: { code: 'LOOPBACK_REQUIRED' } } }
 const applied = { result: { ok: true } }
 
@@ -208,6 +211,7 @@ describe('the seat relay on the real Gateway and the real reach guard', () => {
       expect(await answer(device, eventId, RUN_ANSWER)).toMatchObject(denied)
       expect(w.relay.pendingOf(w.child.id)).toBe(true)
       expect(w.events(w.child, 'external-agent/run-allowed')).toEqual([])
+      expect(w.kept).toEqual([])
       expect(w.events(w.child, 'approval/decided')).toEqual([])
     }
     await refused()
@@ -220,6 +224,7 @@ describe('the seat relay on the real Gateway and the real reach guard', () => {
     grants.mintAnswer(holder, answerKey({ agent: w.child.id, callId: 'call-1', grants: 'external-agent' }), RUN_ANSWER)
     expect(await answer(device, eventId, RUN_ANSWER)).toMatchObject(applied)
     await expect(result).resolves.toBe('allow-run')
+    keepRule()
     await new Promise<void>(resolve => { setImmediate(resolve) })
     expect(w.events(w.child, 'external-agent/run-allowed')).toHaveLength(1)
   })
@@ -242,6 +247,7 @@ describe('the seat relay on the real Gateway and the real reach guard', () => {
     expect(w.events(w.child, 'external-agent/run-allowed')).toEqual([])
     expect(await answer(page, eventId, RUN_ANSWER)).toMatchObject(applied)
     await expect(result).resolves.toBe('allow-run')
+    keepRule()
     await new Promise<void>(resolve => { setImmediate(resolve) })
     expect(w.events(w.child, 'external-agent/run-allowed')).toHaveLength(1)
   })
