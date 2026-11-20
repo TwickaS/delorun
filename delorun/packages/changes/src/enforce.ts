@@ -307,6 +307,64 @@ export async function followApprovedContent(request: EnforceRequest): Promise<re
   }, { waitMs: request.lockWaitMs ?? PROFILE_LOCK_WAIT_MS })
 }
 
+/** What the approved record and `active.json` name for a profile at one moment ({@link recordsOf}). */
+export interface DecisionRecords {
+  /** The profile's approved record. */
+  readonly approved: ApprovedRecord
+  /** `active.json`'s plugins. */
+  readonly active: Readonly<Record<string, ActiveContent>>
+}
+
+/**
+ * Read the two records a start decides, for {@link revertDecisions}.
+ * @param request - the home, the profile and its directory.
+ * @returns the approved record and the active record's plugins now.
+ * @throws {ChangesError} when a record cannot be read.
+ */
+export async function recordsOf(request: Pick<EnforceRequest, 'home' | 'profile' | 'profileDir'>): Promise<DecisionRecords> {
+  return { approved: await readApproved(request.profileDir), active: (await readActiveRecord(request.home, request.profile)).plugins }
+}
+
+/**
+ * Undo what one start decided in the approved record and `active.json`, for an update's successor whose health check
+ * failed: the release it left may predate {@link followApprovedContent}, and with protection on it refuses to resume
+ * when `active.json` names a version the restored approved record does not. Only a plugin whose entry still equals
+ * `after` goes back to its `before` entry (or loses it when it had none), so an entry changed since, by a person or
+ * another writer, is kept. The change log and the history are not touched.
+ * @param request - the home, the profile and its directory.
+ * @param before - the records before the start.
+ * @param after - the records the start left.
+ * @returns the plugins whose approved entry or active entry was put back, in record order.
+ * @throws {ChangesError} when a record cannot be read or written.
+ */
+export async function revertDecisions(request: Pick<EnforceRequest, 'home' | 'profile' | 'profileDir' | 'lockWaitMs'>, before: DecisionRecords, after: DecisionRecords): Promise<readonly string[]> {
+  const { home, profile, profileDir } = request
+  const same = (left: unknown, right: unknown): boolean => JSON.stringify(left) === JSON.stringify(right)
+  /** The names whose entry differs between `before` and `after`. */
+  const changed = <T>(from: Readonly<Record<string, T>>, to: Readonly<Record<string, T>>): string[] => [...new Set([...Object.keys(from), ...Object.keys(to)])].filter(name => !same(from[name], to[name]))
+  if (changed(before.approved.plugins, after.approved.plugins).length === 0 && changed(before.active, after.active).length === 0) return []
+  return withFileLock(join(profileDir, 'package.json'), async () => {
+    const now = await recordsOf(request)
+    const touched = new Set<string>()
+    /** `now` with each changed entry that still equals `after`'s put back to `before`'s. */
+    const reverted = <T>(was: Readonly<Record<string, T>>, left: Readonly<Record<string, T>>, still: Readonly<Record<string, T>>): Record<string, T> => {
+      const entries: Record<string, T> = { ...still }
+      for (const name of changed(was, left)) {
+        if (!same(still[name], left[name])) continue
+        if (was[name] === undefined) delete entries[name]
+        else entries[name] = was[name]
+        touched.add(name)
+      }
+      return entries
+    }
+    const approvedPlugins = reverted(before.approved.plugins, after.approved.plugins, now.approved.plugins)
+    const activePlugins = reverted(before.active, after.active, now.active)
+    if (!same(approvedPlugins, now.approved.plugins)) await writeApproved(profileDir, { ...now.approved, plugins: approvedPlugins })
+    if (!same(activePlugins, now.active)) await writeActiveRecord(home, profile, { schema: ACTIVE_RECORD_SCHEMA, plugins: activePlugins })
+    return [...touched]
+  }, { waitMs: request.lockWaitMs ?? PROFILE_LOCK_WAIT_MS })
+}
+
 /**
  * Who holds the profile write lock, from the process id upstream's lock file records.
  * @param profileDir - the profile directory.

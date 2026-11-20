@@ -633,11 +633,9 @@ async function startHomeProcess(request: StartRequest, dependencies: StartDepend
       profile: request.profile,
       running,
       startId,
-      host: {
-        // A Host booted again after the first, as after a failed switch, finds its active copies pointed at the release
-        // that failed; a successor's first boot finds them pointed at its predecessor's.
-        boot: repointingBoot({ home: request.home, profile: request.profile, ...updatedFrom === undefined ? {} : { updatedFrom }, write: text => { homeLog.logger.info(text.trimEnd()) } }, handover !== undefined, async (access: Parameters<HomeProcessOptions['host']['boot']>[0], controls: Parameters<HomeProcessOptions['host']['boot']>[1]) => bootProfile(handover === undefined ? startRequest : { ...startRequest, open: false }, tracked, runtime.store ? { version: running, composed: runtime.composed } : undefined, homeLog, retry, { control: controls.restart, running: booted, channel: access })),
-      },
+      // A Host booted again after the first, as after a failed switch, finds its active copies pointed at the release
+      // that failed; a successor's first boot finds them pointed at its predecessor's.
+      host: repointingBoot({ home: request.home, profile: request.profile, ...updatedFrom === undefined ? {} : { updatedFrom }, write: text => { homeLog.logger.info(text.trimEnd()) } }, handover !== undefined, async (access: Parameters<HomeProcessOptions['host']['boot']>[0], controls: Parameters<HomeProcessOptions['host']['boot']>[1]) => bootProfile(handover === undefined ? startRequest : { ...startRequest, open: false }, tracked, runtime.store ? { version: running, composed: runtime.composed } : undefined, homeLog, retry, { control: controls.restart, running: booted, channel: access })),
       ...runtime.store ? { restart: restartSupport(request.home, running, booted) } : {},
       preStart: () => runPreStartSteps(dependencies.preStartSteps, {
         home: request.home,

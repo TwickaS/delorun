@@ -7,7 +7,7 @@ import { rmSync, symlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { parseRuntimeVersion } from '@delorun/runtime-store'
-import { enforceApprovedContent, followApprovedContent, prepareReload, repointActiveCopies, startNotice, type StartChanges } from '../src/enforce.ts'
+import { enforceApprovedContent, followApprovedContent, prepareReload, recordsOf, repointActiveCopies, revertDecisions, startNotice, type StartChanges } from '../src/enforce.ts'
 import { checkLoadedContent } from '../src/invariants.ts'
 import { readActiveRecord, readApproved, readChangeLog, writeActiveRecord, writeApproved, writeChangeLog } from '../src/records.ts'
 import { ACTIVE_RECORD_SCHEMA } from '../src/types.ts'
@@ -276,5 +276,43 @@ describe('a failed health check after the baseline advanced, with protection on'
     expect(await followApprovedContent(request(fx))).toEqual([])
     expect((await readActiveRecord(fx.home, PROFILE)).plugins.pkg).toEqual(other)
     expect(record.plugins.pkg).toEqual({ version: approved, kind: 'approved' })
+  })
+})
+
+describe('undoing a start\'s decisions', () => {
+  it('puts back the approved and active entries the baseline changed, so a predecessor without followApprovedContent resumes', async () => {
+    const { fx, approved } = await updated(released21, released22)
+    const before = await recordsOf(request(fx))
+    await enforceApprovedContent(request(fx, baselineOf(released21, released22)))
+    const after = await recordsOf(request(fx))
+    expect(after.active.pkg).not.toEqual(before.active.pkg)
+
+    expect(await revertDecisions(request(fx), before, after)).toEqual(['pkg'])
+
+    expect(await recordsOf(request(fx))).toEqual(before)
+    expect(await approvedVersion(fx, 'pkg')).toBe(approved)
+    // The predecessor re-points its copies to what the record names, as every release does at its start.
+    await repointActiveCopies(request(fx))
+    expect(await checkLoadedContent({ home: fx.home, profile: PROFILE, profileDir: fx.profileDir })).toEqual([])
+  })
+
+  it('does nothing, and takes no lock, when the start changed nothing', async () => {
+    const { fx } = await updated(released21, released22)
+    const records = await recordsOf(request(fx))
+    expect(await revertDecisions({ ...request(fx), lockWaitMs: 0 }, records, records)).toEqual([])
+  })
+
+  it('keeps an entry that changed after the start, and removes an entry the start added', async () => {
+    const { fx } = await updated(released21, released22)
+    const before = await recordsOf(request(fx))
+    const added = { version: before.active.pkg!.version!, kind: 'approved' as const }
+    const started = { ...before, active: { ...before.active, pkg: { version: added.version, kind: 'work-session' as const }, extra: added } }
+    const later = { version: (await storeFolder(fx.home, join(fx.home, 'packs', '2.2.0', 'pkg', 'package'))).version, kind: 'work-session' as const }
+    // A later writer changed `pkg`, so only `extra`, which still equals what the start wrote, goes.
+    await writeActiveRecord(fx.home, PROFILE, { schema: ACTIVE_RECORD_SCHEMA, plugins: { pkg: later, extra: added } })
+
+    expect(await revertDecisions(request(fx), before, started)).toEqual(['extra'])
+
+    expect((await readActiveRecord(fx.home, PROFILE)).plugins).toEqual({ pkg: later })
   })
 })

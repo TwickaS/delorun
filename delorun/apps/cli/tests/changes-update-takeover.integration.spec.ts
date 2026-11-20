@@ -13,13 +13,13 @@ import { dirname, join, relative } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
-import { attestTerminal, listChanges, readApproved, readChangeLog, setProtection, type SignedPackFiles, type UpdateBaseline } from '@delorun/changes'
+import { attestTerminal, listChanges, readActiveRecord, readApproved, readChangeLog, setProtection, type SignedPackFiles } from '@delorun/changes'
 import type { RuntimeVersion } from '@delorun/contract-home-layout'
 import { acquireHomeLock, runDirectory } from '@delorun/home'
 import type { HandoverMessage } from '@delorun/contract-home-process'
 import type { HandoverLine, HandoverPipe } from '@delorun/home-process'
 import { parseRuntimeVersion } from '@delorun/runtime-store'
-import { startChanges } from '../src/changes/start.ts'
+import { changesApprovedContent, repointForSuccessor, startChanges } from '../src/changes/start.ts'
 import type { CommandContext } from '../src/command.ts'
 import { NO_APPROVED_CONTENT } from '../src/compose.ts'
 import { NO_RELEASE_PACKS } from '../src/release-packs.ts'
@@ -30,32 +30,35 @@ import { realPreStartSteps, startForeground, upstreamDependencies, type StartDep
 import { runtimeOfFile } from '../src/update/runtime.ts'
 import { composedBootRows, composedProviders } from './fixtures/composed-rows.ts'
 
-const hooks = vi.hoisted(() => ({ baseline: undefined as import('@delorun/changes').UpdateBaseline | undefined, asked: [] as string[] }))
+const hooks = vi.hoisted(() => ({ signed: new Map<string, import('@delorun/changes').SignedPackFiles[]>(), asked: [] as string[] }))
 
-vi.mock('../src/changes/update-baseline.ts', async importOriginal => {
-  const actual = await importOriginal<typeof import('../src/changes/update-baseline.ts')>()
-  return {
-    ...actual,
-    updateBaselineOf: (...args: Parameters<typeof actual.updateBaselineOf>) => {
-      hooks.asked.push(args[1])
-      return Promise.resolve(hooks.baseline)
-    },
-  }
+// The real `updateBaselineOf` runs, with its newer-release guard and its two packs-file reads; the signature checks of
+// `readSignedPackFiles` are the `packs-client` specs'.
+vi.mock('@delorun/runtime-store', async importOriginal => {
+  const actual = await importOriginal<typeof import('@delorun/runtime-store')>()
+  return { ...actual, readSignedPackFiles: (release: { readonly version: string }) => Promise.resolve(hooks.signed.get(release.version) ?? []) }
 })
 
 vi.mock('@delorun/plugin-packs/environment', () => ({
-  hostPacksEnvironment: () => Promise.resolve({ release: () => Promise.reject(new Error('unused')), files: undefined }),
+  hostPacksEnvironment: () => Promise.resolve({
+    release: (other?: string) => {
+      if (other !== undefined) hooks.asked.push(other)
+      return Promise.resolve({ version: other ?? '2.0.0' })
+    },
+    files: undefined,
+  }),
 }))
 
 let osHome: string
 let home: string
 let context: CommandContext
 const exits: (() => void)[] = []
-/** A loopback listener standing in for the Host's studio, whose health route answers 204. */
+/** A loopback listener standing in for the Host's studio, whose health route answers 204 unless `studioStatus` says otherwise. */
 let studio: Server
+let studioStatus = 204
 
 beforeEach(async () => {
-  studio = createServer((_request, response) => { response.writeHead(204).end() })
+  studio = createServer((_request, response) => { response.writeHead(studioStatus).end() })
   await new Promise<void>(resolve => studio.listen(0, '127.0.0.1', resolve))
   osHome = realpathSync(mkdtempSync(join(tmpdir(), 'delorun-takeover-')))
   home = join(osHome, '.delorun')
@@ -65,7 +68,8 @@ beforeEach(async () => {
   vi.stubEnv('DELORUN_HOME', undefined)
   vi.stubEnv('DELORUN_PROFILE', undefined)
   hooks.asked = []
-  hooks.baseline = undefined
+  hooks.signed.clear()
+  studioStatus = 204
   disabledRows.length = 0
   context = { env: { HOME: osHome, DSH_HOME: join(osHome, '.dsh'), DEEPSEEK_API_KEY: 'fixture-key' }, stdout: () => undefined, stderr: () => undefined }
 })
@@ -89,7 +93,11 @@ function signed(release: string, files: Readonly<Record<string, string>>): Signe
   return { name: 'pkg', release: v(release), files: new Map(Object.entries(files).map(([path, body]) => [path, { sha256: sha(body), executable: false }])), peers: [], texts: new Map(Object.entries(files).filter(([path]) => path === 'package.json')) }
 }
 
-const baseline: UpdateBaseline = { from: '1.0.0', to: '2.0.0', packs: [signed('1.0.0', oldFiles), signed('2.0.0', newFiles)] }
+/** Both releases' stored packs files, as `readSignedPackFiles` reads them. */
+function publishPacks(): void {
+  hooks.signed.set('1.0.0', [signed('1.0.0', oldFiles)])
+  hooks.signed.set('2.0.0', [signed('2.0.0', newFiles)])
+}
 
 function writePack(release: string, files: Readonly<Record<string, string>>): void {
   const folder = join(home, 'packs', release, 'pkg', 'package')
@@ -120,9 +128,9 @@ async function updatedHome(): Promise<void> {
 const disabledRows: string[] = []
 
 /** A handover line of an update from release 1.0.0 to 2.0.0, and the successor's end of its pipe. */
-function updatePipe(messages: HandoverMessage[]): HandoverPipe {
+function updatePipe(messages: HandoverMessage[], purpose: HandoverLine['purpose'] = 'update'): HandoverPipe {
   const handover: HandoverLine = {
-    type: 'handover', purpose: 'update', v: 1, home, profile: PROFILE, from: v('1.0.0'), to: v('2.0.0'),
+    type: 'handover', purpose, v: 1, home, profile: PROFILE, from: v('1.0.0'), to: v('2.0.0'),
     startId: 'a'.repeat(32) as HandoverLine['startId'], health: { disabledPlugins: [], namedRows: disabledRows, previousFailures: [], previousRows: [] }, startedAt: new Date().toISOString(),
   }
   return { handover, send: message => void messages.push(message), committed: Promise.resolve(true), close: () => undefined }
@@ -169,7 +177,7 @@ describe('the update baseline in a start of the real home process', { timeout: 1
     await updatedHome()
     const before = await approvedVersion()
     expect(await waiting()).toBe(1)
-    hooks.baseline = baseline
+    publishPacks()
     const messages: HandoverMessage[] = []
     mkdirSync(runDirectory(home, PROFILE), { recursive: true, mode: 0o700 })
     const pipe = updatePipe(messages)
@@ -189,11 +197,51 @@ describe('the update baseline in a start of the real home process', { timeout: 1
   it('applies nothing in a fresh start of the home process', async () => {
     await updatedHome()
     const before = await approvedVersion()
-    hooks.baseline = baseline
+    publishPacks()
     await startForeground({ home, profile: PROFILE, open: false, output: context, env: context.env }, dependencies(undefined))
     expect(hooks.asked).toEqual([])
     expect(await replaced()).toEqual([])
     expect(await approvedVersion()).toBe(before)
     expect(await waiting()).toBe(1)
+  })
+
+  it('applies nothing in the takeover of a rollback, whose signed packs files would both verify', async () => {
+    await updatedHome()
+    const before = await approvedVersion()
+    publishPacks()
+    const messages: HandoverMessage[] = []
+    mkdirSync(runDirectory(home, PROFILE), { recursive: true, mode: 0o700 })
+    const pipe = updatePipe(messages, 'rollback')
+    acquireHomeLock({ runDirectory: runDirectory(home, PROFILE), runtime: v('1.0.0'), probe: () => Promise.resolve('answered'), startId: pipe.handover.startId })
+
+    await startForeground({ home, profile: PROFILE, open: false, output: context, env: context.env }, dependencies(pipe))
+
+    expect(messages.map(message => message.type)).toEqual(['ready'])
+    expect(hooks.asked).toEqual([])
+    expect(await replaced()).toEqual([])
+    expect(await approvedVersion()).toBe(before)
+    expect(await waiting()).toBe(1)
+  })
+
+  it('leaves the records as the predecessor left them when the successor fails its health check, so a release without followApprovedContent resumes', async () => {
+    await updatedHome()
+    const approvedBefore = await readApproved(profileDir())
+    const activeBefore = await readActiveRecord(home, PROFILE)
+    publishPacks()
+    studioStatus = 500
+    const messages: HandoverMessage[] = []
+    mkdirSync(runDirectory(home, PROFILE), { recursive: true, mode: 0o700 })
+    const pipe = updatePipe(messages)
+    acquireHomeLock({ runDirectory: runDirectory(home, PROFILE), runtime: v('1.0.0'), probe: () => Promise.resolve('answered'), startId: pipe.handover.startId })
+
+    await expect(startForeground({ home, profile: PROFILE, open: false, output: context, env: context.env }, dependencies(pipe))).rejects.toThrow(/health check/)
+
+    expect(messages.map(message => message.type)).toEqual(['failed'])
+    expect(hooks.asked).toEqual(['1.0.0'])
+    expect(await readApproved(profileDir())).toEqual(approvedBefore)
+    expect(await readActiveRecord(home, PROFILE)).toEqual(activeBefore)
+    // The predecessor re-points its copies and checks the invariants, as a 2.1 release does.
+    await repointForSuccessor({ home, profile: PROFILE })
+    await expect(changesApprovedContent({ request: { home, profile: PROFILE, kind: 'cli', output: context, env: context.env } })).resolves.toEqual([])
   })
 })

@@ -109,7 +109,7 @@ description: "@delorun/home-process 包，供 delorun 与运行时仓库的维�
 | `RuntimeStore`：`pointers`、`prepare`（checking、installing、reporting）、`reportRollback`、`switchTo`（C1 的 `previous` 后接 `current` 的顺序）、`restore` 与 `homeCommand`（从某个版本启动 home 进程的命令，用于后继进程或全新启动；其进程必须就是 home 进程本身，因此锁中的进程 id 能指明它） | `delorun/packages/runtime-store` | 不从运行时仓库运行的 home 进程（例如从源码检出启动的）没有该实现：`update.prepare` 以 `VERIFY_FAILED` 被拒绝，`update.apply` 以 `REPORT_EXPIRED` 被拒绝，`rollback` 以 `NO_PREVIOUS` 被拒绝，`status` 将运行中的版本报告为 `current` |
 | `ProfileSnapshots`：`snapshot` 阶段中带报告的 `save`，返回记录保存的历史版本 id | C3 的 profile 历史，即基于 `@delorun/profile-safety` 的 `delorun/apps/cli/src/update/support.ts` | 同上 |
 | `SessionDataCopies`：记录之前的 `plan`，以及 Host 停止之前的 `confirmSoleUser`，用于在其他进程使用对话数据时拒绝；用于副本的 `plan` 与 `save`；用于在切换之前结束的更新的 `discard`；更新提交后的 `commit`；用于每种返回方式的 `rollback` | 基于 `@delorun/update` 的副本及其唯一回滚函数的 `delorun/apps/cli/src/update/support.ts` | 同上 |
-| `HostRunner` 与 `RunningHost`：启动、启动时的每一行与未加载的行、C3 的健康检查、用于 `studio.open-token` 的 studio 链接、关闭 | 使用上游 profile runner 的 `delorun start` | — |
+| `HostRunner` 与 `RunningHost`：启动、`abandon` (a successor that failed its health check undoes what its boot changed before it reports the failure)、启动时的每一行与未加载的行、C3 的健康检查、用于 `studio.open-token` 的 studio 链接、关闭 | 使用上游 profile runner 的 `delorun start` | — |
 | `ChatGate`：运行中的对话、`hold`（拒绝新回合并保留已排期的投递）、`idle`、`cancelAll`；`CountingChatGate` 是 Host 以 `track` 供给数据的一种实现 | `delorun start`，来自上游的 `agent/status` 与任务注册表的事件；`@delorun/bundle-local` 的 `delorunTurnGate` 服务读取 `held` 以拒绝新回合（`delorun/apps/cli/src/update/host.ts`） | — |
 
 测试通过 `tests/support.ts` 中的 fixture（测试前置数据）store 驱动握手，该 fixture 保存 C1 的指针文件，并从 `tests/fixtures/home-entry.ts` 启动后继进程。

@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { attestTerminal, readActiveRecord, readApproved, readChangeLog, setProtection, writeApproved, type SignedPackFiles, type UpdateBaseline } from '@delorun/changes'
+import { attestTerminal, protectionPath, readActiveRecord, readApproved, readChangeLog, setProtection, writeApproved, type SignedPackFiles, type UpdateBaseline } from '@delorun/changes'
 import type { RuntimeVersion } from '@delorun/contract-home-layout'
 import { parseRuntimeVersion } from '@delorun/runtime-store'
 import { prepareHome, type CommandContext } from '../src/command.ts'
@@ -95,7 +95,7 @@ async function updatedHome(): Promise<void> {
 const entries = async (): Promise<string[]> => (await readChangeLog(home, 'default')).entries.flatMap(entry => entry.decidedFrom === 'update' ? [entry.summary] : [])
 
 /** The successor's first boot of an update from `updatedFrom` (none: a start that is no update), as `repointingBoot` runs it. */
-function successorBoot(updatedFrom?: RuntimeVersion, afterFailedSwitch = false): Promise<void> {
+function successorBoot(updatedFrom?: RuntimeVersion, afterFailedSwitch = false): ReturnType<typeof repointForSuccessor> {
   return repointForSuccessor({ home, profile: 'default', ...updatedFrom === undefined ? {} : { updatedFrom }, write: text => void context.printed.push(text) }, afterFailedSwitch)
 }
 
@@ -201,6 +201,74 @@ describe('a failed health check after the baseline advanced, with protection on'
     expect(await readApproved(profileDir())).toEqual(approvedBefore)
     expect(await readActiveRecord(home, 'default')).toEqual(activeBefore)
     expect(await entries()).toEqual(['Replaced by the update to 2.0.0: pkg'])
+  })
+
+  /** The update's predecessor of the 2.1 line resumes: it re-points the copies, has no `followApprovedContent`, and checks the invariants. */
+  async function resumeAsRelease21(): Promise<readonly string[]> {
+    await repointForSuccessor({ home, profile: 'default' })
+    return changesApprovedContent(draft())
+  }
+
+  it('resumes a predecessor that cannot follow the approved record, once the successor abandons its boot', async () => {
+    await updatedHome()
+    const approvedBefore = await readApproved(profileDir())
+    const activeBefore = await readActiveRecord(home, 'default')
+    hooks.baseline = baseline
+    const abandon = await successorBoot(v('1.0.0'))
+    expect(abandon).toBeDefined()
+    expect((await readActiveRecord(home, 'default')).plugins.pkg).not.toEqual(activeBefore.plugins.pkg)
+
+    await abandon!()
+    await writeApproved(profileDir(), approvedBefore)
+
+    await expect(resumeAsRelease21()).resolves.toEqual([])
+    expect(await readApproved(profileDir())).toEqual(approvedBefore)
+    expect(await readActiveRecord(home, 'default')).toEqual(activeBefore)
+  })
+
+  it('refuses the same predecessor when the successor did not abandon', async () => {
+    await updatedHome()
+    const approvedBefore = await readApproved(profileDir())
+    hooks.baseline = baseline
+    await successorBoot(v('1.0.0'))
+    await writeApproved(profileDir(), approvedBefore)
+    await expect(resumeAsRelease21()).rejects.toThrow(/not its approved version/)
+  })
+
+  it('keeps what a person changed after the baseline, and puts back only what the baseline changed', async () => {
+    await updatedHome()
+    const approvedBefore = await readApproved(profileDir())
+    hooks.baseline = baseline
+    const abandon = await successorBoot(v('1.0.0'))
+    const afterBaseline = await readApproved(profileDir())
+    const person = { ...approvedBefore.plugins.pkg!, source: '/somewhere/else' }
+    await writeApproved(profileDir(), { ...afterBaseline, plugins: { ...afterBaseline.plugins, other: person } })
+
+    await abandon!()
+
+    const restored = await readApproved(profileDir())
+    expect(restored.plugins.pkg).toEqual(approvedBefore.plugins.pkg)
+    expect(restored.plugins.other).toEqual(person)
+  })
+
+  it('applies no baseline, so has nothing to abandon, for a rollback, a boot after a failed switch and a failed verification', async () => {
+    await updatedHome()
+    hooks.baseline = baseline
+    expect(await successorBoot(updateSource({ type: 'handover', purpose: 'rollback', from: v('2.0.0') }))).toBeUndefined()
+    expect(await successorBoot(v('1.0.0'), true)).toBeUndefined()
+    hooks.environment = 'unverifiable'
+    expect(await successorBoot(v('1.0.0'))).toBeUndefined()
+  })
+
+  it('leaves the records as they were, and refuses the boot, when Changes cannot prepare the profile after the baseline was asked for', async () => {
+    await updatedHome()
+    const approvedBefore = await readApproved(profileDir())
+    const activeBefore = await readActiveRecord(home, 'default')
+    hooks.baseline = baseline
+    writeFileSync(protectionPath(home), '{', { mode: 0o600 })
+    await expect(successorBoot(v('1.0.0'))).rejects.toThrow(/could not be prepared/)
+    expect(await readApproved(profileDir())).toEqual(approvedBefore)
+    expect(await readActiveRecord(home, 'default')).toEqual(activeBefore)
   })
 
   it('still refuses the boot of a Host that is not after a failed switch', async () => {

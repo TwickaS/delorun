@@ -84,6 +84,10 @@ export interface FixtureBehaviour {
   readonly unhealthySuccessor?: boolean
   /** The plugins its Host disables at boot in a successor's process, in place of {@link FixtureBehaviour.disabled}. */
   readonly successorDisabled?: readonly string[]
+  /** A file its runner's `abandon` creates, which a successor's failed health check runs; none by default. */
+  readonly abandonMarker?: string
+  /** Whether its runner's `abandon` throws after creating the marker, as a runner that cannot undo its changes does. */
+  readonly abandonFails?: boolean
   /**
    * Its teardown for a switch, which resolves at once by default.
    * @returns when the teardown has finished.
@@ -512,6 +516,12 @@ export class FixtureHostRunner implements HostRunner {
     const host = new FixtureHost(behaviour, access)
     this.booted.push(host)
     return host
+  }
+
+  abandon(): Promise<void> {
+    const { abandonMarker, abandonFails } = this.behaviour()
+    if (abandonMarker !== undefined) writeFileSync(abandonMarker, 'abandoned')
+    return abandonFails === true ? Promise.reject(new Error('the records cannot be put back')) : Promise.resolve()
   }
 }
 

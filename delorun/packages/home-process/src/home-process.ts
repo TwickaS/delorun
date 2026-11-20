@@ -317,11 +317,13 @@ export class HomeProcess implements HandshakeSubject {
         options.logger.error('the Host did not boot on the new runtime', { err: error })
         // The predecessor is told the check failed and boots its Host again, while this refused Host may still run.
         if (error instanceof HostNotStoppedError) {
+          await home.abandonSwitch()
           pipe.send({ type: 'failed', reason: 'HEALTH_CHECK_FAILED' })
           throw error
         }
       }
       if (!healthy) {
+        await home.abandonSwitch()
         pipe.send({ type: 'failed', reason: 'HEALTH_CHECK_FAILED', ...criterion === undefined ? {} : { criterion } })
         throw new HomeProcessError('HEALTH_CHECK_FAILED', `the Host on ${handover.to} failed its health check${criterion === undefined ? '' : ` (${criterion})`}`)
       }
@@ -936,6 +938,15 @@ export class HomeProcess implements HandshakeSubject {
     if (!this.stopped) return host
     await host.close()
     throw new Error('the home process stopped while its Host booted')
+  }
+
+  /** Ask the Host runner to undo what a failed successor boot changed; a failure is logged, and the report goes on. */
+  private async abandonSwitch(): Promise<void> {
+    try {
+      await this.options.host.abandon?.()
+    } catch (error) {
+      this.logger.error('the successor could not undo what its boot changed in the profile', { err: error })
+    }
   }
 
   private async bootHost(): Promise<void> {

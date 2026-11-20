@@ -359,6 +359,13 @@ export interface HostRunner {
    *   teardown did not finish, so it may still run in this process.
    */
   boot(access: UpdateChannelAccess, controls: HomeControls): Promise<RunningHost>
+  /**
+   * Undo what booting changed in the profile's files that the release this one replaces cannot undo itself. A
+   * successor runs it when its Host failed its health check or did not boot, before it tells the predecessor, which
+   * then rolls its profile files back and boots its own Host. A failure is logged and does not stop the report.
+   * @returns when the files are as the predecessor left them, as far as this runner changed them.
+   */
+  abandon?(): Promise<void>
 }
 
 /** A studio link, or the reason the Host cannot make one that reaches the studio from this computer. */
