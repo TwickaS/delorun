@@ -202,6 +202,12 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     parity: { kind: 'disabled', reason: 'A disabled row mounts nothing: no hand-off tool, seat provider or seat UI exists, and the one-shot subagent tools run as upstream\'s do.' },
   },
   {
+    id: 'delorun-multiview',
+    kind: 'added',
+    reason: 'Multiview: agents pinned from the agents list, or pinned and opened when a hand-off starts, show beside the main chat in a layout the person arranges; it does nothing until an agent is pinned or handed work, and its settings choose auto-open, the pane limit, the pane composer and reopening on return. Upstream has no such view.',
+    parity: { kind: 'disabled', reason: 'A disabled row mounts nothing: no pin button, header button or panel exists, and the agents list and header are upstream\'s.' },
+  },
+  {
     id: 'delorun-plugin-changes',
     kind: 'added',
     reason: 'The C16 switch `plugin_changes_pending` on: an agent\'s `plugin_manager` install or removal does not run, it is recorded in the profile\'s change log as a pending change for the person\'s review, and the model reads that nothing was installed; the plugin\'s own default, off, is the parity value.',
