@@ -190,6 +190,22 @@ function openPanel() {
 }
 
 describe('SettingsRoot trigger', () => {
+  it('draws no connection pill in the foot row while a plugin shows the connection\'s state elsewhere, so the row stays one line', () => {
+    document.documentElement.setAttribute('data-delorun-connection-alert', '')
+    try {
+      for (const connectionState of ['connecting', 'disconnected'] as const) {
+        mount({ connectionState })
+        expect(document.querySelector('[data-phase]')).toBeNull()
+        expect(screen.queryByRole('button', { name: /reconnect/iu })).toBeNull()
+        cleanup()
+      }
+    } finally {
+      document.documentElement.removeAttribute('data-delorun-connection-alert')
+    }
+    mount({ connectionState: 'connecting' })
+    expect(screen.getByRole('button', { name: 'Reconnecting, reconnect now' })).toBeTruthy()
+  })
+
   it('shows installation instead of expected backend reconnection and restores connection feedback after failure', () => {
     const presentation = { phase: 'installing' as const, version: '1.0.1' }
     const f = mount({ dictionary: zh, connectionState: 'connecting',

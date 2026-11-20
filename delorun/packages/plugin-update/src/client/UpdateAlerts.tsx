@@ -5,12 +5,14 @@ import type { HostObservable, InjectFace, PropsLocale } from '@deepseek-ai/dsh-c
 import type { UpdateLoad } from './controller.ts'
 import type { Outcome } from './controller.ts'
 import { StoppedChatLine } from './StopChats.tsx'
-import { UpdateProgress } from './UpdateProgress.tsx'
+import { UpdateProgress, type ConnectionState } from './UpdateProgress.tsx'
 import type { StopChatsView } from '../wire.ts'
 
 /** What the sidebar alert reads and does. */
 export interface UpdateAlertsInjected {
-  readonly hooks: { readonly load: HostObservable<UpdateLoad>, readonly switching: HostObservable<boolean> }
+  readonly hooks: { readonly load: HostObservable<UpdateLoad>, readonly switching: HostObservable<boolean>, readonly connection: HostObservable<ConnectionState> }
+  /** Reconnect now. */
+  readonly reconnect: () => void
   readonly cancel: () => Promise<unknown>
   readonly stopChats: () => Promise<Outcome<StopChatsView>>
 }
@@ -24,13 +26,14 @@ export type UpdateAlertsProps = PropsLocale<'delorunUpdate'> & InjectFace<Update
  * @returns the alert, or nothing while no update state lasts.
  */
 export function UpdateAlerts(props: UpdateAlertsProps) {
-  const { t, cancel, stopChats } = props
+  const { t, cancel, stopChats, reconnect } = props
+  const connection = props.useConnection(value => value)
   const load = props.useLoad(value => value)
   const switching = props.useSwitching(value => value)
   if (load.status !== 'ready') return null
   const { state } = load
   return <UpdateProgress variant="alert" state={state} switching={switching} reconnecting={load.reconnecting} t={t} cancel={cancel}
-    stop={{ chats: state.runningChats ?? [], automatic: state.continueStopped, run: stopChats }} />
+    stop={{ chats: state.runningChats ?? [], automatic: state.continueStopped, run: stopChats }} connection={connection} reconnect={reconnect} />
 }
 
 /** What the per-chat line reads and does. */
@@ -52,4 +55,13 @@ export type StoppedChatProps = PropsLocale<'delorunUpdate'> & InjectFace<Stopped
 export function StoppedChatDock(props: StoppedChatProps) {
   const load = props.useLoad(value => value)
   return <StoppedChatLine stopped={load.status === 'ready' ? load.state.stopped : undefined} sessionId={props.sessionId} t={props.t} onContinue={props.continueChat} />
+}
+
+/**
+ * The `sidebar.footer.action` entry: the alert in the wide sidebar, nothing on the collapsed rail.
+ * @param props - the slot's `wide` flag with the alert's hooks and dictionary.
+ * @returns the alert, or nothing.
+ */
+export function UpdateAlertsEntry(props: UpdateAlertsProps & { readonly wide: boolean }) {
+  return props.wide ? <UpdateAlerts {...props} /> : null
 }

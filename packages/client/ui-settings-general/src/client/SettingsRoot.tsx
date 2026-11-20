@@ -433,7 +433,10 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
           </button>
         </Tooltip> })}
         <ConnectionIndicator
-          state={wide && desktopUpdate.presentation?.phase !== 'installing' ? connectionIndicator : undefined}
+          // A plugin that shows the connection's state elsewhere (Delorun's pinned alert) marks the root, which withdraws this pill.
+          state={wide && desktopUpdate.presentation?.phase !== 'installing' && !document.documentElement.hasAttribute('data-delorun-connection-alert')
+            ? connectionIndicator
+            : undefined}
           disconnectedLabel={t('connection.error')}
           connectingLabel={t('connection.connecting')}
           recoveredLabel={t('connection.connected')}

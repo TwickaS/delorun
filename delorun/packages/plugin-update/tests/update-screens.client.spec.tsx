@@ -239,6 +239,39 @@ describe('the progress and outcome cards', () => {
   })
 })
 
+describe('the connection as an ongoing state', () => {
+  /** Render the alert with a connection state. */
+  function connection(state: UpdateStateView, value: 'connected' | 'connecting' | 'disconnected', extra: { switching?: boolean, reconnecting?: boolean } = {}) {
+    const reconnect = vi.fn()
+    render(<UpdateProgress variant="alert" state={state} switching={extra.switching ?? false} reconnecting={extra.reconnecting ?? false} t={t} cancel={vi.fn()} connection={value} reconnect={reconnect} />)
+    return reconnect
+  }
+
+  it('shows an unplanned loss as a pinned alert with Reconnect now, and nothing while connected', () => {
+    const reconnect = connection(stateOf(), 'disconnected')
+    expect(document.querySelector('[data-update-variant="alert"]')?.textContent).toContain(en['connection.lost'])
+    fireEvent.click(screen.getByText(en['connection.reconnect']))
+    expect(reconnect).toHaveBeenCalled()
+    cleanup()
+    connection(stateOf(), 'connecting')
+    expect(document.querySelector('[data-update-variant="alert"]')?.textContent).toContain(en['connection.connecting'])
+    cleanup()
+    connection(stateOf(), 'connected')
+    expect(document.querySelector('[data-update-variant]')).toBeNull()
+  })
+
+  it('words a planned update restart as the update, never as a connection fault', () => {
+    connection(stateOf({ progress: { kind: 'applying', phase: 'switching', target: '0.1.3', runningChats: 0 } }), 'disconnected')
+    const text = document.querySelector('[data-update-variant="alert"]')?.textContent ?? ''
+    expect(text).toContain('Switching to Delorun 0.1.3')
+    expect(text).not.toContain(en['connection.lost'])
+    expect(screen.queryByText(en['connection.reconnect'])).toBeNull()
+    cleanup()
+    connection(stateOf(), 'connecting', { reconnecting: true })
+    expect(document.querySelector('[data-update-variant="alert"]')?.textContent).not.toContain(en['connection.connecting'])
+  })
+})
+
 describe('Stop running chats and update', () => {
   const CHATS = [{ sessionId: 's-1', title: 'Refactor' }, { sessionId: 's-2', title: '' }]
   const waiting = (): UpdateStateView => stateOf({ progress: { kind: 'applying', phase: 'waiting', target: '0.1.3', runningChats: 2 }, runningChats: CHATS })

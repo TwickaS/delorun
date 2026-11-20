@@ -9,7 +9,7 @@ import { Button, StateDot, ToastSlot } from '@deepseek-ai/dsh-client-ui-primitiv
 import type { HostObservable, InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { UpdateResultView, UpdateStateView } from '../wire.ts'
 import type { UpdateLoad } from './controller.ts'
-import { UpdateProgress, usePhone } from './UpdateProgress.tsx'
+import { UpdateProgress, usePhone, type ConnectionState } from './UpdateProgress.tsx'
 import { NotesHighlights } from './NotesSheet.tsx'
 import { UpdateDialog, type UpdateDialogActions } from './UpdateDialog.tsx'
 import css from './UpdatePanel.module.css'
@@ -17,7 +17,8 @@ import { controlUse, keepVersions, localTime, type T } from './parts.tsx'
 
 /** What the overlay reads and does. */
 export interface UpdateOverlayInjected {
-  readonly hooks: { readonly load: HostObservable<UpdateLoad>, readonly switching: HostObservable<boolean>, readonly dialog: HostObservable<boolean> }
+  readonly hooks: { readonly load: HostObservable<UpdateLoad>, readonly switching: HostObservable<boolean>, readonly dialog: HostObservable<boolean>, readonly connection: HostObservable<ConnectionState> }
+  readonly reconnect: () => void
   readonly actions: UpdateDialogActions
   readonly cancel: () => Promise<unknown>
   readonly dismiss: () => Promise<unknown>
@@ -34,11 +35,12 @@ export type UpdateOverlayProps = PropsRuntime<'shell.overlay'> & PropsLocale<'de
  * @returns the cards and the dialog, or nothing.
  */
 export function UpdateOverlay(props: UpdateOverlayProps) {
-  const { t, actions, cancel, dismiss, closeDialog, openChanges } = props
+  const { t, actions, cancel, dismiss, closeDialog, openChanges, reconnect } = props
+  const connection = props.useConnection(value => value)
   const load = props.useLoad(value => value)
   const switching = props.useSwitching(value => value)
   const dialog = props.useDialog(value => value)
-  return <UpdateCards t={t} load={load} switching={switching} dialog={dialog} actions={actions} cancel={cancel} dismiss={dismiss} closeDialog={closeDialog} openChanges={openChanges} />
+  return <UpdateCards t={t} load={load} switching={switching} dialog={dialog} actions={actions} cancel={cancel} dismiss={dismiss} closeDialog={closeDialog} openChanges={openChanges} reconnect={reconnect} connection={connection} />
 }
 
 /** What {@link UpdateCards} draws, read from the hooks. */
@@ -47,6 +49,8 @@ export interface UpdateCardsProps extends Omit<UpdateOverlayInjected, 'hooks'> {
   readonly load: UpdateLoad
   readonly switching: boolean
   readonly dialog: boolean
+  /** The connection's state. */
+  readonly connection?: ConnectionState
 }
 
 /**
@@ -54,12 +58,12 @@ export interface UpdateCardsProps extends Omit<UpdateOverlayInjected, 'hooks'> {
  * @param props - the values, the actions and the dictionary.
  * @returns the cards and the dialog, or nothing.
  */
-export function UpdateCards({ t, load, switching, dialog, actions, cancel, dismiss, closeDialog, openChanges }: UpdateCardsProps) {
+export function UpdateCards({ t, load, switching, dialog, actions, cancel, dismiss, closeDialog, openChanges, reconnect, connection }: UpdateCardsProps) {
   const state = load.status === 'ready' ? load.state : undefined
   const reconnecting = load.status === 'ready' && load.reconnecting
   const phone = usePhone()
   return <>
-    {state === undefined ? null : phone ? <UpdateProgress variant="toast" state={state} switching={switching} reconnecting={reconnecting} t={t} cancel={cancel} /> : null}
+    {state === undefined ? null : phone ? <UpdateProgress variant="toast" state={state} switching={switching} reconnecting={reconnecting} t={t} cancel={cancel} connection={connection} reconnect={reconnect} /> : null}
     {state === undefined || state.result === undefined || state.progress.kind !== 'idle' ? null : <OutcomeCard state={state} result={state.result} notes={state.notes} t={t} dismiss={dismiss} />}
     {dialog && state !== undefined
       ? <UpdateDialog state={state} t={t} actions={actions} onClose={closeDialog} openChanges={openChanges} />

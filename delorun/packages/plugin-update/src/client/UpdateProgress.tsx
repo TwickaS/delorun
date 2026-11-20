@@ -30,8 +30,13 @@ export function usePhone(): boolean {
   return phone
 }
 
+/** The connection's states, as the client connection reports them. */
+export type ConnectionState = 'connected' | 'connecting' | 'disconnected'
+
 /** What an ongoing state says and does. */
 interface Ongoing {
+  /** Whether this is the connection's state and offers Reconnect now. */
+  readonly connection?: boolean
   /** The phase, which keys a closed toast. */
   readonly key: string
   readonly text: string
@@ -49,7 +54,7 @@ interface Ongoing {
  * @param t - the dictionary.
  * @returns the ongoing state, or `undefined` when nothing lasts.
  */
-export function ongoingOf(state: UpdateStateView, switching: boolean, reconnecting: boolean, t: T): Ongoing | undefined {
+export function ongoingOf(state: UpdateStateView, switching: boolean, reconnecting: boolean, t: T, connection: ConnectionState = 'connected'): Ongoing | undefined {
   const progress = state.progress
   if (progress.kind === 'applying' || progress.kind === 'rolling-back') {
     const waiting = progress.phase === 'waiting'
@@ -59,6 +64,10 @@ export function ongoingOf(state: UpdateStateView, switching: boolean, reconnecti
     return { key: progress.phase, text, version: progress.target, waiting }
   }
   if (reconnecting || (switching && progress.kind === 'idle' && state.result === undefined)) return { key: 'reconnecting', text: t('progress.reconnecting'), waiting: false }
+  // A planned update restart drops the connection on purpose; only a loss with no update behind it is the connection's own state.
+  if (connection !== 'connected' && state.progress.kind === 'idle' && !switching && !reconnecting) {
+    return { key: `connection-${connection}`, text: t(connection === 'connecting' ? 'connection.connecting' : 'connection.lost'), waiting: false, connection: true }
+  }
   return undefined
 }
 
@@ -72,6 +81,10 @@ export interface UpdateProgressProps {
   readonly cancel: () => Promise<unknown>
   /** The Stop running chats and update menu, offered on the sidebar alert while the update waits for chats. */
   readonly stop?: StopChatsOffer
+  /** The connection's state; a loss with no update behind it shows as an ongoing state. */
+  readonly connection?: ConnectionState
+  /** Reconnect now. */
+  readonly reconnect?: () => void
 }
 
 /**
@@ -79,10 +92,10 @@ export interface UpdateProgressProps {
  * @param props - see {@link UpdateProgressProps}.
  * @returns the alert or toast, or nothing while nothing lasts or the toast was closed.
  */
-export function UpdateProgress({ variant, state, switching, reconnecting, t, cancel, stop }: UpdateProgressProps) {
+export function UpdateProgress({ variant, state, switching, reconnecting, t, cancel, stop, connection, reconnect }: UpdateProgressProps) {
   const [busy, setBusy] = useState(false)
   const [closed, setClosed] = useState<string | undefined>()
-  const ongoing = ongoingOf(state, switching, reconnecting, t)
+  const ongoing = ongoingOf(state, switching, reconnecting, t, connection)
   const use = controlUse(state, 'update-cancel', t)
   if (ongoing === undefined || (variant === 'toast' && closed === ongoing.key)) return null
   const card = <div className={`${css.alert} ${variant === 'toast' ? css.floating : ''}`} role="status" data-update-progress={ongoing.key} data-update-variant={variant}>
@@ -90,6 +103,9 @@ export function UpdateProgress({ variant, state, switching, reconnecting, t, can
     <div className={css.alertActions}>
       {ongoing.waiting
         ? <Button variant="outline" size="sm" className={css.alertButton} disabled={busy || use.disabled} title={use.title} onClick={() => { setBusy(true); void cancel().finally(() => { setBusy(false) }) }}>{t('progress.cancel')}</Button>
+        : null}
+      {ongoing.connection === true && reconnect !== undefined
+        ? <Button variant="outline" size="sm" className={css.alertButton} onClick={reconnect}>{t('connection.reconnect')}</Button>
         : null}
       {variant === 'alert' && ongoing.waiting && stop !== undefined && !controlUse(state, 'update-begin', t).disabled ? <StopChatsMenu offer={stop} t={t} /> : null}
       {variant === 'toast'
