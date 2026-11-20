@@ -43,7 +43,8 @@ export const NOW = Date.parse('2026-11-17T12:00:00.000Z')
 /** A code project on the `main` branch with an `AGENTS.md`. */
 export const CODE_PREVIEW: PreviewAnswer = {
   result: 'folder', kind: 'code', git: true, branch: 'main', agentsFile: true,
-  entries: [{ name: 'apps', folder: true }, { name: 'docs', folder: true }, { name: 'README.md', folder: false }], more: true,
+  lastCommit: { subject: 'fix: keep the sidebar open', at: '2026-11-17T09:00:00.000Z' }, stack: ['node', 'typescript'],
+  entries: [{ name: 'apps', folder: true }, { name: 'docs', folder: true }, { name: 'README.md', folder: false, size: 1536 }, { name: 'package.json', folder: false, size: 812 }], more: true,
 }
 
 /**

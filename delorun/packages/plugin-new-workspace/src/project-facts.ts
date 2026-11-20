@@ -78,7 +78,6 @@ export async function lastCommitOf(folder: string, read: GitReader = runGit, env
   const output = await read(args, env)
   const match = /^(\d{1,12})\t([^\r\n]*)/u.exec(output ?? '')
   if (match === null) return undefined
-  // eslint-disable-next-line no-control-regex -- control characters in a subject are dropped, not shown.
   const subject = (match[2] as string).replace(/[\u0000-\u001f\u007f]/gu, '').trim().slice(0, MAX_COMMIT_SUBJECT)
   const seconds = Number(match[1])
   return subject === '' ? undefined : { subject, at: new Date(seconds * 1000).toISOString() }

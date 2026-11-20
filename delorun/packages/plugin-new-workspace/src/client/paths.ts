@@ -74,3 +74,22 @@ export function relativeTime(iso: string, now: number, t: Translate): string | u
   const count = Math.floor(span / unit.ms)
   return t(count === 1 ? `time.${unit.key}.one` : `time.${unit.key}.other`, { n: count })
 }
+
+/** The units of {@link formatSize}, each 1024 times the one before. */
+const SIZE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB'] as const
+
+/**
+ * A file size as a person reads it.
+ * @param bytes - the size in bytes.
+ * @returns the size with one unit and at most one decimal place, such as `512 B` or `1.5 MB`.
+ */
+export function formatSize(bytes: number): string {
+  let value = bytes
+  let unit = 0
+  while (value >= 1024 && unit < SIZE_UNITS.length - 1) {
+    value /= 1024
+    unit += 1
+  }
+  const text = unit === 0 || value >= 10 ? String(Math.round(value)) : value.toFixed(1).replace(/\.0$/u, '')
+  return `${text} ${SIZE_UNITS[unit]}`
+}

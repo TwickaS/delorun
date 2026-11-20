@@ -7,6 +7,7 @@ import type { NewWorkspaceApi } from '../src/client/api.ts'
 import type { FolderListing } from '../src/client/screens/FolderScreen.tsx'
 import type { FullAccessAsk } from '../src/client/create.ts'
 import type { ModelCatalogView } from '../src/client/models.ts'
+import type { PreviewAnswer } from '../src/wire.ts'
 import { CATALOG, failure, fakeApi, fakeBrowse, fakeBrowser, fakeFullAccess, HOME, listingOf, NOW, ok, PLACES, t } from './fixtures.client.ts'
 
 afterEach(() => {
@@ -20,9 +21,11 @@ const type = async (element: HTMLElement, value: string) => { await act(async ()
 const key = async (element: HTMLElement, name: string) => { await act(async () => { fireEvent.keyDown(element, { key: name }) }); await settle() }
 const button = (name: string | RegExp) => screen.getByRole('button', { name }) as HTMLButtonElement
 const field = (name: string) => screen.getByLabelText(name) as HTMLInputElement
-/** The path the folder screen says it would use. */
-const selectedPath = () => within(screen.getByRole('group', { name: en['folder.selected'] })).getByText(/./).textContent
+/** The path the folder summary says it would use. */
+const selectedPath = () => within(screen.getByRole('region')).getByText(/^~/).textContent
 const heading = () => screen.getByRole('heading', { level: 2 }).textContent
+/** The folder names of a list, without the hints under them. */
+const folderNames = (list: HTMLElement) => within(list).getAllByRole('option').map(each => each.querySelector('[id$="n"]')?.textContent)
 
 interface Options {
   readonly api?: Partial<NewWorkspaceApi>
@@ -133,23 +136,83 @@ describe('a folder on this computer', () => {
     expect(heading()).toBe('New workspace · Choose a folder')
     expect(folders.list).toHaveBeenCalledWith(undefined, expect.any(AbortSignal))
     const list = screen.getByRole('listbox')
-    expect(within(list).getAllByRole('option').map(each => each.textContent)).toEqual(['Documents', 'src'])
-    expect(within(screen.getByRole('navigation', { name: en['folder.crumbs'] })).getAllByRole('button').map(each => each.textContent)).toEqual(['~'])
-    expect(within(screen.getByRole('group', { name: en['folder.suggested'] })).getAllByRole('button').map(each => each.textContent)).toEqual([en['folder.home'], '~/src', '~/Documents'])
+    expect(folderNames(list)).toEqual(['Documents', 'src'])
+    expect(within(screen.getByRole('navigation', { name: en['folder.crumbs'] })).getAllByRole('button').map(each => each.textContent)).toEqual([en['folder.home']])
+    expect(within(screen.getByRole('group', { name: en['folder.suggested'] })).getAllByRole('button').map(each => each.textContent)).toEqual(['~/src', '~/Documents'])
     expect(button(en['folder.useNone']).disabled).toBe(true)
     expect(document.body.textContent).not.toContain(HOME)
   })
 
-  it('previews the selected folder: what it holds, its Git branch, its AGENTS.md, its first names and that there are more', async () => {
+  it('summarises the selected folder: its stack, Git branch and latest commit, AGENTS.md, top-level files with sizes and that there are more', async () => {
     const { preview } = await open()
     await click(screen.getByRole('option', { name: 'src' }))
-    expect(await screen.findByText('Code project · Git · main')).toBeTruthy()
+    expect(await screen.findByText(en['preview.stack.node'])).toBeTruthy()
+    expect(screen.getByText(en['preview.stack.typescript'])).toBeTruthy()
     expect(preview).toHaveBeenLastCalledWith(`${HOME}/src`, expect.any(AbortSignal))
+    expect(screen.getByText('main')).toBeTruthy()
+    expect(screen.getByText('fix: keep the sidebar open')).toBeTruthy()
+    expect(screen.getByText('3 hours ago')).toBeTruthy()
     expect(screen.getByText(en['preview.agents'])).toBeTruthy()
-    expect(screen.getByText('README.md')).toBeTruthy()
+    expect(screen.getByText('README.md').nextElementSibling?.textContent).toBe('1.5 KB')
+    expect(screen.getByText('package.json').nextElementSibling?.textContent).toBe('812 B')
+    expect(screen.getByText('docs').nextElementSibling).toBeNull()
     expect(screen.getByText(en['preview.more'])).toBeTruthy()
     expect(selectedPath()).toBe('~/src')
     expect(button('Use "src"').disabled).toBe(false)
+  })
+
+  it('names the kind of folder when no stack is found, and offers Use this folder in the summary too', async () => {
+    const { preview } = await open({ api: { preview: async () => ok({ result: 'folder', kind: 'files', git: false, agentsFile: false, entries: [{ name: 'notes.txt', folder: false, size: 3 }], more: false }) } })
+    await click(screen.getByRole('option', { name: 'src' }))
+    const pane = within(screen.getByRole('region'))
+    expect(await pane.findByText(en['preview.kind.files'])).toBeTruthy()
+    expect(pane.queryByText(en['preview.git'])).toBeNull()
+    expect(preview).toHaveBeenCalled()
+    expect(button('Use "src"').disabled).toBe(false)
+    await click(pane.getByRole('button', { name: en['folder.useNone'] }))
+    expect(screen.getByRole('heading', { level: 2 }).textContent).not.toBe('New workspace · Choose a folder')
+  })
+
+  it('says Git without a branch for a detached HEAD, says an empty folder is empty, and shows a repository without commits', async () => {
+    const { preview } = await open({ api: { preview: async () => ok({ result: 'folder', kind: 'code', git: true, agentsFile: false, entries: [], more: false }) } })
+    await click(screen.getByRole('option', { name: 'src' }))
+    expect(await screen.findByText(en['preview.git'])).toBeTruthy()
+    expect(screen.getByText(en['preview.empty'])).toBeTruthy()
+    expect(preview).toHaveBeenCalled()
+  })
+
+  it('shows the folders as a grid with a hint, and no summary, until a folder is selected', async () => {
+    await open()
+    const columns = document.querySelector('[data-detail]') as HTMLElement
+    expect(columns.dataset.detail).toBe('none')
+    expect(screen.queryByRole('region')).toBeNull()
+    expect(screen.getByText(en['folder.pickHint'])).toBeTruthy()
+    await click(screen.getByRole('option', { name: 'src' }))
+    expect(columns.dataset.detail).toBe('summary')
+    expect(screen.queryByText(en['folder.pickHint'])).toBeNull()
+  })
+
+  it('reads each listed folder for a hint under its name: its stack or kind, and its Git branch', async () => {
+    const { preview } = await open()
+    expect(await screen.findAllByText('Node.js, TypeScript · main')).toHaveLength(2)
+    expect(preview).toHaveBeenCalledWith(`${HOME}/Documents`, expect.any(AbortSignal))
+    expect(preview).toHaveBeenCalledWith(`${HOME}/src`, expect.any(AbortSignal))
+    expect(screen.getByRole('option', { name: 'src' }).getAttribute('aria-describedby')).toBeTruthy()
+  })
+
+  it('names the kind of a folder with no known stack and leaves a folder the Host will not read without a hint', async () => {
+    const answers: Record<string, PreviewAnswer> = {
+      [`${HOME}/Documents`]: { result: 'folder', kind: 'empty', git: false, agentsFile: false, entries: [], more: false },
+      [`${HOME}/src`]: { result: 'refused', problem: 'outside-roots' },
+    }
+    await open({ api: { preview: async path => ok(answers[path] as PreviewAnswer) } })
+    expect(await screen.findByText(en['preview.kind.empty'])).toBeTruthy()
+    expect(screen.getByRole('option', { name: /^src$/ }).getAttribute('aria-describedby')).toBeNull()
+  })
+
+  it('offers New folder as an icon button named for screen readers', async () => {
+    await open()
+    expect(button(en['folder.newFolder']).textContent).toBe('')
   })
 
   it('opens a folder with Enter and moves the selection with the arrow keys', async () => {
@@ -160,8 +223,8 @@ describe('a folder on this computer', () => {
     expect(screen.getByRole('option', { name: 'src' }).getAttribute('aria-selected')).toBe('true')
     await key(screen.getByRole('option', { name: 'src' }), 'Enter')
     expect(folders.list).toHaveBeenLastCalledWith(`${HOME}/src`, expect.any(AbortSignal))
-    expect(within(list).getAllByRole('option').map(each => each.textContent)).toEqual(['delorun', 'site'])
-    expect(within(screen.getByRole('navigation', { name: en['folder.crumbs'] })).getAllByRole('button').map(each => each.textContent)).toEqual(['~', 'src'])
+    expect(folderNames(list)).toEqual(['delorun', 'site'])
+    expect(within(screen.getByRole('navigation', { name: en['folder.crumbs'] })).getAllByRole('button').map(each => each.textContent)).toEqual([en['folder.home'], 'src'])
     expect(button('Use "src"').disabled).toBe(false)
   })
 
@@ -271,7 +334,7 @@ describe('a folder on this computer', () => {
     const { folders } = await open()
     await click(button('~/src'))
     expect(folders.list).toHaveBeenLastCalledWith(`${HOME}/src`, expect.any(AbortSignal))
-    await click(within(screen.getByRole('navigation', { name: en['folder.crumbs'] })).getByRole('button', { name: '~' }))
+    await click(within(screen.getByRole('navigation', { name: en['folder.crumbs'] })).getByRole('button', { name: en['folder.home'] }))
     expect(folders.list).toHaveBeenLastCalledWith(HOME, expect.any(AbortSignal))
   })
 
