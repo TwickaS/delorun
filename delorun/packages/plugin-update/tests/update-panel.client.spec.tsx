@@ -41,7 +41,7 @@ class FormStub {
 
 /** Render the panel over a ready state and a stand-in form. */
 function renderPanel(state: UpdateStateView, form = new FormStub()) {
-  const load: UpdateLoad = { status: 'ready', state }
+  const load: UpdateLoad = { status: 'ready', state, reconnecting: false }
   const props = {
     t: makeTranslate(en), useLoad: (select: (value: UpdateLoad) => unknown) => select(load),
     reload: vi.fn(() => Promise.resolve()), check: vi.fn(), openDialog: vi.fn(), rollback: vi.fn(), settings: form,
