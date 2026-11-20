@@ -37,7 +37,7 @@ import { repositoryRoot } from '@delorun/tools/src/git.ts'
 import { RELEASE_FILE_SIZE_LIMITS, type AdvisoryAcceptance, type FileRef } from '@delorun/contract-release-manifest'
 import type { AdvisoryReport } from '../advisory/check.ts'
 import { readEnvelope } from '@delorun/release-formats/sign/schemas'
-import { addVersion, buildCompared, buildEntry, foldedPreviews, headlineErrors, parseData, renderChangelog, renderEntry, renderHighlights, renderNotes, replacesErrors, type ChangelogData, type VersionEntry } from './data.ts'
+import { addVersion, buildCompared, buildEntry, foldedPreviews, headlineErrors, parseData, publicVersions, renderChangelog, renderEntry, renderHighlights, renderNotes, replacesErrors, type ChangelogData, type VersionEntry } from './data.ts'
 import { fragmentPaths, readFragments, releasedPaths, type Fragment } from './fragment.ts'
 import { listUnreleased } from './list.ts'
 import { messageOf, type Output } from './output.ts'
@@ -137,7 +137,8 @@ export function renderAssembly(
   const entry = buildEntry(version, options.date ?? today(), ledger.ref, fragments, foldedPreviews(options.existing, version), options.headlines)
   const data = addVersion(options.existing, ledger, entry, buildCompared([...options.released ?? [], ...fragments]))
   const advisories = advisoryLines(accepted)
-  const notes = advisories.length === 0 ? renderNotes(entry) : `${renderNotes(entry)}\n${advisories.join('\n').trimEnd()}\n`
+  const publicEntry = publicVersions(data).find(candidate => candidate.version === version) ?? entry
+  const notes = advisories.length === 0 ? renderNotes(publicEntry) : `${renderNotes(publicEntry)}\n${advisories.join('\n').trimEnd()}\n`
   return { version, upstreamRef: ledger.ref, entry, data, changelog: renderChangelog(data), notes, fragments }
 }
 
