@@ -214,6 +214,11 @@
     - id: delorun-agent-seats
       name: '@delorun/plugin-agent-seats'
 
+    # Multiview: pinned agents beside the main chat. Plain on, with no preview flag: it does nothing until an agent is
+    # pinned or handed work, and its settings (autoOpen, maxPanes, compactComposer, reopenOnReturn) have defaults.
+    - id: delorun-multiview
+      name: '@delorun/plugin-multiview'
+
     - id: delorun-plugin-changes
       name: '@delorun/plugin-changes'
       config:

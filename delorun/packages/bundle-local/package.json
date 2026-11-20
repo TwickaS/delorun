@@ -121,6 +121,7 @@
     "@delorun/plugin-install-check": "workspace:*",
     "@delorun/plugin-instruction-consent": "workspace:*",
     "@delorun/plugin-mcp-consent": "workspace:*",
+    "@delorun/plugin-multiview": "workspace:*",
     "@delorun/plugin-permission-defaults": "workspace:*",
     "@delorun/plugin-schedule-consent": "workspace:*",
     "@delorun/plugin-tool-failure-guard": "workspace:*",
