@@ -43,7 +43,7 @@ import { pointLinkAt, readLinks } from './link.ts'
 import { activeDirectory, CHANGES_ENTRIES, profileChangesDirectory } from './paths.ts'
 import { approvedOf, findEntry, migratesAtUpgrade, readActiveRecord, readApproved, readChangeLog, readProtection, readWorkSession, withEntry, writeActiveRecord, writeApproved, writeChangeLog } from './records.ts'
 import { holdsVersion, materialize, readVersion, storeEmptyVersion, storeFolder } from './store.ts'
-import { referenceRelease, versionOf } from './tree.ts'
+import { referenceRelease, versionOf, type ScanMemo } from './tree.ts'
 import { ACTIVE_RECORD_SCHEMA, type ActiveContent, type ApprovedRecord, type ChangeEntry, type ChangeId, type ChangeLog, type ContentVersion, type ProtectionLevel } from './types.ts'
 import { inPackStore, supersededByUpdate, type UpdateBaseline } from './update-baseline.ts'
 import { approvedWith, declinedByPerson, unreviewedEntry, unreviewedWords, type UnreviewedLoad } from './unreviewed.ts'
@@ -86,6 +86,12 @@ export interface EnforceRequest {
    * replaced by the folder's, as an applied change decided `update`. A start without it never replaces approved content.
    */
   readonly updateBaseline?: UpdateBaseline
+  /**
+   * The digests this boot's earlier scans of active directories read. The pass uses it only where it decides whether to
+   * rewrite a directory, never in a check that decides what loads, and drops what it writes. An update's successor passes
+   * one for its first boot; every other caller leaves it out and reads every file.
+   */
+  readonly scanMemo?: ScanMemo
 }
 
 /** A plugin the first start under Changes approved as it was. */
@@ -256,7 +262,7 @@ export async function repointActiveCopies(request: EnforceRequest): Promise<read
   const stale = async (): Promise<[string, ActiveContent][]> => {
     const behind: [string, ActiveContent][] = []
     for (const [plugin, content] of Object.entries((await readActiveRecord(home, profile)).plugins)) {
-      if (content.version !== undefined && !await holdsVersion(home, activeDirectory(home, profile, plugin), content.version, release)) behind.push([plugin, content])
+      if (content.version !== undefined && !await holdsVersion(home, activeDirectory(home, profile, plugin), content.version, release, request.scanMemo)) behind.push([plugin, content])
     }
     return behind
   }
@@ -265,7 +271,7 @@ export async function repointActiveCopies(request: EnforceRequest): Promise<read
   return withFileLock(join(profileDir, 'package.json'), async () => {
     const rewritten: string[] = []
     for (const [plugin, content] of await stale()) {
-      await holdContent(home, activeDirectory(home, profile, plugin), content.version, release)
+      await holdContent(home, activeDirectory(home, profile, plugin), content.version, release, request.scanMemo)
       rewritten.push(plugin)
     }
     return rewritten
@@ -582,14 +588,14 @@ async function bringUnderChanges(request: EnforceRequest, at: string, pass: 'sta
   for (const { plugin } of managed) {
     let active = decided.get(plugin)
     try {
-      await holdContent(home, activeDirectory(home, profile, plugin), active?.version, release)
+      await holdContent(home, activeDirectory(home, profile, plugin), active?.version, release, request.scanMemo)
     } catch (error) {
       if (!isChangesError(error) || (error.code !== 'STORE_CORRUPT' && error.code !== 'RUNTIME_CHANGED')) throw error
       // Content the store no longer holds, such as a version a restored history version names after collection
       // removed it, or a link to a package the release carries while the home runs no installed release: the plugin
       // loads nothing until the person applies a change again.
       failed.push({ plugin, detail: error.detail })
-      await holdContent(home, activeDirectory(home, profile, plugin), undefined, release)
+      await holdContent(home, activeDirectory(home, profile, plugin), undefined, release, request.scanMemo)
       active = undefined
     }
     if (active === undefined) delete activePlugins[plugin]
@@ -709,9 +715,11 @@ function withApproval(record: ApprovedRecord, plugin: string, approval: Approved
  * @param directory - the active directory.
  * @param version - the version; undefined for an empty directory.
  * @param release - the release whose installed packages its `runtime` links name; `runtimes/current` when omitted.
+ * @param memo - the digests this boot's earlier scans read, which the first check of the directory uses; none reads every file. What this writes is dropped from it.
  */
-export async function holdContent(home: string, directory: string, version: ContentVersion | undefined, release?: string): Promise<void> {
-  if (await holdsVersion(home, directory, version ?? EMPTY_CONTENT_VERSION, release)) return
+export async function holdContent(home: string, directory: string, version: ContentVersion | undefined, release?: string, memo?: ScanMemo): Promise<void> {
+  if (await holdsVersion(home, directory, version ?? EMPTY_CONTENT_VERSION, release, memo)) return
+  memo?.forget(directory)
   if (version !== undefined) {
     await materialize(home, version, directory, undefined, release)
     return

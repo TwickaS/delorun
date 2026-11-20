@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto'
-import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, statSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { writeProtectedFile } from '@delorun/home'
 import { objectsDirectory, versionsDirectory } from '../src/paths.ts'
-import { holdsVersion, materialize, readObject, readVersion, storeFolder } from '../src/store.ts'
-import { versionOf } from '../src/tree.ts'
+import { holdsVersion, holdsVersionUnder, materialize, readObject, readVersion, storeFolder } from '../src/store.ts'
+import { CACHE_SETTLE_MS, createScanMemo, versionOf } from '../src/tree.ts'
 import { VERSION_MANIFEST_SCHEMA, type ContentVersion, type ObjectDigest, type VersionEntry } from '../src/types.ts'
 import { countReads, lockOut, makeFifo, modeOf, rejection, temporaryDirectory, writeFiles } from './support.ts'
 
@@ -474,5 +474,71 @@ describe('holdsVersion', () => {
     const { home, folder } = setUp({ 'a.js': 'a' })
     const { version } = await storeFolder(home, folder)
     await expect(holdsVersion(home, join(folder, 'a.js'), version)).rejects.toMatchObject({ code: 'ENOTDIR' })
+  })
+})
+
+describe('holdsVersion with a scan memo', () => {
+  const settled = (): number => Date.now() + 10 * CACHE_SETTLE_MS
+
+  it('reads each file once for the checks that share the memo, and every file when they do not', async () => {
+    const { home, folder } = setUp({ 'a.js': 'a' })
+    const { version } = await storeFolder(home, folder)
+    const memo = createScanMemo(settled)
+    const reads = await countReads(join(folder, 'a.js'))
+    try {
+      expect(await holdsVersion(home, folder, version, undefined, memo)).toBe(true)
+      const first = reads.read()
+      expect(first).toBeGreaterThan(0)
+      expect(await holdsVersion(home, folder, version, undefined, memo)).toBe(true)
+      expect(reads.read()).toBe(first)
+      expect(await holdsVersion(home, folder, version)).toBe(true)
+      expect(reads.read()).toBe(2 * first)
+    } finally {
+      reads.restore()
+    }
+  })
+
+  it('does not remember a file changed within the settle window', async () => {
+    const { home, folder } = setUp({ 'a.js': 'a' })
+    const { version } = await storeFolder(home, folder)
+    const memo = createScanMemo()
+    const reads = await countReads(join(folder, 'a.js'))
+    try {
+      await holdsVersion(home, folder, version, undefined, memo)
+      const first = reads.read()
+      await holdsVersion(home, folder, version, undefined, memo)
+      expect(reads.read()).toBe(2 * first)
+    } finally {
+      reads.restore()
+    }
+  })
+
+  it('leaves the load check reading the bytes: a same-size change with the old modification time is caught after the memo took the file', async () => {
+    const { home, folder } = setUp({ 'a.js': 'a' })
+    const { version } = await storeFolder(home, folder)
+    const memo = createScanMemo(settled)
+    const { atime, mtime } = statSync(join(folder, 'a.js'))
+    expect(await holdsVersion(home, folder, version, undefined, memo)).toBe(true)
+    writeFileSync(join(folder, 'a.js'), 'b')
+    utimesSync(join(folder, 'a.js'), atime, mtime)
+    expect(await holdsVersionUnder(home, folder, version, { kind: 'release', release: undefined })).toBe(false)
+    // The change moved the file's status-change time, so the memo no longer matches either.
+    expect(await holdsVersion(home, folder, version, undefined, memo)).toBe(false)
+  })
+
+  it('drops what a caller forgets, so a rewritten directory is read again', async () => {
+    const { home, folder } = setUp({ 'a.js': 'a' })
+    const { version } = await storeFolder(home, folder)
+    const memo = createScanMemo(settled)
+    const reads = await countReads(join(folder, 'a.js'))
+    try {
+      await holdsVersion(home, folder, version, undefined, memo)
+      const first = reads.read()
+      memo.forget(folder)
+      await holdsVersion(home, folder, version, undefined, memo)
+      expect(reads.read()).toBe(2 * first)
+    } finally {
+      reads.restore()
+    }
   })
 })

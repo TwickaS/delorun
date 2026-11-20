@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { attestTerminal, baselineOfPacks, protectionPath, readActiveRecord, readApproved, readChangeLog, setProtection, writeApproved, type SignedPackFiles, type UpdateBaseline } from '@delorun/changes'
+import { attestTerminal, baselineOfPacks, enforceApprovedContent, protectionPath, readActiveRecord, readApproved, readChangeLog, setProtection, writeApproved, type SignedPackFiles, type UpdateBaseline } from '@delorun/changes'
 import type { RuntimeVersion } from '@delorun/contract-home-layout'
 import { parseRuntimeVersion } from '@delorun/runtime-store'
 import { prepareHome, type CommandContext } from '../src/command.ts'
@@ -15,6 +15,11 @@ import { changesApprovedContent, changesPreStartStep, repointForSuccessor, start
 import { updateSource } from '../src/changes/update-baseline.ts'
 
 const hooks = vi.hoisted(() => ({ baseline: undefined as import('@delorun/changes').UpdateBaseline | undefined, asked: [] as string[], environment: 'verified' as 'verified' | 'unverifiable' | 'unsupported' | 'failing' }))
+
+vi.mock('@delorun/changes', async importOriginal => {
+  const actual = await importOriginal<typeof import('@delorun/changes')>()
+  return { ...actual, enforceApprovedContent: vi.fn(actual.enforceApprovedContent) }
+})
 
 vi.mock('../src/changes/update-baseline.ts', async importOriginal => {
   const actual = await importOriginal<typeof import('../src/changes/update-baseline.ts')>()
@@ -111,6 +116,30 @@ describe('the first boot of an update\'s successor', () => {
     expect(await entries()).toEqual(['Replaced by the update to 2.0.0: pkg'])
     expect(await approvedVersion()).not.toBe(before)
     expect(context.printed.join('')).toContain('pkg now holds the files of the update to 2.0.0')
+  })
+
+  it('runs Changes\' start with one scan memo when an approved plugin is a pack the releases list', async () => {
+    await updatedHome()
+    hooks.baseline = baseline
+    vi.mocked(enforceApprovedContent).mockClear()
+    await successorBoot(v('1.0.0'))
+    expect(enforceApprovedContent).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(enforceApprovedContent).mock.calls[0]![0]).toMatchObject({ updateBaseline: { from: '1.0.0', to: '2.0.0' }, scanMemo: { lookup: expect.any(Function) } })
+  })
+
+  it('reads nothing of the profile\'s plugin folders when no approved plugin is a pack either release lists', async () => {
+    await updatedHome()
+    const before = await approvedVersion()
+    const packsFor = vi.fn(baseline.packsFor)
+    hooks.baseline = { ...baseline, lists: () => false, packsFor }
+    vi.mocked(enforceApprovedContent).mockClear()
+    await successorBoot(v('1.0.0'))
+    expect(hooks.asked).toEqual(['1.0.0'])
+    expect(enforceApprovedContent).not.toHaveBeenCalled()
+    expect(packsFor).not.toHaveBeenCalled()
+    expect(await entries()).toEqual([])
+    expect(await approvedVersion()).toBe(before)
+    expect(context.printed.join('')).toBe('')
   })
 
   it('replaces nothing when no update left a release, and nothing at the pre-start step of a start, whatever it was given', async () => {

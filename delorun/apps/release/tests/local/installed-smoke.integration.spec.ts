@@ -16,7 +16,7 @@ import { signEnvelope } from '@delorun/release-formats/sign/envelope'
 import { toJsonValue } from '@delorun/release-formats/sign/json'
 import { BENIGN_LOG_LINES, FORBIDDEN_LOG_LINES, logProblems } from '../../src/installed-smoke/home-log.ts'
 import { channelSource, offeredPacks, packsForPlatform } from '../../src/installed-smoke/offered-packs.ts'
-import { installsState, loadProblems, parseSmokeArgs, redactTokens, smokeEnvironment, stopLeftover } from '../../scripts/installed-smoke.ts'
+import { HOME_LOG_TAIL_LINES, installsState, loadProblems, parseSmokeArgs, redactTokens, smokeEnvironment, stopLeftover, tailLines } from '../../scripts/installed-smoke.ts'
 import { PacksSnapshot, readAnswer } from '../../src/installed-smoke/wire.ts'
 import { manifestContent, rootFile, throwawayKeys } from '../sign/fixture.ts'
 
@@ -245,10 +245,26 @@ describe('the command line', () => {
     expect(request).toMatchObject({ channel: 'http://127.0.0.1:18431', version: '0.1.0-preview.1.6', launcher: undefined, channelPort: 18981, studioPort: 18982, budgetMinutes: 30, keepGoing: false, keys: undefined })
   })
 
+  it('keeps the scratch home only when asked to', () => {
+    expect(parseSmokeArgs(['--channel', 'x', '--version', '0.1.0', '--keep-home']).keepHome).toBe(true)
+    expect(parseSmokeArgs(['--channel', 'x', '--version', '0.1.0', '--keep-going']).keepHome).toBe(false)
+  })
+
   it('refuses a missing channel, a missing version and a port or budget out of range', () => {
     expect(() => parseSmokeArgs(['--version', '0.1.0'])).toThrow(/--channel/u)
     expect(() => parseSmokeArgs(['--channel', 'x'])).toThrow(/--version/u)
     expect(() => parseSmokeArgs(['--channel', 'x', '--version', '0.1.0', '--studio-port', '80'])).toThrow(/--studio-port/u)
     expect(() => parseSmokeArgs(['--channel', 'x', '--version', '0.1.0', '--budget-minutes', '0'])).toThrow(/--budget-minutes/u)
+  })
+})
+
+describe('the home log a failed run prints', () => {
+  it('is the last lines of the log without its trailing newline', () => {
+    const log = Array.from({ length: HOME_LOG_TAIL_LINES + 5 }, (_, index) => `line ${String(index + 1)}`).join('\n')
+    const tail = tailLines(`${log}\n\n`, HOME_LOG_TAIL_LINES).split('\n')
+    expect(tail).toHaveLength(HOME_LOG_TAIL_LINES)
+    expect(tail[0]).toBe('line 6')
+    expect(tail.at(-1)).toBe(`line ${String(HOME_LOG_TAIL_LINES + 5)}`)
+    expect(tailLines('one\ntwo', 5)).toBe('one\ntwo')
   })
 })

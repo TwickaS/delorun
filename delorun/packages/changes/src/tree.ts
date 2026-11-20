@@ -54,7 +54,7 @@
  * @module @delorun/changes/tree
  */
 import { createHash } from 'node:crypto'
-import { constants, lstatSync, readdirSync, type Stats } from 'node:fs'
+import { constants, lstatSync, readdirSync, type BigIntStats, type Stats } from 'node:fs'
 import { lstat, mkdir, open, readdir, readlink, realpath, stat, type FileHandle } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { brandString } from '@deepseek-ai/dsh-brand'
@@ -75,7 +75,13 @@ export const EXCLUDED_DIRECTORY = '.git'
 export const DEPENDENCY_DIRECTORY = 'node_modules'
 
 /** Schema tag of the scan cache file. */
-export const SCAN_CACHE_SCHEMA = 'delorun.changes-scan-cache/1'
+export const SCAN_CACHE_SCHEMA = 'delorun.changes-scan-cache/2'
+
+/**
+ * How many folders one scan cache file keeps entries for. A profile scans a pack's source, its older copies and its
+ * active directory, for each plugin; the oldest folder's entries are dropped past this count.
+ */
+export const SCAN_CACHE_FOLDERS = 16
 
 /**
  * How recent a file's modification or status change may be for the scan cache to record it, in milliseconds: the
@@ -167,8 +173,61 @@ export interface ActiveScanOptions extends ScanCacheOptions {
   readonly runtimeRelease?: string
 }
 
+/**
+ * The digests one process's earlier scans read, for checks that only decide whether to rewrite a directory. It lives in
+ * memory for one boot and is never written. An entry names a file by absolute path, device, inode, size and the
+ * modification and status-change times in nanoseconds, and a file changed since is hashed again. A check that decides
+ * what loads, or verifies a write, takes no memo.
+ */
+export interface ScanMemo {
+  /**
+   * @param path - the file's absolute path.
+   * @param stats - the file's status now, read from the open file.
+   * @returns the digest an earlier scan read from a file with this status; undefined when none.
+   */
+  lookup(path: string, stats: BigIntStats): ObjectDigest | undefined
+  /**
+   * Remember a digest read from a file whose status was the same before and after the read and whose times are older than {@link CACHE_SETTLE_MS}.
+   * @param path - the file's absolute path.
+   * @param stats - the file's status.
+   * @param digest - the digest of the bytes read.
+   */
+  record(path: string, stats: BigIntStats, digest: ObjectDigest): void
+  /**
+   * Drop every entry below a directory the boot writes.
+   * @param directory - the directory.
+   */
+  forget(directory: string): void
+}
+
+/**
+ * A scan memo for one boot.
+ * @param now - the wall clock in milliseconds, which decides which files are recorded; defaults to `Date.now`. A test hook.
+ * @returns the empty memo.
+ */
+export function createScanMemo(now: () => number = Date.now): ScanMemo {
+  const seen = new Map<string, { readonly dev: bigint, readonly ino: bigint, readonly size: bigint, readonly mtimeNs: bigint, readonly ctimeNs: bigint, readonly digest: ObjectDigest }>()
+  return {
+    lookup: (path, stats) => {
+      const known = seen.get(path)
+      return known !== undefined && known.dev === stats.dev && known.ino === stats.ino && known.size === stats.size && known.mtimeNs === stats.mtimeNs && known.ctimeNs === stats.ctimeNs ? known.digest : undefined
+    },
+    record: (path, stats, digest) => {
+      const changed = stats.mtimeNs > stats.ctimeNs ? stats.mtimeNs : stats.ctimeNs
+      if (changed / 1_000_000n >= BigInt(Math.trunc(now() - CACHE_SETTLE_MS))) return
+      seen.set(path, { dev: stats.dev, ino: stats.ino, size: stats.size, mtimeNs: stats.mtimeNs, ctimeNs: stats.ctimeNs, digest })
+    },
+    forget: (directory) => {
+      const below = `${directory}${sep}`
+      for (const path of seen.keys()) if (path === directory || path.startsWith(below)) seen.delete(path)
+    },
+  }
+}
+
 /** The scan cache and clock both scans take. */
 export interface ScanCacheOptions {
+  /** The digests of this boot's earlier scans, for a check that only decides whether to rewrite ({@link ScanMemo}); none by default. */
+  readonly memo?: ScanMemo
   /**
    * The scan cache file, such as `changes/profiles/<profile>/scan-cache.json`. A file whose device, inode, size and
    * modification and status-change times equal the cached ones is not hashed again. A cache that cannot be read is
@@ -211,11 +270,14 @@ interface CacheEntry {
   readonly digest: ObjectDigest
 }
 
-/** The scan cache file. */
+/** The scan cache file: per folder, its real path and the entries of its files by relative path. */
 interface ScanCache {
   readonly schema: typeof SCAN_CACHE_SCHEMA
-  readonly files: Readonly<Record<string, CacheEntry>>
+  readonly folders: Readonly<Record<string, Readonly<Record<string, CacheEntry>>>>
 }
+
+/** What a scan cache file holds: the entries of each folder, oldest folder first, by relative path. */
+type CacheFolders = Map<string, Map<string, CacheEntry>>
 
 const DIGEST_PATTERN = /^[0-9a-f]{64}$/
 
@@ -399,10 +461,9 @@ function cacheEntry(value: unknown): CacheEntry | undefined {
  * cache, and an entry without its fields is left out: the cache only saves hashing, and every entry is checked against
  * the file's status before use.
  * @param path - the cache file.
- * @returns the cached entries by relative path, or undefined when the file is not a scan cache Delorun can read.
+ * @returns the cached entries of each folder by relative path, or undefined when the file is not a scan cache Delorun can read.
  */
-async function readCache(path: string): Promise<Map<string, CacheEntry> | undefined> {
-  const entries = new Map<string, CacheEntry>()
+async function readCache(path: string): Promise<CacheFolders | undefined> {
   let parsed: unknown
   try {
     parsed = JSON.parse((await readProtectedFile(path)).toString('utf8'))
@@ -411,12 +472,18 @@ async function readCache(path: string): Promise<Map<string, CacheEntry> | undefi
     return undefined
   }
   const cache = parsed as Partial<ScanCache> | null
-  if (cache?.schema !== SCAN_CACHE_SCHEMA || typeof cache.files !== 'object' || cache.files === null) return undefined
-  for (const [path, value] of Object.entries(cache.files)) {
-    const entry = cacheEntry(value)
-    if (entry !== undefined) entries.set(path, entry)
+  if (cache?.schema !== SCAN_CACHE_SCHEMA || typeof cache.folders !== 'object' || cache.folders === null) return undefined
+  const folders: CacheFolders = new Map()
+  for (const [folder, files] of Object.entries(cache.folders)) {
+    if (typeof files !== 'object' || files === null) continue
+    const entries = new Map<string, CacheEntry>()
+    for (const [path, value] of Object.entries(files)) {
+      const entry = cacheEntry(value)
+      if (entry !== undefined) entries.set(path, entry)
+    }
+    folders.set(folder, entries)
   }
-  return entries
+  return folders
 }
 
 /**
@@ -448,6 +515,7 @@ interface Walk {
   readonly cached: ReadonlyMap<string, CacheEntry>
   readonly recorded: Map<string, CacheEntry>
   readonly settledBefore: number
+  readonly memo: ScanMemo | undefined
   readonly entries: VersionEntry[]
   readonly files: ScannedFile[]
   readonly skipped: string[]
@@ -549,14 +617,24 @@ async function addFile(walk: Walk, source: string, path: string): Promise<void> 
       walk.recorded.set(path, cached)
       entry = { type: 'file', path, digest: cached.digest, size: cached.size, executable }
     } else {
-      const hash = createHash('sha256')
-      const size = await readChunks(handle, { size: stats.size, path: source }, (chunk) => { hash.update(chunk) })
-      walk.bytes -= stats.size - size
-      const digest = brandString<ObjectDigest>(hash.digest('hex'))
-      if (Math.max(stats.mtimeMs, stats.ctimeMs) < walk.settledBefore) {
-        walk.recorded.set(path, { dev: stats.dev, ino: stats.ino, size: stats.size, mtimeMs: stats.mtimeMs, ctimeMs: stats.ctimeMs, digest })
+      const before = walk.memo === undefined ? undefined : await handle.stat({ bigint: true })
+      const remembered = before === undefined ? undefined : walk.memo!.lookup(source, before)
+      if (remembered !== undefined) {
+        entry = { type: 'file', path, digest: remembered, size: stats.size, executable }
+      } else {
+        const hash = createHash('sha256')
+        const size = await readChunks(handle, { size: stats.size, path: source }, (chunk) => { hash.update(chunk) })
+        walk.bytes -= stats.size - size
+        const digest = brandString<ObjectDigest>(hash.digest('hex'))
+        if (Math.max(stats.mtimeMs, stats.ctimeMs) < walk.settledBefore) {
+          walk.recorded.set(path, { dev: stats.dev, ino: stats.ino, size: stats.size, mtimeMs: stats.mtimeMs, ctimeMs: stats.ctimeMs, digest })
+        }
+        if (before !== undefined) {
+          const after = await handle.stat({ bigint: true })
+          if (size === stats.size && after.dev === before.dev && after.ino === before.ino && after.size === before.size && after.mtimeNs === before.mtimeNs && after.ctimeNs === before.ctimeNs) walk.memo!.record(source, after, digest)
+        }
+        entry = { type: 'file', path, digest, size, executable }
       }
-      entry = { type: 'file', path, digest, size, executable }
     }
   } finally {
     await handle.close()
@@ -990,12 +1068,14 @@ async function walkDirectory(walk: Walk, root: string, absolute: string, directo
 export async function scanFolder(folder: string, options: ScanOptions): Promise<ScannedFolder> {
   const now = options.now ?? Date.now
   const root = await realpath(folder)
-  const cached = options.cache === undefined ? undefined : await readCache(options.cache)
+  const cacheFolders = options.cache === undefined ? undefined : await readCache(options.cache)
+  const cached = cacheFolders?.get(root)
   const home = 'home' in options ? await realTarget(resolve(options.home)) ?? resolve(options.home) : undefined
   const walk: Walk = {
     cached: cached ?? new Map(),
     recorded: new Map(),
     settledBefore: now() - CACHE_SETTLE_MS,
+    memo: options.memo,
     entries: [],
     files: [],
     skipped: [],
@@ -1015,8 +1095,15 @@ export async function scanFolder(folder: string, options: ScanOptions): Promise<
   await walkDirectory(walk, root, root, '', false)
   // A cache that holds what the scan would record is not written again, so a read of an unchanged folder writes nothing.
   if (options.cache !== undefined && (cached === undefined || !sameCache(cached, walk.recorded))) {
-    const files = Object.fromEntries([...walk.recorded].sort(([a], [b]) => compareCodeUnits(a, b)))
-    const cache: ScanCache = { schema: SCAN_CACHE_SCHEMA, files }
+    // Another folder's entries stay, so the scans of a profile's plugin folders do not replace one another's.
+    const folders: CacheFolders = new Map(cacheFolders)
+    folders.delete(root)
+    folders.set(root, walk.recorded)
+    for (const oldest of [...folders.keys()].slice(0, Math.max(0, folders.size - SCAN_CACHE_FOLDERS))) folders.delete(oldest)
+    const cache: ScanCache = {
+      schema: SCAN_CACHE_SCHEMA,
+      folders: Object.fromEntries([...folders].map(([folder, recorded]) => [folder, Object.fromEntries([...recorded].sort(([a], [b]) => compareCodeUnits(a, b)))])),
+    }
     await mkdir(dirname(options.cache), { recursive: true, mode: PRIVATE_DIR_MODE })
     await writeProtectedFile(options.cache, `${JSON.stringify(cache)}\n`)
   }
@@ -1073,6 +1160,7 @@ export async function scanFile(folder: string, path: string, limits: ScanLimits 
     cached: new Map(),
     recorded: new Map(),
     settledBefore: Number.NEGATIVE_INFINITY,
+    memo: undefined,
     entries: [],
     files: [],
     skipped: [],

@@ -18,7 +18,7 @@
  */
 import { resolve } from 'node:path'
 import { getDelorunRuntimeVersion } from '@deepseek-ai/dsh-app-boot'
-import { checkChangesInvariants, enforceApprovedContent, followApprovedContent, isChangesError, markShownAtUpgrade, PROFILE_LOCK_WAIT_MS, recordsOf, repointActiveCopies, revertDecisions, startNotice, workFinishedLine, writeBootRecord, type BootRow, type DecisionRecords, type ReloadHost, type StartChanges, type UpdateBaseline } from '@delorun/changes'
+import { baselineMayApply, checkChangesInvariants, createScanMemo, enforceApprovedContent, followApprovedContent, isChangesError, markShownAtUpgrade, PROFILE_LOCK_WAIT_MS, recordsOf, repointActiveCopies, revertDecisions, startNotice, workFinishedLine, writeBootRecord, type BootRow, type DecisionRecords, type ReloadHost, type ScanMemo, type StartChanges, type UpdateBaseline } from '@delorun/changes'
 import { finishWorkWithoutPerson } from '@delorun/changes/stop'
 import type { RuntimeVersion } from '@delorun/contract-home-layout'
 import type { DelorunLogger } from '@delorun/logs'
@@ -60,6 +60,8 @@ export interface ChangesStartRequest {
    * differs from its folder only by the release's own files is replaced, not left waiting.
    */
   readonly updateBaseline?: UpdateBaseline
+  /** The digests the successor's first boot reads once for its rewrite-or-not checks of active copies ({@link repointForSuccessor}). */
+  readonly scanMemo?: ScanMemo
 }
 
 /**
@@ -114,7 +116,7 @@ export async function startChanges(request: ChangesStartRequest, output: (text: 
   try {
     const ended = request.ownsHome === true ? await finishWorkWithoutPerson({ home, profile, profileDir }, 'stopped') : undefined
     if (ended !== undefined) notice = `Your work session on ${ended.plugin} ended when Delorun stopped. ${workFinishedLine(ended)}\n`
-    enforced = await enforceApprovedContent({ home, profile, profileDir, harnessLink: isCarriedPackage, ...runningRelease(), ...request.updateBaseline === undefined ? {} : { updateBaseline: request.updateBaseline } })
+    enforced = await enforceApprovedContent({ home, profile, profileDir, harnessLink: isCarriedPackage, ...runningRelease(), ...request.updateBaseline === undefined ? {} : { updateBaseline: request.updateBaseline }, ...request.scanMemo === undefined ? {} : { scanMemo: request.scanMemo } })
   } catch (error) {
     const detail = isChangesError(error) ? error.detail : String(error)
     throw new CliError(EXIT.failed, `delorun: the profile ${profile} was not started, because the plugins it links from folders could not be prepared: ${detail}`)
@@ -212,6 +214,12 @@ export interface SuccessorRequest {
  * every approved-record and `active.json` entry the baseline changed back to what the predecessor left
  * ({@link revertDecisions}, through the Host runner's `abandon`), so the predecessor's rollback and resume find nothing
  * advanced. The same undo runs when the boot's own steps throw after the baseline applied.
+ *
+ * Changes' start runs only when some approved plugin is linked from the pack store and one of the two releases lists it
+ * as a pack ({@link baselineMayApply}); otherwise the boot reads nothing of the profile's plugin folders here, as
+ * before the baseline existed. When it runs, the start and the re-pointing share one in-memory memo of the digests of
+ * the active copies' files ({@link createScanMemo}), used only where they decide whether to rewrite a copy; the load
+ * check that follows the boot ({@link changesApprovedContent}) and a copy's check after it was written read every file.
  * @param request - the home and the profile about to boot, and the release an update left.
  * @param afterFailedSwitch - whether a Host of this process booted before.
  * @returns the undo of what the baseline advanced in the approved record and `active.json`, which the Host runner's
@@ -223,17 +231,20 @@ export interface SuccessorRequest {
 export async function repointForSuccessor(request: SuccessorRequest, afterFailedSwitch = false): Promise<UndoBaseline | undefined> {
   const { home, profile } = request
   if (!hasCliProfile(home, profile)) return undefined
-  const enforce = { home, profile, profileDir: profileDirectory(home, profile), harnessLink: isCarriedPackage, ...runningRelease() }
+  const scanMemo = createScanMemo()
+  const enforce = { home, profile, profileDir: profileDirectory(home, profile), harnessLink: isCarriedPackage, scanMemo, ...runningRelease() }
   const write = request.write ?? (() => undefined)
-  const updateBaseline = afterFailedSwitch || request.updatedFrom === undefined ? undefined : await verifiedUpdateBaseline(request.updatedFrom, write)
-  // Without a verified baseline there is nothing to apply, and the successor boots as it did before.
+  const verified = afterFailedSwitch || request.updatedFrom === undefined ? undefined : await verifiedUpdateBaseline(request.updatedFrom, write)
+  // A profile with no approved plugin that is a pack of either release has nothing to replace, so Changes' start does not read it at all.
+  const updateBaseline = verified !== undefined && baselineMayApply(home, (await recordsOf(enforce)).approved, verified) ? verified : undefined
+  // Without a verified baseline to apply, there is nothing to read, and the successor boots as it did before.
   const before = updateBaseline === undefined ? undefined : await recordsOf(enforce)
   let after: DecisionRecords | undefined
   const undo: UndoBaseline | undefined = before === undefined ? undefined : async () => { await revertDecisions(enforce, before, after ?? await recordsOf(enforce)) }
   try {
     if (updateBaseline !== undefined) {
       try {
-        await startChanges({ home, profile, updateBaseline }, write)
+        await startChanges({ home, profile, updateBaseline, scanMemo }, write)
       } finally {
         after = await recordsOf(enforce)
       }

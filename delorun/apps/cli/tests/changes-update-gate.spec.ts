@@ -30,6 +30,7 @@ const pack = (release: RuntimeVersion, name = 'demo'): SignedPackFiles => ({ nam
 function opened(): string[] {
   const read: string[] = []
   vi.mocked(openSignedPacks).mockImplementation(release => Promise.resolve({
+    lists: () => true,
     files: (name) => {
       read.push(`${release.version} ${name}`)
       return Promise.resolve({ ...pack(release.version), name })
@@ -88,7 +89,7 @@ describe('which update gets a baseline', () => {
 
   it('gives a pack that cannot be read no files and says so once, so its change waits', async () => {
     const environment = { release: (other?: RuntimeVersion) => Promise.resolve({ paths: new StorePaths(base, 'linux-x64'), version: other ?? v('0.2.0') } as never) }
-    vi.mocked(openSignedPacks).mockImplementation(() => Promise.resolve({ files: () => Promise.reject(new Error('EIO')) }))
+    vi.mocked(openSignedPacks).mockImplementation(() => Promise.resolve({ lists: () => true, files: () => Promise.reject(new Error('EIO')) }))
     const told: string[] = []
     const baseline = await updateBaselineOf(environment, v('0.1.0'), (name, error) => void told.push(`${name}: ${(error as Error).message}`))
     expect(await baseline!.packsFor('demo')).toEqual([])

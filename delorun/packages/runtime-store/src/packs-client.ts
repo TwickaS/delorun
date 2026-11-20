@@ -112,6 +112,12 @@ export async function readStoredPacks(release: InstalledRelease): Promise<Releas
 /** One installed release's verified packs file, whose packs' files are read only when asked ({@link openSignedPacks}). */
 export interface SignedPacks {
   /**
+   * Whether the release lists a pack, from the verified packs file alone; no installed file is read.
+   * @param name - the pack's package name.
+   * @returns true when the release lists a pack of that name.
+   */
+  lists(name: string): boolean
+  /**
    * The files one pack lists, hashing the installed pack and its externals to see whether they match.
    * @param name - the pack's package name.
    * @returns its signed files; `undefined` when the release lists no such pack for this platform.
@@ -131,6 +137,7 @@ export async function openSignedPacks(release: InstalledRelease): Promise<Signed
   const packs = await readStoredPacks(release)
   if (packs === undefined) return undefined
   return {
+    lists: name => packs.packs.some(each => each.name === name),
     files: async (name) => {
       const entry = packs.packs.find(each => each.name === name)
       return entry === undefined ? undefined : signedPackFiles(release.paths, release.version, entry, release.paths.platform)

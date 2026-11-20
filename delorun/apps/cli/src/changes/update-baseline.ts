@@ -63,6 +63,7 @@ export async function updateBaselineOf(environment: Pick<PacksEnvironment, 'rele
   return {
     from,
     to: running.version,
+    lists: name => to.lists(name) || before?.lists(name) === true,
     packsFor: (name) => {
       const known = read.get(name)
       if (known !== undefined) return known

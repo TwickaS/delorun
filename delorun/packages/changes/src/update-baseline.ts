@@ -16,7 +16,7 @@ import { resolve, sep } from 'node:path'
 import { DELORUN_HOME_ENTRIES } from '@delorun/contract-home-layout'
 import type { SignedPackFiles } from '@delorun/runtime-store'
 import { readObject } from './store.ts'
-import type { VersionEntry, VersionManifest } from './types.ts'
+import type { ApprovedRecord, VersionEntry, VersionManifest } from './types.ts'
 
 export type { SignedPackFiles }
 
@@ -26,6 +26,12 @@ export interface UpdateBaseline {
   readonly from: string
   /** The release this process runs. */
   readonly to: string
+  /**
+   * Whether either release's verified packs file lists a pack; reads no installed file.
+   * @param name - the pack's package name.
+   * @returns true when `from` or `to` lists a pack of that name.
+   */
+  lists(name: string): boolean
   /**
    * The signed files of one pack in `from` and in `to`, from their verified packs files; each release that lists the pack
    * gives one entry. Reading a pack hashes its installed files, so a pack is asked for only when a waiting change touches
@@ -44,7 +50,20 @@ export interface UpdateBaseline {
  * @returns the baseline, which answers each pack from `packs`.
  */
 export function baselineOfPacks(from: string, to: string, packs: readonly SignedPackFiles[]): UpdateBaseline {
-  return { from, to, packsFor: name => Promise.resolve(packs.filter(pack => pack.name === name)) }
+  return { from, to, lists: name => packs.some(pack => pack.name === name), packsFor: name => Promise.resolve(packs.filter(pack => pack.name === name)) }
+}
+
+/**
+ * Whether an update's baseline can replace anything: some plugin the profile has approved is linked from the pack
+ * store and is a pack one of the two releases lists. Without one, no waiting change is about a release's own files,
+ * and the successor has nothing to read.
+ * @param home - the Delorun home.
+ * @param approved - the profile's approved plugins.
+ * @param baseline - what the successor verified.
+ * @returns true when {@link supersededByUpdate} may be asked about some approved plugin.
+ */
+export function baselineMayApply(home: string, approved: ApprovedRecord, baseline: Pick<UpdateBaseline, 'lists'>): boolean {
+  return Object.entries(approved.plugins).some(([plugin, { source }]) => inPackStore(home, source) && baseline.lists(plugin))
 }
 
 /**

@@ -13,7 +13,7 @@ import { readActiveRecord, readApproved, readChangeLog, writeActiveRecord, write
 import { activeDirectory } from '../src/paths.ts'
 import { ACTIVE_RECORD_SCHEMA } from '../src/types.ts'
 import { storeFolder } from '../src/store.ts'
-import { baselineOfPacks, LAST_RELEASE_WITH_BUILD_PATHS, leftReleaseWithBuildPaths, supersededByUpdate, withoutBuildFolder, type SignedPackFiles, type UpdateBaseline } from '../src/update-baseline.ts'
+import { baselineMayApply, baselineOfPacks, LAST_RELEASE_WITH_BUILD_PATHS, leftReleaseWithBuildPaths, supersededByUpdate, withoutBuildFolder, type SignedPackFiles, type UpdateBaseline } from '../src/update-baseline.ts'
 import { approvedVersion, fixture, history, linkAs, NOW, PROFILE, start, type Fixture } from './profile-fixture.ts'
 import { writeFiles } from './support.ts'
 
@@ -359,5 +359,20 @@ describe('undoing a start\'s decisions', () => {
     expect(await revertDecisions(request(fx), before, started)).toEqual(['extra'])
 
     expect((await readActiveRecord(fx.home, PROFILE)).plugins).toEqual({ pkg: later })
+  })
+})
+
+describe('baselineMayApply', () => {
+  const baseline = baselineOfPacks('1.0.0', '2.0.0', [signed('1.0.0', { 'package.json': '{}' })])
+  const approved = (source: string, name = 'pkg'): Parameters<typeof baselineMayApply>[1] => ({ schema: 'delorun.changes-approved/1', plugins: { [name]: { source, version: sha('v') as never, approvedAt: NOW.toISOString() } } })
+
+  it('applies for an approved plugin linked from the pack store that a release lists', () => {
+    expect(baselineMayApply('/h', approved('/h/packs/current/pkg/package'), baseline)).toBe(true)
+  })
+
+  it('does not apply for a plugin outside the pack store, a pack no release lists, or no plugin', () => {
+    expect(baselineMayApply('/h', approved('/elsewhere/pkg'), baseline)).toBe(false)
+    expect(baselineMayApply('/h', approved('/h/packs/current/other/package', 'other'), baseline)).toBe(false)
+    expect(baselineMayApply('/h', { schema: 'delorun.changes-approved/1', plugins: {} }, baseline)).toBe(false)
   })
 })

@@ -40,7 +40,7 @@ vi.mock('@delorun/runtime-store', async importOriginal => {
     ...actual,
     openSignedPacks: (release: { readonly version: string }) => {
       const packs = hooks.signed.get(release.version)
-      return Promise.resolve(packs === undefined ? undefined : { files: (name: string) => Promise.resolve(packs.find(pack => pack.name === name)) })
+      return Promise.resolve(packs === undefined ? undefined : { lists: (name: string) => packs.some(pack => pack.name === name), files: (name: string) => Promise.resolve(packs.find(pack => pack.name === name)) })
     },
   }
 })

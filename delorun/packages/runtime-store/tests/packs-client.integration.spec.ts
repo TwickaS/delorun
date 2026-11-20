@@ -108,6 +108,14 @@ describe('the signed files of an installed release\'s packs', () => {
     expect(demo!.files.get('package.json')!.sha256).toBe(createHash('sha256').update('{"name":"demo"}').digest('hex'))
   })
 
+  it('says which packs the release lists from the verified packs file, without reading an installed file', async () => {
+    const { release, channel } = await setup()
+    await turnOnPack(release, 'demo', channel)
+    const packs = (await openSignedPacks(release))!
+    expect(packs.lists('demo')).toBe(true)
+    expect(packs.lists('another')).toBe(false)
+  })
+
   it('lists no files for a pack the release does not list', async () => {
     const { release, channel } = await setup()
     await turnOnPack(release, 'demo', channel)

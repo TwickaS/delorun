@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto'
-import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, statSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { writeProtectedFile } from '@delorun/home'
-import { CACHE_SETTLE_MS, compareCodeUnits, CONTENT_BYTE_LIMIT, CONTENT_ENTRY_LIMIT, isDigest, manifestOf, openRegularFile, readChunks, SCAN_CACHE_SCHEMA, scanFile, scanFolder, versionOf } from '../src/tree.ts'
+import { CACHE_SETTLE_MS, compareCodeUnits, CONTENT_BYTE_LIMIT, CONTENT_ENTRY_LIMIT, isDigest, manifestOf, openRegularFile, readChunks, SCAN_CACHE_FOLDERS, SCAN_CACHE_SCHEMA, scanFile, scanFolder, versionOf } from '../src/tree.ts'
 import { VERSION_MANIFEST_SCHEMA, type ObjectDigest, type VersionEntry } from '../src/types.ts'
 import { lockOut, makeFifo, modeOf, rejection, temporaryDirectory, understateSize, writeFiles } from './support.ts'
 
@@ -477,7 +477,7 @@ describe('the scan cache', () => {
     const { entries } = await scanFolder(folder, { home: HOME, cache, now: later })
     expect(entries.map((entry) => entry.type === 'file' && entry.digest)).toEqual([sha('a'), sha('changed')])
     expect(statSync(cache).ino).not.toBe(written.ino)
-    expect(JSON.parse(readFileSync(cache, 'utf8'))).toMatchObject({ files: { 'b.js': { digest: sha('changed') } } })
+    expect(JSON.parse(readFileSync(cache, 'utf8'))).toMatchObject({ folders: { [realpathSync(folder)]: { 'b.js': { digest: sha('changed') } } } })
   })
 
   it('records settled files only, in a 0600 file in a 0700 directory it creates', async () => {
@@ -486,12 +486,12 @@ describe('the scan cache', () => {
     writeFiles(folder, { 'a.js': 'a' })
     const cache = join(home, 'profile', 'scan-cache.json')
     await scanFolder(folder, { home: HOME, cache })
-    expect(JSON.parse(readFileSync(cache, 'utf8'))).toEqual({ schema: SCAN_CACHE_SCHEMA, files: {} })
+    expect(JSON.parse(readFileSync(cache, 'utf8'))).toEqual({ schema: SCAN_CACHE_SCHEMA, folders: { [realpathSync(folder)]: {} } })
     expect(modeOf(cache)).toBe(0o600)
     expect(modeOf(join(home, 'profile'))).toBe(0o700)
     await scanFolder(folder, { home: HOME, cache, now: later })
     const stats = statSync(join(folder, 'a.js'))
-    expect(JSON.parse(readFileSync(cache, 'utf8')).files).toEqual({
+    expect(JSON.parse(readFileSync(cache, 'utf8')).folders[realpathSync(folder)]).toEqual({
       'a.js': { dev: stats.dev, ino: stats.ino, size: 1, mtimeMs: stats.mtimeMs, ctimeMs: stats.ctimeMs, digest: sha('a') },
     })
   })
@@ -501,9 +501,9 @@ describe('the scan cache', () => {
     const cache = join(temporaryDirectory(), 'scan-cache.json')
     writeFiles(folder, { 'a.js': 'a', 'b.js': 'b' })
     await scanFolder(folder, { home: HOME, cache, now: later })
-    const written = JSON.parse(readFileSync(cache, 'utf8')) as { files: Record<string, { digest: string }> }
+    const written = JSON.parse(readFileSync(cache, 'utf8')) as { folders: Record<string, Record<string, { digest: string }>> }
     // A digest only the cache can have supplied shows the file was not read again.
-    written.files['a.js']!.digest = sha('cached')
+    written.folders[realpathSync(folder)]!['a.js']!.digest = sha('cached')
     await writeProtectedFile(cache, JSON.stringify(written))
     const { entries } = await scanFolder(folder, { home: HOME, cache, now: later })
     expect(entries.map((entry) => entry.type === 'file' && entry.digest)).toEqual([sha('cached'), sha('b')])
@@ -514,8 +514,8 @@ describe('the scan cache', () => {
     const cache = join(temporaryDirectory(), 'scan-cache.json')
     writeFiles(folder, { 'a.js': 'a' })
     await scanFolder(folder, { home: HOME, cache, now: later })
-    const written = JSON.parse(readFileSync(cache, 'utf8')) as { files: Record<string, Record<string, number | string>> }
-    const entry = written.files['a.js']!
+    const written = JSON.parse(readFileSync(cache, 'utf8')) as { folders: Record<string, Record<string, Record<string, number | string>>> }
+    const entry = written.folders[realpathSync(folder)]!['a.js']!
     entry.digest = sha('cached')
     entry[field] = (entry[field] as number) + 1
     await writeProtectedFile(cache, JSON.stringify(written))
@@ -526,9 +526,9 @@ describe('the scan cache', () => {
   it.each([
     ['text that is not JSON', 'not json'],
     ['JSON null', 'null'],
-    ['another schema', JSON.stringify({ schema: 'other/1', files: {} })],
-    ['files that are not an object', JSON.stringify({ schema: SCAN_CACHE_SCHEMA, files: 'x' })],
-    ['files that are null', JSON.stringify({ schema: SCAN_CACHE_SCHEMA, files: null })],
+    ['another schema', JSON.stringify({ schema: 'other/1', folders: {} })],
+    ['folders that are not an object', JSON.stringify({ schema: SCAN_CACHE_SCHEMA, folders: 'x' })],
+    ['folders that are null', JSON.stringify({ schema: SCAN_CACHE_SCHEMA, folders: null })],
   ])('ignores and rewrites a cache holding %s', async (_name, text) => {
     const folder = temporaryDirectory()
     const cache = join(temporaryDirectory(), 'scan-cache.json')
@@ -536,7 +536,7 @@ describe('the scan cache', () => {
     await writeProtectedFile(cache, text)
     const { entries } = await scanFolder(folder, { home: HOME, cache, now: later })
     expect(entries).toEqual([{ type: 'file', path: 'a.js', digest: sha('a'), size: 1, executable: false }])
-    expect(JSON.parse(readFileSync(cache, 'utf8'))).toMatchObject({ schema: SCAN_CACHE_SCHEMA, files: { 'a.js': { digest: sha('a') } } })
+    expect(JSON.parse(readFileSync(cache, 'utf8'))).toMatchObject({ schema: SCAN_CACHE_SCHEMA, folders: { [realpathSync(folder)]: { 'a.js': { digest: sha('a') } } } })
   })
 
   it('ignores a cache file other users can read', async () => {
@@ -544,8 +544,8 @@ describe('the scan cache', () => {
     const cache = join(temporaryDirectory(), 'scan-cache.json')
     writeFiles(folder, { 'a.js': 'a' })
     await scanFolder(folder, { home: HOME, cache, now: later })
-    const written = JSON.parse(readFileSync(cache, 'utf8')) as { files: Record<string, { digest: string }> }
-    written.files['a.js']!.digest = sha('cached')
+    const written = JSON.parse(readFileSync(cache, 'utf8')) as { folders: Record<string, Record<string, { digest: string }>> }
+    written.folders[realpathSync(folder)]!['a.js']!.digest = sha('cached')
     writeFileSync(cache, JSON.stringify(written))
     chmodSync(cache, 0o644)
     const { entries } = await scanFolder(folder, { home: HOME, cache, now: later })
@@ -558,15 +558,44 @@ describe('the scan cache', () => {
     const cache = join(temporaryDirectory(), 'scan-cache.json')
     writeFiles(folder, { 'a.js': 'a', 'b.js': 'b', 'c.js': 'c', 'd.js': 'd', 'e.js': 'e' })
     await scanFolder(folder, { home: HOME, cache, now: later })
-    const written = JSON.parse(readFileSync(cache, 'utf8')) as { files: Record<string, unknown> }
-    const files = written.files as Record<string, Record<string, unknown>>
+    const written = JSON.parse(readFileSync(cache, 'utf8')) as { folders: Record<string, Record<string, unknown>> }
+    const files = written.folders[realpathSync(folder)] as Record<string, Record<string, unknown>>
     for (const entry of Object.values(files)) entry.digest = sha('cached')
     files['a.js'] = { ...files['a.js'], ino: 'x' }
     files['b.js'] = { ...files['b.js'], digest: 'not-a-digest' }
     files['c.js'] = { ...files['c.js'], digest: 7 }
-    written.files['d.js'] = null
+    files['d.js'] = null as never
     const { entries } = await scanFolder(folder, { home: HOME, cache: await rewrite(cache, written), now: later })
     expect(entries.map((entry) => entry.type === 'file' && entry.digest)).toEqual([sha('a'), sha('b'), sha('c'), sha('d'), sha('cached')])
+  })
+
+  it('keeps each folder\'s entries when another folder is scanned into the same cache file', async () => {
+    const one = temporaryDirectory()
+    const two = temporaryDirectory()
+    const cache = join(temporaryDirectory(), 'scan-cache.json')
+    writeFiles(one, { 'a.js': 'a' })
+    writeFiles(two, { 'a.js': 'b' })
+    await scanFolder(one, { home: HOME, cache, now: later })
+    await scanFolder(two, { home: HOME, cache, now: later })
+    const written = JSON.parse(readFileSync(cache, 'utf8')) as { folders: Record<string, Record<string, { digest: string }>> }
+    expect(Object.keys(written.folders).sort()).toEqual([realpathSync(one), realpathSync(two)].sort())
+    // A digest only the cache can have supplied shows the first folder's entry survived the second folder's scan.
+    written.folders[realpathSync(one)]!['a.js']!.digest = sha('cached')
+    await writeProtectedFile(cache, JSON.stringify(written))
+    const { entries } = await scanFolder(one, { home: HOME, cache, now: later })
+    expect(entries.map((entry) => entry.type === 'file' && entry.digest)).toEqual([sha('cached')])
+  })
+
+  it('drops the entries of the oldest folder past the folders it keeps', async () => {
+    const cache = join(temporaryDirectory(), 'scan-cache.json')
+    const folders = Array.from({ length: SCAN_CACHE_FOLDERS + 1 }, (_, index) => temporaryDirectory().concat(String(index)))
+    for (const folder of folders) {
+      mkdirSync(folder, { recursive: true })
+      writeFiles(folder, { 'a.js': 'a' })
+      await scanFolder(folder, { home: HOME, cache, now: later })
+    }
+    const written = JSON.parse(readFileSync(cache, 'utf8')) as { folders: Record<string, unknown> }
+    expect(Object.keys(written.folders)).toEqual(folders.slice(1).map((folder) => realpathSync(folder)))
   })
 })
 
