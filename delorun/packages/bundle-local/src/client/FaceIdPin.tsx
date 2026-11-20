@@ -25,8 +25,10 @@ export interface FaceIdPinProps {
   /** Whether the home's secret is a digit PIN (keypad) or a longer passcode (text field). */
   readonly secret: 'pin' | 'passcode'
   readonly onGranted: (grantId: string) => void
-  /** Back to the Face ID sheet, or away when there is none. */
+  /** Back to the Face ID sheet, or away when there is none; Escape does the same. */
   readonly onBack: () => void
+  /** Away, ending the confirmation, when the browser closes the keypad's dialog itself. */
+  readonly onCancel: () => void
 }
 
 /**
@@ -34,7 +36,7 @@ export interface FaceIdPinProps {
  * @param props - see {@link FaceIdPinProps}.
  * @returns the entry, over the same scrim as the sheet.
  */
-export function FaceIdPin({ t, action, api, secret, onGranted, onBack }: FaceIdPinProps): ReactNode {
+export function FaceIdPin({ t, action, api, secret, onGranted, onBack, onCancel }: FaceIdPinProps): ReactNode {
   const [value, setValue] = useState('')
   const [busy, setBusy] = useState(false)
   const [wrong, setWrong] = useState<'wrong' | 'paused' | 'failed' | undefined>(undefined)
@@ -52,7 +54,7 @@ export function FaceIdPin({ t, action, api, secret, onGranted, onBack }: FaceIdP
       (error: unknown) => { setBusy(false); setWrong(isRefused(error, 'PIN_INVALID') ? 'wrong' : isRefused(error, 'PIN_UNLOCKS_PAUSED') ? 'paused' : 'failed') },
     )
   }
-  return <FaceIdLayer labelledBy="delorun-face-id-pin-title" attributes={{ 'data-face-id-pin': '' }}>
+  return <FaceIdLayer labelledBy="delorun-face-id-pin-title" attributes={{ 'data-face-id-pin': '' }} onEscape={onBack} onClosed={onCancel}>
     <form className={css.sheet} onSubmit={submit}>
       <h2 id="delorun-face-id-pin-title" className={css.title}>{action.title}</h2>
       <p className={css.body}>{t(isPin ? 'pin.lead' : 'pin.leadPasscode')}</p>

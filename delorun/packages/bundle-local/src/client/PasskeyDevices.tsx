@@ -146,7 +146,8 @@ export function PasskeyDevices({ t, api, browser, kind, atComputer, secret, onAd
     </div>}
     {all ? null : <Button variant="outline" type="button" className={css.action} onClick={() => { void ask({ kind: 'list' }) }}>{t('devices.showAll')}</Button>}
     {asked === undefined ? null : asked.pin && secret !== undefined
-      ? <FaceIdPin t={t} action={asked.action} api={api} secret={secret} onGranted={done} onBack={() => { setAsked({ ...asked, pin: false }) }} />
+      ? <FaceIdPin t={t} action={asked.action} api={api} secret={secret} onGranted={done} onBack={() => { setAsked({ ...asked, pin: false }) }}
+        onCancel={() => { setAsked(undefined) }} />
       : <FaceIdSheet t={t} action={asked.action} kind={kind} api={api} browser={browser} hasPasskey={asked.hasPasskey} fallback={fallbackToPin ? 'pin' : 'computer'}
         onGranted={done} onCancel={() => { setAsked(undefined) }}
         onFallback={() => { setAsked({ ...asked, pin: true }) }} />}

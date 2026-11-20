@@ -10,6 +10,7 @@
   },
   "include": [
     "tests/**/*.client.spec.tsx",
+    "tests/**/*.client.spec.ts",
     "src/client",
     "src/index.ts",
     "src/css-modules.d.ts"

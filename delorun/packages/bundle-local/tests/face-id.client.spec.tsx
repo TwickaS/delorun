@@ -179,23 +179,27 @@ describe('the top layer', () => {
   it('opens the PIN keypad as a modal dialog that takes focus itself, so no phone keyboard rises over the keypad', () => {
     // The keypad's digits and Approve sat under the terminal panel (F-1b).
     stubShowModal()
-    render(<FaceIdPin t={t} action={action} api={fakeApi()} secret="pin" onGranted={vi.fn()} onBack={vi.fn()} />)
+    render(<FaceIdPin t={t} action={action} api={fakeApi()} secret="pin" onGranted={vi.fn()} onBack={vi.fn()} onCancel={vi.fn()} />)
     const dialog = screen.getByRole('dialog', { name: 'Install “Reports”?' })
     expect(opened).toEqual([dialog])
     expect(dialog.hasAttribute('data-face-id-pin')).toBe(true)
     expect(dialog.hasAttribute('autofocus')).toBe(true)
   })
 
-  it('keeps the dialog open on the browser\'s own cancel, leaving Escape to the sheet', () => {
-    // A dialog that closed itself on Escape would vanish while React still holds the sheet open.
+  it('keeps the dialog open on the browser\'s own cancel and treats it, like Escape, as the person\'s cancel', () => {
+    // A dialog that closed itself on a close request would vanish while React still holds the sheet open.
     stubShowModal()
     const props = sheet()
     const dialog = screen.getByRole('dialog', { name: 'Install “Reports”?' })
     const cancel = new Event('cancel', { cancelable: true })
     dialog.dispatchEvent(cancel)
     expect(cancel.defaultPrevented).toBe(true)
-    fireEvent.keyDown(document, { key: 'Escape' })
     expect(props.onCancel).toHaveBeenCalledOnce()
+    const escape = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true, bubbles: true })
+    document.dispatchEvent(escape)
+    // A handled Escape makes no close request of its own.
+    expect(escape.defaultPrevented).toBe(true)
+    expect(props.onCancel).toHaveBeenCalledTimes(2)
   })
 
   it('stops keys at the sheet, so a studio dialog under it neither closes on Escape nor takes Tab', () => {
@@ -406,13 +410,13 @@ describe('FaceIdPin', () => {
     // The PIN fallback must send the secret with the same grant request as the sheet.
     const onGranted = vi.fn()
     const api = fakeApi()
-    render(<FaceIdPin t={t} action={action} api={api} secret="passcode" onGranted={onGranted} onBack={vi.fn()} />)
+    render(<FaceIdPin t={t} action={action} api={api} secret="passcode" onGranted={onGranted} onBack={vi.fn()} onCancel={vi.fn()} />)
     fireEvent.change(screen.getByLabelText('Passcode'), { target: { value: 'correct horse' } })
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
     await waitFor(() => { expect(onGranted).toHaveBeenCalledWith('g2') })
     expect(api.calls[0]).toEqual({ name: 'pin', request: { ...action.grant, secret: 'correct horse' } })
     cleanup()
-    render(<FaceIdPin t={t} action={action} api={fakeApi({ failPin: true })} secret="passcode" onGranted={onGranted} onBack={vi.fn()} />)
+    render(<FaceIdPin t={t} action={action} api={fakeApi({ failPin: true })} secret="passcode" onGranted={onGranted} onBack={vi.fn()} onCancel={vi.fn()} />)
     fireEvent.change(screen.getByLabelText('Passcode'), { target: { value: 'x' } })
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
     expect(await screen.findByRole('alert')).toBeTruthy()
@@ -425,15 +429,26 @@ describe('FaceIdPin', () => {
     // A paused or refused PIN must not tell the person the right PIN was wrong.
     const api = fakeApi()
     api.pin = async () => { throw new HostRequestError('/auth/passkey/pin', { kind: 'refused', status: 400, code, message: 'm' }) }
-    render(<FaceIdPin t={t} action={action} api={api} secret="passcode" onGranted={vi.fn()} onBack={vi.fn()} />)
+    render(<FaceIdPin t={t} action={action} api={api} secret="passcode" onGranted={vi.fn()} onBack={vi.fn()} onCancel={vi.fn()} />)
     fireEvent.change(screen.getByLabelText('Passcode'), { target: { value: 'x' } })
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
     expect((await screen.findByRole('alert')).textContent).toBe(sentence)
   })
+  it('goes back on Escape and ends the confirmation when the browser closes its dialog itself', () => {
+    // Escape on the keypad did nothing, and Chrome's own close then left the confirmation pending (review P2-2).
+    const onBack = vi.fn()
+    const onCancel = vi.fn()
+    render(<FaceIdPin t={t} action={action} api={fakeApi()} secret="pin" onGranted={vi.fn()} onBack={onBack} onCancel={onCancel} />)
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(onBack).toHaveBeenCalledOnce()
+    expect(onCancel).not.toHaveBeenCalled()
+    document.querySelector('dialog')?.dispatchEvent(new Event('close'))
+    expect(onCancel).toHaveBeenCalledOnce()
+  })
   it('shows the keypad for a digit PIN and goes back', () => {
     // A digit PIN uses the shared cells; Back leaves the entry.
     const onBack = vi.fn()
-    render(<FaceIdPin t={t} action={action} api={fakeApi()} secret="pin" onGranted={vi.fn()} onBack={onBack} />)
+    render(<FaceIdPin t={t} action={action} api={fakeApi()} secret="pin" onGranted={vi.fn()} onBack={onBack} onCancel={vi.fn()} />)
     expect(document.querySelector('[data-face-id-pin]')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '1' }))
     fireEvent.click(screen.getByRole('button', { name: 'Back' }))

@@ -66,12 +66,6 @@ export function FaceIdSheet({ t, action, kind, api, browser, hasPasskey, fallbac
     return () => { current = false }
   }, [browser])
   useEffect(() => { confirmRef.current?.focus() }, [available])
-  useEffect(() => {
-    const close = (event: KeyboardEvent): void => { if (event.key === 'Escape') onCancel() }
-    // Capture phase: a card that holds the sheet stops Escape from bubbling to the document.
-    document.addEventListener('keydown', close, true)
-    return () => { document.removeEventListener('keydown', close, true) }
-  }, [onCancel])
   const confirm = useCallback(async (): Promise<void> => {
     setPhase('waiting')
     let options: Awaited<ReturnType<PasskeyApi['options']>>
@@ -85,9 +79,13 @@ export function FaceIdSheet({ t, action, kind, api, browser, hasPasskey, fallbac
     } finally {
       clearTimeout(timer)
     }
+    // A sheet whose call was withdrawn meanwhile (its panel closed) asks the phone for no Face ID.
+    if (!alive.current) return
     const result = await browser.get(options)
     if (!alive.current) return
     if (result.kind !== 'ok') { setPhase(result.kind); return }
+    // Once `verify` is sent the home may mint the grant even if the sheet goes; that grant names this one call's action and
+    // hash, so only the same call, sent again before the grant expires, can use it.
     try {
       const { grantId } = await api.verify(result.value)
       if (alive.current) onGranted(grantId)
@@ -106,7 +104,7 @@ export function FaceIdSheet({ t, action, kind, api, browser, hasPasskey, fallbac
   const label = phase === 'waiting' ? t('sheet.waiting', { method }) : phase === 'ready' ? t('sheet.confirm', { method }) : t('sheet.again', { method })
   const showFallback = !usable || phase === 'cancelled' || phase === 'failed'
   const faceOnly = showFallback && action.noPin === true
-  return <FaceIdLayer labelledBy="delorun-face-id-title" attributes={{ 'data-face-id-sheet': phase }}>
+  return <FaceIdLayer labelledBy="delorun-face-id-title" attributes={{ 'data-face-id-sheet': phase }} onEscape={onCancel} onClosed={onCancel}>
     <div className={css.sheet}>
       <h2 id="delorun-face-id-title" className={css.title}>{action.title}</h2>
       <p className={css.body}>{action.body}</p>

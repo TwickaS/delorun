@@ -2970,7 +2970,7 @@
       "path": "packages/api/terminal-controller/src/client/model.ts",
       "class": "security",
       "reason": "Views attach before their hold so only the on-screen terminal asks for Face ID (F33): a terminal view whose window hold (`terminal/retain`) the Host's remote access refuses still attaches, so the refusal reaches `terminal/attach`, the call the person's own terminal view makes, and the hold is asked for again once the attachment delivers its first frame. Any other hold failure fails the view as before. Classed security because it changes how the client acts on `remote-access/denied` (r3). Lead verdict: pass, after the independent Opus r3 review (2026-11-19). A creation under way is cancelled when the view leaves the DOM, so a Face ID sheet waiting on it closes and no grant is minted for a view that is gone; the view returns to idle and allocates again on its next mount; a `create` refused with an `elevation-required:` reason ends with the `notConfirmed` issue (owner's iPhone report, F41). Lead verdict: pass; client view state only, no access decision (2026-11-20).",
-      "sha256": "091a68441cc21bffd2b9e97e82a53ec170f0cd249fad1eb7ba44ad693a564c0d"
+      "sha256": "e65901b72e06db75b3a422719e2be465275a11a8b9da224a050caf8862bc0db6"
     },
     {
       "path": "packages/api/terminal-controller/src/types.ts",

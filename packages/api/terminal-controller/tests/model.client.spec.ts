@@ -642,3 +642,22 @@ it('starts again when the view is mounted once more before its cancelled creatio
   await expect.poll(() => model.state.getSnapshot().writable).toBe(true)
   expect(remote.create).toHaveBeenCalledTimes(2)
 })
+
+it('allocates nothing for a view that leaves the DOM while it discovers the environment, and starts on the next mount', async () => {
+  // A creation sent for a closed panel opened a Face ID sheet over whatever was on screen (review P2-1).
+  const { model, remote } = fixture()
+  let discovered: (() => void) | undefined
+  vi.mocked(remote.environment).mockImplementationOnce(async () => {
+    await new Promise<void>((resolve) => { discovered = resolve })
+    return success(environment)
+  })
+  const detach = model.mount()
+  await expect.poll(() => discovered !== undefined).toBe(true)
+  detach()
+  discovered?.()
+  await expect.poll(() => model.state.getSnapshot().phase).toBe('idle')
+  expect(remote.create).not.toHaveBeenCalled()
+  model.mount()
+  await expect.poll(() => model.state.getSnapshot().writable).toBe(true)
+  expect(remote.create).toHaveBeenCalledOnce()
+})

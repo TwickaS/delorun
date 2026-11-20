@@ -141,6 +141,8 @@ export const en = {
   'do.pluginCode.body': 'Code from a plugin you are building runs on your computer.',
   'do.fullAccessOn.title': 'Turn on full access for {workspace}',
   'do.fullAccessOn.body': 'Chats there can run commands outside the sandbox and change files anywhere on your computer.',
+  'do.fullAccessOnChat.title': 'Turn on full access for {workspace} and switch this chat',
+  'do.fullAccessOnChat.body': 'Chats there can run commands outside the sandbox and change files anywhere on your computer. This chat switches to full access now.',
   'do.fullAccessOff.title': 'Turn off full access for {workspace}',
   'do.fullAccessOff.body': 'Chats there go back to the sandbox.',
   'do.network.title': 'Change network access',
@@ -180,7 +182,7 @@ export const en = {
 export const CHANGE_CONTROLS = ['plugin-undo', 'plugin-discard', 'harness-discard', 'plugin-apply', 'plugin-other', 'harness-apply', 'harness-undo', 'protection-off', 'make-copy', 'restart', 'update-begin', 'update-rollback', 'stop'] as const
 
 /** The confirmations of other sensitive actions that have their own words: `do.<id>.title` and `do.<id>.body`. */
-export type FaceActionCopy = 'installPlugin' | 'updatePlugin' | 'removePlugin' | 'switchPlugin' | 'changePlugins' | 'openTerminal' | 'browseFolders' | 'newFolder' | 'changeSettings' | 'saveKey' | 'removeKey' | 'addWorkspace' | 'workspaceDefaults' | 'chatOutside' | 'runCommand' | 'mcpServer' | 'pluginCode' | 'fullAccessOn' | 'fullAccessOff' | 'network' | 'mcpAccept' | 'externalAgent' | 'deleteForever' | 'awayBrowser' | 'reportDetails' | 'profileSave' | 'profileSwitch' | 'seatAnswer' | 'generic'
+export type FaceActionCopy = 'installPlugin' | 'updatePlugin' | 'removePlugin' | 'switchPlugin' | 'changePlugins' | 'openTerminal' | 'browseFolders' | 'newFolder' | 'changeSettings' | 'saveKey' | 'removeKey' | 'addWorkspace' | 'workspaceDefaults' | 'chatOutside' | 'runCommand' | 'mcpServer' | 'pluginCode' | 'fullAccessOn' | 'fullAccessOnChat' | 'fullAccessOff' | 'network' | 'mcpAccept' | 'externalAgent' | 'deleteForever' | 'awayBrowser' | 'reportDetails' | 'profileSave' | 'profileSwitch' | 'seatAnswer' | 'generic'
 
 /**
  * The words of each grant action, by the action's name: a Remote method or a Fetch route's action. An action this map

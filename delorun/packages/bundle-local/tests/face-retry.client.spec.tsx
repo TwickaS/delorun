@@ -321,6 +321,10 @@ describe('the sheet\'s words', () => {
     expect(await words({ action: 'plugin-packs/add', call: { method: 'POST', path: '/p', body: { names: ['a'] } } })).toBe('Install a plugin')
     expect(await words({ action: 'plugin-permission-defaults/set-full-access', call: { method: 'POST', path: '/p', body: { workspace: '/home/me/site', reviewId: 'r', on: true, confirmed: true } } })).toBe('Turn on full access for site')
     expect(await words({ action: 'plugin-permission-defaults/set-full-access', call: { method: 'POST', path: '/p', body: '{"workspace":"/home/me/site","on":false}' } })).toBe('Turn off full access for site')
+    // One grant also switches the chat the consent names, so the sheet says the chat switches too (review P3-2).
+    const withChat = await callActionOf(t, { action: 'plugin-permission-defaults/set-full-access', call: { method: 'POST', path: '/p', body: { workspace: '/home/me/site', reviewId: 'r', on: true, confirmed: true, chat: 'c1' } } })
+    expect(withChat.title).toBe('Turn on full access for site and switch this chat')
+    expect(withChat.body).toContain('This chat switches to full access now.')
     expect(await words({ action: 'plugin-permission-defaults/network-set', call: { method: 'POST', path: '/p', body: {} } })).toBe('Change network access')
     expect(await words({ action: 'plugin-mcp-consent/accept', call: { method: 'POST', path: '/p', body: { serverName: 'files', reviewId: 'r', confirmed: true } } })).toBe('Allow the MCP server “files”')
     expect(await words({ action: 'terminal/close', call: { args: { id: 't' } } })).toBe('Open a terminal')

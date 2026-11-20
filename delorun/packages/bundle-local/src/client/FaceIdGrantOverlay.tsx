@@ -48,6 +48,8 @@ function wordsOf(t: PropsLocale<'delorunFaceId'>['t'], request: FaceGrantRequest
   const body = 'args' in request.call ? request.call.args : 'answer' in request.call ? {} : jsonOf(request.call.body)
   let copy: FaceActionCopy = ACTION_COPY[request.action] ?? ACTION_COPY[`${request.action.slice(0, request.action.indexOf('/'))}/*`] ?? 'generic'
   if (copy === 'fullAccessOn' && Reflect.get(body, 'on') === false) copy = 'fullAccessOff'
+  // The same grant switches the chat it names, so the sheet says so.
+  else if (copy === 'fullAccessOn' && typeof Reflect.get(body, 'chat') === 'string') copy = 'fullAccessOnChat'
   const values: Record<string, string> = {}
   const workspace: unknown = Reflect.get(body, 'workspace')
   if (typeof workspace === 'string') values.workspace = lastSegment(workspace)

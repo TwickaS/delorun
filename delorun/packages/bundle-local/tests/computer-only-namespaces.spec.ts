@@ -65,7 +65,7 @@ describe('the shipped rows that stay at the computer', () => {
       const facts: ReachAccessFacts = {
         admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere',
         elevationOf: () => (kind === 'page' ? undefined : { id: 'e' }), pageUnlockOf: () => (kind === 'page' ? { id: 'p' } : undefined), unlockModeEnabled: () => kind === 'page',
-        keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
+        keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined,
         computerOnlySwitches: () => [], protectedEntryIds: () => protectedEntryIdsOf(ctx), computerOnlyEntryIds: () => computerOnlyEntryIdsOf(ctx),
         defaultPermission: () => undefined, dangerousMode: () => kind === 'dangerous',
       }
@@ -94,7 +94,7 @@ describe('the rows the plugin manager protects', () => {
     const settings = (grace: boolean): ReachAccessFacts => ({
       admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, delorunHome: '/nowhere',
       elevationOf: () => ({ id: 'e', ...grace ? { grace: true as const } : {} }), pageUnlockOf: () => undefined, unlockModeEnabled: () => false,
-      keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
+      keyRefs: () => new Set<string>(), logElevated: () => {}, liftedSettings: () => undefined,
       computerOnlySwitches: () => [], protectedEntryIds: () => protectedEntryIdsOf(ctx), computerOnlyEntryIds: () => computerOnlyEntryIdsOf(ctx),
       defaultPermission: () => undefined, dangerousMode: () => false,
     })

@@ -5,7 +5,7 @@
  *
  * Each test's comment names the behaviour whose removal makes it fail.
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useSyncExternalStore, type ReactNode } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
@@ -121,13 +121,14 @@ describe('the terminal path on a phone (owner report on the iPhone)', () => {
   const create = { request: { id: 't-1', cols: 80, rows: 24 } }
 
   /** The open terminal panel with the overlay, and the refused `terminal/create` the gateway asks the lift about. */
-  function refusedCreate() {
+  function refusedCreate(available = true) {
     const source = createFaceGrantSource()
     const api = fakeApi({ devices: [{ deviceId: 'd', label: 'Phone', thisDevice: true, passkeys: [{ credentialId: 'c1', createdAt: 0, lastUsedAt: null, synced: false }] }] })
+    const browser = fakeBrowser({ available })
     function Page(): ReactNode {
       const pending = useSyncExternalStore(source.hooks.pending.subscribe, source.hooks.pending.getSnapshot)
       const props = {
-        t, fetch: fakeHost({}).fetch, api, browser: fakeBrowser(), settle: source.settle,
+        t, fetch: fakeHost({}).fetch, api, browser, settle: source.settle,
         usePending: <S,>(select: (value: typeof pending) => S): S => select(pending),
         usePin: <S,>(select: (view: PinView) => S): S => select(pinView('on')),
       } as FaceIdGrantOverlayProps
@@ -138,8 +139,9 @@ describe('the terminal path on a phone (owner report on the iPhone)', () => {
     }
     render(<Page />)
     const abort = new AbortController()
-    const lifted = remoteDenialLift(oneAtATime(source.grant))({ endpoint: 'terminal/create', reason: 'elevation-required: terminal/create', args: create, signal: abort.signal })
-    return { api, abort, lifted }
+    const lift = remoteDenialLift(oneAtATime(source.grant))
+    const lifted = lift({ endpoint: 'terminal/create', reason: 'elevation-required: terminal/create', args: create, signal: abort.signal })
+    return { api, browser, abort, lifted, lift }
   }
 
   it('opens the sheet as a modal dialog over the open panel, and a confirm sends terminal/create again for that terminal', async () => {
@@ -159,6 +161,49 @@ describe('the terminal path on a phone (owner report on the iPhone)', () => {
     fireEvent.click(await screen.findByRole('button', { name: en['sheet.cancel'] }))
     await expect(lifted).resolves.toBe(false)
     expect(api.calls.some(entry => entry.name === 'options' || entry.name === 'verify')).toBe(false)
+  })
+
+  it('asks the phone for no Face ID when the panel closes while the sheet fetches its challenge', async () => {
+    // The phone's Face ID prompt would otherwise open for a call no panel waits on (review P3-1).
+    const { api, browser, abort, lifted } = refusedCreate()
+    const challenge = Promise.withResolvers<void>()
+    const real = api.options.bind(api)
+    vi.spyOn(api, 'options').mockImplementationOnce(async (request) => { const options = await real(request); return challenge.promise.then(() => options) })
+    fireEvent.click(await screen.findByRole('button', { name: /Confirm with/ }))
+    await waitFor(() => { expect(api.options).toHaveBeenCalledOnce() })
+    act(() => { abort.abort() })
+    await expect(lifted).resolves.toBe(false)
+    challenge.resolve()
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(browser.calls).toEqual([])
+    expect(api.calls.some(entry => entry.name === 'verify')).toBe(false)
+  })
+
+  it('goes back from the keypad to the sheet on Escape, and hands back the refusal on a second Escape', async () => {
+    // A browser with no Face ID offers the PIN beside the sheet.
+    const { api, lifted } = refusedCreate(false)
+    fireEvent.click(await screen.findByRole('button', { name: en['sheet.usePin'] }))
+    expect(document.querySelector('[data-face-id-pin]')).not.toBeNull()
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
+    await screen.findByRole('button', { name: en['sheet.usePin'] })
+    expect(document.querySelector('[data-face-id-pin]')).toBeNull()
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
+    await expect(lifted).resolves.toBe(false)
+    expect(api.calls.some(entry => entry.name === 'options' || entry.name === 'verify' || entry.name === 'pin')).toBe(false)
+  })
+
+  it.each(['sheet', 'keypad'] as const)('ends the confirmation when the browser closes the %s dialog itself, and asks afresh for the next call', async (where) => {
+    // Chrome closes a modal dialog on a repeated close request with no tap between; a confirmation left pending held every later one (review P2-2).
+    const { lifted, lift } = refusedCreate(where === 'sheet')
+    if (where === 'keypad') fireEvent.click(await screen.findByRole('button', { name: en['sheet.usePin'] }))
+    else await screen.findByRole('button', { name: /Confirm with/ })
+    const dialog = document.querySelector('dialog')
+    act(() => { dialog?.removeAttribute('open'); dialog?.dispatchEvent(new Event('close')) })
+    await expect(lifted).resolves.toBe(false)
+    await waitFor(() => { expect(document.querySelector('dialog')).toBeNull() })
+    const next = lift({ endpoint: 'terminal/create', reason: 'elevation-required: terminal/create', args: create, signal: new AbortController().signal })
+    fireEvent.click(await screen.findByRole('button', { name: en['sheet.cancel'] }))
+    await expect(next).resolves.toBe(false)
   })
 
   it('closes the sheet and mints nothing when the panel that asked is closed while the sheet is open', async () => {

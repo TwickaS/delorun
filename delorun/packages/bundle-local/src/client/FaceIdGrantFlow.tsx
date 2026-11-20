@@ -38,7 +38,8 @@ export function FaceIdGrantFlow({ t, action, kind, api, browser, hasPasskey, sec
   // A device with no passkey has no sheet to show: it opens on the keypad, and its PIN mints a one-action grant (A483), never a page unlock.
   const [pin, setPin] = useState(!hasPasskey)
   if (pin && keypad) {
-    return <FaceIdPin t={t} action={action} api={api} secret={secret} onGranted={onGranted} onBack={() => { if (hasPasskey) setPin(false); else onCancel() }} />
+    return <FaceIdPin t={t} action={action} api={api} secret={secret} onGranted={onGranted} onBack={() => { if (hasPasskey) setPin(false); else onCancel() }}
+      onCancel={onCancel} />
   }
   return <FaceIdSheet t={t} action={action} kind={kind} api={api} browser={browser} hasPasskey={hasPasskey} fallback={keypad ? 'pin' : 'computer'}
     onGranted={onGranted} onCancel={onCancel} onFallback={() => { setPin(true) }} />

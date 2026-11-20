@@ -81,6 +81,8 @@ export class TerminalView {
   private creation: Promise<void> | undefined
   /** Ends the creation under way when the view leaves the DOM, so no confirmation outlives the panel that asked. */
   private creationAbort: AbortController | undefined
+  /** Times the view has left the DOM; discovery compares it to skip an allocation for a view that left meanwhile. */
+  private unmounts = 0
   private loading: Promise<void> | undefined
   private closing: Promise<void> | undefined
   private readonly detaching = new Set<Promise<void>>()
@@ -119,6 +121,7 @@ export class TerminalView {
     else if (state.info !== undefined && state.phase !== 'failed' && state.phase !== 'closed') this.connect()
     return () => {
       this.mounted = false
+      this.unmounts += 1
       this.creationAbort?.abort()
       this.detach()
     }
@@ -134,6 +137,7 @@ export class TerminalView {
     if (this.loading !== undefined) return this.loading
     if (this.closing !== undefined || this.lifetime.signal.aborted) return Promise.resolve()
     const retry = this.state.getSnapshot().phase !== 'idle'
+    const unmounts = this.unmounts
     this.patch({ phase: 'loading', error: undefined, issue: undefined })
     this.loading = (async () => {
       const [environment, available] = await Promise.all([
@@ -153,6 +157,9 @@ export class TerminalView {
         }
         if (this.stopped()) return
         if (path !== undefined) rememberShell(path)
+        // A view that left the DOM during discovery allocates nothing: a refused allocation would ask for a confirmation
+        // no panel shows. It starts again on its next mount. A view the controller starts before its first mount allocates.
+        if (!this.mounted && this.unmounts !== unmounts) { this.patch({ phase: 'idle', error: undefined, issue: undefined }); return }
         await this.create(valueOf(environment), path)
       }
       else throw new TerminalViewError('missingTerminal')

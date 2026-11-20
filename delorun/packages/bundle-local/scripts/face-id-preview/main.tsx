@@ -159,9 +159,9 @@ function screenOf(screen: string): ReactNode {
       return <OverOverlays><FaceIdSheet t={t} action={ACTION} kind="faceId" api={fakeApi()} browser={fakeBrowser()} hasPasskey fallback="pin"
         onGranted={noop} onCancel={noop} onFallback={noop} /></OverOverlays>
     case 'pin-over-overlays':
-      return <OverOverlays><FaceIdPin t={t} action={ACTION} api={fakeApi()} secret="pin" onGranted={noop} onBack={noop} /></OverOverlays>
+      return <OverOverlays><FaceIdPin t={t} action={ACTION} api={fakeApi()} secret="pin" onGranted={noop} onBack={noop} onCancel={noop} /></OverOverlays>
     case 'b3-pin':
-      return <FaceIdPin t={t} action={ACTION} api={fakeApi()} secret="pin" onGranted={noop} onBack={noop} />
+      return <FaceIdPin t={t} action={ACTION} api={fakeApi()} secret="pin" onGranted={noop} onBack={noop} onCancel={noop} />
     case 'b1-pairing':
       return <FaceIdPairingStep t={t} kind="faceId" api={fakeApi()} browser={fakeBrowser()} onDone={noop} onSkip={noop} />
     case 'b1-add':
