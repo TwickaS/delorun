@@ -188,17 +188,22 @@ export interface BrowserCheckHost {
  * @param host - what the routes run with.
  */
 export function registerBrowserCheck(scope: Context, find: FindKit, host: BrowserCheckHost): void {
+  let testing: Promise<BrowserTestAnswer> | undefined
   let installing: Promise<BrowserInstallAnswer> | undefined
-  const route = (path: string, action: () => Promise<BrowserTestAnswer | BrowserInstallAnswer>): void => {
-    scope.connection.fetch.register({
-      path, methods: ['POST'], requestBody: 'buffered',
-      // Admits no paired device: only the owner's own studio reaches the route; `answerBrowserCheck` also refuses a non-loopback Host.
-      fetch: request => answerBrowserCheck(request, host.loopback, action),
-    })
-  }
-  route(BROWSER_TEST_ROUTE, () => testBrowser(find, host.run, host.env()))
-  route(BROWSER_INSTALL_ROUTE, () => {
-    installing ??= installBrowser(find, host.run, host.env()).finally(() => { installing = undefined })
-    return installing
+  // Both routes admit no paired device: only the owner's own studio reaches them; `answerBrowserCheck` also refuses a non-loopback Host.
+  // Each runs one program at a time, so a double click or a stuck page shares the run in flight.
+  scope.connection.fetch.register({
+    path: BROWSER_TEST_ROUTE, methods: ['POST'], requestBody: 'buffered',
+    fetch: request => answerBrowserCheck(request, host.loopback, () => {
+      testing ??= testBrowser(find, host.run, host.env()).finally(() => { testing = undefined })
+      return testing
+    }),
+  })
+  scope.connection.fetch.register({
+    path: BROWSER_INSTALL_ROUTE, methods: ['POST'], requestBody: 'buffered',
+    fetch: request => answerBrowserCheck(request, host.loopback, () => {
+      installing ??= installBrowser(find, host.run, host.env()).finally(() => { installing = undefined })
+      return installing
+    }),
   })
 }

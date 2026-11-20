@@ -309,6 +309,17 @@ export interface BrowserFace {
      */
     record(next: 'on' | 'off'): Promise<boolean>
   }
+  /** Whether this home is new: its setup has not been finished, and it has been read. An unread home is not fresh. */
+  readonly fresh: {
+    /** @returns whether the home is new, a stable boolean. */
+    getSnapshot(): boolean
+    /**
+     * Observe changes.
+     * @param listener - called after each change.
+     * @returns the unsubscribe function.
+     */
+    subscribe(listener: () => void): () => void
+  }
   /**
    * Open a fixed page in the built-in browser on the Host and read its thumbnail; no model turn.
    * @returns the answer; it never rejects.

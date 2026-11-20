@@ -27,12 +27,15 @@ interface Options {
   readonly packMore?: object
   readonly remote?: boolean
   readonly recorded?: 'on' | 'off'
+  /** Whether setup is unfinished; a spec's home is new unless it says otherwise. */
+  readonly fresh?: boolean
 }
 
 /** Render the page over faked services. */
 async function show(options: Options = {}) {
   const browser = options.browser ?? browserFake({ kind: 'ready' })
   if (options.recorded !== undefined) browser.recorded.set(options.recorded)
+  if (options.fresh !== undefined) browser.fresh.set(options.fresh)
   const bundles = installerFake({
     [BROWSER_BUNDLE]: { state: options.pack ?? 'installed', ...options.packMore },
     [REAL_BROWSER_BUNDLE]: { state: options.own ?? 'available' },
@@ -87,6 +90,83 @@ describe('the switch', () => {
     await settle()
     expect(browser.record).toHaveBeenCalledExactlyOnceWith('on')
     expect(bundles.install).toHaveBeenCalledExactlyOnceWith(BROWSER_BUNDLE)
+  })
+
+  // Pins "turning Browser off then on brings it back": a pack turned off in Plugins is held, and only the installer switches it on.
+  it('switches a held pack back on through the installer when switched on after off', async () => {
+    const { browser, bundles } = await show({ pack: 'available', packMore: { held: true }, recorded: 'off' })
+    expect(switchControl().getAttribute('aria-checked')).toBe('false')
+    await click(switchControl())
+    await settle()
+    expect(browser.record).toHaveBeenCalledWith('on')
+    expect(bundles.install).toHaveBeenCalledExactlyOnceWith(BROWSER_BUNDLE)
+    expect(switchControl().getAttribute('aria-checked')).toBe('true')
+  })
+
+  // Pins the fresh-home check: a new home that never chose adds the pack once, and records on so a later removal is read.
+  it('adds the pack in a new home that never chose, and records on', async () => {
+    const { browser, bundles } = await show({ pack: 'available', fresh: true })
+    expect(bundles.install).toHaveBeenCalledExactlyOnceWith(BROWSER_BUNDLE)
+    expect(browser.record).toHaveBeenCalledExactlyOnceWith('on')
+  })
+
+  // Pins the fresh-home check: opening Settings must not download or enable anything in a home whose setup is done.
+  it('adds nothing and records nothing when an existing home that never chose opens the page', async () => {
+    const { browser, bundles } = await show({ pack: 'available', fresh: false })
+    expect(switchControl().getAttribute('aria-checked')).toBe('false')
+    expect(screen.getByText(en['page.status.off'])).toBeTruthy()
+    expect(bundles.install).not.toHaveBeenCalled()
+    expect(browser.record).not.toHaveBeenCalled()
+  })
+
+  it('turns the pack on from the off page of an existing home that never chose', async () => {
+    const { browser, bundles } = await show({ pack: 'available', fresh: false })
+    await click(switchControl())
+    await settle()
+    expect(browser.record).toHaveBeenCalledExactlyOnceWith('on')
+    expect(bundles.install).toHaveBeenCalledExactlyOnceWith(BROWSER_BUNDLE)
+  })
+
+  // Pins the removal check: with on recorded and the pack gone or turned off in Plugins, the page records off, not Installing for ever.
+  it.each<readonly [string, object]>([['removed', {}], ['turned off', { held: true }]])('records off when the pack was %s in Plugins', async (_how, more) => {
+    const { browser, bundles } = await show({ pack: 'available', packMore: more, recorded: 'on', fresh: false })
+    expect(browser.record).toHaveBeenCalledExactlyOnceWith('off')
+    expect(switchControl().getAttribute('aria-checked')).toBe('false')
+    expect(bundles.install).not.toHaveBeenCalled()
+  })
+
+  // Pins the re-enable check: a pack switched on again in Plugins after Off shows On instead of a stale Off.
+  it('records on when the pack was switched on again in Plugins after Off', async () => {
+    const { browser } = await show({ pack: 'installed', recorded: 'off', fresh: false })
+    expect(browser.record).toHaveBeenCalledExactlyOnceWith('on')
+    expect(switchControl().getAttribute('aria-checked')).toBe('true')
+  })
+
+  // The Host's write can fail outright; the page says so and keeps what it shows, and starts no add.
+  it.each([['on', { pack: 'available' as const, fresh: false, recorded: 'off' as const }], ['off', {}]])('says it could not turn Browser %s when recording the choice throws', async (_which, options) => {
+    const browser = browserFake({ kind: 'ready' })
+    browser.record.mockRejectedValue(new Error('refused'))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const { bundles } = await show({ ...options, browser })
+    await click(switchControl())
+    await settle()
+    expect(screen.getByText(en['page.switch.failed'])).toBeTruthy()
+    expect(bundles.install).not.toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
+  it('records on and hands a failed pack to the installer when switched on after Off', async () => {
+    const { browser, bundles } = await show({ pack: 'failed', recorded: 'off', fresh: false, browser: browserFake({ kind: 'not-added' }) })
+    await click(switchControl())
+    await settle()
+    expect(browser.record).not.toHaveBeenCalledWith('off')
+    expect(bundles.install).toHaveBeenCalledExactlyOnceWith(BROWSER_BUNDLE)
+  })
+
+  it('does not add or record anything from a phone', async () => {
+    const { browser, bundles } = await show({ pack: 'available', fresh: true, remote: true })
+    expect(bundles.install).not.toHaveBeenCalled()
+    expect(browser.record).not.toHaveBeenCalled()
   })
 
   it('says it could not change Browser, and keeps the shown state, when the Host refuses', async () => {

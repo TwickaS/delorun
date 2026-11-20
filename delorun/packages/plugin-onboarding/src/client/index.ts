@@ -199,6 +199,10 @@ export function applyStudio(ctx: Context): void {
       subscribe: listener => progress.subscribe(listener),
       record: next => progress.set('browser', next),
     },
+    fresh: {
+      getSnapshot: () => progress.getSnapshot().value?.done === false,
+      subscribe: listener => progress.subscribe(listener),
+    },
     test: () => runBrowserTest((input, init) => globalThis.fetch(input, init)),
     download: () => runBrowserInstall((input, init) => globalThis.fetch(input, init)),
     turnOff: () => turnBrowserOff(ctx),

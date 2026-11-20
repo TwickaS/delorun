@@ -5,7 +5,7 @@
  */
 import { describe, expect, it, vi } from 'vitest'
 import {
-  answerBrowserCheck, installBrowser, INSTALL_SECONDS, runNode, TEST_PAGE, TEST_PROGRAM, TEST_SECONDS, testBrowser,
+  answerBrowserCheck, installBrowser, registerBrowserCheck, INSTALL_SECONDS, runNode, TEST_PAGE, TEST_PROGRAM, TEST_SECONDS, testBrowser,
   type BrowserKit, type FindKit, type RunProgram,
 } from '../src/browser-check.ts'
 import { runBrowserInstall, runBrowserTest, type BrowserInstallAnswer, type BrowserTestAnswer } from '../src/client/browser-check-api.ts'
@@ -113,6 +113,44 @@ describe('answerBrowserCheck', () => {
     expect(refused.status).toBe(403)
     expect(await refused.json()).toMatchObject({ ok: false, reason: 'at-computer' })
     expect(action).not.toHaveBeenCalled()
+  })
+})
+
+describe('registerBrowserCheck', () => {
+  interface Route { readonly path: string, readonly admitPeer?: unknown, readonly fetch: (request: Request) => Promise<Response> }
+  const register = (run: RunProgram): Route[] => {
+    const routes: Route[] = []
+    const scope = { connection: { fetch: { register: (route: Route) => { routes.push(route) } } } }
+    registerBrowserCheck(scope as never, found(), { run, env: () => ENV, loopback })
+    return routes
+  }
+  const post = (path: string): Request => new Request(`http://dsh.internal${path}`, { method: 'POST', headers: { host: '127.0.0.1:19101' } })
+
+  // A paired device reaches a route only through admitPeer; the rows in home-auth class both routes as the computer only.
+  it('registers both routes without admitPeer', () => {
+    const routes = register(printing(''))
+    expect(routes.map(route => route.path)).toEqual(['/api/delorunBrowser.test', '/api/delorunBrowser.install'])
+    for (const route of routes) expect(route.admitPeer).toBeUndefined()
+  })
+
+  // Each Test starts a Chromium for up to a minute; sharing the run in flight stops a double click from stacking browsers.
+  it.each([['/api/delorunBrowser.test'], ['/api/delorunBrowser.install']])('runs %s once for two concurrent calls, and again after it ends', async (path) => {
+    const gate: { finish: (() => void) | undefined } = { finish: undefined }
+    const run = vi.fn<RunProgram>(() => new Promise((resolve) => { gate.finish = () => { resolve({ status: 0, stdout: '', stderr: '' }) } }))
+    const release = (): void => { gate.finish?.() }
+    const route = register(run).find(each => each.path === path)!
+    const first = route.fetch(post(path))
+    const second = route.fetch(post(path))
+    await vi.waitFor(() => { expect(gate.finish).toBeDefined() })
+    expect(run).toHaveBeenCalledTimes(1)
+    release()
+    await Promise.all([first, second])
+    gate.finish = undefined
+    const third = route.fetch(post(path))
+    await vi.waitFor(() => { expect(gate.finish).toBeDefined() })
+    release()
+    await third
+    expect(run).toHaveBeenCalledTimes(2)
   })
 })
 

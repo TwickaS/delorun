@@ -247,10 +247,12 @@ export function browserFake(...states: readonly BrowserReadiness[]) {
     if (accepted.value) recorded.set(next)
     return Promise.resolve(accepted.value)
   })
+  /** Whether the home is new (setup not finished); a spec sets it. A home is new unless a spec says otherwise. */
+  const fresh = createSnapshotStore(true)
   const test = vi.fn((): Promise<BrowserTestAnswer> => Promise.resolve({ ok: true, image: 'data:image/png;base64,iVBORw0KGgo=', title: 'Delorun browser test' }))
   const download = vi.fn((): Promise<BrowserInstallAnswer> => Promise.resolve({ ok: true }))
-  const face: BrowserFace = { setup, ownSetup, choice: { getSnapshot: recorded.getSnapshot, subscribe: recorded.subscribe, record }, test, download, openSettings, turnOff }
-  return { face, set: store.set, setOwn: own.set, refresh, ownRefresh, openSettings, turnOff, outcome, recorded, record, accepted, test, download }
+  const face: BrowserFace = { setup, ownSetup, choice: { getSnapshot: recorded.getSnapshot, subscribe: recorded.subscribe, record }, fresh: { getSnapshot: fresh.getSnapshot, subscribe: fresh.subscribe }, test, download, openSettings, turnOff }
+  return { face, set: store.set, setOwn: own.set, refresh, ownRefresh, openSettings, turnOff, outcome, recorded, record, accepted, fresh, test, download }
 }
 
 /**

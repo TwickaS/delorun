@@ -51,8 +51,30 @@ describe('the Browser step', () => {
     expect(checked()).toEqual([true, false])
     expect(bundles.refresh).toHaveBeenCalledWith([BROWSER_BUNDLE, REAL_BROWSER_BUNDLE])
     expect(bundles.install).toHaveBeenCalledExactlyOnceWith(BROWSER_BUNDLE)
-    // Adding it is the default, not a choice, so nothing is recorded.
+    // Recorded so that removing the pack in Plugins later reads as the person's choice, not as a home that never chose.
+    expect(browser.record).toHaveBeenCalledExactlyOnceWith('on')
+  })
+
+  // Pins the fresh-home check: a home whose setup is finished and that never chose must not download the pack by opening the step.
+  it('does not add the pack for an existing home that never chose, and shows No browser', async () => {
+    const bundles = pack('available')
+    const browser = browserFake()
+    browser.fresh.set(false)
+    await show({ bundles: bundles.installer, browser: browser.face })
+    expect(checked()).toEqual([false, true])
+    expect(bundles.install).not.toHaveBeenCalled()
     expect(browser.record).not.toHaveBeenCalled()
+  })
+
+  it('adds the pack, and records on, when the isolated browser is chosen in an existing home', async () => {
+    const bundles = pack('available')
+    const browser = browserFake()
+    browser.fresh.set(false)
+    await show({ bundles: bundles.installer, browser: browser.face })
+    await click(radios()[0]!)
+    await settle()
+    expect(browser.record).toHaveBeenCalledExactlyOnceWith('on')
+    expect(bundles.install).toHaveBeenCalledExactlyOnceWith(BROWSER_BUNDLE)
   })
 
   // Pins "a home that chose off stays off": without the record check the step would add the pack again at every visit.
