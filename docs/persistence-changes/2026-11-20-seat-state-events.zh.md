@@ -9,7 +9,7 @@ kind: persistence-change
 
 ## 概述
 
-Adds the Session events `external-agent/state`, `external-agent/status` and `external-agent/notice`, which log a live agent chat's program session and cursor, its status, and the notices its transcript shows.
+新增 Session 事件 `external-agent/state`、`external-agent/status` 和 `external-agent/notice`，分别记录实时智能体对话的程序会话与游标、它的状态，以及它的记录中显示的通知。
 
 ## 目录
 
@@ -43,12 +43,12 @@ changes:
 <a id="compatibility"></a>
 ## 兼容性
 
-Three new event types; no existing event changes. They replace three ignorable plugin records of earlier previews (`plugin:delorun/agent-seat/state`, `/status` and `/notice`). The new events are required, not ignorable: a build that does not know them refuses the log, as it refuses any unknown required event type, instead of resuming a live agent chat as an ordinary chat that has lost its program session. A build with them reads every older log: the old plugin records are ignorable events of an unknown type, so it skips them, and the state they recorded is not recovered: the seat shows an idle view without the earlier status (a chat that ended or reached a limit no longer says so), and its next turn starts a fresh program session that is sent every earlier message of the chat, because the input cursor is lost with the old state record. Live agents sit behind an off-by-default preview flag, so such logs are unlikely. The fold version of the `agentSeat` projection rises, so a stored checkpoint built from the old records is discarded and refolded. The Session format version stays: the event type names are their discriminators.
+新增三种事件类型；没有任何现有事件改变。它们取代早期预览版的三条可忽略的插件记录（`plugin:delorun/agent-seat/state`、`/status` 和 `/notice`）。新事件是必需的，不可忽略：不认识它们的构建会拒绝该日志，就像拒绝任何未知的必需事件类型一样，而不是把实时智能体对话当作丢失了程序会话的普通对话来恢复。认识它们的构建可以读取每一份较早的日志：旧的插件记录是未知类型的可忽略事件，因此会被跳过，它们所记录的状态不会被恢复：席位显示一个没有早先状态的空闲视图（已结束或已达到限额的对话不再这样说明），并且它的下一个轮次会启动一个全新的程序会话，该会话会收到对话中此前的每一条消息，因为输入游标随旧的状态记录一起丢失了。实时智能体位于默认关闭的预览开关之后，因此这样的日志不太可能存在。`agentSeat` 投影的折叠版本升高，因此由旧记录构建的已存储检查点会被丢弃并重新折叠。Session 格式版本保持不变：事件类型名称就是它们的判别标记。
 
 <a id="verification"></a>
 ## 验证
 
-pnpm exec vitest run delorun/packages/plugin-agent-seats/tests/state: a seat child restarted from its serialised log rebuilds the same view and logged state, the three events carry no ignorable marker, and a log holding the old plugin records reads without error and shows none of their state; the JSONL read path returns a log that holds them, refuses a log that holds a required event type it does not know, and admits the old ignorable plugin records (delorun/packages/plugin-agent-seats/tests/state/read-path.spec.ts).
+pnpm exec vitest run delorun/packages/plugin-agent-seats/tests/state：从序列化日志重启的席位子对话会重建相同的视图和已记录的状态，这三个事件不带可忽略标记，包含旧插件记录的日志读取时不报错且不显示它们的任何状态；JSONL 读取路径会返回包含它们的日志，拒绝包含它不认识的必需事件类型的日志，并接纳旧的可忽略插件记录（delorun/packages/plugin-agent-seats/tests/state/read-path.spec.ts）。
 
 <a id="dev-note"></a>
 ## 开发备注
