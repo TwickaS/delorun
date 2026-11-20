@@ -144,9 +144,25 @@ describe('the progress and outcome cards', () => {
     expect(document.querySelector('[data-update-details]')?.textContent).toContain('H2-host-ready')
   })
 
+  it('keeps each version whole in the title, shows the time in the local zone and keeps developer words out of the details', () => {
+    overlay(stateOf({ result: RESULT }))
+    const title = document.querySelector('[data-update-outcome] p')
+    expect([...title!.querySelectorAll('span[style]')].map(node => node.textContent).filter(Boolean)).toEqual(['0.1.3', '0.1.2'])
+    fireEvent.click(screen.getByText(en['outcome.details']))
+    const details = document.querySelector('[data-update-details]')?.textContent ?? ''
+    expect(details).toContain(new Date(RESULT.at).toLocaleString())
+    expect(details).not.toContain('2026-11-17T10:00:00Z')
+    expect(details).not.toContain('delorun logs')
+  })
+
+  it('draws the cards in the toast area, not as fixed cards of its own', () => {
+    overlay(stateOf({ result: RESULT }))
+    expect(document.querySelector('[data-toast-area] [data-update-outcome]')).not.toBeNull()
+  })
+
   it('says Updated to … for a committed update and dismisses the record', () => {
     const props = overlay(stateOf({ result: { ...RESULT, outcome: 'committed' } }))
-    expect(screen.getByText('Updated to Delorun 0.1.3')).toBeTruthy()
+    expect(screen.getByText((_, node) => node?.tagName === 'P' && node.textContent === 'Updated to Delorun 0.1.3')).toBeTruthy()
     fireEvent.click(screen.getByText(en['outcome.dismiss']))
     expect(props.dismiss).toHaveBeenCalled()
   })

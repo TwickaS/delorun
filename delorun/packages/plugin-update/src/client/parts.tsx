@@ -2,6 +2,7 @@
  * Parts the update screens share: the dictionary type, plural keys, sizes, what a control's button says about who may
  * use it, and the refusal sentence for a route's refusal code.
  */
+import { Fragment, type ReactNode } from 'react'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import type { UpdateControl, UpdateStateView } from '../wire.ts'
 import type { UpdateRefusal } from './controller.ts'
@@ -64,4 +65,30 @@ const WORDED = new Set<string>(['CROSS_SITE', 'LOOPBACK_REQUIRED', 'ELEVATION_RE
 export function refusalText(refusal: UpdateRefusal, t: T): string {
   if (WORDED.has(refusal.code)) return t(`refusal.${refusal.code}` as 'refusal.CROSS_SITE')
   return t('refusal.UPDATE_FAILED', { message: refusal.message })
+}
+
+/**
+ * Keep each version number whole where a line wraps: every occurrence of a version in the text goes in a no-wrap span.
+ * @param text - the translated sentence.
+ * @param versions - the version strings the sentence names.
+ * @returns the sentence as nodes; the text itself when it names none of them.
+ */
+export function keepVersions(text: string, versions: readonly (string | undefined)[]): ReactNode {
+  const named = versions.filter((version): version is string => version !== undefined && version !== '' && text.includes(version))
+  if (named.length === 0) return text
+  const pattern = new RegExp(`(${named.map(version => version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`)
+  return text.split(pattern).map((part, index) => named.includes(part)
+    // The split keeps each captured version at an odd index.
+    ? <span key={index} style={{ whiteSpace: 'nowrap' }}>{part}</span>
+    : <Fragment key={index}>{part}</Fragment>)
+}
+
+/**
+ * Write an outcome time in the person's own time zone and language.
+ * @param at - the RFC 3339 time the home process recorded.
+ * @returns the local date and time; the recorded text when it does not parse.
+ */
+export function localTime(at: string): string {
+  const date = new Date(at)
+  return Number.isNaN(date.getTime()) ? at : date.toLocaleString()
 }

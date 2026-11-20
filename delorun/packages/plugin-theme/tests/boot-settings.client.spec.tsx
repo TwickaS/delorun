@@ -26,6 +26,7 @@ describe('the printed theme settings', () => {
     ['a switch that is not a boolean', { ...PRINTED, studioAdditions: 'yes' }],
     ['an unknown palette', { ...PRINTED, palette: 'neon' }],
     ['an unknown effort display', { ...PRINTED, effort: 'dots' }],
+    ['an unknown toast position', { ...PRINTED, toastPosition: 'middle' }],
     ['a contrast that is not a number', { ...PRINTED, contrast: '100' }],
     ['a contrast below the range', { ...PRINTED, contrast: CONTRAST.min - 1 }],
     ['a contrast above the range', { ...PRINTED, contrast: CONTRAST.max + 1 }],

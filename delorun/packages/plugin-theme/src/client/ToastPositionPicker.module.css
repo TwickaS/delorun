@@ -1,0 +1,75 @@
+/* A screen-shaped rectangle in a 3 by 2 grid of zones; each zone is at least 44px on both sides. */
+.screen {
+  --zone-min: 44px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(var(--zone-min), 1fr));
+  grid-template-rows: repeat(2, minmax(var(--zone-min), 1fr));
+  gap: 4px;
+  box-sizing: border-box;
+  width: min(100%, 264px);
+  aspect-ratio: 16 / 9;
+  padding: 6px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.zone {
+  display: flex;
+  min-width: var(--zone-min);
+  min-height: var(--zone-min);
+  padding: 6px;
+  border: 1px dashed transparent;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  cursor: pointer;
+  /* The bar sits where a toast would: left, centre or right; top or bottom. */
+  align-items: flex-end;
+  justify-content: flex-start;
+}
+
+.zone[data-position^='top'] {
+  align-items: flex-start;
+}
+
+.zone[data-position$='center'] {
+  justify-content: center;
+}
+
+.zone[data-position$='right'] {
+  justify-content: flex-end;
+}
+
+.bar {
+  width: 55%;
+  height: 8px;
+  border-radius: var(--dsw-radius-panel);
+  background: var(--dsw-alias-border-l2);
+  opacity: 0.6;
+}
+
+.zone[data-chosen] {
+  border-color: var(--dsw-alias-border-l1);
+  background: color-mix(in oklab, var(--dsw-alias-brand-primary) 14%, transparent);
+}
+
+.zone[data-chosen] .bar {
+  background: var(--dsw-alias-brand-primary);
+  opacity: 1;
+}
+
+@media (hover: hover) {
+  .zone:not([data-chosen]):not(:disabled):hover {
+    border-color: var(--dsw-alias-border-l2);
+  }
+}
+
+.zone:focus-visible {
+  outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 1px;
+}
+
+.zone:disabled {
+  cursor: default;
+  opacity: 0.55;
+}

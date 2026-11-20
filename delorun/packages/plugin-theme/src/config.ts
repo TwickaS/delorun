@@ -11,13 +11,13 @@ import type { Volatile } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { DEFAULT_STORED_BRANDING, ICON_SOURCES, type StoredBranding } from '@delorun/brand/branding'
 import {
-  ACCENT_CHOICES, CONTRAST, DENSITIES, EFFORT_DISPLAYS, PALETTES, TYPEFACES,
-  type AccentChoice, type Density, type EffortDisplay, type PaletteChoice, type ThemeSettings, type Typeface,
+  ACCENT_CHOICES, CONTRAST, DENSITIES, EFFORT_DISPLAYS, PALETTES, TOAST_POSITIONS, TYPEFACES,
+  type AccentChoice, type Density, type EffortDisplay, type PaletteChoice, type ThemeSettings, type ToastPosition, type Typeface,
 } from './settings.ts'
 
 export {
-  ACCENT_CHOICES, CONTRAST, DENSITIES, DENSITY_SCALE, EFFORT_DISPLAYS, PALETTES, PRESET_PALETTES, THEME_ROW_ID, TYPEFACES,
-  type AccentChoice, type Density, type EffortDisplay, type PaletteChoice, type PresetPalette, type ThemeSettings, type Typeface,
+  ACCENT_CHOICES, CONTRAST, DENSITIES, DENSITY_SCALE, EFFORT_DISPLAYS, PALETTES, PRESET_PALETTES, THEME_ROW_ID, TOAST_POSITION_ATTRIBUTE, TOAST_POSITIONS, TYPEFACES,
+  type AccentChoice, type Density, type EffortDisplay, type PaletteChoice, type PresetPalette, type ThemeSettings, type ToastPosition, type Typeface,
 } from './settings.ts'
 
 /** The accent a fresh studio shows, and the colour a custom pick starts from. */
@@ -25,7 +25,7 @@ export const DEFAULT_CUSTOM_ACCENT = '#E5734A'
 
 /** The settings the Appearance section shows before the stored ones arrive, and the `Config` defaults. */
 export const DEFAULT_SETTINGS: ThemeSettings = {
-  accent: 'peach', customAccent: DEFAULT_CUSTOM_ACCENT, typeface: 'delorun', density: 'comfortable', studioAdditions: false, palette: 'soft', contrast: CONTRAST.default, effort: 'label', branding: DEFAULT_STORED_BRANDING,
+  accent: 'peach', customAccent: DEFAULT_CUSTOM_ACCENT, typeface: 'delorun', density: 'comfortable', studioAdditions: false, palette: 'soft', contrast: CONTRAST.default, effort: 'label', toastPosition: 'bottom-left', branding: DEFAULT_STORED_BRANDING,
 }
 
 /** The host half's live configuration: one field per setting. */
@@ -46,6 +46,8 @@ export interface Config {
   contrast: Volatile<number>
   /** How reasoning effort shows. */
   effort: Volatile<EffortDisplay>
+  /** Where toasts stack. */
+  toastPosition: Volatile<ToastPosition>
   /** The own branding: mark, name, icon and greeting. */
   branding: Volatile<StoredBranding>
 }
@@ -59,6 +61,7 @@ export const Config = z.object({
   studioAdditions: z.boolean().volatile().default(false),
   palette: z.union([...PALETTES]).default(DEFAULT_SETTINGS.palette).volatile(),
   effort: z.union([...EFFORT_DISPLAYS]).default(DEFAULT_SETTINGS.effort).volatile(),
+  toastPosition: z.union([...TOAST_POSITIONS]).default(DEFAULT_SETTINGS.toastPosition).volatile(),
   // Lenient on purpose: a stored value that fails the branding checks shows the defaults with a notice instead of failing the load.
   branding: z.object({
     showMark: z.boolean().default(true),

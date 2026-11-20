@@ -168,19 +168,8 @@
   overflow-wrap: anywhere;
 }
 
-/* The progress and outcome cards stay on screen while Settings is closed, above the page's other overlays. */
-.overlay {
-  position: fixed;
-  right: 16px;
-  bottom: 16px;
-  z-index: 60;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  width: min(420px, calc(100vw - 32px));
-}
-
-.overlay .card {
+/* The progress and outcome cards float in the toast area, over the page. */
+.floating {
   box-shadow: var(--dsw-shadow-lg, 0 8px 24px rgb(0 0 0 / 0.18));
   background: var(--dsw-alias-surface-primary, var(--dsw-alias-settings-card-fill));
 }
@@ -194,10 +183,5 @@
 
   .actions {
     flex: none;
-  }
-
-  .overlay {
-    right: 16px;
-    bottom: 76px;
   }
 }

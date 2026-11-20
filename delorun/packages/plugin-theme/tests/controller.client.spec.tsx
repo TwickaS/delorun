@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /** The controller lays the theme layers, the faces and the effort mark for settings that have the studio additions on, and removes them all otherwise. */
 import { afterEach, describe, expect, it } from 'vitest'
-import { DEFAULT_SETTINGS } from '../src/config.ts'
+import { DEFAULT_SETTINGS, TOAST_POSITION_ATTRIBUTE } from '../src/config.ts'
 import { LAYERS, PLUGIN_ID, ThemeController } from '../src/client/controller.ts'
 import { effortBarsCss, EFFORT_ATTRIBUTE } from '../src/client/effort.ts'
 import type { TokenLayer } from '../src/palette/generate.ts'
@@ -10,6 +10,7 @@ import { STUDIO_ON } from './theme-form.client.ts'
 afterEach(() => {
   document.head.replaceChildren()
   document.documentElement.removeAttribute(EFFORT_ATTRIBUTE)
+  document.documentElement.removeAttribute(TOAST_POSITION_ATTRIBUTE)
 })
 
 function controller() {
@@ -40,6 +41,17 @@ describe('the theme controller', () => {
     expect(document.documentElement.hasAttribute(EFFORT_ATTRIBUTE)).toBe(false)
     expect(layers.size).toBe(0)
     expect(document.head.querySelector('style')).toBeNull()
+  })
+
+  it('sets the toast position on <html> only while the studio additions are on', () => {
+    const { controller: theme } = controller()
+    theme.update({ ...STUDIO_ON, toastPosition: 'top-right' })
+    expect(document.documentElement.getAttribute(TOAST_POSITION_ATTRIBUTE)).toBe('top-right')
+    theme.update({ ...DEFAULT_SETTINGS, toastPosition: 'top-right' })
+    expect(document.documentElement.hasAttribute(TOAST_POSITION_ATTRIBUTE)).toBe(false)
+    theme.update({ ...STUDIO_ON, toastPosition: 'bottom-centre' })
+    theme.dispose()
+    expect(document.documentElement.hasAttribute(TOAST_POSITION_ATTRIBUTE)).toBe(false)
   })
 
   it('removes every layer, the faces and the mark on disposal', () => {
