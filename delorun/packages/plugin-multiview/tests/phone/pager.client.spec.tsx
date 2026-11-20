@@ -4,7 +4,7 @@ import { useCallback, useState, type JSX } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PaneId } from '../../src/layout/index.ts'
 import {
-  isMounted, pageAt, pageForKey, pageOrder, PhonePager, PhoneSwitch, type PhonePage,
+  isMounted, PageDots, pageAt, pageForKey, pageOrder, PhonePager, PhoneSwitch, type PhonePage,
 } from '../../src/phone/index.ts'
 import { CLAUDE, CODEX, EXPLORER, FIVE, fakeViewport, LABELS, MAIN, mediaList, page, REVIEW } from './helpers.tsx'
 
@@ -95,6 +95,23 @@ describe('pager arithmetic', () => {
   it('orders pages main first, then pins once each in pin order', () => {
     expect(pageOrder(MAIN, [CLAUDE, CODEX, CLAUDE, MAIN])).toEqual([MAIN, CLAUDE, CODEX])
     expect(pageOrder(MAIN, [])).toEqual([MAIN])
+  })
+})
+
+describe('the page dots placed by the pages', () => {
+  it('leaves the pager without dots when the pages draw their own, and draws the same dots as a component', () => {
+    const onSelect = vi.fn()
+    render(
+      <PhonePager pages={FIVE} active={MAIN} onActiveChange={() => {}} externalDots renderPage={() => null} labels={LABELS} />,
+    )
+    expect(document.querySelectorAll('[data-page-dot]')).toHaveLength(0)
+    cleanup()
+    render(<PageDots ids={[MAIN, CLAUDE, CODEX]} active={CLAUDE} onSelect={onSelect} className="above-reply" />)
+    const dots = [...document.querySelectorAll<HTMLElement>('[data-page-dot]')]
+    expect(dots.map(dot => dot.hasAttribute('data-active'))).toEqual([false, true, false])
+    expect(document.querySelector('.above-reply')!.getAttribute('aria-hidden')).toBe('true')
+    fireEvent.click(dots[2]!)
+    expect(onSelect).toHaveBeenCalledWith(CODEX)
   })
 })
 
