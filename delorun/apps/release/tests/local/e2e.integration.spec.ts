@@ -59,7 +59,8 @@ async function servedRelease(test: TestContext, closureFiles?: string): Promise<
     '--log-submit', log.endpoints.submit, '--log-checkpoint', log.endpoints.checkpoint, '--log-tiles', log.endpoints.tiles,
     '--closures-from', closures, '--allow-builder-paths',
   ])
-  expect(built.stderr).toBe('')
+  // The fixture closure names this process's Node, so the allowed builder paths print their warning and nothing else.
+  expect(built.stderr.replaceAll(/^warning: the closure files name the building user's paths.*\n/gmu, '')).toBe('')
   expect(built.status).toBe(0)
   return { directory, channel, origin: await serveChannel(test, channel), rootPath, trusted }
 }

@@ -21,8 +21,9 @@
  * the command signs each platform's `delorun-<version>-<platform>` archive and `.files.json` that a `build-closure.ts`
  * run left there.
  * Before it signs anything the command refuses closure or pack files that name the building user's home directory, user
- * name as a folder or the unique build root (`closure/home-paths.ts`), naming each file; `--allow-builder-paths` skips that
- * refusal, as does building here with `--artifacts existing`, which embeds the worktree's paths.
+ * name as a folder or the unique build root (`closure/home-paths.ts`), naming each file; `--allow-builder-paths` replaces
+ * it with one warning per file, for a local candidate built with `--artifacts existing`, which embeds the worktree's paths.
+ * Nothing else sets it: a public release is built with `--artifacts build`.
  * `--log-submit`, `--log-checkpoint` and `--log-tiles` are `log-release.ts`'s log endpoints: the command submits the
  * manifest's entry to the log they name, so point them at a log you run, never at a public log unless the release is
  * meant to be logged there. The command asks the log for a witnessed checkpoint at most 60 times, `--log-poll-seconds`
@@ -146,7 +147,7 @@ export async function main(argv: readonly string[], build: (repository: string, 
       platforms,
       state: resolve(state),
       log: { submit: values['log-submit']!, checkpoint: values['log-checkpoint']!, tiles: values['log-tiles']! },
-      allowBuilderPaths: values['allow-builder-paths'] || (artifacts === 'existing' && values['closures-from'] === undefined),
+      allowBuilderPaths: values['allow-builder-paths'],
       logAttempts: 60,
       logWait: () => delay(poll * 1000),
       closures,

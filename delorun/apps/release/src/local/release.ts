@@ -41,7 +41,7 @@ import {
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { semanticVersion, sha256Hex } from '@delorun/release-formats/brands'
 import { closureFileNames } from '../closure/tree.ts'
-import { refuseHomePaths, type BuilderIdentity } from '../closure/home-paths.ts'
+import { homePathProblems, refuseHomePaths, type BuilderIdentity } from '../closure/home-paths.ts'
 import { logEntryName, packsLogName, packsName } from '@delorun/release-formats/log/bundle'
 import { logRelease, type LogEndpoints } from '../log/client.ts'
 import { entryRequest, readEntryRequest } from '@delorun/release-formats/log/entry'
@@ -113,11 +113,13 @@ export interface LocalReleaseRequest {
    */
   readonly closures: (directory: string) => Promise<void>
   /**
-   * Sign closure files that name the building user's own paths. A release built from existing artifacts embeds the
-   * worktree's paths, so only a local release sets this; absent or false, the signing is refused before anything is
-   * signed (`closure/home-paths.ts`).
+   * Sign closure files that name the building user's own paths, warning for each file instead of refusing. A release
+   * built from existing artifacts embeds the worktree's paths, so only a local candidate sets this; absent or false, the
+   * signing is refused before anything is signed (`closure/home-paths.ts`).
    */
   readonly allowBuilderPaths?: boolean
+  /** Receives each warning of an allowed build; `console.warn` by default. */
+  readonly warn?: (line: string) => void
   /** The user the scan looks for in the closure files; this computer's user by default. */
   readonly builder?: BuilderIdentity
   /** The signing time. */
@@ -265,7 +267,11 @@ export async function buildLocalRelease(request: LocalReleaseRequest): Promise<L
   try {
     await request.closures(work)
     // Every shipped closure and pack file is final here and nothing is signed yet.
-    if (request.allowBuilderPaths !== true) await refuseHomePaths(work, request.builder)
+    if (request.allowBuilderPaths === true) {
+      for (const problem of await homePathProblems(work, request.builder)) (request.warn ?? console.warn)(`warning: the closure files name the building user's paths, which a public release never does: ${problem.file}: ${problem.found}`)
+    } else {
+      await refuseHomePaths(work, request.builder)
+    }
     const runtime = new Map<RuntimePlatform, { readonly archive: FileRef, readonly files: FileRef }>()
     for (const platform of request.platforms) {
       const names = closureFileNames(request.version, platform)

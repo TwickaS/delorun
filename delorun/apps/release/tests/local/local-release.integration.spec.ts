@@ -89,7 +89,7 @@ async function request(test: Parameters<typeof scratch>[0], directory: string, t
 }
 
 describe('a local release', () => {
-  it('refuses, before signing anything, a closure that names the building user\'s home directory, and signs it when told to allow that', async (test) => {
+  it('refuses, before signing anything, a closure that names the building user\'s home directory, and signs it with a warning naming the file when told to allow that', async (test) => {
     const directory = scratch(test)
     const trusted = trust()
     // The fixture's `node/bin/node` wrapper names this process's Node, so its folder is a home directory the archive holds.
@@ -97,7 +97,9 @@ describe('a local release', () => {
     await expect(buildLocalRelease(await request(test, directory, trusted, '0.1.0', { builder }))).rejects.toThrow(/1 file of the release name the builder's own paths[^]*delorun-0\.1\.0-linux-x64\.tar\.gz!node\/bin\/node: the building user's home directory/u)
     expect(existsSync(join(directory, 'channel', 'timestamp.json'))).toBe(false)
     expect(existsSync(releaseDirectory(join(directory, 'channel'), '0.1.0'))).toBe(false)
-    await expect(buildLocalRelease(await request(test, directory, trusted, '0.1.0', { builder, allowBuilderPaths: true }))).resolves.toMatchObject({ manifestName: 'delorun-0.1.0.manifest.json' })
+    const warnings: string[] = []
+    await expect(buildLocalRelease(await request(test, directory, trusted, '0.1.0', { builder, allowBuilderPaths: true, warn: line => warnings.push(line) }))).resolves.toMatchObject({ manifestName: 'delorun-0.1.0.manifest.json' })
+    expect(warnings).toEqual([expect.stringMatching(/^warning: .*delorun-0\.1\.0-linux-x64\.tar\.gz!node\/bin\/node: the building user's home directory/u)])
   })
 
   it('writes a channel a client verifies: the signed manifest, its file list, its log bundle and the timestamp that names it', async (test) => {

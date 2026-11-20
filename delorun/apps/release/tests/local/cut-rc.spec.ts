@@ -56,9 +56,11 @@ describe('cut-rc plan', () => {
     }
   })
 
-  it('allows the builder\'s paths in the signed closure only for a build from existing artifacts', () => {
-    expect(localReleaseArgs(parseCutArgs(BASE))).toContain('--allow-builder-paths')
+  it('never allows the builder\'s paths in the signed closure unless the person passes --allow-builder-paths', () => {
+    expect(parseCutArgs(BASE)).toMatchObject({ artifacts: 'existing', allowBuilderPaths: false })
+    expect(localReleaseArgs(parseCutArgs(BASE))).not.toContain('--allow-builder-paths')
     expect(localReleaseArgs(parseCutArgs([...BASE, '--artifacts', 'build']))).not.toContain('--allow-builder-paths')
+    expect(localReleaseArgs(parseCutArgs([...BASE, '--allow-builder-paths']))).toContain('--allow-builder-paths')
   })
 
   it('accepts a private test build between two candidates and names it in the default summary', () => {
