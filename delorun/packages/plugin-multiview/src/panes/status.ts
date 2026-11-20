@@ -74,14 +74,14 @@ export function advanceClock(clock: RunClock, status: PaneStatus, now: number, r
 export const FRESH_CLOCK: RunClock = { status: 'idle', startedAt: undefined, lastDuration: undefined }
 
 /**
- * Two letters for a name with no program monogram: the initials of its first two words, or its first two letters.
+ * Two letters for a name with no program monogram: the first two letters of its first word, so two chats whose names share their
+ * later words (such as "Run the tests" and "Review the diff") still read differently. Every surface that draws a monogram uses this.
  * @param name - the chat's or agent's name.
  * @returns up to two upper-case characters; `?` for an empty name.
  */
 export function initialsOf(name: string): string {
-  const words = name.trim().split(/\s+/).filter(word => word !== '')
-  const letters = words.length >= 2 ? [...words[0]!][0]! + [...words[1]!][0]! : [...(words[0] ?? '?')].slice(0, 2).join('')
-  return letters.toUpperCase()
+  const first = name.trim().split(/\s+/)[0] ?? ''
+  return first === '' ? '?' : [...first].slice(0, 2).join('').toUpperCase()
 }
 
 /** The fields of the `agentSeat` projection the limits line reads; every one is optional, so an older or absent value shows less. */

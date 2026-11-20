@@ -197,7 +197,7 @@ function Pager({ frame, main, content, ids, references, active, onActive, stop, 
       onActiveChange={onActive}
       externalDots
       labels={{ region: t('pager.region'), strip: t('pager.strip'), attention: t('pager.attention') }}
-      renderChipIcon={id => <span className={css.monogram} aria-hidden>{initialsOf(names[ids.indexOf(id)] ?? '')}</span>}
+      renderChipIcon={id => <span className={css.monogram} aria-hidden>{initialsOf(id === main ? t('badge.mainChat') : names[ids.indexOf(id)] ?? '')}</span>}
       renderPage={(id) => {
         const reference = references.get(id)
         return (

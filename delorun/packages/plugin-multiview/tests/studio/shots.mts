@@ -149,10 +149,8 @@ try {
     await page.waitForTimeout(1500)
     await page.getByRole('button', { name: 'garden-planner' }).first().click()
     await page.waitForTimeout(3000)
-    await page.screenshot({ path: join(shots, 'debug-before-popover.png') })
     await page.getByRole('button', { name: '2 subagents' }).click()
     await page.waitForTimeout(1500)
-    await page.screenshot({ path: join(shots, 'debug-popover.png') })
     await page.getByRole('button', { name: 'Pin Run the tests to Multiview' }).waitFor()
     await page.screenshot({ path: join(shots, 'agents-list-1440-light.png') })
     await page.getByRole('button', { name: 'Pin Run the tests to Multiview' }).click()
@@ -180,6 +178,12 @@ try {
       await page.emulateMedia({ colorScheme: 'dark' })
       await page.waitForTimeout(2500)
       await page.screenshot({ path: join(shots, 'panes-1440-dark.png') })
+      await page.setViewportSize({ width: 390, height: 844 })
+      await page.waitForTimeout(2000)
+      await page.screenshot({ path: join(shots, 'phone-agent-390-dark.png') })
+      await page.getByRole('tab', { name: /Main chat/ }).click()
+      await page.waitForTimeout(2000)
+      await page.screenshot({ path: join(shots, 'phone-main-390-dark.png') })
     }
   } finally {
     await browser.close()

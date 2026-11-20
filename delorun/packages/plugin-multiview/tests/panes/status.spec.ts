@@ -39,8 +39,10 @@ describe('the badge time', () => {
 })
 
 describe('the monogram', () => {
-  it('takes two initials from two words and two letters from one', () => {
-    expect(initialsOf('Port the garden planner')).toBe('PT')
+  it('takes the first two letters of the first word, so names that share later words differ', () => {
+    expect(initialsOf('Port the garden planner')).toBe('PO')
+    expect(initialsOf('Run the tests')).toBe('RU')
+    expect(initialsOf('Review the diff')).toBe('RE')
     expect(initialsOf('Explorer')).toBe('EX')
     expect(initialsOf('  ')).toBe('?')
   })
