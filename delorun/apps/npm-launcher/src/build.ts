@@ -10,6 +10,9 @@
  * rise by one; a build with no root is refused, because the launcher it made would refuse every install. The channel
  * and log origins become build constants the bundler writes into the code (see `platform.ts`); without them the build
  * is the production launcher. The package is staged at `<out>/package` and packed to `<out>/delorun-<version>.tgz`.
+ * Before it packs, the build scans the whole output folder for the building user's home directory, user name as a
+ * folder and unique build root (`@delorun/release-formats/gate/home-paths`) and refuses, naming each file, so no tarball
+ * is written; there is no flag that skips the scan.
  *
  * @module @delorun/npm-launcher/build
  */
@@ -21,6 +24,7 @@ import { parseArgs, promisify } from 'node:util'
 import { build } from 'tsdown'
 import { RELEASE_REPOSITORY_URL } from '@delorun/contract-release-manifest'
 import { messageOf } from '@delorun/install'
+import { refuseHomePaths, type BuilderIdentity } from '@delorun/release-formats/gate/home-paths'
 import { readRoot } from '@delorun/release-formats/sign/verify'
 import { MINIMUM_NODE, NODE_ENGINES_RANGE } from './node-version.ts'
 import { buildOrigin } from '@delorun/install'
@@ -45,6 +49,8 @@ export interface BuildOptions {
   readonly constants?: BuildConstants
   /** The npm package version; this package's own by default. */
   readonly version?: string
+  /** The building user the home-path scan looks for; this computer's user by default. Tests give another. */
+  readonly builder?: BuilderIdentity
 }
 
 /** What a build made. */
@@ -110,8 +116,8 @@ async function stageRoots(paths: readonly string[], stage: string): Promise<read
  * Build and pack the launcher.
  * @param options - the roots, the output directory, the origins and the version.
  * @returns the staged package and its tarball.
- * @throws {Error} when an origin or a root is refused, the output directory already holds a package, or the bundler
- *   or `npm pack` fails; an `InstallError` when the roots do not form a chain.
+ * @throws {Error} when an origin or a root is refused, the output directory already holds a package, a file of the
+ *   output names the builder's paths, or the bundler or `npm pack` fails; an `InstallError` when the roots do not form a chain.
  */
 export async function buildLauncher(options: BuildOptions): Promise<BuiltLauncher> {
   const constants = options.constants ?? {}
@@ -149,6 +155,8 @@ export async function buildLauncher(options: BuildOptions): Promise<BuiltLaunche
   await writeFile(join(stage, 'package.json'), publishedManifest(version, constants))
   await copyFile(join(PACKAGE_DIRECTORY, 'LICENSE'), join(stage, 'LICENSE'))
   await writeFile(join(stage, 'README.md'), PUBLISHED_README)
+  // A path in the package would publish who built it; this refuses before `npm pack` writes a tarball.
+  await refuseHomePaths(out, options.builder)
   await run('npm', ['pack', '--pack-destination', out, '--silent'], { cwd: stage })
   return { directory: stage, tarball: join(out, `delorun-${version}.tgz`) }
 }

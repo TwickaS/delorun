@@ -93,6 +93,19 @@ describe('the built launcher', LIMIT, () => {
     await expect(buildLauncher({ roots: [root.path], out: join(work, 'out') })).rejects.toThrow('exists; build into a new directory')
   })
 
+  it('refuses a package that names the builder\'s own paths, naming the file, before it writes a tarball', async () => {
+    const work = await scratch()
+    const root = await rootFile(work)
+    // The package README is known text, so a builder whose home directory is a phrase from it plants that "path".
+    const builder = { home: 'installs and starts Delorun', username: 'maker' }
+    const refusal = await buildLauncher({ roots: [root.path], out: join(work, 'out'), version: '0.1.0-planted', builder }).then(() => undefined, (error: unknown) => error as Error)
+    expect(refusal?.message).toMatch(/name the builder's own paths[^]*package\/README\.md: the building user's home directory installs and starts Delorun/u)
+    expect(await readdir(join(work, 'out'))).toEqual(['package'])
+    const built = await buildLauncher({ roots: [root.path], out: join(work, 'clean'), version: '0.1.0-clean', builder: { home: '/home/maker', username: 'maker' } })
+    expect(await readdir(join(work, 'clean'))).toContain('delorun-0.1.0-clean.tgz')
+    expect(built.tarball).toContain('delorun-0.1.0-clean.tgz')
+  })
+
   it('refuses a root that does not verify, and roots that skip a version', async () => {
     const work = await scratch()
     const bad = join(work, 'bad.json')
