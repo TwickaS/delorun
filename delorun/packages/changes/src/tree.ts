@@ -54,7 +54,7 @@
  * @module @delorun/changes/tree
  */
 import { createHash } from 'node:crypto'
-import { constants, lstatSync, readdirSync, type BigIntStats, type Stats } from 'node:fs'
+import { constants, lstatSync, readdirSync, realpathSync, type BigIntStats, type Stats } from 'node:fs'
 import { lstat, mkdir, open, readdir, readlink, realpath, stat, type FileHandle } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { brandString } from '@deepseek-ai/dsh-brand'
@@ -201,6 +201,19 @@ export interface ScanMemo {
 }
 
 /**
+ * @param path - a path.
+ * @returns its real path; the path itself when it does not resolve.
+ */
+function realpathOrSelf(path: string): string {
+  try {
+    return realpathSync(path)
+  } catch {
+    // Nothing is there to have been scanned, so the path names any entry that was.
+    return path
+  }
+}
+
+/**
  * A scan memo for one boot.
  * @param now - the wall clock in milliseconds, which decides which files are recorded; defaults to `Date.now`. A test hook.
  * @returns the empty memo.
@@ -218,8 +231,10 @@ export function createScanMemo(now: () => number = Date.now): ScanMemo {
       seen.set(path, { dev: stats.dev, ino: stats.ino, size: stats.size, mtimeNs: stats.mtimeNs, ctimeNs: stats.ctimeNs, digest })
     },
     forget: (directory) => {
-      const below = `${directory}${sep}`
-      for (const path of seen.keys()) if (path === directory || path.startsWith(below)) seen.delete(path)
+      // Entries are named by the real path a scan read, so a directory given through a link is resolved first.
+      const real = realpathOrSelf(directory)
+      const below = `${real}${sep}`
+      for (const path of seen.keys()) if (path === real || path.startsWith(below)) seen.delete(path)
     },
   }
 }

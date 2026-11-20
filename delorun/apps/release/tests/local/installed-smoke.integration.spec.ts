@@ -14,6 +14,7 @@ import { RELEASE_SCHEMAS } from '@delorun/contract-release-manifest'
 import { currentHolder, holderIdentity, holderOf, newStartId, SYSTEM_PROCESS_TABLE, type ProcessHolder } from '@delorun/home'
 import { signEnvelope } from '@delorun/release-formats/sign/envelope'
 import { toJsonValue } from '@delorun/release-formats/sign/json'
+import { updateChangeProblems } from '../../src/installed-smoke/changes-log.ts'
 import { BENIGN_LOG_LINES, FORBIDDEN_LOG_LINES, logProblems } from '../../src/installed-smoke/home-log.ts'
 import { channelSource, offeredPacks, packsForPlatform } from '../../src/installed-smoke/offered-packs.ts'
 import { HOME_LOG_TAIL_LINES, installsState, loadProblems, parseSmokeArgs, redactTokens, smokeEnvironment, stopLeftover, tailLines } from '../../scripts/installed-smoke.ts'
@@ -266,5 +267,22 @@ describe('the home log a failed run prints', () => {
     expect(tail[0]).toBe('line 6')
     expect(tail.at(-1)).toBe(`line ${String(HOME_LOG_TAIL_LINES + 5)}`)
     expect(tailLines('one\ntwo', 5)).toBe('one\ntwo')
+  })
+})
+
+describe('the change log after an update', () => {
+  const entry = (plugin: string, state: string, decidedFrom?: string): object => ({ state, subject: { plugin }, ...decidedFrom === undefined ? {} : { decidedFrom } })
+  const log = (...entries: object[]): string => JSON.stringify({ entries })
+
+  it('accepts a pack whose change the update applied and nothing waiting', () => {
+    expect(updateChangeProblems(log(entry('a', 'applied', 'update')), ['a'])).toEqual([])
+  })
+
+  it('names a pack with no change applied by the update, and a pack with a change waiting', () => {
+    expect(updateChangeProblems(log(entry('a', 'applied', 'terminal'), entry('b', 'applied', 'update'), entry('b', 'pending')), ['a', 'b'])).toEqual([
+      'a: the change log has no change applied by the update',
+      'b: a change waits for review after the update',
+    ])
+    expect(updateChangeProblems(JSON.stringify({}), ['a'])).toEqual(['a: the change log has no change applied by the update'])
   })
 })

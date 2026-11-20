@@ -526,6 +526,24 @@ describe('holdsVersion with a scan memo', () => {
     expect(await holdsVersion(home, folder, version, undefined, memo)).toBe(false)
   })
 
+  it('forgets a directory named through a link', async () => {
+    const { home, folder } = setUp({ 'a.js': 'a' })
+    const { version } = await storeFolder(home, folder)
+    const through = `${folder}-link`
+    symlinkSync(folder, through)
+    const memo = createScanMemo(settled)
+    const reads = await countReads(join(folder, 'a.js'))
+    try {
+      await holdsVersion(home, folder, version, undefined, memo)
+      const first = reads.read()
+      memo.forget(through)
+      await holdsVersion(home, folder, version, undefined, memo)
+      expect(reads.read()).toBe(2 * first)
+    } finally {
+      reads.restore()
+    }
+  })
+
   it('drops what a caller forgets, so a rewritten directory is read again', async () => {
     const { home, folder } = setUp({ 'a.js': 'a' })
     const { version } = await storeFolder(home, folder)
