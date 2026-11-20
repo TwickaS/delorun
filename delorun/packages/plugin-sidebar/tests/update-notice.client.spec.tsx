@@ -238,7 +238,7 @@ describe('the notice', () => {
     expect(screen.getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual([en['update.dismiss']])
     expect(screen.getByRole('status').textContent).toBe('Delorun 0.1.3 is availableSecurity fix · All your plugins stay compatible')
     expect(notice?.textContent).toContain('Release note: Fixes the reach listener')
-    expect(notice?.textContent).toContain('Run delorun update on the computer that runs Delorun.')
+    expect(notice?.textContent).toContain('Run delorun update on your computer.')
     fireEvent.click(screen.getByRole('button', { name: en['update.dismiss'] }))
     expect(dismiss).toHaveBeenCalledWith('0.1.3')
   })
@@ -272,7 +272,7 @@ describe('the notice', () => {
     const face: UpdateNoticeFace = { notice: createSnapshotStore<UpdateNotice | null>(noticeOf()), notes: async () => null, open, canOpen, dismiss: vi.fn(), remote: true }
     const { container } = render(<UpdateNoticeCard face={face} t={t} />)
     expect(screen.queryByRole('button', { name: en['update.now'] })).toBeNull()
-    expect(container.textContent).toContain('Run delorun update on the computer that runs Delorun')
+    expect(container.textContent).toContain('Run delorun update on your computer')
     act(() => { canOpen.set(true) })
     expect(screen.getByRole('button', { name: en['update.now'] })).toBeTruthy()
   })

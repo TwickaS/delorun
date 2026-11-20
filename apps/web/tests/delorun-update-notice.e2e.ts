@@ -113,7 +113,7 @@ it.skipIf(webSnapshotMode() === 'record')('shows the Host\'s update notice in th
   onTestFailed(() => saveFailureShot(remote, 'web-e2e-delorun-update-notice-remote'))
   const remoteNotice = remote.locator('[data-update-notice="0.1.3"]')
   expect(await remoteNotice.textContent()).toContain('Release note: Fixes the reach listener\'s cookie check')
-  expect(await remoteNotice.textContent()).toContain('Run delorun update on the computer that runs Delorun.')
+  expect(await remoteNotice.textContent()).toContain('Run delorun update on your computer.')
   await remoteNotice.getByRole('button', { name: 'Hide this notice until a newer release' }).click()
   await expect.poll(() => remoteNotice.count()).toBe(0)
 }, 240_000)

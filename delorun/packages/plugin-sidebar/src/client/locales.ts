@@ -145,7 +145,7 @@ export const en = {
   'update.summary': 'Release note: {summary}',
   'update.now': 'Update now…',
   'update.run': 'Run {command} in a terminal on this computer.',
-  'update.run.remote': 'Run {command} on the computer that runs Delorun.',
+  'update.run.remote': 'Run {command} on your computer.',
   'update.dismiss': 'Hide this notice until a newer release',
   'update.whatsNew': 'What\'s new',
   'update.whatsNewTitle': 'What\'s new in {version}',
