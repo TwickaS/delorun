@@ -16,6 +16,7 @@ import { HostRequestError } from '../src/client/host-api.ts'
 import { FaceIdPin } from '../src/client/FaceIdPin.tsx'
 import { FACE_ID_KINDS, type FaceIdAction, type PasskeyDevice } from '../src/client/face-id-types.ts'
 import { FaceIdSheet, OPTIONS_TIMEOUT_MS } from '../src/client/FaceIdSheet.tsx'
+import { FaceIdGrantFlow } from '../src/client/FaceIdGrantFlow.tsx'
 import { AddFaceId, CODE_POLL_MS, FaceIdPairingStep, PasskeyCodeEntry } from '../src/client/FaceIdEnrol.tsx'
 import { PasskeyDevices } from '../src/client/PasskeyDevices.tsx'
 
@@ -138,14 +139,20 @@ describe('FaceIdSheet', () => {
   it('goes straight to the way down without a passkey or support', async () => {
     // A device with no passkey must not offer a prompt that cannot work.
     const onOpenDevices = vi.fn()
-    sheet({ hasPasskey: false, onOpenDevices })
+    const props = sheet({ hasPasskey: false, onOpenDevices })
     expect(screen.queryByRole('button', { name: 'Confirm with Face ID' })).toBeNull()
+    // The PIN is the main button, and says so.
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm with PIN' }))
+    expect(props.onFallback).toHaveBeenCalled()
+    cleanup()
+    const stranded = sheet({ hasPasskey: false, fallback: 'computer', onOpenDevices })
     fireEvent.click(screen.getByRole('button', { name: 'Open Face ID settings' }))
     expect(onOpenDevices).toHaveBeenCalled()
-    expect(screen.getByRole('button', { name: 'Use PIN instead' })).toBeTruthy()
+    expect(stranded.onFallback).not.toHaveBeenCalled()
     cleanup()
     sheet({ browser: fakeBrowser({ available: false }) })
     expect(await screen.findByText('This browser cannot use Face ID here.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Confirm with PIN' })).toBeTruthy()
   })
   it('names Touch ID or Windows Hello on a computer and cancels on Escape', async () => {
     // B5: wording follows the platform.
@@ -153,6 +160,98 @@ describe('FaceIdSheet', () => {
     expect(await screen.findByRole('button', { name: 'Confirm with Windows Hello' })).toBeTruthy()
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(props.onCancel).toHaveBeenCalled()
+  })
+})
+
+describe('the top layer', () => {
+  // jsdom has no showModal; the stub records which dialogs were opened modally, the way a browser lifts them into the top layer.
+  const opened: HTMLDialogElement[] = []
+  const stubShowModal = (): void => {
+    Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value(this: HTMLDialogElement) { opened.push(this); this.setAttribute('open', '') } })
+  }
+  afterEach(() => { Reflect.deleteProperty(HTMLDialogElement.prototype, 'showModal'); opened.splice(0) })
+
+  it('opens the sheet as a modal dialog, so no studio overlay covers its Confirm', () => {
+    // A sheet that is a plain fixed element sits under the consent dialog's mask and the phone's terminal panel (F-1).
+    stubShowModal()
+    sheet()
+    const dialog = screen.getByRole('dialog', { name: 'Install “Reports”?' })
+    expect(dialog.tagName).toBe('DIALOG')
+    expect(opened).toEqual([dialog])
+    expect(dialog.hasAttribute('data-face-id-sheet')).toBe(true)
+    expect(dialog.contains(screen.getByRole('button', { name: 'Confirm with Face ID' }))).toBe(true)
+  })
+
+  it('opens the PIN keypad as a modal dialog that takes focus itself, so no phone keyboard rises over the keypad', () => {
+    // The keypad's digits and Approve sat under the terminal panel (F-1b).
+    stubShowModal()
+    render(<FaceIdPin t={t} action={action} api={fakeApi()} secret="pin" onGranted={vi.fn()} onBack={vi.fn()} onCancel={vi.fn()} />)
+    const dialog = screen.getByRole('dialog', { name: 'Install “Reports”?' })
+    expect(opened).toEqual([dialog])
+    expect(dialog.hasAttribute('data-face-id-pin')).toBe(true)
+    expect(dialog.hasAttribute('autofocus')).toBe(true)
+  })
+
+  it('keeps the dialog open on the browser\'s own cancel and treats it, like Escape, as the person\'s cancel', () => {
+    // A dialog that closed itself on a close request would vanish while React still holds the sheet open.
+    stubShowModal()
+    const props = sheet()
+    const dialog = screen.getByRole('dialog', { name: 'Install “Reports”?' })
+    const cancel = new Event('cancel', { cancelable: true })
+    dialog.dispatchEvent(cancel)
+    expect(cancel.defaultPrevented).toBe(true)
+    expect(props.onCancel).toHaveBeenCalledOnce()
+    const escape = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true, bubbles: true })
+    document.dispatchEvent(escape)
+    // A handled Escape makes no close request of its own.
+    expect(escape.defaultPrevented).toBe(true)
+    expect(props.onCancel).toHaveBeenCalledTimes(2)
+  })
+
+  it('stops keys at the sheet, so a studio dialog under it neither closes on Escape nor takes Tab', () => {
+    // The studio's modal layer listens on the document; it closed the consent dialog under the sheet on the sheet's Escape.
+    stubShowModal()
+    const props = sheet()
+    const under = vi.fn()
+    document.addEventListener('keydown', under)
+    try {
+      const confirm = screen.getByRole('button', { name: 'Confirm with Face ID' })
+      fireEvent.keyDown(confirm, { key: 'Escape' })
+      fireEvent.keyDown(confirm, { key: 'Tab' })
+      expect(under).not.toHaveBeenCalled()
+      expect(props.onCancel).toHaveBeenCalledOnce()
+      expect(screen.getByRole('dialog', { name: 'Install “Reports”?' }).getAttribute('aria-modal')).toBe('true')
+    } finally {
+      document.removeEventListener('keydown', under)
+    }
+  })
+})
+
+describe('FaceIdGrantFlow with nothing to confirm with', () => {
+  /** The flow on a home with no PIN, for a device with no passkey. */
+  function stranded(over: Partial<FaceIdAction> = {}) {
+    const props = { t, action: { ...action, ...over }, kind: 'faceId' as const, api: fakeApi(), browser: fakeBrowser(), hasPasskey: false, secret: undefined,
+      onGranted: vi.fn(), onCancel: vi.fn() }
+    render(<FaceIdGrantFlow {...props} />)
+    return props
+  }
+  it('offers no keypad or confirm button and says how to set up Face ID or a PIN', () => {
+    // Pins the plain answer for a device that cannot confirm: a keypad or a Confirm button here could never succeed.
+    const props = stranded()
+    expect(screen.getByRole('status').textContent).toBe(t('sheet.nothingToConfirm', { method: 'Face ID' }))
+    expect(screen.getByRole('status').textContent).toMatch(/Settings → Face ID → Add Face ID, then type the code it shows at your computer/)
+    expect(screen.queryByLabelText(en['pin.label'])).toBeNull()
+    expect(screen.queryByRole('button', { name: en['sheet.usePin'] })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Confirm with Face ID' })).toBeNull()
+    expect(screen.queryByText(en['sheet.askComputer'])).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: en['sheet.cancel'] }))
+    expect(props.onCancel).toHaveBeenCalledOnce()
+    expect(props.onGranted).not.toHaveBeenCalled()
+  })
+  it('does not suggest a PIN for an action only Face ID approves', () => {
+    stranded({ noPin: true })
+    expect(screen.getByRole('status').textContent).toBe(t('sheet.setUpFirst', { method: 'Face ID' }))
+    expect(screen.getByRole('status').textContent).not.toMatch(/PIN/)
   })
 })
 
@@ -317,13 +416,13 @@ describe('FaceIdPin', () => {
     // The PIN fallback must send the secret with the same grant request as the sheet.
     const onGranted = vi.fn()
     const api = fakeApi()
-    render(<FaceIdPin t={t} action={action} api={api} secret="passcode" onGranted={onGranted} onBack={vi.fn()} />)
+    render(<FaceIdPin t={t} action={action} api={api} secret="passcode" onGranted={onGranted} onBack={vi.fn()} onCancel={vi.fn()} />)
     fireEvent.change(screen.getByLabelText('Passcode'), { target: { value: 'correct horse' } })
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
     await waitFor(() => { expect(onGranted).toHaveBeenCalledWith('g2') })
     expect(api.calls[0]).toEqual({ name: 'pin', request: { ...action.grant, secret: 'correct horse' } })
     cleanup()
-    render(<FaceIdPin t={t} action={action} api={fakeApi({ failPin: true })} secret="passcode" onGranted={onGranted} onBack={vi.fn()} />)
+    render(<FaceIdPin t={t} action={action} api={fakeApi({ failPin: true })} secret="passcode" onGranted={onGranted} onBack={vi.fn()} onCancel={vi.fn()} />)
     fireEvent.change(screen.getByLabelText('Passcode'), { target: { value: 'x' } })
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
     expect(await screen.findByRole('alert')).toBeTruthy()
@@ -336,15 +435,26 @@ describe('FaceIdPin', () => {
     // A paused or refused PIN must not tell the person the right PIN was wrong.
     const api = fakeApi()
     api.pin = async () => { throw new HostRequestError('/auth/passkey/pin', { kind: 'refused', status: 400, code, message: 'm' }) }
-    render(<FaceIdPin t={t} action={action} api={api} secret="passcode" onGranted={vi.fn()} onBack={vi.fn()} />)
+    render(<FaceIdPin t={t} action={action} api={api} secret="passcode" onGranted={vi.fn()} onBack={vi.fn()} onCancel={vi.fn()} />)
     fireEvent.change(screen.getByLabelText('Passcode'), { target: { value: 'x' } })
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
     expect((await screen.findByRole('alert')).textContent).toBe(sentence)
   })
+  it('goes back on Escape and ends the confirmation when the browser closes its dialog itself', () => {
+    // Escape on the keypad did nothing, and Chrome's own close then left the confirmation pending (review P2-2).
+    const onBack = vi.fn()
+    const onCancel = vi.fn()
+    render(<FaceIdPin t={t} action={action} api={fakeApi()} secret="pin" onGranted={vi.fn()} onBack={onBack} onCancel={onCancel} />)
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(onBack).toHaveBeenCalledOnce()
+    expect(onCancel).not.toHaveBeenCalled()
+    document.querySelector('dialog')?.dispatchEvent(new Event('close'))
+    expect(onCancel).toHaveBeenCalledOnce()
+  })
   it('shows the keypad for a digit PIN and goes back', () => {
     // A digit PIN uses the shared cells; Back leaves the entry.
     const onBack = vi.fn()
-    render(<FaceIdPin t={t} action={action} api={fakeApi()} secret="pin" onGranted={vi.fn()} onBack={onBack} />)
+    render(<FaceIdPin t={t} action={action} api={fakeApi()} secret="pin" onGranted={vi.fn()} onBack={onBack} onCancel={vi.fn()} />)
     expect(document.querySelector('[data-face-id-pin]')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '1' }))
     fireEvent.click(screen.getByRole('button', { name: 'Back' }))
@@ -355,7 +465,7 @@ describe('FaceIdPin', () => {
 describe('PasskeyDevices', () => {
   const list = (over: Partial<Parameters<typeof PasskeyDevices>[0]> = {}) => {
     const api = over.api ?? fakeApi({ devices: [phone, laptop] })
-    const props = { t, api, browser: fakeBrowser(), kind: 'faceId' as const, atComputer: false, secret: 'pin' as const, hasPasskey: true,
+    const props = { t, api, browser: fakeBrowser(), kind: 'faceId' as const, atComputer: false, secret: 'pin' as const,
       onAdd: vi.fn(), ...over }
     render(<PasskeyDevices {...props} />)
     return { ...props, api: api as ReturnType<typeof fakeApi> }

@@ -34,19 +34,17 @@ description: "Delorun 更新与回退的设计：更新报告的数据项、默�
 
 ## 规则
 
-<a id="the-studios-update"></a>
+### The studio's update
 
-### studio 的更新
+The person at the computer, or at a phone that confirms each step with Face ID or the PIN, updates, goes back and stops Delorun in the studio, with no terminal. Every step that verifies, installs, switches or rolls back stays in the home process; the Host's update plugin ([`@delorun/plugin-update`](../../packages/plugin-update/README.zh.md)) only asks it over the update channel and shows the person what it answers.
 
-在电脑前的人，或使用已解锁手机的人，无需终端就能在 studio 中更新、回退和停止 Delorun。每一个验证、安装、切换或回滚的步骤都留在 home 进程中；Host 的更新插件（[`@delorun/plugin-update`](../../packages/plugin-update/README.zh.md)）只通过更新通道向它发问，并向此人显示它的回答。
-
-- **谁。** Check now 对任何已配对的手机开放。Update now 与 Go back 需要在电脑前，或者在 Phone powers 为 Full 时使用此人输入过解锁（验证码或 PIN，绝不是批准宽限）的手机；Careful 手机显示「Update at your computer」。Cancel 与 Stop 需要在电脑前，或使用任一级别的已解锁手机。来自其他站点的请求在读取其正文之前就被拒绝。
-- **报告。** `prepare` 返回 C3 的报告，Host 把它保存在内存中并配以不透明的句柄；页面从不持有 home 进程的报告 id 或通道令牌。报告在 600 秒后过期，`apply` 以 `REPORT_EXPIRED` 拒绝未知或已过期的句柄。
-- **勾选。** `--yes` 所用的规则决定什么需要人来确认：每个会关闭或移除某物的条目、已合并的 harness 文件、未验证的条目、未完成的发布日志检查，以及拒绝数据复制，都各需要一次明确的勾选；有冲突的 harness 文件或失败的日志检查则根本不提供 Update。
-- **结果。** 页面无法读取 home 进程的最后一行，因为 Host 在切换时停止。home 进程在每次结束时写入 `run/<profile>/update-result.json`（`committed`、带有未通过健康判据的 `rolled-back`、`aborted`、`failed`）；之后运行的 Host 显示它，直到此人关闭它，并且当 Host 的发行版与页面所加载的不同时，页面会自行重新加载一次。
-- **回退。** 已提交的更新记录会提供 Go back，带有同样的等待或停止选择以及 C3 表中的措辞；没有 chat 数据的副本时只回退设置。
-- **停止。** Stop Delorun 请求 home 进程停止；studio 中没有任何东西会再次启动 Delorun，屏幕提示从应用图标或启动器启动它。
-- **不提供。** `delorun update --from` 放宽新鲜度要求，并且仍留在终端中。
+- **Who.** Check now is open to any paired phone. Update now, Go back and Stop need the computer, or a phone that confirms the action with a Face ID grant or, without a passkey, an unlock the person entered (a code or a PIN, never the approval grace). Cancel and Dismiss are free for any paired phone. A request from another site is refused before its body is read.
+- **The report.** `prepare` returns C3's report, which the Host keeps in memory under an opaque handle; the page never holds the home process's report id or channel token. The report expires after 600 seconds, and `apply` refuses an unknown or expired handle with `REPORT_EXPIRED`.
+- **The ticks.** The rule `--yes` uses decides what needs the person: each item that disables or removes something, a merged harness file, an unverified item, a release-log check that did not complete, and declining the data copy each need an explicit tick; a conflicted harness file or a failed log check offers no Update at all.
+- **The outcome.** The page cannot read the home process's last line, because the Host stops at the switch. The home process writes `run/<profile>/update-result.json` at every end (`committed`, `rolled-back` with the failed health criterion, `aborted`, `failed`); the Host that runs afterwards shows it until the person dismisses it, and the page reloads itself once when the Host's release differs from the one it loaded.
+- **Go back.** A committed update record offers Go back with the same wait-or-stop choice and the C3 table's wording; with no copy of the chat data only the settings go back.
+- **Stop.** Stop Delorun asks the home process to stop; nothing in the studio starts Delorun again, and the screen says to start it from the app icon or the launcher.
+- **Not offered.** `delorun update --from` relaxes freshness and stays in the terminal.
 
 ### 报告指出数据更改
 

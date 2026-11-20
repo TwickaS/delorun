@@ -37,6 +37,11 @@ export interface TrashControllerDeps {
    * @param notice - the outcome.
    */
   readonly report: (notice: TrashNotice) => void
+  /**
+   * Send one request: the studio's `fetch` with the Face ID step, which deleting forever needs on a device; the page's
+   * own `fetch` when absent.
+   */
+  readonly fetch?: ((input: string, init?: RequestInit) => Promise<Response>) | undefined
 }
 
 /** A route's refusal or failed answer. */
@@ -59,13 +64,14 @@ export class TrashRequestError extends Error {
 
 /**
  * Ask one route.
+ * @param send - the request function.
  * @param path - the route from {@link TRASH_PATHS}, fetched relative to the document without its leading slash.
  * @param body - the JSON request body.
  * @returns the JSON answer.
  * @throws {TrashRequestError} for a non-2xx answer; a network failure rejects with the fetch error.
  */
-async function post<T>(path: string, body: object): Promise<T> {
-  const response = await fetch(path.slice(1), {
+async function post<T>(send: (input: string, init?: RequestInit) => Promise<Response>, path: string, body: object): Promise<T> {
+  const response = await send(path.slice(1), {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
   })
   if (!response.ok) {
@@ -115,13 +121,23 @@ export class TrashController {
   }
 
   /**
+   * Ask one route through the page's request function.
+   * @param path - the route from {@link TRASH_PATHS}.
+   * @param body - the JSON request body.
+   * @returns the JSON answer.
+   */
+  private post<T>(path: string, body: object): Promise<T> {
+    return post<T>(this.deps.fetch ?? ((input, init) => globalThis.fetch(input, init)), path, body)
+  }
+
+  /**
    * Read the listing and hide the chats of every item in it. A failure keeps a listing already shown.
    * @returns after the state is current; never rejects.
    */
   async refresh(): Promise<void> {
     let listing: TrashListing
     try {
-      listing = await post<TrashListing>(TRASH_PATHS.list, {})
+      listing = await this.post<TrashListing>(TRASH_PATHS.list, {})
     } catch (error) {
       console.warn('delorun-trash: the trash was not listed:', error)
       if (this.state.getSnapshot().status !== 'ready') this.state.set({ status: 'error' })
@@ -137,7 +153,7 @@ export class TrashController {
    */
   private async readSetAside(): Promise<readonly SetAsideEntry[]> {
     try {
-      return (await post<SetAsideListing>(TRASH_PATHS.setAside, {})).entries
+      return (await this.post<SetAsideListing>(TRASH_PATHS.setAside, {})).entries
     } catch (error) {
       console.warn('delorun-trash: the set-aside data was not listed:', error)
       return []
@@ -150,7 +166,7 @@ export class TrashController {
    * @returns after the outcome is reported.
    */
   async removeSetAside(path: string): Promise<void> {
-    await this.act(() => post<SetAsideRemoved>(TRASH_PATHS.removeSetAside, { path }), 'toast.setAsideRemoved', 'toast.setAsideFailed', () => undefined)
+    await this.act(() => this.post<SetAsideRemoved>(TRASH_PATHS.removeSetAside, { path }), 'toast.setAsideRemoved', 'toast.setAsideFailed', () => undefined)
   }
 
   /**
@@ -169,7 +185,7 @@ export class TrashController {
    * @returns after the outcome is reported, whether the chat moved.
    */
   async trashChat(sessionId: string, label: string): Promise<boolean> {
-    return await this.act(() => post<TrashEntry>(TRASH_PATHS.deleteChat, { sessionId, label }),
+    return await this.act(() => this.post<TrashEntry>(TRASH_PATHS.deleteChat, { sessionId, label }),
       'toast.chatTrashed', 'toast.trashFailed', (entry) => { this.track(entry) })
   }
 
@@ -179,7 +195,7 @@ export class TrashController {
    * @returns after the outcome is reported, whether the workspace moved.
    */
   async trashWorkspace(workspaceId: string): Promise<boolean> {
-    return await this.act(() => post<TrashEntry>(TRASH_PATHS.deleteWorkspace, { workspaceId }),
+    return await this.act(() => this.post<TrashEntry>(TRASH_PATHS.deleteWorkspace, { workspaceId }),
       'toast.workspaceTrashed', 'toast.trashFailed', (entry) => { this.track(entry) })
   }
 
@@ -189,7 +205,7 @@ export class TrashController {
    * @returns after the outcome is reported.
    */
   async restore(itemId: string): Promise<void> {
-    await this.act(() => post<TrashEntry>(TRASH_PATHS.restore, { itemId }),
+    await this.act(() => this.post<TrashEntry>(TRASH_PATHS.restore, { itemId }),
       'toast.restored', 'toast.restoreFailed', (entry) => { this.release(entry.id) })
   }
 
@@ -200,7 +216,7 @@ export class TrashController {
    * @returns after the outcome is reported.
    */
   async purge(itemId: string, clearLogs: boolean): Promise<void> {
-    await this.act(() => post<PurgeOutcome>(TRASH_PATHS.purge, { itemId, clearLogs }),
+    await this.act(() => this.post<PurgeOutcome>(TRASH_PATHS.purge, { itemId, clearLogs }),
       'toast.purged', 'toast.purgeFailed', (outcome) => {
         this.forget(outcome.item)
         return logsOutcome(clearLogs, outcome.logsCleared)
@@ -213,7 +229,7 @@ export class TrashController {
    * @returns after the outcome is reported.
    */
   async empty(clearLogs: boolean): Promise<void> {
-    await this.act(() => post<EmptyOutcome>(TRASH_PATHS.empty, { clearLogs }),
+    await this.act(() => this.post<EmptyOutcome>(TRASH_PATHS.empty, { clearLogs }),
       'toast.emptied', 'toast.emptyFailed', (outcome) => {
         for (const item of outcome.items) this.forget(item)
         return logsOutcome(clearLogs && outcome.items.length > 0, outcome.logsCleared)

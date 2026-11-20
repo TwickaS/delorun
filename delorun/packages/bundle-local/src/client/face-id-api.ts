@@ -31,7 +31,7 @@ export const GRANT_HEADER = 'Delorun-Grant'
 const isEntry = fields({ credentialId: isString, createdAt: isTime, lastUsedAt: orNull(isTime), synced: isBoolean })
 const isGrant = fields({ grantId: isString, expiresAt: isTime })
 const isRecordCheck: Check = isRecord
-const isState = fields({ passkeys: listOf(isEntry), ticket: isBoolean })
+const isState = fields({ deviceId: isString, passkeys: listOf(isEntry), ticket: isBoolean })
 const isAddRequest = fields({ requestId: isString, code: isString, expiresAt: isTime })
 const isPending = fields({ pending: listOf(fields({ requestId: isString, deviceId: isString, expiresAt: isTime })) })
 const isDevices = fields({ devices: listOf(fields({ deviceId: isString, passkeys: listOf(isEntry) })) })
@@ -45,7 +45,7 @@ const grantHeader = (grantId: string | undefined): { readonly headers?: Record<s
  */
 export function httpPasskeyApi(fetch: HostFetch): PasskeyApi {
   return {
-    state: () => call<{ passkeys: PasskeyEntry[]; ticket: boolean }>(fetch, PASSKEY_ROUTES.state, isState),
+    state: () => call<{ deviceId: string; passkeys: PasskeyEntry[]; ticket: boolean }>(fetch, PASSKEY_ROUTES.state, isState),
     options: request => call<RequestOptionsJSON>(fetch, PASSKEY_ROUTES.options, fields({ challenge: isString, rpId: isString }), request),
     verify: (response: AssertionResponseJSON) => call<GrantTicket>(fetch, PASSKEY_ROUTES.verify, isGrant, response),
     pin: request => call<GrantTicket>(fetch, PASSKEY_ROUTES.pin, isGrant, request),

@@ -1,8 +1,9 @@
 /**
- * The remote studio's notice for an answer the home refused because it must be given at the home's own computer, such
- * as a full-access grant. The home keeps the prompt open for its own computer; this notice tells the person where to
- * answer it. One store behind one `shell.overlay` entry holds the notice, so it outlives the conversation surface that
- * answered the prompt.
+ * The remote studio's notice for an answer the home refused. For an action a device can confirm with Face ID or its PIN
+ * (full access, workspace management, an external agent, the real browser) it says the answer was not confirmed and can
+ * be given again; for any other action it says the answer is given at the home's own computer. The home keeps the prompt
+ * open for its own computer. One store behind one `shell.overlay` entry holds the notice, so it outlives the
+ * conversation surface that answered the prompt.
  */
 import type { ReactNode } from 'react'
 import { IconWarningOutlineRegular, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -57,6 +58,9 @@ export function createRemoteNoticeSource(): RemoteNoticeSource {
 /** Props of the `shell.overlay` entry: the notice store and the Devices copy. */
 export type RemoteNoticeProps = PropsLocale<'delorunDevices'> & InjectFace<Omit<RemoteNoticeSource, 'show'>>
 
+/** The actions a device can still give with an answer grant (Face ID or the PIN), so the notice asks it to confirm. */
+const CONFIRMABLE_ACTIONS: ReadonlySet<string> = new Set(['full-access-escalation', 'workspace-management', 'external-agent', 'real-browser'])
+
 /**
  * The localized name of a refused action: its own phrase for a full-access escalation, the action's identifier for
  * another one, and a generic phrase when the home named none.
@@ -68,6 +72,7 @@ export function refusedActionText(t: RemoteNoticeProps['t'], action: string | un
   if (action === 'full-access-escalation') return t('remote.action.fullAccessEscalation')
   if (action === 'workspace-management') return t('remote.action.workspaceManagement')
   if (action === 'external-agent') return t('remote.action.externalAgent')
+  if (action === 'real-browser') return t('remote.action.realBrowser')
   return action === undefined ? t('remote.action.unknown') : t('remote.action.other', { action })
 }
 
@@ -79,7 +84,8 @@ export function refusedActionText(t: RemoteNoticeProps['t'], action: string | un
 export function RemoteNotice({ useNotice, dismiss, t }: RemoteNoticeProps): ReactNode {
   const notice = useNotice(current => current)
   if (notice === null) return null
-  return <Toast key={notice.seq} text={t('remote.refused', { action: refusedActionText(t, notice.action) })}
+  const confirmable = notice.action !== undefined && CONFIRMABLE_ACTIONS.has(notice.action)
+  return <Toast key={notice.seq} text={t(confirmable ? 'remote.notConfirmed' : 'remote.refused', { action: refusedActionText(t, notice.action) })}
     icon={<IconWarningOutlineRegular />} holdMs={NOTICE_HOLD_MS}
     actions={[{ label: t('remote.dismiss'), prefix: ' ', onClick: dismiss }]} onDone={dismiss} />
 }

@@ -44,15 +44,14 @@ description: "@delorun/plugin-update 包，面向 delorun 的维护者：/deloru
 
 ## 谁可以使用每个操作
 
-这些操作是 Changes 访问表（[`@delorun/plugin-changes`](../plugin-changes/README.zh.md)）的条目，路由用它的门构建，因此站点屏障、设备的级别及其解锁都在读取正文之前决定。
+The controls are entries of the Changes access table ([`@delorun/plugin-changes`](../plugin-changes/README.zh.md)), and the routes are built with its gate, so the site fence, the control's class and the device's grant are decided before a body is read.
 
-| 操作 | 电脑 | 手机，Full | 手机，Careful |
-| --- | --- | --- | --- |
-| `update-check` | 可以 | 可以，无论是否解锁 | 可以，无论是否解锁 |
-| `update-begin`、`update-rollback` | 可以 | 可以，需此人输入过的解锁 | 不可以：在电脑前 |
-| `update-cancel`、`update-dismiss`、`update-continue`（`continue-chat`）、`stop` | 可以 | 可以，需解锁 | 可以，需解锁 |
+| Control | Computer | Phone |
+| --- | --- | --- |
+| `update-check`, `update-cancel`, `update-dismiss`, `update-continue` (`continue-chat`) | yes | yes, no prompt (class `free`) |
+| `update-begin` (also `stop-chats`), `update-rollback`, `stop` | yes | yes, with a one-action grant for the request (class `face`) |
 
-解锁是此人输入的验证码或 PIN；批准宽限不算。`state` 只向可以开始更新的请求显示已准备的报告，其中指出了插件和 harness 差异。
+A grant is a Face ID confirmation or the device's PIN for that one request; the approval grace does not count. `state` shows the prepared report, which names plugins and harness diffs, only to a request that may begin an update.
 
 <a id="chats-stopped-for-an-update"></a>
 
@@ -78,4 +77,4 @@ description: "@delorun/plugin-update 包，面向 delorun 的维护者：/deloru
 
 ## 测试
 
-`tests/update-routes.spec.ts` 保存拒绝规格：其他站点、Careful 手机、没有解锁或只有批准宽限的手机、页面提供的或已过期的报告、正在进行的重启或更新、缺失的勾选、有冲突的报告，以及通道令牌和报告 id 从不进入应答。
+`tests/update-routes.spec.ts` holds the denial specs: other site, phone without a grant or with only the approval grace, a page-supplied or expired report, a restart or update in progress, missing ticks, a conflicted report, and the channel token and report id never reaching an answer.

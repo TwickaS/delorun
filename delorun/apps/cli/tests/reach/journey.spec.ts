@@ -156,12 +156,12 @@ describe('remote access from a second device', () => {
     expect(json(await phone.send('POST', '/api/session/list', listChats)).error).toBe('NOT_SIGNED_IN')
     phone.cookie = cookie
 
-    // A full-access grant from the device is refused where the answer applies; so is device management.
+    // A full-access grant from the device without its Face ID or PIN answer grant is refused where the answer applies; so is device management.
     const admitted = studio.ctx.authenticator.admit({ headers: { host: HOST, cookie: phone.cookie ?? '' }, method: 'GET', url: '/' }, 'reach-tailscale-private')
     if (admitted.kind !== 'admitted') throw new Error('the device was not admitted')
     const peer: PeerScope = admitted.peer
     expect(() => { studio.ctx.get('remoteAnswerGuard')?.check({ peer, event: 'approval/request', request: { toolName: 'bash', grants: 'full-access' }, value: 'allowed-once' }) })
-      .toThrow(/needs you at your computer/)
+      .toThrow(/needs your confirmation: granting full access/)
     expect(json(await phone.send('POST', '/auth/devices/window')).error).toBe('LOOPBACK_REQUIRED')
     expect(json(await phone.send('GET', '/delorun/reach/status')).options).toEqual([{ option: 'tailscale-private', state: 'ready', address: ADDRESS }])
     // A session may not remove another device from the tailnet route; naming its own device is a malformed call and ends nothing.

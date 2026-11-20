@@ -569,11 +569,11 @@ describe('the release check', { timeout: TIMEOUT_MS }, () => {
   })
 
 
-  it('reads a version-2 answers document and record as the check on, and records them as version 4', async () => {
+  it('reads a version-2 answers document and record as the check on, and records them as version 5', async () => {
     const document = join(osHome, 'version-2.json')
     writeFileSync(document, JSON.stringify({ schemaVersion: 2, modelProvider: { id: 'deepseek-official', credential: { source: 'environment', name: 'DEEPSEEK_API_KEY' } }, prompts: 'safer', background: false, profile: { name: null, port: null }, reach: { option: 'none', identityFactor: null }, importStockHome: false }))
     expect(await runSetup({ home, profile: PROFILE, env: { DEEPSEEK_API_KEY: 'env-key-value-11' }, form: { kind: 'config', path: document }, portIsFree: () => Promise.resolve(true), output: { stdout: () => undefined, stderr: () => undefined } })).toBe(EXIT.ok)
-    expect(recordOf()).toMatchObject({ schemaVersion: 4, updateCheck: true })
+    expect(recordOf()).toMatchObject({ schemaVersion: 5, updateCheck: true })
     const record = join(profileDirectory(home, PROFILE), 'setup-answers.json')
     const version2: Record<string, unknown> = { ...JSON.parse(readFileSync(record, 'utf8')) as Record<string, unknown>, schemaVersion: 2, modelProvider: { id: 'deepseek-official', credential: { source: 'environment', name: 'DEEPSEEK_API_KEY' } } }
     Reflect.deleteProperty(version2, 'updateCheck')
@@ -581,7 +581,7 @@ describe('the release check', { timeout: TIMEOUT_MS }, () => {
     writeFileSync(record, JSON.stringify(version2))
     const request: SetupRequest = { home, profile: PROFILE, env: {}, output: { stdout: () => undefined, stderr: () => undefined }, form: { kind: 'interactive', prompter: scriptedPrompter(['stock'], recording) } }
     expect(await runSection(request, 'prompts')).toBe(EXIT.ok)
-    expect(recordOf()).toMatchObject({ schemaVersion: 4, updateCheck: true, background: false, prompts: 'stock' })
+    expect(recordOf()).toMatchObject({ schemaVersion: 5, updateCheck: true, background: false, prompts: 'stock' })
   })
 })
 

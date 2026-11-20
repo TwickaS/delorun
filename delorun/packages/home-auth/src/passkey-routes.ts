@@ -1,6 +1,5 @@
 /**
- * The Face ID routes (C14, "Passkeys"), version 1. Every route answers `PASSKEY_UNAVAILABLE` (404) while the
- * `unlock.passkeys` preview flag is off ({@link PasskeyAuth.assertEnabled}).
+ * The Face ID routes (C14, "Passkeys"), version 1.
  *
  * - **Device routes** answer a device on a reach listener with a live session cookie and, for a `POST`, the studio's own
  *   origin, as the PIN routes do: `state`, `registerOptions`, `register`, `addRequest`, `options`, `verify`, `pin` and `remove`.
@@ -94,7 +93,6 @@ function deviceRoute(auth: HomeAuth, method: 'GET' | 'POST', run: (device: Devic
     const device = deviceSession(auth, request, response, method)
     if (device === undefined) return
     try {
-      auth.passkeys.assertEnabled()
       const message = method === 'POST' ? await readMessage(request, response) : {}
       if (message === undefined) return
       sendJson(response, 200, await run(device, message))
@@ -184,11 +182,13 @@ export function passkeyPinHandler(auth: HomeAuth): RouteHandler {
  * @param action - the action name.
  * @param args - the call's arguments as the home received them.
  * @param refusal - the sentence of the refusal.
- * @throws {HomeAuthError} `ELEVATION_REQUIRED` without a live grant for exactly these arguments.
+ * @param factor - `passkey` when only a grant a passkey minted may be used; a grant the PIN minted is then left unused and refused.
+ * @throws {HomeAuthError} `ELEVATION_REQUIRED` without a live grant for exactly these arguments, or with only a PIN grant when `factor` is `passkey`.
  */
-function useGrant(auth: HomeAuth, device: DeviceSession, action: string, args: Readonly<Record<string, unknown>>, refusal: string): void {
+function useGrant(auth: HomeAuth, device: DeviceSession, action: string, args: Readonly<Record<string, unknown>>, refusal: string, factor?: 'passkey'): void {
   const hash = hashArgs(args)
-  if (hash === undefined || auth.grants.consume({ deviceId: device.session.deviceId, listener: device.listener }, action, hash) === undefined) {
+  const holder = { deviceId: device.session.deviceId, listener: device.listener }
+  if (hash === undefined || (factor !== undefined && auth.grants.peek(holder, action, hash)?.factor !== factor) || auth.grants.consume(holder, action, hash) === undefined) {
     throw new HomeAuthError('ELEVATION_REQUIRED', refusal)
   }
 }
@@ -221,7 +221,10 @@ export function passkeyRemoveHandler(auth: HomeAuth): RouteHandler {
     }
     const record = auth.passkeyStore.find(credentialId)
     if (record === undefined || record.deviceId !== (deviceId ?? device.session.deviceId)) throw new HomeAuthError('BAD_REQUEST', 'that device has no such passkey')
-    useGrant(auth, device, PASSKEY_REMOVE_ACTION, message, 'Confirm with Face ID or your PIN to remove this passkey')
+    // Another device's passkey comes off only with a passkey: a PIN seen on a stolen phone must not strip Face ID from the owner's other phones.
+    const another = record.deviceId !== device.session.deviceId
+    if (another) useGrant(auth, device, PASSKEY_REMOVE_ACTION, message, 'Removing another device\'s passkey needs Face ID on this device, or you at your computer', 'passkey')
+    else useGrant(auth, device, PASSKEY_REMOVE_ACTION, message, 'Confirm with Face ID or your PIN to remove this passkey')
     return { removed: await auth.passkeys.remove(record.deviceId, credentialId) }
   })
 }
@@ -240,7 +243,6 @@ export function passkeyPendingHandler(auth: HomeAuth, credential: LoopbackCreden
       return
     }
     try {
-      auth.passkeys.assertEnabled()
       sendJson(response, 200, { pending: auth.passkeys.pendingAdds() })
     } catch (error) {
       sendThrown(response, error)
@@ -262,7 +264,6 @@ export function passkeyApproveHandler(auth: HomeAuth, credential: LoopbackCreden
       return
     }
     try {
-      auth.passkeys.assertEnabled()
       const message = await readMessage(request, response)
       if (message === undefined) return
       if (typeof message.requestId !== 'string' || typeof message.code !== 'string') throw new HomeAuthError('BAD_REQUEST', 'an approval names the request and the code typed')

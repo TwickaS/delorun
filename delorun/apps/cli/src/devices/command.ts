@@ -15,7 +15,6 @@
  *   unlocks; the person approves a request by typing the 8-digit code its device shows, declines one, or ends an unlock.
  * - `code` prints a new owner code, only to a terminal.
  * - `pin set | options | off | resume | status` turns PIN mode on and off and changes its options at this computer (C14, "PIN mode"); see `./pin.ts`.
- * - `powers [careful | full]` shows or chooses Phone powers at this computer (C14, "Phone powers"); see `./powers.ts`.
  *
  * @module @delorun/cli/devices/command
  */
@@ -38,7 +37,6 @@ import { notRunningText, REMOTE_ACCESS_OFF } from '../messages.ts'
 import { readableTime } from '../output.ts'
 import { printable } from '../terminal-text.ts'
 import { runPin, type PinDependencies } from './pin.ts'
-import { runPowers } from './powers.ts'
 
 /** What the command runs against. */
 export interface DevicesDependencies {
@@ -70,7 +68,7 @@ export interface DevicesDependencies {
 }
 
 /** The usage line. */
-const USAGE = 'Usage: delorun devices list | approve | elevate | remove <device id> | code | pin set|options|off|resume|status | powers [careful|full] [--profile <name>]'
+const USAGE = 'Usage: delorun devices list | approve | elevate | remove <device id> | code | pin set|options|off|resume|status [--profile <name>]'
 
 /** How many codes `approve` and `elevate` take for one request: C5's and C14's count before the home cancels it. */
 const CODE_ATTEMPTS = 3
@@ -86,7 +84,7 @@ const SHORT_REQUEST_ID = 8
 export function createDevicesCommand(dependencies: DevicesDependencies): CliCommand {
   return {
     name: 'devices',
-    summary: 'The devices you let sign in to your studio: list, approve, elevate, remove, code, pin, powers',
+    summary: 'The devices you let sign in to your studio: list, approve, elevate, remove, code, pin',
     async run(args, context) {
       const [action, ...rest] = args
       if (action === 'pin') {
@@ -96,10 +94,6 @@ export function createDevicesCommand(dependencies: DevicesDependencies): CliComm
         const profile = selectProfile(typeof values.profile === 'string' ? values.profile : undefined, context.env)
         const home = (await resolveDelorunHome(context.env)).path
         return runPin(pinAction, pinOptions, { home, profile, context, dependencies: { running: dependencies.running, send: dependencies.send, ...dependencies.pin } })
-      }
-      if (action === 'powers') {
-        const { positionals } = parseArgs({ args: rest, options: {}, strict: true, allowPositionals: true })
-        return runPowers((await resolveDelorunHome(context.env)).path, positionals, context)
       }
       // `remove` names its device first: `delorun devices remove <device id> [--profile <name>]`. A device id is base64url
       // text, which may begin with `-`, so only the profile option is read as an option there.

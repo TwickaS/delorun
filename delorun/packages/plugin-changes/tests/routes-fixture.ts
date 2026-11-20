@@ -20,7 +20,9 @@ import { tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
 import { changeId, CHANGE_LOG_SCHEMA, enforceApprovedContent, type HarnessContext, storeEmptyVersion, storeFileVersion, versionsDirectory, writeHarnessLog, type ChangeEntry, type ChangesContext, type ChangeState, type PluginOperationResult, type ReloadOutcome } from '@delorun/changes'
 import { REQUEST_LISTENER } from '@delorun/home'
+import { GrantStore, hashRequest, type GrantHolder } from '@delorun/home-auth'
 import { onTestFinished } from 'vitest'
+import { faceAccessOf } from '../src/face-access.ts'
 import { restartRoutes, type RestartRouteDependencies } from '../src/restart-route.ts'
 import { changesRoutes, type ChangesRoute, type FaceAccess, type RouteDependencies, type RouteDevice } from '../src/routes.ts'
 
@@ -153,7 +155,7 @@ export interface RouteServer {
  *   routes of another plugin over the same dependencies, as `@delorun/plugin-update` does with the Changes gate.
  * @returns the server.
  */
-export async function serveRoutes(ctx: ChangesContext | undefined, options: Partial<RouteDependencies> & { readonly reloadOutcome?: ReloadOutcome, readonly operationResult?: PluginOperationResult, readonly powers?: 'careful' | 'full', readonly face?: FaceAccess, readonly restartRoute?: RestartRouteDependencies, readonly extraRoutes?: (dependencies: RouteDependencies) => readonly ChangesRoute[] } = {}): Promise<RouteServer> {
+export async function serveRoutes(ctx: ChangesContext | undefined, options: Partial<RouteDependencies> & { readonly reloadOutcome?: ReloadOutcome, readonly operationResult?: PluginOperationResult, readonly face?: FaceAccess, readonly restartRoute?: RestartRouteDependencies, readonly extraRoutes?: (dependencies: RouteDependencies) => readonly ChangesRoute[] } = {}): Promise<RouteServer> {
   let profileReads = 0
   let renewals = 0
   let reloads = 0
@@ -195,7 +197,6 @@ export async function serveRoutes(ctx: ChangesContext | undefined, options: Part
         const { unlock } = peer as Partial<RemotePeer>
         return Promise.resolve(unlock === undefined ? undefined : { ...TEST_DEVICE, unlock, renew: () => { renewals += 1 }, ...options.face === undefined ? {} : { face: options.face } })
       },
-      phonePowers: () => ({ level: options.powers ?? 'careful', chosen: options.powers !== undefined }),
     },
     harness: () => undefined,
     harnessEffect: () => Promise.resolve({ kind: 'restart' }),
@@ -378,4 +379,21 @@ export const DEVICE_HOST = 'studio.example.ts.net'
  */
 export function fromDevice(unlock: RouteDevice['unlock'], body: unknown = {}, withholdBody = false): Send {
   return { method: 'POST', host: DEVICE_HOST, headers: [CREDENTIAL, 'x-test-remote: 1', `x-test-unlock: ${unlock}`, `Origin: https://${DEVICE_HOST}`], body, withholdBody }
+}
+
+const FACE_HOLDER: GrantHolder = { deviceId: TEST_DEVICE.id, listener: 'tailscale-private' as GrantHolder['listener'] }
+
+/** A grant store and the access one device sees of it; `enabled: false` is a home that keeps no grant store. */
+export function grantWorld(options: { readonly hasPasskey?: boolean, readonly enabled?: boolean } = {}) {
+  const clock = { at: 1_000_000 }
+  let counter = 0
+  const store = new GrantStore({ now: () => clock.at, random: size => Uint8Array.from({ length: size }, () => (counter++ % 251) + 1) })
+  const face = faceAccessOf(options.enabled === false ? undefined : store, options.hasPasskey ?? true, FACE_HOLDER)
+  /** Mint a grant for one call and return the header that names it. */
+  const grantFor = (control: string, path: string, body: unknown, factor: 'passkey' | 'pin' = 'passkey'): string => {
+    const hash = hashRequest({ method: 'POST', path, body: Buffer.from(JSON.stringify(body)) })
+    if (hash === undefined) throw new Error('body over the cap')
+    return store.mint(FACE_HOLDER, [{ action: `changes/${control}`, hash }], factor).grantId
+  }
+  return { face, grantFor }
 }

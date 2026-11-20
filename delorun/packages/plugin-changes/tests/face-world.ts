@@ -1,14 +1,14 @@
 /**
- * A real grant store for the consumer packages' route specs: the home's `passkeysEnabled`, `faceGrants` and
+ * A real grant store for the consumer packages' route specs: the home's `faceGrants` and
  * `deviceHasPasskey` answers for one device, and a way to make the grant a Face ID would have made for one call.
  *
  * @module @delorun/plugin-changes/tests/face-world
  */
 import { GrantStore, hashRequest } from '@delorun/home-auth'
 
-/** The fields a `homeAuth` stand-in spreads in to turn the Face ID flag on for one device. */
+/** The fields a `homeAuth` stand-in spreads in to give a device a grant store for one device. */
 export interface FaceWorld {
-  readonly fields: { readonly passkeysEnabled: () => boolean, readonly faceGrants: () => GrantStore, readonly deviceHasPasskey: (deviceId: string) => boolean }
+  readonly fields: { readonly faceGrants: () => GrantStore, readonly deviceHasPasskey: (deviceId: string) => boolean }
   /**
    * @param action - the gate's `action` option.
    * @param call - the method, path and body text the device will send.
@@ -29,7 +29,7 @@ export function faceWorld(deviceId: string, listener: string, hasPasskey = true)
   const store = new GrantStore({ now: () => 1_000_000, random: size => Uint8Array.from({ length: size }, () => (counter++ % 251) + 1) })
   return {
     store,
-    fields: { passkeysEnabled: () => true, faceGrants: () => store, deviceHasPasskey: id => hasPasskey && id === deviceId },
+    fields: { faceGrants: () => store, deviceHasPasskey: id => hasPasskey && id === deviceId },
     grantFor: (action, call, hold) => {
       const hash = hashRequest({ method: call.method ?? 'POST', path: call.path, body: Buffer.from(call.body) })
       if (hash === undefined) throw new Error('body over the cap')

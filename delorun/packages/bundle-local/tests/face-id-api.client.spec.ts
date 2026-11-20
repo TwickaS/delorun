@@ -18,7 +18,7 @@ describe('httpPasskeyApi', () => {
   it('posts each route with its body and returns the validated answer', async () => {
     // A wrong path or body would send the passkey routes nothing they understand.
     const host = fakeHost({
-      [`GET ${PASSKEY_ROUTES.state}`]: ok({ passkeys: [entry], ticket: true }),
+      [`GET ${PASSKEY_ROUTES.state}`]: ok({ deviceId: 'd-this', passkeys: [entry], ticket: true }),
       [`POST ${PASSKEY_ROUTES.options}`]: ok({ challenge: 'x', rpId: 'h' }),
       [`POST ${PASSKEY_ROUTES.verify}`]: ok({ grantId: 'g', expiresAt: 5 }),
       [`POST ${PASSKEY_ROUTES.pin}`]: ok({ grantId: 'p', expiresAt: 5 }),
@@ -27,7 +27,7 @@ describe('httpPasskeyApi', () => {
       [`POST ${PASSKEY_ROUTES.addRequest}`]: ok({ requestId: 'r', code: '12345678', expiresAt: 9 }),
     })
     const api = httpPasskeyApi(host.fetch)
-    expect(await api.state()).toEqual({ passkeys: [entry], ticket: true })
+    expect(await api.state()).toEqual({ deviceId: 'd-this', passkeys: [entry], ticket: true })
     await api.options({ actions: [{ action: 'a', hash: 'h' }] })
     expect(await api.verify({ id: 'i', rawId: 'i', type: 'public-key', clientExtensionResults: {}, response: { clientDataJSON: 'a', authenticatorData: 'b', signature: 'c' } })).toEqual({ grantId: 'g', expiresAt: 5 })
     expect((await api.pin({ answer: { agent: 'a', callId: 'c', grants: 'full-access', value: 'allowed-once' }, secret: 's' })).grantId).toBe('p')
@@ -57,7 +57,7 @@ describe('httpPasskeyApi', () => {
     // Without the header the home refuses the face action.
     const host = fakeHost({
       [`GET ${PASSKEY_ROUTES.devices}`]: ok({ devices: [{ deviceId: 'd1', passkeys: [entry] }, { deviceId: 'd2', passkeys: [] }] }),
-      [`GET ${PASSKEY_ROUTES.state}`]: ok({ passkeys: [entry], ticket: false }),
+      [`GET ${PASSKEY_ROUTES.state}`]: ok({ deviceId: 'd-this', passkeys: [entry], ticket: false }),
       [`GET ${DEVICE_ROUTES.devices}`]: devicesList,
       [`POST ${PASSKEY_ROUTES.remove}`]: ok({ removed: true }),
       [`POST ${DEVICE_ROUTES.remove}`]: ok({ removed: true, sessions: 0, connections: 0 }),

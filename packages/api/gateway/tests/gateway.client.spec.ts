@@ -27,7 +27,7 @@ import type {
 } from '@deepseek-ai/dsh-typert-protocol'
 import TypertRegistry from '@deepseek-ai/dsh-typert-registry'
 import type { ClientRemote } from '../src/client/index.ts'
-import { apply, inject, isRemoteFailure, RemoteStream } from '../src/client/index.ts'
+import { apply, inject, isRemoteFailure, LIFTED_UPLINK_LIMIT, RemoteStream } from '../src/client/index.ts'
 import {
   ClientUplinkQueue,
   RemoteStreamCarrierError,
@@ -1339,6 +1339,157 @@ describe('Client Typert API', () => {
       expect(consoleError).toHaveBeenCalledWith('client api: remote/call-denied listener threw:', expect.objectContaining({ message: 'fixture denial listener failure' }))
     } finally {
       consoleError.mockRestore()
+    }
+  })
+
+  it('asks the registered denial lift about a refused call and sends it once more only when the lift agrees', async () => {
+    const denied = { ok: false, error: { code: 'remote-access/denied', message: 'fixture: denied', details: { action: 'probe/create', reason: 'elevation-required: probe/create' } } } as const
+    const call = vi.fn<ConnectionHandle['rpc']['call']>()
+      .mockResolvedValueOnce(denied).mockResolvedValueOnce({ ok: true, value: { ref: 'goal-1' } })
+      .mockResolvedValueOnce(denied)
+      .mockResolvedValueOnce(denied).mockResolvedValueOnce(denied)
+      .mockResolvedValueOnce(denied)
+    const ctx = await bench(call)
+    await ctx.remote.$mount({ package: '@fixture/probe', descriptors: [directDescriptor()] })
+    const denials: unknown[] = []
+    ctx.on('remote/call-denied', (denial) => { denials.push(denial) })
+    const asked: { endpoint: string; reason: string | undefined; args: unknown }[] = []
+    const answers = [true, false, true]
+    const withdraw = ctx.remote.$liftDenials(({ endpoint, reason, args }) => {
+      asked.push({ endpoint, reason, args: { ...args } })
+      const answer = answers.shift()
+      if (answer === undefined) throw new Error('fixture lift failure')
+      return Promise.resolve(answer)
+    })
+    expect(() => ctx.remote.$liftDenials(() => Promise.resolve(true))).toThrow(/already registered/)
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      // Lifted: the same call is sent again and its answer is the caller's; nothing is reported.
+      await expect(ctx.remote.probe.create('agent-1', { objective: 'ship' })).resolves.toEqual({ ok: true, value: { ref: 'goal-1' } })
+      expect(call.mock.calls[1]?.slice(0, 3)).toEqual(call.mock.calls[0]?.slice(0, 3))
+      expect(denials).toEqual([])
+      // Declined: the caller receives the refusal, which is reported, and nothing more is sent.
+      await expect(ctx.remote.probe.create('agent-1', { objective: 'ship' })).resolves.toMatchObject({ ok: false, error: { code: 'remote-access/denied' } })
+      expect(call).toHaveBeenCalledTimes(3)
+      // Lifted but refused again: sent exactly once more, and the second refusal is the caller's.
+      await expect(ctx.remote.probe.create('agent-1', { objective: 'ship' })).resolves.toMatchObject({ ok: false, error: { code: 'remote-access/denied' } })
+      expect(call).toHaveBeenCalledTimes(5)
+      // A throwing lift is contained and answers false.
+      await expect(ctx.remote.probe.create('agent-1', { objective: 'ship' })).resolves.toMatchObject({ ok: false, error: { code: 'remote-access/denied' } })
+      expect(call).toHaveBeenCalledTimes(6)
+      expect(consoleError).toHaveBeenCalledWith('client api: the denial lift threw:', expect.objectContaining({ message: 'fixture lift failure' }))
+      expect(asked).toHaveLength(4)
+      expect(asked[0]).toMatchObject({ endpoint: 'probe/create', reason: 'elevation-required: probe/create' })
+      expect(asked[0]?.args).toEqual({ ...(call.mock.calls[0]?.[2] as { readonly args: object }).args })
+      expect(denials).toHaveLength(3)
+    } finally {
+      consoleError.mockRestore()
+      withdraw()
+    }
+    // Withdrawn: a refusal goes straight to the caller.
+    call.mockResolvedValueOnce(denied)
+    await expect(ctx.remote.probe.create('agent-1', { objective: 'ship' })).resolves.toMatchObject({ ok: false, error: { code: 'remote-access/denied' } })
+    expect(asked).toHaveLength(4)
+  })
+
+  // Removing the stream lift leaves a refused stream open, such as a reloaded terminal's attach, with no grant step.
+  it('asks the denial lift about a refused stream open and reopens it once with the uplink the refused open took', async () => {
+    const denied = (): RemoteError => new RemoteError('remote-access/denied', 'fixture: denied', { action: 'probe/attach', reason: 'elevation-required: probe/attach' } as never)
+    const opens: { topic: unknown; uplink: unknown[] }[] = []
+    const open: NonNullable<ConnectionHandle['rpc']['open']> = async function* (_route, _endpoint, payload, _signal, uplink) {
+      const record = { topic: (payload as { readonly args: { readonly topic: unknown } }).args.topic, uplink: [] as unknown[] }
+      opens.push(record)
+      const items = uplink?.[Symbol.asyncIterator]()
+      if (opens.filter(open => open.topic === record.topic).length === 1) {
+        // Each topic's first open is refused; the refused open has taken one item before the refusal arrives.
+        const first = await items?.next()
+        if (first?.done === false) record.uplink.push(first.value)
+        throw denied()
+      }
+      while (items !== undefined) {
+        const next = await items.next()
+        if (next.done === true) break
+        record.uplink.push(next.value)
+        yield `${String(record.topic)}:${String(next.value)}`
+      }
+    }
+    const call = vi.fn<ConnectionHandle['rpc']['call']>()
+    const { ctx, client } = await benchFiber(call, 'in-process', open)
+    const dispose = await ctx.remote.$mount({ package: '@fixture/attach', descriptors: [attachDescriptor()] })
+    const asked: { endpoint: string; reason: string | undefined; args: unknown }[] = []
+    const answers = [true, false]
+    const withdraw = ctx.remote.$liftDenials(({ endpoint, reason, args }) => {
+      asked.push({ endpoint, reason, args: { ...args } })
+      return Promise.resolve(answers.shift() ?? false)
+    })
+    try {
+      // Lifted: reopened once with the same arguments, and the item the refused open took is sent first.
+      const lifted = ctx.remote.probe.attach('alpha')
+      lifted.send('a')
+      lifted.send('b')
+      lifted.end()
+      await expect(drainStream(lifted)).resolves.toEqual(['alpha:a', 'alpha:b'])
+      expect(opens.slice(0, 2)).toEqual([{ topic: 'alpha', uplink: ['a'] }, { topic: 'alpha', uplink: ['a', 'b'] }])
+      expect(asked).toEqual([{ endpoint: 'probe/attach', reason: 'elevation-required: probe/attach', args: { topic: 'alpha' } }])
+      // Declined: the refusal is the caller's and nothing more opens.
+      const declined = ctx.remote.probe.attach('beta')
+      declined.send('c')
+      await expect(drainStream(declined)).rejects.toMatchObject({ code: 'remote-access/denied' })
+      expect(opens).toHaveLength(3)
+      expect(asked).toHaveLength(2)
+    } finally {
+      withdraw()
+      await dispose()
+      await client.dispose()
+    }
+  })
+
+  // Removing the overflow check after the lift reopens a stream whose uplink lost the items sent while the sheet showed.
+  it('hands the refusal to the reader when the uplink outgrew the replay while the lift decided', async () => {
+    const opens: unknown[] = []
+    const open: NonNullable<ConnectionHandle['rpc']['open']> = async function* (_route, _endpoint, payload) {
+      opens.push(payload)
+      yield* []
+      throw new RemoteError('remote-access/denied', 'fixture: denied', { action: 'probe/attach', reason: 'elevation-required: probe/attach' } as never)
+    }
+    const call = vi.fn<ConnectionHandle['rpc']['call']>()
+    const { ctx, client } = await benchFiber(call, 'in-process', open)
+    const dispose = await ctx.remote.$mount({ package: '@fixture/attach', descriptors: [attachDescriptor()] })
+    let stream: ReturnType<typeof ctx.remote.probe.attach> | undefined
+    const withdraw = ctx.remote.$liftDenials(async () => {
+      for (let index = 0; index <= LIFTED_UPLINK_LIMIT; index += 1) stream?.send(`item-${String(index)}`)
+      await new Promise(resolve => setTimeout(resolve, 0))
+      return true
+    })
+    try {
+      stream = ctx.remote.probe.attach('alpha')
+      await expect(drainStream(stream)).rejects.toMatchObject({ code: 'remote-access/denied' })
+      expect(opens).toHaveLength(1)
+    } finally {
+      withdraw()
+      await dispose()
+      await client.dispose()
+    }
+  })
+
+  // Removing the mount check after the lift runs a granted call on the Host for a plugin that is gone.
+  it('sends nothing more when the calling plugin is withdrawn while the lift is deciding', async () => {
+    const denied = { ok: false, error: { code: 'remote-access/denied', message: 'fixture: denied', details: { action: 'probe/create', reason: 'elevation-required: probe/create' } } } as const
+    const call = vi.fn<ConnectionHandle['rpc']['call']>().mockResolvedValue(denied)
+    const ctx = await bench(call)
+    const dispose = await ctx.remote.$mount({ package: '@fixture/probe', descriptors: [directDescriptor()] })
+    const decided = Promise.withResolvers<boolean>()
+    const asked = Promise.withResolvers<undefined>()
+    const withdraw = ctx.remote.$liftDenials(() => { asked.resolve(undefined); return decided.promise })
+    try {
+      const pending = ctx.remote.probe.create('agent-1', { objective: 'ship' })
+      await asked.promise
+      await dispose()
+      decided.resolve(true)
+      await expect(pending).resolves.toMatchObject({ ok: false })
+      expect(call).toHaveBeenCalledTimes(1)
+    } finally {
+      withdraw()
     }
   })
 

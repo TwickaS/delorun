@@ -1,7 +1,8 @@
 /**
  * The studio's routes to the external agents' account figures ({@link ACCOUNT_ROUTES}). Any approved device reads the
  * figures, and reading never starts a check. "Check now" starts the person's own program, so a reach device needs a
- * running unlock for it and a locked one is answered `403 ELEVATION_REQUIRED`; the computer always may. A request the
+ * Face ID grant for exactly that call (action `external-agents/refresh`; the PIN on a device with no passkey) and is
+ * otherwise answered `403 ELEVATION_REQUIRED` naming the action; the computer always may. A request the
  * home cannot place, or a foreign `Host` on the loopback listener, is answered `403 LOOPBACK_REQUIRED` before the
  * route reads anything.
  *
@@ -10,7 +11,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: the ctx.connection merge and its `connection/request` event.
 import type {} from '@deepseek-ai/dsh-client-connection'
-import { admitApprovedDevice, gateByUnlock, requireComputerOrDevice, routedPathname } from '@delorun/home-auth'
+import { admitApprovedDevice, gateByClass, requireComputerOrDevice, routedPathname } from '@delorun/home-auth'
 import { z } from 'zod'
 import type { AgentAccountsService } from './service.ts'
 import { ACCOUNT_PROVIDERS, ACCOUNT_ROUTES, MAX_ACCOUNT_REQUEST_BYTES } from './wire.ts'
@@ -66,10 +67,10 @@ export function registerAccountRoutes(ctx: Context, accounts: AgentAccountsServi
   })
   ctx.connection.fetch.register({
     path: ACCOUNT_ROUTES.refresh, methods: ['POST'], requestBody: 'buffered',
-    ...gateByUnlock(() => ctx.get('homeAuth'), async (request) => {
+    ...gateByClass(() => ctx.get('homeAuth'), async (request) => {
       const provider = await refreshProvider(request)
       if (provider === undefined) return json(400, { error: 'INVALID_REQUEST', message: `the request must be JSON naming one agent: ${ACCOUNT_PROVIDERS.join(' or ')}` })
       return json(200, await accounts.refresh(provider, 'check-now'))
-    }, { renews: true }),
+    }, { row: 'route:external-agents/src/accounts/routes.ts#ACCOUNT_ROUTES.refresh', action: 'external-agents/refresh', legacy: { renews: true } }),
   })
 }

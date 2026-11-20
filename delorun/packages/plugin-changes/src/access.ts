@@ -5,9 +5,9 @@
  *
  * - `free`: any paired device, with no prompt: the controls that only read, take back or tighten (turning protection on,
  *   cancelling or dismissing an update, the update check);
- * - `face`: one Face ID (or one PIN, as a one-action grant) for exactly this call, or, while the Face ID flag is off or on
- *   a device that holds no passkey, the unlock the person entered together with the Phone powers level (the
- *   {@link LEGACY_LEVELS} below, which go with Phone powers);
+ * - `face`: one Face ID (or one PIN, as a one-action grant) for exactly this call, or, on
+ *   a device that holds no passkey, one PIN grant for exactly this call, never an unlock window; while the home
+ *   keeps no grant store, they stay at the computer;
  * - `computer`: never from a device: dismissing the notice of a change a device made.
  *
  * The update controls (`@delorun/plugin-update`) sit in the same table. The routes decide from {@link mayUse} before they
@@ -16,7 +16,7 @@
  *
  * @module @delorun/plugin-changes/access
  */
-import type { AccessView, ActorView, ChangesControl, MayView, PhonePowersView } from './wire.ts'
+import type { AccessView, ActorView, ChangesControl, MayView } from './wire.ts'
 
 /** How far from the computer a control reaches. */
 export type ControlLevel = 'free' | 'face' | 'computer'
@@ -45,53 +45,54 @@ export const CONTROL_LEVELS: Readonly<Record<ChangesControl, ControlLevel>> = {
 }
 
 /**
- * What a `face` control asked of a device before Face ID: an unlock at either Phone powers level (`unlocked`), or an unlock
- * only while Phone powers is Full (`phone-powers`). Read only while the Face ID flag is off and for a device with no
- * passkey; removed with Phone powers.
+ * What every `face` control asks of a device: a grant for exactly the call, from Face ID or, on a device with no passkey, from its PIN, and nothing
+ * while the home keeps no grant store. No unlock window, code or approval grace opens any of them (A483).
  */
-export const LEGACY_LEVELS: Readonly<Partial<Record<ChangesControl, 'unlocked' | 'phone-powers'>>> = {
-  'plugin-undo': 'unlocked',
-  'plugin-discard': 'unlocked',
-  'harness-discard': 'unlocked',
-  'stop': 'unlocked',
-  'plugin-apply': 'phone-powers',
-  'plugin-other': 'phone-powers',
-  'harness-apply': 'phone-powers',
-  'harness-undo': 'phone-powers',
-  'protection-off': 'phone-powers',
-  'make-copy': 'phone-powers',
-  'restart': 'phone-powers',
-  'update-begin': 'phone-powers',
-  'update-rollback': 'phone-powers',
+export const LEGACY_LEVELS: Readonly<Record<Exclude<ChangesControl, 'protection-on' | 'notice-seen' | 'update-check' | 'update-cancel' | 'update-dismiss' | 'update-continue'>, 'grant'>> = {
+  'plugin-undo': 'grant',
+  'plugin-discard': 'grant',
+  'harness-discard': 'grant',
+  'stop': 'grant',
+  'plugin-apply': 'grant',
+  'plugin-other': 'grant',
+  'harness-apply': 'grant',
+  'harness-undo': 'grant',
+  'protection-off': 'grant',
+  'make-copy': 'grant',
+  'restart': 'grant',
+  'update-begin': 'grant',
+  'update-rollback': 'grant',
+}
+
+/** What the home asks of a device for Face ID: whether the home keeps a grant store, and whether the device holds a passkey. */
+export interface FaceState {
+  readonly enabled: boolean
+  readonly hasPasskey: boolean
 }
 
 /**
  * Whether a request may use one control now.
  * @param actor - where the request came from.
- * @param powers - the Phone powers level in force; read only for a `face` control on the legacy path.
  * @param control - the control.
- * @param faceReady - whether the home asks this device for Face ID: the flag is on and the device holds a passkey.
- * @returns ok, or what the request needs: the computer, Face ID for the call, or an unlock the person enters on the device.
+ * @param face - whether the home keeps a grant store and whether the device holds a passkey.
+ * @returns ok, or what the request needs: the computer, Face ID or a PIN for the call, or an unlock the person enters on the device.
  */
-export function mayUse(actor: ActorView, powers: PhonePowersView['level'], control: ChangesControl, faceReady = false): MayView {
+export function mayUse(actor: ActorView, control: ChangesControl, face: FaceState = { enabled: false, hasPasskey: false }): MayView {
   if (actor === 'computer') return { ok: true }
   const level = CONTROL_LEVELS[control]
   if (level === 'free') return { ok: true }
   if (level === 'computer') return { ok: false, needs: 'computer' }
-  // Until Phone powers is removed, a control of the Full set stays at the computer under Careful for every device, with or without a passkey or a grant.
-  if (LEGACY_LEVELS[control] === 'phone-powers' && powers !== 'full') return { ok: false, needs: 'computer' }
-  if (faceReady) return { ok: false, needs: 'face' }
-  return actor === 'device-unlocked' ? { ok: true } : { ok: false, needs: 'unlock' }
+  // A face control takes a grant from every device, a PIN grant where it holds no passkey; with no grant store no grant exists, so it stays at the computer.
+  return face.enabled ? { ok: false, needs: 'face' } : { ok: false, needs: 'computer' }
 }
 
 /**
  * Every control's decision for one request, as `state` answers it.
  * @param actor - where the request came from.
- * @param powers - the Phone powers level in force and whether the person chose it.
- * @param faceReady - whether the home asks this device for Face ID.
+ * @param face - whether the home keeps a grant store and whether the device holds a passkey.
  * @returns the view.
  */
-export function accessView(actor: ActorView, powers: PhonePowersView, faceReady = false): AccessView {
-  const may = Object.fromEntries((Object.keys(CONTROL_LEVELS) as ChangesControl[]).map(control => [control, mayUse(actor, powers.level, control, faceReady)]))
-  return { actor, phonePowers: powers, may: may as Record<ChangesControl, MayView> }
+export function accessView(actor: ActorView, face: FaceState = { enabled: false, hasPasskey: false }): AccessView {
+  const may = Object.fromEntries((Object.keys(CONTROL_LEVELS) as ChangesControl[]).map(control => [control, mayUse(actor, control, face)]))
+  return { actor, may: may as Record<ChangesControl, MayView> }
 }

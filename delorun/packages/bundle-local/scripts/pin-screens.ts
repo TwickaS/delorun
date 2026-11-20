@@ -1,26 +1,22 @@
 /**
- * Screenshots of the PIN lock screen and the PIN mode settings section, in the real studio, for design review. The
- * studio runs on this computer from a scratch home. The settings section is the studio's own, with `GET /auth/pin/mode`
- * answered by a Playwright stub per scenario. A page on the computer never shows the lock screen, so each lock screen
- * is the real component, built with Vite and mounted over the studio page with a fixed view: the studio's stylesheet,
- * theme, fonts and icons apply to it.
+ * Screenshots of the PIN mode settings section, in the real studio, for design review. The studio runs on this
+ * computer from a scratch home. The settings section is the studio's own, with `GET /auth/pin/mode` answered by a
+ * Playwright stub per scenario.
  *
  *   export DELORUN_HOME=<scratch home>   # an empty directory with mode 0700
  *   delorun setup --yes && delorun start --foreground
  *   node_modules/.bin/tsx delorun/packages/bundle-local/scripts/pin-screens.ts --out <directory>
  *
  * It writes `<scenario>-<width>-<scheme>.png` for widths 390 and 1280 in light and dark, with the page's reduced-motion
- * preference on so no screenshot catches the shake. Playwright comes from `@delorun/benchmarks`.
+ * preference on. Playwright comes from `@delorun/benchmarks`.
  * @module @delorun/bundle-local/scripts/pin-screens
  */
 import { execFileSync } from 'node:child_process'
-import { mkdir, mkdtemp, readFile, readdir } from 'node:fs/promises'
+import { mkdir } from 'node:fs/promises'
 import { createRequire } from 'node:module'
-import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
-import { build } from 'vite'
 import { PIN_COMPUTER_ROUTES } from '../src/client/pin-api.ts'
 
 /** The slice of Playwright's API this script uses. */
@@ -28,9 +24,6 @@ interface Locator { click(): Promise<void>; waitFor(options?: { timeout?: number
 interface Page {
   route(url: string, handler: (route: { fulfill(response: { status: number; contentType: string; body: string }): Promise<void> }) => Promise<void>): Promise<void>
   goto(url: string): Promise<unknown>
-  evaluate<A>(fn: (arg: A) => unknown, arg: A): Promise<unknown>
-  addScriptTag(options: { content: string }): Promise<unknown>
-  addStyleTag(options: { content: string }): Promise<unknown>
   emulateMedia(options: { colorScheme: 'light' | 'dark'; reducedMotion: 'reduce' }): Promise<void>
   waitForTimeout(ms: number): Promise<void>
   getByRole(role: string, options?: { name?: string | RegExp }): Locator
@@ -46,8 +39,6 @@ if (values.out === undefined) throw new Error('usage: DELORUN_HOME=<scratch home
 const out = values.out
 await mkdir(out, { recursive: true })
 const repository = fileURLToPath(new URL('../../../../', import.meta.url))
-const here = fileURLToPath(new URL('.', import.meta.url))
-const clientRequire = createRequire(join(repository, 'packages/client/ui-primitives/package.json'))
 
 /** What the home answers `GET /auth/pin/mode` per settings scenario. */
 const MODE = { enabled: true, kind: 'pin', idleMinutes: 15, lockWhenHidden: true, paused: false }
@@ -60,37 +51,6 @@ const SETTINGS: Record<string, { body: object; steps?: (page: Page) => Promise<v
   'settings-confirm-off': { body: MODE, steps: async page => { await page.getByRole('button', { name: 'Turn off PIN mode' }).click() } },
 }
 
-const view = (outcome?: object, secret = 'pin', paused = false) => ({ phase: 'locked', secret, busy: false, outcome, paused })
-/** The lock screen's views per scenario; `typed` is how many keys the script presses first. */
-const LOCKS: Record<string, { view: object; typed?: number }> = {
-  'lock-ask': { view: view() },
-  'lock-typing': { view: view(), typed: 4 },
-  'lock-passcode': { view: view(undefined, 'passcode') },
-  'lock-wrong': { view: view({ kind: 'wrong', triesLeft: 3 }), typed: 6 },
-  'lock-last-try': { view: view({ kind: 'wrong', triesLeft: 1 }), typed: 6 },
-  'lock-removed': { view: view({ kind: 'removed' }) },
-  'lock-paused': { view: view({ kind: 'paused' }, 'pin', true) },
-  'lock-unreachable': { view: view({ kind: 'unreachable' }) },
-  'lock-address': { view: view({ kind: 'address' }) },
-  'lock-failed': { view: view({ kind: 'failed' }) },
-}
-
-/** Build the preview bundle with Vite.
- * @returns its script and stylesheet text. */
-async function buildPreview(): Promise<{ script: string; style: string }> {
-  const dist = await mkdtemp(join(tmpdir(), 'pin-lock-preview-'))
-  await build({
-    // The bundle imports React through the client packages' copy, which also holds react-dom.
-    resolve: { alias: { 'react-dom': dirname(clientRequire.resolve('react-dom/package.json')), react: dirname(clientRequire.resolve('react/package.json')) } },
-    root: here, logLevel: 'error', configFile: false, define: { 'process.env.NODE_ENV': '"production"' },
-    build: { outDir: dist, emptyOutDir: true, cssCodeSplit: false, lib: { entry: join(here, 'pin-lock-preview.tsx'), formats: ['iife'], name: 'PinLockPreview', fileName: 'preview' } },
-  })
-  const files = await readdir(dist)
-  const read = async (suffix: string): Promise<string> => readFile(join(dist, files.find(file => file.endsWith(suffix)) ?? ''), 'utf8')
-  return { script: await read('.js'), style: await read('.css') }
-}
-
-const preview = await buildPreview()
 const playwright = createRequire(new URL('../../../apps/benchmarks/package.json', import.meta.url))('playwright') as Playwright
 const browser = await playwright.chromium.launch()
 try {
@@ -126,23 +86,6 @@ try {
         await page.waitForTimeout(800)
         await scenario.steps?.(page)
         await page.waitForTimeout(400)
-        await page.screenshot({ path: join(out, `${name}-${String(width)}-${scheme}.png`) })
-        await page.close()
-      }
-      for (const [name, scenario] of Object.entries(LOCKS)) {
-        const page = await context.newPage()
-        await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' })
-        await page.goto(`${link.origin}/`)
-        await page.waitForTimeout(2500)
-        await page.addStyleTag({ content: preview.style })
-        await page.addScriptTag({ content: preview.script })
-        await page.evaluate((shown) => {
-          const mount: unknown = Reflect.get(globalThis, 'mountPinLock')
-          if (typeof mount === 'function') mount(shown)
-        }, scenario.view)
-        await page.waitForTimeout(300)
-        for (let key = 0; key < (scenario.typed ?? 0); key++) await page.getByRole('button', { name: String(2 + key) }).first().click()
-        await page.waitForTimeout(300)
         await page.screenshot({ path: join(out, `${name}-${String(width)}-${scheme}.png`) })
         await page.close()
       }

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { EXIT } from '../src/exit.ts'
-import { COMMON_EXIT_CODES, HELPED_COMMANDS, asksForHelp, commandHelp } from '../src/help.ts'
+import { COMMON_EXIT_CODES, HELPED_COMMANDS, PIN_OPTIONS_NO_EFFECT, asksForHelp, commandHelp } from '../src/help.ts'
 import { COMMANDS, main } from '../src/main.ts'
 
 let home: string
@@ -64,6 +64,7 @@ describe('delorun <command> --help', () => {
   it('documents devices pin and update --from', () => {
     expect(commandHelp('devices')).toContain('pin set|options|off|resume|status')
     expect(commandHelp('devices')).toContain('pin resume')
+    expect(commandHelp('devices')).toContain(PIN_OPTIONS_NO_EFFECT)
     expect(commandHelp('update')).toContain('--from <folder|https-address>')
   })
 

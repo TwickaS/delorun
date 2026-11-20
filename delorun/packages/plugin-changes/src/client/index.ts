@@ -2,7 +2,7 @@
  * The studio half of `@delorun/plugin-changes`: the Changes section in Settings, which reviews, applies, discards and
  * undoes changes to plugins and to Delorun itself, applies the agent's plugin requests, turns protection on and off, and
  * opens and ends a work session through the Host's Changes routes; the work-session badge at the sidebar's foot; and the
- * outcome toast. On a paired device each control follows the state's `access`: one the Phone powers level keeps at the
+ * outcome toast. On a paired device each control follows the state's `access`: one that stays at the
  * computer is disabled, and one that needs an unlock opens the studio's unlock dialog when the route asks for it.
  * @module @delorun/plugin-changes/client
  */
@@ -78,13 +78,8 @@ export function apply(ctx: Context): void {
   ctx.effect(() => ctx.locale.register(NS, { en, zh }), 'delorun-changes: dictionaries')
   const t = ctx.locale.bind(NS)
   const toast = createChangesToastSource()
-  // A refusal until the device is unlocked opens the studio's unlock dialog the way a refused Remote call does.
   const changes = new ChangesController({
     report: toast.report,
-    unlockNeeded: (control) => {
-      const endpoint = `delorunChanges/${control}`
-      ctx.emit('remote/call-denied', { endpoint, reason: `elevation-required: ${endpoint}` })
-    },
     // Read at the call, so the Face ID service may load after this plugin.
     faceGrant: () => ctx.get('delorunFaceGrant')?.grant,
   })

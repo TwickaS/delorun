@@ -10,7 +10,7 @@ description: "在此人自己的 tailnet 上远程访问的设计：只在 home 
 
 ## 摘要
 
-reach 让一个人通过自己的 Tailscale tailnet，从自己的手机或笔记本电脑打开自己的 studio，路径上没有任何 Delorun 的服务。新设备只能在 home 所在的电脑上、在此人于那里打开的一个简短的批准窗口期间获得批准。已批准的设备用它的设备密钥登录。远程会话可以观看、回复、开始 chat、批准普通提示并停止运行；它不能授予完全访问、批准或移除设备，也不能更改 reach 或保护。这些要等到此人在电脑旁才行，并且是 home 拒绝它们，而不是远程页面。准入规则见[约定 C4](../contracts/c04-admission.zh.md)，设备批准见[约定 C5](../contracts/c05-device-approval.zh.md)，reach 提供方见[约定 C7](../contracts/c07-reach-providers.zh.md)，身份因子见[约定 C14](../contracts/c14-oidc-passkeys.zh.md)。
+Reach lets a person open their studio from their own phone or laptop over their own Tailscale tailnet, with no Delorun service in the path. A new device is approved only at the home's computer, during a short approval window the person opens there. An approved device signs in with its device key. A remote session can watch, reply, start chats, approve ordinary prompts and stop a run. Each sensitive action, granting full access among them, takes Face ID or that device's PIN, once per action; removing another device takes Face ID from a device that holds a passkey, never the PIN. Approving a device and changing reach wait until the person is at the computer. The home enforces both, not the remote page. The admission rules are [contract C4](../contracts/c04-admission.zh.md), device approval [contract C5](../contracts/c05-device-approval.zh.md), the reach providers [contract C7](../contracts/c07-reach-providers.zh.md) and the identity factors [contract C14](../contracts/c14-oidc-passkeys.zh.md).
 
 ## 目录
 
@@ -94,6 +94,17 @@ reach 让一个人通过自己的 Tailscale tailnet，从自己的手机或笔�
 ### 命令
 
 13. `delorun reach status | on tailscale | off` 和 `delorun devices list | approve | elevate | remove | code`；`elevate` 回答设备解锁敏感操作的请求（见 [C14](../contracts/c14-oidc-passkeys.zh.md#elevation)）。`delorun reach on tailscale` 检查 `tailscale` 已安装并在运行、tailnet 已开启 HTTPS 证书，以及此人可以运行 `tailscale serve`；对于最后一项，它会打印此人自己要运行的那一条命令，Delorun 从不运行 `sudo`。没有所有者的 home 通过 home 套接字以本地人的身份被认领。
+
+**The grant model.** A paired device confirms one sensitive action at a time instead of holding an unlock for minutes. The rules are in [C14](../contracts/c14-oidc-passkeys.zh.md#face-id-unlock) and [C4](../contracts/c04-admission.zh.md); this paragraph and the list give the design.
+
+- **One table decides.** `AUTH_CLASSES` puts every Remote method, plugin Fetch route, prompt answer and `/auth` route in one of four classes: `free` (any approved device), `face` (one confirmation for exactly this call), `computer` (only the person at the computer) and `ticket` (a route that needs the enrolment ticket the computer's approval minted). A spec fails on an unlisted action or route, a duplicate row and a row in two classes, so a new route cannot ship without a class.
+- **The home keeps the grants.** A grant is a server-side record keyed by device, listener, action and a hash of the call. The browser never sends a token that carries authority: it asks the home for a challenge, confirms with its passkey (or its PIN), and receives a grant id.
+- **The home hashes the body.** A Fetch route of class `face` reads the request body itself, up to 1 MiB, hashes method, path, query and body (JSON in canonical form) and looks up the grant under that hash. The client's idea of the hash is never checked, so a grant for one request cannot cover another. A larger body is refused.
+- **`Delorun-Grant` carries only the id.** The header names the grant; the home checks it equals the grant it found, uses the grant up and removes the header before the route runs, as it does `Delorun-Unlock`. Grants live 30 seconds and are used once, only after the whole decision allows.
+- **Holds keep a terminal or a picker open without a grant per call.** A grant that opens a terminal or the folder picker also opens a hold bound to that terminal's or picker's id, to the device and to the page's connection, with a 5-minute idle cap and a 60-minute total cap. A hold admits follow-up calls on that id; it ends with the device's session, with the device's removal and when the connection closes. Another terminal needs a new grant.
+- **A device with a passkey has no other way in.** Its PIN window, a code typed at the computer and the approval grace admit nothing in class `face`; the PIN still mints a one-action grant. A device with no passkey keeps what an unlock covers, and every other `face` action needs a one-action grant from its PIN, so no running unlock opens a terminal or a Changes apply.
+- **Answers are keyed too.** A prompt answer that grants more authority is admitted by a grant for the agent, call id, grants marker and answer value.
+- **Computer-only stays computer-only.** Approving or removing a device from a device that holds no passkey, the PIN, remote access and the settings document are class `computer`. Removing another device needs a grant from a device that holds a passkey.
 
 <a id="what-this-does-not-protect-against"></a>
 

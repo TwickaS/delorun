@@ -42,7 +42,7 @@ describe('the desktop card', () => {
     expect(screen.getByRole('button', { name: /4 left to install/ })).toBeTruthy()
     expect(screen.getByRole('progressbar', { name: 'alpha' }).getAttribute('aria-valuenow')).toBe('40')
     expect(screen.getByText('Waiting · next')).toBeTruthy()
-    expect(screen.getByText('Waiting for unlock')).toBeTruthy()
+    expect(screen.getByText('Not confirmed. Try again to confirm with Face ID or your PIN')).toBeTruthy()
     expect(screen.getByText('Checking')).toBeTruthy()
     expect(screen.getByText('Added')).toBeTruthy()
   })
@@ -176,9 +176,9 @@ describe('the phone row in the setup guide', () => {
 })
 
 describe('the header words and the queue wording', () => {
-  it('says "Waiting for unlock" when every unfinished item waits for the unlock', () => {
+  it('says "Not confirmed" when every unfinished item waits for a confirmation', () => {
     render(<Card source={createFakeDownloadsSource([item('a', { state: 'waiting-for-unlock' }), item('b', { state: 'waiting-for-unlock' }), item('c', { state: 'ready' })])} />)
-    expect(screen.getByRole('button', { name: /Waiting for unlock/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Not confirmed/ })).toBeTruthy()
     cleanup()
     render(<Card source={createFakeDownloadsSource([item('a', { state: 'waiting-for-unlock' }), item('b', { state: 'downloading' })])} />)
     expect(screen.getByRole('button', { name: /2 left to install/ })).toBeTruthy()

@@ -57,7 +57,7 @@ Below that, two bars show how much of the agent's plan limits you have used, for
 
 Delorun reads these figures from the agent's own program. It does not read them just because a card or the pill is on screen. It checks when you add an agent, when you finish signing in, and when you press Check now. Figures are labelled "As of" the time they were read, and "Last seen" once they are old. If a window's reset time has passed, the bar says "Reset at …, not checked since" until you check again. Press Check now to refresh them.
 
-Checking starts the agent's program on your computer, so a phone or another computer must be unlocked first. A locked device sees "Unlock to check" on the button.
+Checking starts the agent's program on your computer, so a phone or another computer asks for Face ID or your PIN each time you press **Check now**. If you cancel, it says "Not confirmed" and nothing is checked.
 
 To see the same figures at a terminal, run `delorun agents status`. It reads what Delorun has stored and starts nothing. Add `--refresh` to check now, at the computer that runs Delorun.
 

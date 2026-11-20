@@ -7,7 +7,6 @@
  *
  * @module @delorun/cli/setup/current
  */
-import { PhonePowersReader } from '@delorun/home-auth'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { SETUP_DEFAULT_PORT, SETUP_DEFAULTS, type ReachAnswer, type SetupAnswers } from '@delorun/contract-setup-answers'
@@ -52,19 +51,15 @@ function livePort(directory: string, recorded: number | null): number | null {
 /**
  * The answers a profile holds now.
  * @param directory - the CLI profile's directory.
- * @param home - the Delorun home, whose Phone powers record a re-run starts on.
  * @returns the answers, with the recorded section statuses.
  * @throws {CliError} `EXIT.failed` when the profile's patch is not a YAML patch list.
  */
-export function currentAnswers(directory: string, home: string): SetupAnswers {
+export function currentAnswers(directory: string): SetupAnswers {
   const recorded = recordedAnswers(directory)
   const patch = join(directory, 'cordis.patch.yml')
   const reach: ReachAnswer = readReachRowAt(patch).enabled ? { option: 'tailscale-private', identityFactor: 'tailnet-membership' } : { option: 'none', identityFactor: null }
-  const powers = new PhonePowersReader(join(home, 'secrets', 'home-auth')).current()
   return {
     ...recorded,
-    // A level the person chose is what a re-run starts on; a level Delorun recorded for them is not an answer.
-    phonePowers: powers.chosen ? powers.level : null,
     updateCheck: readUpdateCheckRow(patch),
     prompts: readPromptsRows(patch) ?? recorded.prompts,
     modelProvider: readProviderAnswer(patch, recorded.modelProvider),

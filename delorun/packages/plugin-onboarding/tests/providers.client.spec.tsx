@@ -26,14 +26,14 @@ const flush = async (ms = 0) => { await act(async () => { await vi.advanceTimers
 const click = async (element: HTMLElement) => { await act(async () => { fireEvent.click(element) }) }
 const type = async (field: HTMLElement, value: string) => { await act(async () => { fireEvent.change(field, { target: { value } }) }) }
 
-async function mount(change: Parameters<typeof providersFake>[0] = {}, keys: KeyTestAnswer = KEYS) {
+async function mount(change: Parameters<typeof providersFake>[0] = {}, keys: KeyTestAnswer = KEYS, remote = false, pinOn = false) {
   const providers = providersFake(change)
   const next = vi.fn()
   const back = vi.fn()
   const guide = createGuide(hostFake({ keys }).host)
   render(
     <StepFrame title="Models" headingRef={null} count="Step 2 of 7" place={2} total={7} steps={['Welcome', 'Models']} stepsLabel="Steps" stepKey="models">
-      <ProvidersStep services={stepServices({ providers: providers.face })} guide={guide} next={next} back={back} />
+      <ProvidersStep services={stepServices({ providers: providers.face })} guide={guide} next={next} back={back} remote={remote} pinOn={pinOn} />
     </StepFrame>,
   )
   await flush()
@@ -96,6 +96,28 @@ describe('the providers landing', () => {
     const { next } = await mount(change)
     expect(screen.getByText(text)).toBeTruthy()
     await click(screen.getByRole('button', { name: label }))
+    expect(next).toHaveBeenCalledOnce()
+  })
+})
+
+// Offering Try again on a phone loops: the home refuses a device's key test once a PIN or any passkey exists (F37 P3-1).
+describe('the providers step on a phone', () => {
+  it('with a PIN set, says the keys are tested at the computer, offers no Try again and keeps Continue', async () => {
+    const { next } = await mount({ directory: undefined }, KEYS, true, true)
+    expect(screen.getByText(en['providers.atComputer'])).toBeTruthy()
+    expect(screen.queryByText(en['providers.unread'])).toBeNull()
+    expect(screen.queryByRole('button', { name: en['key.again'] })).toBeNull()
+    await click(screen.getByRole('button', { name: en.continue }))
+    expect(next).toHaveBeenCalledOnce()
+  })
+
+  // Without a PIN the phone's key test may still be admitted (no passkey yet), so a transient failure keeps its retry.
+  it('without a PIN, keeps Try again with words that say when keys are tested only at the computer', async () => {
+    const { next } = await mount({ directory: undefined }, KEYS, true, false)
+    expect(screen.getByText(en['providers.atComputerMaybe'])).toBeTruthy()
+    expect(screen.queryByText(en['providers.atComputer'])).toBeNull()
+    expect(screen.getByRole('button', { name: en['key.again'] })).toBeTruthy()
+    await click(screen.getByRole('button', { name: en.continue }))
     expect(next).toHaveBeenCalledOnce()
   })
 })

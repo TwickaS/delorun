@@ -70,7 +70,7 @@ function AgentCard({ agent, services, guide }: { readonly agent: typeof AGENT_BU
           check={async (provider) => {
             const result = await runCheck(services.pin.fetch, t, provider)
             if (result.kind === 'done') setChecked({ record: result.record, now: result.now })
-            return result.kind === 'unlock' ? 'unlock' : result.note
+            return result.note
           }} />
       )}
       <AgentAdvanced agent={agent.agent} title={title} services={services} added={added} />

@@ -38,6 +38,7 @@ import { serveChannel } from './local-channel.ts'
 import { logProblems } from '../src/installed-smoke/home-log.ts'
 import { channelSource, offeredPacks, type ChannelSource } from '../src/installed-smoke/offered-packs.ts'
 import { previousRelease } from '../src/installed-smoke/previous-release.ts'
+import { PREVIOUS_RELEASE_ANSWERS_SCHEMA_VERSION, SMOKE_ANSWERS_SCHEMA_VERSION, smokeAnswers } from '../src/installed-smoke/answers.ts'
 import { writeSnapshot } from '../src/installed-smoke/snapshot.ts'
 import { signIn, type StudioClient } from '../src/installed-smoke/studio.ts'
 import type { QueueItem} from '../src/installed-smoke/wire.ts';
@@ -398,7 +399,7 @@ export async function runSmoke(request: SmokeRequest, say: (line: string) => voi
       launcher = join(out, `delorun-${request.version}.tgz`)
     }
     const answers = join(scratch, 'setup-answers.json')
-    writeFileSync(answers, `${JSON.stringify({ schemaVersion: 4, useCase: 'local', modelProvider: null, prompts: 'safer', background: true, profile: { name: null, port: request.studioPort }, reach: { option: 'none', identityFactor: null }, importStockHome: false, protectChanges: false, updateCheck: false })}\n`)
+    writeFileSync(answers, smokeAnswers(SMOKE_ANSWERS_SCHEMA_VERSION, request.studioPort))
     await required(['setup', '--config', answers], 900_000)
     await start('the first start')
     done(` (${request.version} running, studio on port ${String(request.studioPort)})`)
@@ -472,7 +473,10 @@ export async function runSmoke(request: SmokeRequest, say: (line: string) => voi
         environment = smokeEnvironment(upgradePaths)
         homeLog = join(upgradePaths.delorun, 'logs', `home-${PROFILE}`, 'home.log')
         expected = previous
-        await required(['setup', '--config', answers], 900_000)
+        // The previous release may refuse this release's answers version, so it gets its own document.
+        const previousAnswers = join(scratch, 'setup-answers-previous.json')
+        writeFileSync(previousAnswers, smokeAnswers(PREVIOUS_RELEASE_ANSWERS_SCHEMA_VERSION, request.studioPort))
+        await required(['setup', '--config', previousAnswers], 900_000)
         await start(`the first start of ${previous}`)
         let old = await studio()
         await packsView(old, 'enqueue', { names: agentPacks })

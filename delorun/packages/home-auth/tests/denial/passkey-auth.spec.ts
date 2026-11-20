@@ -30,14 +30,12 @@ let cleared: string[]
 let store: PasskeyStore
 let grants: GrantStore
 let auth: PasskeyAuth
-let flag: boolean
 
 beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), 'passkey-auth-'))
   clock = { at: 10_000_000 }
   misses = []
   cleared = []
-  flag = true
   let counter = 0
   const random = (size: number): Uint8Array => Uint8Array.from({ length: size }, () => (counter++ % 251) + 1)
   store = new PasskeyStore({ file: join(directory, 'passkeys.json') })
@@ -48,7 +46,7 @@ beforeEach(async () => {
     cleared: (deviceId) => { cleared.push(deviceId); return Promise.resolve() },
     verify: (_who, secret) => (secret === '1234' ? Promise.resolve() : Promise.reject(new HomeAuthError('PIN_INVALID', 'wrong'))),
   }
-  auth = new PasskeyAuth({ store, grants, pin, now: () => clock.at, random, sameSession: (a, b) => a === b, enabled: () => flag, log: () => {} })
+  auth = new PasskeyAuth({ store, grants, pin, now: () => clock.at, random, sameSession: (a, b) => a === b, log: () => {} })
 })
 afterEach(async () => { await rm(directory, { recursive: true, force: true }) })
 
@@ -89,15 +87,6 @@ describe('enrolment', () => {
   it('is refused to another device', async () => {
     auth.mintTicket(PHONE, LISTENER)
     expect(await code(() => auth.registrationOptions(asker(OTHER), ADDRESS, 'Phone'))).toBe('ELEVATION_REQUIRED')
-  })
-
-  // Removing the flag check leaves enrolment open while the preview is off.
-  it('answers PASSKEY_UNAVAILABLE while the flag is off and mints no ticket', async () => {
-    flag = false
-    auth.mintTicket(PHONE, LISTENER)
-    expect(await code(() => auth.registrationOptions(asker(PHONE), ADDRESS, 'Phone'))).toBe('PASSKEY_UNAVAILABLE')
-    flag = true
-    expect(await code(() => auth.registrationOptions(asker(PHONE), ADDRESS, 'Phone'))).toBe('ELEVATION_REQUIRED')
   })
 
   // The creation options ask for what the plan fixes.
@@ -271,13 +260,6 @@ describe('assertion', () => {
     await enrol()
     expect(await code(() => auth.assertionOptions(asker(PHONE), 'https://renamed.example.ts.net', ACTIONS))).toBe('PASSKEY_UNAVAILABLE')
   })
-
-  // The flag gates assertion as well.
-  it('answers PASSKEY_UNAVAILABLE while the flag is off', async () => {
-    await enrol()
-    flag = false
-    expect(await code(() => options())).toBe('PASSKEY_UNAVAILABLE')
-  })
 })
 
 describe('a PIN on a device', () => {
@@ -289,14 +271,14 @@ describe('a PIN on a device', () => {
     expect(grants.has({ deviceId: PHONE, listener: LISTENER }, 'pluginManager/installBundle', ACTIONS.entries[0].hash)).toBe(false)
   })
 
-  // Removing the passkey check in pinGrant lets a PIN seen on a stolen phone mint the grant that removes another device (F16).
-  it('mints no device-removal grant for a device that holds no passkey, and one for a device that does', async () => {
+  // Removing the refusal in pinGrant lets a PIN seen on a stolen phone mint the grant that removes another device, passkey or not (F16, F20).
+  it('mints no device-removal grant by PIN, for a device with a passkey or without', async () => {
     const remove = { kind: 'actions', entries: [{ action: DEVICE_REMOVE_ACTION, hash: hashArgs({ v: 1, deviceId: 'x' }) ?? '' }] } as const
     expect(await code(() => auth.pinGrant(asker(OTHER), '1234', remove))).toBe('LOOPBACK_REQUIRED')
     expect(grants.has({ deviceId: OTHER, listener: LISTENER }, DEVICE_REMOVE_ACTION, remove.entries[0].hash)).toBe(false)
     await enrol(PHONE)
-    await auth.pinGrant(asker(PHONE), '1234', remove)
-    expect(grants.has({ deviceId: PHONE, listener: LISTENER }, DEVICE_REMOVE_ACTION, remove.entries[0].hash)).toBe(true)
+    expect(await code(() => auth.pinGrant(asker(PHONE), '1234', remove))).toBe('LOOPBACK_REQUIRED')
+    expect(grants.has({ deviceId: PHONE, listener: LISTENER }, DEVICE_REMOVE_ACTION, remove.entries[0].hash)).toBe(false)
   })
 
   // Face ID for "Allow once" is not a persistent allow.

@@ -21,7 +21,7 @@ describe('the report details route', () => {
     const route = routes[0] as { admitPeer: (request: Request, peer: object) => boolean, fetch: (request: Request) => Promise<Response> }
     const request = () => new Request('http://localhost/api/delorunReport.details')
     let holdsUnlock = false
-    ctx.provide('homeAuth', { elevationOf: () => (holdsUnlock ? { id: 'e' } : undefined), pageUnlockOf: () => undefined } as never)
+    ctx.provide('homeAuth', { faceGrants: () => undefined, deviceHasPasskey: () => false, elevationOf: () => (holdsUnlock ? { id: 'e' } : undefined), pageUnlockOf: () => undefined } as never)
     const asDevice = async (unlocked: boolean) => {
       holdsUnlock = unlocked
       const call = request()
@@ -30,7 +30,10 @@ describe('the report details route', () => {
     }
     // Pins the unlock gate: a locked device is admitted to the route and refused by it, before the log is read.
     const locked = await asDevice(false)
-    expect([locked.status, await locked.json()]).toEqual([403, expect.objectContaining({ error: 'ELEVATION_REQUIRED' })])
+    const refusal: unknown = await locked.json()
+    expect([locked.status, refusal]).toEqual([403, expect.objectContaining({ error: 'ELEVATION_REQUIRED' })])
+    // The device is told to confirm the call, never to unlock with a code from the computer (A483).
+    expect(refusal).toEqual(expect.objectContaining({ message: expect.stringMatching(/^Confirm this with Face ID or your PIN when asked/) }))
     expect(route.admitPeer(request(), { principal: { kind: 'sdk' } })).toBe(false)
     expect((await asDevice(true)).status).toBe(200)
     await ctx.fiber.dispose()

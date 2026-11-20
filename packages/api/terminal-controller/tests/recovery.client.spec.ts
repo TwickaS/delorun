@@ -778,6 +778,53 @@ it('waits for the window hold acknowledgement before restoring an output attachm
   expect(h.remote.create).not.toHaveBeenCalled()
 })
 
+// On a reach device the Host refuses a terminal's window hold until the person confirms that terminal; asking for the
+// holds of saved tabs nobody looks at would raise a confirmation for each (Face ID review r2, P2-1).
+it('keeps refused window holds of saved tabs quiet, and lets the tab on screen attach, which opens its hold', async () => {
+  storage()
+  const ids = ['t-a', 't-b', 't-c'] as WebTerminalId[]
+  for (const [index, id] of ids.entries()) new TerminalBindings().set(sessionId, `tab-${String(index)}`, id)
+  const h = fixture()
+  vi.mocked(h.remote.list).mockResolvedValue(success(ids.map(id => ({ ...info, id }))))
+  const held = new Set<string>()
+  const denied = (id: string): RemoteError => new RemoteError('remote-access/denied' as never, `remote access: terminal/retain ${id}: access denied`, { action: 'terminal/retain', reason: 'elevation-required: terminal/retain' } as never)
+  vi.mocked(h.remote.retain).mockImplementation((session, id, signal) => {
+    if (!held.has(id)) throw denied(id)
+    return streamMethod<TerminalRemote['retain']>(async function* (_session, _id, heldSignal) {
+      yield { type: 'retained' }
+      await new Promise<void>((resolve) => {
+        if (heldSignal?.aborted) resolve()
+        else heldSignal?.addEventListener('abort', () => { resolve() }, { once: true })
+      })
+    })(session, id, signal)
+  })
+  vi.mocked(h.remote.attach).mockImplementation(streamMethod<TerminalRemote['attach']>(async function* (_session, id, signal) {
+    // The confirmed attachment opens the hold on its own terminal only.
+    held.add(id)
+    yield { type: 'snapshot', writable: true, sequence: 0, screen: 'retained', info: { ...info, id } }
+    await new Promise<void>((resolve) => {
+      if (signal?.aborted) resolve()
+      else signal?.addEventListener('abort', () => { resolve() }, { once: true })
+    })
+  }))
+  const { service } = await h.service()
+  service.retainTabs(ids.map((_id, index) => ({ sessionId, tabId: `tab-${String(index)}`, contentId: `tab-${String(index)}` })))
+  await expect.poll(() => vi.mocked(h.remote.retain).mock.calls.length).toBe(3)
+  await setImmediate()
+  // Loading three saved tabs asks for nothing the person did not open, and forgets none of them.
+  expect(h.remote.attach).not.toHaveBeenCalled()
+  for (const [index, id] of ids.entries()) expect(new TerminalBindings().get(sessionId, `tab-${String(index)}`)).toBe(id)
+  const model = service.view(sessionId, 'tab-0', 'tab-0')
+  model.mount()
+  await model.refresh()
+  await expect.poll(() => model.state.getSnapshot().writable).toBe(true)
+  // The tab on screen attaches once, and its hold follows for that terminal alone.
+  expect(vi.mocked(h.remote.attach).mock.calls.map(call => call[1])).toEqual(['t-a'])
+  await expect.poll(() => vi.mocked(h.remote.retain).mock.calls.filter(call => call[1] === 't-a').length).toBeGreaterThan(1)
+  expect(vi.mocked(h.remote.retain).mock.calls.filter(call => call[1] !== 't-a')).toHaveLength(2)
+  expect(model.state.getSnapshot().phase).not.toBe('failed')
+})
+
 it('shows a missing terminal when retention loses the race to Host cleanup, without allocating a replacement', async () => {
   storage()
   new TerminalBindings().set(sessionId, 'restored', info.id)

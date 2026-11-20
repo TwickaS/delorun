@@ -127,6 +127,19 @@ describe('the plugin with the preview flag on', () => {
     expect(route.admitPeer?.(new Request('http://127.0.0.1/api/agentSeat.resume', { method: 'POST' }), peer)).toBe(false)
   })
 
+  // Gating them by Face ID or an unlock puts a sheet, or a bare 403, in front of a seat's Resume and model buttons on a phone (F36, C2: class free).
+  it('admits any approved device to Resume and the model choice once the home is mounted, with no prompt, and nothing else', async () => {
+    const { ctx, connection } = await world(true)
+    ctx.provide('homeAuth', {} as never)
+    await ctx.plugin(Plugin, Config(null))
+    for (const path of [RESUME_PATH, CHOOSE_MODEL_PATH]) {
+      const route = connection.routes.find(candidate => candidate.path === path)!
+      const request = new Request(`http://127.0.0.1${path}`, { method: 'POST' })
+      const as = (kind: string) => route.admitPeer?.(request, { principal: { kind } } as Parameters<NonNullable<typeof route.admitPeer>>[1])
+      expect([path, as('reach-device'), as('sdk')]).toEqual([path, true, false])
+    }
+  })
+
   it('withdraws everything when the plugin stops', async () => {
     const { ctx, connection, presets } = await world(true)
     const fiber = ctx.plugin(Plugin, Config(null))

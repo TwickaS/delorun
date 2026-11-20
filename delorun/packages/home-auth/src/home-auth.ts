@@ -229,8 +229,6 @@ export interface HomeAuthOptions {
    * a listener's unlock minutes must not exceed it. Absent, an unlock does not slide.
    */
   readonly unlockCapMinutes?: () => number
-  /** Whether the preview flag for Face ID enrolment and assertion is on, read at each use; off when absent. */
-  readonly passkeysEnabled?: () => boolean
   /**
    * Records one operational event of the passkey and grant machinery; the text holds no challenge, key or signature.
    * @param event - the event line.
@@ -288,7 +286,7 @@ export class HomeAuth {
   readonly passkeyStore: PasskeyStore
   /** The grants and holds a verified assertion or a correct PIN minted, in memory. */
   readonly grants: GrantStore
-  /** Passkey enrolment and assertion; answers only while the preview flag is on. */
+  /** Passkey enrolment and assertion. */
   readonly passkeys: PasskeyAuth
   private readonly pinListeners = new Set<(event: PinEvent) => void>()
   /** Each rolled session id to the id that continues it, for the 30 seconds its predecessor still admits requests. */
@@ -353,7 +351,6 @@ export class HomeAuth {
       now: this.now,
       random: this.random,
       sameSession: (presented, bound) => presented === bound || this.successors.get(presented) === bound,
-      enabled: options.passkeysEnabled ?? (() => false),
       log: options.log ?? (() => undefined),
     })
     const path = (name: string): string => join(options.directory, name)

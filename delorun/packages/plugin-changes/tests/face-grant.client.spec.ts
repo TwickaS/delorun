@@ -27,7 +27,7 @@ afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 /** A controller whose state says what each control needs. */
 function controller(needs: Partial<Record<ChangesControl, MayView>>, faceGrant: (() => FaceGrant | undefined) | undefined) {
-  const changes = new ChangesController({ report: () => {}, unlockNeeded: () => {}, ...(faceGrant === undefined ? {} : { faceGrant }) })
+  const changes = new ChangesController({ report: () => {}, ...(faceGrant === undefined ? {} : { faceGrant }) })
   const may = new Proxy({}, { get: (_target, key: string) => needs[key as ChangesControl] ?? { ok: true } })
   changes.state.set({ status: 'ready', state: { access: { may } } as ChangesStateView })
   return changes

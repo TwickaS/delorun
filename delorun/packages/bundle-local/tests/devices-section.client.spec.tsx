@@ -17,14 +17,13 @@ import {
   ABOUT_SECTION_ID, ABOUT_SECTION_ORDER, apply, CONSENT_TOAST_ID, DEVICES_SECTION_ID, DEVICES_SECTION_ORDER, EXTERNAL_AGENT_ACTION_ID,
   EXTERNAL_AGENTS_SECTION_ID, EXTERNAL_AGENTS_SECTION_ORDER, FULL_ACCESS_ACTION_ID, FULL_ACCESS_CONSENT_ID, inject, MCP_REVIEW_ID,
   MCP_WAITING_NOTICE_ID, NETWORK_SECTION_ID, PAIRING_NOTICE_ID, NETWORK_SECTION_ORDER, SETUP_VERSIONS_SECTION_ID, SETUP_VERSIONS_SECTION_ORDER, PERMISSIONS_SECTION_ID, PERMISSIONS_SECTION_ORDER, PRIVACY_SECTION_ID,
-  PLUGIN_INSTALLS_SECTION_ID, PLUGIN_INSTALLS_SECTION_ORDER, PRIVACY_SECTION_ORDER, readReachStatus, PIN_LOCK_OVERLAY_ID, PIN_MODE_SECTION_ID, PIN_MODE_SECTION_ORDER, REMOTE_NOTICE_ID, UNLOCK_OVERLAY_ID,
+  PLUGIN_INSTALLS_SECTION_ID, PLUGIN_INSTALLS_SECTION_ORDER, PRIVACY_SECTION_ORDER, readReachStatus, PIN_MODE_SECTION_ID, PIN_MODE_SECTION_ORDER, FACE_ID_SECTION_ID, FACE_ID_GRANT_ID, FACE_ID_OVERLAY_ID, FACE_ID_ANSWER_ID, FACE_ID_SECTION_ORDER, REMOTE_NOTICE_ID,
 } from '../src/client/index.ts'
 import {
   approveDevice, DEVICE_ROUTES, HostRequestError, hostFailureOf, isRefused, openApprovalWindow, PENDING_POLL_MS,
   readDevices, readPendingDevices, removeDevice, type ApprovalRequestId, type DeviceId, type HostFetch,
 } from '../src/client/devices-api.ts'
 import { en, zh } from '../src/client/devices-locales.ts'
-import { PHONE_POWERS_PATH } from '@delorun/home-auth/wire'
 import { approvalCode, DevicesSection, failureText, REACH_ON_COMMAND, type DevicesSectionProps } from '../src/client/DevicesSection.tsx'
 import { AWAY, fakeHost, staticPairing, staticUnlock } from './fake-host.ts'
 import type { ExternalAgentsSectionInjected } from '../src/client/ExternalAgentsSection.tsx'
@@ -97,73 +96,48 @@ function standardHost() {
 /** A paired device's unlock view, as on a phone. */
 const ON_DEVICE = { ...AWAY, place: 'device' } as const
 
-/** Render the section over a fake home with reach ready and a Phone powers answer. */
-function renderPowers(powers: { level: 'careful' | 'full', chosen: boolean }, view = AWAY) {
-  const host = fakeHost({
-    [`GET ${DEVICE_ROUTES.reachStatus}`]: READY,
-    [`GET ${DEVICE_ROUTES.devices}`]: { status: 200, body: { owner: OWNER, devices: [DEVICE_A] } },
-    [`GET ${PHONE_POWERS_PATH}`]: { status: 200, body: powers },
-    [`POST ${PHONE_POWERS_PATH}`]: { status: 200, body: { level: 'full', chosen: true } },
-  })
-  const props = { t: makeTranslate(en), close: () => {}, fetch: host.fetch, ...staticUnlock(view), ...staticPairing() } as DevicesSectionProps
-  render(<DevicesSection {...props} />)
-  return host
-}
-
-describe('Phone powers in the Devices section', () => {
-  it('at the computer, shows both levels with what each allows and changes the level', async () => {
-    const host = renderPowers({ level: 'careful', chosen: true })
-    const group = await screen.findByRole('radiogroup', { name: en['powers.title'] })
-    expect(within(group).getByText(en['powers.careful.body'])).toBeTruthy()
-    expect(within(group).getByText(en['powers.full.body'])).toBeTruthy()
-    const careful = within(group).getByRole('radio', { name: new RegExp(`^${en['powers.careful']}`) }) as HTMLInputElement
-    const full = within(group).getByRole('radio', { name: new RegExp(`^${en['powers.full']}`) }) as HTMLInputElement
-    expect(careful.checked).toBe(true)
-    expect(screen.queryByText(en['powers.unchosen.careful'])).toBeNull()
-    fireEvent.click(full)
-    await settle()
-    expect(host.received.filter(request => request.key === `POST ${PHONE_POWERS_PATH}`).map(request => request.body)).toEqual([{ level: 'full' }])
-    expect((within(group).getByRole('radio', { name: new RegExp(`^${en['powers.full']}`) }) as HTMLInputElement).checked).toBe(true)
-  })
-
-  it('at the computer, a level nobody chose shows the notice until the person keeps or changes it', async () => {
-    const host = renderPowers({ level: 'careful', chosen: false })
-    host.script[`POST ${PHONE_POWERS_PATH}`] = { status: 200, body: { level: 'careful', chosen: true } }
-    expect(await screen.findByText(en['powers.unchosen.careful'])).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: en['powers.keep.careful'] }))
-    await settle()
-    expect(host.received.filter(request => request.key === `POST ${PHONE_POWERS_PATH}`).map(request => request.body)).toEqual([{ level: 'careful' }])
-    expect(screen.queryByText(en['powers.unchosen.careful'])).toBeNull()
-  })
-
-  it('on a phone, shows the level read-only with change this at your computer, and sends nothing', async () => {
-    const host = renderPowers({ level: 'careful', chosen: false }, ON_DEVICE)
-    const group = await screen.findByRole('radiogroup', { name: en['powers.title'] })
-    for (const radio of within(group).getAllByRole('radio')) expect((radio as HTMLInputElement).disabled).toBe(true)
-    expect(screen.getByText(en['powers.device'])).toBeTruthy()
-    expect(screen.queryByText(en['powers.unchosen.careful'])).toBeNull()
-    fireEvent.click(within(group).getByRole('radio', { name: new RegExp(`^${en['powers.full']}`) }))
-    await settle()
-    expect(host.count(`POST ${PHONE_POWERS_PATH}`)).toBe(0)
-  })
-
-  it('says why a choice was refused, and leaves the level as it was', async () => {
-    const host = renderPowers({ level: 'careful', chosen: true })
-    host.script[`POST ${PHONE_POWERS_PATH}`] = loopbackRefusal
-    const group = await screen.findByRole('radiogroup', { name: en['powers.title'] })
-    fireEvent.click(within(group).getByRole('radio', { name: new RegExp(`^${en['powers.full']}`) }))
-    await settle()
-    expect(screen.getByRole('alert').textContent).toBe(en.loopback.replace('{action}', en['action.powers']))
-    expect((within(group).getByRole('radio', { name: new RegExp(`^${en['powers.careful']}`) }) as HTMLInputElement).checked).toBe(true)
-  })
-
-  it('shows nothing in a profile that does not serve the route', async () => {
-    const host = fakeHost({ [`GET ${DEVICE_ROUTES.reachStatus}`]: READY, [`GET ${DEVICE_ROUTES.devices}`]: { status: 200, body: { owner: OWNER, devices: [] } } })
-    const props = { t: makeTranslate(en), close: () => {}, fetch: host.fetch, ...staticUnlock(AWAY), ...staticPairing() } as DevicesSectionProps
+describe('the Devices section on a device', () => {
+  // A device reads a list without addresses, approvers or the first device (home-auth's devicesHandler); requiring them
+  // again shows "could not be read" in place of the list on every phone.
+  it('lists the devices from the list the home sends a device', async () => {
+    const host = fakeHost({
+      [`GET ${DEVICE_ROUTES.reachStatus}`]: READY,
+      [`GET ${DEVICE_ROUTES.devices}`]: { status: 200, body: {
+        owner: { claimedAt: OWNER.claimedAt },
+        devices: [DEVICE_A, DEVICE_B].map(({ address: _address, approvedBy: _approvedBy, ...rest }) => rest),
+        current: DEVICE_A.id,
+        unlocks: [],
+      } },
+    })
+    const props = { t: makeTranslate(en), close: () => {}, fetch: host.fetch, ...staticUnlock(ON_DEVICE), ...staticPairing({ state: { place: 'remote' } }) } as DevicesSectionProps
     render(<DevicesSection {...props} />)
-    await screen.findByText(en['devices.none'])
     await settle()
-    expect(screen.queryByRole('radiogroup', { name: en['powers.title'] })).toBeNull()
+    expect(screen.getByText(DEVICE_A.label)).toBeTruthy()
+    expect(screen.getByText(DEVICE_B.label)).toBeTruthy()
+    expect(screen.getByText(DEVICE_A.platform)).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
+    // Adding a device is computer-only (E1): the phone reads where to do it and gets no button the home would refuse.
+    expect(screen.getByText(en['add.atComputer'])).toBeTruthy()
+    expect(screen.queryByRole('button', { name: en.add })).toBeNull()
+  })
+})
+
+describe('the Devices section without Phone powers', () => {
+  // Removing the Phone powers block from the section brings back a choice for a level that no longer exists; the section never asks for the route.
+  it('shows no Phone powers choice, at the computer or on a phone, and never asks for the route', async () => {
+    for (const view of [AWAY, ON_DEVICE]) {
+      const host = fakeHost({
+        [`GET ${DEVICE_ROUTES.reachStatus}`]: READY,
+        [`GET ${DEVICE_ROUTES.devices}`]: { status: 200, body: { owner: OWNER, devices: [DEVICE_A] } },
+      })
+      const props = { t: makeTranslate(en), close: () => {}, fetch: host.fetch, ...staticUnlock(view), ...staticPairing() } as DevicesSectionProps
+      const { unmount } = render(<DevicesSection {...props} />)
+      await screen.findByText(DEVICE_A.label)
+      await settle()
+      expect(screen.queryByText(/Phone powers/i)).toBeNull()
+      expect(host.received.map(request => request.key).filter(key => key.includes('phone-powers'))).toEqual([])
+      unmount()
+    }
   })
 })
 
@@ -573,22 +547,23 @@ describe('the plugin', () => {
         { id: PLUGIN_INSTALLS_SECTION_ID, order: PLUGIN_INSTALLS_SECTION_ORDER },
         { id: PRIVACY_SECTION_ID, order: PRIVACY_SECTION_ORDER }, { id: DEVICES_SECTION_ID, order: DEVICES_SECTION_ORDER },
         { id: PIN_MODE_SECTION_ID, order: PIN_MODE_SECTION_ORDER },
+        { id: FACE_ID_SECTION_ID, order: FACE_ID_SECTION_ORDER },
         { id: PERMISSIONS_SECTION_ID, order: PERMISSIONS_SECTION_ORDER },
         { id: EXTERNAL_AGENTS_SECTION_ID, order: EXTERNAL_AGENTS_SECTION_ORDER },
         { id: NETWORK_SECTION_ID, order: NETWORK_SECTION_ORDER }, { id: SETUP_VERSIONS_SECTION_ID, order: SETUP_VERSIONS_SECTION_ORDER }, { id: ABOUT_SECTION_ID, order: ABOUT_SECTION_ORDER },
       ])
       expect(DEVICES_SECTION_ORDER).toBe(PRIVACY_SECTION_ORDER + 1)
       expect(sections.map(section => typeof section.label === 'function' ? section.label() : section.label))
-        .toEqual(['Plugin downloads', 'Privacy', en.nav, 'PIN mode', 'Permissions', 'External agents', 'Network', 'Setup versions', 'About'])
+        .toEqual(['Plugin downloads', 'Privacy', en.nav, 'PIN mode', 'Face ID', 'Permissions', 'External agents', 'Network', 'Setup versions', 'About'])
       // The preview notice's copy lookup reads the Privacy dictionary.
       const notice = slots.entries('settings.onboarding')[0]?.inject?.() as { t: (key: string) => string }
       expect(notice.t('notice.continue')).toBe('Continue')
-      expect(slots.entries('shell.overlay').map(entry => entry.options.id)).toEqual([PIN_LOCK_OVERLAY_ID, UNLOCK_OVERLAY_ID, PAIRING_NOTICE_ID, REMOTE_NOTICE_ID, FULL_ACCESS_CONSENT_ID, MCP_REVIEW_ID, MCP_WAITING_NOTICE_ID, CONSENT_TOAST_ID])
+      expect(slots.entries('shell.overlay').map(entry => entry.options.id)).toEqual([PAIRING_NOTICE_ID, FACE_ID_GRANT_ID, FACE_ID_OVERLAY_ID, REMOTE_NOTICE_ID, FULL_ACCESS_CONSENT_ID, MCP_REVIEW_ID, MCP_WAITING_NOTICE_ID, CONSENT_TOAST_ID])
       // Each overlay and each section with a store (the About section has none) read their store's view and actions.
       for (const entry of [...slots.entries('shell.overlay'), ...slots.entries('settings.section').filter(section => section.options.id !== ABOUT_SECTION_ID)]) expect(entry.inject?.()).toBeTypeOf('object')
       // Each approval card action is bound to the card's chat.
       const actions = slots.entries('conversation.approval.action')
-      expect(actions.map(entry => entry.options.id)).toEqual([FULL_ACCESS_ACTION_ID, EXTERNAL_AGENT_ACTION_ID])
+      expect(actions.map(entry => entry.options.id)).toEqual([FACE_ID_ANSWER_ID, FULL_ACCESS_ACTION_ID, EXTERNAL_AGENT_ACTION_ID])
       for (const action of actions) expect((action.inject as ((sessionId: typeof SESSION) => object) | undefined)?.(SESSION)).toMatchObject({ sessionId: SESSION })
       await expect(ctx.get('permissionSwitchConsent')?.confirm(SESSION, 'ask')).resolves.toBe(true)
       expect(slots.entries('settings.section.icon').filter(entry => entry.options.id === DEVICES_SECTION_ID).map(entry => [entry.options.id, entry.component])).toEqual([[DEVICES_SECTION_ID, IconLinkOutlineMedium]])

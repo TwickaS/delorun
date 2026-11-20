@@ -8,10 +8,10 @@ import { hashRequest, type GrantHolder, type GrantStore } from '@delorun/home-au
 import type { FaceAccess } from './routes.ts'
 
 /**
- * @param grants - the home's grant store, or undefined while the Face ID flag is off.
+ * @param grants - the home's grant store, or undefined while the home keeps none.
  * @param hasPasskey - whether the device holds a passkey.
  * @param holder - the device and the listener its session arrived on, which a grant is bound to.
- * @returns the device's grants; `enabled` is false while the flag is off.
+ * @returns the device's grants; `enabled` is false while the home keeps no grant store.
  */
 export function faceAccessOf(grants: GrantStore | undefined, hasPasskey: boolean, holder: GrantHolder): FaceAccess {
   return {

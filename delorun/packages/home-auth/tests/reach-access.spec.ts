@@ -42,6 +42,7 @@ import {
   type ReachAccessFacts,
 } from '../src/reach-access.ts'
 import { keyRefsOf } from '../src/authenticator.ts'
+import { GrantStore } from '../src/grants.ts'
 
 /** The entry id of a row that only the computer changes. */
 const COMPUTER_ONLY_ROW = 'include:delorun-home-auth'
@@ -81,11 +82,11 @@ function facts(overrides: Partial<ReachAccessFacts> = {}): ReachAccessFacts {
     pageUnlockOf: () => undefined,
     unlockModeEnabled: () => false,
     keyRefs: () => new Set(['DEEPSEEK_API_KEY', 'OPENAI_API_KEY']),
-    logElevated: () => {}, liftedSettings: () => undefined, pinLiftedSettings: () => undefined,
+    logElevated: () => {}, liftedSettings: () => undefined,
     computerOnlySwitches: () => [CONSENT],
     protectedEntryIds: () => new Set([PROTECTED_ROW]), computerOnlyEntryIds: () => new Set([COMPUTER_ONLY_ROW]),
     defaultPermission: () => PERMISSION,
-    phonePowers: () => 'full' as const, dangerousMode: () => false,
+    dangerousMode: () => false,
     ...overrides,
   }
 }
@@ -199,6 +200,14 @@ describe('a device\'s workspace-file call', () => {
       expect(condition({ action, resource: chat, args: { path: 'linked-file' } })).toEqual(refusal(action))
     }
     expect(condition({ action: 'workspaceFiles/list', resource: chat, args: { path: 'linked-dir' } })).toEqual(refusal('workspaceFiles/list'))
+  })
+
+  // Pins A483 for the path bound: with the page-unlock lift back, an old PIN page token reads a file outside the workspace.
+  it('keeps the workspace bound for a page that holds an old PIN unlock, with or without a grant', () => {
+    const grants = new GrantStore({ now: () => 5_000_000, random: size => new Uint8Array(size).fill(4) })
+    const page = createCondition(facts({ workspaceRootOf: id => (id === 's-1' ? root : undefined), delorunHome, pageUnlockOf: id => (id === 'page-1' ? { id: 'unlock-1' } : undefined), faceGrants: () => ({ grants, deviceHasPasskey: () => false }) }), { ...DEVICE, unlockId: 'page-1' })
+    const outside = join(directory, 'outside', 'secret.txt')
+    expect(page({ action: 'workspaceFiles/read', resource: chat, args: { path: outside } })).toEqual(refusal('workspaceFiles/read'))
   })
 
   it('refuses the Delorun home even inside the workspace', () => {
@@ -565,7 +574,6 @@ describe('a slash command', () => {
 })
 
 describe('a terminal', () => {
-  const ALLOW = { kind: 'allow' }
   const SESSION = { kind: 'session', id: session('s-1') } as const
   const TERMINAL_ACTIONS = Object.keys(REACH_ELEVATED_ACTIONS).filter(name => name.startsWith('terminal/')) as RemoteAccessAction[]
 
@@ -583,9 +591,10 @@ describe('a terminal', () => {
     }
   })
 
-  it.each([false, true])('admits an unlocked device, with dangerous mode %s', (dangerousMode) => {
+  // Removing the grant-only return for a terminal lets an unlock open a shell outside the sandbox.
+  it.each([false, true])('refuses an unlocked device with no grant, with dangerous mode %s', (dangerousMode) => {
     const condition = createCondition(facts({ dangerousMode: () => dangerousMode, elevationOf: () => ({ id: 'elevation-1' }) }), DEVICE)
-    for (const action of TERMINAL_ACTIONS) expect(condition({ action, resource: SESSION, args: {} }), action).toEqual(ALLOW)
+    for (const action of TERMINAL_ACTIONS) expect(condition({ action, resource: SESSION, args: {} }), action).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
   })
 })
 
@@ -614,17 +623,17 @@ describe('an elevated action', () => {
       return deviceId === 'device-1' && listener === LISTENER ? ELEVATION : undefined
     }
     const condition = createCondition(facts({ elevationOf, logElevated: (line) => { lines.push(line) } }), DEVICE)
-    expect(condition({ action: 'terminal/create', resource: GLOBAL, args: { shell: 'x' } })).toEqual({ kind: 'allow' })
-    expect(condition({ action: 'terminal/create', resource: GLOBAL })).toEqual({ kind: 'allow' })
+    expect(condition({ action: 'directoryPicker/list', resource: GLOBAL, args: { path: 'x' } })).toEqual({ kind: 'allow' })
+    expect(condition({ action: 'directoryPicker/list', resource: GLOBAL })).toEqual({ kind: 'allow' })
     // Pins the device the condition asks for: device B's condition does not borrow device A's unlock.
-    expect(createCondition(facts({ elevationOf }), reachDevicePrincipal('device-2', LISTENER))({ action: 'terminal/create', resource: GLOBAL, args: {} }))
-      .toEqual({ kind: 'deny', reason: 'elevation-required: terminal/create' })
+    expect(createCondition(facts({ elevationOf }), reachDevicePrincipal('device-2', LISTENER))({ action: 'directoryPicker/list', resource: GLOBAL, args: {} }))
+      .toEqual({ kind: 'deny', reason: 'elevation-required: directoryPicker/list' })
     // Pins the listener the condition asks for: an unlock on one listener admits nothing on another.
-    expect(createCondition(facts({ elevationOf }), reachDevicePrincipal('device-1', OTHER_LISTENER))({ action: 'terminal/create', resource: GLOBAL, args: {} }))
-      .toEqual({ kind: 'deny', reason: 'elevation-required: terminal/create' })
+    expect(createCondition(facts({ elevationOf }), reachDevicePrincipal('device-1', OTHER_LISTENER))({ action: 'directoryPicker/list', resource: GLOBAL, args: {} }))
+      .toEqual({ kind: 'deny', reason: 'elevation-required: directoryPicker/list' })
     expect(asked).toEqual([`device-1@${LISTENER}`, `device-1@${LISTENER}`, `device-2@${LISTENER}`, `device-1@${OTHER_LISTENER}`])
     // Only a call is logged; an event or a snapshot question is not one.
-    expect(lines).toEqual([`home-auth: elevated action: device=device-1 listener=${LISTENER} action=terminal/create elevation=elevation-1`])
+    expect(lines).toEqual([`home-auth: elevated action: device=device-1 listener=${LISTENER} action=directoryPicker/list elevation=elevation-1`])
   })
 
   it('keeps the workspace-file rule under an unlock', () => {
@@ -651,13 +660,24 @@ describe('the model key actions', () => {
     }
   })
 
-  it('refuses a locked page and admits an unlocked one while PIN mode is on', () => {
+  it('refuses a locked page and, before the grant store starts, an unlocked one too while PIN mode is on', () => {
     const on = facts({ unlockModeEnabled: () => true, pageUnlockOf: id => id === 'page-1' ? { id: 'unlock-1' } : undefined })
     for (const { action, args } of KEY_CALLS) {
       // Pins the PIN check: without it a locked page saves, removes and reads the status of keys.
       expect(createCondition(on, locked)({ action, resource: GLOBAL, args }), action).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
       expect(createCondition(on, { ...locked, unlockId: 'ended' })({ action, resource: GLOBAL, args }), action).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
-      expect(createCondition(on, unlockedPage)({ action, resource: GLOBAL, args }), action).toEqual({ kind: 'allow' })
+      // Pins A483 before the grant store starts: a PIN page unlock admits no key action either.
+      expect(createCondition(on, unlockedPage)({ action, resource: GLOBAL, args }), action).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
+    }
+  })
+
+  it('refuses an unlocked page a key save or removal without a grant once the grant store exists', () => {
+    const grants = new GrantStore({ now: () => 5_000_000, random: size => new Uint8Array(size).fill(4) })
+    const on = facts({ unlockModeEnabled: () => true, pageUnlockOf: id => id === 'page-1' ? { id: 'unlock-1' } : undefined, faceGrants: () => ({ grants, deviceHasPasskey: () => false }) })
+    // Pins A483 for keys: a PIN page window never stands in for the grant of one save or removal.
+    for (const { action, args } of KEY_CALLS) {
+      expect(createCondition(on, unlockedPage)({ action, resource: GLOBAL, args }), action)
+        .toEqual(action === 'credentials/describe' ? { kind: 'allow' } : { kind: 'deny', reason: `elevation-required: ${action}` })
     }
   })
 })
@@ -718,7 +738,7 @@ const KEYS = [/^credentials\//, /^event:credentials\//]
 const UNLOCK = [
   /^settings\/(mutate|replace|update)$/, /^commands\/execute$/,
   /^pluginManager\/(installBundle|removeBundle|setBundleEnabled|setPluginEnabled|setVersionExemption|updateBundle|cancelInstall|undo|restore)$/,
-  /^terminal\//, /^mcpManager\//, /^directoryPicker\//, /^workspace\/create$/, /^dynamicCordisRunner\//, /^event:cordis\//,
+  /^terminal\/(?!environment$|shells$|list$)/, /^mcpManager\//, /^directoryPicker\//, /^workspace\/create$/, /^dynamicCordisRunner\//, /^event:cordis\//,
 ]
 
 /**

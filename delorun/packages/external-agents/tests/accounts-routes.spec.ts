@@ -1,6 +1,7 @@
 /**
  * The account routes (`src/accounts/routes.ts`): any approved device reads the figures and reading never starts a
- * check; "Check now" needs the computer or an unlocked device, and a locked phone is refused before anything starts.
+ * check; "Check now" needs the computer or a Face ID grant for exactly that call (the PIN on a device with no passkey), and
+ * no unlock, code or approval grace stands in for the grant.
  *
  * Each test's comment names the check whose removal makes that test fail.
  */
@@ -13,6 +14,7 @@ import { registerAccountRoutes } from '../src/accounts/routes.ts'
 import { createAgentAccounts, type AgentAccountsService } from '../src/accounts/service.ts'
 import { accountsFilePath } from '../src/accounts/store.ts'
 import { ACCOUNT_ROUTES } from '../src/accounts/wire.ts'
+import { faceWorld, type FaceWorld } from '../../plugin-changes/tests/face-world.ts'
 
 const roots: string[] = []
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }) })
@@ -43,7 +45,7 @@ interface Mounted {
  * @param listener - the listener `homeAuth` reports.
  * @returns the mounted routes.
  */
-function mounted(listener: string | undefined): Mounted {
+function mounted(listener: string | undefined, home: { readonly face?: FaceWorld, readonly elevation?: { readonly id: string, readonly grace?: true }, readonly page?: boolean } = {}): Mounted {
   const root = mkdtempSync(join(tmpdir(), 'ea1-limits-routes-'))
   roots.push(root)
   const checks: ExternalAgentName[] = []
@@ -60,7 +62,11 @@ function mounted(listener: string | undefined): Mounted {
   const routes = new Map<string, Route>()
   const ctx = {
     on: (_name: string, registered: Mounted['hook']) => { hook = registered },
-    get: (name: string) => (name === 'homeAuth' ? { arrivalOf: () => ({ listener }), dangerousMode: () => false, pinEnabled: () => false, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : deviceId === 'grace-phone' ? { id: 'g', grace: true } : undefined) } : undefined),
+    get: (name: string) => (name === 'homeAuth' ? {
+      ...(home.face ?? faceWorld(PHONE, LISTENER)).fields,
+      arrivalOf: () => ({ listener }), dangerousMode: () => false, unlockModeEnabled: () => true, touchUnlock: () => {},
+      elevationOf: () => home.elevation, pageUnlockOf: () => (home.page === true ? { id: 'page-1' } : undefined),
+    } : undefined),
     connection: { fetch: { register: (route: Route & { path: string }) => { routes.set(route.path, route) } } },
   }
   const used = new Set<string>()
@@ -81,13 +87,17 @@ function mounted(listener: string | undefined): Mounted {
   }
 }
 
-const device = (deviceId: string) => ({ kind: 'reach-device', deviceId, listener: 'reach-tailscale-private' })
-const refresh = (provider: string): RequestInit => ({ method: 'POST', body: JSON.stringify({ provider }) })
+const PHONE = 'phone'
+const LISTENER = 'reach-tailscale-private'
+const ACTION = 'external-agents/refresh'
+const device = (deviceId: string, extra: object = {}) => ({ kind: 'reach-device', deviceId, listener: LISTENER, ...extra })
+const body = (provider: string): string => JSON.stringify({ provider })
+const refresh = (provider: string, grant?: string): RequestInit => ({ method: 'POST', body: body(provider), ...grant === undefined ? {} : { headers: { 'delorun-grant': grant } } })
 
 describe('the account routes', () => {
   it('let a locked phone read the figures, and reading starts no check', async () => {
-    const routes = mounted('reach-tailscale-private')
-    const read = await routes.asPeer(ACCOUNT_ROUTES.accounts, device('locked-phone'))
+    const routes = mounted(LISTENER)
+    const read = await routes.asPeer(ACCOUNT_ROUTES.accounts, device(PHONE))
     expect(read.status).toBe(200)
     expect(await read.json()).toMatchObject({ now: 1_000, accounts: [{ provider: 'claude-code', signedIn: 'unknown' }, { provider: 'codex', signedIn: 'unknown' }] })
     await routes.atComputer(ACCOUNT_ROUTES.accounts)
@@ -96,25 +106,48 @@ describe('the account routes', () => {
     expect((await routes.asPeer(ACCOUNT_ROUTES.accounts, { kind: 'sdk' })).status).toBe(403)
   })
 
-  it('refuse Check now from a locked phone with ELEVATION_REQUIRED before a check starts', async () => {
-    const routes = mounted('reach-tailscale-private')
-    const locked = await routes.asPeer(ACCOUNT_ROUTES.refresh, device('locked-phone'), refresh('codex'))
-    // Pins the unlock gate: without it a locked phone would start the person's program on the computer.
-    expect([locked.status, await locked.json()]).toEqual([403, expect.objectContaining({ error: 'ELEVATION_REQUIRED' })])
-    expect(routes.checks).toEqual([])
+  it('refuse Check now without a grant, whatever unlock the phone holds, naming the action, before a check starts', async () => {
+    // Pins the class gate: a code, a PIN page or the approval grace would otherwise start the person's program on the computer.
+    for (const [name, home, extra] of [
+      ['no unlock', {}, {}],
+      ['a code from the computer', { elevation: { id: 'e' } }, {}],
+      ['the approval grace', { elevation: { id: 'g', grace: true as const } }, {}],
+      ['a PIN page unlock', { page: true }, { unlockId: 'page-1' }],
+    ] as const) {
+      const routes = mounted(LISTENER, home)
+      const refused = await routes.asPeer(ACCOUNT_ROUTES.refresh, device(PHONE, extra), refresh('codex'))
+      expect([name, refused.status, await refused.json()]).toEqual([name, 403, expect.objectContaining({ error: 'ELEVATION_REQUIRED', action: ACTION })])
+      expect(routes.checks, name).toEqual([])
+    }
+    const routes = mounted(LISTENER)
     expect((await routes.asPeer(ACCOUNT_ROUTES.refresh, { kind: 'sdk' }, refresh('codex'))).status).toBe(403)
     expect(routes.checks).toEqual([])
   })
 
-  it('run Check now for an unlocked phone, one holding the approval grace, and the computer', async () => {
-    const routes = mounted('reach-tailscale-private')
-    const unlocked = await routes.asPeer(ACCOUNT_ROUTES.refresh, device('unlocked-phone'), refresh('codex'))
-    expect(unlocked.status).toBe(200)
-    expect(await unlocked.json()).toMatchObject({ outcome: { kind: 'checked' } })
-    expect((await routes.asPeer(ACCOUNT_ROUTES.refresh, device('grace-phone'), refresh('claude-code'))).status).toBe(200)
-    const computer = await routes.atComputer(ACCOUNT_ROUTES.refresh, refresh('codex'))
-    expect(await computer.json()).toMatchObject({ outcome: { kind: 'throttled' } })
+  it('run Check now once for a grant of exactly that call, refusing another agent\'s body and a replay, and always at the computer', async () => {
+    const face = faceWorld(PHONE, LISTENER)
+    const routes = mounted(LISTENER, { face })
+    const grant = face.grantFor(ACTION, { path: ACCOUNT_ROUTES.refresh, body: body('codex') })
+    // Pins the request hash: a grant for one agent's check would otherwise start the other's.
+    expect((await routes.asPeer(ACCOUNT_ROUTES.refresh, device(PHONE), refresh('claude-code', grant))).status).toBe(403)
+    expect(routes.checks).toEqual([])
+    const granted = await routes.asPeer(ACCOUNT_ROUTES.refresh, device(PHONE), refresh('codex', grant))
+    expect(granted.status).toBe(200)
+    expect(await granted.json()).toMatchObject({ outcome: { kind: 'checked' } })
+    // Pins the single use: the same grant would otherwise start the program again.
+    expect((await routes.asPeer(ACCOUNT_ROUTES.refresh, device(PHONE), refresh('codex', grant))).status).toBe(403)
+    const computer = await routes.atComputer(ACCOUNT_ROUTES.refresh, refresh('claude-code'))
+    expect(await computer.json()).toMatchObject({ outcome: { kind: 'checked' } })
     expect(routes.checks).toEqual(['codex', 'claude-code'])
+  })
+
+  it('run Check now for a phone with no passkey by a PIN grant, and refuse it one without', async () => {
+    const face = faceWorld(PHONE, LISTENER, false)
+    const routes = mounted(LISTENER, { face, page: true })
+    expect((await routes.asPeer(ACCOUNT_ROUTES.refresh, device(PHONE, { unlockId: 'page-1' }), refresh('codex'))).status).toBe(403)
+    const grant = face.grantFor(ACTION, { path: ACCOUNT_ROUTES.refresh, body: body('codex') })
+    expect((await routes.asPeer(ACCOUNT_ROUTES.refresh, device(PHONE, { unlockId: 'page-1' }), refresh('codex', grant))).status).toBe(200)
+    expect(routes.checks).toEqual(['codex'])
   })
 
   it('refuse a request that is not JSON naming a known agent', async () => {
@@ -153,12 +186,12 @@ describe('the account routes', () => {
   })
 
   it('answer a read with none of the personal fields a program reply carried', async () => {
-    const routes = mounted('reach-tailscale-private')
+    const routes = mounted(LISTENER)
     const reply = Object.assign({}, { provider: 'codex' as const, signedIn: 'yes' as const, windows: [], source: 'run' as const }, {
       email: 'person@example.com', organization: 'Example Org Ltd', accountId: 'acct_4f2a9c', plan: 'person@example.com',
     })
     await routes.accounts.observe(reply)
-    const text = await (await routes.asPeer(ACCOUNT_ROUTES.accounts, device('locked-phone'))).text()
+    const text = await (await routes.asPeer(ACCOUNT_ROUTES.accounts, device(PHONE))).text()
     for (const value of ['person@example.com', 'Example Org Ltd', 'acct_4f2a9c']) expect(text).not.toContain(value)
   })
 })

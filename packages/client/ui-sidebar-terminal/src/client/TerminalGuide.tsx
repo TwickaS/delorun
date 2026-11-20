@@ -59,25 +59,26 @@ export function TerminalGuide({
     <span className={css.text}>
       <span className={css.titleRow}>
         <span className={css.title} aria-hidden="true">{title}</span>
-        <Menu
-          open={open} portal autoFocus align="end" className={css.menu}
-          items={items.length === 0 ? [{ id: 'empty', label: t('shellEmpty'), disabled: true }] : items}
-          selectedId={state.phase === 'ready' ? state.choices.selectedShell : undefined}
-          onClose={() => { setOpen(false) }}
-          onSelect={(path) => {
-            if (state.phase === 'failed') { setState({ phase: 'loading' }); setAttempt(value => value + 1); return }
-            selectShell(path)
-            setOpen(false)
-            tab.actions.openTab('terminal', { replaceTab: true, params: { shellPath: path } })
-          }}
-          anchor={<Button variant="ghost" className={css.trigger} aria-label={t('shell')} aria-haspopup="menu" aria-expanded={open}
-            onClick={() => { setState({ phase: 'loading' }); setOpen(value => !value) }}>
-            <IconChevronDownOutlineRegular />
-          </Button>}
-        />
       </span>
       {description !== undefined && <span className={css.description} aria-hidden="true">{description}</span>}
     </span>
     {shortcut !== undefined && shortcut.keys.length > 0 && <ShortcutKeys keys={shortcut.keys} className={css.shortcut} />}
+    {/* Choose shell has its own column at the card's edge, outside New terminal, with a touch-sized target. */}
+    <Menu
+      open={open} portal autoFocus align="end" className={css.menu}
+      items={items.length === 0 ? [{ id: 'empty', label: t('shellEmpty'), disabled: true }] : items}
+      selectedId={state.phase === 'ready' ? state.choices.selectedShell : undefined}
+      onClose={() => { setOpen(false) }}
+      onSelect={(path) => {
+        if (state.phase === 'failed') { setState({ phase: 'loading' }); setAttempt(value => value + 1); return }
+        selectShell(path)
+        setOpen(false)
+        tab.actions.openTab('terminal', { replaceTab: true, params: { shellPath: path } })
+      }}
+      anchor={<Button variant="ghost" className={css.trigger} aria-label={t('shell')} aria-haspopup="menu" aria-expanded={open}
+        onClick={() => { setState({ phase: 'loading' }); setOpen(value => !value) }}>
+        <IconChevronDownOutlineRegular />
+      </Button>}
+    />
   </div>
 }

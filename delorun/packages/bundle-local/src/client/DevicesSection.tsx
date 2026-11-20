@@ -1,11 +1,10 @@
 /**
  * The Devices settings section: the reach state, the approved devices with their removal, the approval of a new
- * device while the approval window is open, unlocks of sensitive actions, and the Phone powers level, which only the
- * computer changes. At the home's own computer it lists the
- * devices asking to unlock, each approved by typing the code the device shows or declined, and the running unlocks, each
- * with End. On a device it shows the device's own unlock with Unlock or Lock now, through the unlock store of
- * [`./unlock.ts`](./unlock.ts). Every request goes to the home through the injected `fetch`; the home refuses device
- * management to a remote studio, and the section says so in place.
+ * device while the approval window is open, and unlock requests. At the home's own computer it lists the devices asking
+ * to unlock, each approved by typing the code the device shows or declined, and the running unlocks, each with End. On a
+ * device (told by the place store of [`./unlock.ts`](./unlock.ts)) it offers no unlock: each sensitive action asks for
+ * Face ID or the PIN when taken, and the section says so. Every request goes to the home through the injected `fetch`;
+ * the home refuses device management to a remote studio, and the section says so in place.
  */
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
@@ -13,7 +12,7 @@ import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import { CodeCells } from '@delorun/brand'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import {
-  approveDevice, approveElevation, cancelPendingDevice, ELEVATION_POLL_MS, hostFailureOf, LOOPBACK_REQUIRED, openApprovalWindow,
+  approveDevice, cancelPendingDevice, ELEVATION_POLL_MS, hostFailureOf, LOOPBACK_REQUIRED, openApprovalWindow,
   PENDING_POLL_MS, readDevices, readElevationsAtComputer, readPendingDevices, readReachStatus, removeDevice, revokeElevation,
   type ApprovalRequestId, type Device, type DeviceList, type ElevationId, type ElevationRequestId, type ElevationsAtComputer,
   type HostFetch, type PendingDevice, type PendingElevation, type ReachOptionStatus, type ReachStatus,
@@ -24,9 +23,7 @@ import type { OptInMutation } from './opt-in.ts'
 import type { PairingSource } from './pairing-source.ts'
 import type { PairingRowSettings } from './pairing-writer.ts'
 import { PairingSettings, type PairingSettingsProps } from './PairingSettings.tsx'
-import { PhonePowers } from './PhonePowers.tsx'
 import type { UnlockSource, UnlockView } from './unlock.ts'
-import { clockTime, ELEVATE_COMMAND } from './UnlockOverlay.tsx'
 import { failureSentence, type Loaded } from './host-api.ts'
 import css from './DevicesSection.module.css'
 
@@ -34,16 +31,13 @@ import css from './DevicesSection.module.css'
 export const REACH_ON_COMMAND = 'delorun reach on tailscale'
 
 /** What the section names in a refusal that needs the home's own computer. */
-export type DevicesAction = 'status' | 'list' | 'add' | 'approve' | 'cancel' | 'remove' | 'unlocks' | 'unlockApprove' | 'unlockRevoke' | 'powers'
+export type DevicesAction = 'status' | 'list' | 'add' | 'approve' | 'cancel' | 'remove' | 'unlocks' | 'unlockRevoke'
 
-/** The request function and the unlock store the plugin supplies. */
+
+/** The request function and the place store the plugin supplies. */
 export interface DevicesSectionInjected {
   /** Sends the section's same-origin requests: the browser's `fetch`, or a spec's fake. */
   fetch: HostFetch
-  /** Open the unlock dialog. */
-  openUnlock: UnlockSource['open']
-  /** End the device's unlock. */
-  lockUnlock: UnlockSource['lock']
   hooks: Pick<UnlockSource['hooks'], 'unlock'> & {
     /** The requests that arrived without an approval window and the home's pairing choices. */
     pairing: PairingSource['hooks']['pairing']
@@ -84,6 +78,16 @@ export function failureText(t: Translate, error: unknown, action: DevicesAction)
 }
 
 /**
+ * A time of day as the unlock copy names it, in the copy's locale.
+ * @param t - the Devices copy, whose `time.locale` names the locale.
+ * @param at - milliseconds since the epoch.
+ * @returns the hours and minutes.
+ */
+export function clockTime(t: Translate, at: number): string {
+  return new Intl.DateTimeFormat(t('time.locale'), { hour: '2-digit', minute: '2-digit' }).format(new Date(at))
+}
+
+/**
  * A moment as the section shows it, in the section's locale.
  * @param t - the section's copy, whose `time.locale` names the locale.
  * @param at - milliseconds since the epoch.
@@ -113,14 +117,13 @@ const isCompleteCode = (typed: string): boolean => /^\d{8}$/.test(approvalCode(t
  * @returns the section.
  */
 export function DevicesSection({
-  t, fetch, useUnlock, openUnlock, lockUnlock, usePairing, usePairingForm, usePairingMutation, startPairing, setPairing, openPairingCode, declinePairing,
+  t, fetch, useUnlock, usePairing, usePairingForm, usePairingMutation, startPairing, setPairing, openPairingCode, declinePairing,
 }: DevicesSectionProps): ReactNode {
   const unlock = useUnlock(current => current)
   const pairing = usePairing(current => current)
   const pairingForm = usePairingForm(current => current)
   const pairingMutation = usePairingMutation(current => current)
   useEffect(() => startPairing(), [startPairing])
-  const powersFailure = useCallback((error: unknown) => failureText(t, error, 'powers'), [t])
   const [reach, setReach] = useState<Loaded<ReachStatus | undefined>>({ kind: 'loading' })
   useEffect(() => {
     let current = true
@@ -136,35 +139,13 @@ export function DevicesSection({
       ? <p className={css.line}>{t('reach.unavailable')}</p>
       : <>
         <p className={css.intro}>{t('intro')}</p>
-        {unlock.place === 'device' ? <DeviceUnlock t={t} view={unlock} open={openUnlock} lock={lockUnlock} /> : null}
+        {unlock.place === 'device' ? <p className={css.line} data-device-face-id="">{t('unlock.section.faceId')}</p> : null}
         {reach.kind === 'failed' ? <p className={css.failed} role="alert">{reach.text}</p> : null}
         {reach.kind === 'ready' ? reach.value?.options.map(option => <ReachLine key={option.option} t={t} status={option} />) : null}
         {reach.kind === 'loading' ? null : <PairingSettings t={t} time={at => formatTime(t, at)} state={pairing} form={pairingForm}
           mutation={pairingMutation} set={setPairing} openCode={openPairingCode} decline={declinePairing} />}
-        {reach.kind === 'loading' ? null : <DeviceManager t={t} fetch={fetch} hasOwner={reach.kind !== 'ready' || reach.value?.hasOwner !== false} />}
-        {reach.kind === 'loading' ? null : <PhonePowers t={t} fetch={fetch} onDevice={unlock.place === 'unknown' ? undefined : unlock.place === 'device'} failure={powersFailure} />}
+        {reach.kind === 'loading' ? null : <DeviceManager t={t} fetch={fetch} hasOwner={reach.kind !== 'ready' || reach.value?.hasOwner !== false} place={unlock.place} />}
       </>}
-  </div>
-}
-
-/**
- * The device's own unlock on a device: what is unlocked and until when, with Unlock, Show the code or Lock now.
- * @param props - the copy, the store's view, and its open and lock actions.
- * @returns the block.
- */
-function DeviceUnlock({ t, view, open, lock }: { t: Translate; view: UnlockView; open: () => void; lock: () => Promise<void> }): ReactNode {
-  const state = view.state
-  return <div className={css.unlock} data-unlock-state={state.kind}>
-    <h3 className={css.subheading}>{t('unlock.section.title')}</h3>
-    <p className={css.line} aria-live="polite">
-      {state.kind === 'elevated' ? t('unlock.section.unlocked', { time: clockTime(t, state.endsAt) })
-        : state.kind === 'pending' ? t('unlock.section.pending') : t('unlock.section.locked')}
-    </p>
-    <div className={css.actions}>
-      {state.kind === 'elevated'
-        ? <Button variant="outline" onClick={() => { void lock() }}>{t('unlock.lockNow')}</Button>
-        : <Button variant="primary" onClick={open}>{t(state.kind === 'pending' ? 'unlock.section.show' : 'unlock.start')}</Button>}
-    </div>
   </div>
 }
 
@@ -197,11 +178,13 @@ function ReachLine({ t, status }: { t: Translate; status: ReachOptionStatus }): 
 }
 
 /**
- * The device list, its removal, and the approval window.
- * @param props - the copy, the request function, and whether the home has an owner; without one the list is not requested.
+ * The device list, its removal, the approval window and, at the computer, the unlock requests.
+ * @param props - the copy, the request function, whether the home has an owner (without one the list is not requested),
+ *   and the page's place: a device gets a line in place of "Add a device", and only a page known to be away from any
+ *   device (`away`) reads the unlock requests.
  * @returns the list and the approval controls.
  */
-function DeviceManager({ t, fetch, hasOwner }: { t: Translate; fetch: HostFetch; hasOwner: boolean }): ReactNode {
+function DeviceManager({ t, fetch, hasOwner, place }: { t: Translate; fetch: HostFetch; hasOwner: boolean; place: UnlockView['place'] }): ReactNode {
   const [devices, setDevices] = useState<Loaded<DeviceList | undefined>>({ kind: 'loading' })
   const [removing, setRemoving] = useState<Device | undefined>()
   const [removeFailure, setRemoveFailure] = useState<{ deviceId: Device['id']; text: string } | undefined>()
@@ -318,7 +301,7 @@ function DeviceManager({ t, fetch, hasOwner }: { t: Translate; fetch: HostFetch;
       {list.map(device => <li key={device.id} className={css.row} data-device-id={device.id}>
         <div className={css.details}>
           <div className={css.title}>{device.label}</div>
-          <div className={css.description}>{device.platform} · {device.address}</div>
+          <div className={css.description}>{device.address === undefined ? device.platform : `${device.platform} · ${device.address}`}</div>
           <div className={css.description}>
             {t(device.approvedBy === 'local' ? 'device.approvedLocal' : 'device.approved', { time: formatTime(t, device.approvedAt) })}
             {' · '}
@@ -329,10 +312,13 @@ function DeviceManager({ t, fetch, hasOwner }: { t: Translate; fetch: HostFetch;
         <Button variant="outline" size="sm" onClick={() => { setRemoving(device) }}>{t('device.remove')}</Button>
       </li>)}
     </ul>}
-    <div className={css.actions}>
-      <Button variant="primary" disabled={windowClosesAt !== undefined} onClick={() => { void addDevice() }}>{t('add')}</Button>
-    </div>
-    {devices.kind === 'ready' && devices.value !== undefined ? <UnlockRequests t={t} fetch={fetch} devices={list} /> : null}
+    {/* Adding a device is computer-only (E1): a device is told so instead of offered a button the home refuses. */}
+    {place === 'device'
+      ? <p className={css.line} data-add-at-computer="">{t('add.atComputer')}</p>
+      : <div className={css.actions}>
+        <Button variant="primary" disabled={windowClosesAt !== undefined} onClick={() => { void addDevice() }}>{t('add')}</Button>
+      </div>}
+    {devices.kind === 'ready' && devices.value !== undefined && place === 'away' ? <UnlockRequests t={t} fetch={fetch} devices={list} /> : null}
     {windowFailure === undefined ? null : <p className={css.failed} role="alert">{windowFailure}</p>}
     {windowClosesAt === undefined ? null : <div className={css.window}>
       <p className={css.line}>{t('waiting')}</p>
@@ -433,15 +419,6 @@ function UnlockRequests({ t, fetch, devices }: { t: Translate; fetch: HostFetch;
   }, [read])
 
   const labelOf = (deviceId: string): string => devices.find(device => device.id === deviceId)?.label ?? t('unlock.removedDevice')
-  const approve = async (request: PendingElevation, typed: string): Promise<void> => {
-    setFailure(undefined)
-    try {
-      await approveElevation(fetch, request.requestId, approvalCode(typed))
-    } catch (error) {
-      setFailure({ id: request.requestId, text: failureText(t, error, 'unlockApprove') })
-    }
-    await read()
-  }
   const revoke = async (id: ElevationRequestId | ElevationId): Promise<void> => {
     setFailure(undefined)
     try {
@@ -452,17 +429,16 @@ function UnlockRequests({ t, fetch, devices }: { t: Translate; fetch: HostFetch;
     await read()
   }
 
+  // Nothing waiting or running: an unlock admits nothing (A483), so the block stays out of the way.
   if (list.kind === 'absent' || list.kind === 'loading') return null
+  if (list.kind === 'ready' && list.value.pending.length === 0 && list.value.running.length === 0) return null
   return <div className={css.unlock} data-unlock-requests="">
     <h3 className={css.subheading}>{t('unlock.requests.title')}</h3>
+    <p className={css.line}>{t('unlock.requests.inert')}</p>
     {list.kind === 'failed' ? <p className={css.failed} role="alert">{list.text}</p> : null}
-    {list.kind === 'ready' && list.value.pending.length === 0 && list.value.running.length === 0
-      ? <p className={css.line}>{t('unlock.requests.none')}</p>
-      : null}
     {list.kind === 'ready' ? <>
       {list.value.pending.map(request => <UnlockRequestRow key={request.requestId} t={t} label={labelOf(request.deviceId)} request={request}
-        failure={failure?.id === request.requestId ? failure.text : undefined}
-        onApprove={typed => approve(request, typed)} onDecline={() => revoke(request.requestId)} />)}
+        failure={failure?.id === request.requestId ? failure.text : undefined} onDecline={() => revoke(request.requestId)} />)}
       {list.value.running.map(running => <div key={running.id} className={css.row} data-elevation-id={running.id}>
         <div className={css.details}>
           <div className={css.title}>{labelOf(running.deviceId)}</div>
@@ -472,25 +448,21 @@ function UnlockRequests({ t, fetch, devices }: { t: Translate; fetch: HostFetch;
         <Button variant="outline" size="sm" onClick={() => { void revoke(running.id) }}>{t('unlock.running.end')}</Button>
       </div>)}
     </> : null}
-    <p className={css.line}>{t('unlock.requests.command')} <code className={css.command}>{ELEVATE_COMMAND}</code></p>
   </div>
 }
 
 /**
- * One device asking to unlock, with its code input.
- * @param props - the copy, the device's name, the request, the refusal of its last answer, and the approval and the
- *   decline.
+ * One device asking for an unlock, which the computer can only decline: an approved unlock would admit nothing.
+ * @param props - the copy, the device's name, the request, the refusal of its last decline, and the decline.
  * @returns the row.
  */
-function UnlockRequestRow({ t, label, request, failure, onApprove, onDecline }: {
+function UnlockRequestRow({ t, label, request, failure, onDecline }: {
   t: Translate
   label: string
   request: PendingElevation
   failure: string | undefined
-  onApprove: (typed: string) => Promise<void>
   onDecline: () => Promise<void>
 }): ReactNode {
-  const [typed, setTyped] = useState('')
   const [busy, setBusy] = useState(false)
   const run = async (action: () => Promise<void>): Promise<void> => {
     setBusy(true)
@@ -506,10 +478,6 @@ function UnlockRequestRow({ t, label, request, failure, onApprove, onDecline }: 
       <div className={css.description}>{t('unlock.requests.asked', { time: formatTime(t, request.requestedAt) })}</div>
       {failure === undefined ? null : <div className={css.failed} role="alert">{failure}</div>}
     </div>
-    <form className={css.approve} onSubmit={(event) => { event.preventDefault(); void run(() => onApprove(typed)) }}>
-      <div className={css.code}><CodeCells label={t('unlock.requests.code', { label })} length={CODE_LENGTH} value={typed} onChange={setTyped} autoComplete="one-time-code" disabled={busy} /></div>
-      <Button variant="primary" size="sm" type="submit" disabled={busy || !isCompleteCode(typed)}>{t('unlock.requests.approve')}</Button>
-      <Button size="sm" type="button" disabled={busy} onClick={() => { void run(onDecline) }}>{t('unlock.requests.decline')}</Button>
-    </form>
+    <Button variant="outline" size="sm" type="button" disabled={busy} onClick={() => { void run(onDecline) }}>{t('unlock.requests.decline')}</Button>
   </div>
 }

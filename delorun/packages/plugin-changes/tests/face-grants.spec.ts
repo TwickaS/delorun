@@ -3,32 +3,15 @@
  * holds a passkey, and no unlock, PIN window or approval grace stands in for it; a `free` control needs nothing; the
  * computer is never asked. Each case names the check whose removal makes it fail.
  */
-import { authClassOf, GRANT_BODY_CAP_BYTES, GrantStore, hashRequest, type GrantHolder } from '@delorun/home-auth'
+import { authClassOf, GRANT_BODY_CAP_BYTES } from '@delorun/home-auth'
 import { describe, expect, it, vi } from 'vitest'
-import { CONTROL_LEVELS } from '../src/access.ts'
-import { faceAccessOf } from '../src/face-access.ts'
+import { CONTROL_LEVELS, LEGACY_LEVELS } from '../src/access.ts'
 import { ACTION_PATHS, HARNESS_PATHS, NOTICE_SEEN_PATH, PROTECTION_PATHS, SETUP_PATHS, STATE_PATH } from '../src/routes.ts'
-import { CREDENTIAL, DEVICE_HOST, fromDevice, json, post, routeHome, send, serveRoutes, TEST_DEVICE } from './routes-fixture.ts'
+import { CREDENTIAL, DEVICE_HOST, grantWorld, fromDevice, json, post, routeHome, send, serveRoutes } from './routes-fixture.ts'
 
 vi.setConfig({ testTimeout: 60_000 })
 
-const HOLDER: GrantHolder = { deviceId: TEST_DEVICE.id, listener: 'tailscale-private' as GrantHolder['listener'] }
 const WHERE_REFUSALS = ['LOOPBACK_REQUIRED', 'ELEVATION_REQUIRED', 'CROSS_SITE']
-
-/** A grant store and the access one device sees of it. */
-function faceWorld(options: { readonly hasPasskey?: boolean, readonly enabled?: boolean } = {}) {
-  const clock = { at: 1_000_000 }
-  let counter = 0
-  const store = new GrantStore({ now: () => clock.at, random: size => Uint8Array.from({ length: size }, () => (counter++ % 251) + 1) })
-  const face = faceAccessOf(options.enabled === false ? undefined : store, options.hasPasskey ?? true, HOLDER)
-  /** Mint a grant for one call and return the header that names it. */
-  const grantFor = (control: string, path: string, body: unknown): string => {
-    const hash = hashRequest({ method: 'POST', path, body: Buffer.from(JSON.stringify(body)) })
-    if (hash === undefined) throw new Error('body over the cap')
-    return store.mint(HOLDER, [{ action: `changes/${control}`, hash }], 'passkey').grantId
-  }
-  return { face, grantFor }
-}
 
 /** A device request with a grant header. */
 function withGrant(unlock: 'fresh' | 'grace' | 'none', body: unknown, grantId: string | undefined) {
@@ -46,12 +29,29 @@ const FACE_ROUTES = [
   { control: 'protection-off', path: PROTECTION_PATHS.off },
 ] as const
 
+/** The routes of the controls LEGACY_LEVELS holds to a grant: the set an unlocked phone could once open. */
+const FORMER_FULL_ROUTES = [
+  { control: 'plugin-apply', path: ACTION_PATHS.apply },
+  { control: 'plugin-other', path: ACTION_PATHS.off },
+  { control: 'harness-apply', path: HARNESS_PATHS.apply },
+  { control: 'harness-undo', path: HARNESS_PATHS.undo },
+  { control: 'make-copy', path: HARNESS_PATHS.copy },
+  { control: 'protection-off', path: PROTECTION_PATHS.off },
+] as const
+
 describe('Changes: face controls', () => {
+  // Adding a control to the `grant` set without a route here, or in the restart and update specs, leaves it without a denial case.
+  it('cover every control LEGACY_LEVELS holds to a grant here or in the restart and update specs', () => {
+    const covered: readonly string[] = [...FORMER_FULL_ROUTES, ...FACE_ROUTES].map(route => route.control)
+    const held = Object.entries(LEGACY_LEVELS).filter(([, level]) => level === 'grant').map(([control]) => control)
+    expect(held.filter(control => !covered.includes(control)).sort()).toEqual(['restart', 'stop', 'update-begin', 'update-rollback'])
+  })
+
   it('refuse a device that holds a passkey with no grant, whatever unlock it holds', async () => {
     // Pins `gate`: without the grant check a fresh unlock (a PIN or code) or the grace would admit the call.
     const { ctx } = routeHome()
-    const world = faceWorld()
-    const server = await serveRoutes(ctx, { powers: 'full', face: world.face })
+    const world = grantWorld()
+    const server = await serveRoutes(ctx, { face: world.face })
     for (const { path } of FACE_ROUTES) {
       for (const unlock of ['fresh', 'grace', 'none'] as const) {
         const reply = await send(server.port, path, fromDevice(unlock, {}))
@@ -59,46 +59,52 @@ describe('Changes: face controls', () => {
         expect(json(reply).code, `${unlock} ${path}`).toBe('ELEVATION_REQUIRED')
       }
     }
+    for (const { control, path } of FACE_ROUTES) {
+      // The refusal names the grant's action and nothing secret, so the client knows what to confirm.
+      expect(Object.keys(json(await send(server.port, path, fromDevice('none', {})))).sort(), path).toEqual(['action', 'code', 'message'])
+      expect(json(await send(server.port, path, fromDevice('none', {}))).action, path).toBe(`changes/${control}`)
+    }
     for (const path of Object.values(SETUP_PATHS)) {
       expect(json(await send(server.port, path, fromDevice('fresh', {}))).code, path).toBe('ELEVATION_REQUIRED')
     }
   })
 
-  it('refuse a Full-set control under Careful even with a valid grant, for a passkey device', async () => {
-    // Pins F11: until Phone powers is removed the Careful refusal comes before the grant lookup, so a grant cannot lift it.
+  // Removing the `grant` rows of LEGACY_LEVELS, or the grant-store check in `mayUse`, lets a running unlock (a code or a PIN window) open the set an unlocked phone could once open, for a device with no passkey.
+  it('refuse every control that changes what runs to a device with no passkey and a running unlock, and open it to a PIN grant for the call', async () => {
     const { ctx } = routeHome()
-    const world = faceWorld()
-    const server = await serveRoutes(ctx, { powers: 'careful', face: world.face })
-    for (const { control, path } of [{ control: 'plugin-apply', path: ACTION_PATHS.apply }, { control: 'harness-apply', path: HARNESS_PATHS.apply }]) {
-      const grant = world.grantFor(control, path, { id: 'a' })
-      expect(json(await send(server.port, path, withGrant('fresh', { id: 'a' }, grant))).code, control).toBe('LOOPBACK_REQUIRED')
+    const world = grantWorld({ hasPasskey: false })
+    const server = await serveRoutes(ctx, { face: world.face })
+    const former = [
+      ...FORMER_FULL_ROUTES,
+      ...Object.values(SETUP_PATHS).map(path => ({ control: 'plugin-other', path })),
+    ]
+    for (const { control, path } of former) {
+      for (const unlock of ['fresh', 'grace', 'none'] as const) {
+        const reply = await send(server.port, path, fromDevice(unlock, {}))
+        expect(reply.status, `${unlock} ${path}`).toBe(403)
+        expect(json(reply).code, `${unlock} ${path}`).toBe('ELEVATION_REQUIRED')
+      }
+      const grant = world.grantFor(control, path, { id: 'a' }, 'pin')
+      expect(WHERE_REFUSALS, path).not.toContain(json(await send(server.port, path, withGrant('none', { id: 'a' }, grant))).code)
     }
   })
 
-  it('refuse a Full-set control and setup under Careful even with a valid grant, for a device with no passkey', async () => {
-    // Pins F11 for the legacy device: the Careful refusal comes before the grant lookup whether or not the device holds a passkey.
+  // Removing the `face.enabled` branch in `mayUse` sends a grant, which cannot exist with no grant store, to the unlock path.
+  it('keep every control that changes what runs at the computer with no grant store, whatever unlock a device holds', async () => {
     const { ctx } = routeHome()
-    const world = faceWorld({ hasPasskey: false })
-    const server = await serveRoutes(ctx, { powers: 'careful', face: world.face })
-    for (const { control, path } of [{ control: 'plugin-apply', path: ACTION_PATHS.apply }, { control: 'harness-apply', path: HARNESS_PATHS.apply }, { control: 'plugin-other', path: SETUP_PATHS.export }]) {
-      const grant = world.grantFor(control, path, { id: 'a' })
-      expect(json(await send(server.port, path, withGrant('fresh', { id: 'a' }, grant))).code, control).toBe('LOOPBACK_REQUIRED')
+    const server = await serveRoutes(ctx, { face: grantWorld({ enabled: false }).face })
+    for (const { path } of [...FORMER_FULL_ROUTES, ...Object.values(SETUP_PATHS).map(path => ({ path }))]) {
+      for (const unlock of ['fresh', 'grace', 'none'] as const) {
+        expect(json(await send(server.port, path, fromDevice(unlock, {}))).code, `${unlock} ${path}`).toBe('LOOPBACK_REQUIRED')
+      }
     }
-  })
-
-  it('refuse setup under Careful even with a valid grant, for a passkey device', async () => {
-    const { ctx } = routeHome()
-    const world = faceWorld()
-    const server = await serveRoutes(ctx, { powers: 'careful', face: world.face })
-    const grant = world.grantFor('plugin-other', SETUP_PATHS.export, { list: true })
-    expect(json(await send(server.port, SETUP_PATHS.export, withGrant('fresh', { list: true }, grant))).code).toBe('LOOPBACK_REQUIRED')
   })
 
   it('bind the query string a grant was made for', async () => {
     // Pins the hash over path and query: a grant for one query must not admit the same path with another or none.
     const { ctx } = routeHome()
-    const world = faceWorld()
-    const server = await serveRoutes(ctx, { powers: 'full', face: world.face })
+    const world = grantWorld()
+    const server = await serveRoutes(ctx, { face: world.face })
     const path = ACTION_PATHS.apply
     const grant = world.grantFor('plugin-apply', `${path}?a=1`, { id: 'a' })
     for (const target of [path, `${path}?a=2`, `${path}?a=1&b=2`]) {
@@ -110,20 +116,23 @@ describe('Changes: face controls', () => {
   it('refuse a body over the grant cap whatever grant it carries, and leave the grant unused', async () => {
     // Pins the 1 MiB cap: a body that cannot be hashed is covered by no grant.
     const { ctx } = routeHome()
-    const world = faceWorld()
-    const server = await serveRoutes(ctx, { powers: 'full', face: world.face })
+    const world = grantWorld()
+    const server = await serveRoutes(ctx, { face: world.face })
     const path = ACTION_PATHS.apply
     const grant = world.grantFor('plugin-apply', path, { id: 'a' })
     const oversized = JSON.stringify({ id: 'a', pad: 'x'.repeat(GRANT_BODY_CAP_BYTES) })
-    expect(json(await send(server.port, path, withGrant('none', oversized, grant))).code).toBe('ELEVATION_REQUIRED')
+    const refused = json(await send(server.port, path, withGrant('none', oversized, grant)))
+    expect(refused.code).toBe('ELEVATION_REQUIRED')
+    // No grant can cover it, so the refusal names no action to confirm.
+    expect(refused.action).toBeUndefined()
     expect(WHERE_REFUSALS).not.toContain(json(await send(server.port, path, withGrant('none', { id: 'a' }, grant))).code)
   })
 
   it('admit exactly the call a grant was made for, once', async () => {
     // Pins the body hash and the single use: a grant for body A must not admit body B, and a replay is refused.
     const { ctx } = routeHome()
-    const world = faceWorld()
-    const server = await serveRoutes(ctx, { powers: 'full', face: world.face })
+    const world = grantWorld()
+    const server = await serveRoutes(ctx, { face: world.face })
     const path = ACTION_PATHS.apply
     const grant = world.grantFor('plugin-apply', path, { id: 'a' })
     const other = await send(server.port, path, withGrant('none', { id: 'b' }, grant))
@@ -136,8 +145,8 @@ describe('Changes: face controls', () => {
 
   it('refuse a grant for another control or path, and a body with no header naming the grant', async () => {
     const { ctx } = routeHome()
-    const world = faceWorld()
-    const server = await serveRoutes(ctx, { powers: 'full', face: world.face })
+    const world = grantWorld()
+    const server = await serveRoutes(ctx, { face: world.face })
     const grant = world.grantFor('plugin-apply', ACTION_PATHS.apply, { id: 'a' })
     expect(json(await send(server.port, ACTION_PATHS.undo, withGrant('none', { id: 'a' }, grant))).code).toBe('ELEVATION_REQUIRED')
     expect(json(await send(server.port, ACTION_PATHS.apply, withGrant('none', { id: 'a' }, undefined))).code).toBe('ELEVATION_REQUIRED')
@@ -148,29 +157,33 @@ describe('Changes: face controls', () => {
 
   it('never ask the computer', async () => {
     const { ctx } = routeHome()
-    const server = await serveRoutes(ctx, { face: faceWorld().face })
+    const server = await serveRoutes(ctx, { face: grantWorld().face })
     for (const { path } of FACE_ROUTES) expect(WHERE_REFUSALS).not.toContain(json(await post(server.port, path, {})).code)
   })
 
-  it('keep the legacy unlock for a device with no passkey, and let it use a grant too', async () => {
+  // Reverting the `unlocked` level of the take-back controls lets a running unlock (a code or a PIN window) undo and discard from a phone with no passkey.
+  it('refuse the take-back controls to a device with no passkey and a running unlock, and open them to a PIN grant for the call', async () => {
     const { ctx } = routeHome()
-    const world = faceWorld({ hasPasskey: false })
-    const server = await serveRoutes(ctx, { powers: 'full', face: world.face })
-    const path = ACTION_PATHS.apply
-    expect(json(await send(server.port, path, fromDevice('none', {}))).code).toBe('ELEVATION_REQUIRED')
-    expect(WHERE_REFUSALS).not.toContain(json(await send(server.port, path, fromDevice('fresh', {}))).code)
-    expect(WHERE_REFUSALS).not.toContain(json(await send(server.port, path, withGrant('none', { id: 'a' }, world.grantFor('plugin-apply', path, { id: 'a' })))).code)
+    const world = grantWorld({ hasPasskey: false })
+    const server = await serveRoutes(ctx, { face: world.face })
+    const path = ACTION_PATHS.undo
+    for (const unlock of ['fresh', 'grace', 'none'] as const) {
+      expect(json(await send(server.port, path, fromDevice(unlock, {}))).code, unlock).toBe('ELEVATION_REQUIRED')
+    }
+    expect(WHERE_REFUSALS).not.toContain(json(await send(server.port, path, withGrant('none', { id: 'a' }, world.grantFor('plugin-undo', path, { id: 'a' }, 'pin')))).code)
   })
 
-  it('stay at the legacy levels while the flag is off', async () => {
+  it('keep the take-back controls at the computer with no grant store, whatever unlock a device holds', async () => {
     const { ctx } = routeHome()
-    const server = await serveRoutes(ctx, { powers: 'careful', face: faceWorld({ enabled: false }).face })
-    expect(json(await send(server.port, ACTION_PATHS.apply, fromDevice('fresh', {}))).code).toBe('LOOPBACK_REQUIRED')
+    const server = await serveRoutes(ctx, { face: grantWorld({ enabled: false }).face })
+    for (const unlock of ['fresh', 'grace', 'none'] as const) {
+      expect(json(await send(server.port, ACTION_PATHS.undo, fromDevice(unlock, {}))).code, unlock).toBe('LOOPBACK_REQUIRED')
+    }
   })
 
   it('say in the state that a passkey device needs Face ID', async () => {
     const { ctx } = routeHome()
-    const server = await serveRoutes(ctx, { powers: 'full', face: faceWorld().face })
+    const server = await serveRoutes(ctx, { face: grantWorld().face })
     const state = json(await send(server.port, STATE_PATH, { host: DEVICE_HOST, headers: [CREDENTIAL, 'x-test-remote: 1', 'x-test-unlock: fresh'] }))
     expect(state).toMatchObject({ access: { may: { 'plugin-apply': { ok: false, needs: 'face' }, 'protection-on': { ok: true }, 'notice-seen': { ok: false, needs: 'computer' } } } })
   })
@@ -180,7 +193,7 @@ describe('Changes: free controls', () => {
   it('work for a paired device with no unlock, no grant and a passkey', async () => {
     // Pins the `free` class: protection on only tightens, so a locked phone may turn it on.
     const { ctx } = routeHome()
-    const server = await serveRoutes(ctx, { powers: 'careful', face: faceWorld().face })
+    const server = await serveRoutes(ctx, { face: grantWorld().face })
     for (const unlock of ['fresh', 'grace', 'none'] as const) {
       expect(WHERE_REFUSALS, unlock).not.toContain(json(await send(server.port, PROTECTION_PATHS.on, fromDevice(unlock, {}))).code)
     }
