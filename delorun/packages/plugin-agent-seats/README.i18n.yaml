@@ -4,25 +4,25 @@
 #   pnpm run verify-translation-pairing --write delorun/packages/plugin-agent-seats/README.md
 /:
   en: fa99a1b762f54532
-  zh: fa99a1b762f54532
+  zh: 80b982dfe0df92a5
 /delorun-plugin-agent-seats:
   en: f1ce36c48b272174
   zh: e66928a3bfc583f0
 /delorun-plugin-agent-seats/summary:
   en: 86febb8e243ab9bb
-  zh: 86febb8e243ab9bb
+  zh: 0f57178a7be469a0
 /delorun-plugin-agent-seats/contents:
   en: 659ab0877fba1087
-  zh: 659ab0877fba1087
+  zh: 295ada45fe45f09b
 /delorun-plugin-agent-seats/configuration:
   en: 2d179274c4e11b30
-  zh: 2d179274c4e11b30
+  zh: 63ceb08eb4e5a20b
 /delorun-plugin-agent-seats/contract:
   en: 1e096fbb4f78bd7e
-  zh: 1e096fbb4f78bd7e
+  zh: 138c716ea2ddd6bf
 /delorun-plugin-agent-seats/questions-from-the-program:
   en: 58ababb346c2d8a2
-  zh: 58ababb346c2d8a2
+  zh: ac9fc851fdf4bc1c
 /delorun-plugin-agent-seats/tests:
   en: 1fb193646e58192d
-  zh: 1fb193646e58192d
+  zh: f82dedc1d0eebd61

@@ -1,5 +1,5 @@
 ---
-description: "Delorun's live external agents, for maintainers: Claude Code and Codex as child chats of the chat that handed work over, behind the externalAgents.liveAgents preview flag."
+description: "Delorun 的实时外部智能体，面向维护者：Claude Code 和 Codex 作为交付工作的对话的子对话，位于预览开关 externalAgents.liveAgents 之后。"
 kind: "package-library"
 ---
 
@@ -7,55 +7,55 @@ kind: "package-library"
 
 [English](README.md) | 中文
 
-## Summary
+## 概述
 
-This package makes Claude Code and Codex live agents: a child chat (a seat) of the chat that handed work over, whose model is the external program and which a person can watch, message and stop. Everything except the declaration of the preview flag `externalAgents.liveAgents` registers only while that flag is on. With the flag off, a chat's tools, model routes, presets and routes are as without this package, and upstream's one-shot `subagent_claude_code` and `subagent_codex` tools stay as they are. The start gate (`@delorun/external-agents`) is the only code that starts either program; this package asks it.
+这个包让 Claude Code 和 Codex 成为实时智能体：交付工作的对话的一个子对话（席位），它的模型是外部程序，本人可以观看、发送消息和停止它。除了预览开关 `externalAgents.liveAgents` 的声明之外，所有内容只在该开关开启时才注册。开关关闭时，对话的工具、模型路由、预设和路由与没有这个包时相同，上游的一次性 `subagent_claude_code` 和 `subagent_codex` 工具保持不变。启动门控（`@delorun/external-agents`）是唯一启动这两个程序的代码；这个包向它提出请求。
 
-## Contents
+## 目录
 
-- [Configuration](#configuration)
-- [Contract](#contract)
-- [Questions from the program](#questions-from-the-program)
-- [Tests](#tests)
+- [配置](#configuration)
+- [契约](#contract)
+- [程序的提问](#questions-from-the-program)
+- [测试](#tests)
 
-## Configuration
+## 配置
 
-The Host row `delorun-agent-seats` holds `seats`, a list of `{ provider, route, preset, toolName, maxDepth, contextWindow }`. The default has one seat each for Claude Code (`claude_code`) and Codex (`codex`).
+Host 行 `delorun-agent-seats` 保存 `seats`，它是 `{ provider, route, preset, toolName, maxDepth, contextWindow }` 的列表。默认为 Claude Code（`claude_code`）和 Codex（`codex`）各一个席位。
 
 | Field | Meaning |
 | --- | --- |
-| `provider` | The agent the gate runs: `claude-code` or `codex`. Any other value stops the row. |
-| `route` | The hidden model route the seat child's turns use. |
-| `preset` | The agent preset that composes the seat child. |
-| `toolName` | The hand-off tool the lead's model sees; its dotted form (`claude_code.`) prefixes the seat's recorded tool names. |
-| `maxDepth` | The deepest chain of seat children that may hand work on; 1 means a seat child cannot hand over again. |
-| `contextWindow` | The program's context window in tokens, which the token meter divides by. |
+| `provider` | 门控运行的智能体：`claude-code` 或 `codex`。任何其他值都会使该行停止。 |
+| `route` | 席位子对话的各轮次所使用的隐藏模型路由。 |
+| `preset` | 组成席位子对话的智能体预设。 |
+| `toolName` | 主导对话的模型看到的交接工具；它的点号形式（`claude_code.`）是席位所记录的工具名称的前缀。 |
+| `maxDepth` | 可以继续交接工作的席位子对话的最深链条；1 表示席位子对话不能再次交接。 |
+| `contextWindow` | 程序的上下文窗口，单位为词元，令牌计量器用它做除数。 |
 
-Two seats may not share a provider, route or tool name. The row reads the preview flag once when it loads, so a change of the flag takes a reload of the row. It needs the services `previewFlags`, `llm`, `sessions`, `sessionProjections`, `externalAgents`, `subagents`, `tools`, `agentPresets`, `connection` and `profileContext`; the model choices are kept in `agent-seat-models.json` in the profile folder.
+两个席位不能共用同一个 provider、路由或工具名称。该行在加载时读取一次预览开关，因此开关改变后需要重新加载该行。它需要服务 `previewFlags`、`llm`、`sessions`、`sessionProjections`、`externalAgents`、`subagents`、`tools`、`agentPresets`、`connection` 和 `profileContext`；模型选择保存在配置档文件夹中的 `agent-seat-models.json`。
 
-## Contract
+## 契约
 
-- **Flag off.** The row declares the flag and registers nothing else.
-- **Flag on.** For each seat the row registers a subagent provider named `<provider>-seat`, the hand-off tool, a model route, the preset and the `agentSeat` session projection. It provides the `seatPrograms` service and two Host routes. Every registration is an effect, so stopping the row withdraws all of them.
-- **Hand-off.** The tool starts a continuable child of the lead on the seat provider, route and preset, with the task exactly as written. The gate's refusals reach the model as fixed sentences. In a chat with the live agent, upstream's one-shot tool for the same agent is hidden from that agent with `ctx.tools.restrict`.
-- **Model route.** `listModels()` is empty, so no picker shows the route, and the adapter refuses every request that is not a seat child's own turn. Each harness step streams one program message.
-- **Records.** The preset mounts the seat tool executor, which writes the program's tool calls as records named with the seat's prefix (`claude_code.Bash`), so the native executor can never run one. Program output is cut at a fixed cap and the full text kept as a spill.
-- **Logged state.** The seat child's own log holds the program's session and input cursor (`external-agent/state`), its status (`external-agent/status`) and the notices its transcript shows (`external-agent/notice`), so a restart and an archive restore carry them; a fork inherits the events but shows no seat. They are required events: a build that does not know them refuses the log. The `agentSeat` projection folds them and ignores the ignorable `plugin:delorun/agent-seat/*` records that earlier previews wrote.
-- **Host routes.** `POST /api/agentSeat.resume` starts a new turn once a reached plan limit has lifted, and `POST /api/agentSeat.chooseModel` keeps the person's pick of a model the plan offers, once per workspace. Nothing resumes by itself. Both routes are open to the computer and, with no prompt, to any approved phone once the home is mounted (class `free`): Resume only flips the seat's status, and the model pick changes no permission.
-- **Lease end.** When the consent ends a seat's lease (chat archived, permission revoked, consent off), the gate stops the program, this row drops its run and the chat shows why its agent stopped.
-- **Not read yet.** The check that tells a person the program's own session moved on while the chat was closed runs only when the entry supplies a `tail` reader, and the chat's program version and settings name only when it supplies `info`. Neither is supplied.
-- **Relay seam.** `mountSeats(ctx, config, { relay })` takes the question relay as a function of the mounted state and the exact seat provider names. Without one, every question of a program is rejected.
+- **开关关闭。**该行声明开关，不注册其他任何东西。
+- **开关开启。**该行为每个席位注册一个名为 `<provider>-seat` 的子智能体提供方、交接工具、一条模型路由、预设和 `agentSeat` 会话投影。它提供 `seatPrograms` 服务和两条 Host 路由。每项注册都是 effect，因此停止该行会撤回所有这些注册。
+- **交接。**工具在席位的提供方、路由和预设上启动主导对话的一个可继续的子对话，任务原文照传。门控的各项拒绝以固定语句到达模型。在有实时智能体的对话中，上游针对同一智能体的一次性工具会用 `ctx.tools.restrict` 对该智能体隐藏。
+- **模型路由。**`listModels()` 为空，因此没有选择器显示该路由，适配器会拒绝每个不是席位子对话自己轮次的请求。每个 harness 步骤流式传输一条程序消息。
+- **记录。**预设挂载席位工具执行器，它把程序的工具调用写成以席位前缀命名的记录（`claude_code.Bash`），因此原生执行器永远不会运行其中任何一个。程序输出在固定上限处被截断，完整文本作为溢出内容保留。
+- **已记录的状态。**席位子对话自己的日志保存程序的会话和输入游标（`external-agent/state`）、它的状态（`external-agent/status`）以及它的记录中显示的通知（`external-agent/notice`），因此重启和归档恢复都会带上它们；分叉会继承这些事件，但不显示席位。它们是必需事件：不认识它们的构建会拒绝该日志。`agentSeat` 投影折叠它们，并忽略早期预览版写入的、可忽略的 `plugin:delorun/agent-seat/*` 记录。
+- **Host 路由。**`POST /api/agentSeat.resume` 在已达到的套餐限额解除后开始新的轮次，`POST /api/agentSeat.chooseModel` 保存本人对套餐所提供的模型的选择，每个工作区一次。没有任何东西会自行恢复。两条路由对电脑开放，并且在 home 挂载之后，对任何已批准的手机也不显示提示即可开放（类别 `free`）：Resume 只切换席位的状态，选择模型不改变任何权限。
+- **租约结束。**当同意结束席位的租约（对话被归档、权限被撤销、同意被关闭）时，门控停止程序，该行丢弃它的运行，对话会显示它的智能体为何停止。
+- **尚未读取。**告知本人程序自己的会话在对话关闭期间已前进的检查，只有在条目提供 `tail` 读取器时才运行；对话中程序的版本和设置名称，只有在它提供 `info` 时才显示。两者都没有提供。
+- **转达接缝。**`mountSeats(ctx, config, { relay })` 以挂载状态和确切的席位提供方名称的函数形式接收提问转达器。没有它，程序的每个提问都被拒绝。
 
-## Questions from the program
+## 程序的提问
 
-A seat's permission questions go to the person through the approval service on the seat child, with the `external-agent` grant marker: the computer may allow, and a phone may allow only with an answer grant for exactly that question and that answer (a grant for `allowed-once` never admits `allowed-for-run`, and the reverse; a live Face ID pass of the answering device admits both, as it admits Allow once); no PIN or code unlock, approval grace or dangerous mode stands in for it, and any phone may reject. The studio's card shows the granting answers on the computer and on an approved phone, where each one first asks for Face ID, or the PIN keypad on a phone with no passkey, through the reach service's `confirm`, which mints that grant; a question without a call id cannot be confirmed, and the card says Not confirmed. A page with no reach service offers Reject only. In a Full access chat the questions are allowed without a card and logged as allowed. "Allow for this run" reaches the host as the raw answer `allowed-for-run`, which a listener on `approval/request` turns into allowed-once plus a mark; the gate keeps the program's rule in memory until the seat's lease ends. Once the consent service holds the rule, the seat child's log gets an `external-agent/run-allowed` event naming the question's `approval/asked` event; when the gate falls back to Allow once, nothing is logged.
+席位的权限提问通过席位子对话上的批准服务交给本人，带有 `external-agent` 授权标记：电脑可以允许；手机只有在持有恰好针对该提问和该回答的回答授权时才可以允许（针对 `allowed-once` 的授权从不准入 `allowed-for-run`，反之亦然；回答它的设备持有的有效 Face ID 通行期则两者都准入，就像它准入允许一次一样），PIN 或代码解锁、批准宽限或危险模式都不能代替它；任何手机都可以拒绝。工作室的卡片在电脑上和已批准的手机上显示授予权限的回答，在手机上每个回答都先通过 reach 服务的 `confirm` 要求 Face ID（没有通行密钥的手机则用 PIN 键盘），由它签发该授权；没有调用 id 的提问无法确认，卡片会显示“未确认”。没有 reach 服务的页面只提供拒绝。在“完全访问”的对话中，提问不显示卡片就被允许，并记录为已允许。“为此次运行允许”以原始回答 `allowed-for-run` 到达 host，`approval/request` 上的监听者会把它变成允许一次加一个标记；门控在内存中保存程序的规则，直到席位的租约结束。一旦同意服务持有该规则，席位子对话的日志中就会出现一个 `external-agent/run-allowed` 事件，它指明该提问的 `approval/asked` 事件；当门控退回到允许一次时，不记录任何东西。
 
-A question waits until the seat has written the record of its call, so the log reads call, asked, decided, result. The relay asks only when that record carries the name the seat gives the call (`claude_code.Bash`); otherwise it rejects the question and logs a warning. The card shows the program's reason as the agent's words ("Claude Code says: ..."). A stop ends a pending question before the turn ends.
+提问会等到席位写下它的调用记录之后，因此日志按调用、询问、决定、结果的顺序读取。只有当该记录带有席位给该调用的名称（`claude_code.Bash`）时，转达器才会询问；否则它拒绝该提问并记录一条警告。卡片把程序的理由显示为智能体的话（“Claude Code says: ...”）。停止会在轮次结束之前结束一个待处理的提问。
 
-## Tests
+## 测试
 
-- [`tests/wiring.spec.ts`](tests/wiring.spec.ts) proves that the entry registers nothing but the flag while it is off, registers the tools, providers, routes, presets and Host routes while it is on, withdraws them when the row stops, and tells a seat's chat why its lease ended.
-- [`tests/provider/provider.spec.ts`](tests/provider/provider.spec.ts) proves the subagent provider, the hand-off tools, the depth rule and every gate refusal on a real subagent runtime and tool pipeline.
-- [`tests/adapter`](tests/adapter) proves the model route on a scripted gate and program, including its refusals.
-- [`tests/executor`](tests/executor) proves the seat executor, the preset and the output cap on the production agent loop.
-- [`tests/state`](tests/state) proves the `agentSeat` projection, the model choices, the Host routes and the seat's turns on a real session store.
+- [`tests/wiring.spec.ts`](tests/wiring.spec.ts) 证明条目在开关关闭时只注册该开关，开启时注册工具、提供方、路由、预设和 Host 路由，该行停止时撤回它们，并告诉席位的对话它的租约为何结束。
+- [`tests/provider/provider.spec.ts`](tests/provider/provider.spec.ts) 在真实的子智能体运行时和工具流水线上证明子智能体提供方、交接工具、深度规则和门控的每一种拒绝。
+- [`tests/adapter`](tests/adapter) 在脚本化的门控和程序上证明模型路由，包括它的各项拒绝。
+- [`tests/executor`](tests/executor) 在生产的 agent loop 上证明席位执行器、预设和输出上限。
+- [`tests/state`](tests/state) 在真实的会话存储上证明 `agentSeat` 投影、模型选择、Host 路由和席位的各个轮次。

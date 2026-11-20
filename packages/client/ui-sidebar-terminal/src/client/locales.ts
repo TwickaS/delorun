@@ -27,8 +27,8 @@ export const zh = {
   'badge.sandbox': '沙箱',
   'badge.readOnlyHint': '命令在 Agent 的只读沙箱里运行，包括你在这里输入的命令。',
   'badge.workspaceWriteHint': '命令在 Agent 的工作区沙箱里运行，包括你在这里输入的命令。',
-  errorWithheld: 'The terminal could not start or stopped with an error. The details are on the computer.',
-  notConfirmed: 'Not confirmed. The terminal did not start.',
+  errorWithheld: '终端无法启动，或因错误而停止。详细信息在电脑上。',
+  notConfirmed: '未确认。终端没有启动。',
 } satisfies Record<string, string>
 
 /** English terminal copy. */

@@ -4,31 +4,31 @@
 #   pnpm run verify-translation-pairing --write delorun/packages/plugin-multiview/README.md
 /:
   en: 0197ed938602c22e
-  zh: 0197ed938602c22e
+  zh: 3af517b3fc5b626e
 /delorun-plugin-multiview:
   en: d501bd90e9579fa0
   zh: d3cbb6da68829df0
 /delorun-plugin-multiview/summary:
   en: ab999f686f8f0827
-  zh: ab999f686f8f0827
+  zh: 1dedde009f7f8597
 /delorun-plugin-multiview/contents:
   en: b31330b88153d44a
-  zh: b31330b88153d44a
+  zh: 59fa92e9d1b25096
 /delorun-plugin-multiview/using-it:
   en: 5d5519fc16124ae3
-  zh: 5d5519fc16124ae3
+  zh: 7a28336a9ea5406b
 /delorun-plugin-multiview/panes:
   en: 8fb29d4cc6ae8a7b
   zh: 8fb29d4cc6ae8a7b
 /delorun-plugin-multiview/configuration:
   en: 055d059ed2ea31f5
-  zh: 055d059ed2ea31f5
+  zh: 4fd84a013ca22f11
 /delorun-plugin-multiview/contract:
   en: 5aefe7466f9ae01a
-  zh: 5aefe7466f9ae01a
+  zh: d31aacb03d868f75
 /delorun-plugin-multiview/limits:
   en: 707fe6e287a05070
-  zh: 707fe6e287a05070
+  zh: 2f3b7b8dbd7e49b2
 /delorun-plugin-multiview/tests:
   en: c1fc331e45134130
-  zh: c1fc331e45134130
+  zh: 2284fec7a04723c7
