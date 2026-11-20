@@ -3175,6 +3175,60 @@
       "class": "delorun-feature",
       "feature": "studio-seams",
       "reason": "Every toast renders into one toast area with the newest nearest the edge and at most three visible; adds the slot that persistent plugin cards (downloads, update progress) use, and drops the anchor prop."
+    },
+    {
+      "path": "packages/client/ui-agent-preset/src/client/locales.ts",
+      "class": "delorun-feature",
+      "feature": "studio-polish",
+      "reason": "The English PTC mode description and the create-a-mode button use British spelling and say mode where the page says mode."
+    },
+    {
+      "path": "packages/client/ui-chat/src/client/chat/StatsPills.module.css",
+      "class": "delorun-feature",
+      "feature": "studio-polish",
+      "reason": "The stats pills keep the proportional digits of the typeface, so a decimal point is not drawn as wide as a digit; at 480px and below they show the first reading only, so no word is cut in half."
+    },
+    {
+      "path": "packages/client/ui-conversation/src/client/skeleton/ContextMeter.module.css",
+      "class": "delorun-feature",
+      "feature": "studio-polish",
+      "reason": "The context meter keeps the typeface's proportional digits, so a decimal point is not drawn as wide as a digit."
+    },
+    {
+      "path": "packages/client/ui-settings-plugin-inventory/src/client/PluginInventorySettingsTab.tsx",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "A plugin card without a title reads its module name as plain words (\"Tool bash\") and no longer prints the entry id under the description; the id stays in the expanded card."
+    },
+    {
+      "path": "packages/experimental/auto-review/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "British spelling in the plugin title."
+    },
+    {
+      "path": "packages/experimental/badge-skill-bundle/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "The plugin title and description say Delorun, not DSH."
+    },
+    {
+      "path": "packages/experimental/forge-bundle/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "The description is shorter and names the GitHub command-line tool in plain words, so the clamp no longer cuts the requirement."
+    },
+    {
+      "path": "packages/experimental/inspector-profile/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "The description says Delorun, not DSH."
+    },
+    {
+      "path": "packages/experimental/personalized-recommendations/locale/en.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "British spelling in the title and description, and Delorun in place of DSH."
     }
   ],
   "retired": []
