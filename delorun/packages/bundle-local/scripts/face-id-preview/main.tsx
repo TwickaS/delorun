@@ -207,6 +207,8 @@ function screenOf(screen: string): ReactNode {
     case 'b4-computer':
       return <PasskeyDevices t={t} api={fakeApi({ devices: COMPUTER_DEVICES })} browser={fakeBrowser()} kind="faceId" atComputer secret="pin"
         onAdd={noop} onAskComputer={noop} />
+    case 'icon-catalogue':
+      return <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, padding: 8, fontSize: 10 }}>{Object.keys(ICON_SYMBOLS).filter(id => id.endsWith('-medium')).map(id => <div key={id} style={{ display: 'grid', justifyItems: 'center', gap: 2 }}><svg width={28} height={28}><use href={`#${id}`} /></svg>{id.slice(9, -7)}</div>)}</div>
     case 'terminal-guide':
       return <TerminalGuideEntry />
     case 'devices-phone':

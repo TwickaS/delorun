@@ -4,20 +4,21 @@
  */
 import type { ReactNode } from 'react'
 import {
-  IconCheckCircleOutlineMedium, IconCodeOutlineMedium, IconCordisPluginOutlineMedium, IconDownloadOutlineMedium, IconFolderOpenOutlineMedium,
-  IconGlobeOutlineMedium, IconRefreshOutlineMedium, IconSettingsOutlineMedium, IconShieldOutlineMedium, IconTrashOutlineMedium, type IconProps,
+  IconApiOutlineMedium, IconCheckCircleOutlineMedium, IconDownloadOutlineMedium, IconFolderOpenOutlineMedium,
+  IconGlobeOutlineMedium, IconPluginPinwheelOutlineMedium, IconRefreshOutlineMedium, IconSettingsOutlineMedium, IconShieldOutlineMedium, IconTrashOutlineMedium, type IconProps,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { FaceIconKey } from './face-id-types.ts'
 
 /** The glyph component of each key. */
 const GLYPHS: Readonly<Record<FaceIconKey, (props: IconProps) => ReactNode>> = {
-  terminal: IconCodeOutlineMedium,
+  // The sprite's `api-outline` draws a prompt, `>_`; its `code-outline` is a hash sign.
+  terminal: IconApiOutlineMedium,
   shield: IconShieldOutlineMedium,
   download: IconDownloadOutlineMedium,
   check: IconCheckCircleOutlineMedium,
   folder: IconFolderOpenOutlineMedium,
   settings: IconSettingsOutlineMedium,
-  plugin: IconCordisPluginOutlineMedium,
+  plugin: IconPluginPinwheelOutlineMedium,
   trash: IconTrashOutlineMedium,
   globe: IconGlobeOutlineMedium,
   refresh: IconRefreshOutlineMedium,

@@ -13,6 +13,7 @@ import { hashArgs, hashRequest } from './face-id-hash.ts'
 import { CHANGE_CONTROLS, faceCopyOf, type FaceActionCopy } from './face-id-locales.ts'
 import type { FaceIdAction, PasskeyApi } from './face-id-types.ts'
 import { COPY_ICON, faceIconOf } from './face-id-icon-keys.ts'
+import { STAYS_OF_CHANGE, STAYS_OF_COPY } from './face-id-stays.ts'
 import { FaceIdGrantFlow } from './FaceIdGrantFlow.tsx'
 import type { FaceGrantSource } from './face-grant.ts'
 import type { HostFetch } from './host-api.ts'
@@ -39,13 +40,15 @@ export type FaceIdGrantOverlayProps = PropsLocale<'delorunFaceId'> & InjectFace<
  * The words, glyph and workspace of the action a grant covers: a Changes control's own, an action of {@link ACTION_COPY}, or the generic ones.
  * @param t - the copy.
  * @param request - the call and its action.
- * @returns the title, the body, the items a batch covers, the glyph and the workspace the call names.
+ * @returns the title, the body, the items a batch covers, the glyph, what stays afterwards and the workspace the call names.
  */
-function wordsOf(t: PropsLocale<'delorunFaceId'>['t'], request: FaceGrantRequest): Pick<FaceIdAction, 'title' | 'body' | 'items' | 'icon' | 'context'> {
+function wordsOf(t: PropsLocale<'delorunFaceId'>['t'], request: FaceGrantRequest): Pick<FaceIdAction, 'title' | 'body' | 'items' | 'icon' | 'context' | 'stays'> {
   if (request.action.startsWith('changes/')) {
     const known = CHANGE_CONTROLS.find(entry => entry === request.action.slice('changes/'.length))
     const icon = faceIconOf(request.action)
-    return known === undefined ? { title: t('change.generic.title'), body: t('change.generic.body'), icon } : { title: t(`change.${known}.title`), body: t(`change.${known}.body`), icon }
+    if (known === undefined) return { title: t('change.generic.title'), body: t('change.generic.body'), icon }
+    const stays = STAYS_OF_CHANGE[known]
+    return { title: t(`change.${known}.title`), body: t(`change.${known}.body`), icon, ...stays === undefined ? {} : { stays: t(stays) } }
   }
   const body = 'args' in request.call ? request.call.args : 'answer' in request.call ? {} : jsonOf(request.call.body)
   let copy: FaceActionCopy = faceCopyOf(request.action)
@@ -60,7 +63,8 @@ function wordsOf(t: PropsLocale<'delorunFaceId'>['t'], request: FaceGrantRequest
   const names: unknown = Reflect.get(body, 'names')
   const items = Array.isArray(names) && names.every(item => typeof item === 'string') ? { items: names } : {}
   const context = values.workspace === undefined ? {} : { context: { workspace: values.workspace } }
-  return { title: t(`do.${copy}.title`, values), body: t(`do.${copy}.body`, values), icon: COPY_ICON[copy], ...context, ...items }
+  const stays = STAYS_OF_COPY[copy]
+  return { title: t(`do.${copy}.title`, values), body: t(`do.${copy}.body`, values), icon: COPY_ICON[copy], ...stays === undefined ? {} : { stays: t(stays, values) }, ...context, ...items }
 }
 
 /**

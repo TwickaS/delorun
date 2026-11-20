@@ -39,6 +39,8 @@ export interface FaceIdAction {
   readonly items?: readonly string[]
   /** The glyph by the title; the sheet uses the plain shield when absent. */
   readonly icon?: FaceIconKey
+  /** What the action leaves in place after the one confirmation, in a sentence; absent when nothing lasts. */
+  readonly stays?: string
   /** The workspace and chat the action belongs to, when the request names them. */
   readonly context?: FaceIdContext
   /** True when the home never grants this action by PIN, so the sheet offers no PIN keypad. */

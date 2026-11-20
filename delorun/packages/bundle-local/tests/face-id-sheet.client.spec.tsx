@@ -15,6 +15,7 @@ import { en } from '../src/client/face-id-locales.ts'
 import { fakeApi, fakeBrowser } from '../src/client/face-id-fake.ts'
 import type { FaceIdAction } from '../src/client/face-id-types.ts'
 import { FaceIdGrantFlow } from '../src/client/FaceIdGrantFlow.tsx'
+import { callActionOf } from '../src/client/FaceIdGrantOverlay.tsx'
 
 const t = makeTranslate(en)
 const terminal: FaceIdAction = {
@@ -66,7 +67,7 @@ describe('the shared action sheet', () => {
   // The glyph comes from the action's own key; the plain shield stands in when the request has none.
   it('draws the action\'s glyph by the title, and the shield when the action has none', () => {
     flow()
-    expect(document.querySelector('header [data-icon]')?.getAttribute('data-icon')).toBe('dsw-icon-code-outline-medium')
+    expect(document.querySelector('header [data-icon]')?.getAttribute('data-icon')).toBe('dsw-icon-api-outline-medium')
     cleanup()
     flow({ action: install })
     expect(document.querySelector('header [data-icon]')?.getAttribute('data-icon')).toBe('dsw-icon-shield-outline-medium')
@@ -122,5 +123,22 @@ describe('the shared action sheet', () => {
     const props = flow()
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(props.onCancel).toHaveBeenCalledOnce()
+  })
+
+  // "Lasts" is how long the Face ID holds; without its own row, full access would read as "Just this once" and mislead.
+  it('names the state an action leaves in an Afterwards row, and none for a terminal', async () => {
+    const full = await callActionOf(t, { action: 'plugin-permission-defaults/set-full-access', call: { method: 'POST', path: '/api/full-access', body: { workspace: '/home/user/delorun', on: true } } })
+    expect(full.stays).toBe('Full access stays on for delorun until you turn it off.')
+    const off = await callActionOf(t, { action: 'plugin-permission-defaults/set-full-access', call: { method: 'POST', path: '/api/full-access', body: { workspace: '/home/user/delorun', on: false } } })
+    expect(off.stays).toBe('Full access stays off for delorun until you turn it on.')
+    expect((await callActionOf(t, { action: 'plugin-packs/add', call: { method: 'POST', path: '/api/p', body: {} } })).stays).toBe('The plugin stays installed until you remove it.')
+    expect((await callActionOf(t, { action: 'changes/update-begin', call: { method: 'POST', path: '/api/c', body: {} } })).stays).toBe('Delorun stays on the new release until you go back.')
+    expect((await callActionOf(t, { action: 'terminal/create', call: { args: { request: { id: 't' } } } })).stays).toBeUndefined()
+    flow({ action: full })
+    const rows = [...document.querySelectorAll('dl > div')].map(row => [row.querySelector('dt')?.textContent, row.querySelector('dd')?.textContent])
+    expect(rows.slice(-2)).toEqual([['Lasts', 'Just this once'], ['Afterwards', 'Full access stays on for delorun until you turn it off.']])
+    cleanup()
+    flow()
+    expect([...document.querySelectorAll('dl dt')].map(row => row.textContent)).not.toContain('Afterwards')
   })
 })
