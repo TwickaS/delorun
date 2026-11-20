@@ -33,7 +33,7 @@ const TERMINAL = { stdin: { isTTY: true }, stdout: { isTTY: true } }
 /** What `delorun changes protection` says protection on means. */
 const ON_MEANING = "a changed plugin, an edit of Delorun itself and the agent's plugin installs and removals load only after you apply them, and the agent asks before it first changes an approved plugin in a chat"
 /** What `delorun changes protection` says protection off means. */
-const OFF_MEANING = 'changes load without your review and are still recorded: a changed plugin loads at the next start and when you save while Delorun runs, edits of Delorun itself apply at the next start, and the agent installs and removes plugins with the full-access approval alone; see and undo each with delorun changes list'
+const OFF_MEANING = 'changes load without your review and are still recorded: a changed plugin loads at the next start and when you save while Delorun runs, edits of Delorun itself apply at the next start, and the agent installs, removes, turns on, configures, undoes and restores plugins with the full-access approval alone; see and undo each with delorun changes list'
 
 let base: string
 let home: string

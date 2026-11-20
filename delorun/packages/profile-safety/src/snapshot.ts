@@ -19,6 +19,7 @@ import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import {
   HistoryUnavailableError,
+  PROFILE_FILES,
   ProfileHistory,
   writeProfileVersion,
   type ProfileChangedBy,
@@ -32,6 +33,7 @@ import type { RestoreChanges } from '@delorun/contract-update-report'
 import type { SemanticVersion } from '@delorun/contract-release-manifest'
 import { isProfileSafetyError, ProfileSafetyError } from './errors.ts'
 import {
+  DELORUN_COMPATIBILITY_FILENAME,
   DELORUN_STATE_FILES,
   HOME_PATCH_COPY_FILENAME,
   HOME_PATCH_FILENAME,
@@ -194,6 +196,12 @@ export interface RestoreRequest extends HistoryOptions {
   readonly revoked?: readonly RevokedPlugin[]
   /** An open history, when the caller already has one. */
   readonly history?: ProfileHistory
+  /**
+   * Which of the version's files the restore brings back: `all`, the default, is every file the history tracks, as
+   * `delorun recover` restores them; `manager` is only the files plugin management writes ({@link MANAGER_FILES}), so
+   * the home patch, Delorun's safety record and the update report keep what they hold now.
+   */
+  readonly scope?: 'all' | 'manager'
 }
 
 /** What bringing a version back would change, before anything is written. */
@@ -228,7 +236,7 @@ export interface RestorePlan {
 export async function planRestore(request: RestoreRequest): Promise<RestorePlan> {
   const history = request.history ?? openHistory(request)
   const current = currentFiles(request.profileDir)
-  const restored = await restoredFiles(history, request.version, request.profileDir, current)
+  const restored = scoped(await restoredFiles(history, request.version, request.profileDir, current), request.scope)
   const adjusted = adjustForRevoked(restored, request.revoked ?? [], request.profileDir)
   return {
     version: request.version,
@@ -238,7 +246,7 @@ export async function planRestore(request: RestoreRequest): Promise<RestorePlan>
     unreadable: unreadableFiles(current, adjusted.files),
     disabled: adjusted.disabled,
     writes: writesFor(current, adjusted.files),
-    homePatchWritten: adjusted.files.get(HOME_PATCH_COPY_FILENAME) !== readHomePatch(request.homeDir),
+    homePatchWritten: request.scope !== 'manager' && adjusted.files.get(HOME_PATCH_COPY_FILENAME) !== readHomePatch(request.homeDir),
     lockfileChanged: current.get('pnpm-lock.yaml') !== adjusted.files.get('pnpm-lock.yaml'),
   }
 }
@@ -253,7 +261,7 @@ export async function planRestore(request: RestoreRequest): Promise<RestorePlan>
  */
 export async function applyRestore(plan: RestorePlan, request: RestoreRequest): Promise<void> {
   const history = request.history ?? openHistory(request)
-  const restored = await restoredFiles(history, request.version, request.profileDir, currentFiles(request.profileDir))
+  const restored = scoped(await restoredFiles(history, request.version, request.profileDir, currentFiles(request.profileDir)), request.scope)
   const adjusted = adjustForRevoked(restored, request.revoked ?? [], request.profileDir)
   try {
     // Only the files the plan listed are written, so a plan the person approved is the set of changes they get.
@@ -288,6 +296,18 @@ export async function rollbackToSnapshot(request: Omit<RestoreRequest, 'version'
   const plan = await planRestore({ ...request, version, history })
   await applyRestore(plan, { ...request, version, history })
   return plan
+}
+
+/** The files plugin management writes, which a restore of the `manager` scope brings back: upstream's five and Delorun's exemption file. */
+export const MANAGER_FILES: readonly string[] = [...PROFILE_FILES, DELORUN_COMPATIBILITY_FILENAME]
+
+/**
+ * @param files - a version's files.
+ * @param scope - the restore's scope.
+ * @returns the files the scope brings back.
+ */
+function scoped(files: Map<string, string | undefined>, scope: RestoreRequest['scope']): Map<string, string | undefined> {
+  return scope === 'manager' ? new Map([...files].filter(([name]) => MANAGER_FILES.includes(name))) : files
 }
 
 /**

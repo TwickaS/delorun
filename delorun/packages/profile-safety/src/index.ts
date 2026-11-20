@@ -84,6 +84,7 @@ export {
   currentFiles,
   HISTORY_TIMEOUT_MS,
   latestVersion,
+  MANAGER_FILES,
   historyGitProblem,
   openHistory,
   planRestore,

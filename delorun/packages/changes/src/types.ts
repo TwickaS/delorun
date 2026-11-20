@@ -34,9 +34,20 @@ export type ChangeKind =
   | 'harness-edit'
   /** A setting that weakens a consent, a guard or the protection setting. */
   | 'guard-weakening'
+  /**
+   * An action of the agent's `plugin_manager` that ran with protection off and is neither an install nor a removal:
+   * turning a bundle or plugin on or off, a setting, a version exemption, an undo or a restore.
+   */
+  | 'plugin-setting-change'
 
 /** Every {@link ChangeKind}, in the order a list shows them. */
-export const CHANGE_KINDS: readonly ChangeKind[] = ['plugin-edit', 'plugin-install', 'plugin-update', 'plugin-remove', 'plugin-off', 'plugin-on', 'harness-edit', 'guard-weakening']
+export const CHANGE_KINDS: readonly ChangeKind[] = ['plugin-edit', 'plugin-install', 'plugin-update', 'plugin-remove', 'plugin-off', 'plugin-on', 'harness-edit', 'guard-weakening', 'plugin-setting-change']
+
+/**
+ * The kinds `log.json` may hold: every kind but `plugin-setting-change`, which only the agent-action log
+ * ({@link AgentLog}) holds, so an older release that reads `log.json` never meets it.
+ */
+export const LOG_CHANGE_KINDS: readonly ChangeKind[] = CHANGE_KINDS.filter(kind => kind !== 'plugin-setting-change')
 
 /** Where a change stands. */
 export type ChangeState =
@@ -249,6 +260,12 @@ export interface ChangeEntry {
   readonly decidedOn?: StudioDevice
   /** The profile history version that applied it. */
   readonly historyVersion?: string
+  /**
+   * For an agent's `plugin_manager` action that ran with protection off ([agent actions](./agent-actions.ts)), held in
+   * {@link AgentLog} only: the profile history version that holds the profile as it was just before the action, which
+   * undoing the action brings back.
+   */
+  readonly historyBefore?: string
   /** Set when a start left the change out. */
   readonly leftOut?: LeftOut
   /** When a change approved at upgrade was first shown to the person, ISO 8601. */
@@ -268,6 +285,22 @@ export interface ChangeLog {
 
 /** Schema tag of {@link ChangeLog}. */
 export const CHANGE_LOG_SCHEMA = 'delorun.changes-log/1'
+
+/**
+ * The file `changes/profiles/<profile>/agent-log.json`: the entries of the agent's `plugin_manager` actions that ran with
+ * protection off ([agent actions](./agent-actions.ts)). It is a file of its own, never part of {@link ChangeLog}, because a
+ * release that predates it refuses a `log.json` with an entry kind or field it does not know and cannot start the
+ * profile; such a release never reads this file. Starting a profile reads `log.json` only; Changes' own list and undo
+ * read both.
+ */
+export interface AgentLog {
+  readonly schema: typeof AGENT_LOG_SCHEMA
+  /** Oldest first. */
+  readonly entries: readonly ChangeEntry[]
+}
+
+/** Schema tag of {@link AgentLog}. */
+export const AGENT_LOG_SCHEMA = 'delorun.changes-agent-log/1'
 
 /** The file `changes/protection.json`. A home without it is at {@link DEFAULT_PROTECTION}. */
 export interface ProtectionRecord {

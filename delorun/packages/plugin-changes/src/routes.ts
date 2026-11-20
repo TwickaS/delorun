@@ -59,6 +59,7 @@ import {
   CONTENT_VERSION_PATTERN,
   discardChange,
   finishWork,
+  isAgentAction,
   isChangesError,
   isPluginRequest,
   listChanges,
@@ -66,6 +67,7 @@ import {
   PACKAGE_NAME_PATTERN,
   parseChangeId,
   readBootRecord,
+  readAgentLog,
   readChangeLog,
   readHarnessLog,
   readProtection,
@@ -78,6 +80,7 @@ import {
   turnOff,
   turnOn,
   undoChange,
+  withAgentEntries,
   workSessionFact,
   WORK_SESSION_DEFAULT_MINUTES,
   WORK_SESSION_MAX_MINUTES,
@@ -712,7 +715,7 @@ function entryView(entry: ChangeEntry): EntryView {
     ...entry.decidedOn === undefined ? {} : { decidedOn: entry.decidedOn.label },
     ...entry.lastFailure === undefined ? {} : { lastFailure: entry.lastFailure },
     ...entry.leftOut === undefined ? {} : { leftOut: entry.leftOut },
-    undoable: entry.state === 'applied' && (entry.kind === 'plugin-off' || entry.kind === 'plugin-on' || ((entry.kind === 'plugin-edit' || entry.kind === 'plugin-install') && !isPluginRequest(entry))),
+    undoable: entry.state === 'applied' && (entry.kind === 'plugin-off' || entry.kind === 'plugin-on' || isAgentAction(entry) || ((entry.kind === 'plugin-edit' || entry.kind === 'plugin-install') && !isPluginRequest(entry))),
   }
 }
 
@@ -852,6 +855,7 @@ async function stateOf(ctx: ChangesContext, requester: Requester, home: HomeWord
   const problems: string[] = []
   const boot = await part(problems, home, 'The record of the last start', () => readBootRecord(ctx.home, ctx.profile))
   const log = await part(problems, home, 'The change log', () => readChangeLog(ctx.home, ctx.profile))
+  const agentLog = await part(problems, home, 'The log of the agent\'s plugin actions', () => readAgentLog(ctx.home, ctx.profile))
   const protection = await part(problems, home, 'The protection setting', () => readProtection(ctx.home))
   const safeMode = await part(problems, home, 'The safe mode record', () => readSafeMode(ctx.home, ctx.profile))
   const workSession = await part(problems, home, 'The work session', () => workSessionFact(ctx.home, ctx.profile))
@@ -860,7 +864,7 @@ async function stateOf(ctx: ChangesContext, requester: Requester, home: HomeWord
   const notices = requester.kind === 'computer' ? await part(problems, home, 'The notices', () => readNotices(ctx.home)) : []
   const harness = dependencies.harness()
   const restart = await part(problems, home, 'Whether Delorun needs a restart', () => dependencies.restartState())
-  const entries = log?.entries ?? []
+  const entries = log === undefined ? agentLog?.entries ?? [] : withAgentEntries(log, agentLog?.entries ?? []).entries
   return {
     atComputer: requester.kind === 'computer',
     access: accessView(actorOf(requester), faceStateOf(requester)),
@@ -1127,7 +1131,7 @@ async function act(action: ChangesAction, body: Readonly<Record<string, unknown>
       const id = changeIdOf(body)
       confirmedRiskOf(body.confirmedRisk)
       await refuseHarnessChange(ctx.home, id)
-      return action === 'discard' ? { entry: entryView(await discardChange(ctx, id, presence)) } : actionView(await undoChange(ctx, id, presence, options))
+      return action === 'discard' ? { entry: entryView(await discardChange(ctx, id, presence)) } : actionView(await undoChange(ctx, id, presence, { ...options, run: dependencies.pluginOperation(ctx) }))
     }
     case 'off':
     case 'on':
@@ -1441,7 +1445,7 @@ async function confirmProtectionOff(ctx: ChangesContext, harness: HarnessContext
       if (!isChangesError(error) || (error.code !== 'HARNESS_COPY_UNREADABLE' && error.code !== 'CHANGED_WHILE_READING')) throw error
     }
   }
-  return new RouteRefusal(409, CONFIRM_PROTECTION, 'With protection off, saved changes to your linked plugins load at once, your copy of Delorun applies at the next start, and the agent installs plugins with the full-access approval alone. Confirm again to turn it off.', { willLoad: { plugins, harnessFiles } })
+  return new RouteRefusal(409, CONFIRM_PROTECTION, 'With protection off, saved changes to your linked plugins load at once, your copy of Delorun applies at the next start, and the agent installs, removes, turns on, configures, undoes and restores plugins with the full-access approval alone. Confirm again to turn it off.', { willLoad: { plugins, harnessFiles } })
 }
 
 /**

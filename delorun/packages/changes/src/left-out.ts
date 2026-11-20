@@ -21,10 +21,12 @@
  */
 import { resolve } from 'node:path'
 import { locked, timeOf } from './action-support.ts'
+import { isAgentAction } from './agent-actions.ts'
 import type { ChangesContext } from './actions.ts'
+import { isChangesError } from './errors.ts'
 import { readLinks } from './link.ts'
 import { activeDirectory } from './paths.ts'
-import { approvedOf, decisionOf, readActiveRecord, readApproved, readChangeLog, readHarnessLog, readHarnessRecord, withEntry, withoutDecision, withHarnessLock, writeChangeLog, writeHarnessLog } from './records.ts'
+import { approvedOf, decisionOf, readActiveRecord, readAgentLog, readApproved, readChangeLog, readHarnessLog, readHarnessRecord, withEntry, withAgentEntries, withoutDecision, withHarnessLock, writeChangeLog, writeHarnessLog } from './records.ts'
 import type { ActiveContent, ActiveRecord, ApprovedRecord, ChangeEntry, ChangeKind, ChangeLog, ChangeState } from './types.ts'
 
 /** The most a left-out change's failure keeps, in bytes of UTF-8. */
@@ -94,13 +96,30 @@ function activeOf(plugins: ActiveRecord['plugins'], plugin: string): ActiveConte
  */
 export function leavableIn(records: LeavableRecords): ChangeEntry | undefined {
   const entry = newestDecided(records.log.entries, candidate => RUNNING_DECISIONS.has(candidate.state))
-  if (entry?.state !== 'applied' || !LEAVABLE_KINDS.has(entry.kind) || entry.decidedFrom === 'upgrade') return undefined
+  if (entry?.state !== 'applied' || isAgentAction(entry) || !LEAVABLE_KINDS.has(entry.kind) || entry.decidedFrom === 'upgrade') return undefined
   const plugin = entry.subject.plugin
   if (plugin === undefined || !records.linked.has(plugin)) return undefined
   const active = activeOf(records.active.plugins, plugin)
   if (active?.kind !== 'approved') return undefined
   if (entry.kind === 'plugin-on') return entry
   return entry.to !== undefined && active.version === entry.to && approvedOf(records.approved, plugin)?.version === entry.to ? entry : undefined
+}
+
+/**
+ * The profile's change log with the agent's entries, for deciding what a failed start leaves out. A start must not stop
+ * because the agent-action log is unreadable, and with it unread the newest decision is not known.
+ * @param ctx - the profile.
+ * @returns the entries; undefined when the agent-action log cannot be read, so nothing may be left out.
+ * @throws {ChangesError} `RECORD_UNREADABLE` when the change log is not one Delorun wrote.
+ */
+async function decisionsOf(ctx: Pick<ChangesContext, 'home' | 'profile'>): Promise<ChangeLog | undefined> {
+  const log = await readChangeLog(ctx.home, ctx.profile)
+  try {
+    return withAgentEntries(log, (await readAgentLog(ctx.home, ctx.profile)).entries)
+  } catch (error) {
+    if (isChangesError(error) && error.code === 'RECORD_UNREADABLE') return undefined
+    throw error
+  }
 }
 
 /**
@@ -113,7 +132,8 @@ export function leavableIn(records: LeavableRecords): ChangeEntry | undefined {
  * @throws {ChangesError} `RECORD_UNREADABLE` when a record of Changes or the profile's manifest is not one Delorun wrote.
  */
 export async function newestLeavableChange(ctx: Pick<ChangesContext, 'home' | 'profile' | 'profileDir'>, runtime?: string): Promise<ChangeEntry | undefined> {
-  const log = await readChangeLog(ctx.home, ctx.profile)
+  const log = await decisionsOf(ctx)
+  if (log === undefined) return undefined
   const harness = runtime === undefined ? undefined : await newestHarnessDecision(ctx.home, runtime)
   const newest = newestDecided(log.entries, candidate => RUNNING_DECISIONS.has(candidate.state))
   if (harness !== undefined && (newest === undefined || Date.parse(harness.entry.decidedAt!) >= Date.parse(newest.decidedAt!))) return harness.leavable ? harness.entry : undefined

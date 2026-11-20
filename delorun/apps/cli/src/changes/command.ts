@@ -308,7 +308,7 @@ function print(write: (text: string) => void, lines: readonly string[]): void {
 /** What each protection setting means, in the person's words. */
 const PROTECTION_MEANING: Readonly<Record<ProtectionLevel, string>> = {
   on: "a changed plugin, an edit of Delorun itself and the agent's plugin installs and removals load only after you apply them, and the agent asks before it first changes an approved plugin in a chat",
-  off: "changes load without your review and are still recorded: a changed plugin loads at the next start and when you save while Delorun runs, edits of Delorun itself apply at the next start, and the agent installs and removes plugins with the full-access approval alone; see and undo each with delorun changes list",
+  off: "changes load without your review and are still recorded: a changed plugin loads at the next start and when you save while Delorun runs, edits of Delorun itself apply at the next start, and the agent installs, removes, turns on, configures, undoes and restores plugins with the full-access approval alone; see and undo each with delorun changes list",
 }
 
 /**
@@ -746,7 +746,7 @@ export async function runChanges(args: readonly string[], context: CommandContex
         if (target.kind === 'harness') return await undoHarness(harness, target.target, presence!, dependencies, context)
         const { shown } = target
         if (!await confirmed(dependencies, `Undo ${action.id}: ${printable(shown.kind === 'pending' ? shown.change.plugin : shown.entry.summary)}?`)) return declined(context)
-        const undone = await dependencies.withHost(home.path, profile, reload => undoChange(ctx, action.id, presence!, { reload }))
+        const undone = await dependencies.withHost(home.path, profile, reload => undoChange(ctx, action.id, presence!, { reload, run: dependencies.pluginOperation(ctx, context) }))
         const code = reported(`Undid ${action.id}`, undone, context)
         const { entry } = undone
         const name = entry.subject.plugin

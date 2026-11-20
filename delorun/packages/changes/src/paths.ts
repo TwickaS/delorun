@@ -13,6 +13,7 @@
  *     active/<slug>/                the directory the profile's link: dependency names
  *     active.json                   what each active directory holds
  *     log.json                      the change log
+ *     agent-log.json                the agent's plugin_manager actions that ran with protection off; a start never reads it
  *     work-session.json             the work session, while one lasts
  *     scan-cache.json               file digests by inode, size and times, to scan a folder quickly
  *   harness/
@@ -48,6 +49,7 @@ export const CHANGES_ENTRIES = {
   active: 'active',
   activeRecord: 'active.json',
   log: 'log.json',
+  agentLog: 'agent-log.json',
   workSession: 'work-session.json',
   scanCache: 'scan-cache.json',
   harnessPending: 'pending.json',

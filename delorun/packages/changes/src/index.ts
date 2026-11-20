@@ -8,7 +8,7 @@
  * dependencies ([link](./link.ts)), what a start loads ([enforce](./enforce.ts)) and the invariants a booted profile keeps
  * ([invariants](./invariants.ts)), leaving a change out after a failed start ([left out](./left-out.ts)), collecting the store ([collect](./collect.ts)), what a person does with a change ([actions](./actions.ts)), what the studio's state reads of the records ([state](./state.ts)), and the Host's side of a work
  * session ([work](./work.ts), [work record](./work-record.ts)), and the agent's plugin requests and applying them
- * ([install actions](./install-actions.ts), also the entry `@delorun/changes/install`), reloading the running Host
+ * ([install actions](./install-actions.ts), also the entry `@delorun/changes/install`), the agent's plugin actions that ran with protection off ([agent actions](./agent-actions.ts)), reloading the running Host
  * ([reload](./reload.ts)), and the person's changes to the harness itself with the composed tree a start runs
  * ([harness](./harness.ts), [harness tree](./harness-tree.ts)), and what loads without review while protection is off
  * ([unreviewed](./unreviewed.ts)). Ending a work session because Delorun
@@ -56,6 +56,7 @@ export {
 } from './work.ts'
 export * from './work-record.ts'
 export * from './install-actions.ts'
+export * from './agent-actions.ts'
 export * from './reload.ts'
 export * from './harness.ts'
 export * from './harness-tree.ts'
