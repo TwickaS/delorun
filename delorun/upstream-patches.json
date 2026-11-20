@@ -3097,6 +3097,36 @@
       "class": "delorun-feature",
       "feature": "studio-seams",
       "reason": "Tightens the question card's padding and keeps an expanded option or question's collapse button at the end of its last text line, so phones show more choices and the button never takes a line of its own; adds 44px rows and 16px answer text on touch."
+    },
+    {
+      "path": "packages/client/ui-agent-preset/src/client/AgentPresetSeat.tsx",
+      "class": "delorun-feature",
+      "feature": "studio-seams",
+      "reason": "The refusal toast no longer centres over the composer card: every toast renders in the one toast area, so the anchor prop is dropped."
+    },
+    {
+      "path": "packages/client/ui-conversation/src/client/skeleton/InputBar.tsx",
+      "class": "delorun-feature",
+      "feature": "studio-seams",
+      "reason": "The composer's toast no longer centres over the composer card: every toast renders in the one toast area, so the anchor prop is dropped."
+    },
+    {
+      "path": "packages/client/ui-message-feedback/src/client/FeedbackDialog.tsx",
+      "class": "delorun-feature",
+      "feature": "studio-seams",
+      "reason": "The feedback toasts no longer centre over the composer card: every toast renders in the one toast area, so the card probe and the anchor prop are dropped."
+    },
+    {
+      "path": "packages/client/ui-primitives/src/Toast.module.css",
+      "class": "delorun-feature",
+      "feature": "studio-seams",
+      "reason": "One toast area, bottom left by default and at the top at full width on a phone, with a root attribute that moves it to any corner or centre; the toast itself no longer positions itself, and a slot holds persistent cards."
+    },
+    {
+      "path": "packages/client/ui-primitives/src/Toast.tsx",
+      "class": "delorun-feature",
+      "feature": "studio-seams",
+      "reason": "Every toast renders into one toast area with the newest nearest the edge and at most three visible; adds the slot that persistent plugin cards (downloads, update progress) use, and drops the anchor prop."
     }
   ],
   "retired": []
