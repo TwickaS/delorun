@@ -424,7 +424,7 @@ describe('manual web performance: Multiview panes', () => {
       const tracing = process.env.MV_PROFILE === 'trace'
       const traced: Array<{ name: string; dur?: number; args?: Record<string, unknown> }> = []
       if (tracing) {
-        cdp.on('Tracing.dataCollected', (chunk: { value: typeof traced }) => { traced.push(...chunk.value) })
+        cdp.on('Tracing.dataCollected', (payload) => { traced.push(...(payload.value as typeof traced)) })
         await cdp.send('Tracing.start', { traceConfig: { includedCategories: ['devtools.timeline', 'disabled-by-default-devtools.timeline.invalidationTracking'] } } as never)
       }
       if (profiling) { await cdp.send('Profiler.enable'); await cdp.send('Profiler.setSamplingInterval', { interval: 200 }); await cdp.send('Profiler.start') }
