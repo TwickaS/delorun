@@ -124,6 +124,7 @@ function Status({ t, state, remote, download, onDownload, onRetry }: {
             </>
           )}
           {state.fix.kind === 'command' && <BrowserCommand command={state.fix.command} t={t} />}
+          {asking}
         </>
       )
     }

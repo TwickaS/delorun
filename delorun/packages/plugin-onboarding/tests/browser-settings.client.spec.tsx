@@ -123,6 +123,15 @@ describe('the status', () => {
     expect(screen.getByText(text)).toBeTruthy()
   })
 
+  // Chrome is looked for first and the download second, so a computer with no Chrome and no download shows what to do and can try again.
+  it('offers Try again where Chrome is not found or the download is missing, and reads the check again', async () => {
+    const browser = browserFake(OTHER, { kind: 'ready' })
+    await show({ browser })
+    expect(screen.getByText('Not ready yet: Needs Google Chrome installed')).toBeTruthy()
+    await click(screen.getByRole('button', { name: en['page.retry'] }))
+    expect(screen.getByText(en['page.status.ready'])).toBeTruthy()
+  })
+
   it('reads the check again on Try again after a failure, and adds the pack again after a failed add', async () => {
     const browser = browserFake({ kind: 'failed' })
     await show({ browser, pack: 'installed' })

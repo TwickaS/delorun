@@ -118,6 +118,7 @@ export function useBrowser(services: BrowserServices): BrowserView {
   }, [browser, bundles, on])
   const recheck = useCallback((): void => { void browser.setup.refresh() }, [browser])
   const retry = useCallback((): void => {
+    bundles.refresh([BROWSER_BUNDLE])
     void bundles.install(BROWSER_BUNDLE)
     void browser.setup.refresh()
   }, [browser, bundles])
