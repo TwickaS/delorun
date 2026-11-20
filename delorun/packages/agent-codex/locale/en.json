@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Codex driver",
+    "description": "Opens, steers and stops the Codex program as a live agent and relays its approval questions to you; it does nothing until the Codex pack is added"
+  }
+}

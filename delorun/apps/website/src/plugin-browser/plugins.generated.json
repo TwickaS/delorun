@@ -7,7 +7,7 @@
       "state": "shipped",
       "standing": "on",
       "requires": [],
-      "files": 194,
+      "files": 231,
       "folder": "delorun/packages/bundle-local"
     },
     {
@@ -27,7 +27,7 @@
       "state": "shipped",
       "standing": "on",
       "requires": [],
-      "files": 26,
+      "files": 27,
       "folder": "delorun/packages/plugin-mcp-consent"
     },
     {
@@ -37,7 +37,7 @@
       "state": "shipped",
       "standing": "on",
       "requires": [],
-      "files": 34,
+      "files": 35,
       "folder": "delorun/packages/plugin-permission-defaults"
     },
     {
@@ -97,8 +97,48 @@
       "state": "shipped",
       "standing": "on",
       "requires": [],
-      "files": 17,
+      "files": 22,
       "folder": "delorun/packages/plugin-delegation-consent"
+    },
+    {
+      "name": "@delorun/external-agents",
+      "title": "External agents gate",
+      "sentence": "Starts Claude Code or Codex for a chat only through one checked path, with a limit on live programs, and refuses a start once a plan limit is reached",
+      "state": "shipped",
+      "standing": "on",
+      "requires": [],
+      "files": 31,
+      "folder": "delorun/packages/external-agents"
+    },
+    {
+      "name": "@delorun/agent-claude-code",
+      "title": "Claude Code driver",
+      "sentence": "Opens, steers and stops the Claude Code program as a live agent and relays its permission questions to you; it does nothing until the Claude Code pack is added",
+      "state": "shipped",
+      "standing": "on",
+      "requires": [],
+      "files": 35,
+      "folder": "delorun/packages/agent-claude-code"
+    },
+    {
+      "name": "@delorun/agent-codex",
+      "title": "Codex driver",
+      "sentence": "Opens, steers and stops the Codex program as a live agent and relays its approval questions to you; it does nothing until the Codex pack is added",
+      "state": "shipped",
+      "standing": "on",
+      "requires": [],
+      "files": 35,
+      "folder": "delorun/packages/agent-codex"
+    },
+    {
+      "name": "@delorun/plugin-agent-seats",
+      "title": "Live agents",
+      "sentence": "Shows Claude Code and Codex as chats under the chat that handed work over, which you can watch, message and stop; it adds nothing unless the live agents preview flag is on",
+      "state": "shipped",
+      "standing": "on",
+      "requires": [],
+      "files": 110,
+      "folder": "delorun/packages/plugin-agent-seats"
     },
     {
       "name": "@delorun/plugin-changes",
@@ -107,7 +147,7 @@
       "state": "shipped",
       "standing": "on",
       "requires": [],
-      "files": 62,
+      "files": 67,
       "folder": "delorun/packages/plugin-changes"
     },
     {
@@ -117,7 +157,7 @@
       "state": "shipped",
       "standing": "on",
       "requires": [],
-      "files": 31,
+      "files": 33,
       "folder": "delorun/packages/plugin-update"
     },
     {
@@ -157,7 +197,7 @@
       "state": "shipped",
       "standing": "on",
       "requires": [],
-      "files": 98,
+      "files": 111,
       "folder": "delorun/packages/home-auth"
     },
     {
@@ -217,7 +257,7 @@
       "state": "shipped",
       "standing": "on",
       "requires": [],
-      "files": 131,
+      "files": 133,
       "folder": "delorun/packages/plugin-onboarding"
     },
     {
@@ -257,7 +297,7 @@
       "state": "experimental",
       "standing": "off",
       "requires": [],
-      "files": 35,
+      "files": 42,
       "folder": "delorun/packages/plugin-cost-meter"
     },
     {
