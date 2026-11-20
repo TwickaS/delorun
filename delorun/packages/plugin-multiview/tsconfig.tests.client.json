@@ -16,6 +16,7 @@
     "src/client",
     "src/entry",
     "src/layout",
+    "src/phone",
     "src/store",
     "src/config.ts",
     "src/css-modules.d.ts"
