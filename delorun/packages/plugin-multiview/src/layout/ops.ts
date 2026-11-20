@@ -251,7 +251,7 @@ export interface MoveOption {
 export function moveOptions(model: LayoutModel, pane: PaneId): readonly MoveOption[] {
   const others = panesOf(model).filter(candidate => candidate !== pane)
   if (others.length === 0) return []
-  const regions = ['left', 'right', 'top', 'bottom', 'center'] as const
+  const regions = ['left', 'right', 'top', 'bottom', 'center'] as const // us-spelling: quoted output
   const edges = ['left', 'right', 'top', 'bottom'] as const
   return [
     ...others.flatMap(other => regions.map((region): MoveOption => ({ target: { kind: 'pane', pane: other, region } }))),
