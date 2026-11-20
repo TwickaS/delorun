@@ -6,7 +6,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useSyncExternalStore, type ComponentType } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  apply, hostApi, inject, DEFERRED_ENTRY, KEY_BANNER_ENTRY, RENAME_TOOL, SET_ASIDE_ENTRY, type SetAsideInjected, loadSetupRecord, NS, ONBOARDING_STEP, SHOW_AGAIN_ROW, type KeyBannerInjected, type OnboardingInjected, type OnboardingStep, type OnboardingStepEntryProps, type ShowAgainRowProps,
+  apply, hostApi, inject, DEFERRED_ENTRY, KEY_BANNER_ENTRY, RENAME_TOOL, SET_ASIDE_ENTRY, type SetAsideInjected, loadSetupRecord, NS, ONBOARDING_STEP, SHOW_AGAIN_ROW, BROWSER_SECTION, type KeyBannerInjected, type OnboardingInjected, type OnboardingStep, type OnboardingStepEntryProps, type ShowAgainRowProps,
   type ShowAgainInjected,
 } from '../src/client/index.ts'
 import { en, zh } from '../src/client/locales.ts'
@@ -98,6 +98,7 @@ const BANNER_KEY = `conversation.input.dock#${KEY_BANNER_ENTRY.id}`
 const RENAME_KEY = `tool.call.toolview#${RENAME_TOOL}`
 const DEFERRED_KEY = `sidebar.footer.action#${DEFERRED_ENTRY.id}`
 const SET_ASIDE_KEY = `conversation.input.dock#${SET_ASIDE_ENTRY.id}`
+const BROWSER_KEY = `settings.section#${BROWSER_SECTION.id}`
 
 describe('the stock look', () => {
   it('registers nothing until the Delorun look provides delorunStudio, and everything leaves with it', async () => {
@@ -110,7 +111,7 @@ describe('the stock look', () => {
     expect(dictionaries.has(NS)).toBe(true)
     expect(served.ids).toEqual([ONBOARDING_ROW_ID])
     served.on()
-    expect(entries.size).toBe(6)
+    expect(entries.size).toBe(7)
     await studio.dispose()
     expect([dictionaries.size, entries.size, ctx.get('delorunOnboarding')]).toEqual([0, 0, undefined])
     await fiber.dispose()
@@ -137,11 +138,12 @@ describe('the registrations', () => {
     expect([...entries.keys()]).toEqual([RENAME_KEY])
     expect(entries.get(RENAME_KEY)?.options).toMatchObject({ name: 'tool.call.toolview', key: 'rename_workspace', locale: NS })
     served.on()
-    expect([...entries.keys()].toSorted()).toEqual([BANNER_KEY, DEFERRED_KEY, RENAME_KEY, ROW_KEY, SET_ASIDE_KEY, STEP_KEY].toSorted())
+    expect([...entries.keys()].toSorted()).toEqual([BANNER_KEY, BROWSER_KEY, DEFERRED_KEY, RENAME_KEY, ROW_KEY, SET_ASIDE_KEY, STEP_KEY].toSorted())
     expect(entries.get(STEP_KEY)?.options).toMatchObject({ name: 'settings.onboarding', id: 'delorun-onboarding', order: -200, locale: NS })
     // bundle-local's step registers at -100, so this one is mounted first.
     expect(ONBOARDING_STEP.order).toBeLessThan(-100)
     expect(entries.get(ROW_KEY)?.options).toMatchObject({ name: 'settings.general.item', id: 'delorun-onboarding', locale: NS })
+    expect(entries.get(BROWSER_KEY)?.options).toMatchObject({ name: 'settings.section', id: 'delorun-browser', order: 17, locale: NS })
     served.off()
     expect([...entries.keys()]).toEqual([RENAME_KEY])
   })

@@ -14,6 +14,7 @@ Two surfaces ask whether agents may use a web browser: the setup guide's Browser
 ## Contents
 
 - [Read whether Browser is ready](#read-whether-browser-is-ready)
+- [The home's choice and the page's states](#the-homes-choice-and-the-pages-states)
 - [Draw the choice](#draw-the-choice)
 - [Contract](#contract)
 - [Tests](#tests)
@@ -32,6 +33,12 @@ Two surfaces ask whether agents may use a web browser: the setup guide's Browser
 | `failed` | The check itself could not be read |
 
 `browserAdded(readiness)` is true for the three states the Host reports about the pack itself. The readiness cannot say which browser was found; `ready` covers an installed Chrome and a downloaded Chromium alike.
+
+## The home's choice and the page's states
+
+`resolveBrowserSwitch(recorded, declined)` (`./switch`, exported as `.`) turns what the studio recorded into `on` or `off`: a recorded `on` or `off` stands, no record is `off` for a pack the person turned off in Plugins or an existing home that never chose and has no pack (`declined`), and everything else, including a new home that never chose and a damaged value, is `on`. The studio adds the pack on its own only in a new home that never chose, or when the person switches Browser on. `browserPageState({ choice, pack, packReason, readiness })` combines the choice, where adding the pack stands (`PackProgress`: `checking`, `available`, `installing`, `slow`, `restart`, `installed`, `offline`, `unavailable` or `failed`) and the requirement check into one `BrowserPageState` for the Settings page: `off`, `checking`, `installing` (`slow` after the add's wait), `restart`, `ready`, `needs-setup` with the Host's reason and fix, or `failed` with a `BrowserFailure` (`offline`, `unavailable`, `failed`, `unread` or `problem`). The choice outranks everything else, the Host's own answer outranks the installer's last word, and a check that cannot be read shows `unread` instead of waiting.
+
+`REAL_BROWSER_BUNDLE` names the pack for the person's own Chrome, and `createBrowserSetup(fetch, language, bundle)` and `browserReadinessOf(answer, bundle)` read either pack's rows. `BrowserCommand` (`./client`) draws a command with its copy button, for the Settings page.
 
 ## Draw the choice
 
@@ -57,4 +64,4 @@ Two surfaces ask whether agents may use a web browser: the setup guide's Browser
 
 ## Tests
 
-`node_modules/.bin/vitest run --config delorun/vitest.config.ts delorun/packages/browser-setup` runs [`browser-choices.client.spec.tsx`](tests/browser-choices.client.spec.tsx): the readiness for each answer of the check, the store, and the component's choices, its disabled third choice, each readiness state and each kind of fix.
+[`switch.spec.ts`](tests/switch.spec.ts) covers the choice rule and each state of the page, including a home that chose off, a pack turned off in Plugins and a check that cannot be read. `node_modules/.bin/vitest run --config delorun/vitest.config.ts delorun/packages/browser-setup` runs [`browser-choices.client.spec.tsx`](tests/browser-choices.client.spec.tsx): the readiness for each answer of the check, the store, and the component's choices, its disabled third choice, each readiness state and each kind of fix.
