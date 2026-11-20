@@ -233,7 +233,7 @@ Face ID is how an approved phone confirms one sensitive action at the moment it 
 Every action a phone can take is in one of three groups:
 
 - **Never asks.** Reading, following a chat, replying, attaching files, stopping a run, and the other actions listed above as working without asking.
-- **Asks.** The actions listed above as asking each time: opening a terminal, turning protection off, applying changes to your plugins or to Delorun's own files, restarting Delorun, saving or removing a provider key, and answering a prompt that grants full access. The phone shows a sheet that names the action, and you confirm with Face ID, or with your PIN on a phone without it. One confirmation covers that one action, once, within 30 seconds, unless a Face ID pass is open (see below). Some always ask, even while a pass is open: removing another device, removing a passkey, **Show all devices** in the Face ID settings, and changing **Ask again after** from a phone. Each takes Face ID for that one action, even while a pass is open, and a Face ID that confirms one of them opens no pass. Removing another device and changing **Ask again after** never accept the PIN.
+- **Asks.** The actions listed above as asking each time: opening a terminal, turning protection off, applying changes to your plugins or to Delorun's own files, restarting Delorun, saving or removing a provider key, and answering a prompt that grants full access. The phone shows a sheet that names the action, and you confirm with Face ID, or with your PIN on a phone without it. One confirmation covers that one action, once, within 30 seconds, unless a Face ID pass is open (see below). Some always ask, even while a pass is open: removing another device, removing a passkey, **Show all devices** in the Face ID settings, changing **Ask again after** from a phone, turning protection off, and turning full access on or off for a workspace. Each takes Face ID for that one action, even while a pass is open, and a Face ID that confirms one of them opens no pass. Removing another device and changing **Ask again after** never accept the PIN.
 - **Only at your computer.** Approving or removing devices, setting the PIN, turning remote access on or off, and the other actions listed above as staying at your computer. Face ID never opens these.
 
 Neither a code from your computer, your PIN nor a new phone's first sign-in opens a window in which a phone asks less: a phone without Face ID confirms each sensitive action with one PIN. A terminal you opened with Face ID stays open for its own follow-up work, so you are not asked for every keystroke. It ends after 5 minutes idle, 60 minutes in all, or when the phone signs out, and a pass ending does not close it. Another terminal needs its own confirmation, or an open pass.
@@ -243,13 +243,13 @@ Neither a code from your computer, your PIN nor a new phone's first sign-in open
 
 **The chip.** While a pass is open, the studio on the phone shows "Unlocked · 14 min" above the open chat, counting down in whole minutes, with a **Lock now** button. The chip goes at the end of the pass. Your computer never shows it.
 
-**It does not slide.** The pass ends the chosen number of minutes after the Face ID, however much you use the phone. Changing the setting applies to the next pass.
+**It does not slide.** The pass ends the chosen number of minutes after the Face ID, however much you use the phone. Changing **Ask again after**, on a phone or at your computer, ends every open pass, so a shorter time or **Every time** applies at once.
 
 **What always asks.** The actions above that always ask still ask for Face ID while a pass is open. Reach settings, PIN mode settings and the other actions that stay at your computer stay there.
 
 **What does not open a pass.** Your PIN, whether the phone has no Face ID or Face ID failed; a code from your computer; the first minutes after you approve a phone; dangerous mode. A phone without Face ID confirms one PIN for each action.
 
-**What ends it.** The end of its time; **Lock now**; the studio page hidden for 5 minutes; the phone signing out or its session ending; removing the phone; Delorun rotating every session; restarting Delorun. A pass is kept in memory, so a restart closes it.
+**What ends it.** The end of its time; 5 minutes in which the phone sends Delorun nothing, for example when it is locked in a pocket or the studio is closed; **Lock now**; the studio hidden for 5 minutes, checked again when you come back, so a phone that paused the page still locks; changing **Ask again after**; the phone signing out or its session ending; removing the phone; Delorun rotating every session; restarting Delorun. **Lock now** and the hidden check end the pass for the whole phone, so one tab hidden for 5 minutes locks the others too. A pass is kept in memory, so a restart closes it.
 
 **Set up Face ID.**
 
