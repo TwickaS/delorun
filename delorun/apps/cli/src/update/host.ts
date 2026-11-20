@@ -18,6 +18,7 @@ import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@delorun/bundle-local/update-gate'
 import type {} from '@delorun/plugin-packs'
+import type {} from '@delorun/plugin-update'
 import { protectedPluginsIn } from '@delorun/home-auth'
 import type { BootRow, CountingChatGate, HealthExpectations, HealthVerdict, HostProtection } from '@delorun/home-process'
 import { bundleListOf } from '@delorun/profile-safety'
@@ -78,6 +79,13 @@ export function watchChats(ctx: Context, gate: CountingChatGate): void {
       for (const end of jobs.values()) end()
       jobs.clear()
     })
+  })
+  // The chats the studio's "Stop running chats and update" names and stops: the sessions of the running agents.
+  ctx.inject(['delorunUpdateChats'], (scope) => {
+    scope.effect(() => scope.delorunUpdateChats.attach({
+      list: () => [...new Set([...ends.keys()].map(agent => agent.session.id))],
+      cancelAll: () => gate.cancelAll(),
+    }))
   })
   ctx.inject(['delorunTurnGate'], (scope) => {
     scope.effect(() => scope.delorunTurnGate.attach(() => gate.held))
