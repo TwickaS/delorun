@@ -47,6 +47,7 @@ export const FUNDAMENTALS_INPUTS: readonly string[] = [
   'delorun/packages/home-auth/src/routes.ts',
   'delorun/packages/home-auth/src/service.ts',
   'delorun/packages/home-auth/tests/authenticator.spec.ts',
+  'delorun/packages/home-auth/tests/denial/face-pass.spec.ts',
   'delorun/packages/home-auth/tests/owner-claim.spec.ts',
   'delorun/packages/home-auth/tests/reach-routes.spec.ts',
   'delorun/packages/home-auth/tests/routes.spec.ts',

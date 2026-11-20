@@ -16,6 +16,7 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import type { StudioAddress } from '@delorun/contract-admission'
 import type { Base64Url, DevicePublicKeyJwk } from '@delorun/contract-device-approval'
 import type { HomeAuth } from '../src/home-auth.ts'
+import type { PassMinutes } from '../src/pass-setting.ts'
 import { Config, HomeAuthService, loopbackCredentialOf } from '../src/service.ts'
 import { DEVICE_REMOVE_PATH, DEVICES_PATH, OWNER_CLAIM_PATH } from '../src/routes.ts'
 import { REACH_PATHS } from '../src/reach-routes.ts'
@@ -559,6 +560,13 @@ describe('the homeAuth service', () => {
     expect(() => Config({ secretsDirectory: '/nowhere', challenges: { perDevicePerMinute: 0 } })).toThrow()
     expect(() => Config({ secretsDirectory: '/nowhere', challenges: { perSourcePerMinute: 601 } })).toThrow()
     expect(Config({ secretsDirectory: '/nowhere' }).challenges).toEqual({ perSourcePerMinute: 60, perDevicePerMinute: 10 })
+  })
+
+  // Pins the pass default's set (A499): a value outside Every time, 5, 15, 30 and 60 minutes fails the load, and 15 is the default.
+  it('validates the Face ID pass default at load', () => {
+    for (const faceIdPassMinutes of [7, 61, 90, -1]) expect(() => Config({ secretsDirectory: '/nowhere', faceIdPassMinutes: faceIdPassMinutes as PassMinutes }), String(faceIdPassMinutes)).toThrow()
+    expect(Config({ secretsDirectory: '/nowhere' }).faceIdPassMinutes).toBe(15)
+    for (const faceIdPassMinutes of [0, 5, 15, 30, 60] as const) expect(Config({ secretsDirectory: '/nowhere', faceIdPassMinutes }).faceIdPassMinutes).toBe(faceIdPassMinutes)
   })
 
   it('refuses a secrets directory outside a Delorun home, and names the home it lies in', async () => {

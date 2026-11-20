@@ -6,7 +6,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ChangesController } from '../src/client/controller.ts'
-import type { FaceGrant } from '../src/client/face-grant.ts'
+import { PASS_GRANT_ID, type FaceGrant } from '../src/client/face-grant.ts'
 import { ACTION_PATHS, type ChangesControl, type ChangesStateView, type MayView } from '../src/wire.ts'
 
 const posts: { path: string; body: unknown; grant: string | null }[] = []
@@ -64,6 +64,22 @@ describe('the Changes controller\'s Face ID step', () => {
     expect(grant).not.toHaveBeenCalled()
     expect(posts).toHaveLength(1)
     expect(posts[0]?.grant).toBeNull()
+  })
+  it('asks again with a sheet when the home refuses a call sent under a pass that ended in between', async () => {
+    // Removing the fallback leaves Apply failing with "confirm" after a Lock now in another tab (review P3-3).
+    vi.stubGlobal('fetch', vi.fn(async (path: string, init?: RequestInit) => {
+      const headers = new Headers(init?.headers)
+      posts.push({ path, body: JSON.parse(String(init?.body)), grant: headers.get('Delorun-Grant') })
+      return headers.get('Delorun-Grant') === PASS_GRANT_ID
+        ? new Response(JSON.stringify({ error: 'ELEVATION_REQUIRED', code: 'ELEVATION_REQUIRED', message: 'm', action: 'changes/plugin-discard' }), { status: 403 })
+        : new Response('{}', { status: 200 })
+    }))
+    const answers = [PASS_GRANT_ID, 'g2']
+    const grant = vi.fn<FaceGrant>(async () => answers.shift())
+    const changes = controller({ 'plugin-discard': { ok: false, needs: 'face' } }, () => grant)
+    expect(await changes.discard('c1')).toEqual({ kind: 'done' })
+    expect(grant).toHaveBeenCalledTimes(2)
+    expect(posts.map(post => post.grant)).toEqual([PASS_GRANT_ID, 'g2'])
   })
   it('sends plain when the page has no Face ID service', async () => {
     // Without the bundle's row the home's own refusal is the answer; the page must not hang on a missing service.

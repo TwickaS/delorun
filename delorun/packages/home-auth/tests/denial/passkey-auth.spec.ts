@@ -30,6 +30,8 @@ let cleared: string[]
 let store: PasskeyStore
 let grants: GrantStore
 let auth: PasskeyAuth
+/** The minutes the pass setting names for this spec; 0 opens none. */
+let passMinutes: number
 
 beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), 'passkey-auth-'))
@@ -46,7 +48,8 @@ beforeEach(async () => {
     cleared: (deviceId) => { cleared.push(deviceId); return Promise.resolve() },
     verify: (_who, secret) => (secret === '1234' ? Promise.resolve() : Promise.reject(new HomeAuthError('PIN_INVALID', 'wrong'))),
   }
-  auth = new PasskeyAuth({ store, grants, pin, now: () => clock.at, random, sameSession: (a, b) => a === b, log: () => {} })
+  passMinutes = 0
+  auth = new PasskeyAuth({ store, grants, pin, now: () => clock.at, random, sameSession: (a, b) => a === b, log: () => {}, passMinutes: () => passMinutes })
 })
 afterEach(async () => { await rm(directory, { recursive: true, force: true }) })
 
@@ -286,5 +289,73 @@ describe('a PIN on a device', () => {
     await auth.pinGrant(asker(PHONE), '1234', { kind: 'answer', requestKey: 'call-1', answer: 'allowed-once' })
     expect(grants.consumeAnswer({ deviceId: PHONE, listener: LISTENER }, 'call-1', 'allowed-always')).toBeUndefined()
     expect(grants.consumeAnswer({ deviceId: PHONE, listener: LISTENER }, 'call-1', 'allowed-once')).toBeDefined()
+  })
+})
+
+describe('the Face ID pass (A499)', () => {
+  const holder = { deviceId: PHONE, listener: LISTENER }
+  const assert = async (phone: VirtualAuthenticator, request: Parameters<PasskeyAuth['assertionOptions']>[2] = ACTIONS): Promise<Awaited<ReturnType<PasskeyAuth['verify']>>> =>
+    auth.verify(asker(PHONE), ADDRESS, phone.get(await auth.assertionOptions(asker(PHONE), ADDRESS, request), { origin: ORIGIN }))
+
+  // Removing openPass from verify leaves a passkey phone asking for every action.
+  it('opens for the device\'s Peer on a verified Face ID, for the minutes the setting names', async () => {
+    passMinutes = 15
+    const phone = await enrol()
+    const minted = await assert(phone)
+    expect(minted.pass).toEqual({ startedAt: clock.at, endsAt: clock.at + 15 * 60_000, remainingMs: 15 * 60_000 })
+    expect(grants.passOf(holder)).toEqual(minted.pass)
+    expect(grants.passOf({ deviceId: OTHER, listener: LISTENER })).toBeUndefined()
+  })
+
+  // Removing the minutes check opens a pass at "Every time".
+  it('opens none when the setting is Every time', async () => {
+    const phone = await enrol()
+    expect((await assert(phone)).pass).toBeUndefined()
+    expect(grants.passOf(holder)).toBeUndefined()
+  })
+
+  // Removing the always-ask test opens a pass from the Face ID that confirms removing a device, a passkey or the pass setting itself.
+  it('opens none from a Face ID that confirms an always-ask action', async () => {
+    passMinutes = 60
+    const phone = await enrol()
+    for (const action of [DEVICE_REMOVE_ACTION, 'auth/passkey/remove', 'auth/passkey/devices', 'auth/passkey/pass']) {
+      const minted = await assert(phone, { kind: 'actions', entries: [{ action, hash: hashArgs({ any: action }) ?? '' }] })
+      expect(minted.pass, action).toBeUndefined()
+    }
+    expect(grants.passOf(holder)).toBeUndefined()
+  })
+
+  it('opens from a Face ID that confirms a prompt answer', async () => {
+    passMinutes = 5
+    const phone = await enrol()
+    expect((await assert(phone, { kind: 'answer', requestKey: '["chat-a","call_0","full-access"]', answer: 'allowed-once' })).pass).toBeDefined()
+  })
+
+  // A PIN never opens one (A483): adding openPass to pinGrant fails both cases, a phone with no passkey and the fallback on a passkey phone.
+  it('never opens from the PIN, with or without a passkey on the device', async () => {
+    passMinutes = 60
+    await auth.pinGrant(asker(OTHER), '1234', ACTIONS)
+    expect(grants.passOf({ deviceId: OTHER, listener: LISTENER })).toBeUndefined()
+    await enrol()
+    const minted = await auth.pinGrant(asker(PHONE), '1234', ACTIONS)
+    expect('pass' in minted).toBe(false)
+    expect(grants.passOf(holder)).toBeUndefined()
+  })
+
+  // A failed assertion opens nothing.
+  it('never opens from a failed Face ID', async () => {
+    passMinutes = 60
+    const phone = await enrol()
+    expect(await code(async () => auth.verify(asker(PHONE), ADDRESS, phone.get(await auth.assertionOptions(asker(PHONE), ADDRESS, ACTIONS), { origin: ORIGIN, uv: false })))).toBe('PASSKEY_USER_VERIFICATION_REQUIRED')
+    expect(grants.passOf(holder)).toBeUndefined()
+  })
+
+  // Removing endDevice from forgetDevice leaves a removed device's pass live.
+  it('ends when the device is removed', async () => {
+    passMinutes = 15
+    const phone = await enrol()
+    await assert(phone)
+    await auth.forgetDevice(PHONE)
+    expect(grants.passOf(holder)).toBeUndefined()
   })
 })

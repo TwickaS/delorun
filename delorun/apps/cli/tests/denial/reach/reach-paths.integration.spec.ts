@@ -121,6 +121,8 @@ const REACHED: Readonly<Record<string, string>> = {
   'exact /auth/passkey/options': HOME_AUTH,
   'exact /auth/passkey/verify': HOME_AUTH,
   'exact /auth/passkey/pin': HOME_AUTH,
+  'exact /auth/passkey/pass': HOME_AUTH,
+  'exact /auth/passkey/lock': HOME_AUTH,
   'exact /auth/passkey/register/options': HOME_AUTH,
   'exact /auth/passkey/register': HOME_AUTH,
   'exact /auth/passkey/add/request': HOME_AUTH,
