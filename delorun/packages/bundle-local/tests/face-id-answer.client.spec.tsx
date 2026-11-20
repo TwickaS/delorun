@@ -100,29 +100,25 @@ describe('the approval card\'s Face ID step', () => {
     expect(api.calls.some(call => call.name === 'options')).toBe(false)
   })
   // Reverting the keypad start in FaceIdGrantFlow shows a passkey sheet to a phone that has none.
-  it('opens the PIN keypad from the sheet of a phone with no passkey, and mints a one-action grant through the PIN route, never a page unlock', async () => {
+  it('opens straight on the PIN keypad on a phone with no passkey, and mints a one-action grant through the PIN route, never a page unlock', async () => {
     const { api, gate, gateAllow } = card({ passkeys: false, secret: 'passcode' })
     await waitFor(() => { expect(gateAllow).toHaveBeenCalled() })
     let sent: Promise<boolean> | undefined
     act(() => { sent = gate()() })
     expect(screen.queryByRole('button', { name: 'Use PIN instead' })).toBeNull()
-    fireEvent.click(await screen.findByRole('button', { name: 'Confirm with PIN' }))
     fireEvent.change(await screen.findByLabelText('Passcode'), { target: { value: 'correct horse' } })
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
     await expect(sent).resolves.toBe(true)
     expect(api.calls.find(call => call.name === 'pin')?.request).toEqual({ answer: { agent: 'chat-1', callId: 'call-7', grants: 'full-access', value: 'allowed-once' }, secret: 'correct horse' })
     expect(api.calls.some(call => call.name === 'options')).toBe(false)
   })
-  // Reverting the keypad's Back to the sheet would strand a phone on the keypad with no way to leave.
+  // Reverting the Back-cancels rule for a phone with no passkey would drop it onto a passkey sheet it cannot use.
   it('sends nothing when the keypad of a phone with no passkey is left', async () => {
     const { gate, gateAllow } = card({ passkeys: false, secret: 'passcode' })
     await waitFor(() => { expect(gateAllow).toHaveBeenCalled() })
     let sent: Promise<boolean> | undefined
     act(() => { sent = gate()() })
-    fireEvent.click(await screen.findByRole('button', { name: 'Confirm with PIN' }))
-    // Back from the keypad is the sheet again; Cancel there sends nothing.
     fireEvent.click(await screen.findByRole('button', { name: 'Back' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
     await expect(sent).resolves.toBe(false)
   })
   // Removing the catch on the state read leaves the gate waiting for ever when the passkey state cannot be read.
@@ -130,9 +126,8 @@ describe('the approval card\'s Face ID step', () => {
     const { gate, gateAllow } = card({ stateFails: true, secret: 'passcode' })
     await waitFor(() => { expect(gateAllow).toHaveBeenCalled() })
     act(() => { void gate()() })
-    fireEvent.click(await screen.findByRole('button', { name: 'Confirm with PIN' }))
     expect(await screen.findByLabelText('Passcode')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: /Confirm with Face ID/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Confirm with/ })).toBeNull()
   })
   it('removes the gate and settles an open sheet as cancelled when it unmounts', async () => {
     // A withdrawn card must not hold a stale gate.

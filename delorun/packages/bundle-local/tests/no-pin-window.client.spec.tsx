@@ -95,7 +95,6 @@ describe('a device with PIN mode on', () => {
     } as FaceIdGrantOverlayProps
     const granted = source.grant({ action: 'changes/plugin-discard', call })
     render(<FaceIdGrantOverlay {...props} />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Confirm with PIN' }))
     fireEvent.change(await screen.findByLabelText('Passcode'), { target: { value: 'correct horse' } })
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
     await expect(granted).resolves.toBe('g1')

@@ -41,7 +41,7 @@ const SHOTS: readonly { readonly name: string; readonly screen: string; readonly
   { name: 'a498-approval', screen: 'a498-approval', wide: false },
   { name: 'a498-update', screen: 'a498-update', wide: false },
   { name: 'a498-install', screen: 'a498-install', wide: false },
-  { name: 'a498-keypad', screen: 'a498-keypad', wide: false, tap: '[data-face-id-sheet] button', top: '[data-face-id-pin] button' },
+  { name: 'a498-keypad', screen: 'a498-keypad', wide: false, top: '[data-face-id-pin] button' },
   { name: 'b2-sheet', screen: 'b2-sheet', wide: true },
   { name: 'b2-answer', screen: 'b2-answer', wide: false },
   { name: 'wire-install', screen: 'wire-install', wide: false },

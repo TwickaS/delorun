@@ -108,13 +108,13 @@ describe('the shared action sheet', () => {
   })
 
   // A keypad that keeps its digits on the way back would show an old PIN to the next person to open it.
-  it('empties the keypad each time it opens', () => {
-    flow({ hasPasskey: false })
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm with PIN' }))
+  it('empties the keypad each time it opens', async () => {
+    flow({ browser: fakeBrowser({ available: false }) })
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm with PIN' }))
     fireEvent.click(screen.getByRole('button', { name: '1' }))
     expect((document.querySelector('input[name="delorun-grant-pin"]') as HTMLInputElement | null)?.value).toBe('1')
     fireEvent.click(screen.getByRole('button', { name: 'Back' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm with PIN' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm with PIN' }))
     expect((document.querySelector('input[name="delorun-grant-pin"]') as HTMLInputElement | null)?.value).toBe('')
   })
 
@@ -140,5 +140,15 @@ describe('the shared action sheet', () => {
     cleanup()
     flow()
     expect([...document.querySelectorAll('dl dt')].map(row => row.textContent)).not.toContain('Afterwards')
+  })
+
+  // A phone with no passkey has no sheet to confirm on; its keypad carries the one-line context instead.
+  it('opens a phone with no passkey on the keypad with one context line, and Back ends the confirmation', () => {
+    const props = flow({ hasPasskey: false })
+    const dialog = screen.getByRole('dialog')
+    expect(dialog.hasAttribute('data-face-id-pin')).toBe(true)
+    expect(dialog.textContent).toContain('delorun · Fix the tests · The terminal stays open until it has been unused for 5 minutes.')
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    expect(props.onCancel).toHaveBeenCalledOnce()
   })
 })

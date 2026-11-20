@@ -11,6 +11,7 @@ import { CodeCells, Keypad } from '@delorun/brand'
 import { isRefused } from './host-api.ts'
 import type { FaceIdAction, PasskeyApi } from './face-id-types.ts'
 import { FaceIdIcon } from './face-id-icons.tsx'
+import { faceIdLastsLine } from './face-id-lasts.ts'
 import { FaceIdLayer } from './FaceIdLayer.tsx'
 import css from './FaceId.module.css'
 
@@ -60,6 +61,7 @@ export function FaceIdPinBody({ t, action, api, secret, onGranted, onBack }: Omi
       <span className={css.icon}><FaceIdIcon icon={action.icon} /></span>
       <h2 id="delorun-face-id-pin-title" className={css.title}>{action.title}</h2>
     </header>
+    <p className={css.body}>{[action.context?.workspace, action.context?.chat, action.stays ?? faceIdLastsLine(t, action, 'pin')].filter(part => part !== undefined).join(' · ')}</p>
     <p className={css.body}>{t(isPin ? 'pin.lead' : 'pin.leadPasscode')}</p>
     {isPin
       ? <>

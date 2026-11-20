@@ -1,5 +1,5 @@
 /**
- * One Face ID confirmation: the action sheet and, after a cancel or on request, the PIN keypad, in one dialog. The sheet
+ * One Face ID confirmation: the action sheet and, after a cancel or on request, the PIN keypad, in one dialog; a device with no passkey opens on the keypad. The sheet
  * and the keypad each mint a grant for the action's calls through the home; this component only slides between them and
  * reports the outcome once. The sheet stays mounted under the keypad so a cancelled Face ID still reads as cancelled on
  * the way back; the keypad starts empty each time it opens.
@@ -38,18 +38,22 @@ export interface FaceIdGrantFlowProps {
  */
 export function FaceIdGrantFlow({ t, action, kind, api, browser, hasPasskey, secret, onGranted, onCancel }: FaceIdGrantFlowProps): ReactNode {
   const keypad = secret !== undefined && action.noPin !== true
-  // A keypad opens only from the sheet's PIN button: the PIN mints a one-action grant (A483), never a page unlock.
-  // `round` counts the keypad's openings: it empties the keypad each time and tells the sheet it slid back in.
-  const [view, setView] = useState({ keypad: false, round: 0 })
+  // A device with no passkey opens on the keypad: its PIN mints a one-action grant (A483), never a page unlock. Any other
+  // device reaches it from the sheet's PIN button. `round` counts the keypad's openings: it empties the keypad each
+  // time and tells the sheet it slid back in.
+  const [view, setView] = useState({ keypad: !hasPasskey && keypad, round: 0 })
   const onKeypad = view.keypad && keypad
-  const back = (): void => { setView(current => ({ ...current, keypad: false })) }
+  // With no passkey there is no sheet to go back to, so leaving the keypad ends the confirmation.
+  const back = (): void => { if (hasPasskey) setView(current => ({ ...current, keypad: false })); else onCancel() }
   return <FaceIdLayer labelledBy={onKeypad ? 'delorun-face-id-pin-title' : 'delorun-face-id-title'}
     attributes={onKeypad ? { 'data-face-id-pin': '' } : { 'data-face-id-sheet': '' }} onEscape={onKeypad ? back : onCancel} onClosed={onCancel}>
     <div className={css.sheet}>
-      <div className={view.round > 0 ? `${css.pane} ${css.slideBack}` : css.pane} hidden={onKeypad}>
-        <FaceIdSheetBody t={t} action={action} kind={kind} api={api} browser={browser} hasPasskey={hasPasskey} fallback={keypad ? 'pin' : 'computer'}
-          onGranted={onGranted} onCancel={onCancel} onFallback={() => { setView(current => ({ keypad: true, round: current.round + 1 })) }} />
-      </div>
+      {hasPasskey || !keypad
+        ? <div className={view.round > 0 ? `${css.pane} ${css.slideBack}` : css.pane} hidden={onKeypad}>
+          <FaceIdSheetBody t={t} action={action} kind={kind} api={api} browser={browser} hasPasskey={hasPasskey} fallback={keypad ? 'pin' : 'computer'}
+            onGranted={onGranted} onCancel={onCancel} onFallback={() => { setView(current => ({ keypad: true, round: current.round + 1 })) }} />
+        </div>
+        : null}
       {onKeypad
         ? <div className={css.slide}><FaceIdPinBody key={view.round} t={t} action={action} api={api} secret={secret} onGranted={onGranted} onBack={back} /></div>
         : null}

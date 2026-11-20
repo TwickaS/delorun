@@ -73,7 +73,7 @@ describe('the Face ID grant overlay', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
   // Reverting the state read leaves `hasPasskey` fixed, so a phone with no passkey is shown a sheet it cannot answer, or no keypad.
-  it('offers a phone with no passkey, or one whose state cannot be read, Confirm with PIN, and mints the grant through the PIN route', async () => {
+  it('opens a phone with no passkey, or one whose state cannot be read, on the PIN keypad and mints the grant through the PIN route', async () => {
     for (const unreadable of [false, true]) {
       const source = createFaceGrantSource()
       const base = fakeApi({ devices: [{ deviceId: 'd', label: 'Phone', thisDevice: true, passkeys: [] }] })
@@ -85,9 +85,7 @@ describe('the Face ID grant overlay', () => {
       } as FaceIdGrantOverlayProps
       const granted = source.grant(request)
       render(<FaceIdGrantOverlay {...props} />)
-      // The sheet's main button names the PIN, not Face ID, and opens the keypad in the same dialog.
-      expect(screen.queryByRole('button', { name: /Confirm with Face ID/ })).toBeNull()
-      fireEvent.click(await screen.findByRole('button', { name: 'Confirm with PIN' }))
+      expect(screen.queryByRole('button', { name: /Confirm with/ })).toBeNull()
       fireEvent.change(await screen.findByLabelText('Passcode'), { target: { value: 'correct horse' } })
       fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
       await expect(granted).resolves.toBe('g2')

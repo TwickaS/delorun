@@ -59,8 +59,6 @@ async function answer(source: FaceGrantSource, api: PasskeyApi & { readonly call
   const title = dialog.querySelector('h2,h3')?.textContent ?? dialog.textContent
   if (how === 'faceId') fireEvent.click(await screen.findByRole('button', { name: /Confirm with/ }))
   if (how === 'pin') {
-    // A device with no passkey sees the sheet first; its main button opens the keypad.
-    fireEvent.click(await screen.findByRole('button', { name: 'Confirm with PIN' }))
     fireEvent.change(await screen.findByLabelText('Passcode'), { target: { value: 'correct horse' } })
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
   }
@@ -92,7 +90,7 @@ describe('a live agent\'s granting answer on a device', () => {
     await expect(confirming).resolves.toBe(true)
   })
 
-  it('shows the sheet on a device with no passkey, opens the keypad from Confirm with PIN, and mints the same answer grant', async () => {
+  it('opens straight on the PIN keypad on a device with no passkey, and mints the same answer grant', async () => {
     const { source, grant, api } = world({ passkey: false })
     const reach = reachOn('device', grant)
     expect(reach?.get()).toEqual({ kind: 'device' })
@@ -162,7 +160,7 @@ describe('a Remote call the home refuses for want of a grant', () => {
   })
 
   // Dropping the passkey read shows a phone with no passkey a Face ID button it cannot answer.
-  it('opens the PIN keypad from the sheet on a device with no passkey and mints the grant through the PIN route', async () => {
+  it('opens on the PIN keypad on a device with no passkey and mints the grant through the PIN route', async () => {
     const { source, grant, api } = world({ passkey: false })
     const lifted = remoteDenialLift(grant)(denial('credentials/set', { ref: 'DEEPSEEK_API_KEY', value: 'sk-new' }))
     const { sent, title } = await answer(source, api, 'pin')
