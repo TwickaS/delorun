@@ -40,6 +40,9 @@
       "path": "../../../packages/client/store"
     },
     {
+      "path": "../../../packages/client/ui-approval"
+    },
+    {
       "path": "../../../packages/client/ui-conversation/tsconfig.client.json"
     },
     {
