@@ -83,6 +83,16 @@ describe('the approval grace', () => {
     expect(served.auth.elevationState(phone.id, LISTENER)).toEqual({ kind: 'elevated', elevationId: unlock?.id, endsAt: approvedAt + 10 * MINUTE, reason: 'approval-grace' })
   })
 
+  // Only a verified Face ID opens a pass (A499): the grace starts an unlock, never a pass.
+  it('never opens a Face ID pass', async () => {
+    const { home: served } = await graced(10)
+    const phone = device()
+    await approve(served.auth, phone)
+    await signIn(served.auth, phone)
+    expect(served.auth.elevationOf(phone.id, LISTENER)?.grace).toBe(true)
+    expect(served.auth.grants.passOf({ deviceId: phone.id, listener: LISTENER })).toBeUndefined()
+  })
+
   it('is capped at the listener\'s unlock minutes', async () => {
     const { home: served } = await graced(60)
     const phone = device()

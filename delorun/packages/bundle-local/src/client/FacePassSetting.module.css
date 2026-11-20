@@ -1,0 +1,64 @@
+/* "Ask again after": a label, one row of choices that fills the width, and a line of help. */
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.label {
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.choices {
+  display: flex;
+  gap: 6px;
+}
+
+.choice {
+  flex: 1 1 0;
+  min-height: 40px;
+  padding: 0 6px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-label-tertiary) 50%, transparent);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.choice[aria-checked='true'] {
+  border-color: var(--dsw-alias-brand-primary);
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 12%, transparent);
+  font-weight: 600;
+}
+
+.choice:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.choice:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: 1px;
+}
+
+.choice:disabled {
+  cursor: default;
+}
+
+.help {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.failed {
+  margin: 0;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+}

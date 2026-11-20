@@ -81,7 +81,7 @@ describe('Face ID grants and holds, through home-auth', () => {
   it('end when the device is removed, by endDevice for that device', async () => {
     const ended = vi.spyOn(home.auth.grants, 'endDevice')
     await home.auth.revokeDevice(deviceId)
-    expect(ended).toHaveBeenCalledWith(deviceId)
+    expect(ended).toHaveBeenCalledWith(deviceId, 'device-removed')
     expect(home.auth.grants.holdAdmits(holder, 'terminal', 't-1', 'session:s-1')).toBe(false)
     expect(home.auth.grants.has(holder, 'pluginManager/installBundle', hashArgs({ id: 'p' }) ?? '')).toBe(false)
   })

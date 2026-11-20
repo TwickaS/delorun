@@ -481,6 +481,18 @@ describe('PasskeyDevices', () => {
     expect(props.api.calls.find(call => call.name === 'devices' && (call.request as { grantId?: string }).grantId === 'g1')).toBeTruthy()
     expect(props.api.calls.find(call => call.name === 'options')?.request).toEqual({ actions: [{ action: 'auth/passkey/devices', hash: '44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a' }] })
   })
+  it('names a passkey removal as one, never as removing the device', async () => {
+    // "Remove your device" on a lock-only phone read as removing the device, though the button removes its passkey.
+    list()
+    expect(await screen.findByRole('button', { name: 'Remove Face ID from this device' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Show all devices' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm with Face ID' }))
+    expect(await screen.findByRole('button', { name: 'Remove the passkey on Laptop' })).toBeTruthy()
+    cleanup()
+    list({ kind: 'deviceLock' })
+    expect(await screen.findByRole('button', { name: 'Remove the passkey from this device' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Remove your device/ })).toBeNull()
+  })
   it('offers Add Face ID where this device has none', async () => {
     // A device with no passkey needs the way to add one.
     const props = list({ api: fakeApi({ devices: [{ ...phone, passkeys: [] }] }) })
@@ -501,14 +513,14 @@ describe('PasskeyDevices', () => {
   it('removes a passkey through the sheet, falls back to the PIN, and cancelling removes nothing', async () => {
     // Cancel must leave the list unchanged; the PIN grant is the same kind of grant.
     const props = list()
-    fireEvent.click(await screen.findByRole('button', { name: 'Remove Face ID' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove Face ID from this device' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
     expect(props.api.calls.some(call => call.name === 'removePasskey')).toBe(false)
-    fireEvent.click(screen.getByRole('button', { name: 'Remove Face ID' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Face ID from this device' }))
     await screen.findByRole('dialog')
     cleanup()
     const second = list({ browser: fakeBrowser({ get: [{ kind: 'cancelled' }] }), secret: 'passcode' })
-    fireEvent.click(await screen.findByRole('button', { name: 'Remove Face ID' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove Face ID from this device' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Confirm with Face ID' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Use PIN instead' }))
     fireEvent.change(await screen.findByLabelText('Passcode'), { target: { value: 'secret value' } })
@@ -519,7 +531,7 @@ describe('PasskeyDevices', () => {
   it('points at the computer when no PIN is set', async () => {
     // Without a PIN the sheet's way down is the computer.
     const props = list({ browser: fakeBrowser({ get: [{ kind: 'cancelled' }] }), secret: undefined })
-    fireEvent.click(await screen.findByRole('button', { name: 'Remove Face ID' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove Face ID from this device' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Confirm with Face ID' }))
     expect(await screen.findByText('Or do this at your computer.')).toBeTruthy()
     expect(props.api.calls.some(call => call.name === 'removePasskey')).toBe(false)
@@ -527,7 +539,7 @@ describe('PasskeyDevices', () => {
   it('removes this phone\'s own Face ID without naming a placeholder device, and hashes the same body', async () => {
     // The home looks the passkey up under the caller\'s own device when deviceId is absent; a placeholder id is refused after the grant is spent.
     const props = list()
-    fireEvent.click(await screen.findByRole('button', { name: 'Remove Face ID' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove Face ID from this device' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Confirm with Face ID' }))
     await waitFor(() => { expect(props.api.calls.some(call => call.name === 'removePasskey')).toBe(true) })
     expect(props.api.calls.find(call => call.name === 'removePasskey')?.request).toEqual({ credentialId: 'p1', grantId: 'g1' })

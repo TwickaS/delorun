@@ -133,7 +133,7 @@ With Never ask, a phone you hold unlocked has nearly the computer's authority, s
 
 ### What an unlocked phone can do with Never ask
 
-A phone or browser signed in over remote access can then do these too, each time it confirms that action with [Face ID](reach.md#confirm-with-face-id) or your PIN:
+A phone or browser signed in over remote access can then do these too, each time it confirms that action with [Face ID](reach.md#confirm-with-face-id) or your PIN, or while a Face ID pass is open (Ask again after, in Settings, Face ID):
 
 - It changes settings and plugin rows the computer alone changes with the other answers.
 - It runs any slash command.

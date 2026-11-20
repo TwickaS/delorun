@@ -9,7 +9,7 @@ import { once } from 'node:events'
 import { createServer, request as httpRequest, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { REACH_SESSION_COOKIE, type DeviceId, type StudioAddress } from '@delorun/contract-admission'
 import { ELEVATION_LIMITS } from '@delorun/contract-oidc-passkeys'
@@ -23,11 +23,11 @@ import {
   elevationRevokeHandler,
   elevationStateHandler,
 } from '../src/elevation-routes.ts'
-import { PASSKEY_PATHS, PASSKEY_REMOVE_ACTION, passkeyRemoveHandler, passkeyStateHandler } from '../src/passkey-routes.ts'
+import { PASSKEY_DEVICES_ACTION, PASSKEY_PATHS, PASSKEY_REMOVE_ACTION, passkeyDevicesHandler, passkeyLockHandler, passkeyPassHandler, passkeyRemoveHandler, passkeyStateHandler } from '../src/passkey-routes.ts'
 import { DEVICE_REMOVE_ACTION, DEVICE_REMOVE_PATH, DEVICES_PATH, devicesHandler, removeDeviceHandler, type RouteHandler } from '../src/routes.ts'
 import { claimOf, homeFixture, recordOf, STUDIO_COOKIE, testCredential, type Home } from './fixtures/home.ts'
 import { DeviceStore } from '../src/devices.ts'
-import { hashArgs } from '../src/grants.ts'
+import { hashArgs, PASS_SETTING_ACTION } from '../src/grants.ts'
 import { HOME_AUTH_FILES } from '@delorun/contract-device-approval'
 
 const ADDRESS = brandString<StudioAddress>('https://home.example.ts.net')
@@ -54,6 +54,9 @@ beforeEach(async () => {
     [DEVICE_REMOVE_PATH]: removeDeviceHandler(home.auth, testCredential),
     [PASSKEY_PATHS.remove]: passkeyRemoveHandler(home.auth),
     [PASSKEY_PATHS.state]: passkeyStateHandler(home.auth),
+    [PASSKEY_PATHS.devices]: passkeyDevicesHandler(home.auth),
+    [PASSKEY_PATHS.lock]: passkeyLockHandler(home.auth),
+    [PASSKEY_PATHS.pass]: passkeyPassHandler(home.auth, testCredential),
     [ELEVATION_PATHS.state]: elevationStateHandler(home.auth),
     [ELEVATION_PATHS.request]: elevationRequestHandler(home.auth),
     [ELEVATION_PATHS.lock]: elevationLockHandler(home.auth),
@@ -250,6 +253,142 @@ describe('the device list and removal for a signed-in device', () => {
 
   it('refuses an unsigned request', async () => {
     expect(await send('GET', `${DEVICES_PATH}?reach`, undefined, { cookie: undefined })).toMatchObject({ status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
+  })
+})
+
+describe('a Face ID pass (A499) at the device routes', () => {
+  const setup = async (): Promise<{ other: ReturnType<typeof recordOf>; current: string; holder: { deviceId: string; listener: typeof LISTENER } }> => {
+    const other = recordOf(9, ADDRESS)
+    await new DeviceStore({ file: join(home.directory, HOME_AUTH_FILES.devices) }).add(other)
+    const current = String((await send('GET', `${DEVICES_PATH}?reach`)).body['current'])
+    const holder = { deviceId: current, listener: LISTENER } as const
+    home.auth.grants.openPass(holder, 15)
+    return { other, current, holder }
+  }
+
+  describe('leaves the always-ask rows asking', () => {
+    // Pins the always-ask device removal: a pass check in removeDeviceHandler would let a stolen phone in a pass remove the owner's other devices.
+    it('refuses removing another device during a pass without its grant', async () => {
+      const { other } = await setup()
+      expect(await send('POST', `${DEVICE_REMOVE_PATH}?reach`, { v: 1, deviceId: other.id })).toMatchObject({ status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
+      expect((await home.auth.devices()).devices.map(device => device.id)).toContain(other.id)
+    })
+
+    // Pins the always-ask passkey removal.
+    it('refuses removing a passkey during a pass without its grant', async () => {
+      const { current } = await setup()
+      await home.auth.passkeyStore.add({ credentialId: 'cred-own', publicKey: 'k', counter: 0, backupEligible: false, backupState: false, transports: [], createdAt: 1, lastUsedAt: null, address: ADDRESS, rpId: 'home.example.ts.net', deviceId: brandString<DeviceId>(current) })
+      expect(await send('POST', `${PASSKEY_PATHS.remove}?reach`, { credentialId: 'cred-own' })).toMatchObject({ status: 403, body: { error: 'ELEVATION_REQUIRED' } })
+      expect(home.auth.passkeyStore.find('cred-own')).toBeDefined()
+    })
+
+    // Pins the always-ask Face ID settings list of every device's passkeys.
+    it('refuses the devices\' passkey list during a pass without its grant', async () => {
+      const { holder } = await setup()
+      expect(await send('GET', `${PASSKEY_PATHS.devices}?reach`)).toMatchObject({ status: 403, body: { error: 'ELEVATION_REQUIRED' } })
+      home.auth.grants.mint(holder, [{ action: PASSKEY_DEVICES_ACTION, hash: hashArgs({}) ?? '' }], 'passkey')
+      expect(await send('GET', `${PASSKEY_PATHS.devices}?reach`)).toMatchObject({ status: 200 })
+    })
+
+    // Pins the always-ask pass setting: without the grant check a phone in a pass could lengthen its own pass.
+    it('refuses changing the pass setting during a pass without its grant, and the setting stays', async () => {
+      await setup()
+      expect(await send('POST', `${PASSKEY_PATHS.pass}?reach`, { minutes: 60 })).toMatchObject({ status: 403, body: { error: 'ELEVATION_REQUIRED' } })
+      expect(home.auth.passMinutes()).toBe(15)
+    })
+  })
+
+  describe('the pass setting', () => {
+    // Removing the factor check lets a PIN seen on a stolen phone lengthen every phone's pass.
+    it('refuses a device\'s change with a grant the PIN minted, and admits one a passkey minted, once', async () => {
+      const { holder } = await setup()
+      const body = { minutes: 60 }
+      home.auth.grants.mint(holder, [{ action: PASS_SETTING_ACTION, hash: hashArgs(body) ?? '' }], 'pin')
+      expect(await send('POST', `${PASSKEY_PATHS.pass}?reach`, body)).toMatchObject({ status: 403, body: { error: 'ELEVATION_REQUIRED' } })
+      home.auth.grants.mint(holder, [{ action: PASS_SETTING_ACTION, hash: hashArgs(body) ?? '' }], 'passkey')
+      expect(await send('POST', `${PASSKEY_PATHS.pass}?reach`, body)).toMatchObject({ status: 200, body: { minutes: 60, choices: [0, 5, 15, 30, 60] } })
+      expect(home.auth.passMinutes()).toBe(60)
+      expect(await send('POST', `${PASSKEY_PATHS.pass}?reach`, body)).toMatchObject({ status: 403 })
+    })
+
+    // Removing the validation stores a length outside the set, at the computer or from a device.
+    it('refuses a length outside Every time, 5, 15, 30 and 60 minutes', async () => {
+      const { holder } = await setup()
+      for (const minutes of [7, 120, -5, '15', null]) {
+        const body = { minutes }
+        home.auth.grants.mint(holder, [{ action: PASS_SETTING_ACTION, hash: hashArgs(body) ?? '' }], 'passkey')
+        expect(await send('POST', `${PASSKEY_PATHS.pass}?reach`, body), JSON.stringify(minutes)).toMatchObject({ status: 400, body: { error: 'BAD_REQUEST' } })
+        expect(await send('POST', PASSKEY_PATHS.pass, body), JSON.stringify(minutes)).toMatchObject({ status: 400, body: { error: 'BAD_REQUEST' } })
+      }
+      expect(home.auth.passMinutes()).toBe(15)
+    })
+
+    it('is changed at the computer without a grant, and kept across a restart of the store', async () => {
+      expect(await send('GET', PASSKEY_PATHS.pass)).toMatchObject({ status: 200, body: { minutes: 15, pass: null } })
+      expect(await send('POST', PASSKEY_PATHS.pass, { minutes: 0 })).toMatchObject({ status: 200, body: { minutes: 0 } })
+      await home.auth.passSetting.load()
+      expect(home.auth.passMinutes()).toBe(0)
+    })
+
+    // Removing endPasses from the route leaves a 60-minute pass running after the person chose Every time (review P2-2).
+    it('ends every live pass when it changes, from a device or at the computer', async () => {
+      const { other, holder } = await setup()
+      const theirs = { deviceId: other.id, listener: LISTENER } as const
+      home.auth.grants.openPass(theirs, 15)
+      const body = { minutes: 0 }
+      home.auth.grants.mint(holder, [{ action: PASS_SETTING_ACTION, hash: hashArgs(body) ?? '' }], 'passkey')
+      expect(await send('POST', `${PASSKEY_PATHS.pass}?reach`, body)).toMatchObject({ status: 200, body: { minutes: 0, pass: null } })
+      expect(home.auth.grants.passOf(holder)).toBeUndefined()
+      expect(home.auth.grants.passOf(theirs)).toBeUndefined()
+      home.auth.grants.openPass(theirs, 15)
+      expect(await send('POST', PASSKEY_PATHS.pass, { minutes: 30 })).toMatchObject({ status: 200, body: { minutes: 30 } })
+      expect(home.auth.grants.passOf(theirs)).toBeUndefined()
+    })
+
+    // Pins the computer's arrival check: a foreign origin never changes the setting.
+    it('refuses a change at the computer from another origin', async () => {
+      expect(await send('POST', PASSKEY_PATHS.pass, { minutes: 60 }, { origin: 'https://evil.example' })).toMatchObject({ status: 403 })
+      expect(home.auth.passMinutes()).toBe(15)
+    })
+  })
+
+  // Only a verified Face ID opens a pass: a code typed at the computer starts an unlock, never a pass.
+  it('never opens from a computer code', async () => {
+    const current = String((await send('GET', `${DEVICES_PATH}?reach`)).body['current'])
+    const asked = await send('POST', `${ELEVATION_PATHS.request}?reach`)
+    home.auth.approveElevation(String(asked.body['requestId']), String(asked.body['code']))
+    expect(home.auth.elevationOf(brandString<DeviceId>(current), LISTENER)).toBeDefined()
+    expect(home.auth.grants.passOf({ deviceId: current, listener: LISTENER })).toBeUndefined()
+    expect(await send('GET', `${PASSKEY_PATHS.pass}?reach`)).toMatchObject({ status: 200, body: { pass: null } })
+  })
+
+  // Removing touchPass from admitToken lets a pass end idle while its device is still making requests (review P2-1).
+  it('counts each admitted request of the device as its use of the pass', async () => {
+    const { holder } = await setup()
+    const touched = vi.spyOn(home.auth.grants, 'touchPass')
+    await send('GET', `${DEVICES_PATH}?reach`)
+    expect(touched).toHaveBeenCalledWith({ deviceId: holder.deviceId, listener: LISTENER })
+  })
+
+  // Removing the route's endPass leaves the pass running after Lock now.
+  it('reads the live pass and ends it with Lock now', async () => {
+    const { holder } = await setup()
+    expect(await send('GET', `${PASSKEY_PATHS.pass}?reach`)).toMatchObject({ status: 200, body: { pass: { endsAt: expect.any(Number) } } })
+    expect(await send('POST', `${PASSKEY_PATHS.lock}?reach`, {})).toMatchObject({ status: 200, body: { ended: true } })
+    expect(home.auth.grants.passOf(holder)).toBeUndefined()
+    expect(await send('GET', `${PASSKEY_PATHS.pass}?reach`)).toMatchObject({ status: 200, body: { pass: null } })
+  })
+
+  // Pins forgetDevice's endDevice and the rotation: a removed device's pass ends with it, and so does every other.
+  it('ends the pass of a device that is removed', async () => {
+    const { other, holder } = await setup()
+    const theirs = { deviceId: other.id, listener: LISTENER } as const
+    home.auth.grants.openPass(theirs, 15)
+    home.auth.grants.mint(holder, [{ action: DEVICE_REMOVE_ACTION, hash: hashArgs({ v: 1, deviceId: other.id }) ?? '' }], 'passkey')
+    expect(await send('POST', `${DEVICE_REMOVE_PATH}?reach`, { v: 1, deviceId: other.id })).toMatchObject({ status: 200 })
+    expect(home.auth.grants.passOf(theirs)).toBeUndefined()
+    // A removal rotates every session, so the remover's pass ends too and its next strong action asks.
+    expect(home.auth.grants.passOf(holder)).toBeUndefined()
   })
 })
 

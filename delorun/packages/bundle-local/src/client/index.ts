@@ -81,7 +81,9 @@ import { createRemoteNoticeSource, RemoteNotice } from './RemoteNotice.tsx'
 import { createPinSource, type PinSource } from './pin-lock.ts'
 import { en as faceIdEn, zh as faceIdZh, type FaceIdLocaleKey } from './face-id-locales.ts'
 import { grantingFetchOf, type FaceGrantService } from '@delorun/plugin-changes/face-grant'
-import { createFaceGrantSource, type FaceGrantSource } from './face-grant.ts'
+import { createFaceGrantSource, passAware, type FaceGrantSource } from './face-grant.ts'
+import { createPassSource, type PassSource } from './face-id-pass.ts'
+import { FacePassChip, type FacePassChipInjected } from './FacePassChip.tsx'
 import { confirmationQueue, grantingFetch, oneAtATime, remoteDenialLift, type ConfirmationQueue } from './face-retry.ts'
 import { FaceIdGrantOverlay } from './FaceIdGrantOverlay.tsx'
 import { FaceIdAnswerAction, type FaceIdAnswerInjected } from './FaceIdAnswerAction.tsx'
@@ -232,6 +234,9 @@ export const FACE_ID_ANSWER_ID = 'delorun-face-id-answer'
 
 /** The `shell.overlay` id of the confirmation another plugin's call asks for through `ctx.delorunFaceGrant`. */
 export const FACE_ID_GRANT_ID = 'delorun-face-id-grant'
+
+/** The `conversation.session.banner` entry id of the Face ID pass chip. */
+export const FACE_PASS_CHIP_ID = 'delorun-face-pass-chip'
 
 /** The `shell.overlay` id of the pairing step. */
 export const FACE_ID_OVERLAY_ID = 'delorun-face-id-pairing'
@@ -486,14 +491,14 @@ export function apply(ctx: Context): void {
   }, PluginInstallsSection))
   // One function for the plugin's lifetime: the section's requests restart when its identity changes.
   const browserFetch: HostFetch = (input, init) => globalThis.fetch(input, init)
-  const { source: faceGrant, fetch: studioFetch, queue: faceQueue } = applyFaceGrant(ctx, browserFetch, (ctx.get('connection') as ConnectionHandle).isLoopback)
+  const { source: faceGrant, fetch: studioFetch, queue: faceQueue, pass: facePass, grant: proactiveGrant } = applyFaceGrant(ctx, browserFetch, (ctx.get('connection') as ConnectionHandle).isLoopback)
   registerReportSlots(ctx, () => t('about.nav'), versions)
   ctx.effect(() => ctx.locale.register(DEVICES_NS, { en: devicesEn, zh: devicesZh }), 'delorun-devices: section dictionaries')
   const devicesT = ctx.locale.bind(DEVICES_NS)
   ctx.effect(() => ctx.locale.register(FACE_ID_NS, { en: faceIdEn, zh: faceIdZh }), 'delorun-face-id: screen dictionaries')
   const pin = applyPin(ctx, browserFetch, (ctx.get('connection') as ConnectionHandle).isLoopback)
   const unlock = applyUnlock(ctx, browserFetch, (ctx.get('connection') as ConnectionHandle).isLoopback)
-  provideAgentSeatReach(ctx, (ctx.get('connection') as ConnectionHandle).isLoopback ? 'computer' : studioSurface(ctx) === 'approved device' ? 'device' : 'none', oneAtATime(faceGrant.grant, faceQueue))
+  provideAgentSeatReach(ctx, (ctx.get('connection') as ConnectionHandle).isLoopback ? 'computer' : studioSurface(ctx) === 'approved device' ? 'device' : 'none', proactiveGrant)
   // A reach page whose session a device approval, removal or passkey enrolment rotated (C4) reloads, so the sign-in page signs it in again.
   if (!(ctx.get('connection') as ConnectionHandle).isLoopback) {
     const link = ctx.get('connection') as ConnectionHandle
@@ -538,7 +543,7 @@ export function apply(ctx: Context): void {
     inject: pinModeFace,
   }, PinModeSection))
   const faceIdT = ctx.locale.bind(FACE_ID_NS)
-  const faceIdFace = (): FaceIdSectionInjected => ({ fetch: browserFetch, atComputer: () => (ctx.get('connection') as ConnectionHandle).isLoopback, hooks: pin.hooks })
+  const faceIdFace = (): FaceIdSectionInjected => ({ fetch: browserFetch, atComputer: () => (ctx.get('connection') as ConnectionHandle).isLoopback, hooks: { ...pin.hooks, ...facePass.hooks }, grant: proactiveGrant })
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: FACE_ID_SECTION_ID,
@@ -557,8 +562,16 @@ export function apply(ctx: Context): void {
     name: 'conversation.approval.action',
     id: FACE_ID_ANSWER_ID,
     locale: FACE_ID_NS,
-    inject: (sessionId): FaceIdAnswerInjected => ({ ...faceIdFace(), sessionId, queue: faceQueue }),
+    inject: (sessionId): FaceIdAnswerInjected => ({ ...faceIdFace(), sessionId, queue: faceQueue, pass: facePass }),
   }, FaceIdAnswerAction))
+  // The "Unlocked" chip of a live Face ID pass, above the active chat's view on a phone or a desktop device; the computer has no pass.
+  const passChipFace = (): FacePassChipInjected => ({ hooks: facePass.hooks, lockNow: facePass.lockNow })
+  ctx.slots.inject('conversation.session.banner', () => ctx.slots.register({
+    name: 'conversation.session.banner',
+    id: FACE_PASS_CHIP_ID,
+    locale: FACE_ID_NS,
+    inject: passChipFace,
+  }, FacePassChip))
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({
     name: 'shell.overlay',
     id: FACE_ID_OVERLAY_ID,
@@ -848,26 +861,32 @@ export function registerReportSlots(ctx: Context, aboutLabel: () => string, vers
 /**
  * Provide `ctx.delorunFaceGrant` and, on a reach device, the Face ID step for every sensitive call (A483): a Remote call
  * or a plugin route the home refuses for want of a grant opens the confirmation and is sent once more
- * (`face-retry.ts`). On the home's own computer nothing is refused, so nothing asks: the service's `fetch` is the page's
- * and no Remote lift is registered.
+ * (`face-retry.ts`). A caller that asks before it sends skips the sheet while this device's Face ID pass covers the
+ * action ({@link passAware}). On the home's own computer nothing is refused, so nothing asks: the service's `fetch` is
+ * the page's, no Remote lift is registered and the pass mirror reads nothing.
  * @param ctx - the browser plugin context.
  * @param fetch - the page's request function.
  * @param onComputer - whether the page is the home's own computer.
- * @returns the confirmation's store, which the overlay shows, the `fetch` the plugin's own sections send through, and the
- *   page's confirmation queue.
+ * @returns the confirmation's store, which the overlay shows, the `fetch` the plugin's own sections send through, the
+ *   page's confirmation queue, the pass mirror and the proactive confirmation `ctx.delorunFaceGrant.grant` is.
  */
-export function applyFaceGrant(ctx: Context, fetch: HostFetch, onComputer: boolean): { readonly source: FaceGrantSource; readonly fetch: HostFetch; readonly queue: ConfirmationQueue } {
+export function applyFaceGrant(ctx: Context, fetch: HostFetch, onComputer: boolean): { readonly source: FaceGrantSource; readonly fetch: HostFetch; readonly queue: ConfirmationQueue; readonly pass: PassSource; readonly grant: FaceGrantService['grant'] } {
   const source = createFaceGrantSource()
   const queue = confirmationQueue()
   const queued = oneAtATime(source.grant, queue)
+  const pass = createPassSource({ fetch, atComputer: () => onComputer })
+  ctx.effect(() => pass.dispose, 'delorun-face-id: the pass mirror stops listening once the plugin unloads')
+  ctx.on('connection/reset', () => { void pass.refresh() })
+  // A caller that asks before it sends skips the sheet under a live pass; a refused call's lift always asks (A499).
+  const grant = passAware(queued, pass)
   const studioFetch: HostFetch = onComputer ? fetch : grantingFetch(fetch, queued)
-  ctx.provide('delorunFaceGrant', { grant: queued, fetch: studioFetch } satisfies FaceGrantService)
+  ctx.provide('delorunFaceGrant', { grant, fetch: studioFetch } satisfies FaceGrantService)
   if (!onComputer) {
     ctx.inject(['remote'], (inner) => {
       inner.effect(() => inner.remote.$liftDenials(remoteDenialLift(queued)), 'delorun-face-id: a refused Remote call asks for Face ID and is sent once more')
     })
   }
-  return { source, fetch: studioFetch, queue }
+  return { source, fetch: studioFetch, queue, pass, grant }
 }
 
 /**
