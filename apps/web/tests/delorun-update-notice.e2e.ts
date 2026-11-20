@@ -116,7 +116,8 @@ it.skipIf(webSnapshotMode() === 'record')('shows the Host\'s update notice in th
   expect(await remoteNotice.textContent()).not.toContain('Release note')
   await remoteNotice.getByRole('button', { name: 'What\'s new', exact: true }).click()
   expect(await remoteNotice.textContent()).toContain('Release note: Fixes the reach listener\'s cookie check')
-  expect(await remoteNotice.textContent()).toContain('Run delorun update on your computer.')
+  // The scaffold's loopback page may begin an update, so the details end with Update now… and not the terminal line.
+  expect(await remoteNotice.getByRole('button', { name: 'Update now…', exact: true }).count()).toBe(1)
   await remoteNotice.getByRole('button', { name: 'Hide this notice until a newer release' }).click()
   await expect.poll(() => remoteNotice.count()).toBe(0)
 }, 240_000)
