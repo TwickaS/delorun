@@ -234,6 +234,15 @@ describe('previewing a project folder', () => {
     expect(git).not.toHaveBeenCalled()
   })
 
+  it('does not run Git for a repository that names other folders to read objects from', async () => {
+    const git = vi.fn(async () => '0\tx')
+    const folder = await folderWith('shared', ['.git/'])
+    await mkdir(join(folder, '.git', 'objects', 'info'), { recursive: true })
+    await writeFile(join(folder, '.git', 'objects', 'info', 'alternates'), '/elsewhere/objects\n')
+    expect(await previewFolder(folder, previewDeps({ git }))).not.toHaveProperty('lastCommit')
+    expect(git).not.toHaveBeenCalled()
+  })
+
   it('leaves the commit out when Git gives none, as for a repository with no commits', async () => {
     const folder = await folderWith('fresh', ['.git/'])
     expect(await previewFolder(folder, previewDeps())).not.toHaveProperty('lastCommit')

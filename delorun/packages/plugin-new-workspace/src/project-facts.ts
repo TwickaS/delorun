@@ -1,7 +1,8 @@
 /**
  * What a project folder's top-level names and Git history say about it, for the folder preview: the stacks its marker
- * files name, and its latest commit. The commit comes from one `git log -1` run with the repository's own
- * configuration neutralised (no file system monitor, no hooks, no signature checks), a short time bound and a small
+ * files name, and its latest commit. The commit comes from one `git log -1` run with the user's and the system's
+ * configuration off, replacement refs ignored, and the repository's settings that could run a program overridden (no
+ * file system monitor, no hooks, no signature checks), a short time bound and a small
  * output bound; it opens no file itself.
  * @module @delorun/plugin-new-workspace/project-facts
  */
@@ -69,12 +70,16 @@ export const runGit: GitReader = (args, env) => new Promise((resolve) => {
  * Git refuses to read, or output that does not parse.
  */
 export async function lastCommitOf(folder: string, read: GitReader = runGit, environment: NodeJS.ProcessEnv = process.env): Promise<LastCommit | undefined> {
-  const env: Record<string, string> = { GIT_CONFIG_NOSYSTEM: '1', GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C' }
+  // No system or user configuration is read, and no replacement ref changes the commit shown; only the repository's own
+  // configuration applies, and the arguments below override its settings that could run a program.
+  const env: Record<string, string> = {
+    GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: devNull, GIT_NO_REPLACE_OBJECTS: '1', GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C',
+  }
   for (const name of ['PATH', 'HOME', 'USERPROFILE', 'SystemRoot']) {
     const value = environment[name]
     if (value !== undefined) env[name] = value
   }
-  const args = ['-c', 'core.fsmonitor=false', '-c', `core.hooksPath=${devNull}`, '-C', folder, 'log', '-1', '--no-show-signature', '--format=%ct%x09%s']
+  const args = ['-c', 'core.fsmonitor=false', '-c', `core.hooksPath=${devNull}`, '-c', 'log.showSignature=false', '-C', folder, 'log', '-1', '--no-show-signature', '--format=%ct%x09%s']
   const output = await read(args, env)
   const match = /^(\d{1,12})\t([^\r\n]*)/u.exec(output ?? '')
   if (match === null) return undefined

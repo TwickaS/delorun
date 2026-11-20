@@ -116,17 +116,29 @@ async function withSizes(folder: string, entries: readonly (PreviewEntry & { rea
   }))
 }
 
+/** The file that makes Git read objects from folders the repository names. */
+const ALTERNATES = join(GIT_DIR, 'objects', 'info', 'alternates')
+
 /**
- * Whether `.git` is a real folder inside the previewed folder, so Git reads nothing the folder does not hold.
+ * Whether Git may be asked about the folder: `.git` is a real folder inside it and names no other folder to read
+ * objects from, so Git reads nothing the previewed folder does not hold.
  * @param folder - the previewed folder.
- * @returns true for a folder, false for a link, a worktree's `.git` file or anything unreadable.
+ * @returns true for such a repository, false for a link, a worktree's `.git` file, a repository with alternates or
+ * anything unreadable.
  */
-async function isGitDirectory(folder: string): Promise<boolean> {
+async function isSelfContainedRepository(folder: string): Promise<boolean> {
   try {
-    return (await lstat(join(folder, GIT_DIR))).isDirectory()
+    if (!(await lstat(join(folder, GIT_DIR))).isDirectory()) return false
   } catch (_absent) {
     // No repository to ask.
     return false
+  }
+  try {
+    await lstat(join(folder, ALTERNATES))
+    return false
+  } catch (_none) {
+    // No alternates file: the usual case.
+    return true
   }
 }
 
@@ -187,7 +199,7 @@ export async function previewFolder(path: string, deps: PreviewDeps): Promise<Pr
   entries.sort((left, right) => Number(right.folder) - Number(left.folder) || left.name.localeCompare(right.name))
   const listed = await withSizes(path, entries.slice(0, MAX_PREVIEW_NAMES))
   const branch = git ? await branchOf(path) : undefined
-  const lastCommit = git && await isGitDirectory(path) ? await lastCommitOf(path, deps.git ?? runGit) : undefined
+  const lastCommit = git && await isSelfContainedRepository(path) ? await lastCommitOf(path, deps.git ?? runGit) : undefined
   const stack = stacksOf(names)
   return {
     result: 'folder',

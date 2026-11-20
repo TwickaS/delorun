@@ -1,4 +1,5 @@
 /** Project facts: stacks from marker names, and the latest commit parsed from one bounded Git run. */
+import { devNull } from 'node:os'
 import { describe, expect, it, vi } from 'vitest'
 import { lastCommitOf, stacksOf } from '../src/project-facts.ts'
 import { MAX_COMMIT_SUBJECT } from '../src/wire.ts'
@@ -15,8 +16,10 @@ describe('the latest commit', () => {
     const read = vi.fn(async () => '86400\tfix:\u001b[31m red\u0007 text\n')
     expect(await lastCommitOf('/r', read, { PATH: '/bin', HOME: '/h', SECRET: 'no' })).toEqual({ subject: 'fix:[31m red text', at: '1970-01-02T00:00:00.000Z' })
     const [args, env] = read.mock.calls[0] as unknown as [string[], Record<string, string>]
-    expect(args).toEqual(expect.arrayContaining(['-c', 'core.fsmonitor=false', '-C', '/r', 'log', '-1', '--no-show-signature']))
-    expect(env).toEqual({ GIT_CONFIG_NOSYSTEM: '1', GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C', PATH: '/bin', HOME: '/h' })
+    expect(args).toEqual(expect.arrayContaining(['-c', 'core.fsmonitor=false', '-c', 'log.showSignature=false', '-C', '/r', 'log', '-1', '--no-show-signature']))
+    expect(env).toEqual({
+      GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: devNull, GIT_NO_REPLACE_OBJECTS: '1', GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C', PATH: '/bin', HOME: '/h',
+    })
   })
 
   it('cuts a long subject', async () => {
