@@ -42,6 +42,8 @@
 
 `closure.json` 还列出 `packExternals`，即插件包从不携带的包名（精确名称，或以 `*` 结尾的前缀），因为发布者的许可证禁止再分发：Claude Code 的 `@anthropic-ai/claude-agent-sdk` 包及其平台程序 `@anthropic-ai/claude-agent-sdk-*`，以及 Codex 的 `@openai/codex-*`。packs 文件按 npm tarball URL 和 SHA-512 固定其中每一个，启用插件包时会从注册表获取并校验它。
 
+A pack's `package.json` and `pnpm-lock.yaml` are the same bytes in every build of the same sources. `pnpm deploy` writes a workspace package it injects as `<name>@file:///<absolute source path>`, which names the build's temporary folder, so the pack build writes the exact version of the package the pack carries instead, in `package.json` and in the lockfile's `importers`, `packages` and `snapshots` (its `directory` becomes `node_modules/<name>`), and deletes `pnpm-workspace.yaml`, which lists patch files by path. It then refuses a pack whose `package.json` dependency fields, own packages' `package.json`, lockfile or workspace file still name an absolute path, a `file://` URL, a path outside the pack or a temporary or home folder, naming the pack, the file and the field (`src/closure/pack-specifiers.ts`).
+
 `node_modules/.bin/tsx delorun/apps/release/src/build-closure.ts --version <version> --out <dir> [--commit <rev>] [--platform <platform>]... [--cache <dir>]` 从某个提交（默认 `HEAD`）构建所有发布平台或指定平台的发行包。它在带有 Docker 引擎的 Linux 或 macOS 上运行（原生步骤需要 Docker），在 Node 或 pnpm 版本与 `toolchain.json` 固定的不一致时拒绝运行，并拒绝不是发布平台的平台。每次构建它依次：
 
 1. 把该提交的目录树导出到 `closure.json` 固定的构建根目录 `/var/tmp/delorun-release-build/source`，使打包工具嵌入客户端产物的绝对路径在每个构建者那里都相同；构建持有锁文件 `/var/tmp/delorun-release-build.lock`，其中记录进程 id，因此同一台计算机上的第二次构建会拒绝运行并指出持有者，而不是删除第一次构建的目录树，该路径上并非本命令创建的目录会被拒绝，绝不会被删除；

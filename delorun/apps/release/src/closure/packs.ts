@@ -43,6 +43,7 @@ import { parse as parseYaml } from 'yaml'
 import { z } from 'zod'
 import { closureName } from '../rebuild/compare.ts'
 import { transpileDelorunPackage, transpileDelorunPackages } from './delorun.ts'
+import { refuseMachinePaths, stabilizeDeployedSpecifiers } from './pack-specifiers.ts'
 import { linkCarriedNeeds, nestedSingleCopies, undeclaredPeerNeeds, type PackLayout } from './pack-imports.ts'
 import { installedReviewCopyProblems } from './review-copy.ts'
 import { listStagedTree, unsignedEnvelopeText } from './tree.ts'
@@ -396,6 +397,7 @@ export async function buildPack(name: string, version: string, experimental: boo
     const directory = join(scratch, `${name.replaceAll('/', '__')}-${platform}`)
     await sources.deploy(name, platform, directory, nativeSystems(natives[platform] ?? [], platform, sources))
     await restoreDeclaredPeers(directory, await sources.declaredPeers(name), sources.closureNodeModules(platform))
+    await stabilizeDeployedSpecifiers(directory)
     // A Delorun package exports TypeScript sources, which Node does not run from a pack; the closure's are transpiled too.
     await transpilePackPackages(name, directory)
     const external: PackExternal[] = []
@@ -431,6 +433,7 @@ export async function buildPack(name: string, version: string, experimental: boo
     if (untranspiled.length > 0) throw new Error(`${name} for ${platform} carries TypeScript sources of a Delorun package, which Node does not run from a pack: ${untranspiled.slice(0, 3).join(', ')}`)
     await linkClosureNeeds(name, platform, entries, peers, nestedName => keepsOneCopy(nestedName, packPeers, externals), external, sources)
     await declareLinkedNeeds(name, platform, directory, entries, peers, external, sources)
+    refuseMachinePaths(name, platform, entries)
     const result = await buildPackArchive(packArchiveName(releaseVersion, name, platform), entries, epoch)
     const variant = { ...result.variant, external: external.sort((a, b) => (a.name < b.name ? -1 : 1)), peers: [...peers].sort() }
     const copyProblems = await installedReviewCopyProblems({
