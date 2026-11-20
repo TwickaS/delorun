@@ -1,7 +1,8 @@
 /** Project facts: stacks from marker names, and the latest commit parsed from one bounded Git run. */
 import { devNull } from 'node:os'
+import { delimiter } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { lastCommitOf, limitGit, stacksOf } from '../src/project-facts.ts'
+import { lastCommitOf, limitGit, stacksOf, type GitReader } from '../src/project-facts.ts'
 import { MAX_COMMIT_SUBJECT } from '../src/wire.ts'
 
 describe('the stacks of a folder', () => {
@@ -13,9 +14,9 @@ describe('the stacks of a folder', () => {
 
 describe('the latest commit', () => {
   it('parses the time and subject, and drops control characters', async () => {
-    const read = vi.fn(async () => '86400\tfix:\u001b[31m red\u0007 text\n')
+    const read = vi.fn<GitReader>(async () => '86400\tfix:\u001b[31m red\u0007 text\n')
     expect(await lastCommitOf('/r', read, { PATH: '/bin', HOME: '/h', SECRET: 'no' })).toEqual({ subject: 'fix:[31m red text', at: '1970-01-02T00:00:00.000Z' })
-    const [args, env] = read.mock.calls[0] as unknown as [string[], Record<string, string>]
+    const [args, env] = read.mock.calls[0] ?? []
     expect(args).toEqual(expect.arrayContaining(['-c', 'core.fsmonitor=false', '-c', 'log.showSignature=false', '-c', 'safe.bareRepository=explicit', '-C', '/r', 'log', '-1', '--no-show-signature']))
     expect(env).toEqual({
       GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: devNull, GIT_NO_REPLACE_OBJECTS: '1', GIT_NO_LAZY_FETCH: '1', GIT_ALLOW_PROTOCOL: 'x-delorun-none',
@@ -24,9 +25,15 @@ describe('the latest commit', () => {
   })
 
   it('keeps Git from looking above the folder', async () => {
-    const read = vi.fn(async () => undefined)
+    const read = vi.fn<GitReader>(async () => undefined)
     await lastCommitOf('/home/p/repo', read, {})
-    expect((read.mock.calls[0] as unknown as [string[], Record<string, string>])[1].GIT_CEILING_DIRECTORIES).toBe('/home/p')
+    expect(read.mock.calls[0]?.[1].GIT_CEILING_DIRECTORIES).toBe('/home/p')
+  })
+
+  it('runs no Git when the parent path holds the separator of the ceiling list', async () => {
+    const read = vi.fn<GitReader>(async () => '5\tx')
+    expect(await lastCommitOf(`/home/a${delimiter}b/repo`, read, {})).toBeUndefined()
+    expect(read).not.toHaveBeenCalled()
   })
 
   it('drops bidirectional and other format characters from a subject', async () => {

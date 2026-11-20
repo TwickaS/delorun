@@ -120,8 +120,9 @@ async function withSizes(folder: string, entries: readonly (PreviewEntry & { rea
 const ALTERNATES = join(GIT_DIR, 'objects', 'info', 'alternates')
 
 /**
- * Whether Git may be asked about the folder: `.git` is a real folder inside it and names no other folder to read
- * objects from, so Git reads nothing the previewed folder does not hold.
+ * Whether Git may be asked about the folder: `.git` is a real folder inside it and has no `objects/info/alternates`
+ * file. A `.git/commondir` file is not checked: it sends Git to another folder, whose own alternates are not read
+ * either. Git only reads from those folders; it starts no program.
  * @param folder - the previewed folder.
  * @returns true for such a repository, false for a link, a worktree's `.git` file, a repository with alternates or
  * anything unreadable.
