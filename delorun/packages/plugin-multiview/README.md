@@ -59,3 +59,5 @@ The Host row `delorun-multiview` has six volatile fields ([`src/config.ts`](src/
 ## Tests
 
 `tests/entry/` runs with `node_modules/.bin/vitest run --config delorun/vitest.config.ts delorun/packages/plugin-multiview/tests/entry`. It covers the hand-off watcher, the store (pins, limit, no-room, layout, persistence calls), the persistence round trip and every discard case, `Config` defaults and bounds, the registration (auto-pin on a new catalog entry and not on existing ones, auto-open each time, auto-open off, the limit, reopen on return, a close from outside) and the components (pin states, the disabled reason, the footer, the count and the amber dot, the Layout menu).
+
+`tests/entry/browser/shots.mts` builds a page with the real pin button, footer and header button over the stock colour tokens and takes light-theme pictures in headless Chromium at 1440 and 390 px: `node --import tsx/esm delorun/packages/plugin-multiview/tests/entry/browser/shots.mts <directory>`. The page's header and agents rows stand in for the upstream catalog component.

@@ -2248,6 +2248,9 @@ importers:
       '@delorun/plugin-mcp-consent':
         specifier: workspace:*
         version: link:../plugin-mcp-consent
+      '@delorun/plugin-multiview':
+        specifier: workspace:*
+        version: link:../plugin-multiview
       '@delorun/plugin-packs':
         specifier: workspace:*
         version: link:../plugin-packs
