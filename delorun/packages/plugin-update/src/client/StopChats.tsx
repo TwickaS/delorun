@@ -7,13 +7,15 @@ import { useId, useState } from 'react'
 import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { RunningChatView, StoppedChatsView } from '../wire.ts'
 import css from './UpdatePanel.module.css'
-import { refusalText, type T } from './parts.tsx'
+import { pluralKey, refusalText, type T } from './parts.tsx'
 import type { Outcome } from './controller.ts'
 
 /** What the stop needs. */
 export interface StopChatsOffer {
   /** The chats that will stop. */
   readonly chats: readonly RunningChatView[]
+  /** The background jobs that stop too; none continue. */
+  readonly jobs: number
   /** Whether the stopped chats continue by themselves after the update. */
   readonly automatic: boolean
   /**
@@ -64,12 +66,13 @@ function StopChatsConfirm({ offer, t, onClose }: { readonly offer: StopChatsOffe
       <Button variant="outline" className={css.danger} disabled={busy} onClick={stop}>{t('stop.confirm')}</Button>
     </>}>
     <div className={css.dialogBody} data-stop-chats-confirm>
-      {offer.chats.length === 0
+      {offer.chats.length === 0 && offer.jobs === 0
         ? <p className={css.body}>{t('stop.none')}</p>
         : <>
           <p className={css.body}>{t('stop.lead')}</p>
           <ul className={css.highlights}>{offer.chats.map(chat => <li key={chat.sessionId}>{chat.title === '' ? t('stop.untitled') : chat.title}</li>)}</ul>
         </>}
+      {offer.jobs === 0 ? null : <p className={css.body}>{t(pluralKey('stop.jobs', offer.jobs), { count: offer.jobs })}</p>}
       <p className={css.body}>{t(offer.automatic ? 'stop.after.automatic' : 'stop.after.manual')}</p>
       {failure === undefined ? null : <p className={css.body} role="alert">{failure}</p>}
     </div>

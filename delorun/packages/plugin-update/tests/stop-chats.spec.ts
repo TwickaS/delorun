@@ -131,6 +131,39 @@ describe('the stopped chats in the state, and the continue-chat route', () => {
   })
 })
 
+describe('an update cancelled after the stop', () => {
+  /** Stop two chats, then cancel the waiting update. */
+  async function cancelled(update: UpdateServer): Promise<void> {
+    updateWaiting(update)
+    update.chats.running = [...RUNNING]
+    await post(update.server.port, UPDATE_PATHS.stopChats, {})
+    expect((await post(update.server.port, UPDATE_PATHS.cancel, {})).status).toBe(200)
+  }
+
+  it('continues each stopped chat at once with the setting on, and clears the record', async () => {
+    const update = await serveUpdate()
+    await cancelled(update)
+    expect(update.sent.ids).toEqual(['s-1', 's-2'])
+    expect(existsSync(recordPath(update))).toBe(false)
+  })
+
+  it('keeps the record for the Continue buttons with the setting off, and sends nothing', async () => {
+    const update = await serveUpdate()
+    update.setting.automatic = false
+    await cancelled(update)
+    expect(update.sent.ids).toEqual([])
+    expect((await readStopped(recordPath(update)))?.chats.map(chat => chat.state)).toEqual(['stopped', 'stopped'])
+  })
+
+  it('names the background jobs in the state while an update waits', async () => {
+    const update = await serveUpdate()
+    updateWaiting(update)
+    update.chats.running = [...RUNNING]
+    update.chats.jobs = 3
+    expect(json(await get(update.server.port, UPDATE_PATHS.state)).runningJobs).toBe(3)
+  })
+})
+
 describe('the updated Host continuing the stopped chats', () => {
   /** @returns a record on disk and the sends the continuation made. */
   async function after(automatic: boolean, answers: Record<string, 'continued' | 'skipped-missing' | 'skipped-running' | 'failed'> = {}, settingOn = true) {

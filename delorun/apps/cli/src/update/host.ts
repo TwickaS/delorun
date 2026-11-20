@@ -47,6 +47,7 @@ export const STOP_REASON = 'Delorun is stopping or updating'
  */
 export function watchChats(ctx: Context, gate: CountingChatGate): void {
   const ends = new Map<Agent, () => void>()
+  let jobCount = 0
   ctx.on('agent/status', ({ agent, status }) => {
     if (status === 'running') {
       if (!ends.has(agent)) ends.set(agent, gate.track(() => { agent.cancel({ kind: 'hook', reason: STOP_REASON }) }))
@@ -61,6 +62,7 @@ export function watchChats(ctx: Context, gate: CountingChatGate): void {
     scope.effect(() => scope.jobs.events.subscribe({ owners: 'all' }, (event) => {
       if (event.type === 'registered') {
         const { id, owner } = event.job
+        jobCount += 1
         jobs.set(id, gate.track(() => {
           try {
             scope.jobs.kill(id, owner, STOP_REASON)
@@ -72,12 +74,13 @@ export function watchChats(ctx: Context, gate: CountingChatGate): void {
       }
       if (event.type !== 'settled' && event.type !== 'removed') return
       jobs.get(event.job.id)?.()
-      jobs.delete(event.job.id)
+      if (jobs.delete(event.job.id)) jobCount -= 1
     }))
     // The registry settles its jobs when it goes; a job it never reported settled is not running either.
     scope.effect(() => () => {
       for (const end of jobs.values()) end()
       jobs.clear()
+      jobCount = 0
     })
   })
   // The chats the studio's "Stop running chats and update" names and stops: the sessions of the running agents.
@@ -85,6 +88,7 @@ export function watchChats(ctx: Context, gate: CountingChatGate): void {
     scope.effect(() => scope.delorunUpdateChats.attach({
       list: () => [...new Set([...ends.keys()].map(agent => agent.session.id))],
       cancelAll: () => gate.cancelAll(),
+      jobs: () => jobCount,
     }))
   })
   ctx.inject(['delorunTurnGate'], (scope) => {

@@ -9,6 +9,7 @@ import { UpdateController } from '../src/client/controller.ts'
 import { en } from '../src/client/locales.ts'
 import { UpdateDialog } from '../src/client/UpdateDialog.tsx'
 import { StoppedChatLine } from '../src/client/StopChats.tsx'
+import { UpdateAlertsEntry } from '../src/client/UpdateAlerts.tsx'
 import { UpdateProgress } from '../src/client/UpdateProgress.tsx'
 import { UpdateCards, type UpdateCardsProps } from '../src/client/UpdateOverlay.tsx'
 import { UPDATE_CONTROLS, UPDATE_PATHS, type PreparedUpdateView, type UpdateControl, type UpdateMayView, type UpdateResultView, type UpdateStateView } from '../src/wire.ts'
@@ -272,13 +273,38 @@ describe('the connection as an ongoing state', () => {
   })
 })
 
+describe('the sidebar entry', () => {
+  /** Render the entry with hooks over fixed values. */
+  function entry(wide: boolean, state: UpdateStateView) {
+    const hook = (value: unknown) => (select: (value: never) => unknown) => select(value as never)
+    const props = {
+      t, wide, reconnect: vi.fn(), cancel: vi.fn(), stopChats: vi.fn(),
+      useLoad: hook({ status: 'ready', state, reconnecting: false }), useSwitching: hook(false), useConnection: hook('connected'),
+    }
+    render(<UpdateAlertsEntry {...props as never} />)
+  }
+
+  it('shows the alert in the wide sidebar and only a dot on the collapsed rail', () => {
+    const waiting = stateOf({ progress: { kind: 'applying', phase: 'waiting', target: '0.1.3', runningChats: 1 } })
+    entry(true, waiting)
+    expect(document.querySelector('[data-update-variant="alert"]')).not.toBeNull()
+    cleanup()
+    entry(false, waiting)
+    expect(document.querySelector('[data-update-variant]')).toBeNull()
+    expect(document.querySelector('[data-update-rail-dot]')).not.toBeNull()
+    cleanup()
+    entry(false, stateOf())
+    expect(document.querySelector('[data-update-rail-dot]')).toBeNull()
+  })
+})
+
 describe('Stop running chats and update', () => {
   const CHATS = [{ sessionId: 's-1', title: 'Refactor' }, { sessionId: 's-2', title: '' }]
   const waiting = (): UpdateStateView => stateOf({ progress: { kind: 'applying', phase: 'waiting', target: '0.1.3', runningChats: 2 }, runningChats: CHATS })
 
   /** Render the sidebar alert with the stop offer. */
   function alert(automatic: boolean, run = vi.fn(() => Promise.resolve({ ok: true as const, value: {} })), state = waiting()) {
-    render(<UpdateProgress variant="alert" state={state} switching={false} reconnecting={false} t={t} cancel={vi.fn()} stop={{ chats: CHATS, automatic, run }} />)
+    render(<UpdateProgress variant="alert" state={state} switching={false} reconnecting={false} t={t} cancel={vi.fn()} stop={{ chats: CHATS, jobs: 0, automatic, run }} />)
     return run
   }
 
@@ -291,6 +317,13 @@ describe('Stop running chats and update', () => {
     expect(confirm?.textContent).toContain('Refactor')
     expect(confirm?.textContent).toContain(en['stop.untitled'])
     expect(screen.getByText(en['stop.cancel']).hasAttribute('data-modal-autofocus')).toBe(true)
+  })
+
+  it('names the background jobs that stop too and says they are not continued', () => {
+    render(<UpdateProgress variant="alert" state={waiting()} switching={false} reconnecting={false} t={t} cancel={vi.fn()} stop={{ chats: CHATS, jobs: 2, automatic: true, run: vi.fn() }} />)
+    fireEvent.click(screen.getByLabelText(en['stop.menu']))
+    fireEvent.click(screen.getByText(en['stop.item']))
+    expect(document.querySelector('[data-stop-chats-confirm]')?.textContent).toContain('2 background jobs also stop. Background jobs are not continued.')
   })
 
   it('says what happens next by the setting', () => {

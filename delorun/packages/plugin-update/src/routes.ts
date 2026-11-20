@@ -205,11 +205,36 @@ export function updateRoutes(dependencies: UpdateRouteDependencies): readonly Up
       ...result === undefined ? {} : { result },
       ...notes === undefined ? {} : { notes },
       ...stopped === undefined ? {} : { stopped },
-      ...runningChats === undefined ? {} : { runningChats },
+      ...runningChats === undefined ? {} : { runningChats, runningJobs: dependencies.chats?.()?.jobs() ?? 0 },
       continueStopped: dependencies.continueAutomatically(),
     }
     return answer
   })
+
+  /**
+   * Act on the record of stopped chats now that the update ended without restarting the Host: with the setting on at the
+   * time they were stopped, each chat gets its continue message and the record is cleared; with it off the record stays,
+   * so each chat shows Continue.
+   * @param path - the record's path.
+   */
+  const settleStopped = async (path: string): Promise<void> => {
+    const record = await readStopped(path)
+    if (record === undefined || !record.automatic) return
+    let chats = record.chats
+    for (const chat of record.chats) {
+      if (chat.state !== 'stopped') continue
+      chats = chats.map(each => each.sessionId === chat.sessionId ? { ...each, state: 'continued' as const } : each)
+      await writeStopped(path, { ...record, chats })
+      const state = await dependencies.sendContinue(chat.sessionId)
+      if (state !== 'continued') {
+        chats = chats.map(each => each.sessionId === chat.sessionId ? { ...each, state } : each)
+        await writeStopped(path, { ...record, chats })
+      }
+    }
+    // Every chat has been dealt with; a chat that could not be continued is noted in the log, not kept for a later start.
+    for (const chat of chats) if (chat.state !== 'continued') logger.warn(`chat ${chat.sessionId} was not continued after the cancelled update: ${chat.state}`)
+    await clearStopped(path)
+  }
 
   const checkRoute = gate.open(async (body) => {
     onlyFields(body, [])
@@ -284,11 +309,13 @@ export function updateRoutes(dependencies: UpdateRouteDependencies): readonly Up
     return { kind: 'update-begun', target: update.report.to.delorun, runningChats: status?.chats ?? 0 }
   })
 
-  const cancelRoute = gate.post('update-cancel', async (body): Promise<UpdateCancelView> => {
+  const cancelRoute = gate.post('update-cancel', async (body, ctx): Promise<UpdateCancelView> => {
     onlyFields(body, [])
     const status = await statusOf()
     const waiting = status.update !== undefined
     await finish(access(), { op: 'update.cancel' })
+    // The Host stays up, so the chats the update stopped cannot wait for a later start: settle them now.
+    if (waiting) await settleStopped(stoppedFile(ctx.home, ctx.profile))
     return { cancelled: waiting }
   })
 

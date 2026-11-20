@@ -93,7 +93,7 @@ export interface UpdateServer {
   /** What the release check answers, or undefined for the check being off. */
   check: UpdateCheckAccess | undefined
   /** The chats the Host reports as running, and what was asked of the Host's chats. */
-  readonly chats: { running: { sessionId: string, title: string }[], cancelled: number }
+  readonly chats: { running: { sessionId: string, title: string }[], cancelled: number, jobs: number }
   /** The chats the continue sender was asked to continue, and the state it answers. */
   readonly sent: { ids: string[], answer: StoppedChatState }
   /** The setting now. */
@@ -113,7 +113,7 @@ export async function serveUpdate(options: { readonly powers?: 'careful' | 'full
   const log: string[] = []
   const handle: UpdateServer = {
     channel, home: ctx.home, clock, log, check: undefined,
-    chats: { running: [], cancelled: 0 }, sent: { ids: [], answer: 'continued' }, setting: { automatic: true },
+    chats: { running: [], cancelled: 0, jobs: 0 }, sent: { ids: [], answer: 'continued' }, setting: { automatic: true },
     server: await serveRoutes(ctx, {
       ...options.powers === undefined ? {} : { powers: options.powers },
       ...options.face === undefined ? {} : { face: options.face },
@@ -130,6 +130,7 @@ export async function serveUpdate(options: { readonly powers?: 'careful' | 'full
           attach: () => () => undefined,
           list: () => handle.chats.running,
           cancelAll: () => { handle.chats.cancelled += 1; return Promise.resolve() },
+          jobs: () => handle.chats.jobs,
         }),
         continueAutomatically: () => handle.setting.automatic,
         sendContinue: (sessionId) => { handle.sent.ids.push(sessionId); return Promise.resolve(handle.sent.answer) },

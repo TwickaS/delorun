@@ -329,6 +329,8 @@ export interface UpdateStateView {
   readonly notes?: UpdateNotesView
   /** The chats running now, for the Stop running chats confirm step; only for a request that may begin an update, and only while an update waits. */
   readonly runningChats?: readonly RunningChatView[]
+  /** The background jobs running now, which stopping the chats also stops and no update continues; present with {@link runningChats}. */
+  readonly runningJobs?: number
   /** The chats the update stopped, with how each stands. */
   readonly stopped?: StoppedChatsView
   /** Whether the Host continues stopped chats by itself after an update (Settings → Updates). */

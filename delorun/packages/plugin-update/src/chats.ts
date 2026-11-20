@@ -29,6 +29,11 @@ export interface ChatSource {
    * @returns when the cancellation has been requested.
    */
   cancelAll(): Promise<void>
+  /**
+   * The background jobs running now, which {@link cancelAll} also stops.
+   * @returns their number.
+   */
+  jobs(): number
 }
 
 /** The service. */
@@ -49,6 +54,11 @@ export interface UpdateChats {
    * @returns when the cancellation has been requested.
    */
   cancelAll(): Promise<void>
+  /**
+   * The background jobs running now.
+   * @returns their number; 0 while no source is attached.
+   */
+  jobs(): number
 }
 
 /** The `delorunUpdateChats` service. */
@@ -77,5 +87,10 @@ export class UpdateChatsService extends Service implements UpdateChats {
   /** @inheritdoc */
   cancelAll(): Promise<void> {
     return this.source?.cancelAll() ?? Promise.resolve()
+  }
+
+  /** @inheritdoc */
+  jobs(): number {
+    return this.source?.jobs() ?? 0
   }
 }

@@ -286,6 +286,15 @@
   cursor: pointer;
 }
 
+.railDot {
+  display: block;
+  width: 8px;
+  height: 8px;
+  margin: 4px auto;
+  border-radius: 50%;
+  background: var(--dsw-alias-state-warning-primary, var(--dsw-alias-brand-primary));
+}
+
 .stoppedLine {
   display: flex;
   align-items: center;

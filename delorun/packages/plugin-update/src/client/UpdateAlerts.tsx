@@ -5,7 +5,8 @@ import type { HostObservable, InjectFace, PropsLocale } from '@deepseek-ai/dsh-c
 import type { UpdateLoad } from './controller.ts'
 import type { Outcome } from './controller.ts'
 import { StoppedChatLine } from './StopChats.tsx'
-import { UpdateProgress, type ConnectionState } from './UpdateProgress.tsx'
+import css from './UpdatePanel.module.css'
+import { ongoingOf, UpdateProgress, type ConnectionState } from './UpdateProgress.tsx'
 import type { StopChatsView } from '../wire.ts'
 
 /** What the sidebar alert reads and does. */
@@ -33,7 +34,7 @@ export function UpdateAlerts(props: UpdateAlertsProps) {
   if (load.status !== 'ready') return null
   const { state } = load
   return <UpdateProgress variant="alert" state={state} switching={switching} reconnecting={load.reconnecting} t={t} cancel={cancel}
-    stop={{ chats: state.runningChats ?? [], automatic: state.continueStopped, run: stopChats }} connection={connection} reconnect={reconnect} />
+    stop={{ chats: state.runningChats ?? [], jobs: state.runningJobs ?? 0, automatic: state.continueStopped, run: stopChats }} connection={connection} reconnect={reconnect} />
 }
 
 /** What the per-chat line reads and does. */
@@ -63,5 +64,19 @@ export function StoppedChatDock(props: StoppedChatProps) {
  * @returns the alert, or nothing.
  */
 export function UpdateAlertsEntry(props: UpdateAlertsProps & { readonly wide: boolean }) {
-  return props.wide ? <UpdateAlerts {...props} /> : null
+  return props.wide ? <UpdateAlerts {...props} /> : <RailDot {...props} />
+}
+
+/**
+ * The collapsed rail's mark of an ongoing state: one small dot, no text.
+ * @param props - the hooks and the dictionary.
+ * @returns the dot, or nothing while no state lasts.
+ */
+function RailDot(props: UpdateAlertsProps) {
+  const load = props.useLoad(value => value)
+  const switching = props.useSwitching(value => value)
+  const connection = props.useConnection(value => value)
+  if (load.status !== 'ready') return null
+  const ongoing = ongoingOf(load.state, switching, load.reconnecting, props.t, connection)
+  return ongoing === undefined ? null : <span className={css.railDot} role="status" aria-label={ongoing.text} title={ongoing.text} data-update-rail-dot />
 }
