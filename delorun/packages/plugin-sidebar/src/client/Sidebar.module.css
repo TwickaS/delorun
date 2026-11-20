@@ -32,7 +32,9 @@
   display: flex;
   flex: 1;
   flex-direction: column;
-  min-height: 0;
+  /* The workspace browser around this list is `flex: none` in a column with no height of its own, so `flex: 1` alone
+     leaves the list as tall as its rows. Filling the shell's viewport pins the Working shelf above the foot. */
+  min-height: 100cqh;
 }
 
 /* The header answers to its own width: the shortcut hint goes first, then the search field's gaps. */
@@ -320,6 +322,9 @@
 
 /* The Working shelf: pinned below the scrolling list, always in view, capped so the chat list keeps most of the sidebar. */
 .workingPane {
+  /* Above the sidebar's bottom fade, which would otherwise dim the last working chat. */
+  position: relative;
+  z-index: 1;
   display: flex;
   flex: none;
   flex-direction: column;
