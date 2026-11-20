@@ -7,7 +7,7 @@
  * `--only <prefix>` shoots only the screens whose name starts with it; `--base` names the preview's address. It writes `<name>-<width>-<theme>.png`: 390px wide in dark and light for every screen, and 1440px wide for the
  * screens a computer also shows. A shot with `top` fails the run unless every element it names is the topmost element at
  * its own centre, which proves the Face ID layer sits over the studio's overlays; one with `apart` fails unless the
- * elements it names have no overlapping boxes. Playwright comes from
+ * elements it names have no overlapping boxes. At 390px every open sheet's card must end inside the viewport. Playwright comes from
  * `@deepseek-ai/dsh-web`'s dependencies.
  * @module @delorun/bundle-local/scripts/face-id-preview/shoot
  */
@@ -92,6 +92,14 @@ try {
               return boxes.flatMap((a, index) => boxes.slice(index + 1).filter(b => a.box.left < b.box.right && b.box.left < a.box.right && a.box.top < b.box.bottom && b.box.top < a.box.bottom).map(b => `${a.name} overlaps ${b.name}`))
             }, shot.apart)
             if (overlapping.length > 0) throw new Error(`${shot.name} at ${String(width)}px: ${overlapping.join('; ')}`)
+          }
+          // An open sheet's card must end inside the viewport, or its last control's padding is cut off (e2e at 390x844).
+          if (mobile) {
+            const overflow = await page.evaluate(() => {
+              const card = document.querySelector('dialog[open] > div')
+              return card === null ? 0 : card.getBoundingClientRect().bottom - globalThis.innerHeight
+            })
+            if (overflow > 0.5) throw new Error(`${shot.name} at ${String(width)}px: the sheet ends ${overflow.toFixed(1)}px below the viewport`)
           }
           // A full-page capture drops Chromium's touch emulation, and with it `(pointer: coarse)` and the 44 px touch
           // targets; growing the viewport to the page keeps the emulation.
