@@ -1,0 +1,55 @@
+{
+  "name": "@delorun/plugin-multiview",
+  "description": "Multiview: pinned agents beside the main chat in a resizable layout the person arranges, with a pager on phones",
+  "version": "0.1.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "types": "./lib/types/client/index.d.ts",
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/client.js",
+    "lib/types/**/*.d.ts",
+    "locale/*.json"
+  ],
+  "dsh": {
+    "client": {
+      "inject": [],
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json && tsdown",
+    "typecheck": "tsc -b tsconfig.json && tsc --noEmit -p tsconfig.tests.client.json"
+  },
+  "dependencies": {
+    "react-resizable-panels": "4.24.1",
+    "zod": "4.6.6"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-client-store": "workspace:*",
+    "@deepseek-ai/dsh-client-test-runtime": "workspace:*",
+    "@deepseek-ai/dsh-session": "workspace:*",
+    "@testing-library/react": "^16.3.3",
+    "@types/react": "~18.3.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "tsdown": "^0.22.2"
+  },
+  "delorun": {
+    "state": "experimental"
+  }
+}
