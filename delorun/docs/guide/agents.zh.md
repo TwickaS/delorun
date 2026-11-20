@@ -21,7 +21,7 @@ Claude Code 和 Codex 是可选的[外部智能体](../reference/glossary.zh.md#
 - [第一次](#the-first-time)
 - [智能体能接触什么](#what-the-agent-can-touch)
 - [结果显示在哪里](#where-the-result-shows)
-- [Watch several agents at once](#watch-several-agents-at-once)
+- [同时观察多个智能体](#watch-several-agents-at-once)
 - [高级选项](#advanced-options)
 - [使用风险自负](#use-at-your-own-risk)
 - [下一步](#next)
@@ -117,24 +117,24 @@ Delorun 的 Codex 运行从不修改你自己的 Codex 设置文件，因此你�
 
 <a id="watch-several-agents-at-once"></a>
 
-## Watch several agents at once
+## 同时观察多个智能体
 
-Multiview puts the agents a chat works with beside the chat, so you can follow them together instead of opening each one. It needs no setup: it does nothing until an agent is pinned or a chat hands work to one.
+Multiview 把对话所用的智能体放在对话旁边，这样你可以一起关注它们，不必逐个打开。它不需要任何设置：在有智能体被固定或对话把工作交给某个智能体之前，它什么也不做。
 
-1. Open the agents list in the chat header (the "N subagents" button) and press the pin beside an agent. A chat opens Multiview by itself when it hands work to a new agent, and pins that agent.
-2. Press **Multiview** in the header. The main chat stays on the left and the pinned agents stack on the right. Press it again to go back to the normal chat.
-3. Each pane shows the agent's name, whether it is working, waiting for you or done, and, for Claude Code and Codex, the plan and how much of its limits it has used. You can approve or reject what an agent asks, reply to it or stop it right there. **Open full chat** moves it into the main view and **Close** removes the pane.
-4. To arrange the panes, drag one by its handle onto the edge of another to split it, or onto the middle to share its tabs. The **Layout** menu offers Main and column, Side by side, Grid and Main on top, and **Reset to default**. Nothing here closes a pane.
+1. 打开对话头部的智能体列表（“N subagents”按钮），按下某个智能体旁边的图钉。对话把工作交给新的智能体时，会自行打开 Multiview，并固定该智能体。
+2. 按下头部的 **Multiview**。主对话留在左侧，已固定的智能体在右侧叠放。再按一次即可回到普通对话。
+3. 每个窗格显示智能体的名称，它是在工作、在等你还是已完成；对于 Claude Code 和 Codex，还显示套餐以及已用掉多少额度。你可以直接在那里批准或拒绝智能体的请求、回复它或停止它。**Open full chat** 会把它移到主视图，**Close** 会移除该窗格。
+4. 要排列窗格，可以拖动窗格的把手，放到另一个窗格的边缘来拆分它，或放到中间来共用它的标签。**Layout** 菜单提供 Main and column、Side by side、Grid 和 Main on top，以及 **Reset to default**。这里的任何操作都不会关闭窗格。
 
-Each chat remembers its panes and layout, and shows them again when you come back to it. On a phone, or in a window narrower than 768 pixels, the panes become pages you swipe sideways, with a strip of names at the top and an amber dot on an agent that is waiting for you.
+每个对话都会记住自己的窗格和布局，你回到它时会再次显示。在手机上，或在窄于 768 像素的窗口中，窗格会变成可以左右滑动的页面，顶部有一条名称栏，正在等你的智能体上有一个琥珀色圆点。
 
 <details>
-<summary>Edge cases</summary>
+<summary>边界情况</summary>
 
-- If the window has no room for another pane, the pin is greyed out and says why; a saved layout that no longer fits shows the panes that do and says how many are left out. They stay pinned.
-- If an agent that is waiting for you has its pane closed, the first press on **Close** asks again, because the agent keeps waiting.
-- Stop in a pane stops that agent only. A phone that is not allowed to stop an agent does not show the button.
-- The Multiview settings are under the Multiview plugin in Plugins: opening on every hand-off, the pane limit (six, the main chat included), the short or full reply box in each pane, and reopening when you return to a chat.
+- 如果窗口没有空间再放一个窗格，图钉会变灰并说明原因；已保存的布局放不下时，会显示放得下的窗格，并说明有多少个被省略。它们仍保持固定。
+- 如果要关闭一个正在等你的智能体的窗格，第一次按 **Close** 会再次询问，因为该智能体仍在等待。
+- 窗格中的 Stop 只会停止那个智能体。不允许停止智能体的手机不会显示该按钮。
+- Multiview 的设置在 Plugins 中的 Multiview 插件下：每次交接时是否打开、窗格上限（六个，包含主对话）、每个窗格使用简短还是完整的回复框，以及回到对话时是否重新打开。
 
 </details>
 
