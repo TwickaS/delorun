@@ -133,7 +133,20 @@
     min-height: 88px;
   }
 
+  /* On a phone the picture is as tall as its content; stretching it left a blank band between the reply and the message box. */
   .preview {
+    flex: 0 0 auto;
     grid-template-columns: minmax(96px, 38%) 1fr;
+    min-height: 0;
+  }
+}
+
+@media (max-width: 479px) {
+  .preview {
+    grid-template-columns: 1fr;
+  }
+
+  .side {
+    display: none;
   }
 }

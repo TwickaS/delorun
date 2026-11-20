@@ -1,6 +1,6 @@
 /**
  * A card for one thing the person can add or tick: a fixed icon slot, a title, a summary of up to two lines with the rest of a
- * long description behind "More", one action area and a state line under them. A card without artwork shows a tinted
+ * long description behind "More", which sits under the summary, one action area and a state line under them. A card without artwork shows a tinted
  * letter tile, so every title in a list starts at the same place.
  */
 import { CardIcon } from '@delorun/brand'
@@ -66,21 +66,19 @@ export function Card({ title, icon, monogram, description, labels, leading, acti
   const long = description !== undefined && (description.length > SUMMARY_LIMIT || clipped || open)
   return (
     <div className={css.card} data-selected={selected || undefined}>
-      <div className={css.row}>
+      <div className={css.row} data-described={description !== undefined || undefined}>
         {leading !== undefined && <span className={css.leading}>{leading}</span>}
         <span className={css.icon}>
           {icon !== undefined ? <img className={css.image} src={icon} alt="" /> : <Monogram name={title} letters={monogram} />}
         </span>
         <div className={css.text}>
-          <div className={css.titleLine}>
-            <h4 className={css.title}>{title}</h4>
-            {long && (
-              <Button variant="ghost" size="sm" className={css.more} aria-expanded={open} aria-controls={id} onClick={() => { setOpen(!open) }}>
-                {open ? labels.less : labels.more}
-              </Button>
-            )}
-          </div>
+          <h4 className={css.title}>{title}</h4>
           {description !== undefined && <p id={id} ref={summary} className={css.summary} data-open={open || undefined}>{description}</p>}
+          {long && (
+            <Button variant="ghost" size="sm" className={css.more} aria-expanded={open} aria-controls={id} onClick={() => { setOpen(!open) }}>
+              {open ? labels.less : labels.more}
+            </Button>
+          )}
         </div>
         {action !== undefined && <div className={css.action}>{action}</div>}
       </div>
