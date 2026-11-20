@@ -72,6 +72,6 @@
     "tsdown": "^0.22.2"
   },
   "delorun": {
-    "state": "experimental"
+    "state": "shipped"
   }
 }
