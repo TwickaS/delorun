@@ -41,16 +41,16 @@ export const UPDATE_PATHS = {
 /**
  * The controls these routes are, in the Changes access table (`@delorun/plugin-changes/access`):
  *
- * - `update-check`, `update-cancel` and `update-dismiss` (which `continue-chat` also uses: it sends one fixed message to a chat the update stopped): class `free`, any paired device with no prompt (they read, or only
+ * - `update-check`, `update-cancel`, `update-dismiss` and `update-continue` (`continue-chat`: one fixed message to a chat the update stopped; a cancel that settles the stopped chats sends the same message, as the person's setting asked): class `free`, any paired device with no prompt (they read, or only
  *   take back);
  * - `update-begin` (which `stop-chats` also uses, since it ends running chats to let the update go on), `update-rollback` and `stop`: class `face`, the computer, or a device with a Face ID (or PIN) grant for
  *   exactly that call. While the Face ID flag is off, and for a device with no passkey, the unlock of today applies:
  *   `update-begin` and `update-rollback` while Phone powers is Full, `stop` at either level.
  */
-export type UpdateControl = 'update-check' | 'update-begin' | 'update-cancel' | 'update-rollback' | 'update-dismiss' | 'stop'
+export type UpdateControl = 'update-check' | 'update-begin' | 'update-cancel' | 'update-rollback' | 'update-dismiss' | 'update-continue' | 'stop'
 
 /** Every {@link UpdateControl}. */
-export const UPDATE_CONTROLS: readonly UpdateControl[] = ['update-check', 'update-begin', 'update-cancel', 'update-rollback', 'update-dismiss', 'stop']
+export const UPDATE_CONTROLS: readonly UpdateControl[] = ['update-check', 'update-begin', 'update-cancel', 'update-rollback', 'update-dismiss', 'update-continue', 'stop']
 
 /** Whether a request may use a control now, and if not, what it needs: the computer, Face ID for this call, or an unlock entered on the device. */
 export type UpdateMayView =

@@ -95,7 +95,7 @@ export interface UpdateServer {
   /** The chats the Host reports as running, and what was asked of the Host's chats. */
   readonly chats: { running: { sessionId: string, title: string }[], cancelled: number, jobs: number }
   /** The chats the continue sender was asked to continue, and the state it answers. */
-  readonly sent: { ids: string[], answer: StoppedChatState }
+  readonly sent: { ids: string[], answer: StoppedChatState, answers: Record<string, StoppedChatState>, hold: Promise<void> | undefined }
   /** The setting now. */
   setting: { automatic: boolean }
 }
@@ -113,7 +113,7 @@ export async function serveUpdate(options: { readonly powers?: 'careful' | 'full
   const log: string[] = []
   const handle: UpdateServer = {
     channel, home: ctx.home, clock, log, check: undefined,
-    chats: { running: [], cancelled: 0, jobs: 0 }, sent: { ids: [], answer: 'continued' }, setting: { automatic: true },
+    chats: { running: [], cancelled: 0, jobs: 0 }, sent: { ids: [], answer: 'continued', answers: {}, hold: undefined }, setting: { automatic: true },
     server: await serveRoutes(ctx, {
       ...options.powers === undefined ? {} : { powers: options.powers },
       ...options.face === undefined ? {} : { face: options.face },
@@ -133,7 +133,7 @@ export async function serveUpdate(options: { readonly powers?: 'careful' | 'full
           jobs: () => handle.chats.jobs,
         }),
         continueAutomatically: () => handle.setting.automatic,
-        sendContinue: (sessionId) => { handle.sent.ids.push(sessionId); return Promise.resolve(handle.sent.answer) },
+        sendContinue: async (sessionId) => { handle.sent.ids.push(sessionId); await handle.sent.hold; return handle.sent.answers[sessionId] ?? handle.sent.answer },
       }),
     }),
   }

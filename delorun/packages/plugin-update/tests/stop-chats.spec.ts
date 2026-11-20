@@ -3,13 +3,13 @@
  * chats; it records the chats before it cancels them; the continue-chat route sends one message per stopped chat; and the
  * updated Host continues the recorded chats once, only while the setting is on.
  */
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { fromDevice, get, json, post, send } from '../../plugin-changes/tests/routes-fixture.ts'
 import { UPDATE_PATHS } from '../src/wire.ts'
 import { readStopped, stoppedPath, writeStopped } from '../src/stopped.ts'
-import { serveUpdate, updateWaiting, type UpdateServer } from './update-fixture.ts'
+import { serveUpdate, updateWaiting, writeResult, type UpdateServer } from './update-fixture.ts'
 
 const RUNNING = [{ sessionId: 's-1', title: 'First chat' }, { sessionId: 's-2', title: 'Second chat' }]
 
@@ -147,6 +147,28 @@ describe('an update cancelled after the stop', () => {
     expect(existsSync(recordPath(update))).toBe(false)
   })
 
+  it('keeps a chat that was still stopping for its Continue button, and drops one that no longer exists', async () => {
+    const update = await serveUpdate()
+    update.sent.answers = { 's-1': 'skipped-running', 's-2': 'skipped-missing' }
+    await cancelled(update)
+    expect((await readStopped(recordPath(update)))?.chats).toEqual([{ ...RUNNING[0], state: 'skipped-running' }])
+    expect(json(await post(update.server.port, UPDATE_PATHS.continueChat, { sessionId: 's-1' }))).toEqual({ state: 'continued' })
+  })
+
+  it('leaves no automatic record behind when the cancel lands while the chats are being recorded', async () => {
+    const update = await serveUpdate()
+    let asked = 0
+    update.channel.answers.set('status', () => {
+      asked += 1
+      return [{ ok: true, status: { state: 'running', pid: 1, startId: 's', runtime: { current: '0.1.0', running: '0.1.0' }, chats: 2, ...asked === 1 ? { update: { phase: 'waiting', target: '0.1.1' } } : {} } }]
+    })
+    update.chats.running = [...RUNNING]
+    const reply = await post(update.server.port, UPDATE_PATHS.stopChats, {})
+    expect(reply.status, reply.body).toBe(200)
+    expect(update.sent.ids).toEqual(['s-1', 's-2'])
+    expect(existsSync(recordPath(update))).toBe(false)
+  })
+
   it('keeps the record for the Continue buttons with the setting off, and sends nothing', async () => {
     const update = await serveUpdate()
     update.setting.automatic = false
@@ -164,12 +186,80 @@ describe('an update cancelled after the stop', () => {
   })
 })
 
+describe('continue-chat while an update runs, and under concurrency', () => {
+  /** Stop two chats with the setting off, so both chats wait for the button. */
+  async function waitingButtons(update: UpdateServer): Promise<void> {
+    update.setting.automatic = false
+    updateWaiting(update)
+    update.chats.running = [...RUNNING]
+    await post(update.server.port, UPDATE_PATHS.stopChats, {})
+    update.channel.answers.set('status', [{ ok: true, status: { state: 'running', pid: 1, startId: 's', runtime: { current: '0.1.0', running: '0.1.0' }, chats: 0 } }])
+  }
+
+  it('is refused while the update still waits or applies, and sends nothing', async () => {
+    const update = await serveUpdate()
+    update.setting.automatic = false
+    updateWaiting(update)
+    update.chats.running = [...RUNNING]
+    await post(update.server.port, UPDATE_PATHS.stopChats, {})
+    expect(json(await post(update.server.port, UPDATE_PATHS.continueChat, { sessionId: 's-1' }))).toMatchObject({ code: 'UPDATE_IN_PROGRESS' })
+    expect(update.sent.ids).toEqual([])
+  })
+
+  it('is refused for a chat the Host continues by itself', async () => {
+    const update = await serveUpdate()
+    updateWaiting(update)
+    update.chats.running = [...RUNNING]
+    await post(update.server.port, UPDATE_PATHS.stopChats, {})
+    update.channel.answers.set('status', [{ ok: true, status: { state: 'running', pid: 1, startId: 's', runtime: { current: '0.1.0', running: '0.1.0' }, chats: 0 } }])
+    expect(json(await post(update.server.port, UPDATE_PATHS.continueChat, { sessionId: 's-1' }))).toMatchObject({ code: 'NOT_STOPPED_BY_UPDATE' })
+    expect(update.sent.ids).toEqual([])
+  })
+
+  it('keeps both chats continued when two different chats are continued at once, and a repeat sends nothing', async () => {
+    const update = await serveUpdate()
+    await waitingButtons(update)
+    const both = await Promise.all(['s-1', 's-2'].map(sessionId => post(update.server.port, UPDATE_PATHS.continueChat, { sessionId })))
+    expect(both.map(reply => reply.status)).toEqual([200, 200])
+    expect(json(await post(update.server.port, UPDATE_PATHS.continueChat, { sessionId: 's-1' }))).toMatchObject({ code: 'NOT_STOPPED_BY_UPDATE' })
+    expect(update.sent.ids.toSorted()).toEqual(['s-1', 's-2'])
+    expect((await readStopped(recordPath(update)))?.chats.map(chat => chat.state)).toEqual(['continued', 'continued'])
+  })
+
+  it('sends once when the same chat is continued twice at the same moment', async () => {
+    const update = await serveUpdate()
+    await waitingButtons(update)
+    const replies = await Promise.all([1, 2].map(() => post(update.server.port, UPDATE_PATHS.continueChat, { sessionId: 's-1' })))
+    expect(replies.map(reply => reply.status).toSorted()).toEqual([200, 409])
+    expect(update.sent.ids).toEqual(['s-1'])
+  })
+
+  it('never sends a chat twice when Continue is pressed while the start continues the chats', async () => {
+    const update = await serveUpdate()
+    await waitingButtons(update)
+    // The start's record: one chat still waiting for the button, one the start continues by itself.
+    await writeStopped(recordPath(update), { v: 1, to: '0.1.1', automatic: true, at: 'x', chats: [{ ...RUNNING[0]!, state: 'skipped-running' }, { ...RUNNING[1]!, state: 'stopped' }] })
+    writeResult(update.home, { v: 1, kind: 'update', outcome: 'committed', from: '0.1.0', to: '0.1.1', at: '2026-11-19T10:00:00Z' })
+    const { continueAfterUpdate } = await import('../src/index.ts')
+    const scope = { get: () => ({ home: update.home, name: 'default' }) } as never
+    const started: string[] = []
+    await Promise.all([
+      post(update.server.port, UPDATE_PATHS.continueChat, { sessionId: 's-1' }),
+      post(update.server.port, UPDATE_PATHS.continueChat, { sessionId: 's-2' }),
+      continueAfterUpdate(scope, (id) => { started.push(id); return Promise.resolve('continued') }, true),
+    ])
+    const all = [...update.sent.ids, ...started]
+    expect(all.toSorted()).toEqual(['s-1', 's-2'])
+  })
+})
+
 describe('the updated Host continuing the stopped chats', () => {
   /** @returns a record on disk and the sends the continuation made. */
   async function after(automatic: boolean, answers: Record<string, 'continued' | 'skipped-missing' | 'skipped-running' | 'failed'> = {}, settingOn = true) {
     const update = await serveUpdate()
-    await writeStopped(recordPath(update), { v: 1, automatic, at: '2026-11-19T10:00:00Z', chats: RUNNING.map(chat => ({ ...chat, state: 'stopped' as const })) })
+    await writeStopped(recordPath(update), { v: 1, to: '0.1.1', automatic, at: '2026-11-19T10:00:00Z', chats: RUNNING.map(chat => ({ ...chat, state: 'stopped' as const })) })
     const sent: string[] = []
+    writeResult(update.home, { v: 1, kind: 'update', outcome: 'committed', from: '0.1.0', to: '0.1.1', at: '2026-11-19T10:00:00Z' })
     const { continueAfterUpdate } = await import('../src/index.ts')
     const scope = { get: () => ({ home: update.home, name: 'default' }) } as never
     const run = async (): Promise<void> => { await continueAfterUpdate(scope, (id) => { sent.push(id); return Promise.resolve(answers[id] ?? 'continued') }, settingOn) }
@@ -181,7 +271,13 @@ describe('the updated Host continuing the stopped chats', () => {
     await run()
     await run()
     expect(sent).toEqual(['s-1', 's-2'])
-    expect((await readStopped(recordPath(update)))?.chats.map(chat => chat.state)).toEqual(['continued', 'skipped-missing'])
+    expect(await readStopped(recordPath(update))).toBeUndefined()
+  })
+
+  it('keeps a chat that was still running for its Continue button', async () => {
+    const { update, run } = await after(true, { 's-1': 'skipped-running' })
+    await run()
+    expect((await readStopped(recordPath(update)))?.chats).toEqual([{ ...RUNNING[0], state: 'skipped-running' }])
   })
 
   it('sends nothing while the setting is off, or when the record was made with it off, and leaves the chats stopped for the Continue button', async () => {
@@ -194,10 +290,36 @@ describe('the updated Host continuing the stopped chats', () => {
     expect((await readStopped(recordPath(recordedOff.update)))?.chats.map(chat => chat.state)).toEqual(['stopped', 'stopped'])
   })
 
+  it('sends nothing at a start whose update attempt has no outcome yet, or an outcome for another version', async () => {
+    const { update, sent, run } = await after(true)
+    rmSync(join(update.home, 'run', 'default', 'update-result.json'))
+    await run()
+    expect(sent).toEqual([])
+    writeResult(update.home, { v: 1, kind: 'update', outcome: 'committed', from: '0.1.0', to: '0.1.9', at: '2026-11-19T10:00:00Z' })
+    await run()
+    expect(sent).toEqual([])
+  })
+
+  it('continues the chats of an attempt that ended without a restart when the state is read', async () => {
+    const update = await serveUpdate()
+    await writeStopped(recordPath(update), { v: 1, to: '0.1.1', automatic: true, at: 'x', chats: RUNNING.map(chat => ({ ...chat, state: 'stopped' as const })) })
+    writeResult(update.home, { v: 1, kind: 'update', outcome: 'aborted', from: '0.1.0', to: '0.1.1', reason: 'DRAIN_TIMEOUT', at: '2026-11-19T10:00:00Z' })
+    await get(update.server.port, UPDATE_PATHS.state)
+    await vi.waitFor(() => { expect(update.sent.ids).toEqual(['s-1', 's-2']) })
+    await vi.waitFor(() => { expect(existsSync(recordPath(update))).toBe(false) })
+  })
+
+  it('ignores a record with an unknown state or a bad session id', async () => {
+    const update = await serveUpdate()
+    const path = recordPath(update)
+    writeFileSync(path, JSON.stringify({ v: 1, to: '0.1.1', automatic: true, at: 'x', chats: [{ sessionId: 'a', title: '', state: 'stoppedX' }, { sessionId: 'b'.repeat(10_000), title: '', state: 'stopped' }, { sessionId: 'ok', title: '', state: 'stopped' }] }))
+    expect((await readStopped(path))?.chats.map(chat => chat.sessionId)).toEqual(['ok'])
+  })
+
   it('reads a record that survived the restart, and ignores a damaged one', async () => {
     const { update, sent, run } = await after(true)
     expect(readFileSync(recordPath(update), 'utf8')).toContain('"sessionId":"s-1"')
-    await writeStopped(recordPath(update), { v: 1, automatic: true, at: 'x', chats: [] })
+    await writeStopped(recordPath(update), { v: 1, to: '0.1.1', automatic: true, at: 'x', chats: [] })
     await run()
     expect(sent).toEqual([])
   })

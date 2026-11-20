@@ -846,7 +846,7 @@
       "path": "packages/client/ui-settings-general/src/client/SettingsRoot.tsx",
       "class": "delorun-feature",
       "feature": "studio-seams",
-      "reason": "Renders the grouped Settings navigation and search and keeps the flat list when no layout is registered; grouped icons come from the section icon registration. Onboarding steps get `renderSection`, which draws one registered `settings.section` inside a step with a `close` that does nothing, and `completeStep`, which marks another step complete while the page is open. At 600px and below outside the desktop windows (`data-phone` on the panel) it shows the grouped list first, a page under a back arrow and the page title, and moves focus to the arrow and back to the opened row."
+      "reason": "Renders the grouped Settings navigation and search and keeps the flat list when no layout is registered; grouped icons come from the section icon registration. Onboarding steps get `renderSection`, which draws one registered `settings.section` inside a step with a `close` that does nothing, and `completeStep`, which marks another step complete while the page is open. At 600px and below outside the desktop windows (`data-phone` on the panel) it shows the grouped list first, a page under a back arrow and the page title, and moves focus to the arrow and back to the opened row. The connection pill is also withdrawn from the foot row while a plugin marks the root with data-delorun-connection-alert (Delorun's pinned update and connection alert shows the state instead), so the foot row never wraps."
     },
     {
       "path": "packages/client/ui-settings-general/src/client/index.ts",

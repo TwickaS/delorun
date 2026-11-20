@@ -22,9 +22,9 @@ import type { UpdateChannelAccess } from '@delorun/home-process'
 import type {} from '@delorun/bundle-local/update-check'
 import type {} from '@delorun/plugin-changes'
 import { dirname } from 'node:path'
-import { updateResultPath } from '@delorun/home-process'
+import { readUpdateResult, updateResultPath } from '@delorun/home-process'
 import { UpdateChatsService } from './chats.ts'
-import { CONTINUE_SOURCE, CONTINUE_TEXT, readStopped, stoppedPath, writeStopped } from './stopped.ts'
+import { clearStopped, CONTINUE_SOURCE, CONTINUE_TEXT, readStopped, stoppedPath, withStoppedLock, writeStopped } from './stopped.ts'
 import type { StoppedChatState } from './wire.ts'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
@@ -84,7 +84,7 @@ export function apply(ctx: Context, config: Config): void {
   // Once chats can be opened, the updated Host continues the chats the update stopped.
   ctx.inject(['sessionController', 'sessions'], (scope) => {
     scope.effect(() => {
-      void continueAfterUpdate(scope, continueSender(scope), config.continueStoppedChats.get()).catch((error: unknown) => {
+      void continueAfterUpdate(scope, continueSender(scope, config.waitSeconds * 1000), config.continueStoppedChats.get()).catch((error: unknown) => {
         scope.logger.warn(`the chats the update stopped were not continued: ${error instanceof Error ? error.message : String(error)}`)
       })
       return undefined
@@ -93,7 +93,7 @@ export function apply(ctx: Context, config: Config): void {
   ctx.inject(['webServer', 'changesGate'], (scope) => {
     const gate = scope.changesGate
     if (gate === undefined) return
-    const sendContinue = continueSender(scope)
+    const sendContinue = continueSender(scope, config.waitSeconds * 1000)
     const routes = updateRoutes({
       chats: () => scope.get('delorunUpdateChats'),
       continueAutomatically: () => config.continueStoppedChats.get(),
@@ -141,9 +141,10 @@ async function readInstalledChangelog(): Promise<unknown> {
 /**
  * Build the sender of the one continue message.
  * @param scope - the context holding the session controller and the sessions.
+ * @param idleWaitMs - the longest wait for a chat that is still stopping to go idle.
  * @returns a function that sends the message to a chat and says how the chat stands afterwards.
  */
-function continueSender(scope: Context): (sessionId: string) => Promise<StoppedChatState> {
+function continueSender(scope: Context, idleWaitMs: number): (sessionId: string) => Promise<StoppedChatState> {
   return async (sessionId) => {
     const controller = scope.get('sessionController')
     if (controller === undefined) return 'failed'
@@ -155,6 +156,13 @@ function continueSender(scope: Context): (sessionId: string) => Promise<StoppedC
     } catch (error) {
       scope.logger.warn(`the chat ${sessionId} could not be opened to continue it: ${error instanceof Error ? error.message : String(error)}`)
       return 'skipped-missing'
+    }
+    // A cancelled turn takes a moment to end; a chat the person has started again, or that will not stop, is left to its Continue button.
+    if (agent.status !== 'idle') {
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const timeout = new Promise<void>((resolve) => { timer = setTimeout(resolve, idleWaitMs) })
+      await Promise.race([agent.whenIdle(), timeout])
+      clearTimeout(timer)
     }
     if (agent.status !== 'idle') return 'skipped-running'
     try {
@@ -168,8 +176,10 @@ function continueSender(scope: Context): (sessionId: string) => Promise<StoppedC
 }
 
 /**
- * Once the updated Host starts: when the chats stopped for the update are to continue by themselves, send each one's
- * continue message, once. Each chat is marked before its send, so a start that dies in between never sends twice.
+ * Once the updated Host starts: when the chats stopped for the update are to continue by themselves, and the update
+ * attempt they belong to has ended (its outcome record names the same target), send each one's continue message, once.
+ * Each chat is marked before its send, under the record's lock, so a start that dies in between, or a Continue press
+ * meanwhile, never sends twice. A chat that could not be continued keeps its Continue button.
  * @param scope - the context.
  * @param send - the continue sender.
  * @param automatic - whether the setting is on now.
@@ -179,17 +189,22 @@ export async function continueAfterUpdate(scope: Context, send: (sessionId: stri
   const profile = scope.get('profileContext')
   if (profile === undefined || !automatic) return
   const path = stoppedPath(dirname(updateResultPath(profile.home, profile.name)))
-  const record = await readStopped(path)
-  if (record === undefined || !record.automatic) return
-  let chats = record.chats
-  for (const chat of record.chats) {
-    if (chat.state !== 'stopped') continue
-    chats = chats.map(each => each.sessionId === chat.sessionId ? { ...each, state: 'continued' as const } : each)
-    await writeStopped(path, { ...record, chats })
-    const state = await send(chat.sessionId)
-    if (state !== 'continued') {
-      chats = chats.map(each => each.sessionId === chat.sessionId ? { ...each, state } : each)
+  await withStoppedLock(path, async () => {
+    const record = await readStopped(path)
+    if (record === undefined || !record.automatic) return
+    // A record whose attempt has no outcome yet belongs to an update still running: it is not this start's to act on.
+    const outcome = await readUpdateResult(updateResultPath(profile.home, profile.name)).catch(() => undefined)
+    if (outcome === undefined || outcome.to !== record.to) return
+    let chats = record.chats
+    for (const chat of record.chats) {
+      if (chat.state !== 'stopped') continue
+      chats = chats.map(each => each.sessionId === chat.sessionId ? { ...each, state: 'continued' as const } : each)
       await writeStopped(path, { ...record, chats })
+      const state = await send(chat.sessionId)
+      if (state !== 'continued') chats = chats.map(each => each.sessionId === chat.sessionId ? { ...each, state } : each)
     }
-  }
+    chats = chats.filter(chat => chat.state !== 'continued' && chat.state !== 'skipped-missing')
+    if (chats.length === 0) await clearStopped(path)
+    else await writeStopped(path, { ...record, chats })
+  })
 }

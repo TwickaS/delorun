@@ -33,7 +33,7 @@ const ACCESS_COMPUTER: AccessView = {
     'make-copy': { ok: true }, 'restart': { ok: true },
     'plugin-apply': { ok: true }, 'plugin-undo': { ok: true }, 'plugin-discard': { ok: true }, 'plugin-other': { ok: true },
     'notice-seen': { ok: true },
-    'update-check': { ok: true }, 'update-begin': { ok: true }, 'update-cancel': { ok: true }, 'update-rollback': { ok: true }, 'update-dismiss': { ok: true }, 'stop': { ok: true },
+    'update-check': { ok: true }, 'update-begin': { ok: true }, 'update-cancel': { ok: true }, 'update-rollback': { ok: true }, 'update-dismiss': { ok: true }, 'update-continue': { ok: true }, 'stop': { ok: true },
   },
 }
 
@@ -60,7 +60,7 @@ function phoneAccess(actor: ActorView, level: 'careful' | 'full'): AccessView {
       'make-copy': kept, 'restart': kept,
       'plugin-apply': kept, 'plugin-undo': fresh, 'plugin-discard': fresh, 'plugin-other': kept,
       'notice-seen': COMPUTER,
-      'update-check': { ok: true }, 'update-begin': kept, 'update-cancel': fresh, 'update-rollback': kept, 'update-dismiss': fresh, 'stop': fresh,
+      'update-check': { ok: true }, 'update-begin': kept, 'update-cancel': fresh, 'update-rollback': kept, 'update-dismiss': fresh, 'update-continue': fresh, 'stop': fresh,
     },
   }
 }

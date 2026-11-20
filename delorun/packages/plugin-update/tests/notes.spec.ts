@@ -58,5 +58,6 @@ describe('notesBetween', () => {
     const notes = notesBetween({ versions: [big('1.0.3'), big('1.0.2')] }, '1.0.0', '1.0.3')
     expect(notes?.versions.map(version => version.version)).toEqual(['1.0.3'])
     expect(notes?.truncated).toBe(true)
+    expect(Buffer.byteLength(JSON.stringify(notes))).toBeLessThanOrEqual(MAX_NOTES_BYTES + 200)
   })
 })

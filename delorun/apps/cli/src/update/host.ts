@@ -47,7 +47,7 @@ export const STOP_REASON = 'Delorun is stopping or updating'
  */
 export function watchChats(ctx: Context, gate: CountingChatGate): void {
   const ends = new Map<Agent, () => void>()
-  let jobCount = 0
+  const jobs = new Map<JobId, () => void>()
   ctx.on('agent/status', ({ agent, status }) => {
     if (status === 'running') {
       if (!ends.has(agent)) ends.set(agent, gate.track(() => { agent.cancel({ kind: 'hook', reason: STOP_REASON }) }))
@@ -58,11 +58,9 @@ export function watchChats(ctx: Context, gate: CountingChatGate): void {
     ctx.get('delorunChatGate')?.chatEnded()
   })
   ctx.inject(['jobs'], (scope) => {
-    const jobs = new Map<JobId, () => void>()
     scope.effect(() => scope.jobs.events.subscribe({ owners: 'all' }, (event) => {
       if (event.type === 'registered') {
         const { id, owner } = event.job
-        jobCount += 1
         jobs.set(id, gate.track(() => {
           try {
             scope.jobs.kill(id, owner, STOP_REASON)
@@ -74,21 +72,21 @@ export function watchChats(ctx: Context, gate: CountingChatGate): void {
       }
       if (event.type !== 'settled' && event.type !== 'removed') return
       jobs.get(event.job.id)?.()
-      if (jobs.delete(event.job.id)) jobCount -= 1
+      jobs.delete(event.job.id)
     }))
     // The registry settles its jobs when it goes; a job it never reported settled is not running either.
     scope.effect(() => () => {
       for (const end of jobs.values()) end()
       jobs.clear()
-      jobCount = 0
     })
   })
   // The chats the studio's "Stop running chats and update" names and stops: the sessions of the running agents.
   ctx.inject(['delorunUpdateChats'], (scope) => {
     scope.effect(() => scope.delorunUpdateChats.attach({
-      list: () => [...new Set([...ends.keys()].map(agent => agent.session.id))],
+      // Top-level chats only: a subagent's session is not a chat the person can continue.
+      list: () => [...new Set([...ends.keys()].filter(agent => agent.session.header.origin !== 'subagent').map(agent => agent.session.id))],
       cancelAll: () => gate.cancelAll(),
-      jobs: () => jobCount,
+      jobs: () => jobs.size,
     }))
   })
   ctx.inject(['delorunTurnGate'], (scope) => {

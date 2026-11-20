@@ -56,6 +56,22 @@ function versionOf(entry: unknown): UpdateNotesVersion | undefined {
 }
 
 /**
+ * Cut one version's entries so that its JSON fits {@link MAX_NOTES_BYTES}.
+ * @param version - the version.
+ * @returns the version with whole bullets dropped from the end until it fits.
+ */
+function trimmed(version: UpdateNotesVersion): UpdateNotesVersion {
+  const areas = version.areas.map(area => ({ ...area, items: [...area.items] }))
+  const fits = (): boolean => Buffer.byteLength(JSON.stringify({ ...version, areas })) <= MAX_NOTES_BYTES
+  while (!fits()) {
+    const last = areas.findLast(area => area.items.length > 0)
+    if (last === undefined) break
+    last.items.pop()
+  }
+  return { ...version, highlights: version.highlights.filter(line => Buffer.byteLength(line) < MAX_NOTES_BYTES / 4), areas: areas.filter(area => area.items.length > 0) }
+}
+
+/**
  * The notes of the versions after `from` up to and including `to`, newest first.
  * @param data - the parsed `changelog.json`, or `undefined` when it could not be read.
  * @param from - the version that ran before the update.
@@ -79,8 +95,14 @@ export function notesBetween(data: unknown, from: string, to: string): UpdateNot
   let truncated = false
   let bytes = 0
   for (const version of unique) {
-    bytes += Buffer.byteLength(JSON.stringify(version))
-    if (kept.length >= MAX_NOTES_VERSIONS || (bytes > MAX_NOTES_BYTES && kept.length > 0)) { truncated = true; break }
+    const size = Buffer.byteLength(JSON.stringify(version))
+    if (kept.length >= MAX_NOTES_VERSIONS || bytes + size > MAX_NOTES_BYTES) {
+      truncated = true
+      // The newest version alone may be over the cap: keep as many of its entries as fit.
+      if (kept.length === 0) kept.push(trimmed(version))
+      break
+    }
+    bytes += size
     kept.push(version)
   }
   return { versions: kept, truncated }

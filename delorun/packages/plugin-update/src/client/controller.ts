@@ -275,7 +275,7 @@ export class UpdateController {
    * @returns how the chat stands afterwards.
    */
   continueChat(sessionId: string): Promise<Outcome<ContinueChatView>> {
-    return this.#act('update-dismiss', send => send<ContinueChatView>(UPDATE_PATHS.continueChat, { sessionId }))
+    return this.#act('update-continue', send => send<ContinueChatView>(UPDATE_PATHS.continueChat, { sessionId }))
   }
 
   /**
