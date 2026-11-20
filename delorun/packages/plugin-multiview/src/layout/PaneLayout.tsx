@@ -74,6 +74,7 @@ export function PaneLayout(props: PaneLayoutProps): JSX.Element {
     [],
   )
 
+  const reportsArea = onAreaChange !== undefined
   const keeper = useRef<StateKeeper | undefined>(undefined)
   useEffect(() => {
     const element = root.current
@@ -81,10 +82,18 @@ export function PaneLayout(props: PaneLayoutProps): JSX.Element {
     const own = new StateKeeper(element)
     keeper.current = own
     // A drag starts on a grip: freeze the recorded scroll offsets until the drop has been applied or abandoned.
+    let gripHeld = false
     const onDown = (event: PointerEvent): void => {
-      if (event.target instanceof Element && event.target.closest('[data-tabset-drag-handle]') !== null) own.freeze()
+      if (!(event.target instanceof Element) || event.target.closest('[data-tabset-drag-handle]') === null) return
+      gripHeld = true
+      own.freeze()
     }
-    const onUp = (): void => own.release(DROP_WAIT_FRAMES)
+    // Only the end of a drag that began on a grip restores; any other pointerup in the document leaves the recorded scroll alone.
+    const onUp = (): void => {
+      if (!gripHeld) return
+      gripHeld = false
+      own.release(DROP_WAIT_FRAMES)
+    }
     element.addEventListener('pointerdown', onDown, true)
     element.ownerDocument.addEventListener('pointerup', onUp, true)
     element.ownerDocument.addEventListener('pointercancel', onUp, true)
@@ -107,13 +116,21 @@ export function PaneLayout(props: PaneLayoutProps): JSX.Element {
 
   useEffect(() => {
     const element = root.current
-    if (element === null || onAreaChange === undefined) return undefined
-    const report = (): void => latest.current.onAreaChange?.({ width: element.clientWidth, height: element.clientHeight })
+    if (element === null || !reportsArea) return undefined
+    // The callback is read through `latest`, so a new callback identity never re-subscribes; an unchanged size is not reported again.
+    let width: number | undefined
+    let height: number | undefined
+    const report = (): void => {
+      if (element.clientWidth === width && element.clientHeight === height) return
+      width = element.clientWidth
+      height = element.clientHeight
+      latest.current.onAreaChange?.({ width, height })
+    }
     report()
     const observer = new ResizeObserver(report)
     observer.observe(element)
     return () => observer.disconnect()
-  }, [onAreaChange])
+  }, [reportsArea])
 
   const onModelChanged = useCallback(
     (next: WorkspaceModel<PaneTabData>, meta: Meta): void => {

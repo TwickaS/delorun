@@ -1,11 +1,16 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
-import { buildPreset, layoutOf, leafOf, splitOf } from '../../src/layout/index.ts'
-import { A, B, MAIN, show } from './helpers.ts'
+import { useState, type JSX } from 'react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { buildPreset, fitLayout, layoutOf, leafOf, splitOf, type LayoutArea } from '../../src/layout/index.ts'
+import { A, B, C, D, MAIN, show } from './helpers.ts'
 import { LayoutHarness, type Harness } from './harness.tsx'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
+})
 
 const record = (): Harness => ({ changes: [], mounts: new Map() })
 const mountColumn = (rec: Harness) => render(<LayoutHarness initial={buildPreset('main-column', MAIN, [A, B])} main={MAIN} record={rec} />)
@@ -79,5 +84,109 @@ describe('PaneLayout in jsdom', () => {
     mountColumn(record())
     expect(screen.getAllByTitle('Move pane')).toHaveLength(3)
     expect(screen.getAllByLabelText('Move pane')).toHaveLength(3)
+  })
+})
+
+/** A ResizeObserver that records what it watches; jsdom has none. `fire` runs the callbacks of the observers watching the element. */
+function stubResizeObserver() {
+  const observers: { callback: () => void; targets: Element[]; disconnected: boolean }[] = []
+  vi.stubGlobal('ResizeObserver', class {
+    readonly #entry: { callback: () => void; targets: Element[]; disconnected: boolean }
+    constructor(callback: () => void) {
+      this.#entry = { callback, targets: [], disconnected: false }
+      observers.push(this.#entry)
+    }
+    observe(target: Element): void { this.#entry.targets.push(target) }
+    unobserve(): void {}
+    disconnect(): void { this.#entry.disconnected = true }
+  })
+  const watching = (element: Element) => observers.filter(observer => observer.targets.includes(element))
+  return { observers, watching, fire: (element: Element) => { for (const observer of watching(element)) observer.callback() } }
+}
+
+describe('PaneLayout reporting its area', () => {
+  it('does not re-subscribe or loop when the consumer passes a new callback on every render that sets state', () => {
+    const resize = stubResizeObserver()
+    const reports: LayoutArea[] = []
+    function Consumer(): JSX.Element {
+      const [, setArea] = useState<LayoutArea>({ width: -1, height: -1 })
+      return (
+        <LayoutHarness
+          initial={buildPreset('main-column', MAIN, [A])}
+          main={MAIN}
+          record={record()}
+          overrides={{ onAreaChange: area => { reports.push(area); setArea({ ...area }) } }}
+        />
+      )
+    }
+    render(<Consumer />)
+    const region = screen.getByRole('region', { name: 'Multiview' })
+    expect(reports).toHaveLength(1)
+    expect(resize.watching(region)).toHaveLength(1)
+    expect(resize.watching(region)[0]!.disconnected).toBe(false)
+  })
+
+  it('reports a new size once and an unchanged size not at all', () => {
+    const resize = stubResizeObserver()
+    const reports: LayoutArea[] = []
+    render(<LayoutHarness initial={buildPreset('main-column', MAIN, [A])} main={MAIN} record={record()} overrides={{ onAreaChange: area => { reports.push(area) } }} />)
+    const region = screen.getByRole('region', { name: 'Multiview' })
+    expect(reports).toEqual([{ width: 0, height: 0 }])
+    act(() => { resize.fire(region) })
+    expect(reports).toHaveLength(1)
+    Object.defineProperty(region, 'clientWidth', { configurable: true, value: 900 })
+    act(() => { resize.fire(region) })
+    act(() => { resize.fire(region) })
+    expect(reports).toEqual([{ width: 0, height: 0 }, { width: 900, height: 0 }])
+  })
+
+  it('stops observing when the consumer stops asking for the area, and when it unmounts', () => {
+    const resize = stubResizeObserver()
+    const view = render(<LayoutHarness initial={buildPreset('main-column', MAIN, [A])} main={MAIN} record={record()} overrides={{ onAreaChange: () => {} }} />)
+    const region = screen.getByRole('region', { name: 'Multiview' })
+    const [watcher] = resize.watching(region)
+    view.rerender(<LayoutHarness initial={buildPreset('main-column', MAIN, [A])} main={MAIN} record={record()} />)
+    expect(watcher!.disconnected).toBe(true)
+    view.unmount()
+  })
+})
+
+describe('PaneLayout with panes hidden for lack of room', () => {
+  it('reports no layout change when the window resizes, so a stored layout keeps the hidden panes', () => {
+    const resize = stubResizeObserver()
+    const stored = buildPreset('main-column', MAIN, [A, B, C, D])
+    const fitted = fitLayout(stored, MAIN, 3)
+    expect(fitted.hidden).toEqual([C, D])
+    const rec = record()
+    render(<LayoutHarness initial={fitted.model} main={MAIN} record={rec} overrides={{ onAreaChange: () => {} }} />)
+    const region = screen.getByRole('region', { name: 'Multiview' })
+    Object.defineProperty(region, 'clientWidth', { configurable: true, value: 500 })
+    act(() => { resize.fire(region) })
+    expect(rec.changes).toEqual([])
+  })
+})
+
+describe('PaneLayout restoring after a drag', () => {
+  it('schedules a restore only for a pointerup that ends a press on a grip', () => {
+    const frame = vi.spyOn(window, 'requestAnimationFrame')
+    mountColumn(record())
+    const base = frame.mock.calls.length
+    act(() => { document.dispatchEvent(new Event('pointerup', { bubbles: true })) })
+    expect(frame.mock.calls.length).toBe(base)
+    act(() => { fireEvent.pointerDown(screen.getAllByTitle('Move pane')[0]!) })
+    act(() => { document.dispatchEvent(new Event('pointerup', { bubbles: true })) })
+    expect(frame.mock.calls.length).toBeGreaterThan(base)
+    const after = frame.mock.calls.length
+    act(() => { document.dispatchEvent(new Event('pointerup', { bubbles: true })) })
+    expect(frame.mock.calls.length).toBe(after)
+  })
+
+  it('ignores a press that is not on a grip', () => {
+    const frame = vi.spyOn(window, 'requestAnimationFrame')
+    mountColumn(record())
+    const base = frame.mock.calls.length
+    act(() => { fireEvent.pointerDown(screen.getByTestId('input-a')) })
+    act(() => { document.dispatchEvent(new Event('pointerup', { bubbles: true })) })
+    expect(frame.mock.calls.length).toBe(base)
   })
 })
