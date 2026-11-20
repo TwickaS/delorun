@@ -35,7 +35,7 @@ export interface FaceIdAnswerInjected {
   /** The page's one-at-a-time queue, so the sheet waits for another confirmation that is showing. */
   readonly queue?: ConfirmationQueue
   /** The page's Face ID pass mirror: while it covers the answer, Allow sends at once and the home admits it by the pass (A499). */
-  readonly pass?: Pick<PassSource, 'covers'>
+  readonly pass?: Pick<PassSource, 'covers' | 'refresh'>
 }
 
 /** Props the renderer binds for the action. */
@@ -89,8 +89,12 @@ export function FaceIdAnswerAction({ t, grants, callId, toolName, gateAllow, ses
       if (current) setHasPasskey((state?.passkeys.length ?? 0) > 0)
     })
     const confirm = async (): Promise<boolean> => {
-      // A granting answer is never always-ask, so a live pass covers it.
-      if (pass?.covers(`answer/${grants}`) === true) return true
+      // A granting answer is never always-ask, so a live pass covers it. The pass is read from the home first, so an
+      // Allow tapped again after the home refused the answer (the pass ended) opens the sheet.
+      if (pass?.covers(`answer/${grants}`) === true) {
+        await pass.refresh()
+        if (current && pass.covers(`answer/${grants}`)) return true
+      }
       await reading
       if (!current) return false
       return await new Promise<boolean>((resolve) => {

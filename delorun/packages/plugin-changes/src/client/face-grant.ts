@@ -81,6 +81,12 @@ export type FaceGrant = (request: FaceGrantRequest) => Promise<string | undefine
 /** The page's `fetch` as the studio's plugins call it: a path relative to the document, and the request's options. */
 export type GrantingFetch = (input: string, init?: RequestInit) => Promise<Response>
 
+/**
+ * The grant id a confirmation resolves with when the page's Face ID pass covers the action, so no sheet showed. The home
+ * admits the call by the pass and does not read the id; a caller whose call the home refuses with this id asks again.
+ */
+export const PASS_GRANT_ID = 'pass'
+
 /** What `ctx.delorunFaceGrant` shares. */
 export interface FaceGrantService {
   /** @see FaceGrant */

@@ -4,8 +4,12 @@
  * "Unlocked" chip, the sheets that would otherwise open, the sheet's "lasts" line and Lock now.
  *
  * - {@link createPassSource} reads `GET /auth/passkey/pass` when the studio starts, when the window regains focus, when the
- *   page becomes visible and on {@link PASS_CHANGED} (a verified Face ID dispatches it), clears the pass at its end, and
- *   calls Lock now when the page has been hidden {@link PASS_HIDDEN_LOCK_MS}. On the home's own computer it reads only the
+ *   page becomes visible and on {@link PASS_CHANGED} (a verified Face ID dispatches it), and clears the pass at its end,
+ *   counted from the home's `remainingMs` so a skewed phone clock does not move it. It calls Lock now when the page has
+ *   been hidden {@link PASS_HIDDEN_LOCK_MS}: by a timer while the page runs, and, because a phone suspends a hidden page
+ *   and its timers, again on return when the page was away that long, before anything else. Lock now ends the device's
+ *   pass on every tab, so one tab hidden that long locks the others too. The home also ends a pass 5 minutes after the
+ *   device's last request, so a page that never returns cannot keep it. On the home's own computer it reads only the
  *   setting: the computer never asks and has no pass.
  * - {@link passLastsLine} gives the sheet's "lasts" line when a Face ID would open a pass.
  *
@@ -29,9 +33,12 @@ export const PASS_SETTING_ACTION = 'auth/passkey/pass'
 
 /**
  * The grant actions no pass covers, as the home's `ALWAYS_ASK_ACTIONS` lists them (`@delorun/home-auth`, pinned equal by
- * `tests/face-pass.client.spec.tsx`): adding or removing a device or a passkey, the Face ID settings and the pass setting.
+ * `tests/face-grants.spec.ts`): adding or removing a device or a passkey, the Face ID settings, the pass setting, turning
+ * Changes protection off and a workspace's full access.
  */
-export const ALWAYS_ASK_ACTIONS: ReadonlySet<string> = new Set(['auth/devices/remove', 'auth/passkey/devices', 'auth/passkey/remove', PASS_SETTING_ACTION])
+export const ALWAYS_ASK_ACTIONS: ReadonlySet<string> = new Set([
+  'auth/devices/remove', 'auth/passkey/devices', 'auth/passkey/remove', PASS_SETTING_ACTION, 'changes/protection-off', 'plugin-permission-defaults/set-full-access',
+])
 
 /** The window event that asks every pass source to read the pass again: a Face ID verified, or the setting changed. */
 export const PASS_CHANGED = 'delorun:face-pass-changed'
@@ -48,23 +55,24 @@ export interface PassState {
   readonly minutes: number
   /** The lengths the setting takes. */
   readonly choices: readonly number[]
-  /** When this device's live pass ends, in milliseconds since the epoch, or null while it holds none. */
+  /** When this device's live pass ends by this page's clock (the home's `remainingMs` from the read), or null while it holds none. */
   readonly endsAt: number | null
 }
 
 /** The state before the first read: no pass, and the deployment default the home applies until the person chooses. */
 export const NO_PASS: PassState = { minutes: 15, choices: [0, 5, 15, 30, 60], endsAt: null }
 
-const isPassAnswer = fields({ minutes: isTime, choices: listOf(isTime), pass: orNull(fields({ startedAt: isTime, endsAt: isTime })) })
+const isPassAnswer = fields({ minutes: isTime, choices: listOf(isTime), pass: orNull(fields({ startedAt: isTime, endsAt: isTime, remainingMs: isTime })) })
 
 /**
  * Read the pass setting and this device's live pass.
  * @param fetch - the same-origin request function.
+ * @param now - this page's clock, which the home's `remainingMs` is added to.
  * @returns the state.
  */
-export async function readPass(fetch: HostFetch): Promise<PassState> {
-  const answer = await call<{ minutes: number; choices: number[]; pass: { startedAt: number; endsAt: number } | null }>(fetch, PASS_ROUTES.pass, isPassAnswer)
-  return { minutes: answer.minutes, choices: answer.choices, endsAt: answer.pass?.endsAt ?? null }
+export async function readPass(fetch: HostFetch, now: () => number = Date.now): Promise<PassState> {
+  const answer = await call<{ minutes: number; choices: number[]; pass: { startedAt: number; endsAt: number; remainingMs: number } | null }>(fetch, PASS_ROUTES.pass, isPassAnswer)
+  return { minutes: answer.minutes, choices: answer.choices, endsAt: answer.pass === null ? null : now() + answer.pass.remainingMs }
 }
 
 /** The pass mirror of one studio page. */
@@ -122,7 +130,7 @@ export function createPassSource(options: PassSourceOptions): PassSource {
   }
   const refresh = async (): Promise<void> => {
     try {
-      apply(await readPass(options.fetch))
+      apply(await readPass(options.fetch, now))
     } catch (_unreadable) {
       // An unreadable pass shows no chip and skips no sheet; the home still decides every call.
       apply({ ...store.getSnapshot(), endsAt: null })
@@ -136,17 +144,35 @@ export function createPassSource(options: PassSourceOptions): PassSource {
       await refresh()
     }
   }
+  let hiddenAt: number | undefined
+  /**
+   * Back from hidden: a page that held a pass and was away {@link PASS_HIDDEN_LOCK_MS} or more locks first, since its
+   * timer may never have run on a suspended phone; otherwise it reads the pass again.
+   */
+  const back = (): void => {
+    const away = hiddenAt === undefined ? 0 : now() - hiddenAt
+    hiddenAt = undefined
+    if (away >= PASS_HIDDEN_LOCK_MS) void lockNow()
+    else void refresh()
+  }
   const onVisibility = (): void => {
     if (hiddenTimer !== undefined) win.clearTimeout(hiddenTimer)
     hiddenTimer = undefined
     if (win.document.visibilityState === 'hidden') {
-      if (store.getSnapshot().endsAt !== null) hiddenTimer = win.setTimeout(() => { hiddenTimer = undefined; void lockNow() }, PASS_HIDDEN_LOCK_MS)
+      // Only a page that held a pass when it was hidden locks: a pass another tab opened meanwhile is that tab's.
+      if (store.getSnapshot().endsAt === null) return
+      hiddenAt = now()
+      hiddenTimer = win.setTimeout(() => { hiddenTimer = undefined; void lockNow() }, PASS_HIDDEN_LOCK_MS)
       return
     }
-    void refresh()
+    back()
   }
-  const onRead = (): void => { void refresh() }
+  const onRead = (): void => {
+    if (!computer && hiddenAt !== undefined) back()
+    else void refresh()
+  }
   win.addEventListener('focus', onRead)
+  win.addEventListener('pageshow', onRead)
   win.addEventListener(PASS_CHANGED, onRead)
   if (!computer) win.addEventListener('visibilitychange', onVisibility)
   void refresh()
@@ -165,6 +191,7 @@ export function createPassSource(options: PassSourceOptions): PassSource {
       if (endTimer !== undefined) win.clearTimeout(endTimer)
       if (hiddenTimer !== undefined) win.clearTimeout(hiddenTimer)
       win.removeEventListener('focus', onRead)
+      win.removeEventListener('pageshow', onRead)
       win.removeEventListener(PASS_CHANGED, onRead)
       if (!computer) win.removeEventListener('visibilitychange', onVisibility)
     },

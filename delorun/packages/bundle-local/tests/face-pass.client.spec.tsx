@@ -14,6 +14,7 @@ import type { ApprovalAllowGate } from '@deepseek-ai/dsh-client-ui-approval/clie
 import { en } from '../src/client/face-id-locales.ts'
 import { fakeApi, fakeBrowser } from '../src/client/face-id-fake.ts'
 import { createFaceGrantSource, PASS_GRANT_ID, passAware } from '../src/client/face-grant.ts'
+import { grantingFetch } from '../src/client/face-retry.ts'
 import {
   ALWAYS_ASK_ACTIONS, createPassSource, PASS_CHANGED, PASS_HIDDEN_LOCK_MS, PASS_ROUTES, PASS_SETTING_ACTION, passLastsLine, passMinutesOf, type PassSource,
 } from '../src/client/face-id-pass.ts'
@@ -42,11 +43,11 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-const passAnswer = (endsAt: number | null, minutes = 15): Answer => ({ status: 200, body: { minutes, choices: [0, 5, 15, 30, 60], pass: endsAt === null ? null : { startedAt: START, endsAt } } })
+const passAnswer = (endsAt: number | null, minutes = 15, remainingMs = endsAt === null ? 0 : endsAt - START): Answer => ({ status: 200, body: { minutes, choices: [0, 5, 15, 30, 60], pass: endsAt === null ? null : { startedAt: START, endsAt, remainingMs } } })
 
 /** A pass source over a fake home that answers a live pass ending at `endsAt`, and the page's visibility. */
-async function source(endsAt: number | null, options: { computer?: boolean; minutes?: number } = {}): Promise<{ pass: PassSource; host: ReturnType<typeof fakeHost>; hide: () => void; show: () => void }> {
-  const host = fakeHost({ [`GET ${PASS_ROUTES.pass}`]: passAnswer(endsAt, options.minutes), [`POST ${PASS_ROUTES.lock}`]: { status: 200, body: { ended: true } } })
+async function source(endsAt: number | null, options: { computer?: boolean; minutes?: number; remainingMs?: number } = {}): Promise<{ pass: PassSource; host: ReturnType<typeof fakeHost>; hide: () => void; show: () => void }> {
+  const host = fakeHost({ [`GET ${PASS_ROUTES.pass}`]: passAnswer(endsAt, options.minutes, options.remainingMs), [`POST ${PASS_ROUTES.lock}`]: { status: 200, body: { ended: true } } })
   let visibility: DocumentVisibilityState = 'visible'
   Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => visibility })
   const pass = createPassSource({ fetch: host.fetch, atComputer: () => options.computer ?? false, now: () => clock })
@@ -112,6 +113,33 @@ describe('the pass source', () => {
     expect(host.count(`POST ${PASS_ROUTES.lock}`)).toBe(1)
   })
 
+  // Removing the check on return keeps a pass live on a phone whose hidden page was suspended, so its timer never ran (review P2-1).
+  it('locks first on return when the page was away five minutes, though its timer never ran', async () => {
+    const { host, hide, show } = await source(START + 30 * MINUTE)
+    hide()
+    clock += PASS_HIDDEN_LOCK_MS
+    const before = host.received.length
+    await act(async () => { show() })
+    expect(host.received.slice(before).map(request => request.key)[0]).toBe(`POST ${PASS_ROUTES.lock}`)
+  })
+
+  // Removing the held-a-pass condition lets a tab that was hidden without a pass end the pass another tab opened meanwhile.
+  it('does not lock on return when the page held no pass when it was hidden', async () => {
+    const { host, hide, show } = await source(null)
+    hide()
+    clock += PASS_HIDDEN_LOCK_MS
+    await act(async () => { show() })
+    expect(host.count(`POST ${PASS_ROUTES.lock}`)).toBe(0)
+  })
+
+  // Counting from the home's endsAt with the phone's clock shows a pass past its end on a slow clock (review P3-2).
+  it('counts from the home\'s remainingMs, not the end time by the phone\'s clock', async () => {
+    const { pass } = await source(START + 60 * MINUTE, { remainingMs: MINUTE })
+    expect(pass.current().endsAt).toBe(START + MINUTE)
+    clock = START + MINUTE - 1_000
+    expect(pass.covers('pluginManager/installBundle')).toBe(false)
+  })
+
   it('reads the pass again when a Face ID verified', async () => {
     const { host } = await source(null)
     const before = host.count(`GET ${PASS_ROUTES.pass}`)
@@ -143,6 +171,35 @@ describe('no sheet under a pass', () => {
     await expect(asked).resolves.toBeUndefined()
   })
 
+  // Removing the read before the skip trusts a stale mirror after the pass ended at the home (review P3-3).
+  it('asks with a sheet when the home says the pass ended, though the page still showed it', async () => {
+    const { pass, host } = await source(START + 10 * MINUTE)
+    host.script[`GET ${PASS_ROUTES.pass}`] = passAnswer(null)
+    const sheets = createFaceGrantSource()
+    const grant = passAware(sheets.grant, pass)
+    const asked = grant({ action: 'changes/plugin-apply', call: { method: 'POST', path: '/delorun/changes/apply', body: {} } })
+    await vi.waitFor(() => { expect(sheets.hooks.pending.getSnapshot()?.request.action).toBe('changes/plugin-apply') })
+    sheets.settle('g1')
+    await expect(asked).resolves.toBe('g1')
+  })
+
+  // Removing the pass exception in grantingFetch leaves a call sent under an ended pass refused, with no sheet (review P3-3).
+  it('asks with a sheet when the home refuses a call that carried the pass id', async () => {
+    const sent: (string | null)[] = []
+    const fetch = vi.fn(async (_input: string, init?: RequestInit) => {
+      const header = new Headers(init?.headers).get('Delorun-Grant')
+      sent.push(header)
+      return header === 'g1' ? new Response('{}', { status: 200 }) : new Response(JSON.stringify({ error: 'ELEVATION_REQUIRED', action: 'changes/plugin-apply' }), { status: 403 })
+    })
+    const grant = vi.fn(async () => 'g1')
+    const lifted = grantingFetch(fetch, grant, () => 'https://home.example/')
+    expect((await lifted('/delorun/changes/apply', { method: 'POST', headers: { 'Delorun-Grant': PASS_GRANT_ID }, body: '{}' })).status).toBe(200)
+    expect(sent).toEqual([PASS_GRANT_ID, 'g1'])
+    sent.length = 0
+    expect((await lifted('/delorun/changes/apply', { method: 'POST', headers: { 'Delorun-Grant': 'mine' }, body: '{}' })).status).toBe(403)
+    expect(sent).toEqual(['mine'])
+  })
+
   // Removing the pass check in the approval card opens a sheet for an answer the home admits by the pass.
   it('lets an approval answer go with no sheet', async () => {
     const { pass } = await source(START + 10 * MINUTE)
@@ -161,6 +218,24 @@ describe('no sheet under a pass', () => {
     await expect(sent).resolves.toBe(true)
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(api.calls.some(call => call.name === 'options')).toBe(false)
+  })
+
+  // Removing the read in the card lets Allow skip the sheet on a stale mirror, so the home refuses the answer (review P3-3).
+  it('opens the sheet for an approval answer once the home says the pass ended', async () => {
+    const { pass, host } = await source(START + 10 * MINUTE)
+    host.script[`GET ${PASS_ROUTES.pass}`] = passAnswer(null)
+    const gateAllow = vi.fn<(gate: ApprovalAllowGate | null) => void>()
+    const api = fakeApi({ devices: [{ deviceId: 'd', label: 'Phone', thisDevice: true, passkeys: [{ credentialId: 'c1', createdAt: 0, lastUsedAt: null, synced: false }] }] })
+    const props = {
+      t, grants: 'full-access', callId: 'call-7' as ToolCallId, toolName: 'x', allow: async () => {}, answered: false, canAnswer: () => true, gateAllow,
+      sessionId: 'chat-1', fetch: fakeHost({}).fetch, api, browser: fakeBrowser(), atComputer: () => false, pass,
+      usePin: <S,>(select: (view: PinView) => S): S => select({ phase: 'on', secret: 'pin' }),
+    } as FaceIdAnswerProps
+    render(<FaceIdAnswerAction {...props} />)
+    await vi.waitFor(() => { expect(gateAllow).toHaveBeenCalled() })
+    const gate = gateAllow.mock.calls.findLast(([next]) => next !== null)?.[0]
+    act(() => { void gate?.() })
+    await vi.waitFor(() => { expect(screen.getByRole('dialog')).toBeTruthy() })
   })
 })
 

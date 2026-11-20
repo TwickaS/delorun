@@ -5,7 +5,7 @@
  */
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
-import type { FaceGrant, FaceGrantRequest } from '@delorun/plugin-changes/face-grant'
+import { PASS_GRANT_ID, type FaceGrant, type FaceGrantRequest } from '@delorun/plugin-changes/face-grant'
 
 /** A confirmation that waits for the person. */
 export interface PendingGrant {
@@ -59,20 +59,25 @@ export function createFaceGrantSource(): FaceGrantSource {
   }
 }
 
-/**
- * The grant id a confirmation skipped under a live Face ID pass resolves with. It is no grant: the home admits the call
- * by the pass and ignores `Delorun-Grant`; if the pass ended in between, the home refuses the call as without a grant.
- */
-export const PASS_GRANT_ID = 'pass'
+/** The grant id a covered confirmation resolves with; see `PASS_GRANT_ID` in `@delorun/plugin-changes/face-grant`. */
+export { PASS_GRANT_ID } from '@delorun/plugin-changes/face-grant'
 
 /**
  * The proactive confirmation for callers that ask before they send (Changes, Update, a seat's answer): while this page's
- * Face ID pass covers the action it resolves with {@link PASS_GRANT_ID} and shows no sheet; otherwise it asks. A call the
- * home already refused goes through `grant` itself, never through this, since the refusal means the home holds no pass.
+ * Face ID pass covers the action, it reads the pass from the home once more and, if it still covers it, resolves with
+ * {@link PASS_GRANT_ID} and shows no sheet; otherwise it asks. A request the home refuses although it carried
+ * {@link PASS_GRANT_ID} (the pass ended in between) is asked again with a sheet by `grantingFetch`.
  * @param grant - the queued confirmation.
  * @param pass - the page's pass mirror.
  * @returns the confirmation.
  */
-export function passAware(grant: FaceGrant, pass: { readonly covers: (action: string) => boolean }): FaceGrant {
-  return request => (request.signal?.aborted !== true && pass.covers(request.action) ? Promise.resolve(PASS_GRANT_ID) : grant(request))
+export function passAware(grant: FaceGrant, pass: { readonly covers: (action: string) => boolean; readonly refresh: () => Promise<void> }): FaceGrant {
+  return async (request) => {
+    const live = (): boolean => request.signal?.aborted !== true && pass.covers(request.action)
+    if (live()) {
+      await pass.refresh()
+      if (live()) return PASS_GRANT_ID
+    }
+    return await grant(request)
+  }
 }
