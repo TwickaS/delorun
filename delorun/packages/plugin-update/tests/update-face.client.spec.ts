@@ -5,7 +5,7 @@
  * Each test's comment names the behaviour whose removal makes it fail.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { FaceGrant } from '@delorun/plugin-changes/face-grant'
+import { PASS_GRANT_ID, type FaceGrant } from '@delorun/plugin-changes/face-grant'
 import { UpdateController } from '../src/client/controller.ts'
 import { UPDATE_PATHS, type UpdateControl, type UpdateMayView, type UpdateStateView } from '../src/wire.ts'
 
@@ -38,6 +38,19 @@ describe('the update controller\'s Face ID step', () => {
     await update.prepare()
     expect(grant).toHaveBeenCalledExactlyOnceWith({ action: 'changes/update-begin', call: { method: 'POST', path: UPDATE_PATHS.prepare, body: {} } })
     expect(posts).toEqual([{ path: UPDATE_PATHS.prepare.slice(1), grant: 'g1' }])
+  })
+  it('asks again with a sheet when the home refuses a call sent under a pass that ended in between', async () => {
+    // Removing the fallback leaves Prepare refused after the pass ended between the check and the send (review P3-3).
+    vi.stubGlobal('fetch', vi.fn(async (path: string, init?: RequestInit) => {
+      const grant = new Headers(init?.headers).get('Delorun-Grant')
+      posts.push({ path, grant })
+      return grant === PASS_GRANT_ID ? new Response(JSON.stringify({ code: 'ELEVATION_REQUIRED', message: 'm' }), { status: 403 }) : new Response('{}', { status: 200 })
+    }))
+    const answers = [PASS_GRANT_ID, 'g2']
+    const grant = vi.fn<FaceGrant>(async () => answers.shift())
+    const update = controller({ 'update-begin': { ok: false, needs: 'face' } }, () => grant)
+    await update.prepare()
+    expect(posts.filter(post => post.path === UPDATE_PATHS.prepare.slice(1)).map(post => post.grant)).toEqual([PASS_GRANT_ID, 'g2'])
   })
   it('sends nothing and reports a cancelled refusal when the person cancels', async () => {
     // A cancelled sheet must not reach the route, and the screen needs a refusal to word.

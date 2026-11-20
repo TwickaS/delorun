@@ -34,7 +34,7 @@ import { checkStoredBranding } from '@delorun/brand/branding'
 import { DEFAULT_WORKSPACE_ICON, parseWorkspaceIcon } from '@delorun/brand/workspace-icon'
 import type { ReachListenerId } from '@delorun/contract-admission'
 import type { SettingsLift } from './dangerous-settings.ts'
-import { HOLD_OPENERS, holdFeatureOf, hashArgs, scopeOf, type GrantStore, type HoldFeature } from './grants.ts'
+import { HOLD_OPENERS, holdFeatureOf, hashArgs, scopeOf, type GrantHolder, type GrantStore, type HoldFeature } from './grants.ts'
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface PrincipalMap {
@@ -1171,12 +1171,16 @@ export function createCondition(
    * @param action - the action.
    * @param reason - the refusal.
    * @param call - whether a call's arguments came with the question.
+   * @param scope - {@link scopeOf} of the resource the question names.
+   * @param args - the arguments.
+   * @param row - the `AUTH_CLASSES` row the call is decided under, which says whether a Face ID pass may admit it; `remote:<action>` by default.
    * @returns the refusal, or undefined when an unlock admits it.
    */
-  const unlocked = (action: RemoteAccessAction, reason: string, call: boolean, scope: string, args?: unknown): RemoteAccessDecision | undefined => {
+  const unlocked = (action: RemoteAccessAction, reason: string, call: boolean, scope: string, args?: unknown, row = `remote:${action}`): RemoteAccessDecision | undefined => {
     const faced = facts.faceGrants?.()
-    // A face action is admitted by a grant for exactly this call, from Face ID or, on a device with no passkey, from its PIN (A483); no unlock window, code or approval grace admits it.
-    if (faced !== undefined) return grantFor(faced, action, reason, call, scope, args)
+    // A face action is admitted by a grant for exactly this call, from Face ID or, on a device with no passkey, from its
+    // PIN (A483), or by the device's Face ID pass on this listener when its row allows one (A499); no unlock window, code or approval grace admits it.
+    if (faced !== undefined) return grantFor(faced, action, reason, call, scope, args, row)
     // Before the grant store starts, a terminal stays refused and any other action falls back to the unlock the person
     // entered; no unlock exists before the home service starts either, so the fallback admits nothing.
     if (GRACE_REFUSED_ACTIONS.has(action)) return { kind: 'deny', reason }
@@ -1203,22 +1207,30 @@ export function createCondition(
    * @param call - whether a call's arguments came with the question.
    * @param scope - {@link scopeOf} of the resource the question names.
    * @param args - the arguments.
-   * @returns the refusal, or undefined when a hold or a grant admits it.
+   * @param row - the `AUTH_CLASSES` row of the call: a live Face ID pass of this device on this listener admits it when that row is `face`
+   *   and not always-ask, and a call that opens a terminal or picker then opens its hold too, so the terminal outlives the pass under the hold's own limits.
+   * @returns the refusal, or undefined when a hold, a pass or a grant admits it.
    */
-  const grantFor = (faced: FaceGrantFacts, action: RemoteAccessAction, reason: string, call: boolean, scope: string, args: unknown): RemoteAccessDecision | undefined => {
+  const grantFor = (faced: FaceGrantFacts, action: RemoteAccessAction, reason: string, call: boolean, scope: string, args: unknown, row: string): RemoteAccessDecision | undefined => {
     if (!call) return action.startsWith('event:') ? { kind: 'deny', reason } : undefined
     const holder = { deviceId, listener, unlockId }
     const feature = holdFeatureOf(action)
     const id = feature === undefined ? undefined : holdIdOf(feature, action, args)
     if (feature !== undefined && !ALWAYS_GRANTED.has(action) && (id === undefined ? feature === 'picker' && faced.grants.holdsAny(holder, feature, scope) : faced.grants.holdAdmits(holder, feature, id, scope))) return undefined
+    const opens = feature !== undefined && id !== undefined && HOLD_OPENERS[action] === feature ? { feature, id, scope } : undefined
+    if (faced.passAdmits?.(holder, row) === true) {
+      if (opens !== undefined) spend.push(() => { faced.grants.openHoldByPass(holder, opens) })
+      return undefined
+    }
     const hash = hashArgs(args)
     if (hash === undefined || !faced.grants.has(holder, action, hash)) return { kind: 'deny', reason }
-    const opens = feature !== undefined && id !== undefined && HOLD_OPENERS[action] === feature ? { feature, id, scope } : undefined
     spend.push(() => { faced.grants.consume(holder, action, hash, opens) })
     return undefined
   }
   const decide: ReachCondition = ({ action, resource, args }) => {
     const scope = scopeOf(resource)
+    // A call (a question with arguments) is the device's use: it keeps its Face ID pass from the idle end, never past its end.
+    if (args !== undefined) facts.faceGrants?.()?.grants.touchPass({ deviceId, listener })
     // Dangerous mode lifts the four refusals below: each call still needs its grant, and the check follows. The mode is
     // read per call, so withdrawing the grant restores them. A PIN page unlock lifts nothing (A483: never a window).
     const lifts: SettingsLift[] = []
@@ -1257,7 +1269,7 @@ export function createCondition(
       if (faced !== undefined) {
         // Saving or removing a key needs a grant for this call, whatever the page's PIN unlock says (A483: never a
         // window); presence and its events stay free.
-        const refused = FACE_KEY_ACTIONS.has(action) ? grantFor(faced, action, `elevation-required: ${action}`, args !== undefined, scope, args) : undefined
+        const refused = FACE_KEY_ACTIONS.has(action) ? grantFor(faced, action, `elevation-required: ${action}`, args !== undefined, scope, args, `remote:${action}`) : undefined
         if (refused !== undefined) return refused
       } else {
         // Before the grant store starts, no grant can admit a key action.
@@ -1277,7 +1289,7 @@ export function createCondition(
     if (args === undefined) return ALLOW
     if (action === 'session/create') {
       if (createsInKnownWorkspace(facts, args)) return ALLOW
-      return unlocked(action, CREATE_OUTSIDE_WORKSPACES, true, scope, args) ?? ALLOW
+      return unlocked(action, CREATE_OUTSIDE_WORKSPACES, true, scope, args, 'remote:session/create outside the known workspaces') ?? ALLOW
     }
     if (WORKSPACE_PATH_ACTIONS.has(action)) {
       const bounds = boundsOf(facts, resource)
@@ -1285,7 +1297,7 @@ export function createCondition(
       const outside = `loopback-required: ${action} with a path outside the chat's workspace`
       // Dangerous mode moves the workspace bound for a call with its grant; the Delorun home stays out of reach.
       if (bounds !== undefined && facts.dangerousMode() && workspacePathsReachable({ ...bounds, confined: false }, args)) {
-        return unlocked(action, outside, true, scope, args) ?? ALLOW
+        return unlocked(action, outside, true, scope, args, 'remote:workspaceFiles/* outside the workspace') ?? ALLOW
       }
       return { kind: 'deny', reason: outside }
     }
@@ -1310,7 +1322,16 @@ const SESSION_ROLE = role('session')
 /** What the policy reads of the grants for Face ID. */
 export interface FaceGrantFacts {
   /** The grants and holds a verified assertion or a correct PIN minted. */
-  readonly grants: Pick<GrantStore, 'has' | 'consume' | 'holdAdmits' | 'holdsAny'>
+  readonly grants: Pick<GrantStore, 'has' | 'consume' | 'holdAdmits' | 'holdsAny' | 'openHoldByPass' | 'touchPass'>
+  /**
+   * Whether the live Face ID pass of this device on this listener admits a call decided under one `AUTH_CLASSES` row (`passAdmitsRow` in
+   * `./auth-classes.ts`, which this module cannot import: that table is built from this module's tables). Absent, no
+   * pass admits anything.
+   * @param holder - the device, listener and page unlock of the call.
+   * @param row - the row's id.
+   * @returns whether the pass admits the call.
+   */
+  readonly passAdmits?: (holder: GrantHolder, row: string) => boolean
   /**
    * Whether a device holds a passkey; such a device is admitted by a grant and never by an unlock window.
    * @param deviceId - the device.

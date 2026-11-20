@@ -32,6 +32,7 @@ import type {} from '@deepseek-ai/dsh-workspace'
 import type {} from '@deepseek-ai/dsh-working-directory'
 import type {} from '@deepseek-ai/dsh-permission-presets'
 import type {} from './full-access-grants.ts'
+import { passAdmitsRow } from './auth-classes.ts'
 import { answerKey } from './grants.ts'
 import { LOOPBACK_LISTENER } from '@deepseek-ai/dsh-client-connection/authenticator'
 import { Authenticator, type Admission, type ConnectionIndexRequest, type ListenerPolicy, type PreLoginRoute } from '@deepseek-ai/dsh-client-connection'
@@ -302,7 +303,7 @@ export class HomeAuthAuthenticator extends Authenticator {
         unlockModeEnabled: () => ctx.homeAuth.unlockModeEnabled(),
         faceGrants: () => {
           const grants = ctx.homeAuth.faceGrants()
-          return grants === undefined ? undefined : { grants, deviceHasPasskey: deviceId => ctx.homeAuth.deviceHasPasskey(deviceId) }
+          return grants === undefined ? undefined : { grants, deviceHasPasskey: deviceId => ctx.homeAuth.deviceHasPasskey(deviceId), passAdmits: (holder, row) => passAdmitsRow(grants, holder, row) }
         },
         keyRefs: () => keyRefsOf(access),
         logElevated: (line) => { ctx.logger.info(line) },
@@ -338,7 +339,7 @@ export class HomeAuthAuthenticator extends Authenticator {
    * agent program, such as Claude Code or Codex, outside the sandbox) and `real-browser` (the person's own browser for
    * one chat). Once the grant store exists, a device's granting answer is admitted only by the answer grant the person
    * made for exactly this prompt (its Session, call id and grants marker) and this value, with Face ID or, on a device
-   * with no passkey, its PIN; the grant is used up here. No PIN page unlock, code from the computer, approval grace or
+   * with no passkey, its PIN; the grant is used up here, or by the live Face ID pass of the Peer that answers (A499). No PIN page unlock, code from the computer, approval grace or
    * dangerous mode stands in for it (A483); before the store starts, nothing admits it. Any answer but `rejected`, `cancelled` and `unavailable` counts as granting. Every other answer, a
    * refusal of the same prompt included, applies.
    * @param answer - the answer and the Peer that gave it.
@@ -363,6 +364,11 @@ export class HomeAuthAuthenticator extends Authenticator {
     const agentId: unknown = typeof agent === 'object' && agent !== null ? Reflect.get(agent, 'id') : undefined
     if (grants !== undefined && typeof callId === 'string' && typeof agentId === 'string' && typeof marker === 'string' && typeof answer.value === 'string'
       && grants.consumeAnswer({ deviceId: reach.deviceId, listener: reach.listener }, answerKey({ agent: agentId, callId, grants: marker }), answer.value) !== undefined) return
+    // The device's live Face ID pass on this listener admits a granting answer whose row allows it (A499); a full-access answer is always-ask (F48).
+    if (grants !== undefined && typeof marker === 'string' && passAdmitsRow(grants, { deviceId: reach.deviceId, listener: reach.listener, unlockId: reach.unlockId }, `answer:${marker}`)) {
+      this.ctx.logger.info(`home-auth: pass.used device=${reach.deviceId} listener=${reach.listener} answer=${answer.value} grants=${marker}`)
+      return
+    }
     throw new RemoteError('LOOPBACK_REQUIRED', refusal.message, { action: refusal.action })
   }
 

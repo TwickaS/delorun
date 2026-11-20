@@ -10,7 +10,9 @@
  *   prompt answer; the home stores a 32-byte challenge for the device, session, listener and that list for 60 seconds,
  *   single use; `allowCredentials` holds only this device's credential ids. A verified assertion mints grants
  *   ({@link GrantStore}), never a window. A failed one counts as a wrong try in the PIN's counters.
- * - **A correct PIN** on a device mints the same grants ({@link PasskeyAuth.pinGrant}).
+ * - **A correct PIN** on a device mints the same grants ({@link PasskeyAuth.pinGrant}), and never opens a pass.
+ * - **A verified assertion** also opens the device's Face ID pass when the pass setting is above 0 and nothing it
+ *   confirmed is always-ask (A499, {@link GrantStore.openPass}).
  *
  * @module @delorun/home-auth/passkey-auth
  */
@@ -22,7 +24,8 @@ import type { DeviceId, StudioAddress } from '@delorun/contract-admission'
 import { IDENTITY_LIMITS, PASSKEY_COSE_ALGORITHMS, PASSKEY_REGISTRATION, RELYING_PARTY_NAME } from '@delorun/contract-oidc-passkeys'
 import { HomeAuthError } from './errors.ts'
 import { isRecord } from './files.ts'
-import { answerKey, DEVICE_REMOVE_ACTION, HOLD_FEATURES, type GrantEntry, type GrantStore, type HoldFeature } from './grants.ts'
+import { ALWAYS_ASK_ACTIONS } from './auth-classes.ts'
+import { answerKey, DEVICE_REMOVE_ACTION, HOLD_FEATURES, type GrantEntry, type GrantStore, type HoldFeature, type PassView } from './grants.ts'
 import { passkeyCode } from './match-code.ts'
 import type { PasskeyRecord, PasskeyStore } from './passkeys.ts'
 import type { PinUnlocks, UnlockAsker } from './pin-unlocks.ts'
@@ -63,6 +66,8 @@ export interface PasskeyGrantResult {
   readonly grantId: string
   /** When the grant stops being usable, in milliseconds since the epoch. */
   readonly expiresAt: number
+  /** The Face ID pass this assertion's device holds on this listener, when one is live (A499); a PIN never opens one. */
+  readonly pass?: PassView
 }
 
 /** The public half of one passkey record, which a device's studio lists. */
@@ -131,6 +136,11 @@ interface AssertionChallenge {
 export interface PasskeyAuthOptions {
   readonly store: PasskeyStore
   readonly grants: GrantStore
+  /**
+   * The pass length in minutes a verified Face ID opens (A499), read at each verification; 0 or absent opens none.
+   * @returns the minutes.
+   */
+  readonly passMinutes?: () => number
   readonly pin: Pick<PinUnlocks, 'missed' | 'cleared' | 'verify'>
   readonly now: () => number
   readonly random: RandomBytes
@@ -399,7 +409,23 @@ export class PasskeyAuth {
     await this.options.store.recordUse(credential.credentialId, { counter: info.newCounter, backupState: info.credentialBackedUp, lastUsedAt: this.options.now() })
     if (credential.backupState && !info.credentialBackedUp) this.options.log(`home-auth: passkey.backup-state-changed device=${asker.deviceId} from=1 to=0`)
     await this.options.pin.cleared(asker.deviceId)
-    return this.mint(asker, stored.request, 'passkey')
+    const minted = this.mint(asker, stored.request, 'passkey')
+    const pass = this.openPass(asker, stored.request)
+    return pass === undefined ? minted : { ...minted, pass }
+  }
+
+  /**
+   * Open the Face ID pass a verified assertion earns (A499): for the device on this listener, which has no page
+   * unlock (a device holds no PIN page unlock once the grant store exists), for the length the setting names. An
+   * assertion that confirms an always-ask action opens none, and a live pass stays as it is.
+   * @param asker - the device and listener.
+   * @param request - what the assertion confirmed.
+   * @returns the live pass, or undefined when none opened and none was live.
+   */
+  private openPass(asker: UnlockAsker, request: AssertionRequest): PassView | undefined {
+    const holder = { deviceId: asker.deviceId, listener: asker.listener }
+    if (request.kind === 'actions' && request.entries.some(entry => ALWAYS_ASK_ACTIONS.has(entry.action))) return this.options.grants.passOf(holder)
+    return this.options.grants.openPass(holder, this.options.passMinutes?.() ?? 0)
   }
 
   /**
@@ -458,7 +484,7 @@ export class PasskeyAuth {
     for (const [id, request] of this.adds) if (request.asker.deviceId === deviceId) this.adds.delete(id)
     for (const [key, challenge] of this.registrations) if (challenge.deviceId === deviceId) this.registrations.delete(key)
     for (const [key, challenge] of this.assertions) if (challenge.deviceId === deviceId) this.assertions.delete(key)
-    this.options.grants.endDevice(deviceId)
+    this.options.grants.endDevice(deviceId, 'device-removed')
     const count = await this.options.store.removeDevice(deviceId)
     if (count > 0) this.options.log(`home-auth: passkey.removed device=${deviceId} count=${String(count)} reason=device-removed`)
   }

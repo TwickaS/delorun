@@ -1,14 +1,16 @@
 /* The Face ID screens. The sheet is a bottom sheet on a phone and a centred 480px dialog from 480px; the main control fills the width and is at least 56px tall; motion stops under prefers-reduced-motion. */
 
-/* The scrim is the top-layer <dialog> itself (FaceIdLayer.tsx): the user agent's dialog box is reset to fill the viewport. */
+/* The scrim is the top-layer <dialog> itself (FaceIdLayer.tsx): the user agent's dialog box is reset to the visible
+   viewport, its bottom on the viewport's bottom and its height the dynamic viewport's, so the sheet's last control and its
+   safe-area padding never end below the screen. */
 .scrim {
   position: fixed;
-  inset: 0;
+  inset: auto 0 0;
   box-sizing: border-box;
   width: 100%;
   max-width: none;
-  height: 100%;
-  max-height: none;
+  height: 100dvh;
+  max-height: 100dvh;
   margin: 0;
   padding: 0;
   border: 0;
