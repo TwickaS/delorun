@@ -77,7 +77,7 @@ What you can do:
 Resolving the release: the stable channel names 0.1.0-preview.2.2.
 Checking the signature: 0.1.0-preview.2.2 is signed under release root 1.
 Checking the release log: verified.
-Downloading delorun-0.1.0-preview.2.2-linux-x64.tar.gz (61.5 MB).
+Downloading delorun-0.1.0-preview.2.2-linux-x64.tar.gz (217.9 MB).
 Installing release 0.1.0-preview.2.2.
 ```
 
