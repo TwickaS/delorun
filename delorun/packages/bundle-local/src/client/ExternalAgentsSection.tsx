@@ -187,7 +187,7 @@ function AgentSettings({ t, form, mutation, remote, set }: {
   }
   return <SettingsCard title={t('agents.settings.heading')} description={t('agents.settings.description')} group="external-agent-settings">
     <ul className={css.list} data-agent-settings="">
-      <li className={css.row}>
+      <li className={`${css.row} ${css.switchRow}`}>
         <div className={css.details}>
           <div className={css.title}>{t('agents.ask.title')}</div>
           <div className={css.description}>{t('agents.ask.description')}</div>
@@ -197,7 +197,7 @@ function AgentSettings({ t, form, mutation, remote, set }: {
         <Switch checked={form.value.enabled} label={t('agents.ask.title')} disabled={disabled}
           onChange={(enabled) => { void set('enabled', enabled) }} />
       </li>
-      <li className={css.row}>
+      <li className={`${css.row} ${css.switchRow}`}>
         <div className={css.details}>
           <div className={css.title}>{t('agents.fullAccess.title')}</div>
           <div className={css.description}>{t('agents.fullAccess.description')}</div>

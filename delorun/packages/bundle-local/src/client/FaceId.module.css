@@ -342,8 +342,9 @@
 
 .sectionTitle {
   margin: 0;
-  font-size: 20px;
-  font-weight: 600;
+  font-size: var(--dsh-settings-section-title-size, 20px);
+  font-weight: var(--dsh-settings-section-title-weight, 600);
+  display: var(--dsh-settings-section-title-display, block);
 }
 
 .card {

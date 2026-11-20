@@ -25,7 +25,7 @@ export function ProtectionGroup({ state, t, busy, onTurn }: {
   const on = state.protection === 'on'
   const use = controlUse(state, on ? 'protection-off' : 'protection-on', t)
   return <Group heading={t('protection.heading')}>
-    <li className={css.row} data-protection={state.protection}>
+    <li className={`${css.row} ${css.switchRow}`} data-protection={state.protection}>
       <div className={css.main}>
         <p className={css.text}>{t(`protection.${state.protection}`)}</p>
         {on || state.unreviewedSinceOff === 0 ? null : <p className={css.meta}>{t(pluralKey('protection.loaded', state.unreviewedSinceOff), { n: state.unreviewedSinceOff })}</p>}

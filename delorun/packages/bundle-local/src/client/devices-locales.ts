@@ -101,7 +101,7 @@ export const en = {
   'pairing.expiry.description': 'Minutes a request waits for its code, from {min} to {max}.',
   'pairing.per.title': 'Waiting requests per Tailscale user',
   'pairing.per.description': 'From {min} to {max}.',
-  'pairing.fixed': 'Fixed for safety: approval only at this computer, the 8-digit match code, three wrong codes cancel a request, at most five requests wait, and a remote device never sees or answers a request.',
+  'pairing.fixed': 'Fixed for safety: a device can only be approved here, at this computer, by typing the code it shows.',
   'pairing.failed': 'The change was not saved. Try again.',
   'action.pairing': 'changing the pairing choices',
   'time.locale': 'en',

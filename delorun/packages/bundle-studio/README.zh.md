@@ -29,6 +29,7 @@ kind: "package-bundle"
 - **层顺序。** 此 bundle 在每个上游 bundle 和 `@delorun/bundle-local` 之后、profile 自己的 `cordis.patch.yml` 之前应用，所以本人在设置中修改的、写入 profile 补丁的设置，优先于这里的行。
 - **加载。** `delorun` 拒绝启动其 loader 跳过了 `@delorun/` 作用域内某个 bundle 的 CLI profile，所以列出此 bundle 却无法解析它的 profile 不会带着一半的 studio 启动。
 - **构建。** 每个插件的 `pnpm --filter <package> run build` 会写出其 `lib/index.js` 和 `lib/client.js`；上游的 `pnpm run build:artifacts` 不构建 Delorun 的包。
+- **Detail page.** `locale/en.json` names `docs/DETAIL.md` in `meta.detail`, the short text Plugins shows for this bundle in place of this README: what it adds, how to turn an extra on, and the switch back to the stock look.
 
 <a id="rows"></a>
 

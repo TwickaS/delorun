@@ -12,6 +12,7 @@
   },
   "files": [
     "cordis.patch.yml",
+    "docs/DETAIL.md",
     "locale/*.json"
   ],
   "dsh": {

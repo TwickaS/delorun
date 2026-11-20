@@ -25,6 +25,7 @@ English | [中文](README.zh.md)
 - **Layer order.** The bundle applies after every upstream bundle and after `@delorun/bundle-local`, and before the profile's own `cordis.patch.yml`, so a setting the person changes in Settings, which writes the profile's patch, wins over a row here.
 - **Loading.** `delorun` refuses to start a CLI profile whose loader skipped a bundle in the `@delorun/` scope, so a profile that lists this bundle and cannot resolve it does not start with half of the studio.
 - **Building.** Each plugin's `pnpm --filter <package> run build` writes its `lib/index.js` and `lib/client.js`; upstream's `pnpm run build:artifacts` does not build Delorun's packages.
+- **Detail page.** `locale/en.json` names `docs/DETAIL.md` in `meta.detail`, the short text Plugins shows for this bundle in place of this README: what it adds, how to turn an extra on, and the switch back to the stock look.
 
 ## Rows
 
