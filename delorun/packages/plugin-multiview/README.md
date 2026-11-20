@@ -5,6 +5,8 @@ kind: "package-library"
 
 # @delorun/plugin-multiview
 
+English | [中文](README.zh.md)
+
 ## Summary
 
 Multiview shows pinned agents (teammates, subagents, Claude Code and Codex) beside the main chat in a layout the person arranges. This package holds the entry points that put agents into Multiview: the pin button on each row of the header's agents list, the header's Multiview button with the Layout menu, the observer that pins and opens on a hand-off, and the settings. The layout engine is in `src/layout`; the `main` panel that draws the panes belongs to the panes lane of the Multiview build.
