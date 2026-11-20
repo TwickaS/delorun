@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { UpdateController } from '../src/client/controller.ts'
 import { en } from '../src/client/locales.ts'
 import { UpdateDialog } from '../src/client/UpdateDialog.tsx'
+import { UpdateProgress } from '../src/client/UpdateProgress.tsx'
 import { UpdateCards, type UpdateCardsProps } from '../src/client/UpdateOverlay.tsx'
 import { UPDATE_CONTROLS, UPDATE_PATHS, type PreparedUpdateView, type UpdateControl, type UpdateMayView, type UpdateResultView, type UpdateStateView } from '../src/wire.ts'
 
@@ -122,16 +123,54 @@ function overlay(state: UpdateStateView, extra: Partial<UpdateCardsProps> = {}, 
 const RESULT: UpdateResultView = { kind: 'update', outcome: 'rolled-back', from: '0.1.2', to: '0.1.3', criterion: 'H2-host-ready', reason: 'T1', at: '2026-11-17T10:00:00Z' }
 
 describe('the progress and outcome cards', () => {
-  it('shows the wait for chats with Cancel update', () => {
-    const props = overlay(stateOf({ progress: { kind: 'applying', phase: 'waiting', target: '0.1.3', runningChats: 2 } }))
-    expect(document.body.textContent).toContain('Waiting for 2 chats')
+  const WAITING = (chats: number) => stateOf({ progress: { kind: 'applying', phase: 'waiting', target: '0.1.3', runningChats: chats } })
+
+  /**
+   * Draw the ongoing state as the sidebar alert or the phone toast.
+   * @param state - the update state.
+   * @param variant - where it shows.
+   * @returns the cancel spy.
+   */
+  function progress(state: UpdateStateView, variant: 'alert' | 'toast', reconnecting = false) {
+    const cancel = vi.fn(() => Promise.resolve({}))
+    render(<UpdateProgress variant={variant} state={state} switching={false} reconnecting={reconnecting} t={t} cancel={cancel} />)
+    return cancel
+  }
+
+  it('shows the wait for chats as a compact alert with Cancel update', () => {
+    const cancel = progress(WAITING(1), 'alert')
+    expect(document.querySelector('[data-update-variant="alert"]')?.textContent).toContain('Waiting for 1 chat to finish. New chats wait until the update is done.')
+    expect(document.querySelector('[data-toast-area]')).toBeNull()
     fireEvent.click(screen.getByText(en['progress.cancel']))
-    expect(props.cancel).toHaveBeenCalled()
+    expect(cancel).toHaveBeenCalled()
   })
 
-  it('says the studio is unavailable for a moment while Delorun switches', () => {
-    overlay(stateOf({ progress: { kind: 'applying', phase: 'switching', target: '0.1.3', runningChats: 0 } }))
+  it('says the studio is unavailable for a moment while Delorun switches, and offers no Cancel', () => {
+    progress(stateOf({ progress: { kind: 'applying', phase: 'switching', target: '0.1.3', runningChats: 0 } }), 'alert')
     expect(document.querySelector('[data-update-progress="switching"]')?.textContent).toContain('reconnects by itself')
+    expect(screen.queryByText(en['progress.cancel'])).toBeNull()
+  })
+
+  it('shows nothing while no ongoing state lasts', () => {
+    progress(stateOf(), 'alert')
+    expect(document.querySelector('[data-update-progress]')).toBeNull()
+  })
+
+  it('on a phone also shows the state as a toast in the toast area, and closing hides the toast only', () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: true, media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
+    try {
+      overlay(WAITING(2))
+      expect(document.querySelector('[data-toast-area] [data-update-variant="toast"]')?.textContent).toContain('Waiting for 2 chats')
+      fireEvent.click(screen.getByLabelText(en['progress.close']))
+      expect(document.querySelector('[data-update-variant="toast"]')).toBeNull()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('shows no toast on a wider screen, where the sidebar carries the state', () => {
+    overlay(WAITING(2))
+    expect(document.querySelector('[data-update-variant]')).toBeNull()
   })
 
   it('says why a rolled-back update went back, and that chats are unchanged', () => {

@@ -9,10 +9,11 @@ import { Button, StateDot, ToastSlot } from '@deepseek-ai/dsh-client-ui-primitiv
 import type { HostObservable, InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { UpdateResultView, UpdateStateView } from '../wire.ts'
 import type { UpdateLoad } from './controller.ts'
+import { UpdateProgress, usePhone } from './UpdateProgress.tsx'
 import { NotesHighlights } from './NotesSheet.tsx'
 import { UpdateDialog, type UpdateDialogActions } from './UpdateDialog.tsx'
 import css from './UpdatePanel.module.css'
-import { controlUse, keepVersions, localTime, pluralKey, type T } from './parts.tsx'
+import { controlUse, keepVersions, localTime, type T } from './parts.tsx'
 
 /** What the overlay reads and does. */
 export interface UpdateOverlayInjected {
@@ -56,52 +57,14 @@ export interface UpdateCardsProps extends Omit<UpdateOverlayInjected, 'hooks'> {
 export function UpdateCards({ t, load, switching, dialog, actions, cancel, dismiss, closeDialog, openChanges }: UpdateCardsProps) {
   const state = load.status === 'ready' ? load.state : undefined
   const reconnecting = load.status === 'ready' && load.reconnecting
+  const phone = usePhone()
   return <>
-    {state === undefined ? null : <ProgressCard state={state} switching={switching} reconnecting={reconnecting} t={t} cancel={cancel} />}
+    {state === undefined ? null : phone ? <UpdateProgress variant="toast" state={state} switching={switching} reconnecting={reconnecting} t={t} cancel={cancel} /> : null}
     {state === undefined || state.result === undefined || state.progress.kind !== 'idle' ? null : <OutcomeCard state={state} result={state.result} notes={state.notes} t={t} dismiss={dismiss} />}
     {dialog && state !== undefined
       ? <UpdateDialog state={state} t={t} actions={actions} onClose={closeDialog} openChanges={openChanges} />
       : null}
   </>
-}
-
-/**
- * The card while an update or a rollback runs: waiting for chats with Cancel, or switching and reconnecting.
- * @param props - the state, whether this page began a switch, whether the Host is out of reach, and Cancel.
- * @returns the card, or nothing.
- */
-function ProgressCard({ state, switching, reconnecting, t, cancel }: {
-  readonly state: UpdateStateView
-  readonly switching: boolean
-  readonly reconnecting: boolean
-  readonly t: T
-  readonly cancel: () => Promise<unknown>
-}) {
-  const [busy, setBusy] = useState(false)
-  const progress = state.progress
-  const use = controlUse(state, 'update-cancel', t)
-  if (progress.kind === 'applying' || progress.kind === 'rolling-back') {
-    const waiting = progress.phase === 'waiting'
-    const text = waiting
-      ? progress.runningChats === 0 ? t('progress.waiting.zero') : t(pluralKey('progress.waiting', progress.runningChats), { count: progress.runningChats })
-      : t(progress.kind === 'applying' ? 'progress.switching' : 'progress.rollback.switching', { version: progress.target })
-    return <ToastSlot width={420}><div className={`${css.card} ${css.floating} ${css.warn}`} role="status" data-update-progress={progress.phase}>
-      <div className={css.cardRow}>
-        <div className={css.main}>
-          <p className={css.title}><StateDot state="ongoing" /><span>{keepVersions(text, [progress.target])}</span></p>
-        </div>
-        {waiting ? <div className={css.actions}>
-          <Button variant="outline" size="sm" disabled={busy || use.disabled} title={use.title} onClick={() => { setBusy(true); void cancel().finally(() => { setBusy(false) }) }}>{t('progress.cancel')}</Button>
-        </div> : null}
-      </div>
-    </div></ToastSlot>
-  }
-  if (reconnecting || (switching && progress.kind === 'idle' && state.result === undefined)) {
-    return <ToastSlot width={420}><div className={`${css.card} ${css.floating} ${css.warn}`} role="status" data-update-progress="reconnecting">
-      <p className={css.title}><StateDot state="ongoing" /><span>{t('progress.reconnecting')}</span></p>
-    </div></ToastSlot>
-  }
-  return null
 }
 
 /**
