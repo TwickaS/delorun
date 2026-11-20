@@ -25,7 +25,9 @@
  * is at the commit, that tracked files are clean and that each package's `lib/` exists and is newer than its sources;
  * the native step then replaces any copied native addon binaries, and the closure embeds the worktree's paths, so the
  * build takes a fresh directory beside the fixed root and removes it when it ends, and is for a local release only.
- * `--write-pins` records the native files found instead of checking them, for a
+ * When every file is written, a build from source refuses any output file that holds the building user's home
+ * directory, user name as a folder or the unique build root, naming each file (`closure/home-paths.ts`); a build from
+ * existing artifacts prints the same findings as warnings. `--write-pins` records the native files found instead of checking them, for a
  * reviewed change of `prebuilt-pins.json`. On the targets-key holder's machine, `--attestation-key` and
  * `--attestation` write an HMAC over the version, commit and every file in `--out`, keyed with the holder's secret,
  * which signing checks; the attestation file lies outside `--out`.
@@ -47,6 +49,7 @@ import { pruneForeignPrebuilds } from './closure/prune.ts'
 import { archiveClosure, type ClosureFiles } from './closure/archive-closure.ts'
 import { buildReleasePacks } from './closure/packs.ts'
 import { DEPLOY_METADATA } from './closure/pack-specifiers.ts'
+import { gateBuildOutput } from './closure/home-paths.ts'
 import { artifactDirectories, artifactProblems, isArtifactSource, type ArtifactSource } from './closure/artifacts.ts'
 import { claimBuildRoot } from './closure/build-root.ts'
 import { writeDataFormats } from './closure/data-formats.ts'
@@ -218,6 +221,7 @@ async function buildIn(buildRoot: string, repository: string, recipe: Recipe, re
     stage: platform => join(buildRoot, 'stage', platform), targets: TARGETS, out: request.out, scratch: await mkdtemp(join(buildRoot, 'packs-')),
   })
   console.log(`build-closure: built ${String(packCount)} plugin packs`)
+  await gateBuildOutput(request.out, existing ? 'existing' : 'build', line => console.warn(`build-closure: warning: ${line}`))
   if (recipe.closure.platforms.every(platform => results.has(platform))) console.log(`build-closure: wrote ${await writeReleaseSbom(request.out, request.version, recipe.closure.platforms, recipe.toolchain, readImagesRecipe().base)}`)
   return results
 }

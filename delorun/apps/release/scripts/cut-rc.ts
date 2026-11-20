@@ -236,6 +236,8 @@ export function localReleaseArgs(request: CutRequest): string[] {
     ...request.platforms.flatMap(platform => ['--platform', platform]),
     '--log-submit', request.log.submit, '--log-checkpoint', request.log.checkpoint, '--log-tiles', request.log.tiles, '--log-poll-seconds', request.logPollSeconds,
     '--notes', request.highlights,
+    // A build from existing artifacts embeds the worktree's paths; only a build from source passes the home-path refusal.
+    ...request.artifacts === 'existing' ? ['--allow-builder-paths'] : [],
   ]
 }
 

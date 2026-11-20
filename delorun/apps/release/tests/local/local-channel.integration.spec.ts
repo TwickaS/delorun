@@ -34,6 +34,8 @@ async function release(test: Parameters<typeof scratch>[0], directory: string, t
     logAttempts: 1,
     logWait: () => Promise.resolve(),
     closures: fixtureClosure(test, version),
+    // The fixture closure names this process's Node, which may lie under the real user's home.
+    allowBuilderPaths: true,
     now,
   }
   await buildLocalRelease(built)

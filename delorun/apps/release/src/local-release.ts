@@ -5,7 +5,7 @@
  * `node_modules/.bin/tsx delorun/apps/release/src/local-release.ts --version <version> --summary <text> [--security] [--notes <file>] --out <channel dir>
  * --root <root file>... --targets-key <targets.pem> --timestamp-key <timestamp.pem> --state <state.json> --log-submit <url>
  * --log-checkpoint <url> --log-tiles <url> [--log-poll-seconds <n>] [--platform <platform>]... [--artifacts build|existing]
- * [--commit <rev>] [--closures-from <dir>] [--cache <dir>] [--production-keys <file>]`
+ * [--commit <rev>] [--closures-from <dir>] [--cache <dir>] [--production-keys <file>] [--allow-builder-paths]`
  *
  * `--summary` is the release's one-line summary and `--security` marks the release as a security fix; the signed
  * manifest carries both as `summary` and `security` (false without the flag), which an update notice shows.
@@ -20,6 +20,9 @@
  * build (`--artifacts existing` reuses the artifacts already built in the worktree instead of building them); with it,
  * the command signs each platform's `delorun-<version>-<platform>` archive and `.files.json` that a `build-closure.ts`
  * run left there.
+ * Before it signs anything the command refuses closure or pack files that name the building user's home directory, user
+ * name as a folder or the unique build root (`closure/home-paths.ts`), naming each file; `--allow-builder-paths` skips that
+ * refusal, as does building here with `--artifacts existing`, which embeds the worktree's paths.
  * `--log-submit`, `--log-checkpoint` and `--log-tiles` are `log-release.ts`'s log endpoints: the command submits the
  * manifest's entry to the log they name, so point them at a log you run, never at a public log unless the release is
  * meant to be logged there. The command asks the log for a witnessed checkpoint at most 60 times, `--log-poll-seconds`
@@ -96,6 +99,7 @@ export async function main(argv: readonly string[], build: (repository: string, 
       'closures-from': { type: 'string' },
       'cache': { type: 'string', default: join(homedir(), '.cache', 'delorun-release') },
       'production-keys': { type: 'string' },
+      'allow-builder-paths': { type: 'boolean', default: false },
     },
   })
   try {
@@ -142,6 +146,7 @@ export async function main(argv: readonly string[], build: (repository: string, 
       platforms,
       state: resolve(state),
       log: { submit: values['log-submit']!, checkpoint: values['log-checkpoint']!, tiles: values['log-tiles']! },
+      allowBuilderPaths: values['allow-builder-paths'] || (artifacts === 'existing' && values['closures-from'] === undefined),
       logAttempts: 60,
       logWait: () => delay(poll * 1000),
       closures,
