@@ -16,6 +16,7 @@ studio 的第一分钟是一个以 chat 收尾的对话框。「Welcome」设置
 ## 目录
 
 - [步骤](#the-steps)
+- [The Browser page in Settings](#the-browser-page-in-settings)
 - [约定](#contract)
 - [连接](#connections)
 - [配置](#configuration)
@@ -44,6 +45,18 @@ studio 的第一分钟是一个以 chat 收尾的对话框。「Welcome」设置
 「Ready」上的想法跟随文件夹包含的内容，其文字位于字典中，所以每种语言各有自己的文字。复制一个想法不会向消息框写入任何内容，也不会发送任何内容；第一个 chat 打开时是空的。
 
 <a id="contract"></a>
+
+## The Browser page in Settings
+
+The studio half also registers the `delorun-browser` `settings.section` (order 17, right after the plugin downloads section; [`src/client/browser/BrowserSettings.tsx`](src/client/browser/BrowserSettings.tsx)), served with the rest of this plugin's registrations. Browser is on until the person turns it off, and the page reads and writes that choice through the same hook as the guide's Browser step ([`src/client/browser/use-browser.ts`](src/client/browser/use-browser.ts), the rule and the states in [`@delorun/browser-setup`](../browser-setup/README.zh.md#the-homes-choice-and-the-pages-states)).
+
+- **Built-in browser.** A switch, then the status in plain words: off, checking, adding, slow, restart needed, ready, needs setup with the Host's reason, or a failure (offline, not available here, the plugin manager's own words, an unreadable check or declaration) with Try again. A home that never chose and has not added the pack adds it when the page opens; a home that chose off is never added to. Off turns the pack off through the plugin manager and records `off`; the pack stays downloaded.
+- **Download.** While the unmet need is the Chromium build, the page offers **Download the browser**, which asks the Host to run the Browser pack's own installer, with the command shown for a terminal. A need that is Google Chrome shows its command only.
+- **Test browser.** While Browser is ready, the button asks the Host to open a fixed page in the built-in browser and shows its thumbnail; no model turn runs. The Host routes are [`@delorun/bundle-local`'s](../bundle-local/README.zh.md#the-browser-page-routes) and answer the home's own computer only; a phone sees where to run the test.
+- **Your own Chrome.** Where the `@delorun/bundle-real-browser` pack stands: **Add your Chrome** while it can be added, then whether the browse extension is paired, with **Finish in Plugins** for the pairing steps and the approval that each chat asks for.
+- **Phones.** A studio opened from a phone cannot add packs or turn them off, so the switch, the download and the test are held and the page says where to change Browser.
+
+The first chat that uses Browser still asks once to allow the browser tool; the page does not allow it, because no review exists until a chat starts the server.
 
 ## 约定
 
@@ -105,6 +118,7 @@ id 的形式是：设置 → 模型所列的模型提供方路线 `provider:<id>
 | --- | --- | --- |
 | `done` | `false` | 本人是否完成或跳过了引导。 |
 | `step` | 空 | 所到达步骤的 id。 |
+| `browser` | empty | What the person chose for Browser, in Settings or in the guide: `on` or `off`. Empty while they never chose, which counts as on. A home that turned the pack off in Plugins reads as off too. |
 | `pausedStart` | 空 | 本人按下「Finish later」的那次 Delorun 启动，取自 `GET /api/delorunOnboarding.start`。当它指向当前这次启动时，引导保持关闭，无论在哪个标签页或重新加载之后都是如此，下次启动时会再次显示。从侧边栏页脚的「Finish setup」条目再次打开引导会清除它。 |
 | `plugins` | 空 | 「Recommended plugins」步骤提供的最多十二个 npm 包名。没有任何包且没有 `optionalRows` 时，该步骤被省略。 |
 | `optionalRows` | 空 | 最多十二个行 id（如 `delorun-cost-meter`），即 bundle 以禁用状态插入的行；该步骤提议逐个开启。每个都必须是 profile 的行，否则插件在加载时停止并给出指名它的错误。 |
@@ -133,5 +147,6 @@ id 的形式是：设置 → 模型所列的模型提供方路线 `provider:<id>
 - [`tests/readiness.spec.ts`](tests/readiness.spec.ts)、[`tests/key-test.spec.ts`](tests/key-test.spec.ts) 和 [`tests/recommend.spec.ts`](tests/recommend.spec.ts) 检查登录和 Tailscale 检查、文件夹类型、针对本地列表服务器的每种密钥结果，以及来自磁盘和注册表的已声明连接。
 - [`tests/steps.client.spec.tsx`](tests/steps.client.spec.tsx)、[`tests/workspace.client.spec.tsx`](tests/workspace.client.spec.tsx)、[`tests/bundles.client.spec.tsx`](tests/bundles.client.spec.tsx)、[`tests/guide.client.spec.tsx`](tests/guide.client.spec.tsx) 和 [`tests/dialog.client.spec.tsx`](tests/dialog.client.spec.tsx) 检查每一步、单选组的 Tab 停靠点和按键、agent 确认、bundle 仅在按下按钮时安装、「Workspace」步骤的对话框按钮及其状态、引导的共享状态、提示的确认、恢复、跳过、被省略的步骤，以及焦点的落点。
 - [`tests/focus.client.spec.tsx`](tests/focus.client.spec.tsx) 检查焦点；[`tests/plugin.client.spec.tsx`](tests/plugin.client.spec.tsx) 检查各项注册、「Run setup again」、记录加载器、默认工作区查找、新建工作区服务和第一个 chat；[`tests/starters.client.spec.tsx`](tests/starters.client.spec.tsx) 检查起始提示词；[`tests/key-banner.client.spec.tsx`](tests/key-banner.client.spec.tsx) 检查无密钥横幅；[`tests/set-aside-banner.client.spec.tsx`](tests/set-aside-banner.client.spec.tsx) 检查搁置提示；[`tests/rename-row.client.spec.tsx`](tests/rename-row.client.spec.tsx) 检查重命名行；[`tests/previews.spec.ts`](tests/previews.spec.ts) 检查预览颜色；[`tests/locales.spec.ts`](tests/locales.spec.ts) 检查英文和中文文案。
+- [`tests/browser-settings.client.spec.tsx`](tests/browser-settings.client.spec.tsx) checks the Browser page: the switch and the choice it records, each status in plain words, the download, the test and its thumbnail, the own-Chrome card, and the phone holds.
 - [`tests/browser.client.spec.tsx`](tests/browser.client.spec.tsx) 检查“浏览器”步骤：选项随插件包而定，选择独立浏览器会添加它、选择“不使用浏览器”会关闭它，添加过程的每种状态，获得焦点时的重新读取，该步骤在向导中的位置，以及计划中的第三个选项只在预览开关打开时显示且永远无法被选中。
 - [`tests/preview-flags.spec.ts`](tests/preview-flags.spec.ts) 检查 Host 部分声明的开关与本包清单在 `delorun.previewFlags` 下列出的开关一致。

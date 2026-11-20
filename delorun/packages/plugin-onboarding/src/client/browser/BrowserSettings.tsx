@@ -199,6 +199,7 @@ export function BrowserSettings({ t, services, openPlugins }: BrowserSettingsPro
         <div className={css.block}>
           <Status t={t} state={b.state} remote={remote} download={download} onDownload={runDownload} onRetry={b.state.kind === 'failed' ? b.retry : b.recheck} />
         </div>
+        {b.choice === 'on' && <div className={css.block}><p className={css.hint}>{t('page.asks')}</p></div>}
         {b.choice === 'on' && <Test t={t} ready={b.state.kind === 'ready'} remote={remote} run={test} onTest={runTest} />}
       </SettingsCard>
       <SettingsCard title={t('page.own.title')} description={t('page.own.text')} group="own-browser">

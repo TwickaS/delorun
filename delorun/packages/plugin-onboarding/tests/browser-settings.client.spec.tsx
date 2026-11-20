@@ -53,6 +53,15 @@ describe('the switch', () => {
     expect(screen.getByText(en['page.status.ready'])).toBeTruthy()
   })
 
+  // The first chat asks once to allow the browser tool; Settings does not allow it for the person.
+  it('says agents ask once before first use while on, and nothing while off', async () => {
+    await show()
+    expect(screen.getByText(en['page.asks'])).toBeTruthy()
+    cleanup()
+    await show({ recorded: 'off', pack: 'available' })
+    expect(screen.queryByText(en['page.asks'])).toBeNull()
+  })
+
   it('records off and turns the pack off when switched off', async () => {
     const { browser } = await show()
     await click(switchControl())
