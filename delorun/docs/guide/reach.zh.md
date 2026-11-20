@@ -1,5 +1,5 @@
 ---
-description: "Open your Delorun studio from your phone over your own Tailscale network: turn remote access on, approve a phone at your computer, what an approved phone can and cannot do, confirm sensitive actions with Face ID or a PIN, remove a device and turn remote access off."
+description: "通过你自己的 Tailscale 网络，在手机上打开你的 Delorun studio：开启远程访问、在电脑上批准一部手机、已批准的手机能做什么和不能做什么、用 Face ID 或 PIN 确认敏感操作、移除设备以及关闭远程访问。"
 ---
 
 # 用手机访问 studio
@@ -24,8 +24,8 @@ tailnet 上的任何设备都能打开登录页面，但只有你在电脑上批
 - [批准设备](#approve-a-device)
 - [让批准权掌握在你手里](#keep-approval-yours)
 - [已批准的手机能做什么、不能做什么](#what-an-approved-phone-can-and-cannot-do)
-- [Confirm with Face ID](#confirm-with-face-id)
-- [Confirm with a PIN](#confirm-with-a-pin)
+- [用 Face ID 确认](#confirm-with-face-id)
+- [用 PIN 确认](#confirm-with-a-pin)
 - [移除设备](#remove-a-device)
 - [关闭远程访问](#turn-remote-access-off)
 - [获取一次性所有者验证码](#get-a-one-time-owner-code)
@@ -163,11 +163,11 @@ Tailscale 报告为以你所允许的用户登录的手机，可以在批准窗�
 
 ## 已批准的手机能做什么、不能做什么
 
-An approved phone is you: it can already ask the model to do things, so it can do everything that is no riskier than a message. A few sensitive actions ask you to confirm each one, with Face ID or your PIN, and a few things never work from a phone.
+已批准的手机就是你本人：它已经可以要求模型做事，所以凡是风险不高于一条消息的事，它都可以做。少数敏感操作会要求你用 Face ID 或你的 PIN 确认，可以逐个确认，也可以在 Face ID 通行期（pass）内确认，另有少数事情无论如何都不能在手机上完成。
 
 ![手机宽度下的 studio：一个关于规划高架种植床的 chat，消息框上方是助手的回复和一个 JSON 代码块。](pictures/phone-chat.webp)
 
-Without asking, the phone can:
+无需询问，手机可以：
 
 - 阅读你的 chat 和工作区，并在 chat 运行时跟随它；
 - 回复、附加文件、编辑或撤回排队中的消息、fork 一个 chat，并在你已有的[工作区](../reference/glossary.zh.md#workspace)中，用你的任何[预设](../reference/glossary.zh.md#preset)开始一个 chat。选择预设本身不授予任何权限：工作区的完全访问和每一次批准提示仍然决定该 chat 可以做什么；
@@ -177,11 +177,11 @@ Without asking, the phone can:
 - 选择 chat 的模型，这也会把它保存为新 chat 的默认值；
 - 阅读已安装的[插件](../reference/glossary.zh.md#plugin)、你可以撤销的 profile 更改、已保存的设置版本及其之间的差异、harness 信任什么，以及较新版本的发行说明；
 - 查看哪些 chat 被暂缓或已了结并暂缓或了结它们，以及关闭危险模式；
-- 查看哪些 MCP 服务器和外部 agent 在等待你的同意或持有授权，并拒绝或撤销它们（拒绝和撤销只是收回同意）；
+- 查看哪些 MCP 服务器和外部 agent 在等待你的同意或持有授权凭证（grant），并拒绝或撤销它们（拒绝和撤销只是收回同意）；
 - 对 chat 或某条消息给出反馈；
 - 回答普通的提示和模型提出的问题，并停止一次运行或一个后台任务。
 
-After you confirm each one with Face ID or your PIN, the phone can also:
+在你用 Face ID 或你的 PIN 逐个确认之后，或在 Face ID 通行期开启期间，手机还可以：
 
 - 更改设置；
 - 运行只更改该 chat 的斜杠命令：`/compact`、`/export`、`/goal`、`/permission` 和 `/plan`；手机不运行其他斜杠命令；
@@ -189,33 +189,33 @@ After you confirm each one with Face ID or your PIN, the phone can also:
 - 在「变更」中撤销插件的变更或丢弃任何等待中的变更，以及打开保护；
 - 用文件夹选择器浏览文件夹、添加工作区，并在不属于你的工作区的文件夹中开始 chat；
 - 运行模型编写的插件代码；
-- grant full access, whether a command asks to run outside the sandbox or a workspace asks to be put on full access, and allow an external agent to work in a workspace. The phone asks for Face ID or your PIN when you answer, and if you cancel, the prompt keeps waiting;
+- 授予完全访问权限，无论是命令请求在沙箱之外运行，还是工作区请求被设为完全访问，也包括允许外部 agent 在某个工作区工作。你回答时，手机会要求 Face ID 或你的 PIN；如果你取消，该提示会继续等待；
 - 接受某个 [MCP 服务器](../reference/glossary.zh.md#mcp-server)，因为接受会让它的命令在你的电脑上运行；
 - 把设置保存为一个版本，并切换到已保存的版本；
 - 放宽工作区的网络、运行信任检查，以及发送问题报告（其中可能包含你电脑上的路径）；
-- keep what you changed: nothing is set back later, and undo and the saved setup versions are how you roll a change back.
+- 保留你所做的更改：之后不会有任何东西被撤回，撤销和已保存的设置版本才是你回退更改的方式。
 
-No confirmation opens a window: each sensitive action asks again, also right after you approve a new phone and while you set Delorun up from it.
+任何确认都不会开启一个窗口：每个敏感操作都会再次询问，刚批准一部新手机之后以及你从手机上设置 Delorun 时也一样。
 
-Only your computer, whatever the phone confirms:
+只能在你的电脑上，无论手机确认什么：
 
 - 开启或关闭远程访问、设置或更改 PIN，以及批准或移除设备；
-- dismiss the notice that tells you a phone changed protection;
+- 关闭那条告知你有手机更改了保护的通知；
 - 关闭更新检查（开启则可以在手机上进行）；
 - 在你电脑上的应用程序中打开文件或文件夹。
 
 手机会把这些显示为 “Do this on your computer”，并附上原因。
 
-The phone can also open a terminal, turn protection off, apply changes to your plugins or to Delorun's own files, turn a plugin off or on, start a work session, create a plugin, move a setup file in or out, or restart Delorun. Each of these takes its own confirmation, with [Face ID](#confirm-with-face-id) or your PIN.
+手机还可以打开终端、关闭保护、对你的插件或 Delorun 自己的文件应用更改、关闭或开启插件、开始工作会话、创建插件、移入或移出设置文件，或重启 Delorun。其中每一项都需要各自的确认，使用 [Face ID](#confirm-with-face-id) 或你的 PIN，除非 Face ID 通行期已开启。
 
-Never, whatever the phone confirms:
+无论手机确认什么，都绝不能做：
 
 - 读取或更改你的密钥和其他凭据，或你的账户；
 - 关闭 **Ask before external agents run**；手机仍然可以把它打开，并更改其运行时间上限（见[外部 agent](safety.zh.md#external-agents)）；
 - 放宽新 chat 开始时的权限，例如把它调向完全访问；手机仍然可以把它调得更严格；
 - 回答会让模型管理工作区及其指令的提示；
 - 在你电脑上的编辑器中打开设置文件；
-- reset the home.
+- 重置 home。
 
 当手机尝试其他被拒绝的操作时，你应该会看到 studio 的错误信息。
 
@@ -224,7 +224,7 @@ Never, whatever the phone confirms:
 <details>
 <summary>边界情况</summary>
 
-- If a workspace is on full access, then the phone still confirms with Face ID or your PIN to open or attach to a terminal there, and so does dangerous mode: a terminal is a shell with your authority, so the phone confirms each terminal it opens.
+- 如果工作区处于完全访问，那么手机在那里打开或连接终端时仍需用 Face ID 或你的 PIN 确认，危险模式也是如此：终端是带着你的权限的 shell，所以手机打开的每个终端都要确认，除非 Face ID 通行期已开启。
 - 如果手机的会话空闲了 12 小时，或自登录起已过去 14 天，那么会话结束，它打开的连接也会关闭：手机会用自己的密钥从登录页面重新登录。
 - 如果你批准或移除了任何设备，那么每部手机已打开的连接都会关闭：每部手机会自动重新登录。
 - 如果回复以你电脑上的文件的形式显示图片，或你预览了某个文件，那么它不会在手机上显示：附加在消息中的图片则会显示。
@@ -242,83 +242,95 @@ Never, whatever the phone confirms:
 
 <a id="confirm-with-face-id"></a>
 
-## Confirm with Face ID
+## 用 Face ID 确认
 
-Face ID is how an approved phone confirms one sensitive action at the moment it happens, with the phone's own lock instead of a code from your computer. "Face ID" here means whatever your phone uses: Face ID or Touch ID on an iPhone, a fingerprint or screen lock on Android, Windows Hello on Windows. Behind it is a passkey that stays on the phone, which the [glossary](../reference/glossary.zh.md#face-id) explains. Delorun never sees your face or fingerprint.
+Face ID 是已批准的手机在敏感操作发生的那一刻确认该操作的方式，用的是手机自己的锁，而不是来自你电脑的代码。这里的“Face ID”指你的手机所使用的任何方式：iPhone 上的 Face ID 或 Touch ID、Android 上的指纹或屏幕锁、Windows 上的 Windows Hello。其背后是一把保留在手机上的通行密钥，[术语表](../reference/glossary.zh.md#face-id)对此有说明。Delorun 从不会看到你的面部或指纹。
 
-Every action a phone can take is in one of three groups:
+手机能做的每个操作都属于三组之一：
 
-- **Never asks.** Reading, following a chat, replying, attaching files, stopping a run, and the other actions listed above as working without asking.
-- **Asks every time.** The actions listed above as asking each time: opening a terminal, turning protection off, applying changes to your plugins or to Delorun's own files, restarting Delorun, saving or removing a provider key, and answering a prompt that grants full access. The phone shows a sheet that names the action, and you confirm with Face ID, or with your PIN on a phone without it. One confirmation covers that one action, once, within 30 seconds.
-- **Only at your computer.** Approving or removing devices, setting the PIN, turning remote access on or off, and the other actions listed above as staying at your computer. Face ID never opens these.
+- **从不询问。**阅读、跟随 chat、回复、附加文件、停止一次运行，以及上文列为无需询问的其他操作。
+- **会询问。**上文列为每次都要询问的操作：打开终端、关闭保护、对你的插件或 Delorun 自己的文件应用更改、重启 Delorun、保存或移除提供方的密钥，以及回答会授予完全访问权限的提示。手机会显示一张写明该操作的面板，你用 Face ID 确认，没有 Face ID 的手机则用你的 PIN 确认。一次确认只覆盖那一个操作，只能用一次，并且须在 30 秒内，除非 Face ID 通行期已开启（见下文）。有些操作即使在通行期开启时也始终要询问：移除另一台设备、移除通行密钥、Face ID 设置中的 **Show all devices**、在手机上更改 **Ask again after**、关闭保护、为某个工作区开启或关闭完全访问，以及允许 chat 提出的完全访问请求。其中每一项都需要为那一个操作进行 Face ID，即使通行期已开启也一样，而确认其中任何一项的 Face ID 不会开启通行期。移除另一台设备和更改 **Ask again after** 从不接受 PIN。
+- **仅限你的电脑。**批准或移除设备、设置 PIN、开启或关闭远程访问，以及上文列为只能在你电脑上进行的其他操作。Face ID 从不开启这些操作。
 
-No phone holds an unlock for a while: neither a code from your computer, your PIN nor a new phone's first sign-in opens one, so each sensitive action asks again. A terminal you opened with Face ID stays open for its own follow-up work, so you are not asked for every keystroke. It ends after 5 minutes idle, 60 minutes in all, or when the phone signs out. Another terminal needs its own confirmation.
+无论是来自你电脑的代码、你的 PIN，还是新手机的首次登录，都不会开启一个让手机少问一些的窗口：没有 Face ID 的手机，每个敏感操作都用一次 PIN 确认。你用 Face ID 打开的终端会保持打开，用于它自己的后续工作，所以你不会为每次按键都被询问。它在空闲 5 分钟、总共 60 分钟或手机退出登录时结束，通行期结束并不会关闭它。另一个终端需要它自己的确认，或一个已开启的通行期。
 
-**Set up Face ID.**
+**Ask again after**。手机上的一次 Face ID 可以为该手机开启一个通行期。通行期开启期间，手机执行**会询问**组中的操作时，不必每次都出现 Face ID 面板。在“设置”的 Face ID 中选择时长 **Ask again after**：Every time、5、15、30 或 60 分钟。默认为 15 分钟。**Every time** 表示每个操作都要一次 Face ID，没有通行期。
 
-1. **While you pair the phone.** On your computer, approve the phone as in [Approve a device](#approve-a-device). Once you do, the phone offers **Set up Face ID**. Choose it, then confirm with the phone's lock when it asks. **Skip for now** hides the offer for that visit, and Settings, Face ID offers it again.
-2. **Later, on a phone that is already paired.** Open Settings, Face ID on the phone and choose **Add Face ID**. The phone shows an 8-digit code. At your computer, open Settings, Face ID, pick the phone under **Device**, type the code and choose **Confirm**. Back on the phone, choose **Set up Face ID** and confirm with its lock. The code ties the new passkey to the screen you can see, as an approval code does.
+**标签。**通行期开启期间，手机上的 studio 会在打开的 chat 上方显示 “Unlocked · 14 min”，按整分钟倒计时，并带有 **Lock now** 按钮。通行期结束时该标签消失。你的电脑从不显示它。
 
-Each phone has its own passkey. Adding Face ID on one phone changes nothing on another.
+**不会顺延。**无论你多频繁地使用手机，通行期都在 Face ID 之后所选的分钟数结束。更改 **Ask again after**（无论在手机上还是在你的电脑上）会结束所有已开启的通行期，所以更短的时间或 **Every time** 会立即生效。
 
-**When Face ID fails or is not there.**
+**始终询问的操作。**上文始终询问的操作，在通行期开启时仍然要求 Face ID。远程访问设置、PIN 模式设置以及其他只能在你电脑上进行的操作，仍然只能在那里进行。
 
-Choose **Use PIN instead** on the sheet to confirm the same action with your PIN ([Confirm with a PIN](#confirm-with-a-pin)). A correct PIN confirms that one action only. The sheet shows this choice as soon as Face ID is cancelled or does not work. If you have set no PIN, the sheet says **Or do this at your computer**: take that action at your computer.
+**不会开启通行期的情形。**你的 PIN，无论是手机没有 Face ID 还是 Face ID 失败；来自你电脑的代码；批准手机后的最初几分钟；危险模式。没有 Face ID 的手机，每个操作用一次 PIN 确认。
 
-Cancelling the phone's own sheet counts for nothing. A wrong passkey or a wrong PIN counts as a wrong PIN try: the fifth on one phone removes that phone, and ten across all phones pause PIN and Face ID confirmations until you run `delorun devices pin resume` at your computer.
+**结束通行期的情形。**时间到；手机连续 5 分钟没有向 Delorun 发送任何内容，例如它在口袋里被锁屏或 studio 被关闭；**Lock now**；studio 被隐藏 5 分钟（你回来时会再次检查，所以暂停了页面的手机仍会上锁）；更改 **Ask again after**；手机退出登录或其会话结束；移除该手机；Delorun 轮换所有会话；重启 Delorun。**Lock now** 和隐藏检查会结束整部手机的通行期，所以一个标签页隐藏 5 分钟也会锁定其他标签页。通行期保存在内存中，所以重启会关闭它。
 
-**What Face ID does not do.**
+**设置 Face ID。**
 
-- It does not sign a phone in. The phone's own key and your approval still do that.
-- It does not let a phone do what only your computer may do.
-- It does not make a stolen, unlocked phone safe by itself. On an iPhone, turn on **Stolen Device Protection** in Settings, Face ID & Passcode, so that someone who learns the phone's passcode still cannot use Face ID, change the passcode or turn the protection off away from your usual places without waiting an hour.
-- It does not work in a browser that cannot make a platform passkey. Some versions of Firefox, and other browsers without one, say "This browser cannot use Face ID here"; that phone confirms actions with its PIN, or you take them at your computer. Safari on an iPhone and Chrome on Android work in the browsers tried.
+1. **配对手机时。**在你的电脑上，按[批准设备](#approve-a-device)批准该手机。批准之后，手机会提供 **Set up Face ID**。选择它，然后在它询问时用手机的锁确认。**Skip for now** 会在这次访问中隐藏该提示，“设置”的 Face ID 会再次提供它。
+2. **之后，在已经配对的手机上。**在手机上打开“设置”的 Face ID，选择 **Add Face ID**。手机会显示一个 8 位数字代码。在你的电脑上，打开“设置”的 Face ID，在 **Device** 下选出该手机，输入代码并选择 **Confirm**。回到手机上，选择 **Set up Face ID** 并用它的锁确认。与批准代码一样，这个代码把新的通行密钥绑定到你能看到的屏幕上。
+
+每部手机都有自己的通行密钥。在一部手机上添加 Face ID 不会改变另一部手机。
+
+**Face ID 失败或不可用时。**
+
+在面板上选择 **Use PIN instead**，用你的 PIN 确认同一个操作（见[用 PIN 确认](#confirm-with-a-pin)）。正确的 PIN 只确认那一个操作。Face ID 一被取消或无法使用，面板就会显示这个选项。如果你没有设置 PIN，面板会显示 **Or do this at your computer**：请在你的电脑上执行该操作。
+
+取消手机自己的面板不计入任何次数。错误的通行密钥或错误的 PIN 算作一次 PIN 错误尝试：一部手机上的第五次错误会移除该手机，所有手机合计十次错误会暂停 PIN 和 Face ID 确认，直到你在电脑上运行 `delorun devices pin resume`。
+
+**Face ID 不做的事。**
+
+- 它不会让手机登录。登录仍由手机自己的密钥和你的批准完成。
+- 它不会让手机去做只有你的电脑才可以做的事，通行期也不会。
+- 它本身不能让被盗且已解锁的手机变得安全。在 iPhone 上，请在“设置”“Face ID 与密码”中开启 **Stolen Device Protection**，这样即使有人得知手机的密码，在你常去的地点之外，仍无法使用 Face ID、更改密码或关闭该保护，除非等待一小时。
+- 它在无法创建平台通行密钥的浏览器中不起作用。某些版本的 Firefox 以及其他没有该能力的浏览器会提示 “This browser cannot use Face ID here”；那部手机用它的 PIN 确认操作，或者由你在电脑上执行。iPhone 上的 Safari 和 Android 上的 Chrome 在试过的浏览器中可用。
 
 <details>
 <summary>Edge cases</summary>
 
-- If you set up Face ID on one address and later change your reach address, then the old passkey does not work on the new one: the phone says to set Face ID up again.
-- If the phone's sheet runs longer than 60 seconds, then the request expires — choose the action again.
-- If a passkey syncs between your devices through your account, then it still works only on the phone that created it with Delorun, because the phone's own session is part of the check.
-- If you choose Use PIN while a passkey fails, then the failed passkey tries still count as wrong tries.
-- If you use only your computer, then nothing here applies: the computer is never asked.
-- If an action's request is larger than 1 MiB, then Face ID cannot cover it — do it at your computer.
+- 如果你在一个地址上设置了 Face ID，之后更改了 reach 地址，那么旧的通行密钥在新地址上不起作用：手机会提示重新设置 Face ID。
+- 如果手机的面板停留超过 60 秒，那么请求会过期：请重新选择该操作。
+- 如果通行密钥通过你的账户在你的设备之间同步，那么它仍然只在用 Delorun 创建它的那部手机上起作用，因为手机自己的会话是检查的一部分。
+- 如果你在通行密钥失败时选择 Use PIN，那么失败的通行密钥尝试仍然算作错误尝试。
+- 如果你只使用电脑，那么这里的一切都不适用：电脑从不被询问。
+- 如果某个操作的请求大于 1 MiB，那么 Face ID 无法覆盖它：请在你的电脑上执行。
 
 </details>
 
 <details>
 <summary>Go further</summary>
 
-- `delorun devices list` shows each device; Settings, Face ID on your computer lists every device's passkeys with when each was last used.
-- Face ID rows are listed in `AUTH_CLASSES` ([reach design](../design/reach.zh.md)).
+- `delorun devices list` 显示每台设备；你电脑上“设置”的 Face ID 列出每台设备的通行密钥以及各自最近一次使用的时间。
+- Face ID 各行列在 `AUTH_CLASSES` 中（[reach 设计](../design/reach.zh.md)）。
 
 </details>
 
 <a id="confirm-with-a-pin"></a>
 
-## Confirm with a PIN
+## 用 PIN 确认
 
-PIN mode lets an approved phone confirm a sensitive action by typing a PIN or passcode, the same way Face ID does: on a phone without Face ID, and on a phone with it when Face ID fails. A correct PIN confirms that one action, once; the next action asks again. A phone opens the studio without the PIN. It is off until you turn it on, and you can only turn it on at your computer. It works only on the Tailscale private address, not on a Funnel address.
+PIN 模式让已批准的手机通过输入 PIN 或口令来确认敏感操作，方式与 Face ID 相同：用于没有 Face ID 的手机，以及有 Face ID 但 Face ID 失败的手机。正确的 PIN 只确认那一个操作，只能用一次；下一个操作会再次询问。手机打开 studio 不需要 PIN。它在你开启之前是关闭的，并且只能在你的电脑上开启。它只在 Tailscale 私有地址上起作用，在 Funnel 地址上不起作用。
 
 一旦开启了手机访问，首次运行引导会在 PIN 步骤中提供这一选项，且只在你的电脑上；在那里选择 **Skip** 会让 PIN 模式保持关闭。你也可以稍后在“设置”的 PIN 模式中设置，或在 Delorun 运行期间，在终端中运行 `delorun devices pin set`。它会两次询问密码，输入的字符不会显示。PIN 至少有 6 位数字，并且不能是重复或连续的数字，例如 `111111` 或 `123456`。口令至少有 10 个字符，可以是任何不全是数字的密码。要通过管道输入一行而不是手工输入，请添加 `--stdin`。
 
 你应该会看到 “PIN mode is on, with a PIN.” 以及一份简短的允许事项列表。设置或更改 PIN、开启或关闭该模式，以及批准设备，仍然只能在你的电脑上进行。
 
-The mode limits wrong tries. The fifth wrong try on one device removes that device and signs it out; approve it again at your computer. Ten wrong tries across all your devices pause the PIN and Face ID for everyone until you run `delorun devices pin resume`.
+该模式会限制错误尝试。一台设备上的第五次错误尝试会移除该设备并让它退出登录；请在你的电脑上重新批准它。你所有设备合计十次错误尝试会为所有人暂停 PIN 和 Face ID，直到你运行 `delorun devices pin resume`。
 
 | 命令 | 作用 |
 | --- | --- |
 | `delorun devices pin set` | 开启 PIN 模式，或更改 PIN 或口令。 |
-| `delorun devices pin off` | Turns PIN mode off and drops the PIN. A phone without Face ID then takes its sensitive actions at your computer. |
-| `delorun devices pin resume` | Resumes the PIN and Face ID after wrong tries paused them. |
+| `delorun devices pin off` | 关闭 PIN 模式并丢弃 PIN。没有 Face ID 的手机此后在你的电脑上执行其敏感操作。 |
+| `delorun devices pin resume` | 在错误尝试导致暂停之后，恢复 PIN 和 Face ID。 |
 | `delorun devices pin status` | 说明 PIN 模式是否已开启以及如何设置。Delorun 没有运行时也可使用。 |
 
 <details>
 <summary>边界情况</summary>
 
-- If Delorun is not running, then `pin set`, `off` and `resume` stop and say so. Start it with `delorun start`, then run the command again. Nothing changes until then.
+- 如果 Delorun 没有在运行，那么 `pin set`、`off` 和 `resume` 会停止并说明这一点。请用 `delorun start` 启动它，然后再次运行该命令。在此之前不会有任何更改。
 - 如果 PIN 太弱，那么命令会说明原因且不做任何更改（见[故障排查](troubleshooting.zh.md)中的 `PIN_FAILED`）。
-- If `delorun devices pin status` says "PIN mode is off. Turn it on with delorun devices pin set.", then a phone without Face ID takes its sensitive actions at your computer.
+- 如果 `delorun devices pin status` 显示 “PIN mode is off. Turn it on with delorun devices pin set.”，那么没有 Face ID 的手机在你的电脑上执行其敏感操作。
 
 </details>
 
@@ -330,7 +342,7 @@ The mode limits wrong tries. The fifth wrong try on one device removes that devi
 
 你应该会看到 “Removed <device id>; <n> session(s) ended.” 该设备会立即退出登录，它打开的连接也会关闭。要再次使用它，需要重新批准。
 
-**Remove a passkey.** Remove a passkey when you replace a phone's lock or no longer trust it. At your computer, open Settings, Face ID and choose **Remove** beside the passkey, or **Remove device** to remove the whole device; removing a device with `delorun devices remove <device id>` removes its passkeys in the same step. On a phone, open Settings, Face ID: the phone lists its own passkeys, and you choose **Remove** beside one and confirm with Face ID. **Show all devices**, which asks for Face ID, lists the others. To remove another device's passkey, or another device, the phone must hold a passkey itself: a PIN cannot confirm it. You should see the passkey gone from the list; a phone with no passkey left confirms with a code or its PIN again.
+**移除通行密钥。**当你更换手机的锁或不再信任它时，请移除通行密钥。在你的电脑上，打开“设置”的 Face ID，选择通行密钥旁的 **Remove**，或选择 **Remove device** 移除整台设备；用 `delorun devices remove <device id>` 移除设备时，会同时移除它的通行密钥。在手机上，打开“设置”的 Face ID：手机列出它自己的通行密钥，你选择其中一个旁边的 **Remove** 并用 Face ID 确认。**Show all devices** 会要求 Face ID，并列出其他设备。要移除另一台设备的通行密钥或另一台设备，手机自己必须持有一把通行密钥：PIN 无法确认这一点。你应该会看到该通行密钥从列表中消失；没有剩余通行密钥的手机会重新用代码或它的 PIN 确认。
 
 <details>
 <summary>边界情况</summary>

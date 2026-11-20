@@ -89,7 +89,7 @@ Delorun 不会启动其设置关闭了某项保护的 [profile](../reference/glo
 
 在默认的 setup 选项 [**Ask me first**](../reference/glossary.zh.md#ask-me-first) 下，你可以在四个地方授予它：
 
-- **在[批准卡片](../reference/glossary.zh.md#approval-card)上。**当某条命令请求在沙箱之外运行时，studio 会显示一张卡片，上面有 **Allow once**（让那一条命令运行）和 **Allow for this chat**（把 chat 切换为命令所请求的权限）。chat 会一直保持这一权限，直到你在输入框中把它调低。当命令请求完全访问而工作区还没有时，**Allow for this chat** 会打开完全访问对话框。对话框中的 **Allow full access** 会为该工作区记录这项授权并切换 chat。成功后，卡片得到回答，命令开始运行。
+- **在[批准卡片](../reference/glossary.zh.md#approval-card)上。**当某条命令请求在沙箱之外运行时，studio 会显示一张卡片，上面有 **Allow once**（让那一条命令运行）和 **Allow for this chat**（把 chat 切换为命令所请求的权限）。chat 会一直保持这一权限，直到你在输入框中把它调低。当命令请求完全访问而工作区还没有时，**Allow for this chat** 会打开完全访问对话框。对话框中的 **Allow full access** 会为该工作区记录这项授权凭证（grant）并切换 chat。成功后，卡片得到回答，命令开始运行。
 - **在 chat 中。**在 chat 的权限控件中选择 Full access。同一个对话框会打开，其中有一个要勾选的框，表示你了解风险。成功后，该控件显示 Full access。
 - **在设置中。**打开“设置”→“安全”→“权限”，选择工作区旁边的 **Allow full access**。成功后，工作区显示 “Allowed” 和时间。
 - **在终端中。**运行 `delorun workspace full-access <folder> on` 并回答“是”。成功后，不带文件夹的 `delorun workspace full-access` 会列出该工作区。
@@ -139,11 +139,11 @@ setup 的提示问题决定 Delorun 在有风险的更改之前如何询问。`d
 
 **Never ask (dangerous)** 是第三个答案。它像 Ask less 一样关闭这三项同意，并让任何 chat 无需询问就能切换为完全访问，无论是来自 studio、手机、计划任务还是脚本。setup 会打印一条警告，要求你确认两次并输入 `full access everywhere`；对 root 用户它会拒绝这个答案，`--yes` 也从不选择它。用 `delorun setup prompts` 选择另一个答案即可再次关闭它。
 
-With Never ask, a phone you hold unlocked has nearly the computer's authority, so treat it as the computer.
+使用 Never ask 时，你解锁着拿在手里的手机拥有近乎这台电脑的权限，所以请把它当作这台电脑。
 
 ### Never ask 下已解锁的手机能做什么
 
-A phone or browser signed in over remote access can then do these too, each time it confirms that action with [Face ID](reach.zh.md#confirm-with-face-id) or your PIN:
+通过远程访问登录的手机或浏览器，每次用 [Face ID](reach.zh.md#confirm-with-face-id) 或你的 PIN 确认该操作时，或在 Face ID 通行期（pass）开启期间（“设置”的 Face ID 中的 Ask again after），还可以做这些事：
 
 - 它更改在其他答案下只有电脑才能更改的设置和插件行。
 - 它运行任何斜杠命令。
@@ -151,13 +151,13 @@ A phone or browser signed in over remote access can then do these too, each time
 - 它保存或移除提供方密钥（但从不读回已保存的密钥）。
 - 它读取 chat 工作区之外的文件（但从不读取 Delorun home 之内的）。这与该模式下完全访问给予 chat 的权限范围相同。
 
-Answering the questions for MCP servers, external agents and a workspace's network, giving the approvals that reserve full access and opening a terminal ask for Face ID or your PIN every time, whatever the answer; no switch or full-access workspace waives them. Opening a chat's folder in an application stays at the computer.
+回答关于 MCP 服务器、外部 agent 和工作区网络的问题、给出预留完全访问的批准，以及打开终端，无论答案是什么，每次都要 Face ID 或你的 PIN；没有任何开关或完全访问的工作区可以免除它们。在应用程序中打开 chat 的文件夹仍然只能在电脑上进行。
 
 手机以这种方式放宽的预设或同意（新 chat 开始时的权限，或被关闭的外部 agent 同意），在该模式结束时会被设回，除非你在那之后已在电脑上更改过。设备在该模式开启期间所做的任何事都不会比它活得更久：设备开启的终端开关或工作区完全访问会在该模式结束时关闭，这些工作区中的 chat 回到 Workspace Write，而你在电脑上设置的则保持不变。
 
-Remote access never extends itself: only the computer, through `delorun setup`, turns the mode on, approves a new device or removes a device, changes the remote-access settings and resets the home, and a device signs in as before.
+远程访问从不自行扩大：只有电脑才能通过 `delorun setup` 开启该模式、批准新设备或移除设备、更改远程访问设置以及重置 home，设备则照常登录。
 
-A phone that has a terminal, or that prompts a chat in a full-access workspace, has the computer's authority: a shell on the computer can run `delorun devices approve`, `elevate` and `code`, so treat a phone you hold unlocked as the computer. Without its confirmation, a phone keeps every refusal it has with the other answers, and it opens no terminal. [`@delorun/home-auth`](../../packages/home-auth/README.zh.md#dangerous-mode) lists each refusal the mode lifts.
+拥有终端的手机，或在完全访问的工作区中向 chat 发出提示的手机，拥有这台电脑的权限：电脑上的 shell 可以运行 `delorun devices approve`、`elevate` 和 `code`，所以请把你解锁着拿在手里的手机当作这台电脑。没有它的确认，手机保留它在其他答案下的每一项拒绝，并且不会打开终端。[`@delorun/home-auth`](../../packages/home-auth/README.zh.md#dangerous-mode) 列出了该模式解除的每一项拒绝。
 
 `web_fetch` [防护](../reference/glossary.zh.md#fetch-guard)、更新保护以及[外部 agent](#external-agents) 同意，在两种答案下都保持原样。在任何模式下，插件管理都不能关闭、移除或更改 Delorun 的同意和防护插件或沙箱。
 
@@ -208,14 +208,16 @@ MCP 服务器是给模型提供额外工具的辅助程序。运行命令的 MCP
 
 Claude Code 和 Codex 是可选插件，让模型可以把任务交给另一个 agent 程序，即[外部 agent](../reference/glossary.zh.md#external-agent)。该程序在 Delorun 的沙箱和批准提示之外运行。它可以读取和更改工作区中的文件，以及它自己的设置所允许的任何其他位置，包括你的 Delorun home。它使用你自己的 Claude Code 或 Codex 登录，所以任何费用都记在那个账户上。
 
+每个 agent 以你在“设置”→“安全”→“外部 agent”中选择的级别运行：Careful、Standard、Your own settings 或 Unrestricted。Standard 是默认级别。已批准的设备可以收紧级别，但放宽级别（尤其是 Unrestricted）需要你在运行 Delorun 的那台电脑前，危险模式也不会解除这一点。
+
 无论你在 setup 中给出了哪种提示答案，Delorun 都会在每次运行之前，在运行 Delorun 的那台电脑上询问。**Allow once** 只启动这一次运行。**Allow for this workspace** 让该 agent 在那里无需询问就能启动，直到你在“设置”→“安全”→“外部 agent”中，或用 `delorun workspace external-agents <folder> <agent> off` 撤销。每次运行在 30 分钟后停止。
 
 <details>
 <summary>边界情况</summary>
 
 - 如果 chat 处于 Read Only，那么外部 agent 永远不会启动：请先切换 chat 的权限。
-- 如果 chat 处于 Full access，那么每个批准都会被不经询问地拒绝，所以 agent 只会在你已允许它的工作区中启动：请为该工作区允许它。
-- 如果你运行 `delorun headless`，那么没有人可以被询问，所以 agent 只会在你已允许的地方启动。
+- 如果 chat 处于 Full access，那么 agent 会不经询问就启动，因为你已选择在没有提示的情况下运行，chat 会显示 “Started without asking · Full access”。要让 Full access 的 chat 重新询问，请在“设置”→“安全”→“外部 agent”中关闭 **Full access chats start agents without asking**：此后 agent 只会在你已允许它的工作区中启动。只有运行 Delorun 的那台电脑才能把该开关打开。
+- 如果你运行 `delorun headless`，那么没有人可以被询问，所以 agent 只会在你已允许的地方启动，或在该次运行具有完全访问权限时启动，即通过工作区的完全访问授权，或 setup 的 **Never ask (dangerous)** 答案。具有完全访问权限的运行与 Full access 的 chat 一样，不经询问也无需授权就会启动 agent。
 - 如果 chat 没有工作区文件夹，那么 agent 永远不会启动：请给 chat 一个文件夹。
 - 如果你在手机上，那么你无法回答这个问题：请在运行 Delorun 的那台电脑上回答。
 - 如果模型试图通过插件管理安装或开启这些插件，那么会被拒绝：请自己从“插件”页面或新手引导的 setup 中添加它们。

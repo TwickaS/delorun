@@ -8,8 +8,6 @@ description: "更改 Delorun 运行的内容：为什么从文件夹链接的插
 
 > 英文页面是当前版本；本页可能落后于它。
 
-本页描述 Delorun 目前的工作方式。
-
 ## 摘要
 
 你可以更改你的 Delorun 运行的内容：你从文件夹链接的插件，以及 Delorun 自己的文件。[保护](../reference/glossary.zh.md#changes-protection)设置决定更改是立即加载，还是等待你的审阅。
@@ -107,7 +105,7 @@ description: "更改 Delorun 运行的内容：为什么从文件夹链接的插
 
 `delorun plugin dev <folder>`（见[为 Delorun 编写插件](plugins.zh.md#run-it-while-you-work-on-it)）也遵循这些规则。保护关闭时，它构建的每次编辑都会实时加载。保护开启时，编辑和文件夹中的其他编辑一样等待你的审阅，在你应用它或启动 `delorun changes work <plugin>` 之前，`delorun plugin dev` 不会从该文件夹加载任何内容。
 
-Both commands run only in a terminal on your computer; the studio's Changes section does the same in a browser on that computer ([In the studio](#in-the-studio)). A phone can start or end a work session only after it confirms that one action with [Face ID](reach.zh.md#confirm-with-face-id) or your PIN. Your agent cannot start or end one.
+这两条命令都只在你电脑上的终端中运行；studio 的 Changes 部分在该电脑上的浏览器中做同样的事（见[在 studio 中](#in-the-studio)）。手机只有在用 [Face ID](reach.zh.md#confirm-with-face-id) 或你的 PIN 确认那一个操作之后，才能开始或结束开发会话。你的 agent 不能开始或结束开发会话。
 
 <a id="when-your-agent-changes-a-plugin"></a>
 
@@ -133,7 +131,7 @@ Both commands run only in a terminal on your computer; the studio's Changes sect
 | `delorun changes undo <id>` | Delorun 从下次启动时起像以前一样运行该文件。 |
 | `delorun changes edit-harness --discard` | 询问，然后撤回对 Delorun 本身的每一项更改并移除你的副本；下一次启动原样运行已安装的发布版本。 |
 
-These commands run only in a terminal, and only in an installed Delorun, not in a source checkout. The studio's Changes section applies, undoes and discards the same changes at your computer, and Make my copy there makes your copy. A phone confirms each of discarding, applying or undoing a change, and making your copy, with [Face ID](reach.zh.md#confirm-with-face-id) or your PIN. When Delorun fails to start right after you applied a change to it, including when a changed file stops Delorun before it starts, it starts once more without your newest change to it, as it does for a plugin. When it does not start without that change either, it names `delorun changes undo <id>` for your newest applied change and `delorun changes edit-harness --discard`, which takes back every change to Delorun itself. Safe mode, `delorun recover safe-mode`, runs the installed release without any of your changes to it until you leave safe mode. `delorun verify` and `delorun doctor` list the files you changed. Your changes belong to the installed version: after an update, the update report says how each one carries over.
+这些命令只在终端中运行，并且只在已安装的 Delorun 中运行，不在源码检出中运行。studio 的 Changes 部分在你的电脑上应用、撤销和丢弃同样的更改，其中的 Make my copy 制作你的副本。手机对丢弃、应用或撤销一项更改，以及制作你的副本，都要分别用 [Face ID](reach.zh.md#confirm-with-face-id) 或你的 PIN 确认，除非 Face ID 通行期（pass）已开启。当 Delorun 在你对它应用一项更改之后立即无法启动时，包括更改的文件在 Delorun 启动之前就使其停止时，它会在没有你对它的最新更改的情况下再启动一次，对插件也是如此。当没有那项更改它也不能启动时，它会为你最新应用的更改指出 `delorun changes undo <id>`，并指出 `delorun changes edit-harness --discard`，后者撤回对 Delorun 本身的每一项更改。安全模式 `delorun recover safe-mode` 运行已安装的发布版本，不带你对它的任何更改，直到你离开安全模式。`delorun verify` 和 `delorun doctor` 列出你更改过的文件。你的更改属于已安装的版本：更新之后，更新报告会说明每一项如何延续。
 
 你的 agent 可以替你编辑你的副本。在拥有完全访问的 chat 中，`delorun-harness-copy` 技能把它指向你的 Delorun 副本，它只在那里起作用。它从不应用、撤销或丢弃更改，也从不更改保护：这些决定始终由你作出。
 
@@ -168,7 +166,7 @@ To try it again: delorun changes apply c1a2b3c4d5e. To undo it: delorun changes 
 
 保护关闭时，任何能写入已链接插件文件夹的东西，都可以在你看到之前改变 Delorun 运行的内容：以完全访问工作的 agent、你下载的程序、任何以你的身份运行的程序。受限工作区中的命令只在沙箱允许的地方写入：该工作区内的插件文件夹，绝不是你的 Delorun home，所以它们无法改变你的 Delorun 本身的副本。当你想先审阅每一项更改时，请开启保护。
 
-`delorun changes protection` prints the setting and what it means. `delorun changes protection on` or `off` changes it in a terminal on your computer, and the studio's Changes section changes it at your computer. A phone can turn it on without a prompt, and turns it off only after [Face ID](reach.zh.md#confirm-with-face-id) or your PIN. Each way says what the new setting means, such as "Changes will load without your review." for `off`, and asks you to confirm; the new setting applies at once, without a restart. Full setup also offers to turn protection on.
+`delorun changes protection` 打印该设置及其含义。`delorun changes protection on` 或 `off` 在你电脑上的终端中更改它，studio 的 Changes 部分在你的电脑上更改它。手机可以不经提示就把它打开，只有在用 [Face ID](reach.zh.md#confirm-with-face-id) 或你的 PIN 确认之后才能把它关闭。每种方式都会说明新设置的含义，例如 `off` 对应 “Changes will load without your review.”，并要求你确认；新设置立即生效，无需重启。完整的 setup 也会提供开启保护的选项。
 
 关闭保护时会再问一次，并说明届时哪些内容会不经审阅就加载：等待中的更改会立即加载的插件，以及会在下次启动时应用的你 Delorun 副本中的文件。第二个问题能挡住一次手滑。它挡不住在你电脑前的人，因为他们也能回答它。
 
@@ -196,4 +194,4 @@ To try it again: delorun changes apply c1a2b3c4d5e. To undo it: delorun changes 
 
 agent 安装、更新或移除插件的请求，可以在第二次确认（说明 Delorun 在运行之前无法显示它安装什么）之后被应用，或被丢弃。studio 还会应用、撤销和丢弃对 Delorun 本身的更改，制作你的 Delorun 副本，以及打开或关闭保护，关闭时有上面所说的第二个问题。每个结果都会在窗口底部短暂显示，包括更改加载失败而 Delorun 回到之前运行的内容时的错误。
 
-At your computer, every action works. On a phone, the section shows everything. Turning protection on needs no prompt, and every other action asks for [Face ID](reach.zh.md#confirm-with-face-id) or your PIN each time. Opening the Changes page on a phone never asks. A button the phone may not use is greyed out and says "Needs your computer" when you point at it. When a phone changed protection, your computer's Changes section shows a notice with the phone's name and the time, until you dismiss it.
+在你的电脑上，每个操作都可用。在手机上，该部分显示所有内容。开启保护不需要提示，其他每个操作每次都要求 [Face ID](reach.zh.md#confirm-with-face-id) 或你的 PIN，除非 Face ID 通行期已开启。在手机上打开 Changes 页面从不会询问。手机不能使用的按钮会变灰，指向它时显示 “Needs your computer”。当手机更改了保护时，你电脑的 Changes 部分会显示一条带有该手机名称和时间的通知，直到你将其关闭。
