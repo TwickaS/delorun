@@ -30,11 +30,11 @@ This page lists the rough edges you may meet in the preview. Each one says what 
 
 **What happens.** Delorun runs on Linux (x64 and arm64) and on Windows through WSL2. It does not run on macOS or on native Windows.
 
-**What to do.** On Windows, install WSL2 and run Delorun inside it ([Install and first run](install.md#windows-through-wsl2)). On macOS, there is no supported way to run Delorun; the [roadmap](roadmap.md#next) lists the desktop app as the next stage.
+**What to do.** On Windows, install WSL2 and run Delorun inside it ([Install and first run](install.md#windows-through-wsl2)). On macOS, there is no supported way to run Delorun. The [roadmap](roadmap.md#next) lists the desktop app.
 
 ## What undo covers
 
-**What happens.** "Undo everything" covers the harness and your chats: your setup, plugins and settings. It does not cover what an agent did to the files in a workspace, because workspace checkpoints are not built.
+**What happens.** "Undo everything" covers the harness and your chats: your setup, plugins and settings. It does not cover what an agent did to the files in a workspace, because Delorun has no workspace checkpoints.
 
 **What to do.** Keep your workspaces in git, and commit before you let an agent change many files, so that git can undo what the agent did.
 
@@ -103,7 +103,7 @@ This page lists the rough edges you may meet in the preview. Each one says what 
 **What happens.** Multiview has three rough edges.
 
 - With six busy panes, the main chat's first words can take up to about twice as long to appear.
-- A notice from an agent, such as a refused question, is recorded in the agent's log but not yet shown in the chat.
+- A notice from an agent, such as a refused question, is recorded in the agent's log and is not shown in the chat.
 - A Claude Code or Codex chat still shows upstream's own text for the hand-off, and a failure can appear as two red lines.
 
 **What to do.** Pin fewer agents if the main chat feels slow. The extra text and the doubled line change nothing about the run ([Watch several agents at once](agents.md#watch-several-agents-at-once)).

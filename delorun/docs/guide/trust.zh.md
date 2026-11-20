@@ -74,8 +74,6 @@ Delo Run 不能：
 | 时间戳密钥 id | `df07a99c3eab87eb0428a3f17ac561cafc7f3bf13444a10a66885d342662a971` |
 | 索引密钥 id | `cee603433150c5d96ac52e886af0e3d502a9910de3d4efb994d078ab2de5d446` |
 
-到 `1.0.0`，根会换成在离线机器上的密钥仪式中生成的新根。携带新根的版本由旧根签名，因此沿更新链走的安装无需任何操作就会迁移过去。新根的 SHA-256 和密钥 id 随后取代此表，Delo Run 会把它们列在 `delorun/release/production-keys.json` 中。
-
 <a id="outside-security-review"></a>
 ## 外部安全评审
 

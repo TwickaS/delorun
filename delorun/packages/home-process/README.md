@@ -104,7 +104,7 @@ The specs drive the handshake through a fixture store in `tests/support.ts`, whi
 ## Not implemented
 
 - The CLI's Host holds no scheduled delivery: a delivery that falls due while the gate is held is recorded as delivered and its turn is refused with `UPDATE_PENDING`. Work that began before the Host reported it is not counted.
-- Step 8's confinement probes and their results, and `delorun verify`'s report of a dialect that cannot enforce C1's rules. The home process wraps no confined command itself; the probes, when they land, retry once a Landlock wrap refused with exit code 125 because an entry on the path to the home changed between the wrap and the launch, before reporting it.
+- Step 8's confinement probes and their results, and `delorun verify`'s report of a dialect that cannot enforce C1's rules. The home process wraps no confined command itself.
 - A supervisor launched by `delorun start`, and the setup step that writes the supervisor's roots file.
 - The retry of an `unchecked` release-log check while the home process runs ([C18](../../docs/contracts/c18-release-log.md)).
 - Start at login (`--at-login`) and `delorun status --follow`.

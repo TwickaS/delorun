@@ -27,7 +27,7 @@ The first-run guide's Recommended plugins step offers the same switch.
 
 The band shows one word at a time, in a fixed place, with the letter your eye fixes on marked. A word that ends a sentence or a clause stays a little longer.
 
-Below the band, the page lists every word. What you have read is above the band and what is still to come is below it, each part labelled Reasoning or Reply. Scroll either side to look back or ahead; the band keeps its place.
+Below the band, the page lists every word. What you have read is above the band and what you have not read yet is below it, each part labelled Reasoning or Reply. Scroll either side to look back or ahead; the band keeps its place.
 
 ## Choose what and how fast
 

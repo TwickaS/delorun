@@ -14,5 +14,5 @@ export const TRUST_STATEMENT: readonly string[] = [
   'A terminal runs commands with your authority. Approving devices, changing remote access and setting the PIN stay at this computer, whatever the phone confirms.',
   'A workspace you already put on full access at this computer can still be driven from it, and a command there can do anything your user can.',
   'What protects you: the phone\'s own lock, removing the device with delorun devices remove, and the sign-out after 12 hours unused or 14 days after sign-in.',
-  'No outside security review of remote access has happened yet.',
+  'No outside security review of remote access has happened.',
 ]

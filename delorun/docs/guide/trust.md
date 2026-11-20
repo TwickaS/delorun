@@ -10,7 +10,7 @@ English | [中文](trust.zh.md)
 
 This page helps you decide what you are comfortable with. It says, party by party, what each one can see and do when you use Delorun, and how to check it yourself. You need nothing first, but it reads best after [Install and first run](install.md).
 
-Delorun is a preview. Its releases are signed with preview keys, and no outside security review has happened yet; the sections on [signing](#how-releases-are-signed-in-the-preview) and [review](#outside-security-review) say what that means and when it changes. Delorun runs on your computer, as you. Nobody else runs it for you, and Delo Run, the project that publishes it, has no way into your [studio](../reference/glossary.md#studio). Delorun has no telemetry: it sends nothing about you. Two small checks that keep your installation honest talk to the internet by default. Everything else leaves your computer only when you turn it on.
+Delorun is a preview. Its releases are signed with preview keys, and no outside security review has happened; the sections on [signing](#how-releases-are-signed-in-the-preview) and [review](#outside-security-review) say what that means. Delorun runs on your computer, as you. Nobody else runs it for you, and Delo Run, the project that publishes it, has no way into your [studio](../reference/glossary.md#studio). Delorun has no telemetry: it sends nothing about you. Two small checks that keep your installation honest talk to the internet by default. Everything else leaves your computer only when you turn it on.
 
 ## Contents
 
@@ -55,9 +55,9 @@ What you still trust:
 
 ## How releases are signed in the preview
 
-Every release is signed, and `delorun update` and `delorun verify` check the signature before anything runs. Until `1.0.0`, the signing keys are preview keys: they were made on the computer where the maintainer works with agents, not on a machine kept offline for the purpose, and nobody else has witnessed or backed them up. That computer is also where agents run. So anyone, or any agent, who gains access to it could sign a release that your installation accepts. The public release log still records every release, so a release signed that way would be visible to everyone who checks it, but nothing stops it from being signed.
+Every release is signed, and `delorun update` and `delorun verify` check the signature before anything runs. The signing keys are preview keys: they were made on the computer where the maintainer works with agents, not on a machine kept offline for the purpose, and nobody else has witnessed or backed them up. That computer is also where agents run. So anyone, or any agent, who gains access to it could sign a release that your installation accepts. The public release log still records every release, so a release signed that way would be visible to everyone who checks it, but nothing stops it from being signed.
 
-This is the main limit of the preview, and it is why the README calls Delorun a preview. A signature tells you a release came from whoever holds the preview keys, and the release log tells you that everyone got the same release. Neither is the protection that offline keys give. With `1.0.0` the keys are made in a key ceremony on an offline machine, and the maintainer publishes every release by hand with a second factor until then, so that no long-lived publishing credential sits where agents can use it.
+This is the main limit of the preview, and it is why the README calls Delorun a preview. A signature tells you a release came from whoever holds the preview keys, and the release log tells you that everyone got the same release. Neither is the protection that offline keys give. The maintainer publishes every release by hand with a second factor, so that no long-lived publishing credential sits where agents can use it.
 
 The release root that these releases are signed under:
 
@@ -69,11 +69,9 @@ The release root that these releases are signed under:
 | Timestamp key id | `df07a99c3eab87eb0428a3f17ac561cafc7f3bf13444a10a66885d342662a971` |
 | Catalogue key id | `cee603433150c5d96ac52e886af0e3d502a9910de3d4efb994d078ab2de5d446` |
 
-With `1.0.0` the root changes to one made in a key ceremony on an offline machine. The release that carries the new root is signed by the old root, so an installation that follows the update chain moves to it without any action. The new root's SHA-256 and key ids then replace this table, and Delo Run lists them in `delorun/release/production-keys.json`.
-
 ## Outside security review
 
-No outside security review of Delorun has happened yet. The maintainer's own reviews, the denial tests that fail when a protection is removed, and the checks that replay recorded sessions are real, and they are the work of the maintainer and the agents the maintainer works with. An outside review is a person or firm that does not work on Delorun reading its security-critical code and reporting what they find. It comes with `1.0.0`, together with the key ceremony, and the review's report is published. Until then, treat Delorun as a preview: do not rely on it to confine an agent you would not otherwise trust ([What Delorun protects](safety.md)).
+No outside security review of Delorun has happened. The maintainer's own reviews, the denial tests that fail when a protection is removed, and the checks that replay recorded sessions are real, and they are the work of the maintainer and the agents the maintainer works with. An outside review is a person or firm that does not work on Delorun reading its security-critical code and reporting what they find. Treat Delorun as a preview: do not rely on it to confine an agent you would not otherwise trust ([What Delorun protects](safety.md)).
 
 ## What each reach option shows its provider
 
