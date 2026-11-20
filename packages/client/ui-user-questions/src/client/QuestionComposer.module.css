@@ -344,29 +344,31 @@
 }
 
 .optionCopy {
-  display: flex;
+  display: grid;
   flex: 1;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0 6px;
+  /* The label and the description take the left; the Recommended chip keeps the right end of the label line. */
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0 8px;
   min-width: 0;
 }
 
 .optionLine {
-  display: flex;
-  max-width: 100%;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 2px 6px;
+  display: contents;
 }
 
 .optionLabel {
+  grid-column: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-size: 14px;
   line-height: 24px;
   font-weight: 500;
 }
 
 .badge {
+  grid-column: 2;
+  margin-top: 3px;
   padding: 0 4px;
   border-radius: var(--dsw-radius-xs);
   background: var(--dsw-specific-sidebar-nav-item-active-accent);
@@ -374,10 +376,12 @@
   font-size: 11px;
   line-height: 18px;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .description {
   display: block;
+  grid-column: 1 / -1;
   width: max-content;
   max-width: 100%;
   min-width: 0;
