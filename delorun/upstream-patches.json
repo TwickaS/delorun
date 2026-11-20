@@ -3271,6 +3271,12 @@
       "class": "delorun-feature",
       "feature": "plugin-titles",
       "reason": "The Chinese description says Delorun, not DSH."
+    },
+    {
+      "path": "packages/experimental/inspector/scripts/devtools/vite.ts",
+      "class": "generic-fix",
+      "feature": "devtools-build-paths",
+      "reason": "The DevTools bundle named each stylesheet module by its absolute path, so every built chunk carried the build machine's checkout path in a region comment; the module id is now relative to the frontend root. Offer upstream."
     }
   ],
   "retired": []
