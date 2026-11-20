@@ -9,7 +9,8 @@
  * which hold a path as plain bytes; it finds no path a binary stores in another encoding, such as UTF-16, and it cannot
  * read inside a `.zip`, whose entries are compressed. A path the build fixes on purpose, the shared build root
  * `/var/tmp/delorun-release-build/source`, is not a finding: only the unique roots `delorun-release-build-<suffix>` of a
- * build from existing artifacts are.
+ * build from existing artifacts are, where the suffix is the six letters or digits `mkdtemp` appends; text that names
+ * the pattern, such as `delorun-release-build-*` in a comment or a document, is not one.
  *
  * @module @delorun/release-formats/gate/home-paths
  */
@@ -41,10 +42,15 @@ export function currentBuilder(): BuilderIdentity {
 interface Needle {
   readonly description: string
   readonly bytes: Buffer
+  /** When set, the bytes alone are not a finding: the text must also match this, so a file that names the pattern in prose is not refused. */
+  readonly confirm?: RegExp
 }
 
 /** The prefix of a build root `build-closure.ts` makes beside the fixed one for a build from existing artifacts. */
 const UNIQUE_BUILD_ROOT = 'delorun-release-build-'
+
+/** A real unique root: the prefix and the six letters or digits `mkdtemp` appends, with nothing alphanumeric after them. */
+const UNIQUE_BUILD_ROOT_NAME = /delorun-release-build-[A-Za-z0-9]{6}(?![A-Za-z0-9])/u
 
 /**
  * What a release's files must not hold, for a builder.
@@ -56,7 +62,7 @@ const UNIQUE_BUILD_ROOT = 'delorun-release-build-'
 export function builderNeedles(builder: BuilderIdentity): Needle[] {
   if (builder.username === '' || /[\\/]/u.test(builder.username)) throw new Error(`the building user name ${JSON.stringify(builder.username)} is not usable as a path segment`)
   const needles: Needle[] = [
-    { description: `the build's temporary root ${UNIQUE_BUILD_ROOT}*`, bytes: Buffer.from(UNIQUE_BUILD_ROOT) },
+    { description: `the build's temporary root ${UNIQUE_BUILD_ROOT}*`, bytes: Buffer.from(UNIQUE_BUILD_ROOT), confirm: UNIQUE_BUILD_ROOT_NAME },
     { description: `the user name as a folder (/${builder.username}/)`, bytes: Buffer.from(`/${builder.username}/`) },
     { description: `the user name as a folder (\\${builder.username}\\)`, bytes: Buffer.from(`\\${builder.username}\\`) },
   ]
@@ -73,7 +79,7 @@ export interface HomePathProblem {
 }
 
 function scan(file: string, data: Buffer, needles: readonly Needle[], out: HomePathProblem[]): void {
-  const found = needles.filter(needle => data.includes(needle.bytes)).map(needle => needle.description)
+  const found = needles.filter(needle => data.includes(needle.bytes) && (needle.confirm === undefined || needle.confirm.test(data.toString('latin1')))).map(needle => needle.description)
   if (found.length > 0) out.push({ file, found: found.join('; ') })
 }
 
