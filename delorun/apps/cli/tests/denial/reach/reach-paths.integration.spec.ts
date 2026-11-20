@@ -169,6 +169,8 @@ const UPSTREAM_OWNER_ONLY = 'upstream declares no device admission, so only the 
  */
 const FETCH_ROUTES: Readonly<Record<string, FetchDecision>> = {
   '/api/delorunBrowsePair.start': { device: 'refused', reason: 'pairing runs browse on the computer and links the person\'s own Chrome, with their sign-ins; only the computer\'s own studio starts it' },
+  '/api/delorunBrowser.test': { device: 'refused', reason: 'the Settings Browser page\'s test starts a browser on the computer, outside the agent sandbox; only the computer\'s own studio asks (route-access C)' },
+  '/api/delorunBrowser.install': { device: 'refused', reason: 'the Settings Browser page downloads a browser build onto the computer; only the computer\'s own studio asks (route-access C)' },
   '/api/delorunPreviewFlags.list': READ('names the declared preview flags and whether each is on, with no setting or data'),
   '/api/delorunChatStates.list': READ('snooze and settle states order the chat list, which a phone shows too'),
   '/api/delorunChatStates.set': OPEN('snoozing or settling a chat is everyday organising', 400),
