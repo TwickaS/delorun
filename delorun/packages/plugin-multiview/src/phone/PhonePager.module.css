@@ -53,7 +53,7 @@
   cursor: pointer;
   user-select: none;
   touch-action: manipulation;
-  background: var(--dsw-alias-bg-layer-2, var(--dsw-alias-bg-layer-1));
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 6%, transparent);
   border: 1px solid transparent;
   border-radius: 999px;
 }

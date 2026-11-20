@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Multiview phone pager</title>
+    <style>
+      /* Stand-in for the brand colour Delorun's theme sets over the stock tokens. */
+      html body { --dsw-alias-brand-primary: #e07048; }
+      html body[data-ds-dark-theme] { --dsw-alias-brand-primary: #f08a63; }
+      html, body, #root { margin: 0; height: 100%; font: 15px/1.4 system-ui, sans-serif; color: var(--dsw-alias-label-primary); }
+      #root { display: flex; flex-direction: column; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./pager-main.tsx"></script>
+  </body>
+</html>
