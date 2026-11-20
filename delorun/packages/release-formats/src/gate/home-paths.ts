@@ -2,7 +2,7 @@
  * The gate against the building user's own paths in a release's files. A file built on one person's computer that
  * names their home folder, their user name as a folder, or the build's unique temporary root differs from the same file
  * built elsewhere and publishes who built it and where. {@link homePathProblems} scans every file of a directory, and
- * every entry of each `.tar.gz` and `.tgz` archive in it (runtime closures, packs and the npm launcher's package), for
+ * every entry of each `.tar.gz` and `.tgz` archive in it (runtime closures, packs and the npm launcher's package; the release build and the launcher build both run it), for
  * the strings in {@link builderNeedles}; {@link refuseHomePaths} throws when it finds any.
  *
  * The scan reads bytes, so it covers JavaScript, JSON, YAML, source maps, text and, for the same strings, binary files,
@@ -11,15 +11,15 @@
  * `/var/tmp/delorun-release-build/source`, is not a finding: only the unique roots `delorun-release-build-<suffix>` of a
  * build from existing artifacts are.
  *
- * @module @delorun/release/closure/home-paths
+ * @module @delorun/release-formats/gate/home-paths
  */
 import { createReadStream } from 'node:fs'
 import { readdir, readFile } from 'node:fs/promises'
 import { homedir, userInfo } from 'node:os'
 import { join } from 'node:path'
 import { createGunzip } from 'node:zlib'
-import { MAX_ARCHIVE_BYTES } from '@delorun/release-formats/archive/entry'
-import { readTar } from '@delorun/release-formats/archive/tar'
+import { MAX_ARCHIVE_BYTES } from '../archive/entry.ts'
+import { readTar } from '../archive/tar.ts'
 
 /** Who built the release: the facts the scan looks for. */
 export interface BuilderIdentity {

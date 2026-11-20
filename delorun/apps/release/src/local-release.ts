@@ -21,7 +21,7 @@
  * the command signs each platform's `delorun-<version>-<platform>` archive and `.files.json` that a `build-closure.ts`
  * run left there.
  * Before it signs anything the command refuses closure or pack files that name the building user's home directory, user
- * name as a folder or the unique build root (`closure/home-paths.ts`), naming each file; `--allow-builder-paths` replaces
+ * name as a folder or the unique build root (`@delorun/release-formats/gate/home-paths`), naming each file; `--allow-builder-paths` replaces
  * it with one warning per file, for a local candidate built with `--artifacts existing`, which embeds the worktree's paths.
  * Nothing else sets it: a public release is built with `--artifacts build`.
  * `--log-submit`, `--log-checkpoint` and `--log-tiles` are `log-release.ts`'s log endpoints: the command submits the

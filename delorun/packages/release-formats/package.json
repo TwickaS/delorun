@@ -9,6 +9,7 @@
     "./advisory/*": "./src/advisory/*.ts",
     "./archive/*": "./src/archive/*.ts",
     "./brands": "./src/brands.ts",
+    "./gate/*": "./src/gate/*.ts",
     "./log/*": "./src/log/*.ts",
     "./packs/*": "./src/packs/*.ts",
     "./sign/*": "./src/sign/*.ts"

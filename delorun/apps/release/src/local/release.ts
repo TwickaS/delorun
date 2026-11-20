@@ -41,7 +41,7 @@ import {
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { semanticVersion, sha256Hex } from '@delorun/release-formats/brands'
 import { closureFileNames } from '../closure/tree.ts'
-import { homePathProblems, refuseHomePaths, type BuilderIdentity } from '../closure/home-paths.ts'
+import { homePathProblems, refuseHomePaths, type BuilderIdentity } from '@delorun/release-formats/gate/home-paths'
 import { logEntryName, packsLogName, packsName } from '@delorun/release-formats/log/bundle'
 import { logRelease, type LogEndpoints } from '../log/client.ts'
 import { entryRequest, readEntryRequest } from '@delorun/release-formats/log/entry'
@@ -115,7 +115,7 @@ export interface LocalReleaseRequest {
   /**
    * Sign closure files that name the building user's own paths, warning for each file instead of refusing. A release
    * built from existing artifacts embeds the worktree's paths, so only a local candidate sets this; absent or false, the
-   * signing is refused before anything is signed (`closure/home-paths.ts`).
+   * signing is refused before anything is signed (`@delorun/release-formats/gate/home-paths`).
    */
   readonly allowBuilderPaths?: boolean
   /** Receives each warning of an allowed build; `console.warn` by default. */

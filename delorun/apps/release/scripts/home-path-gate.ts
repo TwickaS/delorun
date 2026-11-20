@@ -4,14 +4,14 @@
  *
  * `tsx delorun/apps/release/scripts/home-path-gate.ts <directory>...`
  *
- * Each directory is scanned with `closure/home-paths.ts`: every file, and every entry of each `.tar.gz` and `.tgz`
+ * Each directory is scanned with `@delorun/release-formats/gate/home-paths`: every file, and every entry of each `.tar.gz` and `.tgz`
  * inside it, for this computer user's home directory, user name as a folder and the unique build root. The command
  * names every offending file and exits 1; it exits 0 when none is found and 2 without a directory.
  *
  * @module home-path-gate
  */
 import { resolve } from 'node:path'
-import { homePathProblems } from '../src/closure/home-paths.ts'
+import { homePathProblems } from '@delorun/release-formats/gate/home-paths'
 
 const directories = process.argv.slice(2)
 if (directories.length === 0) {

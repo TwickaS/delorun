@@ -1,9 +1,20 @@
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, type TestContext } from 'vitest'
 import { buildPackArchive } from '@delorun/release-formats/packs/archive'
-import { builderNeedles, gateBuildOutput, homePathProblems, refuseHomePaths, type BuilderIdentity } from '../../src/closure/home-paths.ts'
-import { scratch } from '../support.ts'
+import { builderNeedles, gateBuildOutput, homePathProblems, refuseHomePaths, type BuilderIdentity } from '../src/gate/home-paths.ts'
+
+/**
+ * A temporary directory removed when the test ends.
+ * @param test - the running test.
+ * @returns the directory's path.
+ */
+function scratch(test: TestContext): string {
+  const directory = mkdtempSync(join(tmpdir(), 'delorun-home-paths-'))
+  test.onTestFinished(() => rmSync(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }))
+  return directory
+}
 
 const BUILDER: BuilderIdentity = { home: '/home/maker', username: 'maker' }
 

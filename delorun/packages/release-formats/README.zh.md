@@ -20,5 +20,6 @@ Delo 发布版的格式集中于一处，供两方共同使用：在 [`delorun/a
 - `log/entry`、`log/bundle`、`log/note`、`log/merkle` 与 `log/tiles`：带 Ed25519ph 签名的 Rekor v2 条目、按 C18 五个步骤进行的离线 bundle 检查、C2SP 签名 note 与联签、RFC 6962 证明，以及由 `tlog-tiles` 计算的证明。
 - `archive/*`：确定性的 tar、gzip 与 ZIP 写入器和读取器、归档条目规则、确定性形式的检查，以及重建比较所用的 PE 规范化（`archive/pe`）。
 - `brands`：语义版本与 SHA-256 的品牌类型。
+- `gate/home-paths`: the scan for the building user's home directory, user name as a folder and unique build root in a directory's files and archives, which the release build and the launcher build run over their output and refuse on.
 
-规格测试位于编写这些格式的发布工具旁，即 `delorun/apps/release/tests/{sign,log,archive}`。
+`sign`、`log` 与 `archive` 的规格测试位于编写这些格式的发布工具旁，即 `delorun/apps/release/tests/{sign,log,archive}`；`gate/home-paths` 的规格测试位于本包的 `tests/`。
