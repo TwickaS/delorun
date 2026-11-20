@@ -27,9 +27,9 @@ kind: "package-reference"
 
 命令 `terminal.new` 在焦点停靠分栏创建独立终端，替换开始页并保留已有内容页。从聊天区或浮动内容页触发时，使用活动停靠分栏。开始页卡片右侧对齐显示当前有效快捷键的无背景文字，不额外弹出重复提示。Windows 和 macOS Web 使用[快捷键服务的平台默认值](../shortcuts/README.zh.md)；Linux Web 默认不绑定此命令。
 
-Open the right sidebar and click **New terminal** to open the remembered available shell immediately. The separate arrow in its own column at the right edge of the card opens the installed-shell menu; selecting an item remembers it and opens that shell directly. Discovery runs when the menu opens and does not allocate a terminal. A failed lookup offers Retry in the menu. Use **New tab** to return to the guide and open another terminal.
+打开右侧栏并点击 **新建终端**，即可立即打开记住的可用 shell。卡片右边缘独立一列中的箭头打开已安装 shell 的菜单；选择其中一项会记住它并直接打开该 shell。探测在菜单打开时运行，不分配终端。查找失败时，菜单提供“重试”。使用 **新标签页** 回到开始页，再打开另一个终端。
 
-Double-click the terminal's tab title to rename it. **Take control** makes the current attachment writable when another page owns input. A temporary disconnect preserves the screen and offers **Reconnect**, without exposing transport diagnostics. An exited shell remains visible with its exit code and offers **New terminal**; it never restarts automatically. A terminal the person did not confirm on a device says "Not confirmed. The terminal did not start." and offers **Retry**, which asks again. Exited terminals count toward the Session limit; close unused tabs when the limit is reached.
+双击终端的标签标题可重命名。其他页面持有输入权时，**接管输入** 使当前 attachment 可写。临时断开会保留屏幕并提供 **重新连接**，不暴露传输诊断信息。已退出的 shell 保持可见，显示其退出码并提供 **新建终端**，不会自动重启。用户未在设备上确认的终端显示“未确认。终端未启动。”并提供 **重试**，点击后会再次请求确认。已退出的终端计入 Session 的终端数量上限；达到上限时请关闭不用的标签页。
 
 关闭或替换终端标签页会立即移除标签页，并在后台结束进程。清理失败没有通知或手动重试操作；已保存的未完成关闭请求会在 Client 插件启动时重试。折叠、切换标签页或 Session、浮动和全屏都保留进程。
 
