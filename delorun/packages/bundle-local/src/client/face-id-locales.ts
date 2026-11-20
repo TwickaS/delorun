@@ -26,6 +26,13 @@ export const en = {
   'sheet.setUpFirst': 'This device has no {method} yet. Set it up: Settings → Face ID → Add {method}, then type the code it shows at your computer. Or do this at your computer.',
   'sheet.faceOnly': 'This needs {method} itself. A PIN cannot approve it.',
   'sheet.cancel': 'Cancel',
+  'sheet.confirmPin': 'Confirm with PIN',
+  'sheet.workspace': 'Workspace',
+  'sheet.chat': 'Chat',
+  'sheet.allows': 'Allows',
+  'sheet.lasts': 'Lasts',
+  'lasts.once': 'Just this once',
+  'lasts.terminal': 'The terminal stays open until it has been unused for 5 minutes.',
   'pin.lead': 'Enter your PIN to approve this once.',
   'pin.leadPasscode': 'Enter your passcode to approve this once.',
   'pin.label': 'PIN',
@@ -183,6 +190,15 @@ export const CHANGE_CONTROLS = ['plugin-undo', 'plugin-discard', 'harness-discar
 
 /** The confirmations of other sensitive actions that have their own words: `do.<id>.title` and `do.<id>.body`. */
 export type FaceActionCopy = 'installPlugin' | 'updatePlugin' | 'removePlugin' | 'switchPlugin' | 'changePlugins' | 'openTerminal' | 'browseFolders' | 'newFolder' | 'changeSettings' | 'saveKey' | 'removeKey' | 'addWorkspace' | 'workspaceDefaults' | 'chatOutside' | 'runCommand' | 'mcpServer' | 'pluginCode' | 'fullAccessOn' | 'fullAccessOnChat' | 'fullAccessOff' | 'network' | 'mcpAccept' | 'externalAgent' | 'deleteForever' | 'awayBrowser' | 'reportDetails' | 'profileSave' | 'profileSwitch' | 'seatAnswer' | 'generic'
+
+/**
+ * The copy of a grant action: its own entry, else its `<namespace>/*` entry, else `generic`.
+ * @param action - a Remote method, a Fetch route's action name, or `changes/<control>`.
+ * @returns the copy id the sheet's words and glyph are looked up by.
+ */
+export function faceCopyOf(action: string): FaceActionCopy {
+  return ACTION_COPY[action] ?? ACTION_COPY[`${action.slice(0, action.indexOf('/'))}/*`] ?? 'generic'
+}
 
 /**
  * The words of each grant action, by the action's name: a Remote method or a Fetch route's action. An action this map

@@ -10,8 +10,9 @@ import type { FaceGrantRequest } from '@delorun/plugin-changes/face-grant'
 import { httpPasskeyApi } from './face-id-api.ts'
 import { browserPasskeys, faceIdKindOf, type PasskeyBrowser } from './face-id-browser.ts'
 import { hashArgs, hashRequest } from './face-id-hash.ts'
-import { ACTION_COPY, CHANGE_CONTROLS, type FaceActionCopy } from './face-id-locales.ts'
+import { CHANGE_CONTROLS, faceCopyOf, type FaceActionCopy } from './face-id-locales.ts'
 import type { FaceIdAction, PasskeyApi } from './face-id-types.ts'
+import { COPY_ICON, faceIconOf } from './face-id-icon-keys.ts'
 import { FaceIdGrantFlow } from './FaceIdGrantFlow.tsx'
 import type { FaceGrantSource } from './face-grant.ts'
 import type { HostFetch } from './host-api.ts'
@@ -35,18 +36,19 @@ export interface FaceIdGrantOverlayInjected {
 export type FaceIdGrantOverlayProps = PropsLocale<'delorunFaceId'> & InjectFace<FaceIdGrantOverlayInjected>
 
 /**
- * The words of the action a grant covers: a Changes control's own, an action of {@link ACTION_COPY}, or the generic ones.
+ * The words, glyph and workspace of the action a grant covers: a Changes control's own, an action of {@link ACTION_COPY}, or the generic ones.
  * @param t - the copy.
  * @param request - the call and its action.
- * @returns the title, the body and the items a batch covers.
+ * @returns the title, the body, the items a batch covers, the glyph and the workspace the call names.
  */
-function wordsOf(t: PropsLocale<'delorunFaceId'>['t'], request: FaceGrantRequest): Pick<FaceIdAction, 'title' | 'body' | 'items'> {
+function wordsOf(t: PropsLocale<'delorunFaceId'>['t'], request: FaceGrantRequest): Pick<FaceIdAction, 'title' | 'body' | 'items' | 'icon' | 'context'> {
   if (request.action.startsWith('changes/')) {
     const known = CHANGE_CONTROLS.find(entry => entry === request.action.slice('changes/'.length))
-    return known === undefined ? { title: t('change.generic.title'), body: t('change.generic.body') } : { title: t(`change.${known}.title`), body: t(`change.${known}.body`) }
+    const icon = faceIconOf(request.action)
+    return known === undefined ? { title: t('change.generic.title'), body: t('change.generic.body'), icon } : { title: t(`change.${known}.title`), body: t(`change.${known}.body`), icon }
   }
   const body = 'args' in request.call ? request.call.args : 'answer' in request.call ? {} : jsonOf(request.call.body)
-  let copy: FaceActionCopy = ACTION_COPY[request.action] ?? ACTION_COPY[`${request.action.slice(0, request.action.indexOf('/'))}/*`] ?? 'generic'
+  let copy: FaceActionCopy = faceCopyOf(request.action)
   if (copy === 'fullAccessOn' && Reflect.get(body, 'on') === false) copy = 'fullAccessOff'
   // The same grant switches the chat it names, so the sheet says so.
   else if (copy === 'fullAccessOn' && typeof Reflect.get(body, 'chat') === 'string') copy = 'fullAccessOnChat'
@@ -57,7 +59,8 @@ function wordsOf(t: PropsLocale<'delorunFaceId'>['t'], request: FaceGrantRequest
   if (typeof name === 'string') values.name = `“${name}”`
   const names: unknown = Reflect.get(body, 'names')
   const items = Array.isArray(names) && names.every(item => typeof item === 'string') ? { items: names } : {}
-  return { title: t(`do.${copy}.title`, values), body: t(`do.${copy}.body`, values), ...items }
+  const context = values.workspace === undefined ? {} : { context: { workspace: values.workspace } }
+  return { title: t(`do.${copy}.title`, values), body: t(`do.${copy}.body`, values), icon: COPY_ICON[copy], ...context, ...items }
 }
 
 /**

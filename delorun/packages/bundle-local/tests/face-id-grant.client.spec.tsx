@@ -73,7 +73,7 @@ describe('the Face ID grant overlay', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
   // Reverting the state read leaves `hasPasskey` fixed, so a phone with no passkey is shown a sheet it cannot answer, or no keypad.
-  it('opens a phone with no passkey, or one whose state cannot be read, on the PIN keypad and mints the grant through the PIN route', async () => {
+  it('offers a phone with no passkey, or one whose state cannot be read, Confirm with PIN, and mints the grant through the PIN route', async () => {
     for (const unreadable of [false, true]) {
       const source = createFaceGrantSource()
       const base = fakeApi({ devices: [{ deviceId: 'd', label: 'Phone', thisDevice: true, passkeys: [] }] })
@@ -85,7 +85,9 @@ describe('the Face ID grant overlay', () => {
       } as FaceIdGrantOverlayProps
       const granted = source.grant(request)
       render(<FaceIdGrantOverlay {...props} />)
-      expect(screen.queryByRole('button', { name: /Confirm with/ })).toBeNull()
+      // The sheet's main button names the PIN, not Face ID, and opens the keypad in the same dialog.
+      expect(screen.queryByRole('button', { name: /Confirm with Face ID/ })).toBeNull()
+      fireEvent.click(await screen.findByRole('button', { name: 'Confirm with PIN' }))
       fireEvent.change(await screen.findByLabelText('Passcode'), { target: { value: 'correct horse' } })
       fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
       await expect(granted).resolves.toBe('g2')
@@ -182,10 +184,10 @@ describe('the terminal path on a phone (owner report on the iPhone)', () => {
   it('goes back from the keypad to the sheet on Escape, and hands back the refusal on a second Escape', async () => {
     // A browser with no Face ID offers the PIN beside the sheet.
     const { api, lifted } = refusedCreate(false)
-    fireEvent.click(await screen.findByRole('button', { name: en['sheet.usePin'] }))
+    fireEvent.click(await screen.findByRole('button', { name: en['sheet.confirmPin'] }))
     expect(document.querySelector('[data-face-id-pin]')).not.toBeNull()
     fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
-    await screen.findByRole('button', { name: en['sheet.usePin'] })
+    await screen.findByRole('button', { name: en['sheet.confirmPin'] })
     expect(document.querySelector('[data-face-id-pin]')).toBeNull()
     fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
     await expect(lifted).resolves.toBe(false)
@@ -195,7 +197,7 @@ describe('the terminal path on a phone (owner report on the iPhone)', () => {
   it.each(['sheet', 'keypad'] as const)('ends the confirmation when the browser closes the %s dialog itself, and asks afresh for the next call', async (where) => {
     // Chrome closes a modal dialog on a repeated close request with no tap between; a confirmation left pending held every later one (review P2-2).
     const { lifted, lift } = refusedCreate(where === 'sheet')
-    if (where === 'keypad') fireEvent.click(await screen.findByRole('button', { name: en['sheet.usePin'] }))
+    if (where === 'keypad') fireEvent.click(await screen.findByRole('button', { name: en['sheet.confirmPin'] }))
     else await screen.findByRole('button', { name: /Confirm with/ })
     const dialog = document.querySelector('dialog')
     act(() => { dialog?.removeAttribute('open'); dialog?.dispatchEvent(new Event('close')) })

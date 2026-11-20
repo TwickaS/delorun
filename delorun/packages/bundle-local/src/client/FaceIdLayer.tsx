@@ -35,11 +35,12 @@ export function FaceIdLayer({ labelledBy, attributes, onEscape, onClosed, childr
   useLayoutEffect(() => {
     const element = dialog.current
     if (element === null || element.open) return
-    // The dialog takes focus itself, so opening the keypad does not focus its field and raise a phone's keyboard.
+    // The dialog takes focus itself: no control shows a focus ring on open, and opening the keypad does not focus its field and raise a phone's keyboard.
     element.setAttribute('autofocus', '')
     // jsdom has no showModal; there the dialog is only marked open.
     if (typeof element.showModal === 'function') element.showModal()
     else element.setAttribute('open', '')
+    element.focus({ preventScroll: true })
   }, [])
   useEffect(() => {
     let alive = true
@@ -60,7 +61,7 @@ export function FaceIdLayer({ labelledBy, attributes, onEscape, onClosed, childr
       element?.removeEventListener('close', closed)
     }
   }, [])
-  return <dialog ref={dialog} className={css.scrim} role="dialog" aria-modal="true" aria-labelledby={labelledBy} {...attributes}
+  return <dialog ref={dialog} className={css.scrim} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={labelledBy} {...attributes}
     onCancel={(event) => { event.preventDefault(); handlers.current.onEscape() }} onKeyDown={(event) => { event.stopPropagation() }}>
     {children}
   </dialog>

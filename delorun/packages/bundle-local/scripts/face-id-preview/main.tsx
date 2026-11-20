@@ -15,6 +15,7 @@ import { AddFaceId, FaceIdPairingStep, PasskeyCodeEntry } from '../../src/client
 import { answerActionOf } from '../../src/client/FaceIdAnswerAction.tsx'
 import { FaceIdPin } from '../../src/client/FaceIdPin.tsx'
 import { FaceIdSheet } from '../../src/client/FaceIdSheet.tsx'
+import { FaceIdGrantFlow } from '../../src/client/FaceIdGrantFlow.tsx'
 import { callActionOf } from '../../src/client/FaceIdGrantOverlay.tsx'
 import { PasskeyDevices } from '../../src/client/PasskeyDevices.tsx'
 import { fakeApi, fakeBrowser } from '../../src/client/face-id-fake.ts'
@@ -44,6 +45,16 @@ const ACTION: FaceIdAction = {
 }
 /** The sheet a phone shows when the home refuses a plugin install for want of a grant, as the Face ID step builds it. */
 const INSTALL = await callActionOf(t, { action: 'plugin-packs/add', call: { method: 'POST', path: '/api/delorunPacks.add', body: { names: ['@delorun/reports'] } } })
+/** Where the actions below happen, as a real request names it. */
+const WHERE = { workspace: 'delorun', chat: 'Fix the tests' }
+/** The shared sheet, as the Face ID step builds it for a refused call: terminal, full access, the update, an approval answer and an install. */
+const SHEETS: Readonly<Record<string, FaceIdAction>> = {
+  'a498-terminal': { ...await callActionOf(t, { action: 'terminal/create', call: { args: { request: { id: 't1' } } }, hold: { feature: 'terminal', id: 't1' } }), context: WHERE },
+  'a498-fullaccess': { ...await callActionOf(t, { action: 'plugin-permission-defaults/set-full-access', call: { method: 'POST', path: '/api/full-access', body: { workspace: '/home/user/delorun', on: true, chat: 'c1' } } }), context: WHERE },
+  'a498-approval': { ...answerActionOf(t, { sessionId: 'chat-1', callId: 'call-7', grants: 'external-agent', toolName: 'Claude Code' }), context: WHERE },
+  'a498-update': { ...await callActionOf(t, { action: 'changes/update-begin', call: { method: 'POST', path: '/api/changes/update-begin', body: {} } }) },
+  'a498-install': { ...INSTALL, context: WHERE },
+}
 const PASSKEY = { credentialId: 'BBBB', createdAt: NOW - 3 * DAY, lastUsedAt: NOW - DAY, synced: true }
 const PHONE_DEVICES: readonly PasskeyDevice[] = [{ deviceId: 'this', label: 'This device', thisDevice: true, passkeys: [PASSKEY] }]
 const COMPUTER_DEVICES: readonly PasskeyDevice[] = [
@@ -107,6 +118,22 @@ function PhoneDevices({ passkey }: { passkey: boolean }): ReactNode {
 }
 
 /**
+ * A stand-in for the studio under a sheet: the chat's header and a few messages, so the dimmed backdrop reads as it does over the real page.
+ * @param props.children - the sheet.
+ * @returns the page with the sheet over it.
+ */
+function OverStudio({ children }: { readonly children: ReactNode }): ReactNode {
+  const line = (width: string): ReactNode => <div style={{ height: 12, width, borderRadius: 6, background: 'var(--dsw-alias-border-l3)' }} />
+  return <>
+    <div style={{ padding: 16, display: 'grid', gap: 14, background: 'var(--dsw-alias-bg-layer-1)', minHeight: '100dvh', boxSizing: 'border-box' }}>
+      <strong>delorun · Fix the tests</strong>
+      {line('80%')}{line('62%')}{line('90%')}{line('45%')}{line('70%')}{line('85%')}{line('55%')}{line('75%')}
+    </div>
+    {children}
+  </>
+}
+
+/**
  * The studio's worst stacking for the Face ID layer: an open studio Modal (z-index 1000, portalled to the body), a
  * terminal panel at the highest z-index, and the sheet rendered inside a small transformed box that clips its content.
  * @param props.children - the sheet or keypad.
@@ -149,6 +176,10 @@ function screenOf(screen: string): ReactNode {
     case 'wire-install':
       return <FaceIdSheet t={t} action={INSTALL} kind="faceId" api={fakeApi()} browser={fakeBrowser()} hasPasskey fallback="pin"
         onGranted={noop} onCancel={noop} onFallback={noop} />
+    case 'a498-terminal': case 'a498-fullaccess': case 'a498-approval': case 'a498-update': case 'a498-install':
+      return <OverStudio><FaceIdGrantFlow t={t} action={SHEETS[screen] ?? ACTION} kind="faceId" api={fakeApi()} browser={fakeBrowser()} hasPasskey secret="pin" onGranted={noop} onCancel={noop} /></OverStudio>
+    case 'a498-keypad':
+      return <OverStudio><FaceIdGrantFlow t={t} action={SHEETS['a498-terminal'] ?? ACTION} kind="faceId" api={fakeApi()} browser={fakeBrowser()} hasPasskey={false} secret="pin" onGranted={noop} onCancel={noop} /></OverStudio>
     case 'b2-answer':
       return <FaceIdSheet t={t} action={answerActionOf(t, { sessionId: 'chat-1', callId: 'call-7', grants: 'external-agent', toolName: 'Claude Code' })} kind="faceId"
         api={fakeApi()} browser={fakeBrowser()} hasPasskey fallback="pin" onGranted={noop} onCancel={noop} onFallback={noop} />
