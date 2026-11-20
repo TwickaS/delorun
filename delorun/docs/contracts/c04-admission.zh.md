@@ -152,14 +152,16 @@ home 的 Host 运行一个回环监听器；在远程访问开启期间，还为
 <a id="page-unlock"></a>
 ### 页面解锁
 
-No route mints a page unlock: [PIN mode](c14-oidc-passkeys.zh.md#pin-mode) refuses the unlock to every device, which confirms each action with a one-action grant instead. Admission still strips and checks the token carriers below, so a token a page still sends is refused with `401 UNLOCK_INVALID` and admits nothing. Each part below is a fact of admission, not of the routes.
+没有任何路由签发页面解锁：[PIN 模式](c14-oidc-passkeys.zh.md#pin-mode)对每台设备都拒绝解锁，设备改为用一次一个操作的授权凭证（grant）确认每项操作，持有通行密钥的设备则在 Face ID 通行期（pass）内确认。准入仍会剥离并检查下面的令牌载体，因此页面仍发送的令牌会以 `401 UNLOCK_INVALID` 被拒绝，并且不准入任何东西。下面每一部分都是准入的事实，而不是路由的事实。
 
 - **载体。** 令牌在 `/api` 请求中作为 `Delorun-Unlock` 头传送，在 `/api/remote.mux` 升级请求中作为 WebSocket 子协议 `delorun-unlock.<token>` 传送。查询参数从不被读作令牌。提供该子协议的页面会在它之前再提供一个固定协议，使升级应答写明浏览器接受的协议。
 - **剥离。** `admit` 在任何路由、升级处理器或插件看到请求之前，从请求的每个头视图中移除这两种载体。PIN 模式关闭时，令牌被剥离并被忽略。
 - **检查。** 会话被准入之后，令牌必须写明一个绑定到该会话的设备、监听器与会话的解锁（最近 30 秒内被滚动更新的会话视为同一会话）。没有令牌的请求照常被准入，归属于该设备的锁定 Peer。未知、已结束、重复或绑定到其他对象的令牌会被拒绝并返回 `401 UNLOCK_INVALID`，绑定到其他设备、监听器或会话的解锁随之结束：移动过的令牌已经泄露。
-- **Per-page Peers.** A device holds one locked Peer per listener and one Peer for each running page unlock, whose principal carries the unlock's `unlockId`. The Peer decides what its page may do; no Peer answers a reserved prompt or takes a `face` action without a grant of its own, and an unlock never admits another page.
+- **每页一个 Peer。** 设备在每个监听器上持有一个已锁定的 Peer，并为每个运行中的页面解锁持有一个 Peer，其主体携带该解锁的 `unlockId`。Peer 决定它的页面可以做什么；没有任何 Peer 在没有自己的授权凭证时答复保留的提示或执行 `face` 操作，一次解锁也从不准入另一个页面。
 - **结束。** 解锁结束时，其 Peer 被 dispose，其会话的远程访问连接被关闭。设备的其他页面以各自的令牌重新连接。
 - **缓存。** 远程访问首页以 `Cache-Control: no-store` 应答，因此恢复的页面不会从缓存提供。
+
+**授权凭证（Face ID）。** 已确认的操作不以令牌的形式传送：home 为每个设备、监听器、操作和调用哈希保存一个授权凭证（C14，「Face ID 解锁」）。`face` 类别的插件 Fetch 路由在 `Delorun-Grant` 头中写明它的授权凭证，home 在路由运行之前读取并移除该头，就像对 `Delorun-Unlock` 所做的那样；该头只保存授权凭证 id，home 检查的是它所收到的请求的哈希。Remote 调用和提示答复什么也不携带：策略和答复守卫去查找授权凭证。终端或文件夹选择器的保持窗口（hold）绑定到那个 id 和该连接。
 
 <a id="launch-tokens"></a>
 ### 启动令牌
@@ -320,9 +322,9 @@ cookie 名称 `__Host-delorun-session`、监听器 id、拒绝代码以及会话
 
 - **受信任源上的代码。** 准入决定谁能访问 Host，而不决定已获准入的代码做什么。社区客户端插件，或绕过净化器的脚本，以会话的全部权限在 studio 的源上运行；内容安全策略与 Trusted Types 限制脚本和请求如何进入，而不限制本人安装的代码。
 - **每台设备都是所有者。** 每台受信任设备的 Peer 都以上游的 `owner` 主体行事，因此本约定不会让任何设备的权限低于另一台设备。
+- **本人自己的进程。** 本人用户在沙箱之外的进程可以读取 home 的机密（包括浏览器会话密钥），可以签发回环凭据并修改会话存储；会话限额防范的是其他方，而不是这类进程（[C1](c01-home-layout.zh.md#security)）。
 - **被复制的回环 cookie。** 回环 cookie 自签发起 30 天内有效，在重启后仍有效，且没有可用于撤销它的记录；回环 studio 不发送内容安全策略，因此 studio 创建的 Trusted Types 策略在那里不被强制执行。
 - **命令行上的链接。** 浏览器启动器（`xdg-open`、`open`，或 Windows 与 WSL 下的 `cmd.exe`）以参数形式接收链接，因此令牌出现在该进程的命令行上；当启动器启动新的浏览器进程时，还出现在浏览器的命令行上。能读取命令行的另一个进程（Linux 上未设 `hidepid` 时的其他用户的进程，或 Landlock 或 Seatbelt 下的受限命令，它们的方言不隐藏本人的进程）可以在启动到浏览器第一次请求之间，最多在令牌的 60 秒内，抢在浏览器之前取得令牌。该请求之后，令牌就毫无价值。bwrap 给受限命令独立的进程命名空间，因此它看不到 Linux 上的其他进程；在 WSL 下该命名空间不覆盖经互操作到达的 Windows 进程，该情形在验证之前不在覆盖范围内。
-- **本人自己的进程。** 本人用户在沙箱之外的进程可以读取 home 的机密（包括浏览器会话密钥），可以签发回环凭据并修改会话存储；会话限额防范的是其他方，而不是这类进程（[C1](c01-home-layout.zh.md#security)）。
 - **聊天渲染之外的远程内容。** 占位符规则覆盖 studio 在聊天内容中渲染的图片与媒体；客户端插件发出的其他请求只由内容安全策略拒绝。
 
 <a id="decided-values"></a>

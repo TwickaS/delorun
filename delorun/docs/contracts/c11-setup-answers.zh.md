@@ -145,7 +145,7 @@ setup 提供下列提供方，按名称排列，不让任何一家排在另一�
 
 | 字段 | 类型与取值 | 默认值 | 规则 |
 | --- | --- | --- | --- |
-| `schemaVersion` | Integer `5`, or `2`, `3` or `4` for a document written earlier. | `5` | Setup refuses any other value. A version-2, version-3 or version-4 document that holds `phonePowers` is read with that key ignored and a line on standard error saying so; a version-5 document that holds it is refused as an unknown field (`IGNORED_ANSWER_KEYS` in `@delorun/contract-setup-answers`). A version-2 document has no `updateCheck`, reads as `true`, and is refused when it carries one. A version-2 or version-3 document's `modelProvider` holds `id` and `credential` only, and reads as `deepseek-official` with its credential and the profile's default model, because setup of those versions applied DeepSeek's key and no other provider. One that names another id is refused with a message that it needs schema version 4. |
+| `schemaVersion` | 整数 `5`，对于更早写入的文档为 `2`、`3` 或 `4`。 | `5` | setup 拒绝任何其他值。含有 `phonePowers` 的版本 2、版本 3 或版本 4 的文档，读取时忽略该键，并在标准错误上输出一行说明；含有它的版本 5 的文档则作为未知字段被拒绝（`@delorun/contract-setup-answers` 中的 `IGNORED_ANSWER_KEYS`）。版本 2 的文档没有 `updateCheck`，读作 `true`，带有它时被拒绝。版本 2 或版本 3 文档的 `modelProvider` 只含 `id` 和 `credential`，读作 `deepseek-official`，带有其凭据和 profile 的默认模型，因为这些版本的 setup 只应用 DeepSeek 的密钥而不应用任何其他提供方。指名其他 id 的文档会被拒绝，并提示它需要 schema 版本 4。 |
 | `useCase` | `local`、`remote` 或 `automation`。 | `local` | 本人如何使用 Delorun。交互形式据此设定默认值和问题；`--yes` 和 `--config` 存储它而不问任何问题。`remote` 文档不能启用 reach，因此远程访问用 `delorun setup reach` 开启。在使用场景问题之前写入的记录没有它，读作 `local`；其 `mode` 键（询问过 Quick 或 Full 的 setup 所写的 `quick` 或 `full`）被读取并忽略，任何其他 `mode` 值会被拒绝。 |
 | `modelProvider` | 带有下面四个字段的对象，或表示没有提供方的 `null`。 | 在终端中为带有各字段默认值的对象；使用 `--yes` 时为 `null`，除非给出 `--provider`。 | `null` 不写入任何提供方行，并保留已有的行，因此新 chat 保持 profile 所选的模型；setup 会说明这一点。 |
 | `modelProvider.id` | [模型提供方](#model-providers)中的一个 id。 | `deepseek-official` | 任何其他 id 都被拒绝，并写明 setup 接受的 id。 |
@@ -192,7 +192,7 @@ setup 提供下列提供方，按名称排列，不让任何一家排在另一�
 <a id="yes-and-config-forms"></a>
 ### --yes 与 --config 形式
 
-`--yes` keeps the `local` use case, accepts every default but the provider, and applies no answer other than the defaults, the provider flags, `--prompts` and `--no-update-check`. Without `--provider` it sets up no provider, whatever keys the environment holds, and prints how to add one: `delorun setup key` in a terminal or with the provider flags, or the studio's Settings → Agent → Models. `--provider <id>` names a provider of [Model providers](#model-providers), `--model <id>` its model, which every provider but DeepSeek needs, `--base-url <url>` the endpoint of `openai-compatible` and of no other provider, and `--key-env <NAME>` the variable the key is read from at each start, which defaults to the provider's key variable. A key is never accepted on the command line, and a `--key-env` value that is not a variable name is refused without being echoed. When the variable is unset, setup stops with a typed error that names it. `delorun setup key` takes the same flags on a profile that is set up and then asks nothing. `--check-key` without a provider is refused with the usage code.
+`--yes` 保持 `local` 使用场景，接受除提供方之外的每个默认值，并且除默认值、提供方标志、`--prompts` 和 `--no-update-check` 之外不应用任何回答。没有 `--provider` 时，无论环境中有什么密钥，它都不设置任何提供方，并打印如何添加：在终端中或带提供方标志的 `delorun setup key`，或 studio 的 Settings → Agent → Models。`--provider <id>` 指名[模型提供方](#model-providers)中的一家提供方，`--model <id>` 指名其模型（除 DeepSeek 之外的每家提供方都需要），`--base-url <url>` 指名 `openai-compatible` 的端点且不用于任何其他提供方，`--key-env <NAME>` 指名每次启动时读取密钥的变量，默认为提供方的密钥变量。命令行从不接受密钥，不是变量名的 `--key-env` 值会被拒绝且不回显。变量未设置时，setup 以写明它的带类型错误停止。`delorun setup key` 在已设置好的 profile 上接受相同的标志，然后什么也不问。没有提供方的 `--check-key` 以用法代码被拒绝。
 
 `--config <file>` 读取符合上述 schema 的回答文档，并按与 `--yes` 相同的规则应用其回答；其提供方是 `modelProvider` 所指名的那一个，提供方标志在它旁边被拒绝；无论文档怎么说，`--no-update-check` 都会关闭发布检查。`reach.option` 不是 `none` 的文档，以及 `importStockHome` 或 `protectChanges` 为 `true` 的文档，都会被拒绝，并返回写明该字段的带类型错误。两种形式都不更改保护设置。带有已移除键的文档会被拒绝，拒绝信息写明已移除的键。任何字段中带有凭据取值的文档会被拒绝，且不回显该取值。
 
@@ -223,7 +223,7 @@ setup 在每次终端运行开始时显示隐私说明，并在无人值守的�
 <a id="compatibility"></a>
 ## 兼容性
 
-The answers schema is versioned by `schemaVersion`, which is `5`. A change that adds a question with a safe default keeps the version when an older reader that ignores the new field writes the same profile; `useCase` is such a field, because the answers it sets are stored beside it and the profile files do not depend on it. A change that alters the meaning of an existing answer, or that removes a field, increments the version; version 2 removed five fields. Version 3 added `updateCheck`: a reader that ignored `false` would leave the release check on, so the version increments. Version 4 gave `modelProvider.id` its meaning and added `baseURL`, `model` and `null`: a version-3 reader ignores the id and would store an Anthropic key as DeepSeek's, so the version increments. Version 5 removed `phonePowers`, so the version increments. Setup reads a version-2, version-3 or version-4 document as version 5, as [Answer schema](#answer-schema) describes, and records it as version 5. Setup refuses an answers document whose version it does not know.
+回答 schema 通过 `schemaVersion` 标记版本，其值为 `5`。若新增的问题带有安全的默认值，且忽略该新字段的旧读取者写入的 profile 相同，则该变更保持版本不变；`useCase` 就是这样的字段，因为它所设定的回答与它一起存储，而 profile 文件并不依赖它。改变既有回答含义，或删除字段，都会递增版本；版本 2 删除了五个字段。版本 3 增加了 `updateCheck`：忽略 `false` 的读取者会让发布检查保持开启，因此版本递增。版本 4 赋予 `modelProvider.id` 含义，并增加了 `baseURL`、`model` 和 `null`：版本 3 的读取者忽略该 id，会把 Anthropic 的密钥存储为 DeepSeek 的，因此版本递增。版本 5 删除了 `phonePowers`，因此版本递增。setup 如[回答 schema](#answer-schema) 所述，把版本 2、版本 3 或版本 4 的文档读作版本 5，并将其记录为版本 5。setup 拒绝其版本它不认识的回答文档。
 
 上游新增的选择加入项，以默认关闭的问题形式加入，并在同一次变更中把其 profile 行加入映射表。
 
@@ -280,7 +280,7 @@ The answers schema is versioned by `schemaVersion`, which is `5`. A change that 
 <a id="decided-values"></a>
 ## 决定的取值
 
-- The answers schema version is `5`; setup also reads versions 2, 3 and 4.
+- 回答 schema 的版本是 `5`；setup 也读取版本 2、3 和 4。
 - 提供方问题在终端中起始为 `deepseek-official`，`--yes` 不设置任何提供方，除非 `--provider` 指名一家。
 - 使用场景默认为 `local`；`remote` 和 `automation` 由本人选择，从不作为默认值。
 - 默认值为：「Ask me first」提示，后台运行开启，端口 3080，远程访问 `none`，stock home 导入关闭（导入节显示时也预选为否），发布检查开启。

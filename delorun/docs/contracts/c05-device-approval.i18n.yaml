@@ -13,7 +13,7 @@
   zh: fb935274a65be795
 /contract-c5-device-approval/status:
   en: e2f72e51c29a128c
-  zh: d3d6d9804f84b8ca
+  zh: c1e08c2c5e3ac456
 /contract-c5-device-approval/contents:
   en: 1fbf42d12d2d5bf7
   zh: 03b0f807fa83d9e6
@@ -40,7 +40,7 @@
   zh: 66ac48a05cbafd50
 /contract-c5-device-approval/contract/match-code:
   en: 6486a12fd6ff91f5
-  zh: de52201f37f8fc7c
+  zh: 5cb82b146777e265
 /contract-c5-device-approval/contract/approval:
   en: ebac68ecfaccbef9
   zh: 1decd4c3ca0cdae8
@@ -49,13 +49,13 @@
   zh: cdede30ba3cf54b8
 /contract-c5-device-approval/contract/local-approval:
   en: a1e3d64a1738a655
-  zh: 672539af4c992a2b
+  zh: 6619a6de324f5227
 /contract-c5-device-approval/contract/sign-in:
   en: ac33033e968a74b7
   zh: d97772854a6ec7e3
 /contract-c5-device-approval/contract/removal:
   en: 68e9fe73c2b71799
-  zh: ab260df0ec31bb1d
+  zh: 273e4685fbd60bb1
 /contract-c5-device-approval/contract/reset:
   en: d2251fc6f2df5e19
   zh: b6d1a5417f4dee01

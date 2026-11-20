@@ -36,7 +36,7 @@ kind: "package-bundle"
 
 ## 账户与限额
 
-`ctx.agentAccounts` 把每个智能体的登录、套餐和套餐限额窗口保存在 `secrets/external-agents/accounts.json`（权限 0600）。它只保存 `signedIn`、`plan`、每个窗口的 `kind`、`usedPercent`、`resetsAt`、`status`、`seenAt` 和 `source`、提供的模型，以及一次检查最近何时回答、失败或被请求；每条观测都逐字段重建，因此程序回复中的电子邮件、组织、账户 id 或令牌绝不会进入该文件。无法读取的文件按没有数据处理，不会因此拒绝任何东西。运行通过驱动的 `onLimits` 报告数据。限额检查是门控的 `probe`，只在关于该智能体的、`probeTriggers` 所列出的明确操作上运行：它的包刚被添加（没有已保存的条目）、登录完成（`delorun agents login`，或它为下次启动留下的标记）或“立即检查”；单单 Host 启动不检查任何东西，`probeMinIntervalMinutes` 是两次检查之间的下限，不是定时器。重置时间已过的窗口从不拒绝启动。`GET /api/delorunExternalAgents.accounts` 回答任何已批准的设备，且从不启动检查；`POST /api/delorunExternalAgents.refresh` 需要在电脑上进行，或对恰好该次调用的 Face ID 授权（没有 passkey 的手机用 PIN）；任何解锁、代码或批准宽限都不能代替它。`delorun agents status` 通过更新通道或该文件读取同样的数据。该存储在门控和连接都存在时挂载。
+`ctx.agentAccounts` 把每个智能体的登录、套餐和套餐限额窗口保存在 `secrets/external-agents/accounts.json`（权限 0600）。它只保存 `signedIn`、`plan`、每个窗口的 `kind`、`usedPercent`、`resetsAt`、`status`、`seenAt` 和 `source`、提供的模型，以及一次检查最近何时回答、失败或被请求；每条观测都逐字段重建，因此程序回复中的电子邮件、组织、账户 id 或令牌绝不会进入该文件。无法读取的文件按没有数据处理，不会因此拒绝任何东西。运行通过驱动的 `onLimits` 报告数据。限额检查是门控的 `probe`，只在关于该智能体的、`probeTriggers` 所列出的明确操作上运行：它的包刚被添加（没有已保存的条目）、登录完成（`delorun agents login`，或它为下次启动留下的标记）或“立即检查”；单单 Host 启动不检查任何东西，`probeMinIntervalMinutes` 是两次检查之间的下限，不是定时器。重置时间已过的窗口从不拒绝启动。`GET /api/delorunExternalAgents.accounts` 回答任何已批准的设备，且从不启动检查；`POST /api/delorunExternalAgents.refresh` 需要在电脑上进行，或对恰好该次调用的 Face ID 授权（没有通行密钥的手机用 PIN）；任何解锁、代码或批准宽限都不能代替它。`delorun agents status` 通过更新通道或该文件读取同样的数据。该存储在门控和连接都存在时挂载。
 
 ## 配置
 
