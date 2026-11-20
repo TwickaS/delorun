@@ -2,7 +2,7 @@
  * The update notice at the bottom of the chat list: a newer Delorun release exists, what kind of update it is, how
  * many of the person's plugins it would turn off, its summary under a "Release note" label, so the release's own text
  * never reads as the studio's instruction, and Update now…, which opens the update dialog of `@delorun/plugin-update`
- * (the command that applies it where the studio has no such dialog, or a remote page the Host does not let begin one). It applies nothing itself. It sits below
+ * (the command that applies it where the studio has no such dialog, or a remote page the Host does not let begin one). It applies nothing itself. Every page has a close button that hides the notice for that release in that browser only. It sits below
  * the list's scrolling region, so it never covers or moves a row, and takes no focus. Its polite live region holds the
  * title and the kind and plugin line only; the close and summary buttons sit outside it.
  * @module @delorun/plugin-sidebar/client/UpdateNotice
@@ -28,8 +28,13 @@ export interface UpdateNoticeFace {
   readonly open: (() => void) | null
   /** Whether the Host's state lets this page begin an update; Update now… shows only while it is true, otherwise the terminal line. */
   readonly canOpen: HostObservable<boolean>
-  /** Hide the notice for one release; null on a remote session, whose notice offers no action. */
-  readonly dismiss: ((release: SemanticVersion) => void) | null
+  /**
+   * Hide the notice for one release in this browser. It writes a display preference to the page's own storage and calls no
+   * Host route, so the computer's page and a remote page both have it; a newer release shows again.
+   */
+  readonly dismiss: (release: SemanticVersion) => void
+  /** Whether this page is a remote session's (a phone): the title, What's new and the close button share one row. */
+  readonly remote: boolean
 }
 
 /** The notice's props: what it reads and does, and the sidebar's copy. */
@@ -61,7 +66,7 @@ export function UpdateNoticeCard({ face, t }: UpdateNoticeCardProps) {
   }, [notesOpen, face, shownVersion])
   if (notice === null) return null
   const { release, running } = notice
-  const remote = face.dismiss === null
+  const { remote, dismiss } = face
   const kind = t(release.security ? 'update.kind.security' : `update.kind.${notice.kind}`)
   const plugins = notice.disables === 0
     ? t('update.plugins.none')
@@ -70,13 +75,15 @@ export function UpdateNoticeCard({ face, t }: UpdateNoticeCardProps) {
     ? t('update.title', { version: release.delorun })
     : t('update.title.base', { version: release.delorun, dsh: release.dsh })
   const [before = '', after = ''] = t(remote ? 'update.run.remote' : 'update.run', { command: MARK }).split(MARK)
-  const dismiss = face.dismiss
   const [noteBefore = '', noteAfter = ''] = t('update.summary', { summary: MARK }).split(MARK)
   const note = release.summary === undefined
     ? null
     : <><span className={css.summaryLabel}>{noteBefore}</span>{release.summary}{noteAfter}</>
+  const whatsNew = release.notes === undefined
+    ? null
+    : <Button variant="ghost" className={css.whatsNew} onClick={() => { setNotesOpen(true) }}>{t('update.whatsNew')}</Button>
   return (
-    <div className={css.notice} data-update-notice={release.delorun}>
+    <div className={css.notice} data-update-notice={release.delorun} data-remote={remote}>
       <div className={css.head}>
         <div className={css.status} role="status">
           <p className={css.title}>{title}</p>
@@ -86,12 +93,11 @@ export function UpdateNoticeCard({ face, t }: UpdateNoticeCardProps) {
             {plugins}
           </p>
         </div>
-        {dismiss !== null && (
-          <button type="button" className={css.dismiss} aria-label={t('update.dismiss')} title={t('update.dismiss')}
-            onClick={() => { dismiss(release.delorun) }}>
-            <IconCloseOutlineRegular size={14} className={css.dismissIcon} />
-          </button>
-        )}
+        {remote && whatsNew}
+        <button type="button" className={css.dismiss} aria-label={t('update.dismiss')} title={t('update.dismiss')}
+          onClick={() => { dismiss(release.delorun) }}>
+          <IconCloseOutlineRegular size={14} className={css.dismissIcon} />
+        </button>
       </div>
       {note !== null && (remote
         ? <p className={css.summary}>{note}</p>
@@ -101,9 +107,7 @@ export function UpdateNoticeCard({ face, t }: UpdateNoticeCardProps) {
             {note}
           </button>
         ))}
-      {release.notes !== undefined && (
-        <Button variant="ghost" className={css.whatsNew} onClick={() => { setNotesOpen(true) }}>{t('update.whatsNew')}</Button>
-      )}
+      {!remote && whatsNew}
       {notesOpen && (
         <Modal open onClose={() => { setNotesOpen(false) }} closeLabel={t('update.whatsNewClose')}
           title={t('update.whatsNewTitle', { version: release.delorun })}>

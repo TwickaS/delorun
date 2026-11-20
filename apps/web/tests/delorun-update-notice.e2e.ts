@@ -108,11 +108,12 @@ it.skipIf(webSnapshotMode() === 'record')('shows the Host\'s update notice in th
   await expect.poll(() => notice.count()).toBe(0)
   expect(await page.evaluate(() => window.localStorage.getItem('delorun:sidebar:update.dismissed'))).toBe('0.1.3')
 
-  // A remote session's page, in a fresh browser context, shows the Host's notice and no control.
+  // A remote session's page, in a fresh browser context, shows the Host's notice and a close button that hides it there.
   const remote = await openStudio(browser, scaffold.authenticatedUrl, true)
   onTestFailed(() => saveFailureShot(remote, 'web-e2e-delorun-update-notice-remote'))
   const remoteNotice = remote.locator('[data-update-notice="0.1.3"]')
   expect(await remoteNotice.textContent()).toContain('Release note: Fixes the reach listener\'s cookie check')
-  expect(await remoteNotice.textContent()).toContain('Run delorun update in a terminal on the computer that runs Delorun.')
-  expect(await remoteNotice.locator('button, a, input, [tabindex]').count()).toBe(0)
+  expect(await remoteNotice.textContent()).toContain('Run delorun update on the computer that runs Delorun.')
+  await remoteNotice.getByRole('button', { name: 'Hide this notice until a newer release' }).click()
+  await expect.poll(() => remoteNotice.count()).toBe(0)
 }, 240_000)

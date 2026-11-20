@@ -402,16 +402,21 @@ describe('the update notice in the studio', () => {
     expect(window.localStorage.getItem('delorun:sidebar:update.dismissed')).toBe('0.1.3')
   })
 
-  it('offers no control on a page a reach listener served', async () => {
-    serve()
+  it('offers the close button on a page a reach listener served, which keeps the dismissal in that browser and calls no Host route', async () => {
+    const fetch = serve()
     const h = harness({ settings: DEFAULT_SIDEBAR_SETTINGS, remoteMedia: 'placeholder' })
     await h.fiber.await()
     const face = h.face<SidebarInjected>('sidebar.workspaces.list#').updateNotice
-    expect(face.dismiss).toBeNull()
+    expect(face.remote).toBe(true)
     render(<UpdateNoticeCard face={face} t={t} />)
     expect((await screen.findByRole('status')).textContent).toContain(en['update.kind.security'])
-    expect(screen.queryAllByRole('button')).toEqual([])
+    const reads = fetch.mock.calls.length
+    fireEvent.click(screen.getByRole('button', { name: en['update.dismiss'] }))
+    expect(screen.queryByRole('status')).toBeNull()
+    expect(window.localStorage.getItem('delorun:sidebar:update.dismissed')).toBe('0.1.3')
+    expect(fetch.mock.calls.length).toBe(reads)
   })
+
 })
 
 describe('a viewer\'s preferences', () => {

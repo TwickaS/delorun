@@ -51,8 +51,8 @@ function memoryStorage(initial: Record<string, string> = {}): DismissalStorage &
 }
 
 /** Render the notice over a fixed notice. */
-function show(notice: UpdateNotice | null, dismiss: UpdateNoticeFace['dismiss'] = vi.fn(), notes: UpdateNoticeFace['notes'] = async () => null) {
-  const face: UpdateNoticeFace = { notice: createSnapshotStore(notice), notes, open: null, canOpen: createSnapshotStore(false), dismiss }
+function show(notice: UpdateNotice | null, dismiss: UpdateNoticeFace['dismiss'] = vi.fn(), notes: UpdateNoticeFace['notes'] = async () => null, remote = false) {
+  const face: UpdateNoticeFace = { notice: createSnapshotStore(notice), notes, open: null, canOpen: createSnapshotStore(false), dismiss, remote }
   return render(<UpdateNoticeCard face={face} t={t} />)
 }
 
@@ -88,7 +88,7 @@ describe('what\'s new', () => {
     fireEvent.click(screen.getByText('What\'s new'))
     expect(await screen.findByText('The release notes could not be shown.')).toBeTruthy()
     cleanup()
-    const face: UpdateNoticeFace = { notice: createSnapshotStore<UpdateNotice | null>(noticeOf({ notes: true })), notes: async () => ({ version: v('0.1.3'), notes: '- 更新' }), open: null, canOpen: createSnapshotStore(false), dismiss: null }
+    const face: UpdateNoticeFace = { notice: createSnapshotStore<UpdateNotice | null>(noticeOf({ notes: true })), notes: async () => ({ version: v('0.1.3'), notes: '- 更新' }), open: null, canOpen: createSnapshotStore(false), dismiss: vi.fn(), remote: true }
     render(<UpdateNoticeCard face={face} t={makeTranslate(zh)} />)
     fireEvent.click(screen.getByText('新功能'))
     expect((await screen.findByText(/更新/u)).closest('pre')?.textContent).toBe('- 更新')
@@ -163,7 +163,7 @@ describe('the notice', () => {
 
   it('offers Update now… in place of the terminal command where the studio has an update dialog, and opens it', () => {
     const open = vi.fn()
-    const face: UpdateNoticeFace = { notice: createSnapshotStore(noticeOf()), notes: async () => null, open, canOpen: createSnapshotStore(true), dismiss: vi.fn() }
+    const face: UpdateNoticeFace = { notice: createSnapshotStore(noticeOf()), notes: async () => null, open, canOpen: createSnapshotStore(true), dismiss: vi.fn(), remote: false }
     const { container } = render(<UpdateNoticeCard face={face} t={t} />)
     expect(container.textContent).not.toContain(UPDATE_COMMAND)
     fireEvent.click(screen.getByText(en['update.now']))
@@ -195,7 +195,7 @@ describe('the notice', () => {
   })
 
   it('marks the summary with the Chinese label in Chinese', () => {
-    const face: UpdateNoticeFace = { notice: createSnapshotStore<UpdateNotice | null>(noticeOf({ summary: '修复远程访问' })), notes: async () => null, open: null, canOpen: createSnapshotStore(false), dismiss: null }
+    const face: UpdateNoticeFace = { notice: createSnapshotStore<UpdateNotice | null>(noticeOf({ summary: '修复远程访问' })), notes: async () => null, open: null, canOpen: createSnapshotStore(false), dismiss: vi.fn(), remote: true }
     render(<UpdateNoticeCard face={face} t={makeTranslate(zh)} />)
     const summary = screen.getByText(/修复远程访问/)
     expect(summary.tagName).toBe('P')
@@ -231,32 +231,48 @@ describe('the notice', () => {
     expect(dismiss).toHaveBeenCalledWith('0.1.4')
   })
 
-  it('update-notice-remote-session-offers-no-action: a remote session\'s notice shows its text and offers no control', () => {
-    const { container } = show(noticeOf({ security: true, summary: 'Fixes the reach listener' }), null)
+  it('update-notice-remote-session-dismissal: a remote session\'s notice shows its text and a close button that hides it for the release', () => {
+    const dismiss = vi.fn()
+    const { container } = show(noticeOf({ security: true, summary: 'Fixes the reach listener' }), dismiss, undefined, true)
     const notice = container.querySelector('[data-update-notice="0.1.3"]')
-    expect(screen.queryAllByRole('button')).toEqual([])
-    expect(notice?.querySelectorAll('button, a, input, [tabindex]')).toHaveLength(0)
+    expect(screen.getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual([en['update.dismiss']])
     expect(screen.getByRole('status').textContent).toBe('Delorun 0.1.3 is availableSecurity fix · All your plugins stay compatible')
     expect(notice?.textContent).toContain('Release note: Fixes the reach listener')
-    expect(notice?.textContent).toContain('Run delorun update in a terminal on the computer that runs Delorun.')
+    expect(notice?.textContent).toContain('Run delorun update on the computer that runs Delorun.')
+    fireEvent.click(screen.getByRole('button', { name: en['update.dismiss'] }))
+    expect(dismiss).toHaveBeenCalledWith('0.1.3')
   })
 
-  it('update-notice-remote-may-true: a remote page the Host lets begin an update shows Update now… and no dismiss', () => {
+  it('update-notice-remote-compact: on a remote page the title, What\'s new and the close button share the head row', () => {
+    const { container } = show(noticeOf({ notes: true }), undefined, undefined, true)
+    const head = container.querySelector('[data-update-notice] > div')
+    expect([...head?.querySelectorAll('button') ?? []].map(button => button.textContent || button.getAttribute('aria-label'))).toEqual([en['update.whatsNew'], en['update.dismiss']])
+    expect(head?.querySelector('[role="status"]')).toBeTruthy()
+  })
+
+  it('update-notice-local-layout: the computer\'s page keeps What\'s new below the head', () => {
+    const { container } = show(noticeOf({ notes: true }))
+    const head = container.querySelector('[data-update-notice] > div')
+    expect([...head?.querySelectorAll('button') ?? []].map(button => button.getAttribute('aria-label'))).toEqual([en['update.dismiss']])
+    expect(screen.getByRole('button', { name: en['update.whatsNew'] })).toBeTruthy()
+  })
+
+  it('update-notice-remote-may-true: a remote page the Host lets begin an update shows Update now… and the close button', () => {
     const open = vi.fn()
-    const face: UpdateNoticeFace = { notice: createSnapshotStore<UpdateNotice | null>(noticeOf()), notes: async () => null, open, canOpen: createSnapshotStore(true), dismiss: null }
+    const face: UpdateNoticeFace = { notice: createSnapshotStore<UpdateNotice | null>(noticeOf()), notes: async () => null, open, canOpen: createSnapshotStore(true), dismiss: vi.fn(), remote: true }
     render(<UpdateNoticeCard face={face} t={t} />)
     fireEvent.click(screen.getByRole('button', { name: en['update.now'] }))
     expect(open).toHaveBeenCalledTimes(1)
-    expect(screen.queryByRole('button', { name: en['update.dismiss'] })).toBeNull()
+    expect(screen.getByRole('button', { name: en['update.dismiss'] })).toBeTruthy()
   })
 
   it('update-notice-remote-may-false: a remote page the Host does not let begin one shows the terminal line and no button', () => {
     const open = vi.fn()
     const canOpen = createSnapshotStore(false)
-    const face: UpdateNoticeFace = { notice: createSnapshotStore<UpdateNotice | null>(noticeOf()), notes: async () => null, open, canOpen, dismiss: null }
+    const face: UpdateNoticeFace = { notice: createSnapshotStore<UpdateNotice | null>(noticeOf()), notes: async () => null, open, canOpen, dismiss: vi.fn(), remote: true }
     const { container } = render(<UpdateNoticeCard face={face} t={t} />)
     expect(screen.queryByRole('button', { name: en['update.now'] })).toBeNull()
-    expect(container.textContent).toContain('Run delorun update in a terminal')
+    expect(container.textContent).toContain('Run delorun update on the computer that runs Delorun')
     act(() => { canOpen.set(true) })
     expect(screen.getByRole('button', { name: en['update.now'] })).toBeTruthy()
   })
