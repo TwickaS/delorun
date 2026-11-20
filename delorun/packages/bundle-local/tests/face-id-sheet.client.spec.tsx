@@ -53,15 +53,15 @@ describe('the shared action sheet', () => {
       ['Workspace', 'delorun'],
       ['Chat', 'Fix the tests'],
       ['Allows', 'Commands you type there run on your computer, as you.'],
-      ['Lasts', 'The terminal stays open until it has been unused for 5 minutes.'],
+      ['Covers', 'This terminal until it is unused for 5 minutes'],
     ])
   })
 
   // A request that names no workspace or chat shows no row for them rather than an empty or invented one.
-  it('shows only the rows it knows, and "Just this once" for an action with no hold', () => {
+  it('shows only the rows it knows, and "This action only" for an action with no hold', () => {
     flow({ action: install })
-    expect([...document.querySelectorAll('dl dt')].map(row => row.textContent)).toEqual(['Allows', 'Lasts'])
-    expect(document.querySelector('dl')?.textContent).toContain('Just this once')
+    expect([...document.querySelectorAll('dl dt')].map(row => row.textContent)).toEqual(['Allows', 'Covers'])
+    expect(document.querySelector('dl')?.textContent).toContain('This action only')
   })
 
   // The glyph comes from the action's own key; the plain shield stands in when the request has none.
@@ -125,7 +125,7 @@ describe('the shared action sheet', () => {
     expect(props.onCancel).toHaveBeenCalledOnce()
   })
 
-  // "Lasts" is how long the Face ID holds; without its own row, full access would read as "Just this once" and mislead.
+  // "Covers" is what the one Face ID confirms; the state it leaves needs its own row, or full access would read as finished with the action.
   it('names the state an action leaves in an Afterwards row, and none for a terminal', async () => {
     const full = await callActionOf(t, { action: 'plugin-permission-defaults/set-full-access', call: { method: 'POST', path: '/api/full-access', body: { workspace: '/home/user/delorun', on: true } } })
     expect(full.stays).toBe('Full access stays on for delorun until you turn it off.')
@@ -136,7 +136,7 @@ describe('the shared action sheet', () => {
     expect((await callActionOf(t, { action: 'terminal/create', call: { args: { request: { id: 't' } } } })).stays).toBeUndefined()
     flow({ action: full })
     const rows = [...document.querySelectorAll('dl > div')].map(row => [row.querySelector('dt')?.textContent, row.querySelector('dd')?.textContent])
-    expect(rows.slice(-2)).toEqual([['Lasts', 'Just this once'], ['Afterwards', 'Full access stays on for delorun until you turn it off.']])
+    expect(rows.slice(-2)).toEqual([['Covers', 'This action only'], ['Afterwards', 'Full access stays on for delorun until you turn it off.']])
     cleanup()
     flow()
     expect([...document.querySelectorAll('dl dt')].map(row => row.textContent)).not.toContain('Afterwards')
@@ -147,7 +147,7 @@ describe('the shared action sheet', () => {
     const props = flow({ hasPasskey: false })
     const dialog = screen.getByRole('dialog')
     expect(dialog.hasAttribute('data-face-id-pin')).toBe(true)
-    expect(dialog.textContent).toContain('delorun · Fix the tests · The terminal stays open until it has been unused for 5 minutes.')
+    expect(dialog.textContent).toContain('delorun · Fix the tests · This terminal until it is unused for 5 minutes')
     fireEvent.click(screen.getByRole('button', { name: 'Back' }))
     expect(props.onCancel).toHaveBeenCalledOnce()
   })
