@@ -5,13 +5,13 @@
  * denial tests `c03-restore-lists-changes` and `c03-restore-revoked-stays-disabled`.
  */
 import { execFileSync } from 'node:child_process'
-import { rmSync, writeFileSync } from 'node:fs'
+import { readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { ProfileSafetyError } from '../src/errors.ts'
-import { readSafetyRecord } from '../src/record.ts'
+import { readSafetyRecord, writeSafetyRecord } from '../src/record.ts'
 import { applyRestore, openHistory, planRestore, recordSnapshot } from '../src/snapshot.ts'
-import { fixture, readTree } from './support.ts'
+import { emptyRecord, fixture, readTree } from './support.ts'
 
 /** Whether git can run here, which the profile history needs. */
 const hasGit = ((): boolean => {
@@ -226,6 +226,34 @@ describe.skipIf(!hasGit)('c03-restore-revoked-stays-disabled', () => {
       expect((failure as ProfileSafetyError).code).toBe('RESTORE_REFUSED')
       expect((failure as ProfileSafetyError).message).toContain('give the row an id')
       expect(readTree(profile.root)).toEqual(before)
+    } finally {
+      profile.remove()
+    }
+  })
+})
+
+describe.skipIf(!hasGit)('a restore of the manager scope', () => {
+  it('brings back only the files plugin management writes, and leaves the home patch and the safety record', async () => {
+    const profile = fixture({ dependencies: { '@me/alpha': '1.0.0' }, homePatch: [{ set: { a: 1 } }] })
+    try {
+      const history = openHistory({ profileDir: profile.profileDir })
+      const version = await recordSnapshot({ profileDir: profile.profileDir, homeDir: profile.homeDir, summary: 'Before the agent', changedBy: { kind: 'person' }, history })
+      changeProfile(profile.profileDir)
+      writeFileSync(join(profile.homeDir, 'cordis.patch.yml'), '[{"set":{"a":2}}]\n')
+      await writeSafetyRecord(profile.profileDir, { ...emptyRecord(), disabled: [{ name: '@me/x', version: '1.0.0', reason: 'revoked', message: 'revoked' }] })
+      const safety = readSafetyRecord(profile.profileDir)
+      expect(safety.disabled).toHaveLength(1)
+      const request = { profileDir: profile.profileDir, homeDir: profile.homeDir, version, history }
+      expect((await planRestore(request)).homePatchWritten).toBe(true)
+      const plan = await planRestore({ ...request, scope: 'manager' })
+      expect(plan.homePatchWritten).toBe(false)
+      expect(plan.writes).toEqual(expect.arrayContaining(['package.json', 'compatibility.json']))
+      expect(plan.writes).not.toContain('home-cordis.patch.yml')
+      expect(plan.writes).not.toContain('delorun-safety.json')
+      await applyRestore(plan, { ...request, scope: 'manager' })
+      expect(readFileSync(join(profile.homeDir, 'cordis.patch.yml'), 'utf8')).toBe('[{"set":{"a":2}}]\n')
+      expect(JSON.parse(readFileSync(join(profile.profileDir, 'package.json'), 'utf8')).dependencies).toEqual({ '@me/alpha': '1.0.0' })
+      expect(readSafetyRecord(profile.profileDir)).toEqual(safety)
     } finally {
       profile.remove()
     }

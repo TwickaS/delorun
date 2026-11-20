@@ -37,6 +37,7 @@ import {
   findEntry,
   readActiveRecord,
   readApproved,
+  readAgentLog,
   readChangeLog,
   readProtection,
   readWorkSession,
@@ -64,7 +65,7 @@ import {
   type ProtectionLevel,
   type WorkSessionRecord,
 } from './types.ts'
-import { isAgentAction, undoAgentAction } from './agent-actions.ts'
+import { findAgentEntry, undoAgentAction } from './agent-actions.ts'
 import { isPluginRequest, type PluginOperation } from './install-actions.ts'
 import { leftOutOf } from './left-out.ts'
 import { addProtectionNotice } from './notices.ts'
@@ -441,7 +442,7 @@ export async function listChanges(ctx: ChangesContext): Promise<ChangesListing> 
     })
   const requests = state.log.entries.filter(entry => entry.state === 'pending' && isPluginRequest(entry))
   const leftOut = state.log.entries.filter(entry => entry.state === 'left-out-at-start' && leftOutOf(state.log, state.approved, entry.subject.plugin!) === entry).reverse()
-  const entries = state.log.entries
+  const entries = [...state.log.entries, ...(await readAgentLog(ctx.home, ctx.profile)).entries]
     .map((entry, index) => ({ entry, index, at: Date.parse(entry.decidedAt ?? entry.createdAt) }))
     .filter(({ entry }) => !isFolderPending(entry) && !requests.includes(entry) && !leftOut.includes(entry))
     .sort((left, right) => right.at - left.at || right.index - left.index)
@@ -468,6 +469,10 @@ export async function listChanges(ctx: ChangesContext): Promise<ChangesListing> 
  */
 export async function showChange(ctx: ChangesContext, id: ChangeId): Promise<ShownChange> {
   const state = await readState(ctx)
+  if (state.changes.every(change => change.id !== id) && findEntry(state.log, id) === undefined) {
+    const agent = findAgentEntry(await readAgentLog(ctx.home, ctx.profile), id)
+    if (agent !== undefined) return { kind: 'logged', entry: agent }
+  }
   const located = await locate(ctx, state, id)
   if (located.kind === 'logged') return located
   const entry = findEntry(state.log, id)
@@ -583,10 +588,7 @@ export async function discardChange(ctx: ChangesContext, id: ChangeId, presence:
  */
 export async function undoChange(ctx: ChangesContext, id: ChangeId, presence: AtComputer, options: ReloadOptions & { readonly run?: PluginOperation }): Promise<ActionResult> {
   requirePresence(presence, id)
-  const agent = await locked(ctx, async () => {
-    const entry = findEntry(await readChangeLog(ctx.home, ctx.profile), id)
-    return entry !== undefined && isAgentAction(entry)
-  })
+  const agent = await locked(ctx, async () => findEntry(await readChangeLog(ctx.home, ctx.profile), id) === undefined && findAgentEntry(await readAgentLog(ctx.home, ctx.profile), id) !== undefined)
   if (agent) {
     if (options.run === undefined) throw new ChangesError('NOT_ALLOWED', id, `Change ${id} is an action the agent ran with protection off; undoing it installs the earlier plugin set, which needs the plugin operation.`)
     return undoAgentAction(ctx, id, presence, { reload: options.reload, run: options.run })

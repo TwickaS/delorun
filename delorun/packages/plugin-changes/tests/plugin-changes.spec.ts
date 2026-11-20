@@ -2,12 +2,12 @@
  * Specs of `@delorun/plugin-changes` against upstream's real `plugin_manager` tool and tool pipeline: with the C16 switch
  * `plugin_changes_pending` on and protection on, the model's install, update and removal record a pending change and
  * change nothing the profile runs, without reaching the tool's full-access approval; with protection off, the default,
- * a removal or a turn-off reaches upstream's approval and manager as with the switch off, while an install is recorded and a turn-on is left to the person at their computer, as at every level; a protection record that cannot be
+ * every action reaches upstream's approval and manager as with the switch off and is recorded in the agent-action log before it runs and completed after; a protection record that cannot be
  * read holds the call; the setting is read at each call, so changing it takes effect without a restart; a listener that
  * allows such a call without the plugin's listener is overruled by its guard; and with the switch at parity the tool
  * asks its approval as upstream's does.
  */
-import { lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -25,7 +25,7 @@ import { executeToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import ToolRuntime, { type ToolExecutionResult } from '@deepseek-ai/dsh-tools'
 import ApprovalService from '@deepseek-ai/dsh-user-approval'
 import { openHistory } from '@delorun/profile-safety'
-import { attestTerminal, protectionPath, readChangeLog, setProtection, type ProtectionLevel } from '@delorun/changes'
+import { attestTerminal, protectionPath, readAgentLog, readChangeLog, setProtection, type ProtectionLevel } from '@delorun/changes'
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import * as plugin from '../src/index.ts'
 
@@ -96,9 +96,10 @@ function activeAgent(): Agent {
  * @param profileHistory - the tool's switch that offers `configure`, `undo` and `restore`.
  * @param protection - the protection setting the home records; `none`, the home has no record and is at the default.
  * @param sandboxMode - the sandbox mode the chat runs in.
+ * @param beforeMount - registers what must come before this plugin's listeners.
  * @returns the context, the manager, the approval spy, the profile and a call.
  */
-async function harness(enabled: boolean, withProfile = true, profileHistory = false, protection: ProtectionLevel | 'none' = 'on', sandboxMode: 'workspace-write' | 'danger-full-access' = 'workspace-write') {
+async function harness(enabled: boolean, withProfile = true, profileHistory = false, protection: ProtectionLevel | 'none' = 'on', sandboxMode: 'workspace-write' | 'danger-full-access' = 'workspace-write', beforeMount?: (ctx: Context) => void) {
   const profile = home()
   if (protection !== 'none') await protect(profile.home, protection)
   const ctx = new Context()
@@ -125,6 +126,7 @@ async function harness(enabled: boolean, withProfile = true, profileHistory = fa
   await ctx.plugin(SandboxPolicy, { mode: sandboxMode })
   await ctx.plugin(ApprovalService, { policy: 'ask' })
   await ctx.plugin(tool, { profileHistory })
+  beforeMount?.(ctx)
   await ctx.plugin(plugin, { enabled, installationBundles: [], restartWaitSeconds: 600 })
   const approval = vi.fn(async () => 'allowed-once' as const)
   ctx.on('approval/request', approval)
@@ -327,7 +329,7 @@ describe('with protection off, after the full-access approval', () => {
       const result = await call(row.args)
       expect(result.isError, JSON.stringify(row.args)).toBe(false)
       expect(manager[row.spy], JSON.stringify(row.args)).toHaveBeenCalled()
-      const log = (await readChangeLog(profile.home, PROFILE)).entries
+      const log = (await readAgentLog(profile.home, PROFILE)).entries
       const entry = log.at(-1)!
       const latest = (await openHistory({ profileDir: profile.profileDir }).list(1))[0]!.id
       expect(entry, JSON.stringify(row.args)).toMatchObject({ kind: row.kind, state: 'applied', decidedFrom: 'unreviewed', historyVersion: latest, historyBefore: previous })
@@ -336,7 +338,7 @@ describe('with protection off, after the full-access approval', () => {
       previous = latest
     }
     expect(approval).toHaveBeenCalledTimes(ACTIONS.length)
-    expect((await readChangeLog(profile.home, PROFILE)).entries).toHaveLength(ACTIONS.length)
+    expect((await readAgentLog(profile.home, PROFILE)).entries).toHaveLength(ACTIONS.length)
   })
 
   it('lets configure reach upstream\'s approval too', async () => {
@@ -355,7 +357,7 @@ describe('with protection off, after the full-access approval', () => {
       expect((await call(args)).isError, JSON.stringify(args)).toBe(true)
     }
     for (const spy of [manager.installBundle, manager.setBundleEnabled, manager.undo, manager.restore]) expect(spy).not.toHaveBeenCalled()
-    expect((await readChangeLog(profile.home, PROFILE)).entries).toEqual([])
+    expect((await readAgentLog(profile.home, PROFILE)).entries).toEqual([])
   })
 
   it('records nothing for an action that left the profile as it was', async () => {
@@ -364,7 +366,7 @@ describe('with protection off, after the full-access approval', () => {
     expect((await call({ action: 'set_bundle', target: 'installed-plugin', enabled: false })).isError).toBe(false)
     expect(manager.setBundleEnabled).toHaveBeenCalledTimes(1)
     expect(approval).toHaveBeenCalledTimes(1)
-    expect((await readChangeLog(profile.home, PROFILE)).entries).toEqual([])
+    expect((await readAgentLog(profile.home, PROFILE)).entries).toEqual([])
   })
 
   it('reports an action it ran but could not record, and does not hide it', async () => {
@@ -374,13 +376,13 @@ describe('with protection off, after the full-access approval', () => {
     manager.installBundle.mockImplementation(async () => {
       const result = await change()
       mkdirSync(join(profile.home, 'changes', 'profiles', PROFILE), { recursive: true, mode: 0o700 })
-      writeFileSync(join(profile.home, 'changes', 'profiles', PROFILE, 'log.json'), 'not json', { mode: 0o600 })
+      writeFileSync(join(profile.home, 'changes', 'profiles', PROFILE, 'agent-log.json'), 'not json', { mode: 0o600 })
       return result
     })
     const result = await call({ action: 'install_bundle', target: 'registry-plugin@2.0.0' })
     expect(result.isError).toBe(true)
     expect(result.error?.info).toEqual({ name: 'PluginChangeUnrecorded', code: plugin.PLUGIN_CHANGE_UNRECORDED })
-    expect(text(result)).toMatch(/^install_bundle ran and changed the person's harness, but Delorun could not record it in Changes: .+ Tell the person/s)
+    expect(text(result)).toMatch(/^install_bundle ran and may have changed the person's harness, but Delorun could not complete its record in Changes: .+ Tell the person/s)
   })
 
   it('holds a call whose history Changes cannot read, as the action could not be recorded', async () => {
@@ -416,7 +418,68 @@ describe('with protection off, after the full-access approval', () => {
     }
     expect(approval).not.toHaveBeenCalled()
     for (const spy of [manager.installBundle, manager.setBundleEnabled, manager.undo, manager.restore]) expect(spy).not.toHaveBeenCalled()
-    expect((await readChangeLog(profile.home, PROFILE)).entries).toEqual([])
+    expect((await readAgentLog(profile.home, PROFILE)).entries).toEqual([])
+  })
+
+  it('records the action before it runs, so a plugin it loads is already in Changes', async () => {
+    const { manager, profile, call } = await harness(true, true, false, 'off')
+    await firstVersion(profile.profileDir)
+    const seen: string[] = []
+    const change = changing(profile.profileDir, 'agent install')
+    manager.installBundle.mockImplementation(async () => {
+      seen.push(...(await readAgentLog(profile.home, PROFILE)).entries.map(entry => entry.summary))
+      return change()
+    })
+    expect((await call({ action: 'install_bundle', target: 'registry-plugin@2.0.0' })).isError).toBe(false)
+    expect(seen).toEqual([expect.stringMatching(/^The agent ran: install registry-plugin@2.0.0; Delorun did not see how it ended/)])
+    expect((await readAgentLog(profile.home, PROFILE)).entries).toEqual([expect.objectContaining({ summary: 'The agent ran: install registry-plugin@2.0.0', historyVersion: expect.any(String) })])
+  })
+
+  it('keeps the entry when the action stops without a result, and says Delorun did not see how it ended', async () => {
+    const { ctx, profile, call } = await harness(true, true, false, 'off')
+    await firstVersion(profile.profileDir)
+    // A listener registered after this plugin's, ahead of it, that blocks every result.
+    ctx.on('tools/post-execute', async () => ({ kind: 'block' as const, feedback: [{ type: 'text' as const, text: 'blocked' }] }), { prepend: true })
+    expect((await call({ action: 'install_bundle', target: 'registry-plugin@2.0.0' })).isError).toBe(true)
+    const [entry] = (await readAgentLog(profile.home, PROFILE)).entries
+    expect(entry).toMatchObject({ state: 'applied', decidedFrom: 'unreviewed', subject: { spec: 'registry-plugin@2.0.0' } })
+    expect(entry!.summary).toContain('Delorun did not see how it ended')
+    expect(entry!.historyVersion).toBeUndefined()
+  })
+
+  it('finishes the entry although an earlier post-execute listener blocks the result', async () => {
+    const { manager, profile, call } = await harness(true, true, false, 'off', 'workspace-write', ctx => {
+      ctx.on('tools/post-execute', async () => ({ kind: 'block' as const, feedback: [{ type: 'text' as const, text: 'blocked' }] }))
+    })
+    await firstVersion(profile.profileDir)
+    manager.installBundle.mockImplementation(changing(profile.profileDir, 'agent install'))
+    const result = await call({ action: 'install_bundle', target: 'registry-plugin@2.0.0' })
+    expect(text(result)).toBe('blocked')
+    expect((await readAgentLog(profile.home, PROFILE)).entries).toEqual([expect.objectContaining({ summary: 'The agent ran: install registry-plugin@2.0.0', historyVersion: expect.any(String) })])
+  })
+
+  it('reports an action that changed the profile when no history version was saved for it', async () => {
+    const { manager, profile, call } = await harness(true, true, false, 'off')
+    await firstVersion(profile.profileDir)
+    manager.installBundle.mockImplementation(async () => {
+      const path = join(profile.profileDir, 'package.json')
+      writeFileSync(path, `${JSON.stringify({ ...JSON.parse(readFileSync(path, 'utf8')) as object, touched: 'unsaved' }, undefined, 2)}\n`)
+      return { changed: true, application: 'applied', stage: 'install', target: 'plug' } as ChangeResult
+    })
+    const result = await call({ action: 'install_bundle', target: 'registry-plugin@2.0.0' })
+    expect(result.isError).toBe(true)
+    expect(result.error?.info).toEqual({ name: 'PluginChangeUnrecorded', code: plugin.PLUGIN_CHANGE_UNRECORDED })
+    expect(text(result)).toMatch(/could not save a version of it, so Delorun recorded it in Changes without an undo/)
+    expect((await readAgentLog(profile.home, PROFILE)).entries).toEqual([expect.objectContaining({ summary: 'The agent ran: install registry-plugin@2.0.0' })])
+  })
+
+  it('leaves the change log byte for byte as a release without the agent log reads it', async () => {
+    const { manager, profile, call } = await harness(true, true, false, 'off')
+    await firstVersion(profile.profileDir)
+    manager.installBundle.mockImplementation(changing(profile.profileDir, 'agent install'))
+    expect((await call({ action: 'install_bundle', target: 'registry-plugin@2.0.0' })).isError).toBe(false)
+    expect((await readAgentLog(profile.home, PROFILE)).entries).toHaveLength(1)
+    expect(existsSync(join(profile.home, 'changes', 'profiles', PROFILE, 'log.json'))).toBe(false)
   })
 
   it('reads the setting at each call, so changing it takes effect in the running Host without a restart', async () => {

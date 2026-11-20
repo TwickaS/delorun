@@ -8,6 +8,7 @@ import { existsSync, lstatSync, readdirSync, readFileSync, readlinkSync, writeFi
 import { join, relative } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
+import { beginAgentAction, planAgentAction } from '../src/agent-actions.ts'
 import { applyChange, listChanges, turnOn, undoChange, type ChangesContext, type ReloadHost, type ReloadOutcome } from '../src/actions.ts'
 import { EMPTY_CONTENT_VERSION, startNotice } from '../src/enforce.ts'
 import { checkLoadedContent } from '../src/invariants.ts'
@@ -221,6 +222,16 @@ describe('which change a failed start leaves out', () => {
   it('the newest change a person applied to a plugin linked to its active directory, whose approved content it is', async () => {
     const { fx, change } = await appliedEdit()
     expect(await newestLeavableChange(contextOf(fx))).toEqual(change)
+  })
+
+  it('nothing when the newest change is an agent action, and not an older approved change', async () => {
+    const { fx, change } = await appliedEdit()
+    expect(await newestLeavableChange(contextOf(fx))).toEqual(change)
+    const later = contextOf(fx, FAILED_AT)
+    await beginAgentAction(later, await planAgentAction(later, { action: 'install_bundle', target: 'new-plugin' }))
+    expect(await newestLeavableChange(contextOf(fx))).toBeUndefined()
+    expect(await leaveOutNewestChange(later, 'boom')).toBeUndefined()
+    expect((await readChangeLog(fx.home, PROFILE)).entries.at(-1)).toEqual(change)
   })
 
   it('nothing after an approval at upgrade, a change already left out, an undone change or a change of another kind', async () => {

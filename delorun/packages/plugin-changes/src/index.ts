@@ -15,12 +15,12 @@
  * by installing a version of a plugin the profile has, which records a `plugin-update`.
  *
  * With protection off, the default, every such call goes to upstream as with the switch off: the listener reads what
- * the call changes from the profile's history and dependencies, calls `next()`, and upstream's full-access approval
- * alone decides. After the tool ran, a `tools/post-execute` listener records the action in the profile's change log
- * when the profile's history moved: an applied change decided `unreviewed` with the history version upstream wrote and
- * the one before it, which `delorun changes undo` and the studio bring back ([agent actions](../../changes/src/agent-actions.ts)).
- * An action that ran but could not be recorded is reported to the model as unrecorded, and one whose records cannot be
- * read before it runs is denied. A plugin the agent installs from a folder or links reloads on save, and the check
+ * the call changes from the profile's history and files, writes an entry for it in the profile's agent-action log
+ * before the tool runs, calls `next()`, and upstream's full-access approval alone decides. A `tools/post-execute`
+ * listener, registered ahead of the others, completes the entry with the history version upstream wrote and the one
+ * before it, which `delorun changes undo` and the studio bring back, or removes it when the action changed nothing
+ * ([agent actions](../../changes/src/agent-actions.ts)). An action that ran but could not be fully recorded is reported
+ * to the model as unrecorded, and one whose records cannot be read or written before it runs is denied. A plugin the agent installs from a folder or links reloads on save, and the check
  * below logs its folder's content as an unreviewed change as it does for the person's.
  *
  * A protection record that cannot be read holds every such call as protection on does: it is denied, naming that the
@@ -58,7 +58,7 @@ import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-workspace'
 import type { PostToolDecision, PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
 import z from '@deepseek-ai/schemastery'
-import { PACKAGE_NAME_PATTERN, planAgentAction, prepareReload, readProtection, recordAgentAction, reloadProfile, startNotice, type AgentActionPlan, type ChangeEntry, type ChangesContext, type ChangesHarnessHost, type ChangesRestartHost, type PluginOperation, type ProtectionLevel } from '@delorun/changes'
+import { beginAgentAction, finishAgentAction, PACKAGE_NAME_PATTERN, planAgentAction, prepareReload, readProtection, reloadProfile, startNotice, type AgentActionPlan, type ChangeEntry, type ChangeId, type ChangesContext, type ChangesHarnessHost, type ChangesRestartHost, type PluginOperation, type ProtectionLevel } from '@delorun/changes'
 import { REACH_DEVICE, unlockOf, type ReachDevicePrincipal } from '@delorun/home-auth'
 import { recordPluginRequest, type PluginRequest } from '@delorun/changes/install'
 import { loadUpstreamChecks, upstreamPluginOperation } from '@delorun/changes/plugin-operation'
@@ -227,6 +227,15 @@ function protectionUnreadable(action: string, detail: string): PreToolDecision {
 }
 
 /**
+ * The result the model reads when an action that ran with protection off is not fully recorded in Changes.
+ * @param what - what happened.
+ * @returns the block.
+ */
+function unrecordedBlock(what: string): PostToolDecision {
+  return { kind: 'block', feedback: [{ type: 'text', text: `${what} Tell the person, who checks the profile with delorun changes list and delorun recover.` }], info: { name: 'PluginChangeUnrecorded', code: PLUGIN_CHANGE_UNRECORDED } }
+}
+
+/**
  * The result the model reads when a call would run with protection off but Changes cannot read the profile it must record
  * the call in, so it does not run.
  * @param action - the action.
@@ -315,7 +324,7 @@ export function apply(ctx: Context, config: Config): void {
   })
   if (!config.enabled) return
   const recorded = new WeakSet<object>()
-  const planned = new WeakMap<object, AgentActionPlan>()
+  const planned = new WeakMap<object, { readonly plan: AgentActionPlan, readonly id: ChangeId }>()
   const changesOf = (profile: ProfileContext): ChangesContext => ({ home: profile.home, profile: profile.name, profileDir: profile.dir, ...runningRelease() })
   ctx.on('tools/pre-execute', async (exec, next): Promise<PreToolDecision> => {
     const held = heldRequest(exec)
@@ -333,9 +342,11 @@ export function apply(ctx: Context, config: Config): void {
       return protectionUnreadable(action, messageOf(error))
     }
     if (level === 'off') {
-      // Upstream's full-access approval alone decides; the action is recorded in Changes once it ran, from what the profile held before it.
+      // Upstream's full-access approval alone decides. The action is recorded in Changes before it runs, so nothing it loads goes unrecorded, and completed once it ran.
       try {
-        planned.set(exec, await planAgentAction(changesOf(profile), { action, ...typeof args.target === 'string' ? { target: args.target } : {}, ...typeof args.enabled === 'boolean' ? { enabled: args.enabled } : {} }))
+        const changes = changesOf(profile)
+        const plan = await planAgentAction(changes, { action, ...typeof args.target === 'string' ? { target: args.target } : {}, ...typeof args.enabled === 'boolean' ? { enabled: args.enabled } : {} })
+        planned.set(exec, { plan, id: await beginAgentAction(changes, plan) })
       } catch (error) {
         return unplanned(action, messageOf(error))
       }
@@ -350,17 +361,20 @@ export function apply(ctx: Context, config: Config): void {
       return unrecorded(messageOf(error))
     }
   }, { prepend: true })
+  // First among the post-execute listeners, so a listener ahead of this one that blocks the result cannot leave the entry unfinished.
   ctx.on('tools/post-execute', async (exec, _result, next): Promise<PostToolDecision> => {
-    const plan = planned.get(exec)
+    const started = planned.get(exec)
     const profile = ctx.get('profileContext')
-    if (plan === undefined || profile === undefined) return next()
+    if (started === undefined || profile === undefined) return next()
+    const action = (exec.arguments as { action: string }).action
     try {
-      await recordAgentAction(changesOf(profile), plan)
+      const finished = await finishAgentAction(changesOf(profile), started.plan, started.id)
+      if (finished.unsaved) return unrecordedBlock(`${action} changed the person's harness, but the profile's history could not save a version of it, so Delorun recorded it in Changes without an undo.`)
     } catch (error) {
-      return { kind: 'block', feedback: [{ type: 'text', text: `${(exec.arguments as { action: string }).action} ran and changed the person's harness, but Delorun could not record it in Changes: ${messageOf(error)} Tell the person, who checks the profile with delorun changes list and delorun recover.` }], info: { name: 'PluginChangeUnrecorded', code: PLUGIN_CHANGE_UNRECORDED } }
+      return unrecordedBlock(`${action} ran and may have changed the person's harness, but Delorun could not complete its record in Changes: ${messageOf(error)}`)
     }
     return next()
-  })
+  }, { prepend: true })
   ctx.tools.guard(exec => (heldRequest(exec) !== undefined || atComputerAction(exec)) && !recorded.has(exec)
     ? 'Plugin changes wait for the person at their computer; this call was not handled as one, so it does not run.'
     : undefined)

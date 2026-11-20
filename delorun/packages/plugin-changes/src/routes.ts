@@ -67,6 +67,7 @@ import {
   PACKAGE_NAME_PATTERN,
   parseChangeId,
   readBootRecord,
+  readAgentLog,
   readChangeLog,
   readHarnessLog,
   readProtection,
@@ -79,6 +80,7 @@ import {
   turnOff,
   turnOn,
   undoChange,
+  withAgentEntries,
   workSessionFact,
   WORK_SESSION_DEFAULT_MINUTES,
   WORK_SESSION_MAX_MINUTES,
@@ -853,6 +855,7 @@ async function stateOf(ctx: ChangesContext, requester: Requester, home: HomeWord
   const problems: string[] = []
   const boot = await part(problems, home, 'The record of the last start', () => readBootRecord(ctx.home, ctx.profile))
   const log = await part(problems, home, 'The change log', () => readChangeLog(ctx.home, ctx.profile))
+  const agentLog = await part(problems, home, 'The log of the agent\'s plugin actions', () => readAgentLog(ctx.home, ctx.profile))
   const protection = await part(problems, home, 'The protection setting', () => readProtection(ctx.home))
   const safeMode = await part(problems, home, 'The safe mode record', () => readSafeMode(ctx.home, ctx.profile))
   const workSession = await part(problems, home, 'The work session', () => workSessionFact(ctx.home, ctx.profile))
@@ -861,7 +864,7 @@ async function stateOf(ctx: ChangesContext, requester: Requester, home: HomeWord
   const notices = requester.kind === 'computer' ? await part(problems, home, 'The notices', () => readNotices(ctx.home)) : []
   const harness = dependencies.harness()
   const restart = await part(problems, home, 'Whether Delorun needs a restart', () => dependencies.restartState())
-  const entries = log?.entries ?? []
+  const entries = log === undefined ? agentLog?.entries ?? [] : withAgentEntries(log, agentLog?.entries ?? []).entries
   return {
     atComputer: requester.kind === 'computer',
     access: accessView(actorOf(requester), faceStateOf(requester)),

@@ -9,7 +9,7 @@
 import type { ChangesContext } from './actions.ts'
 import { managedPlugins } from './boot-record.ts'
 import { isPluginRequest } from './install-actions.ts'
-import { approvedOf, readApproved, readChangeLog, readHarnessLog } from './records.ts'
+import { approvedOf, readApproved, readChangeLog, readChangeLogWithAgent, readHarnessLog } from './records.ts'
 import type { ChangeEntry } from './types.ts'
 
 /** One plugin under Changes, as its records name it. */
@@ -57,7 +57,7 @@ export async function recordedChanges(ctx: Pick<ChangesContext, 'home' | 'profil
  * @throws {ChangesError} `RECORD_UNREADABLE` when a log is not one Delorun wrote.
  */
 export async function unreviewedSinceOff(ctx: Pick<ChangesContext, 'home' | 'profile'>): Promise<number> {
-  return countUnreviewedSinceOff((await readChangeLog(ctx.home, ctx.profile)).entries, (await readHarnessLog(ctx.home)).entries)
+  return countUnreviewedSinceOff((await readChangeLogWithAgent(ctx.home, ctx.profile)).entries, (await readHarnessLog(ctx.home)).entries)
 }
 
 /**

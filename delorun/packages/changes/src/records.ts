@@ -23,8 +23,10 @@ import {
   ACTIVE_KINDS,
   ACTIVE_RECORD_SCHEMA,
   APPROVED_RECORD_SCHEMA,
+  AGENT_LOG_SCHEMA,
   CHANGE_KINDS,
   CHANGE_LOG_SCHEMA,
+  LOG_CHANGE_KINDS,
   CHANGE_STATES,
   DECIDED_FROM,
   DEFAULT_PROTECTION,
@@ -38,6 +40,7 @@ import {
   type ApprovedRecord,
   type ChangeEntry,
   type ChangeId,
+  type AgentLog,
   type ChangeLog,
   type ContentVersion,
   type HarnessRecord,
@@ -398,7 +401,7 @@ const WORK_SESSION_RULES: Readonly<Record<string, FieldRule>> = {
 
 const ENTRY_RULES: Readonly<Record<string, FieldRule>> = {
   id: { test: matching(CHANGE_ID_PATTERN), expected: 'a change id' },
-  kind: { test: oneOf(CHANGE_KINDS), expected: 'a change kind' },
+  kind: { test: oneOf(LOG_CHANGE_KINDS), expected: 'a change kind' },
   state: { test: oneOf(CHANGE_STATES), expected: 'a change state' },
   subject: nested({ plugin: optional.string, source: optional.string, file: optional.string, runtime: optional.string, setting: optional.string, spec: optional.string }, 'a change subject'),
   from: optional.version,
@@ -409,28 +412,47 @@ const ENTRY_RULES: Readonly<Record<string, FieldRule>> = {
   decidedFrom: { test: oneOf(DECIDED_FROM), expected: DECIDED_FROM.join(', '), optional: true },
   decidedOn: { ...nested({ id: required.string, label: required.string }, 'a paired device'), optional: true },
   historyVersion: optional.string,
-  historyBefore: optional.string,
   leftOut: { ...nested({ at: required.iso, failure: required.string }, 'a failure report'), optional: true },
   shownAt: optional.iso,
   lastFailure: { ...nested({ at: required.iso, failure: required.string }, 'a failure report'), optional: true },
 }
 
-const LOG_RULES: Readonly<Record<string, FieldRule>> = {
-  schema: schemaRule(CHANGE_LOG_SCHEMA),
-  migratedAt: optional.iso,
-  entries: {
+/** An entry of the agent-action log: the entry fields of `log.json`, with every kind and the version before the action. */
+const AGENT_ENTRY_RULES: Readonly<Record<string, FieldRule>> = {
+  ...ENTRY_RULES,
+  kind: { test: oneOf(CHANGE_KINDS), expected: 'a change kind' },
+  historyBefore: optional.string,
+}
+
+/**
+ * @param rules - the entry rules a list holds.
+ * @returns the rule of a list of entries with distinct ids.
+ */
+function entriesRule(rules: Readonly<Record<string, FieldRule>>): FieldRule {
+  return {
     expected: 'a list of changes with distinct ids',
     test: (value, path, where) => {
       if (!Array.isArray(value)) return false
       const entries: readonly unknown[] = value
       const ids = new Set<unknown>()
       entries.forEach((entry, index) => {
-        checkFields(entry, path, `${where}[${String(index)}]`, ENTRY_RULES)
+        checkFields(entry, path, `${where}[${String(index)}]`, rules)
         ids.add(objectAt(entry, path, where).id)
       })
       return ids.size === entries.length
     },
-  },
+  }
+}
+
+const AGENT_LOG_RULES: Readonly<Record<string, FieldRule>> = {
+  schema: schemaRule(AGENT_LOG_SCHEMA),
+  entries: entriesRule(AGENT_ENTRY_RULES),
+}
+
+const LOG_RULES: Readonly<Record<string, FieldRule>> = {
+  schema: schemaRule(CHANGE_LOG_SCHEMA),
+  migratedAt: optional.iso,
+  entries: entriesRule(ENTRY_RULES),
 }
 
 const ACTIVE_RULES: Readonly<Record<string, FieldRule>> = {
@@ -500,6 +522,15 @@ function assertWorkSession(value: unknown, path: string): asserts value is WorkS
  */
 function assertChangeLog(value: unknown, path: string): asserts value is ChangeLog {
   checkFields(value, path, 'the record', LOG_RULES)
+}
+
+/**
+ * @param value - a parsed agent-action log.
+ * @param path - its path.
+ * @throws {ChangesError} `RECORD_UNREADABLE` unless it is one.
+ */
+function assertAgentLog(value: unknown, path: string): asserts value is AgentLog {
+  checkFields(value, path, 'the record', AGENT_LOG_RULES)
 }
 
 /**
@@ -720,6 +751,67 @@ export async function readChangeLog(home: string, profile: string): Promise<Chan
 export async function writeChangeLog(home: string, profile: string, log: ChangeLog): Promise<void> {
   await makeChangesDirectory(home, profileChangesDirectory(home, profile))
   await writeProtectedFile(logPath(home, profile), jsonText(log))
+}
+
+/**
+ * @param home - the Delorun home.
+ * @param profile - the profile's name.
+ * @returns the agent-action log's path.
+ */
+function agentLogPath(home: string, profile: string): string {
+  return join(profileChangesDirectory(home, profile), CHANGES_ENTRIES.agentLog)
+}
+
+/**
+ * Read the profile's agent-action log ([agent actions](./agent-actions.ts)). Starting a profile never calls this: a log that
+ * cannot be read stops the Changes commands that list or undo, not the start.
+ * @param home - the Delorun home.
+ * @param profile - the profile's name.
+ * @returns the log; an empty one when the profile has none.
+ * @throws {ChangesError} `RECORD_UNREADABLE` when the file is not one Delorun wrote.
+ */
+export async function readAgentLog(home: string, profile: string): Promise<AgentLog> {
+  const path = agentLogPath(home, profile)
+  const value = await readRecordFile(path)
+  if (value === undefined) return { schema: AGENT_LOG_SCHEMA, entries: [] }
+  assertAgentLog(value, path)
+  return value
+}
+
+/**
+ * Write the profile's agent-action log. The caller holds the profile's lock.
+ * @param home - the Delorun home.
+ * @param profile - the profile's name.
+ * @param log - the whole log.
+ * @throws {HomeLayoutError} `HOME_MODE` when `changes/` is laxer than 0700.
+ */
+export async function writeAgentLog(home: string, profile: string, log: AgentLog): Promise<void> {
+  await makeChangesDirectory(home, profileChangesDirectory(home, profile))
+  await writeProtectedFile(agentLogPath(home, profile), jsonText(log))
+}
+
+/**
+ * The profile's change log with its agent-action entries added, for the commands that list and undo changes. The result is
+ * for reading only: writing it to `log.json` would put agent entries there.
+ * @param home - the Delorun home.
+ * @param profile - the profile's name.
+ * @returns the log's entries and the agent's, by when each was created, the log's first on a tie.
+ * @throws {ChangesError} `RECORD_UNREADABLE` when either file is not one Delorun wrote.
+ */
+export async function readChangeLogWithAgent(home: string, profile: string): Promise<ChangeLog> {
+  return withAgentEntries(await readChangeLog(home, profile), (await readAgentLog(home, profile)).entries)
+}
+
+/**
+ * @param log - a change log.
+ * @param agent - the entries of the agent-action log.
+ * @returns the log's entries and the agent's, by when each was created, the log's first on a tie; for reading only.
+ */
+export function withAgentEntries(log: ChangeLog, agent: readonly ChangeEntry[]): ChangeLog {
+  if (agent.length === 0) return log
+  const ordered = [...log.entries, ...agent].map((entry, index) => ({ entry, index, at: Date.parse(entry.createdAt) }))
+  ordered.sort((left, right) => left.at - right.at || left.index - right.index)
+  return { ...log, entries: ordered.map(({ entry }) => entry) }
 }
 
 /**

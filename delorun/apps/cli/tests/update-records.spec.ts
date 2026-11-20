@@ -106,6 +106,8 @@ const DECLARATIONS: Readonly<Record<string, string | null>> = {
   'delorun.changes-migration': 'changes-migration',
   'delorun.changes-harness': 'changes-harness',
   'delorun.changes-notices': 'changes-notices',
+  // The agent's plugin_manager actions with protection off: a file of its own that no earlier release reads, so going back to one reads nothing of it and still starts the profile.
+  'delorun.changes-agent-log': null,
   // A cache of file digests that a start rebuilds when it cannot read it; never decides anything.
   'delorun.changes-scan-cache': null,
   // The files of the changes the last read of a harness copy found; an action checks each file again, and reads the whole copy when it cannot use it.
