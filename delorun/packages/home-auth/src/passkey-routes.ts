@@ -12,8 +12,9 @@
 import type { AuthenticationResponseJSON, RegistrationResponseJSON } from '@simplewebauthn/server'
 import { HomeAuthError } from './errors.ts'
 import { isRecord } from './files.ts'
-import { hashArgs } from './grants.ts'
-import { deviceSession, type DeviceSession } from './elevation-routes.ts'
+import { hashArgs, PASS_SETTING_ACTION, type PassView } from './grants.ts'
+import { deviceSession, signedInDevice, type DeviceSession } from './elevation-routes.ts'
+import { isPassMinutes, PASS_MINUTES, type PassMinutes } from './pass-setting.ts'
 import type { HomeAuth } from './home-auth.ts'
 import { parseAssertionRequest } from './passkey-auth.ts'
 import { personAtComputer, readMessage, sendError, sendJson, sendThrown, type LoopbackCredential, type RouteHandler } from './routes.ts'
@@ -42,6 +43,10 @@ export const PASSKEY_PATHS = {
   pending: '/auth/passkey/add/pending',
   /** `POST` `{ requestId, code }`: the computer types the code a device shows. */
   approve: '/auth/passkey/add/approve',
+  /** `POST` `{}`: Lock now: the device ends its own Face ID pass. */
+  lock: '/auth/passkey/lock',
+  /** `GET`: the pass setting and the device's live pass; `POST` `{ minutes }`: change the setting (a device needs a passkey grant). */
+  pass: '/auth/passkey/pass',
 } as const
 
 /** The action name a passkey removal is confirmed under: its grant covers `{ credentialId }`. */
@@ -269,6 +274,94 @@ export function passkeyApproveHandler(auth: HomeAuth, credential: LoopbackCreden
       if (typeof message.requestId !== 'string' || typeof message.code !== 'string') throw new HomeAuthError('BAD_REQUEST', 'an approval names the request and the code typed')
       auth.passkeys.approveAdd(message.requestId, message.code)
       sendJson(response, 200, { approved: true })
+    } catch (error) {
+      sendThrown(response, error)
+    }
+  }
+}
+
+/**
+ * Build Lock now: the device ends its own Face ID pass on this listener (a `free` row: it only takes access away).
+ * @param auth - the home-auth instance.
+ * @returns the handler.
+ */
+export function passkeyLockHandler(auth: HomeAuth): RouteHandler {
+  return deviceRoute(auth, 'POST', device => ({ ended: auth.grants.endPass({ deviceId: device.session.deviceId, listener: device.listener }, 'lock-now') }))
+}
+
+/** What the pass route answers. */
+export interface PassAnswer {
+  /** The length in effect, in minutes; 0 is "Every time". */
+  readonly minutes: PassMinutes
+  /** The lengths the setting takes. */
+  readonly choices: readonly PassMinutes[]
+  /** The asking device's live pass, or null; always null at the computer, which never asks. */
+  readonly pass: PassView | null
+}
+
+/**
+ * Build the pass route. `GET` answers {@link PassAnswer}. `POST` `{ minutes }` changes the setting: at the computer as any
+ * other setting there; from a device only with a grant a passkey minted for exactly the body sent
+ * ({@link PASS_SETTING_ACTION}), which no Face ID pass stands in for (an always-ask row). A length outside
+ * {@link PASS_MINUTES} is refused `BAD_REQUEST`. A change applies to the next pass; a live pass keeps its end.
+ * @param auth - the home-auth instance.
+ * @param credential - the loopback credential check.
+ * @returns the handler.
+ */
+export function passkeyPassHandler(auth: HomeAuth, credential: LoopbackCredential): RouteHandler {
+  const answer = (pass: PassView | undefined): PassAnswer => ({ minutes: auth.passMinutes(), choices: PASS_MINUTES, pass: pass ?? null })
+  const parse = (message: Readonly<Record<string, unknown>>): PassMinutes => {
+    const { minutes, ...rest } = message
+    if (!isPassMinutes(minutes) || Object.keys(rest).length > 0) throw new HomeAuthError('BAD_REQUEST', `the pass length is one of ${PASS_MINUTES.join(', ')} minutes`)
+    return minutes
+  }
+  const onDevice = deviceRouteBoth(auth, async (device, message, method) => {
+    const holder = { deviceId: device.session.deviceId, listener: device.listener }
+    if (method === 'GET') return answer(auth.grants.passOf(holder))
+    const minutes = parse(message)
+    useGrant(auth, device, PASS_SETTING_ACTION, message, 'Changing how long Face ID lasts needs Face ID on this device each time, or you at your computer', 'passkey')
+    await auth.passSetting.set(minutes)
+    return answer(auth.grants.passOf(holder))
+  })
+  return async (request, response) => {
+    if (signedInDevice(auth, request) !== undefined) {
+      await onDevice(request, response)
+      return
+    }
+    const post = request.method === 'POST'
+    if (!personAtComputer(auth, credential, request, response, 'Changing how long Face ID lasts', post)) return
+    if (!post && request.method !== 'GET') {
+      sendError(response, new HomeAuthError('METHOD_NOT_ALLOWED', 'this route takes GET or POST'))
+      return
+    }
+    try {
+      if (post) {
+        const message = await readMessage(request, response)
+        if (message === undefined) return
+        await auth.passSetting.set(parse(message))
+      }
+      sendJson(response, 200, answer(undefined))
+    } catch (error) {
+      sendThrown(response, error)
+    }
+  }
+}
+
+/**
+ * Build a device route that answers JSON for `GET` and `POST`.
+ * @param auth - the home-auth instance.
+ * @param run - the work, given the admitted session, the parsed body (empty for a `GET`) and the method.
+ * @returns the handler.
+ */
+function deviceRouteBoth(auth: HomeAuth, run: (device: DeviceSession, message: Readonly<Record<string, unknown>>, method: 'GET' | 'POST') => Promise<unknown>): RouteHandler {
+  return async (request, response) => {
+    const method = request.method === 'POST' ? 'POST' : 'GET'
+    const device = deviceSession(auth, request, response, method)
+    if (device === undefined) return
+    try {
+      const message = method === 'POST' ? await readMessage(request, response) : {}
+      if (message === undefined) return
+      sendJson(response, 200, await run(device, message, method))
     } catch (error) {
       sendThrown(response, error)
     }

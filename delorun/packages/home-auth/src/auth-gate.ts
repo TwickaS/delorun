@@ -16,7 +16,7 @@
  *
  * @module @delorun/home-auth/auth-gate
  */
-import { authClassOf } from './auth-classes.ts'
+import { authClassOf, passAdmitsRow } from './auth-classes.ts'
 import { gateByUnlock, type DangerousModeHome } from './computer-only.ts'
 import { refusalBody } from './errors.ts'
 import { GLOBAL_SCOPE, GRANT_BODY_CAP_BYTES, hashRequest, type HoldFeature } from './grants.ts'
@@ -138,6 +138,11 @@ export function gateByClass(homeAuth: () => GrantGateHome | undefined, fetch: (r
       const held = options.hold?.idOf(request, body)
       const feature = options.hold?.feature
       if (feature !== undefined && held !== undefined && grants.holdAdmits(holder, feature, held, GLOBAL_SCOPE)) return fetch(withoutGrantHeader(request))
+      // The Peer's live Face ID pass admits the row unless it is always-ask (A499); an opener opens its hold as a grant would.
+      if (passAdmitsRow(grants, holder, options.row)) {
+        if (options.hold?.opens === true && feature !== undefined && held !== undefined) grants.openHoldByPass(holder, { feature, id: held, scope: GLOBAL_SCOPE })
+        return fetch(withoutGrantHeader(request))
+      }
       const hash = hashRequest({ method: request.method, path: pathAndQuery, body })
       const named = request.headers.get(GRANT_HEADER)
       const found = hash === undefined ? undefined : grants.peek(holder, options.action, hash)

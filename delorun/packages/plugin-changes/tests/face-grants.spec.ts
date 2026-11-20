@@ -189,6 +189,26 @@ describe('Changes: face controls', () => {
   })
 })
 
+describe('Changes: a Face ID pass (A499)', () => {
+  // Removing the pass branch in faceAccessOf makes every Apply in a pass ask again; removing its end check admits after the pass.
+  it('admits every face control with no grant while the pass is live, and none after it', async () => {
+    const { ctx } = routeHome()
+    const world = grantWorld()
+    const server = await serveRoutes(ctx, { face: world.face })
+    world.openPass(5)
+    for (const { path } of FACE_ROUTES) {
+      const reply = await send(server.port, path, fromDevice('none', {}))
+      expect(json(reply).code, path).not.toBe('ELEVATION_REQUIRED')
+    }
+    world.clock.at += 5 * 60_000
+    for (const { path } of FACE_ROUTES) {
+      const reply = await send(server.port, path, fromDevice('none', {}))
+      expect(reply.status, path).toBe(403)
+      expect(json(reply).code, path).toBe('ELEVATION_REQUIRED')
+    }
+  })
+})
+
 describe('Changes: free controls', () => {
   it('work for a paired device with no unlock, no grant and a passkey', async () => {
     // Pins the `free` class: protection on only tightens, so a locked phone may turn it on.

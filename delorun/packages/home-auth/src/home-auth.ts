@@ -33,6 +33,7 @@ import {
 import { ELEVATION_LIMITS, TAILNET_MEMBERSHIP_OPTIONS, type ElevationState, type IdentityFactor } from '@delorun/contract-oidc-passkeys'
 import { PinModeStore } from './pin-mode.ts'
 import { GrantStore } from './grants.ts'
+import { PASS_MINUTES_DEFAULT, PassSettingStore, type PassMinutes } from './pass-setting.ts'
 import { PasskeyAuth } from './passkey-auth.ts'
 import { PASSKEYS_FILE, PasskeyStore } from './passkeys.ts'
 import { PinUnlocks, type PinEvent } from './pin-unlocks.ts'
@@ -230,6 +231,11 @@ export interface HomeAuthOptions {
    */
   readonly unlockCapMinutes?: () => number
   /**
+   * The deployment's default pass length ({@link PASS_MINUTES}), read whenever a Face ID verifies and the person has not
+   * chosen one in Settings; absent, {@link PASS_MINUTES_DEFAULT}.
+   */
+  readonly passDefaultMinutes?: () => PassMinutes
+  /**
    * Records one operational event of the passkey and grant machinery; the text holds no challenge, key or signature.
    * @param event - the event line.
    */
@@ -288,6 +294,9 @@ export class HomeAuth {
   readonly grants: GrantStore
   /** Passkey enrolment and assertion. */
   readonly passkeys: PasskeyAuth
+  /** The person's choice of the Face ID pass length. */
+  readonly passSetting: PassSettingStore
+  private readonly passDefaultMinutes: () => PassMinutes
   private readonly pinListeners = new Set<(event: PinEvent) => void>()
   /** Each rolled session id to the id that continues it, for the 30 seconds its predecessor still admits requests. */
   private readonly successors = new Map<string, string>()
@@ -344,9 +353,12 @@ export class HomeAuth {
     this.removalListeners.add((deviceId) => { void this.pinStore.forget(deviceId).catch(() => undefined) })
     this.passkeyStore = new PasskeyStore({ file: join(options.directory, PASSKEYS_FILE) })
     this.grants = new GrantStore({ now: this.now, random: this.random, ...options.log === undefined ? {} : { log: options.log } })
+    this.passSetting = new PassSettingStore({ file: join(options.directory, HOME_AUTH_FILES.faceIdPass) })
+    this.passDefaultMinutes = options.passDefaultMinutes ?? (() => PASS_MINUTES_DEFAULT)
     this.passkeys = new PasskeyAuth({
       store: this.passkeyStore,
       grants: this.grants,
+      passMinutes: () => this.passMinutes(),
       pin: this.pin,
       now: this.now,
       random: this.random,
@@ -378,7 +390,13 @@ export class HomeAuth {
     this.homeKey = await loadHomeKey(this.directory, this.secrets)
     await this.pinStore.load()
     await this.passkeyStore.load()
+    await this.passSetting.load()
     await this.refresh()
+  }
+
+  /** @returns the Face ID pass length now in effect: the person's choice, else the deployment's default; 0 opens no pass. */
+  passMinutes(): PassMinutes {
+    return this.passSetting.get() ?? this.passDefaultMinutes()
   }
 
   /**
