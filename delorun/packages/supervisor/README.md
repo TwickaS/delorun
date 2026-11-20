@@ -112,8 +112,8 @@ Every Engine API call has the deadline `engineCallMs` and every pull `pullMs`; a
 ## Not implemented
 
 - A launch by a shipped command: `delorun start` passes no supervisor setup, and no setup step writes the roots file.
-- The S2 helper (`helper.start`), the S3 container (`s3.*`) and credential forwarding are refused with `SHAPE_UNAVAILABLE` until their shapes add them.
-- The egress proxy program is the S2 image's; until the image ships it, the proxy container does not start, and `egress-allowlist` is reported `unknown`.
+- The S2 helper (`helper.start`), the S3 container (`s3.*`) and credential forwarding are refused with `SHAPE_UNAVAILABLE`.
+- The egress proxy program is the S2 image's, which does not ship, so the proxy container does not start, and `egress-allowlist` is reported `unknown`.
 - Windows named pipes with C1's DACL: the supervisor listens only on a Unix socket.
 
 ## Tests

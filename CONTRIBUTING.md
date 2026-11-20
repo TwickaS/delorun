@@ -28,7 +28,7 @@ The root [AGENTS.md](AGENTS.md) is the one guide for people and agents. Read it 
 
 ## Replies
 
-The maintainer tries to reply as soon as possible, usually within a day or two, and sometimes longer. Delorun promises no response time for issues and pull requests.
+The maintainer replies as quickly as possible, usually within a day or two and sometimes longer. Delorun promises no response time for issues and pull requests.
 
 ## Conduct and bans
 

@@ -12,7 +12,7 @@ Run it with `npx delorun`. Built on DeepSeek Harness; runs its plugins and impor
 
 ## Status
 
-Delorun is a preview, signed with preview keys, and has had no outside security review yet. [What you trust when you use Delorun](delorun/docs/guide/trust.md) explains what that means and when it changes. Delorun runs on Linux and on Windows through WSL2.
+Delorun is a preview, signed with preview keys, and has had no outside security review. [What you trust when you use Delorun](delorun/docs/guide/trust.md) explains what that means. Delorun runs on Linux and on Windows through WSL2.
 
 ## What you can do
 
@@ -40,7 +40,7 @@ The `delorun` command provides:
 - `import-home` to copy a DeepSeek Harness home (`~/.dsh`) into your Delorun home.
 - `plugin` and `headless`. `delorun plugin` runs DeepSeek Harness's plugin installer inside your Delorun home, without Delorun's protections. `delorun headless` answers one task and exits, as `dsh headless` does, but with Delorun's sandbox protection, guards and consents, and with DeepSeek's session-log upload off; a consent that would ask you refuses instead, because nobody is there to answer.
 
-Review the [safety notice](SAFETY.md) before running the project. The [user guide](delorun/docs/guide/README.md) explains how to install and use Delorun. The [roadmap](delorun/docs/guide/roadmap.md) says what is being built, what follows and what comes later.
+Review the [safety notice](SAFETY.md) before running the project. The [user guide](delorun/docs/guide/README.md) explains how to install and use Delorun. The [roadmap](delorun/docs/guide/roadmap.md) lists what is being built and the directions after it.
 
 ## Run
 

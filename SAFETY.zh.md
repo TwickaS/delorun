@@ -4,10 +4,6 @@
 
 > 本页是英文页面的模型翻译。如有出入，以英文页面为准。
 
-<!-- DRAFT FOR THE OWNER: rewrite every section in your own words, then delete this comment and the note below. -->
-
-> **草稿。** 维护者尚未用自己的话重写本说明。事实是准确的；语气只是初稿。
-
 ## 预览状态
 
 Delorun 是预览版软件。它的发布使用预览密钥签名，尚未经过外部安全评审，并且只有一个人维护。不要把它视为安全或可用于生产环境的软件。[使用 Delorun 时你要信任什么](delorun/docs/guide/trust.zh.md)说明了其中每一项的含义。
@@ -31,5 +27,7 @@ Delorun 可以执行模型编写的代码与命令、加载第三方插件，并
 ## 不提供保证，不承担责任
 
 请自行承担使用 Delorun 的风险。本软件依照 [MIT License](LICENSE) 提供，不附带任何保证。在适用法律允许的最大范围内，对于使用本项目造成的计算机损坏、数据丢失或泄露、文件丢失或其他损害，作者和版权持有人不承担责任。
+
+To report a security problem, follow [SECURITY.md](SECURITY.md). For anything else, use the contact details in [SUPPORT.md](SUPPORT.md).
 
 本说明以 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的安全说明为基础，Delorun 构建于其上。

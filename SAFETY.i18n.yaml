@@ -3,17 +3,17 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write SAFETY.md
 /safety:
-  en: 9c95c84fe680dd1f
-  zh: 9ad38412d3aab51c
+  en: a374f70c56b3f221
+  zh: 421e23948cd37dcb
 /safety/preview-status:
-  en: cd53da46471c3720
+  en: b78ddae6598ca4ed
   zh: 7f483d42ca8bb759
 /safety/what-the-sandbox-does-not-do:
-  en: 3207c5335793e007
+  en: 8d3830bd36d1ea26
   zh: 6ce2274949036c48
 /safety/using-it-responsibly:
   en: 938f4b6d74d1c71e
   zh: 8cfd6377c1ba4927
 /safety/no-warranty-or-liability:
-  en: 0d0151cdfff966fa
-  zh: 8e86c55f422ad180
+  en: 0f662ef760c0f6ad
+  zh: f256519c33db7fe0

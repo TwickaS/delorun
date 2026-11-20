@@ -8,10 +8,6 @@ description: "对 Delorun 那些难回答的问题的直接回答：为什么它
 
 > 本页是英文页面的模型翻译。如有出入，以英文页面为准。
 
-<!-- DRAFT FOR THE OWNER: rewrite every answer in your own words, then delete this comment and the note below. -->
-
-> **草稿。** 维护者尚未用自己的话重写本页。事实是准确的；语气只是初稿。
-
 ## 摘要
 
 本页回答一个谨慎的人在运行一个会在自己电脑上工作的工具之前会问的问题。回答以维护者的第一人称写成，指出 Delorun 的不足时与说明它的长处同样直白。你不需要任何前置知识。如果想了解某个回答背后的细节，每个回答都链接到负责该内容的页面。

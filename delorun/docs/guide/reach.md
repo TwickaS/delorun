@@ -42,7 +42,7 @@ Any device on your tailnet can open the sign-in page, but only a device you appr
 
 Follow this path if you have no Tailscale account. Tailscale's own pages give the steps for their product, so this page links to them and does not copy them.
 
-1. **Create an account.** Sign up at [login.tailscale.com/start](https://login.tailscale.com/start) with an identity you already have. Your devices will join one private network, your tailnet, under this account.
+1. **Create an account.** Sign up at [login.tailscale.com/start](https://login.tailscale.com/start) with an identity you already have. Your devices join one private network, your tailnet, under this account.
 2. **Install Tailscale on the computer where Delorun runs.** On Linux, and inside WSL2, follow Tailscale's [Linux download page](https://tailscale.com/download/linux) and sign in with `sudo tailscale up`, which prints a link to open. Install it in the Linux system that runs Delorun, not only on Windows, because `delorun reach on tailscale` runs the `tailscale` command in the system where Delorun runs.
 3. **Install Tailscale on your phone.** Get the app from the App Store or Google Play ([download page](https://tailscale.com/download)) and sign in with the same account.
 4. **Check that both devices see each other.** On the computer, `tailscale status` lists the phone beside the computer. In the phone's app, the computer shows as connected. If either is missing, the two are signed in to different accounts; sign one out and in again.

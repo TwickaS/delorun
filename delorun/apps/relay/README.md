@@ -162,6 +162,6 @@ The app also registers a driver for C20's cross-surface denial suite (`delorun/p
 
 ## Not in this app
 
-- **Rebinding's signature check, 60-second delay and announcement.** The configuration checks that a rebind statement names its binding's name and new key, and does not verify the old key's signature. A changed binding takes effect when the relay restarts with the edited configuration, with no delay and no `tunnel-rebound` announcement; those wait for the binding history in `stateDir`.
+- **Rebinding's signature check, 60-second delay and announcement.** The configuration checks that a rebind statement names its binding's name and new key, and does not verify the old key's signature. A changed binding takes effect when the relay restarts with the edited configuration, with no delay and no `tunnel-rebound` announcement; those need a binding history in `stateDir`, which this app does not keep.
 - **Certificate monitoring.** C6 gives it to the home, and no home-side certificate monitoring is built.
 - **The Delorun relay.** Relay control and `delo.run` names are not part of Delorun ([roadmap](../../docs/guide/roadmap.md)), and the data plane serves the self-hosted relay only.
