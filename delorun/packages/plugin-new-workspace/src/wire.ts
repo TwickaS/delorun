@@ -226,15 +226,35 @@ export type PreviewRequest = z.output<typeof PreviewRequest>
 /** The most entry names a preview lists. */
 export const MAX_PREVIEW_NAMES = 24
 
-/** One top-level entry a preview lists: its name and whether it is a folder. */
-export const PreviewEntry = z.strictObject({ name: z.string().min(1).max(MAX_NAME_LENGTH), folder: z.boolean() })
+/** One top-level entry a preview lists: its name, whether it is a folder, and a file's size in bytes when it could be read. */
+export const PreviewEntry = z.strictObject({
+  name: z.string().min(1).max(MAX_NAME_LENGTH),
+  folder: z.boolean(),
+  size: z.number().int().nonnegative().optional(),
+})
 
 /** {@link PreviewEntry}'s parsed value. */
 export type PreviewEntry = z.output<typeof PreviewEntry>
 
+/** The project stacks a preview names, each from the presence of its marker file: `node` from `package.json`, `python` from `pyproject.toml`, and so on. */
+export const STACKS = ['node', 'typescript', 'deno', 'python', 'rust', 'go', 'java', 'ruby', 'php', 'dotnet', 'swift', 'elixir', 'cpp'] as const
+
+/** One of {@link STACKS}. */
+export type Stack = typeof STACKS[number]
+
+/** The longest commit subject a preview carries, in characters. */
+export const MAX_COMMIT_SUBJECT = 200
+
+/** A repository's latest commit: its subject line and when it was made (ISO-8601). */
+export const LastCommit = z.strictObject({ subject: z.string().min(1).max(MAX_COMMIT_SUBJECT), at: z.string().max(64) })
+
+/** {@link LastCommit}'s parsed value. */
+export type LastCommit = z.output<typeof LastCommit>
+
 /**
- * What one folder holds, from its top-level names and Git's `HEAD` only: its kind, its Git branch when it is a
- * repository on a branch, whether it has an `AGENTS.md`, its first visible entries, and whether there are more; or why
+ * What one folder holds, from its top-level names, file sizes, Git's `HEAD` and the latest commit's subject and time:
+ * its kind, its Git branch when it is a repository on a branch, its latest commit when Git could read one, the stacks
+ * its marker files name, whether it has an `AGENTS.md`, its first visible entries, and whether there are more; or why
  * it cannot be previewed (outside the roots, or a folder Delorun never adds); or that it cannot be read.
  */
 export const PreviewAnswer = z.discriminatedUnion('result', [
@@ -243,6 +263,8 @@ export const PreviewAnswer = z.discriminatedUnion('result', [
     kind: z.enum(FOLDER_KINDS),
     git: z.boolean(),
     branch: z.string().min(1).max(MAX_BRANCH_LENGTH).optional(),
+    lastCommit: LastCommit.optional(),
+    stack: z.array(z.enum(STACKS)).max(STACKS.length).optional(),
     agentsFile: z.boolean(),
     entries: z.array(PreviewEntry).max(MAX_PREVIEW_NAMES),
     more: z.boolean(),
