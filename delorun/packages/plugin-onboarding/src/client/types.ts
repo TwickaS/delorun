@@ -309,6 +309,23 @@ export interface BrowserFace {
      */
     record(next: 'on' | 'off'): Promise<boolean>
   }
+  /** While the choice is off: whether the pack was last seen enabled or disabled, empty until seen; recording a choice clears it. */
+  readonly packSeen: {
+    /** @returns the stored observation, a stable string. */
+    getSnapshot(): '' | 'enabled' | 'disabled'
+    /**
+     * Observe changes.
+     * @param listener - called after each change.
+     * @returns the unsubscribe function.
+     */
+    subscribe(listener: () => void): () => void
+    /**
+     * Record an observation.
+     * @param next - what the pack was seen as.
+     * @returns whether the Host accepted it.
+     */
+    record(next: 'enabled' | 'disabled'): Promise<boolean>
+  }
   /** Whether this home is new: its setup has not been finished, and it has been read. An unread home is not fresh. */
   readonly fresh: {
     /** @returns whether the home is new, a stable boolean. */

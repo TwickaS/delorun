@@ -64,6 +64,7 @@ export function useBrowser(services: BrowserServices): BrowserView {
   const { browser, bundles, remote } = services
   const recorded = useSyncExternalStore(browser.choice.subscribe, browser.choice.getSnapshot)
   const fresh = useSyncExternalStore(browser.fresh.subscribe, browser.fresh.getSnapshot)
+  const seen = useSyncExternalStore(browser.packSeen.subscribe, browser.packSeen.getSnapshot)
   const readiness = useSyncExternalStore(browser.setup.subscribe, browser.setup.getSnapshot)
   const ownReadiness = useSyncExternalStore(browser.ownSetup.subscribe, browser.ownSetup.getSnapshot)
   const view = useBundle(services, BROWSER_BUNDLE)
@@ -97,9 +98,14 @@ export function useBrowser(services: BrowserServices): BrowserView {
     if (recorded === '' && fresh && packState === 'available' && !held) { add(); record('on') }
     // On was recorded and the pack is gone or turned off, in Plugins: that is the person's choice.
     else if (recorded === 'on' && packState === 'available' && !started.current) record('off')
-    // Off was recorded and the pack was switched on again outside this page.
-    else if (recorded === 'off' && packState === 'installed' && result.kind === 'idle') record('on')
-  }, [recorded, fresh, remote, packState, held, result.kind, browser, bundles])
+    // While off, the pack is watched: a pack seen enabled after it was disabled or removed was switched on again in
+    // Plugins. A pack that stays enabled because its turn-off waits for a restart was never seen disabled, so it stays off.
+    else if (recorded === 'off' && (packState === 'available' || packState === 'installed' || packState === 'restart')) {
+      if (packState === 'available') { if (seen !== 'disabled') void browser.packSeen.record('disabled') }
+      else if (seen === 'disabled') record('on')
+      else if (seen === '') void browser.packSeen.record('enabled')
+    }
+  }, [recorded, fresh, seen, remote, packState, held, browser, bundles])
   const adding = packState === 'installing' || packState === 'slow'
   const on = adding || packState === 'installed' || packState === 'restart' || browserAdded(readiness)
   const state = browserPageState({

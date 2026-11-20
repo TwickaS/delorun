@@ -197,7 +197,17 @@ export function applyStudio(ctx: Context): void {
     choice: {
       getSnapshot: () => progress.getSnapshot().value?.browser ?? '',
       subscribe: listener => progress.subscribe(listener),
-      record: next => progress.set('browser', next),
+      // Each choice starts a new observation of the pack, so an earlier `disabled` never reads a later restart as a re-enable.
+      record: async (next) => {
+        const accepted = await progress.set('browser', next)
+        if (accepted) await progress.set('browserPack', '')
+        return accepted
+      },
+    },
+    packSeen: {
+      getSnapshot: () => progress.getSnapshot().value?.browserPack ?? '',
+      subscribe: listener => progress.subscribe(listener),
+      record: next => progress.set('browserPack', next),
     },
     fresh: {
       getSnapshot: () => progress.getSnapshot().value?.done === false,

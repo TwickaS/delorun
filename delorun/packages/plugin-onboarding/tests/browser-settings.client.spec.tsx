@@ -29,6 +29,8 @@ interface Options {
   readonly recorded?: 'on' | 'off'
   /** Whether setup is unfinished; a spec's home is new unless it says otherwise. */
   readonly fresh?: boolean
+  /** What the pack was last seen as while off. */
+  readonly seen?: 'enabled' | 'disabled'
 }
 
 /** Render the page over faked services. */
@@ -36,6 +38,7 @@ async function show(options: Options = {}) {
   const browser = options.browser ?? browserFake({ kind: 'ready' })
   if (options.recorded !== undefined) browser.recorded.set(options.recorded)
   if (options.fresh !== undefined) browser.fresh.set(options.fresh)
+  if (options.seen !== undefined) browser.packSeen.set(options.seen)
   const bundles = installerFake({
     [BROWSER_BUNDLE]: { state: options.pack ?? 'installed', ...options.packMore },
     [REAL_BROWSER_BUNDLE]: { state: options.own ?? 'available' },
@@ -135,11 +138,48 @@ describe('the switch', () => {
     expect(bundles.install).not.toHaveBeenCalled()
   })
 
-  // Pins the re-enable check: a pack switched on again in Plugins after Off shows On instead of a stale Off.
-  it('records on when the pack was switched on again in Plugins after Off', async () => {
-    const { browser } = await show({ pack: 'installed', recorded: 'off', fresh: false })
+  // Pins the re-enable check: a pack seen disabled and now enabled was switched on in Plugins, so the page shows On, not a stale Off.
+  it('records on when the pack, seen disabled while off, is enabled again in Plugins', async () => {
+    const { browser } = await show({ pack: 'installed', recorded: 'off', seen: 'disabled', fresh: false })
     expect(browser.record).toHaveBeenCalledExactlyOnceWith('on')
     expect(switchControl().getAttribute('aria-checked')).toBe('true')
+  })
+
+  // Pins the "never infer on from installed" check: a pack never seen disabled is still waiting to turn off.
+  it.each([['not seen yet', undefined, 'enabled'], ['seen enabled', 'enabled' as const, undefined]])('stays off for an enabled pack %s, and notes it', async (_how, seen, noted) => {
+    const { browser } = await show({ pack: 'installed', recorded: 'off', ...seen === undefined ? {} : { seen }, fresh: false })
+    expect(browser.record).not.toHaveBeenCalled()
+    if (noted === undefined) expect(browser.recordSeen).not.toHaveBeenCalled()
+    else expect(browser.recordSeen).toHaveBeenCalledExactlyOnceWith(noted)
+    expect(switchControl().getAttribute('aria-checked')).toBe('false')
+  })
+
+  it('notes a pack that is off or removed while Browser is off, once', async () => {
+    const { browser } = await show({ pack: 'available', packMore: { held: true }, recorded: 'off', fresh: false })
+    expect(browser.recordSeen).toHaveBeenCalledExactlyOnceWith('disabled')
+    expect(browser.record).not.toHaveBeenCalled()
+  })
+
+  // Turning off whose pack change ends in a restart leaves the pack enabled until the restart; reopening must not read that as On.
+  it('stays off when turning off ended in a restart and the page is opened again', async () => {
+    const browser = browserFake({ kind: 'ready' })
+    browser.outcome.value = 'restart'
+    await show({ browser })
+    await click(switchControl())
+    await settle()
+    expect(browser.recorded.getSnapshot()).toBe('off')
+    cleanup()
+    await show({ browser })
+    expect(browser.recorded.getSnapshot()).toBe('off')
+    expect(browser.record).toHaveBeenCalledExactlyOnceWith('off')
+    expect(switchControl().getAttribute('aria-checked')).toBe('false')
+    // After the restart the pack reads off, and a later switch-on in Plugins is a real re-enable.
+    cleanup()
+    await show({ browser, pack: 'available', packMore: { held: true } })
+    expect(browser.packSeen.getSnapshot()).toBe('disabled')
+    cleanup()
+    await show({ browser, pack: 'installed' })
+    expect(browser.record).toHaveBeenLastCalledWith('on')
   })
 
   // The Host's write can fail outright; the page says so and keeps what it shows, and starts no add.

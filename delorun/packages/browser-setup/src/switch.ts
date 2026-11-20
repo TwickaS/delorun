@@ -13,13 +13,13 @@ export type BrowserSwitch = 'on' | 'off'
 /**
  * Resolve the home's choice.
  * @param recorded - the stored choice, or an empty or absent value when the person never chose here.
- * @param held - whether the Browser pack is in the home but turned off, which only the person did, in Plugins.
- * @returns `on` or `off` as recorded; with no record, `off` for a pack the person turned off and `on` for everything
- * else, so a home that never chose is on and a home that chose off, here or in Plugins, stays off.
+ * @param declined - whether the home has not taken the pack: it is in the home but turned off, which only the person did, in Plugins, or the home is an existing one that never chose and has no pack.
+ * @returns `on` or `off` as recorded; with no record, `off` for a declined pack and `on` for everything else, so a new
+ * home that never chose is on and a home that chose off, here or in Plugins, stays off.
  */
-export function resolveBrowserSwitch(recorded: string | undefined, held = false): BrowserSwitch {
+export function resolveBrowserSwitch(recorded: string | undefined, declined = false): BrowserSwitch {
   if (recorded === 'on' || recorded === 'off') return recorded
-  return held ? 'off' : 'on'
+  return declined ? 'off' : 'on'
 }
 
 /**

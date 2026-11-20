@@ -46,10 +46,12 @@ export interface OnboardingSettings {
   addWaitSeconds: number
   /** What the person chose for Browser: `on` or `off`; empty while they never chose, which counts as on. */
   browser: '' | 'on' | 'off'
+  /** While `browser` is `off`: whether the Browser pack was last seen `enabled` or `disabled` (turned off or removed); empty until seen. A pack seen enabled after `disabled` was switched on again in Plugins. */
+  browserPack: '' | 'enabled' | 'disabled'
 }
 
 /** The settings of a profile that has not started onboarding. */
-export const DEFAULT_SETTINGS: OnboardingSettings = { done: false, step: '', plugins: [], optionalRows: [], pausedStart: '', addWaitSeconds: 60, browser: '' }
+export const DEFAULT_SETTINGS: OnboardingSettings = { done: false, step: '', plugins: [], optionalRows: [], pausedStart: '', addWaitSeconds: 60, browser: '', browserPack: '' }
 
 /** The host half's live configuration: one field per setting. */
 export interface Config {
@@ -60,6 +62,7 @@ export interface Config {
   pausedStart: Volatile<string>
   addWaitSeconds: Volatile<number>
   browser: Volatile<'' | 'on' | 'off'>
+  browserPack: Volatile<'' | 'enabled' | 'disabled'>
   registry: string
   registryTimeoutMs: number
   keyTestTimeoutMs: number
@@ -84,6 +87,9 @@ export const Config = z.object({
   browser: z.union(['', 'on', 'off'])
     .description('What the person chose for Browser, in Settings or in the guide: on, or off. Empty while they never chose, which counts as on.')
     .default(DEFAULT_SETTINGS.browser).volatile(),
+  browserPack: z.union(['', 'enabled', 'disabled'])
+    .description('While Browser is off: whether the Browser plugin pack was last seen enabled or disabled, so Settings can tell a pack switched on again in Plugins from one still waiting for a restart to turn off. Empty until seen.')
+    .default(DEFAULT_SETTINGS.browserPack).volatile(),
   registry: z.string().pattern(/^https:\/\/[^\s/]+(?:\/[^\s]*)?$/u)
     .description('The npm registry the plugins step reads a package that is not installed from, only when the person asks.')
     .default('https://registry.npmjs.org'),
