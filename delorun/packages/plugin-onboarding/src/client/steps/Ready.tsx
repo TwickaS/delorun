@@ -8,8 +8,9 @@ import { folderOf } from '../guide.ts'
 import { didNotPass } from '../key-status.ts'
 import { STARTERS, starterSet } from '../ideas.ts'
 import type { ReachState, StartTarget, StepServices } from '../types.ts'
+import { BreakablePath } from '../ui/BreakablePath.tsx'
 import { AGENT_BUNDLES } from './Agents.tsx'
-import { useStore, type StepProps, type Tone } from './shared.ts'
+import { folderName, useStore, type StepProps, type Tone } from './shared.ts'
 import css from './steps.module.css'
 
 /** One line of the Ready checklist. */
@@ -18,22 +19,8 @@ interface CheckLine {
   readonly label: string
   readonly value: string
   readonly tone: Tone
-  /** The whole value when the shown one is shortened. */
-  readonly full?: string
-}
-
-/** The longest a path is shown before its middle is cut. */
-const PATH_SHOWN = 44
-
-/**
- * Shorten a long path in the middle, keeping its start and its last folders.
- * @param path - the path.
- * @returns the path, or its start and end joined by an ellipsis when it is longer than the limit.
- */
-export function middleEllipsis(path: string): string {
-  if (path.length <= PATH_SHOWN) return path
-  const tail = Math.floor((PATH_SHOWN - 1) * 0.6)
-  return `${path.slice(0, PATH_SHOWN - 1 - tail)}…${path.slice(path.length - tail)}`
+  /** The workspace's path, shown under its folder name. */
+  readonly path?: string
 }
 
 /**
@@ -89,9 +76,9 @@ export function ReadyStep({ services, guide, reach, target, keepCurrent }: StepP
     { key: 'plugins', label: t('ready.plugins'), value: extra === 0 ? t('ready.none') : t('ready.plugins.count', { count: String(extra) }), tone: undefined },
     ...reach === 'absent' ? [] : [{ key: 'reach', label: t('ready.reach'), value: t(reach === 'set-up' || phone === 'on' ? 'ready.reach.on' : phone === 'done' ? 'ready.reach.check' : 'ready.reach.off'), tone: undefined }],
     workspace !== undefined
-      ? { key: 'workspace', label: t('ready.workspace'), value: middleEllipsis(workspace.path), full: workspace.path, tone: undefined }
+      ? { key: 'workspace', label: t('ready.workspace'), value: folderName(workspace.path), path: workspace.path, tone: undefined }
       : target.kind === 'default' && !keepCurrent
-        ? { key: 'workspace', label: t('ready.workspace'), value: middleEllipsis(target.path), full: target.path, tone: undefined }
+        ? { key: 'workspace', label: t('ready.workspace'), value: folderName(target.path), path: target.path, tone: undefined }
         : target.kind === 'other' || keepCurrent
           ? { key: 'workspace', label: t('ready.workspace'), value: t('ready.workspace.last'), tone: undefined }
           : { key: 'workspace', label: t('ready.workspace'), value: t('ready.workspace.none'), tone: 'attention' },
@@ -103,7 +90,10 @@ export function ReadyStep({ services, guide, reach, target, keepCurrent }: StepP
         {lines.map(line => (
           <div key={line.key} className={css.checkRow}>
             <dt>{line.label}</dt>
-            <dd className={css.status} data-tone={line.tone} title={line.full}>{line.value}</dd>
+            <dd className={css.status} data-tone={line.tone}>
+              {line.value}
+              {line.path !== undefined && <span className={css.checkPath}><BreakablePath path={line.path} /></span>}
+            </dd>
           </div>
         ))}
       </dl>

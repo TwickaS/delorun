@@ -47,7 +47,7 @@ import {
   type WorkReviewView,
   type WorkspacesView,
 } from '../wire.ts'
-import { fetchedPath, type FaceGrant } from './face-grant.ts'
+import { fetchedPath, PASS_GRANT_ID, type FaceGrant } from './face-grant.ts'
 import type { ChangesToastKey } from './locales.ts'
 
 /** What the section shows: the first load, a failed load with nothing to show, or the state. */
@@ -549,7 +549,9 @@ export class ChangesController {
 
   /**
    * The sender of one control's requests. While the page's state says the control needs Face ID, a `POST` first asks for
-   * a grant covering exactly that call and carries it in `Delorun-Grant`.
+   * a grant covering exactly that call and carries it in `Delorun-Grant`. A call sent under the page's Face ID pass
+   * ({@link PASS_GRANT_ID}) that the home refuses for want of a grant (the pass ended in between) is asked once more,
+   * which shows the sheet.
    * @param control - the control the requests belong to.
    * @returns the sender.
    * @throws {FaceCancelled} from a send whose grant the person did not give.
@@ -560,9 +562,18 @@ export class ChangesController {
       const load = this.state.getSnapshot()
       const needsFace = body !== undefined && ask !== undefined && load.status === 'ready' && mayNeedsFace(load.state.access.may[control])
       if (!needsFace) return await request<T>(path, body)
-      const grantId = await ask({ action: `changes/${control}`, call: { method: 'POST', path: fetchedPath(path), body } })
+      const call = { action: `changes/${control}`, call: { method: 'POST', path: fetchedPath(path), body } }
+      const grantId = await ask(call)
       if (grantId === undefined) throw new FaceCancelled()
-      return await request<T>(path, body, grantId)
+      try {
+        return await request<T>(path, body, grantId)
+      } catch (error) {
+        if (grantId !== PASS_GRANT_ID || !(error instanceof ChangesRequestError) || error.refusal?.code !== ELEVATION_REQUIRED) throw error
+        const again = await ask(call)
+        if (again === undefined) throw new FaceCancelled()
+        if (again === PASS_GRANT_ID) throw error
+        return await request<T>(path, body, again)
+      }
     }
   }
 

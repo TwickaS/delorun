@@ -9,8 +9,9 @@ import type { AgentSignIn } from '../../wire.ts'
 import { StateLine, type StateTone } from '../ui/StateLine.tsx'
 import { AgentAdvanced } from './AgentAdvanced.tsx'
 import { CommandRow } from '../ui/CommandRow.tsx'
+import { Disclosure } from '../ui/Disclosure.tsx'
 import { BundleCard } from './BundleCard.tsx'
-import { useBundle, useRefresh, useStore, type StepProps } from './shared.ts'
+import { keepSignInTogether, useBundle, useRefresh, useStore, type StepProps } from './shared.ts'
 import css from './steps.module.css'
 
 /**
@@ -52,11 +53,14 @@ function AgentCard({ agent, services, guide }: { readonly agent: typeof AGENT_BU
   // The sign-in stays visible while the package is added; it hides while the package's own state is checking, failed or not available.
   const showSignIn = bundleState === 'available' || bundleState === 'installing' || bundleState === 'slow' || added
   return (
-    <BundleCard name={agent.name} title={title} description={t(`agents.${agent.key}.description`)} services={services}>
+    <BundleCard name={agent.name} title={title} description={keepSignInTogether(t(`agents.${agent.key}.description`))} services={services}>
       <p className={css.how}>
-        {t(`agents.${agent.key}.how`)}{' '}
+        {keepSignInTogether(t(`agents.${agent.key}.how`))}{' '}
         <a href={AGENTS_GUIDE_URL} target="_blank" rel="noopener noreferrer">{t('agents.guide')}</a>
       </p>
+      <Disclosure label={t('agents.permissions')} size="quiet">
+        <p className={css.how}>{keepSignInTogether(t(`agents.${agent.key}.permissions`))}</p>
+      </Disclosure>
       {bundleState !== undefined && bundleState !== 'checking' && bundleState !== 'unavailable' && !added && <p className={css.how}>{t('agents.download', { size: String(agent.downloadMb) })}</p>}
       <StateLine tone="warning">{t(`agents.${agent.key}.risk`)}</StateLine>
       {showSignIn && (

@@ -5,7 +5,9 @@ import { AGENT_BUNDLES, AGENTS_GUIDE_URL, AgentsStep } from '../src/client/steps
 import { LookStep } from '../src/client/steps/Look.tsx'
 import { connectionName, PluginsStep, readableName } from '../src/client/steps/Plugins.tsx'
 import { APPROVE_COMMAND, REACH_COMMAND, ReachStep } from '../src/client/steps/Reach.tsx'
-import { middleEllipsis, ReadyStep } from '../src/client/steps/Ready.tsx'
+import { BreakablePath } from '../src/client/ui/BreakablePath.tsx'
+import { keepSignInTogether } from '../src/client/steps/shared.ts'
+import { ReadyStep } from '../src/client/steps/Ready.tsx'
 import { WelcomeStep } from '../src/client/steps/Welcome.tsx'
 import { CommandRow as Command } from '../src/client/ui/CommandRow.tsx'
 import { createGuide, type Guide } from '../src/client/guide.ts'
@@ -297,15 +299,21 @@ describe('the agents step', () => {
     expect(screen.getByText('Downloads about 320 MB when you add it.')).toBeTruthy()
   })
 
-  it('shows the default path on each card: how a chat uses the agent, the risk warning and one Add, with no choice', () => {
+  it('shows the default path on each card: how a chat uses the agent, the risk warning and one Add, with no choice', async () => {
     const [claude, codex] = AGENT_BUNDLES
     const fake = installerFake({ [claude.name]: { state: 'available' }, [codex.name]: { state: 'available' } })
     render(<AgentsStep services={stepServices({ bundles: fake.installer })} guide={guideOf()} />)
     const cardOf = (title: string): HTMLElement => screen.getByRole('heading', { level: 4, name: title }).closest('li') as HTMLElement
     const claudeCard = cardOf('Claude Code')
     const codexCard = cardOf('Codex')
-    expect(within(claudeCard).getByText(en['agents.claude.how'], { exact: false })).toBeTruthy()
-    expect(within(codexCard).getByText(en['agents.codex.how'], { exact: false })).toBeTruthy()
+    expect(within(claudeCard).getByText(keepSignInTogether(en['agents.claude.how']), { exact: false })).toBeTruthy()
+    expect(within(codexCard).getByText(keepSignInTogether(en['agents.codex.how']), { exact: false })).toBeTruthy()
+    // The rest of the permissions copy is folded under a disclosure until it is opened, with its copy kept.
+    for (const [card, key] of [[claudeCard, 'claude'], [codexCard, 'codex']] as const) {
+      expect(within(card).queryByText(keepSignInTogether(en[`agents.${key}.permissions`]), { exact: false })).toBeNull()
+    }
+    await click(within(claudeCard).getByRole('button', { name: en['agents.permissions'] }))
+    expect(within(claudeCard).getByText(en['agents.claude.permissions'], { exact: false })).toBeTruthy()
     expect(within(claudeCard).getByText('Downloads about 206 MB when you add it.')).toBeTruthy()
     expect(within(codexCard).getByText('Downloads about 320 MB when you add it.')).toBeTruthy()
     expect(within(claudeCard).getByText(en['agents.claude.risk'])).toBeTruthy()
@@ -314,7 +322,7 @@ describe('the agents step', () => {
     expect(en['agents.claude.risk']).toContain('A home internet connection works best; avoid VPNs, proxies and cloud servers.')
     expect(within(codexCard).queryByText(/home internet/)).toBeNull()
     for (const card of [claudeCard, codexCard]) {
-      expect(within(card).getAllByRole('button').map(each => each.textContent)).toEqual([en['bundle.add'], en['agents.advanced']])
+      expect(within(card).getAllByRole('button').map(each => each.textContent)).toEqual([en['bundle.add'], en['agents.permissions'], en['agents.advanced']])
       expect(within(card).getByRole('button', { name: en['agents.advanced'] }).getAttribute('aria-expanded')).toBe('false')
       expect(within(card).queryByRole('radio')).toBeNull()
       expect(within(card).getByRole('link', { name: en['agents.guide'] }).getAttribute('href')).toBe(AGENTS_GUIDE_URL)
@@ -727,12 +735,15 @@ describe('the phone access step', () => {
 describe('the ready step', () => {
   const ready = (guide: Guide, options: { readonly target?: StartTarget; readonly reach?: 'absent' | 'set-up' | 'off'; readonly services?: StepServices } = {}) =>
     render(<ReadyStep services={options.services ?? stepServices()} guide={guide} reach={options.reach ?? 'off'} target={options.target ?? { kind: 'checking' }} keepCurrent={false} />)
-  const rows = () => [...document.querySelectorAll('dt')].map(each => [each.textContent, each.nextElementSibling?.textContent, each.nextElementSibling?.getAttribute('data-tone') ?? undefined])
+  // A value's own text; the workspace's path sits in a span under its folder name.
+  const rows = () => [...document.querySelectorAll('dt')].map(each => [each.textContent, each.nextElementSibling?.firstChild?.textContent, each.nextElementSibling?.getAttribute('data-tone') ?? undefined])
+  const workspacePath = () => document.querySelector('dd > span')?.textContent
 
   it('shows the default workspace as a plain value when the Workspace step was skipped', async () => {
     ready(guideOf(), { target: { kind: 'default', workspaceId: DEFAULT_WORKSPACE, path: DEFAULT_PATH } })
     await settle()
-    expect(rows().find(row => row[0] === 'Workspace')).toEqual(['Workspace', DEFAULT_PATH, undefined])
+    expect(rows().find(row => row[0] === 'Workspace')).toEqual(['Workspace', 'Delorun', undefined])
+    expect(workspacePath()).toBe(DEFAULT_PATH)
   })
 
   it('lists what the guide set and the starting prompts that fit the chosen folder', async () => {
@@ -748,8 +759,9 @@ describe('the ready step', () => {
       ['Agents', 'Claude Code', undefined],
       ['Plugins', '1 added', undefined],
       ['Phone access', 'On', undefined],
-      ['Workspace', '/home/person/app', undefined],
+      ['Workspace', 'app', undefined],
     ])
+    expect(workspacePath()).toBe('/home/person/app')
     expect(screen.getByText(en['ready.ideas'])).toBeTruthy()
     expect(screen.getAllByRole('listitem').map(each => each.textContent)).toEqual(['code.1', 'code.2', 'code.3'].map(key => `${en[`starter.${key}.label` as 'starter.code.1.label']}${en[`starter.${key}.prompt` as 'starter.code.1.prompt']}${en.copy}`))
   })
@@ -799,7 +811,7 @@ describe('the ready step', () => {
     guide.chooseWorkspace({ kind: 'default', workspaceId: DEFAULT_WORKSPACE, path: DEFAULT_PATH })
     ready(guide, { target: { kind: 'default', workspaceId: DEFAULT_WORKSPACE, path: DEFAULT_PATH } })
     await settle()
-    expect(rows().at(-1)).toEqual(['Workspace', DEFAULT_PATH, undefined])
+    expect(rows().at(-1)).toEqual(['Workspace', 'Delorun', undefined])
     expect(KEYS.providers).toHaveLength(1)
   })
 })
@@ -886,14 +898,15 @@ describe('what the guide shows after the audit', () => {
     expect(screen.getAllByRole('radio').map(each => each.textContent)).toEqual([`English${en['welcome.language.own']}`, `中文${zh['welcome.language.own']}`])
   })
 
-  it('shortens a long path in the middle and keeps its start and end', () => {
-    expect(middleEllipsis('/home/person/app')).toBe('/home/person/app')
-    const long = `/home/person/${'deeply/'.repeat(10)}project`
-    const shown = middleEllipsis(long)
-    expect(shown.length).toBeLessThan(long.length)
-    expect(shown.startsWith('/home/')).toBe(true)
-    expect(shown.endsWith('project')).toBe(true)
-    expect(shown).toContain('…')
+  it('lets a path break only after a slash, keeping each folder name whole', () => {
+    const { container } = render(<span><BreakablePath path="/tmp/polish2-home/work" /></span>)
+    expect([...container.querySelectorAll('span > span > span')].map(each => each.textContent)).toEqual(['/', 'tmp/', 'polish2-home/', 'work'])
+    expect(container.querySelectorAll('wbr')).toHaveLength(4)
+  })
+
+  it('keeps "sign-in" unbreakable and leaves other copy alone', () => {
+    expect(keepSignInTogether('with its own sign-in.')).toBe('with its own sign\u2060-\u2060in.')
+    expect(keepSignInTogether('Nothing to keep.')).toBe('Nothing to keep.')
   })
 
   it('reads one key state on Ready and Models: a found key the test could not reach is named, not called missing', async () => {

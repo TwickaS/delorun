@@ -164,7 +164,7 @@ function DeviceCard({ t, kind, device, canRemoveDevice, onAdd, onRemove }: {
       <span>{device.label}</span>
       {device.thisDevice && device.label !== t('devices.thisDevice') ? <span className={css.tag}>{t('devices.thisDevice')}</span> : null}
     </h3>
-    {device.passkeys.map(passkey => <PasskeyRow key={passkey.credentialId} t={t} passkey={passkey} kind={kind}
+    {device.passkeys.map(passkey => <PasskeyRow key={passkey.credentialId} t={t} passkey={passkey} kind={kind} owner={device.thisDevice ? undefined : device.label}
       onRemove={() => { onRemove({ kind: 'passkey', credentialId: passkey.credentialId, deviceId: device.thisDevice ? undefined : device.deviceId, label: device.label }) }} />)}
     {device.passkeys.length === 0 && device.thisDevice
       ? <Button variant="primary" type="button" className={css.action} onClick={onAdd}>{t('devices.add')}</Button> : null}
@@ -175,14 +175,20 @@ function DeviceCard({ t, kind, device, canRemoveDevice, onAdd, onRemove }: {
   </section>
 }
 
-/** One passkey inside a device's card. */
-function PasskeyRow({ t, passkey, kind, onRemove }: {
-  readonly t: Translate; readonly passkey: PasskeyEntry; readonly kind: FaceIdKind; readonly onRemove: () => void
+/**
+ * One passkey inside a device's card. Its button removes the passkey, never the device: on this device it names the
+ * method ("Remove Face ID from this device"), or the passkey when the method is only "your device"; on another device's
+ * card it names that device, since this page cannot tell which method that passkey uses.
+ */
+function PasskeyRow({ t, passkey, kind, owner, onRemove }: {
+  readonly t: Translate; readonly passkey: PasskeyEntry; readonly kind: FaceIdKind; readonly owner: string | undefined; readonly onRemove: () => void
 }): ReactNode {
-  const method = t(`kind.${kind}`)
+  const label = owner !== undefined ? t('devices.removePasskeyOn', { name: owner })
+    : kind === 'deviceLock' ? t('devices.removePasskeyLock')
+      : t('devices.removePasskey', { method: t(`kind.${kind}`) })
   return <div className={css.passkey} data-face-id-passkey={passkey.credentialId}>
     <p className={css.meta}>{t('devices.added', { date: day(t, passkey.createdAt) })} · {t(passkey.synced ? 'devices.synced' : 'devices.deviceOnly')}</p>
     <p className={css.meta}>{passkey.lastUsedAt === null ? t('devices.neverUsed') : t('devices.lastUsed', { date: day(t, passkey.lastUsedAt) })}</p>
-    <Button variant="outline" type="button" className={css.action} onClick={onRemove}>{t('devices.removePasskey', { method })}</Button>
+    <Button variant="outline" type="button" className={css.action} onClick={onRemove}>{label}</Button>
   </div>
 }

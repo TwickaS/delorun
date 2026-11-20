@@ -5,7 +5,7 @@ import { createGuide } from '../src/client/guide.ts'
 import { en } from '../src/client/locales.ts'
 import type { NewWorkspaceOutcome, StartTarget } from '../src/client/types.ts'
 import { WorkspaceStep } from '../src/client/steps/Workspace.tsx'
-import { DEFAULT_PATH, DEFAULT_WORKSPACE, HOME, hostFake, startFace, stepServices } from './fixtures.client.ts'
+import { DEFAULT_PATH, pathText, DEFAULT_WORKSPACE, HOME, hostFake, startFace, stepServices } from './fixtures.client.ts'
 
 afterEach(cleanup)
 
@@ -31,7 +31,7 @@ describe('the workspace step', () => {
     expect(screen.getAllByRole('radio').map(each => [each.textContent, each.getAttribute('aria-checked')])).toEqual([
       [en['workspace.mode.default'], 'true'], [en['workspace.mode.another'], 'false'],
     ])
-    expect(screen.getByText(DEFAULT_PATH)).toBeTruthy()
+    expect(screen.getByText(pathText(DEFAULT_PATH))).toBeTruthy()
     expect(screen.queryByRole('button', { name: en['workspace.new'] })).toBeNull()
   })
 
@@ -46,7 +46,7 @@ describe('the workspace step', () => {
   it('chooses the default workspace again when the person comes back to it', async () => {
     const { guide } = mount()
     await click(radio(en['workspace.mode.another']))
-    expect(screen.queryByText(DEFAULT_PATH)).toBeNull()
+    expect(screen.queryByText(pathText(DEFAULT_PATH))).toBeNull()
     await click(radio(en['workspace.mode.default']))
     expect(guide.workspace.getSnapshot()).toEqual({ kind: 'default', workspaceId: DEFAULT_WORKSPACE, path: DEFAULT_PATH })
   })

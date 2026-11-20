@@ -49,6 +49,8 @@ export const HOME_AUTH_FILES = {
   pinAttempts: 'pin-attempts.json',
   /** The settings an unlocked PIN page loosened, set back when PIN mode turns off (C14, "PIN mode"). */
   reachPinSettings: 'reach-pin-settings.json',
+  /** The person's choice of how long one Face ID opens a pass for (C14, "Passkeys"). */
+  faceIdPass: 'face-id-pass.json',
 } as const
 
 /** IndexedDB database and store that hold a browser device key on its origin. */

@@ -5,7 +5,7 @@
  */
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
-import type { FaceGrant, FaceGrantRequest } from '@delorun/plugin-changes/face-grant'
+import { PASS_GRANT_ID, type FaceGrant, type FaceGrantRequest } from '@delorun/plugin-changes/face-grant'
 
 /** A confirmation that waits for the person. */
 export interface PendingGrant {
@@ -56,5 +56,30 @@ export function createFaceGrantSource(): FaceGrantSource {
       })
     },
     settle,
+  }
+}
+
+/** The grant id a covered confirmation resolves with; see `PASS_GRANT_ID` in `@delorun/plugin-changes/face-grant`. */
+export { PASS_GRANT_ID } from '@delorun/plugin-changes/face-grant'
+
+/**
+ * The proactive confirmation for callers that ask before they send (Changes, Update, a seat's answer): while this page's
+ * Face ID pass covers the action (and, for an approval answer, `answer/<grants marker>`), it reads the pass from the home once more and, if it still covers it, resolves with
+ * {@link PASS_GRANT_ID} and shows no sheet; otherwise it asks. A request the home refuses although it carried
+ * {@link PASS_GRANT_ID} (the pass ended in between) is asked again with a sheet by `grantingFetch`.
+ * @param grant - the queued confirmation.
+ * @param pass - the page's pass mirror.
+ * @returns the confirmation.
+ */
+export function passAware(grant: FaceGrant, pass: { readonly covers: (action: string) => boolean; readonly refresh: () => Promise<void> }): FaceGrant {
+  return async (request) => {
+    // An answer is also checked under its own action, `answer/<grants marker>`, so a seat's full-access answer asks.
+    const answer = 'answer' in request.call ? `answer/${request.call.answer.grants}` : undefined
+    const live = (): boolean => request.signal?.aborted !== true && pass.covers(request.action) && (answer === undefined || pass.covers(answer))
+    if (live()) {
+      await pass.refresh()
+      if (live()) return PASS_GRANT_ID
+    }
+    return await grant(request)
   }
 }

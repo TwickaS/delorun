@@ -1,7 +1,8 @@
 /** The Setup versions and report routes under Face ID: saving, switching and reading the report's details need a grant for that exact call; listing versions and their changes stay free. */
 import { describe, expect, it, vi } from 'vitest'
-import { PICKER_HOLD_ID, REACH_DEVICE } from '@delorun/home-auth'
+import { ALWAYS_ASK_ACTIONS, PICKER_HOLD_ID, REACH_DEVICE } from '@delorun/home-auth'
 import { PICKER_HOLD_ID as CLIENT_PICKER_HOLD_ID } from '../src/client/face-retry.ts'
+import { ALWAYS_ASK_ACTIONS as CLIENT_ALWAYS_ASK } from '../src/client/face-id-pass.ts'
 import { faceWorld, type FaceWorld } from '../../plugin-changes/tests/face-world.ts'
 import { PROFILE_VERSION_ROUTES } from '../src/client/versions-api.ts'
 import { REPORT_ROUTE } from '../src/client/report-api.ts'
@@ -156,5 +157,12 @@ describe('the client\'s picker hold id', () => {
   // A picker hold id other than the home's would open a hold no later picker read matches.
   it('is the home\'s', () => {
     expect(CLIENT_PICKER_HOLD_ID).toBe(PICKER_HOLD_ID)
+  })
+})
+
+describe('the always-ask actions of the Face ID pass (A499)', () => {
+  // A drift between the client's list and the home's skips a sheet the home then refuses, or asks where a pass covers the action.
+  it('are the same on the device and the home', () => {
+    expect([...CLIENT_ALWAYS_ASK].sort()).toEqual([...ALWAYS_ASK_ACTIONS].sort())
   })
 })

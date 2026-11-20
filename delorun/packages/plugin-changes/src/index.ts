@@ -406,7 +406,7 @@ export function routeDevices(scope: Pick<Context, 'get'>): RouteDevices {
         label,
         unlock: unlock === undefined ? 'none' : unlock.grace === true ? 'grace' : 'fresh',
         renew: () => { if (unlock !== undefined) home.touchUnlock(unlock.id) },
-        face: faceAccessOf(home.faceGrants(), home.deviceHasPasskey(deviceId), { deviceId, listener: (principal as ReachDevicePrincipal).listener }),
+        face: faceAccessOf(home.faceGrants(), home.deviceHasPasskey(deviceId), { deviceId, listener: (principal as ReachDevicePrincipal).listener, unlockId: (principal as ReachDevicePrincipal).unlockId }),
       }
       return device
     },

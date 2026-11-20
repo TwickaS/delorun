@@ -11,6 +11,7 @@ import { en } from '../src/client/face-id-locales.ts'
 import { fakeBrowser } from '../src/client/face-id-fake.ts'
 import { PASSKEY_ROUTES } from '../src/client/face-id-api.ts'
 import { FaceIdSection, type FaceIdSectionProps } from '../src/client/FaceIdSection.tsx'
+import { NO_PASS, type PassState } from '../src/client/face-id-pass.ts'
 import { FaceIdPairingOverlay, PAIRING_SKIP_STORAGE_KEY, pairingSkipped, rememberPairingSkip } from '../src/client/FaceIdPairingOverlay.tsx'
 import type { PinView } from '../src/client/pin-lock.ts'
 import { fakeHost } from './fake-host.ts'
@@ -21,7 +22,7 @@ const pinView = (phase: PinView['phase']): PinView => ({ phase, secret: 'pin' })
 
 function section(script: Parameters<typeof fakeHost>[0], over: { computer?: boolean; phase?: PinView['phase'] } = {}) {
   const host = fakeHost(script)
-  const props = { t, close: () => {}, fetch: host.fetch, atComputer: () => over.computer ?? false, usePin: <S,>(select: (view: PinView) => S): S => select(pinView(over.phase ?? 'on')), browser: fakeBrowser() } as FaceIdSectionProps
+  const props = { t, close: () => {}, fetch: host.fetch, atComputer: () => over.computer ?? false, usePin: <S,>(select: (view: PinView) => S): S => select(pinView(over.phase ?? 'on')), browser: fakeBrowser(), usePass: <S,>(select: (state: PassState) => S): S => select(NO_PASS), grant: () => Promise.resolve(undefined) } as FaceIdSectionProps
   render(<FaceIdSection {...props} />)
   return host
 }
@@ -45,7 +46,7 @@ describe('FaceIdSection', () => {
     const host = fakeHost({ [`GET ${PASSKEY_ROUTES.state}`]: { status: 200, body: { deviceId: 'd-this', passkeys: [entry], ticket: false } } })
     let held = true
     const fetch: typeof host.fetch = (input, init) => (held && String(input).includes(PASSKEY_ROUTES.state) ? new Promise<Response>(() => {}) : host.fetch(input, init))
-    const props = { t, close: () => {}, fetch, atComputer: () => false, usePin: <S,>(select: (view: PinView) => S): S => select(pinView('off')), browser: fakeBrowser() } as FaceIdSectionProps
+    const props = { t, close: () => {}, fetch, atComputer: () => false, usePin: <S,>(select: (view: PinView) => S): S => select(pinView('off')), browser: fakeBrowser(), usePass: <S,>(select: (state: PassState) => S): S => select(NO_PASS), grant: () => Promise.resolve(undefined) } as FaceIdSectionProps
     render(<FaceIdSection {...props} />)
     held = false
     fireEvent.click(screen.getByRole('button', { name: 'Show all devices' }))

@@ -137,6 +137,13 @@ export const DEFAULT_WORKSPACE = 'workspace-1' as WorkspaceId
 /** The default workspace's folder in the specs. */
 export const DEFAULT_PATH = '/home/person/Delorun'
 
+/**
+ * A text matcher for a path the card breaks into parts after each slash.
+ * @param path - the whole path.
+ * @returns a matcher for `getByText` that finds the element holding the whole path.
+ */
+export const pathText = (path: string) => (_content: string, element: Element | null): boolean => element?.textContent === path
+
 /** A computer with both agents signed in and Tailscale ready. */
 export const READY: Readiness = { agents: { 'claude-code': 'found', 'codex': 'found' }, tailscale: { state: 'ready', dnsName: 'box.example.ts.net' } }
 
@@ -211,7 +218,7 @@ export function providersFake(change: { readonly directory?: readonly DirectoryE
 export function agentsFake(options: { readonly rows?: boolean; readonly minutes?: number } = {}) {
   const claude = liveForm<AgentRowSettings>(options.rows === false ? undefined : {}, { status: options.rows === false ? 'unavailable' : 'ready' })
   const codex = liveForm<AgentRowSettings>(options.rows === false ? undefined : {}, { status: options.rows === false ? 'unavailable' : 'ready' })
-  const limit = liveForm<DelegationConsentSettings>({ enabled: true, runTimeoutMinutes: options.minutes ?? 30, fullAccessStartsAgents: true })
+  const limit = liveForm<DelegationConsentSettings>({ enabled: true, runTimeoutMinutes: options.minutes ?? 30, fullAccessStartsAgents: true, claudeCodeLevel: 'standard', codexLevel: 'standard' })
   return { claude, codex, limit, face: { rows: { 'claude-code': claude.form, 'codex': codex.form }, limit: limit.form } satisfies AgentsFace }
 }
 
