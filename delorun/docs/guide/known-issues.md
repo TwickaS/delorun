@@ -28,7 +28,7 @@ This page lists the rough edges you may meet in the preview. Each one says what 
 
 ## Where Delorun runs
 
-**What happens.** Delorun runs on Linux (x64 and arm64) and on Windows through WSL2. It does not run on macOS or on native Windows.
+**What happens.** Delorun runs on Linux (x64) and on Windows through WSL2. Delorun does not run on Linux on ARM (arm64). It does not run on macOS or on native Windows.
 
 **What to do.** On Windows, install WSL2 and run Delorun inside it ([Install and first run](install.md#windows-through-wsl2)). On macOS, there is no supported way to run Delorun. The [roadmap](roadmap.md#next) lists the desktop app.
 

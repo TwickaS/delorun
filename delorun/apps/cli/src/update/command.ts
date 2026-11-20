@@ -350,7 +350,7 @@ async function decide(report: UpdateReport, values: { readonly yes?: boolean, re
  */
 export async function runUpdate(args: readonly string[], context: CommandContext, prompts: UpdatePrompts = TERMINAL_PROMPTS, checks: UpdateCheckDependencies = CHECK_DEPENDENCIES, manual: ManualInstall = MANUAL_INSTALL): Promise<CommandResult> {
   const values = parseOptions('update', args, UPDATE_OPTIONS)
-  const host = hostRefusal(process.platform)
+  const host = hostRefusal(process.platform, undefined, process.arch)
   if (host !== undefined) throw new CliError(EXIT.failed, `delorun update: ${host}`)
   const { home, profile } = await prepareHome(context, values.profile, false)
   if (values.from !== undefined && (values.check === true || values.report === true)) {

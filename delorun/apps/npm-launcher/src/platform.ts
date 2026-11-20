@@ -44,15 +44,19 @@ export const WSL_GUIDE = 'https://docs.delorun.com/guide/install#windows-through
  * Why this Delorun does not run on a host, before any download.
  * @param platform - Node's `process.platform`.
  * @param version - the launcher package's own version, or `undefined` when it does not read; the refusal then says "Delorun" alone.
- * @returns the refusal for native Windows or macOS, naming the version, what works and the guide; `undefined` for every other host.
+ * @param arch - Node's `process.arch`, or `undefined` to leave the processor out of the decision. Releases publish a runtime for Linux x64 only, so Linux on arm64 is refused.
+ * @returns the refusal for native Windows, macOS or Linux on arm64, naming the version, what works and the guide; `undefined` for every other host.
  */
-export function hostRefusal(platform: string, version?: string): string | undefined {
+export function hostRefusal(platform: string, version?: string, arch?: string): string | undefined {
   const name = version === undefined ? 'Delorun' : `Delorun ${version}`
+  const works = `It runs on Linux (x64), and on Windows through WSL2: ${WSL_GUIDE}`
   switch (platform) {
     case 'win32':
       return `${name} runs in WSL2, not on native Windows. Nothing was downloaded. Open a WSL2 terminal and run it there: ${WSL_GUIDE}`
     case 'darwin':
-      return `${name} does not run on macOS. Nothing was downloaded. It runs on Linux (x64 and arm64), and on Windows through WSL2: ${WSL_GUIDE}`
+      return `${name} does not run on macOS. Nothing was downloaded. ${works}`
+    case 'linux':
+      return arch === 'arm64' ? `${name} does not run on Linux on ARM (arm64). Nothing was downloaded. ${works}` : undefined
     default:
       return undefined
   }

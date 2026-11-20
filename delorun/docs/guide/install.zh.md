@@ -31,7 +31,7 @@ Delorun 是一个可以按你自己的工作来塑造的 agent harness。它构�
 
 ## 开始之前
 
-- **一台受支持的电脑。**x64 或 arm64 上的 Linux，或通过 WSL2 使用的 Windows（见[通过 WSL2 使用 Windows](#windows-through-wsl2)）。Delorun 不能在原生 Windows 或 macOS 上运行（见[路线图](roadmap.zh.md)）。
+- **一台受支持的电脑。**x64 上的 Linux，或通过 WSL2 使用的 Windows（见[通过 WSL2 使用 Windows](#windows-through-wsl2)）。Delorun 不能在 ARM（arm64）上的 Linux、原生 Windows 或 macOS 上运行（见[路线图](roadmap.zh.md)）。
 - **[Node.js](https://nodejs.org) 24.9 或更新版本。**`delorun` 命令是一个 Node 程序，所以每次启动都需要 Node，而不只是安装时。用 `node --version` 检查。如果你没有 Node，或版本较旧，请使用 [nodejs.org](https://nodejs.org/en/download) 上的官方安装方式。Ubuntu 自带的 Node 软件包要旧得多（Ubuntu 24.04 提供的是 Node 18），所以 `apt` 给不了你可用的 Node。
 - **bubblewrap（在 Linux 和 WSL2 中）。**它是限制 chat 所运行命令的程序。请用系统的包管理器安装 `bubblewrap` 软件包。没有它时，在有登录会话或正在运行 tmux 这类程序的电脑上，Delorun 会拒绝每一条命令，`delorun doctor` 会显示 `fail sandbox`（见 [Delorun 保护什么](safety.zh.md#the-sandbox)）。
 - **模型密钥。**密钥是让 Delorun 在你的账户下使用 AI 模型的秘密文本。运行模型的公司或服务器就是[模型提供方](../reference/glossary.zh.md#provider)。默认是 DeepSeek API 密钥。其他提供方也可以使用（见[模型提供方](providers.zh.md)）。你可以在 setup 时跳过密钥，之后再添加。

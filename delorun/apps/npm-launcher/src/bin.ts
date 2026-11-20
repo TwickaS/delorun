@@ -208,6 +208,8 @@ export interface LauncherContext {
   readonly now?: (() => number) | undefined
   /** The host's `process.platform`, which native Windows and macOS refuse before any download; this process's by default. */
   readonly hostPlatform?: string | undefined
+  /** The host's `process.arch`, which Linux on arm64 refuses before any download; this process's by default. */
+  readonly hostArch?: string | undefined
   /** Asks `delorun repair`'s yes/no question; `undefined` answers when there is no terminal. This process's terminal by default. */
   readonly confirm?: ((question: string) => Promise<boolean | undefined>) | undefined
 }
@@ -332,7 +334,7 @@ export async function main(argv: readonly string[], context: LauncherContext = {
       context.output.stdout(usage())
       return LAUNCHER_EXIT.ok
     }
-    const host = hostRefusal(context.hostPlatform ?? process.platform, await launcherVersion(context.packageDirectory ?? dirname(dirname(fileURLToPath(import.meta.url)))))
+    const host = hostRefusal(context.hostPlatform ?? process.platform, await launcherVersion(context.packageDirectory ?? dirname(dirname(fileURLToPath(import.meta.url)))), context.hostArch ?? process.arch)
     if (host !== undefined) {
       context.output.stderr(`${host}\n`)
       return LAUNCHER_EXIT.failed
