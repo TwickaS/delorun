@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Config, DEFAULT_MULTIVIEW_SETTINGS, MAX_PANES_RANGE, MIN_PANE_SIZE_RANGE } from '../../src/config.ts'
+import { Config, DEFAULT_MULTIVIEW_SETTINGS, KEPT_CHATS_RANGE, MAX_PANES_RANGE, MIN_PANE_SIZE_RANGE } from '../../src/config.ts'
 import { DEFAULT_MAX_PANES, DEFAULT_MIN_PANE_HEIGHT, DEFAULT_MIN_PANE_WIDTH } from '../../src/layout/index.ts'
 import { limitsOf } from '../../src/entry/state.ts'
 
@@ -9,13 +9,14 @@ function plain(input: Record<string, unknown>) {
   return {
     autoOpen: config.autoOpen.get(), maxPanes: config.maxPanes.get(), minPaneWidth: config.minPaneWidth.get(),
     minPaneHeight: config.minPaneHeight.get(), compactComposer: config.compactComposer.get(), reopenOnReturn: config.reopenOnReturn.get(),
+    keepChats: config.keepChats.get(),
   }
 }
 
 describe('Config', () => {
   it('defaults: auto-open on (MV9), six panes (MV10), compact composer (MV8), reopen on return (MV11)', () => {
     expect(plain({})).toEqual({
-      autoOpen: true, maxPanes: 6, minPaneWidth: 340, minPaneHeight: 240, compactComposer: true, reopenOnReturn: true,
+      autoOpen: true, maxPanes: 6, minPaneWidth: 340, minPaneHeight: 240, compactComposer: true, reopenOnReturn: true, keepChats: 50,
     })
     expect(DEFAULT_MULTIVIEW_SETTINGS).toEqual(plain({}))
     expect([DEFAULT_MAX_PANES, DEFAULT_MIN_PANE_WIDTH, DEFAULT_MIN_PANE_HEIGHT]).toEqual([6, 340, 240])
@@ -30,7 +31,13 @@ describe('Config', () => {
   it('maxPanes takes a whole number from 2 to 12', () => {
     expect(plain({ maxPanes: MAX_PANES_RANGE.min }).maxPanes).toBe(2)
     expect(plain({ maxPanes: MAX_PANES_RANGE.max }).maxPanes).toBe(12)
-    for (const bad of [1, 0, -3, 13, 2.5, '6']) expect(() => plain({ maxPanes: bad })).toThrow()
+    for (const bad of [1, 0, -3, 13, 2.5, '6', NaN, Infinity]) expect(() => plain({ maxPanes: bad })).toThrow()
+  })
+
+  it('keepChats takes a whole number from 1 to 500', () => {
+    expect(plain({ keepChats: KEPT_CHATS_RANGE.min }).keepChats).toBe(1)
+    expect(plain({ keepChats: KEPT_CHATS_RANGE.max }).keepChats).toBe(500)
+    for (const bad of [0, -1, 501, 2.5, '50', NaN]) expect(() => plain({ keepChats: bad })).toThrow()
   })
 
   it('the least pane size takes whole numbers inside its range', () => {

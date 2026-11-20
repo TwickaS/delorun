@@ -57,7 +57,7 @@ export class MultiviewStore implements MultiviewService {
 
   #write(chat: SessionId, next: ChatMultiview): void {
     this.#store(chat).set(next)
-    this.#options.persistence.save(chat, next)
+    this.#options.persistence.save(chat, next, this.settings.getSnapshot().keepChats)
   }
 
   #limits(): LayoutLimits {

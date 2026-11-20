@@ -118,6 +118,14 @@ describe('MultiviewStore open, layout and persistence', () => {
     expect(store.of(CHAT).getSnapshot().layout).toEqual(layout)
   })
 
+  it('saves each change with the number of chats to keep now in force', () => {
+    const { store, saves, change } = makeStore({ settings: { keepChats: 7 } })
+    store.pin(CHAT, A)
+    change({ keepChats: 3 })
+    store.pin(CHAT, B)
+    expect(saves.map(save => save.keepChats)).toEqual([7, 3])
+  })
+
   it('loads a chat saved earlier', () => {
     const { store } = makeStore({ initial: { [CHAT]: { pins: [A], layout: null, open: true } } })
     expect(store.of(CHAT).getSnapshot()).toEqual({ pins: [A], layout: null, open: true })

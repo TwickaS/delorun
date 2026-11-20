@@ -16,6 +16,9 @@ export const MAX_PANES_RANGE = { min: 2, max: 12 } as const
 /** The smallest pane Config accepts, in CSS pixels. */
 export const MIN_PANE_SIZE_RANGE = { width: { min: 240, max: 1200 }, height: { min: 160, max: 1200 } } as const
 
+/** The most chats whose saved Multiview state is kept, least recent first to go; Config accepts a count in this range. */
+export const KEPT_CHATS_RANGE = { min: 1, max: 500 } as const
+
 /** The settings as the browser half reads them. */
 export interface MultiviewSettings {
   /** Whether a new hand-off (teammate, subagent, Claude Code or Codex) pins itself and opens Multiview, every time. */
@@ -30,6 +33,8 @@ export interface MultiviewSettings {
   compactComposer: boolean
   /** Whether a chat that had Multiview open reopens it when the person comes back to the chat. */
   reopenOnReturn: boolean
+  /** How many chats' saved pins and layouts the browser keeps; saving one more removes the least recently saved chat's. */
+  keepChats: number
 }
 
 /** The settings a browser applies before its stored ones arrive. */
@@ -40,6 +45,7 @@ export const DEFAULT_MULTIVIEW_SETTINGS: MultiviewSettings = {
   minPaneHeight: DEFAULT_MIN_PANE_HEIGHT,
   compactComposer: true,
   reopenOnReturn: true,
+  keepChats: 50,
 }
 
 /** The host half's live configuration: one field per setting. */
@@ -56,6 +62,8 @@ export interface Config {
   compactComposer: Volatile<boolean>
   /** Whether a chat that had Multiview open reopens it on return; default on. */
   reopenOnReturn: Volatile<boolean>
+  /** How many chats' saved pins and layouts the browser keeps; default 50. */
+  keepChats: Volatile<number>
 }
 
 /** The configuration schema: each field validated, defaulted, and changeable while the studio runs. */
@@ -66,4 +74,5 @@ export const Config = z.object({
   minPaneHeight: z.natural().min(MIN_PANE_SIZE_RANGE.height.min).max(MIN_PANE_SIZE_RANGE.height.max).description('The least height of a pane in CSS pixels.').default(DEFAULT_MULTIVIEW_SETTINGS.minPaneHeight).volatile(),
   compactComposer: z.boolean().description('Show a one-line reply box in each pane; off shows the full composer, with its model and permission controls, in every pane.').default(DEFAULT_MULTIVIEW_SETTINGS.compactComposer).volatile(),
   reopenOnReturn: z.boolean().description('Reopen Multiview when the person returns to a chat that had it open.').default(DEFAULT_MULTIVIEW_SETTINGS.reopenOnReturn).volatile(),
+  keepChats: z.natural().min(KEPT_CHATS_RANGE.min).max(KEPT_CHATS_RANGE.max).description('How many chats keep their pinned agents and layout in this browser; the chat saved longest ago is forgotten first.').default(DEFAULT_MULTIVIEW_SETTINGS.keepChats).volatile(),
 })

@@ -7,7 +7,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Config as MultiviewConfig } from './config.ts'
 
 export {
-  Config, DEFAULT_MULTIVIEW_SETTINGS, MAX_PANES_RANGE, MIN_PANE_SIZE_RANGE, MULTIVIEW_ROW_ID, type MultiviewSettings,
+  Config, DEFAULT_MULTIVIEW_SETTINGS, KEPT_CHATS_RANGE, MAX_PANES_RANGE, MIN_PANE_SIZE_RANGE, MULTIVIEW_ROW_ID, type MultiviewSettings,
 } from './config.ts'
 
 /** The plugin's name in logs. */

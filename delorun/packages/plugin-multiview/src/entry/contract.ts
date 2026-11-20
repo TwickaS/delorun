@@ -47,8 +47,9 @@ export interface MultiviewPersistence {
    * Save a chat's state.
    * @param chat - the chat.
    * @param value - the state to keep.
+   * @param keepChats - how many chats' states to keep; saving beyond it forgets the least recently saved chats.
    */
-  save(chat: SessionId, value: ChatMultiview): void
+  save(chat: SessionId, value: ChatMultiview, keepChats: number): void
 }
 
 /**

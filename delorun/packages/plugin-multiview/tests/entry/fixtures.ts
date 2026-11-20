@@ -13,10 +13,10 @@ export const C = sid('agent-c')
 /** A persistence kept in memory that records every save. */
 export function memoryPersistence(initial: Record<string, ChatMultiview> = {}) {
   const saved = new Map<string, ChatMultiview>(Object.entries(initial))
-  const saves: Array<{ chat: string; value: ChatMultiview }> = []
+  const saves: Array<{ chat: string; value: ChatMultiview; keepChats: number }> = []
   const persistence: MultiviewPersistence = {
     load: chat => saved.get(chat),
-    save: (chat, value) => { saved.set(chat, value); saves.push({ chat, value }) },
+    save: (chat, value, keepChats) => { saved.set(chat, value); saves.push({ chat, value, keepChats }) },
   }
   return { persistence, saved, saves }
 }

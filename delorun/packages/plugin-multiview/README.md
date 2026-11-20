@@ -28,7 +28,7 @@ Multiview shows pinned agents (teammates, subagents, Claude Code and Codex) besi
 
 ## Configuration
 
-The Host row `delorun-multiview` has six volatile fields ([`src/config.ts`](src/config.ts)), validated when the configuration loads and changeable while the studio runs.
+The Host row `delorun-multiview` has seven volatile fields ([`src/config.ts`](src/config.ts)), validated when the configuration loads and changeable while the studio runs.
 
 | Field | Default | Meaning |
 | --- | --- | --- |
@@ -38,6 +38,7 @@ The Host row `delorun-multiview` has six volatile fields ([`src/config.ts`](src/
 | `minPaneHeight` | `240` | The least height of a pane in CSS pixels (160 to 1200). |
 | `compactComposer` | `true` | Whether a pane shows the one-line reply box. With `false` every pane shows the full composer. The panes lane reads it. |
 | `reopenOnReturn` | `true` | Whether a chat that had Multiview open reopens it on return. |
+| `keepChats` | `50` | How many chats keep their pinned agents and layout in this browser (1 to 500); saving one more forgets the chat saved longest ago. |
 
 ## Contract
 
@@ -47,7 +48,7 @@ The Host row `delorun-multiview` has six volatile fields ([`src/config.ts`](src/
 - **Opening** selects the `multiview` main panel through `ctx.layout.selectPanel`. Until that panel is registered, opening records the open flag and selects nothing.
 - **The hand-off observer** subscribes to the session list. The main chat is the session retained as `mainView`; its agent catalog is its `subagentCatalog` projection. The agents in the catalog when the chat becomes the main view, or when its projection is first read, are the baseline. Each later entry is a hand-off. Another chat becoming the main view starts a new baseline.
 - **The limit** counts the main chat: with `maxPanes` 6 an agent can be pinned while fewer than 5 are. The window fits `floor(width / minPaneWidth) × floor(height / minPaneHeight)` panes at most; until the layout reports its own area the window's size is used.
-- **Persistence** is a client preference: `localStorage`, one key per chat (`dsh.multiview.v1.<host>.<chat>`), the value `{ v: 1, pins, layout, open }` validated with zod on read. A value that is not JSON, does not validate or holds a layout that is not consistent is discarded, removed and reported with a warning, and the chat starts with nothing pinned. Nothing reaches a model request, so no session event is written.
+- **Persistence** ([`src/store/persist.ts`](src/store/persist.ts)) is the only owner of the saved per-chat state, a client preference in `localStorage`: one key per chat (`dsh.multiview.v1.<host>.<chat>`) with the value `{ v: 1, pins, layout, open }`, validated with zod on read. A value that is not JSON, fails validation, holds more panes than the largest `maxPanes` (12), nests deeper than such a layout can or holds a layout that is not consistent is discarded, removed and reported with a warning, and the chat starts with nothing pinned. A layout may hold a pane the pins do not list; the store reconciles the two. A second key (`dsh.multiview-index.v1.<host>`) lists the saved chats, most recent first; saving a chat beyond `keepChats` removes the least recent chats' keys. A browser that blocks `localStorage` behaves as if nothing was saved. Nothing reaches a model request, so no session event is written.
 - **Copy** is in English and Chinese ([`src/entry/locales.ts`](src/entry/locales.ts)); the Plugins page names the row from [`locale/`](locale/en.json).
 
 ## Limits
@@ -58,6 +59,6 @@ The Host row `delorun-multiview` has six volatile fields ([`src/config.ts`](src/
 
 ## Tests
 
-`tests/entry/` runs with `node_modules/.bin/vitest run --config delorun/vitest.config.ts delorun/packages/plugin-multiview/tests/entry`. It covers the hand-off watcher, the store (pins, limit, no-room, layout, persistence calls), the persistence round trip and every discard case, `Config` defaults and bounds, the registration (auto-pin on a new catalog entry and not on existing ones, auto-open each time, auto-open off, the limit, reopen on return, a close from outside) and the components (pin states, the disabled reason, the footer, the count and the amber dot, the Layout menu).
+`tests/entry/` runs with `node_modules/.bin/vitest run --config delorun/vitest.config.ts delorun/packages/plugin-multiview/tests/entry`. It covers the hand-off watcher, the store (pins, limit, no-room, layout, persistence calls), `Config` defaults and bounds, the registration (auto-pin on a new catalog entry and not on existing ones, auto-open each time, auto-open off, the limit, reopen on return, a close from outside) and the components (pin states, the disabled reason, the footer, the count and the amber dot, the Layout menu).
 
-`tests/entry/browser/shots.mts` builds a page with the real pin button, footer and header button over the stock colour tokens and takes light-theme pictures in headless Chromium at 1440 and 390 px: `node --import tsx/esm delorun/packages/plugin-multiview/tests/entry/browser/shots.mts <directory>`. The page's header and agents rows stand in for the upstream catalog component.
+`tests/store/` covers the persistence: the round trip, every discard case, the size limits, pruning to `keepChats` and blocked or full storage. `tests/entry/browser/shots.mts` builds a page with the real pin button, footer and header button over the stock colour tokens and takes light-theme pictures in headless Chromium at 1440 and 390 px: `node --import tsx/esm delorun/packages/plugin-multiview/tests/entry/browser/shots.mts <directory>`. The page's header and agents rows stand in for the upstream catalog component.
