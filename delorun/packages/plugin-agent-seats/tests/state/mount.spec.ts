@@ -5,11 +5,11 @@
  */
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { appendPluginRecord, pluginRecordOf, SessionId, type Session } from '@deepseek-ai/dsh-session'
+import { SessionId, type Session } from '@deepseek-ai/dsh-session'
 import { GateRefusedError, ProgramOpenError } from '@delorun/external-agents/contract'
 import { describe, expect, it } from 'vitest'
 import {
-  CHOOSE_MODEL_PATH, FileModelChoices, loadModelChoices, MODEL_CHOICES_FILE, RESUME_PATH, SEAT_NOTICE_RECORD, SEAT_STATE_RECORD, SEAT_STATUS_RECORD,
+  CHOOSE_MODEL_PATH, FileModelChoices, loadModelChoices, MODEL_CHOICES_FILE, RESUME_PATH, SEAT_NOTICE_EVENT, SEAT_STATE_EVENT, SEAT_STATUS_EVENT,
   type SeatRoute,
 } from '../../src/state/index.ts'
 import { collect, finishOf } from '../adapter/support.ts'
@@ -20,12 +20,9 @@ const tick = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 0))
 
 const view = (w: StateWorld) => w.mount.store.viewOf(w.child)
 
-/** The plugin records of one type in the child's log. */
+/** The data of the child's events of one seat type. */
 const records = (w: StateWorld, type: string) =>
-  w.session.snapshotEvents().flatMap((event) => {
-    const record = pluginRecordOf(event)
-    return record?.type === type ? [record.data] : []
-  })
+  w.session.snapshotEvents().flatMap(event => event.type === type ? [event.data] : [])
 
 /** Finish the program's turn so a stream ends. */
 async function finishTurn(w: StateWorld, running: Promise<unknown>): Promise<void> {
@@ -107,11 +104,11 @@ describe('while a turn runs', () => {
     const running = collect(w.adapter.stream(w.request([w.say('task')])))
     await tick()
     await tick()
-    const before = records(w, SEAT_STATUS_RECORD).length
+    const before = records(w, SEAT_STATUS_EVENT).length
     w.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
     await tick()
     await tick()
-    expect(records(w, SEAT_STATUS_RECORD)).toHaveLength(before)
+    expect(records(w, SEAT_STATUS_EVENT)).toHaveLength(before)
     await finishTurn(w, running)
   })
 
@@ -132,7 +129,7 @@ describe('while a turn runs', () => {
     const w = await stateWorld()
     w.gate.failure = failure
     await collect(w.adapter.stream(w.request([w.say('task')])))
-    const states = records(w, SEAT_STATUS_RECORD).map(record => (record as { state: string }).state)
+    const states = records(w, SEAT_STATUS_EVENT).map(record => (record as { state: string }).state)
     expect(states.at(-1)).toBe('idle')
     expect(view(w)?.state).not.toBe('starting')
   })
@@ -143,7 +140,7 @@ describe('while a turn runs', () => {
     const first = w.say('task')
     await turn(w, [first])
     expect(w.mount.store.read(w.child)).toEqual({ programSessionId: 'program-1', cursor: first.id })
-    expect(records(w, SEAT_STATE_RECORD).at(-1)).toEqual({ programSessionId: 'program-1', cursor: first.id })
+    expect(records(w, SEAT_STATE_EVENT).at(-1)).toEqual({ programSessionId: 'program-1', cursor: first.id })
     await w.adapter.release(w.child)
     const second = w.say('next')
     const next = collect(w.adapter.stream(w.request([first, second])))
@@ -219,7 +216,7 @@ describe('a reached plan limit', () => {
     const w = await stateWorld({ now: () => 9000 })
     const resume = routeOf(w, RESUME_PATH)
     expect((await post(resume, { child: w.child })).status).toBe(409)
-    appendPluginRecord(w.session, SEAT_STATUS_RECORD, { state: 'limit', resetAt: 5000 })
+    w.session.append(SEAT_STATUS_EVENT, { state: 'limit', resetAt: 5000 })
     expect((await post(resume, { child: w.child })).status).toBe(200)
     expect(view(w)?.state).toBe('idle')
     expect(w.session.ownEvents().some(event => event.type === 'user/message')).toBe(false)
@@ -255,7 +252,7 @@ describe('the model pick', () => {
     expect(w.mount.choices.get('workspace-1')).toBe('gpt-b')
     expect(view(w)?.state).toBe('idle')
     expect(view(w)?.modelPicker).toBeUndefined()
-    expect(records(w, SEAT_NOTICE_RECORD)).toEqual([{ kind: 'model-chosen', text: expect.stringContaining('GPT B') }])
+    expect(records(w, SEAT_NOTICE_EVENT)).toEqual([{ kind: 'model-chosen', text: expect.stringContaining('GPT B') }])
 
     w.gate.failure = undefined
     const next = collect(w.adapter.stream(w.request([w.say('task again')])))
@@ -277,7 +274,7 @@ describe('the model pick', () => {
 
   it('refuses a pick for an agent with no workspace', async () => {
     const w = await stateWorld({ workspaceOf: () => undefined })
-    appendPluginRecord(w.session, SEAT_STATUS_RECORD, { state: 'model-needed', modelPicker: { offered: [{ id: 'a', label: 'A' }], planDefault: 'a' } })
+    w.session.append(SEAT_STATUS_EVENT, { state: 'model-needed', modelPicker: { offered: [{ id: 'a', label: 'A' }], planDefault: 'a' } })
     expect((await post(routeOf(w, CHOOSE_MODEL_PATH), { child: w.child, id: 'a' })).status).toBe(409)
     const plain = w.ctx.sessions.create()
     expect((await post(routeOf(w, CHOOSE_MODEL_PATH), { child: plain.header.id, id: 'a' })).status).toBe(404)
@@ -325,7 +322,7 @@ describe('a program that cannot be resumed', () => {
     expect(finishOf(chunks)).toMatchObject({ kind: 'error', failure: { code: 'EXTERNAL_AGENT_RESUME_FAILED' } })
     expect(w.gate.starts[1]).toMatchObject({ resume: 'program-1' })
     expect(w.mount.store.read(w.child)).toEqual({ cursor: second.id })
-    expect(records(w, SEAT_NOTICE_RECORD)).toEqual([{ kind: 'unresumable', text: expect.stringContaining('could not be resumed') }])
+    expect(records(w, SEAT_NOTICE_EVENT)).toEqual([{ kind: 'unresumable', text: expect.stringContaining('could not be resumed') }])
     expect(w.gate.programs[0]?.sent).toEqual([{ text: 'task', mode: 'start' }])
 
     w.gate.failure = undefined
@@ -364,29 +361,29 @@ describe('parting on resume', () => {
   it('says the agent did work Delorun did not record', async () => {
     const w = await stateWorld({ tail: () => Promise.resolve({ lastMessageId: 'program-message-9' }) })
     await resumed(w, 'program-message-5')
-    expect(records(w, SEAT_NOTICE_RECORD)).toEqual([{ kind: 'unrecorded-work', text: expect.stringContaining('did work') }])
+    expect(records(w, SEAT_NOTICE_EVENT)).toEqual([{ kind: 'unrecorded-work', text: expect.stringContaining('did work') }])
   })
 
   it('says nothing when the program holds what the log recorded', async () => {
     const w = await stateWorld({ tail: () => Promise.resolve({ lastMessageId: 'program-message-5' }) })
     await resumed(w, 'program-message-5')
-    expect(records(w, SEAT_NOTICE_RECORD)).toEqual([])
+    expect(records(w, SEAT_NOTICE_EVENT)).toEqual([])
   })
 
   it('compares nothing when the log recorded no program message, or no reader is mounted', async () => {
     const unrecorded = await stateWorld({ tail: () => Promise.resolve({ lastMessageId: 'program-message-9' }) })
     await resumed(unrecorded, undefined)
-    expect(records(unrecorded, SEAT_NOTICE_RECORD)).toEqual([])
+    expect(records(unrecorded, SEAT_NOTICE_EVENT)).toEqual([])
     const unread = await stateWorld()
     await resumed(unread, 'program-message-5')
-    expect(records(unread, SEAT_NOTICE_RECORD)).toEqual([])
+    expect(records(unread, SEAT_NOTICE_EVENT)).toEqual([])
   })
 
   it('reports a program that cannot be read instead of failing the turn', async () => {
     const w = await stateWorld({ tail: () => Promise.reject(new Error('thread file locked')) })
     await resumed(w, 'program-message-5')
     expect(w.warnings.join('\n')).toContain('thread file locked')
-    expect(records(w, SEAT_NOTICE_RECORD)).toEqual([])
+    expect(records(w, SEAT_NOTICE_EVENT)).toEqual([])
   })
 
   it('remembers the program\'s last message when a turn ends, and forgets it when the turn was stopped', async () => {
@@ -394,15 +391,15 @@ describe('parting on resume', () => {
     await turn(w, [w.say('task')])
     w.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
     await until(() => w.mount.store.stateOf(w.child).logged.programMessageId === 'program-message-7', 'the recorded message')
-    expect(records(w, SEAT_STATE_RECORD).at(-1)).toMatchObject({ programSessionId: 'program-1', programMessageId: 'program-message-7' })
+    expect(records(w, SEAT_STATE_EVENT).at(-1)).toMatchObject({ programSessionId: 'program-1', programMessageId: 'program-message-7' })
     w.session.append('turn/end', { turn: 2, reason: { kind: 'aborted', reason: { kind: 'user' } } })
     await until(() => w.mount.store.stateOf(w.child).logged.programMessageId === null || w.warnings.length > 0, 'the forgotten message')
     expect(w.warnings).toEqual([])
     // A stopped turn that had none recorded records nothing more.
-    const count = records(w, SEAT_STATE_RECORD).length
+    const count = records(w, SEAT_STATE_EVENT).length
     w.session.append('turn/end', { turn: 3, reason: { kind: 'interrupted' } })
     await tick()
-    expect(records(w, SEAT_STATE_RECORD)).toHaveLength(count)
+    expect(records(w, SEAT_STATE_EVENT)).toHaveLength(count)
   })
 
   it('leaves a chat that is not a seat alone at a turn end, and reports a failed read', async () => {
@@ -485,17 +482,16 @@ describe('what the adapter reports about a program that cannot start', () => {
     const plain = w.ctx.sessions.create().header.id
     w.mount.events.onTurnFailure?.(plain, { category: 'resume-failed' }, 'turn')
     const [notice] = w.ctx.sessions.get(plain)?.snapshotEvents().flatMap((event) => {
-      const record = pluginRecordOf(event)
-      return record?.type === SEAT_NOTICE_RECORD ? [record.data] : []
+      return event.type === SEAT_NOTICE_EVENT ? [event.data] : []
     }) ?? []
     expect(notice).toMatchObject({ kind: expect.any(String), text: expect.stringContaining('Claude Code') })
   })
 
   it('leaves the chat as it was when a start fails while the chat is not "Starting"', async () => {
     const w = await stateWorld()
-    const before = records(w, SEAT_STATUS_RECORD).length
+    const before = records(w, SEAT_STATUS_EVENT).length
     w.mount.events.onStartFailed?.(w.child)
-    expect(records(w, SEAT_STATUS_RECORD)).toHaveLength(before)
+    expect(records(w, SEAT_STATUS_EVENT)).toHaveLength(before)
     expect(view(w)?.state).toBe('idle')
   })
 
@@ -542,9 +538,9 @@ describe('what the adapter reports about a program that cannot start', () => {
     ['a failed turn', { category: 'program', detail: 'boom' }],
   ] as const)('changes nothing in the chat\'s state for %s', async (_label, failure) => {
     const w = await stateWorld()
-    const before = records(w, SEAT_STATUS_RECORD).length
+    const before = records(w, SEAT_STATUS_EVENT).length
     w.mount.events.onTurnFailure?.(w.child, failure, 'turn')
-    expect(records(w, SEAT_STATUS_RECORD)).toHaveLength(before)
+    expect(records(w, SEAT_STATUS_EVENT)).toHaveLength(before)
   })
 
   it.each([
@@ -554,9 +550,9 @@ describe('what the adapter reports about a program that cannot start', () => {
   ] as const)('logs and reports only the fixed facts of %s, never the program\'s words', async (_label, stage, failure, sentence) => {
     const w = await stateWorld()
     w.mount.events.onTurnFailure?.(w.child, failure, stage)
-    expect(records(w, SEAT_NOTICE_RECORD).at(-1)).toEqual({ kind: 'program-failed', text: sentence })
+    expect(records(w, SEAT_NOTICE_EVENT).at(-1)).toEqual({ kind: 'program-failed', text: sentence })
     expect(w.warnings.join('\n')).toContain(sentence)
-    expect(JSON.stringify(records(w, SEAT_NOTICE_RECORD))).not.toContain('secret')
+    expect(JSON.stringify(records(w, SEAT_NOTICE_EVENT))).not.toContain('secret')
     expect(w.warnings.join('\n')).not.toContain('secret')
   })
 
@@ -569,7 +565,7 @@ describe('what the adapter reports about a program that cannot start', () => {
   it('keeps the state\'s own fields when it logs account figures', async () => {
     const w = await stateWorld()
     const picker = { offered: [{ id: 'm', label: 'M' }], planDefault: 'm' }
-    appendPluginRecord(w.session, SEAT_STATUS_RECORD, { state: 'model-needed', modelPicker: picker, pending: 5, resetAt: 9, endedReason: 'why' })
+    w.session.append(SEAT_STATUS_EVENT, { state: 'model-needed', modelPicker: picker, pending: 5, resetAt: 9, endedReason: 'why' })
     w.mount.store.setAccount(w.child, { plan: 'Max' })
     expect(view(w)).toMatchObject({ state: 'model-needed', modelPicker: picker, pending: { since: 5 }, resetAt: 9, endedReason: 'why', plan: 'Max' })
   })
@@ -588,7 +584,7 @@ describe('a seat child whose Session is cold', () => {
   }
   const needsModel = (cold: Session): void => {
     describeSeat(cold)
-    appendPluginRecord(cold, SEAT_STATUS_RECORD, { state: 'model-needed', modelPicker: PICKER })
+    cold.append(SEAT_STATUS_EVENT, { state: 'model-needed', modelPicker: PICKER })
   }
 
   it('keeps the model pick for the workspace without logging anything in the chat', async () => {
