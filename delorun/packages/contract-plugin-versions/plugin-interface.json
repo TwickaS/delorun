@@ -43,6 +43,7 @@
     { "kind": "service", "name": "updateChannel", "side": "host", "source": "delorun/packages/plugin-update/src/index.ts" },
     { "kind": "service", "name": "delorunUpdate", "side": "browser", "source": "delorun/packages/plugin-update/src/client/index.ts" },
     { "kind": "event", "name": "delorun-update/open", "side": "browser", "source": "delorun/packages/plugin-update/src/client/index.ts" },
+    { "kind": "service", "name": "delorunUpdateChats", "side": "host", "source": "delorun/packages/plugin-update/src/chats.ts" },
     { "kind": "service", "name": "multiview", "side": "browser", "source": "delorun/packages/plugin-multiview/src/client/contract.ts" }
   ]
 }
