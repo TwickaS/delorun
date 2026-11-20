@@ -14,8 +14,7 @@
  *
  * @module @delorun/changes/unreviewed
  */
-import { join, resolve, sep } from 'node:path'
-import { DELORUN_HOME_ENTRIES } from '@delorun/contract-home-layout'
+import { join, resolve } from 'node:path'
 import { locked, recordVersion, timeOf } from './action-support.ts'
 import type { ChangesContext, ReloadHost, ReloadOutcome } from './actions.ts'
 import { holdContent, namesDirectory, storeFolderContent } from './enforce.ts'
@@ -27,6 +26,7 @@ import { activeDirectory, CHANGES_ENTRIES, profileChangesDirectory } from './pat
 import { approvedOf, findEntry, readActiveRecord, readApproved, readChangeLog, readProtection, readWorkSession, withEntry, withoutDecision, writeActiveRecord, writeApproved, writeChangeLog } from './records.ts'
 import type { ActiveRecord, ApprovedRecord, ChangeEntry, ChangeId, ChangeLog, ContentVersion, LeftOut } from './types.ts'
 import { referenceRelease } from './tree.ts'
+import { inPackStore } from './update-baseline.ts'
 
 /** A plugin's folder content that loaded without review. */
 export interface UnreviewedLoad {
@@ -135,18 +135,6 @@ export interface WatchedFolder {
   readonly plugin: string
   /** Its folder, absolute. */
   readonly source: string
-}
-
-/**
- * Whether a folder is an unpacked plugin pack of the home. A pack's files are the release's signed list and no one edits
- * them live; watching them would scan each pack and queue it for the profile write lock, which a pack install holds
- * for minutes. A start or a reload approves a linked pack's content under that lock.
- * @param home - the Delorun home.
- * @param folder - a plugin's folder.
- * @returns true for a folder under `packs/`.
- */
-function inPackStore(home: string, folder: string): boolean {
-  return resolve(folder).startsWith(`${resolve(home, DELORUN_HOME_ENTRIES.packs)}${sep}`)
 }
 
 /**

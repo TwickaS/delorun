@@ -3,7 +3,7 @@
  * have a log record, an archive only downloads from the signed name, and each refusal leaves nothing under `packs/`.
  */
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -13,7 +13,7 @@ import { signEnvelope } from '@delorun/release-formats/sign/envelope'
 import { toJsonValue } from '@delorun/release-formats/sign/json'
 import { trustRootChain } from '@delorun/release-formats/sign/verify'
 import { removeTree } from '../src/files.ts'
-import { acquirePacks, packDownloadSize, readStoredPacks, turnOnPack, type InstalledRelease, type PackFiles } from '../src/packs-client.ts'
+import { acquirePacks, packDownloadSize, readSignedPackFiles, readStoredPacks, turnOnPack, type InstalledRelease, type PackFiles } from '../src/packs-client.ts'
 import { StorePaths } from '../src/paths.ts'
 import { PLATFORM, releaseFiles, rootFile, throwawayKeys, version } from './support.ts'
 
@@ -81,5 +81,36 @@ describe('turning a pack on', () => {
     const { release, channel } = await setup()
     const missing: PackFiles = { ...channel, fetchRelease: name => (name.endsWith('.tar.gz') ? Promise.resolve(undefined) : channel.fetchRelease(name, { max: 1 << 20 })) }
     await expect(turnOnPack(release, 'demo', missing)).rejects.toThrow(/has no delorun-0\.1\.0-pack-demo/u)
+  })
+})
+
+describe('the signed files of an installed release\'s packs', () => {
+  it('lists each pack\'s signed files, its peers and the text of package.json once the installed pack matches', async () => {
+    const { release, channel } = await setup()
+    await turnOnPack(release, 'demo', channel)
+    const [demo] = await readSignedPackFiles(release)
+    expect(demo).toMatchObject({ name: 'demo', release: V, peers: ['peer'] })
+    expect([...demo!.files.keys()]).toEqual(['package.json'])
+    expect(demo!.files.get('package.json')).toEqual({ sha256: createHash('sha256').update('{"name":"demo"}').digest('hex'), executable: false })
+    expect(demo!.texts.get('package.json')).toBe('{"name":"demo"}')
+  })
+
+  it('gives no text from an installed pack that differs from its signed list, and no files without a packs file', async () => {
+    const { release, channel, paths } = await setup()
+    expect(await readSignedPackFiles(release)).toEqual([])
+    await turnOnPack(release, 'demo', channel)
+    const file = join(paths.pack(V, 'demo'), 'package', 'package.json')
+    chmodSync(join(paths.pack(V, 'demo'), 'package'), 0o755)
+    chmodSync(file, 0o644)
+    writeFileSync(file, '{"name":"planted"}')
+    const [demo] = await readSignedPackFiles(release)
+    expect(demo!.texts.size).toBe(0)
+    expect(demo!.files.get('package.json')!.sha256).toBe(createHash('sha256').update('{"name":"demo"}').digest('hex'))
+  })
+
+  it('refuses a stored packs file that no longer verifies', async () => {
+    const { release, channel } = await setup()
+    await turnOnPack(release, 'demo', channel)
+    await expect(readSignedPackFiles({ ...release, checkLog: () => ({ ok: false, detail: 'revoked' }) })).rejects.toThrow(/release-log record/u)
   })
 })

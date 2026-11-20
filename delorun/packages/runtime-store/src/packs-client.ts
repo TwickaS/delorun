@@ -13,7 +13,7 @@ import { RELEASE_FILE_SIZE_LIMITS, type PackEntry, type PackExternal, type Relea
 import { PackRefusal } from '@delorun/release-formats/packs/archive'
 import { verifyPacks } from '@delorun/release-formats/sign/verify'
 import { STORE_FILE_MODE, writeStoreFile } from './files.ts'
-import { installPack, packVariantFor } from './packs.ts'
+import { installPack, packVariantFor, signedPackFiles, type SignedPackFiles } from './packs.ts'
 import type { StorePaths } from './paths.ts'
 
 /**
@@ -107,6 +107,24 @@ export async function readStoredPacks(release: InstalledRelease): Promise<Releas
   if (packsBytes === undefined) return undefined
   if (bundleBytes === undefined) throw new PackRefusal('the stored packs file has no release-log bundle', 'PACKS_FILE_REFUSED')
   return verified(release, packsBytes, bundleBytes)
+}
+
+/**
+ * The files each pack of an installed release's stored packs file lists, for Changes to tell the release's own files
+ * from a person's. The stored packs file is verified again under the root and the release-log record, as every use does.
+ * @param release - the installed release.
+ * @returns each published pack's signed files; empty when the release stored no packs file.
+ * @throws PackRefusal or VerificationError when the stored files no longer verify.
+ */
+export async function readSignedPackFiles(release: InstalledRelease): Promise<readonly SignedPackFiles[]> {
+  const packs = await readStoredPacks(release)
+  if (packs === undefined) return []
+  const signed: SignedPackFiles[] = []
+  for (const entry of packs.packs) {
+    const files = await signedPackFiles(release.paths, release.version, entry, release.paths.platform)
+    if (files !== undefined) signed.push(files)
+  }
+  return signed
 }
 
 /**

@@ -29,6 +29,8 @@ export interface PreStartContext {
   readonly kind: ComposeKind
   /** Whether this start is an update's or a rollback's successor, which inherits a running home's state. */
   readonly successor: boolean
+  /** The release an update left, set for the successor of an update; absent for any other start. */
+  readonly updatedFrom?: RuntimeVersion
   /** Where a step writes what the person reads. */
   readonly output: CommandOutput
   /** The stored runtime a fresh start of the CLI profile runs from C1's store; absent outside the store and for headless. */

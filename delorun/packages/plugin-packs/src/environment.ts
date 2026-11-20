@@ -19,11 +19,12 @@ import { createPackFiles, parseRuntimeVersion, StorePaths, type InstalledRelease
 /** The installed release and the channel its packs come from. */
 export interface PacksEnvironment {
   /**
-   * The installed release, verified now.
+   * An installed release, verified now.
+   * @param other - another installed release of the store, such as the one an update left; the running release when omitted.
    * @returns the release with the anchored root.
    * @throws Error when the release is not an installation of the store, or its root does not anchor.
    */
-  release(): Promise<InstalledRelease>
+  release(other?: RuntimeVersion): Promise<InstalledRelease>
   /** Where the release's files and external packages come from. */
   readonly files: PackFiles
 }
@@ -70,11 +71,11 @@ export async function hostPacksEnvironment(env: Readonly<Record<string, string |
   const paths = new StorePaths(home, platform)
   const files = await packFilesFor(home, version, settings)
   return {
-    release: async () => {
+    release: async (other = version) => {
       const root = (await readAnchoredRoot(home, await readShippedRoots(roots))).metadata
-      const manifestBytes = await readFile(paths.releaseFiles(version).manifest)
+      const manifestBytes = await readFile(paths.releaseFiles(other).manifest)
       verifySignedManifest(root, manifestBytes)
-      return { paths, root, version, manifestBytes, checkLog: checkPacksBundle }
+      return { paths, root, version: other, manifestBytes, checkLog: checkPacksBundle }
     },
     files,
   }

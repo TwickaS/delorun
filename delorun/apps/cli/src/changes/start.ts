@@ -18,9 +18,11 @@
  */
 import { resolve } from 'node:path'
 import { getDelorunRuntimeVersion } from '@deepseek-ai/dsh-app-boot'
-import { checkChangesInvariants, enforceApprovedContent, isChangesError, markShownAtUpgrade, PROFILE_LOCK_WAIT_MS, repointActiveCopies, startNotice, workFinishedLine, writeBootRecord, type BootRow, type ReloadHost, type StartChanges } from '@delorun/changes'
+import { checkChangesInvariants, enforceApprovedContent, isChangesError, markShownAtUpgrade, PROFILE_LOCK_WAIT_MS, repointActiveCopies, startNotice, workFinishedLine, writeBootRecord, type BootRow, type ReloadHost, type StartChanges, type UpdateBaseline } from '@delorun/changes'
 import { finishWorkWithoutPerson } from '@delorun/changes/stop'
+import type { RuntimeVersion } from '@delorun/contract-home-layout'
 import type { DelorunLogger } from '@delorun/logs'
+import { hostPacksEnvironment } from '@delorun/plugin-packs/environment'
 import { RuntimeStoreError } from '@delorun/runtime-store'
 import type { CompositionDraft } from '../compose.ts'
 import { carriedPackageDirectory } from '../delorun-bundles.ts'
@@ -28,6 +30,7 @@ import { CliError, EXIT } from '../exit.ts'
 import type { PreStartContext, StoredRuntime } from '../pre-start.ts'
 import { hasCliProfile, profileDirectory } from '../profile.ts'
 import { printable, printableText } from '../terminal-text.ts'
+import { updateBaselineOf } from './update-baseline.ts'
 import { watchUnreviewed } from './unreviewed-watch.ts'
 import { watchWork } from './work-watch.ts'
 
@@ -51,6 +54,12 @@ export interface ChangesStartRequest {
    * the log only, so its start shows nothing.
    */
   readonly terminal?: boolean
+  /**
+   * The signed pack files of an update's two releases, set only for the successor of an update to a newer release
+   * ([update baseline](./update-baseline.ts)): a pack whose approved content differs from its folder only by the
+   * release's own files is replaced, not left waiting.
+   */
+  readonly updateBaseline?: UpdateBaseline
 }
 
 /**
@@ -105,7 +114,7 @@ export async function startChanges(request: ChangesStartRequest, output: (text: 
   try {
     const ended = request.ownsHome === true ? await finishWorkWithoutPerson({ home, profile, profileDir }, 'stopped') : undefined
     if (ended !== undefined) notice = `Your work session on ${ended.plugin} ended when Delorun stopped. ${workFinishedLine(ended)}\n`
-    enforced = await enforceApprovedContent({ home, profile, profileDir, harnessLink: isCarriedPackage, ...runningRelease() })
+    enforced = await enforceApprovedContent({ home, profile, profileDir, harnessLink: isCarriedPackage, ...runningRelease(), ...request.updateBaseline === undefined ? {} : { updateBaseline: request.updateBaseline } })
   } catch (error) {
     const detail = isChangesError(error) ? error.detail : String(error)
     throw new CliError(EXIT.failed, `delorun: the profile ${profile} was not started, because the plugins it links from folders could not be prepared: ${detail}`)
@@ -178,17 +187,38 @@ export async function repointForSuccessor(request: { readonly home: string, read
  * @returns when the profile's linked plugins load what Changes allows.
  * @throws {CliError} as {@link startChanges} does.
  */
-export function changesPreStartStep(context: PreStartContext): Promise<void> {
+export async function changesPreStartStep(context: PreStartContext): Promise<void> {
   const { home, profile, kind, successor, output, storedRuntime } = context
+  const write = (text: string): void => {
+    if (kind === 'headless') output.stderr(text)
+    else output.stdout(text)
+  }
+  const updateBaseline = successor && context.updatedFrom !== undefined ? await verifiedUpdateBaseline(context.updatedFrom, write) : undefined
   return startChanges({
     home,
     profile,
     ...storedRuntime === undefined ? {} : { runtime: storedRuntime },
     ...kind === 'cli' && !successor ? { ownsHome: true } as const : {},
-  }, (text) => {
-    if (kind === 'headless') output.stderr(text)
-    else output.stdout(text)
-  })
+    ...updateBaseline === undefined ? {} : { updateBaseline },
+  }, write)
+}
+
+/**
+ * The signed pack files of the update this process is the successor of. A release whose files cannot be verified
+ * replaces nothing: its packs' changes wait for review as they would without an update.
+ * @param from - the release the update left.
+ * @param write - where the line about a failed check goes.
+ * @returns the baseline, or `undefined` when there is none to use.
+ */
+async function verifiedUpdateBaseline(from: RuntimeVersion, write: (text: string) => void): Promise<UpdateBaseline | undefined> {
+  const environment = await hostPacksEnvironment(process.env)
+  if ('unsupported' in environment) return undefined
+  try {
+    return await updateBaselineOf(environment, from)
+  } catch (error) {
+    write(`Delorun could not check the plugin packs of the update against the signed release, so changes to them wait for your review: ${printable(error instanceof Error ? error.message : String(error))}\n`)
+    return undefined
+  }
 }
 
 /**

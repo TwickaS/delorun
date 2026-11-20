@@ -22,6 +22,7 @@ description: "约定 C21：更改。本人的 harness 是已签名的发布加�
 - [更改的种类与状态](#change-kinds-and-states)
 - [加载已批准的内容](#loading-approved-content)
 - [harness 编辑](#harness-edits)
+- [Plugin packs across an update](#plugin-packs-across-an-update)
 - [重新加载与恢复](#reloads-and-restores)
 - [回收存储](#collecting-the-store)
 - [Changes 下的首次启动](#the-first-start-under-changes)
@@ -153,6 +154,22 @@ description: "约定 C21：更改。本人的 harness 是已签名的发布加�
 - **等待重启的内容。** 任何其他已决定的更改，以及 Host 的组合未知期间的每项更改，都回答 `restart`；没有已安装发布的 home 进程运行的 Host 回答 `not-running`，更改从下一次启动起运行。当记录所组成的内容在某个非实时的文件上与 Host 所运行的内容不同时，`state.restart` 为 `needed`，并带有这类文件的数量和运行中的 chat 数。
 - **重启。** `POST /delorun/changes/restart` 请求 home 进程的重启（[C19](c19-home-process.zh.md#the-restart)）：它最多等待运行中的 chat `restartWaitSeconds`（插件的配置，默认 600 秒），或用 `stopChats` 停止它们，在同一版本上启动新的 Host，后者组成记录现在持有的内容；当新 Host 未通过健康检查时保留运行中的 Host，并且在运行中的 Host 并未运行对 Delorun 本身最新已应用的更改时，把该更改排除在外。重启运行期间，`state.restart` 为 `restarting` 并带有其阶段和运行中的 chat；失败后为 `failed`，带有时间、原因（`health`、`chats` 或 `host`）和被排除的更改，直到下一次对 Delorun 本身的更改作出决定。`restart-cancel` 结束仍在等待 chat 的重启。
 
+<a id="plugin-packs-across-an-update"></a>
+
+## Plugin packs across an update
+
+A pack's folder under `packs/<release>/` holds a release's own files, and a profile links it through `packs/current` ([C1](c01-home-layout.zh.md)). An update moves that link to the new release's folder, so the approved content, which is the previous release's files, and the folder differ by what the release replaced. That difference is the release's and not a person's change: the successor of an update replaces the approved content with the folder's, as an applied `plugin-edit` decided `update` with the summary "Replaced by the update to `<version>`: `<package>`" and one profile history version, and the start's words name it (`delorun changes show <id>`). It does this under protection on or off; with protection off it is not logged as `unreviewed`. The library is [`update-baseline.ts`](../../packages/changes/src/update-baseline.ts), called from `enforceApprovedContent`'s start pass with the `updateBaseline` request field.
+
+- **Who may.** Only the pre-start step `changes` of an update's successor ([`start.ts`](../../apps/cli/src/changes/start.ts), [`update-baseline.ts`](../../apps/cli/src/changes/update-baseline.ts)), and only for an update to a newer release: a rollback, a restart, a fresh start, a reload and `delorun headless` get no baseline, and neither does an update whose `to` is not a newer semantic version than its `from`. No route, studio call, plugin or command reaches it.
+- **What it is given.** The signed pack files of the release the update left and the release this process runs, read by `readSignedPackFiles` of the runtime store from each release's stored packs file, which the store verifies again under the anchored root, against the release's manifest and the release-log record. It adds the files an installed pack's install record names for its pinned external packages, and the text of `package.json` and `pnpm-lock.yaml`, only when the installed pack matches the signed list and the record byte for byte. A release whose files do not verify gives no baseline: nothing is replaced, and the start says that changes to the packs wait for review.
+- **What is replaced.** A plugin that is a pack of the release this process runs, linked from a folder under `packs/`, whose folder content is not content the person declined, and for which both of these hold. The folder is exactly the signed pack of the release this process runs: each file listed with its digest and execute bit, each runtime link the pack's peers name, and nothing else. Every approved file or link that differs from the folder's is listed by the packs file of the previous release or of the release this process runs. The approved content is then replaced as a whole.
+- **What is not.** Any other difference. A real edit, a file the packs files do not list, a digest that does not match, or an edit mixed with release files leaves the whole change waiting as it would without the update, with the release-file part of it still in the diff; nothing is dropped from it and nothing is folded into the baseline.
+- **A narrow allowance.** Releases up to 0.1.0-preview.2.1 shipped a pack's `package.json` and `pnpm-lock.yaml` with the build's temporary folder in their dependency specifiers (`delorun-release-build-<random>`), so each release's pack differed from the last one's in those two files only. An approved `package.json` or `pnpm-lock.yaml` also counts as the previous release's when, with each `delorun-release-build-<random>` folder segment in both texts replaced by one fixed token, it equals the text of that file in a signed pack of either release. Nothing else is normalised, and the folder's side is never normalised.
+
+## 回收存储
+
+在每次启动结束时，在 profile 写锁之下、检查之后，`collectStore` 移除 Changes 下没有任何 profile 引用的每个版本文件和对象：每个 profile 的已批准记录、其更改日志中状态为 `pending`、`applied` 或 `left-out-at-start` 的条目（`from` 和 `to`）、其 `active.json` 和其工作会话（`from`、`lastLoaded`、`lastFailed`）。最近一小时之内写入的版本文件被保留（`COLLECT_GRACE_MS`），因此为审查而计算、但尚未被决定的更改保留其内容。回收不等待就取得存储的锁，在另一个进程存储文件夹期间什么都不做，当这些记录中任何一个无法读取时什么都不移除，两秒后停止（`COLLECT_TIME_LIMIT_MS`），其余留给下一次启动；移除某个文件失败时保留它，启动继续。只被 `discarded` 或 `undone` 条目引用，或只被较早的 profile 历史版本引用的版本会被移除，因此恢复这样的历史版本不会为该插件加载任何内容，直到本人再次应用某项更改。
+
 <a id="reloads-and-restores"></a>
 
 ## 重新加载与恢复
@@ -170,10 +187,6 @@ profile 写锁决定它是否可以写入。当 Host 自己的进程持有该锁
 保护开启且 `plugin_changes_pending` 开启时，模型对 `plugin_manager` 的那些会改变所运行内容（而不是安装和移除）的调用不会运行（[智能体与插件](#the-agent-and-plugins)）。
 
 <a id="collecting-the-store"></a>
-
-## 回收存储
-
-在每次启动结束时，在 profile 写锁之下、检查之后，`collectStore` 移除 Changes 下没有任何 profile 引用的每个版本文件和对象：每个 profile 的已批准记录、其更改日志中状态为 `pending`、`applied` 或 `left-out-at-start` 的条目（`from` 和 `to`）、其 `active.json` 和其工作会话（`from`、`lastLoaded`、`lastFailed`）。最近一小时之内写入的版本文件被保留（`COLLECT_GRACE_MS`），因此为审查而计算、但尚未被决定的更改保留其内容。回收不等待就取得存储的锁，在另一个进程存储文件夹期间什么都不做，当这些记录中任何一个无法读取时什么都不移除，两秒后停止（`COLLECT_TIME_LIMIT_MS`），其余留给下一次启动；移除某个文件失败时保留它，启动继续。只被 `discarded` 或 `undone` 条目引用，或只被较早的 profile 历史版本引用的版本会被移除，因此恢复这样的历史版本不会为该插件加载任何内容，直到本人再次应用某项更改。
 
 <a id="the-first-start-under-changes"></a>
 
@@ -582,6 +595,13 @@ Delorun 的组合中有两种行为，决定智能体可以对 harness 所运行
 | `applies an agent's plugin request after a confirmation and the second confirmation that names what it installs`, `with protection off, says that changes load and linked plugins reload live on save without review, and shows the switch off` | [studio 的 Changes 一节](#the-studios-changes-section)（`changes-section.client.spec.tsx`） |
 | `names the plugins and files that load without review before protection goes off, and turns it off with the confirmation`, `says nothing waits for review when protection goes off with nothing waiting, and Cancel sends nothing more` | 该节中的[保护设置](#the-protection-setting)：开关提交 `protection-off {}`，`409 CONFIRM_PROTECTION` 回答的 `willLoad` 填充那一次确认或说明没有内容等待，只有其确认才提交 `{ confirmed: true }`，Cancel 让该设置保持开启（`changes-section.client.spec.tsx`） |
 | `shows a protection notice from a phone and dismisses it by its id` | 该节中的[保护设置](#the-protection-setting)：每条通知写明其设备，关闭通知说明该怎么做，Dismiss 以该通知的 id 提交 `notice-seen`（`changes-section.client.spec.tsx`） |
+| `closes the owner's case: approved and previous release differ only by the build folder, the new release is signed`, `closes a change whose only difference is the previous release's own files, whichever protection` | [Plugin packs across an update](#plugin-packs-across-an-update) (`delorun/packages/changes/tests/update-baseline.integration.spec.ts`) |
+| `leaves an approved edit waiting: a file the release does not list`, `leaves an edit waiting in any other line of package.json or pnpm-lock.yaml`, `does not close a change that mixes release files with an edit, and the whole change keeps waiting` | [Plugin packs across an update](#plugin-packs-across-an-update): a person's edit is never folded into the baseline |
+| `treats a folder that is not exactly the signed pack as a person's change`, `treats a pack whose digest the verified list does not give as a person's change`, `applies the build folder allowance to no other file`, `counts only the packs files of the two releases of the update` | [Plugin packs across an update](#plugin-packs-across-an-update): only content the verified packs files list counts |
+| `never replaces content for a start without a baseline, nor for a reload`, `leaves a plugin that is not a pack of the home alone`, `leaves content the person declined waiting` | [Plugin packs across an update](#plugin-packs-across-an-update): no other start or plugin advances the baseline |
+| `is an update to a newer semantic version`, `gives none for a downgrade or the same release, and never asks for a release`, `throws, so nothing is replaced, when the running release's packs file does not verify` | [Plugin packs across an update](#plugin-packs-across-an-update): a downgrade or an unverified packs file never replaces anything (`delorun/apps/cli/tests/changes-update-gate.spec.ts`) |
+| `replaces nothing at a start that is not an update's successor, whatever it was given`, `leaves the changes waiting, and says so, when the signed files cannot be verified`, `replaces nothing in a process that is not an installed release` | The same (`delorun/apps/cli/tests/changes-update-baseline.spec.ts`) |
+| `gives no text from an installed pack that differs from its signed list, and no files without a packs file`, `refuses a stored packs file that no longer verifies` | The same (`delorun/packages/runtime-store/tests/packs-client.integration.spec.ts`) |
 
 ### 本约定不能证明的内容
 

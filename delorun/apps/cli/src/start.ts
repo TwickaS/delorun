@@ -642,6 +642,7 @@ async function startHomeProcess(request: StartRequest, dependencies: StartDepend
         profile: request.profile,
         kind: 'cli',
         successor: handover !== undefined,
+        ...handover?.handover.type === 'handover' ? { updatedFrom: handover.handover.from } : {},
         output: request.output,
         // A successor's runtime was checked by the update that started it.
         ...runtime.store && handover === undefined ? { storedRuntime: { version: running, check: () => dependencies.checkRuntime(request.home, running, homeLog.logger, launcherAnchor(request.home, request.env).root, fullCheckDaysOf(request.env), runtime.composed) } } : {},
