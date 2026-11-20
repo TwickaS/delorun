@@ -11,6 +11,7 @@ const SETTLE_FRAMES = 2
 
 /** Records and restores the scroll and focus state of a layout's content. */
 export class StateKeeper {
+  private readonly root: HTMLElement
   private readonly positions = new Map<Element, { top: number; left: number }>()
   private frozen = false
   private focused: HTMLElement | undefined
@@ -19,7 +20,8 @@ export class StateKeeper {
   /**
    * @param root - the layout's root element; scrolling inside it is recorded.
    */
-  constructor(private readonly root: HTMLElement) {
+  constructor(root: HTMLElement) {
+    this.root = root
     root.addEventListener('scroll', this.onScroll, true)
   }
 
