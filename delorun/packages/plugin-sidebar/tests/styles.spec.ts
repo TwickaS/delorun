@@ -128,6 +128,26 @@ describe('the stylesheets of the sidebar', () => {
   })
 })
 
+describe('the Working shelf', () => {
+  const rule = (selector: string): Array<[string, string]> => BY_FILE('Sidebar.module.css')
+    .filter(declaration => declaration.selector === selector).map(declaration => [declaration.property, declaration.value])
+
+  it('keeps the list as tall as the shell\'s viewport, so the shelf sits on the foot however few chats there are', () => {
+    expect(rule('.root')).toContainEqual(['min-height', '100cqh'])
+  })
+
+  it('stays at its own height, at most 40% of the sidebar, scrolling its rows on its own', () => {
+    const pane = rule('.workingPane')
+    expect(pane).toContainEqual(['flex', 'none'])
+    expect(pane).toContainEqual(['max-height', '40%'])
+    expect(rule('.workingList')).toContainEqual(['overflow-y', 'auto'])
+  })
+
+  it('sits above the sidebar\'s bottom fade', () => {
+    expect(rule('.workingPane')).toEqual(expect.arrayContaining([['position', 'relative'], ['z-index', '1']]))
+  })
+})
+
 describe('the update notice', () => {
   it('sets the release note\'s label apart from the summary in weight, keeping the summary\'s colour', () => {
     const label = BY_FILE('UpdateNotice.module.css').filter(declaration => declaration.selector === '.summaryLabel')
