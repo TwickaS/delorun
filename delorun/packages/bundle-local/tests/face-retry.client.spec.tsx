@@ -100,6 +100,29 @@ describe('a live agent\'s granting answer on a device', () => {
     await expect(confirming).resolves.toBe(true)
   })
 
+  // Pins L110: Allow for this run mints its grant over its own value, keyed by the same chat, call and marker as Allow once.
+  it('mints the answer grant over allowed-for-run with Face ID, and with the PIN on a device with no passkey', async () => {
+    const run = { ...ANSWER, value: 'allowed-for-run' }
+    const faceId = world()
+    const byFace = reachOn('device', faceId.grant)!.confirm(run)
+    expect((await answer(faceId.source, faceId.api, 'faceId')).sent).toEqual({ answer: { ...SENT.answer, value: 'allowed-for-run' } })
+    await expect(byFace).resolves.toBe(true)
+    const pin = world({ passkey: false })
+    const byPin = reachOn('device', pin.grant)!.confirm(run)
+    expect((await answer(pin.source, pin.api, 'pin')).sent).toEqual({ answer: { ...SENT.answer, value: 'allowed-for-run' }, secret: 'correct horse' })
+    await expect(byPin).resolves.toBe(true)
+  })
+
+  it('does not confirm Allow for this run when the sheet is cancelled or the prompt has no call id', async () => {
+    const run = { ...ANSWER, value: 'allowed-for-run' }
+    const { source, grant, api } = world()
+    const cancelled = reachOn('device', grant)!.confirm(run)
+    expect((await answer(source, api, 'cancel')).sent).toBeUndefined()
+    await expect(cancelled).resolves.toBe(false)
+    await expect(reachOn('device', grant)!.confirm({ ...run, callId: undefined })).resolves.toBe(false)
+    expect(source.hooks.pending.getSnapshot()).toBeNull()
+  })
+
   it('sends nothing when the sheet is cancelled', async () => {
     const { source, grant, api } = world()
     const confirming = reachOn('device', grant)!.confirm(ANSWER)
