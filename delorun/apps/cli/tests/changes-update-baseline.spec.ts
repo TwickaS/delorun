@@ -7,14 +7,15 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { attestTerminal, readApproved, readChangeLog, setProtection, type SignedPackFiles, type UpdateBaseline } from '@delorun/changes'
+import { attestTerminal, readActiveRecord, readApproved, readChangeLog, setProtection, writeApproved, type SignedPackFiles, type UpdateBaseline } from '@delorun/changes'
 import type { RuntimeVersion } from '@delorun/contract-home-layout'
 import { parseRuntimeVersion } from '@delorun/runtime-store'
 import { prepareHome, type CommandContext } from '../src/command.ts'
-import { changesPreStartStep, startChanges } from '../src/changes/start.ts'
+import { changesApprovedContent, changesPreStartStep, repointForSuccessor, startChanges } from '../src/changes/start.ts'
+import { updateSource } from '../src/changes/update-baseline.ts'
 import type { PreStartContext } from '../src/pre-start.ts'
 
-const hooks = vi.hoisted(() => ({ baseline: undefined as import('@delorun/changes').UpdateBaseline | undefined, asked: [] as string[], environment: 'verified' as 'verified' | 'unverifiable' | 'unsupported' }))
+const hooks = vi.hoisted(() => ({ baseline: undefined as import('@delorun/changes').UpdateBaseline | undefined, asked: [] as string[], environment: 'verified' as 'verified' | 'unverifiable' | 'unsupported' | 'failing' }))
 
 vi.mock('../src/changes/update-baseline.ts', async importOriginal => {
   const actual = await importOriginal<typeof import('../src/changes/update-baseline.ts')>()
@@ -29,7 +30,7 @@ vi.mock('../src/changes/update-baseline.ts', async importOriginal => {
 })
 
 vi.mock('@delorun/plugin-packs/environment', () => ({
-  hostPacksEnvironment: () => Promise.resolve(hooks.environment === 'unsupported' ? { unsupported: 'not an installed release' } : { release: () => Promise.reject(new Error('unused')), files: undefined }),
+  hostPacksEnvironment: () => hooks.environment === 'failing' ? Promise.reject(new Error('the launcher anchor cannot be read')) : Promise.resolve(hooks.environment === 'unsupported' ? { unsupported: 'not an installed release' } : { release: () => Promise.reject(new Error('unused')), files: undefined }),
 }))
 
 let base: string
@@ -128,6 +129,15 @@ describe('the pre-start step of a start', () => {
     expect(context.printed.join('')).toContain('pkg has changes waiting for your review')
   })
 
+  it('leaves the changes waiting, and says so, when the packs environment cannot be read, and the start goes on', async () => {
+    await updatedHome()
+    hooks.environment = 'failing'
+    await expect(step({ successor: true, updatedFrom: v('1.0.0') })).resolves.toBeUndefined()
+    expect(await entries()).toEqual([])
+    expect(context.printed.join('')).toContain('so changes to them wait for your review: the launcher anchor cannot be read')
+    expect(context.printed.join('')).toContain('pkg has changes waiting for your review')
+  })
+
   it('replaces nothing in a process that is not an installed release', async () => {
     await updatedHome()
     hooks.environment = 'unsupported'
@@ -135,5 +145,52 @@ describe('the pre-start step of a start', () => {
     expect(hooks.asked).toEqual([])
     expect(await entries()).toEqual([])
     expect((await readApproved(join(home, 'profiles', 'default'))).plugins.pkg).toBeDefined()
+  })
+})
+
+describe('a rollback\'s successor', () => {
+  it('never advances the baseline: a person\'s rollback from a newer release leaves the pack\'s change waiting', async () => {
+    await updatedHome()
+    hooks.baseline = baseline
+    const rollback = { type: 'handover', purpose: 'rollback', from: v('2.0.0') } as const
+    const updatedFrom = updateSource(rollback)
+    await step({ successor: true, ...updatedFrom === undefined ? {} : { updatedFrom } })
+    expect(hooks.asked).toEqual([])
+    expect(await entries()).toEqual([])
+    expect(context.printed.join('')).toContain('pkg has changes waiting for your review')
+  })
+})
+
+describe('a failed health check after the baseline advanced, with protection on', () => {
+  const draft = (): Parameters<typeof changesApprovedContent>[0] => ({ request: { home, profile: 'default', kind: 'cli', output: context, env: context.env } })
+  const profileDir = (): string => join(home, 'profiles', 'default')
+
+  it('boots the predecessor again with nothing advanced and nothing lost', async () => {
+    await updatedHome()
+    const approvedBefore = await readApproved(profileDir())
+    const activeBefore = await readActiveRecord(home, 'default')
+    hooks.baseline = baseline
+    await step({ successor: true, updatedFrom: v('1.0.0') })
+    expect(await entries()).toEqual(['Replaced by the update to 2.0.0: pkg'])
+    // The rollback of the failed update restores the profile's files, the approved record included, not active.json.
+    await writeApproved(profileDir(), approvedBefore)
+    await expect(changesApprovedContent(draft())).rejects.toThrow(/not its approved version/)
+
+    await repointForSuccessor({ home, profile: 'default' }, true)
+
+    await expect(changesApprovedContent(draft())).resolves.toEqual([])
+    expect(await readApproved(profileDir())).toEqual(approvedBefore)
+    expect(await readActiveRecord(home, 'default')).toEqual(activeBefore)
+    expect(await entries()).toEqual(['Replaced by the update to 2.0.0: pkg'])
+  })
+
+  it('still refuses the boot of a Host that is not after a failed switch', async () => {
+    await updatedHome()
+    const approvedBefore = await readApproved(profileDir())
+    hooks.baseline = baseline
+    await step({ successor: true, updatedFrom: v('1.0.0') })
+    await writeApproved(profileDir(), approvedBefore)
+    await repointForSuccessor({ home, profile: 'default' })
+    await expect(changesApprovedContent(draft())).rejects.toThrow(/not its approved version/)
   })
 })

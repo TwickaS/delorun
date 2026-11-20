@@ -9,9 +9,20 @@
  */
 import type { UpdateBaseline } from '@delorun/changes'
 import type { RuntimeVersion } from '@delorun/contract-home-layout'
+import type { HandoverLine } from '@delorun/home-process'
 import type { PacksEnvironment } from '@delorun/plugin-packs/environment'
 import { readSignedPackFiles } from '@delorun/runtime-store'
 import semver from 'semver'
+
+/**
+ * The release an update left, from the handover line its successor was started with.
+ * @param line - the handover line, or `undefined` for a start that is not a successor.
+ * @returns the line's `from` for an update's handover; `undefined` for a rollback's, a restart's and no line, none of
+ *   which is an update to the files their release installed.
+ */
+export function updateSource(line: Pick<HandoverLine, 'type' | 'purpose' | 'from'> | undefined): RuntimeVersion | undefined {
+  return line?.type === 'handover' && line.purpose !== 'rollback' ? line.from : undefined
+}
 
 /**
  * Whether an update goes to a newer release.

@@ -325,15 +325,16 @@ describe('repointsBeforeBoot', () => {
 describe('repointingBoot', () => {
   it('re-points before a successor\'s first boot, and before a second boot of a process that failed a switch, never before a fresh first boot', async () => {
     const calls: string[] = []
-    const repoint = (): Promise<void> => { calls.push('repoint'); return Promise.resolve() }
+    const repoint = (_request: unknown, afterFailedSwitch: boolean): Promise<void> => { calls.push(afterFailedSwitch ? 'repoint-after-failed-switch' : 'repoint'); return Promise.resolve() }
     const fresh = repointingBoot({ home, profile: 'default' }, false, () => { calls.push('boot'); return Promise.resolve(1) }, repoint)
     await fresh()
     await fresh()
-    expect(calls).toEqual(['boot', 'repoint', 'boot'])
+    expect(calls).toEqual(['boot', 'repoint-after-failed-switch', 'boot'])
     calls.length = 0
     const successor = repointingBoot({ home, profile: 'default' }, true, () => { calls.push('boot'); return Promise.resolve(1) }, repoint)
     await successor()
-    expect(calls).toEqual(['repoint', 'boot'])
+    await successor()
+    expect(calls).toEqual(['repoint', 'boot', 'repoint-after-failed-switch', 'boot'])
   })
 })
 

@@ -43,9 +43,37 @@ export function inPackStore(home: string, folder: string): boolean {
 }
 
 /**
- * The files of a pack whose text may carry the build's temporary folder name, which releases up to 0.1.0-preview.2.1
- * wrote into their dependency specifiers.
+ * Security invariant: the last release whose packs carry the build's temporary folder name in their dependency
+ * specifiers. Only the approved content of an update that leaves this release or an earlier one may match a signed file
+ * apart from that name ({@link leftReleaseWithBuildPaths}); a later release's packs are matched byte for byte. Raising
+ * it widens what an update folds into the baseline, so it changes only with a release that was built with those paths.
  */
+export const LAST_RELEASE_WITH_BUILD_PATHS = '0.1.0-preview.2.1'
+
+/** A release of the 0.1.0 preview line: the preview number and an optional patch number. */
+const PREVIEW_RELEASE = /^0\.1\.0-preview\.(\d+)(?:\.(\d+))?$/u
+
+/**
+ * @param release - a release name.
+ * @returns its preview and patch numbers, or `undefined` when it is not a release of the 0.1.0 preview line.
+ */
+function previewNumbers(release: string): readonly [number, number] | undefined {
+  const match = PREVIEW_RELEASE.exec(release)
+  return match === null ? undefined : [Number(match[1]), Number(match[2] ?? 0)]
+}
+
+/**
+ * @param release - the release an update left.
+ * @returns whether it is {@link LAST_RELEASE_WITH_BUILD_PATHS} or an earlier release of the 0.1.0 preview line; any
+ *   other name is not.
+ */
+export function leftReleaseWithBuildPaths(release: string): boolean {
+  const left = previewNumbers(release)
+  const last = previewNumbers(LAST_RELEASE_WITH_BUILD_PATHS)!
+  return left !== undefined && (left[0] < last[0] || (left[0] === last[0] && left[1] <= last[1]))
+}
+
+/** The files of a pack whose text may carry the build's temporary folder name. */
 const BUILD_PATH_FILES: ReadonlySet<string> = new Set(['package.json', 'pnpm-lock.yaml'])
 
 /** One `delorun-release-build-<random>` folder segment, which is the only text {@link withoutBuildFolder} replaces. */
@@ -89,9 +117,9 @@ function isExactly(after: VersionManifest, pack: SignedPackFiles): boolean {
  * @returns whether the entry is a file or link some pack lists; a `package.json` or `pnpm-lock.yaml` also counts when it
  *   equals a listed one apart from the build folder names ({@link withoutBuildFolder}).
  */
-async function isReleaseEntry(home: string, entry: VersionEntry, pools: readonly SignedPackFiles[]): Promise<boolean> {
+async function isReleaseEntry(home: string, entry: VersionEntry, pools: readonly SignedPackFiles[], buildPaths: boolean): Promise<boolean> {
   if (pools.some(pack => listed(entry, pack))) return true
-  if (entry.type !== 'file' || !BUILD_PATH_FILES.has(entry.path) || entry.executable) return false
+  if (!buildPaths || entry.type !== 'file' || !BUILD_PATH_FILES.has(entry.path) || entry.executable) return false
   const text = withoutBuildFolder((await readObject(home, entry.digest)).toString('utf8'))
   return pools.some(pack => {
     const signed = pack.texts.get(entry.path)
@@ -113,7 +141,7 @@ export interface SupersedeRequest {
  * Whether the difference between a plugin's approved content and its folder is only the release's own files: the
  * folder holds exactly what the verified packs file of the release this process runs lists for the pack (no other
  * file, link or byte), and every approved file or link that differs from the folder's is one a pack of either
- * release lists. A `package.json` or `pnpm-lock.yaml` approved from a release up to 0.1.0-preview.2.1 also counts
+ * release lists. A `package.json` or `pnpm-lock.yaml` approved from a release up to {@link LAST_RELEASE_WITH_BUILD_PATHS} also counts
  * when it equals a listed one apart from the build's temporary folder names. A difference that holds any other
  * edit, or a folder that is not the signed pack, is a person's change and is not superseded.
  * @param home - the Delorun home.
@@ -127,13 +155,14 @@ export async function supersededByUpdate(home: string, baseline: UpdateBaseline,
   const target = baseline.packs.find(pack => pack.release === baseline.to && pack.name === plugin)
   if (target === undefined || !isExactly(after, target)) return false
   const pools = baseline.packs.filter(pack => pack.name === plugin && (pack.release === baseline.from || pack.release === baseline.to))
+  const buildPaths = leftReleaseWithBuildPaths(baseline.from)
   const now = new Map(after.entries.map(entry => [entry.path, entry]))
   for (const entry of before.entries) {
     const kept = now.get(entry.path)
     const same = kept !== undefined && (entry.type === 'file'
       ? kept.type === 'file' && kept.digest === entry.digest && kept.executable === entry.executable
       : kept.type === 'link' && kept.target === entry.target && kept.runtime === entry.runtime)
-    if (!same && !await isReleaseEntry(home, entry, pools)) return false
+    if (!same && !await isReleaseEntry(home, entry, pools, buildPaths)) return false
   }
   return true
 }

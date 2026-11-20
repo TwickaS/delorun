@@ -3,7 +3,7 @@
  * have a log record, an archive only downloads from the signed name, and each refusal leaves nothing under `packs/`.
  */
 import { createHash } from 'node:crypto'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -112,5 +112,18 @@ describe('the signed files of an installed release\'s packs', () => {
     const { release, channel } = await setup()
     await turnOnPack(release, 'demo', channel)
     await expect(readSignedPackFiles({ ...release, checkLog: () => ({ ok: false, detail: 'revoked' }) })).rejects.toThrow(/release-log record/u)
+  })
+
+  it('refuses a stored packs file whose signature has one character flipped, though its log record verifies', async () => {
+    const { release, channel, paths } = await setup()
+    await turnOnPack(release, 'demo', channel)
+    expect((await readSignedPackFiles(release)).map(pack => pack.name)).toEqual(['demo'])
+    const file = paths.releaseFiles(V).packs
+    const envelope = JSON.parse(readFileSync(file, 'utf8')) as { signatures: { sig: string }[] }
+    const sig = envelope.signatures[0]!.sig
+    envelope.signatures[0]!.sig = `${sig.slice(0, -1)}${sig.endsWith('0') ? '1' : '0'}`
+    chmodSync(file, 0o644)
+    writeFileSync(file, JSON.stringify(envelope))
+    await expect(readSignedPackFiles(release)).rejects.toThrow(/0 valid signatures/u)
   })
 })

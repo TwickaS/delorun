@@ -273,6 +273,41 @@ export async function repointActiveCopies(request: EnforceRequest): Promise<read
 }
 
 /**
+ * Make each active copy that loads approved content hold what the profile's approved record names now, for a Host
+ * that boots again after a failed switch. A failed health check rolls the profile's files back, approved record
+ * included, but not `active.json`, which still names what the failed release's start decided; with protection on, the
+ * load check refuses that, so the previous release could not resume. This never reads a folder and never approves
+ * anything: each such plugin is set to its approved version, or to nothing when it has none, and
+ * {@link repointActiveCopies} then fills the directories. A copy for a work session or left out of a failed start is
+ * not touched.
+ * @param request - the home, the profile and its directory.
+ * @returns the plugins whose record was changed, in record order.
+ * @throws {ChangesError} when a record cannot be read or written.
+ */
+export async function followApprovedContent(request: EnforceRequest): Promise<readonly string[]> {
+  const { home, profile, profileDir } = request
+  /** The records that name approved content other than the approved record's version, with the version to hold instead. */
+  const stale = async (): Promise<readonly (readonly [string, ContentVersion | undefined])[]> => {
+    const approved = await readApproved(profileDir)
+    return Object.entries((await readActiveRecord(home, profile)).plugins)
+      .filter(([plugin, content]) => content.kind === 'approved' && content.version !== approvedOf(approved, plugin)?.version)
+      .map(([plugin]) => [plugin, approvedOf(approved, plugin)?.version] as const)
+  }
+  // A boot after a failed switch whose records agree takes no lock, as a restart of the same release does.
+  if ((await stale()).length === 0) return []
+  return withFileLock(join(profileDir, 'package.json'), async () => {
+    const behind = await stale()
+    const plugins: Record<string, ActiveContent> = { ...(await readActiveRecord(home, profile)).plugins }
+    for (const [plugin, version] of behind) {
+      if (version === undefined) delete plugins[plugin]
+      else plugins[plugin] = { version, kind: 'approved' }
+    }
+    if (behind.length > 0) await writeActiveRecord(home, profile, { schema: ACTIVE_RECORD_SCHEMA, plugins })
+    return behind.map(([plugin]) => plugin)
+  }, { waitMs: request.lockWaitMs ?? PROFILE_LOCK_WAIT_MS })
+}
+
+/**
  * Who holds the profile write lock, from the process id upstream's lock file records.
  * @param profileDir - the profile directory.
  * @returns `none` without a lock file, `this-process` when it names this process, and `other` otherwise.

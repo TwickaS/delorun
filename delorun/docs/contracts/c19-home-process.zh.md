@@ -329,7 +329,7 @@ studio 的 Restart（[C21](c21-changes.zh.md#harness-edits)）让 CLI 的 Host �
 
 - 协议版本 `v` 为 1。home 进程对 `v` 未知的请求回答 `SCHEMA_VIOLATION`。删除或重命名某个操作、字段或阶段的变更会提高 `v`，提高它的运行时在一个发布内同时接受两个版本，使上一个发布的 `delorun` 仍能更新它。
 - 新的操作、可选字段与新的错误代码保持 `v` 不变；调用方忽略未知的响应字段。
-- 交接行有自己的 `v`，为 1。后继进程检查它认识的每个字段，并丢弃它不认识的每个字段（顶层、`health`、行与 `previousProtection` 中均如此），因此前驱进程可以添加一个可选字段，只要忽略该字段的后继进程不读它也能安全地完成检查。后继进程为安全检查必须读取的字段，或现有字段含义的改变，都会提高交接行的 `v`；后继进程拒绝 `v` 未知的行，前驱进程随后如同健康检查失败一样回滚。`v` 1 包含 `health.previousProtection`，以及不涵盖该行保护的 sandbox 行 `configHash`。其 `type` 为 `handover` 或 `restart`；重启的后继进程运行前任自己的版本，因此总是认识 `restart`。
+- 交接行有自己的 `v`，为 1。后继进程检查它认识的每个字段，并丢弃它不认识的每个字段（顶层、`health`、行与 `previousProtection` 中均如此），因此前驱进程可以添加一个可选字段，只要忽略该字段的后继进程不读它也能安全地完成检查。后继进程为安全检查必须读取的字段，或现有字段含义的改变，都会提高交接行的 `v`；后继进程拒绝 `v` 未知的行，前驱进程随后如同健康检查失败一样回滚。`v` 1 包含 `health.previousProtection`，以及不涵盖该行保护的 sandbox 行 `configHash`。其 `type` 为 `handover` 或 `restart`；重启的后继进程运行前任自己的版本，因此总是认识 `restart`。 A `handover` may carry the optional `purpose`, `update` or `rollback`: a predecessor's update writes `update` and its rollback writes `rollback`. Only a handover whose purpose is not `rollback` lets the successor treat the files its release installed as Changes' baseline ([C21](c21-changes.zh.md#plugin-packs-across-an-update)); a line without a purpose, as older releases write, is an update's.
 - 上述登录项路径与命令参数是外部接口；改变其中任一项都是破坏性变更，需在 `delorun/docs/upgrade-guide/` 下附升级指南。
 - 类型包跟随 Delorun 的版本，并与本页在同一个拉取请求中修改。
 

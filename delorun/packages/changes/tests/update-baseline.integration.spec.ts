@@ -7,10 +7,12 @@ import { rmSync, symlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { parseRuntimeVersion } from '@delorun/runtime-store'
-import { enforceApprovedContent, prepareReload, startNotice, type StartChanges } from '../src/enforce.ts'
-import { readApproved, readChangeLog, writeChangeLog } from '../src/records.ts'
+import { enforceApprovedContent, followApprovedContent, prepareReload, repointActiveCopies, startNotice, type StartChanges } from '../src/enforce.ts'
+import { checkLoadedContent } from '../src/invariants.ts'
+import { readActiveRecord, readApproved, readChangeLog, writeActiveRecord, writeApproved, writeChangeLog } from '../src/records.ts'
+import { ACTIVE_RECORD_SCHEMA } from '../src/types.ts'
 import { storeFolder } from '../src/store.ts'
-import { supersededByUpdate, withoutBuildFolder, type SignedPackFiles, type UpdateBaseline } from '../src/update-baseline.ts'
+import { LAST_RELEASE_WITH_BUILD_PATHS, leftReleaseWithBuildPaths, supersededByUpdate, withoutBuildFolder, type SignedPackFiles, type UpdateBaseline } from '../src/update-baseline.ts'
 import { approvedVersion, fixture, history, linkAs, NOW, PROFILE, start, type Fixture } from './profile-fixture.ts'
 import { writeFiles } from './support.ts'
 
@@ -63,7 +65,7 @@ async function updated(approvedFiles: Files, folderFiles: Files, options: { read
 const request = (fx: Fixture, baseline?: UpdateBaseline): Parameters<typeof enforceApprovedContent>[0] => ({ home: fx.home, profile: PROFILE, profileDir: fx.profileDir, now: () => NOW, ...baseline === undefined ? {} : { updateBaseline: baseline } })
 
 function baselineOf(from: Files, to: Files): UpdateBaseline {
-  return { from: '2.1.0', to: '2.2.0', packs: [signed('2.1.0', from), signed('2.2.0', to)] }
+  return { from: '0.1.0-preview.2.1', to: '2.2.0', packs: [signed('0.1.0-preview.2.1', from), signed('2.2.0', to)] }
 }
 
 const code = 'export default "pkg"\n'
@@ -100,11 +102,20 @@ describe('an update replaces the approved pack content with the release\'s own f
     }
   })
 
-  it('never replaces content for a start without a baseline, nor for a reload', async () => {
+  it('never replaces content for a start without a baseline', async () => {
     const { fx, approved } = await updated(released21, released22)
     expect((await enforceApprovedContent(request(fx))).pending).toHaveLength(1)
-    await prepareReload({ ...request(fx, baselineOf(released21, released22)) })
     expect(await approvedVersion(fx, 'pkg')).toBe(approved)
+  })
+
+  it('never replaces content for a reload, even one that moves a link to the pack\'s folder', async () => {
+    const { fx, source, approved } = await updated(released21, released22)
+    // A restore or an undo writes the link back to the folder; the reload then decides the plugin it moved.
+    linkAs(fx, 'pkg', source)
+    const changes = await prepareReload(request(fx, baselineOf(released21, released22)))
+    expect(changes.replacedByUpdate).toBeUndefined()
+    expect(await approvedVersion(fx, 'pkg')).toBe(approved)
+    expect((await readChangeLog(fx.home, PROFILE)).entries.some(each => each.decidedFrom === 'update')).toBe(false)
   })
 })
 
@@ -130,7 +141,7 @@ describe('what an update never replaces', () => {
     const other = { ...released21, 'index.js': 'import "/var/tmp/delorun-release-build-Xxxxxx/x"\n' }
     const { fx, approved } = await updated(other, released22)
     const from = { ...released21, 'index.js': 'import "/var/tmp/delorun-release-build-Yyyyyy/x"\n' }
-    const listsText: UpdateBaseline = { from: '2.1.0', to: '2.2.0', packs: [signed('2.1.0', from, ['package.json', 'pnpm-lock.yaml', 'index.js']), signed('2.2.0', released22)] }
+    const listsText: UpdateBaseline = { from: '0.1.0-preview.2.1', to: '2.2.0', packs: [signed('0.1.0-preview.2.1', from, ['package.json', 'pnpm-lock.yaml', 'index.js']), signed('2.2.0', released22)] }
     expect((await enforceApprovedContent(request(fx, listsText))).pending).toHaveLength(1)
     expect(await approvedVersion(fx, 'pkg')).toBe(approved)
   })
@@ -153,9 +164,9 @@ describe('what an update never replaces', () => {
 
   it('treats a pack whose digest the verified list does not give as a person\'s change', async () => {
     const { fx, approved } = await updated(released21, released22)
-    const wrong: UpdateBaseline = { from: '2.1.0', to: '2.2.0', packs: [signed('2.1.0', released21), signed('2.2.0', { ...released22, 'index.js': 'another\n' })] }
+    const wrong: UpdateBaseline = { from: '0.1.0-preview.2.1', to: '2.2.0', packs: [signed('0.1.0-preview.2.1', released21), signed('2.2.0', { ...released22, 'index.js': 'another\n' })] }
     expect((await enforceApprovedContent(request(fx, wrong))).pending).toHaveLength(1)
-    const missing: UpdateBaseline = { from: '2.1.0', to: '2.2.0', packs: [signed('2.1.0', released21)] }
+    const missing: UpdateBaseline = { from: '0.1.0-preview.2.1', to: '2.2.0', packs: [signed('0.1.0-preview.2.1', released21)] }
     expect((await enforceApprovedContent(request(fx, missing))).pending).toHaveLength(1)
     expect(await approvedVersion(fx, 'pkg')).toBe(approved)
   })
@@ -163,7 +174,7 @@ describe('what an update never replaces', () => {
   it('counts only the packs files of the two releases of the update', async () => {
     const older = { ...released21, 'index.js': 'export default "pkg 1.9"\n' }
     const { fx, approved } = await updated(older, released22)
-    const baseline: UpdateBaseline = { from: '2.1.0', to: '2.2.0', packs: [signed('1.9.0', older), signed('2.1.0', released21), signed('2.2.0', released22)] }
+    const baseline: UpdateBaseline = { from: '0.1.0-preview.2.1', to: '2.2.0', packs: [signed('1.9.0', older), signed('0.1.0-preview.2.1', released21), signed('2.2.0', released22)] }
     expect((await enforceApprovedContent(request(fx, baseline))).pending).toHaveLength(1)
     expect(await approvedVersion(fx, 'pkg')).toBe(approved)
   })
@@ -190,6 +201,26 @@ describe('what an update never replaces', () => {
   })
 })
 
+describe('the build folder allowance', () => {
+  const approvedTemp = { ...released21, 'package.json': manifest('Xxxxxx'), 'pnpm-lock.yaml': lock('Xxxxxx') }
+
+  it('ends with the last release that shipped build folder names', () => {
+    expect(LAST_RELEASE_WITH_BUILD_PATHS).toBe('0.1.0-preview.2.1')
+    for (const left of ['0.1.0-preview.2.1', '0.1.0-preview.2', '0.1.0-preview.1.2', '0.1.0-preview.1']) expect(leftReleaseWithBuildPaths(left)).toBe(true)
+    for (const left of ['0.1.0-preview.2.2', '0.1.0-preview.3', '0.1.0-preview.10', '0.1.0', '0.2.0', '1.0.0', '0.1.0-rc.1', '0.1.0-preview.2.1.1', 'x0.1.0-preview.1']) expect(leftReleaseWithBuildPaths(left)).toBe(false)
+  })
+
+  it('closes the build folder difference only for an update that leaves such a release', async () => {
+    const leaving = (from: string): UpdateBaseline => ({ from, to: '0.1.0-preview.4', packs: [signed(from, released21), signed('0.1.0-preview.4', released22)] })
+    for (const [from, closed] of [['0.1.0-preview.2.1', true], ['0.1.0-preview.2.2', false], ['0.1.0-preview.3', false]] as const) {
+      const { fx, approved } = await updated(approvedTemp, released22)
+      const changes = await enforceApprovedContent(request(fx, leaving(from)))
+      expect(changes.pending).toHaveLength(closed ? 0 : 1)
+      expect(await approvedVersion(fx, 'pkg') === approved).toBe(!closed)
+    }
+  })
+})
+
 describe('supersededByUpdate', () => {
   it('replaces only the exact build folder segment', () => {
     expect(withoutBuildFolder('file:///var/tmp/delorun-release-build-Ab12Cd/source/x')).toBe('file:///var/tmp/delorun-release-build-TOKEN/source/x')
@@ -201,7 +232,7 @@ describe('supersededByUpdate', () => {
   it('refuses a plugin the release this process runs does not list as a pack', async () => {
     const { fx, source } = await updated(released21, released22)
     const stored = await storeFolder(fx.home, source)
-    const baseline: UpdateBaseline = { from: '2.1.0', to: '2.2.0', packs: [{ ...signed('2.2.0', released22), name: 'another' }] }
+    const baseline: UpdateBaseline = { from: '0.1.0-preview.2.1', to: '2.2.0', packs: [{ ...signed('2.2.0', released22), name: 'another' }] }
     expect(await supersededByUpdate(fx.home, baseline, { plugin: 'pkg', before: stored.manifest, after: stored.manifest })).toBe(false)
   })
 })
@@ -211,5 +242,39 @@ describe('the start notice', () => {
   it('is silent without a replacement', () => {
     const none: StartChanges = { protection: 'on', approvedAtUpgrade: [], pending: [], unreviewed: [] }
     expect(startNotice(none)).toBe('')
+  })
+})
+
+describe('a failed health check after the baseline advanced, with protection on', () => {
+  const request2 = (fx: Fixture): Parameters<typeof checkLoadedContent>[0] => ({ home: fx.home, profile: PROFILE, profileDir: fx.profileDir })
+
+  it('lets the predecessor boot again: its active copies follow the approved record the rollback restored', async () => {
+    const { fx, source, approved } = await updated(released21, released22)
+    const approvedBefore = await readApproved(fx.profileDir)
+    await enforceApprovedContent(request(fx, baselineOf(released21, released22)))
+    expect(await approvedVersion(fx, 'pkg')).not.toBe(approved)
+    // The rollback of the failed update restores the profile's files, the approved record included, not active.json.
+    await writeApproved(fx.profileDir, approvedBefore)
+    expect(await checkLoadedContent(request2(fx))).toEqual([expect.stringContaining('loads version')])
+
+    expect(await followApprovedContent(request(fx))).toEqual(['pkg'])
+    await repointActiveCopies(request(fx))
+
+    expect(await checkLoadedContent(request2(fx))).toEqual([])
+    expect((await readActiveRecord(fx.home, PROFILE)).plugins.pkg).toEqual({ version: approved, kind: 'approved' })
+    expect(await approvedVersion(fx, 'pkg')).toBe(approved)
+    expect((await storeFolder(fx.home, source)).version).not.toBe(approved)
+    expect((await enforceApprovedContent(request(fx))).pending).toHaveLength(1)
+  })
+
+  it('changes nothing when the records agree, and leaves a work session\'s or left-out copy alone', async () => {
+    const { fx, approved } = await updated(released21, released22)
+    expect(await followApprovedContent(request(fx))).toEqual([])
+    const record = await readActiveRecord(fx.home, PROFILE)
+    const other = { version: (await storeFolder(fx.home, join(fx.home, 'packs', '2.2.0', 'pkg', 'package'))).version, kind: 'work-session' as const }
+    await writeActiveRecord(fx.home, PROFILE, { schema: ACTIVE_RECORD_SCHEMA, plugins: { pkg: other } })
+    expect(await followApprovedContent(request(fx))).toEqual([])
+    expect((await readActiveRecord(fx.home, PROFILE)).plugins.pkg).toEqual(other)
+    expect(record.plugins.pkg).toEqual({ version: approved, kind: 'approved' })
   })
 })

@@ -18,7 +18,7 @@
  */
 import { resolve } from 'node:path'
 import { getDelorunRuntimeVersion } from '@deepseek-ai/dsh-app-boot'
-import { checkChangesInvariants, enforceApprovedContent, isChangesError, markShownAtUpgrade, PROFILE_LOCK_WAIT_MS, repointActiveCopies, startNotice, workFinishedLine, writeBootRecord, type BootRow, type ReloadHost, type StartChanges, type UpdateBaseline } from '@delorun/changes'
+import { checkChangesInvariants, enforceApprovedContent, followApprovedContent, isChangesError, markShownAtUpgrade, PROFILE_LOCK_WAIT_MS, repointActiveCopies, startNotice, workFinishedLine, writeBootRecord, type BootRow, type ReloadHost, type StartChanges, type UpdateBaseline } from '@delorun/changes'
 import { finishWorkWithoutPerson } from '@delorun/changes/stop'
 import type { RuntimeVersion } from '@delorun/contract-home-layout'
 import type { DelorunLogger } from '@delorun/logs'
@@ -144,17 +144,19 @@ export function repointsBeforeBoot(successor: boolean, bootsBefore: number): boo
 }
 
 /**
- * Wrap a profile's Host boot so that it re-points the active copies first when {@link repointsBeforeBoot} says so.
+ * Wrap a profile's Host boot so that it re-points the active copies first when {@link repointsBeforeBoot} says so, and
+ * on a boot after the first, first makes them follow the approved record ({@link followApprovedContent}).
  * @param request - the home and the profile.
  * @param successor - whether this process is an update's successor.
  * @param boot - boots the Host.
  * @param repoint - re-points the copies; {@link repointForSuccessor} by default.
  * @returns the wrapped boot, which counts the boots it has run.
  */
-export function repointingBoot<A extends unknown[], T>(request: { readonly home: string, readonly profile: string }, successor: boolean, boot: (...args: A) => Promise<T>, repoint: (request: { readonly home: string, readonly profile: string }) => Promise<void> = repointForSuccessor): (...args: A) => Promise<T> {
+export function repointingBoot<A extends unknown[], T>(request: { readonly home: string, readonly profile: string }, successor: boolean, boot: (...args: A) => Promise<T>, repoint: (request: { readonly home: string, readonly profile: string }, afterFailedSwitch: boolean) => Promise<void> = repointForSuccessor): (...args: A) => Promise<T> {
   let booted = 0
   return async (...args) => {
-    if (repointsBeforeBoot(successor, booted++)) await repoint(request)
+    const afterFailedSwitch = booted > 0
+    if (repointsBeforeBoot(successor, booted++)) await repoint(request, afterFailedSwitch)
     return boot(...args)
   }
 }
@@ -162,16 +164,22 @@ export function repointingBoot<A extends unknown[], T>(request: { readonly home:
 /**
  * An update's successor boots without the pre-start steps, so before its Host boots it re-points each recorded active
  * copy's links into the runtime store to its own release ({@link repointActiveCopies}); otherwise a plugin pack copy
- * written under the previous release fails the load check of the new one and the update rolls back.
+ * written under the previous release fails the load check of the new one and the update rolls back. A boot after a
+ * failed switch first makes the copies that load approved content follow the approved record, which the failed
+ * switch's rollback restored while `active.json` kept the failed release's decision ({@link followApprovedContent});
+ * with protection on, the previous release would otherwise refuse to resume.
  * @param request - the home and the profile about to boot.
+ * @param afterFailedSwitch - whether a Host of this process booted before.
  * @returns when the copies name this release's packages; immediately for a home without the profile.
  * @throws {CliError} when a copy cannot be re-pointed: the successor does not boot, so the update rolls back.
  */
-export async function repointForSuccessor(request: { readonly home: string, readonly profile: string }): Promise<void> {
+export async function repointForSuccessor(request: { readonly home: string, readonly profile: string }, afterFailedSwitch = false): Promise<void> {
   const { home, profile } = request
   if (!hasCliProfile(home, profile)) return
+  const enforce = { home, profile, profileDir: profileDirectory(home, profile), harnessLink: isCarriedPackage, ...runningRelease() }
   try {
-    await repointActiveCopies({ home, profile, profileDir: profileDirectory(home, profile), harnessLink: isCarriedPackage, ...runningRelease() })
+    if (afterFailedSwitch) await followApprovedContent(enforce)
+    await repointActiveCopies(enforce)
   } catch (error) {
     throw new CliError(EXIT.failed, `delorun: the profile ${profile} was not started, because its plugin copies could not be pointed at this release: ${isChangesError(error) ? error.detail : String(error)}`)
   }
@@ -211,9 +219,9 @@ export async function changesPreStartStep(context: PreStartContext): Promise<voi
  * @returns the baseline, or `undefined` when there is none to use.
  */
 async function verifiedUpdateBaseline(from: RuntimeVersion, write: (text: string) => void): Promise<UpdateBaseline | undefined> {
-  const environment = await hostPacksEnvironment(process.env)
-  if ('unsupported' in environment) return undefined
   try {
+    const environment = await hostPacksEnvironment(process.env)
+    if ('unsupported' in environment) return undefined
     return await updateBaselineOf(environment, from)
   } catch (error) {
     write(`Delorun could not check the plugin packs of the update against the signed release, so changes to them wait for your review: ${printable(error instanceof Error ? error.message : String(error))}\n`)

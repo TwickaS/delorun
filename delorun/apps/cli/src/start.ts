@@ -54,6 +54,7 @@ import { appliedReachConfig, localReach, reachRowsOf } from './reach/host.ts'
 import { readReachRow, REACH_ROW_ID, type TailscalePrivateRow } from './reach/row.ts'
 import { resolveSurface, type DelorunLogger } from '@delorun/logs'
 import { afterChangesBoot, changesApprovedContent, recordChangesBoot, repointingBoot } from './changes/start.ts'
+import { updateSource } from './changes/update-baseline.ts'
 import { reloadProfile } from './changes/reload.ts'
 import { runningComposition, type HarnessContext, type RunningComposition } from '@delorun/changes'
 import { checkRunningRuntime, handOffToComposedTree, handsOff, harnessContextOf, processHandOff, startEntry, type HandOff } from './changes/harness-start.ts'
@@ -607,6 +608,7 @@ async function startHomeProcess(request: StartRequest, dependencies: StartDepend
   // A successor reads its handover first: the start id it logs and locks under is the one the predecessor chose.
   const handover = await dependencies.handover()
   const startId = handover?.handover.startId ?? newStartId()
+  const updatedFrom = updateSource(handover?.handover)
   const homeLog = openHomeLog({ home: request.home, profile: request.profile, startId, level: HOME_LOG_LEVEL, onFailure: () => {} })
   const restoreOutput = dependencies.captureOutput(homeLog)
   const dropEnvironment = registerEnvironment(request.env, homeLog.redactor)
@@ -642,7 +644,7 @@ async function startHomeProcess(request: StartRequest, dependencies: StartDepend
         profile: request.profile,
         kind: 'cli',
         successor: handover !== undefined,
-        ...handover?.handover.type === 'handover' ? { updatedFrom: handover.handover.from } : {},
+        ...updatedFrom === undefined ? {} : { updatedFrom },
         output: request.output,
         // A successor's runtime was checked by the update that started it.
         ...runtime.store && handover === undefined ? { storedRuntime: { version: running, check: () => dependencies.checkRuntime(request.home, running, homeLog.logger, launcherAnchor(request.home, request.env).root, fullCheckDaysOf(request.env), runtime.composed) } } : {},

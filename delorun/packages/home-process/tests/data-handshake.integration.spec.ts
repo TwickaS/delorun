@@ -108,6 +108,12 @@ describe('an update with a session-data copy', () => {
     expect(await readJournal(journal)).toMatchObject({ dataDiffers: true, copy: true, targetStarted: true })
   })
 
+  it('tells the successor the handover is an update\'s', async () => {
+    const { handshake, handovers } = await setUp()
+    await update(handshake, true)
+    expect(handovers[0]).toMatchObject({ type: 'handover', purpose: 'update', from: V1, to: V2 })
+  })
+
   it('holds the successor to what the running Host had at boot, read before that Host stopped', async () => {
     const { handshake, handovers } = await setUp()
     await update(handshake, true)
@@ -265,6 +271,8 @@ describe('the person\'s rollback', () => {
     expect(await handshake.rollback('drain', undefined, false, () => {})).toEqual({ outcome: 'rolled-back', lines: ['Went back to 1.0.0; 1 chat(s) set aside.'] })
     // The version rolled back to may protect less than the one it replaced; it is not held to the running Host's protection.
     expect(handovers[0]?.health).not.toHaveProperty('previousProtection')
+    // The version rolled back to never treats the files its release installed as an update's baseline for Changes.
+    expect(handovers[0]).toMatchObject({ type: 'handover', purpose: 'rollback', from: V2, to: V1 })
     // The home log records each phase of the rollback, as it does an update's, and the commit.
     expect(logger.records.filter(record => record.startsWith('info rollback '))).toEqual([
       ...['reporting', 'waiting', 'switching', 'health-check'].map(phase => `info rollback phase ${JSON.stringify({ phase, from: V2, to: V1 })}`),

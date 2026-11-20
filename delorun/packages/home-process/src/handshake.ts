@@ -555,7 +555,7 @@ export class UpdateHandshake {
         await this.phase(update, 'health-check', progress)
         const startId = brandString<StartId>(randomId())
         successor = this.subject.startSuccessor({
-          type: 'handover', v: 1, home: this.subject.home, profile: this.subject.profile, from, to, startId, health, startedAt: update.startedAt,
+          type: 'handover', purpose: 'update', v: 1, home: this.subject.home, profile: this.subject.profile, from, to, startId, health, startedAt: update.startedAt,
         })
         const answer = await successor.result
         if (answer.type === 'ready') {
@@ -726,7 +726,7 @@ export class UpdateHandshake {
       this.rollbackPhase(record, 'health-check', progress)
       const startId = brandString<StartId>(randomId())
       const successor = this.subject.startSuccessor({
-        type: 'handover', v: 1, home: this.subject.home, profile: this.subject.profile, from: running, to: record.from, startId, health, startedAt: new Date().toISOString(),
+        type: 'handover', purpose: 'rollback', v: 1, home: this.subject.home, profile: this.subject.profile, from: running, to: record.from, startId, health, startedAt: new Date().toISOString(),
       })
       const answer = await successor.result
       if (answer.type === 'ready') {
