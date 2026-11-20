@@ -6,7 +6,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, useSurfaceEdges } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PasskeyBrowser } from './face-id-browser.ts'
 import type { FaceIdAction, FaceIdKind, PasskeyApi } from './face-id-types.ts'
@@ -51,6 +51,8 @@ type Phase = 'ready' | 'waiting' | 'cancelled' | 'failed'
  */
 export function FaceIdSheet({ t, action, kind, api, browser, hasPasskey, fallback, onGranted, onCancel, onFallback, onOpenDevices }: FaceIdSheetProps): ReactNode {
   const [phase, setPhase] = useState<Phase>('ready')
+  const sheet = useRef<HTMLDivElement>(null)
+  useSurfaceEdges(sheet, true)
   const [available, setAvailable] = useState<boolean | undefined>(undefined)
   const confirmRef = useRef<HTMLButtonElement>(null)
   const alive = useRef(true)
@@ -103,7 +105,7 @@ export function FaceIdSheet({ t, action, kind, api, browser, hasPasskey, fallbac
   const showFallback = !usable || phase === 'cancelled' || phase === 'failed'
   const faceOnly = showFallback && action.noPin === true
   return <div className={css.scrim} data-face-id-sheet={phase}>
-    <div className={css.sheet} role="dialog" aria-modal="true" aria-labelledby="delorun-face-id-title">
+    <div ref={sheet} className={css.sheet} role="dialog" aria-modal="true" aria-labelledby="delorun-face-id-title">
       <h2 id="delorun-face-id-title" className={css.title}>{action.title}</h2>
       <p className={css.body}>{action.body}</p>
       {listed.length === 0 ? null : <ul className={css.items}>

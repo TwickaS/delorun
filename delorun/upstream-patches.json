@@ -3097,6 +3097,18 @@
       "class": "delorun-feature",
       "feature": "studio-seams",
       "reason": "Tightens the question card's padding and keeps an expanded option or question's collapse button at the end of its last text line, so phones show more choices and the button never takes a line of its own; adds 44px rows and 16px answer text on touch."
+    },
+    {
+      "path": "packages/client/ui-primitives/src/Modal.tsx",
+      "class": "delorun-feature",
+      "feature": "studio-seams",
+      "reason": "Holds the dialog mask on the edge stack while a dialog is open, so the browser's status and bottom bars take the dimmed page colour on a phone and restore it, in order, as nested dialogs close."
+    },
+    {
+      "path": "packages/client/ui-primitives/src/edge-surface.ts",
+      "class": "delorun-feature",
+      "feature": "studio-seams",
+      "reason": "The per-document stack of open full-screen surfaces and dialogs, with the hook that registers one, which the theme plugin's edge controller reads so the phone browser's bars follow the surface on top and restore in order."
     }
   ],
   "retired": []

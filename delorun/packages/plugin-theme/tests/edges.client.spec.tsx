@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 /** The Safari edge controller: strips, one theme-color tag, backgrounds, and a full restore on dispose. */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { EDGE_ATTRIBUTE, EdgeController, edgeColours } from '../src/client/edges.ts'
+import { pushEdgeSurface } from '@deepseek-ai/dsh-client-ui-primitives'
+import { EDGE_ATTRIBUTE, EdgeController, edgeColours, stackedEdgeColours } from '../src/client/edges.ts'
 
 const PAGE = '--dsw-alias-bg-base'
 const SIDEBAR = '--dsw-specific-sidebar-fill'
@@ -37,8 +38,8 @@ describe('the edge controller', () => {
     expect(strips.map(strip => strip.getAttribute(EDGE_ATTRIBUTE))).toEqual(['top', 'bottom'])
     for (const strip of strips) expect(strip.getAttribute('aria-hidden')).toBe('true')
     const rules = document.querySelector(`style[${EDGE_ATTRIBUTE}]`)?.textContent ?? ''
-    expect(rules).toContain('[data-delorun-edge="top"]{position:fixed;left:0;right:0;top:-7px;height:max(12px,calc(env(safe-area-inset-top) + 7px));pointer-events:none;z-index:10')
-    expect(rules).toContain('[data-delorun-edge="bottom"]{position:fixed;left:0;right:0;bottom:-7px;height:max(12px,calc(env(safe-area-inset-bottom) + 7px));pointer-events:none;z-index:10')
+    expect(rules).toContain('[data-delorun-edge="top"]{position:fixed;left:0;right:0;top:-7px;height:max(12px,calc(env(safe-area-inset-top) + 7px));pointer-events:none;z-index:1001')
+    expect(rules).toContain('[data-delorun-edge="bottom"]{position:fixed;left:0;right:0;bottom:-7px;height:max(12px,calc(env(safe-area-inset-bottom) + 7px));pointer-events:none;z-index:1001')
     expect(rules).toContain('background:var(--edge-top-background)')
     expect(document.querySelectorAll('meta[name="theme-color"]')).toHaveLength(1)
     expect(document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.content).toBe('rgb(250 250 248)')
@@ -65,6 +66,10 @@ describe('the edge controller', () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 })
     window.dispatchEvent(new Event('resize'))
     expect(document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.content).toBe('rgb(240 240 238)')
+    expect([...document.querySelectorAll<HTMLElement>(`div[${EDGE_ATTRIBUTE}]`)].map(strip => strip.hidden)).toEqual([true, true])
+    Object.defineProperty(window, 'matchMedia', { configurable: true, value: () => Object.assign(new EventTarget(), { matches: true }) })
+    edges.refresh()
+    expect([...document.querySelectorAll<HTMLElement>(`div[${EDGE_ATTRIBUTE}]`)].map(strip => strip.hidden)).toEqual([false, false])
     edges.dispose()
   })
 
@@ -97,5 +102,44 @@ describe('the edge controller', () => {
     tokens('rgb(1 1 1)', 'rgb(2 2 2)')
     window.dispatchEvent(new Event('resize'))
     expect(document.querySelectorAll(`[${EDGE_ATTRIBUTE}]`)).toHaveLength(0)
+  })
+})
+
+describe('full-screen surfaces on the edge stack', () => {
+  it('composites an overlay over the edges, and a solid surface replaces them', () => {
+    const base = { top: 'rgb(240, 240, 240)', bottom: 'rgb(250, 250, 250)' }
+    expect(stackedEdgeColours(base, [])).toEqual(base)
+    expect(stackedEdgeColours(base, [{ dim: 'rgba(0, 0, 0, 0.5)' }])).toEqual({ top: 'rgb(120, 120, 120)', bottom: 'rgb(125, 125, 125)' })
+    expect(stackedEdgeColours(base, [{ top: 'red', bottom: 'blue' }, { dim: 'rgba(0, 0, 0, 0)' }])).toEqual({ top: 'red', bottom: 'blue' })
+  })
+
+  it('sets the strips while a surface is open and restores the previous colours as nested surfaces close', () => {
+    tokens('rgb(250, 250, 248)', 'rgb(240, 240, 238)')
+    const edges = new EdgeController(document, window)
+    const top = (): string => document.documentElement.style.getPropertyValue('--edge-top-background')
+    const bottom = (): string => document.documentElement.style.getPropertyValue('--edge-bottom-background')
+    const releaseSettings = pushEdgeSurface(document, { top: 'rgb(10, 20, 30)', bottom: 'rgb(40, 50, 60)' })
+    expect([top(), bottom()]).toEqual(['rgb(10, 20, 30)', 'rgb(40, 50, 60)'])
+    expect(document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.content).toBe('rgb(10, 20, 30)')
+    const releaseDialog = pushEdgeSurface(document, { dim: 'rgba(0, 0, 0, 0.5)' })
+    expect([top(), bottom()]).toEqual(['rgb(5, 10, 15)', 'rgb(20, 25, 30)'])
+    releaseDialog()
+    expect([top(), bottom()]).toEqual(['rgb(10, 20, 30)', 'rgb(40, 50, 60)'])
+    releaseSettings()
+    releaseSettings()
+    expect([top(), bottom()]).toEqual(['rgb(250, 250, 248)', 'rgb(250, 250, 248)'])
+    edges.dispose()
+  })
+
+  it('restores an outer surface when the surfaces close out of order', () => {
+    tokens('rgb(250, 250, 248)', 'rgb(240, 240, 238)')
+    const edges = new EdgeController(document, window)
+    const outer = pushEdgeSurface(document, { top: 'rgb(1, 1, 1)', bottom: 'rgb(2, 2, 2)' })
+    const inner = pushEdgeSurface(document, { top: 'rgb(3, 3, 3)', bottom: 'rgb(4, 4, 4)' })
+    outer()
+    expect(document.documentElement.style.getPropertyValue('--edge-top-background')).toBe('rgb(3, 3, 3)')
+    inner()
+    expect(document.documentElement.style.getPropertyValue('--edge-top-background')).toBe('rgb(250, 250, 248)')
+    edges.dispose()
   })
 })

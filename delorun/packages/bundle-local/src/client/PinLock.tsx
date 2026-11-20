@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import {
   Button, IconCloseCircleFillRegular, IconInfoOutlineRegular, IconLinkOutlineRegular, IconPauseOutlineRegular,
-  IconShieldOutlineRegular, IconWarningOutlineRegular,
+  IconShieldOutlineRegular, IconWarningOutlineRegular, useSurfaceEdges,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PinOutcome, PinSource } from './pin-lock.ts'
@@ -70,6 +70,8 @@ function reducedMotion(): boolean {
 export function PinLock({ usePin, unlock, dismiss, t }: PinLockProps): ReactNode {
   const view = usePin(current => current)
   const [value, setValue] = useState('')
+  const cover = useRef<HTMLDivElement>(null)
+  useSurfaceEdges(cover, true)
   const inputRef = useRef<HTMLInputElement>(null)
   const locked = view.phase === 'locked' && view.asked
   const removed = view.outcome?.kind === 'removed'
@@ -98,7 +100,7 @@ export function PinLock({ usePin, unlock, dismiss, t }: PinLockProps): ReactNode
   const notice = outcome === undefined || outcome.kind === 'removed' || outcome.kind === 'wrong' ? undefined : NOTICE_OF[outcome.kind]
   // Each wrong answer is a new outcome object, so the shake restarts; a person who asked for less motion sees none.
   const shake = wrong && !reducedMotion()
-  return <div className={css.cover} role="dialog" aria-modal="true" aria-labelledby="delorun-pin-title" data-pin-lock={removed ? 'removed' : outcome?.kind ?? 'ask'}>
+  return <div ref={cover} className={css.cover} role="dialog" aria-modal="true" aria-labelledby="delorun-pin-title" data-pin-lock={removed ? 'removed' : outcome?.kind ?? 'ask'}>
     <form className={css.card} onSubmit={submit}>
       <div className={css.brand}><DelorunBrandMark size={22} /><span>{BRAND_NAME}</span></div>
       <div className={css.badge} data-removed={removed ? '' : undefined}>
