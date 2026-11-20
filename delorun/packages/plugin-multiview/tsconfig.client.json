@@ -8,6 +8,7 @@
   "include": [
     "src/client",
     "src/layout",
+    "src/phone",
     "src/store",
     "src/css-modules.d.ts"
   ],
