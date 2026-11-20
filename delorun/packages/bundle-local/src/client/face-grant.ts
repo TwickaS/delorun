@@ -58,3 +58,21 @@ export function createFaceGrantSource(): FaceGrantSource {
     settle,
   }
 }
+
+/**
+ * The grant id a confirmation skipped under a live Face ID pass resolves with. It is no grant: the home admits the call
+ * by the pass and ignores `Delorun-Grant`; if the pass ended in between, the home refuses the call as without a grant.
+ */
+export const PASS_GRANT_ID = 'pass'
+
+/**
+ * The proactive confirmation for callers that ask before they send (Changes, Update, a seat's answer): while this page's
+ * Face ID pass covers the action it resolves with {@link PASS_GRANT_ID} and shows no sheet; otherwise it asks. A call the
+ * home already refused goes through `grant` itself, never through this, since the refusal means the home holds no pass.
+ * @param grant - the queued confirmation.
+ * @param pass - the page's pass mirror.
+ * @returns the confirmation.
+ */
+export function passAware(grant: FaceGrant, pass: { readonly covers: (action: string) => boolean }): FaceGrant {
+  return request => (request.signal?.aborted !== true && pass.covers(request.action) ? Promise.resolve(PASS_GRANT_ID) : grant(request))
+}

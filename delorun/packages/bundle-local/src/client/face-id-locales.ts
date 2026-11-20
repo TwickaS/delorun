@@ -176,13 +176,24 @@ export const en = {
   'devices.add': 'Add Face ID',
   'devices.removePasskey': 'Remove {method}',
   'devices.removeOther': 'Remove device',
+  'lasts.pass': 'Strong actions on this phone for {minutes} minutes',
+  'pass.chip': 'Unlocked · {minutes} min',
+  'pass.chipLabel': 'Strong actions on this phone go without Face ID for {minutes} more minutes',
+  'pass.lockNow': 'Lock now',
+  'pass.setting': 'Ask again after',
+  'pass.settingHelp': 'One Face ID lets strong actions on that phone go without asking again for this long. Adding or removing devices and passkeys, these settings and remote access always ask.',
+  'pass.everyTime': 'Every time',
+  'pass.minutes': '{minutes} min',
+  'pass.saveFailed': 'The change was not saved. Try again.',
+  'do.passSetting.title': 'Change how long Face ID lasts?',
+  'do.passSetting.body': 'Sets how long one Face ID lets strong actions go without asking again, on every phone.',
 }
 
 /** The Changes and update controls whose confirmation has its own words; any other control uses the generic ones. */
 export const CHANGE_CONTROLS = ['plugin-undo', 'plugin-discard', 'harness-discard', 'plugin-apply', 'plugin-other', 'harness-apply', 'harness-undo', 'protection-off', 'make-copy', 'restart', 'update-begin', 'update-rollback', 'stop'] as const
 
 /** The confirmations of other sensitive actions that have their own words: `do.<id>.title` and `do.<id>.body`. */
-export type FaceActionCopy = 'installPlugin' | 'updatePlugin' | 'removePlugin' | 'switchPlugin' | 'changePlugins' | 'openTerminal' | 'browseFolders' | 'newFolder' | 'changeSettings' | 'saveKey' | 'removeKey' | 'addWorkspace' | 'workspaceDefaults' | 'chatOutside' | 'runCommand' | 'mcpServer' | 'pluginCode' | 'fullAccessOn' | 'fullAccessOnChat' | 'fullAccessOff' | 'network' | 'mcpAccept' | 'externalAgent' | 'deleteForever' | 'awayBrowser' | 'reportDetails' | 'profileSave' | 'profileSwitch' | 'seatAnswer' | 'generic'
+export type FaceActionCopy = 'installPlugin' | 'updatePlugin' | 'removePlugin' | 'switchPlugin' | 'changePlugins' | 'openTerminal' | 'browseFolders' | 'newFolder' | 'changeSettings' | 'saveKey' | 'removeKey' | 'addWorkspace' | 'workspaceDefaults' | 'chatOutside' | 'runCommand' | 'mcpServer' | 'pluginCode' | 'fullAccessOn' | 'fullAccessOnChat' | 'fullAccessOff' | 'network' | 'mcpAccept' | 'externalAgent' | 'deleteForever' | 'awayBrowser' | 'reportDetails' | 'profileSave' | 'profileSwitch' | 'seatAnswer' | 'passSetting' | 'generic'
 
 /**
  * The words of each grant action, by the action's name: a Remote method or a Fetch route's action. An action this map
@@ -191,6 +202,7 @@ export type FaceActionCopy = 'installPlugin' | 'updatePlugin' | 'removePlugin' |
 export const ACTION_COPY: Readonly<Record<string, FaceActionCopy>> = {
   'pluginManager/installBundle': 'installPlugin',
   'plugin-agent-seats/answer': 'seatAnswer',
+  'auth/passkey/pass': 'passSetting',
   'pluginManager/updateBundle': 'updatePlugin',
   'pluginManager/removeBundle': 'removePlugin',
   'pluginManager/setBundleEnabled': 'switchPlugin',

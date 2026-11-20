@@ -6,6 +6,7 @@
  */
 import { call, fields, isBoolean, isRecord, isRefused, isString, isTime, listOf, optional, orNull, type Check, type HostFetch } from './host-api.ts'
 import { DEVICE_ROUTES, readDevices } from './devices-api.ts'
+import { PASS_CHANGED } from './face-id-pass.ts'
 import type {
   AssertionResponseJSON, CreationOptionsJSON, GrantTicket, PasskeyApi, PasskeyDevice, PasskeyEntry, PendingAdd, RegistrationResponseJSON, RequestOptionsJSON,
 } from './face-id-types.ts'
@@ -47,7 +48,12 @@ export function httpPasskeyApi(fetch: HostFetch): PasskeyApi {
   return {
     state: () => call<{ passkeys: PasskeyEntry[]; ticket: boolean }>(fetch, PASSKEY_ROUTES.state, isState),
     options: request => call<RequestOptionsJSON>(fetch, PASSKEY_ROUTES.options, fields({ challenge: isString, rpId: isString }), request),
-    verify: (response: AssertionResponseJSON) => call<GrantTicket>(fetch, PASSKEY_ROUTES.verify, isGrant, response),
+    async verify(response: AssertionResponseJSON) {
+      const ticket = await call<GrantTicket>(fetch, PASSKEY_ROUTES.verify, isGrant, response)
+      // A verified Face ID may have opened this device's pass; the page's pass mirror reads it again.
+      globalThis.window?.dispatchEvent(new Event(PASS_CHANGED))
+      return ticket
+    },
     pin: request => call<GrantTicket>(fetch, PASSKEY_ROUTES.pin, isGrant, request),
     registerOptions: () => call<CreationOptionsJSON>(fetch, PASSKEY_ROUTES.registerOptions, fields({ challenge: isString, rp: isRecordCheck }), {}),
     register: (response: RegistrationResponseJSON) => call<PasskeyEntry>(fetch, PASSKEY_ROUTES.register, isEntry, response),

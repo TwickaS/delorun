@@ -11,6 +11,7 @@ import { httpPasskeyApi } from './face-id-api.ts'
 import { browserPasskeys, faceIdKindOf, type PasskeyBrowser } from './face-id-browser.ts'
 import { hashArgs, hashRequest } from './face-id-hash.ts'
 import { ACTION_COPY, CHANGE_CONTROLS, type FaceActionCopy } from './face-id-locales.ts'
+import { PASS_SETTING_ACTION } from './face-id-pass.ts'
 import type { FaceIdAction, PasskeyApi } from './face-id-types.ts'
 import { FaceIdGrantFlow } from './FaceIdGrantFlow.tsx'
 import type { FaceGrantSource } from './face-grant.ts'
@@ -85,7 +86,7 @@ function lastSegment(path: string): string {
 }
 
 /**
- * The sheet's words and grant for one call.
+ * The sheet's words and grant for one call. The pass setting takes Face ID itself, so its sheet offers no PIN keypad.
  * @param t - the copy.
  * @param request - the call, its action and the hold it opens.
  * @returns the action, with the grant hashed from the call.
@@ -94,7 +95,7 @@ export async function callActionOf(t: PropsLocale<'delorunFaceId'>['t'], request
   // An answer grant is bound to its prompt and value, which the home compares itself; it has no hash.
   if ('answer' in request.call) return { ...wordsOf(t, request), grant: { answer: request.call.answer } }
   const hash = 'args' in request.call ? await hashArgs(request.call.args) : await hashRequest(request.call)
-  return { ...wordsOf(t, request), grant: { actions: [{ action: request.action, hash, ...request.hold === undefined ? {} : { hold: request.hold } }] } }
+  return { ...wordsOf(t, request), grant: { actions: [{ action: request.action, hash, ...request.hold === undefined ? {} : { hold: request.hold } }] }, ...request.action === PASS_SETTING_ACTION ? { noPin: true as const } : {} }
 }
 
 /**
