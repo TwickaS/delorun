@@ -17,7 +17,7 @@ const [width, height] = size.split('x').map(Number) as [number, number]
 const surfaces = JSON.parse(readFileSync(scriptPath, 'utf8')) as Surface[]
 
 const browser = await webkit.launch()
-const context = await browser.newContext({ ...devices['iPhone 15'], viewport: { width, height }, colorScheme: scheme === 'dark' ? 'dark' : 'light' })
+const context = await browser.newContext({ ...(width < 768 ? devices['iPhone 15'] : {}), viewport: { width, height }, colorScheme: scheme === 'dark' ? 'dark' : 'light' })
 const page = await context.newPage()
 const origin = new URL(url).origin
 await page.goto(origin + '/').catch(() => undefined)

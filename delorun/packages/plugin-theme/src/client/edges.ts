@@ -1,7 +1,8 @@
 /**
  * Seamless backgrounds on mobile Safari. Safari paints a fixed element's background behind its status bar and bottom
  * toolbar, and needs 5px of a strip showing on screen to read it, so two fixed strips 12px tall, 7px off screen and above the page, one colour calculated once and applied to the strips, the `html` and `body`
- * backgrounds and the `theme-color` meta tag, make the browser's chrome continue the studio.
+ * backgrounds and the `theme-color` meta tag, make the browser's chrome continue the studio. A desktop window with a
+ * fine pointer has no such bars, so the strips are hidden there and the header art reaches the window's top edge.
  *
  * The top colour is the studio's top edge: the main header at phone width, the sidebar header beside the main column
  * above it. The bottom colour is the composer area's background. Both are read from the active theme's tokens.
@@ -156,6 +157,9 @@ export class EdgeController {
     html.style.background = colours.top
     this.doc.body.style.background = colours.bottom
     this.ownThemeColor.content = colours.top
+    // Strips draw a visible 5px band over the header art; they are for a touch device's bars, which a desktop window has none of.
+    const coarse = typeof this.win.matchMedia === 'function' && this.win.matchMedia('(pointer: coarse)').matches
+    for (const strip of this.strips) strip.hidden = !(phone || coarse)
   }
 
   /** Remove the strips and listeners and restore every style and tag this controller changed. */

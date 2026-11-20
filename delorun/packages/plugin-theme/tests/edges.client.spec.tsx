@@ -66,6 +66,10 @@ describe('the edge controller', () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 })
     window.dispatchEvent(new Event('resize'))
     expect(document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.content).toBe('rgb(240 240 238)')
+    expect([...document.querySelectorAll<HTMLElement>(`div[${EDGE_ATTRIBUTE}]`)].map(strip => strip.hidden)).toEqual([true, true])
+    Object.defineProperty(window, 'matchMedia', { configurable: true, value: () => Object.assign(new EventTarget(), { matches: true }) })
+    edges.refresh()
+    expect([...document.querySelectorAll<HTMLElement>(`div[${EDGE_ATTRIBUTE}]`)].map(strip => strip.hidden)).toEqual([false, false])
     edges.dispose()
   })
 
