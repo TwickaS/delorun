@@ -13,7 +13,7 @@
  *
  * @module local-smoke
  */
-import { execFileSync } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -94,6 +94,22 @@ export function parseLocalSmokeArgs(argv: readonly string[]): LocalSmokeRequest 
 }
 
 /**
+ * Run a command to its end with its output on this process's.
+ * @param executable - the program.
+ * @param args - its arguments.
+ * @param cwd - its working directory.
+ * @throws Error when it exits with a status other than 0.
+ */
+async function signed(executable: string, args: readonly string[], cwd: string): Promise<void> {
+  const status = await new Promise<number | null>((settle, fail) => {
+    const child = spawn(executable, [...args], { cwd, stdio: 'inherit' })
+    child.on('error', fail)
+    child.on('close', settle)
+  })
+  if (status !== 0) throw new Error(`${executable} ${args.slice(0, 2).join(' ')} exited ${String(status)}`)
+}
+
+/**
  * Sign the two releases into a new channel and run the installed smoke on it.
  * @param request - the request.
  * @param say - prints one line.
@@ -115,14 +131,17 @@ export async function runLocalSmoke(request: LocalSmokeRequest, say: (line: stri
     writeFileSync(root, trusted.root)
     const channel = join(work, 'channel')
     const state = join(work, 'timestamp-state.json')
-    for (const [version, closure] of [[request.previousVersion, request.previousClosure], [request.version, request.closure]] as const) {
+    // The previous release is only the update's starting point, and a published one may carry its builder's paths; the candidate is refused if it does.
+    for (const [version, closure, starting] of [[request.previousVersion, request.previousClosure, true], [request.version, request.closure, false]] as const) {
       say(`local smoke: signing ${version} from ${closure}`)
-      execFileSync(join(repository, 'node_modules/.bin/tsx'), [
+      // The stand-in log runs in this process, so the signing command must not block its event loop.
+      await signed(join(repository, 'node_modules/.bin/tsx'), [
         'delorun/apps/release/src/local-release.ts', '--version', version, '--summary', `local smoke ${version}`,
         '--out', channel, '--root', root, '--targets-key', targets, '--timestamp-key', timestamp, '--state', state,
         '--log-submit', log.endpoints.submit, '--log-checkpoint', log.endpoints.checkpoint, '--log-tiles', log.endpoints.tiles,
         '--log-poll-seconds', '1', '--closures-from', closure,
-      ], { cwd: repository, stdio: 'inherit' })
+        ...starting ? ['--allow-builder-paths'] : [],
+      ], repository)
     }
     return await runSmoke({
       channel,
@@ -134,6 +153,7 @@ export async function runLocalSmoke(request: LocalSmokeRequest, say: (line: stri
       log: request.log ?? join(work, 'installed-smoke.log'),
       keepGoing: false,
       keepHome: request.keep,
+      logOrigin: log.origin,
       keys,
     }, say)
   } finally {

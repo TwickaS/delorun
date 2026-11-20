@@ -246,6 +246,11 @@ describe('the command line', () => {
     expect(request).toMatchObject({ channel: 'http://127.0.0.1:18431', version: '0.1.0-preview.1.6', launcher: undefined, channelPort: 18981, studioPort: 18982, budgetMinutes: 30, keepGoing: false, keys: undefined })
   })
 
+  it('takes a release log origin for a channel whose root names a log of this computer', () => {
+    expect(parseSmokeArgs(['--channel', 'x', '--version', '0.1.0', '--log-origin', 'http://127.0.0.1:19999']).logOrigin).toBe('http://127.0.0.1:19999')
+    expect(parseSmokeArgs(['--channel', 'x', '--version', '0.1.0']).logOrigin).toBeUndefined()
+  })
+
   it('keeps the scratch home only when asked to', () => {
     expect(parseSmokeArgs(['--channel', 'x', '--version', '0.1.0', '--keep-home']).keepHome).toBe(true)
     expect(parseSmokeArgs(['--channel', 'x', '--version', '0.1.0', '--keep-going']).keepHome).toBe(false)

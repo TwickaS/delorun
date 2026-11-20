@@ -4,7 +4,7 @@
  * with no model key and no model request. `cut-rc.ts` runs it as its last step.
  *
  * `tsx delorun/apps/release/scripts/installed-smoke.ts --channel <dir|origin> --version <v> [--launcher <tgz>]
- * [--keys <dir>] [--channel-port <n>] [--studio-port <n>] [--budget-minutes <n>] [--log <file>] [--keep-going] [--keep-home]`
+ * [--keys <dir>] [--channel-port <n>] [--studio-port <n>] [--budget-minutes <n>] [--log <file>] [--keep-going] [--keep-home] [--log-origin <origin>]`
  *
  * A channel directory is served read-only on `127.0.0.1:<channel-port>` for the run, and the launcher is built from
  * this checkout for that origin (`npm-launcher/src/build.ts`). An origin is used as it is, with a launcher built for it
@@ -76,6 +76,8 @@ export interface SmokeRequest {
   readonly keys: string | undefined
   /** Keep the scratch directory after a failed run, and after a passing one too when `--keep-home` is given. */
   readonly keepHome: boolean
+  /** The release log's origin the launchers are built for, when the channel's root names a log of this computer; the root's own log by default. */
+  readonly logOrigin: string | undefined
 }
 
 /** Lines of the home log a failed run prints. */
@@ -112,6 +114,7 @@ export function parseSmokeArgs(argv: readonly string[]): SmokeRequest {
       'keep-going': { type: 'boolean', default: false },
       'keys': { type: 'string' },
       'keep-home': { type: 'boolean', default: false },
+      'log-origin': { type: 'string' },
     },
   })
   if (values.channel === undefined || values.channel === '') throw new Error('pass --channel <dir|origin>')
@@ -135,6 +138,7 @@ export function parseSmokeArgs(argv: readonly string[]): SmokeRequest {
     keepGoing: values['keep-going'],
     keys: values.keys === undefined ? undefined : resolve(values.keys),
     keepHome: values['keep-home'],
+    logOrigin: values['log-origin'],
   }
 }
 
@@ -415,7 +419,7 @@ export async function runSmoke(request: SmokeRequest, say: (line: string) => voi
     if (launcher === undefined) {
       const out = join(scratch, 'launcher')
       const roots = await channelRoots(source, join(scratch, 'roots'))
-      const built = await command(join(repository, 'node_modules/.bin/tsx'), ['delorun/apps/npm-launcher/src/build.ts', ...roots.flatMap(file => ['--root', file]), '--out', out, '--channel-origin', origin, '--package-version', request.version], 300_000, environment, repository)
+      const built = await command(join(repository, 'node_modules/.bin/tsx'), ['delorun/apps/npm-launcher/src/build.ts', ...roots.flatMap(file => ['--root', file]), '--out', out, '--channel-origin', origin, ...request.logOrigin === undefined ? [] : ['--log-origin', request.logOrigin], '--package-version', request.version], 300_000, environment, repository)
       if (built.status !== 0) throw new StepFailure(`the launcher build failed:\n${built.output.trim().split('\n').slice(-15).join('\n')}`)
       launcher = join(out, `delorun-${request.version}.tgz`)
     }
@@ -487,7 +491,7 @@ export async function runSmoke(request: SmokeRequest, say: (line: string) => voi
         extraHomes.push(upgradePaths.delorun)
         const oldLauncher = join(scratch, 'launcher-previous')
         const roots = await channelRoots(source, join(scratch, 'roots-previous'))
-        const built = await command(join(repository, 'node_modules/.bin/tsx'), ['delorun/apps/npm-launcher/src/build.ts', ...roots.flatMap(file => ['--root', file]), '--out', oldLauncher, '--channel-origin', origin, '--package-version', previous], 300_000, environment, repository)
+        const built = await command(join(repository, 'node_modules/.bin/tsx'), ['delorun/apps/npm-launcher/src/build.ts', ...roots.flatMap(file => ['--root', file]), '--out', oldLauncher, '--channel-origin', origin, ...request.logOrigin === undefined ? [] : ['--log-origin', request.logOrigin], '--package-version', previous], 300_000, environment, repository)
         if (built.status !== 0) throw new StepFailure(`the launcher build for ${previous} failed:\n${built.output.trim().split('\n').slice(-15).join('\n')}`)
         // From here every command runs in the upgrade home, with the previous release's launcher.
         launcher = join(oldLauncher, `delorun-${previous}.tgz`)
