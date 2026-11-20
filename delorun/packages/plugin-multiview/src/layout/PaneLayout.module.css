@@ -1,0 +1,205 @@
+/* The layout fills its parent: no padding, no gaps, so the panes use the whole screen. Hashed class names are the library's styling hooks. */
+.root {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.workspace {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.tabset {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  background: var(--dsw-alias-bg-base);
+  border: 1px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-md);
+  overflow: hidden;
+}
+
+.tabset:focus-within {
+  border-color: var(--dsw-alias-brand-primary);
+}
+
+.header {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  background: var(--dsw-alias-bg-layer-1);
+  border-bottom: 1px solid var(--dsw-alias-border-l3);
+}
+
+.toolbar {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  min-width: 0;
+}
+
+.panels {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 var(--delorun-space-3, 8px);
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.tab[data-tab-selected] {
+  color: var(--dsw-alias-label-primary);
+  box-shadow: inset 0 -2px 0 var(--dsw-alias-brand-primary);
+}
+
+.grip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  /* A finger-sized target on touch screens, a compact one with a mouse. */
+  min-width: 28px;
+  min-height: 32px;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: grab;
+  touch-action: none;
+}
+
+.grip:hover,
+.grip:focus-visible {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.grip:focus-visible {
+  outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-brand-primary));
+  outline-offset: -2px;
+}
+
+.grip[data-disabled] {
+  display: none;
+}
+
+/* The divider is a thin line with a wider hit area: 12 px under a mouse, 24 px under a finger. */
+.separator {
+  position: relative;
+  flex: none;
+  background: transparent;
+  touch-action: none;
+}
+
+.separator[aria-orientation='vertical'] {
+  width: 12px;
+  margin: 0 -6px;
+  z-index: 1;
+  cursor: col-resize;
+}
+
+.separator[aria-orientation='horizontal'] {
+  height: 12px;
+  margin: -6px 0;
+  z-index: 1;
+  cursor: row-resize;
+}
+
+.separator::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  background: var(--dsw-alias-brand-primary);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.separator[aria-orientation='vertical']::after {
+  width: 3px;
+  height: 36px;
+  border-radius: 2px;
+}
+
+.separator[aria-orientation='horizontal']::after {
+  width: 36px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+.separator:hover::after,
+.separator:focus-visible::after,
+.separator[data-separator='active']::after {
+  opacity: 1;
+}
+
+.separator:focus-visible {
+  outline: none;
+}
+
+@media (pointer: coarse) {
+  .separator[aria-orientation='vertical'] {
+    width: 24px;
+    margin: 0 -12px;
+  }
+
+  .separator[aria-orientation='horizontal'] {
+    height: 24px;
+    margin: -12px 0;
+  }
+
+  .grip {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+.dropIndicator {
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 18%, transparent);
+  border: 2px solid var(--dsw-alias-brand-primary);
+  border-radius: var(--dsw-radius-md);
+  pointer-events: none;
+  transition: inset 120ms ease, opacity 120ms ease;
+}
+
+.dragPreview {
+  padding: 4px 10px;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-layer-1);
+  border: 1px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-md);
+  pointer-events: none;
+}

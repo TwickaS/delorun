@@ -1,0 +1,35 @@
+/* Pin button on an agents-list row, the header's Multiview button and Layout menu, and the popover footer. */
+.pin { flex: none; display: inline-grid; place-items: center; width: 24px; height: 24px; margin-inline-start: 6px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer; }
+.pin:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(0, 0, 0, .06)); color: var(--dsw-alias-label-primary); }
+.pin:focus-visible { outline: 2px solid var(--dsw-alias-accent, var(--delorun-badge-blue, #3b82f6)); outline-offset: 1px; }
+.pin[data-pinned] { color: var(--dsw-alias-accent, var(--delorun-badge-blue, #3b82f6)); }
+.pin[aria-disabled='true'] { opacity: .45; cursor: not-allowed; }
+.pin[aria-disabled='true']:hover { background: transparent; color: var(--dsw-alias-label-secondary); }
+
+.group { display: inline-flex; align-items: center; flex: none; gap: 2px; }
+.button { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 13px; font-weight: 500; white-space: nowrap; cursor: pointer; }
+.button:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(0, 0, 0, .06)); }
+.button:focus-visible { outline: 2px solid var(--dsw-alias-accent, var(--delorun-badge-blue, #3b82f6)); outline-offset: 1px; }
+.button[aria-pressed='true'] { background: var(--dsw-alias-interactive-bg-selected, rgba(0, 0, 0, .08)); }
+.button[aria-disabled='true'] { opacity: .5; cursor: not-allowed; }
+.count { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; display: inline-grid; place-items: center; font-size: 11px; font-variant-numeric: tabular-nums; background: var(--dsw-alias-interactive-bg-hover, rgba(0, 0, 0, .08)); }
+.dot { position: absolute; inset-block-start: 3px; inset-inline-end: 3px; width: 8px; height: 8px; border-radius: 50%; background: var(--delorun-badge-amber, #e0a100); box-shadow: 0 0 0 2px var(--dsw-alias-bg-primary, #fff); }
+.layoutButton { width: 24px; padding: 0; justify-content: center; }
+
+.footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--dsw-alias-border-primary, rgba(0, 0, 0, .1)); }
+.status { flex: 1 1 auto; min-width: 0; font-size: 12px; color: var(--dsw-alias-label-secondary); }
+.footerButton { flex: none; height: 28px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-primary, rgba(0, 0, 0, .15)); background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.footerButton:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(0, 0, 0, .06)); }
+.footerButton[aria-disabled='true'] { opacity: .5; cursor: not-allowed; }
+.footerButton:focus-visible { outline: 2px solid var(--dsw-alias-accent, var(--delorun-badge-blue, #3b82f6)); outline-offset: 2px; }
+.footerPrimary { background: var(--dsw-alias-accent, var(--delorun-badge-blue, #3b82f6)); border-color: transparent; color: #fff; }
+.footerPrimary:hover { background: var(--dsw-alias-accent, var(--delorun-badge-blue, #3b82f6)); filter: brightness(1.08); }
+.hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* The sidebar's drawer breakpoint: the header keeps the icon, the count and the dot. */
+@media (max-width: 768px) {
+  .label { display: none; }
+  .button { padding: 0 6px; }
+  .footer { padding: 8px; }
+  .footerButton { flex: 1 1 auto; }
+}
