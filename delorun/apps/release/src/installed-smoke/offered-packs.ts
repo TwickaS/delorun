@@ -73,15 +73,14 @@ export function packsForPlatform(packs: readonly PackPlatforms[], platform: Runt
 }
 
 /**
- * The packs a release offers a platform, from its verified packs file.
+ * The verified packs file of a release.
  * @param source - the channel.
  * @param version - the release.
- * @param platform - the platform.
  * @param now - the clock in Unix seconds, for the root's expiry.
- * @returns the pack names, sorted; empty when the release publishes no packs file.
+ * @returns the pack entries; empty when the release publishes no packs file.
  * @throws Error when the channel has no root or no manifest for the release, or a signature or binding check fails.
  */
-export async function offeredPacks(source: ChannelSource, version: string, platform: RuntimePlatform, now: number): Promise<string[]> {
+async function verifiedPackEntries(source: ChannelSource, version: string, now: number): Promise<readonly PackEntry[]> {
   const roots: Uint8Array[] = []
   for (let index = 1; index <= MAX_ROOTS; index++) {
     const bytes = await source.read(`root/${String(index)}.root.json`)
@@ -95,5 +94,44 @@ export async function offeredPacks(source: ChannelSource, version: string, platf
   if (manifest === undefined) throw new Error(`${source.label} has no manifest for ${version}`)
   const packs = await source.read(`${directory}/${packsName(version)}`)
   if (packs === undefined) return []
-  return packsForPlatform(verifyPacks(root.metadata, manifest, packs).packs, platform)
+  return verifyPacks(root.metadata, manifest, packs).packs
+}
+
+/**
+ * The packs a release offers a platform, from its verified packs file.
+ * @param source - the channel.
+ * @param version - the release.
+ * @param platform - the platform.
+ * @param now - the clock in Unix seconds, for the root's expiry.
+ * @returns the pack names, sorted; empty when the release publishes no packs file.
+ * @throws Error when the channel has no root or no manifest for the release, or a signature or binding check fails.
+ */
+export async function offeredPacks(source: ChannelSource, version: string, platform: RuntimePlatform, now: number): Promise<string[]> {
+  return packsForPlatform(await verifiedPackEntries(source, version, now), platform)
+}
+
+/**
+ * The packs whose signed files differ between two releases, for a platform.
+ * @param source - the channel.
+ * @param from - the release an update starts from.
+ * @param to - the release an update installs.
+ * @param platform - the platform.
+ * @param now - the clock in Unix seconds, for the root's expiry.
+ * @returns the names of the packs `from` offers whose signed files (path, SHA-256 and executable bit) are not exactly
+ *   those `to` lists for them, including a pack `to` no longer offers.
+ * @throws Error when either release's packs file cannot be read or verified.
+ */
+export async function packsChangedBetween(source: ChannelSource, from: string, to: string, platform: RuntimePlatform, now: number): Promise<Set<string>> {
+  const fingerprint = (entry: PackEntry | undefined): string | undefined => {
+    const variant = entry?.variants[platform] ?? entry?.variants.any
+    return variant === undefined ? undefined : JSON.stringify(variant.files.map(file => [file.path, file.sha256, file.mode]).sort())
+  }
+  const older = await verifiedPackEntries(source, from, now)
+  const newer = new Map((await verifiedPackEntries(source, to, now)).map(entry => [entry.name, entry]))
+  const changed = new Set<string>()
+  for (const entry of older) {
+    const before = fingerprint(entry)
+    if (before !== undefined && before !== fingerprint(newer.get(entry.name))) changed.add(entry.name)
+  }
+  return changed
 }

@@ -17,15 +17,19 @@ interface LogEntry {
  * The problems of a profile's change log after an update.
  * @param text - the text of `changes/profiles/<profile>/log.json`.
  * @param plugins - the package names of the packs installed before the update.
- * @returns one line per pack that has no applied entry decided by the update, or has a change still waiting; empty when
- *   the update's baseline applied to every pack and nothing waits.
+ * @param changed - the packs whose signed files differ between the previous release and the new one
+ *   (`packsChangedBetween`). The update applies a change only to those packs; a pack with equal files has nothing to replace.
+ * @returns one line per pack that has a change waiting; that is in `changed` and has no applied entry decided by the
+ *   update; or is not in `changed` and has one. Empty when the log is as the release pair requires.
  */
-export function updateChangeProblems(text: string, plugins: readonly string[]): string[] {
+export function updateChangeProblems(text: string, plugins: readonly string[], changed: ReadonlySet<string>): string[] {
   const entries = ((JSON.parse(text) as { entries?: readonly LogEntry[] }).entries ?? [])
   const problems: string[] = []
   for (const plugin of plugins) {
     const own = entries.filter(entry => entry.subject?.plugin === plugin)
-    if (!own.some(entry => entry.state === 'applied' && entry.decidedFrom === 'update')) problems.push(`${plugin}: the change log has no change applied by the update`)
+    const applied = own.some(entry => entry.state === 'applied' && entry.decidedFrom === 'update')
+    if (changed.has(plugin) && !applied) problems.push(`${plugin}: the change log has no change applied by the update`)
+    if (!changed.has(plugin) && applied) problems.push(`${plugin}: the change log has a change applied by the update, but the release's signed files for the pack are unchanged`)
     if (own.some(entry => entry.state === 'pending')) problems.push(`${plugin}: a change waits for review after the update`)
   }
   return problems

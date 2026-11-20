@@ -16,7 +16,7 @@ import { signEnvelope } from '@delorun/release-formats/sign/envelope'
 import { toJsonValue } from '@delorun/release-formats/sign/json'
 import { updateChangeProblems } from '../../src/installed-smoke/changes-log.ts'
 import { BENIGN_LOG_LINES, FORBIDDEN_LOG_LINES, logProblems } from '../../src/installed-smoke/home-log.ts'
-import { channelSource, offeredPacks, packsForPlatform } from '../../src/installed-smoke/offered-packs.ts'
+import { channelSource, offeredPacks, packsChangedBetween, packsForPlatform } from '../../src/installed-smoke/offered-packs.ts'
 import { HOME_LOG_TAIL_LINES, installsState, loadProblems, parseSmokeArgs, redactTokens, smokeEnvironment, stopLeftover, tailLines } from '../../scripts/installed-smoke.ts'
 import { PacksSnapshot, readAnswer } from '../../src/installed-smoke/wire.ts'
 import { manifestContent, rootFile, throwawayKeys } from '../sign/fixture.ts'
@@ -31,27 +31,34 @@ afterEach(() => {
 })
 
 /** A pack entry with the given variants; the variant bodies are not read by the list. */
-function pack(name: string, platforms: readonly string[]) {
-  const variant = { archive: { name: `${name}.tar.gz`, length: 1, sha256: '0'.repeat(64), sha512: `${'A'.repeat(86)}==` }, files: [], external: [], peers: [] }
+function pack(name: string, platforms: readonly string[], files: readonly { path: string, sha256: string, mode: string, length: number }[] = []) {
+  const variant = { archive: { name: `${name}.tar.gz`, length: 1, sha256: '0'.repeat(64), sha512: `${'A'.repeat(86)}==` }, files, external: [], peers: [] }
   return { name, version: '1.0.0', experimental: false, variants: Object.fromEntries(platforms.map(platform => [platform, variant])) }
 }
 
-/** A channel directory with one root, one release's manifest and, unless `packs` is undefined, its packs file. */
-function channel(packs: readonly ReturnType<typeof pack>[] | undefined, sign: 'targets' | 'other' = 'targets'): string {
+/** A channel directory with one root and, for each release, its manifest and, unless its packs are undefined, its packs file. */
+function releases(byVersion: Readonly<Record<string, readonly ReturnType<typeof pack>[] | undefined>>, sign: 'targets' | 'other' = 'targets'): string {
   const keys = throwawayKeys()
   const directory = mkdtempSync(join(tmpdir(), 'installed-smoke-'))
   directories.push(directory)
   mkdirSync(join(directory, 'root'))
   writeFileSync(join(directory, 'root', '1.root.json'), rootFile(keys).bytes)
-  const release = join(directory, 'releases', 'download', 'v0.1.0')
-  mkdirSync(release, { recursive: true })
-  const manifest = envelope(manifestContent('0.1.0', Buffer.from('a')), [keys.targets])
-  writeFileSync(join(release, 'delorun-0.1.0.manifest.json'), manifest)
-  if (packs !== undefined) {
-    const signed = { schema: RELEASE_SCHEMAS.packs, version: '0.1.0', manifest: createHash('sha256').update(manifest).digest('hex'), packs }
-    writeFileSync(join(release, 'delorun-0.1.0.packs.json'), envelope(signed, [sign === 'targets' ? keys.targets : generateKeyPairSync('ed25519').privateKey]))
+  for (const [version, packs] of Object.entries(byVersion)) {
+    const release = join(directory, 'releases', 'download', `v${version}`)
+    mkdirSync(release, { recursive: true })
+    const manifest = envelope(manifestContent(version, Buffer.from('a')), [keys.targets])
+    writeFileSync(join(release, `delorun-${version}.manifest.json`), manifest)
+    if (packs !== undefined) {
+      const signed = { schema: RELEASE_SCHEMAS.packs, version, manifest: createHash('sha256').update(manifest).digest('hex'), packs }
+      writeFileSync(join(release, `delorun-${version}.packs.json`), envelope(signed, [sign === 'targets' ? keys.targets : generateKeyPairSync('ed25519').privateKey]))
+    }
   }
   return directory
+}
+
+/** A channel directory holding release 0.1.0 alone. */
+function channel(packs: readonly ReturnType<typeof pack>[] | undefined, sign: 'targets' | 'other' = 'targets'): string {
+  return releases({ '0.1.0': packs }, sign)
 }
 
 describe('the home-log check', () => {
@@ -103,6 +110,30 @@ describe('the offered packs', () => {
 
   it('filters by platform', () => {
     expect(packsForPlatform([pack('b', ['linux-arm64']), pack('a', ['any'])], 'linux-arm64')).toEqual(['a', 'b'])
+  })
+})
+
+describe('the packs two releases sign differently', () => {
+  const file = (path: string, sha256: string, mode = '0644'): { path: string, sha256: string, mode: string, length: number } => ({ path, sha256, mode, length: 1 })
+  const same = [file('package.json', 'a'.repeat(64)), file('index.js', 'b'.repeat(64))]
+  const between = (older: ReturnType<typeof pack>[], newer: ReturnType<typeof pack>[]): Promise<Set<string>> =>
+    packsChangedBetween(channelSource(releases({ '0.1.0': older, '0.2.0': newer })), '0.1.0', '0.2.0', 'linux-x64', NOW)
+
+  it('names none when every pack lists the same files, whatever their order', async () => {
+    await expect(between([pack('a', ['any'], same)], [pack('a', ['any'], [...same].reverse())])).resolves.toEqual(new Set())
+  })
+
+  it('names a pack whose file digest, executable bit or file list differs, and one the new release drops', async () => {
+    const changed = await between(
+      [pack('digest', ['any'], same), pack('mode', ['any'], same), pack('list', ['any'], same), pack('dropped', ['any'], same), pack('kept', ['any'], same)],
+      [pack('digest', ['any'], [same[0]!, file('index.js', 'c'.repeat(64))]), pack('mode', ['any'], [same[0]!, file('index.js', 'b'.repeat(64), '0755')]), pack('list', ['any'], [...same, file('extra.js', 'd'.repeat(64))]), pack('kept', ['any'], same)],
+    )
+    expect([...changed].sort()).toEqual(['dropped', 'digest', 'list', 'mode'].sort())
+  })
+
+  it('compares the variant of the platform, or `any`', async () => {
+    const changed = await between([pack('native', ['linux-x64'], same)], [pack('native', ['linux-x64'], [same[0]!])])
+    expect([...changed]).toEqual(['native'])
   })
 })
 
@@ -251,6 +282,13 @@ describe('the command line', () => {
     expect(parseSmokeArgs(['--channel', 'x', '--version', '0.1.0']).logOrigin).toBeUndefined()
   })
 
+  it('takes the release step 6 starts from, from a channel directory only', () => {
+    expect(parseSmokeArgs(['--channel', 'x', '--version', '0.1.0', '--previous', '0.1.0-preview.2.1']).previous).toBe('0.1.0-preview.2.1')
+    expect(parseSmokeArgs(['--channel', 'x', '--version', '0.1.0']).previous).toBeUndefined()
+    expect(() => parseSmokeArgs(['--channel', 'x', '--version', '0.1.0', '--previous', 'latest'])).toThrow(/--previous/u)
+    expect(() => parseSmokeArgs(['--channel', 'http://127.0.0.1:1', '--version', '0.1.0', '--previous', '0.0.9'])).toThrow(/--previous needs a channel directory/u)
+  })
+
   it('keeps the scratch home only when asked to', () => {
     expect(parseSmokeArgs(['--channel', 'x', '--version', '0.1.0', '--keep-home']).keepHome).toBe(true)
     expect(parseSmokeArgs(['--channel', 'x', '--version', '0.1.0', '--keep-going']).keepHome).toBe(false)
@@ -278,16 +316,29 @@ describe('the home log a failed run prints', () => {
 describe('the change log after an update', () => {
   const entry = (plugin: string, state: string, decidedFrom?: string): object => ({ state, subject: { plugin }, ...decidedFrom === undefined ? {} : { decidedFrom } })
   const log = (...entries: object[]): string => JSON.stringify({ entries })
+  const changed = (...names: string[]): ReadonlySet<string> => new Set(names)
 
-  it('accepts a pack whose change the update applied and nothing waiting', () => {
-    expect(updateChangeProblems(log(entry('a', 'applied', 'update')), ['a'])).toEqual([])
+  it('accepts a pack whose signed files changed and whose change the update applied, nothing waiting', () => {
+    expect(updateChangeProblems(log(entry('a', 'applied', 'update')), ['a'], changed('a'))).toEqual([])
   })
 
-  it('names a pack with no change applied by the update, and a pack with a change waiting', () => {
-    expect(updateChangeProblems(log(entry('a', 'applied', 'terminal'), entry('b', 'applied', 'update'), entry('b', 'pending')), ['a', 'b'])).toEqual([
-      'a: the change log has no change applied by the update',
-      'b: a change waits for review after the update',
-    ])
-    expect(updateChangeProblems(JSON.stringify({}), ['a'])).toEqual(['a: the change log has no change applied by the update'])
+  it('accepts a pack whose signed files are equal and that has no entry and nothing waiting', () => {
+    expect(updateChangeProblems(log(), ['a'], changed())).toEqual([])
+    expect(updateChangeProblems(JSON.stringify({}), ['a'], changed())).toEqual([])
+    expect(updateChangeProblems(log(entry('a', 'applied', 'terminal')), ['a'], changed())).toEqual([])
+  })
+
+  it('names a changed pack with no change applied by the update', () => {
+    expect(updateChangeProblems(log(entry('a', 'applied', 'terminal')), ['a'], changed('a'))).toEqual(['a: the change log has no change applied by the update'])
+    expect(updateChangeProblems(JSON.stringify({}), ['a'], changed('a'))).toEqual(['a: the change log has no change applied by the update'])
+  })
+
+  it('names an equal pack that has a change applied by the update', () => {
+    expect(updateChangeProblems(log(entry('a', 'applied', 'update')), ['a'], changed())).toEqual(['a: the change log has a change applied by the update, but the release\'s signed files for the pack are unchanged'])
+  })
+
+  it('names a change waiting for review, for a changed and for an equal pack', () => {
+    expect(updateChangeProblems(log(entry('b', 'applied', 'update'), entry('b', 'pending')), ['b'], changed('b'))).toEqual(['b: a change waits for review after the update'])
+    expect(updateChangeProblems(log(entry('c', 'pending')), ['c'], changed())).toEqual(['c: a change waits for review after the update'])
   })
 })

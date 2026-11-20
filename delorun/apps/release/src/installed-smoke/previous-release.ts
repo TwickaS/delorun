@@ -48,3 +48,21 @@ export async function previousRelease(channel: string, candidate: string): Promi
   const older = names.filter(name => name.startsWith('v')).map(name => name.slice(1)).filter(version => compareReleases(version, candidate) < 0)
   return older.sort(compareReleases).at(-1)
 }
+
+/**
+ * The release an upgrade step starts from, when the run names it.
+ * @param channel - the channel directory, with `releases/download/v<version>/` for each release.
+ * @param candidate - the release under test.
+ * @param chosen - the version the run was told to start from.
+ * @returns `chosen`.
+ * @throws Error when the channel does not hold `chosen`, or it is not older than `candidate`.
+ */
+export async function chosenPreviousRelease(channel: string, candidate: string, chosen: string): Promise<string> {
+  if (compareReleases(chosen, candidate) >= 0) throw new Error(`--previous ${chosen} is not older than ${candidate}`)
+  const held = await readdir(join(channel, 'releases', 'download')).catch((error: unknown): string[] => {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+    throw error
+  })
+  if (!held.includes(`v${chosen}`)) throw new Error(`--previous ${chosen} is not in the channel ${channel}`)
+  return chosen
+}
