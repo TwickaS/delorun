@@ -148,22 +148,18 @@ function sameEntry(left: VersionEntry | undefined, right: VersionEntry | undefin
 /**
  * @param home - the Delorun home, whose store holds the approved content's objects.
  * @param entry - an approved entry that the folder no longer holds as it is.
- * @param pools - the packs of the two releases.
  * @param origin - the pack of the release the update left.
  * @param buildPaths - whether that release may carry the build's folder names ({@link leftReleaseWithBuildPaths}).
  * @returns whether the entry is a file the release the update left signed; a `package.json` or `pnpm-lock.yaml` also
- *   counts when it equals the text of an installed, signed one apart from the build folder names ({@link withoutBuildFolder}).
+ *   counts when it equals the text of that release's installed, signed one apart from the build folder names ({@link withoutBuildFolder}).
  */
-async function signedBefore(home: string, entry: VersionEntry, pools: readonly SignedPackFiles[], origin: SignedPackFiles | undefined, buildPaths: boolean): Promise<boolean> {
-  if (entry.type !== 'file') return false
+async function signedBefore(home: string, entry: VersionEntry, origin: SignedPackFiles | undefined, buildPaths: boolean): Promise<boolean> {
+  if (entry.type !== 'file' || origin === undefined) return false
   if (signedFile(entry, origin)) return true
-  if (!buildPaths || !BUILD_PATH_FILES.has(entry.path) || entry.executable) return false
-  const text = withoutBuildFolder((await readObject(home, entry.digest)).toString('utf8'))
-  for (const pack of pools) {
-    const signed = await pack.text(entry.path)
-    if (signed !== undefined && withoutBuildFolder(signed) === text) return true
-  }
-  return false
+  // The signed file must be the same kind of file the approved one is, as the digest rule requires.
+  if (!buildPaths || !BUILD_PATH_FILES.has(entry.path) || origin.files.get(entry.path)?.executable !== entry.executable) return false
+  const signed = await origin.text(entry.path)
+  return signed !== undefined && withoutBuildFolder(signed) === withoutBuildFolder((await readObject(home, entry.digest)).toString('utf8'))
 }
 
 /** What {@link supersededByUpdate} compares. */
@@ -181,8 +177,8 @@ export interface SupersedeRequest {
  * the entries that differ are judged, by what the signed data vouches for: an entry the folder holds now must be a file
  * with the digest and execute bit the verified packs file of the release this process runs lists for it, and an
  * approved entry the folder no longer holds as it is must be a file the packs file of the release the update left
- * lists. A `package.json` or `pnpm-lock.yaml` approved from a release up to {@link LAST_RELEASE_WITH_BUILD_PATHS} also
- * counts when it equals an installed, signed one apart from the build's temporary folder names. A link, an entry the
+ * lists; an entry the approved content lacks must not be listed by that release either. A `package.json` or `pnpm-lock.yaml` approved from a release up to {@link LAST_RELEASE_WITH_BUILD_PATHS} also
+ * counts when it equals that release's installed, signed one apart from the build's temporary folder names. A link, an entry the
  * signed lists do not vouch for, a signed file the folder lacks, or a person's edit among the differing entries
  * means the change is not superseded and waits for review. The digests are the ones the scans of the approved
  * content and the folder already hold; no installed pack is hashed.
@@ -207,7 +203,8 @@ export async function supersededByUpdate(home: string, baseline: UpdateBaseline,
     if (sameEntry(approved, folder)) continue
     // The folder holds a file the release signs, or lacks a file it does not sign.
     if (folder === undefined ? target.files.has(path) : !signedFile(folder, target)) return false
-    if (approved !== undefined && !await signedBefore(home, approved, pools, origin, buildPaths)) return false
+    // An added entry must be absent from the release the update left too: a file it signs that the person deleted is the person's decision.
+    if (approved === undefined ? origin === undefined || origin.files.has(path) : !await signedBefore(home, approved, origin, buildPaths)) return false
   }
   return true
 }
