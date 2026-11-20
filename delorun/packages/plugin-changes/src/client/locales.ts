@@ -64,7 +64,7 @@ export const en = {
   'self.heading': 'Changes to Delorun itself',
   'self.empty': 'No changes to Delorun itself yet.',
   'self.intro': 'Your copy of Delorun holds your edits to Delorun\'s own files. Each edit waits here for your review, and you can undo it.',
-  'self.unavailable': 'Delorun\'s own files change only in an installed release started with delorun start. This Delorun lists the changes it knows of.',
+  'self.unavailable': 'Delorun\'s own files change only in an installed copy of Delorun. This Delorun lists the changes it knows of.',
   'self.copy.none': 'To change Delorun itself, make your copy of it. You, or an agent in a chat with full access, edit the files there, and each change waits here for your review.',
   'self.copy.make': 'Make my copy',
   'self.copy.made': 'Your copy of Delorun {version} is ready.',

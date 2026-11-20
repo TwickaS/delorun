@@ -108,6 +108,24 @@ describe('the real reach guard on a seat question', () => {
     expect(() => { answer(RUN_ANSWER) }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
   })
 
+  // A499 admits an external-agent answer of the Peer that holds a live Face ID pass; a run answer counts as an answer like Allow once (L110).
+  it('admits a for-run answer under the answering device\'s own live Face ID pass only, and refuses it after the pass ends', async () => {
+    const page = await phone(4)
+    const reach = provider()['reachPeers'].get(page.id as never)
+    if (reach === undefined) throw new Error('no reach Peer')
+    const holder = { deviceId: reach.deviceId, listener: reach.listener }
+    const question = { ...QUESTION, agent: { id: 'seat-child' }, callId: 'call_10' }
+    const answer = (value: string): void => { provider().checkAnswer({ peer: page as never, event: 'approval/request', request: question, value }) }
+    const grants = ctx.homeAuth.faceGrants()
+    if (grants === undefined) throw new Error('no grant store')
+    grants.openPass({ deviceId: 'another-device', listener: reach.listener }, 15)
+    expect(() => { answer(RUN_ANSWER) }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
+    grants.openPass(holder, 15)
+    expect(() => { answer(RUN_ANSWER) }).not.toThrow()
+    grants.endPass(holder, 'lock-now')
+    expect(() => { answer(RUN_ANSWER) }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
+  })
+
   it('accepts the computer\'s for-run answer', () => {
     expect(() => { check({ id: 'local' }, RUN_ANSWER) }).not.toThrow()
   })

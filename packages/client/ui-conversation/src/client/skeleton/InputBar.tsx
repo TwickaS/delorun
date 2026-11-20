@@ -18,6 +18,7 @@ import type { ChangeEvent, KeyboardEvent, MouseEvent } from 'react'
 import clsx from 'clsx'
 import {
   focusWithoutRing, IconPlusOutlineMedium, IconTriangleRightFillRegular, IconWarningOutlineRegular, isMobileDevice, Toast, Tooltip,
+  usePhone,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 // Type-only: the `plan` projection key merge (the TodoDock posture — the
 // composer reads a host-computed value; the domain owns the key).
@@ -425,6 +426,8 @@ export const InputBar = memo(function InputBar({
     return translated !== hintKey ? translated : rawHint
   })()
 
+  // The docked placeholder is one ellipsized line, so a phone gets the short wording instead of a cut-off hint list.
+  const phone = usePhone()
   const placeholderText = placeholder ?? (disabled
     ? t('placeholder.unavailable')
   // The steer hint deliberately outranks the plan placeholder:
@@ -432,7 +435,7 @@ export const InputBar = memo(function InputBar({
   // (the gate never consults plan mode), so the actionable hint wins.
     : canSteerQueue
       ? t('placeholder.steerQueue')
-      : planActive ? t('placeholder.plan') : t('placeholder.default'))
+      : planActive ? t('placeholder.plan') : t(phone ? 'placeholder.phone' : 'placeholder.default'))
 
   // A pane's reply box is one line: the editor and the send button, without the command, mode, model or context controls.
   const compact = occurrence === 'pane'

@@ -875,6 +875,18 @@ describe('Enter semantics', () => {
     }).placeholder).toBe('Cmd/Ctrl+Enter 插话发送全部排队消息')
   })
 
+  it('shows the short ordinary placeholder on a phone', () => {
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: (query: string) => ({ matches: true, media: query, addEventListener: () => {}, removeEventListener: () => {} }),
+    })
+    try {
+      expect(bench({}).placeholder).toBe('发消息或创建任务')
+    } finally {
+      Reflect.deleteProperty(window, 'matchMedia')
+    }
+  })
+
   it('keeps the owning placeholder or ordinary guidance when whole-queue steering is unavailable', () => {
     expect(bench({ running: true }).placeholder).toBe('发消息或创建任务, / 调用指令, @ 文件或对话')
     expect(bench({ queue: [row('q-1')] }).placeholder).toBe('发消息或创建任务, / 调用指令, @ 文件或对话')

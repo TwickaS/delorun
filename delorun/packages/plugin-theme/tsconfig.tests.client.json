@@ -2,6 +2,7 @@
   "extends": "../../../tsconfig.base.client.json",
   "compilerOptions": {
     "noEmit": true,
+    "types": ["client-build-environment", "client-assets", "node"],
     "rewriteRelativeImportExtensions": false,
     "composite": false,
     "incremental": false,

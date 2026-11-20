@@ -3,10 +3,10 @@
  * states the log moves it through, the same value after a restore and a fork, and a stable view reference.
  */
 import { createAssistantMessage } from '@deepseek-ai/dsh-llm'
-import { appendPluginRecord, buildForkSeed, SessionId, SessionLogOffset, SessionSeq, type Session, type SessionEvent } from '@deepseek-ai/dsh-session'
+import { buildForkSeed, SessionId, SessionLogOffset, SessionSeq, type Session, type SessionEvent } from '@deepseek-ai/dsh-session'
 import { describe, expect, it } from 'vitest'
 import {
-  agentSeatProjection, DEFAULT_OWN_SETTINGS, foldSeat, NO_LOGGED, NO_SHOWN, SEAT_NOTICE_RECORD, SEAT_STATE_RECORD, SEAT_STATUS_RECORD,
+  agentSeatProjection, DEFAULT_OWN_SETTINGS, foldSeat, NO_LOGGED, NO_SHOWN, SEAT_NOTICE_EVENT, SEAT_STATE_EVENT, SEAT_STATUS_EVENT,
   SeatRecords, seatStateSchema, type AgentSeatView, type SeatProjectionState,
 } from '../../src/state/index.ts'
 import { describeSeat, sessionContext } from './support.ts'
@@ -66,7 +66,7 @@ describe('the agentSeat view', () => {
   it('is null in a chat that is not a seat child', async () => {
     const h = await host()
     expect(h.view()).toBeNull()
-    appendPluginRecord(h.session, SEAT_STATUS_RECORD, { state: 'working' })
+    h.session.append(SEAT_STATUS_EVENT, { state: 'working' })
     expect(h.view()).toBeNull()
   })
 
@@ -85,17 +85,17 @@ describe('the agentSeat view', () => {
   it('moves through starting, working and idle, and keeps the program\'s version and settings once told', async () => {
     const h = await host()
     describeSeat(h.session)
-    appendPluginRecord(h.session, SEAT_STATUS_RECORD, { state: 'starting', version: '2.1.4', ownSettings: 'accept edits' })
+    h.session.append(SEAT_STATUS_EVENT, { state: 'starting', version: '2.1.4', ownSettings: 'accept edits' })
     expect(h.view()).toEqual({ agent: 'claude-code', version: '2.1.4', ownSettings: 'accept edits', state: 'starting' })
-    appendPluginRecord(h.session, SEAT_STATUS_RECORD, { state: 'working', sandbox: 'on' })
+    h.session.append(SEAT_STATUS_EVENT, { state: 'working', sandbox: 'on' })
     expect(h.view()).toMatchObject({ state: 'working', version: '2.1.4', ownSettings: 'accept edits', sandbox: 'on' })
-    appendPluginRecord(h.session, SEAT_STATUS_RECORD, { state: 'idle' })
+    h.session.append(SEAT_STATUS_EVENT, { state: 'idle' })
     expect(h.view()).toMatchObject({ sandbox: 'on' })
-    appendPluginRecord(h.session, SEAT_STATUS_RECORD, { state: 'starting' })
+    h.session.append(SEAT_STATUS_EVENT, { state: 'starting' })
     expect(h.view()?.sandbox).toBeUndefined()
-    appendPluginRecord(h.session, SEAT_STATUS_RECORD, { state: 'working', sandbox: 'off' })
+    h.session.append(SEAT_STATUS_EVENT, { state: 'working', sandbox: 'off' })
     expect(h.view()).toMatchObject({ sandbox: 'off' })
-    appendPluginRecord(h.session, SEAT_STATUS_RECORD, { state: 'working', sandbox: 'own' })
+    h.session.append(SEAT_STATUS_EVENT, { state: 'working', sandbox: 'own' })
     expect(h.view()).toMatchObject({ sandbox: 'own' })
     h.session.append('turn/start', { turn: 1 })
     h.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
@@ -113,7 +113,7 @@ describe('the agentSeat view', () => {
     const h = await host()
     describeSeat(h.session)
     h.session.append('turn/start', { turn: 1 })
-    appendPluginRecord(h.session, SEAT_STATUS_RECORD, { state: 'limit', resetAt: 1_790_000_000_000 })
+    h.session.append(SEAT_STATUS_EVENT, { state: 'limit', resetAt: 1_790_000_000_000 })
     h.session.append('turn/end', { turn: 1, reason: { kind: 'error', error: { message: 'limit', code: 'EXTERNAL_AGENT_LIMIT' } } })
     expect(h.view()).toMatchObject({ state: 'limit', resetAt: 1_790_000_000_000 })
     h.session.append('turn/start', { turn: 2 })
@@ -124,10 +124,10 @@ describe('the agentSeat view', () => {
   it('shows a signed-out program and an ended seat past the turn\'s end', async () => {
     const h = await host()
     describeSeat(h.session)
-    appendPluginRecord(h.session, SEAT_STATUS_RECORD, { state: 'not-signed-in' })
+    h.session.append(SEAT_STATUS_EVENT, { state: 'not-signed-in' })
     h.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
     expect(h.view()?.state).toBe('not-signed-in')
-    appendPluginRecord(h.session, SEAT_STATUS_RECORD, { state: 'ended', endedReason: 'The chat was archived.' })
+    h.session.append(SEAT_STATUS_EVENT, { state: 'ended', endedReason: 'The chat was archived.' })
     expect(h.view()).toMatchObject({ state: 'ended', endedReason: 'The chat was archived.' })
   })
 
@@ -135,16 +135,16 @@ describe('the agentSeat view', () => {
     const h = await host()
     describeSeat(h.session)
     const modelPicker = { offered: [{ id: 'gpt-5.6-luna', label: 'GPT 5.6 Luna' }], planDefault: 'gpt-5.6-luna' }
-    appendPluginRecord(h.session, SEAT_STATUS_RECORD, { state: 'model-needed', modelPicker })
+    h.session.append(SEAT_STATUS_EVENT, { state: 'model-needed', modelPicker })
     expect(h.view()).toMatchObject({ state: 'model-needed', modelPicker })
-    appendPluginRecord(h.session, SEAT_STATUS_RECORD, { state: 'idle' })
+    h.session.append(SEAT_STATUS_EVENT, { state: 'idle' })
     expect(h.view()?.modelPicker).toBeUndefined()
   })
 
   it('shows that a question waits, and clears it at the turn\'s end', async () => {
     const h = await host()
     describeSeat(h.session)
-    appendPluginRecord(h.session, SEAT_STATUS_RECORD, { state: 'working', pending: 1_790_000_000_000 })
+    h.session.append(SEAT_STATUS_EVENT, { state: 'working', pending: 1_790_000_000_000 })
     expect(h.view()?.pending).toEqual({ since: 1_790_000_000_000 })
     h.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
     expect(h.view()?.pending).toBeUndefined()
@@ -158,7 +158,7 @@ describe('the agentSeat view', () => {
     expect(h.view()?.turns).toBeUndefined()
     h.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
     expect(h.view()?.turns).toBe(1)
-    appendPluginRecord(h.session, SEAT_STATUS_RECORD, { state: 'not-signed-in' })
+    h.session.append(SEAT_STATUS_EVENT, { state: 'not-signed-in' })
     h.session.append('turn/end', { turn: 2, reason: { kind: 'completed' } })
     expect(h.view()).toMatchObject({ state: 'not-signed-in', turns: 2 })
   })
@@ -192,14 +192,14 @@ describe('the agentSeat view', () => {
     expect(h.view()?.lastAnswer).toBe('Done: three files.')
   })
 
-  it('keeps the same view reference when only the state record changes', async () => {
+  it('keeps the same view reference when only the state event changes', async () => {
     const h = await host()
     describeSeat(h.session)
     const definition = agentSeatProjection()
     const seated = foldSeat(definition.init(h.session.header, h.session.inheritedEventCount), h.session.snapshotEvents()[0] as SessionEvent)
     const before = definition.wire.view(seated)
-    appendPluginRecord(h.session, SEAT_STATE_RECORD, { programSessionId: 'program-1', cursor: 'm1' })
-    appendPluginRecord(h.session, SEAT_NOTICE_RECORD, { kind: 'unrecorded-work', text: 'x' })
+    h.session.append(SEAT_STATE_EVENT, { programSessionId: 'program-1', cursor: 'm1' })
+    h.session.append(SEAT_NOTICE_EVENT, { kind: 'unrecorded-work', text: 'x' })
     const events = h.session.snapshotEvents()
     const recorded = events.slice(1).reduce(foldSeat, seated)
     expect(recorded).not.toBe(seated)
@@ -207,15 +207,15 @@ describe('the agentSeat view', () => {
     expect(h.handle.stateOf(h.session).logged).toEqual({ programSessionId: 'program-1', cursor: 'm1', programMessageId: null })
   })
 
-  it('reads a malformed stored record as absent fields', async () => {
+  it('reads a malformed stored event as absent fields', async () => {
     const h = await host()
     describeSeat(h.session)
-    appendPluginRecord(h.session, SEAT_STATE_RECORD, { programSessionId: 7 as never, cursor: 'm1' })
-    appendPluginRecord(h.session, SEAT_STATUS_RECORD, { state: 'limit', resetAt: 'soon' as never, modelPicker: { offered: [{ id: 3 }, { id: 'a', label: 'A' }], planDefault: 'a' } as never })
+    h.session.append(SEAT_STATE_EVENT, { programSessionId: 7 as never, cursor: 'm1' })
+    h.session.append(SEAT_STATUS_EVENT, { state: 'limit', resetAt: 'soon' as never, modelPicker: { offered: [{ id: 3 }, { id: 'a', label: 'A' }], planDefault: 'a' } as never })
     expect(h.handle.stateOf(h.session).logged).toEqual({ programSessionId: null, cursor: 'm1', programMessageId: null })
     expect(h.view()).toMatchObject({ state: 'limit', modelPicker: { offered: [{ id: 'a', label: 'A' }], planDefault: 'a' } })
     expect(h.view()?.resetAt).toBeUndefined()
-    appendPluginRecord(h.session, SEAT_STATUS_RECORD, { state: 'working', modelPicker: { planDefault: 'a' } as never })
+    h.session.append(SEAT_STATUS_EVENT, { state: 'working', modelPicker: { planDefault: 'a' } as never })
     expect(h.view()?.modelPicker).toBeUndefined()
   })
 })
@@ -240,8 +240,8 @@ describe('the seat fold', () => {
   it('has no seat in a fork, whose inherited events are not its own', async () => {
     const h = await host()
     describeSeat(h.session)
-    appendPluginRecord(h.session, SEAT_STATE_RECORD, { programSessionId: 'program-1', cursor: 'm1' })
-    appendPluginRecord(h.session, SEAT_STATUS_RECORD, { state: 'working' })
+    h.session.append(SEAT_STATE_EVENT, { programSessionId: 'program-1', cursor: 'm1' })
+    h.session.append(SEAT_STATUS_EVENT, { state: 'working' })
     const fork = h.ctx.sessions.fork(h.session)
     expect(h.view(fork)).toBeNull()
     expect(h.handle.stateOf(fork).logged).toEqual(NO_LOGGED)
@@ -252,8 +252,8 @@ describe('the seat fold', () => {
     h.session.append('subagent/descriptor', { version: 3, mode: 'continuable', provider: 'codex-seat', label: 'task' })
     h.events.push(...h.session.snapshotEvents())
     const checkpoint = h.ctx.sessionProjections.checkpoint(h.session)
-    appendPluginRecord(h.session, SEAT_STATE_RECORD, { programSessionId: 'program-1', cursor: 'm1' })
-    appendPluginRecord(h.session, SEAT_STATUS_RECORD, { state: 'limit', resetAt: 5 })
+    h.session.append(SEAT_STATE_EVENT, { programSessionId: 'program-1', cursor: 'm1' })
+    h.session.append(SEAT_STATUS_EVENT, { state: 'limit', resetAt: 5 })
     h.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
     const events = h.session.snapshotEvents()
     const restored = h.ctx.sessionProjections.restore(checkpoint, events.slice(h.events.length), SessionLogOffset(h.events.length), h.session.header, h.session.inheritedEventCount)
@@ -333,8 +333,8 @@ describe('records the log may hold in a shape the fold did not write', () => {
   it('ignores a status record without a state', async () => {
     const h = await host()
     describeSeat(h.session)
-    appendPluginRecord(h.session, SEAT_STATUS_RECORD, { state: 'working' })
-    appendPluginRecord(h.session, SEAT_STATUS_RECORD, {} as never)
+    h.session.append(SEAT_STATUS_EVENT, { state: 'working' })
+    h.session.append(SEAT_STATUS_EVENT, {} as never)
     expect(h.view()?.state).toBe('working')
   })
 
@@ -342,7 +342,7 @@ describe('records the log may hold in a shape the fold did not write', () => {
     const h = await host()
     describeSeat(h.session)
     const modelPicker = { offered: [null, { id: 'a' }, { id: 'b', label: 'B' }], planDefault: 'b' }
-    appendPluginRecord(h.session, SEAT_STATUS_RECORD, { state: 'model-needed', modelPicker } as never)
+    h.session.append(SEAT_STATUS_EVENT, { state: 'model-needed', modelPicker } as never)
     expect(h.view()?.modelPicker).toEqual({ offered: [{ id: 'b', label: 'B' }], planDefault: 'b' })
   })
 
@@ -361,5 +361,74 @@ describe('records the log may hold in a shape the fold did not write', () => {
     const before = h.view()
     describeSeat(h.session)
     expect(h.view()).toEqual(before)
+  })
+})
+
+/** A fresh Context and registry over a Session rebuilt from a log's JSON, as a restart reads it from disk. */
+async function restartFrom(session: Session, events: readonly SessionEvent[] = session.snapshotEvents()) {
+  const next = await sessionContext()
+  const handle = await next.sessionProjections.register(agentSeatProjection())
+  const seed = JSON.parse(JSON.stringify(events)) as SessionEvent[]
+  const restored = next.sessions.prepare(session.header.id, { seed, meta: structuredClone(session.header), inheritedEventCount: SessionLogOffset(0), eventState: 'detached' })
+  return { next, handle, restored }
+}
+
+describe('a seat child restarted from its serialised log', () => {
+  it('rebuilds the same view and the same logged state', async () => {
+    const h = await host()
+    describeSeat(h.session)
+    const store = new SeatRecords(h.ctx.sessions, h.handle)
+    const child = h.session.header.id
+    store.setStatus(child, 'starting', { version: '2.1.4', ownSettings: 'accept edits', sandbox: 'on' })
+    store.setAccount(child, { plan: 'Max', fiveHourPercent: 40, weeklyPercent: 10, fiveHourResetAt: 1_790_000_000_000 })
+    h.session.append('turn/start', { turn: 1 })
+    h.assistant(1, [{ type: 'text', text: 'Done: three files.' }])
+    store.write(child, { programSessionId: 'program-1', cursor: 'm1' })
+    store.recordProgramMessage(child, 'program-message-7')
+    h.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+    store.setStatus(child, 'model-needed', { modelPicker: { offered: [{ id: 'a', label: 'A' }], planDefault: 'a' } })
+    store.setPending(child, 5)
+    store.notice(child, 'unresumable', 'The earlier conversation could not be resumed.')
+    const { handle, restored, next } = await restartFrom(h.session)
+    expect(next.sessionProjections.snapshot(restored).values.agentSeat).toEqual(h.view())
+    expect(h.view()).toMatchObject({ state: 'model-needed', plan: 'Max', turns: 1, lastAnswer: 'Done: three files.', pending: { since: 5 } })
+    expect(handle.stateOf(restored)).toEqual(h.handle.stateOf(h.session))
+    expect(handle.stateOf(restored).logged).toEqual({ programSessionId: 'program-1', cursor: 'm1', programMessageId: 'program-message-7' })
+  })
+
+  it('writes the three events with no ignorable marker, so a reader that does not know them refuses the log', async () => {
+    const h = await host()
+    describeSeat(h.session)
+    const store = new SeatRecords(h.ctx.sessions, h.handle)
+    const child = h.session.header.id
+    store.setStatus(child, 'idle')
+    store.write(child, { programSessionId: 'program-1' })
+    store.notice(child, 'model-chosen', 'x')
+    const written = h.session.snapshotEvents().filter(event => event.type.startsWith('external-agent/'))
+    expect(written.map(event => event.type)).toEqual(['external-agent/status', 'external-agent/state', 'external-agent/notice'])
+    expect(written.map(event => event.ignorable)).toEqual([undefined, undefined, undefined])
+  })
+})
+
+describe('a log written by an earlier preview with the seat\'s plugin records', () => {
+  const oldRecord = (seq: number, name: string, data: unknown): SessionEvent => ({ type: `plugin:delorun/agent-seat/${name}`, seq, time: 1, data, ignorable: true } as never)
+
+  it('reads without error and shows none of the state the old records held, only that of the typed events after them', async () => {
+    const h = await host()
+    describeSeat(h.session)
+    const descriptor = h.session.snapshotEvents()
+    const seed: SessionEvent[] = [
+      ...descriptor,
+      oldRecord(descriptor.length, 'status', { state: 'limit', resetAt: 5000, plan: 'Max' }),
+      oldRecord(descriptor.length + 1, 'state', { programSessionId: 'old-program', cursor: 'm0' }),
+      oldRecord(descriptor.length + 2, 'notice', { kind: 'unresumable', text: 'old' }),
+      { type: 'turn/start', seq: descriptor.length + 3, time: 1, data: { turn: 1 } },
+      { type: SEAT_STATUS_EVENT, seq: descriptor.length + 4, time: 1, data: { state: 'limit', resetAt: 9 } },
+    ] as SessionEvent[]
+    const { next, handle, restored: old } = await restartFrom(h.session, seed)
+    const view = (): AgentSeatView | null | undefined => next.sessionProjections.snapshot(old).values.agentSeat
+    expect(handle.stateOf(old).logged).toEqual(NO_LOGGED)
+    expect(view()).toMatchObject({ state: 'limit', resetAt: 9 })
+    expect(view()?.plan).toBeUndefined()
   })
 })

@@ -96,7 +96,7 @@ function NumberField({ label, value, min, max, disabled, onCommit }: {
     if (draft !== undefined && Number.isInteger(next) && next >= min && next <= max && next !== value) onCommit(next)
   }
   return <Input type="number" inputMode="numeric" aria-label={label} disabled={disabled} min={min} max={max} step={1}
-    className={css.code as string} value={draft ?? String(value)} onChange={(event) => { setDraft(event.currentTarget.value) }} onBlur={commit}
+    className={css.number as string} value={draft ?? String(value)} onChange={(event) => { setDraft(event.currentTarget.value) }} onBlur={commit}
     onKeyDown={(event) => { if (event.key === 'Enter') commit() }} />
 }
 

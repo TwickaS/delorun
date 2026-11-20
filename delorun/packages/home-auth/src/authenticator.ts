@@ -340,7 +340,7 @@ export class HomeAuthAuthenticator extends Authenticator {
    * one chat). Once the grant store exists, a device's granting answer is admitted only by the answer grant the person
    * made for exactly this prompt (its Session, call id and grants marker) and this value, with Face ID or, on a device
    * with no passkey, its PIN; the grant is used up here, or by the live Face ID pass of the Peer that answers (A499). No PIN page unlock, code from the computer, approval grace or
-   * dangerous mode stands in for it (A483); before the store starts, nothing admits it. Any answer but `rejected`, `cancelled` and `unavailable` counts as granting. Every other answer, a
+   * dangerous mode stands in for it (A483); before the store starts, nothing admits it. Any answer but `rejected`, `cancelled` and `unavailable` counts as granting, a seat's `allowed-for-run` included, and needs a grant or a live pass. Every other answer, a
    * refusal of the same prompt included, applies.
    * @param answer - the answer and the Peer that gave it.
    * @throws {RemoteError} `LOOPBACK_REQUIRED` naming the action for a refused grant.

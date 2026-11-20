@@ -109,13 +109,13 @@ const presetToggle = (): HTMLElement => screen.getByRole('button', { name: en.pr
 describe('PluginInventorySettingsTab', () => {
   it.each(['global', 'preset'])('shortens package and module name fallbacks in the %s inventory', async (scope) => {
     const names = [
-      ['@deepseek-ai/dsh-tool-subagent', 'tool-subagent'],
-      ['@deepseek-ai/dsh-host-web', 'web'],
-      ['@deepseek-ai/dsh-client-tabs', 'tabs'],
-      ['@deepseek-ai/cordis-plugin-hmr', 'hmr'],
-      ['cordis:timer', 'timer'],
-      ['@acme/dsh-sidebar/navigation', 'sidebar/navigation'],
-      ['plain-plugin', 'plain-plugin'],
+      ['@deepseek-ai/dsh-tool-subagent', 'Tool subagent'],
+      ['@deepseek-ai/dsh-host-web', 'Web'],
+      ['@deepseek-ai/dsh-client-tabs', 'Tabs'],
+      ['@deepseek-ai/cordis-plugin-hmr', 'Hmr'],
+      ['cordis:timer', 'Timer'],
+      ['@acme/dsh-sidebar/navigation', 'Sidebar navigation'],
+      ['plain-plugin', 'Plain plugin'],
     ] as const
     const rows = names.flatMap(([moduleName], index) => [false, true].map(fromManifest => ({
       entryId: `include:short-${String(index)}-${String(fromManifest)}` as PluginEntryId,
@@ -146,7 +146,7 @@ describe('PluginInventorySettingsTab', () => {
       target: { value: '@deepseek-ai/dsh-tool-subagent' },
     })
     expect(screen.getAllByRole('listitem')).toHaveLength(2)
-    expect(screen.getAllByRole('button', { name: /^tool-subagent, include:short-0-/ })).toHaveLength(2)
+    expect(screen.getAllByRole('button', { name: /^Tool subagent, include:short-0-/ })).toHaveLength(2)
   })
 
   it('keeps authored locale titles verbatim when they resemble module names', async () => {
@@ -260,7 +260,7 @@ describe('PluginInventorySettingsTab', () => {
     const view = render(<PluginInventorySettingsTab {...pageProps} />)
     await screen.findByRole('searchbox', { name: en.search })
     if (scope === 'global') fireEvent.click(globalToggle())
-    expect(screen.getByRole('button', { name: 'sidebar/navigation, include:navigation, Enabled' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Sidebar navigation, include:navigation, Enabled' })).toBeTruthy()
     expect(screen.getByText('Navigation description.')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'English title, include:commands, Enabled' })).toBeTruthy()
     expect(screen.getByText('Package description.')).toBeTruthy()
@@ -271,7 +271,7 @@ describe('PluginInventorySettingsTab', () => {
     locale.setLocale('zh')
     view.rerender(<PluginInventorySettingsTab {...pageProps} />)
     for (const [name, description] of [
-      ['sidebar/navigation, include:navigation, 已启用', 'Navigation description.'],
+      ['Sidebar navigation, include:navigation, 已启用', 'Navigation description.'],
       ['English title, include:commands, 已启用', '中文命令说明。'],
       ['主题插件, include:theme, 已启用', '中文主题说明。'],
     ] as const) {
@@ -305,7 +305,7 @@ describe('PluginInventorySettingsTab', () => {
     })
     fireEvent.click(globalToggle())
     expect(screen.getByText(en.metadataError.replace('{error}', error))).toBeTruthy()
-    const card = screen.getByRole('button', { name: 'legacy, Disabled' })
+    const card = screen.getByRole('button', { name: 'Legacy, Disabled' })
     expect(card).toHaveProperty('disabled', false)
     expect(card.closest('li')?.getAttribute('data-failed')).toBeNull()
     fireEvent.click(card)
@@ -344,21 +344,21 @@ describe('PluginInventorySettingsTab', () => {
     expect(screen.getByText(en.globalSubtitle).textContent).toBe(en.globalSubtitle)
 
     // A preset row expands into its source facts.
-    fireEvent.click(screen.getByRole('button', { name: 'pwsh, Conditional' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Pwsh, Conditional' }))
     expect(screen.getByText(en.fromPreset)).toBeTruthy()
     expect(screen.getByText('标准模式')).toBeTruthy()
     expect(screen.getByText(en.condition)).toBeTruthy()
     expect(screen.getByText('process.platform === \'win32\'')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'pwsh, Conditional' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Pwsh, Conditional' }))
     expect(screen.queryByText(en.condition)).toBeNull()
 
     // A failed preset row names its runtime state instead of a condition.
-    fireEvent.click(screen.getByRole('button', { name: 'crashy, Failed' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Crashy, Failed' }))
     expect(screen.getByText(en.runtime)).toBeTruthy()
     expect(screen.getByText('Failed to start')).toBeTruthy()
 
     // A row declaring no id has no Loader identity line, only its module.
-    fireEvent.click(screen.getByRole('button', { name: 'anonymous, Enabled' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Anonymous, Enabled' }))
     expect(view.container.querySelector('[data-loader-entry]')).toBeNull()
     expect(screen.getByText(en.moduleLabel).nextElementSibling?.textContent).toBe('@fixture/anonymous')
   })
@@ -406,19 +406,19 @@ describe('PluginInventorySettingsTab', () => {
       }],
     })
 
-    expect(screen.getByRole('button', { name: 'tool-subagent, tool-subagent-primary, Enabled' })
+    expect(screen.getByRole('button', { name: 'Tool subagent, tool-subagent-primary, Enabled' })
       .getAttribute('aria-expanded')).toBe('false')
-    const secondary = screen.getByRole('button', { name: `tool-subagent, ${longId}, Disabled` })
+    const secondary = screen.getByRole('button', { name: `Tool subagent, ${longId}, Disabled` })
     expect(secondary.getAttribute('aria-expanded')).toBe('false')
-    expect(secondary.children).toHaveLength(2)
-    expect(secondary.children[0]?.textContent).toContain('tool-subagent')
+    expect(secondary.children).toHaveLength(1)
+    expect(secondary.children[0]?.textContent).toContain('Tool subagent')
     expect(secondary.children[0]?.textContent).toContain('Disabled')
-    expect(secondary.children[1]?.textContent).toBe(subtitle)
-    expect(screen.getByTitle(longId).textContent).toBe(subtitle)
+    expect(secondary.textContent).not.toContain(subtitle)
+    expect(screen.queryByTitle(longId)).toBeNull()
 
     fireEvent.change(screen.getByRole('searchbox', { name: en.search }), { target: { value: 'include:agent-presets:tool-subagent-secondary' } })
-    expect(screen.queryByRole('button', { name: 'tool-subagent, tool-subagent-primary, Enabled' })).toBeNull()
-    const filteredSecondary = screen.getByRole('button', { name: `tool-subagent, ${longId}, Disabled` })
+    expect(screen.queryByRole('button', { name: 'Tool subagent, tool-subagent-primary, Enabled' })).toBeNull()
+    const filteredSecondary = screen.getByRole('button', { name: `Tool subagent, ${longId}, Disabled` })
     fireEvent.click(filteredSecondary)
     expect(filteredSecondary.getAttribute('aria-expanded')).toBe('true')
   })
@@ -433,13 +433,11 @@ describe('PluginInventorySettingsTab', () => {
     })
     fireEvent.click(globalToggle())
 
-    // An id equal to the title leaves both the card and its accessible name.
-    expect(screen.getByRole('button', { name: 'timer, Enabled' }).querySelector('code')).toBeNull()
+    // An id equal to the title leaves the accessible name; a card never shows the id until it is expanded.
+    expect(screen.getByRole('button', { name: 'Timer, Enabled' }).querySelector('code')).toBeNull()
     // A composition id that matches the title once its include: marker drops is left out the same way.
-    expect(screen.getByRole('button', { name: 'hmr, Enabled' }).querySelector('code')).toBeNull()
-    const typert = screen.getByRole('button', { name: 'typert-registry, typert, Enabled' }).querySelector('code')
-    expect(typert?.textContent).toBe('typert')
-    expect(typert?.getAttribute('title')).toBe('typert')
+    expect(screen.getByRole('button', { name: 'Hmr, Enabled' }).querySelector('code')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Typert registry, typert, Enabled' }).querySelector('code')).toBeNull()
   })
 
   it('expands the global plane with failures first and preset-provided rows inline', async () => {
@@ -456,21 +454,21 @@ describe('PluginInventorySettingsTab', () => {
     // Rows the presets took over sit inline, marked instead of plainly disabled.
     expect(screen.getAllByText(en.presetEnabledTag)).toHaveLength(2)
 
-    fireEvent.click(screen.getByRole('button', { name: 'tool-bash, bash-host, Via presets' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Tool bash, bash-host, Via presets' }))
     expect(screen.getByText(en.presetProvidedDetail)).toBeTruthy()
     expect(screen.getByText(en.enabledIn)).toBeTruthy()
     expect(screen.getByText('标准模式 · ptc')).toBeTruthy()
 
     // The failed global card reports its runtime state.
-    fireEvent.click(screen.getByRole('button', { name: 'telemetry, Failed' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Telemetry, Failed' }))
     expect(screen.getByText('Failed to start')).toBeTruthy()
 
     // An enabled entry with no live fiber says so in its details, dot-free.
-    fireEvent.click(screen.getByRole('button', { name: 'unobserved-name, unobserved, Enabled' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Unobserved name, unobserved, Enabled' }))
     expect(screen.getByText('Not running')).toBeTruthy()
 
     // A disabled row outside every preset stays plainly disabled.
-    fireEvent.click(screen.getByRole('button', { name: 'dormant, Disabled' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Dormant, Disabled' }))
     expect(screen.queryByText(en.presetProvidedDetail)).toBeNull()
 
     fireEvent.click(globalToggle())
@@ -487,7 +485,7 @@ describe('PluginInventorySettingsTab', () => {
 
     pickPreset('ptc')
     expect(view.container.querySelectorAll('[data-plugin-scope="preset"] li')).toHaveLength(3)
-    fireEvent.click(screen.getByRole('button', { name: 'tool-bash, bash, Enabled' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Tool bash, bash, Enabled' }))
     // An unnamed preset labels its source by id.
     expect(screen.getByText(en.fromPreset).nextElementSibling?.textContent).toBe('ptc')
 
@@ -536,11 +534,11 @@ describe('PluginInventorySettingsTab', () => {
     ])
     fireEvent.keyDown(document, { key: 'Escape' })
 
-    fireEvent.click(screen.getByRole('button', { name: 'pwsh, Conditional' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Pwsh, Conditional' }))
     expect(screen.getByText(en.fromPreset).nextElementSibling?.textContent).toBe('Localized standard')
 
     fireEvent.click(globalToggle())
-    fireEvent.click(screen.getByRole('button', { name: 'tool-bash, bash-host, Via presets' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Tool bash, bash-host, Via presets' }))
     expect(screen.getByText('Localized standard · Localized ptc')).toBeTruthy()
   })
 
@@ -589,10 +587,10 @@ describe('PluginInventorySettingsTab', () => {
     expect(globalToggle().getAttribute('aria-expanded')).toBe('true')
     expect(screen.getAllByRole('listitem')).toHaveLength(2)
 
-    fireEvent.click(screen.getByRole('button', { name: 'hmr, Enabled' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Hmr, Enabled' }))
     expect(screen.getByText(en.runtime)).toBeTruthy()
     expect(view.container.querySelector('[data-loader-entry]')?.textContent).toBe('hmr')
-    fireEvent.click(screen.getByRole('button', { name: 'off, Disabled' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Off, Disabled' }))
     expect(screen.getAllByText(en.moduleLabel).length).toBeGreaterThan(0)
     expect(screen.queryByText(en.runtime)).toBeNull()
   })

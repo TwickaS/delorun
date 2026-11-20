@@ -458,13 +458,16 @@ function SafeModeCard({ state, t, busy, controlOf, onChange }: {
 }) {
   const on = state.safeMode !== undefined
   const use = controlOf('plugin-other')
-  return <div className={css.facts} data-delorun-safe-mode={on ? 'on' : 'off'}>
-    <div className={css.name}>{t('safeMode.heading')}</div>
-    <p className={css.meta}>{t(on ? 'safeMode.onBody' : 'safeMode.offBody')}</p>
-    <div className={css.actions}>
-      <Button variant="outline" size="sm" disabled={busy || use.disabled} title={use.title} onClick={() => { onChange(!on) }}>{t(on ? 'safeMode.leave' : 'safeMode.start')}</Button>
-    </div>
-  </div>
+  return <Group heading={t('safeMode.heading')}>
+    <li className={css.row} data-delorun-safe-mode={on ? 'on' : 'off'}>
+      <div className={css.main}>
+        <p className={css.meta}>{t(on ? 'safeMode.onBody' : 'safeMode.offBody')}</p>
+        <div className={css.actions}>
+          <Button variant="outline" size="sm" disabled={busy || use.disabled} title={use.title} onClick={() => { onChange(!on) }}>{t(on ? 'safeMode.leave' : 'safeMode.start')}</Button>
+        </div>
+      </div>
+    </li>
+  </Group>
 }
 
 /**
