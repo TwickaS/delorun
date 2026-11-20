@@ -1,6 +1,6 @@
 /**
- * The seat's logged events: typed Session events of the seat child's own log, so a restart, an archive restore and a
- * fork carry them with the rest of the log; the `agentSeat` projection folds them. They are required events, not
+ * The seat's logged events: typed Session events of the seat child's own log, so a restart and an archive restore
+ * carry them with the rest of the log (a fork inherits them but shows no seat); the `agentSeat` projection folds them. They are required events, not
  * ignorable ones: a build that does not know them refuses the log instead of resuming a seat child as an ordinary
  * chat that has lost its program session. Earlier previews wrote the same three records as ignorable `plugin:`
  * records; the fold ignores those.
