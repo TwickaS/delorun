@@ -7,6 +7,8 @@
  * above it. The bottom colour is the composer area's background. Both are read from the active theme's tokens.
  * @module @delorun/plugin-theme/client/edges
  */
+import { compositeOver, edgeSurfaces, subscribeEdgeSurfaces } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { EdgeSurface } from '@deepseek-ai/dsh-client-ui-primitives'
 
 /** The token the page, and the main header and composer area on it, take their background from. */
 const PAGE_TOKEN = '--dsw-alias-bg-base'
@@ -36,6 +38,24 @@ export function edgeColours(read: (token: string) => string, phone: boolean): Ed
   const page = read(PAGE_TOKEN)
   const sidebar = read(SIDEBAR_TOKEN)
   return { top: phone || sidebar === '' ? page : sidebar, bottom: page }
+}
+
+/**
+ * Apply the open full-screen surfaces over the studio's own edge colours, the earliest opened first: a solid surface
+ * replaces both colours and an overlay tints them, so nested surfaces restore in order as they close.
+ * @param base - the studio's edge colours.
+ * @param surfaces - the open surfaces.
+ * @returns the colours behind the browser's bars.
+ */
+export function stackedEdgeColours(base: EdgeColours, surfaces: readonly EdgeSurface[]): EdgeColours {
+  let colours = base
+  for (const surface of surfaces) {
+    const current = colours
+    colours = 'dim' in surface
+      ? { top: compositeOver(surface.dim, current.top), bottom: compositeOver(surface.dim, current.bottom) }
+      : { top: surface.top, bottom: surface.bottom }
+  }
+  return colours
 }
 
 /** Inline styles saved before the controller changes them, to restore on dispose. */
@@ -87,7 +107,7 @@ export class EdgeController {
     this.sheet = doc.createElement('style')
     this.sheet.setAttribute(EDGE_ATTRIBUTE, 'style')
     this.sheet.textContent = ['top', 'bottom'].map(edge =>
-      `[${EDGE_ATTRIBUTE}="${edge}"]{position:fixed;left:0;right:0;${edge}:-7px;height:max(12px,calc(env(safe-area-inset-${edge}) + 7px));pointer-events:none;z-index:10;background:var(--edge-${edge}-background)}`).join('')
+      `[${EDGE_ATTRIBUTE}="${edge}"]{position:fixed;left:0;right:0;${edge}:-7px;height:max(12px,calc(env(safe-area-inset-${edge}) + 7px));pointer-events:none;z-index:1001;background:var(--edge-${edge}-background)}`).join('')
     doc.head.appendChild(this.sheet)
     for (const edge of ['top', 'bottom']) {
       const strip = doc.createElement('div')
@@ -107,6 +127,7 @@ export class EdgeController {
       target.addEventListener(type, refresh)
       this.listeners.push(() => { target.removeEventListener(type, refresh) })
     }
+    this.listeners.push(subscribeEdgeSurfaces(doc, refresh))
     listen(win, 'resize')
     listen(win.visualViewport, 'resize')
     // jsdom and some embedded views have no matchMedia; the colour-scheme change then still arrives as a theme change.
@@ -128,7 +149,7 @@ export class EdgeController {
     this.claimThemeColor()
     const style = this.win.getComputedStyle(this.doc.body)
     const phone = this.win.innerWidth <= PHONE_WIDTH
-    const colours = edgeColours(token => style.getPropertyValue(token).trim(), phone)
+    const colours = stackedEdgeColours(edgeColours(token => style.getPropertyValue(token).trim(), phone), edgeSurfaces(this.doc))
     const html = this.doc.documentElement
     html.style.setProperty('--edge-top-background', colours.top)
     html.style.setProperty('--edge-bottom-background', colours.bottom)
