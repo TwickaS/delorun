@@ -65,13 +65,13 @@ pnpm 每次操作都会重置 `link:` 依赖的 `node_modules` 链接，所以�
 
 ## 记录及其写入者
 
-每条记录都是一个 0600 的文件，其读取器遇到未知字段、值或权限时以 `RECORD_UNREADABLE` 拒绝。`readProtection` 应答 `on` 或 `off`，没有 `protection.json` 的 home 为 `off`。`setProtection` 接受三个 attest 函数中任一个签发的证明，因此关闭保护依赖于终端的证明、studio 的证明，或者在手机权限为 Full 时依赖于已配对设备的证明。`attestTerminal` 要求标准输入和输出是终端。`attestStudio` 为来自本机的请求（回环 `Host` 下的回环监听器，带 studio 的凭据，同源请求，而非远程会话）签发 studio 的证明。`attestDevice` 为持有本人输入的新解锁（验证码或 PIN，从不是批准宽限期）的已配对设备签发 studio 证明，并指明该设备。只有 `@delorun/plugin-changes` 的路由调用 `attestStudio` 和 `attestDevice`，并且只在控件级别和手机权限级别允许设备操作时才调用 `attestDevice`（[C21](../../docs/contracts/c21-changes.zh.md#who-may-do-what-from-where)）。变更日志把两种 studio 证明都记录为 `decidedFrom: "studio"`，设备所做的决定还会在 `decidedOn` 中指明该设备，`withoutDecision` 会在之后的任何决定之前清除它。除非证明由某个 attest 函数签发，否则被拒绝。该证明无法区分人与模型（其终端工具有真实的伪终端）；受限的模型由沙箱挡在外面，沙箱不允许它在 home 之下写入任何内容。`pluginSlug` 在用名称构造任何路径之前，拒绝不是包名的名称。`noteLoaded` 和 `noteFailed` 在已打开的工作会话中记录 Host 加载或加载失败的内容，不需要证明。`writeWorkFailure` 和 `readWorkFailure` 保存 `run/<profile>/changes-work.json`，即工作会话中最近一次失败的重新加载。
+每条记录都是一个 0600 的文件，其读取器遇到未知字段、值或权限时以 `RECORD_UNREADABLE` 拒绝。`readProtection` 应答 `on` 或 `off`，没有 `protection.json` 的 home 为 `off`。`setProtection` 接受三个 attest 函数中任一个签发的证明，因此关闭保护依赖于终端的证明、studio 的证明，或者已配对设备的证明（需带有针对该请求的授权凭证）。`attestTerminal` 要求标准输入和输出是终端。`attestStudio` 为来自本机的请求（回环 `Host` 下的回环监听器，带 studio 的凭据，同源请求，而非远程会话）签发 studio 的证明。`attestDevice` 为持有针对该请求的授权凭证（从不是批准宽限期）的已配对设备签发 studio 证明，并指明该设备。只有 `@delorun/plugin-changes` 的路由调用 `attestStudio` 和 `attestDevice`，并且只在控件的类别允许设备操作时才调用 `attestDevice`（[C21](../../docs/contracts/c21-changes.zh.md#who-may-do-what-from-where)）。变更日志把两种 studio 证明都记录为 `decidedFrom: "studio"`，设备所做的决定还会在 `decidedOn` 中指明该设备，`withoutDecision` 会在之后的任何决定之前清除它。除非证明由某个 attest 函数签发，否则被拒绝。该证明无法区分人与模型（其终端工具有真实的伪终端）；受限的模型由沙箱挡在外面，沙箱不允许它在 home 之下写入任何内容。`pluginSlug` 在用名称构造任何路径之前，拒绝不是包名的名称。`noteLoaded` 和 `noteFailed` 在已打开的工作会话中记录 Host 加载或加载失败的内容，不需要证明。`writeWorkFailure` 和 `readWorkFailure` 保存 `run/<profile>/changes-work.json`，即工作会话中最近一次失败的重新加载。
+
+`src/notices.ts` 保存 `changes/notices.json`，模式 `delorun.changes-notices/1`：最多 20 条由已配对设备所做的保护变更，按从旧到新排列，以便电脑告诉本人。`readNotices` 列出它们，`addProtectionNotice` 由 `changeProtection` 调用，`dismissNotice` 接收终端或电脑的证明，并拒绝指明设备的证明，因此手机无法清除它自己所做的变更。该记录与变更日志分开，变更日志保持其模式。
 
 <a id="what-a-person-does-with-a-change"></a>
 
 ## 本人可对变更执行的操作
-
-`src/notices.ts` 保存 `changes/notices.json`，模式 `delorun.changes-notices/1`：最多 20 条由已配对设备所做的保护变更，按从旧到新排列，以便电脑告诉本人。`readNotices` 列出它们，`addProtectionNotice` 由 `changeProtection` 调用，`dismissNotice` 接收终端或电脑的证明，并拒绝指明设备的证明，因此手机无法清除它自己所做的变更。该记录与变更日志分开，变更日志保持其模式。
 
 `src/actions.ts` 存放 `delorun changes` 和 studio 的「变更」路由所调用的操作。`listChanges` 计算每个插件的文件夹相对其已批准内容保存了什么，隐藏针对该内容已被丢弃的变更，并返回启动失败时被遗漏的变更（`leftOut`）和其他已记录的变更（最新的在前）、文件夹已不存在的插件、保护设置以及任何工作会话；`showChange` 返回一个变更或其日志条目。`recordedChanges`（`src/state.ts`）仅凭已批准的记录和变更日志，向 studio 的 `state` 路由提供受「变更」管理的插件及其文件夹，以及等待审阅的 agent 请求，不写入任何内容，也不读取任何文件夹。`applyChange`、`discardChange`、`undoChange`、`turnOff`、`turnOn` 和 `changeProtection` 接收 `AtComputer` 证明，并在读取任何内容之前拒绝不是 attest 函数签发的证明；`changeProtection` 把关闭保护记录为已应用的 `guard-weakening` 变更，其决定位置由证明说明；对于指明设备的证明，还会添加一条保护通知。`applyChange` 恰好批准 id 所指名的版本，文件夹保存的是其他内容时以 `CHANGED_SINCE_REVIEW` 拒绝；`turnOff` 和 `turnOn` 只编辑 `dsh.profile.bundles`，并拒绝 Delorun 自己的 bundle。
 
