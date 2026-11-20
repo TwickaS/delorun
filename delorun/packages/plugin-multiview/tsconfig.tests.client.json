@@ -12,8 +12,10 @@
     "tests/**/*.spec.ts",
     "tests/**/*.spec.tsx",
     "src/client",
+    "src/entry",
     "src/layout",
     "src/store",
+    "src/config.ts",
     "src/css-modules.d.ts"
   ],
   "references": [
@@ -24,7 +26,34 @@
       "path": "../../../vendor/cordis"
     },
     {
+      "path": "../../../packages/api/session-controller/tsconfig.client.json"
+    },
+    {
+      "path": "../../../packages/client/locale/tsconfig.client.json"
+    },
+    {
       "path": "../../../packages/client/store"
+    },
+    {
+      "path": "../../../packages/client/ui-conversation/tsconfig.client.json"
+    },
+    {
+      "path": "../../../packages/client/ui-layout"
+    },
+    {
+      "path": "../../../packages/client/ui-primitives"
+    },
+    {
+      "path": "../../../packages/client/ui-renderer"
+    },
+    {
+      "path": "../../../packages/client/ui-settings/tsconfig.client.json"
+    },
+    {
+      "path": "../../../packages/client/ui-slots"
+    },
+    {
+      "path": "../../../packages/client/ui-subagent"
     },
     {
       "path": "../../../packages/core/session"
