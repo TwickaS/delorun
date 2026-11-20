@@ -353,6 +353,28 @@ describe('repointingBoot', () => {
   })
 })
 
+describe('repointingBoot abandoned while the baseline is being applied', () => {
+  it('waits for the baseline, then undoes it, so a successor that gives up during it leaves nothing advanced', async () => {
+    const calls: string[] = []
+    let finish: (undo: () => Promise<void>) => void = () => undefined
+    const slow = new Promise<() => Promise<void>>((resolve) => { finish = resolve })
+    const runner = repointingBoot({ home, profile: 'default' }, true, () => Promise.resolve(1), () => slow)
+    const booting = runner.boot()
+    const abandoned = runner.abandon().then(() => calls.push('abandoned'))
+    await Promise.resolve()
+    expect(calls).toEqual([])
+    finish(() => { calls.push('undo'); return Promise.resolve() })
+    await Promise.all([booting, abandoned])
+    expect(calls).toEqual(['undo', 'abandoned'])
+  })
+
+  it('abandons without undoing when the baseline throws, which has undone itself', async () => {
+    const runner = repointingBoot({ home, profile: 'default' }, true, () => Promise.resolve(1), () => Promise.reject(new Error('the copies cannot be re-pointed')))
+    await expect(runner.boot()).rejects.toThrow('re-pointed')
+    await expect(runner.abandon()).resolves.toBeUndefined()
+  })
+})
+
 describe('repointForSuccessor', () => {
   it('leaves a home without the profile, and a profile whose copies already hold their versions, alone', async () => {
     await prepareHome(context, undefined, true)

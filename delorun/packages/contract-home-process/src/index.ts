@@ -55,6 +55,12 @@ export const DRAIN_TIMEOUT_DEFAULT_S = 1_800
 /** Time for a successor to report `ready` and pass its health check, in milliseconds. */
 export const HEALTH_CHECK_TIMEOUT_MS = 120_000
 
+/**
+ * How long a successor works toward `ready` before it gives up itself, in milliseconds: it undoes what its boot changed in
+ * the profile and reports `failed` while the predecessor, which stops it at {@link HEALTH_CHECK_TIMEOUT_MS}, still waits.
+ */
+export const SUCCESSOR_DEADLINE_MS = HEALTH_CHECK_TIMEOUT_MS - 20_000
+
 /** File descriptor of the handover pipe a successor inherits. */
 export const HANDOVER_FD = 3
 

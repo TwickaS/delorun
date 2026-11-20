@@ -7,12 +7,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RuntimeVersion } from '@delorun/contract-home-layout'
-import { readSignedPackFiles, StorePaths, parseRuntimeVersion, type SignedPackFiles } from '@delorun/runtime-store'
+import { openSignedPacks, StorePaths, parseRuntimeVersion, type SignedPackFiles } from '@delorun/runtime-store'
 import { isUpgrade, updateBaselineOf, updateSource } from '../src/changes/update-baseline.ts'
 
 vi.mock('@delorun/runtime-store', async importOriginal => {
   const actual = await importOriginal<typeof import('@delorun/runtime-store')>()
-  return { ...actual, readSignedPackFiles: vi.fn(actual.readSignedPackFiles) }
+  return { ...actual, openSignedPacks: vi.fn(actual.openSignedPacks) }
 })
 
 let base: string
@@ -21,11 +21,26 @@ beforeEach(() => { base = realpathSync(mkdtempSync(join(tmpdir(), 'delorun-updat
 afterEach(() => { rmSync(base, { recursive: true, force: true }) })
 
 const v = (text: string): RuntimeVersion => parseRuntimeVersion(text)!
-const pack = (release: RuntimeVersion): SignedPackFiles => ({ name: 'demo', release, files: new Map(), peers: [], texts: new Map() })
+const pack = (release: RuntimeVersion, name = 'demo'): SignedPackFiles => ({ name, release, files: new Map(), peers: [], texts: new Map() })
+
+/**
+ * Both releases' packs files, each listing every pack by name.
+ * @returns the log of each pack read, as "release name".
+ */
+function opened(): string[] {
+  const read: string[] = []
+  vi.mocked(openSignedPacks).mockImplementation(release => Promise.resolve({
+    files: (name) => {
+      read.push(`${release.version} ${name}`)
+      return Promise.resolve({ ...pack(release.version), name })
+    },
+  }))
+  return read
+}
 
 beforeEach(async () => {
-  const { readSignedPackFiles: actual } = await vi.importActual<typeof import('@delorun/runtime-store')>('@delorun/runtime-store')
-  vi.mocked(readSignedPackFiles).mockReset().mockImplementation(actual)
+  const { openSignedPacks: actual } = await vi.importActual<typeof import('@delorun/runtime-store')>('@delorun/runtime-store')
+  vi.mocked(openSignedPacks).mockReset().mockImplementation(actual)
 })
 
 describe('which update gets a baseline', () => {
@@ -44,17 +59,41 @@ describe('which update gets a baseline', () => {
         return Promise.resolve({ paths: new StorePaths(base, 'linux-x64'), version: other ?? v('0.1.0') } as never)
       },
     }
-    vi.mocked(readSignedPackFiles).mockImplementation(release => Promise.resolve([pack(release.version)]))
+    opened()
     expect(await updateBaselineOf(environment, v('0.1.0'))).toBeUndefined()
     expect(await updateBaselineOf(environment, v('0.2.0'))).toBeUndefined()
     expect(asked).toEqual([undefined, undefined])
-    expect(readSignedPackFiles).not.toHaveBeenCalled()
+    expect(openSignedPacks).not.toHaveBeenCalled()
   })
 
-  it('gives both releases\' signed packs for an update to a newer release, so the denial above is the guard\'s', async () => {
+  it('gives both releases\' signed packs of the pack asked for, so the denial above is the guard\'s', async () => {
     const environment = { release: (other?: RuntimeVersion) => Promise.resolve({ paths: new StorePaths(base, 'linux-x64'), version: other ?? v('0.2.0') } as never) }
-    vi.mocked(readSignedPackFiles).mockImplementation(release => Promise.resolve([pack(release.version)]))
-    expect(await updateBaselineOf(environment, v('0.1.0'))).toEqual({ from: '0.1.0', to: '0.2.0', packs: [pack(v('0.1.0')), pack(v('0.2.0'))] })
+    opened()
+    const baseline = await updateBaselineOf(environment, v('0.1.0'))
+    expect(baseline).toMatchObject({ from: '0.1.0', to: '0.2.0' })
+    expect(await baseline!.packsFor('demo')).toEqual([pack(v('0.1.0')), pack(v('0.2.0'))])
+  })
+
+  it('reads no pack until a waiting change asks for it, and each pack once', async () => {
+    const environment = { release: (other?: RuntimeVersion) => Promise.resolve({ paths: new StorePaths(base, 'linux-x64'), version: other ?? v('0.2.0') } as never) }
+    const read = opened()
+    const baseline = await updateBaselineOf(environment, v('0.1.0'))
+    expect(read).toEqual([])
+    await Promise.all([baseline!.packsFor('demo'), baseline!.packsFor('demo')])
+    await baseline!.packsFor('demo')
+    expect(read).toEqual(['0.1.0 demo', '0.2.0 demo'])
+    await baseline!.packsFor('another')
+    expect(read).toEqual(['0.1.0 demo', '0.2.0 demo', '0.1.0 another', '0.2.0 another'])
+  })
+
+  it('gives a pack that cannot be read no files and says so once, so its change waits', async () => {
+    const environment = { release: (other?: RuntimeVersion) => Promise.resolve({ paths: new StorePaths(base, 'linux-x64'), version: other ?? v('0.2.0') } as never) }
+    vi.mocked(openSignedPacks).mockImplementation(() => Promise.resolve({ files: () => Promise.reject(new Error('EIO')) }))
+    const told: string[] = []
+    const baseline = await updateBaselineOf(environment, v('0.1.0'), (name, error) => void told.push(`${name}: ${(error as Error).message}`))
+    expect(await baseline!.packsFor('demo')).toEqual([])
+    expect(await baseline!.packsFor('demo')).toEqual([])
+    expect(told).toEqual(['demo: EIO'])
   })
 
   it('throws, so nothing is replaced, when the running release\'s packs file does not verify', async () => {

@@ -153,20 +153,28 @@ export function repointsBeforeBoot(successor: boolean, bootsBefore: number): boo
  * @param boot - boots the Host.
  * @param repoint - re-points the copies; {@link repointForSuccessor} by default.
  * @returns the Host runner: the wrapped boot, which counts the boots it has run, and the undo of the first boot's
- *   baseline, which does nothing when the boot applied none or after it ran once.
+ *   baseline, which waits for a baseline still being applied and does nothing when the boot applied none or after it ran once.
  */
 export function repointingBoot<A extends unknown[], T>(request: SuccessorRequest, successor: boolean, boot: (...args: A) => Promise<T>, repoint: (request: SuccessorRequest, afterFailedSwitch: boolean) => Promise<UndoBaseline | undefined> = repointForSuccessor): { readonly boot: (...args: A) => Promise<T>, readonly abandon: () => Promise<void> } {
   let booted = 0
   let undo: UndoBaseline | undefined
+  let repointing: Promise<unknown> | undefined
   return {
     boot: async (...args) => {
       const afterFailedSwitch = booted > 0
-      if (repointsBeforeBoot(successor, booted++)) undo ??= await repoint(request, afterFailedSwitch)
+      if (repointsBeforeBoot(successor, booted++) && undo === undefined) {
+        const started = repoint(request, afterFailedSwitch)
+        repointing = started
+        undo = await started
+      }
       return boot(...args)
     },
     abandon: async () => {
+      // A successor's own deadline can end its boot while the baseline is still being applied; its undo exists only once that ends.
+      await repointing?.catch(() => undefined)
       const run = undo
       undo = undefined
+      repointing = undefined
       await run?.()
     },
   }
@@ -279,7 +287,7 @@ async function verifiedUpdateBaseline(from: RuntimeVersion, write: (text: string
   try {
     const environment = await hostPacksEnvironment(process.env)
     if ('unsupported' in environment) return undefined
-    return await updateBaselineOf(environment, from)
+    return await updateBaselineOf(environment, from, (name, error) => { write(`Delorun could not read the pack ${name} of the update against the signed release, so changes to it wait for your review: ${printable(error instanceof Error ? error.message : String(error))}\n`) })
   } catch (error) {
     write(`Delorun could not check the plugin packs of the update against the signed release, so changes to them wait for your review: ${printable(error instanceof Error ? error.message : String(error))}\n`)
     return undefined

@@ -7,11 +7,11 @@
  *
  * @module @delorun/cli/changes/update-baseline
  */
-import type { UpdateBaseline } from '@delorun/changes'
+import type { SignedPackFiles, UpdateBaseline } from '@delorun/changes'
 import type { RuntimeVersion } from '@delorun/contract-home-layout'
 import type { HandoverLine } from '@delorun/home-process'
 import type { PacksEnvironment } from '@delorun/plugin-packs/environment'
-import { readSignedPackFiles } from '@delorun/runtime-store'
+import { openSignedPacks } from '@delorun/runtime-store'
 import semver from 'semver'
 
 /**
@@ -35,19 +35,40 @@ export function isUpgrade(from: RuntimeVersion, to: RuntimeVersion): boolean {
 }
 
 /**
- * The verified signed pack files of both releases of an update.
+ * The verified signed packs files of both releases of an update. Each release's packs file verifies here; a pack's files
+ * are read, with each installed file hashed, only when Changes asks for that pack, once per pack.
  * @param environment - gives each installed release, verified under the anchored root.
  * @param from - the release the update left.
+ * @param unreadable - told once for a pack whose installed files cannot be read; that pack replaces nothing.
  * @returns the baseline, or `undefined` when the update is not to a newer release or the release this process runs
  *   stored no packs file.
- * @throws when a release's manifest, packs file or release-log record does not verify, or a stored file cannot be read:
- *   nothing is replaced then, and the caller says so.
+ * @throws when a release's manifest, packs file or release-log record does not verify: nothing is replaced then, and the
+ *   caller says so.
  */
-export async function updateBaselineOf(environment: Pick<PacksEnvironment, 'release'>, from: RuntimeVersion): Promise<UpdateBaseline | undefined> {
+export async function updateBaselineOf(environment: Pick<PacksEnvironment, 'release'>, from: RuntimeVersion, unreadable: (name: string, error: unknown) => void = () => undefined): Promise<UpdateBaseline | undefined> {
   const running = await environment.release()
   if (!isUpgrade(from, running.version)) return undefined
-  const to = await readSignedPackFiles(running)
-  if (to.length === 0) return undefined
-  const before = await readSignedPackFiles(await environment.release(from))
-  return { from, to: running.version, packs: [...before, ...to] }
+  const to = await openSignedPacks(running)
+  if (to === undefined) return undefined
+  const before = await openSignedPacks(await environment.release(from))
+  const read = new Map<string, Promise<readonly SignedPackFiles[]>>()
+  const readPack = async (name: string): Promise<readonly SignedPackFiles[]> => {
+    try {
+      return [await before?.files(name), await to.files(name)].filter(pack => pack !== undefined)
+    } catch (error) {
+      unreadable(name, error)
+      return []
+    }
+  }
+  return {
+    from,
+    to: running.version,
+    packsFor: (name) => {
+      const known = read.get(name)
+      if (known !== undefined) return known
+      const started = readPack(name)
+      read.set(name, started)
+      return started
+    },
+  }
 }

@@ -361,6 +361,24 @@ describe('health-check-rollback', TIMEOUT, () => {
     expect(readPointer(home, 'current')).toBe(V1)
   })
 
+  it('a successor whose boot does not finish in time undoes what it changed and reports the failure itself, before the predecessor would stop it', async () => {
+    const marker = join(tmpdir(), `delorun-deadline-${String(process.pid)}-${String(Date.now())}`)
+    try {
+      // Its boot waits for a file that is never created, as a baseline that runs long does.
+      const home = await setUp({ abandonMarker: marker, bootGate: `${marker}.never`, successorDeadlineMs: 1_500 })
+      await start(home)
+      const begun = Date.now()
+      const outcome = final(await sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'drain', dataCopy: false } }))
+      expect(outcome).toMatchObject({ outcome: 'rolled-back', reason: 'HEALTH_CHECK_FAILED' })
+      // The boot waits 60 seconds for its gate, so only the deadline ends it this early.
+      expect(Date.now() - begun).toBeLessThan(30_000)
+      expect(readFileSync(marker, 'utf8')).toBe('abandoned')
+      expect(readPointer(home, 'current')).toBe(V1)
+    } finally {
+      rmSync(marker, { force: true })
+    }
+  })
+
   it('a successor that fails its health check abandons what its boot changed before the predecessor rolls back, and a runner that cannot still reports the failure', async () => {
     const marker = join(tmpdir(), `delorun-abandon-${String(process.pid)}-${String(Date.now())}`)
     try {

@@ -330,7 +330,8 @@ export async function recordsOf(request: Pick<EnforceRequest, 'home' | 'profile'
  * failed: the release it left may predate {@link followApprovedContent}, and with protection on it refuses to resume
  * when `active.json` names a version the restored approved record does not. Only a plugin whose entry still equals
  * `after` goes back to its `before` entry (or loses it when it had none), so an entry changed since, by a person or
- * another writer, is kept. The change log and the history are not touched.
+ * another writer, is kept; each active directory of an entry put back holds that entry's content again, or nothing. The
+ * change log and the history are not touched.
  * @param request - the home, the profile and its directory.
  * @param before - the records before the start.
  * @param after - the records the start left.
@@ -361,6 +362,8 @@ export async function revertDecisions(request: Pick<EnforceRequest, 'home' | 'pr
     const activePlugins = reverted(before.active, after.active, now.active)
     if (!same(approvedPlugins, now.approved.plugins)) await writeApproved(profileDir, { ...now.approved, plugins: approvedPlugins })
     if (!same(activePlugins, now.active)) await writeActiveRecord(home, profile, { schema: ACTIVE_RECORD_SCHEMA, plugins: activePlugins })
+    // An entry the start added is gone from the record, and one it moved names another version: the directory must hold what the record says, or the predecessor's invariant refuses it.
+    for (const name of changed(now.active, activePlugins)) await holdContent(home, activeDirectory(home, profile, name), activePlugins[name]?.version)
     return [...touched]
   }, { waitMs: request.lockWaitMs ?? PROFILE_LOCK_WAIT_MS })
 }

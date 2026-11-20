@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { attestTerminal, protectionPath, readActiveRecord, readApproved, readChangeLog, setProtection, writeApproved, type SignedPackFiles, type UpdateBaseline } from '@delorun/changes'
+import { attestTerminal, baselineOfPacks, protectionPath, readActiveRecord, readApproved, readChangeLog, setProtection, writeApproved, type SignedPackFiles, type UpdateBaseline } from '@delorun/changes'
 import type { RuntimeVersion } from '@delorun/contract-home-layout'
 import { parseRuntimeVersion } from '@delorun/runtime-store'
 import { prepareHome, type CommandContext } from '../src/command.ts'
@@ -66,7 +66,7 @@ function signed(release: string, files: Readonly<Record<string, string>>): Signe
   return { name: 'pkg', release: v(release), files: new Map(Object.entries(files).map(([path, body]) => [path, { sha256: sha(body), executable: false }])), peers: [], texts: new Map(Object.entries(files).filter(([path]) => path === 'package.json')) }
 }
 
-const baseline: UpdateBaseline = { from: '1.0.0', to: '2.0.0', packs: [signed('1.0.0', approvedFiles), signed('2.0.0', newFiles)] }
+const baseline: UpdateBaseline = baselineOfPacks('1.0.0', '2.0.0', [signed('1.0.0', approvedFiles), signed('2.0.0', newFiles)])
 
 function writePack(release: string, files: Readonly<Record<string, string>>): void {
   const folder = join(home, 'packs', release, 'pkg', 'package')

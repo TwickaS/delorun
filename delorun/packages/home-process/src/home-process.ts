@@ -24,6 +24,7 @@ import {
   DRAIN_TIMEOUT_DEFAULT_S,
   UPDATE_PROTOCOL_VERSION,
   HEALTH_CHECK_TIMEOUT_MS,
+  SUCCESSOR_DEADLINE_MS,
   type HomeProcessState,
   type HomeStatus,
   type StopMode,
@@ -88,6 +89,8 @@ export interface HomeProcessOptions {
   readonly logger: DelorunLogger
   /** The log's redactor, with which the start token is registered. */
   readonly redactor: Redactor
+  /** How long a successor works toward `ready` before it reports `failed` itself; {@link SUCCESSOR_DEADLINE_MS} when omitted. */
+  readonly successorDeadlineMs?: number
   /** The clock of the hourly log age check, in milliseconds since the epoch; the system clock by default. */
   readonly now?: () => number
   /** The runtime store and profile history, or `undefined` in a build without the runtime store: updates are refused. */
@@ -291,19 +294,31 @@ export class HomeProcess implements HandshakeSubject {
    * @param options - the launch values; `running` and `startId` come from the handover line.
    * @param pipe - the handover pipe.
    * @returns the process, in `running`.
-   * @throws {HomeProcessError} `HEALTH_CHECK_FAILED` when the Host fails its health check or the predecessor stops
-   *   before handing the lock over.
+   * @throws {HomeProcessError} `HEALTH_CHECK_FAILED` when the Host fails its health check, is not healthy within
+   *   {@link HomeProcessOptions.successorDeadlineMs}, or the predecessor stops before handing the lock over.
    */
   static async takeOver(options: HomeProcessOptions, pipe: HandoverPipe): Promise<HomeProcess> {
     const home = new HomeProcess(options)
     home.state = 'standby'
     const { handover } = pipe
+    let deadline: ReturnType<typeof setTimeout> | undefined
     try {
       await home.checkDirectories()
       home.listenSignals()
       home.runAgeChecks()
       let healthy = false
       let criterion: string | undefined
+      // One report of `failed`, whichever of the deadline, a failed check or a failed boot comes first.
+      let reported: Promise<void> | undefined
+      const reportFailed = (): Promise<void> => reported ??= (async () => {
+        await home.abandonSwitch()
+        pipe.send({ type: 'failed', reason: 'HEALTH_CHECK_FAILED', ...criterion === undefined ? {} : { criterion } })
+      })()
+      // The predecessor stops a successor that has not answered by `HEALTH_CHECK_TIMEOUT_MS`, and a stopped successor undoes nothing.
+      deadline = setTimeout(() => {
+        options.logger.error('the successor did not pass its health check in time', { data: { deadlineMs: options.successorDeadlineMs ?? SUCCESSOR_DEADLINE_MS } })
+        void reportFailed()
+      }, options.successorDeadlineMs ?? SUCCESSOR_DEADLINE_MS)
       try {
         home.host = await home.bootedHost()
         options.logger.info('the Host booted on the new runtime; checking its health', { data: { to: handover.to } })
@@ -317,16 +332,15 @@ export class HomeProcess implements HandshakeSubject {
         options.logger.error('the Host did not boot on the new runtime', { err: error })
         // The predecessor is told the check failed and boots its Host again, while this refused Host may still run.
         if (error instanceof HostNotStoppedError) {
-          await home.abandonSwitch()
-          pipe.send({ type: 'failed', reason: 'HEALTH_CHECK_FAILED' })
+          await reportFailed()
           throw error
         }
       }
-      if (!healthy) {
-        await home.abandonSwitch()
-        pipe.send({ type: 'failed', reason: 'HEALTH_CHECK_FAILED', ...criterion === undefined ? {} : { criterion } })
+      if (!healthy || reported !== undefined) {
+        await reportFailed()
         throw new HomeProcessError('HEALTH_CHECK_FAILED', `the Host on ${handover.to} failed its health check${criterion === undefined ? '' : ` (${criterion})`}`)
       }
+      clearTimeout(deadline)
       pipe.send({ type: 'ready' })
       const committed = await pipe.committed
       const directory = runDirectory(options.home, options.profile)
@@ -349,6 +363,7 @@ export class HomeProcess implements HandshakeSubject {
       home.releaseListeners()
       throw failure
     } finally {
+      clearTimeout(deadline)
       pipe.close()
     }
   }

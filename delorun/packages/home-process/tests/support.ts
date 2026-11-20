@@ -72,6 +72,8 @@ export interface FixtureBehaviour {
   readonly reportDisabled: readonly string[]
   /** A file whose creation lets its boot finish, so a spec can hold the phase that waits for the boot; none by default. */
   readonly bootGate?: string
+  /** How long its successor process works toward `ready` before it reports `failed` itself, in milliseconds; the product's deadline by default. */
+  readonly successorDeadlineMs?: number
   /** Whether the update report to this version names a data change. */
   readonly dataDiffers?: boolean
   /** The rows its Host has at boot. */

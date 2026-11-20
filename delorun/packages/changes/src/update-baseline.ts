@@ -26,8 +26,25 @@ export interface UpdateBaseline {
   readonly from: string
   /** The release this process runs. */
   readonly to: string
-  /** The signed files of each pack of `from` and of `to`, from their verified packs files. */
-  readonly packs: readonly SignedPackFiles[]
+  /**
+   * The signed files of one pack in `from` and in `to`, from their verified packs files; each release that lists the pack
+   * gives one entry. Reading a pack hashes its installed files, so a pack is asked for only when a waiting change touches
+   * it, and the provider answers the same pack once.
+   * @param name - the pack's package name.
+   * @returns the pack's signed files; none for a release that lists no such pack or whose pack cannot be read.
+   */
+  packsFor(name: string): Promise<readonly SignedPackFiles[]>
+}
+
+/**
+ * A baseline over packs that are already read.
+ * @param from - the release the update left.
+ * @param to - the release this process runs.
+ * @param packs - the signed files of each pack of both releases.
+ * @returns the baseline, which answers each pack from `packs`.
+ */
+export function baselineOfPacks(from: string, to: string, packs: readonly SignedPackFiles[]): UpdateBaseline {
+  return { from, to, packsFor: name => Promise.resolve(packs.filter(pack => pack.name === name)) }
 }
 
 /**
@@ -152,9 +169,9 @@ export interface SupersedeRequest {
  */
 export async function supersededByUpdate(home: string, baseline: UpdateBaseline, request: SupersedeRequest): Promise<boolean> {
   const { plugin, before, after } = request
-  const target = baseline.packs.find(pack => pack.release === baseline.to && pack.name === plugin)
+  const pools = (await baseline.packsFor(plugin)).filter(pack => pack.name === plugin && (pack.release === baseline.from || pack.release === baseline.to))
+  const target = pools.find(pack => pack.release === baseline.to)
   if (target === undefined || !isExactly(after, target)) return false
-  const pools = baseline.packs.filter(pack => pack.name === plugin && (pack.release === baseline.from || pack.release === baseline.to))
   const buildPaths = leftReleaseWithBuildPaths(baseline.from)
   const now = new Map(after.entries.map(entry => [entry.path, entry]))
   for (const entry of before.entries) {

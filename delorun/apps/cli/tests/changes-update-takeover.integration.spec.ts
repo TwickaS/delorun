@@ -2,7 +2,7 @@
  * The update baseline through the real start: `startForeground` reads a handover line and `HomeProcess.takeOver` boots
  * the successor's Host, whose boot re-points its plugin copies. The pack's change waiting from the previous release is
  * closed there, and only there: a fresh `HomeProcess.start` applies nothing. The signed pack files are a stand-in for
- * `readSignedPackFiles`, which `packs-client` specs verify.
+ * `openSignedPacks`, which `packs-client` specs verify.
  */
 import { createHash } from 'node:crypto'
 import { createServer, type Server } from 'node:http'
@@ -33,10 +33,16 @@ import { composedBootRows, composedProviders } from './fixtures/composed-rows.ts
 const hooks = vi.hoisted(() => ({ signed: new Map<string, import('@delorun/changes').SignedPackFiles[]>(), asked: [] as string[] }))
 
 // The real `updateBaselineOf` runs, with its newer-release guard and its two packs-file reads; the signature checks of
-// `readSignedPackFiles` are the `packs-client` specs'.
+// `openSignedPacks` are the `packs-client` specs'.
 vi.mock('@delorun/runtime-store', async importOriginal => {
   const actual = await importOriginal<typeof import('@delorun/runtime-store')>()
-  return { ...actual, readSignedPackFiles: (release: { readonly version: string }) => Promise.resolve(hooks.signed.get(release.version) ?? []) }
+  return {
+    ...actual,
+    openSignedPacks: (release: { readonly version: string }) => {
+      const packs = hooks.signed.get(release.version)
+      return Promise.resolve(packs === undefined ? undefined : { files: (name: string) => Promise.resolve(packs.find(pack => pack.name === name)) })
+    },
+  }
 })
 
 vi.mock('@delorun/plugin-packs/environment', () => ({
@@ -93,7 +99,7 @@ function signed(release: string, files: Readonly<Record<string, string>>): Signe
   return { name: 'pkg', release: v(release), files: new Map(Object.entries(files).map(([path, body]) => [path, { sha256: sha(body), executable: false }])), peers: [], texts: new Map(Object.entries(files).filter(([path]) => path === 'package.json')) }
 }
 
-/** Both releases' stored packs files, as `readSignedPackFiles` reads them. */
+/** Both releases' stored packs files, as `openSignedPacks` reads them. */
 function publishPacks(): void {
   hooks.signed.set('1.0.0', [signed('1.0.0', oldFiles)])
   hooks.signed.set('2.0.0', [signed('2.0.0', newFiles)])
@@ -238,6 +244,8 @@ describe('the update baseline in a start of the real home process', { timeout: 1
 
     expect(messages.map(message => message.type)).toEqual(['failed'])
     expect(hooks.asked).toEqual(['1.0.0'])
+    // The baseline applied before the health check failed, so the equal records below are a revert, not nothing done.
+    expect(await replaced()).toHaveLength(1)
     expect(await readApproved(profileDir())).toEqual(approvedBefore)
     expect(await readActiveRecord(home, PROFILE)).toEqual(activeBefore)
     // The predecessor re-points its copies and checks the invariants, as a 2.1 release does.
