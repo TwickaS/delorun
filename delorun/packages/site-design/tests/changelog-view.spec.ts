@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { headlinesOnly, type ChangelogView, type ViewVersion } from '../src/changelog.ts'
+import { CHANGELOG_SCHEMA } from '../../../apps/release/src/changelog/data.ts'
+import { buildView, headlinesOnly, type ChangelogView, type ViewVersion } from '../src/changelog.ts'
 
 const area = { area: 'Chat', items: [{ prefix: undefined, text: 'A change' }] }
 const version = (number: string): ViewVersion => ({ version: number, date: '2026-01-01', areas: [area], fromUpstream: ['u'], previews: [{ version: `${number}-p`, date: '2025-12-01', areas: [area], fromUpstream: [] }], headlines: ['Headline'] })
@@ -18,5 +19,19 @@ describe('the headlines-only changelog view', () => {
     expect(headlinesOnly(undefined)).toBeUndefined()
     const empty: ChangelogView = { compared: view.compared, versions: [] }
     expect(headlinesOnly(empty)).toBe(empty)
+  })
+})
+
+describe('the public changelog view', () => {
+  const entry = (number: string): Parameters<typeof buildView>[0]['versions'][number] => ({ version: number, date: '2026-01-01', preview: true, areas: [], fromUpstream: { ref: 'u', items: [] }, previews: [] })
+  const record = (publicFrom: string | undefined): Parameters<typeof buildView>[0] => ({ schema: CHANGELOG_SCHEMA, upstream: { ref: 'u', commit: 'c' }, ...publicFrom === undefined ? {} : { publicFrom }, compared: [], versions: [entry('0.1.0-preview.2.1'), entry('0.1.0-preview.2'), entry('0.1.0-preview.1.5')] })
+
+  it('shows publicFrom and later versions and no earlier one', () => {
+    expect(buildView(record('0.1.0-preview.2.1')).versions.map(item => item.version)).toEqual(['0.1.0-preview.2.1'])
+    expect(buildView(record('0.1.0-preview.2')).versions.map(item => item.version)).toEqual(['0.1.0-preview.2.1', '0.1.0-preview.2'])
+  })
+
+  it('shows every version when the record has no publicFrom', () => {
+    expect(buildView(record(undefined)).versions).toHaveLength(3)
   })
 })

@@ -10,7 +10,7 @@
  */
 import { existsSync, readFileSync } from 'node:fs'
 import { isAbsolute, join, resolve } from 'node:path'
-import { basedOnText, bulletPrefix, byArea, comparedText, parseData, type AreaItems, type ChangelogData, type PreviewEntry, type VersionEntry } from '../../../apps/release/src/changelog/data.ts'
+import { basedOnText, bulletPrefix, byArea, comparedText, parseData, publicVersions, type AreaItems, type ChangelogData, type PreviewEntry, type VersionEntry } from '../../../apps/release/src/changelog/data.ts'
 
 /** The record's path relative to the repository root, which `delorun/apps/release/src/changelog/paths.ts` names as `DATA_PATH`. */
 export const RECORD_PATH = 'delorun/changelog/changelog.json'
@@ -97,11 +97,11 @@ function viewVersion(entry: VersionEntry): ViewVersion {
 /**
  * The view of a changelog record.
  * @param data - the parsed record.
- * @returns the view, newest version first as the record orders them.
+ * @returns the view, newest version first as the record orders them; versions before the record's `publicFrom` are left out.
  */
 export function buildView(data: ChangelogData): ChangelogView {
   const { heading, intro } = comparedText(data)
-  return { compared: { heading, intro, areas: viewAreas(byArea(data.compared)) }, versions: data.versions.map(viewVersion) }
+  return { compared: { heading, intro, areas: viewAreas(byArea(data.compared)) }, versions: publicVersions(data).map(viewVersion) }
 }
 
 /**
