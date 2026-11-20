@@ -1,9 +1,9 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { BUILD_STAMP_PATH, captureBuildStart, readBuildStamp, writeBuildStamp } from './build-stamp.ts'
+import { BUILD_SOURCE_COMMIT_ENV, BUILD_SOURCE_TREE_ENV, BUILD_STAMP_PATH, captureBuildStart, readBuildStamp, writeBuildStamp } from './build-stamp.ts'
 
 const directories: string[] = []
 const ENV = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' }
@@ -56,5 +56,52 @@ describe('build stamp', () => {
     writeFileSync(join(directory, 'tracked.txt'), 'edited\n')
     expect(writeBuildStamp(directory, start)).toBeUndefined()
     expect(existsSync(join(directory, BUILD_STAMP_PATH))).toBe(false)
+  })
+})
+
+describe('build stamp in an exported tree without .git', () => {
+  const commit = 'abcdef0123456789abcdef0123456789abcdef01'
+  const facts = { [BUILD_SOURCE_COMMIT_ENV]: commit, [BUILD_SOURCE_TREE_ENV]: 'clean' }
+
+  function exported(): string {
+    const directory = mkdtempSync(join(tmpdir(), 'build-stamp-export-'))
+    directories.push(directory)
+    return directory
+  }
+
+  it('stamps the commit and the clean tree the environment names', () => {
+    const directory = exported()
+    expect(captureBuildStart(directory, facts)).toBe(commit)
+    expect(writeBuildStamp(directory, commit, facts)).toEqual({ commit })
+    expect(readBuildStamp(directory)).toEqual({ commit })
+    expect(readFileSync(join(directory, BUILD_STAMP_PATH), 'utf8')).not.toContain(directory)
+  })
+
+  it('fails loud, and writes no stamp, when the environment names neither the commit nor the tree', () => {
+    const directory = exported()
+    expect(() => captureBuildStart(directory, {})).toThrow(/no \.git.*DSH_BUILD_SOURCE_COMMIT/u)
+    expect(() => captureBuildStart(directory, { [BUILD_SOURCE_COMMIT_ENV]: commit })).toThrow(/DSH_BUILD_SOURCE_TREE/u)
+    expect(() => captureBuildStart(directory, { [BUILD_SOURCE_TREE_ENV]: 'clean' })).toThrow(/DSH_BUILD_SOURCE_COMMIT/u)
+    expect(() => writeBuildStamp(directory, commit, {})).toThrow(/no \.git/u)
+    expect(existsSync(join(directory, BUILD_STAMP_PATH))).toBe(false)
+  })
+
+  it('refuses a commit that is not a full id, and a tree that is not stated clean', () => {
+    const directory = exported()
+    expect(() => captureBuildStart(directory, { ...facts, [BUILD_SOURCE_COMMIT_ENV]: 'HEAD' })).toThrow(/40-character/u)
+    expect(() => captureBuildStart(directory, { ...facts, [BUILD_SOURCE_TREE_ENV]: 'dirty' })).toThrow(/must be clean/u)
+  })
+
+  it('does not stamp a commit other than the one the build started with', () => {
+    const directory = exported()
+    expect(writeBuildStamp(directory, 'f'.repeat(40), facts)).toBeUndefined()
+    expect(existsSync(join(directory, BUILD_STAMP_PATH))).toBe(false)
+  })
+
+  it('uses git, not the environment, inside a checkout', () => {
+    const directory = repository()
+    mkdirSync(join(directory, '.dsh-build'), { recursive: true })
+    expect(captureBuildStart(directory, facts)).toBe(git(directory, 'rev-parse', 'HEAD'))
+    expect(captureBuildStart(directory, {})).toBe(git(directory, 'rev-parse', 'HEAD'))
   })
 })

@@ -6,12 +6,13 @@
  */
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { devNull } from 'node:os'
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { devNull, tmpdir } from 'node:os'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { join } from 'node:path'
 import { create as createTar } from 'tar'
+import { BUILD_STAMP_PATH, captureBuildStart, writeBuildStamp } from '../../../../../scripts/build-stamp.ts'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { buildClosures, buildClosuresChecked, buildEnvironment, toolchainProblems } from '../../src/build-closure.ts'
 import { ClosureRecipe, parseRecipeText, readRecipe, readRecipeFile, RebuildExceptions, RECIPE_DIR, RECIPE_FILES, Toolchain } from '../../src/closure/config.ts'
@@ -150,9 +151,27 @@ describe('the build toolchain and environment', () => {
       CXXFLAGS: '-ffile-prefix-map=/var/tmp/delorun-release-build=.',
       TZ: 'UTC',
       LC_ALL: 'C',
+      DSH_BUILD_SOURCE_COMMIT: 'a'.repeat(40),
+      DSH_BUILD_SOURCE_TREE: 'clean',
       DSH_CLIENT_COMMIT_HASH: 'a'.repeat(40),
       DSH_CLIENT_TITLE: 'Delorun',
     })
+  })
+})
+
+describe('the build environment in an exported tree', () => {
+  it('lets the build stamp name the exported commit without a .git, and keeps every path out of the stamp', () => {
+    const tree = mkdtempSync(join(tmpdir(), 'recipe-export-'))
+    try {
+      const commit = 'b'.repeat(40)
+      const env = buildEnvironment({ PATH: '/usr/bin', HOME: '/home/builder' }, '/var/tmp/delorun-release-build', 1, commit, 'Delorun')
+      expect(captureBuildStart(tree, env)).toBe(commit)
+      expect(writeBuildStamp(tree, commit, env)).toEqual({ commit })
+      const stamp = readFileSync(join(tree, BUILD_STAMP_PATH), 'utf8')
+      expect(stamp).toBe(`{"commit":"${commit}"}\n`)
+    } finally {
+      rmSync(tree, { recursive: true, force: true })
+    }
   })
 })
 

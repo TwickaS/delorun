@@ -3024,7 +3024,7 @@
       "path": "scripts/build-stamp.ts",
       "class": "delorun-feature",
       "feature": "release-cut",
-      "reason": "Records the commit a clean artifact build ran at (only when HEAD and tracked files stayed unchanged across the build), so cut-rc --artifacts existing refuses stale lib/ directories."
+      "reason": "Records the commit a clean artifact build ran at (only when HEAD and tracked files stayed unchanged across the build), so cut-rc --artifacts existing refuses stale lib/ directories. In a tree without .git it takes the commit and the clean state from DSH_BUILD_SOURCE_COMMIT and DSH_BUILD_SOURCE_TREE, and fails when they are absent."
     },
     {
       "path": "packages/sandbox/sandbox/src/locales.ts",
@@ -3277,6 +3277,12 @@
       "class": "generic-fix",
       "feature": "devtools-build-paths",
       "reason": "The DevTools bundle named each stylesheet module by its absolute path, so every built chunk carried the build machine's checkout path in a region comment; the module id is now relative to the frontend root. Offer upstream."
+    },
+    {
+      "path": "scripts/client-build-environment.ts",
+      "class": "generic-fix",
+      "feature": "build-without-git",
+      "reason": "Reading the source commit in a directory that is not a Git checkout fails with an error that names DSH_CLIENT_COMMIT_HASH instead of git's own message. Offer upstream."
     }
   ],
   "retired": []

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { execFileSync, spawnSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import {
   existsSync,
   globSync,
@@ -44,6 +44,14 @@ const CLIENT_ARTIFACT_PATTERNS = [
 /** Public values embedded in one set of client artifacts. */
 export type ClientBuildEnvironment = Readonly<Record<string, string>>
 
+function gitHead(root: string): string {
+  const head = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+  if (head.error !== undefined || head.status !== 0) {
+    throw new Error(`cannot read the source commit: ${root} is not a Git checkout, so ${CLIENT_COMMIT_HASH_VARIABLE} must name it`)
+  }
+  return head.stdout.trim()
+}
+
 /**
  * Resolve the short source commit used by browser build metadata.
  * @param root - repository root used when no explicit value is supplied.
@@ -52,11 +60,7 @@ export type ClientBuildEnvironment = Readonly<Record<string, string>>
  */
 export function repositoryCommitHash(root: string, environment: NodeJS.ProcessEnv = process.env): string {
   const explicit = environment[CLIENT_COMMIT_HASH_VARIABLE]
-  const value = explicit ?? execFileSync('git', ['rev-parse', 'HEAD'], {
-    cwd: root,
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'ignore'],
-  }).trim()
+  const value = explicit ?? gitHead(root)
   if (!/^[0-9a-f]{7,40}$/iu.test(value)) {
     throw new Error(`${CLIENT_COMMIT_HASH_VARIABLE} must be a Git commit hash; got ${JSON.stringify(value)}`)
   }
