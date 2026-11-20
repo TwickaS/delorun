@@ -5,6 +5,7 @@
  * @module @deepseek-ai/dsh-client-ui-primitives/edge-surface
  */
 import { useLayoutEffect } from 'react'
+import type { RefObject } from 'react'
 
 /** A surface that covers the page with its own solid background at the top and bottom of the screen. */
 export interface SolidEdgeSurface {
@@ -97,33 +98,47 @@ export function compositeOver(overlay: string, base: string): string {
   return `rgb(${mix(1)}, ${mix(2)}, ${mix(3)})`
 }
 
-/**
- * Hold a surface on the edge stack while a component is open.
- * @param open - whether the surface is showing.
- * @param surface - its edge colours or overlay; read when the surface opens or when either colour changes.
- */
-export function useEdgeSurface(open: boolean, surface: EdgeSurface): void {
-  const top = 'top' in surface ? surface.top : undefined
-  const bottom = 'bottom' in surface ? surface.bottom : undefined
-  const dim = 'dim' in surface ? surface.dim : undefined
-  useLayoutEffect(() => {
-    if (!open) return undefined
-    const entry: EdgeSurface = dim !== undefined ? { dim } : { top: top ?? '', bottom: bottom ?? '' }
-    return pushEdgeSurface(document, entry)
-  }, [open, top, bottom, dim])
-}
-
 /** The token a dialog mask takes its colour from. */
 const MASK_TOKEN = '--dsw-alias-bg-mask-1'
 
 /**
- * Hold a dialog mask on the edge stack while a modal is open, so the browser's bars take the dimmed page colour.
- * @param open - whether the modal is showing.
+ * Choose the edge entry for an open surface: a surface that fills the viewport with an opaque background puts that
+ * background at both edges, and any other surface is a card on a mask, so the mask tints the edges.
+ * @param element - the surface's own element.
+ * @param win - its window.
+ * @returns the entry, or undefined when the surface needs none because the mask token is empty.
  */
-export function useMaskEdgeSurface(open: boolean): void {
+export function edgeSurfaceOf(element: HTMLElement, win: Window): EdgeSurface | undefined {
+  const rect = element.getBoundingClientRect()
+  const background = win.getComputedStyle(element).backgroundColor
+  const opaque = /^rgb\(/.test(background) || /^rgba\(.*,\s*1\)$/.test(background)
+  if (opaque && rect.width >= win.innerWidth - 1 && rect.height >= win.innerHeight - 1) return { top: background, bottom: background }
+  const dim = win.getComputedStyle(element.ownerDocument.body).getPropertyValue(MASK_TOKEN).trim()
+  return dim === '' ? undefined : { dim }
+}
+
+/**
+ * Hold a full-screen surface or a dialog on the edge stack while it is open, so the browser's bars take its colour.
+ * @param element - a ref to the surface's own element.
+ * @param open - whether the surface is showing.
+ */
+export function useSurfaceEdges(element: RefObject<HTMLElement | null>, open: boolean): void {
   useLayoutEffect(() => {
-    if (!open) return undefined
-    const dim = getComputedStyle(document.body).getPropertyValue(MASK_TOKEN).trim()
-    return dim === '' ? undefined : pushEdgeSurface(document, { dim })
-  }, [open])
+    const target = element.current
+    if (!open || target === null) return undefined
+    const win = target.ownerDocument.defaultView
+    if (win === null) return undefined
+    let release: (() => void) | undefined
+    const apply = (): void => {
+      release?.()
+      const surface = edgeSurfaceOf(target, win)
+      release = surface === undefined ? undefined : pushEdgeSurface(target.ownerDocument, surface)
+    }
+    apply()
+    win.addEventListener('resize', apply)
+    return () => {
+      win.removeEventListener('resize', apply)
+      release?.()
+    }
+  }, [element, open])
 }

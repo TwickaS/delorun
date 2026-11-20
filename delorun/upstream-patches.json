@@ -3103,6 +3103,12 @@
       "class": "delorun-feature",
       "feature": "studio-seams",
       "reason": "Holds the dialog mask on the edge stack while a dialog is open, so the browser's status and bottom bars take the dimmed page colour on a phone and restore it, in order, as nested dialogs close."
+    },
+    {
+      "path": "packages/client/ui-primitives/src/edge-surface.ts",
+      "class": "delorun-feature",
+      "feature": "studio-seams",
+      "reason": "The per-document stack of open full-screen surfaces and dialogs, with the hook that registers one, which the theme plugin's edge controller reads so the phone browser's bars follow the surface on top and restore in order."
     }
   ],
   "retired": []
