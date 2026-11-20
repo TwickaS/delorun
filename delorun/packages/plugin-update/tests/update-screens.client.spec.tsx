@@ -155,6 +155,37 @@ describe('the progress and outcome cards', () => {
     expect(details).not.toContain('delorun logs')
   })
 
+  const NOTES = {
+    truncated: false,
+    versions: [
+      { version: '0.1.3', date: '2026-11-19', highlights: ['New one', 'New two', 'New three'], areas: [{ area: 'Studio', items: [{ section: 'Added', text: 'Full entry A' }] }] },
+      { version: '0.1.2', highlights: ['Old one', 'Old two', 'Old three'], areas: [] },
+    ],
+  }
+
+  it('lists at most five highlights across the skipped versions, newest first, and opens the full notes in a sheet that closes with Back', () => {
+    overlay(stateOf({ result: { ...RESULT, outcome: 'committed' }, notes: NOTES }))
+    const items = [...document.querySelectorAll('[data-update-notes] > ul > li')].map(node => node.textContent)
+    expect(items).toEqual(['New one', 'New two', 'New three', 'Old one', 'Old two'])
+    expect(document.querySelector('[data-update-notes-sheet]')).toBeNull()
+    fireEvent.click(screen.getByText(en['notes.more']))
+    const sheet = document.querySelector('[data-update-notes-sheet]')
+    expect(sheet?.textContent).toContain('Full entry A')
+    expect(sheet?.textContent).toContain('0.1.3, 2026-11-19')
+    fireEvent.click(screen.getAllByText(en['notes.back']).at(-1)!)
+    expect(document.querySelector('[data-update-notes-sheet]')).toBeNull()
+  })
+
+  it('shows no highlights and no Read more without notes, and says when the notes are cut short', () => {
+    overlay(stateOf({ result: { ...RESULT, outcome: 'committed' } }))
+    expect(document.querySelector('[data-update-notes]')).toBeNull()
+    expect(screen.queryByText(en['notes.more'])).toBeNull()
+    cleanup()
+    overlay(stateOf({ result: { ...RESULT, outcome: 'committed' }, notes: { ...NOTES, truncated: true } }))
+    fireEvent.click(screen.getByText(en['notes.more']))
+    expect(document.querySelector('[data-update-notes-sheet]')?.textContent).toContain(en['notes.truncated'])
+  })
+
   it('draws the cards in the toast area, not as fixed cards of its own', () => {
     overlay(stateOf({ result: RESULT }))
     expect(document.querySelector('[data-toast-area] [data-update-outcome]')).not.toBeNull()

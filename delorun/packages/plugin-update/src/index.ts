@@ -16,6 +16,8 @@ import type { UpdateChannelAccess } from '@delorun/home-process'
 // Types only, resolved through the workspace paths: a declared dependency would close a cycle, since bundle-local depends on this package.
 import type {} from '@delorun/bundle-local/update-check'
 import type {} from '@delorun/plugin-changes'
+import { readFile } from 'node:fs/promises'
+import { fileURLToPath } from 'node:url'
 import { updateRoutes } from './routes.ts'
 import { UPDATE_ROUTE_PREFIX } from './wire.ts'
 
@@ -70,6 +72,7 @@ export function apply(ctx: Context, config: Config): void {
       release: () => ({ delorun: getDelorunRuntimeVersion() ?? 'unknown', dsh: getDshRuntimeVersion() ?? 'unknown' }),
       logger: scope.logger,
       now: Date.now,
+      changelog: readInstalledChangelog,
     })
     scope.effect(() => {
       const registered = routes.map(route => scope.webServer.register(route))
@@ -80,4 +83,23 @@ export function apply(ctx: Context, config: Config): void {
     // The recovery screen, which runs without any client plugin, reads whether a rollback is on offer from these routes.
     scope.on('webserver/index-inject', (table) => { table.push({ kind: 'global', name: RECOVERY_UPDATE_ROUTES_GLOBAL, value: UPDATE_ROUTE_PREFIX }) })
   })
+}
+
+/** Where the release's changelog data sits, relative to this package's `src` or `lib` folder in the release tree. */
+const CHANGELOG_URL = new URL('../../../changelog/changelog.json', import.meta.url)
+
+/**
+ * Read the installed release's `changelog.json`.
+ * @returns the parsed file, or `undefined` when the release does not hold it or it is not JSON.
+ */
+async function readInstalledChangelog(): Promise<unknown> {
+  const text = await readFile(fileURLToPath(CHANGELOG_URL), 'utf8').catch(() => undefined)
+  if (text === undefined) return undefined
+  try {
+    return JSON.parse(text)
+  } catch (error) {
+    // A damaged file is the same as no file: the card shows no highlights.
+    void error
+    return undefined
+  }
 }

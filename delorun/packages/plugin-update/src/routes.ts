@@ -12,6 +12,7 @@ import type { UpdateNotice } from '@delorun/contract-update-report'
 import { journalPath, readJournal, readUpdateResult, removeUpdateResult, updateResultPath, type ResponseLine, type UpdateChannelAccess } from '@delorun/home-process'
 import { flag, onlyFields, RouteRefusal, type ChangesGate, type RouteHandler } from '@delorun/plugin-changes'
 import { begin, finish } from './home-channel.ts'
+import { notesBetween } from './notes.ts'
 import { hold, holds, isUpdateReport, missingTicks, viewOf, type HeldUpdate } from './report-view.ts'
 import {
   UPDATE_PATHS,
@@ -42,6 +43,8 @@ export interface UpdateRouteDependencies {
   readonly logger: { info(message: string): void, warn(message: string): void }
   /** The time, in milliseconds since the epoch. */
   readonly now: () => number
+  /** Read the installed release's `changelog.json`, parsed; `undefined` when it is absent or unreadable. */
+  readonly changelog?: () => Promise<unknown>
 }
 
 /** The release check as the routes use it. */
@@ -158,6 +161,9 @@ export function updateRoutes(dependencies: UpdateRouteDependencies): readonly Up
       ...resultRecord.reason === undefined ? {} : { reason: resultRecord.reason },
       ...resultRecord.criterion === undefined ? {} : { criterion: resultRecord.criterion },
     }
+    const notes = result?.kind === 'update' && result.outcome === 'committed' && dependencies.changelog !== undefined
+      ? notesBetween(await dependencies.changelog().catch(() => undefined), result.from, result.to)
+      : undefined
     const journal = await readJournal(journalPath(ctx.home, ctx.profile)).catch(() => undefined)
     const running = release()
     const rollback: RollbackStateView = journal?.phase === 'committed' && journal.to === running.delorun && channelOpen !== undefined
@@ -171,6 +177,7 @@ export function updateRoutes(dependencies: UpdateRouteDependencies): readonly Up
       release: running, available: channelOpen !== undefined, access: view, check: checkView, progress, rollback,
       ...prepared === undefined ? {} : { prepared },
       ...result === undefined ? {} : { result },
+      ...notes === undefined ? {} : { notes },
     }
     return answer
   })

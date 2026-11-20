@@ -174,6 +174,56 @@
   background: var(--dsw-alias-surface-primary, var(--dsw-alias-settings-card-fill));
 }
 
+.notes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.highlights {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.areaHeading {
+  margin: 8px 0 4px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.notesSheet {
+  width: min(640px, 100%);
+}
+
+.notesBody {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: min(60vh, 560px);
+  overflow-y: auto;
+}
+
+/* On a phone the sheet is the whole screen, with Back in its footer. */
+@media (max-width: 767px) {
+  .notesSheet {
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
+    max-height: none;
+    border-radius: 0;
+  }
+
+  .notesBody {
+    flex: 1;
+    max-height: none;
+  }
+}
+
 @media (max-width: 600px) {
   .cardRow {
     flex-direction: column;

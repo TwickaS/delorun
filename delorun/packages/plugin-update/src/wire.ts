@@ -227,6 +227,34 @@ export interface UpdateResultView {
   readonly at: string
 }
 
+/** One section's bullets of a version's notes. */
+export interface UpdateNotesArea {
+  /** The area the bullets belong to, such as `Studio`. */
+  readonly area: string
+  /** The bullets, with their section (`Added`, `Fixed`, and so on). */
+  readonly items: readonly { readonly section: string, readonly text: string }[]
+}
+
+/** One version's notes from the installed release's changelog. */
+export interface UpdateNotesVersion {
+  readonly version: string
+  /** The day the version was assembled, `YYYY-MM-DD`, when the changelog records it. */
+  readonly date?: string
+  /** Up to three one-line highlights: the version's headlines, or its first bullets when it has none. */
+  readonly highlights: readonly string[]
+  /** The full entries, by area. */
+  readonly areas: readonly UpdateNotesArea[]
+}
+
+/**
+ * The notes of a finished update, newest version first: every version after the one that ran before, up to the one that
+ * runs now, read from the installed release. At most 20 versions and about 64 KB; `truncated` says a cap cut the list.
+ */
+export interface UpdateNotesView {
+  readonly versions: readonly UpdateNotesVersion[]
+  readonly truncated: boolean
+}
+
 /** What a rollback needs, from the committed update record. */
 export interface RollbackStateView {
   /** Whether a committed update record names the release this Host runs, so Go back is offered. */
@@ -251,4 +279,6 @@ export interface UpdateStateView {
   /** How the last update or rollback ended, until the person dismisses it. */
   readonly result?: UpdateResultView
   readonly rollback: RollbackStateView
+  /** The notes of the update the `result` records, present only for a committed update whose changelog the install holds. */
+  readonly notes?: UpdateNotesView
 }

@@ -9,6 +9,7 @@ import { Button, StateDot, ToastSlot } from '@deepseek-ai/dsh-client-ui-primitiv
 import type { HostObservable, InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { UpdateResultView, UpdateStateView } from '../wire.ts'
 import type { UpdateLoad } from './controller.ts'
+import { NotesHighlights } from './NotesSheet.tsx'
 import { UpdateDialog, type UpdateDialogActions } from './UpdateDialog.tsx'
 import css from './UpdatePanel.module.css'
 import { controlUse, keepVersions, localTime, pluralKey, type T } from './parts.tsx'
@@ -57,7 +58,7 @@ export function UpdateCards({ t, load, switching, dialog, actions, cancel, dismi
   const reconnecting = load.status === 'ready' && load.reconnecting
   return <>
     {state === undefined ? null : <ProgressCard state={state} switching={switching} reconnecting={reconnecting} t={t} cancel={cancel} />}
-    {state === undefined || state.result === undefined || state.progress.kind !== 'idle' ? null : <OutcomeCard state={state} result={state.result} t={t} dismiss={dismiss} />}
+    {state === undefined || state.result === undefined || state.progress.kind !== 'idle' ? null : <OutcomeCard state={state} result={state.result} notes={state.notes} t={t} dismiss={dismiss} />}
     {dialog && state !== undefined
       ? <UpdateDialog state={state} t={t} actions={actions} onClose={closeDialog} openChanges={openChanges} />
       : null}
@@ -135,9 +136,10 @@ const REASONS: Readonly<Record<string, true>> = {
  * @param props - the state, the record, the dictionary and Dismiss.
  * @returns the card.
  */
-function OutcomeCard({ state, result, t, dismiss }: {
+function OutcomeCard({ state, result, notes, t, dismiss }: {
   readonly state: UpdateStateView
   readonly result: UpdateResultView
+  readonly notes: UpdateStateView['notes']
   readonly t: T
   readonly dismiss: () => Promise<unknown>
 }) {
@@ -155,6 +157,7 @@ function OutcomeCard({ state, result, t, dismiss }: {
       <div className={css.main}>
         <p className={css.title}><StateDot state={good ? 'done' : 'error'} /><span>{keepVersions(title, [result.to, result.from])}</span></p>
         <p className={css.body}>{keepVersions(body, [result.to, result.from])}</p>
+        {good ? <NotesHighlights notes={notes} t={t} /> : null}
       </div>
       <div className={css.actions}>
         <Button variant="outline" size="sm" aria-expanded={details} onClick={() => { setDetails(value => !value) }}>{t(details ? 'outcome.details.hide' : 'outcome.details')}</Button>
