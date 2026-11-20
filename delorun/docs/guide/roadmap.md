@@ -36,7 +36,7 @@ DeepSeek Harness plugins and chats stay compatible. Everything a person sees, wh
 
 ## Now
 
-What is being built is `0.1.0`, the first public version, for individuals: people switching from stock and people new to it.
+What is being built is `0.1.0`, the first version that is not a preview, for individuals: people switching from stock and people new to it.
 
 - **The preview.** The preview versions lead to `0.1.0`: Delorun on Linux and on Windows through WSL2, with the Web studio and your phone over Tailscale.
 - **The words.** The README, the trust page, the known issues and the answers to the hard questions, so a first-time reader is never lost.
