@@ -44,8 +44,8 @@ export const UPDATE_PATHS = {
  * - `update-check`, `update-cancel`, `update-dismiss` and `update-continue` (`continue-chat`: one fixed message to a chat the update stopped; a cancel that settles the stopped chats sends the same message, as the person's setting asked): class `free`, any paired device with no prompt (they read, or only
  *   take back);
  * - `update-begin` (which `stop-chats` also uses, since it ends running chats to let the update go on), `update-rollback` and `stop`: class `face`, the computer, or a device with a Face ID (or PIN) grant for
- *   exactly that call; a device with no passkey takes `update-begin` and `update-rollback` with a PIN grant, and `stop`
- *   also with an unlock it entered. While the home keeps no grant store, `update-begin` and `update-rollback` stay at the computer.
+ *   exactly that call; a device with no passkey takes each of them with a PIN grant, and no unlock opens any of them
+ *   (A483). While the home keeps no grant store, they stay at the computer.
  */
 export type UpdateControl = 'update-check' | 'update-begin' | 'update-cancel' | 'update-rollback' | 'update-dismiss' | 'update-continue' | 'stop'
 

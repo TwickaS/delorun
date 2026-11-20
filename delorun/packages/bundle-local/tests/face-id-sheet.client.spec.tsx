@@ -138,10 +138,25 @@ describe('the shared action sheet', () => {
     expect(props.onCancel).toHaveBeenCalledOnce()
   })
 
+  // ~/a/app and ~/b/app both read "app" on a sheet that grants full access; the row shows the whole path.
+  it('tells two workspaces with the same folder name apart in the Workspace row', async () => {
+    const consent = (workspace: string) => callActionOf(t, { action: 'plugin-permission-defaults/set-full-access', call: { method: 'POST', path: '/p', body: { workspace, on: true } } })
+    const [a, b] = await Promise.all([consent('/home/me/a/app'), consent('/home/me/b/app')])
+    expect(a.title).toBe(b.title)
+    expect([a.context?.workspace, b.context?.workspace]).toEqual(['/home/me/a/app', '/home/me/b/app'])
+  })
+
+  // The folder picker's grant opens a hold, so its Covers row is the hold's, not "This action only".
+  it('names the folder picker\'s hold in the Covers row', async () => {
+    flow({ action: await callActionOf(t, { action: 'directoryPicker/list', call: { args: { path: '/' } }, hold: { feature: 'picker', id: 'directoryPicker' } }) })
+    const covers = [...document.querySelectorAll('dl > div')].find(row => row.querySelector('dt')?.textContent === 'Covers')
+    expect(covers?.querySelector('dd')?.textContent).toBe('Folder browsing until it is unused for 5 minutes')
+  })
+
   // "Covers" is what the one Face ID confirms; the state it leaves needs its own row, or full access would read as finished with the action.
   it('names the state an action leaves in an Afterwards row, and none for a terminal', async () => {
     const full = await callActionOf(t, { action: 'plugin-permission-defaults/set-full-access', call: { method: 'POST', path: '/api/full-access', body: { workspace: '/home/user/delorun', on: true } } })
-    expect(full.stays).toBe('Full access stays on for delorun until you turn it off.')
+    expect(full.stays).toBe('Full access stays on for delorun until you turn it off, or until dangerous mode ends if it is on now.')
     const off = await callActionOf(t, { action: 'plugin-permission-defaults/set-full-access', call: { method: 'POST', path: '/api/full-access', body: { workspace: '/home/user/delorun', on: false } } })
     expect(off.stays).toBe('Full access stays off for delorun until you turn it on.')
     expect((await callActionOf(t, { action: 'plugin-packs/add', call: { method: 'POST', path: '/api/p', body: {} } })).stays).toBe('The plugin stays installed until you remove it.')
@@ -149,7 +164,7 @@ describe('the shared action sheet', () => {
     expect((await callActionOf(t, { action: 'terminal/create', call: { args: { request: { id: 't' } } } })).stays).toBeUndefined()
     flow({ action: full })
     const rows = [...document.querySelectorAll('dl > div')].map(row => [row.querySelector('dt')?.textContent, row.querySelector('dd')?.textContent])
-    expect(rows.slice(-2)).toEqual([['Covers', 'This action only'], ['Afterwards', 'Full access stays on for delorun until you turn it off.']])
+    expect(rows.slice(-2)).toEqual([['Covers', 'This action only'], ['Afterwards', 'Full access stays on for delorun until you turn it off, or until dangerous mode ends if it is on now.']])
     cleanup()
     flow()
     expect([...document.querySelectorAll('dl dt')].map(row => row.textContent)).not.toContain('Afterwards')

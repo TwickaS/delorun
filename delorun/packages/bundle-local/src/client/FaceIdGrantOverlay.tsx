@@ -62,7 +62,8 @@ function wordsOf(t: PropsLocale<'delorunFaceId'>['t'], request: FaceGrantRequest
   if (typeof name === 'string') values.name = `“${name}”`
   const names: unknown = Reflect.get(body, 'names')
   const items = Array.isArray(names) && names.every(item => typeof item === 'string') ? { items: names } : {}
-  const context = values.workspace === undefined ? {} : { context: { workspace: values.workspace } }
+  // The title names the folder; the Workspace row shows its whole path, so two workspaces with the same folder name differ.
+  const context = typeof workspace === 'string' ? { context: { workspace } } : {}
   const stays = STAYS_OF_COPY[copy]
   return { title: t(`do.${copy}.title`, values), body: t(`do.${copy}.body`, values), icon: COPY_ICON[copy], ...stays === undefined ? {} : { stays: t(stays, values) }, ...context, ...items }
 }
