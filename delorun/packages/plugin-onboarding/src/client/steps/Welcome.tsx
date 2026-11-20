@@ -22,7 +22,7 @@ function ownLine(id: string): string | undefined {
 }
 
 /**
- * The studio in miniature: a sidebar with a few chats beside one exchange, in the active language. It re-renders with
+ * The studio in miniature: a sidebar with a few chats beside one exchange (on a phone, three, so the picture fills the step), in the active language. It re-renders with
  * the copy, so it follows the language as the person picks.
  * @param props - the copy.
  * @returns the picture.
@@ -41,6 +41,10 @@ export function StudioPreview({ t }: { readonly t: StepServices['t'] }): ReactNo
       <div className={welcome.main} aria-hidden="true">
         <span className={welcome.ask}>{t('look.preview.ask')}</span>
         <span className={welcome.answer}>{t('look.preview.answer')}</span>
+        <span className={`${welcome.ask} ${welcome.more}`}>{t('welcome.preview.ask.2')}</span>
+        <span className={`${welcome.answer} ${welcome.more}`}>{t('welcome.preview.answer.2')}</span>
+        <span className={`${welcome.ask} ${welcome.more}`}>{t('welcome.preview.ask.3')}</span>
+        <span className={`${welcome.answer} ${welcome.more}`}>{t('welcome.preview.answer.3')}</span>
         <span className={welcome.box}>{t('look.preview.box')}</span>
       </div>
     </div>

@@ -119,6 +119,10 @@
   color: var(--dsw-alias-label-primary);
 }
 
+.more {
+  display: none;
+}
+
 .box {
   margin-top: auto;
   padding: 8px 10px;
@@ -133,11 +137,13 @@
     min-height: 88px;
   }
 
-  /* On a phone the picture is as tall as its content; stretching it left a blank band between the reply and the message box. */
   .preview {
-    flex: 0 0 auto;
     grid-template-columns: minmax(96px, 38%) 1fr;
-    min-height: 0;
+  }
+
+  /* The phone has room for more of the conversation, so the picture is full of chat, with the message box at its foot. */
+  .more {
+    display: block;
   }
 }
 
