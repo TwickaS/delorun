@@ -3,7 +3,8 @@
  * ([scaffold](./scaffold.ts)). `delorun plugin new` and the studio's Create a plugin both call {@link createPlugin}.
  *
  * Contract:
- * - The folder may exist only as an empty directory that is not a symbolic link, and its parent must exist.
+ * - The folder may exist only as an empty directory that is not a symbolic link; missing parent folders are created, and
+ *   stay when the write fails, as empty folders.
  * - A name npm would not publish, a name under the `@deepseek-ai/` or `@delorun/` scope, a name the installation ships
  *   (a profile resolves a shipped package before a profile install, see [installation](./installation.ts)) and an
  *   unknown kind are refused with the kind `usage`; a folder that cannot take the scaffold, with `failed`.
@@ -56,38 +57,62 @@ export function checkName(name: string): void {
   if (scope !== undefined) throw new ScaffoldError('usage', `${shown} is under the ${scope.slice(0, -1)} scope, which only its own packages use; name the plugin under your own scope, such as @you/${bareName(name)}`)
 }
 
+/** What a folder needs before the scaffold is written into it. */
+interface FolderPlan {
+  /** Whether the folder itself must be created. */
+  readonly create: boolean
+  /** The missing parent folders, outermost first; empty when the folder's parent exists. */
+  readonly parents: readonly string[]
+}
+
 /**
- * Check that the folder can take the scaffold: an empty directory, or a new one whose parent exists.
+ * The parent folders of a new folder that do not exist yet.
+ * @param folder - the new folder's absolute path.
+ * @returns the missing parents, outermost first.
+ * @throws {ScaffoldError} of kind `failed` when an ancestor cannot be read.
+ */
+async function missingParents(folder: string): Promise<readonly string[]> {
+  const missing: string[] = []
+  let ancestor = dirname(folder)
+  for (;;) {
+    // The ancestor may be reached through a symbolic link, such as /tmp on macOS; only the new folder must not be one.
+    const status = await stat(ancestor).catch((error: unknown) => {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+      throw new ScaffoldError('failed', `${ancestor} cannot be read: ${error instanceof Error ? error.message : String(error)}`)
+    })
+    if (status !== undefined) return missing.reverse()
+    missing.push(ancestor)
+    ancestor = dirname(ancestor)
+  }
+}
+
+/**
+ * Check that the folder can take the scaffold: an empty directory, or a new one whose missing parents can be created.
  * @param folder - the folder's absolute path.
  * @param via - words appended to the advice to choose another folder, such as ` with --dir`.
- * @returns whether the folder must be created.
- * @throws {ScaffoldError} of kind `failed` for a folder that exists and is not an empty directory, or a missing parent.
+ * @returns what must be created.
+ * @throws {ScaffoldError} of kind `failed` for a folder that exists and is not an empty directory, or an ancestor that cannot be read.
  */
-async function checkFolder(folder: string, via: string): Promise<boolean> {
+async function checkFolder(folder: string, via: string): Promise<FolderPlan> {
   const status = await lstat(folder).catch((error: unknown) => {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
     throw new ScaffoldError('failed', `${folder} cannot be read: ${error instanceof Error ? error.message : String(error)}`)
   })
-  if (status === undefined) {
-    // The parent may be reached through a symbolic link, such as /tmp on macOS; only the new folder must not be one.
-    const parent = await stat(dirname(folder)).catch((_error: unknown) => undefined /* reported as missing below */)
-    if (parent?.isDirectory() !== true) throw new ScaffoldError('failed', `${dirname(folder)} is not a folder; create it first, or choose another folder${via}`)
-    return true
-  }
+  if (status === undefined) return { create: true, parents: await missingParents(folder) }
   if (status.isSymbolicLink() || !status.isDirectory()) throw new ScaffoldError('failed', `${folder} exists and is not a folder; choose another folder${via}`)
   if ((await readdir(folder)).length > 0) throw new ScaffoldError('failed', `${folder} is not empty; choose a new or empty folder${via}`)
-  return false
+  return { create: false, parents: [] }
 }
 
 /**
  * Write the scaffold into the folder, creating no file or directory that exists. When a write fails, what this call
  * wrote is removed: the folder when this call created it, otherwise each file and directory it created.
  * @param folder - the folder's absolute path.
- * @param create - whether to create the folder.
+ * @param plan - what must be created.
  * @param files - the files.
  * @throws {ScaffoldError} of kind `failed` when a write fails.
  */
-async function writeScaffold(folder: string, create: boolean, files: readonly ScaffoldFile[]): Promise<void> {
+async function writeScaffold(folder: string, plan: FolderPlan, files: readonly ScaffoldFile[]): Promise<void> {
   const directories = [...new Set(files.flatMap((file) => {
     const parts = file.path.split('/').slice(0, -1)
     return parts.map((_part, index) => parts.slice(0, index + 1).join('/'))
@@ -95,7 +120,8 @@ async function writeScaffold(folder: string, create: boolean, files: readonly Sc
   const created: { readonly path: string, readonly directory: boolean }[] = []
   let ownsFolder = false
   try {
-    if (create) {
+    for (const parent of plan.parents) await mkdir(parent)
+    if (plan.create) {
       await mkdir(folder)
       ownsFolder = true
     }
@@ -141,11 +167,11 @@ export interface CreateRequest {
  */
 export async function createPlugin(request: CreateRequest): Promise<readonly string[]> {
   checkName(request.name)
-  const create = await checkFolder(request.folder, request.chooseFolderVia)
+  const folderPlan = await checkFolder(request.folder, request.chooseFolderVia)
   if (await installationShips(request.installation, request.name)) {
     throw new ScaffoldError('usage', `${JSON.stringify(request.name)} is a package this Delorun installation ships, and a profile loads the shipped package instead of a plugin of the same name; choose another name, such as @you/${bareName(request.name)}`)
   }
   const files = scaffoldFiles({ name: request.name, kind: request.kind, dsh: request.running.dsh, delorun: request.running.delorun, cordis: installedCordisVersion(request.installation) })
-  await writeScaffold(request.folder, create, files)
+  await writeScaffold(request.folder, folderPlan, files)
   return files.map(file => file.path)
 }

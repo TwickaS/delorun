@@ -9,12 +9,13 @@ import semver from 'semver'
 import { bundleTemplate, presetTemplate, readme, toolTemplate, uiTemplate, type KindTemplate } from './templates.ts'
 
 /**
- * The range that targets a Delorun release's minor: every patch of it, and no later minor.
- * @param delorun - the running Delorun version.
- * @returns `^<major>.<minor>.0`, which before 1.0 admits only that minor's patches.
+ * The range that targets a Delorun release's minor: every prerelease and patch of it, and no later minor.
+ * @param delorun - the running Delorun version, a release or a prerelease.
+ * @returns `^<major>.<minor>.0-0`, which before 1.0 admits only that minor's prereleases, its final release and its
+ *   patches; `^<major>.<minor>.0` would refuse `<major>.<minor>.0-preview.1`, which sorts below it.
  */
 export function targetRange(delorun: string): string {
-  return `^${String(semver.major(delorun))}.${String(semver.minor(delorun))}.0`
+  return `^${String(semver.major(delorun))}.${String(semver.minor(delorun))}.0-0`
 }
 
 /** The kinds of plugin the command scaffolds. */
