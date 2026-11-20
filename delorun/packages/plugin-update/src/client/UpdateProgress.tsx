@@ -31,7 +31,7 @@ export function usePhone(): boolean {
 }
 
 /** The connection's states, as the client connection reports them. */
-export type ConnectionState = 'connected' | 'connecting' | 'disconnected'
+export type ConnectionState = 'connected' | 'connecting' | 'disconnected' | undefined
 
 /** What an ongoing state says and does. */
 interface Ongoing {
@@ -54,7 +54,7 @@ interface Ongoing {
  * @param t - the dictionary.
  * @returns the ongoing state, or `undefined` when nothing lasts.
  */
-export function ongoingOf(state: UpdateStateView, switching: boolean, reconnecting: boolean, t: T, connection: ConnectionState = 'connected'): Ongoing | undefined {
+export function ongoingOf(state: UpdateStateView, switching: boolean, reconnecting: boolean, t: T, connection: ConnectionState = undefined): Ongoing | undefined {
   const progress = state.progress
   if (progress.kind === 'applying' || progress.kind === 'rolling-back') {
     const waiting = progress.phase === 'waiting'
@@ -65,7 +65,7 @@ export function ongoingOf(state: UpdateStateView, switching: boolean, reconnecti
   }
   if (reconnecting || (switching && progress.kind === 'idle' && state.result === undefined)) return { key: 'reconnecting', text: t('progress.reconnecting'), waiting: false }
   // A planned update restart drops the connection on purpose; only a loss with no update behind it is the connection's own state.
-  if (connection !== 'connected' && state.progress.kind === 'idle' && !switching && !reconnecting) {
+  if (connection !== undefined && connection !== 'connected' && state.progress.kind === 'idle' && !switching && !reconnecting) {
     return { key: `connection-${connection}`, text: t(connection === 'connecting' ? 'connection.connecting' : 'connection.lost'), waiting: false, connection: true }
   }
   return undefined
@@ -82,9 +82,9 @@ export interface UpdateProgressProps {
   /** The Stop running chats and update menu, offered on the sidebar alert while the update waits for chats. */
   readonly stop?: StopChatsOffer
   /** The connection's state; a loss with no update behind it shows as an ongoing state. */
-  readonly connection?: ConnectionState
+  readonly connection?: ConnectionState | undefined
   /** Reconnect now. */
-  readonly reconnect?: () => void
+  readonly reconnect?: (() => void) | undefined
 }
 
 /**

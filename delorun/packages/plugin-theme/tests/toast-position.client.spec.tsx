@@ -28,7 +28,7 @@ describe('the toast position setting', () => {
 
   it('accepts the six positions and rejects any other value', () => {
     for (const position of TOAST_POSITIONS) expect(Config({ toastPosition: position }).toastPosition.get()).toBe(position)
-    expect(() => Config({ toastPosition: 'middle' })).toThrow()
+    expect(() => Config({ toastPosition: 'middle' } as never)).toThrow()
   })
 })
 

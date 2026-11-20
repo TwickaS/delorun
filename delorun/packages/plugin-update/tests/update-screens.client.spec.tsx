@@ -5,7 +5,7 @@ import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReleaseChannel, SemanticVersion, Sha256Hex, UtcTimestamp } from '@delorun/contract-release-manifest'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { UpdateController } from '../src/client/controller.ts'
+import { UpdateController, type UpdateLoad } from '../src/client/controller.ts'
 import { en } from '../src/client/locales.ts'
 import { UpdateDialog } from '../src/client/UpdateDialog.tsx'
 import { StoppedChatLine } from '../src/client/StopChats.tsx'
@@ -276,12 +276,9 @@ describe('the connection as an ongoing state', () => {
 describe('the sidebar entry', () => {
   /** Render the entry with hooks over fixed values. */
   function entry(wide: boolean, state: UpdateStateView) {
-    const hook = (value: unknown) => (select: (value: never) => unknown) => select(value as never)
-    const props = {
-      t, wide, reconnect: vi.fn(), cancel: vi.fn(), stopChats: vi.fn(),
-      useLoad: hook({ status: 'ready', state, reconnecting: false }), useSwitching: hook(false), useConnection: hook('connected'),
-    }
-    render(<UpdateAlertsEntry {...props as never} />)
+    const hook = <V,>(value: V) => <R,>(select: (value: V) => R): R => select(value)
+    render(<UpdateAlertsEntry t={t} wide={wide} reconnect={vi.fn()} cancel={vi.fn()} stopChats={vi.fn()}
+      useLoad={hook<UpdateLoad>({ status: 'ready', state, reconnecting: false })} useSwitching={hook(false)} useConnection={hook<'connected'>('connected')} />)
   }
 
   it('shows the alert in the wide sidebar and only a dot on the collapsed rail', () => {
@@ -303,7 +300,7 @@ describe('Stop running chats and update', () => {
   const waiting = (): UpdateStateView => stateOf({ progress: { kind: 'applying', phase: 'waiting', target: '0.1.3', runningChats: 2 }, runningChats: CHATS })
 
   /** Render the sidebar alert with the stop offer. */
-  function alert(automatic: boolean, run = vi.fn(() => Promise.resolve({ ok: true as const, value: {} })), state = waiting()) {
+  function alert(automatic: boolean, run: () => Promise<{ readonly ok: true, readonly value: object } | { readonly ok: false, readonly refusal: { readonly code: string, readonly message: string } }> = vi.fn(() => Promise.resolve({ ok: true as const, value: {} })), state = waiting()) {
     render(<UpdateProgress variant="alert" state={state} switching={false} reconnecting={false} t={t} cancel={vi.fn()} stop={{ chats: CHATS, jobs: 0, automatic, run }} />)
     return run
   }

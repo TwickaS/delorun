@@ -68,7 +68,7 @@ export interface Config {
 }
 
 /** Validated configuration. */
-export const Config: z<Config> = z.object({
+export const Config = z.object({
   waitSeconds: z.natural().min(DRAIN_TIMEOUT_MIN_S).max(DRAIN_TIMEOUT_MAX_S).default(DRAIN_TIMEOUT_DEFAULT_S),
   checkGapSeconds: z.natural().min(1).max(3600).default(10),
   continueStoppedChats: z.boolean().default(true).volatile(),
@@ -87,7 +87,7 @@ export function apply(ctx: Context, config: Config): void {
       void continueAfterUpdate(scope, continueSender(scope, config.waitSeconds * 1000), config.continueStoppedChats.get()).catch((error: unknown) => {
         scope.logger.warn(`the chats the update stopped were not continued: ${error instanceof Error ? error.message : String(error)}`)
       })
-      return undefined
+      return () => undefined
     }, 'plugin-update: continue the chats the update stopped')
   })
   ctx.inject(['webServer', 'changesGate'], (scope) => {

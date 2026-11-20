@@ -44,13 +44,15 @@ export function UpdateOverlay(props: UpdateOverlayProps) {
 }
 
 /** What {@link UpdateCards} draws, read from the hooks. */
-export interface UpdateCardsProps extends Omit<UpdateOverlayInjected, 'hooks'> {
+export interface UpdateCardsProps extends Omit<UpdateOverlayInjected, 'hooks' | 'reconnect'> {
+  /** Reconnect now; the connection's alert shows it. */
+  readonly reconnect?: (() => void) | undefined
   readonly t: T
   readonly load: UpdateLoad
   readonly switching: boolean
   readonly dialog: boolean
   /** The connection's state. */
-  readonly connection?: ConnectionState
+  readonly connection?: ConnectionState | undefined
 }
 
 /**

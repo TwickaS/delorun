@@ -40,7 +40,7 @@
       "path": "../../../packages/llm/llm"
     },
     {
-      "path": "../../../packages/api/session-controller"
+      "path": "../../../packages/api/session-controller/tsconfig.host.json"
     },
     {
       "path": "../../../packages/settings/settings"
