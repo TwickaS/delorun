@@ -89,19 +89,43 @@
 }
 
 /*
- * A remote page is a phone's: the title, What's new and the close button share one row, each at the 44px touch size.
- * The close button's box is 44px and pulled into the notice's padding so the row keeps its height.
+ * A remote page is a phone's: the title, What's new and the close button share the first row, each at the 44px touch
+ * size, and the kind and plugin line takes the full width under them. The live region's box is dropped so the title and
+ * that line lay out as cells of the head's grid; its role stays. The close button's 44px box is pulled into the
+ * notice's padding so the row stays as tall as its content.
  */
 .notice[data-remote='true'] .head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
+  column-gap: var(--delorun-space-2);
+}
+
+.notice[data-remote='true'] .status {
+  display: contents;
+}
+
+.notice[data-remote='true'] .title {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.notice[data-remote='true'] .facts {
+  grid-column: 1 / -1;
+  grid-row: 2;
 }
 
 .notice[data-remote='true'] .whatsNew {
-  flex: none;
+  grid-column: 2;
+  grid-row: 1;
   min-height: var(--notice-touch);
+  padding-inline: var(--delorun-space-2);
+  white-space: nowrap;
 }
 
 .notice[data-remote='true'] .dismiss {
+  grid-column: 3;
+  grid-row: 1;
   width: var(--notice-touch);
   height: var(--notice-touch);
   margin: calc(var(--delorun-space-3) * -1) calc(var(--delorun-space-4) * -1) calc(var(--delorun-space-3) * -1) 0;
