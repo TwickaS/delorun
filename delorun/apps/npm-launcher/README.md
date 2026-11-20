@@ -72,18 +72,18 @@ The runtime runs in this process's stead: the launcher spawns it with the enviro
 An install prints one line per step to standard error, so the output of the command that runs next stays on standard output unmixed. Each line says what finished:
 
 ```text
-Resolving the release: the stable channel names 0.1.0-preview.2.
-Checking the signature: 0.1.0-preview.2 is signed under release root 1.
+Resolving the release: the stable channel names 0.1.0-preview.2.1.
+Checking the signature: 0.1.0-preview.2.1 is signed under release root 1.
 Checking the release log: verified.
-Downloading delorun-0.1.0-preview.2-linux-x64.tar.gz (61.5 MB).
-Installing release 0.1.0-preview.2.
+Downloading delorun-0.1.0-preview.2.1-linux-x64.tar.gz (61.5 MB).
+Installing release 0.1.0-preview.2.1.
 ```
 
 Lines appear in the order the checks run: the signature is checked before the archive is downloaded, because the signed manifest is what names the archive and its size. When the release log or its witness cannot be reached, or its newest witnessed checkpoint is older than 24 hours, the log line says so with the reason, and one warning follows in the words of contract C18:
 
 ```text
 Checking the release log: not checked (the release log did not answer: …).
-Warning: Release 0.1.0-preview.2 has not been checked against the release log; Delorun checks it at the next connection.
+Warning: Release 0.1.0-preview.2.1 has not been checked against the release log; Delorun checks it at the next connection.
 ```
 
 The install then goes on with the release's signature, and the home records the release as `unchecked` in `trust/release-log.json` (see [`@delorun/install`](../install/README.md#the-release-log)). A log that answers and contradicts the release refuses instead, as [Refusals](#refusals) describes. A start prints none of these lines. The lines are `@delorun/install`'s `progressLines`, which `src/progress.ts` re-exports, so `delorun update` prints the same words.

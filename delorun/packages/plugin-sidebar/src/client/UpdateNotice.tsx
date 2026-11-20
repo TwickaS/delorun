@@ -2,7 +2,7 @@
  * The update notice at the bottom of the chat list: a newer Delorun release exists, what kind of update it is, how
  * many of the person's plugins it would turn off, its summary under a "Release note" label, so the release's own text
  * never reads as the studio's instruction, and Update now…, which opens the update dialog of `@delorun/plugin-update`
- * (the command that applies it where the studio has no such dialog, or a remote page the Host does not let begin one). It applies nothing itself. It sits below
+ * (the command that applies it where the studio has no such dialog, or a remote page the Host does not let begin one). It applies nothing itself. Every page has a close button that hides the notice for that release in that browser only. It sits below
  * the list's scrolling region, so it never covers or moves a row, and takes no focus. Its polite live region holds the
  * title and the kind and plugin line only; the close and summary buttons sit outside it.
  * @module @delorun/plugin-sidebar/client/UpdateNotice
@@ -11,7 +11,7 @@ import { Button, IconCloseOutlineRegular, Modal } from '@deepseek-ai/dsh-client-
 import type { HostObservable, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SemanticVersion } from '@delorun/contract-release-manifest'
 import { UPDATE_COMMAND, type UpdateNotice } from '@delorun/contract-update-report'
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useEffect, useId, useState, useSyncExternalStore } from 'react'
 import css from './UpdateNotice.module.css'
 
 /** What the notice reads and does. */
@@ -28,8 +28,13 @@ export interface UpdateNoticeFace {
   readonly open: (() => void) | null
   /** Whether the Host's state lets this page begin an update; Update now… shows only while it is true, otherwise the terminal line. */
   readonly canOpen: HostObservable<boolean>
-  /** Hide the notice for one release; null on a remote session, whose notice offers no action. */
-  readonly dismiss: ((release: SemanticVersion) => void) | null
+  /**
+   * Hide the notice for one release in this browser. It writes a display preference to the page's own storage and calls no
+   * Host route, so the computer's page and a remote page both have it; a newer release shows again.
+   */
+  readonly dismiss: (release: SemanticVersion) => void
+  /** Whether this page is a remote session's (a phone): the title, What's new and the close button share one row. */
+  readonly remote: boolean
 }
 
 /** The notice's props: what it reads and does, and the sidebar's copy. */
@@ -47,6 +52,9 @@ export function UpdateNoticeCard({ face, t }: UpdateNoticeCardProps) {
   const notice = useSyncExternalStore(listener => face.notice.subscribe(listener), () => face.notice.getSnapshot())
   const canOpen = useSyncExternalStore(listener => face.canOpen.subscribe(listener), () => face.canOpen.getSnapshot())
   const [expanded, setExpanded] = useState(false)
+  // Remote pages only: whether the details under What's new are open.
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const detailsId = useId()
   const [notesOpen, setNotesOpen] = useState(false)
   // undefined while reading, null when there are no notes to show.
   const [notes, setNotes] = useState<string | null | undefined>(undefined)
@@ -61,7 +69,7 @@ export function UpdateNoticeCard({ face, t }: UpdateNoticeCardProps) {
   }, [notesOpen, face, shownVersion])
   if (notice === null) return null
   const { release, running } = notice
-  const remote = face.dismiss === null
+  const { remote, dismiss } = face
   const kind = t(release.security ? 'update.kind.security' : `update.kind.${notice.kind}`)
   const plugins = notice.disables === 0
     ? t('update.plugins.none')
@@ -70,54 +78,88 @@ export function UpdateNoticeCard({ face, t }: UpdateNoticeCardProps) {
     ? t('update.title', { version: release.delorun })
     : t('update.title.base', { version: release.delorun, dsh: release.dsh })
   const [before = '', after = ''] = t(remote ? 'update.run.remote' : 'update.run', { command: MARK }).split(MARK)
-  const dismiss = face.dismiss
   const [noteBefore = '', noteAfter = ''] = t('update.summary', { summary: MARK }).split(MARK)
   const note = release.summary === undefined
     ? null
     : <><span className={css.summaryLabel}>{noteBefore}</span>{release.summary}{noteAfter}</>
+  const facts = (
+    <p className={css.facts}>
+      <span className={release.security ? css.security : undefined}>{kind}</span>
+      {t('update.separator')}
+      {plugins}
+    </p>
+  )
+  const summary = note === null
+    ? null
+    : remote
+      ? <p className={css.summary}>{note}</p>
+      : (
+        <button type="button" className={css.summaryToggle} aria-expanded={expanded} data-expanded={expanded}
+          onClick={() => { setExpanded(value => !value) }}>
+          {note}
+        </button>
+      )
+  const whatsNew = release.notes === undefined
+    ? null
+    : <Button variant="ghost" className={css.whatsNew} onClick={() => { setNotesOpen(true) }}>{t(remote ? 'update.releaseNotes' : 'update.whatsNew')}</Button>
+  const run = face.open === null || !canOpen
+    ? <p className={css.run}>{before}<code className={css.command}>{UPDATE_COMMAND}</code>{after}</p>
+    : <Button variant="primary" size="sm" className={css.updateNow} data-update-now onClick={face.open}>{t('update.now')}</Button>
+  const closeButton = (
+    <button type="button" className={css.dismiss} aria-label={t('update.dismiss')} title={t('update.dismiss')}
+      onClick={() => { dismiss(release.delorun) }}>
+      <IconCloseOutlineRegular size={14} className={css.dismissIcon} />
+    </button>
+  )
+  const notesDialog = notesOpen && (
+    <Modal open onClose={() => { setNotesOpen(false) }} closeLabel={t('update.whatsNewClose')}
+      title={t('update.whatsNewTitle', { version: release.delorun })}>
+      {/* The notes are signed plain text: rendered as text in a pre, never as markup. */}
+      {notes === undefined
+        ? <p>{t('update.whatsNewLoading')}</p>
+        : notes === null
+          ? <p>{t('update.whatsNewUnavailable')}</p>
+          : <pre className={css.notes} data-update-notes>{notes}</pre>}
+    </Modal>
+  )
+  // A remote page is a phone's: one row, and the details open under What's new.
+  if (remote) {
+    return (
+      <div className={css.notice} data-update-notice={release.delorun} data-remote>
+        <div className={css.head}>
+          <div className={css.status} role="status">
+            <p className={css.title} title={title}>{t('update.title.short', { version: release.delorun })}</p>
+          </div>
+          <Button variant="ghost" className={css.whatsNew} aria-expanded={detailsOpen} aria-controls={detailsId}
+            onClick={() => { setDetailsOpen(value => !value) }}>{t('update.whatsNew')}</Button>
+          {closeButton}
+        </div>
+        {detailsOpen && (
+          <div className={css.details} id={detailsId} data-update-details>
+            <p className={css.detailTitle}>{title}</p>
+            {facts}
+            {summary}
+            {whatsNew}
+            {run}
+          </div>
+        )}
+        {notesDialog}
+      </div>
+    )
+  }
   return (
-    <div className={css.notice} data-update-notice={release.delorun}>
+    <div className={css.notice} data-update-notice={release.delorun} data-remote={false}>
       <div className={css.head}>
         <div className={css.status} role="status">
           <p className={css.title}>{title}</p>
-          <p className={css.facts}>
-            <span className={release.security ? css.security : undefined}>{kind}</span>
-            {t('update.separator')}
-            {plugins}
-          </p>
+          {facts}
         </div>
-        {dismiss !== null && (
-          <button type="button" className={css.dismiss} aria-label={t('update.dismiss')} title={t('update.dismiss')}
-            onClick={() => { dismiss(release.delorun) }}>
-            <IconCloseOutlineRegular size={14} className={css.dismissIcon} />
-          </button>
-        )}
+        {closeButton}
       </div>
-      {note !== null && (remote
-        ? <p className={css.summary}>{note}</p>
-        : (
-          <button type="button" className={css.summaryToggle} aria-expanded={expanded} data-expanded={expanded}
-            onClick={() => { setExpanded(value => !value) }}>
-            {note}
-          </button>
-        ))}
-      {release.notes !== undefined && (
-        <Button variant="ghost" className={css.whatsNew} onClick={() => { setNotesOpen(true) }}>{t('update.whatsNew')}</Button>
-      )}
-      {notesOpen && (
-        <Modal open onClose={() => { setNotesOpen(false) }} closeLabel={t('update.whatsNewClose')}
-          title={t('update.whatsNewTitle', { version: release.delorun })}>
-          {/* The notes are signed plain text: rendered as text in a pre, never as markup. */}
-          {notes === undefined
-            ? <p>{t('update.whatsNewLoading')}</p>
-            : notes === null
-              ? <p>{t('update.whatsNewUnavailable')}</p>
-              : <pre className={css.notes} data-update-notes>{notes}</pre>}
-        </Modal>
-      )}
-      {face.open === null || !canOpen
-        ? <p className={css.run}>{before}<code className={css.command}>{UPDATE_COMMAND}</code>{after}</p>
-        : <Button variant="primary" size="sm" className={css.updateNow} data-update-now onClick={face.open}>{t('update.now')}</Button>}
+      {summary}
+      {whatsNew}
+      {notesDialog}
+      {run}
     </div>
   )
 }

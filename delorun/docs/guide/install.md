@@ -98,11 +98,11 @@ Keep your projects inside the Ubuntu home folder, such as `~/projects`, because 
 Before it installs anything, the launcher proves the download is the release the maintainer published. It prints each check:
 
 ```text
-Resolving the release: the stable channel names 0.1.0-preview.2.
-Checking the signature: 0.1.0-preview.2 is signed under release root 1.
+Resolving the release: the stable channel names 0.1.0-preview.2.1.
+Checking the signature: 0.1.0-preview.2.1 is signed under release root 1.
 Checking the release log: verified.
-Downloading delorun-0.1.0-preview.2-linux-x64.tar.gz (…).
-Installing release 0.1.0-preview.2.
+Downloading delorun-0.1.0-preview.2.1-linux-x64.tar.gz (…).
+Installing release 0.1.0-preview.2.1.
 ```
 
 - **Channel.** A preview is published on the channel named `stable`, so the first line says so.
@@ -181,7 +181,7 @@ Delorun is set up. Nothing is running yet.
 
 Next:
   1. Install the delorun command, which npx does not keep:
-     npm install -g delorun@0.1.0-preview.2
+     npm install -g delorun@0.1.0-preview.2.1
   2. Set DEEPSEEK_API_KEY in your terminal, then run delorun stop and delorun start if Delorun is running. It is the DeepSeek key you chose.
   3. Start Delorun and open the studio: delorun
      Send a first message in a new chat. The install guide's section on your first chat walks through it: https://docs.delorun.com/guide/install#the-studio-and-your-first-chat

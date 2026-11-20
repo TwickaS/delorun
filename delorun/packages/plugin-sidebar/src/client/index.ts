@@ -298,7 +298,7 @@ export function applyStudio(ctx: Context): void {
   }, 'delorun-sidebar: update notice reads')
   // A page a reach listener served, a remote session, shows Update now… only while the Host's state lets it begin an update.
   const remote = (ctx.get('connection') as ConnectionHandle | undefined)?.remoteMedia === 'placeholder'
-  const updateNotice: UpdateNoticeFace = { notice: updates.visible, notes: fetchUpdateNotes, open: () => { ctx.emit('delorun-update/open') }, canOpen: remote ? optionalSource<{ readonly canUpdate: HostObservable<boolean> }, boolean>(ctx, 'delorunUpdate', service => service.canUpdate, false) : PRESENT, dismiss: remote ? null : (release) => { updates.dismiss(release) } }
+  const updateNotice: UpdateNoticeFace = { notice: updates.visible, notes: fetchUpdateNotes, open: () => { ctx.emit('delorun-update/open') }, canOpen: remote ? optionalSource<{ readonly canUpdate: HostObservable<boolean> }, boolean>(ctx, 'delorunUpdate', service => service.canUpdate, false) : PRESENT, dismiss: (release) => { updates.dismiss(release) }, remote }
   let actionsFor: DelorunChatStates | undefined
   let actions: RowStateActions | null = null
   const chatStatesSource = <T,>(pick: (service: DelorunChatStates) => HostObservable<T>, fallback: T) =>
