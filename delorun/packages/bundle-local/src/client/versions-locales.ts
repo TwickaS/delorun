@@ -15,7 +15,7 @@ export const en = {
   'save.heading': 'Save a version',
   'list.heading': 'Saved versions',
   'save.name': 'Name (optional)',
-  'save.placeholder': 'For example, Before trying the new plugin',
+  'save.placeholder': 'For example, Before a new plugin',
   'save.action': 'Save this setup',
   'save.saved': 'Saved this setup as a version.',
   'save.unchanged': 'Nothing to save: the latest version already holds this setup.',

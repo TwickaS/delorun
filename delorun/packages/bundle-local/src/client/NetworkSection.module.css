@@ -38,6 +38,23 @@
   gap: 8px;
 }
 
+.riskText {
+  margin: 0;
+}
+
+.riskMore {
+  margin-top: 6px;
+}
+
+.riskMore summary {
+  cursor: pointer;
+  color: var(--dsw-alias-label-primary);
+}
+
+.riskMore .riskText {
+  margin-top: 6px;
+}
+
 .risk {
   margin: 0 0 16px;
   padding: 10px 14px;

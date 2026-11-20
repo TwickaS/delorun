@@ -33,6 +33,18 @@ export type NetworkSectionProps = PropsRuntime<'settings.section'> & PropsLocale
 
 type Translate = NetworkSectionProps['t']
 
+/** The start of a path inside a person's home folder on Linux, macOS and Windows. */
+const HOME_PREFIX = /^(?:\/home\/[^/]+|\/Users\/[^/]+|[A-Za-z]:[\\/]Users[\\/][^\\/]+)(?=[\\/]|$)/u
+
+/**
+ * A workspace folder as the person reads it: the home folder is `~`.
+ * @param path - the folder's absolute path.
+ * @returns `~` or `~/…` for a folder inside a home folder, otherwise the path unchanged.
+ */
+export function homeRelative(path: string): string {
+  return path.replace(HOME_PREFIX, '~')
+}
+
 /**
  * The sentence for a failed request.
  * @param t - the section's copy.
@@ -86,7 +98,13 @@ export function NetworkSection({ t, fetch }: NetworkSectionProps): ReactNode {
       ? <p className={css.line}>{t('unavailable')}</p>
       : <>
         <p className={css.intro}>{t('intro')}</p>
-        <p className={css.risk} role="note">{t('risk')}</p>
+        <div className={css.risk} role="note">
+          <p className={css.riskText}>{t('risk')}</p>
+          <details className={css.riskMore}>
+            <summary>{t('risk.more')}</summary>
+            <p className={css.riskText}>{t('risk.detail')}</p>
+          </details>
+        </div>
         {list.kind === 'failed' ? <p className={css.failed} role="alert">{list.text}</p> : null}
         {list.kind === 'ready' && list.value !== undefined ? <WorkspaceList t={t} fetch={fetch} list={list.value} onSaved={refresh} /> : null}
       </>}
@@ -199,7 +217,7 @@ function WorkspaceRow({ t, fetch, workspace, defaultNetwork, locked, onSaved }: 
     <div className={css.head}>
       <div className={css.details}>
         <div className={css.title}>{workspace.title}</div>
-        <div className={css.description}>{workspace.path}</div>
+        <div className={css.description} title={workspace.path}>{homeRelative(workspace.path)}</div>
         <div className={css.description}>
           {t(workspace.own ? 'row.own' : 'row.default', { access: accessName(defaultNetwork.access) })}
         </div>

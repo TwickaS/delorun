@@ -110,6 +110,13 @@
   min-width: 0;
 }
 
+/* A whole number of minutes or requests: a short field beside the text. */
+.number {
+  flex-shrink: 0;
+  width: 96px;
+  box-sizing: border-box;
+}
+
 .unlock {
   margin: 8px 0 16px;
 }

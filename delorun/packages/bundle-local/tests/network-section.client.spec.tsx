@@ -19,7 +19,7 @@ import {
 } from '../src/client/network-api.ts'
 import { PERMISSION_ROUTES } from '@delorun/plugin-permission-defaults/wire'
 import { en, zh } from '../src/client/network-locales.ts'
-import { looseningText, NetworkSection, type NetworkSectionProps } from '../src/client/NetworkSection.tsx'
+import { homeRelative, looseningText, NetworkSection, type NetworkSectionProps } from '../src/client/NetworkSection.tsx'
 
 afterEach(() => {
   cleanup()
@@ -101,7 +101,7 @@ describe('the Network section', () => {
     const alpha = await rowOf('Alpha')
     expect(screen.getByText(en.intro)).toBeTruthy()
     expect(screen.getAllByText(en.risk)).toHaveLength(1)
-    expect(within(alpha).getByText('/home/me/alpha')).toBeTruthy()
+    expect(within(alpha).getByText('~/alpha')).toBeTruthy()
     expect(within(alpha).getByText('Default: Open')).toBeTruthy()
     expect(within(alpha).getByRole('tab', { name: en['access.open'] }).getAttribute('aria-selected')).toBe('true')
     expect(within(alpha).queryByRole('button', { name: en.useDefault })).toBeNull()
@@ -370,5 +370,16 @@ describe('the plugin', () => {
     } finally {
       await ctx.fiber.dispose()
     }
+  })
+})
+
+describe('homeRelative', () => {
+  it('shows the home folder as ~ on Linux, macOS and Windows, and leaves other folders whole', () => {
+    expect(homeRelative('/home/me/alpha')).toBe('~/alpha')
+    expect(homeRelative('/Users/me/Projects/beta')).toBe('~/Projects/beta')
+    expect(homeRelative('C:\\Users\\me\\gamma')).toBe('~\\gamma')
+    expect(homeRelative('/home/me')).toBe('~')
+    expect(homeRelative('/srv/shared/delta')).toBe('/srv/shared/delta')
+    expect(homeRelative('/homework/epsilon')).toBe('/homework/epsilon')
   })
 })

@@ -73,7 +73,10 @@ export function AgentLevels({ t, saved, views, remote, disabled, set }: {
               return <label key={level} className={css.levelOption} title={locked ? t('levels.computerOnly') : undefined}>
                 <input type="radio" name={`level-${provider}`} value={level} checked={current === level} disabled={locked}
                   onChange={() => { void set(field, level) }} />
-                <span className={css.levelText}><strong>{title}</strong>{' — '}{t(DESCRIPTIONS[level], { agent: name })}</span>
+                <span className={css.levelText}>
+                  <span className={css.levelName}>{title}</span>
+                  <span className={css.levelDescription}>{t(DESCRIPTIONS[level], { agent: name })}</span>
+                </span>
               </label>
             })}
             {remote ? <p className={css.description}>{t('levels.computerOnly')}</p> : null}

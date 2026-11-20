@@ -179,6 +179,12 @@
   width: 96px;
 }
 
+/* The field's own border and padding sit inside the 96 px, so it ends at the card's padding. */
+.minutes > * {
+  box-sizing: border-box;
+  width: 100%;
+}
+
 .buttons {
   display: flex;
   flex-shrink: 0;
@@ -241,6 +247,13 @@
   .start {
     grid-template-columns: minmax(0, 1fr);
   }
+
+  /* A row that holds only text and a switch keeps the switch beside the text, as on the other settings pages. */
+  .switchRow {
+    flex-direction: row;
+    align-items: center;
+    gap: 24px;
+  }
 }
 
 .start .command {
@@ -277,12 +290,45 @@
   line-height: 20px;
 }
 
-/* The name and description wrap together beside the radio button, not under it. */
+/* The name sits on one line with the description under it, beside the radio mark. */
 .levelText {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
 }
 
+.levelName {
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.levelDescription {
+  overflow-wrap: anywhere;
+}
+
+/* The ring fills with the accent when chosen, as in the other settings pages' radio lists. */
 .levelOption input {
   flex: none;
-  margin: 3px 0 0;
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+  appearance: none;
+  border: 1.5px solid var(--dsw-alias-label-tertiary);
+  border-radius: 50%;
+  background: transparent;
+}
+
+.levelOption input:checked {
+  border: 5px solid var(--dsw-alias-brand-primary);
+}
+
+.levelOption input:focus-visible {
+  outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+
+.levelOption input:disabled {
+  opacity: 0.5;
 }
