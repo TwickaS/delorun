@@ -3247,6 +3247,30 @@
       "class": "delorun-feature",
       "feature": "plugin-titles",
       "reason": "British spelling in the title and description, and Delorun in place of DSH."
+    },
+    {
+      "path": "packages/experimental/badge-skill-bundle/locale/zh.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "The Chinese title and description say Delorun, not DSH."
+    },
+    {
+      "path": "packages/experimental/forge-bundle/locale/zh.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "The Chinese description is the shorter plain-words text that names the GitHub command-line tool, matching the English."
+    },
+    {
+      "path": "packages/experimental/inspector-profile/locale/zh.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "The Chinese description says Delorun, not DSH."
+    },
+    {
+      "path": "packages/experimental/personalized-recommendations/locale/zh.json",
+      "class": "delorun-feature",
+      "feature": "plugin-titles",
+      "reason": "The Chinese description says Delorun, not DSH."
     }
   ],
   "retired": []
