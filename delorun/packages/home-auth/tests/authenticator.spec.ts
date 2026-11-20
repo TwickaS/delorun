@@ -299,6 +299,55 @@ describe('the authenticator provider', () => {
     expect(() => { answer('chat-a', 'full-access', 'allowed-once') }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
   })
 
+  // Removing the pass branch in checkAnswer makes a phone in a pass confirm every prompt; removing its Peer key admits another device's answer.
+  it('admits a granting answer from the Peer that holds a live Face ID pass, and from no other device', async () => {
+    ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
+    const admitted = provider().admit(request({ headers: { cookie: `__Host-delorun-session=${await session(2)}` } }), 'reach-tailscale-private')
+    if (admitted.kind !== 'admitted') throw new Error('not admitted')
+    const grants = ctx.homeAuth.faceGrants()
+    if (grants === undefined) throw new Error('no grant store')
+    const answer = (marker: string): void => {
+      provider().checkAnswer({ peer: admitted.peer, event: 'approval/request', request: { agent: { id: 'chat-a' }, callId: 'call_3', grants: marker }, value: 'allowed-once' })
+    }
+    grants.openPass({ deviceId: recordOf(3, ADDRESS).id, listener: 'reach-tailscale-private' }, 15)
+    expect(() => { answer('workspace-management') }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
+    grants.openPass({ deviceId: recordOf(2, ADDRESS).id, listener: 'reach-tailscale-private' }, 15)
+    for (const marker of ['workspace-management', 'external-agent', 'real-browser']) expect(() => { answer(marker) }, marker).not.toThrow()
+    grants.endPass({ deviceId: recordOf(2, ADDRESS).id, listener: 'reach-tailscale-private' }, 'lock-now')
+    expect(() => { answer('workspace-management') }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
+  })
+
+  // Moving answer:full-access back into PASS_ADMITS lets a picked-up phone in a pass turn on full access with one tap (F48).
+  it('still refuses a full-access answer under a live pass without its own grant, and admits it with one', async () => {
+    ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
+    const admitted = provider().admit(request({ headers: { cookie: `__Host-delorun-session=${await session(2)}` } }), 'reach-tailscale-private')
+    if (admitted.kind !== 'admitted') throw new Error('not admitted')
+    const grants = ctx.homeAuth.faceGrants()
+    if (grants === undefined) throw new Error('no grant store')
+    const holder = { deviceId: recordOf(2, ADDRESS).id, listener: 'reach-tailscale-private' } as const
+    const answer = (): void => {
+      provider().checkAnswer({ peer: admitted.peer, event: 'approval/request', request: { agent: { id: 'chat-a' }, callId: 'call_4', grants: 'full-access' }, value: 'allowed-once' })
+    }
+    grants.openPass(holder, 60)
+    expect(() => { answer() }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
+    grants.mintAnswer(holder, answerKey({ agent: 'chat-a', callId: 'call_4', grants: 'full-access' }), 'allowed-once')
+    expect(() => { answer() }).not.toThrow()
+    expect(() => { answer() }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
+  })
+
+  // Removing endPeer's pass ending leaves a pass live after its Peer is gone.
+  it('ends the Face ID pass when its Peer is disposed', async () => {
+    ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
+    const admitted = provider().admit(request({ headers: { cookie: `__Host-delorun-session=${await session(2)}` } }), 'reach-tailscale-private')
+    if (admitted.kind !== 'admitted') throw new Error('not admitted')
+    const grants = ctx.homeAuth.faceGrants()
+    if (grants === undefined) throw new Error('no grant store')
+    const holder = { deviceId: recordOf(2, ADDRESS).id, listener: 'reach-tailscale-private' } as const
+    grants.openPass(holder, 15)
+    await admitted.peer.dispose()
+    expect(grants.passOf(holder)).toBeUndefined()
+  })
+
   // A live agent's seat card on a phone sends its granting answer only after minting this grant; without the check a phone
   // would allow a program's question, or turn an Allow once into Allow for this run, with no confirmation (F36 addendum).
   it('refuses a seat\'s external-agent answer from a device with no grant, and admits one grant for exactly its value, once', async () => {

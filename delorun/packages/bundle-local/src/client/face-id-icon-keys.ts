@@ -42,6 +42,7 @@ export const COPY_ICON: Readonly<Record<FaceActionCopy, FaceIconKey>> = {
   profileSave: 'check',
   profileSwitch: 'refresh',
   seatAnswer: 'check',
+  passSetting: 'shield',
   generic: 'shield',
 }
 

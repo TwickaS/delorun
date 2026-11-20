@@ -166,6 +166,27 @@ describe('the terminal path on a phone (owner report on the iPhone)', () => {
     await waitFor(() => { expect(document.querySelector('[data-face-id-pin]')).toBeNull() })
   })
 
+  // Covers comes from the hold the lift derives from the call's own wire arguments, for each call that opens one.
+  it('names the hold in Covers for a terminal create, a terminal attach and the folder picker reached through the lift', async () => {
+    const { lift } = refusedCreate()
+    const covers = async (): Promise<string | null | undefined> => {
+      await screen.findByRole('button', { name: /Confirm with/ })
+      return [...document.querySelectorAll('dl > div')].find(row => row.querySelector('dt')?.textContent === en['sheet.lasts'])?.querySelector('dd')?.textContent
+    }
+    const terminalLine = en['lasts.terminal']
+    expect(await covers()).toBe(terminalLine)
+    const attached = lift({ endpoint: 'terminal/attach', reason: 'elevation-required: terminal/attach', args: { sessionId: 's1', id: 't-2' }, signal: new AbortController().signal })
+    const listed = lift({ endpoint: 'directoryPicker/list', reason: 'elevation-required: directoryPicker/list', args: { path: '/' }, signal: new AbortController().signal })
+    fireEvent.click(screen.getByRole('button', { name: en['sheet.cancel'] }))
+    await waitFor(async () => { expect(await covers()).toBe(terminalLine) })
+    expect(screen.getByRole('heading').textContent).toBe(en['do.openTerminal.title'])
+    fireEvent.click(screen.getByRole('button', { name: en['sheet.cancel'] }))
+    await expect(attached).resolves.toBe(false)
+    await waitFor(async () => { expect(await covers()).toBe(en['lasts.picker']) })
+    fireEvent.click(screen.getByRole('button', { name: en['sheet.cancel'] }))
+    await expect(listed).resolves.toBe(false)
+  })
+
   // A PIN minted for a stale tab's terminal/close under "Open a terminal" left the create refused (e2e flow 7).
   it('gives two queued refusals a sheet each, with its own words, and mints each grant for its own call only', async () => {
     const { api, lift, lifted } = refusedCreate(false)

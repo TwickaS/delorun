@@ -202,8 +202,8 @@ describe('the class gate on the consumer routes', () => {
 
   it('classifies each route once: a doubly listed or doubly classed route row fails the gate', () => {
     // Proves the gate rejects: the same route id in two classes, and listed twice, are both reported.
-    const row: AuthRow = { id: 'route:plugin-packs/src/routes.ts#path (write)', surface: 'route', authClass: 'face', reason: 'r' }
-    expect(checkAuthTable([...AUTH_CLASSES, { ...row, authClass: 'free' }])).toEqual([`${row.id} is in two classes (face, free)`])
+    const row: AuthRow = { id: 'route:plugin-packs/src/routes.ts#path (write)', surface: 'route', authClass: 'face', reason: 'r', pass: 'admits' }
+    expect(checkAuthTable([...AUTH_CLASSES, { id: row.id, surface: row.surface, authClass: 'free', reason: row.reason }])).toEqual([`${row.id} is in two classes (face, free)`])
     expect(checkAuthTable([...AUTH_CLASSES, row])).toEqual([`${row.id} is listed twice`])
     expect(checkAuthTable(AUTH_CLASSES)).toEqual([])
   })

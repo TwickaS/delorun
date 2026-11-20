@@ -38,6 +38,11 @@ const PLAIN_SHIELD: Readonly<Record<string, string>> = {
 }
 
 /** The client action name a remote row's sheet is asked for. */
+/** `face` rows of the home's own `/auth` routes whose sheet the studio raises, by the grant action the studio names. */
+const AUTH_ACTIONS: Readonly<Record<string, string>> = {
+  'auth:/auth/passkey/pass (write)': 'auth/passkey/pass',
+}
+
 const REMOTE_ACTIONS: Readonly<Record<string, string>> = {
   'remote:session/create outside the known workspaces': 'session/create',
   'remote:commands/execute of an unlisted command': 'commands/execute',
@@ -52,7 +57,7 @@ export function problemOf(row: AuthRow): string | undefined {
   if (PLAIN_SHIELD[row.id] !== undefined) return undefined
   if (row.surface === 'answer') return (ANSWER_GRANTS as readonly string[]).includes(row.id.slice('answer:'.length)) ? undefined : `${row.id} has no answer glyph`
   if (row.surface === 'changes') return (CHANGE_CONTROLS as readonly string[]).includes(row.id.slice('changes:'.length)) ? undefined : `${row.id} has no Changes words`
-  const action = row.surface === 'route' ? ROUTE_ACTIONS[row.id]
+  const action = row.surface === 'route' ? ROUTE_ACTIONS[row.id] : row.surface === 'auth' ? AUTH_ACTIONS[row.id]
     : row.id.startsWith('remote:event:') ? 'dynamicCordisRunner/event' : REMOTE_ACTIONS[row.id] ?? row.id.slice('remote:'.length)
   if (action === undefined) return `${row.id} names no client action`
   // The studio never raises a sheet for these calls, so they need no words.
