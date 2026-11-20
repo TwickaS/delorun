@@ -93,6 +93,8 @@ describe('cut-rc plan', () => {
     expect(smokeArgs(request)).toEqual(['delorun/apps/release/scripts/installed-smoke.ts', '--channel', request.channel, '--version', '0.1.0-rc.2', '--keys', request.keys, '--budget-minutes', '20', '--log', join(request.work, 'installed-smoke-0.1.0-rc.2.log')])
     expect(planSteps(request).at(-1)?.title).toContain('at most 20 min')
     expect(planSteps(parseCutArgs([...BASE, '--no-smoke'])).map(step => step.id)).not.toContain('smoke')
+    expect(parseCutArgs(BASE).smokePrevious).toBeUndefined()
+    expect(smokeArgs(parseCutArgs([...BASE, '--smoke-previous', '0.1.0-rc.1'])).slice(-2)).toEqual(['--previous', '0.1.0-rc.1'])
     expect(() => parseCutArgs([...BASE, '--smoke-minutes', '0'])).toThrow(/--smoke-minutes/u)
   })
 

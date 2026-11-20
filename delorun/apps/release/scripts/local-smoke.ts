@@ -154,6 +154,7 @@ export async function runLocalSmoke(request: LocalSmokeRequest, say: (line: stri
       keepGoing: false,
       keepHome: request.keep,
       logOrigin: log.origin,
+      previous: undefined,
       keys,
     }, say)
   } finally {

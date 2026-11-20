@@ -6,7 +6,7 @@
  * `tsx delorun/apps/release/scripts/cut-rc.ts --version <0.1.0-preview.N[.M]|0.1.0-rc.N[.M]> --channel <dir> --state <signer state file> --keys <dir>
  * --root <root file> --commit <sha> [--highlights <file>] [--summary <text>] [--work <dir>] [--closures-from <dir>]
  * [--artifacts build|existing] [--platform <platform>]... [--log-submit <url> --log-checkpoint <url> --log-tiles <url>]
- * [--log-poll-seconds <n>] [--smoke-minutes <n>] [--no-smoke] [--allow-builder-paths] [--dry-run]`
+ * [--log-poll-seconds <n>] [--smoke-minutes <n>] [--smoke-previous <version>] [--no-smoke] [--allow-builder-paths] [--dry-run]`
  *
  * `--keys` is a directory holding `targets.pem` and `timestamp.pem`; their contents are passed to no log and no output,
  * only their paths reach the signing command. `--highlights` is where the release-notes file is written (default
@@ -23,7 +23,7 @@
  *
  * The last step is the installed-release smoke (`installed-smoke.ts`): it installs the candidate from the channel into a
  * scratch home with a launcher built for a scratch origin, adds every pack, restarts twice and creates a chat, within
- * `--smoke-minutes` (default 30). It runs after the candidate is published into the channel directory, so a failure
+ * `--smoke-minutes` (default 30). Its upgrade step starts from the newest older release in the channel; `--smoke-previous <version>` names another (one the channel holds that is older than the candidate), such as the release a person is on when a later candidate failed. It runs after the candidate is published into the channel directory, so a failure
  * means: do not tag, and do not give the candidate to anyone. `--no-smoke` leaves it out, for a channel of closures that
  * are not real runtimes.
  *
@@ -106,6 +106,8 @@ export interface CutRequest {
   readonly logPollSeconds: string
   /** The installed-release smoke's time budget in minutes; undefined with `--no-smoke`. */
   readonly smokeMinutes: number | undefined
+  /** The release the smoke's upgrade step starts from (`--smoke-previous`); the smoke picks the newest older release in the channel when undefined. */
+  readonly smokePrevious: string | undefined
   /** Print the plan and run nothing. */
   readonly dryRun: boolean
 }
@@ -138,6 +140,7 @@ export function parseCutArgs(argv: readonly string[]): CutRequest {
       'log-tiles': { type: 'string', default: REKOR.tiles },
       'log-poll-seconds': { type: 'string', default: '30' },
       'smoke-minutes': { type: 'string', default: '30' },
+      'smoke-previous': { type: 'string' },
       'no-smoke': { type: 'boolean', default: false },
       'allow-builder-paths': { type: 'boolean', default: false },
       'dry-run': { type: 'boolean', default: false },
@@ -183,6 +186,7 @@ export function parseCutArgs(argv: readonly string[]): CutRequest {
     log: { submit: values['log-submit']!, checkpoint: values['log-checkpoint']!, tiles: values['log-tiles']! },
     logPollSeconds: values['log-poll-seconds']!,
     smokeMinutes: values['no-smoke'] ? undefined : smokeMinutes,
+    smokePrevious: values['smoke-previous'],
     dryRun: values['dry-run'],
   }
 }
@@ -279,7 +283,7 @@ export function planSteps(request: CutRequest): PlannedStep[] {
  * @returns the arguments of `installed-smoke.ts`.
  */
 export function smokeArgs(request: CutRequest): string[] {
-  return ['delorun/apps/release/scripts/installed-smoke.ts', '--channel', request.channel, '--version', request.version, '--keys', request.keys, '--budget-minutes', String(request.smokeMinutes ?? 30), '--log', join(request.work, `installed-smoke-${request.version}.log`)]
+  return ['delorun/apps/release/scripts/installed-smoke.ts', '--channel', request.channel, '--version', request.version, '--keys', request.keys, '--budget-minutes', String(request.smokeMinutes ?? 30), '--log', join(request.work, `installed-smoke-${request.version}.log`), ...request.smokePrevious === undefined ? [] : ['--previous', request.smokePrevious]]
 }
 
 /** The result of one command. */

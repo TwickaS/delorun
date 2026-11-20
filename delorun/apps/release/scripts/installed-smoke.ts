@@ -4,7 +4,7 @@
  * with no model key and no model request. `cut-rc.ts` runs it as its last step.
  *
  * `tsx delorun/apps/release/scripts/installed-smoke.ts --channel <dir|origin> --version <v> [--launcher <tgz>]
- * [--keys <dir>] [--channel-port <n>] [--studio-port <n>] [--budget-minutes <n>] [--log <file>] [--keep-going] [--keep-home] [--log-origin <origin>]`
+ * [--keys <dir>] [--channel-port <n>] [--studio-port <n>] [--budget-minutes <n>] [--log <file>] [--keep-going] [--keep-home] [--log-origin <origin>] [--previous <version>]`
  *
  * A channel directory is served read-only on `127.0.0.1:<channel-port>` for the run, and the launcher is built from
  * this checkout for that origin (`npm-launcher/src/build.ts`). An origin is used as it is, with a launcher built for it
@@ -14,7 +14,7 @@
  * runs with the same environment.
  *
  * Steps, each named on failure: 1 install and start, 2 add the offered packs, 3 wait for the installs and check each
- * pack's plugins are loaded, 4 stop and start twice with a clean home log, 5 create a chat, 6 upgrade the previous release, installed with the Claude Code and Codex packs, to this one with `delorun update --yes --data-copy` and check both packs still load and their changes were closed by the update, none waiting (needs `--keys`, whose `timestamp.pem` signs a snapshot of the channel that names the previous release; skipped, with its reason, without it, for a channel origin, or for a channel with no older release), 7 clean up. The scratch
+ * pack's plugins are loaded, 4 stop and start twice with a clean home log, 5 create a chat, 6 upgrade the previous release, installed with the Claude Code and Codex packs, to this one with `delorun update --yes --data-copy` and check both packs still load and their changes were closed by the update, none waiting (needs `--keys`, whose `timestamp.pem` signs a snapshot of the channel that names the previous release; skipped, with its reason, without it, for a channel origin, or for a channel with no older release), 7 clean up. Step 6 starts from the newest release older than `--version` in the channel directory, or from `--previous <version>`, which must be in the channel and older (step 1 fails otherwise); each pack's change must be applied by the update exactly when the two releases' signed files for it differ. The scratch
  * directory `/var/tmp/itest-*` (outside `/tmp`, which a sandboxed command may write, as a real home is) is removed and every process the run started is stopped, whether it passes or not. The run
  * stops at the first failure; `--keep-going` records a failed check (a refused home-log line, a pack that is not loaded)
  * and goes on, so one run names every failing step. A failed run prints the last {@link HOME_LOG_TAIL_LINES} lines of
@@ -40,8 +40,8 @@ import { repositoryRoot } from '@delorun/tools/src/git.ts'
 import { serveChannel } from './local-channel.ts'
 import { updateChangeProblems } from '../src/installed-smoke/changes-log.ts'
 import { logProblems } from '../src/installed-smoke/home-log.ts'
-import { channelSource, offeredPacks, type ChannelSource } from '../src/installed-smoke/offered-packs.ts'
-import { previousRelease } from '../src/installed-smoke/previous-release.ts'
+import { channelSource, offeredPacks, packsChangedBetween, type ChannelSource } from '../src/installed-smoke/offered-packs.ts'
+import { chosenPreviousRelease, previousRelease } from '../src/installed-smoke/previous-release.ts'
 import { PREVIOUS_RELEASE_ANSWERS_SCHEMA_VERSION, SMOKE_ANSWERS_SCHEMA_VERSION, smokeAnswers } from '../src/installed-smoke/answers.ts'
 import { writeSnapshot } from '../src/installed-smoke/snapshot.ts'
 import { signIn, type StudioClient } from '../src/installed-smoke/studio.ts'
@@ -78,6 +78,8 @@ export interface SmokeRequest {
   readonly keepHome: boolean
   /** The release log's origin the launchers are built for, when the channel's root names a log of this computer; the root's own log by default. */
   readonly logOrigin: string | undefined
+  /** The release step 6 upgrades from; the newest older release in the channel directory when undefined. */
+  readonly previous: string | undefined
 }
 
 /** Lines of the home log a failed run prints. */
@@ -115,6 +117,7 @@ export function parseSmokeArgs(argv: readonly string[]): SmokeRequest {
       'keys': { type: 'string' },
       'keep-home': { type: 'boolean', default: false },
       'log-origin': { type: 'string' },
+      'previous': { type: 'string' },
     },
   })
   if (values.channel === undefined || values.channel === '') throw new Error('pass --channel <dir|origin>')
@@ -127,6 +130,8 @@ export function parseSmokeArgs(argv: readonly string[]): SmokeRequest {
   const budget = Number(values['budget-minutes'])
   if (!Number.isInteger(budget) || budget < 1 || budget > 240) throw new Error(`--budget-minutes is a whole number from 1 to 240, not ${values['budget-minutes']!}`)
   const remote = /^https?:\/\//u.test(values.channel)
+  if (values.previous !== undefined && !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?$/u.test(values.previous)) throw new Error(`--previous is a release version, not ${values.previous}`)
+  if (values.previous !== undefined && remote) throw new Error('--previous needs a channel directory, not an origin')
   return {
     channel: remote ? values.channel.replace(/\/+$/u, '') : resolve(values.channel),
     version: values.version,
@@ -139,6 +144,7 @@ export function parseSmokeArgs(argv: readonly string[]): SmokeRequest {
     keys: values.keys === undefined ? undefined : resolve(values.keys),
     keepHome: values['keep-home'],
     logOrigin: values['log-origin'],
+    previous: values.previous,
   }
 }
 
@@ -407,6 +413,8 @@ export async function runSmoke(request: SmokeRequest, say: (line: string) => voi
   const extraHomes: string[] = []
   try {
     begin(1)
+    // Resolved first, so a `--previous` the channel cannot start from fails before any install.
+    const previous = /^https?:\/\//u.test(request.channel) ? undefined : request.previous === undefined ? await previousRelease(request.channel, request.version) : await chosenPreviousRelease(request.channel, request.version, request.previous)
     const source = channelSource(request.channel)
     const packs = await offeredPacks(source, request.version, platform as RuntimePlatform, Math.floor(Date.now() / 1000))
     say(`      ${request.version} offers ${String(packs.length)} pack(s) for ${platform}: ${packs.join(', ') || 'none'}`)
@@ -464,7 +472,6 @@ export async function runSmoke(request: SmokeRequest, say: (line: string) => voi
     done(` (chat ${created.sessionId})`)
 
     begin(6)
-    const previous = /^https?:\/\//u.test(request.channel) ? undefined : await previousRelease(request.channel, request.version)
     if (request.keys === undefined) {
       done(' (skipped: pass --keys <dir with timestamp.pem>; the launcher installs an older release only from a channel whose timestamp names it)')
     } else if (previous === undefined) {
@@ -517,7 +524,9 @@ export async function runSmoke(request: SmokeRequest, say: (line: string) => voi
         checkLog(updateOffset, `the update from ${previous}`)
         // The successor's first boot must have closed each pack's change against the signed files, not just booted.
         const changeLog = join(upgradePaths.delorun, 'changes', 'profiles', PROFILE, 'log.json')
-        const waiting = existsSync(changeLog) ? updateChangeProblems(readFileSync(changeLog, 'utf8'), agentPacks) : [`no change log at ${changeLog}`]
+        const changed = await packsChangedBetween(source, previous, request.version, platform as RuntimePlatform, Math.floor(Date.now() / 1000))
+        say(`      signed files differ between ${previous} and ${request.version} for: ${changed.size === 0 ? 'no pack' : [...changed].join(', ')}`)
+        const waiting = existsSync(changeLog) ? updateChangeProblems(readFileSync(changeLog, 'utf8'), agentPacks, changed) : [`no change log at ${changeLog}`]
         if (waiting.length > 0) checkFailed(`the update did not close the packs' changes:\n${waiting.join('\n')}`)
         done(` (${previous} updated to ${request.version}, both agent packs loaded)`)
       }
