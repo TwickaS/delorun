@@ -8,7 +8,7 @@ import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { fromDevice, get, json, post, send } from '../../plugin-changes/tests/routes-fixture.ts'
 import { UPDATE_PATHS } from '../src/wire.ts'
-import { readStopped, stoppedPath, writeStopped } from '../src/stopped.ts'
+import { readStopped, stoppedPath, withStoppedLock, writeStopped } from '../src/stopped.ts'
 import { serveUpdate, updateWaiting, writeResult, type UpdateServer } from './update-fixture.ts'
 
 const RUNNING = [{ sessionId: 's-1', title: 'First chat' }, { sessionId: 's-2', title: 'Second chat' }]
@@ -206,6 +206,14 @@ describe('continue-chat while an update runs, and under concurrency', () => {
     expect(update.sent.ids).toEqual([])
   })
 
+  it('is refused when the home process cannot say whether the update ended', async () => {
+    const update = await serveUpdate()
+    await waitingButtons(update)
+    update.channel.closed = true
+    expect(json(await post(update.server.port, UPDATE_PATHS.continueChat, { sessionId: 's-1' }))).toMatchObject({ code: expect.stringMatching(/CHANNEL_UNREACHABLE|UPDATE_UNAVAILABLE/u) })
+    expect(update.sent.ids).toEqual([])
+  })
+
   it('is refused for a chat the Host continues by itself', async () => {
     const update = await serveUpdate()
     updateWaiting(update)
@@ -238,7 +246,7 @@ describe('continue-chat while an update runs, and under concurrency', () => {
     const update = await serveUpdate()
     await waitingButtons(update)
     // The start's record: one chat still waiting for the button, one the start continues by itself.
-    await writeStopped(recordPath(update), { v: 1, to: '0.1.1', automatic: true, at: 'x', chats: [{ ...RUNNING[0]!, state: 'skipped-running' }, { ...RUNNING[1]!, state: 'stopped' }] })
+    await writeStopped(recordPath(update), { v: 1, to: '0.1.1', automatic: true, at: new Date().toISOString(), chats: [{ ...RUNNING[0]!, state: 'skipped-running' }, { ...RUNNING[1]!, state: 'stopped' }] })
     writeResult(update.home, { v: 1, kind: 'update', outcome: 'committed', from: '0.1.0', to: '0.1.1', at: '2026-11-19T10:00:00Z' })
     const { continueAfterUpdate } = await import('../src/index.ts')
     const scope = { get: () => ({ home: update.home, name: 'default' }) } as never
@@ -257,7 +265,7 @@ describe('the updated Host continuing the stopped chats', () => {
   /** @returns a record on disk and the sends the continuation made. */
   async function after(automatic: boolean, answers: Record<string, 'continued' | 'skipped-missing' | 'skipped-running' | 'failed'> = {}, settingOn = true) {
     const update = await serveUpdate()
-    await writeStopped(recordPath(update), { v: 1, to: '0.1.1', automatic, at: '2026-11-19T10:00:00Z', chats: RUNNING.map(chat => ({ ...chat, state: 'stopped' as const })) })
+    await writeStopped(recordPath(update), { v: 1, to: '0.1.1', automatic, at: new Date().toISOString(), chats: RUNNING.map(chat => ({ ...chat, state: 'stopped' as const })) })
     const sent: string[] = []
     writeResult(update.home, { v: 1, kind: 'update', outcome: 'committed', from: '0.1.0', to: '0.1.1', at: '2026-11-19T10:00:00Z' })
     const { continueAfterUpdate } = await import('../src/index.ts')
@@ -298,6 +306,33 @@ describe('the updated Host continuing the stopped chats', () => {
     writeResult(update.home, { v: 1, kind: 'update', outcome: 'committed', from: '0.1.0', to: '0.1.9', at: '2026-11-19T10:00:00Z' })
     await run()
     expect(sent).toEqual([])
+  })
+
+  it('at a start after an attempt that did not restart, sends nothing and leaves each chat its Continue button', async () => {
+    const { update, sent, run } = await after(true)
+    writeResult(update.home, { v: 1, kind: 'update', outcome: 'aborted', from: '0.1.0', to: '0.1.1', reason: 'DRAIN_TIMEOUT', at: new Date().toISOString() })
+    await run()
+    expect(sent).toEqual([])
+    expect((await readStopped(recordPath(update)))?.chats.map(chat => chat.state)).toEqual(['skipped-running', 'skipped-running'])
+    for (const outcome of ['failed', 'something-else']) {
+      writeResult(update.home, { v: 1, kind: 'update', outcome, from: '0.1.0', to: '0.1.1', at: new Date().toISOString() })
+      await run()
+      expect(sent).toEqual([])
+    }
+  })
+
+  it('drops a record older than a day', async () => {
+    const update = await serveUpdate()
+    await writeStopped(recordPath(update), { v: 1, to: '0.1.1', automatic: false, at: new Date(Date.now() - 25 * 3_600_000).toISOString(), chats: [{ ...RUNNING[0]!, state: 'skipped-running' }] })
+    expect(await readStopped(recordPath(update))).toBeUndefined()
+  })
+
+  it('serialises two writers on one record, in order', async () => {
+    const order: string[] = []
+    const slow = withStoppedLock('p', async () => { order.push('a1'); await new Promise(resolve => setTimeout(resolve, 20)); order.push('a2') })
+    const fast = withStoppedLock('p', () => { order.push('b'); return Promise.resolve() })
+    await Promise.all([slow, fast])
+    expect(order).toEqual(['a1', 'a2', 'b'])
   })
 
   it('continues the chats of an attempt that ended without a restart when the state is read', async () => {

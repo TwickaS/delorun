@@ -195,6 +195,11 @@ export async function continueAfterUpdate(scope: Context, send: (sessionId: stri
     // A record whose attempt has no outcome yet belongs to an update still running: it is not this start's to act on.
     const outcome = await readUpdateResult(updateResultPath(profile.home, profile.name)).catch(() => undefined)
     if (outcome === undefined || outcome.to !== record.to) return
+    // Only an update that restarted the Host continues the chats by itself; any other end leaves each chat its Continue button.
+    if (outcome.outcome !== 'committed' && outcome.outcome !== 'rolled-back') {
+      await writeStopped(path, { ...record, chats: record.chats.map(chat => chat.state === 'stopped' ? { ...chat, state: 'skipped-running' as const } : chat) })
+      return
+    }
     let chats = record.chats
     for (const chat of record.chats) {
       if (chat.state !== 'stopped') continue

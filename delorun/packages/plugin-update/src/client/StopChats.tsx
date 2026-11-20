@@ -5,7 +5,7 @@
  */
 import { useId, useState } from 'react'
 import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { RunningChatView, StoppedChatsView } from '../wire.ts'
+import { canContinueByHand, type RunningChatView, type StoppedChatsView } from '../wire.ts'
 import css from './UpdatePanel.module.css'
 import { pluralKey, refusalText, type T } from './parts.tsx'
 import type { Outcome } from './controller.ts'
@@ -98,7 +98,7 @@ export function StoppedChatLine({ stopped, sessionId, t, onContinue }: {
       : t('stopped.skipped')
   return <div className={css.stoppedLine} role="status" data-update-stopped={chat.state}>
     <span>{text}</span>
-    {chat.state === 'stopped' && !stopped?.automatic
+    {canContinueByHand(stopped?.automatic === true, chat.state)
       ? <Button variant="outline" size="sm" className={css.alertButton} disabled={busy} onClick={() => { setBusy(true); void onContinue(sessionId).finally(() => { setBusy(false) }) }}>{t('stopped.continue')}</Button>
       : null}
   </div>

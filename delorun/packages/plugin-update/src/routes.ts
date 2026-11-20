@@ -18,7 +18,7 @@ import type { UpdateChats } from './chats.ts'
 import { clearStopped, readStopped, stoppedPath, stoppedView, withStoppedLock, writeStopped } from './stopped.ts'
 import { hold, holds, isUpdateReport, missingTicks, viewOf, type HeldUpdate } from './report-view.ts'
 import {
-  UPDATE_PATHS,
+  canContinueByHand, UPDATE_PATHS,
   type ChatChoice, type ContinueChatView, type RollbackStateView, type RunningChatView, type StoppedChatState, type StopBegunView, type StopChatsView, type UpdateAccessView, type UpdateBegunView, type UpdateCancelView, type UpdateCheckedView,
   type UpdatePhaseView, type UpdateProgressView, type UpdateResultView, type UpdateStateView,
 } from './wire.ts'
@@ -380,13 +380,15 @@ export function updateRoutes(dependencies: UpdateRouteDependencies): readonly Up
     const sessionId = body.sessionId
     const path = stoppedFile(ctx.home, ctx.profile)
     // The chats are still being stopped, and a new turn is refused while the update waits or applies.
-    if ((await statusOf().then(answer => answer, () => undefined))?.update !== undefined) throw new RouteRefusal(409, 'UPDATE_IN_PROGRESS', 'The update is still running. Continue the chat once it has ended.')
+    if (begun !== undefined || preparing !== undefined || applying) throw new RouteRefusal(409, 'UPDATE_IN_PROGRESS', 'The update is still running. Continue the chat once it has ended.')
+    // Fails closed: a status that cannot be read is not "no update".
+    const status = await statusOf().then(answer => answer, () => undefined)
+    if (status === undefined) throw new RouteRefusal(409, 'CHANNEL_UNREACHABLE', 'Delorun could not tell whether the update has ended. Try again in a moment.')
+    if (status.update !== undefined) throw new RouteRefusal(409, 'UPDATE_IN_PROGRESS', 'The update is still running. Continue the chat once it has ended.')
     const change = (state: StoppedChatState) => async (): Promise<boolean> => {
       const record = await readStopped(path)
       const entry = record?.chats.find(chat => chat.sessionId === sessionId)
-      // A chat in `stopped` state continues by itself when the setting was on; only `skipped-running` is the button's after that.
-      const open = entry !== undefined && (entry.state === 'skipped-running' || entry.state === 'stopped' && !record?.automatic)
-      if (record === undefined || !open) return false
+      if (record === undefined || entry === undefined || !canContinueByHand(record.automatic, entry.state)) return false
       await writeStopped(path, { ...record, chats: record.chats.map(chat => chat.sessionId === sessionId ? { ...chat, state } : chat) })
       return true
     }

@@ -20,6 +20,9 @@ let counter = 0
 /** The record's file name in the profile's run folder. */
 const FILE = 'update-stopped-chats.json'
 
+/** How long a record stays usable. */
+const MAX_AGE_MS = 24 * 60 * 60 * 1000
+
 /** The session ids the record accepts: a bounded run of id characters. */
 const SESSION_ID = /^[\w.:-]{1,200}$/u
 
@@ -64,6 +67,8 @@ export async function readStopped(path: string): Promise<StoppedRecord | undefin
   if (typeof value !== 'object' || value === null) return undefined
   const record = value as Partial<StoppedRecord>
   if (record.v !== 1 || typeof record.to !== 'string' || typeof record.automatic !== 'boolean' || typeof record.at !== 'string' || !Array.isArray(record.chats)) return undefined
+  // A record older than a day is stale: the chats have likely been used since, so nothing is sent into them from it.
+  if (Date.now() - Date.parse(record.at) > MAX_AGE_MS) return undefined
   const chats = record.chats.filter((chat): chat is StoppedRecord['chats'][number] => typeof chat?.title === 'string'
     && typeof chat.sessionId === 'string' && SESSION_ID.test(chat.sessionId) && STATES.has(chat.state))
   return { v: 1, to: record.to, automatic: record.automatic, at: record.at, chats }

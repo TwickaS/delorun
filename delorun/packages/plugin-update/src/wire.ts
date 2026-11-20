@@ -273,6 +273,17 @@ export interface RunningChatView {
 /** How a chat the update stopped stands: waiting for the update, continued once, skipped, or left for the person's Continue button. */
 export type StoppedChatState = 'stopped' | 'continued' | 'skipped-missing' | 'skipped-running' | 'failed'
 
+/**
+ * Whether a person's Continue press may send the continue message to a chat now: a chat the update left that the Host
+ * did not or could not continue by itself. A `stopped` chat of a record made with the setting on belongs to the Host.
+ * @param automatic - whether the record's chats continue by themselves.
+ * @param state - the chat's state.
+ * @returns true when the chat has a Continue button.
+ */
+export function canContinueByHand(automatic: boolean, state: StoppedChatState): boolean {
+  return state === 'skipped-running' || state === 'failed' || (state === 'stopped' && !automatic)
+}
+
 /** One chat the update stopped. */
 export interface StoppedChatView extends RunningChatView {
   readonly state: StoppedChatState

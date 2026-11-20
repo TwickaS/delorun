@@ -362,12 +362,16 @@ describe('Stop running chats and update', () => {
 
   it('says Stopped for the update on a stopped chat, with Continue when the Host does not continue it by itself', async () => {
     const onContinue = vi.fn(() => Promise.resolve({}))
-    const view = (state: 'stopped' | 'continued' | 'skipped-missing', automatic: boolean) => <StoppedChatLine stopped={{ automatic, chats: [{ sessionId: 's-1', title: 'x', state }] }} sessionId="s-1" t={t} onContinue={onContinue} />
+    const view = (state: 'stopped' | 'continued' | 'skipped-missing' | 'skipped-running', automatic: boolean) => <StoppedChatLine stopped={{ automatic, chats: [{ sessionId: 's-1', title: 'x', state }] }} sessionId="s-1" t={t} onContinue={onContinue} />
     const { rerender } = render(view('stopped', false))
     fireEvent.click(screen.getByText(en['stopped.continue']))
     expect(onContinue).toHaveBeenCalledWith('s-1')
     rerender(view('continued', true))
     expect(screen.getByRole('status').textContent).toBe(en['stopped.continuing'])
+    expect(screen.queryByText(en['stopped.continue'])).toBeNull()
+    rerender(view('skipped-running', true))
+    expect(screen.getByText(en['stopped.continue'])).toBeTruthy()
+    rerender(view('stopped', true))
     expect(screen.queryByText(en['stopped.continue'])).toBeNull()
     rerender(view('skipped-missing', true))
     expect(screen.getByRole('status').textContent).toBe(en['stopped.skipped'])
