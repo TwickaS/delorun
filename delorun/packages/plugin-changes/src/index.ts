@@ -56,9 +56,9 @@ import type { HostConnectionAdmission, HostConnectionService } from '@deepseek-a
 import type {} from '@deepseek-ai/dsh-hmr'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-workspace'
-import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
+import type { PostToolDecision, PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
 import z from '@deepseek-ai/schemastery'
-import { PACKAGE_NAME_PATTERN, prepareReload, readProtection, reloadProfile, startNotice, type ChangeEntry, type ChangesContext, type ChangesHarnessHost, type ChangesRestartHost, type PluginOperation, type ProtectionLevel } from '@delorun/changes'
+import { PACKAGE_NAME_PATTERN, planAgentAction, prepareReload, readProtection, recordAgentAction, reloadProfile, startNotice, type AgentActionPlan, type ChangeEntry, type ChangesContext, type ChangesHarnessHost, type ChangesRestartHost, type PluginOperation, type ProtectionLevel } from '@delorun/changes'
 import { REACH_DEVICE, unlockOf, type ReachDevicePrincipal } from '@delorun/home-auth'
 import { recordPluginRequest, type PluginRequest } from '@delorun/changes/install'
 import { loadUpstreamChecks, upstreamPluginOperation } from '@delorun/changes/plugin-operation'
@@ -227,6 +227,21 @@ function protectionUnreadable(action: string, detail: string): PreToolDecision {
 }
 
 /**
+ * The result the model reads when a call would run with protection off but Changes cannot read the profile it must record
+ * the call in, so it does not run.
+ * @param action - the action.
+ * @param detail - why.
+ * @returns the denial.
+ */
+function unplanned(action: string, detail: string): PreToolDecision {
+  return {
+    kind: 'deny',
+    reason: `${action} changes what the person's harness runs, and every such change is recorded in Changes, whose records cannot be read: ${detail} Nothing was changed; tell the person.`,
+    info: { name: 'PluginChangeUnrecorded', code: PLUGIN_CHANGE_UNRECORDED },
+  }
+}
+
+/**
  * Provide the check before every recomposition of the profile, and, with the switch on, hold back the agent's plugin
  * changes while protection is on: every `plugin_manager` install, update or removal is recorded as a pending change in
  * the profile the Host runs and denied with the change's id, one that cannot be recorded is denied too, and every other
@@ -301,12 +316,15 @@ export function apply(ctx: Context, config: Config): void {
   })
   if (!config.enabled) return
   const recorded = new WeakSet<object>()
+  const planned = new WeakMap<object, AgentActionPlan>()
+  const changesOf = (profile: ProfileContext): ChangesContext => ({ home: profile.home, profile: profile.name, profileDir: profile.dir, ...runningRelease() })
   ctx.on('tools/pre-execute', async (exec, next): Promise<PreToolDecision> => {
     const held = heldRequest(exec)
     const other = atComputerAction(exec)
     if (held === undefined && !other) return next()
     recorded.add(exec)
-    const action = (exec.arguments as { action: string }).action
+    const args = exec.arguments as { action: string, target?: unknown, enabled?: unknown }
+    const action = args.action
     const profile = ctx.get('profileContext')
     if (profile === undefined) return held === undefined ? atComputer(action) : unrecorded('this harness runs no profile whose changes Delorun keeps.')
     let level: ProtectionLevel
@@ -315,34 +333,38 @@ export function apply(ctx: Context, config: Config): void {
     } catch (error) {
       return protectionUnreadable(action, messageOf(error))
     }
-    // A plugin that is not on yet starts only at the computer, whatever the level; protection decides the rest.
-    if (level === 'off' && !startsPlugin(exec, held)) return next()
+    if (level === 'off') {
+      // Upstream's full-access approval alone decides; the action is recorded in Changes once it ran, from what the profile held before it.
+      try {
+        planned.set(exec, await planAgentAction(changesOf(profile), { action, ...typeof args.target === 'string' ? { target: args.target } : {}, ...typeof args.enabled === 'boolean' ? { enabled: args.enabled } : {} }))
+      } catch (error) {
+        return unplanned(action, messageOf(error))
+      }
+      return next()
+    }
     if (held === undefined) return atComputer(action)
     if (typeof held.target !== 'string' || held.target.trim() === '') return unrecorded('the call names no target.')
     try {
-      const entry = await recordPluginRequest({ home: profile.home, profile: profile.name, profileDir: profile.dir, ...runningRelease() }, { action: held.action, spec: held.target })
+      const entry = await recordPluginRequest(changesOf(profile), { action: held.action, spec: held.target })
       return pendingDecision(entry)
     } catch (error) {
       return unrecorded(messageOf(error))
     }
   }, { prepend: true })
+  ctx.on('tools/post-execute', async (exec, _result, next): Promise<PostToolDecision> => {
+    const plan = planned.get(exec)
+    const profile = ctx.get('profileContext')
+    if (plan === undefined || profile === undefined) return next()
+    try {
+      await recordAgentAction(changesOf(profile), plan)
+    } catch (error) {
+      return { kind: 'block', feedback: [{ type: 'text', text: `${(exec.arguments as { action: string }).action} ran and changed the person's harness, but Delorun could not record it in Changes: ${messageOf(error)} Tell the person, who checks the profile with delorun changes list and delorun recover.` }], info: { name: 'PluginChangeUnrecorded', code: PLUGIN_CHANGE_UNRECORDED } }
+    }
+    return next()
+  })
   ctx.tools.guard(exec => (heldRequest(exec) !== undefined || atComputerAction(exec)) && !recorded.has(exec)
     ? 'Plugin changes wait for the person at their computer; this call was not handled as one, so it does not run.'
     : undefined)
-}
-
-/**
- * Whether a call could start a plugin that is not running: an install, a turn-on of a bundle or a plugin, or an undo
- * or a restore, which can bring back a plugin the profile dropped or turned off.
- * @param exec - the pending call.
- * @param held - its held request, when it is one.
- * @returns true for an install, for `undo` and `restore`, and for `set_bundle` or `set_plugin` with `enabled` anything but the boolean false.
- */
-function startsPlugin(exec: Pick<ToolExecution, 'arguments'>, held: ReturnType<typeof heldRequest>): boolean {
-  if (held !== undefined) return held.action === 'install'
-  const args = exec.arguments as { action?: unknown, enabled?: unknown }
-  if (args.action === 'undo' || args.action === 'restore') return true
-  return (args.action === 'set_bundle' || args.action === 'set_plugin') && args.enabled !== false
 }
 
 /**

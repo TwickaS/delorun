@@ -409,6 +409,7 @@ const ENTRY_RULES: Readonly<Record<string, FieldRule>> = {
   decidedFrom: { test: oneOf(DECIDED_FROM), expected: DECIDED_FROM.join(', '), optional: true },
   decidedOn: { ...nested({ id: required.string, label: required.string }, 'a paired device'), optional: true },
   historyVersion: optional.string,
+  historyBefore: optional.string,
   leftOut: { ...nested({ at: required.iso, failure: required.string }, 'a failure report'), optional: true },
   shownAt: optional.iso,
   lastFailure: { ...nested({ at: required.iso, failure: required.string }, 'a failure report'), optional: true },

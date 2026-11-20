@@ -276,7 +276,7 @@ export interface AccessView {
 }
 
 /** What a change changes. */
-export type ChangeKindView = 'plugin-edit' | 'plugin-install' | 'plugin-update' | 'plugin-remove' | 'plugin-off' | 'plugin-on' | 'harness-edit' | 'guard-weakening'
+export type ChangeKindView = 'plugin-edit' | 'plugin-install' | 'plugin-update' | 'plugin-remove' | 'plugin-off' | 'plugin-on' | 'harness-edit' | 'guard-weakening' | 'plugin-setting-change'
 
 /** Where a change stands. */
 export type ChangeStateView = 'pending' | 'applied' | 'discarded' | 'left-out-at-start' | 'undone'

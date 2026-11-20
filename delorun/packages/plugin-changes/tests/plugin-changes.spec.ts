@@ -24,6 +24,7 @@ import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import { executeToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import ToolRuntime, { type ToolExecutionResult } from '@deepseek-ai/dsh-tools'
 import ApprovalService from '@deepseek-ai/dsh-user-approval'
+import { openHistory } from '@delorun/profile-safety'
 import { attestTerminal, protectionPath, readChangeLog, setProtection, type ProtectionLevel } from '@delorun/changes'
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import * as plugin from '../src/index.ts'
@@ -276,72 +277,120 @@ describe('the model\'s plugin_manager changes wait for the person', () => {
   })
 })
 
-describe('with protection off', () => {
-  it.each(['off', 'none'] as const)('records the model\'s plugin_manager install as pending at protection %s, and a removal goes to upstream', async (level) => {
-    const { manager, approval, profile, call } = await harness(true, true, false, level)
-    const result = await call({ action: 'install_bundle', target: 'link:/work/plugins/new-plugin' })
-    expect(result.error?.info).toEqual({ name: 'PluginChangePending', code: plugin.PLUGIN_CHANGE_PENDING })
-    expect(manager.installBundle).not.toHaveBeenCalled()
-    expect(approval).not.toHaveBeenCalled()
-    expect((await readChangeLog(profile.home, PROFILE)).entries).toEqual([expect.objectContaining({ kind: 'plugin-install', state: 'pending' })])
-    expect((await call({ action: 'remove_bundle', target: 'installed-plugin' })).isError).toBe(false)
-    expect(manager.removeBundle).toHaveBeenCalledWith('installed-plugin')
+/**
+ * A manager method that changes the profile and saves a history version for it, as the real manager does.
+ * @param profileDir - the profile directory.
+ * @param summary - the version's subject.
+ * @returns the spy.
+ */
+function changing(profileDir: string, summary: string) {
+  return vi.fn(async (): Promise<ChangeResult> => {
+    const path = join(profileDir, 'package.json')
+    const manifest = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>
+    manifest.touched = `${String(manifest.touched ?? '')}x`
+    writeFileSync(path, `${JSON.stringify(manifest, undefined, 2)}\n`)
+    await openHistory({ profileDir }).record(summary, { kind: 'agent', sessionId: 'plugin-changes' })
+    return { changed: true, application: 'applied', stage: 'install', target: 'plug' }
+  })
+}
+
+/**
+ * Save the profile as its first history version, so an action's version has one before it.
+ * @param profileDir - the profile directory.
+ * @returns the version's id.
+ */
+async function firstVersion(profileDir: string): Promise<string | undefined> {
+  return openHistory({ profileDir }).record('profile before the agent', { kind: 'person' })
+}
+
+describe('with protection off, after the full-access approval', () => {
+  const ACTIONS = [
+    { args: { action: 'install_bundle', target: 'registry-plugin@2.0.0' }, spy: 'installBundle', kind: 'plugin-install', spec: 'registry-plugin@2.0.0' },
+    { args: { action: 'install_bundle', target: 'link:/work/plugins/new-plugin' }, spy: 'installBundle', kind: 'plugin-install', spec: 'link:/work/plugins/new-plugin' },
+    { args: { action: 'remove_bundle', target: 'installed-plugin' }, spy: 'removeBundle', kind: 'plugin-remove', spec: 'installed-plugin' },
+    { args: { action: 'set_bundle', target: 'new-plugin', enabled: true }, spy: 'setBundleEnabled', kind: 'plugin-setting-change', setting: 'set_bundle' },
+    { args: { action: 'set_plugin', target: 'new-plugin', enabled: true }, spy: 'setPluginEnabled', kind: 'plugin-setting-change', setting: 'set_plugin' },
+    { args: { action: 'set_bundle', target: 'installed-plugin', enabled: false }, spy: 'setBundleEnabled', kind: 'plugin-setting-change', setting: 'set_bundle' },
+    { args: { action: 'set_version_exemption', target: 'installed-plugin@1.0.0', runtimeVersion: '1.0.0', enabled: true }, spy: 'setVersionExemption', kind: 'plugin-setting-change', setting: 'set_version_exemption' },
+    { args: { action: 'undo' }, spy: 'undo', kind: 'plugin-setting-change', setting: 'undo' },
+    { args: { action: 'restore', target: 'version-1' }, spy: 'restore', kind: 'plugin-setting-change', setting: 'restore' },
+  ] as const
+
+  it.each(['off', 'none'] as const)('runs every action the tool offers and records each in Changes as unreviewed, with the version before it, at protection %s', async (level) => {
+    const { manager, approval, profile, call } = await harness(true, true, true, level)
+    const preview = { ok: true as const, version: { version: 'version-1', summary: 'earlier' }, changes: { plugins: [], bundles: [], builds: [], exemptions: [], patchChanged: false, unreadable: [] } }
+    manager.previewUndo.mockResolvedValue(preview as never)
+    manager.previewRestore.mockResolvedValue(preview as never)
+    for (const row of ACTIONS) manager[row.spy].mockImplementation(changing(profile.profileDir, 'agent action'))
+    let previous = await firstVersion(profile.profileDir)
+    for (const row of ACTIONS) {
+      const result = await call(row.args)
+      expect(result.isError, JSON.stringify(row.args)).toBe(false)
+      expect(manager[row.spy], JSON.stringify(row.args)).toHaveBeenCalled()
+      const log = (await readChangeLog(profile.home, PROFILE)).entries
+      const entry = log.at(-1)!
+      const latest = (await openHistory({ profileDir: profile.profileDir }).list(1))[0]!.id
+      expect(entry, JSON.stringify(row.args)).toMatchObject({ kind: row.kind, state: 'applied', decidedFrom: 'unreviewed', historyVersion: latest, historyBefore: previous })
+      if ('spec' in row) expect(entry.subject.spec).toBe(row.spec)
+      if ('setting' in row) expect(entry.subject.setting).toBe(row.setting)
+      previous = latest
+    }
+    expect(approval).toHaveBeenCalledTimes(ACTIONS.length)
+    expect((await readChangeLog(profile.home, PROFILE)).entries).toHaveLength(ACTIONS.length)
+  })
+
+  it('lets configure reach upstream\'s approval too', async () => {
+    const { approval, call } = await harness(true, true, true, 'off')
+    const result = await call({ action: 'configure', target: 'installed-plugin', config: {} })
+    expect(result.error?.info).not.toEqual({ name: 'PluginChangeAtComputer', code: plugin.PLUGIN_CHANGE_AT_COMPUTER })
     expect(approval).toHaveBeenCalledTimes(1)
   })
 
-  it('holds a chat\'s install and turn-on at protection off although the chat has full access', async () => {
-    const { manager, approval, call } = await harness(true, true, false, 'off', 'danger-full-access')
-    expect((await call({ action: 'install_bundle', target: 'link:/work/plugins/new-plugin' })).error?.info).toEqual({ name: 'PluginChangePending', code: plugin.PLUGIN_CHANGE_PENDING })
-    expect((await call({ action: 'set_bundle', target: 'new-plugin', enabled: true })).error?.info).toEqual({ name: 'PluginChangeAtComputer', code: plugin.PLUGIN_CHANGE_AT_COMPUTER })
-    expect(manager.installBundle).not.toHaveBeenCalled()
-    expect(manager.setBundleEnabled).not.toHaveBeenCalled()
-    expect(approval).not.toHaveBeenCalled()
-  })
-
-  it('keeps holding a chat\'s install and turn-on in dangerous mode: full access, every approval allowed and the default protection record change nothing', async () => {
-    // Dangerous mode gives the chat danger-full-access with approvals the person never answers; neither reaches the hold on a plugin that is not on yet.
-    const { manager, approval, profile, call } = await harness(true, true, false, 'none', 'danger-full-access')
-    for (const target of ['link:/work/plugins/new-plugin', 'registry-plugin@2.0.0']) {
-      expect((await call({ action: 'install_bundle', target })).error?.info, target).toEqual({ name: 'PluginChangePending', code: plugin.PLUGIN_CHANGE_PENDING })
+  it('runs nothing and records nothing when the person does not give the full-access approval', async () => {
+    const { ctx, manager, approval, profile, call } = await harness(true, true, true, 'off')
+    ctx.on('approval/request', async () => 'rejected' as const, { prepend: true })
+    approval.mockClear()
+    await firstVersion(profile.profileDir)
+    for (const args of [{ action: 'install_bundle', target: 'registry-plugin@2.0.0' }, { action: 'set_bundle', target: 'new-plugin', enabled: true }, { action: 'undo' }, { action: 'restore', target: 'version-1' }]) {
+      expect((await call(args)).isError, JSON.stringify(args)).toBe(true)
     }
-    expect((await call({ action: 'set_plugin', target: 'new-plugin', enabled: true })).error?.info).toEqual({ name: 'PluginChangeAtComputer', code: plugin.PLUGIN_CHANGE_AT_COMPUTER })
-    expect(manager.installBundle).not.toHaveBeenCalled()
-    expect(manager.setPluginEnabled).not.toHaveBeenCalled()
-    expect(approval).not.toHaveBeenCalled()
-    expect((await readChangeLog(profile.home, PROFILE)).entries).toHaveLength(2)
+    for (const spy of [manager.installBundle, manager.setBundleEnabled, manager.undo, manager.restore]) expect(spy).not.toHaveBeenCalled()
+    expect((await readChangeLog(profile.home, PROFILE)).entries).toEqual([])
   })
 
-  it('leaves a turn-on to the person at the computer at protection off, and a turn-off to upstream', async () => {
-    const { manager, call } = await harness(true, true, false, 'off')
-    for (const action of ['set_bundle', 'set_plugin']) {
-      const result = await call({ action, target: 'some-plugin', enabled: true })
-      expect(result.error?.info).toEqual({ name: 'PluginChangeAtComputer', code: plugin.PLUGIN_CHANGE_AT_COMPUTER })
-    }
-    expect(manager.setBundleEnabled).not.toHaveBeenCalled()
-    expect(manager.setPluginEnabled).not.toHaveBeenCalled()
-    expect((await call({ action: 'set_plugin', target: 'some-plugin', enabled: false })).isError).toBe(false)
-    expect(manager.setPluginEnabled).toHaveBeenCalledTimes(1)
-  })
-
-  it('leaves undo, restore and any turn-on that is not a boolean false to the person at every level, dangerous mode included', async () => {
-    for (const level of ['off', 'none'] as const) {
-      const { manager, approval, call } = await harness(true, true, true, level, 'danger-full-access')
-      for (const args of [
-        { action: 'undo' }, { action: 'restore', target: 'version-1' },
-        { action: 'set_plugin', target: 'p', enabled: 'true' }, { action: 'set_bundle', target: 'p', enabled: 1 },
-      ]) {
-        expect((await call(args)).error?.info, `${level} ${JSON.stringify(args)}`).toEqual({ name: 'PluginChangeAtComputer', code: plugin.PLUGIN_CHANGE_AT_COMPUTER })
-      }
-      for (const spy of [manager.undo, manager.restore, manager.setPluginEnabled, manager.setBundleEnabled]) expect(spy).not.toHaveBeenCalled()
-      expect(approval).not.toHaveBeenCalled()
-    }
-  })
-
-  it('every other action that changes what runs goes to upstream too', async () => {
-    const { manager, approval, call } = await harness(true, true, true, 'off')
+  it('records nothing for an action that left the profile as it was', async () => {
+    const { manager, approval, profile, call } = await harness(true, true, true, 'off')
+    await firstVersion(profile.profileDir)
     expect((await call({ action: 'set_bundle', target: 'installed-plugin', enabled: false })).isError).toBe(false)
     expect(manager.setBundleEnabled).toHaveBeenCalledTimes(1)
     expect(approval).toHaveBeenCalledTimes(1)
+    expect((await readChangeLog(profile.home, PROFILE)).entries).toEqual([])
+  })
+
+  it('reports an action it ran but could not record, and does not hide it', async () => {
+    const { manager, profile, call } = await harness(true, true, false, 'off')
+    await firstVersion(profile.profileDir)
+    const change = changing(profile.profileDir, 'agent install')
+    manager.installBundle.mockImplementation(async () => {
+      const result = await change()
+      mkdirSync(join(profile.home, 'changes', 'profiles', PROFILE), { recursive: true, mode: 0o700 })
+      writeFileSync(join(profile.home, 'changes', 'profiles', PROFILE, 'log.json'), 'not json', { mode: 0o600 })
+      return result
+    })
+    const result = await call({ action: 'install_bundle', target: 'registry-plugin@2.0.0' })
+    expect(result.isError).toBe(true)
+    expect(result.error?.info).toEqual({ name: 'PluginChangeUnrecorded', code: plugin.PLUGIN_CHANGE_UNRECORDED })
+    expect(text(result)).toMatch(/^install_bundle ran and changed the person's harness, but Delorun could not record it in Changes: .+ Tell the person/s)
+  })
+
+  it('holds a call whose history Changes cannot read, as the action could not be recorded', async () => {
+    const { manager, approval, profile, call } = await harness(true, true, false, 'off')
+    await firstVersion(profile.profileDir)
+    writeFileSync(join(profile.profileDir, '.plugin-manager', 'history', 'HEAD'), 'garbage')
+    const result = await call({ action: 'install_bundle', target: 'registry-plugin@2.0.0' })
+    expect(result.error?.info).toEqual({ name: 'PluginChangeUnrecorded', code: plugin.PLUGIN_CHANGE_UNRECORDED })
+    expect(approval).not.toHaveBeenCalled()
+    expect(manager.installBundle).not.toHaveBeenCalled()
   })
 
   it('a listener that allows the call without the plugin\'s listener is still overruled by its guard', async () => {
@@ -353,18 +402,20 @@ describe('with protection off', () => {
     expect(manager.installBundle).not.toHaveBeenCalled()
   })
 
-  it('a protection record that cannot be read holds the call', async () => {
+  it('a protection record that cannot be read holds every call as with protection on', async () => {
     const { manager, approval, profile, call } = await harness(true, true, true, 'off')
     writeFileSync(protectionPath(profile.home), 'not json', { mode: 0o600 })
-    for (const args of [{ action: 'install_bundle', target: 'new-plugin' }, { action: 'set_bundle', target: 'installed-plugin', enabled: false }]) {
+    for (const args of [
+      { action: 'install_bundle', target: 'new-plugin' }, { action: 'set_bundle', target: 'installed-plugin', enabled: false },
+      { action: 'set_bundle', target: 'new-plugin', enabled: true }, { action: 'undo' }, { action: 'restore', target: 'version-1' },
+    ]) {
       const result = await call(args)
       expect(result.isError).toBe(true)
       expect(result.error?.info).toEqual({ name: 'PluginChangeUnrecorded', code: plugin.PLUGIN_CHANGE_UNRECORDED })
       expect(text(result)).toMatch(new RegExp(`^Error: ${args.action} changes what the person's harness runs, and the protection setting that decides whether it waits for the person cannot be read: .+ Nothing was changed; tell the person, who checks it with delorun changes protection\\.$`, 's'))
     }
     expect(approval).not.toHaveBeenCalled()
-    expect(manager.installBundle).not.toHaveBeenCalled()
-    expect(manager.setBundleEnabled).not.toHaveBeenCalled()
+    for (const spy of [manager.installBundle, manager.setBundleEnabled, manager.undo, manager.restore]) expect(spy).not.toHaveBeenCalled()
     expect((await readChangeLog(profile.home, PROFILE)).entries).toEqual([])
   })
 
@@ -375,7 +426,9 @@ describe('with protection off', () => {
     await protect(profile.home, 'on')
     const held = await call({ action: 'install_bundle', target: 'second-plugin' })
     expect(held.error?.info).toEqual({ name: 'PluginChangePending', code: plugin.PLUGIN_CHANGE_PENDING })
+    expect((await call({ action: 'set_bundle', target: 'second-plugin', enabled: true })).error?.info).toEqual({ name: 'PluginChangeAtComputer', code: plugin.PLUGIN_CHANGE_AT_COMPUTER })
     expect(manager.installBundle).not.toHaveBeenCalled()
+    expect(manager.setBundleEnabled).not.toHaveBeenCalled()
     expect((await readChangeLog(profile.home, PROFILE)).entries).toEqual([expect.objectContaining({ kind: 'plugin-install', state: 'pending', subject: { plugin: 'second-plugin', spec: 'second-plugin' } })])
     await protect(profile.home, 'off')
     expect((await call({ action: 'remove_bundle', target: 'third-plugin' })).isError).toBe(false)

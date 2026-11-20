@@ -746,7 +746,7 @@ export async function runChanges(args: readonly string[], context: CommandContex
         if (target.kind === 'harness') return await undoHarness(harness, target.target, presence!, dependencies, context)
         const { shown } = target
         if (!await confirmed(dependencies, `Undo ${action.id}: ${printable(shown.kind === 'pending' ? shown.change.plugin : shown.entry.summary)}?`)) return declined(context)
-        const undone = await dependencies.withHost(home.path, profile, reload => undoChange(ctx, action.id, presence!, { reload }))
+        const undone = await dependencies.withHost(home.path, profile, reload => undoChange(ctx, action.id, presence!, { reload, run: dependencies.pluginOperation(ctx, context) }))
         const code = reported(`Undid ${action.id}`, undone, context)
         const { entry } = undone
         const name = entry.subject.plugin

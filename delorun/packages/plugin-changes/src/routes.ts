@@ -59,6 +59,7 @@ import {
   CONTENT_VERSION_PATTERN,
   discardChange,
   finishWork,
+  isAgentAction,
   isChangesError,
   isPluginRequest,
   listChanges,
@@ -712,7 +713,7 @@ function entryView(entry: ChangeEntry): EntryView {
     ...entry.decidedOn === undefined ? {} : { decidedOn: entry.decidedOn.label },
     ...entry.lastFailure === undefined ? {} : { lastFailure: entry.lastFailure },
     ...entry.leftOut === undefined ? {} : { leftOut: entry.leftOut },
-    undoable: entry.state === 'applied' && (entry.kind === 'plugin-off' || entry.kind === 'plugin-on' || ((entry.kind === 'plugin-edit' || entry.kind === 'plugin-install') && !isPluginRequest(entry))),
+    undoable: entry.state === 'applied' && (entry.kind === 'plugin-off' || entry.kind === 'plugin-on' || isAgentAction(entry) || ((entry.kind === 'plugin-edit' || entry.kind === 'plugin-install') && !isPluginRequest(entry))),
   }
 }
 
@@ -1127,7 +1128,7 @@ async function act(action: ChangesAction, body: Readonly<Record<string, unknown>
       const id = changeIdOf(body)
       confirmedRiskOf(body.confirmedRisk)
       await refuseHarnessChange(ctx.home, id)
-      return action === 'discard' ? { entry: entryView(await discardChange(ctx, id, presence)) } : actionView(await undoChange(ctx, id, presence, options))
+      return action === 'discard' ? { entry: entryView(await discardChange(ctx, id, presence)) } : actionView(await undoChange(ctx, id, presence, { ...options, run: dependencies.pluginOperation(ctx) }))
     }
     case 'off':
     case 'on':

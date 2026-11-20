@@ -21,6 +21,7 @@
  */
 import { resolve } from 'node:path'
 import { locked, timeOf } from './action-support.ts'
+import { isAgentAction } from './agent-actions.ts'
 import type { ChangesContext } from './actions.ts'
 import { readLinks } from './link.ts'
 import { activeDirectory } from './paths.ts'
@@ -93,7 +94,7 @@ function activeOf(plugins: ActiveRecord['plugins'], plugin: string): ActiveConte
  * @returns the applied entry, or undefined when the failed start leaves nothing out.
  */
 export function leavableIn(records: LeavableRecords): ChangeEntry | undefined {
-  const entry = newestDecided(records.log.entries, candidate => RUNNING_DECISIONS.has(candidate.state))
+  const entry = newestDecided(records.log.entries, candidate => RUNNING_DECISIONS.has(candidate.state) && !isAgentAction(candidate))
   if (entry?.state !== 'applied' || !LEAVABLE_KINDS.has(entry.kind) || entry.decidedFrom === 'upgrade') return undefined
   const plugin = entry.subject.plugin
   if (plugin === undefined || !records.linked.has(plugin)) return undefined
@@ -115,7 +116,7 @@ export function leavableIn(records: LeavableRecords): ChangeEntry | undefined {
 export async function newestLeavableChange(ctx: Pick<ChangesContext, 'home' | 'profile' | 'profileDir'>, runtime?: string): Promise<ChangeEntry | undefined> {
   const log = await readChangeLog(ctx.home, ctx.profile)
   const harness = runtime === undefined ? undefined : await newestHarnessDecision(ctx.home, runtime)
-  const newest = newestDecided(log.entries, candidate => RUNNING_DECISIONS.has(candidate.state))
+  const newest = newestDecided(log.entries, candidate => RUNNING_DECISIONS.has(candidate.state) && !isAgentAction(candidate))
   if (harness !== undefined && (newest === undefined || Date.parse(harness.entry.decidedAt!) >= Date.parse(newest.decidedAt!))) return harness.leavable ? harness.entry : undefined
   const linked = new Set((await readLinks(ctx.profileDir)).filter(link => resolve(link.target) === resolve(activeDirectory(ctx.home, ctx.profile, link.name))).map(link => link.name))
   return leavableIn({ log, approved: await readApproved(ctx.profileDir), active: await readActiveRecord(ctx.home, ctx.profile), linked })

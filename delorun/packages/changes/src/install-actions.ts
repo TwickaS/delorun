@@ -118,7 +118,7 @@ export interface InstallResult {
 }
 
 /** What recording one request decides from the spec and the profile's dependencies. */
-interface Classified {
+export interface Classified {
   readonly kind: PluginRequestKind
   readonly subject: ChangeSubject
   readonly summary: string
@@ -433,3 +433,5 @@ export async function applyInstallChange(ctx: ChangesContext, id: ChangeId, pres
     return { entry: applied, ...recorded, ...operation.folderChange === undefined ? {} : { folderChange: operation.folderChange }, reload }
   })
 }
+
+export { classify as classifyPluginRequest }

@@ -34,9 +34,14 @@ export type ChangeKind =
   | 'harness-edit'
   /** A setting that weakens a consent, a guard or the protection setting. */
   | 'guard-weakening'
+  /**
+   * An action of the agent's `plugin_manager` that ran with protection off and is neither an install nor a removal:
+   * turning a bundle or plugin on or off, a setting, a version exemption, an undo or a restore.
+   */
+  | 'plugin-setting-change'
 
 /** Every {@link ChangeKind}, in the order a list shows them. */
-export const CHANGE_KINDS: readonly ChangeKind[] = ['plugin-edit', 'plugin-install', 'plugin-update', 'plugin-remove', 'plugin-off', 'plugin-on', 'harness-edit', 'guard-weakening']
+export const CHANGE_KINDS: readonly ChangeKind[] = ['plugin-edit', 'plugin-install', 'plugin-update', 'plugin-remove', 'plugin-off', 'plugin-on', 'harness-edit', 'guard-weakening', 'plugin-setting-change']
 
 /** Where a change stands. */
 export type ChangeState =
@@ -249,6 +254,11 @@ export interface ChangeEntry {
   readonly decidedOn?: StudioDevice
   /** The profile history version that applied it. */
   readonly historyVersion?: string
+  /**
+   * For an agent's `plugin_manager` action that ran with protection off ([agent actions](./agent-actions.ts)): the
+   * profile history version the profile held before the action, which undoing the action brings back.
+   */
+  readonly historyBefore?: string
   /** Set when a start left the change out. */
   readonly leftOut?: LeftOut
   /** When a change approved at upgrade was first shown to the person, ISO 8601. */

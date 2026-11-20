@@ -64,7 +64,8 @@ import {
   type ProtectionLevel,
   type WorkSessionRecord,
 } from './types.ts'
-import { isPluginRequest } from './install-actions.ts'
+import { isAgentAction, undoAgentAction } from './agent-actions.ts'
+import { isPluginRequest, type PluginOperation } from './install-actions.ts'
 import { leftOutOf } from './left-out.ts'
 import { addProtectionNotice } from './notices.ts'
 import { beginWork, endWork, type WorkDone, type WorkStarted } from './work.ts'
@@ -580,8 +581,16 @@ export async function discardChange(ctx: ChangesContext, id: ChangeId, presence:
  *   log has no change with the id; `NOT_ALLOWED` for a change that is neither applied nor left out, a later change of the same plugin, a
  *   kind undone another way, or a plugin in a work session.
  */
-export async function undoChange(ctx: ChangesContext, id: ChangeId, presence: AtComputer, options: ReloadOptions): Promise<ActionResult> {
+export async function undoChange(ctx: ChangesContext, id: ChangeId, presence: AtComputer, options: ReloadOptions & { readonly run?: PluginOperation }): Promise<ActionResult> {
   requirePresence(presence, id)
+  const agent = await locked(ctx, async () => {
+    const entry = findEntry(await readChangeLog(ctx.home, ctx.profile), id)
+    return entry !== undefined && isAgentAction(entry)
+  })
+  if (agent) {
+    if (options.run === undefined) throw new ChangesError('NOT_ALLOWED', id, `Change ${id} is an action the agent ran with protection off; undoing it installs the earlier plugin set, which needs the plugin operation.`)
+    return undoAgentAction(ctx, id, presence, { reload: options.reload, run: options.run })
+  }
   return locked(ctx, async () => {
     const state = await readState(ctx)
     const entry = findEntry(state.log, id)
@@ -597,6 +606,7 @@ export async function undoChange(ctx: ChangesContext, id: ChangeId, presence: At
         throw new ChangesError('NOT_ALLOWED', id, `Change ${id} cannot be undone here: ${entry.summary}. Restore the profile version before it with delorun recover.`)
       case 'plugin-update':
       case 'plugin-remove':
+      case 'plugin-setting-change':
       case 'harness-edit':
       case 'guard-weakening':
         throw new ChangesError('NOT_ALLOWED', id, `Change ${id} cannot be undone here: ${entry.summary}.`)
