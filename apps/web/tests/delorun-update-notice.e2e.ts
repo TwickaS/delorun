@@ -112,6 +112,9 @@ it.skipIf(webSnapshotMode() === 'record')('shows the Host\'s update notice in th
   const remote = await openStudio(browser, scaffold.authenticatedUrl, true)
   onTestFailed(() => saveFailureShot(remote, 'web-e2e-delorun-update-notice-remote'))
   const remoteNotice = remote.locator('[data-update-notice="0.1.3"]')
+  // A remote page is one row; What's new opens the rest.
+  expect(await remoteNotice.textContent()).not.toContain('Release note')
+  await remoteNotice.getByRole('button', { name: 'What\'s new', exact: true }).click()
   expect(await remoteNotice.textContent()).toContain('Release note: Fixes the reach listener\'s cookie check')
   expect(await remoteNotice.textContent()).toContain('Run delorun update on your computer.')
   await remoteNotice.getByRole('button', { name: 'Hide this notice until a newer release' }).click()

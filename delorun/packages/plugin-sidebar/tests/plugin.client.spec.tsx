@@ -409,7 +409,7 @@ describe('the update notice in the studio', () => {
     const face = h.face<SidebarInjected>('sidebar.workspaces.list#').updateNotice
     expect(face.remote).toBe(true)
     render(<UpdateNoticeCard face={face} t={t} />)
-    expect((await screen.findByRole('status')).textContent).toContain(en['update.kind.security'])
+    expect((await screen.findByRole('status')).textContent).toBe('Delorun 0.1.3')
     const reads = fetch.mock.calls.length
     fireEvent.click(screen.getByRole('button', { name: en['update.dismiss'] }))
     expect(screen.queryByRole('status')).toBeNull()

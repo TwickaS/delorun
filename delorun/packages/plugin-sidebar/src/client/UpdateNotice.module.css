@@ -9,13 +9,17 @@
   --notice-touch: 44px;
   --notice-icon: 14px;
   --notice-line: 18px;
+  --notice-foot-clear: 12px;
 
   display: flex;
   flex: none;
   flex-direction: column;
   gap: var(--delorun-space-1);
   min-width: 0;
-  margin: 0 var(--delorun-space-4) var(--delorun-space-2);
+  /* Above the sidebar's bottom fade, which would otherwise dim the notice's last line, and clear of the foot that overlaps the list's end. */
+  position: relative;
+  z-index: 1;
+  margin: 0 var(--delorun-space-4) calc(var(--delorun-space-2) + var(--notice-foot-clear));
   padding: var(--delorun-space-3) var(--delorun-space-4);
   border: 1px solid var(--dsw-alias-border-l1);
   border-radius: var(--dsw-radius-sm);
@@ -89,11 +93,14 @@
 }
 
 /*
- * A remote page is a phone's: the title, What's new and the close button share the first row, each at the 44px touch
- * size, and the kind and plugin line takes the full width under them. The live region's box is dropped so the title and
- * that line lay out as cells of the head's grid; its role stays. The close button's 44px box is pulled into the
- * notice's padding so the row stays as tall as its content.
+ * A remote page is a phone's: the notice is one row of the title on one line, What's new and the close button, each at
+ * the 44px touch size, and the rest opens under What's new. The close button's 44px box is pulled into the notice's
+ * padding so the row stays as tall as the buttons.
  */
+.notice[data-remote='true'] {
+  padding-block: 0;
+}
+
 .notice[data-remote='true'] .head {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
@@ -101,34 +108,36 @@
   column-gap: var(--delorun-space-2);
 }
 
-.notice[data-remote='true'] .status {
-  display: contents;
-}
-
 .notice[data-remote='true'] .title {
-  grid-column: 1;
-  grid-row: 1;
-}
-
-.notice[data-remote='true'] .facts {
-  grid-column: 1 / -1;
-  grid-row: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .notice[data-remote='true'] .whatsNew {
-  grid-column: 2;
-  grid-row: 1;
   min-height: var(--notice-touch);
   padding-inline: var(--delorun-space-2);
   white-space: nowrap;
 }
 
 .notice[data-remote='true'] .dismiss {
-  grid-column: 3;
-  grid-row: 1;
   width: var(--notice-touch);
   height: var(--notice-touch);
-  margin: calc(var(--delorun-space-3) * -1) calc(var(--delorun-space-4) * -1) calc(var(--delorun-space-3) * -1) 0;
+  margin: 0 calc(var(--delorun-space-4) * -1) 0 0;
+}
+
+.detailTitle {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: var(--dsw-font-xs-13-font-size);
+  font-weight: 500;
+}
+
+.details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delorun-space-1);
+  padding-bottom: var(--delorun-space-3);
 }
 
 .dismiss:focus-visible,

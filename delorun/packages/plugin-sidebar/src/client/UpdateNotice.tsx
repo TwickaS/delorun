@@ -11,7 +11,7 @@ import { Button, IconCloseOutlineRegular, Modal } from '@deepseek-ai/dsh-client-
 import type { HostObservable, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SemanticVersion } from '@delorun/contract-release-manifest'
 import { UPDATE_COMMAND, type UpdateNotice } from '@delorun/contract-update-report'
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useEffect, useId, useState, useSyncExternalStore } from 'react'
 import css from './UpdateNotice.module.css'
 
 /** What the notice reads and does. */
@@ -52,6 +52,9 @@ export function UpdateNoticeCard({ face, t }: UpdateNoticeCardProps) {
   const notice = useSyncExternalStore(listener => face.notice.subscribe(listener), () => face.notice.getSnapshot())
   const canOpen = useSyncExternalStore(listener => face.canOpen.subscribe(listener), () => face.canOpen.getSnapshot())
   const [expanded, setExpanded] = useState(false)
+  // Remote pages only: whether the details under What's new are open.
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const detailsId = useId()
   const [notesOpen, setNotesOpen] = useState(false)
   // undefined while reading, null when there are no notes to show.
   const [notes, setNotes] = useState<string | null | undefined>(undefined)
@@ -79,49 +82,84 @@ export function UpdateNoticeCard({ face, t }: UpdateNoticeCardProps) {
   const note = release.summary === undefined
     ? null
     : <><span className={css.summaryLabel}>{noteBefore}</span>{release.summary}{noteAfter}</>
+  const facts = (
+    <p className={css.facts}>
+      <span className={release.security ? css.security : undefined}>{kind}</span>
+      {t('update.separator')}
+      {plugins}
+    </p>
+  )
+  const summary = note === null
+    ? null
+    : remote
+      ? <p className={css.summary}>{note}</p>
+      : (
+        <button type="button" className={css.summaryToggle} aria-expanded={expanded} data-expanded={expanded}
+          onClick={() => { setExpanded(value => !value) }}>
+          {note}
+        </button>
+      )
   const whatsNew = release.notes === undefined
     ? null
-    : <Button variant="ghost" className={css.whatsNew} onClick={() => { setNotesOpen(true) }}>{t('update.whatsNew')}</Button>
+    : <Button variant="ghost" className={css.whatsNew} onClick={() => { setNotesOpen(true) }}>{t(remote ? 'update.releaseNotes' : 'update.whatsNew')}</Button>
+  const run = face.open === null || !canOpen
+    ? <p className={css.run}>{before}<code className={css.command}>{UPDATE_COMMAND}</code>{after}</p>
+    : <Button variant="primary" size="sm" className={css.updateNow} data-update-now onClick={face.open}>{t('update.now')}</Button>
+  const closeButton = (
+    <button type="button" className={css.dismiss} aria-label={t('update.dismiss')} title={t('update.dismiss')}
+      onClick={() => { dismiss(release.delorun) }}>
+      <IconCloseOutlineRegular size={14} className={css.dismissIcon} />
+    </button>
+  )
+  const notesDialog = notesOpen && (
+    <Modal open onClose={() => { setNotesOpen(false) }} closeLabel={t('update.whatsNewClose')}
+      title={t('update.whatsNewTitle', { version: release.delorun })}>
+      {/* The notes are signed plain text: rendered as text in a pre, never as markup. */}
+      {notes === undefined
+        ? <p>{t('update.whatsNewLoading')}</p>
+        : notes === null
+          ? <p>{t('update.whatsNewUnavailable')}</p>
+          : <pre className={css.notes} data-update-notes>{notes}</pre>}
+    </Modal>
+  )
+  // A remote page is a phone's: one row, and the details open under What's new.
+  if (remote) {
+    return (
+      <div className={css.notice} data-update-notice={release.delorun} data-remote>
+        <div className={css.head}>
+          <div className={css.status} role="status">
+            <p className={css.title} title={title}>{t('update.title.short', { version: release.delorun })}</p>
+          </div>
+          <Button variant="ghost" className={css.whatsNew} aria-expanded={detailsOpen} aria-controls={detailsId}
+            onClick={() => { setDetailsOpen(value => !value) }}>{t('update.whatsNew')}</Button>
+          {closeButton}
+        </div>
+        {detailsOpen && (
+          <div className={css.details} id={detailsId} data-update-details>
+            <p className={css.detailTitle}>{title}</p>
+            {facts}
+            {summary}
+            {whatsNew}
+            {run}
+          </div>
+        )}
+        {notesDialog}
+      </div>
+    )
+  }
   return (
-    <div className={css.notice} data-update-notice={release.delorun} data-remote={remote}>
+    <div className={css.notice} data-update-notice={release.delorun} data-remote={false}>
       <div className={css.head}>
         <div className={css.status} role="status">
           <p className={css.title}>{title}</p>
-          <p className={css.facts}>
-            <span className={release.security ? css.security : undefined}>{kind}</span>
-            {t('update.separator')}
-            {plugins}
-          </p>
+          {facts}
         </div>
-        {remote && whatsNew}
-        <button type="button" className={css.dismiss} aria-label={t('update.dismiss')} title={t('update.dismiss')}
-          onClick={() => { dismiss(release.delorun) }}>
-          <IconCloseOutlineRegular size={14} className={css.dismissIcon} />
-        </button>
+        {closeButton}
       </div>
-      {note !== null && (remote
-        ? <p className={css.summary}>{note}</p>
-        : (
-          <button type="button" className={css.summaryToggle} aria-expanded={expanded} data-expanded={expanded}
-            onClick={() => { setExpanded(value => !value) }}>
-            {note}
-          </button>
-        ))}
-      {!remote && whatsNew}
-      {notesOpen && (
-        <Modal open onClose={() => { setNotesOpen(false) }} closeLabel={t('update.whatsNewClose')}
-          title={t('update.whatsNewTitle', { version: release.delorun })}>
-          {/* The notes are signed plain text: rendered as text in a pre, never as markup. */}
-          {notes === undefined
-            ? <p>{t('update.whatsNewLoading')}</p>
-            : notes === null
-              ? <p>{t('update.whatsNewUnavailable')}</p>
-              : <pre className={css.notes} data-update-notes>{notes}</pre>}
-        </Modal>
-      )}
-      {face.open === null || !canOpen
-        ? <p className={css.run}>{before}<code className={css.command}>{UPDATE_COMMAND}</code>{after}</p>
-        : <Button variant="primary" size="sm" className={css.updateNow} data-update-now onClick={face.open}>{t('update.now')}</Button>}
+      {summary}
+      {whatsNew}
+      {notesDialog}
+      {run}
     </div>
   )
 }
