@@ -63,7 +63,7 @@ export function PaneLayout(props: PaneLayoutProps): JSX.Element {
   const shown = useRef<LayoutModel>(model)
   const latest = useRef(props)
   latest.current = props
-  const initial = useMemo(() => toWorkspaceModel(model), []) // eslint-disable-line react-hooks/exhaustive-deps -- only the first layout is the default model
+  const initial = useMemo(() => toWorkspaceModel(model), [])
 
   const actions = useMemo(
     () =>
@@ -159,7 +159,7 @@ export function PaneLayout(props: PaneLayoutProps): JSX.Element {
         </div>
       )
     },
-    [renderPane, model, main, focusedPane], // eslint-disable-line react-hooks/exhaustive-deps
+    [renderPane, model, main, focusedPane],
   )
 
   const renderTabsetToolbar = useCallback(
@@ -179,7 +179,7 @@ export function PaneLayout(props: PaneLayoutProps): JSX.Element {
         canClose: pane !== main,
       })
     },
-    [renderHeader, labels.grip, actions, model, main, focusedPane], // eslint-disable-line react-hooks/exhaustive-deps
+    [renderHeader, labels.grip, actions, model, main, focusedPane],
   )
 
   const renderTabElement = useCallback(

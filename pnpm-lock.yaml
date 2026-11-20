@@ -3750,12 +3750,6 @@ importers:
       '@deepseek-ai/cordis':
         specifier: workspace:~
         version: link:../../../vendor/cordis
-      '@deepseek-ai/dsh-api-session-controller':
-        specifier: workspace:*
-        version: link:../../../packages/api/session-controller
-      '@deepseek-ai/dsh-client-locale':
-        specifier: workspace:*
-        version: link:../../../packages/client/locale
       '@deepseek-ai/dsh-client-store':
         specifier: workspace:*
         version: link:../../../packages/client/store
