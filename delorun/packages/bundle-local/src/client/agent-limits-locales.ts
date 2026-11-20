@@ -66,7 +66,7 @@ export const limitsZh: Readonly<Record<LimitsKey, string>> = {
   'limits.window.days': '{count} 天额度',
   'limits.check': '立即检查',
   'limits.checking': '正在检查…',
-  'limits.notConfirmed': 'Not confirmed, so nothing was checked. A check starts the agent\'s program on your computer, so it asks for Face ID or your PIN each time.',
+  'limits.notConfirmed': '未确认，所以没有检查任何内容。检查会在你的电脑上启动该智能体的程序，所以每次都会要求 Face ID 或你的 PIN。',
   'limits.checked': '已检查。',
   'limits.throttled': '刚刚检查过。下次检查最早在 {time}。',
   'limits.failed': '检查未得到回应：{problem}',
