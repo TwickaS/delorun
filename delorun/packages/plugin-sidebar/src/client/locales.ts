@@ -316,7 +316,7 @@ export const zh: Record<SidebarLocaleKey, string> = {
   'update.summary': '版本说明：{summary}',
   'update.now': '立即更新…',
   'update.run': '在这台电脑的终端中运行 {command}。',
-  'update.run.remote': '在运行 Delorun 的电脑的终端中运行 {command}。',
+  'update.run.remote': '在你的电脑上运行 {command}。',
   'update.dismiss': '隐藏此提醒，直到有更新的版本',
   'update.whatsNew': '新功能',
   'update.whatsNewTitle': '{version} 的新功能',

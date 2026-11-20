@@ -74,18 +74,18 @@ What you can do:
 安装会把每一步打印为标准错误上的一行，因此接下来运行的命令的输出留在标准输出上，不会混杂。每一行说明完成了什么：
 
 ```text
-Resolving the release: the stable channel names 0.1.0-preview.2.
-Checking the signature: 0.1.0-preview.2 is signed under release root 1.
+Resolving the release: the stable channel names 0.1.0-preview.2.1.
+Checking the signature: 0.1.0-preview.2.1 is signed under release root 1.
 Checking the release log: verified.
-Downloading delorun-0.1.0-preview.2-linux-x64.tar.gz (61.5 MB).
-Installing release 0.1.0-preview.2.
+Downloading delorun-0.1.0-preview.2.1-linux-x64.tar.gz (61.5 MB).
+Installing release 0.1.0-preview.2.1.
 ```
 
 各行按检查运行的顺序出现：签名在下载归档之前检查，因为正是已签名的 manifest 指明归档及其大小。当发布日志或其见证者无法访问，或其最新的经见证检查点早于 24 小时之前时，日志行会说明这一点及原因，随后以约定 C18 的措辞给出一条警告：
 
 ```text
 Checking the release log: not checked (the release log did not answer: …).
-Warning: Release 0.1.0-preview.2 has not been checked against the release log; Delorun checks it at the next connection.
+Warning: Release 0.1.0-preview.2.1 has not been checked against the release log; Delorun checks it at the next connection.
 ```
 
 安装随后依据发布的签名继续进行，home 会在 `trust/release-log.json` 中把该发布记录为 `unchecked`（见 [`@delorun/install`](../install/README.zh.md#the-release-log)）。有回应且与发布矛盾的日志则会拒绝安装，如[拒绝](#refusals)所述。启动不打印这些行。这些行是 `@delorun/install` 的 `progressLines`，由 `src/progress.ts` 重新导出，因此 `delorun update` 打印相同的措辞。
