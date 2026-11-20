@@ -169,6 +169,12 @@
 }
 
 /* The progress and outcome cards float in the toast area, over the page. */
+.floating .cardRow {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
 .floating {
   box-shadow: var(--dsw-shadow-lg, 0 8px 24px rgb(0 0 0 / 0.18));
   background: var(--dsw-alias-surface-primary, var(--dsw-alias-settings-card-fill));
