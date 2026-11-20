@@ -13,8 +13,7 @@
   },
   "dependencies": {
     "@deepseek-ai/dsh-client-ui-primitives": "workspace:*",
-    "@delorun/bundle-local": "workspace:*",
-    "@delorun/preview-flags": "workspace:*"
+    "@delorun/bundle-local": "workspace:*"
   },
   "peerDependencies": {
     "react": "^18.2.0"

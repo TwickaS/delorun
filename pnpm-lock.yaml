@@ -2000,9 +2000,6 @@ importers:
       '@delorun/bundle-local':
         specifier: workspace:*
         version: link:../bundle-local
-      '@delorun/preview-flags':
-        specifier: workspace:*
-        version: link:../preview-flags
     devDependencies:
       '@testing-library/react':
         specifier: ^16.3.3

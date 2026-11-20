@@ -49,18 +49,6 @@ describe('the browser screen', () => {
     expect(heading()).toBe('New workspace · New folder')
   })
 
-  it('shows the third choice disabled with its preview chip, and choosing it records nothing', async () => {
-    const { setDefaults } = await atBrowser()
-    const mine = radio(en['browser.choice.mine.title'])
-    expect(mine.disabled).toBe(true)
-    expect(mine.checked).toBe(false)
-    expect(screen.getByText(en['previewFlag.chip'])).toBeTruthy()
-    await click(mine)
-    expect(radio(en['browser.choice.isolated.title']).checked).toBe(true)
-    await click(button(en.createNow))
-    expect(setDefaults).toHaveBeenCalledExactlyOnceWith(SITE, expect.objectContaining({ browser: 'isolated' }))
-  })
-
   it('follows the readiness while it loads until the person picks, and a pick sticks', async () => {
     const { set } = await atBrowser({ kind: 'checking' })
     expect(radio(en['browser.choice.none.title']).checked).toBe(true)

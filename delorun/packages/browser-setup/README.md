@@ -46,19 +46,17 @@ Two surfaces ask whether agents may use a web browser: the setup guide's Browser
 
 | Prop | Meaning |
 | --- | --- |
-| `t` | The caller's bound translate function. The caller spreads this package's dictionaries (`./locales`, which include the preview chip's) into its own. |
+| `t` | The caller's bound translate function. The caller spreads this package's dictionaries (`./locales`) into its own. |
 | `heading` | The question above the choices, where the caller's differs from the home-wide "Can agents use a web browser?" |
 | `choice`, `onChoice` | The choice in effect, `isolated` or `none`, and the callback for a change. The caller holds the choice and decides what it does. |
 | `disabled` | Holds both choices, as while a change is being applied |
 | `readiness` | A `BrowserReadiness` |
-| `planned` | Shows the third choice, "Use my browser": a disabled radio with the Preview chip and a tooltip that says it is not built |
 | `notAdded` | What to draw in place of the readiness while it is `not-added`, such as where adding the pack stands or a line that turns Browser on |
 | `onRetry`, `onOpenSettings` | Read the readiness again after a failed read; open the Settings section a need is met in |
 
 ## Contract
 
 - **Presentational.** The component makes no request and writes nothing. Storage is the caller's: the setup guide maps the choice to the Browser plugin pack being on or off, and the new-workspace flow keeps it per workspace.
-- **The planned choice can never be chosen.** Its radio is disabled and has no change handler, so `onChoice` only ever reports `isolated` or `none`.
 - **Readiness shows for the isolated browser only.** With No browser chosen, nothing about Browser's needs is drawn.
 - **Tokens.** The styles read the studio's `--dsw-*` roles and the Delorun look's spacing steps with pixel fallbacks, so the group looks the same inside and outside the setup guide.
 

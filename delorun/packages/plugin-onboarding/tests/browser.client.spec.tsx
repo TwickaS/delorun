@@ -1,9 +1,8 @@
 // @vitest-environment jsdom
 /**
  * The Browser step: the shared Browser choice over the Browser plugin pack. Browser is on until the person turns it off:
- * a home that never chose adds the pack, No browser turns it off and records that, the readiness comes from the Host's requirement check, and the planned third choice
- * shows only under the preview flag and can never be chosen. Each denial test's comment names the check whose removal
- * makes it fail.
+ * a home that never chose adds the pack, No browser turns it off and records that, and the readiness comes from the Host's
+ * requirement check. Each denial test's comment names the check whose removal makes it fail.
  */
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -19,8 +18,7 @@ import { BrowserStep } from '../src/client/steps/Browser.tsx'
 import type { OnboardingStep, StepServices } from '../src/client/types.ts'
 import type { OnboardingSettings } from '../src/config.ts'
 import { NO_RECORD } from '../src/wire.ts'
-import { PREVIEW_STEPS } from '../src/preview-flags.ts'
-import { browserFake, flagsFake, hostFake, installerFake, liveForm, settings, stepServices, t } from './fixtures.client.ts'
+import { browserFake, hostFake, installerFake, liveForm, settings, stepServices, t } from './fixtures.client.ts'
 
 afterEach(cleanup)
 
@@ -256,36 +254,6 @@ describe('turning the Browser pack off', () => {
     expect(await turnBrowserOff(ctx({ setBundleEnabled: () => Promise.reject(new Error('transport')) }))).toBe('failed')
     expect(warn).toHaveBeenCalledTimes(1)
     warn.mockRestore()
-  })
-})
-
-describe('the planned choice of browser', () => {
-  it('is absent while the preview flag is off: two choices', async () => {
-    // Pins the flag read: without it the unbuilt choice shows to everyone.
-    await show({ browser: browserFake({ kind: 'ready' }).face, bundles: pack('installed').installer })
-    expect(radios()).toHaveLength(2)
-    expect(screen.queryByText(en['browser.choice.mine.title'])).toBeNull()
-    expect(screen.queryByText(en['previewFlag.chip'])).toBeNull()
-  })
-
-  it('shows as a disabled third choice with the Preview chip while the flag is on, and records nothing', async () => {
-    // Pins the preview's promise: a write, a request, an install or a turn-off here would make the planned choice real.
-    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.reject(new Error('no request may be made')))
-    const browser = browserFake({ kind: 'ready' })
-    const bundles = pack('installed')
-    const { host } = await show({ browser: browser.face, bundles: bundles.installer, previewFlags: flagsFake(PREVIEW_STEPS.id) })
-    const [, , mine] = radios()
-    expect(radios()).toHaveLength(3)
-    expect([mine?.disabled, mine?.checked]).toEqual([true, false])
-    expect(screen.getAllByText('Preview')).toHaveLength(1)
-    const reads = browser.refresh.mock.calls.length
-    await click(mine as HTMLInputElement)
-    expect(checked()).toEqual([true, false, false])
-    expect(fetch).not.toHaveBeenCalled()
-    expect(browser.refresh.mock.calls.length).toBe(reads)
-    expect([browser.turnOff, browser.openSettings, bundles.install, bundles.enableRow, bundles.openPlugins].every(spy => spy.mock.calls.length === 0)).toBe(true)
-    expect([host.defer, host.recommend].every(spy => spy.mock.calls.length === 0)).toBe(true)
-    fetch.mockRestore()
   })
 })
 

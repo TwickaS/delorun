@@ -249,14 +249,21 @@ describe('runUpdate', () => {
     return runUpdate(args, context, answers, { runtime: () => ({ version: brandString<RuntimeVersion>('1.0.0'), store: true }) })
   }
 
-  it.each([['win32', /runs in WSL2, not on native Windows\. Nothing was downloaded\./u], ['darwin', /macOS joins in a later release\. Nothing was downloaded\./u]])('stops on %s before it asks the home process for anything', async (platform, message) => {
-    const real = Object.getOwnPropertyDescriptor(process, 'platform')!
-    Object.defineProperty(process, 'platform', { ...real, value: platform })
+  it.each([
+    ['win32', 'x64', /runs in WSL2, not on native Windows\. Nothing was downloaded\./u],
+    ['darwin', 'x64', /does not run on macOS\. Nothing was downloaded\./u],
+    ['linux', 'arm64', /does not run on Linux on ARM \(arm64\)\. Nothing was downloaded\./u],
+  ])('stops on %s %s before it asks the home process for anything', async (platform, arch, message) => {
+    const realPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!
+    const realArch = Object.getOwnPropertyDescriptor(process, 'arch')!
+    Object.defineProperty(process, 'platform', { ...realPlatform, value: platform })
+    Object.defineProperty(process, 'arch', { ...realArch, value: arch })
     try {
       await expect(update([])).rejects.toThrow(message)
-      await expect(update(['--from', '/no/such/folder'])).rejects.toThrow(/^delorun update: Delorun (?:runs in WSL2,|does not run on macOS)/u)
+      await expect(update(['--from', '/no/such/folder'])).rejects.toThrow(/^delorun update: Delorun (?:runs in WSL2,|does not run on (?:macOS|Linux on ARM))/u)
     } finally {
-      Object.defineProperty(process, 'platform', real)
+      Object.defineProperty(process, 'platform', realPlatform)
+      Object.defineProperty(process, 'arch', realArch)
     }
     expect(requests).toEqual([])
   })

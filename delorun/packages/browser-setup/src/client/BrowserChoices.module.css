@@ -84,19 +84,6 @@
   color: var(--dsw-alias-label-secondary);
 }
 
-/* The planned choice's words are dimmed; its chip keeps its own ink so the reason stays readable. */
-.dimmed {
-  opacity: 0.55;
-}
-
-/* Above the radio's overlay, so the chip takes its own hover, focus and tap for the tooltip. */
-.chip {
-  position: relative;
-  z-index: 1;
-  display: inline-flex;
-  font-weight: 400;
-}
-
 .line {
   display: flex;
   flex-wrap: wrap;

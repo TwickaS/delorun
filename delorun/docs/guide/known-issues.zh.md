@@ -31,7 +31,7 @@ description: "你在 Delorun 预览版中可能遇到的毛边，每条都写明
 <a id="where-delorun-runs"></a>
 ## Delorun 在哪里运行
 
-**会发生什么。** Delorun 在 Linux（x64 和 arm64）上运行，也可通过 WSL2 在 Windows 上运行。它不能在 macOS 或原生 Windows 上运行。
+**会发生什么。** Delorun 在 Linux（x64）上运行，也可通过 WSL2 在 Windows 上运行。Delorun 不能在 ARM（arm64）上的 Linux 上运行。它不能在 macOS 或原生 Windows 上运行。
 
 **该怎么做。** 在 Windows 上，请安装 WSL2 并在其中运行 Delorun（[安装与首次运行](install.zh.md#windows-through-wsl2)）。在 macOS 上，没有受支持的方式运行 Delorun；[路线图](roadmap.zh.md#next)把桌面应用列为下一阶段。
 

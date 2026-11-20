@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * The shared Browser choice: the readiness narrowed from the Host's requirement check, and the component that draws
- * the two choices, the planned third one that can never be chosen, and whether Browser is ready. Each denial test's
+ * the two choices and whether Browser is ready. Each denial test's
  * comment names the check whose removal makes it fail.
  */
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
@@ -23,7 +23,7 @@ function show(change: Partial<BrowserChoicesProps> = {}) {
   const onChoice = vi.fn()
   const onRetry = vi.fn()
   const onOpenSettings = vi.fn()
-  const props: BrowserChoicesProps = { t, choice: 'isolated', onChoice, readiness: { kind: 'ready' }, planned: false, onRetry, onOpenSettings, ...change }
+  const props: BrowserChoicesProps = { t, choice: 'isolated', onChoice, readiness: { kind: 'ready' }, onRetry, onOpenSettings, ...change }
   return { ...render(<BrowserChoices {...props} />), onChoice, onRetry, onOpenSettings }
 }
 
@@ -92,8 +92,6 @@ describe('the Browser choices', () => {
     const group = screen.getByRole('radiogroup', { name: en['browser.which'] })
     expect(within(group).getAllByRole('radio')).toHaveLength(2)
     expect(radios().map(radio => [named(radio), radio.checked, radio.disabled])).toEqual([['Isolated browser', false, false], ['No browser', true, false]])
-    expect(screen.queryByText(en['browser.choice.mine.title'])).toBeNull()
-    expect(screen.queryByText(en['previewFlag.chip'])).toBeNull()
   })
 
   it('tells the caller the choice and changes nothing itself', async () => {
@@ -115,27 +113,10 @@ describe('the Browser choices', () => {
     expect(radios().map(radio => radio.disabled)).toEqual([true, true])
   })
 
-  it('shows Use my browser as a third choice that cannot be chosen, with the Preview chip beside its title', async () => {
-    // Pins the disabled radio: the choice is not built, so nothing may select it or report it.
-    const { onChoice } = show({ planned: true, choice: 'none' })
-    const [, , mine] = radios()
-    expect(radios()).toHaveLength(3)
-    expect([named(mine as HTMLInputElement), mine?.disabled, mine?.checked]).toEqual(['Use my browser', true, false])
-    await click(mine as HTMLInputElement)
-    expect(onChoice).not.toHaveBeenCalled()
-    expect(radios().map(radio => radio.checked)).toEqual([false, true, false])
-    expect(screen.getByText(en['browser.choice.mine.text']).textContent).toBe('Your Chrome with your sign-ins, approved per chat.')
-    const chips = screen.getAllByText('Preview')
-    expect(chips).toHaveLength(1)
-    expect(chips[0]?.closest('[data-planned]')?.textContent).toContain('Use my browser')
-    fireEvent.focus(chips[0] as HTMLElement)
-    expect((await screen.findByRole('tooltip')).textContent).toBe('Planned and not built yet, so it cannot be chosen.')
-  })
-
   it('says Browser is ready while the isolated browser is chosen, and nothing about readiness for no browser', () => {
     const view = show()
     expect(screen.getByText(en['browser.ready'])).toBeTruthy()
-    view.rerender(<BrowserChoices t={t} choice="none" onChoice={() => {}} readiness={NEEDS_COMMAND} planned={false} onRetry={() => {}} onOpenSettings={() => {}} />)
+    view.rerender(<BrowserChoices t={t} choice="none" onChoice={() => {}} readiness={NEEDS_COMMAND} onRetry={() => {}} onOpenSettings={() => {}} />)
     expect(screen.queryByText(en['browser.ready'])).toBeNull()
     expect(screen.queryByText(/^Needs setup/)).toBeNull()
   })

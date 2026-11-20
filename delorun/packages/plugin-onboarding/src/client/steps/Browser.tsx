@@ -2,13 +2,10 @@
  * Browser: whether agents may use a web browser, as the shared Browser choice (`@delorun/browser-setup`). For the home
  * the choice is the Browser plugin pack, on until the person turns it off: the isolated browser is the choice until
  * then and adds the pack through the guide's installer, and No browser turns it off and records that. Under the choice the step says whether Browser is ready, read from the Host's requirement check, or
- * where adding the pack stands, and what the first chat that uses it asks. While the preview flag
- * `onboarding.previewSteps` is on, the planned third choice shows, disabled.
+ * where adding the pack stands, and what the first chat that uses it asks.
  */
 import { BrowserChoices } from '@delorun/browser-setup/client'
-import { PreviewFlagsProvider, usePreviewFlag } from '@delorun/preview-flags/client'
 import type { ReactNode } from 'react'
-import { PREVIEW_STEPS } from '../../preview-flags.ts'
 import { useBrowser } from '../browser/use-browser.ts'
 import type { BundleView } from '../bundles.ts'
 import type { StepServices } from '../types.ts'
@@ -57,20 +54,19 @@ function PackLine({ view, services, onRetry }: { readonly view: BundleView | und
 }
 
 /**
- * The step's content, under the provider its preview flag is read from.
+ * The Browser step.
  * @param props - the services and the guide.
- * @returns the content.
+ * @returns the step body.
  */
-function BrowserBody({ services }: StepProps): ReactNode {
+export function BrowserStep({ services }: StepProps): ReactNode {
   const { t, browser } = services
-  const planned = usePreviewFlag(PREVIEW_STEPS.id)
   const { choice, view, readiness, on, result, working, retry, turnOn, turnOff } = useBrowser(services)
   const adding = view?.state === 'installing' || view?.state === 'slow'
   return (
     <div className={css.stack}>
       <p className={css.lead}>{t('browser.lead')}</p>
       <BrowserChoices t={t} choice={choice === 'on' ? 'isolated' : 'none'} onChoice={(next) => { void (next === 'isolated' ? turnOn() : turnOff()) }}
-        disabled={adding || working} readiness={readiness} planned={planned}
+        disabled={adding || working} readiness={readiness}
         notAdded={<PackLine view={view} services={services} onRetry={retry} />}
         onRetry={() => { void browser.setup.refresh() }} onOpenSettings={browser.openSettings} />
       <div aria-live="polite">
@@ -79,18 +75,5 @@ function BrowserBody({ services }: StepProps): ReactNode {
       </div>
       <Explain heading={t('browser.expect')} cards={EXPECT.map(key => ({ key, title: t(`browser.expect.${key}.title`), text: t(`browser.expect.${key}.text`) }))} />
     </div>
-  )
-}
-
-/**
- * The Browser step.
- * @param props - the services and the guide.
- * @returns the step body.
- */
-export function BrowserStep(props: StepProps): ReactNode {
-  return (
-    <PreviewFlagsProvider store={props.services.previewFlags}>
-      <BrowserBody {...props} />
-    </PreviewFlagsProvider>
   )
 }
