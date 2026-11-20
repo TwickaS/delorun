@@ -3792,6 +3792,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-subagent':
         specifier: workspace:*
         version: link:../../../packages/client/ui-subagent
+      '@deepseek-ai/dsh-client-ui-workspace':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-workspace
       '@deepseek-ai/dsh-session':
         specifier: workspace:*
         version: link:../../../packages/core/session

@@ -1,19 +1,26 @@
 /**
  * Browser half of Multiview: the entry points (pin button, header button, popover footer, Layout menu, auto-pin and
- * reopen on return) and the `multiview` service. The panel lane adds the `main` panel keyed `multiview`, which reads that
- * service; the layout engine they build on is `../layout/index.ts`.
+ * reopen on return), the `multiview` service, and the `main` panel keyed `multiview` that shows the pinned agents' chats in panes
+ * (or, on a phone, pages); the layout engine they build on is `../layout/index.ts`.
  * @module @delorun/plugin-multiview/client
  */
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: the ctx.sessions merge.
 import type {} from '@deepseek-ai/dsh-api-session-controller/client'
 import { registerEntry } from '../entry/register.ts'
+import { registerPanel } from '../panel/register.ts'
 import { browserStorage, localPersistence } from '../store/persist.ts'
 
 export {
   EMPTY_CHAT_MULTIVIEW, MULTIVIEW_NS, MULTIVIEW_PANEL_ID,
   type ChatMultiview, type MultiviewPersistence, type MultiviewService, type PinRefusal, type PinResult,
 } from './contract.ts'
+export { registerPanel, type PanelOptions } from '../panel/register.ts'
+export { MultiviewPanel, type PanelInjected, type PanelProps } from '../panel/Panel.tsx'
+export { PaneHeader, type PaneHeaderProps } from '../panes/PaneHeader.tsx'
+export { PaneBody, type PaneBodyProps } from '../panes/PaneBody.tsx'
+export { PaneReferences, usePaneReferences, type PaneSessions } from '../panes/references.ts'
+export { en as panesEn, PANES_NS, zh as panesZh, type PanesLocaleKey } from '../panes/locales.ts'
 export { Footer, HeaderButton, openOrClose, PinButton, type EntryInjected, type FooterProps, type HeaderButtonProps, type PinButtonProps } from '../entry/Entry.tsx'
 export { en, zh, type MultiviewLocaleKey } from '../entry/locales.ts'
 export { HEADER_ORDER, registerEntry, type RegisterOptions } from '../entry/register.ts'
@@ -27,15 +34,17 @@ export { browserStorage, localPersistence, MULTIVIEW_INDEX_NAME, MULTIVIEW_PERSI
 export const name = 'delorun-multiview'
 
 /** Services every registration needs. */
-export const inject = ['slots', 'locale', 'sessions', 'layout', 'configForms']
+export const inject = ['slots', 'locale', 'sessions', 'layout', 'configForms', 'uiWorkspace']
 
 /**
  * Mount the entry points.
  * @param ctx - the browser plugin context.
  */
 export function apply(ctx: Context): void {
-  registerEntry(ctx, {
+  const multiview = registerEntry(ctx, {
     persistence: localPersistence(browserStorage, message => { console.warn(message) }),
     windowArea: () => ({ width: globalThis.innerWidth, height: globalThis.innerHeight }),
   })
+  const time = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' })
+  registerPanel(ctx, { multiview, clock: epochMs => time.format(epochMs) })
 }

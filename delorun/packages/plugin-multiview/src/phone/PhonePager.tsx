@@ -65,6 +65,39 @@ export interface PhonePagerProps {
   readonly labels: PhonePagerLabels
   /** A class for the pager's root element. */
   readonly className?: string | undefined
+  /** The page dots are drawn by the pages themselves, above their reply boxes, with {@link PageDots}; the pager draws none. */
+  readonly externalDots?: boolean | undefined
+}
+
+/** What {@link PageDots} takes. */
+export interface PageDotsProps {
+  /** The pages' ids in order. */
+  readonly ids: readonly PaneId[]
+  /** The shown page. */
+  readonly active: PaneId
+  /**
+   * Called when a dot is pressed.
+   * @param id - the page to show.
+   */
+  readonly onSelect: (id: PaneId) => void
+  /** A class for the dots' row, to place it above a reply box. */
+  readonly className?: string | undefined
+}
+
+/**
+ * The position dots: one per page, the shown page's a short bar. Presentation only, hidden from assistive technology because the
+ * strip of chips is the accessible route.
+ * @param props - the pages and the shown page.
+ * @returns the dots.
+ */
+export function PageDots({ ids, active, onSelect, className }: PageDotsProps): JSX.Element {
+  return (
+    <div className={[styles.dots, className].filter(Boolean).join(' ')} aria-hidden="true" data-multiview-dots="">
+      {ids.map(id => (
+        <button key={id} type="button" tabIndex={-1} className={styles.dot} data-page-dot={id} data-active={id === active ? '' : undefined} onClick={() => { onSelect(id) }} />
+      ))}
+    </div>
+  )
 }
 
 const reducedMotion = (): boolean => typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -197,19 +230,7 @@ export function PhonePager(props: PhonePagerProps): JSX.Element {
           </div>
         ))}
       </div>
-      <div className={styles.dots} aria-hidden="true">
-        {pages.map((page, index) => (
-          <button
-            key={page.id}
-            type="button"
-            tabIndex={-1}
-            className={styles.dot}
-            data-page-dot={page.id}
-            data-active={index === activeIndex ? '' : undefined}
-            onClick={() => { go(index) }}
-          />
-        ))}
-      </div>
+      {props.externalDots === true ? null : <PageDots ids={pages.map(page => page.id)} active={pages[activeIndex]?.id ?? active} onSelect={(id) => { onActiveChange(id) }} />}
     </div>
   )
 }
