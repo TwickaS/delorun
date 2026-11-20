@@ -9,7 +9,7 @@ import { once } from 'node:events'
 import { createServer, request as httpRequest, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { REACH_SESSION_COOKIE, type DeviceId, type StudioAddress } from '@delorun/contract-admission'
 import { ELEVATION_LIMITS } from '@delorun/contract-oidc-passkeys'
@@ -330,6 +330,21 @@ describe('a Face ID pass (A499) at the device routes', () => {
       expect(home.auth.passMinutes()).toBe(0)
     })
 
+    // Removing endPasses from the route leaves a 60-minute pass running after the person chose Every time (review P2-2).
+    it('ends every live pass when it changes, from a device or at the computer', async () => {
+      const { other, holder } = await setup()
+      const theirs = { deviceId: other.id, listener: LISTENER } as const
+      home.auth.grants.openPass(theirs, 15)
+      const body = { minutes: 0 }
+      home.auth.grants.mint(holder, [{ action: PASS_SETTING_ACTION, hash: hashArgs(body) ?? '' }], 'passkey')
+      expect(await send('POST', `${PASSKEY_PATHS.pass}?reach`, body)).toMatchObject({ status: 200, body: { minutes: 0, pass: null } })
+      expect(home.auth.grants.passOf(holder)).toBeUndefined()
+      expect(home.auth.grants.passOf(theirs)).toBeUndefined()
+      home.auth.grants.openPass(theirs, 15)
+      expect(await send('POST', PASSKEY_PATHS.pass, { minutes: 30 })).toMatchObject({ status: 200, body: { minutes: 30 } })
+      expect(home.auth.grants.passOf(theirs)).toBeUndefined()
+    })
+
     // Pins the computer's arrival check: a foreign origin never changes the setting.
     it('refuses a change at the computer from another origin', async () => {
       expect(await send('POST', PASSKEY_PATHS.pass, { minutes: 60 }, { origin: 'https://evil.example' })).toMatchObject({ status: 403 })
@@ -345,6 +360,14 @@ describe('a Face ID pass (A499) at the device routes', () => {
     expect(home.auth.elevationOf(brandString<DeviceId>(current), LISTENER)).toBeDefined()
     expect(home.auth.grants.passOf({ deviceId: current, listener: LISTENER })).toBeUndefined()
     expect(await send('GET', `${PASSKEY_PATHS.pass}?reach`)).toMatchObject({ status: 200, body: { pass: null } })
+  })
+
+  // Removing touchPass from admitToken lets a pass end idle while its device is still making requests (review P2-1).
+  it('counts each admitted request of the device as its use of the pass', async () => {
+    const { holder } = await setup()
+    const touched = vi.spyOn(home.auth.grants, 'touchPass')
+    await send('GET', `${DEVICES_PATH}?reach`)
+    expect(touched).toHaveBeenCalledWith({ deviceId: holder.deviceId, listener: LISTENER })
   })
 
   // Removing the route's endPass leaves the pass running after Lock now.

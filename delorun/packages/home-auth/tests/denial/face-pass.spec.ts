@@ -1,7 +1,7 @@
 /**
  * Denial specs for the Face ID pass (A499, `src/grants.ts`, `src/auth-classes.ts`, the reach policy and the Fetch gate):
- * a pass is bound to one Peer, lasts a fixed time, ends on Lock now, Peer disposal, device removal and restart, and never
- * admits an always-ask or computer row. Each test's comment names the check whose removal makes it fail.
+ * a pass is bound to one device and listener, lasts a fixed time, ends after 5 minutes with no request, on Lock now, a
+ * change of the setting, Peer disposal, device removal and restart, and never admits an always-ask or computer row. Each test's comment names the check whose removal makes it fail.
  */
 import { describe, expect, it } from 'vitest'
 import type { RemoteAccessAction } from '@deepseek-ai/dsh-api-remote-access/types'
@@ -53,15 +53,68 @@ describe('the pass in the store', () => {
     const { grants, clock } = store()
     const opened = grants.openPass(HOLDER, 15)
     expect(opened?.endsAt).toBe(clock.at + 15 * MINUTE)
-    clock.at += 10 * MINUTE
+    clock.at += 4 * MINUTE
+    grants.touchPass(HOLDER)
+    clock.at += 4 * MINUTE
+    grants.touchPass(HOLDER)
+    clock.at += 2 * MINUTE
     expect(grants.openPass(HOLDER, 15)?.endsAt).toBe(opened?.endsAt)
     expect(grants.passOf(HOLDER)).toBeDefined()
-    clock.at += 5 * MINUTE
+    clock.at += 4 * MINUTE
+    grants.touchPass(HOLDER)
+    clock.at += 1 * MINUTE
     expect(grants.passOf(HOLDER)).toBeUndefined()
   })
 
-  // Removing the Peer from the pass key lets one device's pass admit another device, listener or page.
-  it('belongs to one device, listener and Peer', () => {
+  // Removing the idle check in passOf keeps a pass alive on a phone that was put away, closed or suspended (review P2-1).
+  it('ends 5 minutes after the last request from its device and listener, and a late request does not revive it', () => {
+    const { grants, clock, lines } = store()
+    grants.openPass(HOLDER, 60)
+    clock.at += 4 * MINUTE
+    grants.touchPass({ deviceId: 'device-2', listener: LISTENER })
+    grants.touchPass({ deviceId: 'device-1', listener: OTHER_LISTENER })
+    expect(grants.passOf(HOLDER)).toBeDefined()
+    clock.at += MINUTE
+    expect(grants.passOf(HOLDER)).toBeUndefined()
+    expect(lines.at(-1)).toBe(`home-auth: pass.ended device=device-1 listener=${LISTENER} reason=idle`)
+  })
+
+  // Removing the idle check in touchPass lets the first request after a long gap revive the pass.
+  it('is not revived by a request that comes after the idle end', () => {
+    const { grants, clock } = store()
+    grants.openPass(HOLDER, 60)
+    clock.at += 6 * MINUTE
+    grants.touchPass(HOLDER)
+    expect(grants.passOf(HOLDER)).toBeUndefined()
+  })
+
+  // Removing endPasses leaves every pass at the length the person just changed (review P2-2).
+  it('ends every live pass when the setting changes', () => {
+    const { grants, lines } = store()
+    grants.openPass(HOLDER, 60)
+    grants.openPass({ deviceId: 'device-2', listener: LISTENER }, 60)
+    grants.endPasses('setting-changed')
+    expect(grants.passOf(HOLDER)).toBeUndefined()
+    expect(grants.passOf({ deviceId: 'device-2', listener: LISTENER })).toBeUndefined()
+    expect(lines.filter(line => line.endsWith('reason=setting-changed'))).toHaveLength(2)
+  })
+
+  // The device counts down from the home's clock, not its own (review P3-2).
+  it('reports how long it has left by the home\'s clock', () => {
+    const { grants, clock } = store()
+    expect(grants.openPass(HOLDER, 15)?.remainingMs).toBe(15 * MINUTE)
+    clock.at += 3 * MINUTE
+    expect(grants.passOf(HOLDER)?.remainingMs).toBe(12 * MINUTE)
+  })
+
+  // Removing the assertion lets a pass be keyed on a page unlock, which the device's own calls would never match (review P3-5).
+  it('is opened only for a device and listener, never for a page unlock', () => {
+    const { grants } = store()
+    expect(() => grants.openPass({ ...HOLDER, unlockId: 'page-1' }, 15)).toThrow(/never for a page unlock/)
+  })
+
+  // Removing the device or listener from the pass key lets one device's pass admit another device, listener or page.
+  it('belongs to one device on one listener, and a call with a page unlock has none', () => {
     const { grants } = store()
     grants.openPass(HOLDER, 15)
     expect(grants.passOf({ deviceId: 'device-2', listener: LISTENER })).toBeUndefined()
@@ -118,25 +171,28 @@ describe('the pass in the store', () => {
 
 describe('the always-ask rows', () => {
   // The column is the gate: these are the rows the owner named (A499), and the check fails on any drift.
-  it('are exactly devices, passkeys, the Face ID settings and the pass setting', () => {
-    expect(AUTH_CLASSES.filter(row => row.alwaysAsk === true).map(row => row.id).sort()).toEqual([
+  it('are exactly devices, passkeys, the Face ID settings, the pass setting, protection off and full access', () => {
+    expect(AUTH_CLASSES.filter(row => row.pass === 'alwaysAsk').map(row => row.id).sort()).toEqual([
       'auth:/auth/devices/remove', 'auth:/auth/passkey/devices', 'auth:/auth/passkey/pass (write)', 'auth:/auth/passkey/remove',
+      'changes:protection-off', 'route:plugin-permission-defaults/src/routes.ts#PERMISSION_ROUTES.setFullAccess',
     ])
-    expect([...ALWAYS_ASK_ACTIONS].sort()).toEqual([DEVICE_REMOVE_ACTION, PASSKEY_DEVICES_ACTION, PASS_SETTING_ACTION, PASSKEY_REMOVE_ACTION].sort())
+    expect([...ALWAYS_ASK_ACTIONS].sort()).toEqual([
+      DEVICE_REMOVE_ACTION, PASSKEY_DEVICES_ACTION, PASS_SETTING_ACTION, PASSKEY_REMOVE_ACTION, 'changes/protection-off', 'plugin-permission-defaults/set-full-access',
+    ].sort())
   })
 
   // Reach and the PIN's own settings have no face row a pass could admit: every row that names them is computer-only.
   it('leave Reach and the PIN mode settings at the computer', () => {
     const named = AUTH_CLASSES.filter(row => /reach|\/auth\/pin\/|home-auth/i.test(row.id))
     expect(named.length).toBeGreaterThan(0)
-    for (const row of named) expect(row.authClass === 'computer' || row.alwaysAsk === true, row.id).toBe(true)
+    for (const row of named) expect(row.authClass === 'computer' || row.pass === 'alwaysAsk', row.id).toBe(true)
   })
 
-  // Removing the alwaysAsk check in passAdmitsRow lets a pass stand in for each family's grant.
+  // Removing the admits check in passAdmitsRow lets a pass stand in for each family's grant.
   it('are never admitted by a live pass, one family at a time', () => {
     const { grants } = store()
     grants.openPass(HOLDER, 60)
-    for (const row of ['auth:/auth/devices/remove', 'auth:/auth/passkey/remove', 'auth:/auth/passkey/devices', 'auth:/auth/passkey/pass (write)']) {
+    for (const row of ['auth:/auth/devices/remove', 'auth:/auth/passkey/remove', 'auth:/auth/passkey/devices', 'auth:/auth/passkey/pass (write)', 'changes:protection-off', 'route:plugin-permission-defaults/src/routes.ts#PERMISSION_ROUTES.setFullAccess']) {
       expect(passAdmitsRow(grants, HOLDER, row), row).toBe(false)
     }
   })
@@ -153,6 +209,19 @@ describe('the always-ask rows', () => {
 })
 
 describe('the pass in the reach policy', () => {
+  // Removing touchPass from the condition ends a pass idle while its device keeps calling (review P2-1).
+  it('stays live while the device keeps calling, and ends 5 minutes after its last call', () => {
+    const { grants, clock } = store()
+    const decide = policy(grants)
+    grants.openPass(HOLDER, 60)
+    for (let step = 0; step < 3; step += 1) {
+      clock.at += 4 * MINUTE
+      expect(decide('pluginManager/installBundle', INSTALL).kind, String(step)).toBe('allow')
+    }
+    clock.at += 5 * MINUTE
+    expect(decide('pluginManager/installBundle', INSTALL).kind).toBe('deny')
+  })
+
   // Removing the pass branch in grantFor makes a passkey phone confirm every install in a pass.
   it('admits a face row from the same device, listener and Peer, over and over, within the pass', () => {
     const { grants } = store()

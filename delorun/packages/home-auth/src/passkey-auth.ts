@@ -66,7 +66,7 @@ export interface PasskeyGrantResult {
   readonly grantId: string
   /** When the grant stops being usable, in milliseconds since the epoch. */
   readonly expiresAt: number
-  /** The Face ID pass this assertion's Peer holds, when one is live (A499); a PIN never opens one. */
+  /** The Face ID pass this assertion's device holds on this listener, when one is live (A499); a PIN never opens one. */
   readonly pass?: PassView
 }
 
@@ -413,7 +413,7 @@ export class PasskeyAuth {
   }
 
   /**
-   * Open the Face ID pass a verified assertion earns (A499): for the device's Peer on this listener, which has no page
+   * Open the Face ID pass a verified assertion earns (A499): for the device on this listener, which has no page
    * unlock (a device holds no PIN page unlock once the grant store exists), for the length the setting names. An
    * assertion that confirms an always-ask action opens none, and a live pass stays as it is.
    * @param asker - the device and listener.

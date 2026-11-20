@@ -303,7 +303,8 @@ export interface PassAnswer {
  * Build the pass route. `GET` answers {@link PassAnswer}. `POST` `{ minutes }` changes the setting: at the computer as any
  * other setting there; from a device only with a grant a passkey minted for exactly the body sent
  * ({@link PASS_SETTING_ACTION}), which no Face ID pass stands in for (an always-ask row). A length outside
- * {@link PASS_MINUTES} is refused `BAD_REQUEST`. A change applies to the next pass; a live pass keeps its end.
+ * {@link PASS_MINUTES} is refused `BAD_REQUEST`. A change, from a device or the computer, ends every live pass (reason
+ * `setting-changed`), so a shorter length or Every time takes effect at once.
  * @param auth - the home-auth instance.
  * @param credential - the loopback credential check.
  * @returns the handler.
@@ -321,6 +322,7 @@ export function passkeyPassHandler(auth: HomeAuth, credential: LoopbackCredentia
     const minutes = parse(message)
     useGrant(auth, device, PASS_SETTING_ACTION, message, 'Changing how long Face ID lasts needs Face ID on this device each time, or you at your computer', 'passkey')
     await auth.passSetting.set(minutes)
+    auth.grants.endPasses('setting-changed')
     return answer(auth.grants.passOf(holder))
   })
   return async (request, response) => {
@@ -339,6 +341,7 @@ export function passkeyPassHandler(auth: HomeAuth, credential: LoopbackCredentia
         const message = await readMessage(request, response)
         if (message === undefined) return
         await auth.passSetting.set(parse(message))
+        auth.grants.endPasses('setting-changed')
       }
       sendJson(response, 200, answer(undefined))
     } catch (error) {

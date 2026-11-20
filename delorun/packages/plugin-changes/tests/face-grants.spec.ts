@@ -29,6 +29,9 @@ const FACE_ROUTES = [
   { control: 'protection-off', path: PROTECTION_PATHS.off },
 ] as const
 
+/** The face controls a live Face ID pass admits: every one but protection off, which always asks (F48). */
+const PASS_ROUTES = FACE_ROUTES.filter(route => route.control !== 'protection-off')
+
 /** The routes of the controls LEGACY_LEVELS holds to a grant: the set an unlocked phone could once open. */
 const FORMER_FULL_ROUTES = [
   { control: 'plugin-apply', path: ACTION_PATHS.apply },
@@ -191,12 +194,12 @@ describe('Changes: face controls', () => {
 
 describe('Changes: a Face ID pass (A499)', () => {
   // Removing the pass branch in faceAccessOf makes every Apply in a pass ask again; removing its end check admits after the pass.
-  it('admits every face control with no grant while the pass is live, and none after it', async () => {
+  it('admits every face control but protection off with no grant while the pass is live, and none after it', async () => {
     const { ctx } = routeHome()
     const world = grantWorld()
     const server = await serveRoutes(ctx, { face: world.face })
     world.openPass(5)
-    for (const { path } of FACE_ROUTES) {
+    for (const { path } of PASS_ROUTES) {
       const reply = await send(server.port, path, fromDevice('none', {}))
       expect(json(reply).code, path).not.toBe('ELEVATION_REQUIRED')
     }
@@ -206,6 +209,17 @@ describe('Changes: a Face ID pass (A499)', () => {
       expect(reply.status, path).toBe(403)
       expect(json(reply).code, path).toBe('ELEVATION_REQUIRED')
     }
+  })
+
+  // Removing protection off from PASS_ALWAYS_ASK lets a pass turn protection off with no Face ID for that call (F48).
+  it('still asks for protection off during a pass', async () => {
+    const { ctx } = routeHome()
+    const world = grantWorld()
+    const server = await serveRoutes(ctx, { face: world.face })
+    world.openPass(60)
+    const reply = await send(server.port, PROTECTION_PATHS.off, fromDevice('none', {}))
+    expect(reply.status).toBe(403)
+    expect(json(reply).code).toBe('ELEVATION_REQUIRED')
   })
 })
 

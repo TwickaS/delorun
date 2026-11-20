@@ -5,7 +5,7 @@
  * - `free`: any approved device, no prompt;
  * - `face`: one Face ID (or one PIN, as a one-action grant) at the moment of the action; the home keeps the grant
  *   ({@link GrantStore}) and the gate uses it up ({@link gateByClass}, the reach policy's condition, `checkAnswer`).
- *   While the device's Peer holds a Face ID pass (A499), a `face` row is admitted without a grant ({@link passAdmitsRow})
+ *   While the device holds a Face ID pass on that listener (A499), a `face` row is admitted without a grant ({@link passAdmitsRow})
  *   unless the row is `alwaysAsk`: adding or removing a device or a passkey, the Face ID settings and the pass setting;
  *   those still need a grant for the one call, by Face ID;
  * - `computer`: only the person at the computer;
@@ -19,7 +19,8 @@
  *
  * @module @delorun/home-auth/auth-classes
  */
-import { DEVICE_REMOVE_ACTION, holdFeatureOf, PASS_SETTING_ACTION, type GrantHolder, type GrantStore, type HoldFeature } from './grants.ts'
+import { holdFeatureOf, type GrantHolder, type GrantStore, type HoldFeature } from './grants.ts'
+import { PASS_ADMITS, PASS_ALWAYS_ASK } from './pass-policy.ts'
 import {
   REACH_ALLOWED_ACTIONS, REACH_DANGEROUS_ACTIONS, REACH_DENIED_ACTIONS, REACH_ELEVATED_ACTIONS, REACH_KEY_ACTIONS,
 } from './reach-access.ts'
@@ -45,10 +46,11 @@ export interface AuthRow {
   /** For a `face` row that opens a stream or a picker: the feature whose hold the grant may open. */
   readonly hold?: HoldFeature
   /**
-   * For a `face` row that a Face ID pass never admits: it needs a grant for the one call, and a Face ID for it opens no
-   * pass (A499: devices, passkeys, the security settings, the pass setting and Reach).
+   * For a `face` row, what a Face ID pass does, from `./pass-policy.ts`: `admits` (no grant needed while the device holds a
+   * live pass) or `alwaysAsk` (a grant for the one call even during a pass, and a Face ID for it opens no pass). Every
+   * `face` row has one; {@link checkAuthTable} reports a row without it.
    */
-  readonly alwaysAsk?: true
+  readonly pass?: 'admits' | 'alwaysAsk'
   /** For an `alwaysAsk` row: the grant action name its route checks, so a Face ID for that action opens no pass. */
   readonly action?: string
 }
@@ -126,34 +128,48 @@ const PASSKEY_ROWS: readonly AuthRow[] = [
   { id: 'auth:/auth/passkey/pin', surface: 'auth', authClass: 'free', reason: 'a correct PIN mints a one-action grant; wrong tries count as an unlock does; it never opens a pass' },
   { id: 'auth:/auth/passkey/lock', surface: 'auth', authClass: 'free', reason: 'Lock now only ends the device\'s own Face ID pass' },
   { id: 'auth:/auth/passkey/pass (read)', surface: 'auth', authClass: 'free', reason: 'a device reads the pass setting and its own live pass' },
-  { id: 'auth:/auth/passkey/devices', surface: 'auth', authClass: 'face', alwaysAsk: true, action: 'auth/passkey/devices', reason: 'it reads the device list and each device\'s passkeys, which is device metadata of the Face ID settings' },
-  { id: 'auth:/auth/devices/remove', surface: 'auth', authClass: 'face', alwaysAsk: true, action: DEVICE_REMOVE_ACTION, reason: 'a device removes another device only with a grant a passkey minted for exactly that removal; removing itself needs none' },
-  { id: 'auth:/auth/passkey/remove', surface: 'auth', authClass: 'face', alwaysAsk: true, action: 'auth/passkey/remove', reason: 'a device removes its own or another device\'s passkey only with a grant for exactly that removal' },
-  { id: 'auth:/auth/passkey/pass (write)', surface: 'auth', authClass: 'face', alwaysAsk: true, action: PASS_SETTING_ACTION, reason: 'a longer pass lets a phone do more without asking, so a device changes it only with a grant a passkey minted for exactly that change' },
+  { id: 'auth:/auth/passkey/devices', surface: 'auth', authClass: 'face', reason: 'it reads the device list and each device\'s passkeys, which is device metadata of the Face ID settings' },
+  { id: 'auth:/auth/devices/remove', surface: 'auth', authClass: 'face', reason: 'a device removes another device only with a grant a passkey minted for exactly that removal; removing itself needs none' },
+  { id: 'auth:/auth/passkey/remove', surface: 'auth', authClass: 'face', reason: 'a device removes its own or another device\'s passkey only with a grant for exactly that removal' },
+  { id: 'auth:/auth/passkey/pass (write)', surface: 'auth', authClass: 'face', reason: 'a longer pass lets a phone do more without asking, so a device changes it only with a grant a passkey minted for exactly that change' },
 ]
 
 /** The things that stay at the computer, from `COMPUTER_ONLY` in `./route-access.ts`. */
 const COMPUTER_ROWS: readonly AuthRow[] = COMPUTER_ONLY.map((row): AuthRow => ({ id: `computer:${row.kind}:${row.id}`, surface: 'computer', authClass: 'computer', reason: row.reason }))
 
+/**
+ * A row with its pass behaviour from `./pass-policy.ts`; a `face` row named in neither list keeps none, which
+ * {@link checkAuthTable} reports.
+ * @param row - the row.
+ * @returns the row with `pass`, and `action` for an always-ask row.
+ */
+function withPass(row: AuthRow): AuthRow {
+  if (row.authClass !== 'face') return row
+  const action = PASS_ALWAYS_ASK[row.id]
+  if (action !== undefined) return { ...row, pass: 'alwaysAsk', action }
+  return PASS_ADMITS.has(row.id) ? { ...row, pass: 'admits' } : row
+}
+
 /** Every row. */
-export const AUTH_CLASSES: readonly AuthRow[] = [...REMOTE_ROWS, ...ROUTE_ROWS, ...ANSWER_ROWS, ...PASSKEY_ROWS, ...COMPUTER_ROWS]
+export const AUTH_CLASSES: readonly AuthRow[] = [...REMOTE_ROWS, ...ROUTE_ROWS, ...ANSWER_ROWS, ...PASSKEY_ROWS, ...COMPUTER_ROWS].map(withPass)
 
 const ROWS_BY_ID: ReadonlyMap<string, AuthRow> = new Map(AUTH_CLASSES.map(row => [row.id, row]))
 
 /** The grant action names of the `alwaysAsk` rows: a Face ID that confirms one of them opens no pass. */
-export const ALWAYS_ASK_ACTIONS: ReadonlySet<string> = new Set(AUTH_CLASSES.flatMap(row => row.alwaysAsk === true && row.action !== undefined ? [row.action] : []))
+export const ALWAYS_ASK_ACTIONS: ReadonlySet<string> = new Set(AUTH_CLASSES.flatMap(row => row.pass === 'alwaysAsk' && row.action !== undefined ? [row.action] : []))
 
 /**
- * Whether a Face ID pass admits a call to one row: the row is `face` and not `alwaysAsk`, and exactly this Peer holds a
- * live pass. A `free` row needs no pass, and a `computer`, `ticket` or unknown row is never admitted by one.
+ * Whether a Face ID pass admits a call to one row: the row is `face` and declared `admits`, and the device holds a live
+ * pass on the listener the call arrived on. A `free` row needs no pass, and an `alwaysAsk`, `computer`, `ticket`,
+ * undeclared or unknown row is never admitted by one.
  * @param grants - the home's grants.
- * @param holder - the device, listener and page unlock the call arrived on.
+ * @param holder - the device and listener the call arrived on.
  * @param rowId - the row the call is decided under.
  * @returns whether the pass admits it.
  */
 export function passAdmitsRow(grants: Pick<GrantStore, 'passOf'>, holder: GrantHolder, rowId: string): boolean {
   const row = ROWS_BY_ID.get(rowId)
-  return row?.authClass === 'face' && row.alwaysAsk !== true && grants.passOf(holder) !== undefined
+  return row?.authClass === 'face' && row.pass === 'admits' && grants.passOf(holder) !== undefined
 }
 
 /**
@@ -167,7 +183,8 @@ export function authClassOf(id: string): AuthClass | undefined {
 
 /**
  * The problems of an auth table: an id listed twice (in the same class or in two), a row with no reason or an unknown
- * class or surface, and an always-ask row that is not `face` or names no grant action.
+ * class or surface, a `face` row that declares no pass behaviour, a pass behaviour on a row that is not `face`, and an
+ * always-ask row that names no grant action.
  * @param rows - the table to check; {@link AUTH_CLASSES} in production.
  * @returns one sentence per problem, empty for a sound table.
  */
@@ -180,8 +197,23 @@ export function checkAuthTable(rows: readonly AuthRow[]): readonly string[] {
     else seen.set(row.id, row.authClass)
     if (row.reason.trim() === '') problems.push(`${row.id} has no reason`)
     if (!AUTH_CLASS_NAMES.some(name => name === row.authClass)) problems.push(`${row.id} has the unknown class ${row.authClass}`)
-    if (row.alwaysAsk === true && row.authClass !== 'face') problems.push(`${row.id} is always-ask but not a face row`)
-    if (row.alwaysAsk === true && row.action === undefined) problems.push(`${row.id} is always-ask but names no grant action`)
+    if (row.authClass === 'face' && row.pass === undefined) problems.push(`${row.id} is a face row that declares no pass behaviour; name it in PASS_ADMITS or PASS_ALWAYS_ASK (./pass-policy.ts)`)
+    if (row.pass !== undefined && row.authClass !== 'face') problems.push(`${row.id} declares a pass behaviour but is not a face row`)
+    if (row.pass === 'alwaysAsk' && row.action === undefined) problems.push(`${row.id} is always-ask but names no grant action`)
   }
   return problems
+}
+
+/**
+ * The entries of `./pass-policy.ts` that name no `face` row of a table, or name one in both lists.
+ * @param rows - the table; {@link AUTH_CLASSES} in production.
+ * @returns one sentence per stale or doubled entry.
+ */
+export function stalePassEntries(rows: readonly AuthRow[]): readonly string[] {
+  const face = new Set(rows.flatMap(row => row.authClass === 'face' ? [row.id] : []))
+  const asked = Object.keys(PASS_ALWAYS_ASK)
+  return [
+    ...[...asked, ...PASS_ADMITS].flatMap(id => face.has(id) ? [] : [`${id} is in the pass policy but names no face row`]),
+    ...asked.flatMap(id => PASS_ADMITS.has(id) ? [`${id} is both admitted and always-ask`] : []),
+  ]
 }

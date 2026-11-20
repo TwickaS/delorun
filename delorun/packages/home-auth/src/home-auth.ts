@@ -1038,6 +1038,8 @@ export class HomeAuth {
       return this.roll(view, sessionId, used, at)
     }
     this.touch(sessionId, at)
+    // A request admitted here keeps the device's Face ID pass on this listener from its idle end (A499 review P2-1).
+    this.grants.touchPass({ deviceId: session.deviceId, listener })
     return { kind: 'admitted', sessionId: brandString<SessionId>(sessionId), session: used }
   }
 

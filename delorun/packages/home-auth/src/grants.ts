@@ -17,12 +17,16 @@
  *   that Peer is disposed ({@link GrantStore.endPeer}). A Peer is one device on one listener and one page unlock, so
  *   closing a browser tab that shares it does not end the hold. Another id, scope or Peer needs a new grant.
  * - **Passes** (A499, "sudo mode") are opened by a verified Face ID assertion when the home's pass setting is above 0
- *   ({@link GrantStore.openPass}). A pass is bound to one Peer (device, listener and page unlock), lasts a fixed number
- *   of minutes from the assertion and never slides. While it is live, the gates admit that Peer's `face` rows that are
- *   not always-ask without a per-call grant (`passAdmitsRow` in `./auth-classes.ts`). It ends at its end time, by Lock
- *   now ({@link GrantStore.endPass}), with its Peer, its device's session, the device's removal, a rotation of every
+ *   ({@link GrantStore.openPass}). A pass is bound to one device on one listener (a device holds no page unlock, which
+ *   `openPass` asserts), lasts a fixed number of minutes from the assertion and never slides. While it is live, the
+ *   gates admit that device's `face` rows declared `admits` without a per-call grant (`passAdmitsRow` in
+ *   `./auth-classes.ts`). It ends at its end time; after {@link PASS_IDLE_MS} with no request from that device on that
+ *   listener ({@link GrantStore.touchPass}), an idle end that never extends it; by Lock now ({@link GrantStore.endPass}),
+ *   which the studio also sends after its page was hidden {@link PASS_IDLE_MS}; when the pass setting changes
+ *   ({@link GrantStore.endPasses}); with its Peer, its device's session, the device's removal, a rotation of every
  *   session, or a restart, since the store lives in memory. A PIN never opens one. Each start and end is logged as
- *   `pass.started` and `pass.ended` with the reason; an expired pass is logged when the home next looks at it.
+ *   `home-auth: pass.started` and `home-auth: pass.ended reason=…`; an expired or idle pass is logged when the home next
+ *   looks at it.
  *
  * @module @delorun/home-auth/grants
  */
@@ -32,6 +36,9 @@ import { newSecret, type RandomBytes } from './secret.ts'
 
 /** How long a minted grant stays usable: 30 seconds. */
 export const GRANT_LIFE_MS = 30_000
+
+/** The longest a Face ID pass lasts with no request from its device on its listener: 5 minutes. */
+export const PASS_IDLE_MS = 5 * 60_000
 
 /** The longest a feature hold idles before it ends: 5 minutes. */
 export const HOLD_IDLE_MS = 5 * 60_000
@@ -115,14 +122,16 @@ export interface HoldTarget {
 export type GrantFactor = 'passkey' | 'pin'
 
 /** Why a pass ended. */
-export type PassEndReason = 'expired' | 'lock-now' | 'peer-ended' | 'session-ended' | 'device-removed' | 'sessions-rotated'
+export type PassEndReason = 'expired' | 'idle' | 'lock-now' | 'setting-changed' | 'peer-ended' | 'session-ended' | 'device-removed' | 'sessions-rotated'
 
 /** A live pass, as the home reports it to the device that holds it. */
 export interface PassView {
   /** When the Face ID opened it, in milliseconds since the epoch. */
   readonly startedAt: number
-  /** When it ends, in milliseconds since the epoch; it never moves. */
+  /** When it ends at the latest, in milliseconds since the epoch; it never moves. */
   readonly endsAt: number
+  /** How long it has left by the home's clock when read, so a device with a skewed clock counts down from this. */
+  readonly remainingMs: number
 }
 
 /**
@@ -236,8 +245,12 @@ interface StoredHold {
 }
 
 /** What the store keeps for one pass. */
-interface StoredPass extends PassView {
+interface StoredPass {
   readonly holder: GrantHolder
+  readonly startedAt: number
+  readonly endsAt: number
+  /** The last request from the device on the listener; {@link PASS_IDLE_MS} after it the pass ends. */
+  lastSeenAt: number
 }
 
 /** What a grant mint returns. */
@@ -403,7 +416,7 @@ export class GrantStore {
   }
 
   /**
-   * Open the hold of a terminal or picker whose opening call this Peer's live pass admitted, so the terminal stays
+   * Open the hold of a terminal or picker whose opening call the device's live pass admitted, so the terminal stays
    * open under the hold's own idle and total limits after the pass ends. Without a live pass nothing opens.
    * @param holder - the device, listener and page unlock of the call.
    * @param opens - the terminal or picker (and scope) the call opens, as the home read it from the call.
@@ -444,6 +457,28 @@ export class GrantStore {
     for (const [key, pass] of [...this.passes]) if (pass.holder.deviceId === deviceId) this.dropPass(key, reason)
   }
 
+  /**
+   * End every live pass: the pass setting changed, so no pass keeps a length the person no longer chose.
+   * @param reason - why.
+   */
+  endPasses(reason: PassEndReason): void {
+    for (const key of [...this.passes.keys()]) this.dropPass(key, reason)
+  }
+
+  /**
+   * Record a request from a device on a listener: the pass of that device on that listener stays live while requests
+   * keep coming, up to its fixed end. A pass already idle {@link PASS_IDLE_MS} ends here and is not revived.
+   * @param holder - the device and listener the request arrived on.
+   */
+  touchPass(holder: GrantHolder): void {
+    const at = this.now()
+    for (const [key, pass] of [...this.passes]) {
+      if (!sameHolder(pass.holder, holder)) continue
+      if (at - pass.lastSeenAt >= PASS_IDLE_MS) this.dropPass(key, 'idle')
+      else pass.lastSeenAt = at
+    }
+  }
+
   /** End every hold, grant and pass of every device: all sessions were rotated. */
   endAll(): void {
     this.grants = []
@@ -453,37 +488,44 @@ export class GrantStore {
   }
 
   /**
-   * Open a pass for one Peer after a verified Face ID assertion. A pass that is already live stays as it is: a pass is
-   * fixed from the Face ID that opened it and never slides.
-   * @param holder - the device, listener and page unlock of the Peer the assertion came from.
+   * Open a pass for one device on one listener after a verified Face ID assertion. A pass that is already live stays as
+   * it is: a pass is fixed from the Face ID that opened it and never slides.
+   * @param holder - the device and listener the assertion came from; a device holds no page unlock.
    * @param minutes - the pass setting; 0 opens none.
    * @returns the live pass, or undefined when the setting is 0.
+   * @throws {Error} for a holder with a page unlock: a pass keyed on one would stop matching the device's calls.
    */
   openPass(holder: GrantHolder, minutes: number): PassView | undefined {
+    if (holder.unlockId !== undefined) throw new Error('home-auth: a Face ID pass is opened for a device and listener, never for a page unlock')
     const live = this.passOf(holder)
     if (live !== undefined) return live
     if (!(minutes > 0)) return undefined
     const startedAt = this.now()
-    const pass: StoredPass = { holder: { deviceId: holder.deviceId, listener: holder.listener, unlockId: holder.unlockId }, startedAt, endsAt: startedAt + minutes * 60_000 }
+    const pass: StoredPass = { holder: { deviceId: holder.deviceId, listener: holder.listener }, startedAt, endsAt: startedAt + minutes * 60_000, lastSeenAt: startedAt }
     this.passes.set(peerKey(holder), pass)
     this.log(`home-auth: pass.started device=${holder.deviceId} listener=${holder.listener} minutes=${String(minutes)}`)
-    return { startedAt: pass.startedAt, endsAt: pass.endsAt }
+    return viewOf(pass, startedAt)
   }
 
   /**
-   * The live pass of exactly one Peer; another device, listener or page unlock has none of its own.
-   * @param holder - the device, listener and page unlock the call arrived on.
-   * @returns the pass, or undefined when none is live.
+   * The live pass of one device on one listener; another device or listener, or a call with a page unlock, has none.
+   * @param holder - the device and listener the call arrived on.
+   * @returns the pass, or undefined when none is live: past its end, or idle {@link PASS_IDLE_MS}.
    */
   passOf(holder: GrantHolder): PassView | undefined {
     const key = peerKey(holder)
     const pass = this.passes.get(key)
     if (pass === undefined) return undefined
-    if (pass.endsAt <= this.now()) {
+    const at = this.now()
+    if (pass.endsAt <= at) {
       this.dropPass(key, 'expired')
       return undefined
     }
-    return { startedAt: pass.startedAt, endsAt: pass.endsAt }
+    if (at - pass.lastSeenAt >= PASS_IDLE_MS) {
+      this.dropPass(key, 'idle')
+      return undefined
+    }
+    return viewOf(pass, at)
   }
 
   /**
@@ -540,7 +582,10 @@ export class GrantStore {
   /** Drop what expired. */
   private sweep(): void {
     const at = this.now()
-    for (const [key, pass] of [...this.passes]) if (pass.endsAt <= at) this.dropPass(key, 'expired')
+    for (const [key, pass] of [...this.passes]) {
+      if (pass.endsAt <= at) this.dropPass(key, 'expired')
+      else if (at - pass.lastSeenAt >= PASS_IDLE_MS) this.dropPass(key, 'idle')
+    }
     this.grants = this.grants.filter(stored => stored.expiresAt > at)
     this.answers = this.answers.filter(stored => stored.expiresAt > at)
     for (const [key, hold] of [...this.holds]) {
@@ -579,7 +624,17 @@ function samePeer(left: GrantHolder, right: GrantHolder): boolean {
 }
 
 /**
- * The map key of one Peer's pass.
+ * What the home reports of a pass.
+ * @param pass - the stored pass.
+ * @param at - the home's clock now.
+ * @returns its start, end and what is left.
+ */
+function viewOf(pass: StoredPass, at: number): PassView {
+  return { startedAt: pass.startedAt, endsAt: pass.endsAt, remainingMs: Math.max(0, pass.endsAt - at) }
+}
+
+/**
+ * The map key of one device's pass on one listener.
  * @param holder - the device, listener and page unlock.
  * @returns the key.
  */

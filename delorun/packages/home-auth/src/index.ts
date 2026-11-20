@@ -106,7 +106,7 @@ export {
 } from './routes.ts'
 export { REQUEST_LISTENER, isLoopbackHost, listenerOf, stampListener, type LoopbackPort, type StampedRequest } from '@delorun/home'
 export { hashImage, ICON_FILE_SEGMENTS, readIcon, storeIcon } from './icon-file.ts'
-export { ALWAYS_ASK_ACTIONS, AUTH_CLASSES, AUTH_CLASS_NAMES, authClassOf, checkAuthTable, passAdmitsRow, type AuthClass, type AuthRow, type AuthSurface } from './auth-classes.ts'
+export { ALWAYS_ASK_ACTIONS, AUTH_CLASSES, AUTH_CLASS_NAMES, authClassOf, checkAuthTable, passAdmitsRow, stalePassEntries, type AuthClass, type AuthRow, type AuthSurface } from './auth-classes.ts'
 export { GRANT_HEADER, gateByClass, readBodyCapped, type ClassGate, type GateOptions, type GrantGateHome, type LegacyUnlock } from './auth-gate.ts'
 export { GRANT_BODY_CAP_BYTES, GRANT_LIFE_MS, HOLD_ABSOLUTE_MS, HOLD_IDLE_MS, PASS_SETTING_ACTION, GrantStore, canonicalJson, hashArgs, hashRequest, type GrantEntry, type GrantHolder, type HoldFeature, type PassEndReason, type PassView } from './grants.ts'
 export { PASSKEY_DEVICES_ACTION, PASSKEY_PATHS, PASSKEY_REMOVE_ACTION } from './passkey-routes.ts'

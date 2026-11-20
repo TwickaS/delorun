@@ -302,7 +302,7 @@ describe('the Face ID pass (A499)', () => {
     passMinutes = 15
     const phone = await enrol()
     const minted = await assert(phone)
-    expect(minted.pass).toEqual({ startedAt: clock.at, endsAt: clock.at + 15 * 60_000 })
+    expect(minted.pass).toEqual({ startedAt: clock.at, endsAt: clock.at + 15 * 60_000, remainingMs: 15 * 60_000 })
     expect(grants.passOf(holder)).toEqual(minted.pass)
     expect(grants.passOf({ deviceId: OTHER, listener: LISTENER })).toBeUndefined()
   })

@@ -1179,7 +1179,7 @@ export function createCondition(
   const unlocked = (action: RemoteAccessAction, reason: string, call: boolean, scope: string, args?: unknown, row = `remote:${action}`): RemoteAccessDecision | undefined => {
     const faced = facts.faceGrants?.()
     // A face action is admitted by a grant for exactly this call, from Face ID or, on a device with no passkey, from its
-    // PIN (A483), or by the Peer's Face ID pass when its row allows one (A499); no unlock window, code or approval grace admits it.
+    // PIN (A483), or by the device's Face ID pass on this listener when its row allows one (A499); no unlock window, code or approval grace admits it.
     if (faced !== undefined) return grantFor(faced, action, reason, call, scope, args, row)
     // Before the grant store starts, a terminal stays refused and any other action falls back to the unlock the person
     // entered; no unlock exists before the home service starts either, so the fallback admits nothing.
@@ -1207,7 +1207,7 @@ export function createCondition(
    * @param call - whether a call's arguments came with the question.
    * @param scope - {@link scopeOf} of the resource the question names.
    * @param args - the arguments.
-   * @param row - the `AUTH_CLASSES` row of the call: a live Face ID pass of this Peer admits it when that row is `face`
+   * @param row - the `AUTH_CLASSES` row of the call: a live Face ID pass of this device on this listener admits it when that row is `face`
    *   and not always-ask, and a call that opens a terminal or picker then opens its hold too, so the terminal outlives the pass under the hold's own limits.
    * @returns the refusal, or undefined when a hold, a pass or a grant admits it.
    */
@@ -1229,6 +1229,8 @@ export function createCondition(
   }
   const decide: ReachCondition = ({ action, resource, args }) => {
     const scope = scopeOf(resource)
+    // A call (a question with arguments) is the device's use: it keeps its Face ID pass from the idle end, never past its end.
+    if (args !== undefined) facts.faceGrants?.()?.grants.touchPass({ deviceId, listener })
     // Dangerous mode lifts the four refusals below: each call still needs its grant, and the check follows. The mode is
     // read per call, so withdrawing the grant restores them. A PIN page unlock lifts nothing (A483: never a window).
     const lifts: SettingsLift[] = []
@@ -1320,9 +1322,9 @@ const SESSION_ROLE = role('session')
 /** What the policy reads of the grants for Face ID. */
 export interface FaceGrantFacts {
   /** The grants and holds a verified assertion or a correct PIN minted. */
-  readonly grants: Pick<GrantStore, 'has' | 'consume' | 'holdAdmits' | 'holdsAny' | 'openHoldByPass'>
+  readonly grants: Pick<GrantStore, 'has' | 'consume' | 'holdAdmits' | 'holdsAny' | 'openHoldByPass' | 'touchPass'>
   /**
-   * Whether this Peer's live Face ID pass admits a call decided under one `AUTH_CLASSES` row (`passAdmitsRow` in
+   * Whether the live Face ID pass of this device on this listener admits a call decided under one `AUTH_CLASSES` row (`passAdmitsRow` in
    * `./auth-classes.ts`, which this module cannot import: that table is built from this module's tables). Absent, no
    * pass admits anything.
    * @param holder - the device, listener and page unlock of the call.
