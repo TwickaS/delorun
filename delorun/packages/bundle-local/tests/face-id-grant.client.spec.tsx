@@ -169,10 +169,10 @@ describe('the terminal path on a phone (owner report on the iPhone)', () => {
   // A PIN minted for a stale tab's terminal/close under "Open a terminal" left the create refused (e2e flow 7).
   it('gives two queued refusals a sheet each, with its own words, and mints each grant for its own call only', async () => {
     const { api, lift, lifted } = refusedCreate(false)
-    const close = { sessionId: 's1', id: 't-old' }
-    const closed = lift({ endpoint: 'terminal/close', reason: 'elevation-required: terminal/close', args: close, signal: new AbortController().signal })
+    const rename = { sessionId: 's1', id: 't-old', title: 'build' }
+    const renamed = lift({ endpoint: 'terminal/rename', reason: 'elevation-required: terminal/rename', args: rename, signal: new AbortController().signal })
     const pins = () => api.calls.filter(entry => entry.name === 'pin').map(entry => entry.request)
-    for (const [title, action, args] of [[en['do.openTerminal.title'], 'terminal/create', create], [en['do.closeTerminal.title'], 'terminal/close', close]] as const) {
+    for (const [title, action, args] of [[en['do.openTerminal.title'], 'terminal/create', create], [en['do.renameTerminal.title'], 'terminal/rename', rename]] as const) {
       await screen.findByRole('heading', { name: title })
       fireEvent.click(await screen.findByRole('button', { name: en['sheet.confirmPin'] }))
       for (const digit of '824619') fireEvent.click(screen.getByRole('button', { name: digit }))
@@ -181,8 +181,17 @@ describe('the terminal path on a phone (owner report on the iPhone)', () => {
       expect(pins().at(-1)).toMatchObject({ actions: [{ action, hash: await hashArgs(args) }] })
     }
     await expect(lifted).resolves.toBe(true)
-    await expect(closed).resolves.toBe(true)
-    expect(pins().map(each => (each as { actions: readonly { action: string }[] }).actions.map(entry => entry.action))).toEqual([['terminal/create'], ['terminal/close']])
+    await expect(renamed).resolves.toBe(true)
+    expect(pins().map(each => (each as { actions: readonly { action: string }[] }).actions.map(entry => entry.action))).toEqual([['terminal/create'], ['terminal/rename']])
+  })
+
+  // A stale tab's close, replayed after a reload, raised a sheet nobody asked for and took the PIN meant for the create (e2e flow 7).
+  it('raises no sheet for a refused terminal/close and hands the refusal back', async () => {
+    const source = createFaceGrantSource()
+    const lift = remoteDenialLift(oneAtATime(source.grant))
+    const closed = lift({ endpoint: 'terminal/close', reason: 'elevation-required: terminal/close', args: { sessionId: 's1', id: 't-old' }, signal: new AbortController().signal })
+    await expect(closed).resolves.toBe(false)
+    expect(source.hooks.pending.getSnapshot()).toBeNull()
   })
 
   it('hands the refusal back on a cancel, so the panel can say the terminal did not start', async () => {

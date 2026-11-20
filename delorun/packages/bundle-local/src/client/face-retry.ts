@@ -58,6 +58,7 @@ export const NEVER_ASKED = {
   'dynamicCordisRunner/resolveRequestRun': 'answers the home\'s run request as the last step of a run',
   'dynamicCordisRunner/settleUserRun': 'settles a run as its last step',
   'terminal/watch': 'the chat header opens the roster of the chat\'s terminals on every chat view',
+  'terminal/close': 'the terminal controller also sends it without a tap, replaying a close saved before a reload; a close the person taps rides the terminal\'s hold, and one the home refuses leaves the terminal to idle out with the "couldn\'t close, Retry" notice',
   'terminal/retain': 'keeps every saved terminal tab alive on load and on reconnect, on screen or not; the terminal view on screen asks through terminal/attach, whose grant opens the hold this call then rides',
 } as const satisfies Readonly<Record<string, string>>
 
