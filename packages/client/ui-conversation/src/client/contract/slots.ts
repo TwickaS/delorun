@@ -683,9 +683,13 @@ export type ConversationSlotProps =
   & PropsRenderSlots<'conversation.header'>
   & PropsRenderFactories
 
-/** Inputs shared by main and embedded Conversation content occurrences. */
+/**
+ * Inputs shared by Conversation content occurrences. `main` is the Conversation panel, `embedded` a chat hosted in another
+ * surface with the full composer, and `pane` a chat hosted in a split pane: the embedded body with tighter padding and a
+ * compact one-line reply box (no commands, mode, model or context readings).
+ */
 export interface ConversationContentInputProps {
-  variant: 'main' | 'embedded'
+  variant: 'main' | 'embedded' | 'pane'
   phase: 'settling' | 'hero' | 'active'
   hero: boolean
 }

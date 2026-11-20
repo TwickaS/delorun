@@ -85,6 +85,26 @@
   --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
 }
 
+/* Pane reply box: the editor and the send button share one line. */
+.cardCompact {
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 0;
+  padding-top: 0;
+  border-radius: var(--dsw-radius-lg, 14px);
+}
+
+.cardCompact .scroll {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-block: 4px;
+}
+
+.cardCompact .row {
+  flex: none;
+  padding: 4px 6px 4px 0;
+}
+
 @media (pointer: coarse) {
   .card {
     font-size: max(16px, var(--dsh-content-font-size, 14px));
