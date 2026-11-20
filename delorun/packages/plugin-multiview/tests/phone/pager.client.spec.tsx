@@ -177,8 +177,17 @@ describe('the phone pager at 390 px', () => {
     expect(document.querySelector('[data-page="main"]')!.childElementCount).toBe(0)
 
     fireEvent.click(screen.getByRole('tab', { name: 'Review' }))
-    expect([...record.live].sort()).toEqual(['explorer', 'review'])
+    // Claude Code waits for the person, so its page stays mounted and its approval card stays in reach.
+    expect([...record.live].sort()).toEqual(['claude', 'explorer', 'review'])
     expect(record.mounts.get('claude')).toBe(1)
+    expect(document.querySelector('[data-page="codex"]')!.childElementCount).toBe(0)
+  })
+
+  it('keeps the main chat\'s page mounted too while it waits, wherever the shown page is', () => {
+    const record = probe()
+    render(<Pager record={record} pages={FIVE.map(entry => ({ ...entry, needsAttention: entry.id === MAIN }))} start={REVIEW} />)
+    expect(record.live.has('main')).toBe(true)
+    expect(record.live.has('claude')).toBe(false)
   })
 
   it('remounts a distant page when it comes back into reach', () => {

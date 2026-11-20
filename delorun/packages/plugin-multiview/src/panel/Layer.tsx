@@ -101,7 +101,9 @@ const ChatMultiview = memo(function ChatMultiview(props: Omit<LayerProps, 'child
       // A refused stop is published on the chat's own promptError, which its composer shows.
     })
   }, [references])
-  const waitingKey = useSessionStatus(statuses => state.pins.filter(pin => statuses.get(pin)?.pendingInteraction !== undefined).join('\n'))
+  // The main chat counts too: its own request is easy to miss when the main page is out of sight on a phone or the pane is small.
+  const ids = useMemo(() => pageOrder(main, state.pins), [main, state.pins])
+  const waitingKey = useSessionStatus(statuses => ids.filter(pane => statuses.get(pane)?.pendingInteraction !== undefined).join('\n'))
   const waitingPanes = useMemo(() => new Set(waitingKey === '' ? [] : waitingKey.split('\n')), [waitingKey])
   const labels: PaneLayoutLabels = { separator: t('layout.separator'), region: t('region'), tabList: t('layout.tabs'), grip: t('layout.grip') }
 
@@ -115,7 +117,7 @@ const ChatMultiview = memo(function ChatMultiview(props: Omit<LayerProps, 'child
       onFocusPane={setFocused}
       onAreaChange={onAreaChange}
       onModelChange={(model) => { multiview.setLayout(main, model) }}
-      renderTab={pane => <TabLabel useSessions={useSessions} pane={pane} />}
+      renderTab={pane => <TabLabel useSessions={useSessions} pane={pane} waiting={waitingPanes.has(pane)} label={t('pager.attention')} />}
       renderHeader={(pane, paneState, controls) => (
         <HeaderSlot
           frame={frame}
@@ -131,10 +133,13 @@ const ChatMultiview = memo(function ChatMultiview(props: Omit<LayerProps, 'child
       renderPane={pane => <BodySlot frame={frame} reference={references.get(pane)} content={pane === main ? mainContent : undefined} compact={settings.compactComposer} waiting={waitingPanes.has(pane)} />}
     />
   )
+  const hiddenWaiting = fitted.hidden.filter(pane => waitingPanes.has(pane)).length
   const hidden = fitted.hidden.length === 0 ? null : (
-    <div className={css.hidden} role="status">{fitted.hidden.length === 1 ? t('layout.hidden.one') : t('layout.hidden', { count: String(fitted.hidden.length) })}</div>
+    <div className={css.hidden} role="status" data-waiting={hiddenWaiting > 0 || undefined}>
+      {fitted.hidden.length === 1 ? t('layout.hidden.one') : t('layout.hidden', { count: String(fitted.hidden.length) })}
+      {hiddenWaiting > 0 && ` ${hiddenWaiting === 1 ? t('layout.hidden.waiting.one') : t('layout.hidden.waiting', { count: String(hiddenWaiting) })}`}
+    </div>
   )
-  const ids = useMemo(() => pageOrder(main, state.pins), [main, state.pins])
   const phone = (
     <Pager frame={frame} main={main} content={mainContent} ids={ids} references={references} active={active} onActive={setActive} stop={stop} compact={settings.compactComposer} waiting={waitingPanes} />
   )
@@ -146,8 +151,9 @@ const ChatMultiview = memo(function ChatMultiview(props: Omit<LayerProps, 'child
 })
 
 /** The layout's tab label for a pane that shares a leaf: the chat's name. */
-function TabLabel({ useSessions, pane }: Pick<LayerProps, 'useSessions'> & { readonly pane: PaneId }) {
-  return <>{useSessions(state => state.byId[pane]?.projectionValues?.subagent?.label ?? state.byId[pane]?.displayTitle ?? pane)}</>
+function TabLabel({ useSessions, pane, waiting, label }: Pick<LayerProps, 'useSessions'> & { readonly pane: PaneId; readonly waiting: boolean; readonly label: string }) {
+  const name = useSessions(state => state.byId[pane]?.projectionValues?.subagent?.label ?? state.byId[pane]?.displayTitle ?? pane)
+  return <>{name}{waiting && <span className={css.tabDot} role="img" aria-label={label} data-attention-dot="" />}</>
 }
 
 /** A pane's header, inside the pane's chat reference. */

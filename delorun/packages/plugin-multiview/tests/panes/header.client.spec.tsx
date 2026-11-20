@@ -156,6 +156,18 @@ describe('the pane header content', () => {
     expect(controls.actions.swap).toHaveBeenCalledWith(CHAT, CODEX)
   })
 
+  it('asks before closing a pane whose chat waits for the person, and closes on the second press', () => {
+    const waiting = setup({ running: true, waiting: true })
+    fireEvent.click(screen.getByRole('button', { name: 'Close pane' }))
+    expect(waiting.onClose).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Close anyway?' }))
+    expect(waiting.onClose).toHaveBeenCalledTimes(1)
+    cleanup()
+    const quiet = setup({ running: true })
+    fireEvent.click(screen.getByRole('button', { name: 'Close pane' }))
+    expect(quiet.onClose).toHaveBeenCalledTimes(1)
+  })
+
   it('draws a phone page header with no grip, menu or buttons', () => {
     setup({ page: true, running: true })
     expect(document.querySelector('[data-grip]')).toBeNull()

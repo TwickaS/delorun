@@ -12,10 +12,10 @@ function state(overrides: Partial<PhoneDotsState> = {}): PhoneDotsState {
   return { ids: [CHAT, A, B], active: A, main: CHAT, select: vi.fn(), open: vi.fn(), stop: vi.fn(), ...overrides }
 }
 
-function renderDock(chat: string, running: boolean, value: PhoneDotsState | undefined) {
+function renderDock(chat: string, running: boolean, value: PhoneDotsState | undefined, cancelDenied = false) {
   const dots = createPhoneDots()
   dots.set(value)
-  const props = { sessionId: chat, dots, useSession: (select: (session: { running: boolean; subagent: null }) => unknown) => select({ running, subagent: null }), t: makeTranslate(en) }
+  const props = { sessionId: chat, dots, useSession: (select: (session: { running: boolean; subagent: null }) => unknown) => select({ running, subagent: null }), useAccess: () => !cancelDenied, t: makeTranslate(en) }
   const view = render(<DotsDock {...(props as never as DotsDockProps)} />)
   return { view, dots }
 }
@@ -47,6 +47,12 @@ describe('the phone dots above the reply box', () => {
     cleanup()
     renderDock(A, false, state())
     expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull()
+  })
+
+  it('offer no Stop on a page that may not cancel, as the desktop header does', () => {
+    renderDock(A, true, state(), true)
+    expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Open full chat' })).toBeTruthy()
   })
 
   it('leave the main chat page with the dots alone', () => {

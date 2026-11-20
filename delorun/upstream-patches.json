@@ -624,7 +624,7 @@
       "path": "packages/client/ui-conversation/src/client/contract/slots.ts",
       "class": "delorun-feature",
       "feature": "studio-seams",
-      "reason": "Declares the conversation.hero.headline slot, so a product can replace the New Session headline; upstream's headline and Preview badge remain the fallback. Declares the conversation.session.banner list slot between the header and the active View, which a live agent's chat uses for its coloured rule and opening card (EA13). Multiview U1: `ConversationContentInputProps.variant` accepts `pane`, the occurrence of a chat hosted in a split pane. Multiview U3: declares the conversation.main.body hoc slot (session-maybe scope) around the main content."
+      "reason": "Declares the conversation.hero.headline slot, so a product can replace the New Session headline; upstream's headline and Preview badge remain the fallback. Declares the conversation.session.banner list slot between the header and the active View, which a live agent's chat uses for its coloured rule and opening card (EA13). Multiview U1: `ConversationContentInputProps.variant` accepts `pane`, the occurrence of a chat hosted in a split pane. Multiview U3: declares the conversation.main.body hoc slot (session-maybe scope) around the main content. The slot's contract: a layer renders the content exactly once while mounted or shows a visible notice for a hidden pending approval; approval safety rests on the Host's grants, not on this slot."
     },
     {
       "path": "packages/client/ui-conversation/src/client/locales.ts",
@@ -3150,7 +3150,7 @@
       "path": "packages/client/ui-conversation/src/client/skeleton/ConversationMainPanel.tsx",
       "class": "delorun-feature",
       "feature": "multiview",
-      "reason": "Multiview U3: renders the main content (transcript and composer) inside the `conversation.main.body` hoc slot, so a layer can arrange it beside other chats; with no layer the content renders unchanged and the header stays outside."
+      "reason": "Multiview U3: renders the main content (transcript and composer) inside the `conversation.main.body` hoc slot, so a layer can arrange it beside other chats; with no layer the content renders unchanged and the header stays outside. The content holds the main chat's pending approval card; approval safety rests on the Host's grants, not on this slot."
     },
     {
       "path": "packages/api/terminal-controller/src/client/model.ts",

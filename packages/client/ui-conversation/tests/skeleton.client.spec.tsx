@@ -470,6 +470,9 @@ describe('ConversationRoot main body layers', () => {
     cleanup()
     const passthrough = mount(sessionSnapshotOf(), undefined, undefined, { mainBody: 'passthrough' })
     expect(passthrough.view.container.innerHTML).toBe(bare)
+    // A layer renders the content exactly once: the main chat's composer, which carries a pending approval card, is mounted once.
+    expect(passthrough.view.container.querySelectorAll('[data-conversation-content]')).toHaveLength(1)
+    expect(passthrough.view.container.querySelectorAll('[data-composer-seat]')).toHaveLength(1)
   })
 
   it('wraps the content under the header in the main body slot and leaves the header outside it', () => {

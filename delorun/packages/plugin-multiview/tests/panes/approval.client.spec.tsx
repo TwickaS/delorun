@@ -10,6 +10,7 @@ import type { FactoryComponentPropsOf } from '@deepseek-ai/dsh-client-ui-slots'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { createContext, useContext, useEffect, useSyncExternalStore, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { PaneBody, type PaneBodyProps } from '../../src/panes/PaneBody.tsx'
 import { MultiviewLayer, type LayerProps } from '../../src/panel/Layer.tsx'
 import { createPhoneDots } from '../../src/panel/dots.tsx'
 import { en } from '../../src/panes/locales.ts'
@@ -167,5 +168,77 @@ describe('the allow gate in panes', () => {
     await waitFor(() => { expect(pending.get(A)!.onReject).toHaveBeenCalledTimes(1) })
     expect(gate).not.toHaveBeenCalled()
     expect(screen.getAllByRole('button', { name: 'Reject' })).toHaveLength(2)
+  })
+})
+
+// The composition below mounts the real pane body inside the real layer; the factory stub stands for `conversation.content`, whose
+// composer chain elects the chat's approval card with the page's grant step as its grant action. The step is a stand-in for Face ID's
+// (`bundle-local`'s own spec covers the minting): it records the grant it would mint from the chat id its slot props carry, which the
+// pane body takes from the pane's chat reference, and it decides the confirmation.
+describe('the grant step through the real pane body', () => {
+  /** What a step would mint, from the slot props it received. */
+  interface Minted { readonly agent: string; readonly callId: string | undefined; readonly grants: string }
+
+  function GrantStep({ sessionId, callId, grants, gateAllow, minted, confirm }: {
+    sessionId: string; callId: string | undefined; grants: string
+    gateAllow: (next: (() => Promise<boolean>) | null) => void; minted: Minted[]; confirm: (chat: string) => boolean
+  }) {
+    useEffect(() => {
+      gateAllow(() => { minted.push({ agent: sessionId, callId, grants }); return Promise.resolve(confirm(sessionId)) })
+      return () => { gateAllow(null) }
+    }, [gateAllow, sessionId, callId, grants, minted, confirm])
+    return null
+  }
+
+  /** The pane body as the layer renders it: the real component over a factory that mounts the chat's card and the grant step. */
+  function paneBody(requests: Map<string, Pending>, minted: Minted[], confirm: (chat: string) => boolean) {
+    return function Pane(props: { readonly chat: string }) {
+      const { chat } = props
+      const sources = {
+        sessionId: chat,
+        useSession: (select: (value: object) => unknown) => select({ blank: false, awaitingFirstTurn: false, running: true, promptAttempted: true, openState: 'open' }),
+        useConversation: (select: (value: { activeTargets: Set<string> }) => unknown) => select({ activeTargets: new Set() }),
+        useSessions: (select: (value: { byId: Record<string, { blank: boolean }> }) => unknown) => select({ byId: { [chat]: { blank: false } } }),
+        compact: true,
+        // The slot kit gives the factory's children the pane body's own chat as `sessionId`.
+        renderFactorySlot: () => {
+          const request = requests.get(chat)!
+          const card = {
+            requestKey: `request-${chat}`, title: `Run in ${chat}`, grants: 'external-agent', callId: `call-${chat}`, toolName: 'claude-code', canAnswer: () => true,
+            onAllow: request.onAllow, onReject: request.onReject, t: makeTranslate(approvalEn),
+            renderSlot: (key: string, owner: { grants: string; callId: string | undefined; gateAllow: (next: (() => Promise<boolean>) | null) => void }) => (
+              key === 'conversation.approval.action'
+                ? <GrantStep sessionId={chat} callId={owner.callId} grants={owner.grants} gateAllow={owner.gateAllow} minted={minted} confirm={confirm} />
+                : null),
+          }
+          return <ApprovalCard {...(card as never as ApprovalCardProps)} />
+        },
+      }
+      return <PaneBody {...(sources as never as PaneBodyProps)} />
+    }
+  }
+
+  it('mints for the pane\'s own chat, never the main chat\'s, and sends the answer once it is confirmed', async () => {
+    const requests = new Map<string, Pending>()
+    const minted: Minted[] = []
+    const Pane = paneBody(requests, minted, () => true)
+    const { pending } = setup((chat, request) => { requests.set(chat, request); return <Pane chat={chat} /> })
+    fireEvent.click(within(paneOf(B)).getByRole('button', { name: 'Allow once' }))
+    await waitFor(() => { expect(pending.get(B)!.onAllow).toHaveBeenCalledTimes(1) })
+    expect(minted).toEqual([{ agent: B, callId: `call-${B}`, grants: 'external-agent' }])
+    expect(JSON.stringify(minted)).not.toContain(CHAT)
+    expect(pending.get(A)!.onAllow).not.toHaveBeenCalled()
+  })
+
+  it('sends nothing when the confirmation of a pane is refused, and leaves that pane answerable', async () => {
+    const requests = new Map<string, Pending>()
+    const minted: Minted[] = []
+    const Pane = paneBody(requests, minted, () => false)
+    const { pending } = setup((chat, request) => { requests.set(chat, request); return <Pane chat={chat} /> })
+    fireEvent.click(within(paneOf(A)).getByRole('button', { name: 'Allow once' }))
+    await waitFor(() => { expect(minted).toHaveLength(1) })
+    await waitFor(() => { expect(within(paneOf(A)).getByRole('button', { name: 'Allow once' }).hasAttribute('disabled')).toBe(false) })
+    expect(pending.get(A)!.onAllow).not.toHaveBeenCalled()
+    expect(pending.get(B)!.onAllow).not.toHaveBeenCalled()
   })
 })

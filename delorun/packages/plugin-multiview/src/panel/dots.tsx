@@ -57,20 +57,21 @@ export function createPhoneDots(): PhoneDotsStore {
 export type DotsDockProps = PropsRuntime<'conversation.input.dock'> & PropsLocale<typeof PANES_NS> & InjectFace<DotsInjected>
 
 /**
- * Draw a phone page's Open full chat and Stop buttons and the position dots, above the page's reply box.
+ * Draw a phone page's Open full chat and Stop buttons (Stop only where the page may cancel, as in the desktop header) and the position dots, above the page's reply box.
  * @param props - the chat, its run state and the pager's position.
  * @returns the buttons and dots, or null when the pager does not show this chat.
  */
-export function DotsDock({ sessionId, dots, useSession, t }: DotsDockProps) {
+export function DotsDock({ sessionId, dots, useSession, useAccess, t }: DotsDockProps) {
   const state = useSyncExternalStore(listener => dots.subscribe(listener), () => dots.getSnapshot())
   const stoppable = useSession(session => session.running && (session.subagent === null || session.subagent.address.mode === 'continuable'))
+  const stopDenied = useAccess('session/cancel') === false
   if (state === undefined || !state.ids.includes(sessionId)) return null
   const buttons = sessionId === state.main ? null : (
     <div className={css.pageButtons}>
       <button type="button" className={css.pageButton} onClick={() => { state.open(sessionId) }}>
         <IconShareOutlineRegular size={16} />{t('action.open')}
       </button>
-      {stoppable === true && (
+      {stoppable === true && !stopDenied && (
         <button type="button" className={css.pageButton} data-danger="" onClick={() => { state.stop(sessionId) }}>
           <IconStopFillRegular size={16} />{t('action.stop')}
         </button>

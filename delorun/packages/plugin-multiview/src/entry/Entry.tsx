@@ -154,7 +154,7 @@ export function HeaderButton(props: HeaderButtonProps) {
 
 function RootHeaderButton({ sessionId, useSessions, useSessionStatus, multiview, t }: HeaderButtonProps) {
   const { pins, open: shown } = useChat(multiview, sessionId)
-  const waiting = useSessionStatus(statuses => pins.some(pin => statuses.get(pin)?.pendingInteraction?.kind === 'approval'))
+  const waiting = useSessionStatus(statuses => pins.some(pin => statuses.get(pin)?.pendingInteraction !== undefined))
   const running = useSessions(state => runningAgentsOf(state, sessionId).join('\n'))
   const [menuOpen, setMenuOpen] = useState(false)
   const unpinnedRunning = running === '' ? [] : running.split('\n').filter(id => !pins.includes(id as SessionId)) as SessionId[]

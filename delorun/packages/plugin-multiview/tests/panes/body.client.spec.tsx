@@ -32,8 +32,11 @@ describe('the pane body', () => {
     expect(setup(false, { running: true }).mock.calls[0]![1].variant).toBe('embedded')
   })
 
-  it('selects the chat view only, so a pane has no view tabs', () => {
-    expect(setup(true).mock.calls[0]![2].slots.views).toBe(ChatOnlyViews)
+  it('selects the chat view only and overrides nothing else, so the chat\'s own composer chain and approval card stay in force', () => {
+    // A pane that replaced the composer or an approval seat in `slots` would be a second approval path.
+    expect(setup(true).mock.calls[0]![2]).toEqual({ slots: { views: ChatOnlyViews } })
+    cleanup()
+    expect(setup(false).mock.calls[0]![2]).toEqual({ slots: { views: ChatOnlyViews } })
   })
 
   it('settles while a blank chat replays and shows the hero once it is open and blank', () => {

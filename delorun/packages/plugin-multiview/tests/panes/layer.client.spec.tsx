@@ -4,6 +4,7 @@ import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { createContext, useContext, useSyncExternalStore, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { layoutOf, leafOf, splitOf } from '../../src/layout/index.ts'
 import { MultiviewLayer, type LayerProps } from '../../src/panel/Layer.tsx'
 import { createPhoneDots } from '../../src/panel/dots.tsx'
 import { en } from '../../src/panes/locales.ts'
@@ -155,6 +156,29 @@ describe('the multiview layer', () => {
     setup({ waiting: [A] })
     expect(document.querySelector(`[data-body="${A}"]`)!.closest('[data-pane-body]')!.hasAttribute('data-waiting')).toBe(true)
     expect(document.querySelector(`[data-body="${B}"]`)!.closest('[data-pane-body]')!.hasAttribute('data-waiting')).toBe(false)
+  })
+
+  it('counts the main chat\'s own request on the phone: its chip shows the dot, and a waiting page stays mounted far from the shown one', () => {
+    viewport.resize(390)
+    setup({ pins: [A, B], waiting: [CHAT] })
+    expect(document.querySelector(`[data-page-chip="${CHAT}"]`)!.hasAttribute('data-needs-attention')).toBe(true)
+    fireEvent.click(screen.getAllByRole('tab')[2]!)
+    expect(document.querySelector(`[data-page-chat="${CHAT}"] [data-main-content]`)).not.toBeNull()
+  })
+
+  it('marks the tab of a waiting pane that shares a leaf with another', () => {
+    const h = setup({ waiting: [B] })
+    act(() => { h.store.setLayout(CHAT, layoutOf(splitOf('horizontal', [leafOf([CHAT]), leafOf([A, B], 100, A)]))) })
+    expect(screen.getAllByRole('tab').map(tab => tab.querySelector('[data-attention-dot]') !== null)).toEqual([false, true])
+  })
+
+  it('says in the hidden notice that a hidden pane waits', () => {
+    // Room for two panes only (two columns of one row): the last pane in reading order, which waits, is left out.
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => 700 })
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get: () => 300 })
+    setup({ waiting: [B], pins: [A, B] })
+    expect(screen.getByRole('status').textContent).toContain('It waits for you.')
+    expect(screen.getByRole('status').hasAttribute('data-waiting')).toBe(true)
   })
 
   it('returns to the normal chat when the last pinned pane is closed', () => {

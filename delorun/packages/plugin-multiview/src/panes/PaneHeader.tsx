@@ -16,6 +16,9 @@ import {
 } from './status.ts'
 import css from './PaneHeader.module.css'
 
+/** How long a pending Close stays armed, in milliseconds. */
+const CONFIRM_MS = 4000
+
 /** Props of the pane header entry. */
 export type PaneHeaderProps = PropsRuntime<'multiview.pane.header'> & PropsLocale<typeof PANES_NS> & PaneHeaderOwnerProps
 
@@ -89,6 +92,13 @@ export function PaneHeader(props: PaneHeaderProps) {
   const titles = useSessions(state => targets.map(id => titleOf(state.byId[id])).join('\u0000')).split('\u0000')
   const nameOf = (pane: SessionId): string => titles[targets.indexOf(pane)] ?? pane
   const [menuOpen, setMenuOpen] = useState(false)
+  // Closing a pane unpins it, and a chat that waits for the person keeps waiting unseen, so the first press only asks.
+  const [confirmClose, setConfirmClose] = useState(false)
+  useEffect(() => {
+    if (!confirmClose) return undefined
+    const timer = setTimeout(() => { setConfirmClose(false) }, CONFIRM_MS)
+    return () => { clearTimeout(timer) }
+  }, [confirmClose])
   const items = [
     ...controls.swapCandidates.map(other => ({ id: `swap:${other}`, label: `${t('action.swap')} · ${nameOf(other)}` })),
     ...(controls.swapCandidates.length > 0 && controls.moveOptions.length > 0 ? [{ type: 'separator' as const, id: 'separator' }] : []),
@@ -135,8 +145,20 @@ export function PaneHeader(props: PaneHeaderProps) {
             </Tooltip>
           )}
           {controls.canClose && (
-            <Tooltip label={t('action.close')} side="bottom" delayMs={500} portal>
-              <button type="button" className={css.action} aria-label={t('action.close')} onClick={onClose}><IconCloseOutlineRegular size={14} /></button>
+            <Tooltip label={waiting ? t('close.waiting') : t('action.close')} side="bottom" delayMs={500} portal>
+              <button
+                type="button"
+                className={css.action}
+                data-confirming={confirmClose || undefined}
+                aria-label={confirmClose ? t('close.confirm') : t('action.close')}
+                onClick={() => {
+                  if (waiting && !confirmClose) { setConfirmClose(true); return }
+                  setConfirmClose(false)
+                  onClose()
+                }}
+              >
+                {confirmClose ? <span className={css.confirm}>{t('close.confirm')}</span> : <IconCloseOutlineRegular size={14} />}
+              </button>
             </Tooltip>
           )}
         </span>}

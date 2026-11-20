@@ -294,7 +294,9 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'conversation.hero.workspace': { kind: 'single'; scope: 'root'; owner: EmptyWorkspaceOwnerProps }
     /**
      * Layers wrapping the main Conversation's content, the transcript and composer under the header. The header stays outside;
-     * a layer renders its `children` to leave the content as it is, or arranges it with other surfaces.
+     * a layer renders its `children` exactly once while it is mounted, leaving the content as it is or arranging it with other surfaces.
+     * The content holds the main chat's pending approval card, so a layer that hides it shows a visible notice that the chat waits.
+     * Approval safety rests on the Host's grants, not on this slot.
      */
     'conversation.main.body': { kind: 'hoc'; scope: 'session-maybe' }
     /** Layers wrapping the Conversation scroll body; `hero` reports a blank, standalone home. */

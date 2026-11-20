@@ -1,7 +1,8 @@
 /**
  * The phone pager: one page per chat (the main chat, then each pinned agent), swiped sideways with native scroll snap. A strip of
  * name chips on top jumps to a page and shows an amber dot where an agent needs the person; dots at the bottom show the position.
- * Pages that are neither shown nor adjacent keep their wrapper but render no body, so only three transcripts are in the DOM.
+ * Pages that are neither shown nor adjacent keep their wrapper but render no body, so only three transcripts are in the DOM, except a
+ * page that needs the person: its body stays mounted, so its approval card is never out of reach.
  * The pager owns no session state: the panel lane supplies the pages and renders each body.
  * @module @delorun/plugin-multiview/phone/PhonePager
  */
@@ -226,7 +227,7 @@ export function PhonePager(props: PhonePagerProps): JSX.Element {
             // Off-screen pages take no focus, so Tab cannot scroll the pager away from the page the state names.
             {...(index === activeIndex ? {} : { inert: '' })}
           >
-            {isMounted(index, activeIndex) ? renderPage(page.id, { active: index === activeIndex }) : null}
+            {isMounted(index, activeIndex) || page.needsAttention ? renderPage(page.id, { active: index === activeIndex }) : null}
           </div>
         ))}
       </div>

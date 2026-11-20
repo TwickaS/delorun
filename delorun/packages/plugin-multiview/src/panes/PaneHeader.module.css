@@ -22,3 +22,5 @@
 /* A narrow pane keeps name, badge and actions on the row; the task gives way first. */
 @container (max-width: 420px) { .task { display: none; } }
 @media (pointer: coarse) { .action { width: 44px; height: 44px; } }
+.action[data-confirming] { width: auto; padding: 0 8px; background: var(--dsw-alias-state-warn-tertiary); color: var(--dsw-alias-state-warn-label); }
+.confirm { font-size: 11px; font-weight: 600; white-space: nowrap; }
