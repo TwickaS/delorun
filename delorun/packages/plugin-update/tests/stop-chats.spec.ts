@@ -6,7 +6,7 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { fromDevice, get, json, post, send } from '../../plugin-changes/tests/routes-fixture.ts'
+import { CREDENTIAL, fromDevice, get, json, post, send } from '../../plugin-changes/tests/routes-fixture.ts'
 import { UPDATE_PATHS } from '../src/wire.ts'
 import { readStopped, stoppedPath, withStoppedLock, writeStopped } from '../src/stopped.ts'
 import { serveUpdate, updateWaiting, writeResult, type UpdateServer } from './update-fixture.ts'
@@ -21,7 +21,7 @@ describe('the stop-chats route', () => {
     const update = await serveUpdate({ powers: 'full' })
     updateWaiting(update)
     update.chats.running = [...RUNNING]
-    const cross = await send(update.server.port, UPDATE_PATHS.stopChats, { method: 'POST', headers: ['Sec-Fetch-Site: cross-site'], body: {}, withholdBody: true })
+    const cross = await send(update.server.port, UPDATE_PATHS.stopChats, { method: 'POST', headers: [CREDENTIAL, 'Sec-Fetch-Site: cross-site'], body: {}, withholdBody: true })
     expect(cross.status).toBe(403)
     for (const unlock of ['none', 'grace'] as const) {
       const refused = await send(update.server.port, UPDATE_PATHS.stopChats, fromDevice(unlock, {}))
@@ -86,10 +86,13 @@ describe('the stop-chats route', () => {
 
 describe('the stopped chats in the state, and the continue-chat route', () => {
   /** Stop two chats through the route. */
-  async function stopped(update: UpdateServer): Promise<void> {
+  async function stopped(update: UpdateServer, automatic = true): Promise<void> {
+    update.setting.automatic = automatic
     updateWaiting(update)
     update.chats.running = [...RUNNING]
     await post(update.server.port, UPDATE_PATHS.stopChats, {})
+    // The update has since ended without restarting, so Continue is allowed.
+    update.channel.answers.set('status', [{ ok: true, status: { state: 'running', pid: 1, startId: 's', runtime: { current: '0.1.0', running: '0.1.0' }, chats: 0 } }])
   }
 
   it('shows each stopped chat with its state, and the setting', async () => {
@@ -102,7 +105,7 @@ describe('the stopped chats in the state, and the continue-chat route', () => {
 
   it('sends the continue message once per chat: marked before it is sent, and a second press is refused', async () => {
     const update = await serveUpdate()
-    await stopped(update)
+    await stopped(update, false)
     const first = await post(update.server.port, UPDATE_PATHS.continueChat, { sessionId: 's-1' })
     expect(json(first)).toEqual({ state: 'continued' })
     expect(update.sent.ids).toEqual(['s-1'])
@@ -113,7 +116,7 @@ describe('the stopped chats in the state, and the continue-chat route', () => {
 
   it('refuses a chat the update did not stop, and notes a chat that no longer exists', async () => {
     const update = await serveUpdate()
-    await stopped(update)
+    await stopped(update, false)
     expect(json(await post(update.server.port, UPDATE_PATHS.continueChat, { sessionId: 'other' }))).toMatchObject({ code: 'NOT_STOPPED_BY_UPDATE' })
     expect((await post(update.server.port, UPDATE_PATHS.continueChat, { sessionId: 7 })).status).toBe(400)
     update.sent.answer = 'skipped-missing'
@@ -152,6 +155,8 @@ describe('an update cancelled after the stop', () => {
     update.sent.answers = { 's-1': 'skipped-running', 's-2': 'skipped-missing' }
     await cancelled(update)
     expect((await readStopped(recordPath(update)))?.chats).toEqual([{ ...RUNNING[0], state: 'skipped-running' }])
+    update.channel.answers.set('status', [{ ok: true, status: { state: 'running', pid: 1, startId: 's', runtime: { current: '0.1.0', running: '0.1.0' }, chats: 0 } }])
+    update.sent.answers = {}
     expect(json(await post(update.server.port, UPDATE_PATHS.continueChat, { sessionId: 's-1' }))).toEqual({ state: 'continued' })
   })
 

@@ -362,7 +362,7 @@ export function updateRoutes(dependencies: UpdateRouteDependencies): readonly Up
       const before = await readStopped(path)
       const kept = (before?.chats ?? []).filter(chat => !chats.some(running => running.sessionId === chat.sessionId))
       await writeStopped(path, {
-        v: 1, to: status.update.target, automatic: dependencies.continueAutomatically(), at: new Date(now()).toISOString(),
+        v: 1, to: status.update.target, automatic: dependencies.continueAutomatically(), at: new Date().toISOString(),
         chats: [...kept, ...chats.map(chat => ({ ...chat, state: 'stopped' as const }))],
       })
       await source.cancelAll()
