@@ -123,6 +123,8 @@ The data file has this shape:
 }
 ```
 
+`publicFrom` is optional and names the first version the public changelog shows. `CHANGELOG.md`, the release notes and the documentation site's changelog leave out every version, and every folded preview, before it; the entries stay in `versions` so the updater can still read the notes of an update from an earlier build, and the standing comparison is unchanged. Reading the file refuses a `publicFrom` that is not an accepted version. A file without the field shows every version.
+
 `previews` holds the previews that a final version folded in, newest first, each with its `version`, `date`, `areas` and `fromUpstream` items; it is empty for a preview and for a version that had none.
 
 `headlines` holds up to three plain sentences, written for people, that say what a person can now do with the version. They come from `--headline <sentence>` (repeat it up to three times) at assembly, open the version's entry and release notes, and feed the "What's new" strip on both sites; a version assembled without any has no field and no strip.

@@ -8,7 +8,7 @@
  */
 import { basename } from 'node:path'
 import { AREAS, type Area, type Fragment, type Section } from './fragment.ts'
-import { compareVersions, isPreview, releaseOf } from './version.ts'
+import { compareVersions, isPreview, releaseOf, versionErrors } from './version.ts'
 
 /** The `schema` value of the data file. */
 export const CHANGELOG_SCHEMA = 'delorun.changelog/1'
@@ -94,6 +94,12 @@ export interface ChangelogData {
   readonly schema: typeof CHANGELOG_SCHEMA
   /** The upstream release the comparison is against, from the divergence ledger. */
   readonly upstream: { readonly ref: string; readonly commit: string }
+  /**
+   * The first version the public changelog shows: every public rendering (`CHANGELOG.md`, the release notes and the
+   * documentation site) leaves out the versions and folded previews before it. Earlier entries stay in `versions` for
+   * the updater's notes. Absent means every version is public.
+   */
+  readonly publicFrom?: string
   /** What differs from that upstream release in the latest assembled state, by area. */
   readonly compared: readonly ComparedItem[]
   /** Every assembled version, newest first, with folded previews inside their final version. */
@@ -225,7 +231,18 @@ function fold(versions: readonly VersionEntry[], version: string): { readonly pr
  */
 export function addVersion(existing: ChangelogData | undefined, upstream: ChangelogData['upstream'], entry: VersionEntry, compared: readonly ComparedItem[]): ChangelogData {
   const { rest } = fold(existing?.versions ?? [], entry.version)
-  return { schema: CHANGELOG_SCHEMA, upstream, compared, versions: [entry, ...rest].sort((a, b) => compareVersions(b.version, a.version)) }
+  return { schema: CHANGELOG_SCHEMA, upstream, ...existing?.publicFrom === undefined ? {} : { publicFrom: existing.publicFrom }, compared, versions: [entry, ...rest].sort((a, b) => compareVersions(b.version, a.version)) }
+}
+
+/**
+ * The versions the public changelog shows.
+ * @param data - the data file.
+ * @returns the entries at or after `publicFrom`, newest first, each without the folded previews before it; every entry when `publicFrom` is absent.
+ */
+export function publicVersions(data: ChangelogData): VersionEntry[] {
+  const { publicFrom } = data
+  if (publicFrom === undefined) return [...data.versions]
+  return data.versions.filter(entry => compareVersions(entry.version, publicFrom) >= 0).map(entry => ({ ...entry, previews: entry.previews.filter(preview => compareVersions(preview.version, publicFrom) >= 0) }))
 }
 
 /**
@@ -344,7 +361,7 @@ function renderCompared(data: ChangelogData): string {
  * @returns the document: the title, the standing comparison, then every version newest first.
  */
 export function renderChangelog(data: ChangelogData): string {
-  return ['# Changelog', '', renderCompared(data), ...data.versions.map(renderEntry)].join('\n')
+  return ['# Changelog', '', renderCompared(data), ...publicVersions(data).map(renderEntry)].join('\n')
 }
 
 /**
@@ -385,7 +402,7 @@ export function renderHighlights(entry: VersionEntry, maxBytes: number): string 
  * Read a data file's text.
  * @param text - the file text.
  * @returns the data.
- * @throws Error when the text is not JSON, has another schema, or lacks the version list the assembly reads.
+ * @throws Error when the text is not JSON, has another schema, lacks the version list the assembly reads, or has a `publicFrom` that is not an accepted version.
  */
 export function parseData(text: string): ChangelogData {
   let value: unknown
@@ -395,6 +412,10 @@ export function parseData(text: string): ChangelogData {
     throw new Error('delorun/changelog/changelog.json is not JSON', { cause: error })
   }
   const data = value as Partial<ChangelogData> | null
+  if (data?.publicFrom !== undefined) {
+    const refusals = typeof data.publicFrom === 'string' ? versionErrors(data.publicFrom, true) : ['it is not a string']
+    if (refusals.length > 0) throw new Error(`delorun/changelog/changelog.json: publicFrom is not an accepted version (${refusals.join('; ')})`)
+  }
   if (data?.schema !== CHANGELOG_SCHEMA || !Array.isArray(data.versions) || !Array.isArray(data.compared)) {
     throw new Error(`delorun/changelog/changelog.json is not a ${CHANGELOG_SCHEMA} document with versions and compared lists`)
   }

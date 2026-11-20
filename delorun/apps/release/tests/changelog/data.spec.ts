@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addVersion, buildCompared, buildEntry, CHANGELOG_SCHEMA, foldedPreviews, parseData, renderChangelog, renderEntry, renderHighlights, renderNotes, replacesErrors, type ChangelogData } from '../../src/changelog/data.ts'
+import { addVersion, buildCompared, buildEntry, CHANGELOG_SCHEMA, foldedPreviews, parseData, publicVersions, renderChangelog, renderEntry, renderHighlights, renderNotes, replacesErrors, type ChangelogData } from '../../src/changelog/data.ts'
 import type { Area, Fragment, Section } from '../../src/changelog/fragment.ts'
 
 const UPSTREAM = { ref: 'dsh-v0.2.2-rc.1', commit: 'a'.repeat(40) }
@@ -200,5 +200,36 @@ describe('the data file', () => {
     expect(() => parseData('null')).toThrow('not a delorun.changelog/1 document')
     expect(() => parseData(JSON.stringify({ schema: 'other/1', versions: [], compared: [] }))).toThrow('not a delorun.changelog/1 document')
     expect(() => parseData(JSON.stringify({ schema: CHANGELOG_SCHEMA, versions: {}, compared: [] }))).toThrow('not a delorun.changelog/1 document')
+  })
+})
+
+describe('the public view of the data file', () => {
+  const two = assemble(assemble(undefined, '0.1.0-preview.1', FRAGMENTS.slice(0, 1)), '0.1.0-preview.2', FRAGMENTS.slice(1, 2))
+  const data: ChangelogData = { ...two, publicFrom: '0.1.0-preview.2' }
+
+  it('leaves out the versions before publicFrom and keeps publicFrom itself', () => {
+    expect(publicVersions(data).map(entry => entry.version)).toEqual(['0.1.0-preview.2'])
+    const text = renderChangelog(data)
+    expect(text).toContain('## 0.1.0-preview.2 ')
+    expect(text).not.toContain('## 0.1.0-preview.1 ')
+    expect(data.versions.map(entry => entry.version)).toEqual(['0.1.0-preview.2', '0.1.0-preview.1'])
+  })
+
+  it('shows every version when publicFrom is absent', () => {
+    expect(publicVersions(two).map(entry => entry.version)).toEqual(['0.1.0-preview.2', '0.1.0-preview.1'])
+  })
+
+  it('leaves out the folded previews before publicFrom', () => {
+    const final = addVersion({ ...two, publicFrom: '0.1.0-preview.2' }, UPSTREAM, buildEntry('0.1.0', '2026-11-12', UPSTREAM.ref, FRAGMENTS.slice(2, 3), foldedPreviews(two, '0.1.0')), [])
+    expect(final.publicFrom).toBe('0.1.0-preview.2')
+    expect(publicVersions(final)[0]?.previews.map(preview => preview.version)).toEqual(['0.1.0-preview.2'])
+    expect(final.versions[0]?.previews.map(preview => preview.version)).toEqual(['0.1.0-preview.2', '0.1.0-preview.1'])
+  })
+
+  it('refuses a publicFrom that is not an accepted version', () => {
+    expect(parseData(JSON.stringify(data)).publicFrom).toBe('0.1.0-preview.2')
+    for (const publicFrom of ['nope', 7, '0.1.0-preview.0']) {
+      expect(() => parseData(JSON.stringify({ ...data, publicFrom }))).toThrow('publicFrom is not an accepted version')
+    }
   })
 })
