@@ -27,7 +27,7 @@ kind: "package-reference"
 
 命令 `terminal.new` 在焦点停靠分栏创建独立终端，替换开始页并保留已有内容页。从聊天区或浮动内容页触发时，使用活动停靠分栏。开始页卡片右侧对齐显示当前有效快捷键的无背景文字，不额外弹出重复提示。Windows 和 macOS Web 使用[快捷键服务的平台默认值](../shortcuts/README.zh.md)；Linux Web 默认不绑定此命令。
 
-展开右侧栏，点击**新建终端**即可直接打开上次选择且仍可用的 shell。标题旁的独立箭头展开已安装 shell 菜单；选择后立即记住该项并打开终端。菜单展开时才查询 shell，不分配终端进程；查询失败可在菜单内重试。通过**新标签页**回到开始页并打开更多终端。
+Open the right sidebar and click **New terminal** to open the remembered available shell immediately. The separate arrow in its own column at the right edge of the card opens the installed-shell menu; selecting an item remembers it and opens that shell directly. Discovery runs when the menu opens and does not allocate a terminal. A failed lookup offers Retry in the menu. Use **New tab** to return to the guide and open another terminal.
 
 Double-click the terminal's tab title to rename it. **Take control** makes the current attachment writable when another page owns input. A temporary disconnect preserves the screen and offers **Reconnect**, without exposing transport diagnostics. An exited shell remains visible with its exit code and offers **New terminal**; it never restarts automatically. A terminal the person did not confirm on a device says "Not confirmed. The terminal did not start." and offers **Retry**, which asks again. Exited terminals count toward the Session limit; close unused tabs when the limit is reached.
 

@@ -11,7 +11,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { FaceGrantRequest } from '@delorun/plugin-changes/face-grant'
 import { createPacksClient } from '@delorun/plugin-packs/client'
-import { hashArgs as homeHashArgs, hashRequest as homeHashRequest } from '../../home-auth/src/grants.ts'
+import { hashArgs, hashRequest } from '../src/client/face-id-hash.ts'
 import { createFaceGrantSource, type FaceGrantSource } from '../src/client/face-grant.ts'
 import { en } from '../src/client/face-id-locales.ts'
 import { fakeApi, fakeBrowser } from '../src/client/face-id-fake.ts'
@@ -137,7 +137,7 @@ describe('a Remote call the home refuses for want of a grant', () => {
     const { sent, title } = await answer(source, api, 'faceId')
     await expect(lifted).resolves.toBe(true)
     expect(title).toContain('Install a plugin')
-    expect(sent).toEqual({ actions: [{ action: 'pluginManager/installBundle', hash: homeHashArgs(ARGS) }] })
+    expect(sent).toEqual({ actions: [{ action: 'pluginManager/installBundle', hash: await hashArgs(ARGS) }] })
   })
 
   // Removing the reason check would ask for Face ID where no grant can help, such as a computer-only action.
@@ -167,7 +167,7 @@ describe('a Remote call the home refuses for want of a grant', () => {
     await expect(lifted).resolves.toBe(true)
     expect(title).toContain('Save a model key')
     expect(api.calls.some(entry => entry.name === 'options')).toBe(false)
-    expect(sent).toMatchObject({ actions: [{ action: 'credentials/set', hash: homeHashArgs({ ref: 'DEEPSEEK_API_KEY', value: 'sk-new' }) }], secret: 'correct horse' })
+    expect(sent).toMatchObject({ actions: [{ action: 'credentials/set', hash: await hashArgs({ ref: 'DEEPSEEK_API_KEY', value: 'sk-new' }) }], secret: 'correct horse' })
   })
 
   // Without the hold, every later read of the new terminal would ask again.
@@ -178,7 +178,7 @@ describe('a Remote call the home refuses for want of a grant', () => {
     const { sent, title } = await answer(source, api, 'faceId')
     await expect(lifted).resolves.toBe(true)
     expect(title).toContain('Open a terminal')
-    expect(sent).toEqual({ actions: [{ action: 'terminal/create', hash: homeHashArgs(created), hold: { feature: 'terminal', id: 'term-1' } }] })
+    expect(sent).toEqual({ actions: [{ action: 'terminal/create', hash: await hashArgs(created), hold: { feature: 'terminal', id: 'term-1' } }] })
   })
 
   // Without the hold, a reloaded terminal tab asks again for each of its streams.
@@ -190,7 +190,7 @@ describe('a Remote call the home refuses for want of a grant', () => {
     const { sent, title } = await answer(source, api, 'faceId')
     await expect(lifted).resolves.toBe(true)
     expect(title).toContain('Open a terminal')
-    expect(sent).toEqual({ actions: [{ action: endpoint, hash: homeHashArgs(args), hold: { feature: 'terminal', id: 'term-2' } }] })
+    expect(sent).toEqual({ actions: [{ action: endpoint, hash: await hashArgs(args), hold: { feature: 'terminal', id: 'term-2' } }] })
   })
 
   // Asking about a call the studio sends on load or reconnect puts a sheet nobody asked for in front of the person,
@@ -207,7 +207,7 @@ describe('a Remote call the home refuses for want of a grant', () => {
     const { sent, title } = await answer(source, api, 'faceId')
     await expect(install).resolves.toBe(true)
     expect(title).toContain('Install a plugin')
-    expect(sent).toEqual({ actions: [{ action: 'pluginManager/installBundle', hash: homeHashArgs(ARGS) }] })
+    expect(sent).toEqual({ actions: [{ action: 'pluginManager/installBundle', hash: await hashArgs(ARGS) }] })
     await new Promise(resolve => setTimeout(resolve, 0))
     expect(source.hooks.pending.getSnapshot()).toBeNull()
   })
@@ -247,7 +247,7 @@ describe('a Remote call the home refuses for want of a grant', () => {
     const { sent, title } = await answer(source, api, 'faceId')
     await expect(lifted).resolves.toBe(true)
     expect(title).toContain('Browse your computer')
-    expect(sent).toEqual({ actions: [{ action: 'directoryPicker/list', hash: homeHashArgs({ path: '/home/me' }), hold: { feature: 'picker', id: PICKER_HOLD_ID } }] })
+    expect(sent).toEqual({ actions: [{ action: 'directoryPicker/list', hash: await hashArgs({ path: '/home/me' }), hold: { feature: 'picker', id: PICKER_HOLD_ID } }] })
   })
 
   // Without the queue the second refusal would end the first confirmation as cancelled.
@@ -274,7 +274,7 @@ describe('a plugin Fetch call the home refuses for want of a grant', () => {
     expect((await answered).status).toBe(200)
     expect(title).toContain('Install a plugin')
     const path = '/studio/api/delorunPacks.add?from=card'
-    expect(sent).toEqual({ actions: [{ action: 'plugin-packs/add', hash: homeHashRequest({ method: 'POST', path, body: new TextEncoder().encode(body) }) }] })
+    expect(sent).toEqual({ actions: [{ action: 'plugin-packs/add', hash: await hashRequest({ method: 'POST', path, body }) }] })
     expect(send).toHaveBeenCalledTimes(2)
     expect(new Headers(send.mock.calls[1]?.[1]?.headers).get(GRANT_HEADER)).toBe('g1')
     expect(new Headers(send.mock.calls[1]?.[1]?.headers).get('content-type')).toBe('application/json')

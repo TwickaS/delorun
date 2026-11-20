@@ -3115,6 +3115,18 @@
       "class": "delorun-feature",
       "feature": "external-agents",
       "reason": "The machine record of the persistence acknowledgement for the `external-agent/run-allowed` Session event, written by `persistence-changes --record` beside its bilingual prose."
+    },
+    {
+      "path": "packages/client/ui-sidebar-terminal/src/client/TerminalGuide.module.css",
+      "class": "delorun-feature",
+      "feature": "studio-seams",
+      "reason": "phone layout of Choose shell (Face ID e2e F-3)"
+    },
+    {
+      "path": "packages/client/ui-sidebar-terminal/src/client/TerminalGuide.tsx",
+      "class": "delorun-feature",
+      "feature": "studio-seams",
+      "reason": "phone layout of Choose shell (Face ID e2e F-3)"
     }
   ],
   "retired": []

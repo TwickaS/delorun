@@ -4,7 +4,7 @@
  * @module @delorun/bundle-local/scripts/face-id-preview/main
  */
 import { createRoot } from 'react-dom/client'
-import { Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { ICON_SYMBOLS, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ReactNode } from 'react'
 import '../../../../../packages/client/ui-theme/src/styles/base.css'
 import '../../../../../packages/client/ui-theme/src/styles/design-platform.css'
@@ -24,6 +24,8 @@ import { PASSKEY_ROUTES } from '../../src/client/face-id-api.ts'
 import { FaceIdSection, type FaceIdSectionProps } from '../../src/client/FaceIdSection.tsx'
 import { en as devicesEn } from '../../src/client/devices-locales.ts'
 import { en } from '../../src/client/face-id-locales.ts'
+import { TerminalGuide, type TerminalGuideProps } from '../../../../../packages/client/ui-sidebar-terminal/src/client/TerminalGuide.tsx'
+import { en as terminalEn } from '../../../../../packages/client/ui-sidebar-terminal/src/client/locales.ts'
 import type { FaceIdAction, PasskeyDevice } from '../../src/client/face-id-types.ts'
 
 type Translate = Parameters<typeof FaceIdSheet>[0]['t']
@@ -119,6 +121,22 @@ function OverOverlays({ children }: { readonly children: ReactNode }): ReactNode
 }
 
 /**
+ * The right sidebar's New terminal entry with its Choose shell control, as the terminal provider draws it in the guide.
+ * @returns the entry.
+ */
+function TerminalGuideEntry(): ReactNode {
+  const props = {
+    title: terminalEn.new, description: terminalEn.description, kind: 'terminal',
+    t: (key: keyof typeof terminalEn) => terminalEn[key],
+    useTabInfo: () => ({ tab: { actions: { openTab: noop } } }),
+    useShortcuts: <S,>(select: (entries: readonly never[]) => S): S => select([]),
+    loadShells: async () => ({ shells: [{ name: 'bash', path: '/bin/bash' }, { name: 'zsh', path: '/bin/zsh' }], selectedShell: '/bin/bash' }),
+    selectShell: noop,
+  } as TerminalGuideProps
+  return <TerminalGuide {...props} />
+}
+
+/**
  * Build the chosen screen.
  * @param screen - the `screen` query value.
  * @returns the element, or an explanatory element for an unknown name.
@@ -158,6 +176,8 @@ function screenOf(screen: string): ReactNode {
     case 'b4-computer':
       return <PasskeyDevices t={t} api={fakeApi({ devices: COMPUTER_DEVICES })} browser={fakeBrowser()} kind="faceId" atComputer secret="pin"
         onAdd={noop} onAskComputer={noop} />
+    case 'terminal-guide':
+      return <TerminalGuideEntry />
     case 'devices-phone':
       return <PhoneDevices passkey />
     case 'devices-phone-nokey':
@@ -167,12 +187,26 @@ function screenOf(screen: string): ReactNode {
   }
 }
 
+/* The studio's theme puts the product icons in a sprite that `<use href="#dsw-icon-…">` reads; the preview builds the same. */
+const sprite = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+sprite.setAttribute('aria-hidden', 'true')
+sprite.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden'
+for (const [id, markup] of Object.entries(ICON_SYMBOLS)) {
+  const root = new DOMParser().parseFromString(markup, 'image/svg+xml').documentElement
+  const symbol = document.createElementNS('http://www.w3.org/2000/svg', 'symbol')
+  for (const { name, value } of root.attributes) if (!['width', 'height', 'xmlns', 'class', 'aria-hidden'].includes(name)) symbol.setAttribute(name, value)
+  symbol.id = id
+  symbol.append(...[...root.childNodes].map(node => document.importNode(node, true)))
+  sprite.append(symbol)
+}
+document.body.prepend(sprite)
+
 /* The studio sets the face and the page colours on `body`; the preview does the same. */
 document.body.style.cssText = 'margin: 0; font-family: var(--dl-font-sans); background: var(--dsw-alias-bg-layer-0); color: var(--dsw-alias-label-primary);'
 const query = new URLSearchParams(window.location.search)
 if (query.get('theme') === 'dark') document.body.dataset.dsDarkTheme = ''
 document.documentElement.style.colorScheme = query.get('theme') === 'dark' ? 'dark' : 'light'
-const wrap = query.get('screen')?.startsWith('b4') === true || query.get('screen') === 'code-entry' || query.get('screen')?.startsWith('devices-phone') === true
+const wrap = query.get('screen')?.startsWith('b4') === true || query.get('screen') === 'code-entry' || query.get('screen')?.startsWith('devices-phone') === true || query.get('screen') === 'terminal-guide'
 const screen = screenOf(query.get('screen') ?? '')
 const root = document.getElementById('root')
 if (root === null) throw new Error('no #root')
