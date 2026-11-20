@@ -60,7 +60,7 @@ export type DownloadsLocaleKey = keyof typeof en
 export const zh: typeof en = {
   'title': '下载',
   'header': '还剩 {left} 个待安装',
-  'header.waitingUnlock': 'Not confirmed',
+  'header.waitingUnlock': '未确认',
   'header.attention.one': '{n} 个插件未能安装',
   'header.attention.other': '{n} 个插件未能安装',
   'summary.one': '已添加 {n} 个插件',
@@ -73,7 +73,7 @@ export const zh: typeof en = {
   'state.queued': '排队中 · 前面还有 {ahead} 个',
   'state.queuedNext': '排队中 · 下一个',
   'state.queuedNoPosition': '等待中',
-  'state.waitingForUnlock': 'Not confirmed. Try again to confirm with Face ID or your PIN',
+  'state.waitingForUnlock': '未确认。请重试，并用 Face ID 或你的 PIN 确认',
   'state.verifying': '正在检查',
   'state.installing': '正在安装',
   'state.ready': '已添加',

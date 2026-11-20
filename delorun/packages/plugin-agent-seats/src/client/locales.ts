@@ -71,9 +71,9 @@ export const zh: Record<AgentSeatsLocaleKey, string> = {
   'chip.version': '{agent} {version}',
   'chip.settings': '你的自有设置:{settings}',
   'chip.settingsUnknown': '你的自有设置',
-  'chip.sandboxed': 'Sandboxed',
-  'chip.noSandbox': 'No sandbox',
-  'chip.sandboxOwn': 'Own sandbox settings',
+  'chip.sandboxed': '沙箱内',
+  'chip.noSandbox': '无沙箱',
+  'chip.sandboxOwn': '自有沙箱设置',
   'chip.fiveHour': '5 小时额度 {percent}% · {time} 重置',
   'chip.fiveHourNoReset': '5 小时额度 {percent}%',
   'chip.weekly': '每周 {percent}%',
@@ -118,8 +118,8 @@ export const zh: Record<AgentSeatsLocaleKey, string> = {
   'approval.reject': '拒绝',
   'approval.forRun': '本次运行内允许',
   'approval.once': '仅允许一次',
-  'approval.locked': 'Allow this at your computer. A phone can reject it.',
-  'approval.notConfirmed': 'Not confirmed. Nothing was sent.',
+  'approval.locked': '请在你的电脑上允许此操作。手机可以拒绝。',
+  'approval.notConfirmed': '未确认，没有发送任何内容。',
 }
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
