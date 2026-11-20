@@ -81,4 +81,4 @@ Implement `StudioBrowser` (`id`, `check()`, `run(spec)`), add it to `ADAPTERS` i
 - Only loopback studio addresses are reachable, and that is not configurable: there is no flag or variable that widens it. Do not edit the check to allow another host.
 - The `browse` adapter drives the person's real browser profile, with their signed-in sites. Each run uses its own session, limited to the studio's origin, and deletes it. Confirm with `browse session list` that no `delorun-studio-` session remains after a failure. Never adopt, read or close a tab the run did not open.
 - A `browse` script does not write files: `browse` refuses `page.screenshot({ path })` outside its own file roots. Use the `playwright` adapter's `--screenshot`.
-- A live model or provider is used only with the owner's approval.
+- A live model or provider is used only with a maintainer's approval.

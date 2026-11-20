@@ -25,12 +25,17 @@ Delorun's studio is upstream's studio, improved where the improvement wins and a
 - Radius, spacing, density, elevation, type and the state roles are tokens. Delorun CSS uses tokens only: no literal colours, radii or static values, which a check rejects.
 - Reuse upstream's role names (`--dsw-alias-*`) and add a role only when none fits. Text contrast is at least 4.5:1, which the theme's gate test checks.
 
+## Fill the screen
+
+- No large empty bands. Key controls, such as code or PIN cells and the controls of single-purpose screens, size relative to their container and fill the available width.
+- Check each layout at 390 px and at 1440 px wide. Text inputs on touch devices are at least 16 px.
+
 ## Act only for the person
 
 - Never send a message on the person's behalf. A plugin that prepares a prompt writes it into the composer, and the person sends it; a start message is written once, into a chat that has never sent.
 - Notices do not interrupt. An update or a status change is a small row with a popover, never a modal; a modal is for a decision the person must make before continuing.
 - Choices from a small fixed set are a menu or chips, not a free text box.
 
-## Work with the owner
+## Work in approved steps
 
-Product experience changes in owner-approved steps: propose a small step with a sample or screenshot, get it approved, then build the next. Do not build a whole redesign ahead of approval.
+Product experience changes in maintainer-approved steps: propose a small step with a sample or screenshot, get it approved, then build the next. Do not build a whole redesign ahead of approval.
