@@ -40,7 +40,7 @@ export const gateEn = {
 /** Chinese copy of {@link Gate}. */
 export const gateZh: typeof gateEn = {
   'gate.computer': '请在你的电脑上进行此操作：{reason}',
-  'gate.face': 'This needs Face ID, or your PIN, each time. Try again to confirm it.',
+  'gate.face': '这需要每次都使用 Face ID 或你的 PIN。请重试并确认。',
 }
 
 /** A key of {@link gateEn}. */

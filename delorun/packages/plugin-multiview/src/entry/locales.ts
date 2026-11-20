@@ -31,5 +31,30 @@ export const en = {
 /** A key of the dictionaries. */
 export type MultiviewLocaleKey = keyof typeof en
 
-/** Chinese dictionary: the English copy until the translation pass. */
-export const zh: Record<MultiviewLocaleKey, string> = { ...en }
+/** Chinese dictionary. */
+export const zh: Record<MultiviewLocaleKey, string> = {
+  'pin': '固定到多视图',
+  'pin.aria': '将 {agent} 固定到多视图',
+  'unpin': '从多视图取消固定',
+  'unpin.aria': '将 {agent} 从多视图取消固定',
+  'pin.refused.max-panes': '多视图已满：最多 {max} 个窗格。请取消固定一个智能体，或在“设置”中提高上限。',
+  'pin.refused.no-room': '窗口已没有空间再放一个窗格。请放大窗口，或取消固定一个智能体。',
+  'footer.status': '已固定 {pinned} 个 · 还可再放 {free} 个',
+  'footer.statusFull': '已固定 {pinned} 个 · 没有空间再放了',
+  'footer.pinRunning': '固定运行中的',
+  'footer.pinRunning.none': '没有可固定的运行中智能体',
+  'footer.pinRunning.allPinned': '所有运行中的智能体都已固定',
+  'footer.open': '打开多视图',
+  'footer.close': '关闭多视图',
+  'button': '多视图',
+  'button.aria': '多视图',
+  'button.count': '已固定 {count} 个',
+  'button.waiting': '有智能体在等你',
+  'button.open.none': '暂无内容可显示：请从智能体列表固定一个智能体，或启动一个。',
+  'layout': '布局',
+  'layout.main-column': '主窗格加侧栏',
+  'layout.side-by-side': '并排',
+  'layout.grid': '网格',
+  'layout.main-top': '主窗格在上',
+  'layout.reset': '恢复默认',
+}

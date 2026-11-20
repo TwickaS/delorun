@@ -111,7 +111,7 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
 
   close: '关闭',
 
-  creatorDraft: '让 Agent 帮我创建预设模式',
+  creatorDraft: '让 Agent 帮我创建一个模式',
   createPlugin: '让 Agent 创建插件',
   createPluginDescription: '进入创造模式，制作属于你的 DSH 插件',
   createPluginChecking: '正在确认创造模式是否可用',
