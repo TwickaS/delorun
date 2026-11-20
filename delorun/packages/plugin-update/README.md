@@ -14,6 +14,7 @@ This package is the Host half of the studio's update ([update and rollback](../.
 
 - [Routes](#routes)
 - [Who may use each control](#who-may-use-each-control)
+- [Chats stopped for an update](#chats-stopped-for-an-update)
 - [What the Host keeps](#what-the-host-keeps)
 - [Configuration](#configuration)
 - [Tests](#tests)
