@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "External agents gate",
+    "description": "Starts Claude Code or Codex for a chat only through one checked path, with a limit on live programs, and refuses a start once a plan limit is reached"
+  }
+}
