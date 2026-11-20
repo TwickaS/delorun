@@ -10,7 +10,7 @@ English | [中文](use-your-own-browser.zh.md)
 
 This page shows how to let the agent work in your own Chrome, where you are already signed in, for a task you are watching. It helps when a task needs your accounts, such as filling in a form on a site you use or reading your own dashboard. You need Delorun running and Chrome (or another Chromium-based browser such as Edge or Brave) on the same computer. The agent works in your browser through [browse](https://github.com/anomalyco/browse), an open-source extension and helper made by Anomaly. Delorun ships its own copy of browse, so you install nothing yourself apart from the extension.
 
-Your own browser is never used on its own. The agent asks first, in the [chat](../reference/glossary.md#chat), and only a chat you allow can use it. The isolated browser of the **Browser** pack stays as it is.
+Your own browser is never used on its own. The agent asks first, in the [chat](../reference/glossary.md#chat), and only a chat you allow can use it. The isolated browser of the **Browser** pack stays as it is: it is on unless you turn it off in Settings, under **Browser**, and the first time it is used Delorun adds the pack and downloads its browser part, which can take a few minutes. If Chrome is installed, Delorun uses it first; otherwise it downloads its own Chromium. **Settings → Browser** shows the progress and, if the download cannot finish (no connection, a refused pack or no Chrome found), what to do, with **Try again**.
 
 ## Contents
 

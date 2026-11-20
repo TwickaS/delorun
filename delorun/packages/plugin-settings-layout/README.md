@@ -35,6 +35,7 @@ The navigation has five groups: General, Agent, Safety, Devices and Data. Each p
 | Agent | Modes | Upstream's agent presets | section `agent-presets` |
 | Agent | Tools | Tool settings: a link to each tool's page in Plugins | section `delorun-tool-settings` |
 | Agent | Plugins | Upstream's inventory of built-in plugins, the npm mirror switch, then Create a plugin, which keeps its own heading because the page title names only the inventory | sections `plugins`, `delorun-plugin-installs`, `delorun-create-plugin` |
+| Agent | Browser | Whether agents may use a web browser, its status, a download and a test | section `delorun-browser` |
 | Safety | Permissions | A New chats card with the default permission mode, then Full access and MCP servers | row `permission`; section `delorun-permissions` |
 | Safety | External agents | The delegation consent: the switch that asks before an external agent runs, its run time limit, and the agents allowed to start without asking, each with a revoke | section `delorun-external-agents` |
 | Safety | Network | Each workspace's network access for sandboxed commands and `web_fetch` | section `delorun-network` |

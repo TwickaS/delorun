@@ -8,7 +8,8 @@ import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { REQUIREMENT_ROUTES } from '../src/client/requirements-api.ts'
 import { BROWSE_PAIR_ROUTE } from '../src/client/browse-pair-api.ts'
-import { apply, browseDataDir, browseProgram, checkRequirements, hostEnvironment, isMet, launchesChrome, type BundleToCheck, type CheckEnvironment, type Need } from '../src/requirements.ts'
+import { BROWSER_INSTALL_ROUTE, BROWSER_TEST_ROUTE } from '../src/client/browser-check-api.ts'
+import { apply, browseDataDir, findBrowserKit, browseProgram, checkRequirements, hostEnvironment, isMet, launchesChrome, type BundleToCheck, type CheckEnvironment, type Need } from '../src/requirements.ts'
 
 const roots: string[] = []
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }) })
@@ -34,6 +35,14 @@ function bundle(declaration: unknown, rowIds: string[] = ['row']): BundleToCheck
 
 const program = { kind: 'program', names: ['tool'] }
 const command = { kind: 'command', command: 'brew install tool' }
+
+describe('finding the built-in browser', () => {
+  // A profile without the Browser pack lists no bundle of that name, so the page's test and download say it is not added.
+  it('says Browser is not added while the plugin manager lists no such bundle', async () => {
+    const scope = { get: (name: string) => ({ pluginManager: { listBundles: async () => [] }, profileContext: { installAnchor: '/none', dir: '/none' } } as Record<string, unknown>)[name], logger: () => ({ warn: vi.fn() }) }
+    expect(await findBrowserKit(scope as never)).toEqual({ kind: 'not-added' })
+  })
+})
 
 describe('a need', () => {
   it('finds a program on PATH, with Windows suffixes only on Windows', () => {
@@ -402,7 +411,7 @@ describe('the real computer', () => {
 })
 
 describe('the route', () => {
-  it('registers the read-only check and the pairing start, and answers the check in the asked language', async () => {
+  it('registers the read-only check, the pairing start and the Browser page test and download, and answers the check in the asked language', async () => {
     const target = bundle({ row: { needs: [{ kind: 'env', name: 'REQUIREMENTS_SPEC_UNSET' }], fix: command } })
     const registered: Array<{ path: string, methods: string[], fetch: (request: Request) => Promise<Response> }> = []
     const scope = {
@@ -415,9 +424,9 @@ describe('the route', () => {
       logger: () => ({ warn: vi.fn() }),
     }
     apply({ inject: (_names: string[], callback: (scope: unknown) => void) => { callback(scope) } } as never)
-    expect(registered.map(route => [route.path, route.methods])).toEqual([[BROWSE_PAIR_ROUTE, ['POST']], [REQUIREMENT_ROUTES.check, ['GET']]])
+    expect(registered.map(route => [route.path, route.methods])).toEqual([[BROWSER_TEST_ROUTE, ['POST']], [BROWSER_INSTALL_ROUTE, ['POST']], [BROWSE_PAIR_ROUTE, ['POST']], [REQUIREMENT_ROUTES.check, ['GET']]])
     // The bundle directory cannot be resolved from the scratch profile, so the route answers an empty check.
-    const response = await registered[1]!.fetch(new Request(`http://localhost${REQUIREMENT_ROUTES.check}?language=zh`))
+    const response = await registered[3]!.fetch(new Request(`http://localhost${REQUIREMENT_ROUTES.check}?language=zh`))
     expect(response.status).toBe(200)
     expect(response.headers.get('cache-control')).toBe('no-store')
     expect(await response.json()).toEqual({ rows: [], problems: [] })

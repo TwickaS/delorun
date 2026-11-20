@@ -33,6 +33,17 @@
     { "kind": "service", "name": "realBrowser", "side": "host", "source": "delorun/packages/browser-use-browse/src/index.ts" },
     { "kind": "service", "name": "delorunFullAccess", "side": "browser", "source": "delorun/packages/bundle-local/src/client/full-access.ts" },
     { "kind": "service", "name": "delorunNewWorkspace", "side": "browser", "source": "delorun/packages/plugin-new-workspace/src/client/index.ts" },
-    { "kind": "service", "name": "previewFlags", "side": "host", "source": "delorun/packages/preview-flags/src/index.ts" }
+    { "kind": "service", "name": "previewFlags", "side": "host", "source": "delorun/packages/preview-flags/src/index.ts" },
+    { "kind": "service", "name": "agentSeatReach", "side": "browser", "source": "delorun/packages/bundle-local/src/client/agent-seat-reach.ts" },
+    { "kind": "service", "name": "externalAgents", "side": "host", "source": "delorun/packages/external-agents/src/contract.ts" },
+    { "kind": "service", "name": "agentAccounts", "side": "host", "source": "delorun/packages/external-agents/src/contract.ts" },
+    { "kind": "service", "name": "seatPrograms", "side": "host", "source": "delorun/packages/plugin-agent-seats/src/executor/types.ts" },
+    { "kind": "service", "name": "changesGate", "side": "host", "source": "delorun/packages/plugin-changes/src/index.ts" },
+    { "kind": "service", "name": "delorunFaceGrant", "side": "browser", "source": "delorun/packages/plugin-changes/src/client/face-grant.ts" },
+    { "kind": "service", "name": "updateChannel", "side": "host", "source": "delorun/packages/plugin-update/src/index.ts" },
+    { "kind": "service", "name": "delorunUpdate", "side": "browser", "source": "delorun/packages/plugin-update/src/client/index.ts" },
+    { "kind": "event", "name": "delorun-update/open", "side": "browser", "source": "delorun/packages/plugin-update/src/client/index.ts" },
+    { "kind": "service", "name": "delorunUpdateChats", "side": "host", "source": "delorun/packages/plugin-update/src/chats.ts" },
+    { "kind": "service", "name": "multiview", "side": "browser", "source": "delorun/packages/plugin-multiview/src/client/contract.ts" }
   ]
 }

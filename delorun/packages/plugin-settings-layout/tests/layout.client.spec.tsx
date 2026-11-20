@@ -39,7 +39,7 @@ describe("Delorun's layout", () => {
     const nav = projectLayout(layout, SECTION_ROWS, REGISTERED_ITEMS)
     expect(nav.groups.map(group => [group.label, group.pages.map(page => page.label)])).toEqual([
       ['General', ['General', 'Appearance', 'Sidebar', 'Replies', 'Message box', 'Account']],
-      ['Agent', ['Models', 'Modes', 'Tools', 'Plugins']],
+      ['Agent', ['Models', 'Modes', 'Tools', 'Plugins', 'Browser']],
       ['Safety', ['Permissions', 'External agents', 'Network', 'Privacy', 'PIN mode']],
       ['Devices', ['Devices']],
       ['Data', ['Trash', 'Setup versions', 'Changes', 'About']],
@@ -64,6 +64,7 @@ describe("Delorun's layout", () => {
       Modes: ['agent-presets'],
       Tools: ['delorun-tool-settings'],
       Plugins: ['plugins', 'delorun-plugin-installs', 'delorun-create-plugin'],
+      Browser: ['delorun-browser'],
       Permissions: ['New chats: permission', 'delorun-permissions'],
       'External agents': ['delorun-external-agents'],
       Network: ['delorun-network'],

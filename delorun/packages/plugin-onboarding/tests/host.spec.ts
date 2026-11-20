@@ -29,13 +29,21 @@ const answers = (extra: object = {}) => JSON.stringify({ schemaVersion: 2, reach
 /** The configuration as plain values: each volatile field read. */
 function plain(value: object | undefined): OnboardingSettings {
   const config = Config(value)
-  return { done: config.done.get(), step: config.step.get(), plugins: [...config.plugins.get()], optionalRows: [...config.optionalRows.get()], pausedStart: config.pausedStart.get(), addWaitSeconds: config.addWaitSeconds.get() }
+  return { done: config.done.get(), step: config.step.get(), plugins: [...config.plugins.get()], optionalRows: [...config.optionalRows.get()], pausedStart: config.pausedStart.get(), addWaitSeconds: config.addWaitSeconds.get(), browser: config.browser.get(), browserPack: config.browserPack.get() }
 }
 
 describe('the configuration', () => {
+  // Browser is on until the person turns it off, so an empty choice must stay accepted and anything else but on or off refused.
+  it('keeps the Browser choice empty until the person chooses, and accepts only on or off', () => {
+    expect(plain({}).browser).toBe('')
+    expect(plain({ browser: 'on' }).browser).toBe('on')
+    expect(plain({ browser: 'off' }).browser).toBe('off')
+    expect(() => plain({ browser: 'maybe' })).toThrow()
+  })
+
   it('names the row, defaults to a profile that has not started and offers no packages', () => {
     expect(ONBOARDING_ROW_ID).toBe('delorun-onboarding')
-    expect(DEFAULT_SETTINGS).toEqual({ done: false, step: '', plugins: [], optionalRows: [], pausedStart: '', addWaitSeconds: 60 })
+    expect(DEFAULT_SETTINGS).toEqual({ done: false, step: '', plugins: [], optionalRows: [], pausedStart: '', addWaitSeconds: 60, browser: '', browserPack: '' })
     expect(plain(undefined)).toEqual(DEFAULT_SETTINGS)
   })
 
@@ -65,7 +73,7 @@ describe('the configuration', () => {
 
   it('accepts scoped and plain package names', () => {
     expect(plain({ plugins: ['@scope/plugin-name', 'plain.name'], step: 'thinking.reader', done: true, addWaitSeconds: 60 }))
-      .toEqual({ plugins: ['@scope/plugin-name', 'plain.name'], optionalRows: [], pausedStart: '', step: 'thinking.reader', done: true, addWaitSeconds: 60 })
+      .toEqual({ plugins: ['@scope/plugin-name', 'plain.name'], optionalRows: [], pausedStart: '', step: 'thinking.reader', done: true, addWaitSeconds: 60, browser: '', browserPack: '' })
   })
 })
 

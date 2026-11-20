@@ -1,22 +1,20 @@
 /**
  * Browser: whether agents may use a web browser, as the shared Browser choice (`@delorun/browser-setup`). For the home
- * the choice is the Browser plugin pack: the isolated browser adds it through the guide's installer, and No browser
- * turns it off. Under the choice the step says whether Browser is ready, read from the Host's requirement check, or
+ * the choice is the Browser plugin pack, on until the person turns it off: the isolated browser is the choice until
+ * then and adds the pack through the guide's installer, and No browser turns it off and records that. Under the choice the step says whether Browser is ready, read from the Host's requirement check, or
  * where adding the pack stands, and what the first chat that uses it asks. While the preview flag
  * `onboarding.previewSteps` is on, the planned third choice shows, disabled.
  */
-import { BROWSER_BUNDLE, browserAdded } from '@delorun/browser-setup'
-import { BrowserChoices, type BrowserChoice } from '@delorun/browser-setup/client'
+import { BrowserChoices } from '@delorun/browser-setup/client'
 import { PreviewFlagsProvider, usePreviewFlag } from '@delorun/preview-flags/client'
-import { useEffect, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import { PREVIEW_STEPS } from '../../preview-flags.ts'
-import type { TurnOffOutcome } from '../browser-pack.ts'
+import { useBrowser } from '../browser/use-browser.ts'
 import type { BundleView } from '../bundles.ts'
 import type { StepServices } from '../types.ts'
 import { Explain } from '../ui/Explain.tsx'
 import { StateLine } from '../ui/StateLine.tsx'
-import { useBundle, useRefresh, type StepProps } from './shared.ts'
+import type { StepProps } from './shared.ts'
 import css from './steps.module.css'
 
 /** The cards that say what to expect from Browser. */
@@ -64,51 +62,20 @@ function PackLine({ view, services, onRetry }: { readonly view: BundleView | und
  * @returns the content.
  */
 function BrowserBody({ services }: StepProps): ReactNode {
-  const { t, browser, bundles } = services
-  const readiness = useSyncExternalStore(browser.setup.subscribe, browser.setup.getSnapshot)
-  const view = useBundle(services, BROWSER_BUNDLE)
-  useRefresh(services, [BROWSER_BUNDLE])
-  // Read when the step opens, when the pack's state changes (it was just added or turned off), and when the window
-  // regains focus, so a need the person met in a terminal clears without leaving the step.
-  useEffect(() => {
-    void browser.setup.refresh()
-    const again = (): void => { void browser.setup.refresh() }
-    window.addEventListener('focus', again)
-    return () => { window.removeEventListener('focus', again) }
-  }, [browser.setup, view?.state])
+  const { t, browser } = services
   const planned = usePreviewFlag(PREVIEW_STEPS.id)
+  const { choice, view, readiness, on, result, working, retry, turnOn, turnOff } = useBrowser(services)
   const adding = view?.state === 'installing' || view?.state === 'slow'
-  const on = adding || view?.state === 'installed' || view?.state === 'restart' || browserAdded(readiness)
-  // What the person chose in this step; until then the choice is whether the pack is on.
-  const [wanted, setWanted] = useState<BrowserChoice | undefined>()
-  const [turnOff, setTurnOff] = useState<TurnOffOutcome | 'running' | undefined>()
-  const choice = wanted ?? (on ? 'isolated' : 'none')
-  const add = (): void => { void bundles.install(BROWSER_BUNDLE) }
-  const choose = (next: BrowserChoice): void => {
-    setWanted(next)
-    setTurnOff(undefined)
-    if (next === 'isolated') {
-      if (!on) add()
-      return
-    }
-    if (!on) return
-    setTurnOff('running')
-    void browser.turnOff().then((outcome) => {
-      setTurnOff(outcome)
-      // A pack that stays on is still the choice in effect.
-      if (outcome === 'failed') setWanted('isolated')
-      bundles.refresh([BROWSER_BUNDLE])
-    })
-  }
   return (
     <div className={css.stack}>
       <p className={css.lead}>{t('browser.lead')}</p>
-      <BrowserChoices t={t} choice={choice} onChoice={choose} disabled={adding || turnOff === 'running'} readiness={readiness} planned={planned}
-        notAdded={<PackLine view={view} services={services} onRetry={add} />}
+      <BrowserChoices t={t} choice={choice === 'on' ? 'isolated' : 'none'} onChoice={(next) => { void (next === 'isolated' ? turnOn() : turnOff()) }}
+        disabled={adding || working} readiness={readiness} planned={planned}
+        notAdded={<PackLine view={view} services={services} onRetry={retry} />}
         onRetry={() => { void browser.setup.refresh() }} onOpenSettings={browser.openSettings} />
       <div aria-live="polite">
-        {turnOff === 'restart' && <StateLine tone="info">{t('browser.turnOff.restart')}</StateLine>}
-        {turnOff === 'failed' && <StateLine tone="error">{t('browser.turnOff.failed')}</StateLine>}
+        {result.kind === 'done' && result.outcome === 'restart' && <StateLine tone="info">{t('browser.turnOff.restart')}</StateLine>}
+        {result.kind === 'failed' && <StateLine tone="error">{t(on ? 'browser.turnOff.failed' : 'browser.turnOn.failed')}</StateLine>}
       </div>
       <Explain heading={t('browser.expect')} cards={EXPECT.map(key => ({ key, title: t(`browser.expect.${key}.title`), text: t(`browser.expect.${key}.text`) }))} />
     </div>

@@ -11,9 +11,13 @@ import type { HostFetch } from '@delorun/bundle-local/host-api'
 import { readRequirements, type RequirementFix, type RequirementsAnswer } from '@delorun/bundle-local/requirements-api'
 
 export type { RequirementFix } from '@delorun/bundle-local/requirements-api'
+export { browserPageState, resolveBrowserSwitch, type BrowserFailure, type BrowserPageInput, type BrowserPageState, type BrowserSwitch, type PackProgress } from './switch.ts'
 
 /** The Browser plugin pack's package name. */
 export const BROWSER_BUNDLE = '@delorun/bundle-browser'
+
+/** The pack that lets agents use the person's own Chrome through the browse extension. */
+export const REAL_BROWSER_BUNDLE = '@delorun/bundle-real-browser'
 
 /**
  * Where Browser stands: `checking` before the first answer; `not-added` when the Host lists no row of the pack, which
@@ -35,14 +39,15 @@ const READY: BrowserReadiness = { kind: 'ready' }
 const FAILED: BrowserReadiness = { kind: 'failed' }
 
 /**
- * Narrow the Host's check to Browser.
+ * Narrow the Host's check to one Browser pack.
  * @param answer - every declared row's state.
- * @returns where Browser stands: the first row that needs setup, else ready, else not added.
+ * @param bundle - the pack: the isolated browser's by default, or {@link REAL_BROWSER_BUNDLE}.
+ * @returns where the pack stands: the first row that needs setup, else ready, else not added.
  */
-export function browserReadinessOf(answer: RequirementsAnswer): BrowserReadiness {
-  const problem = answer.problems.find(each => each.packageName === BROWSER_BUNDLE)
+export function browserReadinessOf(answer: RequirementsAnswer, bundle: string = BROWSER_BUNDLE): BrowserReadiness {
+  const problem = answer.problems.find(each => each.packageName === bundle)
   if (problem !== undefined) return { kind: 'problem', message: problem.message }
-  const rows = answer.rows.filter(row => row.packageName === BROWSER_BUNDLE)
+  const rows = answer.rows.filter(row => row.packageName === bundle)
   if (rows.length === 0) return NOT_ADDED
   for (const row of rows) if (row.state === 'needs-setup') return { kind: 'needs-setup', reason: row.reason, fix: row.fix }
   return READY
@@ -78,15 +83,16 @@ export interface BrowserSetupStore {
  * Create the store.
  * @param fetch - the request function.
  * @param language - the studio's language at the time of each read, as a locale id; Chinese reads Chinese reasons.
+ * @param bundle - the pack to read: the isolated browser's by default, or {@link REAL_BROWSER_BUNDLE}.
  * @returns the store; nothing is read until `refresh` is called.
  */
-export function createBrowserSetup(fetch: HostFetch, language: () => string): BrowserSetupStore {
+export function createBrowserSetup(fetch: HostFetch, language: () => string, bundle: string = BROWSER_BUNDLE): BrowserSetupStore {
   const listeners = new Set<() => void>()
   let snapshot = CHECKING
   let reading: Promise<BrowserReadiness> | undefined
   const read = async (): Promise<BrowserReadiness> => {
     try {
-      snapshot = browserReadinessOf(await readRequirements(fetch, language().toLowerCase().startsWith('zh') ? 'zh' : 'en'))
+      snapshot = browserReadinessOf(await readRequirements(fetch, language().toLowerCase().startsWith('zh') ? 'zh' : 'en'), bundle)
     } catch (error) {
       console.warn('delorun browser setup: whether Browser is ready was not read', error)
       snapshot = FAILED

@@ -50,8 +50,10 @@ import type { ThemeSettings } from '@delorun/plugin-theme'
 import { DEFAULT_SETTINGS, ONBOARDING_ROW_ID, THEME_ROW_ID, type OnboardingSettings } from '../config.ts'
 import { NO_RECORD, SETUP_RECORD_PATH, SetupRecord } from '../wire.ts'
 import { createPreviewFlagsStore } from '@delorun/preview-flags/client'
-import { createBrowserSetup } from '@delorun/browser-setup'
+import { createBrowserSetup, REAL_BROWSER_BUNDLE } from '@delorun/browser-setup'
+import { runBrowserInstall, runBrowserTest } from '@delorun/bundle-local/browser-check-api'
 import { turnBrowserOff } from './browser-pack.ts'
+import { BrowserSettings, type BrowserSettingsInjected } from './browser/BrowserSettings.tsx'
 import { createBundleInstaller } from './bundles.ts'
 import { closeSidebarDrawer } from './focus.ts'
 import { hostApi, isLoopbackHostname, readStartId, readWorkspaceNotice } from './host-api.ts'
@@ -65,7 +67,7 @@ import { RenameRow } from './RenameRow.tsx'
 import { DeferredSetupEntry, type DeferredSetupInjected } from './DeferredSetupEntry.tsx'
 import { SetAsideBanner, type SetAsideInjected } from './SetAsideBanner.tsx'
 import type {
-  AgentRowSettings, DelorunOnboarding, NoticeFace, OnboardingInjected, OnboardingStep, SchemePreference, StartFace, StartTarget,
+  AgentRowSettings, BrowserFace, DelorunOnboarding, NoticeFace, OnboardingInjected, OnboardingStep, SchemePreference, StartFace, StartTarget,
   StaticServices,
 } from './types.ts'
 import { AGENT_ROWS } from './steps/agent-rows.ts'
@@ -107,6 +109,9 @@ export const ONBOARDING_STEP = { id: ONBOARDING_ROW_ID, order: -200 } as const
 
 /** The General row that opens onboarding again, by the id Delorun's Settings layout places it under. */
 export const SHOW_AGAIN_ROW = { id: ONBOARDING_ROW_ID, order: 50 } as const
+
+/** The `settings.section` id and place of the Browser page: right after the plugin downloads section (16), before Privacy (20). */
+export const BROWSER_SECTION = { id: 'delorun-browser', order: 17 } as const
 
 /** The no-key banner's place in the input dock. */
 export const KEY_BANNER_ENTRY = { id: 'delorun-onboarding.key-banner', order: 5 } as const
@@ -184,7 +189,36 @@ export function applyStudio(ctx: Context): void {
   // One read of the preview flags and one copy of Browser's setup for the page, however often the dialog opens.
   const previewFlags = createPreviewFlagsStore()
   const browserSetup = createBrowserSetup((input, init) => globalThis.fetch(input, init), () => ctx.locale.getLocale().active)
+  const ownBrowserSetup = createBrowserSetup((input, init) => globalThis.fetch(input, init), () => ctx.locale.getLocale().active, REAL_BROWSER_BUNDLE)
 
+  const browserFace: BrowserFace = {
+    setup: browserSetup,
+    ownSetup: ownBrowserSetup,
+    choice: {
+      getSnapshot: () => progress.getSnapshot().value?.browser ?? '',
+      subscribe: listener => progress.subscribe(listener),
+      // Each choice starts a new observation of the pack, so an earlier `disabled` never reads a later restart as a re-enable.
+      record: async (next) => {
+        const accepted = await progress.set('browser', next)
+        if (accepted) await progress.set('browserPack', '')
+        return accepted
+      },
+    },
+    packSeen: {
+      getSnapshot: () => progress.getSnapshot().value?.browserPack ?? '',
+      subscribe: listener => progress.subscribe(listener),
+      record: next => progress.set('browserPack', next),
+    },
+    fresh: {
+      getSnapshot: () => progress.getSnapshot().value?.done === false,
+      subscribe: listener => progress.subscribe(listener),
+    },
+    test: () => runBrowserTest((input, init) => globalThis.fetch(input, init)),
+    download: () => runBrowserInstall((input, init) => globalThis.fetch(input, init)),
+    turnOff: () => turnBrowserOff(ctx),
+    // Looked up on click, as for the PIN link above.
+    openSettings: (section) => { ctx.get('settingsShell')?.openSection(section) },
+  }
   /** The preview notice, when bundle-local provides one. */
   const notice = (): NoticeFace | undefined => {
     const service = ctx.get('delorunNotice')
@@ -197,6 +231,11 @@ export function applyStudio(ctx: Context): void {
       acknowledge: () => { service.acknowledge() },
     }
   }
+  // One installer for the guide and the Settings Browser page, so an add one starts shows in the other.
+  const installer = createBundleInstaller(ctx, {
+    addWaitMs: () => (progress.getSnapshot().value?.addWaitSeconds ?? DEFAULT_SETTINGS.addWaitSeconds) * 1000,
+    pollMs: 3000,
+  })
   const services = (): StaticServices => ({
     notice: notice(),
     language: {
@@ -221,10 +260,7 @@ export function applyStudio(ctx: Context): void {
       },
       limit: ctx.configForms.get<DelegationConsentSettings>(DELEGATION_CONSENT_ROW),
     },
-    bundles: createBundleInstaller(ctx, {
-      addWaitMs: () => (progress.getSnapshot().value?.addWaitSeconds ?? DEFAULT_SETTINGS.addWaitSeconds) * 1000,
-      pollMs: 3000,
-    }),
+    bundles: installer,
     host: {
       ...hostApi,
       keyTest: () => keyStatus.refresh(),
@@ -242,12 +278,7 @@ export function applyStudio(ctx: Context): void {
       // Looked up on click, as for the Models link above.
       openSettings: () => { ctx.get('settingsShell')?.openSection(PIN_MODE_SECTION_ID) },
     },
-    browser: {
-      setup: browserSetup,
-      turnOff: () => turnBrowserOff(ctx),
-      // Looked up on click, as for the PIN link above.
-      openSettings: (section) => { ctx.get('settingsShell')?.openSection(section) },
-    },
+    browser: browserFace,
     previewFlags,
   })
 
@@ -362,6 +393,16 @@ export function applyStudio(ctx: Context): void {
       ctx.get('settingsShell')?.openOnboarding(ONBOARDING_STEP.id)
     },
   }
+  const browserPage: BrowserSettingsInjected = {
+    services: {
+      bundles: installer,
+      browser: browserFace,
+      // A studio opened from a phone cannot add or turn on packs; the page then points to the computer.
+      remote: !isLoopbackHostname(location.hostname),
+    },
+    // Looked up on click: `settingsShell` is not in this plugin's `inject`, so the property read does not reach the service.
+    openPlugins: () => { ctx.get('settingsShell')?.openSection('plugins') },
+  }
   const showAgain: ShowAgainInjected = {
     show: () => {
       // Unfinished from its first screen, so a reload shows the guide again, as the explicit opening does now.
@@ -393,6 +434,9 @@ export function applyStudio(ctx: Context): void {
       ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
         name: 'settings.onboarding', id: ONBOARDING_STEP.id, order: ONBOARDING_STEP.order, locale: NS, inject: face,
       }, OnboardingStepEntry)),
+      ctx.slots.inject('settings.section', () => ctx.slots.register({
+        name: 'settings.section', id: BROWSER_SECTION.id, order: BROWSER_SECTION.order, label: () => keyT('page.nav'), locale: NS, inject: () => browserPage,
+      }, BrowserSettings)),
       ctx.slots.inject('settings.general.item', () => ctx.slots.register({
         name: 'settings.general.item', id: SHOW_AGAIN_ROW.id, order: SHOW_AGAIN_ROW.order, locale: NS, inject: () => showAgain,
       }, ShowAgainRow)),
