@@ -30,6 +30,17 @@ describe('resolveBrowserSwitch', () => {
   it('reads an unknown value as the default', () => {
     expect(resolveBrowserSwitch('maybe')).toBe('on')
   })
+
+  // Turning the pack off in Plugins is a choice too; reading it as never chosen would turn Browser back on at the next visit.
+  it('keeps a home that turned the pack off in Plugins off when it recorded nothing', () => {
+    expect(resolveBrowserSwitch('', true)).toBe('off')
+    expect(resolveBrowserSwitch(undefined, true)).toBe('off')
+  })
+
+  it('lets a recorded choice outrank the pack\'s state', () => {
+    expect(resolveBrowserSwitch('on', true)).toBe('on')
+    expect(resolveBrowserSwitch('off', false)).toBe('off')
+  })
 })
 
 describe('browserPageState', () => {

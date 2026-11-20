@@ -15,6 +15,7 @@ import type { OnboardingSettings } from '../config.ts'
 import type { DirectoryEntry, KeyProbe } from './providers.ts'
 import type { AgentModelsAnswer, DeferrableStep, FolderKind, KeyTestAnswer, LocalServer, Readiness, RecommendAnswer, SetupRecord } from '../wire.ts'
 import type { BrowserSetupStore } from '@delorun/browser-setup'
+import type { BrowserInstallAnswer, BrowserTestAnswer } from '@delorun/bundle-local/browser-check-api'
 import type { TurnOffOutcome } from './browser-pack.ts'
 import type { BundleInstaller } from './bundles.ts'
 
@@ -289,6 +290,35 @@ export interface StaticServices {
 export interface BrowserFace {
   /** Whether the Browser plugin pack is ready, from the Host's requirement check. */
   readonly setup: BrowserSetupStore
+  /** Whether the pack for the person's own Chrome is ready (paired), from the same check. */
+  readonly ownSetup: BrowserSetupStore
+  /** What the person chose for Browser in this home: `on`, `off`, or empty while they never chose. */
+  readonly choice: {
+    /** @returns the stored choice, a stable string. */
+    getSnapshot(): string
+    /**
+     * Observe changes.
+     * @param listener - called after each change.
+     * @returns the unsubscribe function.
+     */
+    subscribe(listener: () => void): () => void
+    /**
+     * Record the choice.
+     * @param next - the choice.
+     * @returns whether the Host accepted it.
+     */
+    record(next: 'on' | 'off'): Promise<boolean>
+  }
+  /**
+   * Open a fixed page in the built-in browser on the Host and read its thumbnail; no model turn.
+   * @returns the answer; it never rejects.
+   */
+  readonly test: () => Promise<BrowserTestAnswer>
+  /**
+   * Download the browser build the built-in browser needs, and wait for the Host to finish.
+   * @returns the answer; it never rejects.
+   */
+  readonly download: () => Promise<BrowserInstallAnswer>
   /**
    * Turn the Browser plugin pack off, for the No browser choice.
    * @returns how it ended; it never rejects.

@@ -30,7 +30,7 @@ export function useStore<T>(store: Store<T>): T {
  * @param name - a package.
  * @returns where it stands, re-rendering on change.
  */
-export function useBundle(services: StepServices, name: string): BundleView | undefined {
+export function useBundle(services: Pick<StepServices, 'bundles'>, name: string): BundleView | undefined {
   return useSyncExternalStore(
     useCallback(listener => services.bundles.views.subscribe(listener), [services.bundles]),
     () => services.bundles.views.getSnapshot()[name],
@@ -42,7 +42,7 @@ export function useBundle(services: StepServices, name: string): BundleView | un
  * @param services - the services.
  * @param names - the packages.
  */
-export function useRefresh(services: StepServices, names: readonly string[]): void {
+export function useRefresh(services: Pick<StepServices, 'bundles'>, names: readonly string[]): void {
   const { bundles } = services
   const key = names.join('\n')
   useEffect(() => { if (key !== '') bundles.refresh(key.split('\n')) }, [bundles, key])

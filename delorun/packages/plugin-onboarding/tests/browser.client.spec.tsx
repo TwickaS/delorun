@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 /**
- * The Browser step: the shared Browser choice over the Browser plugin pack. Choosing the isolated browser adds the
- * pack, No browser turns it off, the readiness comes from the Host's requirement check, and the planned third choice
+ * The Browser step: the shared Browser choice over the Browser plugin pack. Browser is on until the person turns it off:
+ * a home that never chose adds the pack, No browser turns it off and records that, the readiness comes from the Host's requirement check, and the planned third choice
  * shows only under the preview flag and can never be chosen. Each denial test's comment names the check whose removal
  * makes it fail.
  */
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
-import { BROWSER_BUNDLE, type BrowserReadiness } from '@delorun/browser-setup'
+import { BROWSER_BUNDLE, REAL_BROWSER_BUNDLE, type BrowserReadiness } from '@delorun/browser-setup'
 import { turnBrowserOff } from '../src/client/browser-pack.ts'
 import type { BundleState } from '../src/client/bundles.ts'
 import { buildSteps, STEPS } from '../src/client/flow.tsx'
@@ -43,16 +43,65 @@ const checked = (): boolean[] => radios().map(radio => radio.checked)
 const pack = (state: BundleState, more: object = {}) => installerFake({ [BROWSER_BUNDLE]: { state, ...more } })
 
 describe('the Browser step', () => {
-  it('has No browser chosen while the pack is not added, and adds the pack when the isolated browser is chosen', async () => {
+  it('has the isolated browser chosen for a home that never chose, and adds the pack once', async () => {
     const bundles = pack('available')
-    await show({ bundles: bundles.installer })
+    const browser = browserFake()
+    await show({ bundles: bundles.installer, browser: browser.face })
     expect(screen.getByRole('radiogroup', { name: en['browser.which'] })).toBeTruthy()
+    expect(checked()).toEqual([true, false])
+    expect(bundles.refresh).toHaveBeenCalledWith([BROWSER_BUNDLE, REAL_BROWSER_BUNDLE])
+    expect(bundles.install).toHaveBeenCalledExactlyOnceWith(BROWSER_BUNDLE)
+    // Adding it is the default, not a choice, so nothing is recorded.
+    expect(browser.record).not.toHaveBeenCalled()
+  })
+
+  // Pins "a home that chose off stays off": without the record check the step would add the pack again at every visit.
+  it('does not add the pack for a home that chose off', async () => {
+    const bundles = pack('available')
+    const browser = browserFake()
+    browser.recorded.set('off')
+    await show({ bundles: bundles.installer, browser: browser.face })
     expect(checked()).toEqual([false, true])
-    expect(bundles.refresh).toHaveBeenCalledWith([BROWSER_BUNDLE])
     expect(bundles.install).not.toHaveBeenCalled()
+  })
+
+  // Pins the held check: a pack turned off in Plugins is a choice too, and the step must not turn it back on.
+  it('does not add a pack the person turned off in Plugins', async () => {
+    const bundles = pack('available', { held: true })
+    await show({ bundles: bundles.installer })
+    expect(checked()).toEqual([false, true])
+    expect(bundles.install).not.toHaveBeenCalled()
+  })
+
+  // Pins the phone check: a studio on a phone cannot install, so it must not try.
+  it('does not add the pack from a phone', async () => {
+    const bundles = pack('available')
+    await show({ bundles: bundles.installer, remote: true })
+    expect(bundles.install).not.toHaveBeenCalled()
+  })
+
+  it('records the choice when the isolated browser is chosen after No browser', async () => {
+    const bundles = pack('available')
+    const browser = browserFake()
+    browser.recorded.set('off')
+    await show({ bundles: bundles.installer, browser: browser.face })
     await click(radios()[0] as HTMLInputElement)
+    await settle()
+    expect(browser.record).toHaveBeenCalledExactlyOnceWith('on')
     expect(bundles.install).toHaveBeenCalledExactlyOnceWith(BROWSER_BUNDLE)
     expect(checked()).toEqual([true, false])
+  })
+
+  it('says Browser could not be turned on when the Host refuses the choice, and adds nothing', async () => {
+    const bundles = pack('available')
+    const browser = browserFake()
+    browser.recorded.set('off')
+    browser.accepted.value = false
+    await show({ bundles: bundles.installer, browser: browser.face })
+    await click(radios()[0] as HTMLInputElement)
+    await settle()
+    expect(screen.getByRole('alert').textContent).toContain(en['browser.turnOn.failed'])
+    expect(bundles.install).not.toHaveBeenCalled()
   })
 
   it('has the isolated browser chosen for an added pack, and says Browser is ready and what the first chat asks', async () => {
@@ -102,8 +151,6 @@ describe('the Browser step', () => {
     ['installed', en['browser.added'], {}],
   ])('says where the pack stands while it is %s and the Host does not list it yet', async (state, text, more) => {
     await show({ bundles: pack(state, more).installer })
-    // An unavailable, offline or failed pack is off, so the line shows once the person asks for the isolated browser.
-    if (!(radios()[0] as HTMLInputElement).checked && !(radios()[0] as HTMLInputElement).disabled) await click(radios()[0] as HTMLInputElement)
     expect(screen.getByText(text)).toBeTruthy()
   })
 
@@ -113,7 +160,6 @@ describe('the Browser step', () => {
     expect(radios().map(radio => radio.disabled)).toEqual([true, true])
     await act(async () => { bundles.store.set({ [BROWSER_BUNDLE]: { state: 'failed' } }) })
     expect(radios().map(radio => radio.disabled)).toEqual([false, false])
-    await click(radios()[0] as HTMLInputElement)
     await click(screen.getByRole('button', { name: en['bundle.retry'] }))
     expect(bundles.install).toHaveBeenCalledWith(BROWSER_BUNDLE)
   })
@@ -128,21 +174,22 @@ describe('the Browser step', () => {
     expect(browser.turnOff).toHaveBeenCalledTimes(1)
     expect(bundles.refresh).toHaveBeenCalledExactlyOnceWith([BROWSER_BUNDLE])
     expect(checked()).toEqual([false, true])
+    expect(browser.record).toHaveBeenCalledExactlyOnceWith('off')
     expect(screen.queryByText(en['browser.ready'])).toBeNull()
     expect(bundles.install).not.toHaveBeenCalled()
   })
 
-  it('does nothing to a pack that is not added when No browser is chosen', async () => {
+  it('only records No browser for a pack that is not added', async () => {
     // Pins the guard: without it choosing No browser on a fresh profile asks the plugin manager to disable a bundle it does not hold.
     const browser = browserFake()
     const bundles = pack('unavailable')
     await show({ browser: browser.face, bundles: bundles.installer })
-    await click(radios()[0] as HTMLInputElement)
     await click(radios()[1] as HTMLInputElement)
+    await settle()
     expect(checked()).toEqual([false, true])
     expect(browser.turnOff).not.toHaveBeenCalled()
-    // The one call is the isolated browser's add, which the installer itself refuses for a pack it cannot add.
-    expect(bundles.install).toHaveBeenCalledTimes(1)
+    expect(browser.record).toHaveBeenCalledExactlyOnceWith('off')
+    expect(bundles.install).not.toHaveBeenCalled()
   })
 
   it('says Browser turns off at the next start when the plugin manager needs a restart', async () => {
@@ -164,6 +211,7 @@ describe('the Browser step', () => {
     await settle()
     expect(screen.getByRole('alert').textContent).toContain(en['browser.turnOff.failed'])
     expect(checked()).toEqual([true, false])
+    expect(browser.record).not.toHaveBeenCalled()
   })
 })
 

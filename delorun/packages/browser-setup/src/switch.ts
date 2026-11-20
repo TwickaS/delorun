@@ -11,12 +11,15 @@ import type { BrowserReadiness, RequirementFix } from './index.ts'
 export type BrowserSwitch = 'on' | 'off'
 
 /**
- * Resolve the recorded choice.
- * @param recorded - the stored choice, or an empty or absent value when the person never chose.
- * @returns `off` only when the person chose off; every other value, including no choice, is `on`.
+ * Resolve the home's choice.
+ * @param recorded - the stored choice, or an empty or absent value when the person never chose here.
+ * @param held - whether the Browser pack is in the home but turned off, which only the person did, in Plugins.
+ * @returns `on` or `off` as recorded; with no record, `off` for a pack the person turned off and `on` for everything
+ * else, so a home that never chose is on and a home that chose off, here or in Plugins, stays off.
  */
-export function resolveBrowserSwitch(recorded: string | undefined): BrowserSwitch {
-  return recorded === 'off' ? 'off' : 'on'
+export function resolveBrowserSwitch(recorded: string | undefined, held = false): BrowserSwitch {
+  if (recorded === 'on' || recorded === 'off') return recorded
+  return held ? 'off' : 'on'
 }
 
 /**

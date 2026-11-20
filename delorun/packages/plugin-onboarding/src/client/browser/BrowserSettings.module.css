@@ -1,0 +1,106 @@
+/* The Settings Browser page: the switch, the built-in browser's status with its actions, and the own-Chrome card. The
+   values are the studio's own tokens, so the page matches the other Delorun sections at 390 and at 1440 pixels. */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delorun-space-8, 24px);
+  max-width: var(--dsh-settings-section-max-width, 760px);
+  color: var(--dsw-alias-label-primary);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--dsh-settings-section-title-size, 18px);
+  font-weight: var(--dsh-settings-section-title-weight, 600);
+  line-height: var(--dsh-settings-section-title-line-height, normal);
+  display: var(--dsh-settings-section-title-display, block);
+}
+
+/* What sits under a card's row: the status, the actions and the thumbnail, padded like the rows above. */
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delorun-space-4, 8px);
+  padding: var(--delorun-space-6, 16px);
+  border-top: 0.5px solid var(--dsw-alias-border-l1);
+}
+
+.block:first-child {
+  border-top: 0;
+}
+
+.line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--delorun-space-4, 8px);
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.line[data-tone='success'] {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.line[data-tone='warning'] {
+  color: var(--dsw-alias-state-warn-primary);
+}
+
+.line[data-tone='error'] {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.mark {
+  flex: none;
+  width: 16px;
+  text-align: center;
+  font-weight: 600;
+}
+
+.lineText {
+  flex: 1 1 12rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.hint {
+  margin: 0;
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--delorun-space-4, 8px);
+}
+
+/* Touch targets are 44 px; a fine pointer keeps compact buttons. */
+.button {
+  min-height: 44px;
+}
+
+@media (pointer: fine) {
+  .button {
+    min-height: 32px;
+  }
+}
+
+/* The thumbnail fills the card's width on a phone and stops at its own size on a wide screen. */
+.thumbnail {
+  display: block;
+  width: 100%;
+  max-width: 480px;
+  height: auto;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.thumbnailTitle {
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+  color: var(--dsw-alias-label-secondary);
+}
