@@ -1,5 +1,5 @@
 /**
- * The update's successor makes the release's own pack files the baseline: only its pre-start step `changes`, only for an
+ * The update's successor makes the release's own pack files the baseline: only in its first boot, only for an
  * update to a newer release, and only with signed pack files it verified itself.
  */
 import { createHash } from 'node:crypto'
@@ -13,7 +13,6 @@ import { parseRuntimeVersion } from '@delorun/runtime-store'
 import { prepareHome, type CommandContext } from '../src/command.ts'
 import { changesApprovedContent, changesPreStartStep, repointForSuccessor, startChanges } from '../src/changes/start.ts'
 import { updateSource } from '../src/changes/update-baseline.ts'
-import type { PreStartContext } from '../src/pre-start.ts'
 
 const hooks = vi.hoisted(() => ({ baseline: undefined as import('@delorun/changes').UpdateBaseline | undefined, asked: [] as string[], environment: 'verified' as 'verified' | 'unverifiable' | 'unsupported' | 'failing' }))
 
@@ -95,69 +94,89 @@ async function updatedHome(): Promise<void> {
 
 const entries = async (): Promise<string[]> => (await readChangeLog(home, 'default')).entries.flatMap(entry => entry.decidedFrom === 'update' ? [entry.summary] : [])
 
-function step(overrides: Partial<PreStartContext>): Promise<void> {
-  return changesPreStartStep({ home, profile: 'default', kind: 'cli', successor: false, output: { stdout: text => void context.printed.push(text), stderr: text => void context.errors.push(text) }, ...overrides })
+/** The successor's first boot of an update from `updatedFrom` (none: a start that is no update), as `repointingBoot` runs it. */
+function successorBoot(updatedFrom?: RuntimeVersion, afterFailedSwitch = false): Promise<void> {
+  return repointForSuccessor({ home, profile: 'default', ...updatedFrom === undefined ? {} : { updatedFrom }, write: text => void context.printed.push(text) }, afterFailedSwitch)
 }
 
-describe('the pre-start step of a start', () => {
-  it('replaces the previous release\'s pack content at an update\'s successor', async () => {
+const approvedVersion = async (): Promise<string | undefined> => (await readApproved(join(home, 'profiles', 'default'))).plugins.pkg?.version
+
+describe('the first boot of an update\'s successor', () => {
+  it('replaces the previous release\'s pack content', async () => {
     await updatedHome()
+    const before = await approvedVersion()
     hooks.baseline = baseline
-    await step({ successor: true, updatedFrom: v('1.0.0') })
+    await successorBoot(v('1.0.0'))
     expect(hooks.asked).toEqual(['1.0.0'])
     expect(await entries()).toEqual(['Replaced by the update to 2.0.0: pkg'])
+    expect(await approvedVersion()).not.toBe(before)
     expect(context.printed.join('')).toContain('pkg now holds the files of the update to 2.0.0')
   })
 
-  it('replaces nothing at a start that is not an update\'s successor, whatever it was given', async () => {
+  it('replaces nothing when no update left a release, and nothing at the pre-start step of a start, whatever it was given', async () => {
     await updatedHome()
+    const before = await approvedVersion()
     hooks.baseline = baseline
-    await step({ successor: false, updatedFrom: v('1.0.0') })
-    await step({ kind: 'headless', successor: false, updatedFrom: v('1.0.0') })
-    await step({ successor: true })
+    await successorBoot()
+    await changesPreStartStep({ home, profile: 'default', kind: 'cli', successor: false, output: { stdout: text => void context.printed.push(text), stderr: text => void context.errors.push(text) } })
     expect(hooks.asked).toEqual([])
     expect(await entries()).toEqual([])
+    expect(await approvedVersion()).toBe(before)
     expect(context.printed.join('')).toContain('pkg has changes waiting for your review')
+  })
+
+  it('applies the baseline once: a boot after a failed switch never does', async () => {
+    await updatedHome()
+    const before = await approvedVersion()
+    hooks.baseline = baseline
+    await successorBoot(v('1.0.0'), true)
+    expect(hooks.asked).toEqual([])
+    expect(await entries()).toEqual([])
+    expect(await approvedVersion()).toBe(before)
   })
 
   it('leaves the changes waiting, and says so, when the signed files cannot be verified', async () => {
     await updatedHome()
+    const before = await approvedVersion()
     hooks.environment = 'unverifiable'
-    await step({ successor: true, updatedFrom: v('1.0.0') })
+    await successorBoot(v('1.0.0'))
     expect(await entries()).toEqual([])
+    expect(await approvedVersion()).toBe(before)
     expect(context.printed.join('')).toContain('Delorun could not check the plugin packs of the update against the signed release, so changes to them wait for your review: the packs file has no verified release-log record')
-    expect(context.printed.join('')).toContain('pkg has changes waiting for your review')
   })
 
-  it('leaves the changes waiting, and says so, when the packs environment cannot be read, and the start goes on', async () => {
+  it('leaves the changes waiting, and says so, when the packs environment cannot be read, and the boot goes on', async () => {
     await updatedHome()
+    const before = await approvedVersion()
     hooks.environment = 'failing'
-    await expect(step({ successor: true, updatedFrom: v('1.0.0') })).resolves.toBeUndefined()
+    await expect(successorBoot(v('1.0.0'))).resolves.toBeUndefined()
     expect(await entries()).toEqual([])
+    expect(await approvedVersion()).toBe(before)
     expect(context.printed.join('')).toContain('so changes to them wait for your review: the launcher anchor cannot be read')
-    expect(context.printed.join('')).toContain('pkg has changes waiting for your review')
   })
 
   it('replaces nothing in a process that is not an installed release', async () => {
     await updatedHome()
+    const before = await approvedVersion()
     hooks.environment = 'unsupported'
-    await step({ successor: true, updatedFrom: v('1.0.0') })
+    await successorBoot(v('1.0.0'))
     expect(hooks.asked).toEqual([])
     expect(await entries()).toEqual([])
-    expect((await readApproved(join(home, 'profiles', 'default'))).plugins.pkg).toBeDefined()
+    expect(await approvedVersion()).toBe(before)
   })
 })
 
 describe('a rollback\'s successor', () => {
   it('never advances the baseline: a person\'s rollback from a newer release leaves the pack\'s change waiting', async () => {
     await updatedHome()
+    const before = await approvedVersion()
     hooks.baseline = baseline
     const rollback = { type: 'handover', purpose: 'rollback', from: v('2.0.0') } as const
     const updatedFrom = updateSource(rollback)
-    await step({ successor: true, ...updatedFrom === undefined ? {} : { updatedFrom } })
+    await successorBoot(updatedFrom)
     expect(hooks.asked).toEqual([])
     expect(await entries()).toEqual([])
-    expect(context.printed.join('')).toContain('pkg has changes waiting for your review')
+    expect(await approvedVersion()).toBe(before)
   })
 })
 
@@ -170,7 +189,7 @@ describe('a failed health check after the baseline advanced, with protection on'
     const approvedBefore = await readApproved(profileDir())
     const activeBefore = await readActiveRecord(home, 'default')
     hooks.baseline = baseline
-    await step({ successor: true, updatedFrom: v('1.0.0') })
+    await successorBoot(v('1.0.0'))
     expect(await entries()).toEqual(['Replaced by the update to 2.0.0: pkg'])
     // The rollback of the failed update restores the profile's files, the approved record included, not active.json.
     await writeApproved(profileDir(), approvedBefore)
@@ -188,7 +207,7 @@ describe('a failed health check after the baseline advanced, with protection on'
     await updatedHome()
     const approvedBefore = await readApproved(profileDir())
     hooks.baseline = baseline
-    await step({ successor: true, updatedFrom: v('1.0.0') })
+    await successorBoot(v('1.0.0'))
     await writeApproved(profileDir(), approvedBefore)
     await repointForSuccessor({ home, profile: 'default' })
     await expect(changesApprovedContent(draft())).rejects.toThrow(/not its approved version/)

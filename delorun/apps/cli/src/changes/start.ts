@@ -55,9 +55,9 @@ export interface ChangesStartRequest {
    */
   readonly terminal?: boolean
   /**
-   * The signed pack files of an update's two releases, set only for the successor of an update to a newer release
-   * ([update baseline](./update-baseline.ts)): a pack whose approved content differs from its folder only by the
-   * release's own files is replaced, not left waiting.
+   * The signed pack files of an update's two releases, set only by {@link repointForSuccessor} for the first boot of the
+   * successor of an update to a newer release ([update baseline](./update-baseline.ts)): a pack whose approved content
+   * differs from its folder only by the release's own files is replaced, not left waiting.
    */
   readonly updateBaseline?: UpdateBaseline
 }
@@ -146,13 +146,13 @@ export function repointsBeforeBoot(successor: boolean, bootsBefore: number): boo
 /**
  * Wrap a profile's Host boot so that it re-points the active copies first when {@link repointsBeforeBoot} says so, and
  * on a boot after the first, first makes them follow the approved record ({@link followApprovedContent}).
- * @param request - the home and the profile.
+ * @param request - the home and the profile, and for an update's successor the release it left.
  * @param successor - whether this process is an update's successor.
  * @param boot - boots the Host.
  * @param repoint - re-points the copies; {@link repointForSuccessor} by default.
  * @returns the wrapped boot, which counts the boots it has run.
  */
-export function repointingBoot<A extends unknown[], T>(request: { readonly home: string, readonly profile: string }, successor: boolean, boot: (...args: A) => Promise<T>, repoint: (request: { readonly home: string, readonly profile: string }, afterFailedSwitch: boolean) => Promise<void> = repointForSuccessor): (...args: A) => Promise<T> {
+export function repointingBoot<A extends unknown[], T>(request: SuccessorRequest, successor: boolean, boot: (...args: A) => Promise<T>, repoint: (request: SuccessorRequest, afterFailedSwitch: boolean) => Promise<void> = repointForSuccessor): (...args: A) => Promise<T> {
   let booted = 0
   return async (...args) => {
     const afterFailedSwitch = booted > 0
@@ -161,21 +161,44 @@ export function repointingBoot<A extends unknown[], T>(request: { readonly home:
   }
 }
 
+/** What re-pointing a successor's active copies needs to know about the start. */
+export interface SuccessorRequest {
+  /** The Delorun home. */
+  readonly home: string
+  /** The profile about to boot. */
+  readonly profile: string
+  /** The release an update left, set only for the successor of an update ({@link updateSource}). */
+  readonly updatedFrom?: RuntimeVersion
+  /** Where the lines about the update's pack files go; the home process's log. */
+  readonly write?: (text: string) => void
+}
+
 /**
- * An update's successor boots without the pre-start steps, so before its Host boots it re-points each recorded active
- * copy's links into the runtime store to its own release ({@link repointActiveCopies}); otherwise a plugin pack copy
- * written under the previous release fails the load check of the new one and the update rolls back. A boot after a
- * failed switch first makes the copies that load approved content follow the approved record, which the failed
- * switch's rollback restored while `active.json` kept the failed release's decision ({@link followApprovedContent});
- * with protection on, the previous release would otherwise refuse to resume.
- * @param request - the home and the profile about to boot.
+ * An update's successor boots without the pre-start steps, so before its first Host boots it runs Changes' part of a
+ * start for the profile ({@link startChanges}) with the signed pack files of the update, which replaces a pack's
+ * approved content that differs from its folder only by the release's own files ({@link verifiedUpdateBaseline}); then
+ * it re-points each recorded active copy's links into the runtime store to its own release
+ * ({@link repointActiveCopies}); otherwise a plugin pack copy written under the previous release fails the load check of
+ * the new one and the update rolls back. The baseline is applied once per update: a boot after a failed switch, which
+ * the predecessor or a restarted successor makes, never applies it, and first makes the copies that load approved
+ * content follow the approved record, which the failed switch's rollback restored while `active.json` kept the failed
+ * release's decision ({@link followApprovedContent}); with protection on, the previous release would otherwise refuse
+ * to resume.
+ * @param request - the home and the profile about to boot, and the release an update left.
  * @param afterFailedSwitch - whether a Host of this process booted before.
  * @returns when the copies name this release's packages; immediately for a home without the profile.
- * @throws {CliError} when a copy cannot be re-pointed: the successor does not boot, so the update rolls back.
+ * @throws {CliError} when Changes cannot prepare the profile or a copy cannot be re-pointed: the successor does not
+ *   boot, so the update rolls back.
  */
-export async function repointForSuccessor(request: { readonly home: string, readonly profile: string }, afterFailedSwitch = false): Promise<void> {
+export async function repointForSuccessor(request: SuccessorRequest, afterFailedSwitch = false): Promise<void> {
   const { home, profile } = request
   if (!hasCliProfile(home, profile)) return
+  if (!afterFailedSwitch && request.updatedFrom !== undefined) {
+    const write = request.write ?? (() => undefined)
+    const updateBaseline = await verifiedUpdateBaseline(request.updatedFrom, write)
+    // Without a verified baseline there is nothing to apply, and the successor boots as it did before.
+    if (updateBaseline !== undefined) await startChanges({ home, profile, updateBaseline }, write)
+  }
   const enforce = { home, profile, profileDir: profileDirectory(home, profile), harnessLink: isCarriedPackage, ...runningRelease() }
   try {
     if (afterFailedSwitch) await followApprovedContent(enforce)
@@ -201,18 +224,16 @@ export async function changesPreStartStep(context: PreStartContext): Promise<voi
     if (kind === 'headless') output.stderr(text)
     else output.stdout(text)
   }
-  const updateBaseline = successor && context.updatedFrom !== undefined ? await verifiedUpdateBaseline(context.updatedFrom, write) : undefined
   return startChanges({
     home,
     profile,
     ...storedRuntime === undefined ? {} : { runtime: storedRuntime },
     ...kind === 'cli' && !successor ? { ownsHome: true } as const : {},
-    ...updateBaseline === undefined ? {} : { updateBaseline },
   }, write)
 }
 
 /**
- * The signed pack files of the update this process is the successor of. A release whose files cannot be verified
+ * The signed pack files of the update this process is the successor of ({@link repointForSuccessor} asks for them). A release whose files cannot be verified
  * replaces nothing: its packs' changes wait for review as they would without an update.
  * @param from - the release the update left.
  * @param write - where the line about a failed check goes.

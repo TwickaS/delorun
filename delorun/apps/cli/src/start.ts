@@ -636,7 +636,7 @@ async function startHomeProcess(request: StartRequest, dependencies: StartDepend
       host: {
         // A Host booted again after the first, as after a failed switch, finds its active copies pointed at the release
         // that failed; a successor's first boot finds them pointed at its predecessor's.
-        boot: repointingBoot(request, handover !== undefined, async (access: Parameters<HomeProcessOptions['host']['boot']>[0], controls: Parameters<HomeProcessOptions['host']['boot']>[1]) => bootProfile(handover === undefined ? startRequest : { ...startRequest, open: false }, tracked, runtime.store ? { version: running, composed: runtime.composed } : undefined, homeLog, retry, { control: controls.restart, running: booted, channel: access })),
+        boot: repointingBoot({ home: request.home, profile: request.profile, ...updatedFrom === undefined ? {} : { updatedFrom }, write: text => { homeLog.logger.info(text.trimEnd()) } }, handover !== undefined, async (access: Parameters<HomeProcessOptions['host']['boot']>[0], controls: Parameters<HomeProcessOptions['host']['boot']>[1]) => bootProfile(handover === undefined ? startRequest : { ...startRequest, open: false }, tracked, runtime.store ? { version: running, composed: runtime.composed } : undefined, homeLog, retry, { control: controls.restart, running: booted, channel: access })),
       },
       ...runtime.store ? { restart: restartSupport(request.home, running, booted) } : {},
       preStart: () => runPreStartSteps(dependencies.preStartSteps, {
@@ -644,7 +644,6 @@ async function startHomeProcess(request: StartRequest, dependencies: StartDepend
         profile: request.profile,
         kind: 'cli',
         successor: handover !== undefined,
-        ...updatedFrom === undefined ? {} : { updatedFrom },
         output: request.output,
         // A successor's runtime was checked by the update that started it.
         ...runtime.store && handover === undefined ? { storedRuntime: { version: running, check: () => dependencies.checkRuntime(request.home, running, homeLog.logger, launcherAnchor(request.home, request.env).root, fullCheckDaysOf(request.env), runtime.composed) } } : {},

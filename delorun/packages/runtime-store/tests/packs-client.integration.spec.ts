@@ -121,7 +121,9 @@ describe('the signed files of an installed release\'s packs', () => {
     const file = paths.releaseFiles(V).packs
     const envelope = JSON.parse(readFileSync(file, 'utf8')) as { signatures: { sig: string }[] }
     const sig = envelope.signatures[0]!.sig
-    envelope.signatures[0]!.sig = `${sig.slice(0, -1)}${sig.endsWith('0') ? '1' : '0'}`
+    // A middle character, never the `=` padding, whose change could fail as a decode error instead of a signature check.
+    const middle = Math.floor(sig.length / 2)
+    envelope.signatures[0]!.sig = `${sig.slice(0, middle)}${sig[middle] === 'A' ? 'B' : 'A'}${sig.slice(middle + 1)}`
     chmodSync(file, 0o644)
     writeFileSync(file, JSON.stringify(envelope))
     await expect(readSignedPackFiles(release)).rejects.toThrow(/0 valid signatures/u)
