@@ -327,14 +327,12 @@ function RowsSection({ rows, t, resolveText, toggle, configure, state }: {
                     {configure?.has(row) === true
                       ? (
                         <button type="button" className={css.rowOpen} aria-label={t('configureRow', { name: title })} onClick={() => { configure.open(row) }}>
-                          <span className={css.rowId}>{title}</span>
+                          <span className={css.rowId} title={rowIdentity(row, title)}>{title}</span>
                           <IconChevronRightOutlineRegular className={css.rowOpenIcon} aria-hidden="true" />
                         </button>
                       )
-                      : <span className={css.rowId}>{title}</span>}
-                    {description === undefined ? null : <span className={css.rowModule}>{description}</span>}
-                    {title === row.rowId ? null : <code className={css.rowModule}>{row.rowId}</code>}
-                    {title === row.moduleName ? null : <code className={css.rowModule}>{row.moduleName}</code>}
+                      : <span className={css.rowId} title={rowIdentity(row, title)}>{title}</span>}
+                    {description === undefined ? null : <span className={css.rowDescription}>{description}</span>}
                   </div>
                   <span className={css.rowState}>
                     <StateDot state={rowDotState(row)} />
@@ -358,6 +356,24 @@ function RowsSection({ rows, t, resolveText, toggle, configure, state }: {
   )
 }
 
+/** The folder name of a local `link:` source, whose full path stays in the tooltip; other sources read as declared. */
+function sourceLabel(source: string): string {
+  if (!source.startsWith('link:')) return source
+  const folder = source.slice('link:'.length).replace(/[/\\]+$/, '')
+  return folder.slice(Math.max(folder.lastIndexOf('/'), folder.lastIndexOf('\\')) + 1) || source
+}
+
+/**
+ * The identifiers a row's name tooltip carries instead of printing them under the description.
+ * @param row - the row.
+ * @param title - the row's visible name.
+ * @returns the row id and module name that differ from the title, one per line, or undefined when none does.
+ */
+function rowIdentity(row: { readonly rowId: string; readonly moduleName: string }, title: string): string | undefined {
+  const ids = [row.rowId, row.moduleName].filter(id => id !== title)
+  return ids.length === 0 ? undefined : ids.join('\n')
+}
+
 /** Declared install source and versions; unavailable files retain their recorded dependency spec. */
 function SourceSection({ pkg, t }: { readonly pkg: PackageView; readonly t: Translate }): ReactNode {
   if (pkg.source === undefined && !pkg.installed && pkg.availability === 'installation' && !pkg.optional) return null
@@ -367,19 +383,17 @@ function SourceSection({ pkg, t }: { readonly pkg: PackageView; readonly t: Tran
       <dl className={css.facts}>
         <div>
           <dt>{t('sourceSpec')}</dt>
-          <dd>{pkg.source !== undefined ? <code>{pkg.source}</code> : pkg.availability === 'missing'
+          <dd>{pkg.source !== undefined ? <code title={pkg.source}>{sourceLabel(pkg.source)}</code> : pkg.availability === 'missing'
             ? t(pkg.installed ? 'statusMissingFiles' : 'sourceNotInstalled') : t('sourceBuiltIn')}</dd>
         </div>
-        {pkg.version === undefined
-          ? null
-          : (
-            <div>
-              <dt>{t('sourceVersion')}</dt>
-              <dd>{pkg.version}</dd>
-            </div>
-          )}
         {pkg.installTarget === undefined ? null : (
           <>
+            {pkg.version === undefined ? null : (
+              <div>
+                <dt>{t('sourceVersion')}</dt>
+                <dd>{pkg.version}</dd>
+              </div>
+            )}
             <div>
               <dt>{t('sourceTargetSpec')}</dt>
               <dd><code>{pkg.installTarget.spec}</code></dd>
@@ -893,14 +907,14 @@ function PackageDetail({
       <div className={css.detailMain}>
         <div className={css.titleRow}>
           <h3 className={css.detailTitle}>{title}</h3>
-          {pkg.version === undefined ? null : <Tag className={css.versionTag} tone="neutral">{t('versionTag', { version: pkg.version })}</Tag>}
+          {pkg.version === undefined || pkg.official ? null : <Tag className={css.versionTag} tone="neutral">{t('versionTag', { version: pkg.version })}</Tag>}
           {beta ? <Tag className={css.statusTag} tone="info">{t('statusBeta')}</Tag> : null}
           <StatusTag status={status} t={t} />
           {pkg.availability === 'missing' ? <Tag className={css.statusTag}>{t(pkg.installed ? 'statusMissingFiles' : 'statusNotInstalled')}</Tag> : null}
           {updateAvailable(pkg) || newer !== undefined ? <Tag className={css.statusTag} tone="info">{t('statusUpdateAvailable')}</Tag> : null}
           {renderSlot('plugins.detail.badge', { subject })}
         </div>
-        <p className={css.detailName}><code data-plugin-name>{pkg.name}</code></p>
+        {pkg.official ? null : <p className={css.detailName}><code data-plugin-name>{pkg.name}</code></p>}
         {description === undefined ? null : <p className={css.detailDesc}>{description}</p>}
       </div>
       <MetadataError error={pkg.meta?.error} t={t} />
@@ -1733,6 +1747,9 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
   const tabsId = useId()
   const [activation, setActivation] = useState<string | null>(null)
   const [headerRef] = useState(props.createHeaderRef)
+  // The list, a detail page, History and More share one scroller; a new view starts at its top.
+  const bodyRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => { if (bodyRef.current !== null) bodyRef.current.scrollTop = 0 }, [view])
   useEffect(() => { ensure() }, [ensure])
   // Installation highlights visible cards without changing the user's current page.
   const { highlight, clearHighlight } = { highlight: state.highlight, clearHighlight: props.clearHighlight }
@@ -1845,7 +1862,7 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
           <h1 className={css.pageTitle}>{showsHistory ? t('historyTitle') : t('moreTitle')}</h1>
         </header>
       ) : null}
-      <div className={css.pageBody} data-plugin-body>
+      <div className={css.pageBody} data-plugin-body ref={bodyRef}>
         {showsMainList
           ? (
             <div

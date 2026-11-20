@@ -152,7 +152,7 @@ function reading(first: string, second: string | null): Pick<PillContent, 'label
       <>
         {first}
         <span className={css.sep} aria-hidden>·</span>
-        {second}
+        <span className={css.second}>{second}</span>
       </>
     ),
     text: `${first} · ${second}`,

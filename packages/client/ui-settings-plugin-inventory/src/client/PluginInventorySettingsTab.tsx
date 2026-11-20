@@ -66,13 +66,16 @@ function phaseLabel(phase: PluginFiberPhase, t: Translate): string {
   return phase === null ? t('unobserved') : t(PHASE_KEYS[phase])
 }
 
-/** Compact technical names for Settings without changing their module identity. */
+/** Readable names for Settings without changing their module identity: "tool-bash" reads "Tool bash". */
 function moduleShortName(moduleName: string): string {
   const unscoped = moduleName.startsWith('@') ? moduleName.slice(moduleName.indexOf('/') + 1) : moduleName
-  return unscoped
+  const words = unscoped
     .replace(/^cordis:/, '')
     .replace(/^cordis-plugin-/, '')
     .replace(/^dsh-(?:host-|client-)?/, '')
+    .replace(/[-_/]+/g, ' ')
+    .trim()
+  return words.charAt(0).toLocaleUpperCase() + words.slice(1)
 }
 
 /** Display an entry identity without the composition-only `include:` marker. */
@@ -80,9 +83,14 @@ function entrySubtitle(entryId: string): string {
   return entryId.replace(/^include:/, '')
 }
 
-/** Whether a card shows its entry id: the id exists and, without its `include:` marker, differs from the title. */
+/** A name with its case and word separators ignored, so "Tool bash" matches "tool-bash". */
+function comparable(name: string): string {
+  return name.toLocaleLowerCase().replace(/[-_/\s]+/g, '-')
+}
+
+/** Whether an accessible name carries the entry id: the id exists and, without its `include:` marker, differs from the title. */
 function idAddsToTitle(entryId: string | null, title: string): entryId is string {
-  return entryId !== null && entrySubtitle(entryId) !== title
+  return entryId !== null && comparable(entrySubtitle(entryId)) !== comparable(title)
 }
 
 /** Accessible card name: the title, the complete entry id when the card shows one, then the enablement state. */
@@ -165,11 +173,6 @@ function PluginCard({
           </span>
         </span>
         {description === undefined ? null : <span className={css.cardDescription} id={descriptionId}>{description}</span>}
-        {idAddsToTitle(entryId, title) ? (
-          <span className={css.cardMeta}>
-            <code className={css.cardIdentity} title={entryId}>{entrySubtitle(entryId)}</code>
-          </span>
-        ) : null}
       </button>
       {metadataError === undefined ? null : <p className={css.brokenNote} role="status" data-package-meta-error>{metadataError}</p>}
       {open ? <div className={css.cardDetails} id={detailId}>{children}</div> : null}

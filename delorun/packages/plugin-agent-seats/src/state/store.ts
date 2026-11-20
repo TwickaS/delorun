@@ -1,14 +1,14 @@
 /**
- * The seat's logged state: reads come from the `agentSeat` projection's state, writes are plugin records of the seat
+ * The seat's logged state: reads come from the `agentSeat` projection's state, writes are typed events of the seat
  * child's own log. This is the {@link SeatStateStore} the adapter takes, and the writer of the status and notice
- * records the chat shows.
+ * events the chat shows.
  * @module @delorun/plugin-agent-seats/state/store
  */
-import { appendPluginRecord, type Session, type SessionId } from '@deepseek-ai/dsh-session'
+import type { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { SeatState, SeatStateStore } from '../adapter/state-port.ts'
 import type { SeatProjectionState } from './fold.ts'
 import { viewOf } from './fold.ts'
-import { SEAT_NOTICE_RECORD, SEAT_STATE_RECORD, SEAT_STATUS_RECORD, type SeatNoticeKind } from './record.ts'
+import { SEAT_NOTICE_EVENT, SEAT_STATE_EVENT, SEAT_STATUS_EVENT, type SeatNoticeKind } from './record.ts'
 import type { AgentSeatView, SeatModelPicker, SeatSandbox, SeatViewState } from './view.ts'
 
 /** Where the store finds a seat child's Session. */
@@ -41,7 +41,7 @@ export interface AccountFigures {
   readonly fiveHourResetAt?: number
 }
 
-/** What a status record adds to the current view. */
+/** What a status event adds to the current view. */
 export interface StatusChange extends AccountFigures {
   /** The version of the program, when it has reported one. */
   readonly version?: string
@@ -58,7 +58,7 @@ export interface StatusChange extends AccountFigures {
 }
 
 /**
- * The status fields that belong to the state a view is in, which a status record that only changes another field repeats.
+ * The status fields that belong to the state a view is in, which a status event that only changes another field repeats.
  * @param view - the view shown.
  * @returns the state and its own fields.
  */
@@ -151,7 +151,7 @@ export class SeatRecords implements SeatStateStore {
     const { logged } = this.stateOf(child)
     // The program's last message id belongs to the program session it was read from.
     const keep = state.programSessionId !== undefined && state.programSessionId === logged.programSessionId && logged.programMessageId !== null
-    appendPluginRecord(this.sessionOf(child), SEAT_STATE_RECORD, {
+    this.sessionOf(child).append(SEAT_STATE_EVENT, {
       ...state.programSessionId === undefined ? {} : { programSessionId: state.programSessionId },
       ...state.cursor === undefined ? {} : { cursor: state.cursor },
       ...keep ? { programMessageId: logged.programMessageId } : {},
@@ -165,7 +165,7 @@ export class SeatRecords implements SeatStateStore {
    */
   clearProgram(child: SessionId): void {
     const { tail } = this.stateOf(child)
-    appendPluginRecord(this.sessionOf(child), SEAT_STATE_RECORD, tail === null ? {} : { cursor: tail })
+    this.sessionOf(child).append(SEAT_STATE_EVENT, tail === null ? {} : { cursor: tail })
   }
 
   /**
@@ -176,7 +176,7 @@ export class SeatRecords implements SeatStateStore {
   recordProgramMessage(child: SessionId, programMessageId: string | undefined): void {
     const { logged } = this.stateOf(child)
     if ((programMessageId ?? null) === logged.programMessageId) return
-    appendPluginRecord(this.sessionOf(child), SEAT_STATE_RECORD, {
+    this.sessionOf(child).append(SEAT_STATE_EVENT, {
       ...logged.programSessionId === null ? {} : { programSessionId: logged.programSessionId },
       ...logged.cursor === null ? {} : { cursor: logged.cursor },
       ...programMessageId === undefined ? {} : { programMessageId },
@@ -191,7 +191,7 @@ export class SeatRecords implements SeatStateStore {
    * @param change - the fields that belong to it.
    */
   setStatus(child: SessionId, state: SeatViewState, change: StatusChange = {}): void {
-    appendPluginRecord(this.sessionOf(child), SEAT_STATUS_RECORD, { state, ...change })
+    this.sessionOf(child).append(SEAT_STATUS_EVENT, { state, ...change })
   }
 
   /**
@@ -202,7 +202,7 @@ export class SeatRecords implements SeatStateStore {
   setPending(child: SessionId, since: number | undefined): void {
     const view = this.viewOf(child)
     if (view === null) throw new Error(`the chat ${child} is not a seat child`)
-    appendPluginRecord(this.sessionOf(child), SEAT_STATUS_RECORD, { ...stateFields(view), ...since === undefined ? {} : { pending: since } })
+    this.sessionOf(child).append(SEAT_STATUS_EVENT, { ...stateFields(view), ...since === undefined ? {} : { pending: since } })
   }
 
   /**
@@ -215,7 +215,7 @@ export class SeatRecords implements SeatStateStore {
     if (view === null) throw new Error(`the chat ${child} is not a seat child`)
     const changed = (Object.keys(figures) as (keyof AccountFigures)[]).some(key => figures[key] !== view[key])
     if (!changed) return
-    appendPluginRecord(this.sessionOf(child), SEAT_STATUS_RECORD, {
+    this.sessionOf(child).append(SEAT_STATUS_EVENT, {
       ...stateFields(view),
       ...view.pending === undefined ? {} : { pending: view.pending.since },
       ...figures,
@@ -229,6 +229,6 @@ export class SeatRecords implements SeatStateStore {
    * @param text - the sentence the chat shows.
    */
   notice(child: SessionId, kind: SeatNoticeKind, text: string): void {
-    appendPluginRecord(this.sessionOf(child), SEAT_NOTICE_RECORD, { kind, text })
+    this.sessionOf(child).append(SEAT_NOTICE_EVENT, { kind, text })
   }
 }

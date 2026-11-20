@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Claude Code 驱动",
+    "description": "把 Claude Code 程序作为实时智能体打开、引导和停止，并把它的权限问题转交给你；在添加 Claude Code 包之前不做任何事"
+  }
+}

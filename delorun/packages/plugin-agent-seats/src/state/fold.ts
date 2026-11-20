@@ -4,14 +4,14 @@
  * (an ordinary chat) has no seat.
  * @module @delorun/plugin-agent-seats/state/fold
  */
-import { pluginRecordOf, type SessionEvent } from '@deepseek-ai/dsh-session'
+import type { SessionEvent } from '@deepseek-ai/dsh-session'
 // Type-only: the `subagent/descriptor` event merge.
 import type {} from '@deepseek-ai/dsh-subagent'
-import { SEAT_STATE_RECORD, SEAT_STATUS_RECORD, type SeatStateRecordData, type SeatStatusRecordData } from './record.ts'
+import type { SeatStatusRecordData } from './record.ts'
 import type { AgentSeatView, SeatAgent, SeatModelPicker, SeatSandbox, SeatViewState } from './view.ts'
 
 /** The fold's own version; bump it when the state fields or the fold change. */
-export const SEAT_FOLD_VERSION = 6
+export const SEAT_FOLD_VERSION = 7
 
 /** The `ownSettings` the view carries before the program's settings are known; the chat then names no setting. */
 export const DEFAULT_OWN_SETTINGS = ''
@@ -53,7 +53,7 @@ export interface SeatShown {
   readonly turns: number
 }
 
-/** What the logged state record holds, with absent fields as null. */
+/** What the logged state event holds, with absent fields as null. */
 export interface SeatLogged {
   /** The program's own session id. */
   readonly programSessionId: string | null
@@ -67,7 +67,7 @@ export interface SeatLogged {
 export interface SeatProjectionState {
   /** Events below this sequence number came from a fork's parent and are ignored. */
   readonly inherited: number
-  /** The logged state record. */
+  /** The logged state event. */
   readonly logged: SeatLogged
   /** Id of the newest message in the log, which a fresh program session skips after a failed resume. */
   readonly tail: string | null
@@ -104,7 +104,7 @@ const text = (value: unknown): string | null => typeof value === 'string' ? valu
 const count = (value: unknown): number | null => typeof value === 'number' && Number.isFinite(value) ? value : null
 
 /**
- * Read a picker from a stored status record.
+ * Read a picker from a stored status event.
  * @param value - the stored `modelPicker`.
  * @returns the picker, or null when it is absent or malformed.
  */
@@ -121,8 +121,8 @@ function pickerOf(value: unknown): SeatModelPicker | null {
 }
 
 /**
- * Fold a status record into what the view shows. Stored records are read defensively: they come from the log.
- * @param shown - the view's fields before the record.
+ * Fold a status event into what the view shows. The payload is read defensively: it comes from the log.
+ * @param shown - the view's fields before the event.
  * @param data - the stored payload.
  * @returns the next fields.
  */
@@ -198,16 +198,11 @@ export function foldSeat(previous: SeatProjectionState, event: SessionEvent): Se
     const pinned = event.data.source === 'delegation'
     return pinned === state.pinned ? state : { ...state, pinned }
   }
-  const record = pluginRecordOf(event)
-  if (record !== undefined) {
-    if (record.type === SEAT_STATE_RECORD) {
-      const data = record.data as Partial<SeatStateRecordData>
-      return { ...state, logged: { programSessionId: text(data.programSessionId), cursor: text(data.cursor), programMessageId: text(data.programMessageId) } }
-    }
-    if (record.type === SEAT_STATUS_RECORD) return { ...state, shown: foldStatus(state.shown, record.data as Partial<SeatStatusRecordData>) }
-    // The notice record is for the transcript and changes no state; any other record is another plugin's.
-    return state
+  if (event.type === 'external-agent/state') {
+    const data = event.data
+    return { ...state, logged: { programSessionId: text(data.programSessionId), cursor: text(data.cursor), programMessageId: text(data.programMessageId) } }
   }
+  if (event.type === 'external-agent/status') return { ...state, shown: foldStatus(state.shown, event.data) }
   if (state.shown.agent === null) return state
   switch (event.type) {
     case 'turn/start':

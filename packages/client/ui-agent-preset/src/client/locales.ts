@@ -52,7 +52,7 @@ export const en: Record<AgentPresetSettingsKey, string> = {
     'Work with code, files, and information. Suitable for most tasks, with search, editing, terminal commands, and other tools available as needed.',
   presetPtcName: 'PTC mode',
   presetPtcDescription:
-    'Includes all Standard mode capabilities. Better suited to tasks that call tools in batches and then filter, organize, deduplicate, count, or summarize the results.',
+    'Includes all Standard mode capabilities. Better suited to tasks that call tools in batches and then filter, organise, deduplicate, count, or summarise the results.',
   presetMinimalName: 'Minimal mode',
   presetMinimalDescription:
     'The agent uses a terminal and image reading, with context compaction. Useful for testing and comparing its basic performance.',
@@ -70,7 +70,7 @@ export const en: Record<AgentPresetSettingsKey, string> = {
 
   close: 'Close',
 
-  creatorDraft: 'Let the agent help me create a preset',
+  creatorDraft: 'Let the agent help me create a mode',
   createPlugin: 'Let the agent create a plugin',
   createPluginDescription: 'Enter Creator mode and make your own DSH plugin',
   createPluginChecking: 'Checking whether Creator mode is available',
@@ -111,7 +111,7 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
 
   close: '关闭',
 
-  creatorDraft: '让 Agent 帮我创建预设模式',
+  creatorDraft: '让 Agent 帮我创建一个模式',
   createPlugin: '让 Agent 创建插件',
   createPluginDescription: '进入创造模式，制作属于你的 DSH 插件',
   createPluginChecking: '正在确认创造模式是否可用',

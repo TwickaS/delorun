@@ -9,10 +9,10 @@ import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { mountAgentLoopTestDependencies, mountAgentLoopTestHarness } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import { pluginRecordOf, SessionId } from '@deepseek-ai/dsh-session'
+import { SessionId } from '@deepseek-ai/dsh-session'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import { SeatAdapter, type SeatHost } from '../../src/adapter/adapter.ts'
-import { mountSeatState, RESUME_PATH, SEAT_NOTICE_RECORD, SEAT_STATE_RECORD, SEAT_STATUS_RECORD } from '../../src/state/index.ts'
+import { mountSeatState, RESUME_PATH, SEAT_NOTICE_EVENT, SEAT_STATE_EVENT, SEAT_STATUS_EVENT } from '../../src/state/index.ts'
 import { ROUTE, ScriptedGate, describeSeat, until } from './support.ts'
 
 const say = (text: string) => createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } })
@@ -63,10 +63,7 @@ async function setup(tail?: () => Promise<{ lastMessageId?: string }>) {
   return { ctx, agent, adapter, gate, mount, idle }
 }
 
-const kinds = (agent: Agent): string[] => agent.session.snapshotEvents().map((event) => {
-  const record = pluginRecordOf(event)
-  return record === undefined ? event.type : record.type.replace('plugin:delorun/agent-seat/', 'seat:')
-})
+const kinds = (agent: Agent): string[] => agent.session.snapshotEvents().map(event => event.type.replace('external-agent/', 'seat:'))
 
 describe('the seat state on the production loop', () => {
   it('logs its records while the adapter\'s stream is open and shows the turn in the view', async () => {
@@ -133,9 +130,9 @@ describe('the seat state on the production loop', () => {
     expect(kinds(agent).filter(kind => kind === 'seat:notice')).toEqual([])
   })
 
-  it('writes the three record types under the names the catalog lists', () => {
-    expect([SEAT_STATE_RECORD, SEAT_STATUS_RECORD, SEAT_NOTICE_RECORD]).toEqual([
-      'plugin:delorun/agent-seat/state', 'plugin:delorun/agent-seat/status', 'plugin:delorun/agent-seat/notice',
+  it('writes the three event types under the names the catalog lists', () => {
+    expect([SEAT_STATE_EVENT, SEAT_STATUS_EVENT, SEAT_NOTICE_EVENT]).toEqual([
+      'external-agent/state', 'external-agent/status', 'external-agent/notice',
     ])
   })
 })

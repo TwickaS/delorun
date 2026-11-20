@@ -33,7 +33,7 @@ export interface AgentSeatReachService {
   readonly subscribe: (listener: () => void) => () => void
   /**
    * Confirm one granting answer before it is sent.
-   * @param answer - the prompt and the answer's value.
+   * @param answer - the prompt and the answer's value, `allowed-once` or `allowed-for-run`; the grant is minted over exactly that value, so one never admits the other.
    * @returns true when the answer may go: always on the computer; on a device once the answer grant is minted, and never
    *   for a prompt without a call id, which no grant can name.
    */
