@@ -11,6 +11,7 @@ import type { HostFetch } from '@delorun/bundle-local/host-api'
 import { readRequirements, type RequirementFix, type RequirementsAnswer } from '@delorun/bundle-local/requirements-api'
 
 export type { RequirementFix } from '@delorun/bundle-local/requirements-api'
+export { browserPageState, resolveBrowserSwitch, type BrowserFailure, type BrowserPageInput, type BrowserPageState, type BrowserSwitch, type PackProgress } from './switch.ts'
 
 /** The Browser plugin pack's package name. */
 export const BROWSER_BUNDLE = '@delorun/bundle-browser'

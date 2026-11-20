@@ -44,10 +44,12 @@ export interface OnboardingSettings {
   pausedStart: string
   /** How long adding a package may run before its card says it is still working, in seconds. */
   addWaitSeconds: number
+  /** What the person chose for Browser: `on` or `off`; empty while they never chose, which counts as on. */
+  browser: string
 }
 
 /** The settings of a profile that has not started onboarding. */
-export const DEFAULT_SETTINGS: OnboardingSettings = { done: false, step: '', plugins: [], optionalRows: [], pausedStart: '', addWaitSeconds: 60 }
+export const DEFAULT_SETTINGS: OnboardingSettings = { done: false, step: '', plugins: [], optionalRows: [], pausedStart: '', addWaitSeconds: 60, browser: '' }
 
 /** The host half's live configuration: one field per setting. */
 export interface Config {
@@ -57,6 +59,7 @@ export interface Config {
   optionalRows: Volatile<string[]>
   pausedStart: Volatile<string>
   addWaitSeconds: Volatile<number>
+  browser: Volatile<string>
   registry: string
   registryTimeoutMs: number
   keyTestTimeoutMs: number
@@ -78,6 +81,9 @@ export const Config = z.object({
   addWaitSeconds: z.natural().min(5).max(1800)
     .description('How long adding a package in the guide may run before its card says it is still working, in seconds. The add itself is not stopped.')
     .default(DEFAULT_SETTINGS.addWaitSeconds).volatile(),
+  browser: z.union(['', 'on', 'off'])
+    .description('What the person chose for Browser, in Settings or in the guide: on, or off. Empty while they never chose, which counts as on.')
+    .default(DEFAULT_SETTINGS.browser).volatile(),
   registry: z.string().pattern(/^https:\/\/[^\s/]+(?:\/[^\s]*)?$/u)
     .description('The npm registry the plugins step reads a package that is not installed from, only when the person asks.')
     .default('https://registry.npmjs.org'),
