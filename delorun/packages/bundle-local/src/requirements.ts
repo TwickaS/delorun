@@ -58,9 +58,11 @@ import { chromeChannelExecutable, launchedBrowser, parseBrowserChoice } from '@d
 import type { ProfileContext } from '@deepseek-ai/dsh-app-boot'
 // Type-only: the ctx.pluginManager service.
 import type {} from '@deepseek-ai/dsh-plugin-manager'
-import { admitApprovedDevice } from '@delorun/home-auth'
+import { scrubbedParentEnv } from '@deepseek-ai/dsh-subprocess'
+import { admitApprovedDevice, isLoopbackHost } from '@delorun/home-auth'
 import { z } from 'zod'
 import { registerBrowsePairing } from './browse-pairing.ts'
+import { registerBrowserCheck, runNode, type KitSearch } from './browser-check.ts'
 import { REQUIREMENT_ROUTES, type RequirementFix, type RequirementProblem, type RequirementRow, type RequirementsAnswer } from './client/requirements-api.ts'
 
 /** The plugin's name in the loader's diagnostics. */
@@ -263,6 +265,21 @@ function defaultCache(host: CheckEnvironment): string {
 }
 
 /**
+ * Where a `playwright-browser` need's packages are: the `package.json` of the last package of `via`, the Playwright MCP
+ * package, and the folder of the `playwright-core` it resolves.
+ * @param need - the need.
+ * @param bundleDir - the bundle's folder, from which `via` is resolved.
+ * @param host - the computer.
+ * @returns the MCP package's manifest path and the `playwright-core` folder.
+ * @throws when a package cannot be resolved.
+ */
+export function playwrightPackages(need: Extract<Need, { kind: 'playwright-browser' }>, bundleDir: string, host: CheckEnvironment): { readonly manifest: string; readonly core: string } {
+  let manifest = join(bundleDir, 'package.json')
+  for (const name of need.via) manifest = host.resolvePackage(manifest, name)
+  return { manifest, core: dirname(host.resolvePackage(manifest, 'playwright-core')) }
+}
+
+/**
  * The build a `playwright-browser` need names, read from the packages its bundle resolves.
  * @param need - the need.
  * @param bundleDir - the bundle's folder, from which `via` is resolved.
@@ -273,10 +290,8 @@ function defaultCache(host: CheckEnvironment): string {
  * `playwright-core` lists no such browser, or the cache is a relative path with no one folder to resolve it in.
  */
 export function playwrightBuild(need: Extract<Need, { kind: 'playwright-browser' }>, bundleDir: string, host: CheckEnvironment, rowConfig?: unknown): PlaywrightBuild {
-  let manifest = join(bundleDir, 'package.json')
-  for (const name of need.via) manifest = host.resolvePackage(manifest, name)
+  const { manifest, core } = playwrightPackages(need, bundleDir, host)
   const mcp = PackageManifest.parse(host.readJson(manifest))
-  const core = dirname(host.resolvePackage(manifest, 'playwright-core'))
   const { browsers } = BrowsersManifest.parse(host.readJson(join(core, 'browsers.json')))
   const builds = browsers.filter(entry => entry.name === need.browser || entry.name === `${need.browser}-headless-shell`)
   if (!builds.some(entry => entry.name === need.browser)) throw new Error(`the playwright-core of ${mcp.name} lists no browser "${need.browser}"`)
@@ -355,7 +370,7 @@ const RowBrowser = z.looseObject({ browser: z.unknown().optional(), executablePa
  * @param rowConfig - the row's Loader entry configuration.
  * @returns the path, or `undefined` when the row names none.
  */
-function rowExecutable(rowConfig: unknown): string | undefined {
+export function rowExecutable(rowConfig: unknown): string | undefined {
   const config = RowBrowser.safeParse(rowConfig)
   return config.success && typeof config.data.executablePath === 'string' && config.data.executablePath !== '' ? config.data.executablePath : undefined
 }
@@ -569,12 +584,44 @@ export async function listedBundles(ctx: Context): Promise<BundleToCheck[]> {
   })
 }
 
+/** The Browser pack's package name. */
+export const BROWSER_BUNDLE_NAME = '@delorun/bundle-browser'
+
+/** The pack's row that launches the built-in browser, whose configuration says which browser starts. */
+export const BROWSER_ROW_ID = 'browser-use-playwright-mcp'
+
+/**
+ * Find the built-in browser in the profile.
+ * @param scope - the scope that holds the plugin manager.
+ * @returns the kit, `not-added` while the Host lists no Browser pack, or `unreadable` with the reason the pack's
+ * declaration or packages could not be read.
+ */
+export async function findBrowserKit(scope: Context): Promise<KitSearch> {
+  const bundle = (await listedBundles(scope)).find(each => each.name === BROWSER_BUNDLE_NAME)
+  if (bundle === undefined) return { kind: 'not-added' }
+  try {
+    const need = declarationOf(bundle)?.[BROWSER_ROW_ID]?.needs.find(each => each.kind === 'playwright-browser')
+    if (need === undefined) return { kind: 'unreadable', message: `${BROWSER_BUNDLE_NAME} declares no browser build for ${BROWSER_ROW_ID}` }
+    const host = hostEnvironment()
+    const rowConfig = bundle.rowConfigs?.[BROWSER_ROW_ID]
+    const { manifest, core } = playwrightPackages(need, bundle.dir, host)
+    const launch = launchesChrome(need, rowConfig, host) ? 'chrome' : 'chromium'
+    const executable = rowExecutable(rowConfig) ?? ''
+    const folders = playwrightBuild(need, bundle.dir, host, rowConfig).folders
+    const installed = launch === 'chrome' || executable !== '' || folders.every(folder => host.exists(join(folder, 'INSTALLATION_COMPLETE')))
+    return { kind: 'kit', kit: { core, cli: join(dirname(manifest), 'cli.js'), launch, executable, installed } }
+  } catch (error) {
+    return { kind: 'unreadable', message: (error as Error).message }
+  }
+}
+
 /**
  * Mount the check route, and the pairing route of rows that need a browse pairing, once the Connection is up.
  * @param ctx - the row's scope.
  */
 export function apply(ctx: Context): void {
   ctx.inject(['connection'], (scope) => {
+    registerBrowserCheck(scope, () => findBrowserKit(scope), { run: runNode, env: scrubbedParentEnv, loopback: isLoopbackHost })
     registerBrowsePairing(scope, async (request) => {
       const bundle = (await listedBundles(scope)).find(each => each.name === request.packageName)
       const need = bundle === undefined ? undefined : declarationOf(bundle)?.[request.rowId]?.needs.find(each => each.kind === 'browse-paired')

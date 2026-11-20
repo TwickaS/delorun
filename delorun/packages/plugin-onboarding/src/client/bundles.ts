@@ -37,6 +37,8 @@ export interface BundleView {
   readonly description?: LocalizedText
   /** Why the bundle is `failed` (the plugin manager's own words) or `unavailable` or `offline` (the platform or pack reason). */
   readonly reason?: string
+  /** Whether the bundle is in the home but turned off, which only the person does (in Plugins); a bundle never added is not held. */
+  readonly held?: true
   /** For an `unavailable` bundle: why this Host has no plugin packs to offer (a build from source, for one), which the card says instead of blaming the computer. */
   readonly packsReason?: string
 }
@@ -219,7 +221,11 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
       })
     }
   }
-  const set = (name: string, view: BundleView): void => { views.set({ ...views.getSnapshot(), [name]: view }) }
+  // `held` describes a bundle that is turned off, which only the `available` state can be.
+  const set = (name: string, view: BundleView): void => {
+    const { held: _held, ...rest } = view
+    views.set({ ...views.getSnapshot(), [name]: view.state === 'available' ? view : rest })
+  }
   const setAll = (names: readonly string[], state: BundleState): void => {
     views.set({ ...views.getSnapshot(), ...Object.fromEntries(names.filter(name => !inflight.has(name)).map(name => [name, { state }])) })
   }
@@ -275,6 +281,7 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
         state,
         ...reason === undefined ? {} : { reason },
         ...state === 'unavailable' && !platformLimit && packsUnsupported !== undefined ? { packsReason: packsUnsupported } : {},
+        ...state === 'available' && bundle !== undefined && bundle.availability !== 'missing' && !bundle.enabled ? { held: true as const } : {},
         ...bundle?.meta?.title === undefined ? {} : { title: bundle.meta.title },
         ...bundle?.meta?.description === undefined ? {} : { description: bundle.meta.description },
         ...bundle?.error?.code === 'unsupported-platform' && bundle.error.diagnostic !== undefined ? { reason: bundle.error.diagnostic } : {},

@@ -81,7 +81,7 @@ function Line({ tone, children, action }: { readonly tone: keyof typeof MARKS; r
  * @param props - the command and the copy.
  * @returns the row.
  */
-function Command({ command, t }: { readonly command: string; readonly t: BrowserTranslate }): ReactNode {
+export function BrowserCommand({ command, t }: { readonly command: string; readonly t: BrowserTranslate }): ReactNode {
   const [copied, setCopied] = useState<'no' | 'yes' | 'failed'>('no')
   const copy = (): void => {
     navigator.clipboard.writeText(command).then(() => { setCopied('yes') }, () => { setCopied('failed') })
@@ -117,7 +117,7 @@ function Fix({ fix, t, onOpenSettings }: { readonly fix: RequirementFix } & Pick
       return (
         <div className={css.fix}>
           <span className={css.hint}>{t('browser.fix.command')}</span>
-          <Command command={fix.command} t={t} />
+          <BrowserCommand command={fix.command} t={t} />
         </div>
       )
     case 'settings':
