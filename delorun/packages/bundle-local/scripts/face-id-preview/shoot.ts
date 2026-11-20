@@ -4,7 +4,7 @@
  *
  *   node_modules/.bin/tsx delorun/packages/bundle-local/scripts/face-id-preview/shoot.ts --out <directory>
  *
- * It writes `<name>-<width>-<theme>.png`: 390px wide in dark and light for every screen, and 1440px wide for the
+ * `--only <prefix>` shoots only the screens whose name starts with it; `--base` names the preview's address. It writes `<name>-<width>-<theme>.png`: 390px wide in dark and light for every screen, and 1440px wide for the
  * screens a computer also shows. A shot with `top` fails the run unless every element it names is the topmost element at
  * its own centre, which proves the Face ID layer sits over the studio's overlays; one with `apart` fails unless the
  * elements it names have no overlapping boxes. Playwright comes from
@@ -29,13 +29,19 @@ interface Page {
 interface Context { newPage(): Promise<Page>; close(): Promise<void> }
 interface Playwright { chromium: { launch(): Promise<{ newContext(options: object): Promise<Context>; close(): Promise<void> }> } }
 
-const { values } = parseArgs({ options: { out: { type: 'string' }, base: { type: 'string', default: 'http://127.0.0.1:19115' } } })
+const { values } = parseArgs({ options: { out: { type: 'string' }, base: { type: 'string', default: 'http://127.0.0.1:19115' }, only: { type: 'string' } } })
 if (values.out === undefined) throw new Error('usage: shoot.ts --out <directory>')
 const out = values.out
 await mkdir(out, { recursive: true })
 
 /** One picture: the output name, the screen query value, and the widths it is shot at. */
 const SHOTS: readonly { readonly name: string; readonly screen: string; readonly wide: boolean; readonly tap?: string; readonly top?: string; readonly apart?: string }[] = [
+  { name: 'a498-terminal', screen: 'a498-terminal', wide: false, top: '[data-face-id-sheet] button' },
+  { name: 'a498-fullaccess', screen: 'a498-fullaccess', wide: false },
+  { name: 'a498-approval', screen: 'a498-approval', wide: false },
+  { name: 'a498-update', screen: 'a498-update', wide: false },
+  { name: 'a498-install', screen: 'a498-install', wide: false },
+  { name: 'a498-keypad', screen: 'a498-keypad', wide: false, top: '[data-face-id-pin] button' },
   { name: 'b2-sheet', screen: 'b2-sheet', wide: true },
   { name: 'b2-answer', screen: 'b2-answer', wide: false },
   { name: 'wire-install', screen: 'wire-install', wide: false },
@@ -62,7 +68,7 @@ try {
       const mobile = width === 390
       const context = await browser.newContext({ viewport: { width, height: mobile ? 844 : 900 }, deviceScaleFactor: 1, isMobile: mobile, hasTouch: mobile, reducedMotion: 'reduce', colorScheme: theme })
       try {
-        for (const shot of SHOTS.filter(entry => mobile || entry.wide)) {
+        for (const shot of SHOTS.filter(entry => (mobile || entry.wide) && (values.only === undefined || entry.name.startsWith(values.only)))) {
           const page = await context.newPage()
           await page.goto(`${values.base}/?screen=${shot.screen}&theme=${theme}`)
           await page.waitForTimeout(600)
@@ -73,6 +79,8 @@ try {
           if (shot.top !== undefined) {
             const covered = await page.evaluate((selector: string) => [...document.querySelectorAll(selector)].flatMap((element) => {
               const box = element.getBoundingClientRect()
+              // A control in a hidden pane has no box and takes no tap.
+              if (box.width === 0) return []
               const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)
               return hit !== null && element.contains(hit) ? [] : [`${element.textContent ?? ''} under ${hit?.outerHTML.slice(0, 80) ?? 'nothing'}`]
             }), shot.top)

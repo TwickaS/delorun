@@ -26,6 +26,14 @@ export const en = {
   'sheet.setUpFirst': 'This device has no {method} yet. Set it up: Settings → Face ID → Add {method}, then type the code it shows at your computer. Or do this at your computer.',
   'sheet.faceOnly': 'This needs {method} itself. A PIN cannot approve it.',
   'sheet.cancel': 'Cancel',
+  'sheet.confirmPin': 'Confirm with PIN',
+  'sheet.workspace': 'Workspace',
+  'sheet.chat': 'Chat',
+  'sheet.allows': 'Allows',
+  'sheet.lasts': 'Covers',
+  'sheet.stays': 'Afterwards',
+  'lasts.once': 'This action only',
+  'lasts.terminal': 'This terminal until it is unused for 5 minutes',
   'pin.lead': 'Enter your PIN to approve this once.',
   'pin.leadPasscode': 'Enter your passcode to approve this once.',
   'pin.label': 'PIN',
@@ -165,6 +173,30 @@ export const en = {
   'do.seatAnswer.body': 'Claude Code or Codex goes ahead on your computer with what its question asks.',
   'do.generic.title': 'Confirm this action',
   'do.generic.body': 'Delorun asks you to confirm this on this device.',
+  'stays.installPlugin': 'The plugin stays installed until you remove it.',
+  'stays.updatePlugin': 'The plugin stays on its newer version until you change it.',
+  'stays.removePlugin': 'The plugin stays removed until you install it again.',
+  'stays.switchPlugin': 'The plugin stays on or off until you change it again.',
+  'stays.changePlugins': 'Your plugins stay as changed until you change them again.',
+  'stays.changeSettings': 'The setting stays changed until you change it back.',
+  'stays.saveKey': 'The key stays saved until you remove it.',
+  'stays.removeKey': 'The key stays removed until you save one again.',
+  'stays.addWorkspace': 'The workspace stays in your list until you remove it.',
+  'stays.workspaceDefaults': 'The defaults apply to new chats until you change them.',
+  'stays.fullAccessOn': 'Full access stays on for {workspace} until you turn it off.',
+  'stays.fullAccessOnChat': 'Full access stays on for {workspace} until you turn it off.',
+  'stays.fullAccessOff': 'Full access stays off for {workspace} until you turn it on.',
+  'stays.network': 'The network setting stays as you set it until you change it.',
+  'stays.mcpAccept': 'The MCP server stays allowed until you change it in Settings.',
+  'stays.externalAgent': 'The agent stays allowed in this workspace until you turn it off.',
+  'stays.deleteForever': 'What you delete cannot be restored.',
+  'stays.awayBrowser': 'The agent can use your browser while you are away until you turn it off.',
+  'stays.profileSwitch': 'Delorun stays on that setup until you switch again.',
+  'stays.change.plugin-apply': 'The change stays in place until you undo it.',
+  'stays.change.harness-apply': 'The change stays in place until you undo it.',
+  'stays.change.update-begin': 'Delorun stays on the new release until you go back.',
+  'stays.change.update-rollback': 'Delorun stays on the previous release until you update again.',
+  'stays.change.protection-off': 'Protection stays off until you turn it on again.',
   'devices.failed': 'The device list could not be read or changed. Try again.',
   'devices.thisDevice': 'This device',
   'devices.added': 'Added {date}',
@@ -183,6 +215,15 @@ export const CHANGE_CONTROLS = ['plugin-undo', 'plugin-discard', 'harness-discar
 
 /** The confirmations of other sensitive actions that have their own words: `do.<id>.title` and `do.<id>.body`. */
 export type FaceActionCopy = 'installPlugin' | 'updatePlugin' | 'removePlugin' | 'switchPlugin' | 'changePlugins' | 'openTerminal' | 'browseFolders' | 'newFolder' | 'changeSettings' | 'saveKey' | 'removeKey' | 'addWorkspace' | 'workspaceDefaults' | 'chatOutside' | 'runCommand' | 'mcpServer' | 'pluginCode' | 'fullAccessOn' | 'fullAccessOnChat' | 'fullAccessOff' | 'network' | 'mcpAccept' | 'externalAgent' | 'deleteForever' | 'awayBrowser' | 'reportDetails' | 'profileSave' | 'profileSwitch' | 'seatAnswer' | 'generic'
+
+/**
+ * The copy of a grant action: its own entry, else its `<namespace>/*` entry, else `generic`.
+ * @param action - a Remote method, a Fetch route's action name, or `changes/<control>`.
+ * @returns the copy id the sheet's words and glyph are looked up by.
+ */
+export function faceCopyOf(action: string): FaceActionCopy {
+  return ACTION_COPY[action] ?? ACTION_COPY[`${action.slice(0, action.indexOf('/'))}/*`] ?? 'generic'
+}
 
 /**
  * The words of each grant action, by the action's name: a Remote method or a Fetch route's action. An action this map

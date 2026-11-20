@@ -139,14 +139,20 @@ describe('FaceIdSheet', () => {
   it('goes straight to the way down without a passkey or support', async () => {
     // A device with no passkey must not offer a prompt that cannot work.
     const onOpenDevices = vi.fn()
-    sheet({ hasPasskey: false, onOpenDevices })
+    const props = sheet({ hasPasskey: false, onOpenDevices })
     expect(screen.queryByRole('button', { name: 'Confirm with Face ID' })).toBeNull()
+    // The PIN is the main button, and says so.
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm with PIN' }))
+    expect(props.onFallback).toHaveBeenCalled()
+    cleanup()
+    const stranded = sheet({ hasPasskey: false, fallback: 'computer', onOpenDevices })
     fireEvent.click(screen.getByRole('button', { name: 'Open Face ID settings' }))
     expect(onOpenDevices).toHaveBeenCalled()
-    expect(screen.getByRole('button', { name: 'Use PIN instead' })).toBeTruthy()
+    expect(stranded.onFallback).not.toHaveBeenCalled()
     cleanup()
     sheet({ browser: fakeBrowser({ available: false }) })
     expect(await screen.findByText('This browser cannot use Face ID here.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Confirm with PIN' })).toBeTruthy()
   })
   it('names Touch ID or Windows Hello on a computer and cancels on Escape', async () => {
     // B5: wording follows the platform.

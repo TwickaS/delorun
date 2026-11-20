@@ -10,6 +10,8 @@ import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { CodeCells, Keypad } from '@delorun/brand'
 import { isRefused } from './host-api.ts'
 import type { FaceIdAction, PasskeyApi } from './face-id-types.ts'
+import { FaceIdIcon } from './face-id-icons.tsx'
+import { faceIdLastsLine } from './face-id-lasts.ts'
 import { FaceIdLayer } from './FaceIdLayer.tsx'
 import css from './FaceId.module.css'
 
@@ -32,11 +34,11 @@ export interface FaceIdPinProps {
 }
 
 /**
- * Render the PIN entry.
- * @param props - see {@link FaceIdPinProps}.
- * @returns the entry, over the same scrim as the sheet.
+ * Render the PIN entry's content, for a layer that another component owns (the flow slides it in over the sheet).
+ * @param props - see {@link FaceIdPinProps}; `onCancel` is not used here.
+ * @returns the entry form.
  */
-export function FaceIdPin({ t, action, api, secret, onGranted, onBack, onCancel }: FaceIdPinProps): ReactNode {
+export function FaceIdPinBody({ t, action, api, secret, onGranted, onBack }: Omit<FaceIdPinProps, 'onCancel'>): ReactNode {
   const [value, setValue] = useState('')
   const [busy, setBusy] = useState(false)
   const [wrong, setWrong] = useState<'wrong' | 'paused' | 'failed' | undefined>(undefined)
@@ -54,22 +56,35 @@ export function FaceIdPin({ t, action, api, secret, onGranted, onBack, onCancel 
       (error: unknown) => { setBusy(false); setWrong(isRefused(error, 'PIN_INVALID') ? 'wrong' : isRefused(error, 'PIN_UNLOCKS_PAUSED') ? 'paused' : 'failed') },
     )
   }
-  return <FaceIdLayer labelledBy="delorun-face-id-pin-title" attributes={{ 'data-face-id-pin': '' }} onEscape={onBack} onClosed={onCancel}>
-    <form className={css.sheet} onSubmit={submit}>
+  return <form className={css.pane} onSubmit={submit}>
+    <header className={css.header}>
+      <span className={css.icon}><FaceIdIcon icon={action.icon} /></span>
       <h2 id="delorun-face-id-pin-title" className={css.title}>{action.title}</h2>
-      <p className={css.body}>{t(isPin ? 'pin.lead' : 'pin.leadPasscode')}</p>
-      {isPin
-        ? <>
-          <CodeCells label={t('pin.label')} length={MIN_PIN_DIGITS} open mask value={value} onChange={setValue} error={wrong === 'wrong'} disabled={busy}
-            autoComplete="off" name="delorun-grant-pin" />
-          <Keypad onKey={(key) => { if (!busy) setValue(current => key === '⌫' ? current.slice(0, -1) : current.length < MAX_SECRET_CHARS ? current + key : current) }}
-            deleteLabel={t('pin.delete')} disabled={busy} />
-        </>
-        : <input className={css.field} type="password" name="delorun-grant-pin" aria-label={t('pin.labelPasscode')} autoComplete="off" autoCorrect="off"
-          autoCapitalize="off" spellCheck={false} disabled={busy} value={value} onChange={(event) => { setValue(event.target.value) }} />}
-      {wrong === undefined ? null : <p className={css.failed} role="alert">{t(`pin.${wrong}`)}</p>}
-      <Button variant="primary" type="submit" className={css.confirm} disabled={!ready}>{t(busy ? 'pin.checking' : 'pin.confirm')}</Button>
-      <button type="button" className={css.link} onClick={onBack}>{t('pin.back')}</button>
-    </form>
+    </header>
+    <p className={css.body}>{[action.context?.workspace, action.context?.chat, action.stays ?? faceIdLastsLine(t, action, 'pin')].filter(part => part !== undefined).join(' · ')}</p>
+    <p className={css.body}>{t(isPin ? 'pin.lead' : 'pin.leadPasscode')}</p>
+    {isPin
+      ? <>
+        <CodeCells label={t('pin.label')} length={MIN_PIN_DIGITS} open mask value={value} onChange={setValue} error={wrong === 'wrong'} disabled={busy}
+          autoComplete="off" name="delorun-grant-pin" />
+        <Keypad onKey={(key) => { if (!busy) setValue(current => key === '⌫' ? current.slice(0, -1) : current.length < MAX_SECRET_CHARS ? current + key : current) }}
+          deleteLabel={t('pin.delete')} disabled={busy} />
+      </>
+      : <input className={css.field} type="password" name="delorun-grant-pin" aria-label={t('pin.labelPasscode')} autoComplete="off" autoCorrect="off"
+        autoCapitalize="off" spellCheck={false} disabled={busy} value={value} onChange={(event) => { setValue(event.target.value) }} />}
+    {wrong === undefined ? null : <p className={css.failed} role="alert">{t(`pin.${wrong}`)}</p>}
+    <Button variant="primary" type="submit" className={css.confirm} disabled={!ready}>{t(busy ? 'pin.checking' : 'pin.confirm')}</Button>
+    <Button variant="outline" type="button" className={css.secondary} onClick={onBack}>{t('pin.back')}</Button>
+  </form>
+}
+
+/**
+ * Render the PIN entry.
+ * @param props - see {@link FaceIdPinProps}.
+ * @returns the entry, over the same scrim as the sheet.
+ */
+export function FaceIdPin(props: FaceIdPinProps): ReactNode {
+  return <FaceIdLayer labelledBy="delorun-face-id-pin-title" attributes={{ 'data-face-id-pin': '' }} onEscape={props.onBack} onClosed={props.onCancel}>
+    <div className={css.sheet}><FaceIdPinBody {...props} /></div>
   </FaceIdLayer>
 }

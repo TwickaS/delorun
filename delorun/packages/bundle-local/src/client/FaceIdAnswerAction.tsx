@@ -12,6 +12,7 @@ import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { httpPasskeyApi } from './face-id-api.ts'
 import { browserPasskeys, faceIdKindOf, type PasskeyBrowser } from './face-id-browser.ts'
 import type { FaceIdAction, PasskeyApi } from './face-id-types.ts'
+import { ANSWER_ICON } from './face-id-icon-keys.ts'
 import { FaceIdGrantFlow } from './FaceIdGrantFlow.tsx'
 import type { HostFetch } from './host-api.ts'
 import type { PinSource } from './pin-lock.ts'
@@ -49,6 +50,7 @@ const ANSWER_VALUE = 'allowed-once'
  */
 export function answerActionOf(t: PropsLocale<'delorunFaceId'>['t'], request: { readonly sessionId: string; readonly callId: string; readonly grants: ApprovalGrant; readonly toolName: string | undefined }): FaceIdAction {
   return {
+    icon: ANSWER_ICON[request.grants],
     title: t(`answer.${request.grants}.title`),
     body: t(`answer.${request.grants}.body`, { agent: request.toolName ?? '' }),
     grant: { answer: { agent: request.sessionId, callId: request.callId, grants: request.grants, value: ANSWER_VALUE } },

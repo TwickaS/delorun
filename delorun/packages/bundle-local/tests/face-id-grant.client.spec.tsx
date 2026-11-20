@@ -158,7 +158,7 @@ describe('the terminal path on a phone (owner report on the iPhone)', () => {
 
   it('sends terminal/create again after a PIN confirm, and closes the keypad', async () => {
     const { api, lifted } = refusedCreate(false)
-    fireEvent.click(await screen.findByRole('button', { name: en['sheet.usePin'] }))
+    fireEvent.click(await screen.findByRole('button', { name: en['sheet.confirmPin'] }))
     for (const digit of '824619') fireEvent.click(screen.getByRole('button', { name: digit }))
     fireEvent.click(screen.getByRole('button', { name: en['pin.confirm'] }))
     await expect(lifted).resolves.toBe(true)
@@ -192,10 +192,10 @@ describe('the terminal path on a phone (owner report on the iPhone)', () => {
   it('goes back from the keypad to the sheet on Escape, and hands back the refusal on a second Escape', async () => {
     // A browser with no Face ID offers the PIN beside the sheet.
     const { api, lifted } = refusedCreate(false)
-    fireEvent.click(await screen.findByRole('button', { name: en['sheet.usePin'] }))
+    fireEvent.click(await screen.findByRole('button', { name: en['sheet.confirmPin'] }))
     expect(document.querySelector('[data-face-id-pin]')).not.toBeNull()
     fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
-    await screen.findByRole('button', { name: en['sheet.usePin'] })
+    await screen.findByRole('button', { name: en['sheet.confirmPin'] })
     expect(document.querySelector('[data-face-id-pin]')).toBeNull()
     fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
     await expect(lifted).resolves.toBe(false)
@@ -205,7 +205,7 @@ describe('the terminal path on a phone (owner report on the iPhone)', () => {
   it.each(['sheet', 'keypad'] as const)('ends the confirmation when the browser closes the %s dialog itself, and asks afresh for the next call', async (where) => {
     // Chrome closes a modal dialog on a repeated close request with no tap between; a confirmation left pending held every later one (review P2-2).
     const { lifted, lift } = refusedCreate(where === 'sheet')
-    if (where === 'keypad') fireEvent.click(await screen.findByRole('button', { name: en['sheet.usePin'] }))
+    if (where === 'keypad') fireEvent.click(await screen.findByRole('button', { name: en['sheet.confirmPin'] }))
     else await screen.findByRole('button', { name: /Confirm with/ })
     const dialog = document.querySelector('dialog')
     act(() => { dialog?.removeAttribute('open'); dialog?.dispatchEvent(new Event('close')) })
