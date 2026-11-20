@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_MULTIVIEW_SETTINGS } from '../../src/config.ts'
-import { MULTIVIEW_NS } from '../../src/entry/contract.ts'
+import { MULTIVIEW_NS } from '../../src/client/contract.ts'
 import { en, zh } from '../../src/entry/locales.ts'
 import { HEADER_ORDER } from '../../src/entry/register.ts'
 import { MULTIVIEW_ROW_ID } from '../../src/config.ts'

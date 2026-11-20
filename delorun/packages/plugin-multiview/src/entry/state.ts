@@ -14,7 +14,7 @@ import {
 } from '../layout/index.ts'
 import {
   EMPTY_CHAT_MULTIVIEW, type ChatMultiview, type MultiviewPersistence, type MultiviewService, type PinResult,
-} from './contract.ts'
+} from '../client/contract.ts'
 
 /** What the store needs from its surroundings. */
 export interface MultiviewStoreOptions {

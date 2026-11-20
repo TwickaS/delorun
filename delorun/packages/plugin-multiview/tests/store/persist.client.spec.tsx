@@ -3,7 +3,7 @@ import { qualifiedPersistKey } from '@deepseek-ai/dsh-client-store'
 import { SessionId } from '@deepseek-ai/dsh-session/types'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MAX_PANES_RANGE } from '../../src/config.ts'
-import { EMPTY_CHAT_MULTIVIEW, type ChatMultiview } from '../../src/entry/contract.ts'
+import { EMPTY_CHAT_MULTIVIEW, type ChatMultiview } from '../../src/client/contract.ts'
 import { buildPreset, layoutOf, leafOf, panesOf, splitOf, type LayoutNode } from '../../src/layout/index.ts'
 import {
   browserStorage, localPersistence, MULTIVIEW_INDEX_NAME, MULTIVIEW_PERSIST_NAME, type MultiviewStorage,

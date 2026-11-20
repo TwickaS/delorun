@@ -10,7 +10,7 @@ import { SessionId } from '@deepseek-ai/dsh-session/types'
 import { z } from 'zod'
 import { KEPT_CHATS_RANGE, MAX_PANES_RANGE } from '../config.ts'
 import { layoutProblem, panesOf, type LayoutNode } from '../layout/index.ts'
-import type { ChatMultiview, MultiviewPersistence } from '../entry/contract.ts'
+import type { ChatMultiview, MultiviewPersistence } from '../client/contract.ts'
 
 /** The storage key's name; the chat's id and the connection's host id qualify it. The version is part of the name: another version is another key. */
 export const MULTIVIEW_PERSIST_NAME = 'dsh.multiview.v1'

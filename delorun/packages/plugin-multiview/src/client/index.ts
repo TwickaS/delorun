@@ -13,7 +13,7 @@ import { browserStorage, localPersistence } from '../store/persist.ts'
 export {
   EMPTY_CHAT_MULTIVIEW, MULTIVIEW_NS, MULTIVIEW_PANEL_ID,
   type ChatMultiview, type MultiviewPersistence, type MultiviewService, type PinRefusal, type PinResult,
-} from '../entry/contract.ts'
+} from './contract.ts'
 export { Footer, HeaderButton, openOrClose, PinButton, type EntryInjected, type FooterProps, type HeaderButtonProps, type PinButtonProps } from '../entry/Entry.tsx'
 export { en, zh, type MultiviewLocaleKey } from '../entry/locales.ts'
 export { HEADER_ORDER, registerEntry, type RegisterOptions } from '../entry/register.ts'

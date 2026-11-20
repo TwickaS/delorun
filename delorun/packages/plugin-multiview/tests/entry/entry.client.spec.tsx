@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { MultiviewSettings } from '../../src/config.ts'
 import { Footer, HeaderButton, PinButton, type EntryInjected, type FooterProps, type HeaderButtonProps, type PinButtonProps } from '../../src/entry/Entry.tsx'
 import { en } from '../../src/entry/locales.ts'
-import { MULTIVIEW_PANEL_ID } from '../../src/entry/contract.ts'
+import { MULTIVIEW_PANEL_ID } from '../../src/client/contract.ts'
 import { A, B, C, CHAT, makeStore, sid } from './fixtures.ts'
 import { listOf, slotProps, type ListSpec } from './harness.tsx'
 

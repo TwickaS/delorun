@@ -1,7 +1,7 @@
 /**
  * What the entry points share with the panel and the pane lanes: the settings, the dictionary namespace, the panel id, and
  * the `multiview` service that holds each chat's pins, its layout and whether Multiview is open.
- * @module @delorun/plugin-multiview/entry/contract
+ * @module @delorun/plugin-multiview/client/contract
  */
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
@@ -138,6 +138,6 @@ declare module '@deepseek-ai/cordis' {
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
     /** The Multiview entry points' copy. */
-    'delorunMultiview': import('./locales.ts').MultiviewLocaleKey
+    'delorunMultiview': import('../entry/locales.ts').MultiviewLocaleKey
   }
 }

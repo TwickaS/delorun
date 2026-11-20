@@ -1,7 +1,7 @@
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { SessionId } from '@deepseek-ai/dsh-session/types'
 import { DEFAULT_MULTIVIEW_SETTINGS, type MultiviewSettings } from '../../src/config.ts'
-import type { ChatMultiview, MultiviewPersistence } from '../../src/entry/contract.ts'
+import type { ChatMultiview, MultiviewPersistence } from '../../src/client/contract.ts'
 import { MultiviewStore } from '../../src/entry/state.ts'
 
 export const sid = (value: string): SessionId => SessionId(value)

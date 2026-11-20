@@ -10,8 +10,8 @@ import {
 import type { HostObservable, InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { LAYOUT_PRESETS, type CapacityRefusal } from '../layout/index.ts'
-import type { MULTIVIEW_NS} from './contract.ts';
-import { EMPTY_CHAT_MULTIVIEW, MULTIVIEW_PANEL_ID, type ChatMultiview, type MultiviewService } from './contract.ts'
+import type { MULTIVIEW_NS} from '../client/contract.ts';
+import { EMPTY_CHAT_MULTIVIEW, MULTIVIEW_PANEL_ID, type ChatMultiview, type MultiviewService } from '../client/contract.ts'
 import { ownerOf, runningAgentsOf } from './read.ts'
 import css from './Entry.module.css'
 
