@@ -10,7 +10,7 @@ description: "在此人自己的 tailnet 上远程访问的设计：只在 home 
 
 ## 摘要
 
-Reach lets a person open their studio from their own phone or laptop over their own Tailscale tailnet, with no Delorun service in the path. A new device is approved only at the home's computer, during a short approval window the person opens there. An approved device signs in with its device key. A remote session can watch, reply, start chats, approve ordinary prompts and stop a run. Each sensitive action, granting full access among them, takes Face ID or that device's PIN, once per action; removing another device takes Face ID from a device that holds a passkey, never the PIN. Approving a device and changing reach wait until the person is at the computer. The home enforces both, not the remote page. The admission rules are [contract C4](../contracts/c04-admission.zh.md), device approval [contract C5](../contracts/c05-device-approval.zh.md), the reach providers [contract C7](../contracts/c07-reach-providers.zh.md) and the identity factors [contract C14](../contracts/c14-oidc-passkeys.zh.md).
+Reach 让人可以通过自己的 Tailscale tailnet，从自己的手机或笔记本电脑打开自己的 studio，路径上没有任何 Delorun 服务。新设备只在 home 所在的电脑上、在此人在那里打开的一个简短的批准窗口内获得批准。已批准的设备用它的设备密钥登录。远程会话可以观看、回复、开始 chat、批准普通提示并停止运行。每个敏感操作（包括授予完全访问）都需要 Face ID 或该设备的 PIN，每个操作一次；移除另一台设备需要来自持有通行密钥的设备的 Face ID，绝不能用 PIN。批准设备和更改 reach 要等到此人在电脑前。这两项都由 home 强制执行，而不是由远程页面。准入规则见[约定 C4](../contracts/c04-admission.zh.md)，设备批准见[约定 C5](../contracts/c05-device-approval.zh.md)，reach 提供方见[约定 C7](../contracts/c07-reach-providers.zh.md)，身份因子见[约定 C14](../contracts/c14-oidc-passkeys.zh.md)。
 
 ## 目录
 
@@ -95,16 +95,16 @@ Reach lets a person open their studio from their own phone or laptop over their 
 
 13. `delorun reach status | on tailscale | off` 和 `delorun devices list | approve | elevate | remove | code`；`elevate` 回答设备解锁敏感操作的请求（见 [C14](../contracts/c14-oidc-passkeys.zh.md#elevation)）。`delorun reach on tailscale` 检查 `tailscale` 已安装并在运行、tailnet 已开启 HTTPS 证书，以及此人可以运行 `tailscale serve`；对于最后一项，它会打印此人自己要运行的那一条命令，Delorun 从不运行 `sudo`。没有所有者的 home 通过 home 套接字以本地人的身份被认领。
 
-**The grant model.** A paired device confirms one sensitive action at a time instead of holding an unlock for minutes. The rules are in [C14](../contracts/c14-oidc-passkeys.zh.md#face-id-unlock) and [C4](../contracts/c04-admission.zh.md); this paragraph and the list give the design.
+**授权凭证（grant）模型。**已配对的设备一次确认一个敏感操作，或用一次 Face ID 开启一个 Face ID 通行期（pass），而不是在几分钟内持有一个解锁。规则见 [C14](../contracts/c14-oidc-passkeys.zh.md#face-id-unlock) 和 [C4](../contracts/c04-admission.zh.md)；本段和下面的列表给出设计。
 
-- **One table decides.** `AUTH_CLASSES` puts every Remote method, plugin Fetch route, prompt answer and `/auth` route in one of four classes: `free` (any approved device), `face` (one confirmation for exactly this call), `computer` (only the person at the computer) and `ticket` (a route that needs the enrolment ticket the computer's approval minted). A spec fails on an unlisted action or route, a duplicate row and a row in two classes, so a new route cannot ship without a class.
-- **The home keeps the grants.** A grant is a server-side record keyed by device, listener, action and a hash of the call. The browser never sends a token that carries authority: it asks the home for a challenge, confirms with its passkey (or its PIN), and receives a grant id.
-- **The home hashes the body.** A Fetch route of class `face` reads the request body itself, up to 1 MiB, hashes method, path, query and body (JSON in canonical form) and looks up the grant under that hash. The client's idea of the hash is never checked, so a grant for one request cannot cover another. A larger body is refused.
-- **`Delorun-Grant` carries only the id.** The header names the grant; the home checks it equals the grant it found, uses the grant up and removes the header before the route runs, as it does `Delorun-Unlock`. Grants live 30 seconds and are used once, only after the whole decision allows.
-- **Holds keep a terminal or a picker open without a grant per call.** A grant that opens a terminal or the folder picker also opens a hold bound to that terminal's or picker's id, to the device and to the page's connection, with a 5-minute idle cap and a 60-minute total cap. A hold admits follow-up calls on that id; it ends with the device's session, with the device's removal and when the connection closes. Another terminal needs a new grant.
-- **A device with a passkey has no other way in.** Its PIN window, a code typed at the computer and the approval grace admit nothing in class `face`; the PIN still mints a one-action grant. A device with no passkey keeps what an unlock covers, and every other `face` action needs a one-action grant from its PIN, so no running unlock opens a terminal or a Changes apply.
-- **Answers are keyed too.** A prompt answer that grants more authority is admitted by a grant for the agent, call id, grants marker and answer value.
-- **Computer-only stays computer-only.** Approving or removing a device from a device that holds no passkey, the PIN, remote access and the settings document are class `computer`. Removing another device needs a grant from a device that holds a passkey.
+- **一张表决定。**`AUTH_CLASSES` 把每个 Remote 方法、插件 Fetch 路由、提示答案和 `/auth` 路由归入四个类别之一：`free`（任何已批准的设备）、`face`（对恰好这一次调用的一次确认）、`computer`（只有在电脑前的此人）和 `ticket`（需要由电脑上的批准所签发的注册票据的路由）。规格会在出现未列出的动作或路由、重复的行以及同一行属于两个类别时失败，所以新路由没有类别就无法发布。
+- **home 保管授权。**授权是服务端记录，以设备、监听器、动作和调用的哈希为键。浏览器从不发送携带权限的令牌：它向 home 要一个质询，用它的通行密钥（或 PIN）确认，然后收到一个授权 id。
+- **home 对请求体做哈希。**`face` 类的 Fetch 路由自己读取请求体，最多 1 MiB，对方法、路径、查询和请求体（JSON 用规范形式）做哈希，并在该哈希下查找授权。客户端自己认为的哈希从不被检查，所以为一个请求给出的授权无法覆盖另一个请求。更大的请求体会被拒绝。
+- **`Delorun-Grant` 只携带 id。**该标头指名授权；home 检查它等于自己找到的授权，用掉该授权，并在路由运行之前移除该标头，对 `Delorun-Unlock` 也是这样做。授权存活 30 秒且只使用一次，并且只在整个决定允许之后才使用。
+- **保持窗口让终端或选择器保持打开，而无需每次调用一个授权。**打开终端或文件夹选择器的授权，还会打开一个绑定到该终端或选择器的 id、设备和页面连接的保持窗口，闲置上限 5 分钟，总上限 60 分钟。保持窗口放行该 id 上后续的调用；它随设备的会话结束、随设备被移除结束，并在连接关闭时结束。另一个终端需要新的授权。
+- **持有通行密钥的设备，除了授权或它自己的 Face ID 通行期，没有其他进入方式。**它的 PIN 窗口、在电脑上输入的代码和批准宽限期都不放行 `face` 类中的任何内容；PIN 仍会签发一次性动作的授权，而绝不会开启通行期。没有通行密钥的设备保留解锁所涵盖的内容，其他每个 `face` 动作都需要来自其 PIN 的单次动作授权，所以没有任何正在运行的解锁能打开终端或应用 Changes。
+- **答案同样有键。**授予更多权限的提示答案，由针对 agent、调用 id、授权标记和答案值的授权放行，或由有效的 Face ID 通行期放行。
+- **仅限电脑的仍然仅限电脑。**从没有通行密钥的设备批准或移除设备、PIN、远程访问和设置文档属于 `computer` 类。移除另一台设备需要持有通行密钥的设备给出的授权，任何通行期都不能代替。
 
 <a id="what-this-does-not-protect-against"></a>
 

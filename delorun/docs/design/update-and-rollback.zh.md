@@ -34,17 +34,19 @@ description: "Delorun 更新与回退的设计：更新报告的数据项、默�
 
 ## 规则
 
-### The studio's update
+<a id="the-studios-update"></a>
 
-The person at the computer, or at a phone that confirms each step with Face ID or the PIN, updates, goes back and stops Delorun in the studio, with no terminal. Every step that verifies, installs, switches or rolls back stays in the home process; the Host's update plugin ([`@delorun/plugin-update`](../../packages/plugin-update/README.zh.md)) only asks it over the update channel and shows the person what it answers.
+### studio 的更新
 
-- **Who.** Check now is open to any paired phone. Update now, Go back and Stop need the computer, or a phone that confirms the action with a Face ID grant or, without a passkey, an unlock the person entered (a code or a PIN, never the approval grace). Cancel and Dismiss are free for any paired phone. A request from another site is refused before its body is read.
-- **The report.** `prepare` returns C3's report, which the Host keeps in memory under an opaque handle; the page never holds the home process's report id or channel token. The report expires after 600 seconds, and `apply` refuses an unknown or expired handle with `REPORT_EXPIRED`.
-- **The ticks.** The rule `--yes` uses decides what needs the person: each item that disables or removes something, a merged harness file, an unverified item, a release-log check that did not complete, and declining the data copy each need an explicit tick; a conflicted harness file or a failed log check offers no Update at all.
-- **The outcome.** The page cannot read the home process's last line, because the Host stops at the switch. The home process writes `run/<profile>/update-result.json` at every end (`committed`, `rolled-back` with the failed health criterion, `aborted`, `failed`); the Host that runs afterwards shows it until the person dismisses it, and the page reloads itself once when the Host's release differs from the one it loaded.
-- **Go back.** A committed update record offers Go back with the same wait-or-stop choice and the C3 table's wording; with no copy of the chat data only the settings go back.
-- **Stop.** Stop Delorun asks the home process to stop; nothing in the studio starts Delorun again, and the screen says to start it from the app icon or the launcher.
-- **Not offered.** `delorun update --from` relaxes freshness and stays in the terminal.
+此人在电脑前，或在一部用 Face ID 或 PIN 确认每一步的手机上，或在 Face ID 通行期（pass）内，在 studio 中更新、回退和停止 Delorun，无需终端。每个验证、安装、切换或回退的步骤都留在 home 进程中；Host 的更新插件（[`@delorun/plugin-update`](../../packages/plugin-update/README.zh.md)）只通过更新渠道询问它，并向此人显示它的答复。
+
+- **谁。**Check now 对任何已配对的手机开放。Update now、Go back 和 Stop 需要电脑，或需要一部用 Face ID 授权凭证（grant）确认该操作的手机，或者在没有通行密钥时，需要一部用此人输入的解锁（一个代码或 PIN，绝不是批准宽限期）确认该操作的手机。Cancel 和 Dismiss 对任何已配对的手机都是自由的。来自其他站点的请求在读取其请求体之前就被拒绝。
+- **报告。**`prepare` 返回 C3 的报告，Host 把它保存在内存中，放在一个不透明的句柄之下；页面从不持有 home 进程的报告 id 或渠道令牌。报告在 600 秒后过期，`apply` 以 `REPORT_EXPIRED` 拒绝未知或已过期的句柄。
+- **勾选。**`--yes` 所使用的规则决定哪些需要此人确认：每个关闭或移除某物的条目、合并的 harness 文件、未经验证的条目、未完成的发布日志检查，以及拒绝数据副本，每一项都需要明确勾选；有冲突的 harness 文件或失败的日志检查则完全不提供 Update。
+- **结果。**页面无法读取 home 进程的最后一行，因为 Host 在切换处停止。home 进程在每次结束时写入 `run/<profile>/update-result.json`（`committed`、带有失败的健康判据的 `rolled-back`、`aborted`、`failed`）；之后运行的 Host 会显示它，直到此人关闭它，并且当 Host 的发布版本与页面所加载的不同时，页面会自行重新加载一次。
+- **回退。**已提交的更新记录提供 Go back，使用同样的等待或停止选择和 C3 表的措辞；没有 chat 数据副本时，只有设置会回退。
+- **停止。**Stop Delorun 请求 home 进程停止；studio 中没有任何东西会再次启动 Delorun，屏幕会提示从应用图标或启动器启动它。
+- **不提供。**`delorun update --from` 放宽新鲜度要求，并留在终端中。
 
 ### 报告指出数据更改
 
@@ -132,6 +134,6 @@ The person at the computer, or at a phone that confirms each step with Face ID o
 
 ## 实现状态
 
-studio 的更新已构建：路由、访问表、结果记录及其拒绝测试（`update-begin-refused-from-other-site`、`update-begin-refused-careful-phone`、`update-begin-refused-phone-without-unlock`、`update-begin-refused-phone-approval-grace-only`、`update-rollback-refused-careful-phone`、`update-rollback-refused-phone-without-unlock`、`update-apply-refuses-page-supplied-report`、`update-apply-refuses-while-restarting`、`update-confirm-requires-ticks`、`update-conflicted-harness-cannot-confirm`、`update-failed-log-check-cannot-confirm`、`update-token-never-leaves-host`、`update-result-survives-switch`）。
+studio 的更新已构建：路由、访问表、结果记录及其拒绝测试（`update-begin-refused-from-other-site`、`update-begin-refused-phone-without-unlock`、`update-begin-refused-phone-approval-grace-only`、`update-rollback-refused-phone-without-unlock`、`update-apply-refuses-page-supplied-report`、`update-apply-refuses-while-restarting`、`update-confirm-requires-ticks`、`update-conflicted-harness-cannot-confirm`、`update-failed-log-check-cannot-confirm`、`update-token-never-leaves-host`、`update-result-survives-switch`）。
 
 规则 1 到 14 和规则 16 已为 CLI home 构建，由 C3、C19、C1 和 C2 描述：运行时存储在安装任何东西之前，会以 `TARGET_LOWER` 拒绝低于 `current` 的更新目标，而 `delorun update` 会拒绝目标低于正在运行发布版本的报告。规则 15 的、CLI home 和桌面应用共用的一把锁，以及桌面应用的规则 17、18 和 20，尚未构建。规则 19 通过上游的更新器成立，后者拒绝降级（`allowDowngrade` 为 false）。
