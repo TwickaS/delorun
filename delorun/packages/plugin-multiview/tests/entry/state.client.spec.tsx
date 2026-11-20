@@ -80,21 +80,12 @@ describe('MultiviewStore pins', () => {
 })
 
 describe('MultiviewStore open, layout and persistence', () => {
-  it('records open and close and tells the panel to show or hide', () => {
-    const { store, shown } = makeStore()
+  it('records open and close', () => {
+    const { store } = makeStore()
     store.open(CHAT)
     expect(store.of(CHAT).getSnapshot().open).toBe(true)
     store.close(CHAT)
     expect(store.of(CHAT).getSnapshot().open).toBe(false)
-    expect(shown).toEqual([{ chat: CHAT, open: true }, { chat: CHAT, open: false }])
-  })
-
-  it('marks a close the panel made without telling the panel again', () => {
-    const { store, shown } = makeStore()
-    store.open(CHAT)
-    store.markClosed(CHAT)
-    expect(store.of(CHAT).getSnapshot().open).toBe(false)
-    expect(shown).toEqual([{ chat: CHAT, open: true }])
   })
 
   it('rearranges in a preset and resets to the default without closing a pane', () => {

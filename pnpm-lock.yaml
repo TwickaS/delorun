@@ -3771,6 +3771,9 @@ importers:
       '@deepseek-ai/dsh-client-test-runtime':
         specifier: workspace:*
         version: link:../../../packages/test-support/client-runtime
+      '@deepseek-ai/dsh-client-ui-approval':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-approval
       '@deepseek-ai/dsh-client-ui-conversation':
         specifier: workspace:*
         version: link:../../../packages/client/ui-conversation
@@ -3792,6 +3795,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-subagent':
         specifier: workspace:*
         version: link:../../../packages/client/ui-subagent
+      '@deepseek-ai/dsh-client-ui-workspace':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-workspace
       '@deepseek-ai/dsh-session':
         specifier: workspace:*
         version: link:../../../packages/core/session

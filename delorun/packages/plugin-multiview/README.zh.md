@@ -14,6 +14,7 @@ Multiview 把固定的智能体（队友、子智能体、Claude Code 和 Codex�
 ## 目录
 
 - [使用方式](#using-it)
+- [Panes](#panes)
 - [配置](#configuration)
 - [契约](#contract)
 - [限制](#limits)
@@ -27,6 +28,16 @@ Multiview 把固定的智能体（队友、子智能体、Claude Code 和 Codex�
 - **布局菜单。**Multiview 显示期间，按钮旁的箭头会打开布局菜单：Main and column、Side by side、Grid、Main on top 和 Reset to default。预设会重新排列窗格，从不关闭任何一个。
 - **交接。**当打开的对话把工作交给队友、子智能体、Claude Code 或 Codex 时，只要还有空闲窗格，新智能体就会自行固定并打开 Multiview，每次都是如此，包括本人关闭它之后。对话打开时已经存在的智能体不会被固定。
 - **返回。**打开过 Multiview 的对话，在本人回到它时会再次打开它，页面重新加载后也是如此。用按钮关闭 Multiview，或用“Open full chat”离开它，会使它保持关闭。
+
+## Panes
+
+Multiview is a layer in the `conversation.main.body` slot, which wraps the main Conversation's content (transcript and composer) under its header. While Multiview is closed the layer renders that content as it is. While it is open the layer draws the pane layout under the unchanged header (title, mode, agents list and the Multiview button), and the main chat's pane is that content itself. An agent's pane is the real chat, drawn by the shared Conversation content in its `pane` variant, so tool rows, approval cards and an agent's banner look and work as in the main view. A pane shows the newest part of its chat and follows the tail.
+
+- **The header.** A grip to drag the pane by, the agent's monogram and name, its task, a status badge (`Working` with the time since the run began, `Needs approval`, `Done` with the run's duration; the main chat shows `Ready` at rest), then a Move to… menu (also swap places with another pane), Open full chat, Stop (while the chat runs and may be stopped) and Close. For a live Claude Code or Codex agent a line of chips shows the program's version, plan and five-hour and weekly use, read from the `agentSeat` projection when `@delorun/plugin-agent-seats` provides it; any other chat has no such line. A finished agent keeps its pane with the Done badge until it is closed. A pane whose chat waits for approval has an amber ring.
+- **The reply box.** An agent's pane shows a one-line reply box (the editor and Send); with `compactComposer` off it shows the full composer. The main chat's pane always shows the full composer.
+- **Stop** stops that chat only. **Open full chat** opens the chat in the main view, so the chat whose Multiview it was is no longer on screen. **Close** removes the pin and the pane, and closing the last pane returns to the normal chat.
+- **References.** Each pane retains its chat with the `multiviewPane` reference source for as long as the pane is in the layout, held by the layer and not by the layout, so dragging a pane, hiding it for lack of room or paging past it on a phone never closes its chat. Closing Multiview releases every reference. A window too small for every pin draws the first panes that fit and says how many are hidden; they stay pinned.
+- **On a phone.** Below 768 px the layer draws the pager from `src/phone` instead of the layout: the main chat is the first page and each pin follows in pin order. A page shows the agent's header, the chat, Open full chat and Stop buttons and the position dots above its reply box; the dots are a contribution to `conversation.input.dock`.
 
 ## 配置
 
@@ -52,7 +63,7 @@ Host 行 `delorun-multiview` 有七个易变字段（[`src/config.ts`](src/confi
 - **交接观察器**订阅会话列表。主对话是保留为 `mainView` 的会话；它的智能体目录是它的 `subagentCatalog` 投影。对话成为主视图时，或它的投影第一次被读取时，目录中已有的智能体就是基线。之后的每个条目都是一次交接。另一个对话成为主视图会开始新的基线。
 - **上限**把主对话计入：`maxPanes` 为 6 时，已固定的少于 5 个就还可以再固定一个智能体。窗口最多容纳 `floor(width / minPaneWidth) × floor(height / minPaneHeight)` 个窗格；在布局报告它自己的区域之前，使用窗口的大小。
 - **持久化**（[`src/store/persist.ts`](src/store/persist.ts)）是已保存的每个对话状态的唯一所有者，这是 `localStorage` 中的客户端偏好：每个对话一个键（`dsh.multiview.v1.<host>.<chat>`），值为 `{ v: 1, pins, layout, open }`，读取时用 zod 验证。不是 JSON、未通过验证、窗格数多于最大的 `maxPanes`（12）、嵌套深度超过这样的布局所能达到的深度，或布局不一致的值，会被丢弃、移除并以警告报告，该对话从没有任何固定项开始。布局中可以有固定项未列出的窗格；存储会把两者对齐。第二个键（`dsh.multiview-index.v1.<host>`）按最近优先列出已保存的对话；保存超出 `keepChats` 的对话会移除最久未用的那些对话的键。阻止 `localStorage` 的浏览器的表现就像没有保存任何东西。没有任何内容到达模型请求，因此不写入会话事件。
-- **文案**有英文和中文（[`src/entry/locales.ts`](src/entry/locales.ts)）；插件页面从 [`locale/`](locale/en.json) 为该行命名。
+- **文案**有英文和中文（[`src/entry/locales.ts`](src/entry/locales.ts) 和 [`src/panes/locales.ts`](src/panes/locales.ts)）；插件页面从 [`locale/`](locale/en.json) 为该行命名。
 
 ## 限制
 

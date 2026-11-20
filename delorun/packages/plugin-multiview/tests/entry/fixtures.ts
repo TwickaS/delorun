@@ -31,12 +31,10 @@ export function settingsSource(initial: Partial<MultiviewSettings> = {}) {
 export function makeStore(options: { settings?: Partial<MultiviewSettings>; initial?: Record<string, ChatMultiview>; window?: { width: number; height: number } } = {}) {
   const { persistence, saved, saves } = memoryPersistence(options.initial)
   const source = settingsSource(options.settings)
-  const shown: Array<{ chat: string; open: boolean }> = []
   const store = new MultiviewStore({
     settings: source.settings,
     persistence,
-    show: (chat, open) => { shown.push({ chat, open }) },
     windowArea: () => options.window ?? { width: 4000, height: 3000 },
   })
-  return { store, saved, saves, shown, ...source }
+  return { store, saved, saves, ...source }
 }

@@ -22,6 +22,8 @@ const { chromium } = require('playwright') as typeof import('playwright')
 const PORT = 18843
 const shots = process.argv[2]
 const keep = process.argv.includes('--keep')
+/** With `--panes` the script also opens Multiview and takes the pane pictures: 1440 light and dark, 390 light. */
+const panes = process.argv.includes('--panes')
 if (shots === undefined) throw new Error('usage: shots.mts <shots-dir> [--keep]')
 mkdirSync(shots, { recursive: true })
 
@@ -138,6 +140,8 @@ try {
   const browser = await chromium.launch()
   try {
     const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'light' })).newPage()
+    page.on('console', message => { if (message.type() === 'error' || message.type() === 'warning') console.log(`[page ${message.type()}] ${message.text().slice(0, 900)}`) })
+    page.on('pageerror', error => { console.log(`[page error] ${error.message.slice(0, 300)}`) })
     await page.goto(link)
     await page.waitForTimeout(6000)
     await page.getByText('Complete setup later').click()
@@ -146,6 +150,7 @@ try {
     await page.getByRole('button', { name: 'garden-planner' }).first().click()
     await page.waitForTimeout(3000)
     await page.getByRole('button', { name: '2 subagents' }).click()
+    await page.waitForTimeout(1500)
     await page.getByRole('button', { name: 'Pin Run the tests to Multiview' }).waitFor()
     await page.screenshot({ path: join(shots, 'agents-list-1440-light.png') })
     await page.getByRole('button', { name: 'Pin Run the tests to Multiview' }).click()
@@ -157,6 +162,29 @@ try {
     await page.waitForTimeout(800)
     await page.screenshot({ path: join(shots, 'header-multiview-1440-light.png'), clip: { x: 264, y: 0, width: 1176, height: 120 } })
     console.log(JSON.stringify(await page.evaluate(() => localStorage.getItem(Object.keys(localStorage).find(key => key.startsWith('dsh.multiview')) ?? ''))))
+    if (panes) {
+      await page.getByRole('button', { name: /^Multiview/ }).first().click()
+      await page.getByRole('region', { name: 'Multiview' }).waitFor()
+      await page.waitForTimeout(2500)
+      await page.screenshot({ path: join(shots, 'panes-1440-light.png') })
+      if (process.argv.includes('--probe')) console.log(await page.evaluate(() => [...document.querySelectorAll('[data-pane-header] span')].slice(0, 8).map((element) => { const style = getComputedStyle(element); const box = element.getBoundingClientRect(); return `${element.className} ${element.textContent?.slice(0, 20)} w=${box.width} h=${box.height} color=${style.color} fs=${style.fontSize} disp=${style.display}` }).join('\n')))
+      await page.setViewportSize({ width: 390, height: 844 })
+      await page.waitForTimeout(2000)
+      await page.screenshot({ path: join(shots, 'phone-main-390-light.png') })
+      await page.getByRole('tab', { name: /Run the tests/ }).click()
+      await page.waitForTimeout(2000)
+      await page.screenshot({ path: join(shots, 'phone-agent-390-light.png') })
+      await page.setViewportSize({ width: 1440, height: 900 })
+      await page.emulateMedia({ colorScheme: 'dark' })
+      await page.waitForTimeout(2500)
+      await page.screenshot({ path: join(shots, 'panes-1440-dark.png') })
+      await page.setViewportSize({ width: 390, height: 844 })
+      await page.waitForTimeout(2000)
+      await page.screenshot({ path: join(shots, 'phone-agent-390-dark.png') })
+      await page.getByRole('tab', { name: /Main chat/ }).click()
+      await page.waitForTimeout(2000)
+      await page.screenshot({ path: join(shots, 'phone-main-390-dark.png') })
+    }
   } finally {
     await browser.close()
   }

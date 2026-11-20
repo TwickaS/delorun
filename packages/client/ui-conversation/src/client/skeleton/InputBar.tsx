@@ -437,8 +437,10 @@ export const InputBar = memo(function InputBar({
       ? t('placeholder.steerQueue')
       : planActive ? t('placeholder.plan') : t(phone ? 'placeholder.phone' : 'placeholder.default'))
 
+  // A pane's reply box is one line: the editor and the send button, without the command, mode, model or context controls.
+  const compact = occurrence === 'pane'
   return (
-    <div className={clsx(css.root, variant === 'hero' && css.hero)}>
+    <div className={clsx(css.root, variant === 'hero' && css.hero)} data-composer-compact={compact || undefined}>
       {toast !== null && (
         <Toast
           key={toast.seq}
@@ -460,7 +462,7 @@ export const InputBar = memo(function InputBar({
       <div
         ref={cardRef}
         tabIndex={-1}
-        className={clsx(css.card, workspaceTrigger && css.cardWorkspaceTrigger)}
+        className={clsx(css.card, workspaceTrigger && css.cardWorkspaceTrigger, compact && css.cardCompact)}
         data-composer-card
         onClick={workspaceTrigger ? onRequestWorkspace : undefined}
         onPointerDown={workspaceTrigger ? (e) => { e.stopPropagation() } : undefined}
@@ -504,44 +506,48 @@ export const InputBar = memo(function InputBar({
           showPlaceholder={draft === '' && attachments.length === 0 && !claimActive}
         />
         <div ref={rowRef} className={css.row}>
-          <div className={css.tools} hidden={activity}>
-            <Tooltip label={t('input.commands')} side="top" delayMs={500} portal>
-              <button
-                type="button"
-                className={css.add}
-                aria-label={t('input.commands')}
-                aria-haspopup="listbox"
-                aria-expanded={commandMenuOpen}
-                disabled={locked || toggleCommandMenu === undefined}
-                onMouseDown={keepFocus}
-                onClick={onToggleCommandMenu}
-              >
-                <IconPlusOutlineMedium size={14} />
-              </button>
-            </Tooltip>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              disabled={!canAcceptDrop || subagent !== null}
-              hidden
-              onChange={onPickFiles}
-            />
-            <div className={css.modes}>
-              {sessionId === undefined ? null : renderSlot('conversation.input.permission', { locked })}
-              {sessionId === undefined ? null : renderSlot('conversation.input.plan', { locked })}
-            </div>
-            {input === undefined || sessionId === undefined
-              ? null
-              : renderSlot('conversation.input.left', {})}
-          </div>
-          <div className={clsx(css.trailing, activity && css.trailingActive)}>
-            <div className={css.standardControls} hidden={activity}>
+          {compact ? null : (
+            <div className={css.tools} hidden={activity}>
+              <Tooltip label={t('input.commands')} side="top" delayMs={500} portal>
+                <button
+                  type="button"
+                  className={css.add}
+                  aria-label={t('input.commands')}
+                  aria-haspopup="listbox"
+                  aria-expanded={commandMenuOpen}
+                  disabled={locked || toggleCommandMenu === undefined}
+                  onMouseDown={keepFocus}
+                  onClick={onToggleCommandMenu}
+                >
+                  <IconPlusOutlineMedium size={14} />
+                </button>
+              </Tooltip>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                disabled={!canAcceptDrop || subagent !== null}
+                hidden
+                onChange={onPickFiles}
+              />
+              <div className={css.modes}>
+                {sessionId === undefined ? null : renderSlot('conversation.input.permission', { locked })}
+                {sessionId === undefined ? null : renderSlot('conversation.input.plan', { locked })}
+              </div>
               {input === undefined || sessionId === undefined
                 ? null
-                : renderSlot('conversation.input.right', {})}
-              {sessionId === undefined ? null : renderSlot('conversation.input.model', { locked: modelSeatLocked })}
+                : renderSlot('conversation.input.left', {})}
             </div>
+          )}
+          <div className={clsx(css.trailing, activity && css.trailingActive)}>
+            {compact ? null : (
+              <div className={css.standardControls} hidden={activity}>
+                {input === undefined || sessionId === undefined
+                  ? null
+                  : renderSlot('conversation.input.right', {})}
+                {sessionId === undefined ? null : renderSlot('conversation.input.model', { locked: modelSeatLocked })}
+              </div>
+            )}
             {input === undefined || sessionId === undefined ? null : <div className={activity ? css.activityExpanded : css.activity}>
               {renderSlot('conversation.input.activity', { locked, onActiveChange: setActivity })}
             </div>}
@@ -599,7 +605,7 @@ export const InputBar = memo(function InputBar({
         {variant === 'composer' && input !== undefined && sessionId !== undefined
           ? renderSlot('conversation.composer.dock', {})
           : null}
-        {activity ? null : <ContextMeter useProjection={useProjection} t={t} />}
+        {activity || compact ? null : <ContextMeter useProjection={useProjection} t={t} />}
       </div>
     </div>
   )

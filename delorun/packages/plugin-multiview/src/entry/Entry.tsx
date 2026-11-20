@@ -7,11 +7,11 @@ import { useState, useSyncExternalStore } from 'react'
 import {
   IconChevronDownOutlineRegular, IconPanelLeftOutlineRegular, IconPinFillRegular, IconPinOutlineRegular, Menu, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { HostObservable, InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { LAYOUT_PRESETS, type CapacityRefusal } from '../layout/index.ts'
 import type { MULTIVIEW_NS} from '../client/contract.ts';
-import { EMPTY_CHAT_MULTIVIEW, MULTIVIEW_PANEL_ID, type ChatMultiview, type MultiviewService } from '../client/contract.ts'
+import { EMPTY_CHAT_MULTIVIEW, type ChatMultiview, type MultiviewService } from '../client/contract.ts'
 import { ownerOf, runningAgentsOf } from './read.ts'
 import css from './Entry.module.css'
 
@@ -19,8 +19,6 @@ import css from './Entry.module.css'
 export interface EntryInjected {
   /** The pins, layouts and open state. */
   readonly multiview: MultiviewService
-  /** The main panel that is selected now: null for the chat, `multiview` while Multiview shows. */
-  readonly activePanel: HostObservable<string | null>
 }
 
 type Translate = PropsLocale<typeof MULTIVIEW_NS>['t']
@@ -87,9 +85,8 @@ export type FooterProps = PropsRuntime<'conversation.session.header.actions.suba
  * @param props - the chat, the services and the dictionary.
  * @returns the footer.
  */
-export function Footer({ sessionId, useSessions, multiview, activePanel, t }: FooterProps) {
-  const { pins } = useChat(multiview, sessionId)
-  const shown = useSyncExternalStore(listener => activePanel.subscribe(listener), () => activePanel.getSnapshot()) === MULTIVIEW_PANEL_ID
+export function Footer({ sessionId, useSessions, multiview, t }: FooterProps) {
+  const { pins, open: shown } = useChat(multiview, sessionId)
   const settings = useSyncExternalStore(listener => multiview.settings.subscribe(listener), () => multiview.settings.getSnapshot())
   const running = useSessions(state => runningAgentsOf(state, sessionId).join('\n'))
   const unpinnedRunning = running === '' ? [] : running.split('\n').filter(id => !pins.includes(id as SessionId)) as SessionId[]
@@ -155,10 +152,9 @@ export function HeaderButton(props: HeaderButtonProps) {
   return <RootHeaderButton {...props} />
 }
 
-function RootHeaderButton({ sessionId, useSessions, useSessionStatus, multiview, activePanel, t }: HeaderButtonProps) {
-  const { pins } = useChat(multiview, sessionId)
-  const shown = useSyncExternalStore(listener => activePanel.subscribe(listener), () => activePanel.getSnapshot()) === MULTIVIEW_PANEL_ID
-  const waiting = useSessionStatus(statuses => pins.some(pin => statuses.get(pin)?.pendingInteraction?.kind === 'approval'))
+function RootHeaderButton({ sessionId, useSessions, useSessionStatus, multiview, t }: HeaderButtonProps) {
+  const { pins, open: shown } = useChat(multiview, sessionId)
+  const waiting = useSessionStatus(statuses => pins.some(pin => statuses.get(pin)?.pendingInteraction !== undefined))
   const running = useSessions(state => runningAgentsOf(state, sessionId).join('\n'))
   const [menuOpen, setMenuOpen] = useState(false)
   const unpinnedRunning = running === '' ? [] : running.split('\n').filter(id => !pins.includes(id as SessionId)) as SessionId[]

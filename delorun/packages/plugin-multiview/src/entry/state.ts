@@ -22,8 +22,6 @@ export interface MultiviewStoreOptions {
   readonly settings: HostObservable<MultiviewSettings>
   /** Where chats' state is kept. */
   readonly persistence: MultiviewPersistence
-  /** Show or hide the Multiview panel; the store only records the open flag. */
-  readonly show: (chat: SessionId, open: boolean) => void
   /** The window's size, used for "screen full" until the layout reports its own area. */
   readonly windowArea: () => LayoutArea
 }
@@ -41,7 +39,7 @@ export class MultiviewStore implements MultiviewService {
   readonly settings: HostObservable<MultiviewSettings>
   readonly #options: MultiviewStoreOptions
 
-  /** @param options - the settings, the persistence and the panel switch. */
+  /** @param options - the settings, the persistence and the window measure. */
   constructor(options: MultiviewStoreOptions) {
     this.#options = options
     this.settings = options.settings
@@ -106,22 +104,14 @@ export class MultiviewStore implements MultiviewService {
     return { pinned, refused }
   }
 
-  /** Show Multiview for a chat. */
+  /** Open Multiview for a chat. */
   open(chat: SessionId): void {
     this.#write(chat, { ...this.#store(chat).getSnapshot(), open: true })
-    this.#options.show(chat, true)
   }
 
   /** Return to the normal chat. */
   close(chat: SessionId): void {
     this.#write(chat, { ...this.#store(chat).getSnapshot(), open: false })
-    this.#options.show(chat, false)
-  }
-
-  /** Record that the panel is no longer shown without hiding it, for a close the panel itself made. */
-  markClosed(chat: SessionId): void {
-    const state = this.#store(chat).getSnapshot()
-    if (state.open) this.#write(chat, { ...state, open: false })
   }
 
   /** Replace the layout. */

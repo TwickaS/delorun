@@ -190,14 +190,14 @@ export function ConversationContent(props: ConversationContentProps) {
   return (
     <div
       ref={setBody}
-      className={clsx(css.body, props.variant === 'embedded' && css.embeddedBody)}
+      className={clsx(css.body, props.variant !== 'main' && css.embeddedBody, props.variant === 'pane' && css.paneBody)}
       data-conversation-content=""
       data-conversation-session={sessionId}
       data-conversation-region="chat"
       data-content-phase={phase}
     >
       {/* The frame wraps the scroll body in every phase, so leaving the home keeps the composer mounted. */}
-      {renderSlot('conversation.hero.frame', { hero: hero && props.variant !== 'embedded' }, {
+      {renderSlot('conversation.hero.frame', { hero: hero && props.variant === 'main' }, {
         children: (
           <div className={css.scrollBody} data-conversation-scroll="">
             {sessionId === undefined ? null : <Views />}

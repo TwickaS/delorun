@@ -10,7 +10,6 @@ import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { useSyncExternalStore } from 'react'
 import { SessionId } from '@deepseek-ai/dsh-session/types'
 import { DEFAULT_MULTIVIEW_SETTINGS } from '../../../src/config.ts'
-import { MULTIVIEW_PANEL_ID } from '../../../src/client/contract.ts'
 import { Footer, HeaderButton, PinButton, type EntryInjected } from '../../../src/entry/Entry.tsx'
 import { en } from '../../../src/entry/locales.ts'
 import { MultiviewStore } from '../../../src/entry/state.ts'
@@ -54,11 +53,10 @@ const AGENTS = [
 const store = new MultiviewStore({
   settings: createSnapshotStore({ ...DEFAULT_MULTIVIEW_SETTINGS, maxPanes }),
   persistence: { load: () => undefined, save: () => {} },
-  show: () => {},
   windowArea: () => ({ width: 4000, height: 3000 }),
 })
 store.pinAll(CHAT, AGENTS.slice(0, pinnedCount).map(agent => agent.id))
-if (shown) store.applyPreset(CHAT, 'main-column')
+if (shown) { store.applyPreset(CHAT, 'main-column'); store.open(CHAT) }
 
 const list = createSnapshotStore({
   ids: [], phase: 'ready', projectionsBySession: {},
@@ -68,11 +66,10 @@ const projection = { values: { subagentCatalog: AGENTS.map(agent => ({ id: agent
 list.set({ ...list.getSnapshot(), projectionsBySession: { [CHAT]: projection } } as never)
 list.set({ ...list.getSnapshot(), byId: { [CHAT]: { id: CHAT, displayTitle: 'Refactor billing service', running: true, retainedBy: { mainView: 1 }, blank: false, updatedAt: 0 }, ...list.getSnapshot().byId } } as never)
 const statuses = createSnapshotStore(new Map(AGENTS.filter(agent => agent.waiting).map(agent => [agent.id, { running: true, pendingInteraction: { kind: 'approval', key: 'k', sessionId: agent.id }, completionUnread: false }])))
-const activePanel = createSnapshotStore<string | null>(shown ? MULTIVIEW_PANEL_ID : null)
 
 const t = (key: keyof typeof en, vars: Record<string, string> = {}): string =>
   Object.entries(vars).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), en[key])
-const injected: EntryInjected = { multiview: store, activePanel }
+const injected: EntryInjected = { multiview: store }
 const useSessions = <S,>(select: (state: ReturnType<typeof list.getSnapshot>) => S): S => useSyncExternalStore(listener => list.subscribe(listener), () => select(list.getSnapshot()))
 const useSessionStatus = <S,>(select: (state: ReturnType<typeof statuses.getSnapshot>) => S): S => useSyncExternalStore(listener => statuses.subscribe(listener), () => select(statuses.getSnapshot()))
 const useSession = <S,>(select: (state: { subagent: null }) => S): S => select({ subagent: null })

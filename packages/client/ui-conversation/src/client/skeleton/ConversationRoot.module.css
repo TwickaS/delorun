@@ -482,6 +482,13 @@
   --dsh-composer-dock-inset: 8px;
 }
 
+.paneBody {
+  --dsh-chat-content-width: min(calc(100% - 24px), 920px);
+  --dsh-composer-card-max-width: min(calc(100% - 12px), 952px);
+  --dsh-composer-side-clearance: 6px;
+  --dsh-composer-dock-inset: 6px;
+}
+
 .scrollBody {
   display: flex;
   flex: 1;

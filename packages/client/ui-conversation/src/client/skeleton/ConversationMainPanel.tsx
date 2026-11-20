@@ -37,12 +37,14 @@ export function ConversationMainPanel(props: ConversationSlotProps) {
   return (
     <div className={css.root} data-phase={phase}>
       {renderSlot('conversation.header', {})}
-      {renderFactorySlot('conversation.content', {
-        variant: 'main',
-        phase,
-        hero,
-      }, {
-        slots: CONTENT_SLOTS,
+      {renderSlot('conversation.main.body', {}, {
+        children: renderFactorySlot('conversation.content', {
+          variant: 'main',
+          phase,
+          hero,
+        }, {
+          slots: CONTENT_SLOTS,
+        }),
       })}
     </div>
   )

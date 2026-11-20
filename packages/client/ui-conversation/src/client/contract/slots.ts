@@ -292,6 +292,13 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'conversation.composer': { kind: 'chain'; scope: 'session'; owner: ComposerChainProps }
     /** Workspace picker shown by the blank-session Hero. */
     'conversation.hero.workspace': { kind: 'single'; scope: 'root'; owner: EmptyWorkspaceOwnerProps }
+    /**
+     * Layers wrapping the main Conversation's content, the transcript and composer under the header. The header stays outside;
+     * a layer renders its `children` exactly once while it is mounted, leaving the content as it is or arranging it with other surfaces.
+     * The content holds the main chat's pending approval card, so a layer that hides it shows a visible notice that the chat waits.
+     * Approval safety rests on the Host's grants, not on this slot.
+     */
+    'conversation.main.body': { kind: 'hoc'; scope: 'session-maybe' }
     /** Layers wrapping the Conversation scroll body; `hero` reports a blank, standalone home. */
     'conversation.hero.frame': { kind: 'hoc'; scope: 'root'; owner: HeroFrameOwnerProps }
     /** Brand mark shown before the blank-session headline. */
@@ -680,12 +687,16 @@ export interface HeroBrandMarkOwnerProps {
 /** Full props of the resident optional-Session Conversation shell. */
 export type ConversationSlotProps =
   PropsRuntime<'main.conversation'>
-  & PropsRenderSlots<'conversation.header'>
+  & PropsRenderSlots<'conversation.header' | 'conversation.main.body'>
   & PropsRenderFactories
 
-/** Inputs shared by main and embedded Conversation content occurrences. */
+/**
+ * Inputs shared by Conversation content occurrences. `main` is the Conversation panel, `embedded` a chat hosted in another
+ * surface with the full composer, and `pane` a chat hosted in a split pane: the embedded body with tighter padding and a
+ * compact one-line reply box (no commands, mode, model or context readings).
+ */
 export interface ConversationContentInputProps {
-  variant: 'main' | 'embedded'
+  variant: 'main' | 'embedded' | 'pane'
   phase: 'settling' | 'hero' | 'active'
   hero: boolean
 }

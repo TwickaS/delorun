@@ -21,6 +21,7 @@ Claude Code and Codex are optional [external agents](../reference/glossary.md#ex
 - [The first time](#the-first-time)
 - [What the agent can touch](#what-the-agent-can-touch)
 - [Where the result shows](#where-the-result-shows)
+- [Watch several agents at once](#watch-several-agents-at-once)
 - [Advanced options](#advanced-options)
 - [Use at your own risk](#use-at-your-own-risk)
 - [Next](#next)
@@ -99,6 +100,27 @@ Three Codex failures have their own wording:
 - **Codex is not signed in.** The result gives the `delorun agents login codex` command.
 
 Delorun's Codex runs never change your own Codex settings file, so a folder you hand to Codex does not become a trusted folder in your terminal Codex.
+
+## Watch several agents at once
+
+Multiview puts the agents a chat works with beside the chat, so you can follow them together instead of opening each one. It needs no setup: it does nothing until an agent is pinned or a chat hands work to one.
+
+1. Open the agents list in the chat header (the "N subagents" button) and press the pin beside an agent. A chat opens Multiview by itself when it hands work to a new agent, and pins that agent.
+2. Press **Multiview** in the header. The main chat stays on the left and the pinned agents stack on the right. Press it again to go back to the normal chat.
+3. Each pane shows the agent's name, whether it is working, waiting for you or done, and, for Claude Code and Codex, the plan and how much of its limits it has used. You can approve or reject what an agent asks, reply to it or stop it right there. **Open full chat** moves it into the main view and **Close** removes the pane.
+4. To arrange the panes, drag one by its handle onto the edge of another to split it, or onto the middle to share its tabs. The **Layout** menu offers Main and column, Side by side, Grid and Main on top, and **Reset to default**. Nothing here closes a pane.
+
+Each chat remembers its panes and layout, and shows them again when you come back to it. On a phone, or in a window narrower than 768 pixels, the panes become pages you swipe sideways, with a strip of names at the top and an amber dot on an agent that is waiting for you.
+
+<details>
+<summary>Edge cases</summary>
+
+- If the window has no room for another pane, the pin is greyed out and says why; a saved layout that no longer fits shows the panes that do and says how many are left out. They stay pinned.
+- If an agent that is waiting for you has its pane closed, the first press on **Close** asks again, because the agent keeps waiting.
+- Stop in a pane stops that agent only. A phone that is not allowed to stop an agent does not show the button.
+- The Multiview settings are under the Multiview plugin in Plugins: opening on every hand-off, the pane limit (six, the main chat included), the short or full reply box in each pane, and reopening when you return to a chat.
+
+</details>
 
 ## Advanced options
 

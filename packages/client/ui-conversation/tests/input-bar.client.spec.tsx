@@ -96,7 +96,7 @@ interface BenchOptions {
   /** The hub's steer-all face (empty-draft accelerated Enter). */
   steerQueue?: () => void
   variant?: 'hero' | 'composer'
-  occurrence?: 'main' | 'embedded'
+  occurrence?: 'main' | 'embedded' | 'pane'
   registerFileIntake?: ComposerFileIntake
   placeholder?: string
   t?: InputBarProps['t']
@@ -664,6 +664,20 @@ describe('image draft rail', () => {
     expect(register.mock.calls[1]![0].occurrence).toBe('main')
     result.view.unmount()
     expect(leave).toHaveBeenCalledTimes(2)
+  })
+
+  it('shows a pane occurrence as one line: the editor and Send, without the command, mode, model or context controls', () => {
+    const full = bench({ occurrence: 'embedded', leftItems: <i data-testid="left" />, rightItems: <i data-testid="right" />, modelEntry: <i data-testid="model" /> })
+    expect(full.view.queryByTestId('left')).not.toBeNull()
+    expect(full.view.queryByTestId('model')).not.toBeNull()
+    expect(full.view.container.querySelector('[data-composer-compact]')).toBeNull()
+    cleanup()
+    const pane = bench({ occurrence: 'pane', leftItems: <i data-testid="left" />, rightItems: <i data-testid="right" />, modelEntry: <i data-testid="model" /> })
+    expect(pane.view.container.querySelector('[data-composer-compact]')).not.toBeNull()
+    for (const id of ['left', 'right', 'model']) expect(pane.view.queryByTestId(id)).toBeNull()
+    expect(pane.view.queryByLabelText(en['input.commands'])).toBeNull()
+    expect(pane.view.container.querySelector('[data-composer-input]')).not.toBeNull()
+    expect(pane.view.container.querySelector('button[aria-busy]')).not.toBeNull()
   })
 
   it('announces the format problem before any limit when the batch holds a non-image', () => {

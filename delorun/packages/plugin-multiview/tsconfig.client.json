@@ -9,6 +9,9 @@
     "src/client",
     "src/entry",
     "src/layout",
+    "src/panel",
+    "src/panes",
+    "src/phone",
     "src/store",
     "src/config.ts",
     "src/css-modules.d.ts"
@@ -46,6 +49,9 @@
     },
     {
       "path": "../../../packages/client/ui-subagent"
+    },
+    {
+      "path": "../../../packages/client/ui-workspace"
     },
     {
       "path": "../../../packages/core/session"

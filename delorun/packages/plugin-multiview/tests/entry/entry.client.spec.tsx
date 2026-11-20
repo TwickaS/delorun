@@ -6,7 +6,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { MultiviewSettings } from '../../src/config.ts'
 import { Footer, HeaderButton, PinButton, type EntryInjected, type FooterProps, type HeaderButtonProps, type PinButtonProps } from '../../src/entry/Entry.tsx'
 import { en } from '../../src/entry/locales.ts'
-import { MULTIVIEW_PANEL_ID } from '../../src/client/contract.ts'
 import { A, B, C, CHAT, makeStore, sid } from './fixtures.ts'
 import { listOf, slotProps, type ListSpec } from './harness.tsx'
 
@@ -15,24 +14,24 @@ afterEach(cleanup)
 const t = makeTranslate(en)
 
 /** Slot props for a component in the chat header or a row, over a store and a session list. */
-interface SetupOptions { settings?: Partial<MultiviewSettings>; list?: ListSpec; pending?: readonly string[]; child?: boolean; panel?: string | null }
+interface SetupOptions { settings?: Partial<MultiviewSettings>; list?: ListSpec; pending?: readonly string[]; child?: boolean; open?: boolean }
 
 function setup(options: SetupOptions = {}) {
   const made = makeStore(options.settings === undefined ? {} : { settings: options.settings })
   const list = createSnapshotStore(listOf(options.list ?? { main: CHAT, catalogs: { [CHAT]: [A, B, C] }, running: [A, B] }))
   const statuses = createSnapshotStore(new Map((options.pending ?? []).map(id => [sid(id), { running: true, pendingInteraction: { kind: 'approval', key: 'k', sessionId: sid(id) }, completionUnread: false }])))
-  const activePanel = createSnapshotStore<string | null>(options.panel ?? null)
   const opened: boolean[] = []
   const store = made.store
   const open = store.open.bind(store)
-  store.open = (chat) => { opened.push(true); open(chat); activePanel.set(MULTIVIEW_PANEL_ID) }
+  if (options.open === true) open(CHAT)
+  store.open = (chat) => { opened.push(true); open(chat) }
   const close = store.close.bind(store)
-  store.close = (chat) => { opened.push(false); close(chat); activePanel.set(null) }
-  const injected: EntryInjected = { multiview: store, activePanel }
+  store.close = (chat) => { opened.push(false); close(chat) }
+  const injected: EntryInjected = { multiview: store }
   const useSessions = <S,>(selector: (state: ReturnType<typeof list.getSnapshot>) => S): S => selector(list.getSnapshot())
   const useSessionStatus = <S,>(selector: (state: ReturnType<typeof statuses.getSnapshot>) => S): S => selector(statuses.getSnapshot())
   const useSession = <S,>(selector: (state: { subagent: null | object }) => S): S => selector({ subagent: options.child === true ? {} : null })
-  return { ...made, list, statuses, activePanel, opened, injected, useSessions, useSessionStatus, useSession }
+  return { ...made, list, statuses, opened, injected, useSessions, useSessionStatus, useSession }
 }
 
 const row = (agent: string, label: string) => ({ sessionId: sid(agent), label })
@@ -199,7 +198,7 @@ describe('the header button', () => {
   })
 
   it('closes while Multiview shows', () => {
-    const h = setup({ panel: MULTIVIEW_PANEL_ID })
+    const h = setup({ open: true })
     h.store.pin(CHAT, A)
     renderHeader(h)
     const button = screen.getByRole('button', { name: 'Multiview, 1 pinned' })
@@ -230,7 +229,7 @@ describe('the header button', () => {
     renderHeader(closed)
     expect(screen.queryByRole('button', { name: 'Layout' })).toBeNull()
     cleanup()
-    const h = setup({ panel: MULTIVIEW_PANEL_ID })
+    const h = setup({ open: true })
     h.store.pinAll(CHAT, [A, B])
     renderHeader(h)
     fireEvent.click(screen.getByRole('button', { name: 'Layout' }))
