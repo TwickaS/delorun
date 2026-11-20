@@ -292,6 +292,11 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'conversation.composer': { kind: 'chain'; scope: 'session'; owner: ComposerChainProps }
     /** Workspace picker shown by the blank-session Hero. */
     'conversation.hero.workspace': { kind: 'single'; scope: 'root'; owner: EmptyWorkspaceOwnerProps }
+    /**
+     * Layers wrapping the main Conversation's content, the transcript and composer under the header. The header stays outside;
+     * a layer renders its `children` to leave the content as it is, or arranges it with other surfaces.
+     */
+    'conversation.main.body': { kind: 'hoc'; scope: 'session-maybe' }
     /** Layers wrapping the Conversation scroll body; `hero` reports a blank, standalone home. */
     'conversation.hero.frame': { kind: 'hoc'; scope: 'root'; owner: HeroFrameOwnerProps }
     /** Brand mark shown before the blank-session headline. */
@@ -680,7 +685,7 @@ export interface HeroBrandMarkOwnerProps {
 /** Full props of the resident optional-Session Conversation shell. */
 export type ConversationSlotProps =
   PropsRuntime<'main.conversation'>
-  & PropsRenderSlots<'conversation.header'>
+  & PropsRenderSlots<'conversation.header' | 'conversation.main.body'>
   & PropsRenderFactories
 
 /**

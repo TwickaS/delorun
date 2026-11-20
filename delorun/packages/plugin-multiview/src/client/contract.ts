@@ -1,5 +1,5 @@
 /**
- * What the entry points share with the panel and the pane lanes: the settings, the dictionary namespace, the panel id, and
+ * What the entry points share with the layer and the panes: the settings, the dictionary namespace, the layer id, and
  * the `multiview` service that holds each chat's pins, its layout and whether Multiview is open.
  * @module @delorun/plugin-multiview/client/contract
  */
@@ -11,14 +11,14 @@ import type { MultiviewSettings } from '../config.ts'
 /** The dictionary namespace of the entry points' copy. */
 export const MULTIVIEW_NS = 'delorunMultiview'
 
-/** The id of the `main` panel the panel lane registers, and of the entry that selects it. */
-export const MULTIVIEW_PANEL_ID = 'multiview'
+/** The id of Multiview's layer in the `conversation.main.body` slot, which the entry points wait for before they mount. */
+export const MULTIVIEW_LAYER_ID = 'multiview'
 
 /** One chat's Multiview state, the value that is kept per chat as a client preference. */
 export interface ChatMultiview {
   /** The pinned agents' chats in pin order; the source of truth for which panes exist. */
   readonly pins: readonly SessionId[]
-  /** Where the panes sit; null until the person or a preset arranges them, when the panel builds the default. */
+  /** Where the panes sit; null until the person or a preset arranges them, when the layer builds the default. */
   readonly layout: LayoutModel | null
   /** Whether the person had Multiview open in this chat. */
   readonly open: boolean
@@ -53,7 +53,7 @@ export interface MultiviewPersistence {
 }
 
 /**
- * The service `ctx.multiview`: the entry lane writes it, the panel lane reads it. State is per chat, identified by the chat
+ * The service `ctx.multiview`: the entry points write it, the layer reads it. State is per chat, identified by the chat
  * that is the main view; every method takes that chat.
  */
 export interface MultiviewService {
@@ -95,17 +95,17 @@ export interface MultiviewService {
    */
   pinAll(chat: SessionId, agents: readonly SessionId[]): { readonly pinned: number; readonly refused: number }
   /**
-   * Show Multiview for a chat and record that it is open.
+   * Open Multiview for a chat: the layer in the chat's content shows the panes, and the choice is kept.
    * @param chat - the chat that Multiview belongs to.
    */
   open(chat: SessionId): void
   /**
-   * Return to the normal chat and record that Multiview is closed.
+   * Close Multiview for a chat: the content shows the normal chat, and the choice is kept.
    * @param chat - the chat that Multiview belongs to.
    */
   close(chat: SessionId): void
   /**
-   * Replace the layout, for the panel's own changes: a drop, a divider, a tab.
+   * Replace the layout, for the layer's own changes: a drop, a divider, a tab.
    * @param chat - the chat that Multiview belongs to.
    * @param layout - the new layout.
    */

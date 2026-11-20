@@ -3,7 +3,7 @@ import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { vi } from 'vitest'
 import { DEFAULT_MULTIVIEW_SETTINGS, type MultiviewSettings } from '../../src/config.ts'
-import { MULTIVIEW_PANEL_ID, type ChatMultiview, type MultiviewService } from '../../src/client/contract.ts'
+import { MULTIVIEW_LAYER_ID, type ChatMultiview, type MultiviewService } from '../../src/client/contract.ts'
 import { en } from '../../src/entry/locales.ts'
 import { registerEntry } from '../../src/entry/register.ts'
 import type { MultiviewStore } from '../../src/entry/state.ts'
@@ -42,7 +42,7 @@ export function listOf(spec: ListSpec) {
 }
 
 /** The browser services the entry points use, recording what they are asked. */
-export function harness(options: { settings?: Partial<MultiviewSettings> | undefined; panel?: boolean; initial?: Record<string, ChatMultiview>; list?: ListSpec } = {}) {
+export function harness(options: { settings?: Partial<MultiviewSettings> | undefined; layer?: boolean; initial?: Record<string, ChatMultiview>; list?: ListSpec } = {}) {
   const ctx = new Context()
   const dictionaries = new Map<string, unknown>()
   ctx.provide('locale', {
@@ -50,7 +50,7 @@ export function harness(options: { settings?: Partial<MultiviewSettings> | undef
     register: (ns: string, dicts: unknown) => { dictionaries.set(ns, dicts); return () => { dictionaries.delete(ns) } },
   } as never)
   const entries = new Map<string, { component: unknown; inject?: () => unknown; order?: number }>()
-  let panelRegistered = options.panel ?? true
+  let layerRegistered = options.layer ?? true
   const slotListeners = new Set<() => void>()
   ctx.provide('slots', {
     inject: (_: string, register: () => (() => void) | Generator<() => void>) => {
@@ -65,20 +65,10 @@ export function harness(options: { settings?: Partial<MultiviewSettings> | undef
       return () => { entries.delete(key) }
     },
     subscribe: (_name: string, listener: () => void) => { slotListeners.add(listener); return () => { slotListeners.delete(listener) } },
-    entries: (name: string) => (name === 'main' && panelRegistered ? [{ options: { key: MULTIVIEW_PANEL_ID } }] : []),
+    entries: (name: string) => (name === 'conversation.main.body' && layerRegistered ? [{ options: { id: MULTIVIEW_LAYER_ID } }] : []),
   } as never)
   const list = createSnapshotStore(listOf(options.list ?? {}))
   ctx.provide('sessions', { list } as never)
-  const panelInfo = createSnapshotStore<{ activePanelId: string | null }>({ activePanelId: null })
-  const selected: Array<string | null> = []
-  ctx.provide('layout', {
-    panelInfo,
-    selectPanel: (id: string | null) => {
-      if (id !== null && !panelRegistered) throw new Error(`main panel "${id}" is not registered`)
-      selected.push(id)
-      panelInfo.set({ activePanelId: id })
-    },
-  } as never)
   const formListeners = new Set<() => void>()
   let formValue: Partial<MultiviewSettings> | undefined = options.settings === undefined ? undefined : { ...DEFAULT_MULTIVIEW_SETTINGS, ...options.settings }
   const formIds: string[] = []
@@ -96,18 +86,18 @@ export function harness(options: { settings?: Partial<MultiviewSettings> | undef
   let store!: MultiviewStore
   const fiber = ctx.plugin({
     name: 'delorun-multiview',
-    inject: ['slots', 'locale', 'sessions', 'layout', 'configForms'],
+    inject: ['slots', 'locale', 'sessions', 'configForms'],
     apply: (inner: Context) => {
       store = registerEntry(inner, { persistence: persisted.persistence, windowArea: () => ({ width: 4000, height: 3000 }) })
     },
   })
   return {
-    ctx, fiber, dictionaries, entries, list, panelInfo, selected, formIds, warn, ...persisted,
+    ctx, fiber, dictionaries, entries, list, formIds, warn, ...persisted,
     get store(): MultiviewStore { return store },
     get service(): MultiviewService { return store },
     setList: (spec: ListSpec) => { list.set(listOf(spec)) },
     setSettings: (value: Partial<MultiviewSettings>) => { formValue = { ...DEFAULT_MULTIVIEW_SETTINGS, ...value }; for (const listener of [...formListeners]) listener() },
-    registerPanel: (value: boolean) => { panelRegistered = value; for (const listener of [...slotListeners]) listener() },
+    registerLayer: (value: boolean) => { layerRegistered = value; for (const listener of [...slotListeners]) listener() },
     state: (chat: string): ChatMultiview => store.of(sid(chat)).getSnapshot(),
     face: <T,>(key: string): T => {
       const entry = entries.get(key)

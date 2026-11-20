@@ -37,7 +37,7 @@ describe('registration', () => {
   })
 })
 
-describe('while the Multiview panel is not registered', () => {
+describe('while the Multiview layer is not registered', () => {
   const ENTRY_KEYS = [
     'conversation.session.header.actions#multiview-button',
     'conversation.session.header.actions.subagent.footer#multiview-footer',
@@ -45,43 +45,35 @@ describe('while the Multiview panel is not registered', () => {
   ]
 
   it('shows no pin button, footer or header button, and still offers the service', async () => {
-    const h = harness({ panel: false })
+    const h = harness({ layer: false })
     await h.fiber.await()
     expect(h.entries.size).toBe(0)
     expect(h.ctx.get('multiview')).toBe(h.store)
   })
 
-  it('does not pin, open or select anything for a hand-off', async () => {
-    const h = harness({ panel: false, list: { main: CHAT, catalogs: { [CHAT]: [] } } })
+  it('does not pin or open anything for a hand-off', async () => {
+    const h = harness({ layer: false, list: { main: CHAT, catalogs: { [CHAT]: [] } } })
     await h.fiber.await()
     h.setList({ main: CHAT, catalogs: { [CHAT]: [A] } })
     expect(h.state(CHAT)).toMatchObject({ pins: [], open: false })
-    expect(h.selected).toEqual([])
   })
 
-  it('does not reopen a chat that was open', async () => {
-    const h = harness({ panel: false, initial: { [CHAT]: { pins: [A], layout: null, open: true } }, list: { main: OTHER, catalogs: { [OTHER]: [] } } })
+  it('lights up when the layer is registered: the entry points appear and later hand-offs pin', async () => {
+    const h = harness({ layer: false, list: { main: CHAT, catalogs: { [CHAT]: [A] } } })
     await h.fiber.await()
-    h.setList({ main: CHAT, catalogs: { [CHAT]: [A] } })
-    expect(h.selected).toEqual([])
-  })
-
-  it('lights up when the panel is registered: the entry points appear and later hand-offs pin', async () => {
-    const h = harness({ panel: false, list: { main: CHAT, catalogs: { [CHAT]: [A] } } })
-    await h.fiber.await()
-    h.registerPanel(true)
+    h.registerLayer(true)
     expect([...h.entries.keys()].sort()).toEqual(ENTRY_KEYS)
     expect(h.state(CHAT).pins).toEqual([])
     h.setList({ main: CHAT, catalogs: { [CHAT]: [A, B] } })
     expect(h.state(CHAT).pins).toEqual([B])
-    expect(h.selected).toEqual(['multiview'])
+    expect(h.state(CHAT).open).toBe(true)
   })
 
-  it('takes the entry points away again when the panel goes, and stops the hand-off observer', async () => {
+  it('takes the entry points away again when the layer goes, and stops the hand-off observer', async () => {
     const h = harness({ list: { main: CHAT, catalogs: { [CHAT]: [] } } })
     await h.fiber.await()
     expect([...h.entries.keys()].sort()).toEqual(ENTRY_KEYS)
-    h.registerPanel(false)
+    h.registerLayer(false)
     expect(h.entries.size).toBe(0)
     h.setList({ main: CHAT, catalogs: { [CHAT]: [A] } })
     expect(h.state(CHAT).pins).toEqual([])
@@ -90,8 +82,8 @@ describe('while the Multiview panel is not registered', () => {
   it('registers each entry point once however often the slot changes', async () => {
     const h = harness()
     await h.fiber.await()
-    h.registerPanel(true)
-    h.registerPanel(true)
+    h.registerLayer(true)
+    h.registerLayer(true)
     expect(h.entries.size).toBe(3)
     await h.fiber.dispose()
     expect(h.entries.size).toBe(0)
@@ -103,7 +95,6 @@ describe('auto-pin on a hand-off', () => {
     const h = harness({ list: { main: CHAT, catalogs: { [CHAT]: [A, B] } } })
     await h.fiber.await()
     expect(h.state(CHAT).pins).toEqual([])
-    expect(h.selected).toEqual([])
     h.setList({ main: CHAT, catalogs: { [CHAT]: [A, B] } })
     expect(h.state(CHAT).pins).toEqual([])
   })
@@ -114,19 +105,17 @@ describe('auto-pin on a hand-off', () => {
     h.setList({ main: CHAT, catalogs: { [CHAT]: [A, B] } })
     expect(h.state(CHAT).pins).toEqual([B])
     expect(h.state(CHAT).open).toBe(true)
-    expect(h.selected).toEqual(['multiview'])
   })
 
   it('opens again for every hand-off, also after the person closed it', async () => {
     const h = harness({ list: { main: CHAT, catalogs: { [CHAT]: [] } } })
     await h.fiber.await()
     h.setList({ main: CHAT, catalogs: { [CHAT]: [A] } })
-    expect(h.selected).toEqual(['multiview'])
+    expect(h.state(CHAT).open).toBe(true)
     h.service.close(sid(CHAT))
-    expect(h.selected).toEqual(['multiview', null])
+    expect(h.state(CHAT).open).toBe(false)
     h.setList({ main: CHAT, catalogs: { [CHAT]: [A, B] } })
     expect(h.state(CHAT)).toMatchObject({ pins: [A, B], open: true })
-    expect(h.selected).toEqual(['multiview', null, 'multiview'])
   })
 
   it('pins each of several hand-offs that arrive together', async () => {
@@ -156,7 +145,6 @@ describe('auto-pin on a hand-off', () => {
     await h.fiber.await()
     h.setList({ main: CHAT, catalogs: { [CHAT]: [A] } })
     expect(h.state(CHAT)).toMatchObject({ pins: [], open: false })
-    expect(h.selected).toEqual([])
   })
 
   it('with auto-open off pins the agent but leaves Multiview closed', async () => {
@@ -164,7 +152,6 @@ describe('auto-pin on a hand-off', () => {
     await h.fiber.await()
     h.setList({ main: CHAT, catalogs: { [CHAT]: [A] } })
     expect(h.state(CHAT)).toMatchObject({ pins: [A], open: false })
-    expect(h.selected).toEqual([])
   })
 
   it('treats a chat as new each time it becomes the main view', async () => {
@@ -181,53 +168,32 @@ describe('auto-pin on a hand-off', () => {
 describe('reopen on return', () => {
   const saved = { [CHAT]: { pins: [A], layout: null, open: true } }
 
-  it('reopens a chat that had Multiview open when it becomes the main view', async () => {
+  it('keeps a chat that had Multiview open open, so it shows again when the chat is the main view', async () => {
     const h = harness({ initial: saved, list: { main: OTHER, catalogs: { [OTHER]: [] } } })
-    await h.fiber.await()
-    expect(h.selected).toEqual([])
-    h.setList({ main: CHAT, catalogs: { [CHAT]: [A] } })
-    expect(h.selected).toEqual(['multiview'])
-  })
-
-  it('reopens a chat on a page load that finds it open', async () => {
-    const h = harness({ initial: saved, list: { main: CHAT, catalogs: { [CHAT]: [A] } } })
-    await h.fiber.await()
-    expect(h.selected).toEqual(['multiview'])
-  })
-
-  it('leaves the chat alone when reopening is off', async () => {
-    const h = harness({ settings: { reopenOnReturn: false }, initial: saved, list: { main: OTHER, catalogs: { [OTHER]: [] } } })
-    await h.fiber.await()
-    h.setList({ main: CHAT, catalogs: { [CHAT]: [A] } })
-    expect(h.selected).toEqual([])
-  })
-
-  it('does not reopen a chat that was closed', async () => {
-    const h = harness({ initial: { [CHAT]: { pins: [A], layout: null, open: false } }, list: { main: OTHER, catalogs: { [OTHER]: [] } } })
-    await h.fiber.await()
-    h.setList({ main: CHAT, catalogs: { [CHAT]: [A] } })
-    expect(h.selected).toEqual([])
-  })
-})
-
-describe('closing from outside', () => {
-  it('records a close the panel made in the same chat, such as Open full chat', async () => {
-    const h = harness({ list: { main: CHAT, catalogs: { [CHAT]: [] } } })
     await h.fiber.await()
     h.setList({ main: CHAT, catalogs: { [CHAT]: [A] } })
     expect(h.state(CHAT).open).toBe(true)
-    h.panelInfo.set({ activePanelId: null })
+  })
+
+  it('closes a chat that had Multiview open when the person leaves it, with reopening off', async () => {
+    const h = harness({ settings: { reopenOnReturn: false }, list: { main: CHAT, catalogs: { [CHAT]: [] } } })
+    await h.fiber.await()
+    h.setList({ main: CHAT, catalogs: { [CHAT]: [A] } })
+    expect(h.state(CHAT).open).toBe(true)
+    h.setList({ main: OTHER, catalogs: { [OTHER]: [], [CHAT]: [A] } })
     expect(h.state(CHAT).open).toBe(false)
   })
 
-  it('keeps Multiview open for the chat the person left, so it reopens on return', async () => {
-    const h = harness({ list: { main: CHAT, catalogs: { [CHAT]: [] } } })
+  it('closes a chat that a page load finds open, with reopening off', async () => {
+    const h = harness({ settings: { reopenOnReturn: false }, initial: saved, list: { main: CHAT, catalogs: { [CHAT]: [A] } } })
+    await h.fiber.await()
+    expect(h.state(CHAT).open).toBe(false)
+  })
+
+  it('leaves a chat the person closed closed', async () => {
+    const h = harness({ initial: { [CHAT]: { pins: [A], layout: null, open: false } }, list: { main: OTHER, catalogs: { [OTHER]: [] } } })
     await h.fiber.await()
     h.setList({ main: CHAT, catalogs: { [CHAT]: [A] } })
-    h.setList({ main: OTHER, catalogs: { [OTHER]: [], [CHAT]: [A] } })
-    h.panelInfo.set({ activePanelId: null })
-    expect(h.state(CHAT).open).toBe(true)
-    h.setList({ main: CHAT, catalogs: { [OTHER]: [], [CHAT]: [A] } })
-    expect(h.selected.at(-1)).toBe('multiview')
+    expect(h.state(CHAT).open).toBe(false)
   })
 })

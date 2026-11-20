@@ -1,22 +1,22 @@
 /**
  * Browser half of Multiview: the entry points (pin button, header button, popover footer, Layout menu, auto-pin and
- * reopen on return), the `multiview` service, and the `main` panel keyed `multiview` that shows the pinned agents' chats in panes
- * (or, on a phone, pages); the layout engine they build on is `../layout/index.ts`.
+ * auto-open), the `multiview` service, and the layer in the main Conversation's content that shows the pinned agents' chats in
+ * panes (or, on a phone, pages); the layout engine they build on is `../layout/index.ts`.
  * @module @delorun/plugin-multiview/client
  */
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: the ctx.sessions merge.
 import type {} from '@deepseek-ai/dsh-api-session-controller/client'
 import { registerEntry } from '../entry/register.ts'
-import { registerPanel } from '../panel/register.ts'
+import { registerLayer } from '../panel/register.ts'
 import { browserStorage, localPersistence } from '../store/persist.ts'
 
 export {
-  EMPTY_CHAT_MULTIVIEW, MULTIVIEW_NS, MULTIVIEW_PANEL_ID,
+  EMPTY_CHAT_MULTIVIEW, MULTIVIEW_LAYER_ID, MULTIVIEW_NS,
   type ChatMultiview, type MultiviewPersistence, type MultiviewService, type PinRefusal, type PinResult,
 } from './contract.ts'
-export { registerPanel, type PanelOptions } from '../panel/register.ts'
-export { MultiviewPanel, type PanelInjected, type PanelProps } from '../panel/Panel.tsx'
+export { registerLayer, type LayerOptions } from '../panel/register.ts'
+export { MultiviewLayer, type LayerInjected, type LayerProps } from '../panel/Layer.tsx'
 export { PaneHeader, type PaneHeaderProps } from '../panes/PaneHeader.tsx'
 export { PaneBody, type PaneBodyProps } from '../panes/PaneBody.tsx'
 export { PaneReferences, usePaneReferences, type PaneSessions } from '../panes/references.ts'
@@ -34,7 +34,7 @@ export { browserStorage, localPersistence, MULTIVIEW_INDEX_NAME, MULTIVIEW_PERSI
 export const name = 'delorun-multiview'
 
 /** Services every registration needs. */
-export const inject = ['slots', 'locale', 'sessions', 'layout', 'configForms', 'uiWorkspace']
+export const inject = ['slots', 'locale', 'sessions', 'configForms', 'uiWorkspace']
 
 /**
  * Mount the entry points.
@@ -46,5 +46,5 @@ export function apply(ctx: Context): void {
     windowArea: () => ({ width: globalThis.innerWidth, height: globalThis.innerHeight }),
   })
   const time = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' })
-  registerPanel(ctx, { multiview, clock: epochMs => time.format(epochMs) })
+  registerLayer(ctx, { multiview, clock: epochMs => time.format(epochMs) })
 }

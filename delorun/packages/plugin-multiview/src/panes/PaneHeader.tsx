@@ -78,8 +78,9 @@ export function PaneHeader(props: PaneHeaderProps) {
   const stopDenied = useAccess('session/cancel') === false
   const status = paneStatus({ running: running === true, waiting, isMain })
   const known = seat === null || seat === undefined ? undefined : SEAT_AGENTS[seat.agent ?? '']
-  const name = isMain ? title : known?.name ?? title
-  const task = isMain ? t('badge.mainChat') : name === title ? '' : title
+  // The main chat's own header, in its pane below, carries its title.
+  const name = isMain ? t('badge.mainChat') : known?.name ?? title
+  const task = isMain || name === title ? '' : title
   const monogram = known?.monogram ?? initialsOf(name)
   const { clock, now } = useRunClock(status, isMain ? undefined : createdAt)
   const knownDuration = createdAt !== undefined && updatedAt !== undefined && updatedAt >= createdAt && !isMain ? updatedAt - createdAt : undefined

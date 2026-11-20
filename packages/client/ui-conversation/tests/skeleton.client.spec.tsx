@@ -212,8 +212,9 @@ function mount(
     }
     if (key === 'conversation.hero.workspace') { pickerOwner = owner; return null }
     if (key === 'conversation.hero.headline') return opts?.fallback ?? null
+    // A hoc slot with no layers renders its content unchanged.
+    if (key === 'conversation.main.body') return <div data-testid="main-body">{opts?.children}</div>
     if (key === 'conversation.hero.frame') {
-      // A hoc slot with no layers renders its content unchanged.
       frameOwners.push(owner as HeroFrameOwnerProps)
       return <div data-testid="hero-frame">{opts?.children}</div>
     }
@@ -447,6 +448,16 @@ describe('Hero chrome', () => {
     expect(brandMarkOwner.size).toBe(34)
     expect(brandMarkOwner.className).toBeTypeOf('string')
     expect(renderSlot.mock.calls[0]?.[2]?.fallback).toBeTruthy()
+  })
+})
+
+describe('ConversationRoot main body layers', () => {
+  it('wraps the content under the header in the main body slot and leaves the header outside it', () => {
+    const b = mount(sessionSnapshotOf())
+    const body = b.view.getByTestId('main-body')
+    expect(body.querySelector('[data-conversation-content]')).not.toBeNull()
+    expect(body.querySelector('header')).toBeNull()
+    expect(b.view.container.querySelector('header')).not.toBeNull()
   })
 })
 

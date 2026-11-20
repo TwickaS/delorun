@@ -1,14 +1,15 @@
 /**
- * The `multiview` main panel: the main chat's header strip over the pane layout, or, in a window narrower than the pager breakpoint,
- * over the phone pager. Every pane (the main chat's too) is the real chat rendered through the pane slots, each inside its own
- * `multiviewPane` session reference, held here so that moving, paging or hiding a pane never closes its chat.
+ * Multiview's layer in the main Conversation's content (`conversation.main.body`). While Multiview is closed it renders the content
+ * as it is. While open it draws the pane layout, or, in a window narrower than the pager breakpoint, the phone pager, under the
+ * Conversation's own header. The main chat's pane is that content itself, the real chat with its full composer; an agent's pane is
+ * the pane header and body slots, each inside the agent chat's own `multiviewPane` session reference, held here so that moving,
+ * paging or hiding a pane never closes its chat.
  */
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
 import type { SessionReference } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { MultiviewService } from '../client/contract.ts'
-import { mainChatOf } from '../entry/read.ts'
 import { limitsOf } from '../entry/state.ts'
 import {
   fitLayout, paneCapacity, PaneLayout, reconcileLayout, type LayoutArea, type PaneHeaderControls, type PaneId, type PaneLayoutLabels,
@@ -19,10 +20,10 @@ import type { PaneHeaderOwnerProps } from '../panes/slots.ts'
 import { initialsOf } from '../panes/status.ts'
 import { PhonePager, pageOrder, PhoneSwitch } from '../phone/index.ts'
 import type { PhoneDotsStore } from './dots.tsx'
-import css from './Panel.module.css'
+import css from './Layer.module.css'
 
-/** What the panel reads and does. */
-export interface PanelInjected {
+/** What the layer reads and does. */
+export interface LayerInjected {
   /** The pins, layouts and open state. */
   readonly multiview: MultiviewService
   /** The sessions service the panes' chats are retained through. */
@@ -38,32 +39,37 @@ export interface PanelInjected {
   readonly dots: PhoneDotsStore
 }
 
-/** Props of the panel entry. */
-export type PanelProps = PropsRuntime<'main'>
-  & PropsRenderSlots<'conversation.header' | 'multiview.pane.header' | 'multiview.pane.body'>
+/** Props of the layer entry. */
+export type LayerProps = PropsRuntime<'conversation.main.body'>
+  & PropsRenderSlots<'multiview.pane.header' | 'multiview.pane.body'>
   & PropsLocale<typeof PANES_NS>
-  & InjectFace<PanelInjected>
+  & InjectFace<LayerInjected>
+  & { readonly children: ReactNode }
 
-type Frame = Pick<PanelProps, 'SessionProvider' | 'renderSlot' | 'useSessions' | 'useSessionStatus' | 't'> & PanelInjected
+type Frame = Pick<LayerProps, 'SessionProvider' | 'renderSlot' | 'useSessions' | 'useSessionStatus' | 't'> & LayerInjected
 
 /**
- * The panel.
- * @param props - the slot kit and the services.
- * @returns the layout, or a note while no chat is the main view.
+ * The layer.
+ * @param props - the main content, the slot kit and the services.
+ * @returns the content as it is while Multiview is closed or has nothing pinned, otherwise the layout or the pager.
  */
-export function MultiviewPanel(props: PanelProps) {
-  const main = props.useSessions(state => mainChatOf(state))
-  if (main === undefined) return <div className={css.empty}>{props.t('empty.noMain')}</div>
-  return <ChatMultiview {...props} main={main} />
+export function MultiviewLayer(props: LayerProps) {
+  const { sessionId, multiview, children } = props
+  const open = useObservable(multiview.of(sessionId ?? NO_CHAT)).open
+  if (sessionId === undefined || !open) return <>{children}</>
+  return <ChatMultiview {...props} main={sessionId} />
 }
+
+/** The chat key of a content that has no chat: nothing is ever stored under it. */
+const NO_CHAT = '' as SessionId
 
 /** Observe a service value as React state. */
 function useObservable<T>(source: { subscribe(listener: () => void): () => void; getSnapshot(): T }): T {
   return useSyncExternalStore(listener => source.subscribe(listener), () => source.getSnapshot())
 }
 
-function ChatMultiview(props: PanelProps & { readonly main: SessionId }) {
-  const { main, multiview, sessions, openFull, clock, dots, t, SessionProvider, renderSlot, useSessions, useSessionStatus } = props
+function ChatMultiview(props: LayerProps & { readonly main: SessionId }) {
+  const { main, multiview, sessions, openFull, clock, dots, t, SessionProvider, renderSlot, useSessions, useSessionStatus, children } = props
   const state = useObservable(multiview.of(main))
   const settings = useObservable(multiview.settings)
   const limits = useMemo(() => limitsOf(settings), [settings])
@@ -87,8 +93,6 @@ function ChatMultiview(props: PanelProps & { readonly main: SessionId }) {
   const waitingKey = useSessionStatus(statuses => state.pins.filter(pin => statuses.get(pin)?.pendingInteraction !== undefined).join('\n'))
   const waitingPanes = useMemo(() => new Set(waitingKey === '' ? [] : waitingKey.split('\n')), [waitingKey])
   const labels: PaneLayoutLabels = { separator: t('layout.separator'), region: t('region'), tabList: t('layout.tabs'), grip: t('layout.grip') }
-  const mainReference = references.get(main)
-  const strip = mainReference === undefined ? null : <SessionProvider session={mainReference}>{renderSlot('conversation.header', {})}</SessionProvider>
 
   const split = (
     <PaneLayout
@@ -113,7 +117,7 @@ function ChatMultiview(props: PanelProps & { readonly main: SessionId }) {
           }}
         />
       )}
-      renderPane={pane => <BodySlot frame={frame} reference={references.get(pane)} compact={pane !== main && settings.compactComposer} waiting={waitingPanes.has(pane)} />}
+      renderPane={pane => <BodySlot frame={frame} reference={references.get(pane)} content={pane === main ? children : undefined} compact={settings.compactComposer} waiting={waitingPanes.has(pane)} />}
     />
   )
   const hidden = fitted.hidden.length === 0 ? null : (
@@ -121,18 +125,17 @@ function ChatMultiview(props: PanelProps & { readonly main: SessionId }) {
   )
   const ids = useMemo(() => pageOrder(main, state.pins), [main, state.pins])
   const phone = (
-    <Pager frame={frame} main={main} ids={ids} references={references} active={active} onActive={setActive} stop={stop} compact={settings.compactComposer} waiting={waitingPanes} />
+    <Pager frame={frame} main={main} content={children} ids={ids} references={references} active={active} onActive={setActive} stop={stop} compact={settings.compactComposer} waiting={waitingPanes} />
   )
   return (
     <div className={css.root} data-multiview-panel={main}>
-      <div className={css.strip}>{strip}</div>
       <PhoneSwitch phone={phone} split={<>{hidden}<div className={css.layout}>{split}</div></>} />
     </div>
   )
 }
 
 /** The layout's tab label for a pane that shares a leaf: the chat's name. */
-function TabLabel({ useSessions, pane }: Pick<PanelProps, 'useSessions'> & { readonly pane: PaneId }) {
+function TabLabel({ useSessions, pane }: Pick<LayerProps, 'useSessions'> & { readonly pane: PaneId }) {
   return <>{useSessions(state => state.byId[pane]?.projectionValues?.subagent?.label ?? state.byId[pane]?.displayTitle ?? pane)}</>
 }
 
@@ -147,27 +150,31 @@ function HeaderSlot({ frame, reference, owner }: {
   return <SessionProvider session={reference}>{renderSlot('multiview.pane.header', owner)}</SessionProvider>
 }
 
-/** A pane's body, inside the pane's chat reference; a waiting chat's body carries the amber ring. */
-function BodySlot({ frame, reference, compact, waiting }: {
+/** A pane's body: the main content for the main chat, otherwise the pane body slot inside the agent chat's reference. A waiting chat's body carries the amber ring. */
+function BodySlot({ frame, reference, content, compact, waiting }: {
   readonly frame: Frame
   readonly reference: SessionReference | undefined
+  readonly content: ReactNode | undefined
   readonly compact: boolean
   readonly waiting: boolean
 }) {
   const { SessionProvider, renderSlot } = frame
   return (
     <div className={css.pane} data-pane-body data-waiting={waiting || undefined}>
-      {reference === undefined
-        ? <div className={css.loading} />
-        : <SessionProvider session={reference}>{renderSlot('multiview.pane.body', { compact })}</SessionProvider>}
+      {content !== undefined
+        ? content
+        : reference === undefined
+          ? <div className={css.loading} />
+          : <SessionProvider session={reference}>{renderSlot('multiview.pane.body', { compact })}</SessionProvider>}
     </div>
   )
 }
 
 /** The phone pager over the same references, with the pager's position published for the dots in each page's chat. */
-function Pager({ frame, main, ids, references, active, onActive, stop, compact, waiting }: {
+function Pager({ frame, main, content, ids, references, active, onActive, stop, compact, waiting }: {
   readonly frame: Frame
   readonly main: SessionId
+  readonly content: ReactNode
   readonly ids: readonly SessionId[]
   readonly references: ReadonlyMap<SessionId, SessionReference>
   readonly active: PaneId
@@ -204,7 +211,7 @@ function Pager({ frame, main, ids, references, active, onActive, stop, compact, 
               </frame.SessionProvider>
             )}
             <div className={css.pageBody}>
-              <BodySlot frame={frame} reference={reference} compact={id !== main && compact} waiting={false} />
+              <BodySlot frame={frame} reference={reference} content={id === main ? content : undefined} compact={compact} waiting={false} />
             </div>
           </div>
         )

@@ -103,6 +103,8 @@
 .cardCompact .row {
   flex: none;
   padding: 4px 6px 4px 0;
+  /* No size container: a container's width does not come from its content, so the row would have no width beside the editor. */
+  container-type: normal;
 }
 
 @media (pointer: coarse) {

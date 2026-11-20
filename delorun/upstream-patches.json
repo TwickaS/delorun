@@ -618,13 +618,13 @@
       "path": "packages/client/ui-conversation/src/client/apply.ts",
       "class": "delorun-feature",
       "feature": "studio-seams",
-      "reason": "Declares the conversation.hero.headline slot on the conversation.content factory, so the slot's children are registered with the content; declares the conversation.session.banner slot on the conversation.session entry."
+      "reason": "Declares the conversation.hero.headline slot on the conversation.content factory, so the slot's children are registered with the content; declares the conversation.session.banner slot on the conversation.session entry. Multiview U3: declares the conversation.main.body hoc slot among the children of main.conversation."
     },
     {
       "path": "packages/client/ui-conversation/src/client/contract/slots.ts",
       "class": "delorun-feature",
       "feature": "studio-seams",
-      "reason": "Declares the conversation.hero.headline slot, so a product can replace the New Session headline; upstream's headline and Preview badge remain the fallback. Declares the conversation.session.banner list slot between the header and the active View, which a live agent's chat uses for its coloured rule and opening card (EA13). Multiview U1: `ConversationContentInputProps.variant` accepts `pane`, the occurrence of a chat hosted in a split pane."
+      "reason": "Declares the conversation.hero.headline slot, so a product can replace the New Session headline; upstream's headline and Preview badge remain the fallback. Declares the conversation.session.banner list slot between the header and the active View, which a live agent's chat uses for its coloured rule and opening card (EA13). Multiview U1: `ConversationContentInputProps.variant` accepts `pane`, the occurrence of a chat hosted in a split pane. Multiview U3: declares the conversation.main.body hoc slot (session-maybe scope) around the main content."
     },
     {
       "path": "packages/client/ui-conversation/src/client/locales.ts",
@@ -3145,6 +3145,12 @@
       "class": "delorun-feature",
       "feature": "multiview",
       "reason": "Multiview U1: the content's `pane` variant takes the embedded body plus a tighter padding class and never shows the New Session hero; `main` and `embedded` render as before."
+    },
+    {
+      "path": "packages/client/ui-conversation/src/client/skeleton/ConversationMainPanel.tsx",
+      "class": "delorun-feature",
+      "feature": "multiview",
+      "reason": "Multiview U3: renders the main content (transcript and composer) inside the `conversation.main.body` hoc slot, so a layer can arrange it beside other chats; with no layer the content renders unchanged and the header stays outside."
     }
   ],
   "retired": []

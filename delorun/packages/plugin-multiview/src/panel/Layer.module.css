@@ -1,6 +1,5 @@
-/* The Multiview panel: the main chat's header strip over the layout (or, on a phone, the pager). The panel fills the main area. */
+/* The Multiview panel: the layout, or on a phone the pager. The panel fills the main area. */
 .root { display: flex; flex: 1 1 auto; flex-direction: column; min-width: 0; min-height: 0; height: 100%; background: var(--dsw-alias-bg-base); }
-.strip { flex: none; }
 .layout { flex: 1 1 auto; min-width: 0; min-height: 0; padding: 6px; }
 .empty { display: grid; flex: 1 1 auto; place-items: center; padding: 24px; color: var(--dsw-alias-label-secondary); font-size: 14px; }
 .hidden { flex: none; margin: 0 6px 6px; padding: 6px 10px; border-radius: 8px; background: var(--dsw-alias-state-warn-tertiary); color: var(--dsw-alias-state-warn-label); font-size: 12px; }

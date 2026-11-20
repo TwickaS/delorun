@@ -98,6 +98,7 @@ describe('the pane header status badge', () => {
   it('shows Ready, not Done, for the main chat at rest', () => {
     setup({ isMain: true })
     expect(screen.getByRole('status').textContent).toBe('Ready')
+    expect(document.querySelector('[data-pane-header]')!.textContent).toContain('Main chat')
   })
 })
 

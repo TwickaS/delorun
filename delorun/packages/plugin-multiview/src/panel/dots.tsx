@@ -9,7 +9,7 @@ import type { HostObservable, InjectFace, PropsLocale, PropsRuntime } from '@dee
 import type { PaneId } from '../layout/index.ts'
 import type { PANES_NS } from '../panes/locales.ts'
 import { PageDots } from '../phone/index.ts'
-import css from './Panel.module.css'
+import css from './Layer.module.css'
 
 /** What the dots show while the pager is mounted. */
 export interface PhoneDotsState {
