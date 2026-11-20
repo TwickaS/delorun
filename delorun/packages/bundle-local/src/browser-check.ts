@@ -29,7 +29,7 @@ export const INSTALL_SECONDS = 900
 const MAX_OUTPUT = 64 * 1024
 
 /** The fixed page the test opens: no script, no request, no link. */
-export const TEST_PAGE = '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Delorun browser test</title><style>body{margin:0;display:grid;place-items:center;height:100vh;background:#f4f1ea;color:#1d1b16;font:600 28px/1.3 system-ui,sans-serif;text-align:center}small{display:block;margin-top:8px;font:400 16px system-ui,sans-serif;color:#5a564c}</style></head><body><main>Browser works<small>This page was opened by Delorun on this computer.</small></main></body></html>'
+export const TEST_PAGE = '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Delorun browser test</title><style>body{margin:0;display:grid;place-items:center;height:100vh;background:#f4f1ea;color:#1d1b16;font:600 28px/1.3 system-ui,sans-serif;text-align:center}small{display:block;margin-top:8px;font:400 16px system-ui,sans-serif;color:#5a564c}</style></head><body><main>Browser works<small>This page was opened by Delorun on this computer.</small></main></body></html>' // us-spelling: quoted output
 
 /**
  * The program the test runs under Node, as an ES module: it loads the Browser pack's `playwright-core`, starts the
