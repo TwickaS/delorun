@@ -166,6 +166,25 @@ describe('the terminal path on a phone (owner report on the iPhone)', () => {
     await waitFor(() => { expect(document.querySelector('[data-face-id-pin]')).toBeNull() })
   })
 
+  // A PIN minted for a stale tab's terminal/close under "Open a terminal" left the create refused (e2e flow 7).
+  it('gives two queued refusals a sheet each, with its own words, and mints each grant for its own call only', async () => {
+    const { api, lift, lifted } = refusedCreate(false)
+    const close = { sessionId: 's1', id: 't-old' }
+    const closed = lift({ endpoint: 'terminal/close', reason: 'elevation-required: terminal/close', args: close, signal: new AbortController().signal })
+    const pins = () => api.calls.filter(entry => entry.name === 'pin').map(entry => entry.request)
+    for (const [title, action, args] of [[en['do.openTerminal.title'], 'terminal/create', create], [en['do.closeTerminal.title'], 'terminal/close', close]] as const) {
+      await screen.findByRole('heading', { name: title })
+      fireEvent.click(await screen.findByRole('button', { name: en['sheet.confirmPin'] }))
+      for (const digit of '824619') fireEvent.click(screen.getByRole('button', { name: digit }))
+      fireEvent.click(screen.getByRole('button', { name: en['pin.confirm'] }))
+      await waitFor(() => { expect(pins().at(-1)).toMatchObject({ actions: [{ action }] }) })
+      expect(pins().at(-1)).toMatchObject({ actions: [{ action, hash: await hashArgs(args) }] })
+    }
+    await expect(lifted).resolves.toBe(true)
+    await expect(closed).resolves.toBe(true)
+    expect(pins().map(each => (each as { actions: readonly { action: string }[] }).actions.map(entry => entry.action))).toEqual([['terminal/create'], ['terminal/close']])
+  })
+
   it('hands the refusal back on a cancel, so the panel can say the terminal did not start', async () => {
     const { api, lifted } = refusedCreate()
     fireEvent.click(await screen.findByRole('button', { name: en['sheet.cancel'] }))

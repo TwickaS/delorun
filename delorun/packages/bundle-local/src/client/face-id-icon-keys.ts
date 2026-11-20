@@ -17,6 +17,8 @@ export const COPY_ICON: Readonly<Record<FaceActionCopy, FaceIconKey>> = {
   switchPlugin: 'plugin',
   changePlugins: 'plugin',
   openTerminal: 'terminal',
+  closeTerminal: 'terminal',
+  renameTerminal: 'terminal',
   browseFolders: 'folder',
   newFolder: 'folder',
   changeSettings: 'settings',

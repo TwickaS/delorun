@@ -4,6 +4,7 @@
 import type { AuthRow } from '../../home-auth/src/auth-classes.ts'
 import { ANSWER_GRANTS } from '../src/client/face-id-icon-keys.ts'
 import { CHANGE_CONTROLS, faceCopyOf } from '../src/client/face-id-locales.ts'
+import { NEVER_ASKED } from '../src/client/face-retry.ts'
 
 /** The client's action name for each `face` route row, which the table names by source file and expression. */
 const ROUTE_ACTIONS: Readonly<Record<string, string>> = {
@@ -54,5 +55,7 @@ export function problemOf(row: AuthRow): string | undefined {
   const action = row.surface === 'route' ? ROUTE_ACTIONS[row.id]
     : row.id.startsWith('remote:event:') ? 'dynamicCordisRunner/event' : REMOTE_ACTIONS[row.id] ?? row.id.slice('remote:'.length)
   if (action === undefined) return `${row.id} names no client action`
+  // The studio never raises a sheet for these calls, so they need no words.
+  if (Object.hasOwn(NEVER_ASKED, action)) return undefined
   return faceCopyOf(action) === 'generic' ? `${row.id} (${action}) has only the generic words` : undefined
 }

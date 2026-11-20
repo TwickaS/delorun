@@ -327,7 +327,7 @@ describe('the sheet\'s words', () => {
     expect(withChat.body).toContain('This chat switches to full access now.')
     expect(await words({ action: 'plugin-permission-defaults/network-set', call: { method: 'POST', path: '/p', body: {} } })).toBe('Change network access')
     expect(await words({ action: 'plugin-mcp-consent/accept', call: { method: 'POST', path: '/p', body: { serverName: 'files', reviewId: 'r', confirmed: true } } })).toBe('Allow the MCP server “files”')
-    expect(await words({ action: 'terminal/close', call: { args: { id: 't' } } })).toBe('Open a terminal')
+    expect(await words({ action: 'terminal/close', call: { args: { id: 't' } } })).toBe('Close a terminal')
     expect(await words({ action: 'settings/replace', call: { args: {} } })).toBe('Change a setting')
     expect(await words({ action: 'credentials/unset', call: { args: {} } })).toBe('Remove a model key')
     expect(await words({ action: 'someone/else', call: { args: {} } })).toBe('Confirm this action')

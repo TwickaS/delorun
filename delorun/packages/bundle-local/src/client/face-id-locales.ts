@@ -125,6 +125,10 @@ export const en = {
   'do.changePlugins.body': 'This changes which plugins run on your computer.',
   'do.openTerminal.title': 'Open a terminal',
   'do.openTerminal.body': 'Commands you type there run on your computer, as you.',
+  'do.closeTerminal.title': 'Close a terminal',
+  'do.closeTerminal.body': 'The terminal\'s shell on your computer ends, with anything still running in it.',
+  'do.renameTerminal.title': 'Rename a terminal',
+  'do.renameTerminal.body': 'The terminal keeps running; only its name changes.',
   'do.browseFolders.title': 'Browse your computer’s folders',
   'do.browseFolders.body': 'While the picker is open, this device sees the names of folders and files on your computer.',
   'do.newFolder.title': 'Make a new folder',
@@ -214,7 +218,7 @@ export const en = {
 export const CHANGE_CONTROLS = ['plugin-undo', 'plugin-discard', 'harness-discard', 'plugin-apply', 'plugin-other', 'harness-apply', 'harness-undo', 'protection-off', 'make-copy', 'restart', 'update-begin', 'update-rollback', 'stop'] as const
 
 /** The confirmations of other sensitive actions that have their own words: `do.<id>.title` and `do.<id>.body`. */
-export type FaceActionCopy = 'installPlugin' | 'updatePlugin' | 'removePlugin' | 'switchPlugin' | 'changePlugins' | 'openTerminal' | 'browseFolders' | 'newFolder' | 'changeSettings' | 'saveKey' | 'removeKey' | 'addWorkspace' | 'workspaceDefaults' | 'chatOutside' | 'runCommand' | 'mcpServer' | 'pluginCode' | 'fullAccessOn' | 'fullAccessOnChat' | 'fullAccessOff' | 'network' | 'mcpAccept' | 'externalAgent' | 'deleteForever' | 'awayBrowser' | 'reportDetails' | 'profileSave' | 'profileSwitch' | 'seatAnswer' | 'generic'
+export type FaceActionCopy = 'installPlugin' | 'updatePlugin' | 'removePlugin' | 'switchPlugin' | 'changePlugins' | 'openTerminal' | 'closeTerminal' | 'renameTerminal' | 'browseFolders' | 'newFolder' | 'changeSettings' | 'saveKey' | 'removeKey' | 'addWorkspace' | 'workspaceDefaults' | 'chatOutside' | 'runCommand' | 'mcpServer' | 'pluginCode' | 'fullAccessOn' | 'fullAccessOnChat' | 'fullAccessOff' | 'network' | 'mcpAccept' | 'externalAgent' | 'deleteForever' | 'awayBrowser' | 'reportDetails' | 'profileSave' | 'profileSwitch' | 'seatAnswer' | 'generic'
 
 /**
  * The copy of a grant action: its own entry, else its `<namespace>/*` entry, else `generic`.
@@ -240,7 +244,10 @@ export const ACTION_COPY: Readonly<Record<string, FaceActionCopy>> = {
   'plugin-packs/add': 'installPlugin',
   'plugin-packs/retry': 'installPlugin',
   'plugin-packs/remove': 'changePlugins',
-  'terminal/*': 'openTerminal',
+  'terminal/create': 'openTerminal',
+  'terminal/attach': 'openTerminal',
+  'terminal/close': 'closeTerminal',
+  'terminal/rename': 'renameTerminal',
   'directoryPicker/createDirectory': 'newFolder',
   'directoryPicker/*': 'browseFolders',
   'plugin-new-workspace/places': 'browseFolders',
