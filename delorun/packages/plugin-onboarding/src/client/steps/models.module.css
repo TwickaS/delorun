@@ -105,13 +105,20 @@
   cursor: pointer;
 }
 
+/* The whole row, not only the circle, is the target: the label's overlay covers the card's row (its positioned ancestor). */
+.tickLabel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
 /* A quiet round mark: an empty ring that fills with a tick, not a boxed checkbox. */
 .tick {
   appearance: none;
   display: grid;
   place-content: center;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   margin: 0;
   border: 1px solid var(--dsw-alias-border-l3);
   border-radius: 50%;
@@ -121,8 +128,8 @@
 
 .tick::after {
   content: '';
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
   background: var(--dsw-alias-label-primary);
   clip-path: polygon(14% 52%, 0 66%, 38% 100%, 100% 22%, 86% 8%, 38% 72%);
   opacity: 0;

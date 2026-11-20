@@ -137,6 +137,13 @@ export const DEFAULT_WORKSPACE = 'workspace-1' as WorkspaceId
 /** The default workspace's folder in the specs. */
 export const DEFAULT_PATH = '/home/person/Delorun'
 
+/**
+ * A text matcher for a path the card breaks into parts after each slash.
+ * @param path - the whole path.
+ * @returns a matcher for `getByText` that finds the element holding the whole path.
+ */
+export const pathText = (path: string) => (_content: string, element: Element | null): boolean => element?.textContent === path
+
 /** A computer with both agents signed in and Tailscale ready. */
 export const READY: Readiness = { agents: { 'claude-code': 'found', 'codex': 'found' }, tailscale: { state: 'ready', dnsName: 'box.example.ts.net' } }
 

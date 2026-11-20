@@ -75,7 +75,7 @@ describe('the card', () => {
 
   it('keeps an icon slot for every card: the plugin\'s image, or a tinted letter', () => {
     render(<><Card title="With" icon="data:image/png;base64,AA==" labels={LABELS} /><Card title="Without" labels={LABELS} /></>)
-    const slots = [...document.querySelectorAll('h4')].map(title => title.closest('div')?.parentElement?.parentElement?.firstElementChild as HTMLElement)
+    const slots = [...document.querySelectorAll('h4')].map(title => title.closest('div')?.parentElement?.firstElementChild as HTMLElement)
     expect(slots[0]?.querySelector('img')).not.toBeNull()
     expect(slots[1]?.textContent).toBe('W')
     expect(slots[1]?.firstElementChild?.getAttribute('data-tint')).not.toBeNull()

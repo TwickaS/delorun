@@ -11,10 +11,20 @@
 }
 
 .row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--onb-gap-1);
   min-height: 48px;
+}
+
+/* With a description the icon and the action line up with the title, not with the middle of the text block. */
+.row[data-described] {
+  align-items: flex-start;
+}
+
+.row[data-described] .icon {
+  margin-top: 2px;
 }
 
 .leading {
@@ -43,14 +53,10 @@
   min-width: 0;
 }
 
-.titleLine {
+.title {
   display: flex;
   align-items: center;
-  gap: var(--delorun-space-3);
-  min-width: 0;
-}
-
-.title {
+  min-height: 36px;
   margin: 0;
   font-size: var(--onb-body-size);
   font-weight: 500;
@@ -77,8 +83,14 @@
 }
 
 .more {
-  min-height: 24px;
-  padding: 0 var(--delorun-space-2);
+  /* A 44px touch target under the description; the negative margin keeps the row's height at the link's own. */
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  margin: -10px 0;
+  padding: 0 var(--delorun-space-2) 0 0;
   color: var(--dsw-alias-label-secondary);
   font-size: var(--onb-small-size);
   text-decoration: underline;
@@ -87,6 +99,10 @@
 
 .more:hover {
   color: var(--dsw-alias-label-primary);
+}
+
+.row[data-described] .action {
+  margin-top: -4px;
 }
 
 .action {

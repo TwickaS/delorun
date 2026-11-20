@@ -1,4 +1,5 @@
-/* A labelled line at the sidebar's foot, above its icon buttons and aligned with them; on the rail, an icon with a count. */
+/* A labelled line at the sidebar's foot, above its icon buttons and aligned with them; on the rail, an icon with the count of
+   waiting steps under it, centred in the rail's icon column. */
 .entry,
 .rail {
   display: inline-flex;
@@ -15,6 +16,23 @@
   font-size: var(--dsw-font-xs-13-font-size);
   line-height: var(--dsw-font-xs-13-line-height);
   cursor: pointer;
+}
+
+.rail {
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  padding-inline: 0;
+}
+
+.rail svg {
+  flex: none;
+}
+
+.rail .count {
+  font-size: 11px;
+  line-height: 12px;
 }
 
 .entry {

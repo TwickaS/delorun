@@ -23,7 +23,7 @@ describe('the copy', () => {
 
   it('says plainly how an agent is used and warns, and claims no consent that is not built', () => {
     for (const key of ['claude', 'codex'] as const) {
-      expect(en[`agents.${key}.how`]).toContain('Delorun asks you the first time')
+      expect(en[`agents.${key}.permissions`]).toContain('Delorun asks you the first time')
       expect(en[`agents.${key}.risk`]).toMatch(/^Use at your own risk\. It runs under your own .+ account and terms, outside Delorun’s sandbox\./)
     }
     expect(en['agents.claude.risk']).toContain('A home internet connection works best; avoid VPNs, proxies and cloud servers.')
