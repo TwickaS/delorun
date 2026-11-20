@@ -51,6 +51,7 @@ export function harness(options: { settings?: Partial<MultiviewSettings> | undef
   } as never)
   const entries = new Map<string, { component: unknown; inject?: () => unknown; order?: number }>()
   let panelRegistered = options.panel ?? true
+  const slotListeners = new Set<() => void>()
   ctx.provide('slots', {
     inject: (_: string, register: () => (() => void) | Generator<() => void>) => {
       const result = register()
@@ -63,6 +64,7 @@ export function harness(options: { settings?: Partial<MultiviewSettings> | undef
       entries.set(key, { component, ...slot.inject === undefined ? {} : { inject: slot.inject }, ...slot.order === undefined ? {} : { order: slot.order } })
       return () => { entries.delete(key) }
     },
+    subscribe: (_name: string, listener: () => void) => { slotListeners.add(listener); return () => { slotListeners.delete(listener) } },
     entries: (name: string) => (name === 'main' && panelRegistered ? [{ options: { key: MULTIVIEW_PANEL_ID } }] : []),
   } as never)
   const list = createSnapshotStore(listOf(options.list ?? {}))
@@ -105,7 +107,7 @@ export function harness(options: { settings?: Partial<MultiviewSettings> | undef
     get service(): MultiviewService { return store },
     setList: (spec: ListSpec) => { list.set(listOf(spec)) },
     setSettings: (value: Partial<MultiviewSettings>) => { formValue = { ...DEFAULT_MULTIVIEW_SETTINGS, ...value }; for (const listener of [...formListeners]) listener() },
-    registerPanel: (value: boolean) => { panelRegistered = value },
+    registerPanel: (value: boolean) => { panelRegistered = value; for (const listener of [...slotListeners]) listener() },
     state: (chat: string): ChatMultiview => store.of(sid(chat)).getSnapshot(),
     face: <T,>(key: string): T => {
       const entry = entries.get(key)

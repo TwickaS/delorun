@@ -88,20 +88,55 @@ export function registerEntry(ctx: Context, options: RegisterOptions): Multiview
     subscribe: listener => ctx.layout.panelInfo.subscribe(listener),
   }
   const injected = (): EntryInjected => ({ multiview: store, activePanel })
-  const row = 'conversation.session.header.actions.subagent.row.trail'
-  ctx.effect(() => ctx.slots.inject(row, () => ctx.slots.register({
-    name: row, id: 'multiview-pin', locale: MULTIVIEW_NS, inject: injected,
-  }, PinButton)), 'delorun-multiview: pin button')
-  const footer = 'conversation.session.header.actions.subagent.footer'
-  ctx.effect(() => ctx.slots.inject(footer, () => ctx.slots.register({
-    name: footer, id: 'multiview-footer', order: 100, locale: MULTIVIEW_NS, inject: injected,
-  }, Footer)), 'delorun-multiview: popover footer')
-  ctx.effect(() => ctx.slots.inject('conversation.session.header.actions', () => ctx.slots.register({
-    name: 'conversation.session.header.actions', id: 'multiview-button', order: HEADER_ORDER, locale: MULTIVIEW_NS, inject: injected,
-  }, HeaderButton)), 'delorun-multiview: header button')
-
-  ctx.effect(() => observeChats(ctx, store), 'delorun-multiview: hand-offs and reopening')
+  // The entry points exist only while the `multiview` main panel is registered: without it "Open Multiview" would do nothing.
+  ctx.effect(() => whilePanelRegistered(ctx, panelRegistered, () => mountEntries(ctx, store, injected)), 'delorun-multiview: entry points')
   return store
+}
+
+/**
+ * Run a mount while the `multiview` main panel is registered: mount when it appears, unmount when it goes.
+ * @param ctx - the browser context.
+ * @param registered - whether the panel is registered now.
+ * @param mount - mounts the entry points and returns their disposer.
+ * @returns the disposer, which also unmounts.
+ */
+function whilePanelRegistered(ctx: Context, registered: () => boolean, mount: () => () => void): () => void {
+  let unmount: (() => void) | undefined
+  const sync = (): void => {
+    const present = registered()
+    if (present && unmount === undefined) unmount = mount()
+    else if (!present && unmount !== undefined) {
+      unmount()
+      unmount = undefined
+    }
+  }
+  const stop = ctx.slots.subscribe('main', sync)
+  sync()
+  return () => {
+    stop()
+    unmount?.()
+    unmount = undefined
+  }
+}
+
+/**
+ * Register the pin button, the popover footer and the header button, and start the hand-off observer.
+ * @param ctx - the browser context.
+ * @param store - the state.
+ * @param injected - the services the components read.
+ * @returns the disposer.
+ */
+function mountEntries(ctx: Context, store: MultiviewStore, injected: () => EntryInjected): () => void {
+  const row = 'conversation.session.header.actions.subagent.row.trail'
+  const footer = 'conversation.session.header.actions.subagent.footer'
+  const actions = 'conversation.session.header.actions'
+  const disposers = [
+    ctx.slots.inject(row, () => ctx.slots.register({ name: row, id: 'multiview-pin', locale: MULTIVIEW_NS, inject: injected }, PinButton)),
+    ctx.slots.inject(footer, () => ctx.slots.register({ name: footer, id: 'multiview-footer', order: 100, locale: MULTIVIEW_NS, inject: injected }, Footer)),
+    ctx.slots.inject(actions, () => ctx.slots.register({ name: actions, id: 'multiview-button', order: HEADER_ORDER, locale: MULTIVIEW_NS, inject: injected }, HeaderButton)),
+    observeChats(ctx, store),
+  ]
+  return () => { for (const dispose of disposers.reverse()) dispose() }
 }
 
 /**
