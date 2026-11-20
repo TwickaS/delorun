@@ -10,7 +10,7 @@
 import {
   IconAgentPresetOutlineMedium, IconChecklistOutlineMedium, IconClockOutlineMedium, IconCordisPluginOutlineMedium, IconDataOutlineMedium, IconFlatListOutlineMedium,
   IconEyeOutlineMedium, IconGlobeOutlineMedium, IconInfoOutlineMedium, IconNewChatOutlineMedium, IconPanelLeftOutlineMedium,
-  IconSettingsOutlineMedium, IconShieldOutlineMedium, IconSlidersTwoOutlineMedium, IconSparkleMedium, IconUserOutlineMedium,
+  IconSearchOutlineMedium, IconSettingsOutlineMedium, IconShieldOutlineMedium, IconSlidersTwoOutlineMedium, IconSparkleMedium, IconUserOutlineMedium,
   IconUsersOutlineMedium,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SettingsLayout, SettingsLayoutGroup, SettingsLayoutItem, SettingsLayoutText } from '@deepseek-ai/dsh-client-ui-settings-general/client'
@@ -29,6 +29,7 @@ export const SECTIONS = {
   inventory: 'plugins',
   createPlugin: 'delorun-create-plugin',
   pluginInstalls: 'delorun-plugin-installs',
+  browser: 'delorun-browser',
   permissions: 'delorun-permissions',
   externalAgents: 'delorun-external-agents',
   network: 'delorun-network',
@@ -167,6 +168,7 @@ export function delorunSettingsLayout(
             id: 'plugins', label: text('page.plugins'), icon: IconCordisPluginOutlineMedium, keywords: text('page.plugins.keywords'),
             blocks: [section(SECTIONS.inventory), section(SECTIONS.pluginInstalls), section(SECTIONS.createPlugin)],
           },
+          { id: 'browser', label: text('page.browser'), icon: IconSearchOutlineMedium, keywords: text('page.browser.keywords'), blocks: [section(SECTIONS.browser)] },
         ],
       },
       {

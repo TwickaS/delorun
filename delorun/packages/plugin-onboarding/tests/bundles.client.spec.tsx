@@ -144,7 +144,7 @@ describe('reading the bundles', () => {
     installer.refresh(['a', 'b', 'c'])
     expect(state('a')).toEqual({ state: 'checking' })
     await flush()
-    expect(state('a')).toEqual({ state: 'available', title: { en: 'A' }, description: 'About a.' })
+    expect(state('a')).toEqual({ state: 'available', held: true, title: { en: 'A' }, description: 'About a.' })
     expect(state('b')).toEqual({ state: 'installed' })
     expect(state('c')).toEqual({ state: 'unavailable' })
     expect(pluginManager.setBundleEnabled).not.toHaveBeenCalled()
@@ -393,7 +393,8 @@ describe('a Host that reports no plugin packs', () => {
     installer.refresh(['a', 'held'])
     await flush()
     expect(state('a')).toEqual({ state: 'unavailable', packsReason: 'no packs here' })
-    expect(state('held')).toEqual({ state: 'available' })
+    // A bundle the profile holds but turned off is held: only the person does that, and the Browser page leaves it off.
+    expect(state('held')).toEqual({ state: 'available', held: true })
     await installer.install('a')
     expect(pluginManager.installBundle).not.toHaveBeenCalled()
   })

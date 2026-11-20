@@ -38,6 +38,7 @@ Delo 的“设置”是一个大面板，导航按主题分组，带搜索框，
 | 智能体 | 模式 | 上游的智能体预设 | 分区 `agent-presets` |
 | 智能体 | 工具 | 工具设置：链接到“插件”中每个工具的页面 | 分区 `delorun-tool-settings` |
 | 智能体 | 插件 | 上游的内置插件清单 | 分区 `plugins` |
+| Agent | Browser | Whether agents may use a web browser, its status, a download and a test | section `delorun-browser` |
 | 安全 | 权限 | “新对话”卡片，含默认权限模式，然后是“完全访问”和 MCP 服务器 | 行 `permission`；分区 `delorun-permissions` |
 | 安全 | 外部智能体 | 委派同意：外部智能体运行前询问的开关、运行时间上限，以及被允许不经询问就启动的智能体（各带“撤销”） | 分区 `delorun-external-agents` |
 | 安全 | 网络 | 每个工作区中沙箱内命令和 `web_fetch` 的网络访问 | 分区 `delorun-network` |

@@ -12,8 +12,8 @@
   en: 07d8c01bebd561d4
   zh: 22371418688fd26e
 /delorun-bundle-local/contents:
-  en: 2d14bf104dc84bb4
-  zh: 2271de8c5812677a
+  en: fefa2e3879f6fb42
+  zh: 100d68f542bf94f6
 /delorun-bundle-local/use-this-bundle:
   en: dd8aa699a60fba10
   zh: 4dd269aee9c2da33
@@ -32,9 +32,12 @@
 /delorun-bundle-local/the-consent-surfaces:
   en: 33ea8066577c8733
   zh: ca85708f1a17abc7
+/delorun-bundle-local/the-browser-page-routes:
+  en: 2b100d2e219b241e
+  zh: 2b100d2e219b241e
 /delorun-bundle-local/tests:
-  en: 1b13eac991895f5b
-  zh: 20f358e98a683416
+  en: 6fbc7d160bf76dde
+  zh: a4a8f123d5dcb966
 /delorun-bundle-local/limits:
   en: ccad5d6ea01b39ea
   zh: 4c9aaf0c769a7fa6

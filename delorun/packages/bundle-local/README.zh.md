@@ -21,6 +21,7 @@ kind: "package-bundle"
 - [PIN 锁屏](#the-pin-lock-screen)
 - [PIN 模式分区](#the-pin-mode-section)
 - [同意界面](#the-consent-surfaces)
+- [The Browser page routes](#the-browser-page-routes)
 - [测试](#tests)
 - [限制](#limits)
 
@@ -148,10 +149,18 @@ home 打开 PIN 模式时，手机或其他设备会显示整页锁屏，直到�
 **网络**分区（`delorun-network`，紧接在“外部 agent”之后，[`src/client/NetworkSection.tsx`](src/client/NetworkSection.tsx)）通过 [`@delorun/plugin-permission-defaults`](../plugin-permission-defaults/README.zh.md) 仅限回环的路由（[`src/client/network-api.ts`](src/client/network-api.ts)）为沙箱内的命令与 `web_fetch` 设置每个工作区的网络：“开放”、带每行一个主机的编辑器和可添加的常用注册表主机的“允许列表”，或“关闭”，以及该工作区是否遵循默认值和“使用默认值”。收紧会立即保存；Host 以 `NETWORK_UNCONFIRMED` 拒绝的更改会打开一个对话框，写明它将开放什么，只有对话框的“允许”才会带着 `confirmed: true` 重新发送。没有这些路由的 profile 显示一行文字，`LOOPBACK_REQUIRED` 拒绝会说明只有 home 所在的计算机才能读取和更改该设置，Host 对被拒绝更改的说明和存储的问题则就地显示。
 
 <a id="tests"></a>
+## The Browser page routes
+
+The `delorun-requirements` row also serves two routes for the Settings Browser page ([`src/browser-check.ts`](src/browser-check.ts)), for the home's own computer only: each is a `POST` that carries no body, admits no paired device, and refuses a request whose `Host` is not a loopback name with `403` and `reason: 'at-computer'` before anything runs. Neither starts a model turn. The studio reads them through [`src/client/browser-check-api.ts`](src/client/browser-check-api.ts), which accepts only a PNG data address of at most 600000 characters as a thumbnail.
+
+- `POST /api/delorunBrowser.test` opens a fixed page that comes with Delorun (no script, no link, no request) in the Browser pack's browser, which starts headless in a fresh profile with the environment of every harness child (`scrubbedParentEnv`), and answers `{ ok: true, image, title }` with a thumbnail, or `{ ok: false, reason, message }` with `not-added`, `not-installed` (the Chromium build is not downloaded), `unreadable` or `failed` and the program's last error line. It stops after 60 seconds.
+- `POST /api/delorunBrowser.install` downloads the Chromium build by running `install-browser chromium` of the Playwright MCP package already in the Browser pack, never a package from a registry, and answers `{ ok: true }` or `{ ok: false, reason, message }`. It stops after 15 minutes and runs one download at a time: a second request waits for the one running. A computer that launches its own Chrome, or a row that names an executable, has no download to make and answers `failed`.
+
 ## 测试
 
 `node_modules/.bin/vitest run --config delorun/vitest.config.ts delorun/packages/bundle-local` 运行本包的 spec，它们导入上游已构建的包，因此需要 `pnpm run build:artifacts`；构建缺失时，Delorun 的检查运行器会启动它。
 
+- [`browser-check.spec.ts`](tests/browser-check.spec.ts) covers the two routes with a stand-in kit and program: the fixed page, the thumbnail checks, the refusals, the download, the Host check and the studio's readers. No real browser starts.
 - [`composition.integration.spec.ts`](tests/composition.integration.spec.ts) 在临时的 `DSH_HOME` 下构建一个 Delorun CLI profile，并通过上游真实的 `dsh --profile <name> --dump-config` 读取它：列表中的每个组合包都加载，没有被跳过的；转储在每个标签之下打印全部行，标签中的写入方都是列表中的组合包，第一个标签之前不打印任何内容，stderr 上也没有任何内容，并且列出的恰好是由本组合包写入的 `LOCAL_ROWS` 的各行；该组合与上游的 `web` profile 逐行相等，只有 `LOCAL_ROWS` 的各行除外，它们按各条目所述就地更改，或加在上游各行之后。它还要求每个启用的行只使用它所写明的 DeepSeek 主机：只允许出现 `api.deepseek.com`，即本人自己密钥下的模型提供商 API，反馈导出器、账号界面与反馈界面都不在组合中。
 - [`privacy-defaults.spec.ts`](tests/privacy-defaults.spec.ts) 用每个 profile 所组合的行挂载上游自己的插件，并对照本地网络 fixture。使用 Delorun CLI profile 的行时，发往模拟 DeepSeek API 的模型请求体都不带 `dsh_session_log`，本地 OTLP 收集器也收不到任何分析记录；使用上游 web profile 的行时，同样的 fixture 两者都能收到。组合中的任何字符串（包括 `!!js` 表达式）都不指向 Delorun 主机，指向 Delorun 包的行只有本组合包自己的浏览器部分、它挂载的六个同意与守卫插件、它的更新闸门以及回收站。
 - [`confinement.integration.spec.ts`](tests/confinement.integration.spec.ts) 读取已组合的 `sandbox` 行，并用它配置上游的本地沙箱提供方：该行的 `protectedHome` 是 Delorun home，其 `protectedHomeReadable` 是 C1 的读取豁免，由该提供方隔离的工作区命令无法读取 `<home>/secrets` 之下的 canary，而同一命令不受隔离时可以读取，豁免之下的文件仍然可读。home 位于操作系统临时目录之外（上游的 profile 会把临时目录替换为私有的 `/tmp`），因此拒绝来自受保护的 home，而不是来自私有目录。

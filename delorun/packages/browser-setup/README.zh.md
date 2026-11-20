@@ -16,6 +16,7 @@ kind: "package-library"
 ## 目录
 
 - [读取“浏览器”是否已就绪](#read-whether-browser-is-ready)
+- [The home's choice and the page's states](#the-homes-choice-and-the-pages-states)
 - [绘制选项](#draw-the-choice)
 - [约定](#contract)
 - [测试](#tests)
@@ -37,6 +38,12 @@ kind: "package-library"
 对于 Host 就该插件包本身报告的三种状态，`browserAdded(readiness)` 为 true。就绪状态无法说明找到的是哪个浏览器；`ready` 同时涵盖已安装的 Chrome 和已下载的 Chromium。
 
 <a id="draw-the-choice"></a>
+## The home's choice and the page's states
+
+`resolveBrowserSwitch(recorded, declined)` (`./switch`, exported as `.`) turns what the studio recorded into `on` or `off`: a recorded `on` or `off` stands, no record is `off` for a pack the person turned off in Plugins or an existing home that never chose and has no pack (`declined`), and everything else, including a new home that never chose and a damaged value, is `on`. The studio adds the pack on its own only in a new home that never chose, or when the person switches Browser on. `browserPageState({ choice, pack, packReason, readiness })` combines the choice, where adding the pack stands (`PackProgress`: `checking`, `available`, `installing`, `slow`, `restart`, `installed`, `offline`, `unavailable` or `failed`) and the requirement check into one `BrowserPageState` for the Settings page: `off`, `checking`, `installing` (`slow` after the add's wait), `restart`, `ready`, `needs-setup` with the Host's reason and fix, or `failed` with a `BrowserFailure` (`offline`, `unavailable`, `failed`, `unread` or `problem`). The choice outranks everything else, the Host's own answer outranks the installer's last word, and a check that cannot be read shows `unread` instead of waiting.
+
+`REAL_BROWSER_BUNDLE` names the pack for the person's own Chrome, and `createBrowserSetup(fetch, language, bundle)` and `browserReadinessOf(answer, bundle)` read either pack's rows. `BrowserCommand` (`./client`) draws a command with its copy button, for the Settings page.
+
 ## 绘制选项
 
 `BrowserChoices`（`./client`）绘制一个单选组，并在选择独立浏览器时在其下方显示就绪状态。
@@ -63,4 +70,4 @@ kind: "package-library"
 <a id="tests"></a>
 ## 测试
 
-`node_modules/.bin/vitest run --config delorun/vitest.config.ts delorun/packages/browser-setup` 运行 [`browser-choices.client.spec.tsx`](tests/browser-choices.client.spec.tsx)：检查的每种应答对应的就绪状态、存储，以及组件的选项、禁用的第三个选项、每种就绪状态和每种解决办法。
+[`switch.spec.ts`](tests/switch.spec.ts) covers the choice rule and each state of the page, including a home that chose off, a pack turned off in Plugins and a check that cannot be read. `node_modules/.bin/vitest run --config delorun/vitest.config.ts delorun/packages/browser-setup` 运行 [`browser-choices.client.spec.tsx`](tests/browser-choices.client.spec.tsx)：检查的每种应答对应的就绪状态、存储，以及组件的选项、禁用的第三个选项、每种就绪状态和每种解决办法。

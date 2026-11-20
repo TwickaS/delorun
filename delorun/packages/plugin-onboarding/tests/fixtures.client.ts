@@ -6,6 +6,7 @@ import type { LocaleSnapshot } from '@deepseek-ai/dsh-client-locale/client'
 import { vi } from 'vitest'
 import { DEFAULT_SETTINGS, type OnboardingSettings } from '../src/config.ts'
 import type { BrowserReadiness, BrowserSetupStore } from '@delorun/browser-setup'
+import type { BrowserInstallAnswer, BrowserTestAnswer } from '@delorun/bundle-local/browser-check-api'
 import type { TurnOffOutcome } from '../src/client/browser-pack.ts'
 import type { BundleInstaller, BundleView, RowView } from '../src/client/bundles.ts'
 import { en } from '../src/client/locales.ts'
@@ -232,11 +233,29 @@ export function browserFake(...states: readonly BrowserReadiness[]) {
   })
   const openSettings = vi.fn((_section: string) => {})
   const setup: BrowserSetupStore = { getSnapshot: store.getSnapshot, subscribe: store.subscribe, refresh }
+  /** The own-Chrome pack's readiness, which a spec sets. */
+  const own = createSnapshotStore<BrowserReadiness>({ kind: 'not-added' })
+  const ownRefresh = vi.fn((): Promise<BrowserReadiness> => Promise.resolve(own.getSnapshot()))
+  const ownSetup: BrowserSetupStore = { getSnapshot: own.getSnapshot, subscribe: own.subscribe, refresh: ownRefresh }
   /** How turning Browser off ends; a spec replaces it. */
   const outcome: { value: TurnOffOutcome } = { value: 'off' }
   const turnOff = vi.fn(() => Promise.resolve(outcome.value))
-  const face: BrowserFace = { setup, openSettings, turnOff }
-  return { face, set: store.set, refresh, openSettings, turnOff, outcome }
+  /** What the person recorded: empty, `on` or `off`; recording stores it, and a spec can make the Host refuse. */
+  const recorded = createSnapshotStore('')
+  const accepted: { value: boolean } = { value: true }
+  /** What the pack was last seen as while off; recording a choice clears it, as the real face does. */
+  const packSeen = createSnapshotStore<'' | 'enabled' | 'disabled'>('')
+  const record = vi.fn((next: 'on' | 'off') => {
+    if (accepted.value) { recorded.set(next); packSeen.set('') }
+    return Promise.resolve(accepted.value)
+  })
+  const recordSeen = vi.fn((next: 'enabled' | 'disabled') => { packSeen.set(next); return Promise.resolve(true) })
+  /** Whether the home is new (setup not finished); a spec sets it. A home is new unless a spec says otherwise. */
+  const fresh = createSnapshotStore(true)
+  const test = vi.fn((): Promise<BrowserTestAnswer> => Promise.resolve({ ok: true, image: 'data:image/png;base64,iVBORw0KGgo=', title: 'Delorun browser test' }))
+  const download = vi.fn((): Promise<BrowserInstallAnswer> => Promise.resolve({ ok: true }))
+  const face: BrowserFace = { setup, ownSetup, choice: { getSnapshot: recorded.getSnapshot, subscribe: recorded.subscribe, record }, packSeen: { getSnapshot: packSeen.getSnapshot, subscribe: packSeen.subscribe, record: recordSeen }, fresh: { getSnapshot: fresh.getSnapshot, subscribe: fresh.subscribe }, test, download, openSettings, turnOff }
+  return { face, set: store.set, setOwn: own.set, refresh, ownRefresh, openSettings, turnOff, outcome, recorded, record, accepted, fresh, packSeen, recordSeen, test, download }
 }
 
 /**
