@@ -1,19 +1,13 @@
-/* Above the page and the onboarding window (the modal layer is 1000, toasts 1100). */
+/* The card sits in the toast area, which owns its place and its layer. */
 .card {
-  position: fixed;
-  right: var(--delorun-space-8);
-  bottom: var(--delorun-space-8);
-  z-index: 1050;
   box-sizing: border-box;
-  width: 340px;
-  max-width: calc(100vw - 2 * var(--delorun-space-8));
+  width: 100%;
   overflow: hidden;
   border: 0.5px solid var(--dsw-alias-border-l1);
   border-radius: var(--dsw-radius-lg);
   background: var(--dsw-alias-bg-layer-1);
   box-shadow: var(--dsw-shadow-lv3);
   color: var(--dsw-alias-label-primary);
-  pointer-events: auto;
   animation: card-in 0.22s ease-out;
 }
 

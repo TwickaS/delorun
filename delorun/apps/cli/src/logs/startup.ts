@@ -9,6 +9,7 @@
 import { HomeLayoutError, resolveDelorunHome } from '@delorun/home'
 import { pruneLocalSurfaces } from '@delorun/logs'
 import type { CommandContext } from '../command.ts'
+import { isSandboxHomeMode } from '../sandbox-home.ts'
 
 /**
  * Prune the expired operational logs of the home this invocation resolves.
@@ -29,6 +30,8 @@ export async function pruneLogsAtStart(context: CommandContext, now: number): Pr
   try {
     report = pruneLocalSurfaces(home.path, now)
   } catch (error: unknown) {
+    // Inside a chat sandbox the hidden home shows fake mode bits; there are no logs to prune, so the check stays quiet.
+    if (isSandboxHomeMode(error, context.env)) return
     // The home's `logs/` directory could not be listed; the command still runs, and the next start checks again.
     context.stderr(`delorun: warning: the operational logs were not pruned: ${error instanceof Error ? error.message : String(error)}\n`)
     return

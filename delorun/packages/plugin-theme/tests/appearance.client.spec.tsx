@@ -120,12 +120,21 @@ describe('the Appearance section', () => {
     expect(screen.getByLabelText<HTMLInputElement>('Custom accent colour').value).toBe('#e5734a')
   })
 
+  it('shows the toast position as six zones with the stored one chosen, and saves a click', async () => {
+    const form = themeForm({ ...STUDIO_ON, toastPosition: 'top-right' })
+    open(form)
+    expect(group(en.toastPosition)).toBeTruthy()
+    expect(screen.getByRole('radio', { name: en['toastPosition.top-right'] }).getAttribute('aria-checked')).toBe('true')
+    await click(screen.getByRole('radio', { name: en['toastPosition.bottom-centre'] }))
+    expect(form.writes).toEqual([['toastPosition', 'bottom-centre']])
+  })
+
   it('holds the mode and the themes under one Colours heading that names the section', () => {
     open(themeForm(STUDIO_ON))
     const heading = screen.getByRole('heading', { level: 3, name: en.colours })
     expect(heading.closest('section')?.getAttribute('aria-labelledby')).toBe(heading.id)
-    // The Branding block follows the Colours card as a second card of the same section.
-    expect(screen.getAllByRole('heading', { level: 3 }).map(each => each.textContent)).toEqual([en.colours, brandingEn.title])
+    // The Notifications card and the Branding block follow the Colours card in the same section.
+    expect(screen.getAllByRole('heading', { level: 3 }).map(each => each.textContent)).toEqual([en.colours, en.toasts, brandingEn.title])
     expect(within(heading.closest('section') as HTMLElement).getAllByRole('heading', { level: 4 }).map(each => each.textContent)).toEqual([en.palette])
     expect(screen.queryByRole('radiogroup', { name: en.typeface })).toBeNull()
     expect(screen.queryByRole('radiogroup', { name: en.density })).toBeNull()

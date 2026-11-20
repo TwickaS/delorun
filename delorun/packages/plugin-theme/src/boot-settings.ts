@@ -5,7 +5,7 @@
  * @module @delorun/plugin-theme/boot-settings
  */
 import { DEFAULT_STORED_BRANDING, type StoredBranding } from '@delorun/brand/branding'
-import { ACCENT_CHOICES, CONTRAST, DENSITIES, EFFORT_DISPLAYS, PALETTES, TYPEFACES, type ThemeSettings } from './config.ts'
+import { ACCENT_CHOICES, CONTRAST, DENSITIES, EFFORT_DISPLAYS, PALETTES, TOAST_POSITIONS, TYPEFACES, type ThemeSettings } from './config.ts'
 
 /** The `globalThis` property holding the settings the Host held when it served the page. */
 export const BOOT_SETTINGS_GLOBAL = 'delorunThemeSettings'
@@ -38,11 +38,11 @@ function storedBranding(value: unknown): StoredBranding {
  */
 export function parseBootSettings(value: unknown): ThemeSettings | undefined {
   if (typeof value !== 'object' || value === null) return undefined
-  const { accent, customAccent, typeface, density, studioAdditions, palette, contrast, effort, branding } = value as Record<keyof ThemeSettings, unknown>
+  const { accent, customAccent, typeface, density, studioAdditions, palette, contrast, effort, toastPosition, branding } = value as Record<keyof ThemeSettings, unknown>
   if (!oneOf(ACCENT_CHOICES, accent) || typeof customAccent !== 'string' || !oneOf(TYPEFACES, typeface) || !oneOf(DENSITIES, density)) return undefined
-  if (typeof studioAdditions !== 'boolean' || !oneOf(PALETTES, palette) || !oneOf(EFFORT_DISPLAYS, effort)) return undefined
+  if (typeof studioAdditions !== 'boolean' || !oneOf(PALETTES, palette) || !oneOf(EFFORT_DISPLAYS, effort) || !oneOf(TOAST_POSITIONS, toastPosition)) return undefined
   if (typeof contrast !== 'number' || !(contrast >= CONTRAST.min && contrast <= CONTRAST.max)) return undefined
-  return { accent, customAccent, typeface, density, studioAdditions, palette, contrast, effort, branding: storedBranding(branding) }
+  return { accent, customAccent, typeface, density, studioAdditions, palette, contrast, effort, toastPosition, branding: storedBranding(branding) }
 }
 
 /**

@@ -40,6 +40,7 @@ export const CONTROL_LEVELS: Readonly<Record<ChangesControl, ControlLevel>> = {
   'update-rollback': 'face',
   'update-cancel': 'free',
   'update-dismiss': 'free',
+  'update-continue': 'free',
   'stop': 'face',
 }
 

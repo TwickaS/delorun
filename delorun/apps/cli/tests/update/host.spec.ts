@@ -35,6 +35,26 @@ function fakeAgent(): FakeAgent & Agent {
   return agent as FakeAgent & Agent
 }
 
+describe('watchChats and the update plugin\'s chat source', () => {
+  /** @returns an agent with a session of the given origin. */
+  function sessionAgent(id: string, origin?: 'subagent'): FakeAgent & Agent {
+    return Object.assign(fakeAgent(), { session: { id, header: { id, ...origin === undefined ? {} : { origin } } } })
+  }
+
+  it('lists the top-level chats that run, once each, not a subagent\'s session, and counts the background jobs', async () => {
+    const ctx = new Context()
+    const gate = new CountingChatGate()
+    let source: { list(): readonly string[], jobs(): number } | undefined
+    ctx.provide('delorunUpdateChats', { attach: (attached: typeof source) => { source = attached; return () => undefined } })
+    watchChats(ctx, gate)
+    await ctx.parallel('agent/status', { agent: sessionAgent('parent'), status: 'running' })
+    await ctx.parallel('agent/status', { agent: sessionAgent('child', 'subagent'), status: 'running' })
+    expect(source?.list()).toEqual(['parent'])
+    expect(gate.running()).toBe(2)
+    expect(source?.jobs()).toBe(0)
+  })
+})
+
 describe('watchChats', () => {
   /** @returns a context with the listeners installed over a fresh gate. */
   function watched(): { readonly ctx: Context, readonly gate: CountingChatGate } {

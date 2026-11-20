@@ -43,6 +43,7 @@ export function currentSettings(config: ThemeConfig): ThemeSettings {
     palette: config.palette.get(),
     contrast: config.contrast.get(),
     effort: config.effort.get(),
+    toastPosition: config.toastPosition.get(),
     branding: config.branding.get(),
   }
 }

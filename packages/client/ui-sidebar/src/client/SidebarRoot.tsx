@@ -33,7 +33,7 @@ import clsx from 'clsx'
 import {
   FishLogo, IconAppsAddOutlineRegular, IconNewChatOutlineMedium, IconNewChatOutlineRegular,
   IconPanelLeftOutlineRegular, IconPinFillRegular, focusWithoutRing, isBehindModal, isDarwinDesktop, Menu, ShortcutKeys, Toast,
-  Tooltip, useModalLayer, writeClipboard,
+  Tooltip, useModalLayer, useSurfaceEdges, writeClipboard,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsRenderFactories, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
@@ -316,6 +316,7 @@ export function SidebarRoot({
   const column = useRef<HTMLDivElement>(null)
   const sidebarFocus = useRef<Element | null>(null)
   useModalLayer(column, drawer && !collapsed, toggleSidebar)
+  useSurfaceEdges(column, drawer && !collapsed, true)
   useLayoutEffect(() => {
     if (!collapsed) return
     const controlled = sidebarFocus.current?.getAttribute('aria-controls')?.split(/\s+/) ?? []

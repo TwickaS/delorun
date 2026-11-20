@@ -33,8 +33,8 @@ afterEach(() => { cleanup(); vi.useRealTimers() })
 
 describe('the desktop card', () => {
   it('shows nothing while the queue is empty', () => {
-    const { container } = render(<Card source={createFakeDownloadsSource()} />)
-    expect(container.querySelector('section')).toBeNull()
+    render(<Card source={createFakeDownloadsSource()} />)
+    expect(document.querySelector('section')).toBeNull()
   })
 
   it('reads "Installing n of total" and shows each state', () => {
@@ -48,10 +48,10 @@ describe('the desktop card', () => {
   })
 
   it('puts the accent on a running bar only', () => {
-    const { container } = render(<Card source={createFakeDownloadsSource(mixed())} />)
+    render(<Card source={createFakeDownloadsSource(mixed())} />)
     expect(screen.getByRole('progressbar', { name: 'alpha' }).className).toMatch(/accent/)
     expect(screen.getByRole('progressbar', { name: 'beta' }).className).not.toMatch(/accent/)
-    expect(container.querySelectorAll('[class*="accent"]').length).toBe(2)
+    expect(document.querySelectorAll('[class*="accent"]').length).toBe(2)
   })
 
   it('collapses to one line and expands again', () => {
@@ -75,31 +75,31 @@ describe('the desktop card', () => {
 
   it('shows the summary when everything is added, then hides', () => {
     const source = createFakeDownloadsSource([item('a', { state: 'installing' }), item('b', { state: 'installing' })])
-    const { container } = render(<Card source={source} />)
+    render(<Card source={source} />)
     act(() => { source.set([item('a', { state: 'ready' }), item('b', { state: 'ready' })]) })
     expect(screen.getByRole('button', { name: /2 plugins added/ })).toBeTruthy()
     expect(screen.getByRole('status').textContent).toBe('2 plugins added')
     act(() => { vi.advanceTimersByTime(3999) })
-    expect(container.querySelector('section')).not.toBeNull()
+    expect(document.querySelector('section')).not.toBeNull()
     act(() => { vi.advanceTimersByTime(2) })
-    expect(container.querySelector('section')).toBeNull()
+    expect(document.querySelector('section')).toBeNull()
   })
 
   it('stays hidden for items the Host lists as finished when the page opens, after a reload or a restart', () => {
     const source = createFakeDownloadsSource([item('a', { state: 'ready' }), item('b', { state: 'ready' })])
-    const { container } = render(<Card source={source} />)
-    expect(container.querySelector('section')).toBeNull()
+    render(<Card source={source} />)
+    expect(document.querySelector('section')).toBeNull()
     act(() => { source.set([item('a', { state: 'ready' }), item('b', { state: 'ready' }), item('c', { state: 'installing' })]) })
     expect(screen.getByRole('button', { name: /1 left to install/ })).toBeTruthy()
     act(() => { source.set([item('a', { state: 'ready' }), item('b', { state: 'ready' }), item('c', { state: 'ready' })]) })
     expect(screen.getByRole('button', { name: /3 plugins added/ })).toBeTruthy()
     act(() => { vi.advanceTimersByTime(4001) })
-    expect(container.querySelector('section')).toBeNull()
+    expect(document.querySelector('section')).toBeNull()
   })
 
   it('keeps a failure open until dismissed, with Retry and Remove', () => {
     const source = createFakeDownloadsSource([item('a', { state: 'failed', failure: { code: 'offline', message: 'No connection.' } }), item('b', { state: 'ready' })])
-    const { container } = render(<Card source={source} />)
+    render(<Card source={source} />)
     act(() => { vi.advanceTimersByTime(60_000) })
     expect(screen.getByText('1 plugin could not be installed')).toBeTruthy()
     expect(screen.getByText('No connection.')).toBeTruthy()
@@ -109,7 +109,7 @@ describe('the desktop card', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Remove a from the list' }))
     expect(source.calls).toEqual(['retry:a', 'remove:a'])
     act(() => { vi.advanceTimersByTime(5000) })
-    expect(container.querySelector('section')).toBeNull()
+    expect(document.querySelector('section')).toBeNull()
   })
 
   it('dismisses every failure from the header', () => {

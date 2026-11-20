@@ -11,7 +11,8 @@
     "./locate": "./src/locate.ts",
     "./copy": "./src/copy.ts",
     "./accounts": "./src/accounts/index.ts",
-    "./accounts/wire": "./src/accounts/wire.ts"
+    "./accounts/wire": "./src/accounts/wire.ts",
+    "./locale/*.json": "./locale/*.json"
   },
   "dependencies": {
     "@delorun/contract-home-layout": "workspace:*",

@@ -9,6 +9,14 @@
   gap: 0;
 }
 
+/* The screens that are short forms fit their content, so the dialog has no empty lower half; the folder browser keeps the
+   full height. */
+.compact {
+  height: auto;
+  min-height: min(440px, 88vh);
+  max-height: min(720px, 88vh);
+}
+
 .frame {
   display: flex;
   flex: 1;

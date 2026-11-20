@@ -5,9 +5,12 @@ import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReleaseChannel, SemanticVersion, Sha256Hex, UtcTimestamp } from '@delorun/contract-release-manifest'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { UpdateController } from '../src/client/controller.ts'
+import { UpdateController, type UpdateLoad } from '../src/client/controller.ts'
 import { en } from '../src/client/locales.ts'
 import { UpdateDialog } from '../src/client/UpdateDialog.tsx'
+import { StoppedChatLine } from '../src/client/StopChats.tsx'
+import { UpdateAlertsEntry } from '../src/client/UpdateAlerts.tsx'
+import { UpdateProgress } from '../src/client/UpdateProgress.tsx'
 import { UpdateCards, type UpdateCardsProps } from '../src/client/UpdateOverlay.tsx'
 import { UPDATE_CONTROLS, UPDATE_PATHS, type PreparedUpdateView, type UpdateControl, type UpdateMayView, type UpdateResultView, type UpdateStateView } from '../src/wire.ts'
 
@@ -27,7 +30,7 @@ function may(replace: Partial<Record<UpdateControl, UpdateMayView>> = {}): Updat
 
 /** An idle state at the computer. */
 function stateOf(fields: Partial<UpdateStateView> = {}): UpdateStateView {
-  return { release: { delorun: '0.1.2', dsh: '0.2.2' }, available: true, access: may(), check: { enabled: true }, progress: { kind: 'idle' }, rollback: { available: false }, ...fields }
+  return { release: { delorun: '0.1.2', dsh: '0.2.2' }, available: true, access: may(), check: { enabled: true }, progress: { kind: 'idle' }, rollback: { available: false }, continueStopped: true, ...fields }
 }
 
 /** A prepared report with one plugin the update turns off and the chat-data item. */
@@ -122,16 +125,54 @@ function overlay(state: UpdateStateView, extra: Partial<UpdateCardsProps> = {}, 
 const RESULT: UpdateResultView = { kind: 'update', outcome: 'rolled-back', from: '0.1.2', to: '0.1.3', criterion: 'H2-host-ready', reason: 'T1', at: '2026-11-17T10:00:00Z' }
 
 describe('the progress and outcome cards', () => {
-  it('shows the wait for chats with Cancel update', () => {
-    const props = overlay(stateOf({ progress: { kind: 'applying', phase: 'waiting', target: '0.1.3', runningChats: 2 } }))
-    expect(document.body.textContent).toContain('Waiting for 2 chats')
+  const WAITING = (chats: number) => stateOf({ progress: { kind: 'applying', phase: 'waiting', target: '0.1.3', runningChats: chats } })
+
+  /**
+   * Draw the ongoing state as the sidebar alert or the phone toast.
+   * @param state - the update state.
+   * @param variant - where it shows.
+   * @returns the cancel spy.
+   */
+  function progress(state: UpdateStateView, variant: 'alert' | 'toast', reconnecting = false) {
+    const cancel = vi.fn(() => Promise.resolve({}))
+    render(<UpdateProgress variant={variant} state={state} switching={false} reconnecting={reconnecting} t={t} cancel={cancel} />)
+    return cancel
+  }
+
+  it('shows the wait for chats as a compact alert with Cancel update', () => {
+    const cancel = progress(WAITING(1), 'alert')
+    expect(document.querySelector('[data-update-variant="alert"]')?.textContent).toContain('Waiting for 1 chat to finish. New chats wait until the update is done.')
+    expect(document.querySelector('[data-toast-area]')).toBeNull()
     fireEvent.click(screen.getByText(en['progress.cancel']))
-    expect(props.cancel).toHaveBeenCalled()
+    expect(cancel).toHaveBeenCalled()
   })
 
-  it('says the studio is unavailable for a moment while Delorun switches', () => {
-    overlay(stateOf({ progress: { kind: 'applying', phase: 'switching', target: '0.1.3', runningChats: 0 } }))
+  it('says the studio is unavailable for a moment while Delorun switches, and offers no Cancel', () => {
+    progress(stateOf({ progress: { kind: 'applying', phase: 'switching', target: '0.1.3', runningChats: 0 } }), 'alert')
     expect(document.querySelector('[data-update-progress="switching"]')?.textContent).toContain('reconnects by itself')
+    expect(screen.queryByText(en['progress.cancel'])).toBeNull()
+  })
+
+  it('shows nothing while no ongoing state lasts', () => {
+    progress(stateOf(), 'alert')
+    expect(document.querySelector('[data-update-progress]')).toBeNull()
+  })
+
+  it('on a phone also shows the state as a toast in the toast area, and closing hides the toast only', () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: true, media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
+    try {
+      overlay(WAITING(2))
+      expect(document.querySelector('[data-toast-area] [data-update-variant="toast"]')?.textContent).toContain('Waiting for 2 chats')
+      fireEvent.click(screen.getByLabelText(en['progress.close']))
+      expect(document.querySelector('[data-update-variant="toast"]')).toBeNull()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('shows no toast on a wider screen, where the sidebar carries the state', () => {
+    overlay(WAITING(2))
+    expect(document.querySelector('[data-update-variant]')).toBeNull()
   })
 
   it('says why a rolled-back update went back, and that chats are unchanged', () => {
@@ -144,11 +185,195 @@ describe('the progress and outcome cards', () => {
     expect(document.querySelector('[data-update-details]')?.textContent).toContain('H2-host-ready')
   })
 
+  it('keeps each version whole in the title, shows the time in the local zone and keeps developer words out of the details', () => {
+    overlay(stateOf({ result: RESULT }))
+    const title = document.querySelector('[data-update-outcome] p')
+    expect([...title!.querySelectorAll('span[style]')].map(node => node.textContent).filter(Boolean)).toEqual(['0.1.3', '0.1.2'])
+    fireEvent.click(screen.getByText(en['outcome.details']))
+    const details = document.querySelector('[data-update-details]')?.textContent ?? ''
+    expect(details).toContain(new Date(RESULT.at).toLocaleString())
+    expect(details).not.toContain('2026-11-17T10:00:00Z')
+    expect(details).not.toContain('delorun logs')
+  })
+
+  const NOTES = {
+    truncated: false,
+    versions: [
+      { version: '0.1.3', date: '2026-11-19', highlights: ['New one', 'New two', 'New three'], areas: [{ area: 'Studio', items: [{ section: 'Added', text: 'Full entry A' }] }] },
+      { version: '0.1.2', highlights: ['Old one', 'Old two', 'Old three'], areas: [] },
+    ],
+  }
+
+  it('lists at most five highlights across the skipped versions, newest first, and opens the full notes in a sheet that closes with Back', () => {
+    overlay(stateOf({ result: { ...RESULT, outcome: 'committed' }, notes: NOTES }))
+    const items = [...document.querySelectorAll('[data-update-notes] > ul > li')].map(node => node.textContent)
+    expect(items).toEqual(['New one', 'New two', 'New three', 'Old one', 'Old two'])
+    expect(document.querySelector('[data-update-notes-sheet]')).toBeNull()
+    fireEvent.click(screen.getByText(en['notes.more']))
+    const sheet = document.querySelector('[data-update-notes-sheet]')
+    expect(sheet?.textContent).toContain('Full entry A')
+    expect(sheet?.textContent).toContain('0.1.3, 2026-11-19')
+    fireEvent.click(screen.getAllByText(en['notes.back']).at(-1)!)
+    expect(document.querySelector('[data-update-notes-sheet]')).toBeNull()
+  })
+
+  it('shows no highlights and no Read more without notes, and says when the notes are cut short', () => {
+    overlay(stateOf({ result: { ...RESULT, outcome: 'committed' } }))
+    expect(document.querySelector('[data-update-notes]')).toBeNull()
+    expect(screen.queryByText(en['notes.more'])).toBeNull()
+    cleanup()
+    overlay(stateOf({ result: { ...RESULT, outcome: 'committed' }, notes: { ...NOTES, truncated: true } }))
+    fireEvent.click(screen.getByText(en['notes.more']))
+    expect(document.querySelector('[data-update-notes-sheet]')?.textContent).toContain(en['notes.truncated'])
+  })
+
+  it('draws the cards in the toast area, not as fixed cards of its own', () => {
+    overlay(stateOf({ result: RESULT }))
+    expect(document.querySelector('[data-toast-area] [data-update-outcome]')).not.toBeNull()
+  })
+
   it('says Updated to … for a committed update and dismisses the record', () => {
     const props = overlay(stateOf({ result: { ...RESULT, outcome: 'committed' } }))
-    expect(screen.getByText('Updated to Delorun 0.1.3')).toBeTruthy()
+    expect(screen.getByText((_, node) => node?.tagName === 'P' && node.textContent === 'Updated to Delorun 0.1.3')).toBeTruthy()
     fireEvent.click(screen.getByText(en['outcome.dismiss']))
     expect(props.dismiss).toHaveBeenCalled()
+  })
+})
+
+describe('the connection as an ongoing state', () => {
+  /** Render the alert with a connection state. */
+  function connection(state: UpdateStateView, value: 'connected' | 'connecting' | 'disconnected', extra: { switching?: boolean, reconnecting?: boolean } = {}) {
+    const reconnect = vi.fn()
+    render(<UpdateProgress variant="alert" state={state} switching={extra.switching ?? false} reconnecting={extra.reconnecting ?? false} t={t} cancel={vi.fn()} connection={value} reconnect={reconnect} />)
+    return reconnect
+  }
+
+  it('shows an unplanned loss as a pinned alert with Reconnect now, and nothing while connected', () => {
+    const reconnect = connection(stateOf(), 'disconnected')
+    expect(document.querySelector('[data-update-variant="alert"]')?.textContent).toContain(en['connection.lost'])
+    fireEvent.click(screen.getByText(en['connection.reconnect']))
+    expect(reconnect).toHaveBeenCalled()
+    cleanup()
+    connection(stateOf(), 'connecting')
+    expect(document.querySelector('[data-update-variant="alert"]')?.textContent).toContain(en['connection.connecting'])
+    cleanup()
+    connection(stateOf(), 'connected')
+    expect(document.querySelector('[data-update-variant]')).toBeNull()
+  })
+
+  it('words a planned update restart as the update, never as a connection fault', () => {
+    connection(stateOf({ progress: { kind: 'applying', phase: 'switching', target: '0.1.3', runningChats: 0 } }), 'disconnected')
+    const text = document.querySelector('[data-update-variant="alert"]')?.textContent ?? ''
+    expect(text).toContain('Switching to Delorun 0.1.3')
+    expect(text).not.toContain(en['connection.lost'])
+    expect(screen.queryByText(en['connection.reconnect'])).toBeNull()
+    cleanup()
+    connection(stateOf(), 'connecting', { reconnecting: true })
+    expect(document.querySelector('[data-update-variant="alert"]')?.textContent).not.toContain(en['connection.connecting'])
+  })
+})
+
+describe('the sidebar entry', () => {
+  /** Render the entry with hooks over fixed values. */
+  function entry(wide: boolean, state: UpdateStateView) {
+    const hook = <V,>(value: V) => <R,>(select: (value: V) => R): R => select(value)
+    render(<UpdateAlertsEntry t={t} wide={wide} reconnect={vi.fn()} cancel={vi.fn()} stopChats={vi.fn()}
+      useLoad={hook<UpdateLoad>({ status: 'ready', state, reconnecting: false })} useSwitching={hook(false)} useConnection={hook<'connected'>('connected')} />)
+  }
+
+  it('shows the alert in the wide sidebar and only a dot on the collapsed rail', () => {
+    const waiting = stateOf({ progress: { kind: 'applying', phase: 'waiting', target: '0.1.3', runningChats: 1 } })
+    entry(true, waiting)
+    expect(document.querySelector('[data-update-variant="alert"]')).not.toBeNull()
+    cleanup()
+    entry(false, waiting)
+    expect(document.querySelector('[data-update-variant]')).toBeNull()
+    expect(document.querySelector('[data-update-rail-dot]')).not.toBeNull()
+    cleanup()
+    entry(false, stateOf())
+    expect(document.querySelector('[data-update-rail-dot]')).toBeNull()
+  })
+})
+
+describe('Stop running chats and update', () => {
+  const CHATS = [{ sessionId: 's-1', title: 'Refactor' }, { sessionId: 's-2', title: '' }]
+  const waiting = (): UpdateStateView => stateOf({ progress: { kind: 'applying', phase: 'waiting', target: '0.1.3', runningChats: 2 }, runningChats: CHATS })
+
+  /** Render the sidebar alert with the stop offer. */
+  function alert(automatic: boolean, run: () => Promise<{ readonly ok: true, readonly value: object } | { readonly ok: false, readonly refusal: { readonly code: string, readonly message: string } }> = vi.fn(() => Promise.resolve({ ok: true as const, value: {} })), state = waiting()) {
+    render(<UpdateProgress variant="alert" state={state} switching={false} reconnecting={false} t={t} cancel={vi.fn()} stop={{ chats: CHATS, jobs: 0, automatic, run }} />)
+    return run
+  }
+
+  it('puts the stop behind a menu on the alert, names each chat in the confirm step, and defaults to Cancel', () => {
+    alert(true)
+    expect(screen.queryByText(en['stop.item'])).toBeNull()
+    fireEvent.click(screen.getByLabelText(en['stop.menu']))
+    fireEvent.click(screen.getByText(en['stop.item']))
+    const confirm = document.querySelector('[data-stop-chats-confirm]')
+    expect(confirm?.textContent).toContain('Refactor')
+    expect(confirm?.textContent).toContain(en['stop.untitled'])
+    expect(screen.getByText(en['stop.cancel']).hasAttribute('data-modal-autofocus')).toBe(true)
+  })
+
+  it('names the background jobs that stop too and says they are not continued', () => {
+    render(<UpdateProgress variant="alert" state={waiting()} switching={false} reconnecting={false} t={t} cancel={vi.fn()} stop={{ chats: CHATS, jobs: 2, automatic: true, run: vi.fn() }} />)
+    fireEvent.click(screen.getByLabelText(en['stop.menu']))
+    fireEvent.click(screen.getByText(en['stop.item']))
+    expect(document.querySelector('[data-stop-chats-confirm]')?.textContent).toContain('2 background jobs also stop. Background jobs are not continued.')
+  })
+
+  it('says what happens next by the setting', () => {
+    alert(true)
+    fireEvent.click(screen.getByLabelText(en['stop.menu']))
+    fireEvent.click(screen.getByText(en['stop.item']))
+    expect(document.querySelector('[data-stop-chats-confirm]')?.textContent).toContain(en['stop.after.automatic'])
+    cleanup()
+    alert(false)
+    fireEvent.click(screen.getByLabelText(en['stop.menu']))
+    fireEvent.click(screen.getByText(en['stop.item']))
+    expect(document.querySelector('[data-stop-chats-confirm]')?.textContent).toContain(en['stop.after.manual'])
+  })
+
+  it('stops only on the red button, and words the Host\'s refusal', async () => {
+    const run = vi.fn(() => Promise.resolve({ ok: false as const, refusal: { code: 'NO_UPDATE_PENDING', message: 'x' } }))
+    alert(true, run)
+    fireEvent.click(screen.getByLabelText(en['stop.menu']))
+    fireEvent.click(screen.getByText(en['stop.item']))
+    fireEvent.click(screen.getByText(en['stop.cancel']))
+    expect(run).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByLabelText(en['stop.menu']))
+    fireEvent.click(screen.getByText(en['stop.item']))
+    fireEvent.click(screen.getByText(en['stop.confirm']))
+    await screen.findByText(en['refusal.NO_UPDATE_PENDING'])
+    expect(run).toHaveBeenCalledTimes(1)
+  })
+
+  it('offers no menu once the update stops waiting, or to a phone that needs the computer', () => {
+    alert(true, undefined, stateOf({ progress: { kind: 'applying', phase: 'switching', target: '0.1.3', runningChats: 0 } }))
+    expect(screen.queryByLabelText(en['stop.menu'])).toBeNull()
+    cleanup()
+    alert(true, undefined, { ...waiting(), access: may({ 'update-begin': { ok: false, needs: 'computer' } }) })
+    expect(screen.queryByLabelText(en['stop.menu'])).toBeNull()
+  })
+
+  it('says Stopped for the update on a stopped chat, with Continue when the Host does not continue it by itself', async () => {
+    const onContinue = vi.fn(() => Promise.resolve({}))
+    const view = (state: 'stopped' | 'continued' | 'skipped-missing' | 'skipped-running', automatic: boolean) => <StoppedChatLine stopped={{ automatic, chats: [{ sessionId: 's-1', title: 'x', state }] }} sessionId="s-1" t={t} onContinue={onContinue} />
+    const { rerender } = render(view('stopped', false))
+    fireEvent.click(screen.getByText(en['stopped.continue']))
+    expect(onContinue).toHaveBeenCalledWith('s-1')
+    rerender(view('continued', true))
+    expect(screen.getByRole('status').textContent).toBe(en['stopped.continuing'])
+    expect(screen.queryByText(en['stopped.continue'])).toBeNull()
+    rerender(view('skipped-running', true))
+    expect(screen.getByText(en['stopped.continue'])).toBeTruthy()
+    rerender(view('stopped', true))
+    expect(screen.queryByText(en['stopped.continue'])).toBeNull()
+    rerender(view('skipped-missing', true))
+    expect(screen.getByRole('status').textContent).toBe(en['stopped.skipped'])
+    rerender(<StoppedChatLine stopped={{ automatic: true, chats: [] }} sessionId="s-1" t={t} onContinue={onContinue} />)
+    expect(screen.queryByRole('status')).toBeNull()
   })
 })
 

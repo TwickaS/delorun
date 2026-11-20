@@ -3,7 +3,7 @@
  * admits, the names and folders it refuses, and that it writes only inside the new folder. The installation is a
  * temporary directory standing for one, so which names it ships is fixed by the test.
  */
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -127,6 +127,16 @@ describe('delorun plugin new', () => {
     expect(out).toContain('Delorun axis: engines.delorun admits Delorun 0.1.3.')
   })
 
+  it.each(['0.1.0-preview.1.18', '0.1.0'])('writes a manifest that delorun plugin check admits on Delorun %s', async (delorun) => {
+    const running = { ...RUNNING, delorun: brandString<SemanticVersion>(delorun) }
+    const folder = join(root, 'work', 'preview')
+    await runPluginNew(['@you/preview', '--dir', folder], { env: {}, stdout: () => {}, stderr: () => {} }, running, installation)
+    let out = ''
+    expect(await runPluginCheck([folder], { env: {}, stdout: (text) => { out += text }, stderr: () => {} }, running)).toBe(EXIT.ok)
+    expect(out).toContain(`Delorun axis: engines.delorun admits Delorun ${delorun}.`)
+    expect(manifestOf(folder)['engines']).toMatchObject({ delorun: '^0.1.0-0' })
+  })
+
   it('declares the bundle patch, both engines, and the DSH packages a tool shares with the host as peers', async () => {
     const folder = join(root, 'work', 'greet')
     await scaffold(['greet', '--dir', folder])
@@ -139,7 +149,7 @@ describe('delorun plugin new', () => {
       exports: { '.': './lib/index.js' },
       scripts: { build: 'tsdown', prepare: 'tsdown' },
       dsh: { bundle: { patch: './cordis.patch.yml' } },
-      engines: { dsh: '^0.2.2', delorun: '^0.1.0' },
+      engines: { dsh: '^0.2.2', delorun: '^0.1.0-0' },
       peerDependencies: { '@deepseek-ai/cordis': `~${CORDIS}`, '@deepseek-ai/dsh-tools': '^0.2.2' },
     })
     expect(manifest['devDependencies']).toEqual({
@@ -233,13 +243,20 @@ describe('delorun plugin new', () => {
     expect(readdirSync(folder)).toEqual(['notes.txt'])
   })
 
-  it('refuses a folder that is a file, and one whose parent does not exist', async () => {
+  it('refuses a folder that is a file, and one under a file', async () => {
     writeFileSync(join(root, 'work', 'file'), '')
     expect((await refusal(scaffold(['greet', '--dir', join(root, 'work', 'file')]))).message).toContain('exists and is not a folder')
-    const error = await refusal(scaffold(['greet', '--dir', join(root, 'work', 'missing', 'greet')]))
+    const error = await refusal(scaffold(['greet', '--dir', join(root, 'work', 'file', 'greet')]))
     expect(error.exit).toBe(EXIT.failed)
-    expect(error.message).toContain(`${join(root, 'work', 'missing')} is not a folder; create it first`)
-    expect(existsSync(join(root, 'work', 'missing'))).toBe(false)
+    expect(error.message).toContain(`${join(root, 'work', 'file', 'greet')} cannot be read`)
+    expect(readdirSync(join(root, 'work'))).toEqual(['file'])
+  })
+
+  it('creates the missing parent folders of the folder', async () => {
+    const folder = join(root, 'work', 'plugins', 'home', 'greet')
+    expect((await scaffold(['greet', '--dir', folder])).exit).toBe(EXIT.ok)
+    expect(manifestOf(folder)['name']).toBe('greet')
+    expect(readdirSync(join(root, 'work', 'plugins'))).toEqual(['home'])
   })
 
   it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)('removes what it wrote when a write fails', async () => {

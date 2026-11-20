@@ -168,21 +168,178 @@
   overflow-wrap: anywhere;
 }
 
-/* The progress and outcome cards stay on screen while Settings is closed, above the page's other overlays. */
-.overlay {
-  position: fixed;
-  right: 16px;
-  bottom: 16px;
-  z-index: 60;
-  display: flex;
+/* The progress and outcome cards float in the toast area, over the page. */
+.floating .cardRow {
   flex-direction: column;
+  align-items: stretch;
   gap: 10px;
-  width: min(420px, calc(100vw - 32px));
 }
 
-.overlay .card {
+.floating {
   box-shadow: var(--dsw-shadow-lg, 0 8px 24px rgb(0 0 0 / 0.18));
   background: var(--dsw-alias-surface-primary, var(--dsw-alias-settings-card-fill));
+}
+
+.notes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.highlights {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.areaHeading {
+  margin: 8px 0 4px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.notesSheet {
+  width: min(640px, 100%);
+}
+
+.notesBody {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: min(60vh, 560px);
+  overflow-y: auto;
+}
+
+/* On a phone the sheet is the whole screen, with Back in its footer. */
+/* An ongoing state: one compact block, the text then its buttons, 44px targets on touch. */
+.alert {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 0.5px solid var(--dsw-alias-state-warning-primary, var(--dsw-alias-settings-card-stroke));
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-settings-card-fill);
+}
+
+.alertText {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.alertActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.alertClose {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  min-width: 32px;
+  min-height: 32px;
+  border: none;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.alertMenuButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  min-width: 32px;
+  min-height: 32px;
+  border: none;
+  border-radius: var(--dsw-radius-lg);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.alertMenu {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.alertMenuItem {
+  min-height: 32px;
+  padding: 4px 8px;
+  border: none;
+  border-radius: var(--dsw-radius-lg);
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.railDot {
+  display: block;
+  width: 8px;
+  height: 8px;
+  margin: 4px auto;
+  border-radius: 50%;
+  background: var(--dsw-alias-state-warning-primary, var(--dsw-alias-brand-primary));
+}
+
+.stoppedLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 auto 8px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+/* The sidebar's foot is outside the chat list, so a tall alert scrolls inside itself. */
+.alert[data-update-variant='alert'] {
+  max-height: 25vh;
+  overflow-y: auto;
+}
+
+@media (pointer: coarse) {
+  .alertButton,
+  .alertMenuButton,
+  .alertMenuItem,
+  .alertClose {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 767px) {
+  .notesSheet {
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
+    max-height: none;
+    border-radius: 0;
+  }
+
+  .notesBody {
+    flex: 1;
+    max-height: none;
+  }
 }
 
 @media (max-width: 600px) {
@@ -194,10 +351,5 @@
 
   .actions {
     flex: none;
-  }
-
-  .overlay {
-    right: 16px;
-    bottom: 76px;
   }
 }

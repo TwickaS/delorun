@@ -1,11 +1,11 @@
 /**
  * Applies the theme settings to the studio while the studio additions are on:
  * the palette, accent, type, density and contrast layers through
- * `ctx.theme.overrideTokens`, Delorun's font faces, and the effort-bars mark on
- * `<html>`.
+ * `ctx.theme.overrideTokens`, Delorun's font faces, and the effort-bars mark and
+ * the toast position on `<html>`.
  * @module @delorun/plugin-theme/client/controller
  */
-import type { ThemeSettings } from '../config.ts'
+import { TOAST_POSITION_ATTRIBUTE, type ThemeSettings } from '../config.ts'
 import type { TokenLayer } from '../palette/generate.ts'
 import { themeLayers } from '../palette/layers.ts'
 import { EFFORT_ATTRIBUTE } from './effort.ts'
@@ -77,6 +77,8 @@ export class ThemeController {
     this.setFaces(settings.studioAdditions)
     if (settings.studioAdditions && settings.effort === 'bars') this.doc.documentElement.setAttribute(EFFORT_ATTRIBUTE, 'bars')
     else this.doc.documentElement.removeAttribute(EFFORT_ATTRIBUTE)
+    if (settings.studioAdditions) this.doc.documentElement.setAttribute(TOAST_POSITION_ATTRIBUTE, settings.toastPosition)
+    else this.doc.documentElement.removeAttribute(TOAST_POSITION_ATTRIBUTE)
   }
 
   /** Remove every layer, the faces and the effort mark. */
@@ -85,6 +87,7 @@ export class ThemeController {
     this.removers.clear()
     this.setFaces(false)
     this.doc.documentElement.removeAttribute(EFFORT_ATTRIBUTE)
+    this.doc.documentElement.removeAttribute(TOAST_POSITION_ATTRIBUTE)
     this.applied = undefined
   }
 

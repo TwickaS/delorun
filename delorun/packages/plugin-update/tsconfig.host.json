@@ -29,6 +29,24 @@
     },
     {
       "path": "../../../packages/host/webserver"
+    },
+    {
+      "path": "../../../packages/core/agent"
+    },
+    {
+      "path": "../../../packages/core/session"
+    },
+    {
+      "path": "../../../packages/llm/llm"
+    },
+    {
+      "path": "../../../packages/api/session-controller/tsconfig.host.json"
+    },
+    {
+      "path": "../../../packages/settings/settings"
+    },
+    {
+      "path": "../../../packages/session/session-title"
     }
   ]
 }

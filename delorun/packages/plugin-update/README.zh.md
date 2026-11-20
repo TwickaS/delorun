@@ -14,6 +14,7 @@ description: "@delorun/plugin-update 包，面向 delorun 的维护者：/deloru
 
 - [路由](#routes)
 - [谁可以使用每个操作](#who-may-use-each-control)
+- [Chats stopped for an update](#chats-stopped-for-an-update)
 - [Host 保存什么](#what-the-host-keeps)
 - [配置](#configuration)
 - [测试](#tests)
@@ -33,6 +34,8 @@ description: "@delorun/plugin-update 包，面向 delorun 的维护者：/deloru
 | `cancel` | 结束仍在等待 chat 的更新或回滚。 |
 | `rollback` | 从已提交的更新回退；没有 chat 数据的副本时为 `profileOnly`。 |
 | `dismiss` | 删除结果记录。 |
+| `stop-chats` | While an update waits for chats, records the running top-level chats, then stops them the way their Stop button does, keeping their work. Refused with `NO_UPDATE_PENDING` unless an update waits. |
+| `continue-chat` | Sends one fixed message, "Continue where you stopped before the update.", to a chat the update stopped. Refused while an update runs, for a chat the Host continues by itself, and for a chat already continued. |
 | `stop` | 停止 Delorun。studio 中没有任何东西会再次启动它。 |
 
 线路类型见 [`src/wire.ts`](src/wire.ts)。`apply`、`rollback` 与 `stop` 在 Host 停止之前应答，与 Restart 相同；页面轮询 `state`，并在 Host 的发行版与其所加载的不同时重新加载一次。
@@ -47,9 +50,15 @@ description: "@delorun/plugin-update 包，面向 delorun 的维护者：/deloru
 | --- | --- | --- | --- |
 | `update-check` | 可以 | 可以，无论是否解锁 | 可以，无论是否解锁 |
 | `update-begin`、`update-rollback` | 可以 | 可以，需此人输入过的解锁 | 不可以：在电脑前 |
-| `update-cancel`、`update-dismiss`、`stop` | 可以 | 可以，需解锁 | 可以，需解锁 |
+| `update-cancel`、`update-dismiss`、`update-continue`（`continue-chat`）、`stop` | 可以 | 可以，需解锁 | 可以，需解锁 |
 
 解锁是此人输入的验证码或 PIN；批准宽限不算。`state` 只向可以开始更新的请求显示已准备的报告，其中指出了插件和 harness 差异。
+
+<a id="chats-stopped-for-an-update"></a>
+
+## Chats stopped for an update
+
+`stop-chats` needs what beginning the update needs, because ending running chats is what lets the update go on. It writes the stopped chats, with the update's target version and the `continueStoppedChats` setting as it stands, to `update-stopped-chats.json` in the profile's run folder before it cancels anything, because the update restarts the Host. Every write to that record runs under one lock that re-reads it, and each chat is marked before its message is sent, so a chat gets at most one message. The updated Host continues the recorded chats once, only when the setting was on and the update's outcome record names the same target. An update cancelled, or ended without a restart, settles its chats at once: each gets its message after it has gone idle, and a chat that could not be continued keeps its Continue button. Background jobs stop with the chats and are never continued. The message is a user message with the source kind `delorun-update`.
 
 <a id="what-the-host-keeps"></a>
 
@@ -62,6 +71,7 @@ description: "@delorun/plugin-update 包，面向 delorun 的维护者：/deloru
 ## 配置
 
 - `waitSeconds`：更新或回滚等待运行中 chat 的时间，60 到 86,400 秒，默认 1,800。
+- `continueStoppedChats`: whether chats stopped for an update continue by themselves after it, on by default; Settings → Updates changes it. With it off, each stopped chat shows a Continue button.
 - `checkGapSeconds`：两次到达网络的发行版检查之间的最短时间，1 到 3,600 秒，默认 10。一次检查运行期间的请求会并入它；间隔之内的请求得到上一次的答案。
 
 <a id="tests"></a>

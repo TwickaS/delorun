@@ -6,7 +6,7 @@
 import { useCallback, useMemo, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
-import { ACCENT_CHOICES, CONTRAST, DEFAULT_SETTINGS, PALETTES, type AccentChoice, type PaletteChoice, type ThemeSettings } from '../config.ts'
+import { ACCENT_CHOICES, CONTRAST, DEFAULT_SETTINGS, PALETTES, TOAST_POSITIONS, type AccentChoice, type PaletteChoice, type ThemeSettings, type ToastPosition } from '../config.ts'
 import { writesFor, type CustomValues, type ThemeChange } from '../settings.ts'
 import { formatRgb, fromOklch } from '../palette/color.ts'
 import { previewColors } from '../palette/layers.ts'
@@ -14,8 +14,9 @@ import { lookOf } from '../palette/migrate.ts'
 import { ACCENTS, parseHex } from '../palette/soft.ts'
 import css from './AppearanceSection.module.css'
 import { useFormWrites } from './form-writes.ts'
-import { cardCss, LookChooser, SettingHeading, SettingsCard } from '@delorun/brand'
+import { cardCss, LookChooser, SettingHeading, SettingRow, SettingsCard } from '@delorun/brand'
 import { BrandingSection, type BrandingInjected } from './BrandingSection.tsx'
+import { ToastPositionPicker } from './ToastPositionPicker.tsx'
 
 /** The colour-scheme preference, as upstream's theme service keeps it. */
 export type SchemePreference = 'light' | 'dark' | 'system'
@@ -101,7 +102,7 @@ function ContrastSlider({ value, disabled, label, onCommit }: {
  * @returns the section.
  */
 export function AppearanceSection({ t, settings, scheme, brandingT, pickerT }: AppearanceSectionProps) {
-  const { snapshot, disabled, failed, track } = useFormWrites(settings)
+  const { snapshot, disabled, failed, track, save } = useFormWrites(settings)
   // A stable subscribe function: a new one per render would resubscribe on every render, including after the plugin is disposed.
   const subscribeScheme = useCallback((listener: () => void) => scheme.subscribe(listener), [scheme])
   const stored = snapshot.value ?? DEFAULT_SETTINGS
@@ -150,8 +151,15 @@ export function AppearanceSection({ t, settings, scheme, brandingT, pickerT }: A
           }} />
       </section>
 
-      {failed && <p className={cardCss.failure} role="alert">{t('saveFailed')}</p>}
     </SettingsCard>
+    <SettingsCard id="delorun-appearance-toasts" title={t('toasts')} className={css.section}>
+      <SettingRow stacked title={t('toastPosition')} description={t('toastPosition.lead')}>
+        <ToastPositionPicker value={current.toastPosition} label={t('toastPosition')} disabled={disabled}
+          names={Object.fromEntries(TOAST_POSITIONS.map(position => [position, t(`toastPosition.${position}`)])) as Record<ToastPosition, string>}
+          onChange={(position) => { save('toastPosition', position) }} />
+      </SettingRow>
+    </SettingsCard>
+    {failed && <p className={cardCss.failure} role="alert">{t('saveFailed')}</p>}
     <BrandingSection t={brandingT} settings={settings} pickerT={pickerT} />
     </div>
   )
