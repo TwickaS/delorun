@@ -96,7 +96,7 @@ const oldFiles = { 'package.json': '{"name":"pkg","version":"1"}\n', 'index.js':
 const newFiles = { 'package.json': '{"name":"pkg","version":"2"}\n', 'index.js': 'export default "two"\n' }
 
 function signed(release: string, files: Readonly<Record<string, string>>): SignedPackFiles {
-  return { name: 'pkg', release: v(release), files: new Map(Object.entries(files).map(([path, body]) => [path, { sha256: sha(body), executable: false }])), peers: [], texts: new Map(Object.entries(files).filter(([path]) => path === 'package.json')) }
+  return { name: 'pkg', release: v(release), files: new Map(Object.entries(files).map(([path, body]) => [path, { sha256: sha(body), executable: false }])), peers: [], text: path => Promise.resolve(path === 'package.json' ? files[path] : undefined) }
 }
 
 /** Both releases' stored packs files, as `openSignedPacks` reads them. */

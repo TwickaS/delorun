@@ -21,7 +21,8 @@ beforeEach(() => { base = realpathSync(mkdtempSync(join(tmpdir(), 'delorun-updat
 afterEach(() => { rmSync(base, { recursive: true, force: true }) })
 
 const v = (text: string): RuntimeVersion => parseRuntimeVersion(text)!
-const pack = (release: RuntimeVersion, name = 'demo'): SignedPackFiles => ({ name, release, files: new Map(), peers: [], texts: new Map() })
+const noText = (): Promise<undefined> => Promise.resolve(undefined)
+const pack = (release: RuntimeVersion, name = 'demo'): SignedPackFiles => ({ name, release, files: new Map(), peers: [], text: noText })
 
 /**
  * Both releases' packs files, each listing every pack by name.

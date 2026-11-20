@@ -154,10 +154,11 @@ export function repointsBeforeBoot(successor: boolean, bootsBefore: number): boo
  * @param successor - whether this process is an update's successor.
  * @param boot - boots the Host.
  * @param repoint - re-points the copies; {@link repointForSuccessor} by default.
- * @returns the Host runner: the wrapped boot, which counts the boots it has run, and the undo of the first boot's
- *   baseline, which waits for a baseline still being applied and does nothing when the boot applied none or after it ran once.
+ * @returns the Host runner: the wrapped boot, which counts the boots it has run; the undo of the first boot's
+ *   baseline, which waits for a baseline still being applied and does nothing when the boot applied none or after it ran once;
+ *   and whether there is such an undo, which is whether the boot changed any record.
  */
-export function repointingBoot<A extends unknown[], T>(request: SuccessorRequest, successor: boolean, boot: (...args: A) => Promise<T>, repoint: (request: SuccessorRequest, afterFailedSwitch: boolean) => Promise<UndoBaseline | undefined> = repointForSuccessor): { readonly boot: (...args: A) => Promise<T>, readonly abandon: () => Promise<void> } {
+export function repointingBoot<A extends unknown[], T>(request: SuccessorRequest, successor: boolean, boot: (...args: A) => Promise<T>, repoint: (request: SuccessorRequest, afterFailedSwitch: boolean) => Promise<UndoBaseline | undefined> = repointForSuccessor): { readonly boot: (...args: A) => Promise<T>, readonly abandon: () => Promise<void>, readonly advanced: () => Promise<boolean> } {
   let booted = 0
   let undo: UndoBaseline | undefined
   let repointing: Promise<unknown> | undefined
@@ -178,6 +179,10 @@ export function repointingBoot<A extends unknown[], T>(request: SuccessorRequest
       undo = undefined
       repointing = undefined
       await run?.()
+    },
+    advanced: async () => {
+      await repointing?.catch(() => undefined)
+      return undo !== undefined
     },
   }
 }
@@ -223,8 +228,8 @@ export interface SuccessorRequest {
  * @param request - the home and the profile about to boot, and the release an update left.
  * @param afterFailedSwitch - whether a Host of this process booted before.
  * @returns the undo of what the baseline advanced in the approved record and `active.json`, which the Host runner's
- *   `abandon` runs when the successor's health check fails ({@link repointingBoot}); `undefined` when no baseline applied or
- *   for a home without the profile.
+ *   `abandon` runs when the successor's health check fails ({@link repointingBoot}); `undefined` when no baseline applied,
+ *   when the start decided nothing new, or for a home without the profile.
  * @throws {CliError} when Changes cannot prepare the profile or a copy cannot be re-pointed: the successor does not
  *   boot, so the update rolls back.
  */
@@ -260,7 +265,8 @@ export async function repointForSuccessor(request: SuccessorRequest, afterFailed
     await undo?.().catch((undoError: unknown) => { write(`Delorun could not put the plugin records back after the update's pack files were applied: ${printable(isChangesError(undoError) ? undoError.detail : String(undoError))}\n`) })
     throw error
   }
-  return undo
+  // A start that decided nothing new leaves nothing to undo, so the successor has no deadline of its own to arm.
+  return undo !== undefined && JSON.stringify(before) !== JSON.stringify(after) ? undo : undefined
 }
 
 /**

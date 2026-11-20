@@ -315,9 +315,16 @@ export class HomeProcess implements HandshakeSubject {
         pipe.send({ type: 'failed', reason: 'HEALTH_CHECK_FAILED', ...criterion === undefined ? {} : { criterion } })
       })()
       // The predecessor stops a successor that has not answered by `HEALTH_CHECK_TIMEOUT_MS`, and a stopped successor undoes nothing.
+      // So the successor reports the failure itself only when its boot changed something to undo; otherwise the predecessor's limit applies.
       deadline = setTimeout(() => {
-        options.logger.error('the successor did not pass its health check in time', { data: { deadlineMs: options.successorDeadlineMs ?? SUCCESSOR_DEADLINE_MS } })
-        void reportFailed()
+        void (async () => {
+          if (!await home.bootAdvanced()) {
+            options.logger.warn('the successor passed its deadline with nothing changed to undo; the predecessor\'s health-check limit applies', { data: { deadlineMs: options.successorDeadlineMs ?? SUCCESSOR_DEADLINE_MS } })
+            return
+          }
+          options.logger.error('the successor did not pass its health check in time', { data: { deadlineMs: options.successorDeadlineMs ?? SUCCESSOR_DEADLINE_MS } })
+          await reportFailed()
+        })()
       }, options.successorDeadlineMs ?? SUCCESSOR_DEADLINE_MS)
       try {
         home.host = await home.bootedHost()
@@ -953,6 +960,16 @@ export class HomeProcess implements HandshakeSubject {
     if (!this.stopped) return host
     await host.close()
     throw new Error('the home process stopped while its Host booted')
+  }
+
+  /** Whether the Host runner changed profile files that {@link abandonSwitch} would put back; true for a runner that cannot say or fails to. */
+  private async bootAdvanced(): Promise<boolean> {
+    try {
+      return await this.options.host.advanced?.() ?? true
+    } catch (error) {
+      this.logger.error('the successor could not tell whether its boot changed the profile', { err: error })
+      return true
+    }
   }
 
   /** Ask the Host runner to undo what a failed successor boot changed; a failure is logged, and the report goes on. */

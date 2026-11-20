@@ -85,17 +85,18 @@ describe('turning a pack on', () => {
 })
 
 describe('the signed files of an installed release\'s packs', () => {
-  it('lists each pack\'s signed files, its peers and the text of package.json once the installed pack matches', async () => {
+  it('lists each pack\'s signed files and its peers, and reads the text of package.json only when the installed file matches its signed digest', async () => {
     const { release, channel } = await setup()
     await turnOnPack(release, 'demo', channel)
     const demo = await (await openSignedPacks(release))!.files('demo')
     expect(demo).toMatchObject({ name: 'demo', release: V, peers: ['peer'] })
     expect([...demo!.files.keys()]).toEqual(['package.json'])
     expect(demo!.files.get('package.json')).toEqual({ sha256: createHash('sha256').update('{"name":"demo"}').digest('hex'), executable: false })
-    expect(demo!.texts.get('package.json')).toBe('{"name":"demo"}')
+    expect(await demo!.text('package.json')).toBe('{"name":"demo"}')
+    expect(await demo!.text('index.js')).toBeUndefined()
   })
 
-  it('gives no text from an installed pack that differs from its signed list, and no files without a packs file', async () => {
+  it('gives no text from an installed file that differs from its signed digest, and no files without a packs file', async () => {
     const { release, channel, paths } = await setup()
     expect(await openSignedPacks(release)).toBeUndefined()
     await turnOnPack(release, 'demo', channel)
@@ -104,7 +105,7 @@ describe('the signed files of an installed release\'s packs', () => {
     chmodSync(file, 0o644)
     writeFileSync(file, '{"name":"planted"}')
     const demo = await (await openSignedPacks(release))!.files('demo')
-    expect(demo!.texts.size).toBe(0)
+    expect(await demo!.text('package.json')).toBeUndefined()
     expect(demo!.files.get('package.json')!.sha256).toBe(createHash('sha256').update('{"name":"demo"}').digest('hex'))
   })
 
