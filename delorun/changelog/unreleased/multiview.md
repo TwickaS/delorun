@@ -1,0 +1,10 @@
+---
+area: Studio
+section: Added
+---
+
+- Multiview shows the agents a chat works with beside the main chat, in panes you can resize and rearrange, so you can watch several at once. Pin an agent from the agents list in the chat header; a pinned agent keeps its pane, with its name, whether it is working, waiting for you or done, and, for Claude Code and Codex, the plan and how much of its limits it has used. Press the Multiview button to open the panes and press it again to go back to the normal chat. When the chat hands work to a new agent, Multiview opens by itself and pins it; you can turn that off in the Multiview settings.
+- Each pane is a real chat: you can approve or reject what an agent asks, reply to it and stop it without leaving Multiview, and Stop in one pane stops only that agent. Open full chat takes an agent into the main view, and Close removes its pane. A pane that is waiting for you says so, also when it is tabbed, left out for lack of room, or about to be closed.
+- The layout starts with the main chat on the left and the agents stacked on the right. Drag a pane by its handle to split another pane or to join its tabs, use the Layout menu for Main and column, Side by side, Grid or Main on top, or choose Reset to default; none of these closes a pane. Each chat remembers its panes and layout, and a chat that had Multiview open shows it again when you come back. Up to six panes fit, main chat included, fewer on a small window.
+- On a phone, or any window narrower than 768 pixels, Multiview becomes pages you swipe sideways: the main chat first, then each agent. A strip of names at the top jumps to a page, an amber dot marks an agent that is waiting for you, and the dots above the reply box show where you are.
+- The Multiview settings let you turn off opening on every hand-off, change the pane limit, show the full reply box with its model and permission controls in each pane instead of the short one, and stop a chat reopening Multiview when you return to it.

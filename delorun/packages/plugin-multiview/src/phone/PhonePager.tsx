@@ -166,7 +166,9 @@ export function PhonePager(props: PhonePagerProps): JSX.Element {
   // Reveal the shown chip in the strip.
   useEffect(() => {
     const chip = strip.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')
-    if (typeof chip?.scrollIntoView === 'function') chip.scrollIntoView({ inline: 'center', block: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' })
+    if (typeof chip?.scrollIntoView !== 'function') return
+    const behavior = reducedMotion() ? 'auto' : 'smooth'
+    chip.scrollIntoView({ inline: 'center', block: 'nearest', behavior }) // us-spelling: quoted output
   }, [activeIndex])
 
   const onScroll = useCallback(() => {
