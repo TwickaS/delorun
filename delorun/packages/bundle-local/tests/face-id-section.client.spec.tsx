@@ -11,7 +11,7 @@ import { en } from '../src/client/face-id-locales.ts'
 import { fakeBrowser } from '../src/client/face-id-fake.ts'
 import { PASSKEY_ROUTES } from '../src/client/face-id-api.ts'
 import { FaceIdSection, type FaceIdSectionProps } from '../src/client/FaceIdSection.tsx'
-import { FaceIdPairingOverlay } from '../src/client/FaceIdPairingOverlay.tsx'
+import { FaceIdPairingOverlay, PAIRING_SKIP_STORAGE_KEY, pairingSkipped, rememberPairingSkip } from '../src/client/FaceIdPairingOverlay.tsx'
 import type { PinView } from '../src/client/pin-lock.ts'
 import { fakeHost } from './fake-host.ts'
 
@@ -65,6 +65,7 @@ describe('FaceIdSection', () => {
 
 describe('FaceIdPairingOverlay', () => {
   const state = (ticket: boolean) => ({ status: 200, body: { passkeys: [], ticket } })
+  afterEach(() => { localStorage.removeItem(PAIRING_SKIP_STORAGE_KEY) })
   function overlay(script: Parameters<typeof fakeHost>[0], computer = false) {
     const host = fakeHost(script)
     render(<FaceIdPairingOverlay t={t} fetch={host.fetch} atComputer={() => computer} browser={fakeBrowser()} />)
@@ -76,6 +77,22 @@ describe('FaceIdPairingOverlay', () => {
     expect(await screen.findByRole('button', { name: 'Set up your device' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }))
     expect(screen.queryByRole('button', { name: 'Set up your device' })).toBeNull()
+  })
+  it('never offers the step again after a skip, through a reload, while the ticket still waits', async () => {
+    // A phone that skipped was offered the step on every reload, and the cover took the taps meant for the studio (e2e flow 8).
+    overlay({ [`GET ${PASSKEY_ROUTES.state}`]: state(true) })
+    fireEvent.click(await screen.findByRole('button', { name: 'Skip for now' }))
+    cleanup()
+    const reloaded = overlay({ [`GET ${PASSKEY_ROUTES.state}`]: state(true) })
+    await new Promise(resolve => setTimeout(resolve, 20))
+    expect(document.querySelector('[data-face-id-pairing]')).toBeNull()
+    expect(reloaded.received).toHaveLength(0)
+  })
+  it('offers the step again when local storage cannot be read', async () => {
+    const fail = (): never => { throw new Error('blocked') }
+    const blocked: Storage = { length: 0, clear: fail, key: fail, removeItem: fail, getItem: fail, setItem: fail }
+    expect(pairingSkipped(blocked)).toBe(false)
+    expect(() => { rememberPairingSkip(blocked) }).not.toThrow()
   })
   it('shows nothing without a ticket or at the computer', async () => {
     // No ticket, no step; the computer page asks nothing.

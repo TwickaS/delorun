@@ -1,7 +1,9 @@
 /**
  * The pairing step as a full-screen overlay (B1): a phone the computer just approved holds a single-use enrolment ticket,
- * and its first studio page offers "Set up Face ID" once, ahead of the studio. Skipping hides it for this page; Settings →
- * Face ID offers it again. Nothing shows at the computer or when no ticket waits.
+ * and its first studio page offers "Set up Face ID" once, ahead of the studio. Skipping is remembered in this origin's
+ * local storage, which belongs to the browser that holds the device's key, so a reload never offers the step again; from
+ * then on Settings → Face ID offers it, and the sheet of a device with nothing to confirm with names that place. Nothing
+ * shows at the computer or when no ticket waits.
  */
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
@@ -11,6 +13,35 @@ import { httpPasskeyApi } from './face-id-api.ts'
 import { FaceIdPairingStep } from './FaceIdEnrol.tsx'
 import type { FaceIdSectionInjected } from './FaceIdSection.tsx'
 import css from './FaceId.module.css'
+
+/** The local storage key that records a skipped pairing step on this browser. */
+export const PAIRING_SKIP_STORAGE_KEY = 'delorun.faceId.pairingSkipped'
+
+/**
+ * Whether this browser skipped the pairing step.
+ * @param storage - the browser's local storage, or undefined where none exists.
+ * @returns true when a skip is recorded; false when none is, or when storage cannot be read.
+ */
+export function pairingSkipped(storage: Storage | undefined = globalThis.localStorage): boolean {
+  try {
+    return storage?.getItem(PAIRING_SKIP_STORAGE_KEY) === '1'
+  } catch {
+    // Storage blocked (for example a private window): the step is offered again on the next load.
+    return false
+  }
+}
+
+/**
+ * Record that this browser skipped the pairing step.
+ * @param storage - the browser's local storage, or undefined where none exists.
+ */
+export function rememberPairingSkip(storage: Storage | undefined = globalThis.localStorage): void {
+  try {
+    storage?.setItem(PAIRING_SKIP_STORAGE_KEY, '1')
+  } catch {
+    // Storage blocked: the skip is not remembered and the step is offered again on the next load.
+  }
+}
 
 /** What the plugin supplies: the section's own supplies, without the lock's store. */
 export type FaceIdPairingOverlayInjected = Pick<FaceIdSectionInjected, 'fetch' | 'atComputer' | 'browser'>
@@ -30,7 +61,7 @@ export function FaceIdPairingOverlay({ t, fetch, atComputer, browser }: FaceIdPa
   const kind = useMemo(() => faceIdKindOf(globalThis.navigator), [])
   const computer = atComputer()
   useEffect(() => {
-    if (computer) return undefined
+    if (computer || pairingSkipped()) return undefined
     let current = true
     void api.state().then(
       (state) => { if (current && state?.ticket === true) setShown(true) },
@@ -40,6 +71,7 @@ export function FaceIdPairingOverlay({ t, fetch, atComputer, browser }: FaceIdPa
   }, [computer, api])
   if (!shown) return null
   return <div className={css.cover} data-face-id-pairing>
-    <FaceIdPairingStep t={t} kind={kind} api={api} browser={passkeys} onDone={() => { setShown(false) }} onSkip={() => { setShown(false) }} />
+    <FaceIdPairingStep t={t} kind={kind} api={api} browser={passkeys} onDone={() => { setShown(false) }}
+      onSkip={() => { rememberPairingSkip(); setShown(false) }} />
   </div>
 }
