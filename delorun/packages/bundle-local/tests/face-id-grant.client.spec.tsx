@@ -5,11 +5,13 @@
  *
  * Each test's comment names the behaviour whose removal makes it fail.
  */
-import { afterEach, describe, expect, it } from 'vitest'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { useSyncExternalStore, type ReactNode } from 'react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { createFaceGrantSource } from '../src/client/face-grant.ts'
-import { hashRequest } from '../src/client/face-id-hash.ts'
+import { hashArgs, hashRequest } from '../src/client/face-id-hash.ts'
+import { oneAtATime, remoteDenialLift } from '../src/client/face-retry.ts'
 import { en } from '../src/client/face-id-locales.ts'
 import { fakeApi, fakeBrowser } from '../src/client/face-id-fake.ts'
 import { callActionOf, FaceIdGrantOverlay, type FaceIdGrantOverlayProps } from '../src/client/FaceIdGrantOverlay.tsx'
@@ -107,5 +109,65 @@ describe('the Face ID grant overlay', () => {
     act(() => { view.rerender(<FaceIdGrantOverlay {...props} />) })
     expect(screen.queryByText('Discard this plugin change?')).toBeNull()
     expect(await screen.findByText('Confirm this change?')).toBeTruthy()
+  })
+})
+
+describe('the terminal path on a phone (owner report on the iPhone)', () => {
+  const opened: HTMLDialogElement[] = []
+  beforeEach(() => {
+    Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value(this: HTMLDialogElement) { opened.push(this); this.setAttribute('open', '') } })
+  })
+  afterEach(() => { Reflect.deleteProperty(HTMLDialogElement.prototype, 'showModal'); opened.splice(0) })
+  const create = { request: { id: 't-1', cols: 80, rows: 24 } }
+
+  /** The open terminal panel with the overlay, and the refused `terminal/create` the gateway asks the lift about. */
+  function refusedCreate() {
+    const source = createFaceGrantSource()
+    const api = fakeApi({ devices: [{ deviceId: 'd', label: 'Phone', thisDevice: true, passkeys: [{ credentialId: 'c1', createdAt: 0, lastUsedAt: null, synced: false }] }] })
+    function Page(): ReactNode {
+      const pending = useSyncExternalStore(source.hooks.pending.subscribe, source.hooks.pending.getSnapshot)
+      const props = {
+        t, fetch: fakeHost({}).fetch, api, browser: fakeBrowser(), settle: source.settle,
+        usePending: <S,>(select: (value: typeof pending) => S): S => select(pending),
+        usePin: <S,>(select: (view: PinView) => S): S => select(pinView('on')),
+      } as FaceIdGrantOverlayProps
+      return <>
+        <section data-sidebar-terminal="" style={{ position: 'fixed', inset: 0, zIndex: 2147483647 }}><p role="status">Starting…</p></section>
+        <FaceIdGrantOverlay {...props} />
+      </>
+    }
+    render(<Page />)
+    const abort = new AbortController()
+    const lifted = remoteDenialLift(oneAtATime(source.grant))({ endpoint: 'terminal/create', reason: 'elevation-required: terminal/create', args: create, signal: abort.signal })
+    return { api, abort, lifted }
+  }
+
+  it('opens the sheet as a modal dialog over the open panel, and a confirm sends terminal/create again for that terminal', async () => {
+    const { api, lifted } = refusedCreate()
+    const confirm = await screen.findByRole('button', { name: /Confirm with/ })
+    expect(opened).toHaveLength(1)
+    expect(opened[0]?.contains(confirm)).toBe(true)
+    expect(screen.getByRole('status').textContent).toBe('Starting…')
+    fireEvent.click(confirm)
+    await expect(lifted).resolves.toBe(true)
+    expect(api.calls.find(entry => entry.name === 'options')?.request).toEqual({ actions: [{ action: 'terminal/create', hash: await hashArgs(create), hold: { feature: 'terminal', id: 't-1' } }] })
+    await waitFor(() => { expect(document.querySelector('[data-face-id-sheet]')).toBeNull() })
+  })
+
+  it('hands the refusal back on a cancel, so the panel can say the terminal did not start', async () => {
+    const { api, lifted } = refusedCreate()
+    fireEvent.click(await screen.findByRole('button', { name: en['sheet.cancel'] }))
+    await expect(lifted).resolves.toBe(false)
+    expect(api.calls.some(entry => entry.name === 'options' || entry.name === 'verify')).toBe(false)
+  })
+
+  it('closes the sheet and mints nothing when the panel that asked is closed while the sheet is open', async () => {
+    // The terminal view aborts its creation when it leaves the DOM; the sheet must go with it.
+    const { api, abort, lifted } = refusedCreate()
+    await screen.findByRole('button', { name: /Confirm with/ })
+    act(() => { abort.abort() })
+    await expect(lifted).resolves.toBe(false)
+    await waitFor(() => { expect(document.querySelector('[data-face-id-sheet]')).toBeNull() })
+    expect(api.calls.some(entry => entry.name === 'options' || entry.name === 'verify')).toBe(false)
   })
 })

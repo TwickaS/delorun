@@ -577,3 +577,68 @@ it('drops waiting commands when input is refused and never replays them on a new
   h.model.write('c')
   await expect.poll(() => h.sent[1]).toEqual([{ type: 'write', sequence: 1, data: 'c' }])
 })
+
+/** The refusal the Host's remote access gives a reach device's creation that has no grant, as the page's denial lift hands it on. */
+const unconfirmedCreate = (): RemoteResult<never> => ({ ok: false, error: new RemoteError('remote-access/denied' as never, 'remote access: terminal/create: access denied', { action: 'terminal/create', reason: 'elevation-required: terminal/create' } as never) })
+
+it('starts the terminal in the same mounted view once a creation held for a confirmation is sent again and succeeds', async () => {
+  // The page's denial lift holds the refused creation while the person confirms, then sends it again (the gateway's work).
+  const { model, remote } = fixture()
+  let confirmed: (() => void) | undefined
+  vi.mocked(remote.create).mockImplementationOnce(async (_session, request) => {
+    await new Promise<void>((resolve) => { confirmed = resolve })
+    return success({ ...info, id: request.id })
+  })
+  model.mount()
+  await expect.poll(() => model.state.getSnapshot().phase).toBe('creating')
+  confirmed?.()
+  await expect.poll(() => model.state.getSnapshot().writable).toBe(true)
+  expect(remote.create).toHaveBeenCalledTimes(1)
+})
+
+it('says the terminal did not start when the confirmation was not given, and Retry asks again', async () => {
+  const { model, remote } = fixture()
+  vi.mocked(remote.create).mockResolvedValueOnce(unconfirmedCreate())
+  await mount(model)
+  expect(model.state.getSnapshot()).toMatchObject({ phase: 'failed', issue: 'notConfirmed' })
+  await model.refresh()
+  expect(remote.create).toHaveBeenCalledTimes(2)
+  await expect.poll(() => model.state.getSnapshot().writable).toBe(true)
+})
+
+it('cancels a creation waiting for a confirmation when the view leaves the DOM, and starts again on the next mount', async () => {
+  // A confirmation that outlived its panel minted a grant for a view nobody saw (owner's iPhone report).
+  const { model, remote } = fixture()
+  const signals: AbortSignal[] = []
+  vi.mocked(remote.create).mockImplementationOnce(async (_session, _request, signal) => {
+    if (signal !== undefined) signals.push(signal)
+    await untilAborted(signal)
+    return { ok: false, error: new RemoteError('remote/cancelled' as never, 'cancelled', {} as never) }
+  })
+  const detach = model.mount()
+  await expect.poll(() => signals.length).toBe(1)
+  detach()
+  expect(signals[0]?.aborted).toBe(true)
+  await expect.poll(() => model.state.getSnapshot().phase).toBe('idle')
+  expect(model.state.getSnapshot().issue).toBeUndefined()
+  model.mount()
+  await expect.poll(() => model.state.getSnapshot().writable).toBe(true)
+  expect(remote.create).toHaveBeenCalledTimes(2)
+})
+
+it('starts again when the view is mounted once more before its cancelled creation settles', async () => {
+  // React may unmount and mount a view back at once; the cancelled creation must not leave it idle with nothing under way.
+  const { model, remote } = fixture()
+  let settle: (() => void) | undefined
+  vi.mocked(remote.create).mockImplementationOnce(async () => {
+    await new Promise<void>((resolve) => { settle = resolve })
+    return { ok: false, error: new RemoteError('remote/cancelled' as never, 'cancelled', {} as never) }
+  })
+  const detach = model.mount()
+  await expect.poll(() => settle !== undefined).toBe(true)
+  detach()
+  model.mount()
+  settle?.()
+  await expect.poll(() => model.state.getSnapshot().writable).toBe(true)
+  expect(remote.create).toHaveBeenCalledTimes(2)
+})

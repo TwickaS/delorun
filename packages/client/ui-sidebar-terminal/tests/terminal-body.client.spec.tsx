@@ -224,6 +224,17 @@ it('displays disconnect, close and exit states and offers explicit reconnection 
 })
 
 // Showing the Host's fixed line puts English product copy in front of a device in any locale.
+it('ends Starting with a plain line when the person did not confirm the creation, and Retry asks again', () => {
+  // A cancelled confirmation is not a terminal error; the panel must not stay on Starting either.
+  const h = mount({ ...idle, phase: 'creating' })
+  expect(h.view.getByRole('status').textContent).toBe(en.creating)
+  h.update({ ...idle, phase: 'failed', issue: 'notConfirmed', error: 'remote access: terminal/create: access denied' })
+  expect(h.view.getByRole('alert').textContent).toBe(en.notConfirmed)
+  expect(h.view.queryByText(en.creating)).toBeNull()
+  fireEvent.click(h.view.getByRole('button', { name: en.retry }))
+  expect(h.model.refresh).toHaveBeenCalledOnce()
+})
+
 it('shows its own copy for launch error text the Host keeps on the computer', () => {
   const h = mount({ ...idle, info: { ...info, state: 'failed', error: 'host line', errorCode: 'withheld' }, phase: 'connected' })
   expect(h.view.getByRole('alert').textContent).toContain(en.errorWithheld)

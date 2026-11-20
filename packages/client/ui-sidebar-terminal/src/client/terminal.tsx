@@ -64,7 +64,8 @@ export function TerminalBody({ useTabInfo, useTerminal, useTheme, view, t }: Ter
         {ended && newTerminal}
       </div>}
       {state.info !== undefined && <TerminalScreen state={state} model={model} visible={tab.visible} label={t('title')} theme={theme} />}
-      {error !== undefined && <p className={css.error} role="alert">{t('failed', { message: error })}</p>}
+      {/* A creation the person did not confirm is no error: it says so plainly, beside Retry, which asks again. */}
+      {error !== undefined && <p className={css.error} role="alert">{state.issue === 'notConfirmed' ? error : t('failed', { message: error })}</p>}
     </section>
   )
 }
