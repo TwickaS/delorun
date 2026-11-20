@@ -156,6 +156,16 @@ describe('the terminal path on a phone (owner report on the iPhone)', () => {
     await waitFor(() => { expect(document.querySelector('[data-face-id-sheet]')).toBeNull() })
   })
 
+  it('sends terminal/create again after a PIN confirm, and closes the keypad', async () => {
+    const { api, lifted } = refusedCreate(false)
+    fireEvent.click(await screen.findByRole('button', { name: en['sheet.usePin'] }))
+    for (const digit of '824619') fireEvent.click(screen.getByRole('button', { name: digit }))
+    fireEvent.click(screen.getByRole('button', { name: en['pin.confirm'] }))
+    await expect(lifted).resolves.toBe(true)
+    expect(api.calls.find(entry => entry.name === 'pin')?.request).toMatchObject({ actions: [{ action: 'terminal/create', hash: await hashArgs(create), hold: { feature: 'terminal', id: 't-1' } }] })
+    await waitFor(() => { expect(document.querySelector('[data-face-id-pin]')).toBeNull() })
+  })
+
   it('hands the refusal back on a cancel, so the panel can say the terminal did not start', async () => {
     const { api, lifted } = refusedCreate()
     fireEvent.click(await screen.findByRole('button', { name: en['sheet.cancel'] }))

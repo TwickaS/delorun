@@ -90,6 +90,7 @@ import { FaceIdPairingOverlay } from './FaceIdPairingOverlay.tsx'
 import { en as pinModeEn, zh as pinModeZh, type PinModeLocaleKey } from './pin-mode-locales.ts'
 import { PinModeSection, type PinModeSectionInjected } from './PinModeSection.tsx'
 import { provideAgentSeatReach } from './agent-seat-reach.ts'
+import { watchSessionRotation } from './session-rotation.ts'
 import { createUnlockSource, type UnlockSource } from './unlock.ts'
 import { trustApi, TrustStore, type TrustApi } from './trust-api.ts'
 import { TrustBadge, type TrustBadgeInjected } from './TrustBadge.tsx'
@@ -493,6 +494,12 @@ export function apply(ctx: Context): void {
   const pin = applyPin(ctx, browserFetch, (ctx.get('connection') as ConnectionHandle).isLoopback)
   const unlock = applyUnlock(ctx, browserFetch, (ctx.get('connection') as ConnectionHandle).isLoopback)
   provideAgentSeatReach(ctx, (ctx.get('connection') as ConnectionHandle).isLoopback ? 'computer' : studioSurface(ctx) === 'approved device' ? 'device' : 'none', oneAtATime(faceGrant.grant, faceQueue))
+  // A reach page whose session a device approval, removal or passkey enrolment rotated (C4) reloads, so the sign-in page signs it in again.
+  if (!(ctx.get('connection') as ConnectionHandle).isLoopback) {
+    const link = ctx.get('connection') as ConnectionHandle
+    ctx.effect(() => watchSessionRotation(link.state, async () => (await browserFetch('/', { method: 'HEAD', cache: 'no-store' })).status, () => { globalThis.location.reload() }),
+      'delorun-devices: sign in again after a session rotation')
+  }
   const pairing = createPairingSource(browserFetch)
   const pairingWriter = new PairingWriter(ctx.configForms.get<PairingRowSettings>(HOME_AUTH_ROW))
   const devicesFace = (): DevicesSectionInjected => ({

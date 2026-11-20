@@ -226,8 +226,8 @@ describe('holds are bound to the resource and the device (P2-1, P2-2)', () => {
     expect(decide('terminal/attach', { id: 't-1' }, sessionA).kind).toBe('allow')
     expect(decide('terminal/attach', { id: 't-1' }, sessionB).kind).toBe('deny')
   })
-  // Removing unlockId from the hold key lets another page's Peer of the same device use a hold it never opened; removing endPeer leaves the hold after its Peer is disposed.
-  it('belong to the Peer that opened them: another page of the device is refused, and the hold ends with its Peer', () => {
+  // Removing unlockId from the hold key lets the Peer of another page unlock of the same device use a hold it never opened; removing endPeer leaves the hold after its Peer is disposed.
+  it('belong to the Peer that opened them: a Peer under another page unlock is refused, and the hold ends with its Peer', () => {
     const { grants, facts } = world()
     const peerA = reachDevicePrincipal('device-1', LISTENER, 'unlock-a')
     const peerB = reachDevicePrincipal('device-1', LISTENER, 'unlock-b')
@@ -239,6 +239,18 @@ describe('holds are bound to the resource and the device (P2-1, P2-2)', () => {
     expect(ask(peerB, 'terminal/retain', { id: 't-1' })).toBe('deny')
     grants.endPeer({ ...HOLDER, unlockId: 'unlock-a' })
     expect(ask(peerA, 'terminal/attach', { id: 't-1' })).toBe('deny')
+  })
+  // F41: a hold is the device's on its listener, for one terminal id; a reloaded page or a second tab is the same Peer.
+  it('admit a reloaded page or second tab of the device to the held terminal, and refuse it another terminal', () => {
+    const { grants, facts } = world()
+    grants.mint(HOLDER, [{ action: 'terminal/create', hash: hashArgs(create) ?? '', hold: { feature: 'terminal', id: 't-1' } }], 'passkey')
+    expect(createCondition(facts, reachDevicePrincipal('device-1', LISTENER))({ action: 'terminal/create' as RemoteAccessAction, resource: sessionA as never, args: create }).kind).toBe('allow')
+    // Each page's question builds its own condition for the same principal, as the Host does per call.
+    const page = (): ReturnType<typeof createCondition> => createCondition(facts, reachDevicePrincipal('device-1', LISTENER))
+    for (const action of ['terminal/retain', 'terminal/attach'] as const) {
+      expect(page()({ action: action as RemoteAccessAction, resource: sessionA as never, args: { id: 't-1' } }).kind).toBe('allow')
+      expect(page()({ action: action as RemoteAccessAction, resource: sessionA as never, args: { id: 't-2' } }).kind).toBe('deny')
+    }
   })
   // Removing the scope on the picker keeps it a device-wide hold.
   it('give the folder picker a hold but never a folder write: createDirectory needs its own grant (P3-7)', () => {

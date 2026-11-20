@@ -529,7 +529,9 @@ export class PermissionDefaults extends Service {
         if (workspaceAccessOf(this.grantedEntries(entries), workspace).reviewId !== request.reviewId) {
           throw new FullAccessChangeError('STALE_REVIEW', 'this workspace\'s full access changed after the consent was shown; look at it again before you answer')
         }
-        const mintedByDevice = request.on && from === 'device' && !fullAccessGranted(entries, workspace)
+        // Only a grant a device makes while dangerous mode holds ends with the mode; one it makes outside the mode, with its
+        // one-action Face ID or PIN grant (F13), stays like the computer's.
+        const mintedByDevice = request.on && from === 'device' && this.everywhereOn() && !fullAccessGranted(entries, workspace)
         // Recorded before the grant, so a grant that is written is never missing from the record.
         await this.markDeviceGrant(workspace, mintedByDevice ? 'add' : 'remove')
         await this.write(entries, workspace, request.on ? FULL_ACCESS_PRESET : SAFER_PRESET)

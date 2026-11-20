@@ -15,7 +15,8 @@
  *   events and reads of that exact id in that exact scope (the Session or global resource the call named) for the Peer
  *   that opened it, until it idles {@link HOLD_IDLE_MS}, lives {@link HOLD_ABSOLUTE_MS}, its device's session ends or
  *   that Peer is disposed ({@link GrantStore.endPeer}). A Peer is one device on one listener and one page unlock, so
- *   closing a browser tab that shares it does not end the hold. Another id, scope or Peer needs a new grant.
+ *   every page and tab of the device shares it: a reload or a second tab showing the same terminal rides the hold, and
+ *   closing a tab does not end it. Another id, scope or Peer needs a new grant.
  *
  * @module @delorun/home-auth/grants
  */
