@@ -7,6 +7,7 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import semver from 'semver'
 import { afterEach, describe, expect, it } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { SemanticVersion } from '@delorun/contract-release-manifest'
@@ -89,7 +90,7 @@ describe('delorun plugin check', () => {
     const { exit, out } = await check(plugin({ name: 'stock-plugin', version: '1.0.0' }))
     expect(exit).toBe(EXIT.ok)
     expect(out).toContain('DSH axis: undeclared, so the plugin loads on any DSH. Declare "engines": { "dsh": "^0.2.2" }')
-    expect(out).toContain('Delorun axis: undeclared, so the plugin loads on any Delorun and Delorun promises it nothing. To target Delorun 0.1.3 and its patches, declare "engines": { "delorun": "^0.1.0" }.')
+    expect(out).toContain('Delorun axis: undeclared, so the plugin loads on any Delorun and Delorun promises it nothing. To target Delorun 0.1.3 and its patches, declare "engines": { "delorun": "^0.1.0-0" }.')
   })
 
   it('refuses a plugin whose Delorun range does not admit this release, with the installer\'s own message', async () => {
@@ -108,7 +109,7 @@ describe('delorun plugin check', () => {
   })
 
   it('refuses declarations it cannot read', async () => {
-    expect((await check(plugin({ name: 'a', version: '1.0.0', engines: { delorun: 1 } }))).out).toContain('Delorun axis: engines.delorun is declared in a form Delorun cannot read, so Delorun refuses the plugin. Declare a range such as "^0.1.0".')
+    expect((await check(plugin({ name: 'a', version: '1.0.0', engines: { delorun: 1 } }))).out).toContain('Delorun axis: engines.delorun is declared in a form Delorun cannot read, so Delorun refuses the plugin. Declare a range such as "^0.1.0-0".')
     const dsh = await check(plugin({ name: 'b', version: '1.0.0', engines: { dsh: 1 } }))
     expect([dsh.exit, dsh.out.includes('DSH axis: engines.dsh or a DSH peer is declared in a form Delorun cannot read.'), dsh.out.includes('The installer refuses it: ')]).toEqual([EXIT.failed, true, true])
     const peer = await check(plugin({ name: 'c', version: '1.0.0', peerDependencies: { '@deepseek-ai/dsh': 3 } }))
@@ -172,7 +173,19 @@ describe('delorun plugin check', () => {
   })
 
   it('targets the running minor, before and after 1.0', () => {
-    expect(targetRange('0.1.3')).toBe('^0.1.0')
-    expect(targetRange('1.4.2-rc.1')).toBe('^1.4.0')
+    expect(targetRange('0.1.3')).toBe('^0.1.0-0')
+    expect(targetRange('1.4.2-rc.1')).toBe('^1.4.0-0')
+  })
+
+  it.each([
+    ['0.1.0-preview.1.18', true],
+    ['0.1.0-preview.2', true],
+    ['0.1.0', true],
+    ['0.1.7', true],
+    ['0.2.0-preview.1', false],
+    ['0.2.0', false],
+  ])('targets a prerelease runtime so that the range admits %s: %s', (version, admitted) => {
+    expect(semver.satisfies(version, targetRange('0.1.0-preview.1.18'))).toBe(admitted)
+    expect(semver.satisfies(version, targetRange('0.1.0'))).toBe(admitted)
   })
 })

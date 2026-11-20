@@ -4,8 +4,8 @@
  *
  * Contract:
  * - The kind is `tool` by default; the folder is `<name without its scope>` resolved against the working directory
- *   unless `--dir` names another. The folder may exist only as an empty directory that is not a symbolic link, and its
- *   parent must exist.
+ *   unless `--dir` names another. The folder may exist only as an empty directory that is not a symbolic link; missing
+ *   parent folders are created.
  * - It refuses a name, a kind or a folder as [the scaffold](@delorun/plugin-scaffold) does, a name with the usage code and a
  *   folder with the failure code, and writes only inside the folder.
  * - It prints the files it wrote and the commands that follow: install, build, check, `delorun plugin dev` and
