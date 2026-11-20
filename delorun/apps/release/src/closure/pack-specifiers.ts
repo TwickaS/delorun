@@ -5,7 +5,8 @@
  * absolute path is the build's temporary folder, which differs per build, so two builds of the same sources shipped
  * different bytes and Changes showed a dependency change after every update.
  *
- * {@link stabilizeDeployedSpecifiers} rewrites those specifiers to the exact version of the package the pack carries in
+ * A lockfile snapshot names an injected dependency by its map key and holds `file:///<absolute path>` as the value; that
+ * form is rewritten too. {@link stabilizeDeployedSpecifiers} rewrites those specifiers to the exact version of the package the pack carries in
  * its own `node_modules`, and deletes {@link DEPLOY_METADATA}, the pnpm install state the closure deletes too: it holds
  * the deployment's folder, the pnpm store's folder and timestamps, and a second lockfile with the `file:///` keys.
  * {@link machinePathProblems} then refuses a pack that still carries any of it, or whose metadata still names an
@@ -30,6 +31,12 @@ const OTHER_FIELDS = ['bundledDependencies', 'bundleDependencies', 'overrides', 
  * a lockfile by the peer suffix `(<peer>@<version>)` of a variant. Groups: the name and the suffix.
  */
 const INJECTED = /^(@[^@/]+\/[^@/]+|[^@/]+)@file:\/\/\/[^(]+((?:\(.*\))?)$/u
+
+/**
+ * The version of an injected package as a lockfile snapshot's dependency value, which names the package by its map key
+ * and so holds `file:///<absolute path>` without `<name>@`. Group: the peer suffix.
+ */
+const INJECTED_VALUE = /^file:\/\/\/[^(]+((?:\(.*\))?)$/u
 
 /**
  * What `pnpm deploy` leaves besides the deployed files, by path from the deployment (a folder takes everything under
@@ -110,10 +117,23 @@ export async function stabilizeDeployedSpecifiers(directory: string): Promise<vo
   }
   const document = parseDocument(lock)
   const injected = new Set<string>()
-  visit(document, { Scalar: (_key, node) => { const name = typeof node.value === 'string' ? INJECTED.exec(node.value)?.[1] : undefined; if (name !== undefined) injected.add(name) } })
+  visit(document, {
+    Pair: (_key, pair) => {
+      if (isScalar(pair.key) && typeof pair.key.value === 'string' && isScalar(pair.value) && typeof pair.value.value === 'string' && INJECTED_VALUE.test(pair.value.value)) injected.add(pair.key.value)
+    },
+    Scalar: (_key, node) => { const name = typeof node.value === 'string' ? INJECTED.exec(node.value)?.[1] : undefined; if (name !== undefined) injected.add(name) },
+  })
   for (const name of injected) await need(name)
   visit(document, {
     Pair: (_key, pair) => {
+      if (isScalar(pair.key) && typeof pair.key.value === 'string' && isScalar(pair.value) && typeof pair.value.value === 'string') {
+        const suffix = INJECTED_VALUE.exec(pair.value.value)?.[1]
+        if (suffix !== undefined) {
+          pair.value.value = `${versions.get(pair.key.value)!}${suffix}`
+          pair.value.type = Scalar.PLAIN
+          return
+        }
+      }
       const match = isScalar(pair.key) && typeof pair.key.value === 'string' ? INJECTED.exec(pair.key.value) : null
       if (match === null || !isMap(pair.value)) return
       const resolution = pair.value.get('resolution', true)

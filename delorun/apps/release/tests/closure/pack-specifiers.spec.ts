@@ -1,5 +1,8 @@
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { machinePathProblems, refuseMachinePaths } from '../../src/closure/pack-specifiers.ts'
+import { machinePathProblems, refuseMachinePaths, stabilizeDeployedSpecifiers } from '../../src/closure/pack-specifiers.ts'
 
 const file = (path: string, body: unknown): { path: string, data: Buffer } => ({ path, data: Buffer.from(typeof body === 'string' ? body : JSON.stringify(body)) })
 
@@ -59,5 +62,48 @@ describe('the check for machine paths in a pack\'s metadata', () => {
     const entries = [file('package.json', { dependencies: Object.fromEntries(Array.from({ length: 7 }, (_, index) => [`d${String(index)}`, `file:/tmp/d${String(index)}`])) })]
     expect(() => refuseMachinePaths('@a/b', 'linux-x64', entries)).toThrow(/@a\/b for linux-x64 carries 7 paths.*package\.json dependencies\.d0: file:\/tmp\/d0.*and 2 more/u)
     expect(() => refuseMachinePaths('@a/b', 'linux-x64', [file('package.json', { dependencies: { a: '1.0.0' } })])).not.toThrow()
+  })
+})
+
+describe('rewriting the injected specifiers of a deployment', () => {
+  it('writes the carried version for a package named by key, by specifier or by a snapshot dependency value, and leaves no path', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'pack-specifiers-'))
+    try {
+      for (const name of ['a', 'b']) {
+        mkdirSync(join(directory, 'node_modules/@s', name), { recursive: true })
+        writeFileSync(join(directory, 'node_modules/@s', name, 'package.json'), JSON.stringify({ name: `@s/${name}`, version: '1.2.3' }))
+      }
+      writeFileSync(join(directory, 'package.json'), JSON.stringify({ name: 'p', dependencies: { '@s/a': '@s/a@file:///var/tmp/delorun-release-build/source/a' } }))
+      writeFileSync(join(directory, 'pnpm-lock.yaml'), [
+        "lockfileVersion: '9.0'",
+        'importers:',
+        '  .:',
+        '    dependencies:',
+        "      '@s/a':",
+        "        specifier: '@s/a@file:///var/tmp/delorun-release-build/source/a'",
+        "        version: '@s/a@file:///var/tmp/delorun-release-build/source/a'",
+        'packages:',
+        "  '@s/a@file:///var/tmp/delorun-release-build/source/a':",
+        '    resolution: { directory: ../source/a, type: directory }',
+        "  '@s/b@file:///var/tmp/delorun-release-build/source/b':",
+        '    resolution: { directory: ../source/b, type: directory }',
+        'snapshots:',
+        "  '@s/a@file:///var/tmp/delorun-release-build/source/a':",
+        '    dependencies:',
+        "      '@s/b': file:///var/tmp/delorun-release-build/source/b",
+        '',
+      ].join('\n'))
+      await stabilizeDeployedSpecifiers(directory)
+      const lock = readFileSync(join(directory, 'pnpm-lock.yaml'), 'utf8')
+      expect(lock).toContain("'@s/b': 1.2.3")
+      expect(lock).toContain("'@s/b@1.2.3':")
+      expect(lock).not.toMatch(/file:\/\/|delorun-release-build/u)
+      expect(machinePathProblems([
+        { path: 'package.json', data: readFileSync(join(directory, 'package.json')) },
+        { path: 'pnpm-lock.yaml', data: Buffer.from(lock) },
+      ])).toEqual([])
+    } finally {
+      rmSync(directory, { recursive: true, force: true })
+    }
   })
 })

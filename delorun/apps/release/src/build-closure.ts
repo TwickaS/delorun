@@ -122,8 +122,9 @@ const INHERITED = ['PATH', 'HOME', 'USER', 'TMPDIR', 'HTTP_PROXY', 'HTTPS_PROXY'
 /**
  * The environment every build step runs in. Only {@link INHERITED} passes through, so a variable a builder happens to
  * set cannot reach the artifacts; the rest is the recipe's: `SOURCE_DATE_EPOCH`, the prefix map for compiled code,
- * UTC and the C locale, the commit the client artifacts embed, which the exported tree cannot ask git for, and the
- * product name the client artifacts present.
+ * UTC and the C locale, the commit the exported tree has no `.git` to name (`DSH_BUILD_SOURCE_COMMIT` for the build stamp,
+ * `DSH_CLIENT_COMMIT_HASH` for the client artifacts), `DSH_BUILD_SOURCE_TREE=clean` because `git archive` exports exactly the
+ * commit's tracked files, and the product name the client artifacts present.
  * @param inherited - the builder's environment.
  * @param buildRoot - the fixed build root.
  * @param epoch - the commit's committer time.
@@ -140,6 +141,8 @@ export function buildEnvironment(inherited: NodeJS.ProcessEnv, buildRoot: string
     CXXFLAGS: flags,
     TZ: 'UTC',
     LC_ALL: 'C',
+    DSH_BUILD_SOURCE_COMMIT: commit,
+    DSH_BUILD_SOURCE_TREE: 'clean',
     DSH_CLIENT_COMMIT_HASH: commit,
     DSH_CLIENT_TITLE: clientTitle,
   }

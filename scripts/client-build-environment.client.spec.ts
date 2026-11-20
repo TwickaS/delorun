@@ -143,6 +143,15 @@ describe('client build environment', () => {
     expect(repositoryCommitHash('/unused', { DSH_CLIENT_COMMIT_HASH: COMMIT_HASH })).toBe(COMMIT_HASH.slice(0, 7))
   })
 
+  it('fails loud, naming DSH_CLIENT_COMMIT_HASH, for a directory that is no Git checkout and carries no commit', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'client-commit-'))
+    try {
+      expect(() => repositoryCommitHash(directory, {})).toThrow(/not a Git checkout.*DSH_CLIENT_COMMIT_HASH/u)
+    } finally {
+      rmSync(directory, { recursive: true, force: true })
+    }
+  })
+
   it.each([undefined, 'true', 'false'])('isolates local branding while retaining repository metadata (dirty=%s)', (dirty) => {
     const parent = {
       DSH_BUILD_CLIENT_PROFILE: 'official',

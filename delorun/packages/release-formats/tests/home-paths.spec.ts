@@ -34,6 +34,7 @@ describe('the gate against the builder\'s own paths', () => {
     const directory = scratch(test)
     plant(directory, {
       'lib/a.js': 'import "/home/someone-else/x.js"\n// /var/tmp/delorun-release-build/source/packages/x\n',
+      'doc.md': 'A root named delorun-release-build-* or delorun-release-build-<suffix>, as in delorun-release-build-TOKEN or delorun-release-build-ab12 or delorun-release-build-abcdefg.\n',
       'notes.txt': 'The maker of this release says hello; /home/maker2x is another folder name\n'.replace('/home/maker2x', '/srv/x'),
       'x.tar.gz': await archive({ 'package.json': '{"name":"x"}', 'lib/b.js': 'export {}\n' }),
     })
@@ -48,7 +49,7 @@ describe('the gate against the builder\'s own paths', () => {
     ['the home directory in a binary', 'bin/tool', Buffer.concat([Buffer.from([0, 1, 2, 255]), Buffer.from('/home/maker/build\0')]), "the building user's home directory"],
     ['the user name as a folder with slashes', 'a.json', '{"p":"/mnt/c/maker/x"}', 'the user name as a folder (/maker/)'],
     ['the user name as a folder with backslashes', 'a.txt', 'C:\\Users\\maker\\x', 'the user name as a folder (\\maker\\)'],
-    ['the unique build root', 'lib/b.js', 'const root = "/var/tmp/delorun-release-build-k3j2/source"\n', "the build's temporary root delorun-release-build-*"],
+    ['the unique build root', 'lib/b.js', 'const root = "/var/tmp/delorun-release-build-k3j2Zq/source"\n', "the build's temporary root delorun-release-build-*"],
   ] as const)('refuses $0, naming the file', async ([, path, data, found], test) => {
     const directory = scratch(test)
     plant(directory, { [path]: data, 'clean.txt': 'nothing here\n' })
@@ -58,7 +59,7 @@ describe('the gate against the builder\'s own paths', () => {
 
   it('reads inside an archive and names the archive and the entry', async (test) => {
     const directory = scratch(test)
-    plant(directory, { 'sub/pack.tar.gz': await archive({ 'lib/ok.js': 'ok\n', 'node_modules/x/dev.js': '// built in /home/maker/delo/packages/x\n' }), 'delorun.tgz': await archive({ 'package/bin.js': 'delorun-release-build-ab12\n' }) })
+    plant(directory, { 'sub/pack.tar.gz': await archive({ 'lib/ok.js': 'ok\n', 'node_modules/x/dev.js': '// built in /home/maker/delo/packages/x\n' }), 'delorun.tgz': await archive({ 'package/bin.js': 'delorun-release-build-ab12Cd\n' }) })
     expect(await homePathProblems(directory, BUILDER)).toEqual([
       { file: 'delorun.tgz!package/bin.js', found: expect.stringContaining('temporary root') },
       { file: 'sub/pack.tar.gz!node_modules/x/dev.js', found: expect.stringContaining('home directory') },
