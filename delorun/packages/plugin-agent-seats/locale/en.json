@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Live agents",
+    "description": "Shows Claude Code and Codex as chats under the chat that handed work over, which you can watch, message and stop; it adds nothing unless the live agents preview flag is on"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Claude Code driver",
+    "description": "Opens, steers and stops the Claude Code program as a live agent and relays its permission questions to you; it does nothing until the Claude Code pack is added"
+  }
+}
