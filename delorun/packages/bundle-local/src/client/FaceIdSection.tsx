@@ -2,7 +2,7 @@
  * The Face ID settings section (B1, B4): it lists the passkeys, sets one up on a paired device with the code typed at the
  * computer, and takes that code at the computer.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { browserPasskeys, faceIdKindOf, type PasskeyBrowser } from './face-id-browser.ts'
@@ -35,7 +35,6 @@ export type FaceIdSectionProps = PropsRuntime<'settings.section'> & PropsLocale<
  */
 export function FaceIdSection({ t, fetch, atComputer, usePin, browser }: FaceIdSectionProps): ReactNode {
   const [adding, setAdding] = useState(false)
-  const [hasPasskey, setHasPasskey] = useState(false)
   const [version, setVersion] = useState(0)
   const api = useMemo(() => httpPasskeyApi(fetch), [fetch])
   const passkeys = useMemo(() => browser ?? browserPasskeys(), [browser])
@@ -43,14 +42,6 @@ export function FaceIdSection({ t, fetch, atComputer, usePin, browser }: FaceIdS
   const secret = pin.phase === 'off' || pin.phase === 'unknown' ? undefined : pin.secret
   const kind = useMemo(() => faceIdKindOf(globalThis.navigator), [])
   const computer = atComputer()
-  useEffect(() => {
-    let current = true
-    void api.state().then(
-      (state) => { if (current) setHasPasskey(state.passkeys.length > 0) },
-      () => { if (current) setHasPasskey(false) },
-    )
-    return () => { current = false }
-  }, [api, version])
   return <div className={css.section}>
     <h2 className={css.sectionTitle}>{t('section.title')}</h2>
     <p className={css.body}>{t('section.intro')}</p>
@@ -58,7 +49,7 @@ export function FaceIdSection({ t, fetch, atComputer, usePin, browser }: FaceIdS
     {adding && !computer
       ? <AddFaceId t={t} kind={kind} api={api} browser={passkeys} onCancel={() => { setAdding(false) }}
         onDone={() => { setAdding(false); setVersion(count => count + 1) }} />
-      : <PasskeyDevices key={version} t={t} api={api} browser={passkeys} kind={kind} atComputer={computer} secret={secret} hasPasskey={hasPasskey}
+      : <PasskeyDevices key={version} t={t} api={api} browser={passkeys} kind={kind} atComputer={computer} secret={secret}
         onAdd={() => { setAdding(true) }} />}
   </div>
 }

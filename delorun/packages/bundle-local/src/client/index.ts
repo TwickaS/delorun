@@ -702,7 +702,7 @@ export function applyConsents(ctx: Context, fetch: HostFetch): void {
   const t = ctx.locale.bind(CONSENTS_NS)
   const consent = createFullAccessConsentSource(fetch)
   ctx.provide('permissionSwitchConsent', {
-    confirm: (sessionId, preset) => confirmPermissionSwitch(fetch, consent, sessionId, preset),
+    confirm: async (sessionId, preset) => await confirmPermissionSwitch(fetch, consent, sessionId, preset) === 'submit',
     ownsConfirmation: ownsPermissionConfirmation,
   } satisfies PermissionSwitchConsent)
   ctx.effect(() => () => { consent.cancel() }, 'delorun-consents: an open consent answers no once the plugin unloads')

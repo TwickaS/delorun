@@ -11,6 +11,7 @@ import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PasskeyBrowser } from './face-id-browser.ts'
 import type { FaceIdAction, FaceIdKind, PasskeyApi } from './face-id-types.ts'
 import { DelorunBrandMark } from './brand.tsx'
+import { FaceIdLayer } from './FaceIdLayer.tsx'
 import css from './FaceId.module.css'
 
 /** The most items of a batch the sheet lists before it counts the rest. */
@@ -105,8 +106,8 @@ export function FaceIdSheet({ t, action, kind, api, browser, hasPasskey, fallbac
   const label = phase === 'waiting' ? t('sheet.waiting', { method }) : phase === 'ready' ? t('sheet.confirm', { method }) : t('sheet.again', { method })
   const showFallback = !usable || phase === 'cancelled' || phase === 'failed'
   const faceOnly = showFallback && action.noPin === true
-  return <div className={css.scrim} data-face-id-sheet={phase}>
-    <div className={css.sheet} role="dialog" aria-modal="true" aria-labelledby="delorun-face-id-title">
+  return <FaceIdLayer labelledBy="delorun-face-id-title" attributes={{ 'data-face-id-sheet': phase }}>
+    <div className={css.sheet}>
       <h2 id="delorun-face-id-title" className={css.title}>{action.title}</h2>
       <p className={css.body}>{action.body}</p>
       {listed.length === 0 ? null : <ul className={css.items}>
@@ -127,5 +128,5 @@ export function FaceIdSheet({ t, action, kind, api, browser, hasPasskey, fallbac
       {showFallback && fallback === 'computer' && !stranded ? <p className={css.status} data-face-id-fallback="computer">{t('sheet.askComputer')}</p> : null}
       <button type="button" className={css.link} onClick={onCancel}>{t('sheet.cancel')}</button>
     </div>
-  </div>
+  </FaceIdLayer>
 }

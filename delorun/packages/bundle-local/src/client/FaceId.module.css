@@ -1,9 +1,25 @@
 /* The Face ID screens. The sheet is a bottom sheet on a phone and a centred 480px dialog from 480px; the main control fills the width and is at least 56px tall; motion stops under prefers-reduced-motion. */
 
+/* The scrim is the top-layer <dialog> itself (FaceIdLayer.tsx): the user agent's dialog box is reset to fill the viewport. */
 .scrim {
   position: fixed;
-  z-index: 100;
   inset: 0;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: inherit;
+}
+
+.scrim::backdrop {
+  background: transparent;
+}
+
+.scrim[open] {
   display: flex;
   align-items: stretch;
   justify-content: center;
@@ -13,7 +29,7 @@
 }
 
 @media (min-width: 480px) {
-  .scrim {
+  .scrim[open] {
     align-items: center;
   }
 }

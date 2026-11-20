@@ -40,6 +40,18 @@ describe('FaceIdSection', () => {
     section({ [`GET ${PASSKEY_ROUTES.state}`]: { status: 200, body: { passkeys: [entry], ticket: false } } }, { phase: 'off' })
     expect(await screen.findByText('Added 18 Nov · this device only')).toBeTruthy()
   })
+  it('offers Confirm for Show all devices on a phone with a passkey while its first passkey read is still on its way', async () => {
+    // A section that took "no passkey" until its read answered showed a passkey phone "nothing to confirm with" (F-5).
+    const host = fakeHost({ [`GET ${PASSKEY_ROUTES.state}`]: { status: 200, body: { passkeys: [entry], ticket: false } } })
+    let held = true
+    const fetch: typeof host.fetch = (input, init) => (held && String(input).includes(PASSKEY_ROUTES.state) ? new Promise<Response>(() => {}) : host.fetch(input, init))
+    const props = { t, close: () => {}, fetch, atComputer: () => false, usePin: <S,>(select: (view: PinView) => S): S => select(pinView('off')), browser: fakeBrowser() } as FaceIdSectionProps
+    render(<FaceIdSection {...props} />)
+    held = false
+    fireEvent.click(screen.getByRole('button', { name: 'Show all devices' }))
+    expect(await screen.findByRole('button', { name: /^Confirm with/ })).toBeTruthy()
+    expect(document.querySelector('[data-face-id-sheet]')?.textContent).not.toContain('nothing to confirm with')
+  })
   it('at the computer, shows the code entry', async () => {
     // The computer takes the code the phone shows.
     section({

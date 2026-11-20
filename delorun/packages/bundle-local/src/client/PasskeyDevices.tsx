@@ -28,8 +28,6 @@ export interface PasskeyDevicesProps {
   readonly atComputer: boolean
   /** The home's secret for the fallback keypad, or undefined when none is set (the sheet then points at the computer). */
   readonly secret: 'pin' | 'passcode' | undefined
-  /** Whether this page's device holds a passkey. */
-  readonly hasPasskey: boolean
   /** Start "Add Face ID" for this page's device. */
   readonly onAdd: () => void
 }
@@ -39,7 +37,7 @@ type Target =
   | { readonly kind: 'passkey'; readonly credentialId: string; readonly deviceId: string | undefined; readonly label: string }
   | { readonly kind: 'device'; readonly deviceId: string; readonly label: string }
 
-type Asked = { readonly target: Target; readonly action: FaceIdAction; readonly pin: boolean }
+type Asked = { readonly target: Target; readonly action: FaceIdAction; readonly pin: boolean; readonly hasPasskey: boolean }
 
 /**
  * A date as the card shows it.
@@ -92,7 +90,7 @@ function withoutRemoved(devices: readonly PasskeyDevice[] | undefined, target: T
  * @param props - see {@link PasskeyDevicesProps}.
  * @returns the cards.
  */
-export function PasskeyDevices({ t, api, browser, kind, atComputer, secret, hasPasskey, onAdd }: PasskeyDevicesProps): ReactNode {
+export function PasskeyDevices({ t, api, browser, kind, atComputer, secret, onAdd }: PasskeyDevicesProps): ReactNode {
   const [devices, setDevices] = useState<readonly PasskeyDevice[] | undefined>(undefined)
   const [all, setAll] = useState(atComputer)
   const [failed, setFailed] = useState(false)
@@ -129,7 +127,10 @@ export function PasskeyDevices({ t, api, browser, kind, atComputer, secret, hasP
   }, [api, load, all, atComputer])
   const ask = async (target: Target): Promise<void> => {
     if (atComputer) { await run(target); return }
-    setAsked({ target, action: await actionOf(t, target), pin: false })
+    // This device's passkeys are read as the sheet opens, so a read still on its way never shows a passkey device as
+    // having nothing to confirm with; a failed read shows the way down, and the home checks the grant itself.
+    const [action, hasPasskey] = await Promise.all([actionOf(t, target), api.state().then(state => state.passkeys.length > 0, (): boolean => false)])
+    setAsked({ target, action, pin: false, hasPasskey })
   }
   const done = (grantId: string): void => {
     const target = asked?.target
@@ -146,7 +147,7 @@ export function PasskeyDevices({ t, api, browser, kind, atComputer, secret, hasP
     {all ? null : <Button variant="outline" type="button" className={css.action} onClick={() => { void ask({ kind: 'list' }) }}>{t('devices.showAll')}</Button>}
     {asked === undefined ? null : asked.pin && secret !== undefined
       ? <FaceIdPin t={t} action={asked.action} api={api} secret={secret} onGranted={done} onBack={() => { setAsked({ ...asked, pin: false }) }} />
-      : <FaceIdSheet t={t} action={asked.action} kind={kind} api={api} browser={browser} hasPasskey={hasPasskey} fallback={fallbackToPin ? 'pin' : 'computer'}
+      : <FaceIdSheet t={t} action={asked.action} kind={kind} api={api} browser={browser} hasPasskey={asked.hasPasskey} fallback={fallbackToPin ? 'pin' : 'computer'}
         onGranted={done} onCancel={() => { setAsked(undefined) }}
         onFallback={() => { setAsked({ ...asked, pin: true }) }} />}
   </div>

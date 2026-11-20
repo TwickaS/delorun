@@ -10,6 +10,7 @@ import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { CodeCells, Keypad } from '@delorun/brand'
 import { isRefused } from './host-api.ts'
 import type { FaceIdAction, PasskeyApi } from './face-id-types.ts'
+import { FaceIdLayer } from './FaceIdLayer.tsx'
 import css from './FaceId.module.css'
 
 /** The digits a PIN has at least; the home's own rule is the authority. */
@@ -51,8 +52,8 @@ export function FaceIdPin({ t, action, api, secret, onGranted, onBack }: FaceIdP
       (error: unknown) => { setBusy(false); setWrong(isRefused(error, 'PIN_INVALID') ? 'wrong' : isRefused(error, 'PIN_UNLOCKS_PAUSED') ? 'paused' : 'failed') },
     )
   }
-  return <div className={css.scrim} data-face-id-pin>
-    <form className={css.sheet} role="dialog" aria-modal="true" aria-labelledby="delorun-face-id-pin-title" onSubmit={submit}>
+  return <FaceIdLayer labelledBy="delorun-face-id-pin-title" attributes={{ 'data-face-id-pin': '' }}>
+    <form className={css.sheet} onSubmit={submit}>
       <h2 id="delorun-face-id-pin-title" className={css.title}>{action.title}</h2>
       <p className={css.body}>{t(isPin ? 'pin.lead' : 'pin.leadPasscode')}</p>
       {isPin
@@ -68,5 +69,5 @@ export function FaceIdPin({ t, action, api, secret, onGranted, onBack }: FaceIdP
       <Button variant="primary" type="submit" className={css.confirm} disabled={!ready}>{t(busy ? 'pin.checking' : 'pin.confirm')}</Button>
       <button type="button" className={css.link} onClick={onBack}>{t('pin.back')}</button>
     </form>
-  </div>
+  </FaceIdLayer>
 }

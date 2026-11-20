@@ -5,7 +5,9 @@
  *   node_modules/.bin/tsx delorun/packages/bundle-local/scripts/face-id-preview/shoot.ts --out <directory>
  *
  * It writes `<name>-<width>-<theme>.png`: 390px wide in dark and light for every screen, and 1440px wide for the
- * screens a computer also shows. Playwright comes from `@deepseek-ai/dsh-web`'s dependencies.
+ * screens a computer also shows. A shot with `top` fails the run unless every element it names is the topmost element at
+ * its own centre, which proves the Face ID layer sits over the studio's overlays. Playwright comes from
+ * `@deepseek-ai/dsh-web`'s dependencies.
  * @module @delorun/bundle-local/scripts/face-id-preview/shoot
  */
 import { mkdir } from 'node:fs/promises'
@@ -21,6 +23,7 @@ interface Page {
   screenshot(options: { path: string }): Promise<unknown>
   setViewportSize(size: { width: number; height: number }): Promise<void>
   evaluate<T>(run: () => T): Promise<T>
+  evaluate<T, A>(run: (arg: A) => T, arg: A): Promise<T>
 }
 interface Context { newPage(): Promise<Page>; close(): Promise<void> }
 interface Playwright { chromium: { launch(): Promise<{ newContext(options: object): Promise<Context>; close(): Promise<void> }> } }
@@ -31,12 +34,14 @@ const out = values.out
 await mkdir(out, { recursive: true })
 
 /** One picture: the output name, the screen query value, and the widths it is shot at. */
-const SHOTS: readonly { readonly name: string; readonly screen: string; readonly wide: boolean; readonly tap?: string }[] = [
+const SHOTS: readonly { readonly name: string; readonly screen: string; readonly wide: boolean; readonly tap?: string; readonly top?: string }[] = [
   { name: 'b2-sheet', screen: 'b2-sheet', wide: true },
   { name: 'b2-answer', screen: 'b2-answer', wide: false },
   { name: 'wire-install', screen: 'wire-install', wide: false },
   { name: 'b2-cancelled', screen: 'b2-cancelled', wide: false, tap: '[data-face-id-sheet] button' },
   { name: 'b3-pin', screen: 'b3-pin', wide: false },
+  { name: 'over-overlays', screen: 'over-overlays', wide: true, top: '[data-face-id-sheet] button' },
+  { name: 'pin-over-overlays', screen: 'pin-over-overlays', wide: false, top: '[data-face-id-pin] button' },
   { name: 'b1-pairing', screen: 'b1-pairing', wide: true },
   { name: 'b1-add', screen: 'b1-add', wide: false },
   { name: 'b1-add-code', screen: 'b1-add-code', wide: false, tap: '[data-face-id-add] button' },
@@ -62,6 +67,14 @@ try {
           if (shot.tap !== undefined) {
             await page.locator(shot.tap).first().click()
             await page.waitForTimeout(600)
+          }
+          if (shot.top !== undefined) {
+            const covered = await page.evaluate((selector: string) => [...document.querySelectorAll(selector)].flatMap((element) => {
+              const box = element.getBoundingClientRect()
+              const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)
+              return hit !== null && element.contains(hit) ? [] : [`${element.textContent ?? ''} under ${hit?.outerHTML.slice(0, 80) ?? 'nothing'}`]
+            }), shot.top)
+            if (covered.length > 0) throw new Error(`${shot.name} at ${String(width)}px: ${covered.join('; ')}`)
           }
           // A full-page capture drops Chromium's touch emulation, and with it `(pointer: coarse)` and the 44 px touch
           // targets; growing the viewport to the page keeps the emulation.

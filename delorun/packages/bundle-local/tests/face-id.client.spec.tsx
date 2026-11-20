@@ -157,6 +157,66 @@ describe('FaceIdSheet', () => {
   })
 })
 
+describe('the top layer', () => {
+  // jsdom has no showModal; the stub records which dialogs were opened modally, the way a browser lifts them into the top layer.
+  const opened: HTMLDialogElement[] = []
+  const stubShowModal = (): void => {
+    Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value(this: HTMLDialogElement) { opened.push(this); this.setAttribute('open', '') } })
+  }
+  afterEach(() => { Reflect.deleteProperty(HTMLDialogElement.prototype, 'showModal'); opened.splice(0) })
+
+  it('opens the sheet as a modal dialog, so no studio overlay covers its Confirm', () => {
+    // A sheet that is a plain fixed element sits under the consent dialog's mask and the phone's terminal panel (F-1).
+    stubShowModal()
+    sheet()
+    const dialog = screen.getByRole('dialog', { name: 'Install “Reports”?' })
+    expect(dialog.tagName).toBe('DIALOG')
+    expect(opened).toEqual([dialog])
+    expect(dialog.hasAttribute('data-face-id-sheet')).toBe(true)
+    expect(dialog.contains(screen.getByRole('button', { name: 'Confirm with Face ID' }))).toBe(true)
+  })
+
+  it('opens the PIN keypad as a modal dialog that takes focus itself, so no phone keyboard rises over the keypad', () => {
+    // The keypad's digits and Approve sat under the terminal panel (F-1b).
+    stubShowModal()
+    render(<FaceIdPin t={t} action={action} api={fakeApi()} secret="pin" onGranted={vi.fn()} onBack={vi.fn()} />)
+    const dialog = screen.getByRole('dialog', { name: 'Install “Reports”?' })
+    expect(opened).toEqual([dialog])
+    expect(dialog.hasAttribute('data-face-id-pin')).toBe(true)
+    expect(dialog.hasAttribute('autofocus')).toBe(true)
+  })
+
+  it('keeps the dialog open on the browser\'s own cancel, leaving Escape to the sheet', () => {
+    // A dialog that closed itself on Escape would vanish while React still holds the sheet open.
+    stubShowModal()
+    const props = sheet()
+    const dialog = screen.getByRole('dialog', { name: 'Install “Reports”?' })
+    const cancel = new Event('cancel', { cancelable: true })
+    dialog.dispatchEvent(cancel)
+    expect(cancel.defaultPrevented).toBe(true)
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(props.onCancel).toHaveBeenCalledOnce()
+  })
+
+  it('stops keys at the sheet, so a studio dialog under it neither closes on Escape nor takes Tab', () => {
+    // The studio's modal layer listens on the document; it closed the consent dialog under the sheet on the sheet's Escape.
+    stubShowModal()
+    const props = sheet()
+    const under = vi.fn()
+    document.addEventListener('keydown', under)
+    try {
+      const confirm = screen.getByRole('button', { name: 'Confirm with Face ID' })
+      fireEvent.keyDown(confirm, { key: 'Escape' })
+      fireEvent.keyDown(confirm, { key: 'Tab' })
+      expect(under).not.toHaveBeenCalled()
+      expect(props.onCancel).toHaveBeenCalledOnce()
+      expect(screen.getByRole('dialog', { name: 'Install “Reports”?' }).getAttribute('aria-modal')).toBe('true')
+    } finally {
+      document.removeEventListener('keydown', under)
+    }
+  })
+})
+
 describe('FaceIdGrantFlow with nothing to confirm with', () => {
   /** The flow on a home with no PIN, for a device with no passkey. */
   function stranded(over: Partial<FaceIdAction> = {}) {
@@ -384,7 +444,7 @@ describe('FaceIdPin', () => {
 describe('PasskeyDevices', () => {
   const list = (over: Partial<Parameters<typeof PasskeyDevices>[0]> = {}) => {
     const api = over.api ?? fakeApi({ devices: [phone, laptop] })
-    const props = { t, api, browser: fakeBrowser(), kind: 'faceId' as const, atComputer: false, secret: 'pin' as const, hasPasskey: true,
+    const props = { t, api, browser: fakeBrowser(), kind: 'faceId' as const, atComputer: false, secret: 'pin' as const,
       onAdd: vi.fn(), ...over }
     render(<PasskeyDevices {...props} />)
     return { ...props, api: api as ReturnType<typeof fakeApi> }

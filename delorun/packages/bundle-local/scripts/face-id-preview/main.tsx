@@ -4,6 +4,7 @@
  * @module @delorun/bundle-local/scripts/face-id-preview/main
  */
 import { createRoot } from 'react-dom/client'
+import { Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ReactNode } from 'react'
 import '../../../../../packages/client/ui-theme/src/styles/base.css'
 import '../../../../../packages/client/ui-theme/src/styles/design-platform.css'
@@ -104,6 +105,20 @@ function PhoneDevices({ passkey }: { passkey: boolean }): ReactNode {
 }
 
 /**
+ * The studio's worst stacking for the Face ID layer: an open studio Modal (z-index 1000, portalled to the body), a
+ * terminal panel at the highest z-index, and the sheet rendered inside a small transformed box that clips its content.
+ * @param props.children - the sheet or keypad.
+ * @returns the screen.
+ */
+function OverOverlays({ children }: { readonly children: ReactNode }): ReactNode {
+  return <>
+    <Modal open onClose={noop} title="Turn on full access?" closeLabel="Close" description="The studio's consent dialog stands under the sheet." />
+    <section data-sidebar-terminal="" style={{ position: 'fixed', inset: 0, zIndex: 2147483647, background: 'rgb(0 0 0 / 30%)', color: 'white', padding: 16 }}>Terminal panel</section>
+    <div style={{ position: 'fixed', top: 0, left: 0, width: 10, height: 10, overflow: 'hidden', transform: 'translateZ(0)' }}>{children}</div>
+  </>
+}
+
+/**
  * Build the chosen screen.
  * @param screen - the `screen` query value.
  * @returns the element, or an explanatory element for an unknown name.
@@ -122,6 +137,11 @@ function screenOf(screen: string): ReactNode {
     case 'b2-cancelled':
       return <FaceIdSheet t={t} action={ACTION} kind="faceId" api={fakeApi()} browser={fakeBrowser({ get: [{ kind: 'cancelled' }] })} hasPasskey fallback="pin"
         onGranted={noop} onCancel={noop} onFallback={noop} />
+    case 'over-overlays':
+      return <OverOverlays><FaceIdSheet t={t} action={ACTION} kind="faceId" api={fakeApi()} browser={fakeBrowser()} hasPasskey fallback="pin"
+        onGranted={noop} onCancel={noop} onFallback={noop} /></OverOverlays>
+    case 'pin-over-overlays':
+      return <OverOverlays><FaceIdPin t={t} action={ACTION} api={fakeApi()} secret="pin" onGranted={noop} onBack={noop} /></OverOverlays>
     case 'b3-pin':
       return <FaceIdPin t={t} action={ACTION} api={fakeApi()} secret="pin" onGranted={noop} onBack={noop} />
     case 'b1-pairing':
@@ -133,10 +153,10 @@ function screenOf(screen: string): ReactNode {
     case 'code-entry':
       return <PasskeyCodeEntry t={t} api={fakeApi({ pending: [{ requestId: 'r1', deviceId: 'd1', deviceLabel: 'Vadim’s iPhone', expiresAt: NOW + DAY }] })} onDone={noop} />
     case 'b4-phone':
-      return <PasskeyDevices t={t} api={fakeApi({ devices: PHONE_DEVICES })} browser={fakeBrowser()} kind="faceId" atComputer={false} secret="pin" hasPasskey
+      return <PasskeyDevices t={t} api={fakeApi({ devices: PHONE_DEVICES })} browser={fakeBrowser()} kind="faceId" atComputer={false} secret="pin"
         onAdd={noop} onAskComputer={noop} />
     case 'b4-computer':
-      return <PasskeyDevices t={t} api={fakeApi({ devices: COMPUTER_DEVICES })} browser={fakeBrowser()} kind="faceId" atComputer secret="pin" hasPasskey={false}
+      return <PasskeyDevices t={t} api={fakeApi({ devices: COMPUTER_DEVICES })} browser={fakeBrowser()} kind="faceId" atComputer secret="pin"
         onAdd={noop} onAskComputer={noop} />
     case 'devices-phone':
       return <PhoneDevices passkey />
