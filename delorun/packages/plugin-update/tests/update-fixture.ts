@@ -13,6 +13,7 @@ import { changesGate } from '@delorun/plugin-changes'
 import { routeHome, serveRoutes, type RouteServer } from '../../plugin-changes/tests/routes-fixture.ts'
 import type { FaceAccess } from '../../plugin-changes/src/routes.ts'
 import { updateRoutes, type UpdateCheckAccess } from '../src/routes.ts'
+import type { StoppedChatState } from '../src/wire.ts'
 
 /** The Host's channel token as the stand-in holds it; no answer may carry it. */
 export const CHANNEL_TOKEN = 'channel-token-must-never-reach-a-page'
@@ -91,6 +92,12 @@ export interface UpdateServer {
   readonly log: string[]
   /** What the release check answers, or undefined for the check being off. */
   check: UpdateCheckAccess | undefined
+  /** The chats the Host reports as running, and what was asked of the Host's chats. */
+  readonly chats: { running: { sessionId: string, title: string }[], cancelled: number }
+  /** The chats the continue sender was asked to continue, and the state it answers. */
+  readonly sent: { ids: string[], answer: StoppedChatState }
+  /** The setting now. */
+  setting: { automatic: boolean }
 }
 
 /**
@@ -106,6 +113,7 @@ export async function serveUpdate(options: { readonly powers?: 'careful' | 'full
   const log: string[] = []
   const handle: UpdateServer = {
     channel, home: ctx.home, clock, log, check: undefined,
+    chats: { running: [], cancelled: 0 }, sent: { ids: [], answer: 'continued' }, setting: { automatic: true },
     server: await serveRoutes(ctx, {
       ...options.powers === undefined ? {} : { powers: options.powers },
       ...options.face === undefined ? {} : { face: options.face },
@@ -118,6 +126,13 @@ export async function serveUpdate(options: { readonly powers?: 'careful' | 'full
         release: () => ({ delorun: '0.1.0', dsh: '1.0.0' }),
         logger: { info: (message) => { log.push(message) }, warn: (message) => { log.push(message) } },
         now: () => clock.now,
+        chats: () => ({
+          attach: () => () => undefined,
+          list: () => handle.chats.running,
+          cancelAll: () => { handle.chats.cancelled += 1; return Promise.resolve() },
+        }),
+        continueAutomatically: () => handle.setting.automatic,
+        sendContinue: (sessionId) => { handle.sent.ids.push(sessionId); return Promise.resolve(handle.sent.answer) },
       }),
     }),
   }
@@ -131,4 +146,13 @@ export async function serveUpdate(options: { readonly powers?: 'careful' | 'full
  */
 export function writeResult(home: string, record: Record<string, unknown>): void {
   writeFileSync(join(home, 'run', 'default', 'update-result.json'), `${JSON.stringify(record)}\n`, { mode: 0o600 })
+}
+
+/**
+ * Make the home process report an update that waits for chats.
+ * @param update - the served update.
+ * @param phase - the phase the home process reports.
+ */
+export function updateWaiting(update: UpdateServer, phase = 'waiting'): void {
+  update.channel.answers.set('status', [{ ok: true, status: { state: 'running', pid: 1, startId: 's', runtime: { current: '0.1.0', running: '0.1.0' }, chats: 2, update: { phase, target: '0.1.1' } } }])
 }

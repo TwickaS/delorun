@@ -13,6 +13,8 @@ import {
   type RollbackBody,
   type UpdateApplyBody,
   type UpdateBegunView,
+  type ContinueChatView,
+  type StopChatsView,
   type UpdateCancelView,
   type UpdateCheckedView,
   type UpdateControl,
@@ -256,6 +258,24 @@ export class UpdateController {
     const outcome = await this.#act('update-rollback', send => send<UpdateBegunView>(UPDATE_PATHS.rollback, body))
     if (outcome.ok) this.switching.set(true)
     return outcome
+  }
+
+  /**
+   * Stop the running chats so a waiting update can go on. The route is the strong action (Face ID, a PIN or an unlock
+   * where those apply): this is the one place the studio asks for it.
+   * @returns the chats the Host stopped and recorded.
+   */
+  stopChats(): Promise<Outcome<StopChatsView>> {
+    return this.#act('update-begin', send => send<StopChatsView>(UPDATE_PATHS.stopChats, {}))
+  }
+
+  /**
+   * Send the continue message to a chat the update stopped, once.
+   * @param sessionId - the chat.
+   * @returns how the chat stands afterwards.
+   */
+  continueChat(sessionId: string): Promise<Outcome<ContinueChatView>> {
+    return this.#act('update-dismiss', send => send<ContinueChatView>(UPDATE_PATHS.continueChat, { sessionId }))
   }
 
   /**

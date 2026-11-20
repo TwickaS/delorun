@@ -22,6 +22,8 @@ export const UPDATE_ROUTE_PREFIX = '/delorun/update'
  * - `rollback`: go back from the committed update, body {@link RollbackBody}, answering {@link UpdateBegunView}.
  * - `dismiss`: forget the outcome record the screen showed, answering `{}`.
  * - `stop`: stop Delorun, body {@link StopBody}, answering {@link StopBegunView}.
+ * - `stop-chats`: while an update waits for running chats, stop them and record them for continuing after the update, answering {@link StopChatsView}.
+ * - `continue-chat`: send the one continue message to a chat the update stopped, body {@link ContinueChatBody}, answering {@link ContinueChatView}.
  */
 export const UPDATE_PATHS = {
   state: `${UPDATE_ROUTE_PREFIX}/state`,
@@ -32,14 +34,16 @@ export const UPDATE_PATHS = {
   rollback: `${UPDATE_ROUTE_PREFIX}/rollback`,
   dismiss: `${UPDATE_ROUTE_PREFIX}/dismiss`,
   stop: `${UPDATE_ROUTE_PREFIX}/stop`,
+  stopChats: `${UPDATE_ROUTE_PREFIX}/stop-chats`,
+  continueChat: `${UPDATE_ROUTE_PREFIX}/continue-chat`,
 } as const
 
 /**
  * The controls these routes are, in the Changes access table (`@delorun/plugin-changes/access`):
  *
- * - `update-check`, `update-cancel` and `update-dismiss`: class `free`, any paired device with no prompt (they read, or only
+ * - `update-check`, `update-cancel` and `update-dismiss` (which `continue-chat` also uses: it sends one fixed message to a chat the update stopped): class `free`, any paired device with no prompt (they read, or only
  *   take back);
- * - `update-begin`, `update-rollback` and `stop`: class `face`, the computer, or a device with a Face ID (or PIN) grant for
+ * - `update-begin` (which `stop-chats` also uses, since it ends running chats to let the update go on), `update-rollback` and `stop`: class `face`, the computer, or a device with a Face ID (or PIN) grant for
  *   exactly that call. While the Face ID flag is off, and for a device with no passkey, the unlock of today applies:
  *   `update-begin` and `update-rollback` while Phone powers is Full, `stop` at either level.
  */
@@ -67,6 +71,10 @@ export interface UpdateAccessView {
 export type UpdateRefusalCode =
   /** The Host runs no installed release under `delorun start`, so it has no home process to update it. */
   | 'UPDATE_UNAVAILABLE'
+  /** `stop-chats` while no update waits for running chats. */
+  | 'NO_UPDATE_PENDING'
+  /** `continue-chat` for a chat the update did not stop, or one already continued. */
+  | 'NOT_STOPPED_BY_UPDATE'
   /** The `handle` names no report this Host holds, or its report is older than 600 seconds: prepare again. */
   | 'REPORT_EXPIRED'
   /** A restart or another update or rollback runs. */
@@ -255,6 +263,44 @@ export interface UpdateNotesView {
   readonly truncated: boolean
 }
 
+/** A chat that runs now, as the Stop running chats confirm step names it. */
+export interface RunningChatView {
+  readonly sessionId: string
+  /** The chat's title; empty when it has none yet. */
+  readonly title: string
+}
+
+/** How a chat the update stopped stands: waiting for the update, continued once, skipped, or left for the person's Continue button. */
+export type StoppedChatState = 'stopped' | 'continued' | 'skipped-missing' | 'skipped-running' | 'failed'
+
+/** One chat the update stopped. */
+export interface StoppedChatView extends RunningChatView {
+  readonly state: StoppedChatState
+}
+
+/** The chats the update stopped, until the person dismisses the outcome card. */
+export interface StoppedChatsView {
+  /** Whether the Host continues them by itself after the update (the setting was on when it started). */
+  readonly automatic: boolean
+  readonly chats: readonly StoppedChatView[]
+}
+
+/** The answer of the stop-chats route. */
+export interface StopChatsView {
+  /** The chats stopped and recorded. */
+  readonly chats: readonly RunningChatView[]
+}
+
+/** The body of the continue-chat route. */
+export interface ContinueChatBody {
+  readonly sessionId: string
+}
+
+/** The answer of the continue-chat route. */
+export interface ContinueChatView {
+  readonly state: StoppedChatState
+}
+
 /** What a rollback needs, from the committed update record. */
 export interface RollbackStateView {
   /** Whether a committed update record names the release this Host runs, so Go back is offered. */
@@ -281,4 +327,10 @@ export interface UpdateStateView {
   readonly rollback: RollbackStateView
   /** The notes of the update the `result` records, present only for a committed update whose changelog the install holds. */
   readonly notes?: UpdateNotesView
+  /** The chats running now, for the Stop running chats confirm step; only for a request that may begin an update, and only while an update waits. */
+  readonly runningChats?: readonly RunningChatView[]
+  /** The chats the update stopped, with how each stands. */
+  readonly stopped?: StoppedChatsView
+  /** Whether the Host continues stopped chats by itself after an update (Settings → Updates). */
+  readonly continueStopped: boolean
 }

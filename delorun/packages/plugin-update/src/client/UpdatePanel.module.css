@@ -253,8 +253,53 @@
   cursor: pointer;
 }
 
+.alertMenuButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  min-width: 32px;
+  min-height: 32px;
+  border: none;
+  border-radius: var(--dsw-radius-lg);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.alertMenu {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.alertMenuItem {
+  min-height: 32px;
+  padding: 4px 8px;
+  border: none;
+  border-radius: var(--dsw-radius-lg);
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.stoppedLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 auto 8px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
 @media (pointer: coarse) {
   .alertButton,
+  .alertMenuButton,
+  .alertMenuItem,
   .alertClose {
     min-width: 44px;
     min-height: 44px;

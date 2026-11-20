@@ -9,6 +9,7 @@ import { Button, IconCloseOutlineRegular, StateDot, ToastSlot } from '@deepseek-
 import type { UpdateStateView } from '../wire.ts'
 import css from './UpdatePanel.module.css'
 import { controlUse, keepVersions, pluralKey, type T } from './parts.tsx'
+import { StopChatsMenu, type StopChatsOffer } from './StopChats.tsx'
 
 /** At or below this width the sidebar is hidden and the toast carries the state. */
 const PHONE_QUERY = '(max-width: 767px)'
@@ -69,6 +70,8 @@ export interface UpdateProgressProps {
   readonly reconnecting: boolean
   readonly t: T
   readonly cancel: () => Promise<unknown>
+  /** The Stop running chats and update menu, offered on the sidebar alert while the update waits for chats. */
+  readonly stop?: StopChatsOffer
 }
 
 /**
@@ -76,7 +79,7 @@ export interface UpdateProgressProps {
  * @param props - see {@link UpdateProgressProps}.
  * @returns the alert or toast, or nothing while nothing lasts or the toast was closed.
  */
-export function UpdateProgress({ variant, state, switching, reconnecting, t, cancel }: UpdateProgressProps) {
+export function UpdateProgress({ variant, state, switching, reconnecting, t, cancel, stop }: UpdateProgressProps) {
   const [busy, setBusy] = useState(false)
   const [closed, setClosed] = useState<string | undefined>()
   const ongoing = ongoingOf(state, switching, reconnecting, t)
@@ -88,6 +91,7 @@ export function UpdateProgress({ variant, state, switching, reconnecting, t, can
       {ongoing.waiting
         ? <Button variant="outline" size="sm" className={css.alertButton} disabled={busy || use.disabled} title={use.title} onClick={() => { setBusy(true); void cancel().finally(() => { setBusy(false) }) }}>{t('progress.cancel')}</Button>
         : null}
+      {variant === 'alert' && ongoing.waiting && stop !== undefined && !controlUse(state, 'update-begin', t).disabled ? <StopChatsMenu offer={stop} t={t} /> : null}
       {variant === 'toast'
         ? <button type="button" className={css.alertClose} aria-label={t('progress.close')} onClick={() => { setClosed(ongoing.key) }}><IconCloseOutlineRegular /></button>
         : null}

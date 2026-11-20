@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { UpdateController } from '../src/client/controller.ts'
 import { en } from '../src/client/locales.ts'
 import { UpdateDialog } from '../src/client/UpdateDialog.tsx'
+import { StoppedChatLine } from '../src/client/StopChats.tsx'
 import { UpdateProgress } from '../src/client/UpdateProgress.tsx'
 import { UpdateCards, type UpdateCardsProps } from '../src/client/UpdateOverlay.tsx'
 import { UPDATE_CONTROLS, UPDATE_PATHS, type PreparedUpdateView, type UpdateControl, type UpdateMayView, type UpdateResultView, type UpdateStateView } from '../src/wire.ts'
@@ -28,7 +29,7 @@ function may(replace: Partial<Record<UpdateControl, UpdateMayView>> = {}): Updat
 
 /** An idle state at the computer. */
 function stateOf(fields: Partial<UpdateStateView> = {}): UpdateStateView {
-  return { release: { delorun: '0.1.2', dsh: '0.2.2' }, available: true, access: may(), check: { enabled: true }, progress: { kind: 'idle' }, rollback: { available: false }, ...fields }
+  return { release: { delorun: '0.1.2', dsh: '0.2.2' }, available: true, access: may(), check: { enabled: true }, progress: { kind: 'idle' }, rollback: { available: false }, continueStopped: true, ...fields }
 }
 
 /** A prepared report with one plugin the update turns off and the chat-data item. */
@@ -235,6 +236,77 @@ describe('the progress and outcome cards', () => {
     expect(screen.getByText((_, node) => node?.tagName === 'P' && node.textContent === 'Updated to Delorun 0.1.3')).toBeTruthy()
     fireEvent.click(screen.getByText(en['outcome.dismiss']))
     expect(props.dismiss).toHaveBeenCalled()
+  })
+})
+
+describe('Stop running chats and update', () => {
+  const CHATS = [{ sessionId: 's-1', title: 'Refactor' }, { sessionId: 's-2', title: '' }]
+  const waiting = (): UpdateStateView => stateOf({ progress: { kind: 'applying', phase: 'waiting', target: '0.1.3', runningChats: 2 }, runningChats: CHATS })
+
+  /** Render the sidebar alert with the stop offer. */
+  function alert(automatic: boolean, run = vi.fn(() => Promise.resolve({ ok: true as const, value: {} })), state = waiting()) {
+    render(<UpdateProgress variant="alert" state={state} switching={false} reconnecting={false} t={t} cancel={vi.fn()} stop={{ chats: CHATS, automatic, run }} />)
+    return run
+  }
+
+  it('puts the stop behind a menu on the alert, names each chat in the confirm step, and defaults to Cancel', () => {
+    alert(true)
+    expect(screen.queryByText(en['stop.item'])).toBeNull()
+    fireEvent.click(screen.getByLabelText(en['stop.menu']))
+    fireEvent.click(screen.getByText(en['stop.item']))
+    const confirm = document.querySelector('[data-stop-chats-confirm]')
+    expect(confirm?.textContent).toContain('Refactor')
+    expect(confirm?.textContent).toContain(en['stop.untitled'])
+    expect(screen.getByText(en['stop.cancel']).hasAttribute('data-modal-autofocus')).toBe(true)
+  })
+
+  it('says what happens next by the setting', () => {
+    alert(true)
+    fireEvent.click(screen.getByLabelText(en['stop.menu']))
+    fireEvent.click(screen.getByText(en['stop.item']))
+    expect(document.querySelector('[data-stop-chats-confirm]')?.textContent).toContain(en['stop.after.automatic'])
+    cleanup()
+    alert(false)
+    fireEvent.click(screen.getByLabelText(en['stop.menu']))
+    fireEvent.click(screen.getByText(en['stop.item']))
+    expect(document.querySelector('[data-stop-chats-confirm]')?.textContent).toContain(en['stop.after.manual'])
+  })
+
+  it('stops only on the red button, and words the Host\'s refusal', async () => {
+    const run = vi.fn(() => Promise.resolve({ ok: false as const, refusal: { code: 'NO_UPDATE_PENDING', message: 'x' } }))
+    alert(true, run)
+    fireEvent.click(screen.getByLabelText(en['stop.menu']))
+    fireEvent.click(screen.getByText(en['stop.item']))
+    fireEvent.click(screen.getByText(en['stop.cancel']))
+    expect(run).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByLabelText(en['stop.menu']))
+    fireEvent.click(screen.getByText(en['stop.item']))
+    fireEvent.click(screen.getByText(en['stop.confirm']))
+    await screen.findByText(en['refusal.NO_UPDATE_PENDING'])
+    expect(run).toHaveBeenCalledTimes(1)
+  })
+
+  it('offers no menu once the update stops waiting, or to a phone that needs the computer', () => {
+    alert(true, undefined, stateOf({ progress: { kind: 'applying', phase: 'switching', target: '0.1.3', runningChats: 0 } }))
+    expect(screen.queryByLabelText(en['stop.menu'])).toBeNull()
+    cleanup()
+    alert(true, undefined, { ...waiting(), access: may({ 'update-begin': { ok: false, needs: 'computer' } }) })
+    expect(screen.queryByLabelText(en['stop.menu'])).toBeNull()
+  })
+
+  it('says Stopped for the update on a stopped chat, with Continue when the Host does not continue it by itself', async () => {
+    const onContinue = vi.fn(() => Promise.resolve({}))
+    const view = (state: 'stopped' | 'continued' | 'skipped-missing', automatic: boolean) => <StoppedChatLine stopped={{ automatic, chats: [{ sessionId: 's-1', title: 'x', state }] }} sessionId="s-1" t={t} onContinue={onContinue} />
+    const { rerender } = render(view('stopped', false))
+    fireEvent.click(screen.getByText(en['stopped.continue']))
+    expect(onContinue).toHaveBeenCalledWith('s-1')
+    rerender(view('continued', true))
+    expect(screen.getByRole('status').textContent).toBe(en['stopped.continuing'])
+    expect(screen.queryByText(en['stopped.continue'])).toBeNull()
+    rerender(view('skipped-missing', true))
+    expect(screen.getByRole('status').textContent).toBe(en['stopped.skipped'])
+    rerender(<StoppedChatLine stopped={{ automatic: true, chats: [] }} sessionId="s-1" t={t} onContinue={onContinue} />)
+    expect(screen.queryByRole('status')).toBeNull()
   })
 })
 

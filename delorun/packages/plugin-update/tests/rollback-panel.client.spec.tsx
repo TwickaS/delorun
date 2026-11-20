@@ -17,7 +17,7 @@ function stateOf(fields: Partial<UpdateStateView> = {}, may: Partial<Record<Upda
     actor: 'computer', phonePowers: 'full',
     may: Object.fromEntries(UPDATE_CONTROLS.map(control => [control, may[control] ?? { ok: true }])) as Record<UpdateControl, UpdateMayView>,
   }
-  return { release: { delorun: '0.1.3', dsh: '0.2.2' }, available: true, access, check: { enabled: true }, progress: { kind: 'idle' }, rollback: { available: true, to: '0.1.2' }, ...fields }
+  return { release: { delorun: '0.1.3', dsh: '0.2.2' }, available: true, access, check: { enabled: true }, progress: { kind: 'idle' }, rollback: { available: true, to: '0.1.2' }, continueStopped: true, ...fields }
 }
 
 const granted = () => vi.fn(() => Promise.resolve({ ok: true as const, value: {} }))

@@ -6,7 +6,12 @@
  * a Host that no home process of an installed release runs answers `available: false` and refuses each control.
  * @module @delorun/plugin-update
  */
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context, Volatile } from '@deepseek-ai/cordis'
+import type { Agent } from '@deepseek-ai/dsh-agent'
+import { SessionId } from '@deepseek-ai/dsh-session'
+import type {} from '@deepseek-ai/dsh-api-session-controller'
+import { createUserMessage, type ContextFormed } from '@deepseek-ai/dsh-llm'
+import type {} from '@deepseek-ai/dsh-settings'
 import { getDelorunRuntimeVersion, getDshRuntimeVersion } from '@deepseek-ai/dsh-app-boot'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import z from '@deepseek-ai/schemastery'
@@ -16,10 +21,22 @@ import type { UpdateChannelAccess } from '@delorun/home-process'
 // Types only, resolved through the workspace paths: a declared dependency would close a cycle, since bundle-local depends on this package.
 import type {} from '@delorun/bundle-local/update-check'
 import type {} from '@delorun/plugin-changes'
+import { dirname } from 'node:path'
+import { updateResultPath } from '@delorun/home-process'
+import { UpdateChatsService } from './chats.ts'
+import { CONTINUE_SOURCE, CONTINUE_TEXT, readStopped, stoppedPath, writeStopped } from './stopped.ts'
+import type { StoppedChatState } from './wire.ts'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { updateRoutes } from './routes.ts'
 import { UPDATE_ROUTE_PREFIX } from './wire.ts'
+
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    /** The one message the update sends to a chat it stopped, after the update. */
+    'delorun-update': { kind: 'delorun-update' } & ContextFormed
+  }
+}
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -46,12 +63,15 @@ export interface Config {
   readonly waitSeconds: number
   /** The shortest time between two release checks that reach the network, in seconds. Requests inside it, and while one check runs, get that check's answer. */
   readonly checkGapSeconds: number
+  /** Whether chats stopped for an update continue by themselves, with one message each, once the updated Host starts. Settings → Updates. */
+  readonly continueStoppedChats: Volatile<boolean>
 }
 
 /** Validated configuration. */
 export const Config: z<Config> = z.object({
   waitSeconds: z.natural().min(DRAIN_TIMEOUT_MIN_S).max(DRAIN_TIMEOUT_MAX_S).default(DRAIN_TIMEOUT_DEFAULT_S),
   checkGapSeconds: z.natural().min(1).max(3600).default(10),
+  continueStoppedChats: z.boolean().default(true).volatile(),
 })
 
 /**
@@ -60,10 +80,24 @@ export const Config: z<Config> = z.object({
  * @param config - the wait for running chats.
  */
 export function apply(ctx: Context, config: Config): void {
+  ctx.plugin(UpdateChatsService)
+  // Once chats can be opened, the updated Host continues the chats the update stopped.
+  ctx.inject(['sessionController', 'sessions'], (scope) => {
+    scope.effect(() => {
+      void continueAfterUpdate(scope, continueSender(scope), config.continueStoppedChats.get()).catch((error: unknown) => {
+        scope.logger.warn(`the chats the update stopped were not continued: ${error instanceof Error ? error.message : String(error)}`)
+      })
+      return undefined
+    }, 'plugin-update: continue the chats the update stopped')
+  })
   ctx.inject(['webServer', 'changesGate'], (scope) => {
     const gate = scope.changesGate
     if (gate === undefined) return
+    const sendContinue = continueSender(scope)
     const routes = updateRoutes({
+      chats: () => scope.get('delorunUpdateChats'),
+      continueAutomatically: () => config.continueStoppedChats.get(),
+      sendContinue,
       gate,
       channel: () => scope.get('updateChannel'),
       check: () => scope.get('delorunUpdateCheck'),
@@ -101,5 +135,61 @@ async function readInstalledChangelog(): Promise<unknown> {
     // A damaged file is the same as no file: the card shows no highlights.
     void error
     return undefined
+  }
+}
+
+/**
+ * Build the sender of the one continue message.
+ * @param scope - the context holding the session controller and the sessions.
+ * @returns a function that sends the message to a chat and says how the chat stands afterwards.
+ */
+function continueSender(scope: Context): (sessionId: string) => Promise<StoppedChatState> {
+  return async (sessionId) => {
+    const controller = scope.get('sessionController')
+    if (controller === undefined) return 'failed'
+    let agent: Agent
+    try {
+      const resolved = await controller.resolveAgent(SessionId(sessionId))
+      if ('error' in resolved) return 'skipped-missing'
+      agent = resolved.agent
+    } catch (error) {
+      scope.logger.warn(`the chat ${sessionId} could not be opened to continue it: ${error instanceof Error ? error.message : String(error)}`)
+      return 'skipped-missing'
+    }
+    if (agent.status !== 'idle') return 'skipped-running'
+    try {
+      agent.followup(createUserMessage({ content: [{ type: 'text', text: CONTINUE_TEXT }], source: { kind: CONTINUE_SOURCE } }))
+      return (await scope.sessions.flush(agent.session)) ? 'continued' : 'failed'
+    } catch (error) {
+      scope.logger.warn(`the continue message to chat ${sessionId} failed: ${error instanceof Error ? error.message : String(error)}`)
+      return 'failed'
+    }
+  }
+}
+
+/**
+ * Once the updated Host starts: when the chats stopped for the update are to continue by themselves, send each one's
+ * continue message, once. Each chat is marked before its send, so a start that dies in between never sends twice.
+ * @param scope - the context.
+ * @param send - the continue sender.
+ * @param automatic - whether the setting is on now.
+ * @returns when every chat has been handled.
+ */
+export async function continueAfterUpdate(scope: Context, send: (sessionId: string) => Promise<StoppedChatState>, automatic: boolean): Promise<void> {
+  const profile = scope.get('profileContext')
+  if (profile === undefined || !automatic) return
+  const path = stoppedPath(dirname(updateResultPath(profile.home, profile.name)))
+  const record = await readStopped(path)
+  if (record === undefined || !record.automatic) return
+  let chats = record.chats
+  for (const chat of record.chats) {
+    if (chat.state !== 'stopped') continue
+    chats = chats.map(each => each.sessionId === chat.sessionId ? { ...each, state: 'continued' as const } : each)
+    await writeStopped(path, { ...record, chats })
+    const state = await send(chat.sessionId)
+    if (state !== 'continued') {
+      chats = chats.map(each => each.sessionId === chat.sessionId ? { ...each, state } : each)
+      await writeStopped(path, { ...record, chats })
+    }
   }
 }
