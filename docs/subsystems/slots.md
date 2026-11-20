@@ -149,6 +149,7 @@ root [AppFrame]
       │     ├─ conversation.session.header.utilities
       │     ├─ conversation.session.header.views.actions
       │     └─ conversation.session.header.corner
+      ├─ conversation.main.body [hoc]
       └─ calls Factory: conversation.content
 
 Factory: conversation.content [ConversationContent]

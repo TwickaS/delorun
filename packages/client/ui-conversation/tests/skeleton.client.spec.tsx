@@ -121,6 +121,11 @@ function sessionSnapshotOf(overrides: Partial<SessionSnapshot> = {}): SessionSna
   return { ...sessionFixture(SID), ...overrides }
 }
 
+/** A layer that has nothing to add: it renders its children. */
+function PassThroughLayer({ children }: { children?: ReactNode }) {
+  return <>{children}</>
+}
+
 function mount(
   snapshot: SessionSnapshot,
   workspaceRows: WorkspaceView[] = [{ ...workspace('one'), sessionIds: [SID] }],
@@ -148,6 +153,8 @@ function mount(
     entryActions?: boolean
     /** Isolate header capability checks from the composer's required layout observers. */
     headerOnly?: boolean
+    /** The main body hoc slot: `none` has no layer, `passthrough` has one that renders its children, the default marks the content. */
+    mainBody?: 'none' | 'passthrough'
   } = {},
 ) {
   const sessionId = 'sessionId' in options ? options.sessionId : SID
@@ -213,7 +220,11 @@ function mount(
     if (key === 'conversation.hero.workspace') { pickerOwner = owner; return null }
     if (key === 'conversation.hero.headline') return opts?.fallback ?? null
     // A hoc slot with no layers renders its content unchanged.
-    if (key === 'conversation.main.body') return <div data-testid="main-body">{opts?.children}</div>
+    if (key === 'conversation.main.body') {
+      if (options.mainBody === 'none') return opts?.children ?? null
+      if (options.mainBody === 'passthrough') return <PassThroughLayer>{opts?.children}</PassThroughLayer>
+      return <div data-testid="main-body">{opts?.children}</div>
+    }
     if (key === 'conversation.hero.frame') {
       frameOwners.push(owner as HeroFrameOwnerProps)
       return <div data-testid="hero-frame">{opts?.children}</div>
@@ -452,6 +463,15 @@ describe('Hero chrome', () => {
 })
 
 describe('ConversationRoot main body layers', () => {
+  it('renders the same content with no layer and with a layer that only renders its children', () => {
+    const none = mount(sessionSnapshotOf(), undefined, undefined, { mainBody: 'none' })
+    const bare = none.view.container.innerHTML
+    expect(none.view.container.querySelector('[data-conversation-content]')).not.toBeNull()
+    cleanup()
+    const passthrough = mount(sessionSnapshotOf(), undefined, undefined, { mainBody: 'passthrough' })
+    expect(passthrough.view.container.innerHTML).toBe(bare)
+  })
+
   it('wraps the content under the header in the main body slot and leaves the header outside it', () => {
     const b = mount(sessionSnapshotOf())
     const body = b.view.getByTestId('main-body')
