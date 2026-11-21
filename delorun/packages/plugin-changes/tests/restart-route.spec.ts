@@ -98,7 +98,7 @@ describe('the studio\'s Restart', () => {
     }
   })
 
-  // Removing the `grant` row of `restart` in LEGACY_LEVELS lets a running unlock restart Delorun from a phone with no passkey.
+  // Moving `restart` from `face` in CONTROL_LEVELS, or removing the grant-store check in `mayUse`, lets a running unlock restart Delorun from a phone with no passkey.
   it('an unlocked phone cannot restart, whatever the grant store; a PIN grant for the call restarts, once', async () => {
     const off = await restartServer(grantWorld({ enabled: false }).face)
     for (const path of Object.values(RESTART_PATHS)) {

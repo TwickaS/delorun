@@ -17,6 +17,7 @@
 import { createHash } from 'node:crypto'
 import { extname } from 'node:path'
 import { harnessDrift, isLiveHarnessFile, leaveOutHarnessChange, liveAssetPath, liveFileBytes, type ChangeEntry, type ChangesRestartHost, type ContentVersion, type HarnessContext, type RunningComposition } from '@delorun/changes'
+import { homeSpellings, withHomePlaceholder } from './home-words.ts'
 import type { HarnessEffectView } from './wire.ts'
 
 /** The content types of the studio's built assets; anything else is served as bytes. */
@@ -60,6 +61,29 @@ interface ServedFile {
   readonly etag: string
 }
 
+/** A refresh that could not serve some live files, with the failure of each. */
+export class LiveRefreshError extends Error {
+  /** The failure of each live file the refresh could not serve, by the file's path in the runtime. */
+  readonly failures: ReadonlyMap<string, Error>
+
+  /**
+   * @param failures - the failure of each file; not empty.
+   */
+  constructor(failures: ReadonlyMap<string, Error>) {
+    super([...failures.values()][0]!.message)
+    this.name = 'LiveRefreshError'
+    this.failures = failures
+  }
+}
+
+/**
+ * @param error - what a read or a registration threw.
+ * @returns the error, or the thrown value as an error.
+ */
+function asError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error))
+}
+
 /** The live files this Host serves in place of its running tree's. */
 export class LiveAssets {
   private files = new Map<string, ServedFile>()
@@ -91,7 +115,8 @@ export class LiveAssets {
    * @param harness - the running runtime's harness.
    * @param running - what this Host booted with; an unknown composition serves nothing.
    * @returns when the routes serve the new content.
-   * @throws {ChangesError} when a record, the store or the signed installation cannot be read as Delorun wrote it.
+   * @throws {LiveRefreshError} naming each live file that could not be read or registered, and why.
+   * @throws {ChangesError} when a record cannot be read as Delorun wrote it.
    */
   refresh(harness: HarnessContext, running: RunningComposition): Promise<void> {
     const next = this.queue.then(() => this.refreshNow(harness, running))
@@ -111,21 +136,31 @@ export class LiveAssets {
     if (running.kind === 'unknown' || this.disposed) return
     const drift = await harnessDrift(harness.home, harness.runtime, running)
     const next = new Map<string, ServedFile>()
+    const failures = new Map<string, Error>()
     for (const [file, content] of drift.live) {
       const served = this.files.get(file)
       if (served?.content === content) {
         next.set(file, served)
         continue
       }
-      const bytes = await liveFileBytes(harness.home, await harness.signed(), file, content)
-      next.set(file, { content, bytes, etag: `W/"${createHash('sha1').update(bytes ?? '').digest('base64url')}"` })
+      try {
+        const bytes = await liveFileBytes(harness.home, await harness.signed(), file, content)
+        next.set(file, { content, bytes, etag: `W/"${createHash('sha1').update(bytes ?? '').digest('base64url')}"` })
+      } catch (error) {
+        failures.set(file, asError(error))
+      }
     }
+    if (failures.size > 0) throw new LiveRefreshError(failures)
     if (this.disposed) return
     const added = new Map<string, () => void>()
     try {
       for (const file of next.keys()) {
         if (this.routes.has(file)) continue
-        added.set(file, this.server.register({ kind: 'exact', path: liveAssetPath(file), resource: (request, peer) => Promise.resolve(this.answer(file, request, peer)) }))
+        try {
+          added.set(file, this.server.register({ kind: 'exact', path: liveAssetPath(file), resource: (request, peer) => Promise.resolve(this.answer(file, request, peer)) }))
+        } catch (error) {
+          throw new LiveRefreshError(new Map([[file, asError(error)]]))
+        }
       }
     } catch (error) {
       for (const off of added.values()) off()
@@ -191,8 +226,14 @@ export function harnessEffectOf(dependencies: HarnessEffectDependencies): (entry
       await live.refresh(harness, restart.running)
       return { kind: 'live', page: true }
     } catch (error) {
+      // Only a failure of this entry's own file leaves it out; another file's, or a record's, leaves this change applied for the next start.
+      const own = error instanceof LiveRefreshError ? error.failures.get(file) : undefined
+      if (own === undefined) {
+        dependencies.logger.warn(`Delorun kept serving the previous files and applied ${file} at its next start: ${asError(error).message}`)
+        return { kind: 'restart' }
+      }
       // A recorded failure names the home as `<Delorun home>`, as every failure Changes records does.
-      const failure = `the studio could not serve ${file}: ${error instanceof Error ? error.message : String(error)}`.replaceAll(harness.home, '<Delorun home>')
+      const failure = withHomePlaceholder(`the studio could not serve ${file}: ${own.message}`, homeSpellings(harness.home))
       dependencies.logger.warn(`Delorun kept serving the previous ${file}: ${failure}`)
       if (entry.state !== 'applied') return { kind: 'restart' }
       const left = await leaveOutHarnessChange(harness.home, harness.runtime, entry.id, failure).catch((leaveOutError: unknown) => {

@@ -13,7 +13,8 @@
  * @module @delorun/plugin-changes/setup-actions
  */
 import { randomBytes } from 'node:crypto'
-import { ArchiveError, ArchiveImporter, DirectoryWorkspaceStore, exportSetupArchive, loadHomeKey, signManifest, type OpenedSetup } from '@delorun/archive'
+import { ArchiveError, ArchiveImporter, DirectoryWorkspaceStore, exportSetupArchive, loadHomeKey, signManifest, type ArchiveSizeLimits, type OpenedSetup } from '@delorun/archive'
+import { ARCHIVE_LIMITS } from '@delorun/contract-archive-and-trash'
 import { readProtection, type ChangesContext } from '@delorun/changes'
 import { collectSetup, exportablePlugins, planSetupImport, type CollectOptions, type ImportOptions, type SetupApplied, type SetupPlan } from '@delorun/changes/setup-transfer'
 import { join } from 'node:path'
@@ -21,6 +22,19 @@ import type { SetupApplyView, SetupExportView, SetupInspectView, SetupPluginsVie
 
 /** The largest setup file the studio writes or reads, in bytes; a larger one is moved with the commands. */
 export const MAX_SETUP_FILE_BYTES = 32 * 1024 * 1024
+
+/**
+ * The size limits the studio applies to an uploaded setup file, which it opens inside the Host. The sizes are those of a
+ * file of at most {@link MAX_SETUP_FILE_BYTES}: eight times its size in all and twice its size for one entry, so a
+ * crafted file that keeps under the contract's compression ratio cannot make the Host inflate gigabytes. The ratio
+ * stays the contract's. A larger setup is imported with `delorun setup import`.
+ */
+export const SETUP_INSPECT_LIMITS: ArchiveSizeLimits = {
+  maxEntries: 10_000,
+  maxTotalBytes: 8 * MAX_SETUP_FILE_BYTES,
+  maxEntryBytes: 2 * MAX_SETUP_FILE_BYTES,
+  maxCompressionRatio: ARCHIVE_LIMITS.maxCompressionRatio,
+}
 
 /** How long an inspected file waits to be applied. */
 export const SETUP_HOLD_MS = 10 * 60 * 1000
@@ -197,6 +211,7 @@ export async function inspectSetup(ctx: ChangesContext, file: { readonly file: s
       stagingParent: join(ctx.home, 'archive', 'staging'),
       store: new DirectoryWorkspaceStore(join(ctx.home, 'archive', 'imported')),
       trustedPublicKeys: ownKey === undefined ? [] : [ownKey.publicKey],
+      limits: SETUP_INSPECT_LIMITS,
     }).openSetup(bytes)
   } catch (error) {
     if (error instanceof ArchiveError) throw new SetupRefusal(422, error.code, error.message)

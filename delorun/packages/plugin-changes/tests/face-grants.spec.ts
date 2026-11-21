@@ -5,7 +5,7 @@
  */
 import { authClassOf, GRANT_BODY_CAP_BYTES } from '@delorun/home-auth'
 import { describe, expect, it, vi } from 'vitest'
-import { CONTROL_LEVELS, LEGACY_LEVELS } from '../src/access.ts'
+import { CONTROL_LEVELS } from '../src/access.ts'
 import { ACTION_PATHS, HARNESS_PATHS, NOTICE_SEEN_PATH, PROTECTION_PATHS, SETUP_PATHS, STATE_PATH } from '../src/routes.ts'
 import { CREDENTIAL, DEVICE_HOST, grantWorld, fromDevice, json, post, routeHome, send, serveRoutes } from './routes-fixture.ts'
 
@@ -32,7 +32,7 @@ const FACE_ROUTES = [
 /** The face controls a live Face ID pass admits: every one but protection off, which always asks (F48). */
 const PASS_ROUTES = FACE_ROUTES.filter(route => route.control !== 'protection-off')
 
-/** The routes of the controls LEGACY_LEVELS holds to a grant: the set an unlocked phone could once open. */
+/** The routes of the controls CONTROL_LEVELS holds to a grant: the set an unlocked phone could once open. */
 const FORMER_FULL_ROUTES = [
   { control: 'plugin-apply', path: ACTION_PATHS.apply },
   { control: 'plugin-other', path: ACTION_PATHS.off },
@@ -43,10 +43,10 @@ const FORMER_FULL_ROUTES = [
 ] as const
 
 describe('Changes: face controls', () => {
-  // Adding a control to the `grant` set without a route here, or in the restart and update specs, leaves it without a denial case.
-  it('cover every control LEGACY_LEVELS holds to a grant here or in the restart and update specs', () => {
+  // Adding a `face` control without a route here, or in the restart and update specs, leaves it without a denial case.
+  it('cover every `face` control of CONTROL_LEVELS here or in the restart and update specs', () => {
     const covered: readonly string[] = [...FORMER_FULL_ROUTES, ...FACE_ROUTES].map(route => route.control)
-    const held = Object.entries(LEGACY_LEVELS).filter(([, level]) => level === 'grant').map(([control]) => control)
+    const held = Object.entries(CONTROL_LEVELS).filter(([, level]) => level === 'face').map(([control]) => control)
     expect(held.filter(control => !covered.includes(control)).sort()).toEqual(['restart', 'stop', 'update-begin', 'update-rollback'])
   })
 
@@ -72,7 +72,7 @@ describe('Changes: face controls', () => {
     }
   })
 
-  // Removing the `grant` rows of LEGACY_LEVELS, or the grant-store check in `mayUse`, lets a running unlock (a code or a PIN window) open the set an unlocked phone could once open, for a device with no passkey.
+  // Moving a control from `face` in CONTROL_LEVELS, or removing the grant-store check in `mayUse`, lets a running unlock (a code or a PIN window) open the set an unlocked phone could once open, for a device with no passkey.
   it('refuse every control that changes what runs to a device with no passkey and a running unlock, and open it to a PIN grant for the call', async () => {
     const { ctx } = routeHome()
     const world = grantWorld({ hasPasskey: false })

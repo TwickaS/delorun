@@ -38,6 +38,7 @@
  */
 import { realpathSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { assertNever } from '@deepseek-ai/dsh-util-values'
 import {
   applyChange,
   applyHarnessChange,
@@ -106,6 +107,7 @@ import {
 } from '@delorun/changes'
 import { isForeignFetchSite, isSameLoopbackOrigin, listenerOf, loopbackAddressOf, type LoopbackPort, type StampedRequest } from '@delorun/home'
 import { GRANT_BODY_CAP_BYTES } from '@delorun/home-auth'
+import { HOME_IN_ANSWERS, homeSpellings, withHomePlaceholder } from './home-words.ts'
 import { accessView, CONTROL_LEVELS, mayUse, type FaceState } from './access.ts'
 import { isProfileSafetyError, readSafeMode, recover } from '@delorun/profile-safety'
 import {
@@ -181,8 +183,7 @@ export const FACE_REQUIRED_SENTENCE = 'Confirm with Face ID or your PIN first.'
 /** The sentence that stands for a failure's words when they name the Delorun home's path, which the Host log keeps. */
 export const HOME_WITHHELD_SENTENCE = 'Its details name files Delorun keeps; the Host log has them.'
 
-/** What a recorded failure's text in an answer says in place of the Delorun home's path. */
-export const HOME_IN_ANSWERS = '<Delorun home>'
+export { HOME_IN_ANSWERS }
 
 /** The fields of an answer that carry a recorded failure's text: a failed load, start or reload. */
 const FAILURE_FIELDS: ReadonlySet<string> = new Set(['failure', 'error'])
@@ -566,7 +567,19 @@ async function bodyBytes(request: IncomingMessage, limit: number): Promise<Buffe
  * @returns the refusal.
  */
 function tooLarge(limit: number): RouteRefusal {
-  return new RouteRefusal(413, 'BODY_TOO_LARGE', limit === MAX_BODY_BYTES ? `A request names one change or plugin in at most ${String(MAX_BODY_BYTES)} bytes.` : `A setup file larger than ${String(limit / 1024 / 1024)} MiB is imported with delorun setup import.`)
+  return new RouteRefusal(413, 'BODY_TOO_LARGE', tooLargeSentence(limit))
+}
+
+/**
+ * @param limit - the limit a body exceeded.
+ * @returns what the person reads: the limit of a request that names one change or plugin, of a setup file, or of the body a Face ID confirmation covers.
+ */
+function tooLargeSentence(limit: number): string {
+  switch (limit) {
+    case MAX_BODY_BYTES: return `A request names one change or plugin in at most ${String(MAX_BODY_BYTES)} bytes.`
+    case MAX_SETUP_BODY_BYTES: return `A setup file larger than ${String(MAX_SETUP_FILE_BYTES / 1024 / 1024)} MiB is imported with delorun setup import.`
+    default: return `A request over ${String(limit / 1024 / 1024)} MiB cannot carry a Face ID confirmation.`
+  }
 }
 
 /**
@@ -715,8 +728,16 @@ function entryView(entry: ChangeEntry): EntryView {
     ...entry.decidedOn === undefined ? {} : { decidedOn: entry.decidedOn.label },
     ...entry.lastFailure === undefined ? {} : { lastFailure: entry.lastFailure },
     ...entry.leftOut === undefined ? {} : { leftOut: entry.leftOut },
-    undoable: entry.state === 'applied' && (entry.kind === 'plugin-off' || entry.kind === 'plugin-on' || isAgentAction(entry) || ((entry.kind === 'plugin-edit' || entry.kind === 'plugin-install') && !isPluginRequest(entry))),
+    undoable: entry.state === 'applied' && (entry.kind === 'plugin-off' || entry.kind === 'plugin-on' || isUndoableAgentAction(entry) || ((entry.kind === 'plugin-edit' || entry.kind === 'plugin-install') && !isPluginRequest(entry))),
   }
+}
+
+/**
+ * @param entry - a log entry.
+ * @returns whether it is an agent's action that `undoAgentAction` can restore: one that holds the profile versions on both sides of it.
+ */
+function isUndoableAgentAction(entry: ChangeEntry): boolean {
+  return isAgentAction(entry) && entry.historyVersion !== undefined && entry.historyBefore !== undefined
 }
 
 /**
@@ -780,15 +801,7 @@ interface HomeWords {
  * @returns the home as the Host names it and, when that differs, its real path.
  */
 function homeWords(home: string, logger: RouteDependencies['logger']): HomeWords {
-  let real: string | undefined
-  try {
-    real = realpathSync(home)
-  } catch (_unresolved) {
-    // A home that does not resolve has only the spelling the Host names, which every failure under it carries.
-    real = undefined
-  }
-  // The longer spelling first, so one that contains the other is replaced whole.
-  return { homes: real === undefined || real === home ? [home] : [home, real].sort((a, b) => b.length - a.length), logger }
+  return { homes: homeSpellings(home), logger }
 }
 
 /**
@@ -816,7 +829,7 @@ function withoutHome(value: unknown, homes: readonly string[]): unknown {
   if (typeof value !== 'object' || value === null) return value
   return Object.fromEntries(Object.entries(value).map(([key, field]) => [
     key,
-    FAILURE_FIELDS.has(key) && typeof field === 'string' ? homes.reduce((text, home) => text.replaceAll(home, HOME_IN_ANSWERS), field) : withoutHome(field, homes),
+    FAILURE_FIELDS.has(key) && typeof field === 'string' ? withHomePlaceholder(field, homes) : withoutHome(field, homes),
   ]))
 }
 
@@ -1075,7 +1088,7 @@ function doneView(done: WorkDone): DoneView {
 }
 
 /**
- * Run one of Create a plugin's actions for a request at the computer.
+ * Run one of Create a plugin's actions for a request the route admitted (the computer, or a device with its grant).
  * @param action - the route.
  * @param body - the request's body.
  * @param ctx - the profile.
@@ -1099,7 +1112,7 @@ async function createActionOf(action: 'create' | 'request' | 'reveal', body: Rea
 }
 
 /**
- * Run one action for a request at the computer.
+ * Run one action for a request the route admitted (the computer, or a device with the grant its control needs).
  * @param action - the route.
  * @param body - the request's body.
  * @param ctx - the profile.
@@ -1186,6 +1199,8 @@ async function act(action: ChangesAction, body: Readonly<Record<string, unknown>
       // The safe-mode overlay file the last start left is read only by a start in safe mode, which rewrites or removes it.
       return { lines: report.lines, skipped: [] }
     }
+    default:
+      return assertNever(action)
   }
 }
 
@@ -1412,8 +1427,10 @@ async function harnessAct(action: HarnessAction, body: Readonly<Record<string, u
     case 'copy': {
       onlyFields(body, [])
       const copy = await createHarnessCopy(harness, presence)
-      return { kind: 'copy', created: copy.created, runtime: harness.runtime, place: homeWords(harness.home, dependencies.logger).homes.reduce((text, path) => text.replaceAll(path, HOME_IN_ANSWERS), copy.directory) }
+      return { kind: 'copy', created: copy.created, runtime: harness.runtime, place: withHomePlaceholder(copy.directory, homeSpellings(harness.home)) }
     }
+    default:
+      return assertNever(action)
   }
 }
 

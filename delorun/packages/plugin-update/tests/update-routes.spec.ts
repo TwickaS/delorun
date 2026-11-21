@@ -48,7 +48,7 @@ describe('the update routes\' fence and levels', () => {
     expect(update.channel.requests).toEqual([])
   })
 
-  // Removing the `grant` rows of update-begin and update-rollback in LEGACY_LEVELS lets an unlock the person entered open them for a phone with no passkey.
+  // Moving update-begin and update-rollback from `face` in CONTROL_LEVELS lets an unlock the person entered open them for a phone with no passkey.
   it('update-begin-refused-phone-with-unlock-only and update-rollback-refused-phone-with-unlock-only: Face ID on, no passkey, no grant: no unlock opens them', async () => {
     const update = await serveUpdate({ face: grantWorld({ hasPasskey: false }).face })
     for (const unlock of ['none', 'grace', 'fresh'] as const) {
