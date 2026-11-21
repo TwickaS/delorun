@@ -108,6 +108,17 @@ type Send = <T>(path: string, body?: object) => Promise<T>
 /** The person cancelled the Face ID confirmation, so the request was not sent. */
 class FaceCancelled extends Error {}
 
+/** The body fields that answer a second confirmation. */
+const CONFIRMATION_FIELDS: readonly string[] = ['confirmedRisk', 'confirmed']
+
+/**
+ * @param body - a request's body.
+ * @returns the body without the fields that answer a second confirmation, which the home leaves out when it checks a grant.
+ */
+function withoutConfirmation(body: object): object {
+  return Object.fromEntries(Object.entries(body).filter(([field]) => !CONFIRMATION_FIELDS.includes(field)))
+}
+
 /**
  * Whether the home asks for Face ID before this control.
  * @param may - the state's decision for the control.
@@ -211,6 +222,8 @@ export class ChangesController {
 
   /** The page's toast. */
   private readonly deps: ChangesControllerDeps
+  /** The Face ID grants of requests the home answered with a second confirmation, by the call they cover, for the confirmed request. */
+  private readonly carried = new Map<string, string>()
 
   /** @param deps - the page's toast. */
   constructor(deps: ChangesControllerDeps) {
@@ -560,20 +573,44 @@ export class ChangesController {
     return async <T>(path: string, body?: object): Promise<T> => {
       const ask = this.deps.faceGrant?.()
       const load = this.state.getSnapshot()
-      const needsFace = body !== undefined && ask !== undefined && load.status === 'ready' && mayNeedsFace(load.state.access.may[control])
-      if (!needsFace) return await request<T>(path, body)
-      const call = { action: `changes/${control}`, call: { method: 'POST', path: fetchedPath(path), body } }
-      const grantId = await ask(call)
+      if (body === undefined || ask === undefined || load.status !== 'ready' || !mayNeedsFace(load.state.access.may[control])) return await request<T>(path, body)
+      // The home hashes the call without the fields that answer a second confirmation, so one grant covers a call and its confirmed retry.
+      const covered = withoutConfirmation(body)
+      const call = { action: `changes/${control}`, call: { method: 'POST', path: fetchedPath(path), body: covered } }
+      const key = `${control} ${path} ${JSON.stringify(covered)}`
+      const earlier = this.carried.get(key)
+      this.carried.delete(key)
+      const grantId = earlier ?? await ask(call)
       if (grantId === undefined) throw new FaceCancelled()
       try {
-        return await request<T>(path, body, grantId)
+        return await this.sendGranted<T>(path, body, grantId, key)
       } catch (error) {
-        if (grantId !== PASS_GRANT_ID || !(error instanceof ChangesRequestError) || error.refusal?.code !== ELEVATION_REQUIRED) throw error
+        const expired = error instanceof ChangesRequestError && error.refusal?.code === ELEVATION_REQUIRED
+        if (!expired || (grantId !== PASS_GRANT_ID && earlier === undefined)) throw error
         const again = await ask(call)
         if (again === undefined) throw new FaceCancelled()
         if (again === PASS_GRANT_ID) throw error
-        return await request<T>(path, body, again)
+        return await this.sendGranted<T>(path, body, again, key)
       }
+    }
+  }
+
+  /**
+   * Send a request under a grant, and keep the grant for the confirmed request when the home asks for a second confirmation.
+   * @param path - the route.
+   * @param body - the body.
+   * @param grantId - the grant, or the page's Face ID pass.
+   * @param key - the call the grant covers.
+   * @returns the answer.
+   * @throws {ChangesRequestError} the home's refusal.
+   */
+  private async sendGranted<T>(path: string, body: object, grantId: string, key: string): Promise<T> {
+    try {
+      return await request<T>(path, body, grantId)
+    } catch (error) {
+      const code = error instanceof ChangesRequestError ? error.refusal?.code : undefined
+      if ((code === CONFIRM_RISK || code === CONFIRM_PROTECTION) && grantId !== PASS_GRANT_ID) this.carried.set(key, grantId)
+      throw error
     }
   }
 

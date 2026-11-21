@@ -192,6 +192,63 @@ describe('Changes: face controls', () => {
   })
 })
 
+describe('Changes: one Face ID for a call and its second confirmation (A434)', () => {
+  /** A device that holds a grant store, and the protection-off route, which always asks a second confirmation. */
+  async function setup() {
+    const { ctx } = routeHome()
+    const world = grantWorld()
+    const server = await serveRoutes(ctx, { face: world.face })
+    return { world, server, path: PROTECTION_PATHS.off }
+  }
+
+  // Spending the grant before the route's 409 makes the confirmed retry ask for Face ID again.
+  it('lets one grant carry the call through its 409 to the confirmed retry', async () => {
+    const { world, server, path } = await setup()
+    const grant = world.grantFor('protection-off', path, {})
+    const asked = await send(server.port, path, withGrant('none', {}, grant))
+    expect(asked.status).toBe(409)
+    expect(json(asked).code).toBe('CONFIRM_PROTECTION')
+    const confirmed = await send(server.port, path, withGrant('none', { confirmed: true }, grant))
+    expect(confirmed.status, confirmed.body).toBe(200)
+  })
+
+  // Removing the single use, or leaving a field of the body out of the hash, lets one grant do more than it was made for.
+  it('refuses the same grant after the call proceeded', async () => {
+    const { world, server, path } = await setup()
+    const grant = world.grantFor('protection-off', path, {})
+    expect((await send(server.port, path, withGrant('none', { confirmed: true }, grant))).status).toBe(200)
+    expect(json(await send(server.port, path, withGrant('none', { confirmed: true }, grant))).code).toBe('ELEVATION_REQUIRED')
+  })
+
+  it('refuses the same grant with a changed body, whatever the confirmation field says', async () => {
+    const { ctx } = routeHome()
+    const world = grantWorld()
+    const server = await serveRoutes(ctx, { face: world.face })
+    const path = ACTION_PATHS.apply
+    const grant = world.grantFor('plugin-apply', path, { id: 'a' })
+    for (const body of [{ id: 'b', confirmedRisk: true }, { id: 'b' }, { id: 'a', confirmedRisk: true, extra: 1 }]) {
+      expect(json(await send(server.port, path, withGrant('none', body, grant))).code, JSON.stringify(body)).toBe('ELEVATION_REQUIRED')
+    }
+    // Neither refusal used the grant up: the call it was made for, with or without the confirmation, is still admitted.
+    expect(WHERE_REFUSALS).not.toContain(json(await send(server.port, path, withGrant('none', { id: 'a', confirmedRisk: true }, grant))).code)
+  })
+
+  it('refuses an expired grant', async () => {
+    const { world, server, path } = await setup()
+    const grant = world.grantFor('protection-off', path, {})
+    expect((await send(server.port, path, withGrant('none', {}, grant))).status).toBe(409)
+    world.clock.at += 60 * 60_000
+    expect(json(await send(server.port, path, withGrant('none', { confirmed: true }, grant))).code).toBe('ELEVATION_REQUIRED')
+  })
+
+  it('refuses the confirmation without any grant', async () => {
+    const { server, path } = await setup()
+    const reply = await send(server.port, path, withGrant('none', { confirmed: true }, undefined))
+    expect(reply.status).toBe(403)
+    expect(json(reply).code).toBe('ELEVATION_REQUIRED')
+  })
+})
+
 describe('Changes: a Face ID pass (A499)', () => {
   // Removing the pass branch in faceAccessOf makes every Apply in a pass ask again; removing its end check admits after the pass.
   it('admits every face control but protection off with no grant while the pass is live, and none after it', async () => {
