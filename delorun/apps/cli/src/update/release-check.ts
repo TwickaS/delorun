@@ -2,40 +2,44 @@
  * Contract C18's release-log start check of an installed version, run before a home process starts from it without
  * the launcher: an update's or a rollback's successor, and the start after an interrupted update. It is the check the
  * launcher runs before every start: the stored release-log bundle offline, then the online check against the log the
- * anchored root names, with the state and the verified checkpoint recorded under `trust/`. A check that could not
+ * installation's channel record names, or the anchored root's log without a record, with the state and the verified checkpoint recorded under `trust/`. A check that could not
  * complete lets the start go on; a verifiable failure, or a missing bundle beside a release the store installed, stops
  * it.
  *
  * @module @delorun/cli/update/release-check
  */
 import { readFile } from 'node:fs/promises'
+import { assertNever } from '@deepseek-ai/dsh-util-values'
 import type { RuntimeVersion } from '@delorun/contract-home-layout'
 import type { RootMetadata, RuntimePlatform } from '@delorun/contract-release-manifest'
 import type { LogCheckResult } from '@delorun/contract-update-report'
 import { HomeProcessError } from '@delorun/home-process'
-import { checkAndRecord, logEndpoints, readCheckRecords, tilesTransport, type Fetch } from '@delorun/release-verify'
+import { readChannelRecord, type ChannelOrigins } from '@delorun/install'
+import { checkAndRecord, readCheckRecords, type Fetch } from '@delorun/release-verify'
 import type { ReleaseLogTransport } from '@delorun/release-verify/online'
 import { StorePaths } from '@delorun/runtime-store'
+import { recordedLogTransport } from './channel.ts'
 
 /** What one check reads beside the version and the root. */
 export interface ReleaseCheckEnvironment {
   /**
-   * The transport to the log a root names.
+   * The transport to the log a root names, or the log the installation's channel record names instead.
    * @param root - the anchored root.
+   * @param origins - the origins `trust/channel.json` records; none for an installation that records none.
    * @returns the transport.
    */
-  readonly transport: (root: RootMetadata) => ReleaseLogTransport
+  readonly transport: (root: RootMetadata, origins: ChannelOrigins) => ReleaseLogTransport
   /** The clock, in milliseconds. */
   readonly now: () => number
 }
 
 /**
- * This process's transport, over its own fetch to the log the root names, and its clock.
+ * This process's transport, over its own fetch to the log the installation's channel record names or, without a record, the root's, and its clock.
  * @param fetch - the fetch; this process's by default.
  * @returns the environment.
  */
 export function processReleaseCheck(fetch: Fetch = globalThis.fetch.bind(globalThis)): ReleaseCheckEnvironment {
-  return { transport: root => tilesTransport({ fetch, ...logEndpoints(root) }), now: Date.now }
+  return { transport: (root, origins) => recordedLogTransport(origins, root, fetch), now: Date.now }
 }
 
 /**
@@ -46,6 +50,7 @@ export function processReleaseCheck(fetch: Fetch = globalThis.fetch.bind(globalT
  * @param root - the anchored root its start check verified it under.
  * @param environment - the transport and the clock; this process's by default.
  * @throws {HomeProcessError} `VERIFY_FAILED` when the check fails verifiably, naming the refusal and `delorun verify`.
+ * @throws {InstallError} `TRUST_STATE_INVALID` when the channel record does not read; the launcher's refusal of a recorded log origin that breaks its rule.
  */
 export async function releaseLogStartCheck(home: string, platform: RuntimePlatform, version: RuntimeVersion, root: RootMetadata, environment: ReleaseCheckEnvironment = processReleaseCheck()): Promise<void> {
   const files = new StorePaths(home, platform).releaseFiles(version)
@@ -54,9 +59,10 @@ export async function releaseLogStartCheck(home: string, platform: RuntimePlatfo
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
     throw error
   })
+  const origins = await readChannelRecord(home) ?? {}
   const check = await checkAndRecord(home, {
     root, version, manifest, bundle, missingBundle: 'failed', now: Math.floor(environment.now() / 1000), mode: 'enforce',
-    transport: environment.transport(root),
+    transport: environment.transport(root, origins),
   })
   if (check.stop) {
     throw new HomeProcessError('VERIFY_FAILED', `release ${String(version)} failed its release-log check (${String(check.refusal)}): ${String(check.detail)}; Delorun did not start it. Run delorun verify --release ${String(version)} to see every check`)
@@ -82,5 +88,7 @@ export async function recordedLogCheck(home: string, version: RuntimeVersion): P
       return 'unchecked'
     case 'failed':
       return 'failed'
+    default:
+      return assertNever(record)
   }
 }

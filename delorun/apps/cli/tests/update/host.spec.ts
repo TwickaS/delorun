@@ -199,6 +199,32 @@ describe('watchChats over the job registry', () => {
     await ctx.fiber.dispose()
   })
 
+  it('tells the chat gate when a job settles or is removed, and counts a job that does not run or that registers twice once', async () => {
+    const ctx = new Context()
+    const gate = new CountingChatGate()
+    const jobs = fakeJobs()
+    let ended = 0
+    ctx.provide('jobs', jobs.service)
+    ctx.provide('delorunChatGate', { attach: () => () => {}, chatEnded: () => { ended += 1 } })
+    watchChats(ctx, gate)
+    await settle()
+
+    jobs.emit({ type: 'registered', job: { ...job('bash-1', 'chat-1'), status: 'completed' } })
+    expect(gate.running()).toBe(0)
+    jobs.emit({ type: 'registered', job: job('bash-2', 'chat-1') })
+    jobs.emit({ type: 'registered', job: job('bash-2', 'chat-1') })
+    expect(gate.running()).toBe(1)
+
+    jobs.emit({ type: 'settled', job: job('bash-2', 'chat-1'), cause: 'producer', awaited: false })
+    expect(gate.running()).toBe(0)
+    expect(ended).toBe(1)
+    // The removal that follows the settlement, and the settlement of a job never counted, tell nothing.
+    jobs.emit({ type: 'removed', job: job('bash-2', 'chat-1') })
+    jobs.emit({ type: 'settled', job: job('bash-9'), cause: 'producer', awaited: false })
+    expect(ended).toBe(1)
+    await ctx.fiber.dispose()
+  })
+
   it('stops counting the jobs it still tracks when the registry goes', async () => {
     const ctx = new Context()
     const gate = new CountingChatGate()
