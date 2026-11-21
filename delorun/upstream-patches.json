@@ -2976,13 +2976,13 @@
       "path": "packages/context/harness-dev-context/src/index.ts",
       "class": "delorun-feature",
       "feature": "model-prompt",
-      "reason": "Checkout text, runtime path and studio URL reach the model only in a real git checkout with a pnpm workspace; an install gets one plugin-authoring line; Delorun naming."
+      "reason": "Checkout text, runtime path and studio URL reach the model only in a real git checkout with a pnpm workspace; an install gets one plugin-authoring line; Delorun naming. Registered switch: C16 `model_prompt`. Off, the checkout and Web GUI paragraphs and their runtime context name DeepSeek Harness and are sent whether or not the checkout is real, as upstream sends them."
     },
     {
       "path": "packages/core/system-prompt/src/index.ts",
       "class": "delorun-feature",
       "feature": "model-prompt",
-      "reason": "Identity line names Delorun and the answering model and mentions DeepSeek Harness only when asked."
+      "reason": "Identity line names Delorun and the answering model and mentions DeepSeek Harness only when asked. The `delorunWording` property and `useDelorunWording()` carry C16 `model_prompt` to the sections that read it; the identity line is not switched."
     },
     {
       "path": "packages/deliverables/deliverable-file-references/src/index.ts",
@@ -2994,7 +2994,7 @@
       "path": "packages/experimental/tool-terminal/src/index.ts",
       "class": "delorun-feature",
       "feature": "model-prompt",
-      "reason": "The terminal paragraph is sent only when terminal_open is offered to the agent in that step."
+      "reason": "The terminal paragraph is sent only when terminal_open is offered to the agent in that step. Registered switch: C16 `model_prompt`. Off, the paragraph is upstream's and is sent whether or not terminal_open is offered."
     },
     {
       "path": "packages/preset/agent-preset/skills/dsh-doc/SKILL.md",
@@ -3006,7 +3006,7 @@
       "path": "packages/workflow/tool-workflow/src/index.ts",
       "class": "delorun-feature",
       "feature": "model-prompt",
-      "reason": "The workflow paragraph is sent only when the workflow tool is offered to the agent in that step."
+      "reason": "The workflow paragraph is sent only when the workflow tool is offered to the agent in that step. Registered switch: C16 `model_prompt`. Off, the paragraph is upstream's and is sent whether or not the workflow tool is offered."
     },
     {
       "path": "packages/context/time-context/src/index.ts",

@@ -84,6 +84,7 @@ async function promptLoop(systemPromptUpdate: SystemPromptUpdate | undefined) {
   const adapter = new RecordingAdapter(systemPromptUpdate)
   ctx.llm.registerAdapter([ROUTE.provider], adapter)
   await ctx.plugin(HarnessDevContext)
+  ctx.systemPrompt.useDelorunWording()
   const harness = await mountAgentLoopTestHarness(ctx)
   /** Resume the Session's complete log under a new Agent, as a restarted process does. */
   const resume = async (session: Session, id: string): Promise<Agent> => (await ctx.agents.create({
@@ -140,6 +141,7 @@ describe('harness-dev-context', () => {
     await mountAgentLoopTestDependencies(ctx)
     const fiber = ctx.plugin(HarnessDevContext)
     await fiber
+    ctx.systemPrompt.useDelorunWording()
     const assembly = await ctx.systemPrompt.assemble()
     expect(assembly.sections.filter(entry => entry.name === 'harness:source' || entry.name === 'app:web-surface')
       .map(entry => entry.text)).toEqual([SOURCE_PROMPT, WEB_PROMPT])
@@ -249,6 +251,27 @@ describe('harness-dev-context', () => {
       expect(HarnessDevContext.isCheckout(root())).toBe(false)
     })
 
+    it('keeps upstream\'s checkout and Web GUI text, on a checkout or not, while Delorun\'s wording is off', async () => {
+      const ctx = new Context()
+      onTestFinished(() => ctx.fiber.dispose())
+      provideWebServices(ctx)
+      await mountAgentLoopTestDependencies(ctx)
+      const installed = root()
+      await ctx.plugin(HarnessDevContext, { sourceRoot: installed })
+      const assembly = await ctx.systemPrompt.assemble()
+      const sections = assembly.sections.filter(entry => entry.name === 'harness:source' || entry.name === 'app:web-surface').map(entry => entry.text)
+      const upstreamSource = /^The runtime context names the DeepSeek Harness implementation checkout\. .*DSH itself\.$/u
+      expect(sections[0]).toMatch(upstreamSource)
+      expect(sections[1]).toMatch(
+        /^You are interacting with the user through the DeepSeek Harness Web GUI whose URL the runtime context names\. /u,
+      )
+      expect(renderContextSnapshot(assembly).split('\n\n').slice(1)).toEqual([
+        `Current DeepSeek Harness implementation checkout: ${JSON.stringify(installed)}.`,
+        'Current DeepSeek Harness Web GUI URL: "http://127.0.0.1:4567".',
+      ])
+      expect(sections.join('\n')).not.toContain('Delorun')
+    })
+
     it('sends the plugin-authoring line and no path, URL, or developer text on an installation', async () => {
       const ctx = new Context()
       onTestFinished(() => ctx.fiber.dispose())
@@ -256,6 +279,7 @@ describe('harness-dev-context', () => {
       await mountAgentLoopTestDependencies(ctx)
       const installed = root()
       await ctx.plugin(HarnessDevContext, { sourceRoot: installed })
+      ctx.systemPrompt.useDelorunWording()
       const assembly = await ctx.systemPrompt.assemble()
       const prompt = assembly.sections.filter(entry => entry.name === 'harness:source' || entry.name === 'app:web-surface')
         .map(entry => entry.text).join('\n\n')

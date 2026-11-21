@@ -120,7 +120,7 @@ describe('the real tree', () => {
     // A row may be restated per profile; one switch is still one claim. The consent plugins and the update gate are
     // inserted rows, which carry their module as `name`.
     expect([...new Set(covered.map(({ id }) => id))].sort()).toEqual([
-      'approved_plugin_write_consent', 'external_agent_consent', 'external_agent_limit_refusal', 'fetch_guard', 'instruction_layer_consent', 'mcp_add_consent', 'one_time_launch_tokens', 'permission_defaults',
+      'approved_plugin_write_consent', 'external_agent_consent', 'external_agent_limit_refusal', 'fetch_guard', 'instruction_layer_consent', 'live_agents', 'mcp_add_consent', 'model_prompt', 'one_time_launch_tokens', 'permission_defaults',
       'plugin_changes_pending', 'reach', 'rename_workspace_tool', 'scheduled_task_consent', 'studio_additions', 'tool_failure_guard', 'update_check', 'update_turn_refusal',
     ])
     for (const { id, value, declared } of covered) expect(value, id).toBe(declared)
@@ -494,8 +494,8 @@ describe('the parity overlay', () => {
     expect(overlayErrors(rows, PARITY_SWITCHES)).toEqual([])
     expect(rows).toEqual([{ id: 'tool-plugin-manager', name: '@deepseek-ai/dsh-plugin-manager/tools', config: { readActionsExempt: false, profileHistory: false } }])
     expect(Object.keys(DEFAULT_PARITY).sort()).toEqual([
-      'approved_plugin_write_consent', 'browser_additions', 'container_denial_marker', 'default_workspace_directory', 'doctor', 'external_agent_consent', 'external_agent_limit_refusal', 'fetch_guard', 'instruction_layer_consent',
-      'main_chat', 'mcp_add_consent', 'one_time_launch_tokens', 'permission_defaults', 'plugin_changes_pending', 'preset_inspect', 'reach', 'rename_workspace_tool', 'sandbox_protected_reads',
+      'approved_plugin_write_consent', 'browser_additions', 'container_denial_marker', 'default_workspace_directory', 'doctor', 'external_agent_consent', 'external_agent_limit_refusal', 'fetch_guard', 'instruction_layer_consent', 'live_agents',
+      'main_chat', 'mcp_add_consent', 'model_prompt', 'one_time_launch_tokens', 'permission_defaults', 'plugin_changes_pending', 'preset_inspect', 'reach', 'rename_workspace_tool', 'sandbox_protected_reads',
       'scheduled_task_consent', 'studio_additions', 'tool_failure_guard', 'update_check', 'update_turn_refusal', 'use_my_browser',
     ])
   })
@@ -537,12 +537,13 @@ describe('the parity overlay\'s mount of @delorun/bundle-local', () => {
       { id: 'delorun-external-agents', name: '@delorun/external-agents', config: { maxLivePrograms: 4, graceMs: 3000, probeMinIntervalMinutes: 30, probeTriggers: ['pack-added', 'signed-in', 'check-now'], limitRefusal: true }, disabled: true },
       { id: 'delorun-agent-claude-code', name: '@delorun/agent-claude-code', config: { harnessToolTimeoutSeconds: 900 }, disabled: true },
       { id: 'delorun-agent-codex', name: '@delorun/agent-codex', config: { harnessToolTimeoutSeconds: 900 }, disabled: true },
-      { id: 'delorun-agent-seats', name: '@delorun/plugin-agent-seats', disabled: true },
+      { id: 'delorun-agent-seats', name: '@delorun/plugin-agent-seats', config: { enabled: true }, disabled: true },
       { id: 'delorun-multiview', name: '@delorun/plugin-multiview', disabled: true },
       { id: 'delorun-plugin-changes', name: '@delorun/plugin-changes', config: { enabled: true, installationBundles: CHANGES_BUNDLES }, disabled: true },
       { id: 'delorun-plugin-update', name: '@delorun/plugin-update', disabled: true },
       { id: 'delorun-packs', name: '@delorun/plugin-packs', config: { concurrency: 2 }, disabled: true },
       { id: 'delorun-workspace-rename', name: '@delorun/bundle-local/workspace-rename', config: { enabled: true }, disabled: true },
+      { id: 'delorun-prompt-wording', name: '@delorun/bundle-local/prompt-wording', config: { enabled: true }, disabled: true },
     ],
   }
   /** The update gate row in the parity form the overlay's fourth patch restates it. */
@@ -603,12 +604,13 @@ describe('the parity overlay\'s mount of @delorun/bundle-local', () => {
           { id: 'delorun-external-agents', name: '@delorun/external-agents', config: { maxLivePrograms: 4, graceMs: 3000, probeMinIntervalMinutes: 30, probeTriggers: ['pack-added', 'signed-in', 'check-now'], limitRefusal: true }, disabled: true },
           { id: 'delorun-agent-claude-code', name: '@delorun/agent-claude-code', config: { harnessToolTimeoutSeconds: 900 }, disabled: true },
           { id: 'delorun-agent-codex', name: '@delorun/agent-codex', config: { harnessToolTimeoutSeconds: 900 }, disabled: true },
-          { id: 'delorun-agent-seats', name: '@delorun/plugin-agent-seats', disabled: true },
+          { id: 'delorun-agent-seats', name: '@delorun/plugin-agent-seats', config: { enabled: true }, disabled: true },
           { id: 'delorun-multiview', name: '@delorun/plugin-multiview', disabled: true },
           { id: 'delorun-plugin-changes', name: '@delorun/plugin-changes', config: { enabled: true, installationBundles: CHANGES_BUNDLES }, disabled: true },
           { id: 'delorun-plugin-update', name: '@delorun/plugin-update', disabled: true },
           { id: 'delorun-packs', name: '@delorun/plugin-packs', config: { concurrency: 2 }, disabled: true },
           { id: 'delorun-workspace-rename', name: '@delorun/bundle-local/workspace-rename', config: { enabled: true }, disabled: true },
+          { id: 'delorun-prompt-wording', name: '@delorun/bundle-local/prompt-wording', config: { enabled: true }, disabled: true },
         ],
       },
       GATE_INSERT,

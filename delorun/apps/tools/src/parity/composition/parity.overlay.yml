@@ -162,6 +162,8 @@
 
     - id: delorun-agent-seats
       name: '@delorun/plugin-agent-seats'
+      config:
+        enabled: true
       disabled: true
 
     - id: delorun-multiview
@@ -191,6 +193,12 @@
 
     - id: delorun-workspace-rename
       name: '@delorun/bundle-local/workspace-rename'
+      config:
+        enabled: true
+      disabled: true
+
+    - id: delorun-prompt-wording
+      name: '@delorun/bundle-local/prompt-wording'
       config:
         enabled: true
       disabled: true

@@ -20,7 +20,7 @@ This package makes Claude Code and Codex live agents: a child chat (a seat) of t
 
 ## Configuration
 
-The Host row `delorun-agent-seats` holds `seats`, a list of `{ provider, route, preset, toolName, maxDepth, contextWindow }`. The default has one seat each for Claude Code (`claude_code`) and Codex (`codex`).
+The Host row `delorun-agent-seats` holds `seats`, a list of `{ provider, route, preset, toolName, maxDepth, contextWindow }`. The default has one seat each for Claude Code (`claude_code`) and Codex (`codex`). The row also holds `enabled`, the C16 switch `live_agents`: off by default, which is the parity value, the row declares its preview flag and registers nothing else; every row Delorun ships sets it on, and the preview flag then decides whether live agents run.
 
 | Field | Meaning |
 | --- | --- |

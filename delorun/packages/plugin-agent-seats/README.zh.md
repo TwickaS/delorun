@@ -20,7 +20,7 @@ kind: "package-library"
 
 ## 配置
 
-Host 行 `delorun-agent-seats` 保存 `seats`，它是 `{ provider, route, preset, toolName, maxDepth, contextWindow }` 的列表。默认为 Claude Code（`claude_code`）和 Codex（`codex`）各一个席位。
+Host 行 `delorun-agent-seats` 保存 `seats`，它是 `{ provider, route, preset, toolName, maxDepth, contextWindow }` 的列表。默认为 Claude Code（`claude_code`）和 Codex（`codex`）各一个席位。 The row also holds `enabled`, the C16 switch `live_agents`: off by default, which is the parity value, the row declares its preview flag and registers nothing else; every row Delorun ships sets it on, and the preview flag then decides whether live agents run.
 
 | Field | Meaning |
 | --- | --- |

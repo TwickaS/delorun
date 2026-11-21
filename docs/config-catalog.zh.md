@@ -1063,10 +1063,10 @@ export interface DeniedToolsConfig {
 export interface BrowserAdditionsConfig {
   /**
    * Replace Playwright's report of a browser build that is not installed with one message that tells the model to stop
-   * and send the person to Browser setup (`MISSING_BROWSER_MESSAGE`, `MISSING_CHROME_MESSAGE`). This is Delorun's C16
-   * switch `browser_additions`, off in the parity composition. The turned-off tools (`SERVER_CODE_TOOLS` and
-   * `deniedTools`), the folder guard ({@link refuseOutsideFolder}) and the Session's folder as the server's one MCP
-   * root do not depend on it: they hold with it off. Defaults to off.
+   * and send the person to Browser setup (`MISSING_BROWSER_MESSAGE`, `MISSING_CHROME_MESSAGE`).
+   * This is Delorun's C16 switch `browser_additions`, off in the parity composition. The turned-off tools
+   * (`SERVER_CODE_TOOLS` and `deniedTools`), the folder guard ({@link refuseOutsideFolder}) and the Session's folder as
+   * the server's one MCP root do not depend on it: they hold with it off. Defaults to off.
    */
   browserAdditions: boolean
 }
@@ -1781,7 +1781,7 @@ export interface Config {
 - `source`: [`packages/context/harness-dev-context/src/index.ts:38`](../packages/context/harness-dev-context/src/index.ts)
 
 ```ts config-catalog
-/** Plugin options; no profile sets them. */
+/** Plugin options; no profile sets them. Delorun's wording and the checkout decision follow `systemPrompt.delorunWording`, Delorun's C16 switch `model_prompt`. */
 export interface Config {
   /** Root to classify as a checkout or an installation; tests point it at a temporary directory. Defaults to this installation's root. */
   sourceRoot?: string

@@ -54,6 +54,8 @@
             - interrupt: true
     - id: delorun-agent-seats
       name: '@delorun/plugin-agent-seats'
+      config:
+        enabled: true
     - id: live-agent-person
       name: './person.mjs'
 # Pins the corpus model.

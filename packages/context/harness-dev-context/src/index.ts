@@ -34,7 +34,10 @@ export const inject = ['systemPrompt', 'sessionProjections', 'webApp']
 /** This installation's root, four directories above this package's source or built entry. */
 const SOURCE_ROOT = fileURLToPath(new URL('../../../..', import.meta.url))
 
-/** Plugin options; no profile sets them. */
+/**
+ * Plugin options; no profile sets them. Delorun's wording and the checkout decision follow
+ * `systemPrompt.delorunWording`, Delorun's C16 switch `model_prompt`.
+ */
 export interface Config {
   /** Root to classify as a checkout or an installation; tests point it at a temporary directory. Defaults to this installation's root. */
   sourceRoot?: string
@@ -56,11 +59,13 @@ const HARNESS_SOURCE = 'harness:source'
 /** Prompt-section and runtime-context name for the Web GUI orientation and its URL. */
 const WEB_SURFACE = 'app:web-surface'
 
-const HARNESS_SOURCE_GUIDANCE = 'The checkout location and current working directory are separate values and may differ; '
+const HARNESS_SOURCE_GUIDANCE_BASE = 'The checkout location and current working directory are separate values and may differ; '
   + 'never infer the working directory from the checkout path. Use pwd to determine the current working directory. '
-  + 'Use this checkout only to inspect or extend Delorun itself.'
 
-const HARNESS_SOURCE_PROMPT = `The runtime context names the Delorun implementation checkout. ${HARNESS_SOURCE_GUIDANCE}`
+/** Upstream's paragraph, which the prompt keeps while Delorun's wording is off. */
+const HARNESS_SOURCE_PROMPT_UPSTREAM = `The runtime context names the DeepSeek Harness implementation checkout. ${HARNESS_SOURCE_GUIDANCE_BASE}Use this checkout only to inspect or extend DSH itself.`
+
+const HARNESS_SOURCE_PROMPT = `The runtime context names the Delorun implementation checkout. ${HARNESS_SOURCE_GUIDANCE_BASE}Use this checkout only to inspect or extend Delorun itself.`
 
 /** What an installation's model learns instead of the checkout text. */
 const INSTALLED_PROMPT = 'Make or change plugins with the delorun-plugin-authoring skill and review them in Changes (Apply or Undo). Never edit the installed program.'
@@ -73,6 +78,9 @@ const WEB_SURFACE_GUIDANCE = 'When the user refers to "this page", "this GUI", o
   + 'Starting another server does not update this GUI. '
   + 'The apps/web Vite entry builds the shell but is not a standalone application because only dsh web injects window.__DSH_BOOT__. '
   + 'Do not start a replacement server unless the user asks; if one is needed, use a managed background job and verify its exact URL.'
+
+/** Upstream's paragraph, which the prompt keeps while Delorun's wording is off. */
+const WEB_SURFACE_PROMPT_UPSTREAM = `You are interacting with the user through the DeepSeek Harness Web GUI whose URL the runtime context names. ${WEB_SURFACE_GUIDANCE}`
 
 const WEB_SURFACE_PROMPT = `You are interacting with the user through the Delorun studio whose URL the runtime context names. ${WEB_SURFACE_GUIDANCE}`
 
@@ -153,7 +161,10 @@ const ADMITS_NOTHING: LegacyPrompt = { source: null, web: null }
  * @returns after the projection reader and prompt registrations are ready.
  */
 export async function apply(ctx: Context, config: Config = {}): Promise<void> {
-  const checkout = isCheckout(config.sourceRoot ?? SOURCE_ROOT)
+  const sourceRoot = config.sourceRoot ?? SOURCE_ROOT
+  const checkout = isCheckout(sourceRoot)
+  // Read when each paragraph is produced: the switch's plugin may load after this one.
+  const delorun = (): boolean => ctx.systemPrompt.delorunWording
   const legacyPromptProjectionHandle = await ctx.sessionProjections.register({
     key: LEGACY_PROMPT,
     stateVersion: 1,
@@ -169,24 +180,28 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     name: HARNESS_SOURCE,
     order: ctx.systemPrompt.getSectionOrder('HARNESS_SOURCE'),
     interpolate: false,
-    text: context => admitted(context).source ?? (checkout ? HARNESS_SOURCE_PROMPT : INSTALLED_PROMPT),
+    text: context => admitted(context).source
+      ?? (!delorun() ? HARNESS_SOURCE_PROMPT_UPSTREAM : checkout ? HARNESS_SOURCE_PROMPT : INSTALLED_PROMPT),
   })
   ctx.systemPrompt.context({
     name: HARNESS_SOURCE,
     order: ctx.systemPrompt.getContextOrder('HARNESS_SOURCE'),
     interpolate: false,
-    text: checkout ? `Current Delorun implementation checkout: ${JSON.stringify(config.sourceRoot ?? SOURCE_ROOT)}.` : '',
+    text: () => !delorun() ? `Current DeepSeek Harness implementation checkout: ${JSON.stringify(sourceRoot)}.`
+      : checkout ? `Current Delorun implementation checkout: ${JSON.stringify(sourceRoot)}.` : '',
   })
   ctx.systemPrompt.section({
     name: WEB_SURFACE,
     order: ctx.systemPrompt.getSectionOrder('WEB_SURFACE'),
     interpolate: false,
-    text: context => admitted(context).web ?? (checkout ? WEB_SURFACE_PROMPT : INSTALLED_WEB_SURFACE_PROMPT),
+    text: context => admitted(context).web
+      ?? (!delorun() ? WEB_SURFACE_PROMPT_UPSTREAM : checkout ? WEB_SURFACE_PROMPT : INSTALLED_WEB_SURFACE_PROMPT),
   })
   ctx.systemPrompt.context({
     name: WEB_SURFACE,
     order: ctx.systemPrompt.getContextOrder('WEB_SURFACE'),
     interpolate: false,
-    text: () => checkout ? `Current Delorun studio URL: ${JSON.stringify(ctx.webApp.getAdvertisedUrl())}.` : '',
+    text: () => !delorun() ? `Current DeepSeek Harness Web GUI URL: ${JSON.stringify(ctx.webApp.getAdvertisedUrl())}.`
+      : checkout ? `Current Delorun studio URL: ${JSON.stringify(ctx.webApp.getAdvertisedUrl())}.` : '',
   })
 }

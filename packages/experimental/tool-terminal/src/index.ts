@@ -156,10 +156,11 @@ export function apply(ctx: Context, config: Config = {}): void {
     const raw = rawContentText(result.content)
     return raw === undefined ? undefined : textResult(raw, maxResultBytes)
   }
+  // Delorun's C16 switch `model_prompt`: off, the paragraph is upstream's and is sent whether or not the tool is offered.
   ctx.systemPrompt.section({
     name: 'tool:pty',
     order: ctx.systemPrompt.getSectionOrder('TOOL_PTY'),
-    text: ({ scope, toolSet }) => ctx.tools.get('terminal_open', scope, toolSet) === undefined ? '' : 'Use a terminal session only when work needs persistent terminal state or interactive stdin; prefer shell/read/write/edit for bounded one-shot operations. Track every terminal session id and close sessions that no longer matter. An inferred_idle or timeout result does not prove the foreground command exited.',
+    text: ({ scope, toolSet }) => ctx.systemPrompt.delorunWording && ctx.tools.get('terminal_open', scope, toolSet) === undefined ? '' : 'Use a terminal session only when work needs persistent terminal state or interactive stdin; prefer shell/read/write/edit for bounded one-shot operations. Track every terminal session id and close sessions that no longer matter. An inferred_idle or timeout result does not prove the foreground command exited.',
   })
 
   ctx.tools.register(defineTool({

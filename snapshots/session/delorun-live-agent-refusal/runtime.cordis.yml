@@ -57,6 +57,8 @@
             - event: { kind: turn-end, outcome: completed, usage: { inputTokens: 1500, outputTokens: 40 } }
     - id: delorun-agent-seats
       name: '@delorun/plugin-agent-seats'
+      config:
+        enabled: true
 # An ordinary chat whose model is the hidden route of Claude Code.
 - id: agent-default-model
   name: '@deepseek-ai/dsh-agent-default-model'

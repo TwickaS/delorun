@@ -208,11 +208,13 @@
       config:
         harnessToolTimeoutSeconds: 900
 
-    # Live external agents behind the `externalAgents.liveAgents` preview flag (off unless a profile row sets it): the
+    # Live external agents (C16 switch `live_agents`, on here) behind the `externalAgents.liveAgents` preview flag (off unless a profile row sets it): the
     # hand-off tools `claude_code` and `codex`, the agent's chat and its approvals. With the flag off the row adds no tool
     # and no UI. The row is protected: it relays an agent's questions to the person.
     - id: delorun-agent-seats
       name: '@delorun/plugin-agent-seats'
+      config:
+        enabled: true
 
     # Multiview: pinned agents beside the main chat. Plain on, with no preview flag: it does nothing until an agent is
     # pinned or handed work, and its settings (autoOpen, maxPanes, compactComposer, reopenOnReturn) have defaults.
@@ -249,6 +251,16 @@
     # it off only removes that tool.
     - id: delorun-workspace-rename
       name: '@delorun/bundle-local/workspace-rename'
+      config:
+        enabled: true
+
+    # Delorun's wording in the system prompt (C16 switch `model_prompt`): the
+    # prompt sections that carry a Delorun wording say Delorun, and the workflow
+    # and terminal paragraphs and the checkout text follow Delorun's rules. Off,
+    # they keep upstream's text. The row is not protected: it changes wording, and
+    # turning it off restores upstream's prompt.
+    - id: delorun-prompt-wording
+      name: '@delorun/bundle-local/prompt-wording'
       config:
         enabled: true
 

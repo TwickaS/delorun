@@ -454,10 +454,23 @@ describe('dsh-tool-workflow', () => {
       await ctx.plugin(NativeToolExecutor)
       await ctx.plugin(StubEngine)
       await ctx.plugin(toolWorkflow, {})
+      ctx.systemPrompt.useDelorunWording()
       const paragraph = 'Use the workflow tool ONLY'
       const withheld: ResolvedToolSet = { dispose() {}, view: () => new Map() }
       expect(renderPrompt(await ctx.systemPrompt.assemble())).toContain(paragraph)
       expect(renderPrompt(await ctx.systemPrompt.assemble({ toolSet: withheld }))).not.toContain(paragraph)
+    })
+
+    it('is sent whether or not the step offers the workflow tool while Delorun\'s wording is off', async () => {
+      const ctx = new Context()
+      onTestFinished(async () => { await ctx.fiber.dispose() })
+      await ctx.plugin(SystemPrompt)
+      await ctx.plugin(ToolRuntime)
+      await ctx.plugin(NativeToolExecutor)
+      await ctx.plugin(StubEngine)
+      await ctx.plugin(toolWorkflow, {})
+      const withheld: ResolvedToolSet = { dispose() {}, view: () => new Map() }
+      expect(renderPrompt(await ctx.systemPrompt.assemble({ toolSet: withheld }))).toContain('Use the workflow tool ONLY')
     })
   })
 

@@ -100,6 +100,8 @@ Current Delorun implementation checkout: "<installation root>".
 Current Delorun studio URL: "<advertised URL>".
 ```
 
+The wording above is Delorun's: it applies while the `systemPrompt` service's `delorunWording` is on (Delorun's C16 switch `model_prompt`). With it off, the paragraphs and runtime-context lines are upstream's — the DeepSeek Harness names and DSH wording — and are sent whether or not the directory is a real checkout.
+
 ##### 在已安装的程序上
 
 ```markdown

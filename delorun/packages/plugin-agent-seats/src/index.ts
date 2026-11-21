@@ -29,13 +29,13 @@ export const inject = [
 export { Config as schema }
 
 /**
- * Declares the preview flag and, while it is on, mounts live agents.
+ * Declares the preview flag and, while the row's `enabled` and the flag are both on, mounts live agents.
  * @param ctx - the plugin context with the injected services.
- * @param config - the validated row configuration.
+ * @param config - the validated row configuration; with `enabled` off only the flag is declared.
  * @returns resolves once the mount has finished; the flag is read once, so a change takes a reload of the row.
  */
 export async function apply(ctx: Context, config: Config): Promise<void> {
   for (const flag of PREVIEW_FLAGS) ctx.effect(() => ctx.previewFlags.declare(flag), `delorun-agent-seats: preview flag ${flag.id}`)
-  if (!liveAgentsOn(ctx)) return
+  if (!config.enabled || !liveAgentsOn(ctx)) return
   await mountSeats(ctx, config, { relay: seatRelay })
 }

@@ -125,6 +125,26 @@ describe('SystemPrompt', () => {
     }
   })
 
+  it('reports Delorun\'s wording only while a registration is live, and announces each change', async () => {
+    const ctx = new Context()
+    try {
+      await ctx.plugin(SystemPrompt)
+      const changes: string[] = []
+      ctx.on('system-prompt/change', () => { changes.push('change') })
+      expect(ctx.systemPrompt.delorunWording).toBe(false)
+      const first = ctx.systemPrompt.useDelorunWording()
+      const second = ctx.systemPrompt.useDelorunWording()
+      expect(ctx.systemPrompt.delorunWording).toBe(true)
+      first()
+      expect(ctx.systemPrompt.delorunWording).toBe(true)
+      second()
+      expect(ctx.systemPrompt.delorunWording).toBe(false)
+      expect(changes).toHaveLength(4)
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('preserves literal context in both the joined snapshot and attributed sections', async () => {
     const ctx = new Context()
     try {

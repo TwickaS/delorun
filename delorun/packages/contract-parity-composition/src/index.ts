@@ -492,6 +492,54 @@ export const PARITY_SWITCHES = [
     ],
   },
   {
+    id: 'live_agents',
+    state: 'built',
+    registeredBy: '@delorun/plugin-agent-seats, whose row @delorun/bundle-local inserts with the switch on',
+    defaultValue: true,
+    parityValue: false,
+    modelVisible: true,
+    scenario: 'session/delorun-live-agents',
+    scenarioState: 'recorded',
+    field: {
+      module: '@delorun/plugin-agent-seats',
+      source: 'delorun/packages/plugin-agent-seats/src/config.ts',
+      key: 'enabled',
+    },
+    // Off, the row declares its preview flag and mounts nothing: no hand-off tool per agent, no seat provider, no
+    // executor, no restriction of the one-shot subagent tools and no relay of an agent's questions. The
+    // externalAgents.liveAgents preview flag then decides whether the mounted row runs live agents.
+    sources: [
+      'delorun/packages/plugin-agent-seats/src/executor/plugin.ts',
+      'delorun/packages/plugin-agent-seats/src/provider/hide.ts',
+      'delorun/packages/plugin-agent-seats/src/provider/register.ts',
+      'delorun/packages/plugin-agent-seats/src/provider/tool.ts',
+      'delorun/packages/plugin-agent-seats/src/relay/relay.ts',
+    ],
+  },
+  {
+    id: 'model_prompt',
+    state: 'built',
+    registeredBy: 'Delorun\'s edit of upstream\'s system prompt service and its harness-dev-context, tool-terminal and tool-workflow plugins, whose wording @delorun/bundle-local\'s `delorun-prompt-wording` row turns on',
+    defaultValue: true,
+    parityValue: false,
+    modelVisible: true,
+    scenario: 'session/delorun-model-prompt',
+    scenarioState: 'pending recording',
+    field: {
+      module: '@delorun/bundle-local/prompt-wording',
+      source: 'delorun/packages/bundle-local/src/prompt-wording.ts',
+      key: 'enabled',
+    },
+    // Off, the sections keep upstream's text byte for byte: the checkout and Web GUI paragraphs name DeepSeek Harness
+    // and are sent whether or not the checkout is real, and the workflow and terminal paragraphs are sent whether or
+    // not the step offers the tool.
+    sources: [
+      'packages/context/harness-dev-context/src/index.ts',
+      'packages/experimental/tool-terminal/src/index.ts',
+      'packages/workflow/tool-workflow/src/index.ts',
+    ],
+  },
+  {
     id: 'container_denial_marker',
     state: 'built',
     registeredBy: 'Delorun edit of upstream container denial reporting',

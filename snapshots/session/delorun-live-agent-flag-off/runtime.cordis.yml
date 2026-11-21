@@ -54,6 +54,8 @@
             - event: { kind: turn-end, outcome: completed, usage: { inputTokens: 1500, outputTokens: 40 } }
     - id: delorun-agent-seats
       name: '@delorun/plugin-agent-seats'
+      config:
+        enabled: true
 # Pins the corpus model.
 - id: agent-default-model
   name: '@deepseek-ai/dsh-agent-default-model'
