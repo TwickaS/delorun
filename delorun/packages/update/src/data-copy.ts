@@ -54,6 +54,25 @@ export const RUNTIMES_SET_ASIDE_PREFIX = 'runtimes.set-aside-'
 /** A set-aside program store's name under the home. */
 const RUNTIMES_SET_ASIDE_NAME = /^runtimes\.set-aside-[0-9]{8}T[0-9]{6}Z(?:-[0-9]+)?$/u
 
+/**
+ * The name of a set-aside program store: the one form {@link listKeptData} lists and `delorun recover discard` accepts.
+ * @param time - the compact UTC time, such as `20261113T120000Z`.
+ * @param ordinal - a number that tells a second folder of the same second from the first; none for the first.
+ * @returns `runtimes.set-aside-<time>`, with `-<ordinal>` when one is given.
+ */
+export function runtimesSetAsideName(time: string, ordinal?: number): string {
+  return `${RUNTIMES_SET_ASIDE_PREFIX}${time}${ordinal === undefined ? '' : `-${String(ordinal)}`}`
+}
+
+/**
+ * Whether a name under the home is a set-aside program store.
+ * @param name - an entry of the home.
+ * @returns `true` when {@link listKeptData} lists it.
+ */
+export function isRuntimesSetAsideName(name: string): boolean {
+  return RUNTIMES_SET_ASIDE_NAME.test(name)
+}
+
 /** A temporary copy's name. */
 const TEMPORARY_NAME = /^\.tmp-[0-9a-f]{16}$/u
 
@@ -588,7 +607,7 @@ export async function listKeptData(home: string): Promise<readonly KeptData[]> {
     }
   }
   for (const entry of (await readdir(home)).sort()) {
-    if (RUNTIMES_SET_ASIDE_NAME.test(entry)) kept.push({ kind: 'runtimes', path: entry, bytes: (await walk(join(home, entry), false)).bytes })
+    if (isRuntimesSetAsideName(entry)) kept.push({ kind: 'runtimes', path: entry, bytes: (await walk(join(home, entry), false)).bytes })
   }
   return kept
 }

@@ -16,6 +16,7 @@ import {
   discardCopy,
   discardKeptData,
   isDataSafetyError,
+  isRuntimesSetAsideName,
   keepOnlyCopy,
   listKeptData,
   planDataCopy,
@@ -23,6 +24,7 @@ import {
   recoverDataCopies,
   RESTORE_JOURNAL_FILE,
   restoreDataCopy,
+  runtimesSetAsideName,
   saveDataCopy,
 } from '../src/index.ts'
 import { FORMATS } from './support.ts'
@@ -401,6 +403,17 @@ describe('kept data', () => {
     await discardKeptData(home, join(DATA_SET_ASIDE_DIRECTORY, '1.0.0-20261110T120000Z'), FREE)
     expect((await listKeptData(home)).map(entry => entry.path)).toEqual([join(DATA_COPIES_DIRECTORY, '1.1.0')])
     expect(read('sessions/a')).toBe('12345')
+  })
+
+  it('lists and discards every name the set-aside builder makes, and no name it does not', async () => {
+    const names = [runtimesSetAsideName('20261113T120000Z'), runtimesSetAsideName('20261113T120000Z', 1), runtimesSetAsideName('20261113T120000Z', 12)]
+    for (const name of names) put(`${name}/store.json`, '1')
+    put('runtimes.set-aside-20261113T120000Z-unfinished/store.json', '1')
+    expect(names.every(isRuntimesSetAsideName)).toBe(true)
+    expect(isRuntimesSetAsideName('runtimes.set-aside-20261113T120000Z-unfinished')).toBe(false)
+    expect((await listKeptData(home)).map(entry => entry.path)).toEqual(names)
+    await discardKeptData(home, names[1]!, FREE)
+    expect(existsSync(join(home, names[1]!))).toBe(false)
   })
 
   it('lists a program store that delorun repair set aside, beside the chat data, and removes it only when named', async () => {

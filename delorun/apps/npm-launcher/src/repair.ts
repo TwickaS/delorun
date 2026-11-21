@@ -28,7 +28,7 @@ import { isInstallError, messageOf, newestManifestVersion, readStoredRootBytes, 
 import { Redactor } from '@delorun/logs'
 import { readRoot, verifySignedManifest } from '@delorun/release-formats/sign/verify'
 import { parseRuntimeVersion, type ChannelRelease, type StorePaths, type VerifiedRuntime, type InstallRequest } from '@delorun/runtime-store'
-import { readCopyRecord, readDataFormats, readHomeDataFormat, relateHomeData, restoreDataCopy, RUNTIMES_SET_ASIDE_PREFIX, writeHomeDataFormat } from '@delorun/update/home-data'
+import { readCopyRecord, readDataFormats, readHomeDataFormat, relateHomeData, restoreDataCopy, runtimesSetAsideName, writeHomeDataFormat } from '@delorun/update/home-data'
 import semver from 'semver'
 import type { LauncherOutput } from './launcher.ts'
 import { beginRepairRecord, REPAIR_RECORD_FILE, stamp, staleRepairText, type resolveRepairMarkGraceSeconds } from './repair-record.ts'
@@ -423,7 +423,7 @@ async function repair(options: RepairOptions, log: Record<string, unknown>, undo
   assertAnswered(answer)
 
   const probe = await readdir(runtimes).then(() => true, () => false)
-  const aside = join(home, `${RUNTIMES_SET_ASIDE_PREFIX}${stampNow}`)
+  const aside = join(home, runtimesSetAsideName(stampNow))
   if (probe) {
     await noteSetAside(aside)
     await rename(runtimes, aside)

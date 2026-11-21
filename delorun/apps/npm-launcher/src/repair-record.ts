@@ -13,7 +13,7 @@ import { randomBytes } from 'node:crypto'
 import { link, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { DELORUN_HOME_ENTRIES } from '@delorun/contract-home-layout'
-import { RUNTIMES_SET_ASIDE_PREFIX } from '@delorun/update/home-data'
+import { runtimesSetAsideName } from '@delorun/update/home-data'
 import { currentHolder, holderAlive, parseHolder, type ProcessHolder } from '@delorun/home'
 
 /** The record's file name under the home's `run/`. */
@@ -206,7 +206,8 @@ export async function staleRepairText(record: RepairRecord | undefined, home: st
     return `${lead} No set-aside folder of the old programs was recorded, so there is nothing to put back. Run delorun repair again.`
   }
   const runtimes = join(home, DELORUN_HOME_ENTRIES.runtimes)
-  const unfinished = `${RUNTIMES_SET_ASIDE_PREFIX}${stamp(now)}-unfinished`
+  // Ordinal 1 keeps it apart from the repair's own set-aside, which may carry the same second; `recover status` lists both.
+  const unfinished = runtimesSetAsideName(stamp(now), 1)
   const quoted = { runtimes: quoteForShell(runtimes, platform), setAside: quoteForShell(setAside, platform), unfinished: quoteForShell(join(home, unfinished), platform) }
   const move = (from: string, to: string): string => (platform === 'win32' ? `Move-Item -LiteralPath ${from} -Destination ${to}` : `mv ${from} ${to}`)
   const steps = [...await exists(runtimes) ? [move(quoted.runtimes, quoted.unfinished)] : [], move(quoted.setAside, quoted.runtimes)]

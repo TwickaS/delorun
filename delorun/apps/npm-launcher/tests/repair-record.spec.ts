@@ -7,11 +7,12 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { RuntimeVersion } from '@delorun/contract-home-layout'
 import { StorePaths, type LaunchCommand, type LaunchPlan, type VerifiedRuntime } from '@delorun/runtime-store'
 import { fixtureRelease, type Fixture } from '../../install/tests/support.ts'
+import { isRuntimesSetAsideName } from '@delorun/update/home-data'
 import { runLauncher, type LauncherOptions, type LauncherStore } from '../src/launcher.ts'
 import { beginRepairRecord, quoteForShell, repairRecordPath, resolveRepairMarkGraceSeconds, staleRepairText } from '../src/repair-record.ts'
 import { runRepair, type RepairChannel, type RepairOptions, type RepairStore } from '../src/repair.ts'
@@ -115,7 +116,19 @@ describe('the repair mark', () => {
       // Pins the quoting: unquoted or double-quoted, the shell expands $HOME and runs `id`, and the moves miss.
       execFileSync('sh', ['-c', command], { env: { PATH: process.env.PATH ?? '', HOME: '/nonexistent' }, timeout: 10_000 })
       expect(await readFile(join(odd, 'runtimes/old'), 'utf8')).toBe('good')
-      expect(await readFile(join(odd, 'runtimes.set-aside-20261113T120000Z-unfinished/new'), 'utf8')).toBe('half')
+      expect(await readFile(join(odd, 'runtimes.set-aside-20261113T120000Z-1/new'), 'utf8')).toBe('half')
+    })
+
+    it('names the unfinished store as a set-aside folder that recover status lists and recover discard accepts', async () => {
+      const setAside = join(home, 'runtimes.set-aside-20261113T120000Z')
+      await mkdir(setAside)
+      await mkdir(join(home, 'runtimes'))
+      const text = await staleRepairText(record(setAside), home, NOW, 'linux')
+      const unfinished = /keeping the unfinished store in (\S+):/u.exec(text)?.[1]
+      if (unfinished === undefined) throw new Error(`no folder named in ${text}`)
+      expect(isRuntimesSetAsideName(unfinished)).toBe(true)
+      expect(isRuntimesSetAsideName(basename(setAside))).toBe(true)
+      expect(unfinished).not.toBe(basename(setAside))
     })
 
     it('moves only the set-aside folder back when no store stands, and writes PowerShell on Windows', async () => {

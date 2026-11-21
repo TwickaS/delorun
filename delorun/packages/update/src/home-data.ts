@@ -5,6 +5,6 @@
  *
  * @module @delorun/update/home-data
  */
-export { readCopyRecord, restoreDataCopy, RUNTIMES_SET_ASIDE_PREFIX, type CopyRecord } from './data-copy.ts'
+export { isRuntimesSetAsideName, readCopyRecord, restoreDataCopy, runtimesSetAsideName, RUNTIMES_SET_ASIDE_PREFIX, type CopyRecord } from './data-copy.ts'
 export { readDataFormats } from './data-formats.ts'
 export { readHomeDataFormat, relateHomeData, writeHomeDataFormat, type HomeDataRelation } from './home-data-format.ts'
