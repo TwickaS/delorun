@@ -231,9 +231,9 @@ export interface LauncherContext {
   readonly fetch?: typeof globalThis.fetch | undefined
   /** The clock, in milliseconds; `Date.now` by default. */
   readonly now?: (() => number) | undefined
-  /** The host's `process.platform`, which native Windows and macOS refuse before any download; this process's by default. */
+  /** The host's `process.platform`, which native Windows and macOS refuse before any download, and which names the runtime closure; this process's by default. */
   readonly hostPlatform?: string | undefined
-  /** The host's `process.arch`, which Linux on arm64 refuses before any download; this process's by default. */
+  /** The host's `process.arch`, which Linux on arm64 refuses before any download, and which names the runtime closure; this process's by default. */
   readonly hostArch?: string | undefined
   /** Asks `delorun repair`'s yes/no question; `undefined` answers when there is no terminal. This process's terminal by default. */
   readonly confirm?: ((question: string) => Promise<boolean | undefined>) | undefined
@@ -348,7 +348,6 @@ export async function main(argv: readonly string[], context: LauncherContext = {
 }): Promise<number> {
   let line: LauncherCommandLine
   let profile: string
-  let platform: ReturnType<typeof platformOf>
   let target: RuntimeVersion | undefined
   let fullCheckDays: number
   let repairMarkGraceSeconds: number
@@ -365,7 +364,6 @@ export async function main(argv: readonly string[], context: LauncherContext = {
       return LAUNCHER_EXIT.failed
     }
     profile = launcherProfile(line.profile, context.env)
-    platform = platformOf(process.platform, process.arch)
     target = line.release === undefined ? undefined : parseRuntimeVersion(line.release)
     if (line.release !== undefined && target === undefined) throw new Error(`--release names ${line.release}, which is not a Delorun release version`)
     fullCheckDays = resolveFullCheckDays(context.env[FULL_CHECK_DAYS_ENV])
@@ -375,6 +373,14 @@ export async function main(argv: readonly string[], context: LauncherContext = {
     const refusal = refusalFor(error, { home: '~/.delorun', profile: CLI_PROFILE })
     context.output.stderr(`${refusal.text}\n${usage()}`)
     return LAUNCHER_EXIT.usage
+  }
+  let platform: ReturnType<typeof platformOf>
+  try {
+    platform = platformOf(context.hostPlatform ?? process.platform, context.hostArch ?? process.arch)
+  } catch (error) {
+    // A host no release publishes a runtime for is a refusal of the host, like native Windows and macOS, not a wrong command line.
+    context.output.stderr(`${error instanceof Error ? error.message : String(error)}\n`)
+    return LAUNCHER_EXIT.failed
   }
   const logger = stderrLogger(context.output)
   const report = (event: LauncherProgress): void => {

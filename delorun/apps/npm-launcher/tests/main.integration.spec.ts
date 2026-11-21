@@ -99,6 +99,15 @@ describe('the launcher’s main function', () => {
     expect(await readdir(dirname(world.home))).not.toContain('home')
   })
 
+  it.each([['linux', 'riscv64'], ['linux', 'ia32'], ['freebsd', 'x64']])('refuses %s-%s as a host with no runtime, exit 1 and no usage text', async (hostPlatform, hostArch) => {
+    const world = await surroundings()
+    expect(await main([], world.context({ hostPlatform, hostArch }))).toBe(1)
+    expect(world.stderr.join('')).toMatch(new RegExp(`^Delorun has no runtime for ${hostPlatform}-${hostArch}; `, 'u'))
+    expect(world.stderr.join('')).not.toContain('Usage:')
+    expect(world.server.requests).toEqual([])
+    expect(world.started).toEqual([])
+  })
+
   it('installs the channel’s release, prints each step and the log warning, records the check, and starts the runtime', async () => {
     const world = await surroundings()
     expect(await main([], world.context())).toBe(0)
@@ -198,12 +207,16 @@ describe('the launcher’s main function', () => {
     expect(world.started).toEqual([])
   })
 
-  it('names a machine it publishes no runtime for', async () => {
+  it('names a machine it publishes no runtime for, as a refused host and not a wrong command line', async () => {
     const world = await surroundings()
     const platform = vi.spyOn(process, 'platform', 'get').mockReturnValue('plan9' as NodeJS.Platform)
-    expect(await main([], world.context())).toBe(2)
+    try {
+      expect(await main([], world.context({ hostPlatform: undefined }))).toBe(1)
+    } finally {
+      platform.mockRestore()
+    }
     expect(world.stderr.join('')).toContain('Delorun has no runtime for')
-    platform.mockRestore()
+    expect(world.stderr.join('')).not.toContain('Usage:')
   })
 
   it('reads a --release given as --release=<version> and refuses it when a runtime is already installed', async () => {
