@@ -1298,6 +1298,9 @@ importers:
       '@deepseek-ai/dsh-storage-json':
         specifier: workspace:*
         version: link:../../../packages/storage/storage-json
+      '@deepseek-ai/dsh-util-values':
+        specifier: workspace:*
+        version: link:../../../packages/util/values
       '@deepseek-ai/dsh-web-app':
         specifier: workspace:*
         version: link:../../../packages/bundle/web-app
@@ -3041,6 +3044,9 @@ importers:
 
   delorun/packages/plugin-changes:
     dependencies:
+      '@deepseek-ai/dsh-util-values':
+        specifier: workspace:*
+        version: link:../../../packages/util/values
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
@@ -3050,6 +3056,9 @@ importers:
       '@delorun/changes':
         specifier: workspace:*
         version: link:../changes
+      '@delorun/contract-archive-and-trash':
+        specifier: workspace:*
+        version: link:../contract-archive-and-trash
       '@delorun/contract-home-layout':
         specifier: workspace:*
         version: link:../contract-home-layout
