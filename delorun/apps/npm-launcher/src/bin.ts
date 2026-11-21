@@ -89,9 +89,11 @@ export interface LauncherCommandLine {
 }
 
 /**
- * Split the launcher's own options from the runtime's arguments. The first `--` ends the launcher's options: every
- * argument after it reaches the runtime unchanged, so a runtime option that shares a name with one of the launcher's
- * (`--release`, `--profile`) is the runtime's. The `--` itself is the launcher's and is not passed on.
+ * Split the launcher's own options from the runtime's arguments. The launcher reads `--release` and `--help` only before
+ * the runtime's command word (or after `repair`, the launcher's own command), so `delorun verify --release <version>`
+ * and `delorun start --help` reach the runtime. The first `--` ends the launcher's options: every argument after it
+ * reaches the runtime unchanged, so a runtime option that shares a name with one of the launcher's (`--release`,
+ * `--profile`) is the runtime's. The `--` itself is the launcher's and is not passed on.
  * @param argv - the arguments after the script.
  * @returns the parsed line.
  * @throws {Error} when a flag that takes a value has none.
@@ -100,6 +102,7 @@ export function parseCommandLine(argv: readonly string[]): LauncherCommandLine {
   let profile: string | undefined
   let release: string | undefined
   let help = false
+  let command: string | undefined
   const runtimeArgs: string[] = []
   let passedThrough: string[] = []
   for (let at = 0; at < argv.length; at++) {
@@ -109,9 +112,12 @@ export function parseCommandLine(argv: readonly string[]): LauncherCommandLine {
       runtimeArgs.push(...passedThrough)
       break
     }
-    if (argument === '--help' || argument === '-h') {
+    // After the runtime's command word, `--help` and `--release` are that command's own options; `repair` is the
+    // launcher's command and keeps reading them.
+    const launcherOptions = command === undefined || command === 'repair'
+    if (launcherOptions && (argument === '--help' || argument === '-h')) {
       help = true
-    } else if (argument === RELEASE_FLAG || argument.startsWith(`${RELEASE_FLAG}=`)) {
+    } else if (launcherOptions && (argument === RELEASE_FLAG || argument.startsWith(`${RELEASE_FLAG}=`))) {
       const inline = argument.startsWith(`${RELEASE_FLAG}=`) ? argument.slice(RELEASE_FLAG.length + 1) : undefined
       if (inline !== undefined) {
         release = inline
@@ -127,6 +133,8 @@ export function parseCommandLine(argv: readonly string[]): LauncherCommandLine {
         profile = value
       } else if (argument.startsWith(`${PROFILE_FLAG}=`)) {
         profile = argument.slice(PROFILE_FLAG.length + 1)
+      } else if (command === undefined && !argument.startsWith('-')) {
+        command = argument
       }
       runtimeArgs.push(argument, ...argument === PROFILE_FLAG ? [profile!] : [])
     }
@@ -140,7 +148,7 @@ export function parseCommandLine(argv: readonly string[]): LauncherCommandLine {
  */
 export function usage(): string {
   return [
-    'Usage: delorun [--profile <name>] [--release <version>] [--] [arguments for delorun]',
+    'Usage: delorun [--profile <name>] [--release <version>] [--] [command and arguments for delorun]',
     '',
     'Runs Delorun from the runtime this computer has installed, or installs the release your channel',
     'publishes first. An install checks the release against its signed manifest and the release log',
@@ -154,6 +162,8 @@ export function usage(): string {
     '  Replaces the installed program with a verified release and keeps your chats, settings and keys.',
     '  It asks you first, in a terminal; the old program is set aside, never deleted.',
     '  --                 end the launcher\'s options; everything after it is passed to delorun',
+    '',
+    'The launcher reads --release and --help only before the command word; after it they are the command\'s own.',
     '',
     'Every other argument is passed to delorun unchanged.',
     '',

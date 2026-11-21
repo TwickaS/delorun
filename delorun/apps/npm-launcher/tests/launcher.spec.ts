@@ -922,6 +922,30 @@ describe('the command line', () => {
     expect(line.passedThrough).toEqual(['--release', '0.2.0', '--profile', 'desktop'])
   })
 
+  it('passes --release and --help after the command word to the runtime', () => {
+    const verify = parseCommandLine(['verify', '--release', '0.1.0'])
+    expect(verify.release).toBeUndefined()
+    expect(verify.runtimeArgs).toEqual(['verify', '--release', '0.1.0'])
+    const inline = parseCommandLine(['--profile', 'work', 'verify', '--release=0.1.0', '--json'])
+    expect(inline.release).toBeUndefined()
+    expect(inline.profile).toBe('work')
+    expect(inline.runtimeArgs).toEqual(['--profile', 'work', 'verify', '--release=0.1.0', '--json'])
+    for (const help of ['--help', '-h']) {
+      const line = parseCommandLine(['start', help])
+      expect(line.help).toBe(false)
+      expect(line.runtimeArgs).toEqual(['start', help])
+    }
+  })
+
+  it('still reads --release and --help before the command word and after repair, the launcher\'s own command', () => {
+    expect(parseCommandLine(['--release', '0.1.0', 'verify']).release).toBe('0.1.0')
+    expect(parseCommandLine(['--profile', 'work', '--help']).help).toBe(true)
+    const repair = parseCommandLine(['repair', '--release', '0.1.1', '--from', '/tmp/r'])
+    expect(repair.release).toBe('0.1.1')
+    expect(repair.runtimeArgs).toEqual(['repair', '--from', '/tmp/r'])
+    expect(parseCommandLine(['repair', '--help']).help).toBe(true)
+  })
+
   it('refuses a profile name that would leave the home', () => {
     expect(() => launcherProfile('../../../etc', {})).toThrow(/is not a profile name/u)
     expect(() => launcherProfile(undefined, { DELORUN_PROFILE: '../../etc' })).toThrow(/is not a profile name/u)
