@@ -2,10 +2,10 @@
  * Publishes a built channel directory (the output of `delorun/apps/release/src/local-release.ts`, or a signed release
  * laid out the same way) to the channel's R2 bucket, and optionally mirrors the release files to the GitHub release.
  *
- * `node delorun/apps/release-channel/src/publish-release.ts --stage <stage> --account <id> --channel <dir> --mark-url <url> [--mirror github --tag v<version> --repo <owner/name>]`
+ * `node delorun/apps/release-channel/src/publish-release.ts --stage <stage> --account <id> --channel <dir> --mark-url <https://host/mark> [--mirror github --tag v<version> --repo <owner/name>]`
  *
  * The Resign Worker's high-water mark moves at publish time: right after `timestamp.json` is uploaded, the script posts
- * it to `--mark-url` (the Worker's `/mark` address), signed with `DELORUN_MARK_SECRET`; a refusal fails the publish
+ * it to `--mark-url` (the Worker's `/mark` address: the URL must end in `/mark`, which {@link parseMarkUrl} checks before anything is published), signed with `DELORUN_MARK_SECRET`; a refusal fails the publish
  * ({@link postMark}, `./mark-endpoint.ts`).
  *
  * The S3 token is read from `DELORUN_R2_ACCESS_KEY_ID` and `DELORUN_R2_SECRET_ACCESS_KEY`; it is scoped to Object Read and
@@ -124,6 +124,26 @@ export function postMark(options: { readonly url: string, readonly secret: strin
 }
 
 /**
+ * Check the `--mark-url` value: an absolute `https:` or `http:` URL whose path ends in `/mark`, the Worker's mark
+ * address, so a bare host or the Worker's other paths fail before anything is uploaded.
+ * @param value - the `--mark-url` argument.
+ * @returns the URL, unchanged.
+ * @throws {Error} when the value is not a URL or its path does not end in `/mark`.
+ */
+export function parseMarkUrl(value: string): string {
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch (error) {
+    throw new Error(`--mark-url must be the Resign Worker's /mark address, a URL ending in /mark; ${JSON.stringify(value)} is not a URL (${error instanceof Error ? error.message : String(error)})`, { cause: error })
+  }
+  if (!/^https?:$/u.test(url.protocol) || !url.pathname.endsWith('/mark') || url.search !== '' || url.hash !== '') {
+    throw new Error(`--mark-url must be the Resign Worker's /mark address, a URL ending in /mark with no query or fragment; got ${JSON.stringify(value)}`)
+  }
+  return value
+}
+
+/**
  * Upload a release's files to a GitHub release with `gh release upload`, never with `--clobber`.
  * @param options - the channel directory, tag and repository, and the command runner (`gh` by default).
  * @returns the file paths uploaded.
@@ -146,8 +166,9 @@ async function main(argv: readonly string[]): Promise<number> {
     const secretAccessKey = process.env.DELORUN_R2_SECRET_ACCESS_KEY
     if (accessKeyId === undefined || secretAccessKey === undefined) throw new Error('DELORUN_R2_ACCESS_KEY_ID and DELORUN_R2_SECRET_ACCESS_KEY hold no S3 token')
     const markSecret = process.env.DELORUN_MARK_SECRET
-    if (values['mark-url'] === undefined || markSecret === undefined) throw new Error('pass --mark-url <the Resign Worker\'s /mark address> and set DELORUN_MARK_SECRET, so the high-water mark moves when the timestamp is uploaded')
-    await publishChannel(s3Store({ accountId: values.account, bucket: releaseBucket(values.stage), accessKeyId, secretAccessKey }), values.channel, console.log, postMark({ url: values['mark-url'], secret: markSecret }))
+    if (values['mark-url'] === undefined || markSecret === undefined) throw new Error('pass --mark-url <the Resign Worker\'s /mark address, ending in /mark> and set DELORUN_MARK_SECRET, so the high-water mark moves when the timestamp is uploaded')
+    const markUrl = parseMarkUrl(values['mark-url'])
+    await publishChannel(s3Store({ accountId: values.account, bucket: releaseBucket(values.stage), accessKeyId, secretAccessKey }), values.channel, console.log, postMark({ url: markUrl, secret: markSecret }))
     if (values.mirror === 'github') {
       const uploaded = await mirrorToGithub({ channel: values.channel, tag: values.tag!, repo: values.repo! })
       console.log(`mirrored ${String(uploaded.length)} files to ${values.repo!} ${values.tag!}`)

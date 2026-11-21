@@ -1,5 +1,9 @@
 /** The S3 store sends conditional writes and reads a 412 as a lost condition, through a stand-in `fetch`. */
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { publishChannel } from '../src/publish-release.ts'
 import { s3Store } from '../src/s3-store.ts'
 
 interface Seen { readonly method: string, readonly url: string, readonly headers: Headers }
@@ -23,6 +27,44 @@ describe('S3 release store', () => {
     expect(seen[0]!.headers.get('Authorization')).toMatch(/^AWS4-HMAC-SHA256 Credential=AKIA\//u)
     expect(await s3.putIfMatch('timestamp.json', Buffer.from('x'), '"fresh"')).toBe(true)
     expect(await s3.putIfMatch('timestamp.json', Buffer.from('x'), '"stale"')).toBe(false)
+  })
+
+  describe('a create on a key the bucket lock holds', () => {
+    const lock = (code: string): Response => new Response(`<?xml version="1.0" encoding="UTF-8"?><Error><Code>${code}</Code><Message>m</Message></Error>`, { status: 409 })
+
+    it('reads 409 ObjectLockedByBucketPolicy like 412, so the caller compares the stored bytes', async () => {
+      const { store: s3 } = store(() => lock('ObjectLockedByBucketPolicy'))
+      expect(await s3.putIfAbsent('releases/download/v0.1.0/a', Buffer.from('x'))).toBe(false)
+    })
+
+    it('fails on any other 409', async () => {
+      const { store: s3 } = store(() => lock('OperationAborted'))
+      await expect(s3.putIfAbsent('k', Buffer.from('x'))).rejects.toThrow(/PUT k answered 409.*OperationAborted/su)
+      const { store: bare } = store(() => new Response('conflict', { status: 409 }))
+      await expect(bare.putIfAbsent('k', Buffer.from('x'))).rejects.toThrow(/PUT k answered 409: conflict/u)
+    })
+
+    it('does not read the lock as a lost condition on a replace', async () => {
+      const { store: s3 } = store(() => lock('ObjectLockedByBucketPolicy'))
+      await expect(s3.putIfMatch('timestamp.json', Buffer.from('x'), '"e"')).rejects.toThrow(/answered 409/u)
+    })
+
+    it('lets publishChannel skip a locked key with the same bytes and refuse one with other bytes', async () => {
+      const directory = mkdtempSync(join(tmpdir(), 'release-channel-s3-'))
+      try {
+        mkdirSync(join(directory, 'releases/download/v0.1.0'), { recursive: true })
+        writeFileSync(join(directory, 'releases/download/v0.1.0/a.tar.gz'), 'archive')
+        const respond = (stored: string) => (seen: Seen): Response => seen.method === 'PUT' ? lock('ObjectLockedByBucketPolicy') : new Response(stored, { status: 200, headers: { etag: '"e"' } })
+        const lines: string[] = []
+        const same = store(respond('archive'))
+        expect(await publishChannel(same.store, directory, line => lines.push(line))).toEqual([])
+        expect(lines).toEqual(['skipped releases/download/v0.1.0/a.tar.gz: published with the same bytes'])
+        const other = store(respond('different'))
+        await expect(publishChannel(other.store, directory)).rejects.toThrow(/is already published with other bytes/u)
+      } finally {
+        rmSync(directory, { recursive: true, force: true })
+      }
+    })
   })
 
   it('fails loudly on other errors', async () => {
