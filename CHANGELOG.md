@@ -57,7 +57,7 @@ This is everything that differs from DeepSeek Harness `dsh-v0.2.2-rc.3` in the l
 - **Fixed:** An update no longer fails its check and goes back when the Claude Code or Codex plugin was installed on an earlier release: the plugin loads on the new release as it did before.
 - **Fixed:** An update with the Claude Code plugin installed completes again. The two previous previews were built without the fix and went back to the release before.
 - **Fixed:** An update whose new release fails its health check leaves the previous release running again, with its plugin copies pointed at it, instead of stopping Delorun until you start it by hand.
-- **Fixed:** A chat-data registration left behind before a restart no longer blocks `delorun update`. An update run from release 0.1.0-preview.1.10 or earlier can still be refused.
+- **Fixed:** A chat-data registration left behind before a restart no longer blocks `delorun update`. An update run from an earlier preview release can still be refused.
 - **Fixed:** An installed release carries every built file of the agent seats plugin, so Delorun starts after an install or update.
 - **Fixed:** Settings → Updates opens with its content again. It showed an empty panel, with no title, because the page failed to read its Continue stopped chats switch.
 - **Fixed:** The update report no longer says the release's freshness passed when it was never checked. A release installed with `delorun update --from` after you agreed that the release channel cannot confirm it is current now shows "freshness unchecked". `delorun update --yes` does not confirm it, and the studio asks you to tick that you want to update anyway, as it does when the release log could not be reached.

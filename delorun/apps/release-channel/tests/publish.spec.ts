@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { mirrorToGithub, publishChannel, publishPlan, PublishRefusal } from '../src/publish-release.ts'
+import { mirrorToGithub, parseMarkUrl, publishChannel, publishPlan, PublishRefusal } from '../src/publish-release.ts'
 import { MemoryStore, signedChannel } from './support.ts'
 
 const keys = signedChannel().keys
@@ -103,5 +103,15 @@ describe('release publishing', () => {
     expect(calls).toEqual([['release', 'upload', 'v0.1.0', ...uploaded, '--repo', 'owner/repo']])
     expect(calls[0]).not.toContain('--clobber')
     await expect(mirrorToGithub({ channel: directory, tag: 'v9.9.9', repo: 'owner/repo', run: async () => {} })).rejects.toThrow(/no files under/u)
+  })
+})
+
+describe('--mark-url', () => {
+  it.each(['https://resign.example.test/mark', 'http://127.0.0.1:8787/mark', 'https://example.test/api/mark'])('accepts %s', (url) => {
+    expect(parseMarkUrl(url)).toBe(url)
+  })
+
+  it.each(['https://resign.example.test', 'https://resign.example.test/', 'https://resign.example.test/mark/', 'https://resign.example.test/marks', 'https://resign.example.test/mark?x=1', 'https://resign.example.test/mark#top', 'ftp://resign.example.test/mark', 'http://resign.example.test/mark', 'resign.example.test/mark'])('refuses %s at parse time', (url) => {
+    expect(() => parseMarkUrl(url)).toThrow(/--mark-url must be the Resign Worker's \/mark address/u)
   })
 })

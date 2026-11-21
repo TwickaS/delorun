@@ -81,7 +81,7 @@ Cloudflare 不提供只读的 R2 绑定，所以公开 Worker 的只读性来自
 ```sh
 DELORUN_R2_ACCESS_KEY_ID=... DELORUN_R2_SECRET_ACCESS_KEY=... DELORUN_MARK_SECRET=... \
   node delorun/apps/release-channel/src/publish-release.ts --stage <stage> --account <id> --channel <dir> \
-  --mark-url <the Resign Worker's /mark address> [--mirror github --tag v<version> --repo <owner/name>]
+  --mark-url <the Resign Worker's /mark address, a URL ending in /mark> [--mirror github --tag v<version> --repo <owner/name>]
 ```
 
 `--channel` 是按 `local-release.ts` 写出的方式组织的目录（`timestamp.json`、`root/`、`releases/download/v<version>/`）。隐藏条目会被跳过，任何其他文件都会被拒绝。顺序是发布文件，然后是新的根，最后是 `timestamp.json`。发布文件和根只能创建（`If-None-Match: *`）。字节相同的现有对象会被跳过，所以被中断的发布可以继续；字节不同的对象会使发布停止，并给出指名该键的拒绝。仅当新文件的版本高于已存储文件的版本、且对照刚刚读取的实体标签成立时，才会替换 `timestamp.json`，所以与之竞争的重新签署会保留它的文件，而发布会停止。上传之后，脚本立即把该文件提交到 `--mark-url`，用 `DELORUN_MARK_SECRET` 签名；Worker 最多读取 64 KB 的请求体（超出则 413），只有存储桶保存了这些字节、且该文件在存储桶根链的最新根之下验证通过（未签名或签名错误的文件以 409 被拒绝）时，才把高水位标记移动到它，并且从不降低它，所以恢复出的更旧时间戳会被下次 cron 运行拒绝。被拒绝的请求会使发布失败。版本相同或更低的发布会被拒绝；应从重新签署后的文件签署下一个版本。在第一次之后的每次本地发布之前，运行 `sign-timestamp.ts --import-from https://<channel origin> --root <root>... --state <state.json>`（见[发布 README](../release/README.zh.md#root-and-timestamp-metadata)），它把签署者的状态移动到 Worker 重新签署所留下的时间戳；如果 Worker 在导入与发布之间重新签署，发布会拒绝且不替换任何内容，此时应再次导入、签署并发布。

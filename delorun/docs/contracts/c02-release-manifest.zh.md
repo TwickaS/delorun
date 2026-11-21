@@ -265,7 +265,7 @@ CLI 运行时的每次启动时，npm 启动器用它携带的最新根（或者
 - 草稿的 `install.sh` 或 `install.ps1` 不是零长度的占位文件，因为重建比较尚未覆盖安装脚本；
 - 某个 `npm` 条目的打包 tarball（发布目录中的 `<name>-<version>.tgz`）缺失，或其 `sha512-` integrity，或其 `package/package.json` 中的名称与版本，与该条目不同。
 
-`local-release.ts` 为它自己的通道目录构建并签名发布，不进行重建，也不进行安全公告检查。其 manifest 把构建者指明为 `local release (no independent rebuild)`；它拒绝其 SHA-256 或根、targets、时间戳密钥 id 列于 `delorun/release/production-keys.json` 的根文件；从生产发布位置获取内容的启动器会拒绝指明该构建者的 manifest。
+`local-release.ts` 为它自己的通道目录构建并签名发布，不进行重建，也不进行安全公告检查。其 manifest 把构建者指明为 `local release (no independent rebuild)`；它拒绝其 SHA-256 或根、targets、时间戳密钥 id 列于 `delorun/release/production-keys.json` 的根文件；从生产发布位置获取内容的启动器会拒绝指明该构建者的 manifest，除非以下两点都成立：该版本是 0.x 版本，且验证它的根是预览根（根版本 1，`1.root.json`，SHA-256 为 `e78c076567b1a2e104756409ad6f4a77c9b8caab95a3f38e857a94f82523b746`）。在 `1.0.0` 之前，签名仪式推迟，所以维护者在维护者的电脑上构建并签署 0.x 版本，没有独立重建；`1.0.0` 版本（包括它的预发布版本）、更晚的根下的版本以及其他根下的版本都会被拒绝。本约定的其他所有检查对这种版本照常适用。
 
 签名命令只接受一份重建记录；维护者持有密钥后 N 个中两个构建者的要求见[发布工作流设计](../design/release-workflow.zh.md)，尚未构建。
 
@@ -395,7 +395,7 @@ acceptances:
 | `sign-release-refuses-npm-integrity-mismatch` | release-chain | 签名拒绝其打包 tarball 的 integrity 与条目不同的 `npm` 条目。 |
 | `local-release-refuses-production-keys` | release-chain | 本地发布拒绝 `production-keys.json` 所列的根文件或根、targets、时间戳密钥 id，且不写入任何内容。 |
 | `c02-start-anchors-on-newest-shipped-root` | release-chain | 由携带的最新根所撤销的 targets 密钥签名的运行时无法通过启动检查，即使已存储的根是列出该密钥的较旧根，且不会启动任何进程。 |
-| `c02-production-refuses-local-release` | release-chain | 从生产发布位置获取内容的通道，在安装与更新检查中都会拒绝构建者为 `local release (no independent rebuild)` 的 manifest；它自己的通道会安装它。 |
+| `c02-production-refuses-local-release` | release-chain | 从生产发布位置获取内容的通道，在安装与更新检查中都会拒绝构建者为 `local release (no independent rebuild)` 的 manifest，除非该版本是在预览根下验证的 0.x 版本；`1.0.0`、`1.0.0-rc.1`、更晚的根和其他根都会拒绝，签名或摘要有误则无论构建者是谁都会拒绝。它自己的通道会安装它。 |
 | `c02-setup-installs-pinned-launcher` | release-chain | Setup 按启动器在 `DELORUN_LAUNCHER_VERSION` 中指定的版本安装 `delorun@<version>`，启动器未指定版本时不提供安装。 |
 | `c02-rebuild-difference-blocks-signing` | `release` | `compare-rebuild.ts` 在出现 `rebuild-exceptions.json` 之外的差异时以 1 退出，签名步骤停止。 |
 | `c02-signing-refuses-without-rebuild` | `release` | 没有重建记录的签名会被拒绝，并给出指明所需来源的消息。 |

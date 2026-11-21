@@ -1,6 +1,7 @@
 /**
  * {@link PublishStore} over R2's S3 API with conditional writes (`If-None-Match: *` creates, `If-Match` replaces; a
- * failed condition answers 412). The S3 token is scoped to Object Read and Write on the one bucket and lives with the
+ * failed condition answers 412; a create on a key the bucket lock holds answers 409 `ObjectLockedByBucketPolicy`, which a
+ * create reads as the same "already there"). The S3 token is scoped to Object Read and Write on the one bucket and lives with the
  * person or workflow that publishes, never on a Worker.
  *
  * @module @delorun/release-channel/s3-store
@@ -24,6 +25,9 @@ export interface S3StoreConfig {
   readonly fetch?: typeof fetch
 }
 
+/** The S3 error code R2 answers with a 409 when the bucket lock holds the key. */
+const LOCKED_CODE = /<Code>ObjectLockedByBucketPolicy<\/Code>/u
+
 function encodeKey(key: string): string {
   return key.split('/').map(encodeURIComponent).join('/')
 }
@@ -40,10 +44,14 @@ export function s3Store(config: S3StoreConfig): PublishStore {
     const signed = await client.sign(url, init)
     return await (config.fetch ?? fetch)(signed)
   }
-  const put = async (key: string, bytes: Uint8Array, condition: Record<string, string>): Promise<boolean> => {
+  const put = async (key: string, bytes: Uint8Array, condition: Record<string, string>, lockedIsLost: boolean): Promise<boolean> => {
     const response = await send(`${base}/${encodeKey(key)}`, { method: 'PUT', body: Buffer.from(bytes), headers: condition })
     if (response.status === 412) return false
-    if (!response.ok) throw new Error(`PUT ${key} answered ${String(response.status)}: ${await response.text()}`)
+    const text = response.ok ? '' : await response.text()
+    // Only a create may read the lock as "already there": publishChannel then compares the stored bytes, so a differing
+    // object still fails. Any other 409 is an error.
+    if (lockedIsLost && response.status === 409 && LOCKED_CODE.test(text)) return false
+    if (!response.ok) throw new Error(`PUT ${key} answered ${String(response.status)}: ${text}`)
     return true
   }
   return {
@@ -67,7 +75,7 @@ export function s3Store(config: S3StoreConfig): PublishStore {
       } while (token !== undefined)
       return keys
     },
-    putIfAbsent: async (key, bytes) => await put(key, bytes, { 'If-None-Match': '*' }),
-    putIfMatch: async (key, bytes, etag) => await put(key, bytes, { 'If-Match': etag }),
+    putIfAbsent: async (key, bytes) => await put(key, bytes, { 'If-None-Match': '*' }, true),
+    putIfMatch: async (key, bytes, etag) => await put(key, bytes, { 'If-Match': etag }, false),
   }
 }

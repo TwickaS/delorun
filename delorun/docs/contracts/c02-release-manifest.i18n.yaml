@@ -51,8 +51,8 @@
   en: aeff340b7ac251a7
   zh: 15a7d8e3db1d6ea6
 /c2-release-manifest-and-signature/rebuild-before-signing:
-  en: 3ed3d3b1f519c486
-  zh: a0d153f708ddf17d
+  en: 98435e444de556d9
+  zh: 28b0105ce9ec995b
 /c2-release-manifest-and-signature/dependency-advisory-check:
   en: 77a34af58b6f0eff
   zh: a608438665d86d2b
@@ -78,8 +78,8 @@
   en: 4739d95131498523
   zh: 8579be6852ef8bcf
 /c2-release-manifest-and-signature/security/denial-tests:
-  en: 71530f83a3cf502d
-  zh: d81c0aa334f220f8
+  en: f2d8f16970441c5d
+  zh: 2934ed9697f82954
 /c2-release-manifest-and-signature/security/what-this-does-not-prove:
   en: 6e87204f048d03d1
   zh: ad527b41af729604

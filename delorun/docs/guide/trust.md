@@ -57,6 +57,8 @@ What you still trust:
 
 Every release is signed, and `delorun update` and `delorun verify` check the signature before anything runs. The signing keys are preview keys: they were made on the computer where the maintainer works with agents, not on a machine kept offline for the purpose, and nobody else has witnessed or backed them up. That computer is also where agents run. So anyone, or any agent, who gains access to it could sign a release that your installation accepts. The public release log still records every release, so a release signed that way would be visible to everyone who checks it, but nothing stops it from being signed.
 
+Until `1.0.0`, the maintainer also builds each release on that same computer. No second builder rebuilds it to check that the published files match the source, so the release is built and signed on one machine and no independent rebuild backs it. Your installation accepts such a release while it is a 0.x release signed under the preview root in the table below. Your installation refuses a release built this way when it is a `1.0.0` release or is signed under a later root.
+
 This is the main limit of the preview, and it is why the README calls Delorun a preview. A signature tells you a release came from whoever holds the preview keys, and the release log tells you that everyone got the same release. Neither is the protection that offline keys give. The maintainer publishes every release by hand with a second factor, so that no long-lived publishing credential sits where agents can use it.
 
 The release root that these releases are signed under:
