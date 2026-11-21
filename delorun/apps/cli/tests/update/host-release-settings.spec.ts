@@ -13,7 +13,7 @@ import type { RuntimeVersion } from '@delorun/contract-home-layout'
 import type { HealthExpectations } from '@delorun/home-process'
 import { releaseSettingChanges, rowSettingsFact, type LayerFact, type RowSettingsChange } from '@delorun/update'
 import type { BootedRow } from '../../src/delorun-bundles.ts'
-import { bootRowsOf, checkHealth, HEALTH_PATH, personRowsOf, type HostHealthFacts } from '../../src/update/host.ts'
+import { bootRowsOf, checkHealth, HEALTH_PATH, personRowsOf, withAppliedConfig, type HostHealthFacts } from '../../src/update/host.ts'
 
 const SEATS = '@delorun/plugin-agent-seats'
 const PREVIOUS = '0.1.0-preview.2.3' as RuntimeVersion
@@ -162,6 +162,13 @@ describe('H3 and the changes a release\'s signed bundles bring', () => {
     const unreadable = bootRowsOf([manager, seats({ seats: [] })], 'unreadable')
     expect(unreadable.find(row => row.id === 'delorun-agent-seats')).toMatchObject({ personEdited: true })
     expect(unreadable.find(row => row.id === 'plugin-manager')?.personEdited).toBeUndefined()
+  })
+
+  it('derives nothing for a row whose config the previous Host applied while it ran', async () => {
+    const port = await studio()
+    const read = facts(port, [manager, seats({ seats: [], enabled: true })], async () => Promise.resolve(turnsOn))
+    const handed = withAppliedConfig(bootRowsOf([manager, seats({ seats: [] })]), 'delorun-agent-seats', { seats: [] })
+    expect(await checkHealth(read.facts, { ...expectationsFrom([]), previousRows: handed })).toEqual(failed)
   })
 
   it('checks the sandbox row\'s protection before it accepts any row', async () => {

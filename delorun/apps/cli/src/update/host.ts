@@ -281,14 +281,14 @@ function configHashOf(id: string, config: unknown): string {
 /**
  * The rows a Host hands its successor after it applied a protected row's new config while it ran, outside the Loader:
  * the boot rows with that row's hash taken from the config it applied, which the next start boots from the same file.
- * A row that is not there, or not a protected plugin's, keeps what it had.
+ * The row is marked `personEdited`, because the applied config is the person's. A row that is not there, or not a protected plugin's, keeps what it had.
  * @param rows - the rows as {@link bootRowsOf} gave them at boot.
  * @param id - the row's id.
  * @param config - the config the Host applied.
  * @returns the rows.
  */
 export function withAppliedConfig(rows: readonly BootRow[], id: string, config: unknown): BootRow[] {
-  return rows.map(row => (row.id === id && row.configHash !== undefined ? { ...row, configHash: configHashOf(id, config) } : row))
+  return rows.map(row => (row.id === id && row.configHash !== undefined ? { ...row, configHash: configHashOf(id, config), personEdited: true } : row))
 }
 
 /**
