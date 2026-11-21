@@ -27,7 +27,7 @@ describe('localBuilderAllowed', () => {
     expect(localBuilderAllowed(version, rootOf(1, PREVIEW_ROOT_SHA256))).toBe(true)
   })
 
-  it.each(['1.0.0', '1.0.0-rc.1', '1.0.0-preview.1', '2.0.0', '0.1', 'v0.1.0', '', ' 0.1.0', '0.1.0\n'])('refuses the version "%s" under the preview root', (version) => {
+  it.each(['1.0.0', '1.0.0-rc.1', '1.0.0-preview.1', '2.0.0', '0.1', 'v0.1.0', '', ' 0.1.0', '0.1.0\n', '0.1.0+meta', '00.1.0'])('refuses the version "%s" under the preview root', (version) => {
     expect(localBuilderAllowed(version, rootOf(1, PREVIEW_ROOT_SHA256))).toBe(false)
   })
 

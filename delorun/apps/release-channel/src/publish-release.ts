@@ -124,7 +124,7 @@ export function postMark(options: { readonly url: string, readonly secret: strin
 }
 
 /**
- * Check the `--mark-url` value: an absolute `https:` or `http:` URL whose path ends in `/mark`, the Worker's mark
+ * Check the `--mark-url` value: an absolute `https:` URL, or an `http:` URL on loopback, whose path ends in `/mark`, the Worker's mark
  * address, so a bare host or the Worker's other paths fail before anything is uploaded.
  * @param value - the `--mark-url` argument.
  * @returns the URL, unchanged.
@@ -137,8 +137,9 @@ export function parseMarkUrl(value: string): string {
   } catch (error) {
     throw new Error(`--mark-url must be the Resign Worker's /mark address, a URL ending in /mark; ${JSON.stringify(value)} is not a URL (${error instanceof Error ? error.message : String(error)})`, { cause: error })
   }
-  if (!/^https?:$/u.test(url.protocol) || !url.pathname.endsWith('/mark') || url.search !== '' || url.hash !== '') {
-    throw new Error(`--mark-url must be the Resign Worker's /mark address, a URL ending in /mark with no query or fragment; got ${JSON.stringify(value)}`)
+  const loopback = url.protocol === 'http:' && (url.hostname === '127.0.0.1' || url.hostname === 'localhost' || url.hostname === '[::1]')
+  if ((url.protocol !== 'https:' && !loopback) || !url.pathname.endsWith('/mark') || url.search !== '' || url.hash !== '') {
+    throw new Error(`--mark-url must be the Resign Worker's /mark address, an https: URL (http: only on loopback) ending in /mark with no query or fragment; got ${JSON.stringify(value)}`)
   }
   return value
 }

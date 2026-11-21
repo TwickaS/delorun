@@ -111,7 +111,7 @@ describe('--mark-url', () => {
     expect(parseMarkUrl(url)).toBe(url)
   })
 
-  it.each(['https://resign.example.test', 'https://resign.example.test/', 'https://resign.example.test/mark/', 'https://resign.example.test/marks', 'https://resign.example.test/mark?x=1', 'https://resign.example.test/mark#top', 'ftp://resign.example.test/mark', 'resign.example.test/mark'])('refuses %s at parse time', (url) => {
+  it.each(['https://resign.example.test', 'https://resign.example.test/', 'https://resign.example.test/mark/', 'https://resign.example.test/marks', 'https://resign.example.test/mark?x=1', 'https://resign.example.test/mark#top', 'ftp://resign.example.test/mark', 'http://resign.example.test/mark', 'resign.example.test/mark'])('refuses %s at parse time', (url) => {
     expect(() => parseMarkUrl(url)).toThrow(/--mark-url must be the Resign Worker's \/mark address/u)
   })
 })

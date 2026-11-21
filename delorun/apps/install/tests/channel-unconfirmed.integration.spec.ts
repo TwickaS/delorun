@@ -12,7 +12,7 @@ import { LOCAL_RELEASE_BUILDER } from '@delorun/release-formats/sign/schemas'
 import { Downloader } from '../src/download.ts'
 import { isInstallError } from '../src/errors.ts'
 import { LauncherChannel, type UnconfirmedInstall, type UnconfirmedQuestion } from '../src/channel.ts'
-import { fixtureRelease, logService, NOW, releasePaths, standIn, unreachableLog, type Fixture, type StandIn } from './support.ts'
+import { fixtureRelease, logService, NOW, releasePaths, sha256, standIn, unreachableLog, type Fixture, type StandIn } from './support.ts'
 
 const LOOPBACK = { scheme: 'http:', hosts: ['127.0.0.1'], maxRedirects: 5 }
 const FOUR_DAYS = 4 * 24 * 3600
@@ -25,7 +25,7 @@ afterEach(async () => {
 })
 
 /** A channel over a fixture, with the files the spec keeps and a record of the questions asked. */
-async function harness(fixture: Fixture, change: { readonly files?: (paths: Map<string, Buffer>) => void, readonly now?: number, readonly unconfirmed?: Partial<UnconfirmedInstall>, readonly answer?: boolean, readonly log?: 'unreachable' | ReleaseLogTransport, readonly productionRoot?: boolean } = {}) {
+async function harness(fixture: Fixture, change: { readonly files?: (paths: Map<string, Buffer>) => void, readonly now?: number, readonly unconfirmed?: Partial<UnconfirmedInstall>, readonly answer?: boolean, readonly log?: 'unreachable' | ReleaseLogTransport, readonly productionRoot?: boolean, readonly previewRoots?: readonly string[] } = {}) {
   const home = await mkdtemp(join(tmpdir(), 'delorun-install-unconfirmed-'))
   cleanup.push(() => rm(home, { recursive: true, force: true }))
   const paths = releasePaths(fixture)
@@ -40,6 +40,7 @@ async function harness(fixture: Fixture, change: { readonly files?: (paths: Map<
     channel: 'stable',
     log: change.log === 'unreachable' ? unreachableLog() : change.log ?? logService(fixture.checkpoint),
     ...change.productionRoot === undefined ? {} : { productionRoot: change.productionRoot },
+    ...change.previewRoots === undefined ? {} : { previewRoots: change.previewRoots },
     source: { metadata: server.origin, files: (version, name) => `${server.origin}/releases/${version}/${name}` },
     downloader: new Downloader({ hosts: LOOPBACK }),
     now: () => (change.now ?? NOW) * 1000,
@@ -141,6 +142,22 @@ describe('a release the timestamp does not confirm, past the checks that never r
   it('refuses a release the local release build signed when the roots are production roots, without asking', async () => {
     const fixture = await fixtureRelease({ builder: LOCAL_RELEASE_BUILDER })
     const { channel, questions } = await harness(fixture, { now: NOW + FOUR_DAYS, productionRoot: true })
+    const error: unknown = await channel.resolve().then(() => undefined, (failure: unknown) => failure)
+    expect(isInstallError(error, 'INSTALL_VERIFY_FAILED')).toBe(true)
+    expect((error as Error).message).toContain(`names the builder "${LOCAL_RELEASE_BUILDER}"`)
+    expect(questions).toEqual([])
+  })
+
+  it('installs a 0.x release the local release build signed under the preview root, on the person\'s agreement', async () => {
+    const fixture = await fixtureRelease({ builder: LOCAL_RELEASE_BUILDER })
+    const { channel, questions } = await harness(fixture, { now: NOW + FOUR_DAYS, productionRoot: true, previewRoots: [sha256(fixture.roots[0]!)] })
+    expect((await channel.resolve()).version).toBe('0.1.0')
+    expect(questions).toHaveLength(1)
+  })
+
+  it('refuses a 1.0.0 release the local release build signed under the preview root, without asking', async () => {
+    const fixture = await fixtureRelease({ builder: LOCAL_RELEASE_BUILDER, version: '1.0.0' })
+    const { channel, questions } = await harness(fixture, { now: NOW + FOUR_DAYS, productionRoot: true, previewRoots: [sha256(fixture.roots[0]!)] })
     const error: unknown = await channel.resolve().then(() => undefined, (failure: unknown) => failure)
     expect(isInstallError(error, 'INSTALL_VERIFY_FAILED')).toBe(true)
     expect((error as Error).message).toContain(`names the builder "${LOCAL_RELEASE_BUILDER}"`)
