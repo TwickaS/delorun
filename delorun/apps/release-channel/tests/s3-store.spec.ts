@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { publishChannel } from '../src/publish-release.ts'
 import { s3Store } from '../src/s3-store.ts'
+import { signedChannel } from './support.ts'
 
 interface Seen { readonly method: string, readonly url: string, readonly headers: Headers }
 
@@ -54,11 +55,16 @@ describe('S3 release store', () => {
       try {
         mkdirSync(join(directory, 'releases/download/v0.1.0'), { recursive: true })
         writeFileSync(join(directory, 'releases/download/v0.1.0/a.tar.gz'), 'archive')
-        const respond = (stored: string) => (seen: Seen): Response => seen.method === 'PUT' ? lock('ObjectLockedByBucketPolicy') : new Response(stored, { status: 200, headers: { etag: '"e"' } })
+        writeFileSync(join(directory, 'timestamp.json'), signedChannel().timestamp.bytes)
+        const respond = (stored: string) => (seen: Seen): Response => {
+          // The timestamp is not locked and not stored yet; every other key is locked and holds `stored`.
+          if (seen.url.endsWith('/timestamp.json')) return new Response(null, { status: seen.method === 'PUT' ? 200 : 404 })
+          return seen.method === 'PUT' ? lock('ObjectLockedByBucketPolicy') : new Response(stored, { status: 200, headers: { etag: '"e"' } })
+        }
         const lines: string[] = []
         const same = store(respond('archive'))
-        expect(await publishChannel(same.store, directory, line => lines.push(line))).toEqual([])
-        expect(lines).toEqual(['skipped releases/download/v0.1.0/a.tar.gz: published with the same bytes'])
+        expect(await publishChannel(same.store, directory, line => lines.push(line))).toEqual(['timestamp.json'])
+        expect(lines).toEqual(['skipped releases/download/v0.1.0/a.tar.gz: published with the same bytes', 'published timestamp.json'])
         const other = store(respond('different'))
         await expect(publishChannel(other.store, directory)).rejects.toThrow(/is already published with other bytes/u)
       } finally {

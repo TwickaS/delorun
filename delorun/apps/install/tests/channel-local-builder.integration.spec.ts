@@ -89,7 +89,7 @@ describe('a production channel and a release the maintainer\'s PC built', () => 
     const fixture = await local({ version: '0.1.0-preview.2.7' })
     const channel = await production(fixture, { previewRoots: previewOf(fixture) })
     expect(String((await channel.resolve()).version)).toBe('0.1.0-preview.2.7')
-    expect(String((await (await production(fixture, { previewRoots: previewOf(fixture) })).newest()).version)).toBe('0.1.0-preview.2.7')
+    expect(String((await (await production(fixture, { previewRoots: previewOf(fixture) })).newest()).manifest.version)).toBe('0.1.0-preview.2.7')
   })
 
   it('installs the same release from a folder whose roots are production roots', async () => {
