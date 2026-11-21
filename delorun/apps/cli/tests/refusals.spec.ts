@@ -39,6 +39,7 @@ const BENCHMARKS = 'the wait-time benchmark under delorun/apps/benchmarks, which
 const OUTSIDE_DELORUN: Readonly<Record<string, string>> = {
   InstallRefusal: 'raised by the install queue inside the home process and reported to the studio\'s downloads panel',
   RouteRefusal: 'raised by the Changes routes of the changes plugin and answered to the studio with a status, a code and a sentence',
+  LiveRefreshError: 'raised by the live asset refresh of the changes plugin and caught by the harness routes\' effect, which answers the studio',
   SetupRefusal: 'raised by the setup routes of the changes plugin and answered to the studio with a status and code',
   PacksRequestError: 'raised by the studio\'s packs client in the browser for a route answer',
   ChangesRequestError: 'the studio\'s Changes section raises it in the browser for a route answer; delorun never calls the routes',
