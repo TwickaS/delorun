@@ -6,3 +6,5 @@ recording: live
 header:
   class: delorun-model-prompt
   pin: true
+input:
+  task: Reply READY.

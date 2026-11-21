@@ -524,7 +524,7 @@ export const PARITY_SWITCHES = [
     parityValue: false,
     modelVisible: true,
     scenario: 'session/delorun-model-prompt',
-    scenarioState: 'pending recording',
+    scenarioState: 'recorded',
     field: {
       module: '@delorun/bundle-local/prompt-wording',
       source: 'delorun/packages/bundle-local/src/prompt-wording.ts',
