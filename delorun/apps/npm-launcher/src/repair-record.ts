@@ -25,6 +25,9 @@ export const REPAIR_MARK_GRACE_ENV = 'DELORUN_REPAIR_MARK_GRACE_SECONDS'
 /** The seconds an unparsable mark counts as a repair that is writing it, unless {@link REPAIR_MARK_GRACE_ENV} sets another. */
 const DEFAULT_MARK_GRACE_SECONDS = 5
 
+/** How often {@link checkRepairRecord} looks again after the mark changed under it. */
+const CHECK_ATTEMPTS = 5
+
 /** The longest {@link REPAIR_MARK_GRACE_ENV} may set. */
 const MAX_MARK_GRACE_SECONDS = 60
 
@@ -69,12 +72,20 @@ export function repairRecordPath(home: string): string {
   return join(home, DELORUN_HOME_ENTRIES.run, REPAIR_RECORD_FILE)
 }
 
+/** The mark as read: its exact text, and what the text names. */
+interface ReadMark {
+  /** The file's bytes as text, which {@link removeUnchanged} compares before it removes the file. */
+  readonly text: string
+  /** The record; `null` when the file is not a record. */
+  readonly record: RepairRecord | null
+}
+
 /**
  * Read the record.
  * @param home - the resolved Delorun home.
- * @returns the record; `undefined` when there is none; `null` when the file is not a record.
+ * @returns the mark; `undefined` when there is none.
  */
-async function readRecord(home: string): Promise<RepairRecord | undefined | null> {
+async function readMark(home: string): Promise<ReadMark | undefined> {
   let text: string
   try {
     text = await readFile(repairRecordPath(home), 'utf8')
@@ -87,13 +98,31 @@ async function readRecord(home: string): Promise<RepairRecord | undefined | null
     parsed = JSON.parse(text)
   } catch (_notJson) {
     // A torn or foreign file names no running repair.
-    return null
+    return { text, record: null }
   }
-  if (typeof parsed !== 'object' || parsed === null) return null
+  if (typeof parsed !== 'object' || parsed === null) return { text, record: null }
   const fields = parsed as Record<string, unknown>
   const holder = parseHolder(fields)
-  if (holder === undefined || typeof fields.startedAt !== 'string') return null
-  return { ...holder, startedAt: fields.startedAt, ...typeof fields.setAside === 'string' ? { setAside: fields.setAside } : {} }
+  if (holder === undefined || typeof fields.startedAt !== 'string') return { text, record: null }
+  return { text, record: { ...holder, startedAt: fields.startedAt, ...typeof fields.setAside === 'string' ? { setAside: fields.setAside } : {} } }
+}
+
+/**
+ * Remove the mark only when it still holds the text that was read. A repair that started after that read replaces the
+ * file with its own mark, which must stay.
+ * @param home - the resolved Delorun home.
+ * @param text - the mark's text as the caller read or wrote it.
+ * @returns `true` when the file is gone, `false` when it holds other text and was left.
+ */
+async function removeUnchanged(home: string, text: string): Promise<boolean> {
+  const now = await readFile(repairRecordPath(home), 'utf8').catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+    throw error
+  })
+  if (now === undefined) return true
+  if (now !== text) return false
+  await rm(repairRecordPath(home), { force: true })
+  return true
 }
 
 /**
@@ -121,12 +150,17 @@ async function youngerThan(home: string, graceSeconds: number, nowMs: number): P
  * @returns what was found; a `stale` record is already removed.
  */
 export async function checkRepairRecord(home: string, graceSeconds: number, nowMs: number = Date.now()): Promise<RepairRecordState> {
-  const record = await readRecord(home)
-  if (record === undefined) return { kind: 'none' }
-  if (record !== null && holderAlive(record)) return { kind: 'running', record }
-  if (record === null && await youngerThan(home, graceSeconds, nowMs)) return { kind: 'writing' }
-  await rm(repairRecordPath(home), { force: true })
-  return { kind: 'stale', record: record ?? undefined }
+  // A mark that changes between the read and the removal belongs to a repair that started meanwhile; it is looked at again.
+  for (let attempt = 0; attempt < CHECK_ATTEMPTS; attempt++) {
+    const mark = await readMark(home)
+    if (mark === undefined) return { kind: 'none' }
+    const { record } = mark
+    if (record !== null && holderAlive(record)) return { kind: 'running', record }
+    if (record === null && await youngerThan(home, graceSeconds, nowMs)) return { kind: 'writing' }
+    if (await removeUnchanged(home, mark.text)) return { kind: 'stale', record: record ?? undefined }
+  }
+  // The mark kept changing under the check: a repair is starting.
+  return { kind: 'writing' }
 }
 
 /**
@@ -144,25 +178,29 @@ export async function beginRepairRecord(home: string, now: Date, graceSeconds: n
   if (found.kind === 'writing') throw new Error('another repair is writing its mark')
   await mkdir(join(home, DELORUN_HOME_ENTRIES.run), { recursive: true, mode: 0o700 })
   const record: RepairRecord = { ...currentHolder(), startedAt: now.toISOString() }
+  // The text this process last wrote to the mark; `end` removes the mark only while it still holds that text.
+  let written = `${JSON.stringify(record)}\n`
   // Written whole under a temporary name, then linked: the mark's name is never a partial file, and `link` fails when a
   // repair that started after the check linked its own first.
   const temporary = `${repairRecordPath(home)}.tmp-${randomBytes(8).toString('hex')}`
   try {
-    await writeFile(temporary, `${JSON.stringify(record)}\n`, { flag: 'wx', mode: 0o600 })
+    await writeFile(temporary, written, { flag: 'wx', mode: 0o600 })
     await link(temporary, repairRecordPath(home))
   } finally {
     await rm(temporary, { force: true })
   }
   const noteSetAside = async (path: string): Promise<void> => {
     const rewritten = `${repairRecordPath(home)}.tmp-${randomBytes(8).toString('hex')}`
+    const text = `${JSON.stringify({ ...record, setAside: path })}\n`
     try {
-      await writeFile(rewritten, `${JSON.stringify({ ...record, setAside: path })}\n`, { flag: 'wx', mode: 0o600 })
+      await writeFile(rewritten, text, { flag: 'wx', mode: 0o600 })
       await rename(rewritten, repairRecordPath(home))
+      written = text
     } finally {
       await rm(rewritten, { force: true })
     }
   }
-  return { found, end: () => rm(repairRecordPath(home), { force: true }), noteSetAside }
+  return { found, end: async () => { await removeUnchanged(home, written) }, noteSetAside }
 }
 
 /** A time as the compact UTC stamp that names a set-aside directory. */
