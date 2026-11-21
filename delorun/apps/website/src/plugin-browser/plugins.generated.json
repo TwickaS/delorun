@@ -3,11 +3,11 @@
     {
       "name": "@delorun/bundle-local",
       "title": "Delorun local integration",
-      "sentence": "Delorun's defaults over the stock studio: DeepSeek's session-log upload and desktop analytics stay off until you turn them on in Settings → Safety → Privacy; Settings → Devices shows remote access and the devices you approved; Settings → Safety → Permissions is where you allow or revoke a workspace's full access and a new MCP server",
+      "sentence": "Delorun's own defaults for privacy, devices and permissions.",
       "state": "shipped",
       "standing": "on",
       "requires": [],
-      "files": 231,
+      "files": 241,
       "folder": "delorun/packages/bundle-local"
     },
     {
@@ -107,7 +107,7 @@
       "state": "shipped",
       "standing": "on",
       "requires": [],
-      "files": 31,
+      "files": 34,
       "folder": "delorun/packages/external-agents"
     },
     {
@@ -117,7 +117,7 @@
       "state": "shipped",
       "standing": "on",
       "requires": [],
-      "files": 35,
+      "files": 36,
       "folder": "delorun/packages/agent-claude-code"
     },
     {
@@ -127,7 +127,7 @@
       "state": "shipped",
       "standing": "on",
       "requires": [],
-      "files": 35,
+      "files": 36,
       "folder": "delorun/packages/agent-codex"
     },
     {
@@ -137,8 +137,18 @@
       "state": "shipped",
       "standing": "on",
       "requires": [],
-      "files": 110,
+      "files": 114,
       "folder": "delorun/packages/plugin-agent-seats"
+    },
+    {
+      "name": "@delorun/plugin-multiview",
+      "title": "Multiview",
+      "sentence": "Watch several agents beside the main chat, pin the ones you follow and arrange them as you like",
+      "state": "shipped",
+      "standing": "on",
+      "requires": [],
+      "files": 93,
+      "folder": "delorun/packages/plugin-multiview"
     },
     {
       "name": "@delorun/plugin-changes",
@@ -147,7 +157,7 @@
       "state": "shipped",
       "standing": "on",
       "requires": [],
-      "files": 67,
+      "files": 66,
       "folder": "delorun/packages/plugin-changes"
     },
     {
@@ -157,7 +167,7 @@
       "state": "shipped",
       "standing": "on",
       "requires": [],
-      "files": 33,
+      "files": 43,
       "folder": "delorun/packages/plugin-update"
     },
     {
@@ -197,7 +207,7 @@
       "state": "shipped",
       "standing": "on",
       "requires": [],
-      "files": 111,
+      "files": 110,
       "folder": "delorun/packages/home-auth"
     },
     {
@@ -217,7 +227,7 @@
       "state": "shipped",
       "standing": "on",
       "requires": [],
-      "files": 95,
+      "files": 98,
       "folder": "delorun/packages/plugin-theme"
     },
     {
@@ -257,7 +267,7 @@
       "state": "shipped",
       "standing": "on",
       "requires": [],
-      "files": 133,
+      "files": 139,
       "folder": "delorun/packages/plugin-onboarding"
     },
     {
@@ -267,7 +277,7 @@
       "state": "shipped",
       "standing": "on",
       "requires": [],
-      "files": 71,
+      "files": 75,
       "folder": "delorun/packages/plugin-new-workspace"
     },
     {
