@@ -35,11 +35,13 @@ import { storeFolder } from './store.ts'
 import type { ChangeEntry, ChangeId, ChangeKind, ChangeLog, ChangeSubject } from './types.ts'
 import { referenceRelease } from './tree.ts'
 
-/** What the agent asked `plugin_manager` to do: `install_bundle` is `install`, `remove_bundle` is `remove`. */
+/** What was asked of the profile's plugins: for the agent, `plugin_manager`'s `install_bundle` is `install` and `remove_bundle` is `remove`. */
 export interface PluginRequest {
   readonly action: 'install' | 'remove'
-  /** The install spec, or the name of the bundle to remove, as the agent passed it. */
+  /** The install spec, or the name of the bundle to remove, as the asker passed it. */
   readonly spec: string
+  /** Who asked, which the entry's summary says: the agent when absent, or the person in the studio. */
+  readonly by?: 'agent' | 'person'
 }
 
 /** The kinds an agent's plugin request records. */
@@ -198,17 +200,18 @@ function invalidSpec(spec: string, error: unknown): ChangesError {
  */
 async function classify(profileDir: string, request: PluginRequest): Promise<Classified> {
   const spec = request.spec.trim()
+  const asks = request.by === 'person' ? 'You asked to' : 'The agent asks to'
   const dependencies = dependencyNames(await readProfileManifest(profileDir))
   if (request.action === 'remove') {
     if (!dependencies.has(spec)) throw new ChangesError('INVALID_REQUEST', spec, `${spec} is not a plugin of this profile, so there is nothing to remove.`)
-    return { kind: 'plugin-remove', subject: { plugin: spec, spec }, summary: `The agent asks to remove ${spec}` }
+    return { kind: 'plugin-remove', subject: { plugin: spec, spec }, summary: `${asks} remove ${spec}` }
   }
   const parsed = requestSpec(spec)
   if (parsed.kind === 'registry' && dependencies.has(parsed.name)) {
-    return { kind: 'plugin-update', subject: { plugin: parsed.name, spec }, summary: `The agent asks to move ${parsed.name} to ${spec}` }
+    return { kind: 'plugin-update', subject: { plugin: parsed.name, spec }, summary: `${asks} move ${parsed.name} to ${spec}` }
   }
   const plugin = parsed.kind === 'registry' ? parsed.name : parsed.alias
-  return { kind: 'plugin-install', subject: { ...plugin === undefined ? {} : { plugin }, spec }, summary: `The agent asks to install ${spec}` }
+  return { kind: 'plugin-install', subject: { ...plugin === undefined ? {} : { plugin }, spec }, summary: `${asks} install ${spec}` }
 }
 
 /**

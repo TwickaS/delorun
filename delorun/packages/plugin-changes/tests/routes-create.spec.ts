@@ -127,6 +127,8 @@ describe('Create a plugin', () => {
     const entries = (await readChangeLog(ctx.home, ctx.profile)).entries
     expect(entries).toHaveLength(1)
     expect(entries[0]).toMatchObject({ state: 'pending', kind: 'plugin-install', summary: expect.stringContaining(join(first, 'plugins', 'waiting')) })
+    // The person's own request is worded as theirs, not as the agent's.
+    expect(entries[0]?.summary).toMatch(/^You asked to install /u)
     expect(routes.reloads()).toBe(0)
     expect(routes.operations).toEqual([])
   })

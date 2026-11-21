@@ -84,14 +84,14 @@ export async function applySetupImport(ctx: ChangesContext, document: SetupDocum
   const removed: string[] = []
   const installed: { name: string, reviewChange?: ChangeId }[] = []
   for (const name of plan.remove) {
-    const entry = await recordPluginRequest(ctx, { action: 'remove', spec: name })
+    const entry = await recordPluginRequest(ctx, { action: 'remove', spec: name, by: 'person' })
     await applyInstallChange(ctx, entry.id, options.presence, { reload: options.reload, run: options.run })
     removed.push(name)
     options.progress?.(`Removed ${name}.`)
   }
   for (const { plugin } of plan.install) {
     const spec = plugin.source === 'registry' ? `${plugin.name}@${plugin.version}` : `link:${await stageLocalPlugin(ctx, plugin, options.readFile)}`
-    const entry = await recordPluginRequest(ctx, { action: 'install', spec })
+    const entry = await recordPluginRequest(ctx, { action: 'install', spec, by: 'person' })
     const checked = plugin.source === 'registry' && plugin.integrity !== undefined ? plugin : undefined
     // The integrity is checked before the Host reloads, so a swapped package is never loaded.
     const result = await applyInstallChange(ctx, entry.id, options.presence, {
