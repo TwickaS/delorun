@@ -168,7 +168,7 @@ describe('the plugin with the preview flag on', () => {
   it('fails loud on a seat list the provider side cannot serve, before registering a route', async () => {
     const { ctx, connection } = await world(true)
     const [first] = Config(null).seats
-    await expect(mountSeats(ctx, { seats: [{ ...first!, provider: 'gemini' }] })).rejects.toThrow(/not an external agent/)
+    await expect(mountSeats(ctx, { enabled: true, seats: [{ ...first!, provider: 'gemini' }] })).rejects.toThrow(/not an external agent/)
     expect(connection.routes).toEqual([])
   })
 })

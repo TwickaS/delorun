@@ -1776,10 +1776,13 @@ export interface Config {
 ## `@deepseek-ai/dsh-harness-dev-context`
 
 - `inject`: `systemPrompt` · `sessionProjections` · `webApp`
-- `source`: [`packages/context/harness-dev-context/src/index.ts:38`](../packages/context/harness-dev-context/src/index.ts)
+- `source`: [`packages/context/harness-dev-context/src/index.ts:41`](../packages/context/harness-dev-context/src/index.ts)
 
 ```ts config-catalog
-/** Plugin options; no profile sets them. Delorun's wording and the checkout decision follow `systemPrompt.delorunWording`, Delorun's C16 switch `model_prompt`. */
+/**
+ * Plugin options; no profile sets them. Delorun's wording and the checkout decision follow
+ * `systemPrompt.delorunWording`, Delorun's C16 switch `model_prompt`.
+ */
 export interface Config {
   /** Root to classify as a checkout or an installation; tests point it at a temporary directory. Defaults to this installation's root. */
   sourceRoot?: string

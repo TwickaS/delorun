@@ -44,10 +44,10 @@ const Seat: z<SeatConfig> = z.object({
 })
 
 /** Validates the row's configuration. Two seats may not share a provider, route or tool name. */
-export const Config: z<Config> = z.object({
+export const Config: z<Partial<Config>, Config> = z.object({
   enabled: z.boolean().default(false),
   seats: z.array(Seat).default([
     { provider: 'claude-code', route: 'claude-code-seat', preset: 'claude-code-seat', toolName: 'claude_code', maxDepth: 1, contextWindow: 200_000 },
     { provider: 'codex', route: 'codex-seat', preset: 'codex-seat', toolName: 'codex', maxDepth: 1, contextWindow: 200_000 },
   ]),
-}).description('Live agents') as z<Config>
+}).description('Live agents') as z<Partial<Config>, Config>

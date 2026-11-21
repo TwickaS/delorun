@@ -58,7 +58,7 @@ describe('the seat provider', () => {
     const { ctx } = await stack({ register: false })
     const fiber = ctx.plugin({
       inject: ['subagents', 'tools'],
-      apply: (scope: Context) => { registerSeatProviders(scope, { seats: SEATS }, () => true) },
+      apply: (scope: Context) => { registerSeatProviders(scope, { enabled: true, seats: SEATS }, () => true) },
     })
     await fiber.await()
     expect(ctx.subagents.getProvider('claude-code-seat')).toBeDefined()

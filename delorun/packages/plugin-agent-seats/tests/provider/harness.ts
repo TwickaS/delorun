@@ -120,7 +120,7 @@ export async function mountStack(options: { readonly flag?: boolean, readonly on
       execute: () => Promise.resolve('ran'),
     }))
   }
-  if (options.register !== false) registerSeatProviders(ctx, { seats: options.seats ?? SEATS }, () => options.flag ?? true, { now: () => 1_700_000_000_000 })
+  if (options.register !== false) registerSeatProviders(ctx, { enabled: true, seats: options.seats ?? SEATS }, () => options.flag ?? true, { now: () => 1_700_000_000_000 })
   return {
     ctx,
     gate,
