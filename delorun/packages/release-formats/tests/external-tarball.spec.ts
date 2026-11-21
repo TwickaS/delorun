@@ -77,6 +77,23 @@ const padding = (size: number): Buffer => Buffer.alloc((BLOCK - (size % BLOCK)) 
 /** One file entry: its header and padded data. */
 const file = (fields: Omit<HeaderFields, 'size'>, text: string): Buffer => Buffer.concat([npmHeader({ ...fields, size: Buffer.byteLength(text) }), Buffer.from(text), padding(Buffer.byteLength(text))])
 
+/** A pax record, `<length> <key>=<value>\n`, whose length counts itself. */
+function paxRecord(key: string, value: string): string {
+  const body = ` ${key}=${value}\n`
+  let length = body.length + 1
+  while (String(length).length + body.length !== length) length = String(length).length + body.length
+  return `${String(length)}${body}`
+}
+
+/** An npm-written pax header (type `x`) that carries the records the next entry's header does not fit, then the entry. */
+const paxFile = (records: ReadonlyArray<readonly [string, string]>, path: string, text: string, size = Buffer.byteLength(text)): Buffer => {
+  const data = Buffer.from(records.map(([key, value]) => paxRecord(key, value)).join(''))
+  return Buffer.concat([
+    npmHeader({ path: 'PaxHeader/x', size: data.byteLength, type: 'x' }), data, padding(data.byteLength),
+    npmHeader({ path: path.slice(0, 90), size }), Buffer.from(text), padding(Buffer.byteLength(text)),
+  ])
+}
+
 const tarball = (...parts: Buffer[]): Buffer => gzipSync(Buffer.concat([...parts, END]))
 
 function pin(bytes: Buffer): PackExternal {
@@ -137,6 +154,12 @@ describe('an npm tarball as the registry serves it', () => {
     expect(readFileSync(join(out, 'a.txt'), 'utf8')).toBe('a')
   })
 
+  it('extracts an entry whose pax header carries the mtime and size records node-tar writes beside the path', async () => {
+    const long = `package/${'d'.repeat(120)}/a.txt`
+    const out = await extract(tarball(paxFile([['mtime', '499162500.5'], ['path', long], ['size', '5']], long, 'hello')))
+    expect(readFileSync(join(out, 'd'.repeat(120), 'a.txt'), 'utf8')).toBe('hello')
+  })
+
   it('reads a size written as GNU base-256, within the signed length', async () => {
     const text = 'hello'
     const size = Buffer.from([0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, text.length])
@@ -176,6 +199,23 @@ describe('a tarball that is still refused', () => {
     await refused(tarball(file({ path: 'package/a', checksum: 'bad' }, 'x')), /checksum does not match/u)
   })
 
+  it('refuses a pax mtime or size record whose value is not a plain number, or whose size the header contradicts', async () => {
+    const long = `package/${'d'.repeat(120)}/a.txt`
+    const bad = (records: ReadonlyArray<readonly [string, string]>, size?: number): Buffer => tarball(paxFile(records, long, 'hello', size))
+    await refused(bad([['path', long], ['mtime', 'soon']]), /pax record "mtime" is not a number/u)
+    await refused(bad([['path', long], ['mtime', '-1']]), /pax record "mtime" is not a number/u)
+    await refused(bad([['path', long], ['mtime', '1e9']]), /pax record "mtime" is not a number/u)
+    await refused(bad([['path', long], ['mtime', '1'], ['mtime', '2']]), /pax record "mtime" appears twice/u)
+    await refused(bad([['path', long], ['size', '-5']]), /pax record "size" is not a whole number/u)
+    await refused(bad([['path', long], ['size', '6']]), /pax size 6 does not match the header's 5/u)
+    await refused(bad([['path', long], ['size', '5'], ['size', '5']]), /pax record "size" appears twice/u)
+  })
+
+  it.each(['uid', 'gid', 'uname', 'gname', 'linkpath', 'atime', 'ctime', 'comment', 'charset', 'SCHILY.xattr.user.x'])('refuses a pax %s record, so only path, mtime and size are read', async (key) => {
+    const long = `package/${'d'.repeat(120)}/a.txt`
+    await refused(tarball(paxFile([['path', long], [key, '0']], long, 'hello')), new RegExp(`pax record "${key.replaceAll('.', '\\.')}" is not allowed`, 'u'))
+  })
+
   it('refuses a tarball longer than the length the packs file signs', async () => {
     const bytes = tarball(file({ path: 'package/a' }, 'x'))
     const out = temp()
@@ -193,6 +233,18 @@ describe('the canonical reader', () => {
       return count
     }
     await expect(read(false)).rejects.toThrow(/uid is not an octal number/u)
+    await expect(read(true)).resolves.toBe(1)
+  })
+
+  it('still refuses a pax mtime or size record, which only a foreign writer produces', async () => {
+    const long = `package/${'d'.repeat(120)}/a.txt`
+    const bytes = Buffer.concat([paxFile([['path', long], ['mtime', '1']], long, 'x'), END])
+    const read = async (foreign: boolean): Promise<number> => {
+      let count = 0
+      for await (const _entry of readTar((async function* () { yield bytes })(), 1024, { foreign })) count += 1
+      return count
+    }
+    await expect(read(false)).rejects.toThrow(/pax record "mtime" is not allowed/u)
     await expect(read(true)).resolves.toBe(1)
   })
 })
