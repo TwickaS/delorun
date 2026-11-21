@@ -6,7 +6,7 @@
  * The release fixture is the install path's own (`../../install/tests/support.ts`), because a launcher's flow is the
  * install path plus the store, and a release is what both are about.
  */
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { chmod, lstat, mkdir, mkdtemp, open, readFile, readdir, rm, stat, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -707,34 +707,47 @@ describe('a signal sent to the launcher while the runtime runs', () => {
   beforeEach(async () => { directory = await mkdtemp(join(tmpdir(), 'delorun-spawn-signal-')) })
   afterEach(async () => { await rm(directory, { recursive: true, force: true }) })
 
-  /** Start a runtime that writes `ready` and waits, and give back the listeners the launcher added to this process. */
-  async function started(script: string): Promise<{ readonly status: Promise<number>, readonly added: (signal: 'SIGINT' | 'SIGTERM') => () => void }> {
-    const before = { SIGINT: process.listeners('SIGINT'), SIGTERM: process.listeners('SIGTERM') }
+  type Forwarded = 'SIGINT' | 'SIGTERM' | 'SIGHUP'
+
+  /** Start a runtime that writes its pid to `ready` and waits, and give back the listeners the launcher added to this process. */
+  async function started(script: string): Promise<{ readonly status: Promise<number>, readonly pid: number, readonly added: (signal: Forwarded) => () => void }> {
+    const before = { SIGINT: process.listeners('SIGINT'), SIGTERM: process.listeners('SIGTERM'), SIGHUP: process.listeners('SIGHUP') }
     const status = spawnRuntime({ command: process.execPath, args: ['-e', script], env: { READY: join(directory, 'ready') } })
     const ready = join(directory, 'ready')
-    for (let waited = 0; !existsSync(ready); waited += 20) {
+    for (let waited = 0; !existsSync(ready) || readFileSync(ready, 'utf8') === ''; waited += 20) {
       if (waited > 10_000) throw new Error('the runtime did not start')
       await new Promise(resolve => setTimeout(resolve, 20))
     }
-    return { status, added: signal => process.listeners(signal).find(listener => !before[signal].includes(listener)) as () => void }
+    return { status, pid: Number(readFileSync(ready, 'utf8')), added: signal => process.listeners(signal).find(listener => !before[signal].includes(listener)) as () => void }
   }
 
-  it('is passed to the runtime, and the launcher exits with the runtime\'s own status', async () => {
-    const { status, added } = await started('process.on("SIGTERM", () => process.exit(42)); require("fs").writeFileSync(process.env.READY, ""); setInterval(() => undefined, 1000)')
+  const READY = 'require("fs").writeFileSync(process.env.READY, String(process.pid)); setInterval(() => undefined, 1000)'
+
+  it('passes SIGTERM on to the runtime, and the launcher exits with the runtime\'s own status', async () => {
+    const { status, added } = await started(`process.on("SIGTERM", () => process.exit(42)); ${READY}`)
     added('SIGTERM')()
     expect(await status).toBe(42)
   })
 
-  it('is passed to the runtime for SIGINT too, and a runtime it ends by signal counts as 128 plus the number', async () => {
-    const { status, added } = await started('require("fs").writeFileSync(process.env.READY, ""); setInterval(() => undefined, 1000)')
+  it('passes SIGHUP on too, and a runtime it ends by signal counts as 128 plus the number', async () => {
+    const { status, added } = await started(READY)
+    added('SIGHUP')()
+    expect(await status).toBe(128 + 1)
+  })
+
+  it('leaves SIGINT to the terminal: the runtime that Ctrl-C reaches once through the process group gets exactly one', async () => {
+    // The runtime counts its SIGINTs and exits 100 + the count a moment after the first.
+    const { status, added, pid } = await started(`let count = 0; process.on("SIGINT", () => { if (count++ === 0) setTimeout(() => process.exit(100 + count), 300) }); ${READY}`)
+    // Ctrl-C: the terminal signals the runtime, and the launcher receives its own copy.
+    process.kill(pid, 'SIGINT')
     added('SIGINT')()
-    expect(await status).toBe(128 + 2)
+    expect(await status).toBe(101)
   })
 
   it('stops listening once the runtime has ended', async () => {
-    const before = [process.listeners('SIGINT').length, process.listeners('SIGTERM').length]
+    const before = ['SIGINT', 'SIGTERM', 'SIGHUP'].map(signal => process.listeners(signal as Forwarded).length)
     await spawnRuntime({ command: process.execPath, args: ['-e', ''], env: {} })
-    expect([process.listeners('SIGINT').length, process.listeners('SIGTERM').length]).toEqual(before)
+    expect(['SIGINT', 'SIGTERM', 'SIGHUP'].map(signal => process.listeners(signal as Forwarded).length)).toEqual(before)
   })
 })
 

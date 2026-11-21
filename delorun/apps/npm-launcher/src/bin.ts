@@ -176,13 +176,16 @@ export function usage(): string {
   ].join('\n')
 }
 
-/** The signals the launcher passes on to the runtime it started, which would otherwise end the launcher alone. */
-const FORWARDED_SIGNALS = ['SIGINT', 'SIGTERM'] as const
+/**
+ * The signals the launcher passes on to the runtime. SIGINT is not one: the terminal sends Ctrl-C to the whole foreground
+ * process group, so the runtime already has it, and a second SIGINT would make its stop abrupt (a second one ends it at once).
+ */
+const FORWARDED_SIGNALS = ['SIGTERM', 'SIGHUP'] as const
 
 /**
  * Start a runtime and share this process's standard streams with it, with the environment
- * {@link launchEnvironment} builds. While the runtime runs, a SIGINT or SIGTERM this process receives is passed on to
- * it, so the launcher ends only when the runtime has.
+ * {@link launchEnvironment} builds. While the runtime runs, a SIGTERM or SIGHUP this process receives is passed on to it,
+ * and a SIGINT is left to the terminal, which sends it to the runtime too; the launcher stays until the runtime has ended.
  * @param command - the command the store built for launch protocol 1.
  * @returns the runtime's exit status; `128` plus the signal's number when a signal ended it.
  * @throws {Error} when the runtime cannot be started.
@@ -191,8 +194,14 @@ export function spawnRuntime(command: LaunchCommand): Promise<number> {
   return new Promise<number>((resolve, reject) => {
     const child = startProcess(command.command, [...command.args], { stdio: 'inherit', env: launchEnvironment(process.env, command.env) })
     const forwards = FORWARDED_SIGNALS.map(signal => [signal, () => { child.kill(signal) }] as const)
+    // Listening for SIGINT replaces Node's default, which would end the launcher while the runtime stops.
+    const interrupt = (): void => undefined
     for (const [signal, forward] of forwards) process.on(signal, forward)
-    const settle = (): void => { for (const [signal, forward] of forwards) process.off(signal, forward) }
+    process.on('SIGINT', interrupt)
+    const settle = (): void => {
+      for (const [signal, forward] of forwards) process.off(signal, forward)
+      process.off('SIGINT', interrupt)
+    }
     child.once('error', (error) => { settle(); reject(error) })
     child.once('close', (status, signal) => {
       settle()
