@@ -310,7 +310,7 @@ export async function runRepair(options: RepairOptions): Promise<number> {
   try {
     const recorded = await recordRepair(options, log)
     endRecord = recorded.end
-    await repair(options, log, undo, holds, recorded.noteSetAside)
+    await repair(options, log, undo, holds, recorded)
     outcome = 'repaired'
     return LAUNCHER_EXIT.ok
   } catch (error) {
@@ -334,7 +334,7 @@ export async function runRepair(options: RepairOptions): Promise<number> {
  * @returns the function that removes the mark and the one that records where the old store is set aside.
  * @throws {RepairRefusal} `REPAIR_RUNNING` when another repair of this home runs.
  */
-async function recordRepair(options: RepairOptions, log: Record<string, unknown>): Promise<Pick<Awaited<ReturnType<typeof beginRepairRecord>>, 'end' | 'noteSetAside'>> {
+async function recordRepair(options: RepairOptions, log: Record<string, unknown>): Promise<Pick<Awaited<ReturnType<typeof beginRepairRecord>>, 'end' | 'noteSetAside' | 'noteTrustSetAside'>> {
   let begun
   try {
     begun = await beginRepairRecord(options.home, options.now(), options.repairMarkGraceSeconds)
@@ -350,7 +350,7 @@ async function recordRepair(options: RepairOptions, log: Record<string, unknown>
     options.output.stderr(`${text}\n`)
     log.staleRepair = text
   }
-  return { end: begun.end, noteSetAside: begun.noteSetAside }
+  return { end: begun.end, noteSetAside: begun.noteSetAside, noteTrustSetAside: begun.noteTrustSetAside }
 }
 
 /**
@@ -376,10 +376,10 @@ function say(options: RepairOptions, log: Record<string, unknown>, text: string)
  * @param log - the run's record.
  * @param undo - collects the steps that put a change back.
  * @param holds - collects the home locks, which the caller releases last.
- * @param noteSetAside - records in the repair mark the path the old store is set aside to, before it moves.
+ * @param marks - record in the repair mark the path the old program store, and with `--reset-trust` the old trust records, are set aside to, before each moves.
  * @throws {RepairRefusal} for every refusal the repair itself makes; the store's and install's own errors otherwise.
  */
-async function repair(options: RepairOptions, log: Record<string, unknown>, undo: Undo[], holds: HomeLock[], noteSetAside: (path: string) => Promise<void>): Promise<void> {
+async function repair(options: RepairOptions, log: Record<string, unknown>, undo: Undo[], holds: HomeLock[], marks: Pick<Awaited<ReturnType<typeof beginRepairRecord>>, 'noteSetAside' | 'noteTrustSetAside'>): Promise<void> {
   const { home, line, store } = options
   const entries = await readdir(join(home, DELORUN_HOME_ENTRIES.run)).catch(() => [] as string[])
   refuseWhileRunning(home, entries)
@@ -395,6 +395,7 @@ async function repair(options: RepairOptions, log: Record<string, unknown>, undo
     const answer = await options.confirm('This launcher trusts release keys that this home did not know. Continue only if you installed it with npx delorun@latest from npm yourself. Move the home\'s trust records aside and trust only this launcher\'s keys? [y/N]')
     assertAnswered(answer)
     const aside = join(home, `trust.set-aside-${stampNow}`)
+    await marks.noteTrustSetAside(aside)
     await rename(trust, aside)
     await mkdir(trust, { mode: 0o700 })
     undo.push(async () => { await rm(trust, { recursive: true, force: true }); await rename(aside, trust) })
@@ -425,7 +426,7 @@ async function repair(options: RepairOptions, log: Record<string, unknown>, undo
   const probe = await readdir(runtimes).then(() => true, () => false)
   const aside = join(home, runtimesSetAsideName(stampNow))
   if (probe) {
-    await noteSetAside(aside)
+    await marks.noteSetAside(aside)
     await rename(runtimes, aside)
     undo.push(async () => { await rm(runtimes, { recursive: true, force: true }); await rename(aside, runtimes) })
     ;(log.moved as string[]).push(`runtimes -> ${aside}`)

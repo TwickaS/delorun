@@ -13,7 +13,7 @@ import { currentHolder } from '@delorun/home'
 import { beginRepairRecord, checkRepairRecord, repairRecordPath } from '../src/repair-record.ts'
 
 /** What runs once after the next read of the mark; set by a spec. */
-const hooks: { afterRead?: () => Promise<void> } = {}
+const hooks: { afterRead?: (() => Promise<void>) | undefined } = {}
 
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>()

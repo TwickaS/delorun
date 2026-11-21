@@ -131,6 +131,27 @@ describe('the repair mark', () => {
       expect(unfinished).not.toBe(basename(setAside))
     })
 
+    it('records the trust set-aside beside the runtimes one and offers to put the old trust records back', async () => {
+      const { noteSetAside, noteTrustSetAside } = await beginRepairRecord(home, NOW, GRACE)
+      const trustAside = join(home, 'trust.set-aside-20261113T120000Z')
+      await noteTrustSetAside(trustAside)
+      await noteSetAside(join(home, 'runtimes.set-aside-20261113T120000Z'))
+      const mark = JSON.parse(await readFile(repairRecordPath(home), 'utf8')) as { setAside?: string, trustSetAside?: string }
+      expect(mark).toMatchObject({ setAside: join(home, 'runtimes.set-aside-20261113T120000Z'), trustSetAside: trustAside })
+      await mkdir(trustAside)
+      await writeFile(join(trustAside, 'old'), 'old trust')
+      await mkdir(join(home, 'trust'), { recursive: true })
+      await writeFile(join(home, 'trust/new'), 'aborted')
+      const text = await staleRepairText({ ...mark, pid: 1, startedAt: '2026-11-13T11:00:00.000Z' } as never, home, NOW, 'linux')
+      expect(text).toContain(`The trust records it set aside for --reset-trust are in ${trustAside}`)
+      expect(text).not.toContain('Run delorun repair again')
+      const command = /this puts them back, keeping the new ones in \S+: (mv .*)\. delorun recover status does not list trust/u.exec(text)?.[1]
+      if (command === undefined) throw new Error(`no trust command in ${text}`)
+      execFileSync('sh', ['-c', command], { timeout: 10_000 })
+      expect(await readFile(join(home, 'trust/old'), 'utf8')).toBe('old trust')
+      expect(await readFile(join(home, 'trust.set-aside-20261113T120000Z-1/new'), 'utf8')).toBe('aborted')
+    })
+
     it('moves only the set-aside folder back when no store stands, and writes PowerShell on Windows', async () => {
       const setAside = join(home, 'runtimes.set-aside-20261113T120000Z')
       await mkdir(setAside)
