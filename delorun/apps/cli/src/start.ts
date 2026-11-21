@@ -90,9 +90,10 @@ import { removeSandboxOverlay, sandboxOverlayPath } from './sandbox-protection.t
 import { configSchemasOf, guardSecretFields, reportSecretSettlement, settleSecretValues, type SecretSettlement } from './secret-fields.ts'
 import { secretFieldAdmission, type ConfigSchemasOf } from '@delorun/profile-safety'
 import type { VersionAdmission } from '@deepseek-ai/dsh-plugin-manager/history'
-import { bootProtectionOf, bootRowsOf, checkHealth, inactiveRows, serveHealth, watchChats, withAppliedConfig } from './update/host.ts'
+import { bootProtectionOf, bootRowsOf, checkHealth, inactiveRows, serveHealth, watchChats, withAppliedConfig, type HostHealthFacts } from './update/host.ts'
+import { signedSettingChanges } from './update/release-settings.ts'
 import { inheritedHandover, runtimeOfFile, type RunningRuntime } from './update/runtime.ts'
-import { fullCheckDaysOf, storeUpdateSupport, successorStartCheckRecord } from './update/store-support.ts'
+import { checkStoredRuntime, fullCheckDaysOf, storeUpdateSupport, successorStartCheckRecord } from './update/store-support.ts'
 import { launcherAnchor } from './update/trusted-root.ts'
 import { loadDelorunEnvironment } from './launch-environment.ts'
 import { attachHomeLogs, registerEnvironment } from './log-secrets.ts'
@@ -828,7 +829,10 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
   }
   return runningHost(booted, request, composed.startOnlySockets, async () => {
     if (stored !== undefined) await dependencies.checkRuntime(request.home, stored.version, logger, launcherAnchor(request.home, request.env).root, fullCheckDaysOf(request.env), stored.composed)
-  }, afterChangesBoot({ home: request.home, profile: request.profile, logger }, booted))
+  }, afterChangesBoot({ home: request.home, profile: request.profile, logger }, booted), stored === undefined ? undefined : {
+    version: stored.version,
+    settings: previous => signedSettingChanges({ home: request.home, profile: request.profile, running: stored.version, check: version => checkStoredRuntime(request.home, version, logger, launcherAnchor(request.home, request.env).root, fullCheckDaysOf(request.env)) }, previous),
+  })
 }
 
 /**
@@ -844,9 +848,10 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
  * @param verifyRuntime - C3's H1, the start check of the running version from the store.
  * @param endChanges - what both ways to stop run first: Changes stops following work sessions and ends the open one
  *   without the person ([changes](./changes/start.ts)).
+ * @param release - the release this process runs from the store, and its reader of what the signed bundles change in protected rows (H3).
  * @returns the Host.
  */
-export function runningHost(booted: BootedProfile, request: Pick<StartRequest, 'home' | 'profile'>, startOnly: readonly string[], verifyRuntime: () => Promise<void>, endChanges: () => Promise<void>): RunningHost {
+export function runningHost(booted: BootedProfile, request: Pick<StartRequest, 'home' | 'profile'>, startOnly: readonly string[], verifyRuntime: () => Promise<void>, endChanges: () => Promise<void>, release?: HostHealthFacts['release']): RunningHost {
   const chats = new CountingChatGate()
   booted.watchChats(chats)
   const atBoot = booted.rows()
@@ -868,7 +873,7 @@ export function runningHost(booted: BootedProfile, request: Pick<StartRequest, '
     failedRows: () => failed,
     rows: () => handedRows,
     protection: () => atBootProtection,
-    check: expect => checkHealth({ rows: booted.rows, studio: booted.studio, profileDir: join(request.home, 'profiles', request.profile), verifyRuntime }, expect),
+    check: expect => checkHealth({ rows: booted.rows, studio: booted.studio, profileDir: join(request.home, 'profiles', request.profile), verifyRuntime, ...release === undefined ? {} : { release } }, expect),
     close: async () => {
       await endChanges()
       await booted.shutdown(EXIT.ok)

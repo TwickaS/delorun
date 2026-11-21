@@ -415,6 +415,36 @@ describe('health-check-rollback', TIMEOUT, () => {
   })
 })
 
+describe('the protected-row changes a successor accepted', TIMEOUT, () => {
+  it('an update\'s successor is told which release ran before and its sentences reach the outcome record; a rollback\'s successor is told none', async () => {
+    const marker = join(tmpdir(), `delorun-previous-${String(process.pid)}-${String(Date.now())}`)
+    const sentences = ['Delorun 2.0.0 changes the settings of the External agents row (delorun-agent-seats): turns on live agents.']
+    try {
+      const home = await setUp({ rowChanges: sentences, previousMarker: marker })
+      await start(home)
+      expect(final(await sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'drain', dataCopy: false } }))).toEqual({ ok: true, outcome: 'committed' })
+      await until(async () => (await readUpdateResult(updateResultPath(home, PROFILE)))?.rowChanges !== undefined, 30_000, 'the sentences in the outcome record')
+      expect(await readUpdateResult(updateResultPath(home, PROFILE))).toMatchObject({ kind: 'update', outcome: 'committed', from: V1, to: V2, rowChanges: sentences })
+      expect(readFileSync(marker, 'utf8')).toBe(V1)
+      installFixture(home, V1, { previousMarker: marker })
+      expect(final(await sendHomeRequest(home, PROFILE, { op: 'rollback', args: { wait: 'drain', profileOnly: false } }))).toMatchObject({ ok: true, outcome: 'rolled-back' })
+      await until(async () => (await status(home).catch(() => undefined))?.runtime.running === V1, 30_000, 'the rolled-back successor')
+      expect(readFileSync(marker, 'utf8')).toBe('none')
+      expect((await readUpdateResult(updateResultPath(home, PROFILE)))?.rowChanges).toBeUndefined()
+    } finally {
+      rmSync(marker, { force: true })
+    }
+  })
+
+  it('adds nothing when the release brought no change', async () => {
+    const home = await setUp()
+    await start(home)
+    expect(final(await sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'drain', dataCopy: false } }))).toEqual({ ok: true, outcome: 'committed' })
+    await until(async () => (await status(home).catch(() => undefined))?.runtime.running === V2, 30_000, 'the successor')
+    expect((await readUpdateResult(updateResultPath(home, PROFILE)))?.rowChanges).toBeUndefined()
+  })
+})
+
 describe('rollback', TIMEOUT, () => {
   it('without an update record is refused with NO_UPDATE_RECORD; after an update it moves current back and installs nothing', async () => {
     const home = await setUp()

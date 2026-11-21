@@ -231,6 +231,8 @@ export interface UpdateResultView {
   readonly criterion?: string
   /** When it ended, as an RFC 3339 UTC time. */
   readonly at: string
+  /** For `committed`: plain sentences on the protected-row changes the new release's bundles brought, which the running release's report could not name. */
+  readonly rowChanges?: readonly string[]
 }
 
 /** One section's bullets of a version's notes. */

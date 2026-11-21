@@ -33,6 +33,11 @@ export interface UpdateResultRecord {
   readonly criterion?: string
   /** RFC 3339 UTC time it ended. */
   readonly at: string
+  /**
+   * Plain-words sentences on the protected-row changes the new release's own bundles brought, which the update's health
+   * check accepted because the running release's report could not name them; added by the successor after it took over.
+   */
+  readonly rowChanges?: readonly string[]
 }
 
 const version = z.string().regex(new RegExp(RUNTIME_VERSION_PATTERN))
@@ -45,6 +50,7 @@ const resultSchema = z.strictObject({
   reason: z.string().min(1).max(64).optional(),
   criterion: z.string().min(1).max(64).optional(),
   at: z.string().datetime(),
+  rowChanges: z.array(z.string().max(600)).max(32).optional(),
 })
 
 /**
@@ -92,6 +98,7 @@ export async function readUpdateResult(path: string): Promise<UpdateResultRecord
     v: 1, kind: data.kind, outcome: data.outcome, from: brandString<RuntimeVersion>(data.from), to: brandString<RuntimeVersion>(data.to), at: data.at,
     ...data.reason === undefined ? {} : { reason: data.reason as HomeProcessErrorCode },
     ...data.criterion === undefined ? {} : { criterion: data.criterion },
+    ...data.rowChanges === undefined ? {} : { rowChanges: data.rowChanges },
   }
 }
 

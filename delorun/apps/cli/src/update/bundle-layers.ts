@@ -17,11 +17,12 @@
 import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
-import { join } from 'node:path'
+import { join, sep } from 'node:path'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { ExemptionRecord } from '@delorun/contract-plugin-versions'
 import type { SemanticVersion } from '@delorun/contract-release-manifest'
-import { exempted, exemptionKey, satisfiesRange, type LayerFact, type RowFact, type SkippedBundleFact } from '@delorun/update'
+import type { SettingValue } from '@delorun/contract-update-report'
+import { exempted, exemptionKey, rowSettingsFact, satisfiesRange, type LayerFact, type RowFact, type RowSettingsFact, type SkippedBundleFact } from '@delorun/update'
 import { parse } from 'yaml'
 import { z } from 'zod'
 
@@ -80,6 +81,11 @@ export interface BundleLayerOptions {
   readonly exemptions: ExemptionRecord
   /** The platform the target runs on, as Node names it. */
   readonly platform: string
+  /**
+   * A directory a bundle must resolve under, which only the release's own signed files are under. A bundle another
+   * directory on Node's lookup path holds, such as a folder the person owns above the home, is treated as not installed.
+   */
+  readonly within?: string
 }
 
 /** What the target does with its bundle list. */
@@ -88,6 +94,15 @@ export interface BundleLayerFacts {
   readonly layers: readonly LayerFact[]
   /** The bundles it would skip, in list order. */
   readonly skipped: readonly SkippedBundleFact[]
+}
+
+/**
+ * The one anchor of a release's own signed files.
+ * @param runtime - the installed runtime's directory.
+ * @returns the release's install anchor alone, so a bundle only the profile installs does not resolve.
+ */
+export function signedBundleAnchors(runtime: string): readonly string[] {
+  return [join(runtime, ...TARGET_INSTALL_ANCHOR)]
 }
 
 /**
@@ -123,13 +138,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * turn, taking the first directory that holds a `package.json`.
  * @param bundle - the bundle's package name.
  * @param anchors - the anchors, in order.
+ * @param within - the directory a bundle must be under, when the caller holds it to the release's own files.
  * @returns the directory, or undefined when no anchor reaches one.
  */
-function bundleDirectory(bundle: string, anchors: readonly string[]): string | undefined {
+function bundleDirectory(bundle: string, anchors: readonly string[], within: string | undefined): string | undefined {
   for (const anchor of anchors) {
     // `resolve.paths` answers null for a Node built-in name, which no anchor resolves to a package.
     for (const searchPath of createRequire(anchor).resolve.paths(bundle) ?? []) {
       const candidate = join(searchPath, bundle)
+      if (within !== undefined && !candidate.startsWith(`${within}${sep}`)) continue
       if (existsSync(join(candidate, 'package.json'))) return candidate
     }
   }
@@ -227,6 +244,8 @@ interface PatchRows {
   readonly rows: readonly RowFact[]
   /** The ids of the rows it disables. */
   readonly disabled: readonly string[]
+  /** The settings it gives rows that have an id. */
+  readonly settings: readonly RowSettingsFact[]
 }
 
 /**
@@ -239,6 +258,29 @@ function disabledInserted(rows: readonly unknown[]): readonly string[] {
     if (!isRecord(row)) return []
     if (row['group'] === true && Array.isArray(row['config'])) return disabledInserted(row['config'])
     return row['disabled'] === true && typeof row['id'] === 'string' ? [row['id']] : []
+  })
+}
+
+/**
+ * The top-level `config` keys of a patch row or entry as JSON values.
+ * @param config - the row's `config` value.
+ * @returns the keys; none when the config is not a mapping.
+ */
+function configKeys(config: unknown): Readonly<Record<string, SettingValue>> {
+  if (!isRecord(config)) return {}
+  return Object.fromEntries(Object.entries(config).map(([key, value]): [string, SettingValue] => [key, JSON.parse(JSON.stringify(value ?? null)) as SettingValue]))
+}
+
+/**
+ * The settings of the rows one patch entry inserts, a group's children included; a disabled row loads nothing.
+ * @param rows - the entry's `insert` list, or a group's children.
+ * @returns one fact per inserted row that has an id and a plugin name.
+ */
+function insertedSettings(rows: readonly unknown[]): readonly RowSettingsFact[] {
+  return rows.flatMap((row): readonly RowSettingsFact[] => {
+    if (!isRecord(row) || row['disabled'] === true) return []
+    if (row['group'] === true && Array.isArray(row['config'])) return insertedSettings(row['config'])
+    return typeof row['id'] === 'string' && typeof row['name'] === 'string' ? [rowSettingsFact(row['id'], row['name'], configKeys(row['config']))] : []
   })
 }
 
@@ -281,17 +323,21 @@ async function readPatch(bundle: string, directory: string, file: string): Promi
   if (!Array.isArray(parsed)) throw new BundleReadError('BUNDLE_PATCH_UNREADABLE', bundle, `its patch ${file} is not a list of patch entries`)
   const rows: RowFact[] = []
   const disabled: string[] = []
+  const settings: RowSettingsFact[] = []
   for (const entry of parsed) {
     if (!isRecord(entry)) throw new BundleReadError('BUNDLE_PATCH_UNREADABLE', bundle, `its patch ${file} holds an entry that is not a mapping`)
     // A literal `disabled: true` only; a `!!js` expression stays text and counts as not disabled, as it does for inserted rows.
     if (entry['disabled'] === true && typeof entry['id'] === 'string') disabled.push(entry['id'])
+    // An entry with an id and a config changes the keys of a row another layer inserted.
+    if (typeof entry['id'] === 'string' && isRecord(entry['config'])) settings.push(rowSettingsFact(entry['id'], undefined, configKeys(entry['config'])))
     const inserted = entry['insert']
     if (inserted === undefined) continue
     if (!Array.isArray(inserted)) throw new BundleReadError('BUNDLE_PATCH_UNREADABLE', bundle, `its patch ${file} holds an insert that is not a list`)
     rows.push(...insertedRows(bundle, file, inserted))
     disabled.push(...disabledInserted(inserted))
+    settings.push(...insertedSettings(inserted))
   }
-  return { rows, disabled }
+  return { rows, disabled, settings }
 }
 
 /**
@@ -302,7 +348,7 @@ async function readPatch(bundle: string, directory: string, file: string): Promi
  * @throws {BundleReadError} when its metadata cannot be read as upstream's format.
  */
 async function readBundle(bundle: string, options: BundleLayerOptions): Promise<LayerFact | string> {
-  const directory = bundleDirectory(bundle, options.anchors)
+  const directory = bundleDirectory(bundle, options.anchors, options.within)
   if (directory === undefined) return 'neither the target release nor the profile installs it'
   const manifest = await readManifest(bundle, directory)
   const declaration = declarationOf(bundle, manifest)
@@ -315,12 +361,14 @@ async function readBundle(bundle: string, options: BundleLayerOptions): Promise<
   const files = typeof declaration.patch === 'string' ? [declaration.patch] : declaration.patch
   const rows: RowFact[] = []
   const disabledRows: string[] = []
+  const settings: RowSettingsFact[] = []
   for (const file of files) {
     const patch = await readPatch(bundle, directory, file)
     rows.push(...patch.rows)
     disabledRows.push(...patch.disabled)
+    settings.push(...patch.settings)
   }
-  return { layer: bundle, rows, disabledRows }
+  return { layer: bundle, rows, disabledRows, settings }
 }
 
 /**

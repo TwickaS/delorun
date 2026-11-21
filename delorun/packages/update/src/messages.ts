@@ -8,7 +8,8 @@
  *
  * @module @delorun/update/messages
  */
-import type { PluginSubject, ReportItem, ReportVersions, RowSubject, UncheckedSource } from '@delorun/contract-update-report'
+import type { RowSettingsChange } from './row-settings.ts'
+import type { PluginSubject, ReportItem, ReportVersions, RowSettingsDetail, RowSubject, SettingChange, SettingValue, UncheckedSource } from '@delorun/contract-update-report'
 
 /** The two releases one item is about. */
 export interface MessageVersions {
@@ -102,6 +103,68 @@ function rowName(subject: RowSubject): string {
   return subject.id ?? subject.name
 }
 
+/** How a sentence names a protected row and its switch, for the rows whose own words the report knows. */
+const ROW_WORDS: Readonly<Record<string, { readonly title: string, readonly switch: string }>> = {
+  'delorun-agent-seats': { title: 'External agents', switch: 'live agents' },
+}
+
+/**
+ * How a sentence names a protected row.
+ * @param id - the row's id.
+ * @returns `the <title> row (<id>)` for a row with known words, otherwise `row <id>`.
+ */
+function protectedRowName(id: string): string {
+  const words = ROW_WORDS[id]
+  return words === undefined ? `row ${id}` : `the ${words.title} row (${id})`
+}
+
+/**
+ * Whether a setting value is plain enough to name in a sentence.
+ * @param value - the value.
+ * @returns true for a string, a number or a boolean.
+ */
+function isPlainValue(value: SettingValue | undefined): value is string | number | boolean {
+  return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+}
+
+/**
+ * The words for one changed setting, without its JSON.
+ * @param id - the row's id.
+ * @param change - the setting.
+ * @returns a clause such as `turns on live agents`.
+ */
+function settingClause(id: string, change: SettingChange): string {
+  if (change.after === undefined) return `removes the ${change.key} setting`
+  if (change.key === 'enabled' && typeof change.after === 'boolean') return `turns ${change.after ? 'on' : 'off'} ${ROW_WORDS[id]?.switch ?? 'the row'}`
+  return isPlainValue(change.after) ? `sets ${change.key} to ${String(change.after)}` : `changes the ${change.key} setting`
+}
+
+/**
+ * The sentence of a protected row whose settings the target release's bundle changes, adds or drops.
+ * @param id - the row's id.
+ * @param settings - how the settings differ.
+ * @param versions - the running and target releases.
+ * @returns the sentence.
+ */
+function settingsSentence(id: string, settings: RowSettingsDetail, versions: { readonly to: { readonly delorun: string } }): string {
+  const name = protectedRowName(id)
+  const release = `Delorun ${versions.to.delorun}`
+  if (settings.change === 'added') return `${release} adds ${name}, which Delorun protects.`
+  if (settings.change === 'removed') return `${release} removes ${name}, which Delorun protects.`
+  return `${release} changes the settings of ${name}: ${settings.keys.map(key => settingClause(id, key)).join('; ')}.`
+}
+
+/**
+ * The sentence for a protected row whose settings a release's bundles changed, for a health check that found the change
+ * itself.
+ * @param change - the row's change between the two releases' bundles.
+ * @param delorun - the release the bundles belong to.
+ * @returns the sentence.
+ */
+export function settingsNote(change: RowSettingsChange, delorun: string): string {
+  return settingsSentence(change.id, change, { to: { delorun } })
+}
+
 /**
  * The sentence of a row item.
  * @param item - the item, whose subject is a row.
@@ -111,6 +174,7 @@ function rowName(subject: RowSubject): string {
 function rowSentence(item: ReportItem & { readonly kind: 'row' }, versions: MessageVersions): string {
   const subject = item.subject
   const plugin = item.detail.plugin?.name ?? ''
+  if (item.detail.settings !== undefined) return settingsSentence(rowName(subject), item.detail.settings, versions)
   if (item.detail.bundlePatch) return `Delorun ${versions.to.delorun} switches off row ${rowName(subject)} through its bundle ${subject.layer}; the row stays in your profile but does not run.`
   if (item.reason === 'row-include-blocked') return `Include ${subject.name} reaches ${plugin}, which the update disables, so the whole Include is disabled.`
   return `Row ${rowName(subject)} in ${subject.layer} loads ${plugin}, which the update disables.`

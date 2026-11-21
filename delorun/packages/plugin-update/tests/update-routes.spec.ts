@@ -251,6 +251,13 @@ describe('rollback, cancel, stop and state', () => {
     expect(json(await get(update.server.port, UPDATE_PATHS.state)).result).toBeUndefined()
   })
 
+  it('the outcome record\'s protected-row sentences reach the page with the outcome', async () => {
+    const update = await serveUpdate()
+    const rowChanges = ['Delorun 0.1.1 changes the settings of the External agents row (delorun-agent-seats): turns on live agents.']
+    writeResult(update.home, { v: 1, kind: 'update', outcome: 'committed', from: '0.1.0', to: '0.1.1', at: '2026-11-17T12:00:00.000Z', rowChanges })
+    expect(json(await get(update.server.port, UPDATE_PATHS.state)).result).toEqual({ kind: 'update', outcome: 'committed', from: '0.1.0', to: '0.1.1', at: '2026-11-17T12:00:00.000Z', rowChanges })
+  })
+
   it('state names every control\'s decision, and hides the report from a request that may not begin an update', async () => {
     const update = await serveUpdate()
     const handle = await prepared(update, report([DISABLED_PLUGIN]))

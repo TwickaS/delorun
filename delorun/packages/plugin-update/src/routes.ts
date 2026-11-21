@@ -182,6 +182,7 @@ export function updateRoutes(dependencies: UpdateRouteDependencies): readonly Up
       kind: resultRecord.kind, outcome: resultRecord.outcome, from: resultRecord.from, to: resultRecord.to, at: resultRecord.at,
       ...resultRecord.reason === undefined ? {} : { reason: resultRecord.reason },
       ...resultRecord.criterion === undefined ? {} : { criterion: resultRecord.criterion },
+      ...resultRecord.rowChanges === undefined ? {} : { rowChanges: resultRecord.rowChanges },
     }
     const notes = result?.kind === 'update' && result.outcome === 'committed' && dependencies.changelog !== undefined
       ? notesBetween(await dependencies.changelog().catch(() => undefined), result.from, result.to)

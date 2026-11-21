@@ -10,7 +10,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { SemanticVersion } from '@delorun/contract-release-manifest'
 import { bundleRowItems } from '@delorun/update'
-import { BundleReadError, bundleAnchors, readBundleLayers, type BundleLayerOptions } from '../../src/update/bundle-layers.ts'
+import { BundleReadError, bundleAnchors, readBundleLayers, signedBundleAnchors, type BundleLayerOptions } from '../../src/update/bundle-layers.ts'
 
 const base = realpathSync(mkdtempSync(join(tmpdir(), 'dbl-')))
 const runtime = join(base, 'runtime')
@@ -115,6 +115,11 @@ describe('readBundleLayers', () => {
           { name: 'plugin-nameless', plugins: ['plugin-nameless'] },
           { id: 'maybe', name: 'plugin-maybe', plugins: ['plugin-maybe'] },
           { id: 'inner', name: 'plugin-inner', plugins: ['plugin-inner'] },
+        ], settings: [
+          { id: 'first', plugin: 'plugin-first', config: {} },
+          { id: 'maybe', plugin: 'plugin-maybe', config: {} },
+          { id: 'inner', plugin: 'plugin-inner', config: {} },
+          { id: 'first', config: { level: 2 } },
         ] }],
         skipped: [],
       })
@@ -137,7 +142,7 @@ describe('readBundleLayers', () => {
         ].join('\n'),
       })
 
-      expect((await readBundleLayers(['off'], OPTIONS)).layers).toEqual([{ layer: 'off', rows: [], disabledRows: ['llm-deepseek-account', 'inserted-off'] }])
+      expect((await readBundleLayers(['off'], OPTIONS)).layers).toEqual([{ layer: 'off', rows: [], disabledRows: ['llm-deepseek-account', 'inserted-off'], settings: [{ id: 'no-disable', config: {} }] }])
     })
 
     it('lets the report name nothing for a row the running and the target release both disable through their patches', async () => {
@@ -158,7 +163,7 @@ describe('readBundleLayers', () => {
         'b.yml': '- insert:\n    - name: plugin-b\n',
       })
 
-      expect((await readBundleLayers(['two-files'], OPTIONS)).layers).toEqual([{ layer: 'two-files', disabledRows: [], rows: [{ name: 'plugin-a', plugins: ['plugin-a'] }, { name: 'plugin-b', plugins: ['plugin-b'] }] }])
+      expect((await readBundleLayers(['two-files'], OPTIONS)).layers).toEqual([{ layer: 'two-files', disabledRows: [], rows: [{ name: 'plugin-a', plugins: ['plugin-a'] }, { name: 'plugin-b', plugins: ['plugin-b'] }], settings: [] }])
     })
 
     it('resolves a bundle from the target before the profile, and from the profile when the target does not carry it', async () => {
@@ -167,8 +172,8 @@ describe('readBundleLayers', () => {
       writeBundle('profile', 'own', bundle('own'), { 'cordis.patch.yml': '- insert:\n    - name: own-row\n' })
 
       expect((await readBundleLayers(['shared', 'own'], OPTIONS)).layers).toEqual([
-        { layer: 'shared', disabledRows: [], rows: [{ name: 'from-target', plugins: ['from-target'] }] },
-        { layer: 'own', disabledRows: [], rows: [{ name: 'own-row', plugins: ['own-row'] }] },
+        { layer: 'shared', disabledRows: [], rows: [{ name: 'from-target', plugins: ['from-target'] }], settings: [] },
+        { layer: 'own', disabledRows: [], rows: [{ name: 'own-row', plugins: ['own-row'] }], settings: [] },
       ])
     })
 
@@ -305,5 +310,63 @@ describe('readBundleLayers', () => {
 
   it('lets any other failure reach the caller', async () => {
     await expect(readBundleLayers(['@a/bundle'], { ...OPTIONS, anchors: ['relative/anchor'] })).rejects.toThrow(TypeError)
+  })
+})
+
+describe('the settings a patch gives rows', () => {
+  const patch = [
+    '- id: plugin-manager',
+    '  config:',
+    '    protectedPlugins: [plugin-seats]',
+    '    fallbackRegistries: !!js "process.env.MIRROR ? [1] : []"',
+    '- insert:',
+    '    - id: seats',
+    '      name: plugin-seats',
+    '      config:',
+    '        enabled: true',
+    '        seats: [{ provider: a, limit: 2 }]',
+    '    - id: bare',
+    '      name: plugin-bare',
+    '    - id: off',
+    '      name: plugin-off',
+    '      disabled: true',
+    '      config: { enabled: true }',
+    '    - id: tools',
+    '      group: true',
+    '      config:',
+    '        - id: inner',
+    '          name: plugin-inner',
+    '          config: { depth: 1 }',
+    '    - name: plugin-without-id',
+    '      config: { enabled: true }',
+    '    - id: whole',
+    '      name: plugin-whole',
+    '      config: !!js "{ enabled: true }"',
+    '',
+  ].join('\n')
+
+  it('reads each row\'s top-level config keys as JSON values, an update entry\'s without a plugin, and a bare row as an empty config', async () => {
+    writeBundle('target', '@a/bundle', bundle('@a/bundle'), { 'cordis.patch.yml': patch })
+
+    const { settings } = (await readBundleLayers(['@a/bundle'], OPTIONS)).layers[0] ?? {}
+
+    expect(settings).toEqual([
+      { id: 'plugin-manager', config: { protectedPlugins: ['plugin-seats'], fallbackRegistries: 'process.env.MIRROR ? [1] : []' } },
+      { id: 'seats', plugin: 'plugin-seats', config: { enabled: true, seats: [{ provider: 'a', limit: 2 }] } },
+      { id: 'bare', plugin: 'plugin-bare', config: {} },
+      { id: 'inner', plugin: 'plugin-inner', config: { depth: 1 } },
+      { id: 'whole', plugin: 'plugin-whole', config: {} },
+    ])
+  })
+
+  it('resolves a bundle only from the release\'s own files when the caller asks for it', async () => {
+    writeBundle('profile', 'planted', bundle('planted'))
+    writeBundle('target', 'signed', bundle('signed'))
+    const signed = { ...OPTIONS, anchors: signedBundleAnchors(runtime), within: join(runtime, 'app') }
+
+    expect(signedBundleAnchors('/r')).toEqual(['/r/app/node_modules/@deepseek-ai/dsh/package.json'])
+    expect((await readBundleLayers(['signed'], signed)).layers.map(layer => layer.layer)).toEqual(['signed'])
+    expect(await skipOf('planted', { ...OPTIONS, within: join(runtime, 'app') })).toMatchObject({ reason: 'neither the target release nor the profile installs it', verification: 'verified' })
+    expect(await skipOf('planted', signed)).toMatchObject({ reason: 'neither the target release nor the profile installs it' })
   })
 })
