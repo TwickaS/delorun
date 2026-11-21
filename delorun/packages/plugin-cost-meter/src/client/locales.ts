@@ -65,7 +65,7 @@ export const zh: Record<CostMeterLocaleKey, string> = {
   'plans.title': '套餐',
   'plans.agent.claude-code': 'Claude Code',
   'plans.agent.codex': 'Codex',
-  'plans.note': '数据来自各智能体自己的登录，仅在你点击“立即检查”时读取。',
+  'plans.note': '数据来自各智能体自己的登录，仅在你点击“立即检查”时读取',
   'pill.label': '估算对话费用 {cost}',
   'pill.labelWithAgents': '估算对话费用 {cost}，含智能体共 {total}',
   'pill.withAgents': '含智能体 {total}',
