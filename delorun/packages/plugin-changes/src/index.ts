@@ -264,7 +264,7 @@ function unplanned(action: string, detail: string): PreToolDecision {
  */
 export function apply(ctx: Context, config: Config): void {
   // Upstream hot reload's `ProfileReconcileCheck`: it awaits `check` before every recomposition of the profile.
-  ctx.provide('profileReconcileCheck', { check: (profile: ProfileContext) => checkReload(ctx, profile) })
+  ctx.provide('profileReconcileCheck', { check: (profile: ProfileContext) => checkReload(ctx, profile, config.installationBundles) })
   ctx.inject(['webServer', 'connection'], (scope) => {
     const restart = (): ChangesRestartHost | undefined => scope.get('changesRestart')
     const harness = (): ReturnType<ChangesHarnessHost['context']> => scope.get('changesHarness')?.context()
@@ -481,12 +481,13 @@ function runningRelease(): { readonly runningRelease?: string } {
  * logged.
  * @param ctx - the plugin context.
  * @param profile - the profile about to be recomposed.
+ * @param shipped - the packages the installation ships, `installationBundles`.
  * @throws {ChangesError} `LOAD_REFUSED` when a link or an active directory is not what Changes keeps, which refuses the
  *   recomposition.
  */
-async function checkReload(ctx: Context, profile: ProfileContext): Promise<void> {
+async function checkReload(ctx: Context, profile: ProfileContext, shipped: readonly string[]): Promise<void> {
   const loaded = loadedLinks(ctx.get('pluginPackages')?.resolution?.linkedRoots ?? [])
-  const carried = installationLinks()
+  const carried = installationLinks(shipped)
   // A package that failed to import is missing from the published resolution; its link is still the installation's own.
   const harnessLink = (name: string, target: string): boolean => loaded(name, target) || carried(name, target)
   const changes = await prepareReload({ home: profile.home, profile: profile.name, profileDir: profile.dir, harnessLink, ...runningRelease() })
