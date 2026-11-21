@@ -164,6 +164,10 @@
       name: '@delorun/plugin-agent-seats'
       disabled: true
 
+    - id: delorun-multiview
+      name: '@delorun/plugin-multiview'
+      disabled: true
+
     - id: delorun-plugin-changes
       name: '@delorun/plugin-changes'
       config:
@@ -173,6 +177,10 @@
           - '@deepseek-ai/dsh-web-app'
           - '@delorun/bundle-local'
           - '@delorun/bundle-studio'
+      disabled: true
+
+    - id: delorun-plugin-update
+      name: '@delorun/plugin-update'
       disabled: true
 
     - id: delorun-packs
