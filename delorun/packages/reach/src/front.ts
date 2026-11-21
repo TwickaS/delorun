@@ -33,10 +33,11 @@ export interface LoopbackFront {
 /**
  * Bind the fixed listener port.
  * @param port - the port on `127.0.0.1`.
+ * @param onError - called with an error the server raises after it bound, such as a failed accept; the server keeps listening.
  * @returns the bound front.
  * @throws {ReachError} `PORT_CONFLICT` when the port cannot be bound, which another program holding it causes.
  */
-export async function openFront(port: number): Promise<LoopbackFront> {
+export async function openFront(port: number, onError: (error: Error) => void): Promise<LoopbackFront> {
   const sockets = new Set<Socket>()
   let target: number | undefined
   const server = createServer((socket) => {
@@ -63,6 +64,8 @@ export async function openFront(port: number): Promise<LoopbackFront> {
   } catch (error) {
     throw new ReachError('PORT_CONFLICT', `Another program on this computer holds 127.0.0.1:${String(port)}, the port Tailscale forwards this home's address to (${String(error)}). Close that program, or stop Delorun and run delorun reach on tailscale again to choose another port`)
   }
+  // Without a listener an 'error' event after the bind is an uncaught exception; `listen` removed its own.
+  server.on('error', onError)
   return {
     port,
     connect: (value) => { target = value },

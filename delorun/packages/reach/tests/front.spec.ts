@@ -50,7 +50,7 @@ describe('the fixed listener port', () => {
     const port = await chooseListenerPort(LISTENER_PORT_RANGE)
     expect(port).toBeGreaterThanOrEqual(LISTENER_PORT_RANGE.min)
     expect(port).toBeLessThanOrEqual(LISTENER_PORT_RANGE.max)
-    const front = await openFront(port)
+    const front = await openFront(port, () => {})
     try {
       expect(front.port).toBe(port)
       // Pins the unconnected refusal: nothing is relayed before the reach listener exists.
@@ -67,14 +67,14 @@ describe('the fixed listener port', () => {
   it('refuses a port another program holds', async () => {
     const held = await echo()
     // Pins the bind before the rule: a port another program holds is never relayed to.
-    await expect(openFront(held)).rejects.toMatchObject({ code: 'PORT_CONFLICT', detail: expect.stringContaining(`127.0.0.1:${String(held)}`) })
+    await expect(openFront(held, () => {})).rejects.toMatchObject({ code: 'PORT_CONFLICT', detail: expect.stringContaining(`127.0.0.1:${String(held)}`) })
     await expect(isPortFree(held)).resolves.toBe(false)
     await expect(chooseListenerPort({ min: held, max: held }, 2)).rejects.toThrow(/no free port/)
   })
 
   it('ends both sides of a relayed connection when either ends, and every one at close', async () => {
     const port = await chooseListenerPort(LISTENER_PORT_RANGE)
-    const front = await openFront(port)
+    const front = await openFront(port, () => {})
     // A reach listener that is gone: the relay closes the client's connection.
     const gone = await echo()
     await new Promise<void>((resolve) => { servers.pop()?.close(() => { resolve() }) })

@@ -15,7 +15,7 @@ import type { StudioAddress } from '@delorun/contract-admission'
 import { TAILSCALE_OPERATOR_COMMAND } from '@delorun/contract-reach-providers'
 import { checkServeAccess, TailscalePrivateProvider, TAILSCALE_PRIVATE_VISIBILITY, tailscaleAddress, type ReachSpec } from '../src/provider.ts'
 import {
-  isPermissionRefusal, parseServeRules, readComputerUser, readServeRules, readTailscale, removeServe, systemTailscale, type TailscaleResult, type TailscaleRunner,
+  isMissing, isPermissionRefusal, parseServeRules, readComputerUser, readServeRules, readTailscale, removeServe, systemTailscale, type TailscaleResult, type TailscaleRunner,
 } from '../src/tailscale.ts'
 import { fakeTailscale, ownRule } from './fake-tailscale.ts'
 
@@ -220,6 +220,53 @@ describe('the Tailscale private provider', () => {
     const foreign = fakeTailscale(HOST, { 'serve off': denied })
     foreign.config = ownRule(HOST, 443, 1)
     await expect(checkServeAccess(foreign.run, request)).rejects.toMatchObject({ code: 'TAILSCALE_SERVE_NOT_PERMITTED', detail: expect.stringContaining('may still serve home.example.ts.net:443') })
+  })
+
+  it('tells a missing binary from a timeout, a too large answer and a binary that cannot run', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'delorun-reach-'))
+    try {
+      const slow = join(directory, 'slow')
+      await writeFile(slow, '#!/bin/sh\nsleep 5\n')
+      await chmod(slow, 0o700)
+      const loud = join(directory, 'loud')
+      await writeFile(loud, '#!/bin/sh\nhead -c 4096 /dev/zero | tr \'\\0\' x\n')
+      await chmod(loud, 0o700)
+      const locked = join(directory, 'locked')
+      await writeFile(locked, '#!/bin/sh\necho hi\n')
+      await chmod(locked, 0o600)
+      const missing = await systemTailscale(join(directory, 'missing'))(['version'])
+      expect(isMissing(missing)).toBe(true)
+      const timedOut = await systemTailscale(slow, 150)(['status'])
+      expect(timedOut).toMatchObject({ code: null, failure: 'timeout', stderr: 'tailscale did not finish within 0.15 seconds' })
+      expect(isMissing(timedOut)).toBe(false)
+      const tooLarge = await systemTailscale(loud, 5_000, 1024)(['status'])
+      expect(tooLarge).toMatchObject({ code: null, failure: 'output-too-large', stdout: '' })
+      expect(tooLarge.stderr).toContain('printed more than')
+      expect(await systemTailscale(locked)(['status'])).toMatchObject({ code: null, failure: 'not-run' })
+      // A large tailnet's status stays under the default limit.
+      const large = join(directory, 'large')
+      await writeFile(large, '#!/bin/sh\nhead -c 2097152 /dev/zero | tr \'\\0\' x\n')
+      await chmod(large, 0o700)
+      expect((await systemTailscale(large)(['status'])).stdout).toHaveLength(2_097_152)
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('reports a tailscale that did not answer as not signed in, never as not installed', async () => {
+    const hung: TailscaleResult = { code: null, stdout: '', stderr: 'tailscale did not finish within 15 seconds', failure: 'timeout' }
+    // Pins the mapping: callers and the stop read NOT_INSTALLED as "nothing serves".
+    await expect(readTailscale(fake({ version: hung }).run)).rejects.toMatchObject({ code: 'TAILSCALE_NOT_LOGGED_IN', detail: 'tailscale version failed: tailscale did not finish within 15 seconds' })
+    await expect(readTailscale(fake({ status: hung }).run)).rejects.toMatchObject({ code: 'TAILSCALE_NOT_LOGGED_IN', detail: 'tailscale status failed: tailscale did not finish within 15 seconds' })
+    await expect(readServeRules(fake({ serve: hung }).run, HOST, 443, TARGET)).rejects.toMatchObject({ code: 'TAILSCALE_NOT_LOGGED_IN' })
+    await expect(readServeRules(fake({ serve: { code: null, stdout: '', stderr: '' } }).run, HOST, 443, TARGET)).rejects.toMatchObject({ code: 'TAILSCALE_NOT_INSTALLED' })
+  })
+
+  it('refuses a serve check interval a timer cannot take', () => {
+    const provider = new TailscalePrivateProvider(fake().run)
+    // Pins the interval check: a delay below 1 or above 2147483647 makes Node run the check every millisecond.
+    for (const serveCheckIntervalMs of [0, 999, 1.5, Number.NaN, 2_147_483_648]) expect(() => provider.resolve(rows({ serveCheckIntervalMs })), String(serveCheckIntervalMs)).toThrow(/serveCheckIntervalMs must be a whole number/u)
+    expect(provider.resolve(rows({ serveCheckIntervalMs: 2_147_483_647 }))).toMatchObject({ checkIntervalMs: 2_147_483_647 })
   })
 
   it('runs the system tailscale without a shell', async () => {
