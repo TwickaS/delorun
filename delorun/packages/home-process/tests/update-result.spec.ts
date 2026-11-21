@@ -28,6 +28,18 @@ describe('update-result', () => {
     await removeUpdateResult(path)
   })
 
+  it('round-trips the sentences the successor added, and reads as none a list that is too long or holds a long sentence', async () => {
+    temp = await tempHome()
+    const path = updateResultPath(temp.home, PROFILE)
+    const committed: UpdateResultRecord = { ...record(), outcome: 'committed', rowChanges: ['Delorun 2.0.0 changes the settings of the External agents row (delorun-agent-seats): turns on live agents.'] }
+    await writeUpdateResult(path, committed)
+    expect(await readUpdateResult(path)).toEqual(committed)
+    await writeUpdateResult(path, { ...committed, rowChanges: Array.from({ length: 33 }, () => 'x') })
+    expect(await readUpdateResult(path)).toBeUndefined()
+    await writeUpdateResult(path, { ...committed, rowChanges: ['x'.repeat(601)] })
+    expect(await readUpdateResult(path)).toBeUndefined()
+  })
+
   it('reads as none a file that is not JSON, holds an unknown field or a bad version, or is laxer than 0600', async () => {
     temp = await tempHome()
     const path = updateResultPath(temp.home, PROFILE)

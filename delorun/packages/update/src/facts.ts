@@ -9,7 +9,7 @@
  */
 import type { ExemptionRecord, VersionAxis } from '@delorun/contract-plugin-versions'
 import type { SemanticVersion, Sha256Hex, UtcTimestamp } from '@delorun/contract-release-manifest'
-import type { Installation, InstallationStatus, ItemVerification, LogCheckResult, ReleaseCheckResult, ReportVersions, UncheckedSource } from '@delorun/contract-update-report'
+import type { Installation, InstallationStatus, ItemVerification, LogCheckResult, ReleaseCheckResult, ReportVersions, SettingValue, UncheckedSource } from '@delorun/contract-update-report'
 import type { DataFacts } from './data-formats.ts'
 import type { HarnessFact } from './harness-items.ts'
 import type { InstalledPluginFact } from './manifest.ts'
@@ -106,6 +106,16 @@ export interface RowFact {
   readonly include?: IncludeFact
 }
 
+/** The settings one bundle layer's patch gives a row: its top-level `config` keys, as the patch writes them. */
+export interface RowSettingsFact {
+  /** The row's id. */
+  readonly id: string
+  /** The plugin the row loads, when the layer inserts the row; absent for a patch entry that updates a row another layer inserts. */
+  readonly plugin?: string
+  /** The row's `config` keys. A `!!js` expression stays the text the patch holds, because no expression is evaluated. */
+  readonly config: Readonly<Record<string, SettingValue>>
+}
+
 /** One patch layer the profile composes, with its rows. */
 export interface LayerFact {
   /** The layer's name: the bundle, the profile patch, the home patch or the overlay that holds the rows. */
@@ -114,6 +124,8 @@ export interface LayerFact {
   readonly rows: readonly RowFact[]
   /** The ids of the rows this layer's patch disables: a patch entry with an `id` and `disabled: true`, or an inserted row that is disabled and has an id. Absent means the layer disables no row; only bundle layers carry it. */
   readonly disabledRows?: readonly string[]
+  /** The settings this layer's patch gives rows that have an id, one fact per row; absent for a layer that does not read them. Only bundle layers carry it. */
+  readonly settings?: readonly RowSettingsFact[]
 }
 
 /** The profile as the update would find it, before anything changes. */

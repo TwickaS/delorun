@@ -260,11 +260,11 @@ describe('storeReportSources', () => {
         retired: [],
         skipped: [{ package: '@p/old', reason: 'it requires DSH ^0.1.0 and the target runs DSH 0.2.2', verification: 'verified' }],
         layers: [
-          { layer: '@t/bundle', disabledRows: [], rows: [{ id: 'target-row', name: 'plugin-target', plugins: ['plugin-target'] }] },
-          { layer: '@p/bundle', disabledRows: [], rows: [{ name: 'plugin-profile', plugins: ['plugin-profile'] }] },
+          { layer: '@t/bundle', disabledRows: [], rows: [{ id: 'target-row', name: 'plugin-target', plugins: ['plugin-target'] }], settings: [{ id: 'target-row', plugin: 'plugin-target', config: {} }] },
+          { layer: '@p/bundle', disabledRows: [], rows: [{ name: 'plugin-profile', plugins: ['plugin-profile'] }], settings: [] },
         ],
         // The running release resolves its own anchor, so the target-only bundle is absent from the baseline.
-        runningLayers: [{ layer: '@p/bundle', disabledRows: [], rows: [{ name: 'plugin-profile', plugins: ['plugin-profile'] }] }],
+        runningLayers: [{ layer: '@p/bundle', disabledRows: [], rows: [{ name: 'plugin-profile', plugins: ['plugin-profile'] }], settings: [] }],
       })
       expect(target.notChecked).toEqual(['revocations'])
     })

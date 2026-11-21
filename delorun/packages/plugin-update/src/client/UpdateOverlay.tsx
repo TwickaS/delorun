@@ -127,6 +127,7 @@ function OutcomeCard({ state, result, notes, t, dismiss }: {
         <p className={css.title}><StateDot state={good ? 'done' : 'error'} /><span>{keepVersions(title, [result.to, result.from])}</span></p>
         <p className={css.body}>{keepVersions(body, [result.to, result.from])}</p>
         {good ? <NotesHighlights notes={notes} t={t} /> : null}
+        {good && result.rowChanges !== undefined && result.rowChanges.length > 0 ? <div data-update-row-changes><p className={css.body}>{t('outcome.rowChanges')}</p><ul className={css.highlights}>{result.rowChanges.map(line => <li key={line}>{line}</li>)}</ul></div> : null}
       </div>
       <div className={css.actions}>
         <Button variant="outline" size="sm" aria-expanded={details} onClick={() => { setDetails(value => !value) }}>{t(details ? 'outcome.details.hide' : 'outcome.details')}</Button>

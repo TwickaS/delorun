@@ -144,8 +144,10 @@ export function builtReport(input: ReportInput): BuiltUpdateReport {
     report,
     health: {
       disabledPlugins: disabledPluginNames(report),
-      namedRows: report.items.flatMap(item => item.kind === 'row' && item.detail.bundlePatch !== true ? [item.subject.id ?? item.subject.name] : []),
-      bundleRows: report.items.flatMap(item => item.kind === 'row' && item.detail.bundlePatch === true ? [item.subject.id ?? item.subject.name] : []),
+      // A row whose settings the target's bundle changes or adds is not named: H3 derives that change itself and holds the
+      // row to exactly it. A row the target's bundle drops is named by its id, because nothing is left to compare.
+      namedRows: report.items.flatMap(item => item.kind === 'row' && item.detail.bundlePatch !== true && item.detail.settings === undefined ? [item.subject.id ?? item.subject.name] : []),
+      bundleRows: report.items.flatMap(item => item.kind === 'row' && (item.detail.bundlePatch === true || item.detail.settings?.change === 'removed') ? [item.subject.id ?? item.subject.name] : []),
       bundles: predictBundleList(profile.bundles, target.bundles),
     },
     dataDiffers: report.items.some(item => item.kind === 'data'),

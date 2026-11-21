@@ -56,6 +56,7 @@ import { endUpdateRecord, hasStash, journalledUpdate, journalPath, markCommitted
 import type { BootRow, ChatGate, HostProtection, HostRunner, RunningHost, RuntimePointers, UpdateChannelAccess } from './seams.ts'
 import { SIGNAL_EXIT_CODES, type HomeSignal } from './signals.ts'
 import { ChannelTokenCheck, studioOpenToken } from './studio-link.ts'
+import { readUpdateResult, updateResultPath, writeUpdateResult } from './update-result.ts'
 import { approveDevices, changePin, elevateDevices, removeDevice } from './devices-approve.ts'
 import { reloadChanges } from './reload.ts'
 import { acceptServer, declineServer, listServers, reloadPermissions, revokeServer } from './consents.ts'
@@ -307,6 +308,7 @@ export class HomeProcess implements HandshakeSubject {
       home.listenSignals()
       home.runAgeChecks()
       let healthy = false
+      let rowChanges: readonly string[] | undefined
       let criterion: string | undefined
       // One report of `failed`, whichever of the deadline, a failed check or a failed boot comes first.
       let reported: Promise<void> | undefined
@@ -329,7 +331,9 @@ export class HomeProcess implements HandshakeSubject {
       try {
         home.host = await home.bootedHost()
         options.logger.info('the Host booted on the new runtime; checking its health', { data: { to: handover.to } })
-        const verdict = await home.host.check(handover.health)
+        // Only an update's successor may derive what its own release changes in protected rows; a rollback's and a restart's stay as they are.
+        const verdict = await home.host.check(handover.type === 'handover' && handover.purpose !== 'rollback' ? { ...handover.health, previousVersion: handover.from } : handover.health)
+        if (verdict.passed) rowChanges = verdict.rowChanges
         if (!verdict.passed) {
           options.logger.warn('the Host failed its health check on the new runtime', { data: { criterion: verdict.criterion, detail: verdict.detail } })
           criterion = verdict.criterion
@@ -358,7 +362,10 @@ export class HomeProcess implements HandshakeSubject {
       home.startSupervisor()
       home.enterRunning()
       // A restart's successor runs the same runtime and leaves the update record and the runtimes as they are.
-      if (handover.type === 'handover') await home.settleRecord(handover.to)
+      if (handover.type === 'handover') {
+        await home.settleRecord(handover.to)
+        await home.noteRowChanges(handover.to, rowChanges)
+      }
       options.logger.info(handover.type === 'restart' ? 'took over from the previous start of this runtime' : 'took over from the previous runtime', { data: { from: handover.from, to: handover.to } })
       return home
     } catch (error) {
@@ -926,6 +933,25 @@ export class HomeProcess implements HandshakeSubject {
       this.logger.warn('the runtime store could not remove the runtimes the update left; the next update retries it', { err: error })
     })
     if (retained !== undefined) this.logger.info('retained the runtimes the pointers name', { data: { retention: retained } })
+  }
+
+  /**
+   * Add the sentences on the protected-row changes the new release brought to the outcome record the predecessor wrote when
+   * the successor reported ready. The record only reports, so a record that is missing or cannot be written is logged
+   * and changes nothing.
+   * @param to - the version the update committed to.
+   * @param rowChanges - the health check's sentences; none when the release brought no change.
+   */
+  private async noteRowChanges(to: RuntimeVersion, rowChanges: readonly string[] | undefined): Promise<void> {
+    if (rowChanges === undefined || rowChanges.length === 0) return
+    const path = updateResultPath(this.options.home, this.options.profile)
+    try {
+      const record = await readUpdateResult(path)
+      if (record?.outcome === 'committed' && record.to === to) await writeUpdateResult(path, { ...record, rowChanges })
+      else this.logger.warn('the update\'s outcome record was not there to name the protected-row changes the new release brought', { data: { to, rowChanges } })
+    } catch (error) {
+      this.logger.warn('the update\'s outcome record could not name the protected-row changes the new release brought', { err: error, data: { to, rowChanges } })
+    }
   }
 
   /**

@@ -239,6 +239,7 @@ export type ReportReason =
   | 'bundle-skipped'
   | 'row-disabled'
   | 'row-include-blocked'
+  | 'row-settings-changed'
   | 'data-format-changed'
   | 'data-format-unknown'
   | 'harness-change-carried'
@@ -254,6 +255,27 @@ export type ItemVerification = 'verified' | 'unverified'
 /** A choice the report offers for an item. */
 export type ItemAction = 'update-plugin' | 'keep-disabled' | 'allow-version' | 'skip-update' | 'copy-session-data' | 'continue-without-copy'
 
+/** A setting's value as a release's bundle patch writes it: a JSON value. */
+export type SettingValue = string | number | boolean | null | readonly SettingValue[] | { readonly [key: string]: SettingValue }
+
+/** One setting of a protected row that the target release's bundle sets differently from the running release's. */
+export interface SettingChange {
+  /** The setting's key in the row's `config`. */
+  readonly key: string
+  /** The running release's value; absent when its bundle does not set the key. */
+  readonly before?: SettingValue
+  /** The target release's value; absent when its bundle does not set the key. */
+  readonly after?: SettingValue
+}
+
+/** How a protected row's settings differ between the two releases' bundles, for `row-settings-changed`. */
+export interface RowSettingsDetail {
+  /** `changed`: both releases' bundles have the row; `added`: only the target's does; `removed`: only the running release's does. */
+  readonly change: 'changed' | 'added' | 'removed'
+  /** The settings that differ, in key order; for an added or removed row, every setting the bundle gives it. */
+  readonly keys: readonly SettingChange[]
+}
+
 /** The facts behind an item's reason. */
 export interface ItemDetail {
   /** The version axis, for requirement reasons. */
@@ -268,6 +290,8 @@ export interface ItemDetail {
   readonly plugin?: PluginSubject
   /** For `row-disabled`: the row is switched off by a patch of the target release's bundle, not by a plugin the update disables. Readers that do not know the field show the plugin sentence. */
   readonly bundlePatch?: true
+  /** For `row-settings-changed`: how the row's settings differ. */
+  readonly settings?: RowSettingsDetail
   /** What differs between the two releases' data facts, for `data-format-changed`. */
   readonly differs?: readonly DataFormatDifference[]
   /** Which release's `data-formats.json` is missing or unreadable, for `data-format-unknown`. */

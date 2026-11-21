@@ -57,7 +57,7 @@ const version = z.string().regex(new RegExp(RUNTIME_VERSION_PATTERN))
  * objects drop fields this release does not know, so a predecessor may add an optional field a successor can do
  * without, as contract C19's "Compatibility" allows; a field a successor must understand raises `v`.
  */
-const bootRow = z.object({ id: z.string(), name: z.string(), generated: z.boolean(), configHash: z.string().regex(/^[0-9a-f]{64}$/u).optional() })
+const bootRow = z.object({ id: z.string(), name: z.string(), generated: z.boolean(), configHash: z.string().regex(/^[0-9a-f]{64}$/u).optional(), personEdited: z.boolean().optional() })
 const handoverSchema = z.object({
   type: z.enum(['handover', 'restart']),
   purpose: z.enum(['update', 'rollback']).optional(),

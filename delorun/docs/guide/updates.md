@@ -53,7 +53,7 @@ delorun update --report    # what would the newest release change? applies nothi
 - under "Your changes to Delorun's own files", each file of Delorun itself that you changed, and whether your change would be merged into the new release. A merged change keeps your version beside the new file as `<file>.mine`;
 - whether the chat data changes format, with the size of the copy and the free disk space ([Chat data that changes format](#chat-data-that-changes-format)).
 
-When nothing changes, the report says `No plugin, bundle or profile row changes.` The report covers plugins, bundles and profile entries; it does not list setting values, which carry over unchanged.
+When nothing changes, the report says `No plugin, bundle or profile row changes.` The report also names the settings of the rows Delorun protects, such as the guards and the sandbox, that the new release changes, adds or drops, in plain words: `Delorun <version> changes the settings of the External agents row (delorun-agent-seats): turns on live agents.` Only a release can change these rows this way; the report never lists a setting you changed yourself. Apart from these, the report does not list setting values, which carry over unchanged.
 
 ## Apply an update
 
@@ -73,7 +73,7 @@ Delorun never applies an update you have not confirmed, and the check applies no
 2. **Snapshot.** Delorun saves a profile history version named `Before update to Delorun <version>`, holding your profile's patches, bundle list and plugin version exemptions.
 3. **Waiting.** Running chats finish their turns; a new message gets "Delorun started no new turn: an update is waiting for running chats" and you send it again once Delorun is back. Delorun waits up to 30 minutes, then stops the update with `DRAIN_TIMEOUT` and changes nothing.
 4. **Switching.** The studio stops, the chat-data copy is written when one is taken, and the new release starts. The studio is unavailable for this step.
-5. **Health check.** Within two minutes the new release must verify its own files, answer its health request, start every plugin that started before, keep the profile's bundle list, and turn off nothing the report did not name.
+5. **Health check.** Within two minutes the new release must verify its own files, answer its health request, start every plugin that started before, keep the profile's bundle list, keep every protected row's settings except the ones the release itself changes, and turn off nothing the report did not name. A report made by an older release cannot name a protected setting that the new release changes; the new release then checks its own signed files, accepts exactly that change, and shows it with the update's outcome in Settings → Updates.
 
 If the health check fails, or the new release stops, Delorun goes back on its own to the release and profile you had and prints which check failed: `Delorun <version> failed its health check (<check>); Delorun <previous> runs again with the profile from before. See delorun logs.` On success it prints `Delorun <version> runs now.`
 

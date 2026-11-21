@@ -12,6 +12,7 @@ import { readFile } from 'node:fs/promises'
 import type { IncomingMessage } from 'node:http'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
+import type { RuntimeVersion } from '@delorun/contract-home-layout'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { JobId } from '@deepseek-ai/dsh-jobs'
 import type {} from '@deepseek-ai/dsh-client-connection'
@@ -21,7 +22,8 @@ import type {} from '@delorun/plugin-packs'
 import type {} from '@delorun/plugin-update'
 import { protectedPluginsIn } from '@delorun/home-auth'
 import type { BootRow, CountingChatGate, HealthExpectations, HealthVerdict, HostProtection } from '@delorun/home-process'
-import { bundleListOf } from '@delorun/profile-safety'
+import { bundleListOf, readInventory } from '@delorun/profile-safety'
+import { canonicalJson, previousConfigsOf, settingsNote, type RowSettingsChange } from '@delorun/update'
 import type { BootedRow } from '../delorun-bundles.ts'
 import { hostProtectionOf, protectionWeakenings, SANDBOX_ROW, settingsBeyondProtection } from '../sandbox-protection.ts'
 
@@ -110,6 +112,21 @@ export interface HostHealthFacts {
    * @throws when a file differs.
    */
   readonly verifyRuntime: () => Promise<void>
+  /**
+   * The release this Host runs and what its signed bundles change against the release that ran before. Without it, no
+   * change counts as brought by the release.
+   */
+  readonly release?: {
+    /** The release this Host runs, which the sentences name. */
+    readonly version: string
+    /**
+     * The protected rows whose settings the two releases' signed bundles give differently, each read from the runtime
+     * files its signature check verified.
+     * @param previous - the release that ran before.
+     * @returns the changes, or `undefined` when either release's bundles could not be verified and read, so no change counts as brought by the release.
+     */
+    readonly settings: (previous: RuntimeVersion) => Promise<readonly RowSettingsChange[] | undefined>
+  }
 }
 
 /**
@@ -213,14 +230,20 @@ export function protectedPluginsOf(rows: readonly BootedRow[]): ReadonlySet<stri
 }
 
 /**
- * JSON with each object's keys in sorted order, so the same config always gives the same text.
- * @param value - the value.
- * @returns the text.
+ * The rows the person's own patch layers touch: a row they insert and a row whose settings they patch, in the profile's
+ * patch and the home's patch.
+ * @param home - the resolved Delorun home.
+ * @param profile - the CLI profile.
+ * @returns the rows' ids, or `unreadable` when a layer cannot be read, which a successor treats as touching every protected row.
  */
-function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
-  if (value !== null && typeof value === 'object') return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonicalJson((value as Record<string, unknown>)[key])}`).join(',')}}`
-  return JSON.stringify(value) ?? 'null'
+export function personRowsOf(home: string, profile: string): ReadonlySet<string> | 'unreadable' {
+  try {
+    const inventory = readInventory({ profileDir: join(home, 'profiles', profile), homeDir: home })
+    return new Set([...inventory.rows.flatMap(row => row.id === undefined ? [] : [row.id]), ...inventory.configurations.map(configuration => configuration.rowId)])
+  } catch (_unreadable) {
+    // A layer that cannot be read may touch any protected row, which `unreadable` states.
+    return 'unreadable'
+  }
 }
 
 /**
@@ -228,15 +251,18 @@ function canonicalJson(value: unknown): string {
  * the id up, and the config hash of a protected plugin's row. The sandbox row's hash leaves out its protection
  * ({@link settingsBeyondProtection}), which H3 compares on its own ({@link bootProtectionOf}).
  * @param rows - the Loader's rows.
+ * @param personRows - the ids of the rows the person's own patch layers touch, or `unreadable` when those layers could
+ *   not be read; a protected row of either kind is marked `personEdited`. Omitted, no row is marked.
  * @returns the rows.
  */
-export function bootRowsOf(rows: readonly BootedRow[]): BootRow[] {
+export function bootRowsOf(rows: readonly BootedRow[], personRows?: ReadonlySet<string> | 'unreadable'): BootRow[] {
   const protectedPlugins = protectedPluginsOf(rows)
   return rows.map(row => ({
     id: row.id,
     name: row.name,
     generated: isGeneratedRowId(row.id),
     ...protectedPlugins.has(row.name) ? { configHash: configHashOf(row.id, row.config) } : {},
+    ...protectedPlugins.has(row.name) && personRows !== undefined && (personRows === 'unreadable' || personRows.has(row.id)) ? { personEdited: true } : {},
   }))
 }
 
@@ -255,14 +281,14 @@ function configHashOf(id: string, config: unknown): string {
 /**
  * The rows a Host hands its successor after it applied a protected row's new config while it ran, outside the Loader:
  * the boot rows with that row's hash taken from the config it applied, which the next start boots from the same file.
- * A row that is not there, or not a protected plugin's, keeps what it had.
+ * The row is marked `personEdited`, because the applied config is the person's. A row that is not there, or not a protected plugin's, keeps what it had.
  * @param rows - the rows as {@link bootRowsOf} gave them at boot.
  * @param id - the row's id.
  * @param config - the config the Host applied.
  * @returns the rows.
  */
 export function withAppliedConfig(rows: readonly BootRow[], id: string, config: unknown): BootRow[] {
-  return rows.map(row => (row.id === id && row.configHash !== undefined ? { ...row, configHash: configHashOf(id, config) } : row))
+  return rows.map(row => (row.id === id && row.configHash !== undefined ? { ...row, configHash: configHashOf(id, config), personEdited: true } : row))
 }
 
 /**
@@ -339,6 +365,12 @@ export async function checkHealth(facts: HostHealthFacts, expect: HealthExpectat
   // A bundle-patch item names its row by id alone: its id may equal a plugin name that other rows load.
   const bundleRows = new Set(expect.bundleRows ?? [])
   const reported = (row: { readonly id: string, readonly name: string }): boolean => named.has(row.id) || named.has(row.name) || bundleRows.has(row.id) || disabledPlugins.has(row.name)
+  if (expect.previousProtection !== undefined) {
+    // Every socket the target's row denies counts, those its start found on the computer included; neither a report nor a change the release brings excuses a weaker one, so this runs before either can accept a row.
+    const now = bootProtectionOf(facts.rows(), [])
+    const weaker = now === undefined ? ['sets no protected home'] : protectionWeakenings(expect.previousProtection, now)
+    if (weaker.length > 0) return { passed: false, criterion: 'H3-only-named-disabled', detail: `the ${SANDBOX_ROW} row's protection is weaker than before the update: it ${weaker.join('; it ')}` }
+  }
   const target = bootRowsOf(facts.rows())
   const failedBefore = new Set(expect.previousFailures.map(row => row.id))
   // A row the Loader gave a new id is matched by its plugin, one previous row for one target row; no other row is.
@@ -354,23 +386,24 @@ export async function checkHealth(facts: HostHealthFacts, expect: HealthExpectat
   const present = new Map(target.map(row => [row.id, row]))
   const previousIds = new Set(expect.previousRows.map(row => row.id))
   const spares = countByPlugin(target.filter(row => row.generated && !previousIds.has(row.id)))
+  const brought: RowSettingsChange[] = []
+  let releaseChanges: Promise<readonly RowSettingsChange[] | undefined> | undefined
   for (const row of expect.previousRows) {
     const now = present.get(row.id)
     if (now !== undefined) {
       if (row.configHash !== undefined && now.configHash !== row.configHash && !reported(row)) {
-        return { passed: false, criterion: 'H3-only-named-disabled', detail: `the settings of protected row ${row.id} changed and the report did not name it` }
+        releaseChanges ??= releaseChangesOf(facts.release, expect.previousVersion)
+        const booted = facts.rows().filter(candidate => candidate.id === row.id)
+        // Two booted rows with one id leave no single row to hold the hash and the config together, so nothing is derived.
+        const change = booted.length === 1 ? broughtByRelease(row, now, booted[0]?.config, await releaseChanges) : undefined
+        if (change === undefined) return { passed: false, criterion: 'H3-only-named-disabled', detail: `the settings of protected row ${row.id} changed and the report did not name it` }
+        brought.push(change)
       }
       continue
     }
     if (reported(row)) continue
     if (row.generated && claim(spares, row.name)) continue
     return { passed: false, criterion: 'H3-only-named-disabled', detail: `row ${row.id} was in the profile before the update, is gone, and the report did not name it or disable its plugin` }
-  }
-  if (expect.previousProtection !== undefined) {
-    // Every socket the target's row denies counts, those its start found on the computer included; a report cannot excuse a weaker one.
-    const now = bootProtectionOf(facts.rows(), [])
-    const weaker = now === undefined ? ['sets no protected home'] : protectionWeakenings(expect.previousProtection, now)
-    if (weaker.length > 0) return { passed: false, criterion: 'H3-only-named-disabled', detail: `the ${SANDBOX_ROW} row's protection is weaker than before the update: it ${weaker.join('; it ')}` }
   }
   if (expect.bundles !== undefined) {
     const path = join(facts.profileDir, 'package.json')
@@ -380,5 +413,41 @@ export async function checkHealth(facts: HostHealthFacts, expect: HealthExpectat
       return { passed: false, criterion: 'H5-bundle-list-predicted', detail: `the bundle list is ${bundles.join(', ')}; the report predicted ${expect.bundles.join(', ')}` }
     }
   }
-  return { passed: true }
+  const version = facts.release?.version
+  return version === undefined || brought.length === 0 ? { passed: true } : { passed: true, rowChanges: brought.map(change => settingsNote(change, version)) }
+}
+
+/**
+ * What the two releases' signed bundles change in protected rows, read once and only when a protected row's settings
+ * differ from the previous Host's.
+ * @param release - the release this Host runs and its reader.
+ * @param previous - the release that ran before, when the handover names one for an update.
+ * @returns the changes, or `undefined` when they cannot be read or verified.
+ */
+async function releaseChangesOf(release: HostHealthFacts['release'], previous: RuntimeVersion | undefined): Promise<readonly RowSettingsChange[] | undefined> {
+  if (release === undefined || previous === undefined) return undefined
+  try {
+    return await release.settings(previous)
+  } catch (_unverifiable) {
+    // A release whose bundles cannot be verified and read brings no change H3 may derive, so H3 stays as it is.
+    return undefined
+  }
+}
+
+/**
+ * Whether the release's own signed bundles explain a protected row's different settings: the booted config differs
+ * from the previous Host's in exactly the keys the two releases' bundles set differently, and holds the target
+ * release's values there. A key the person set by hand, or any other difference, leaves the hashes apart.
+ * @param row - the row as the previous Host had it, with its config hash.
+ * @param now - the row as this Host booted it.
+ * @param booted - the config the Loader mounted the row with.
+ * @param changes - what the signed bundles change, or `undefined` when they could not be read.
+ * @returns the change that explains the row, or `undefined` when none does.
+ */
+function broughtByRelease(row: BootRow, now: BootRow, booted: unknown, changes: readonly RowSettingsChange[] | undefined): RowSettingsChange | undefined {
+  // The same plugin must be protected on both sides and in both releases' bundles: an id pointed at another plugin is no change the release brought.
+  if (row.personEdited === true || now.configHash === undefined || now.name !== row.name) return undefined
+  const change = changes?.find(candidate => candidate.id === row.id && candidate.change === 'changed' && candidate.plugin === row.name)
+  if (change === undefined) return undefined
+  return previousConfigsOf(booted, change).some(config => configHashOf(row.id, config) === row.configHash) ? change : undefined
 }

@@ -185,6 +185,17 @@ describe('the progress and outcome cards', () => {
     expect(document.querySelector('[data-update-details]')?.textContent).toContain('H2-host-ready')
   })
 
+  it('lists the protected-row changes a committed update brought, and nothing when it brought none', () => {
+    const line = 'Delorun 0.1.3 changes the settings of the External agents row (delorun-agent-seats): turns on live agents.'
+    const committed: UpdateResultView = { kind: 'update', outcome: 'committed', from: '0.1.2', to: '0.1.3', at: '2026-11-17T10:00:00Z' }
+    overlay(stateOf({ result: { ...committed, rowChanges: [line] } }))
+    expect(document.querySelector('[data-update-row-changes]')?.textContent).toContain(en['outcome.rowChanges'])
+    expect(document.querySelector('[data-update-row-changes] li')?.textContent).toBe(line)
+    cleanup()
+    overlay(stateOf({ result: committed }))
+    expect(document.querySelector('[data-update-row-changes]')).toBeNull()
+  })
+
   it('keeps each version whole in the title, shows the time in the local zone and keeps developer words out of the details', () => {
     overlay(stateOf({ result: RESULT }))
     const title = document.querySelector('[data-update-outcome] p')

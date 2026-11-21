@@ -51,6 +51,12 @@ export interface HealthExpectations {
    * absent where no Host ran before, as in the check after a rollback's restart.
    */
   readonly previousProtection?: HostProtection | undefined
+  /**
+   * H3: the release the previous Host ran, set for an update's successor by the home process from the handover. A
+   * successor reads both releases' signed bundles to tell which changes of a protected row's settings the release
+   * itself brings; absent for a rollback and after an interrupted switch, where nothing is derived.
+   */
+  readonly previousVersion?: RuntimeVersion | undefined
 }
 
 /**
@@ -85,11 +91,22 @@ export interface BootRow {
   readonly generated: boolean
   /** For a row of a protected plugin (a guard, consent or sandbox row), the SHA-256 of its canonical config. */
   readonly configHash?: string | undefined
+  /**
+   * For a protected row, whether the person's own patch layers (the profile's patch and the home's patch) touched the
+   * row when the Host booted, or the Host could not read them. A successor derives no change of such a row from the
+   * release's bundles, because the previous hash cannot tell a value the person set from the bundle's. Absent for a Host
+   * of an earlier release, which did not state it.
+   */
+  readonly personEdited?: boolean | undefined
 }
 
 /** The health check's answer: passed, or the first criterion that failed. */
 export type HealthVerdict =
-  | { readonly passed: true }
+  | {
+    readonly passed: true
+    /** Plain-words notes on the protected-row changes the new release's own bundles brought and H3 accepted without the report naming them. */
+    readonly rowChanges?: readonly string[]
+  }
   | { readonly passed: false, readonly criterion: string, readonly detail: string }
 
 /** A version ready to switch to, with C3's update report against it. */

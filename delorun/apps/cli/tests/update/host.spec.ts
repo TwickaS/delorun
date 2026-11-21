@@ -290,7 +290,7 @@ describe('rows', () => {
     const manager = row({ id: 'plugin-manager', name: '@deepseek-ai/dsh-plugin-manager', config: { protectedPlugins: ['@delorun/reach'] } })
     const reach = (config: unknown): BootedRow => row({ id: 'delorun-reach', name: '@delorun/reach', config })
     const atBoot = bootRowsOf([manager, reach({ enabled: false }), row({ id: 'other', config: { a: 1 } })])
-    expect(withAppliedConfig(atBoot, 'delorun-reach', { enabled: true })).toEqual(bootRowsOf([manager, reach({ enabled: true }), row({ id: 'other', config: { a: 1 } })]))
+    expect(withAppliedConfig(atBoot, 'delorun-reach', { enabled: true })).toEqual(bootRowsOf([manager, reach({ enabled: true }), row({ id: 'other', config: { a: 1 } })]).map(booted => booted.id === 'delorun-reach' ? { ...booted, personEdited: true } : booted))
     expect(withAppliedConfig(atBoot, 'other', { a: 2 })).toEqual(atBoot)
     expect(withAppliedConfig(atBoot, 'absent', { a: 2 })).toEqual(atBoot)
   })

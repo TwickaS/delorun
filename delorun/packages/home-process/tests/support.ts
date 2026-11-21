@@ -92,6 +92,10 @@ export interface FixtureBehaviour {
   readonly abandonFails?: boolean
   /** Whether its runner reports that its boot changed no profile file, so there is nothing for `abandon` to undo. */
   readonly nothingAdvanced?: boolean
+  /** The sentences its health check returns as the protected-row changes its release brought; none by default. */
+  readonly rowChanges?: readonly string[]
+  /** A file its health check writes the expectation's `previousVersion` to, or `none` when the expectation names none; none by default. */
+  readonly previousMarker?: string
   /**
    * Its teardown for a switch, which resolves at once by default.
    * @returns when the teardown has finished.
@@ -465,6 +469,8 @@ export class FixtureHost implements RunningHost {
   async check(expect: HealthExpectations | undefined): Promise<HealthVerdict> {
     if (!this.behaviour.healthy) return Promise.resolve({ passed: false, criterion: 'H2-host-ready', detail: 'the fixture is unhealthy' })
     if (expect === undefined) return Promise.resolve({ passed: true })
+    const { previousMarker, rowChanges } = this.behaviour
+    if (previousMarker !== undefined) writeFileSync(previousMarker, expect.previousVersion ?? 'none')
     const allowed = new Set([...expect.disabledPlugins, ...expect.previousFailures.map(row => row.id)])
     const unexpected = this.behaviour.disabled.filter(plugin => !allowed.has(plugin))
     if (unexpected.length > 0) return Promise.resolve({ passed: false, criterion: 'H3-only-named-disabled', detail: unexpected.join(',') })
@@ -473,7 +479,7 @@ export class FixtureHost implements RunningHost {
     if (lost.length > 0) return Promise.resolve({ passed: false, criterion: 'H3-only-named-disabled', detail: `no longer denies ${lost.join(',')}` })
     const present = this.rows().map(row => row.id)
     const gone = expect.previousRows.filter(row => !present.includes(row.id) && !expect.namedRows.includes(row.id)).map(row => row.id)
-    return Promise.resolve(gone.length === 0 ? { passed: true } : { passed: false, criterion: 'H3-rows-kept', detail: gone.join(',') })
+    return Promise.resolve(gone.length === 0 ? { passed: true, ...rowChanges === undefined ? {} : { rowChanges } } : { passed: false, criterion: 'H3-rows-kept', detail: gone.join(',') })
   }
 
   async reload(): Promise<ChangesReloadOutcome> {
