@@ -58,12 +58,13 @@ export function advisoryId(advisory: z.output<typeof FeedAdvisory>): string {
  * @param feed - the bulk advisory endpoint.
  * @param packages - the package versions.
  * @param options - the time limit and the signal.
- * @returns per package name, the feed's advisories; the caller matches each vulnerable range against its versions.
+ * @returns per package name, the feed's advisories, in an object with no prototype; the caller matches each vulnerable range against its versions.
  * @throws FeedFailure when the feed is unreachable, the time limit passes or the signal fires, or the feed answers with
  * a status other than 200 or a body that is not the bulk advisory format.
  */
 export async function queryFeed(feed: string, packages: readonly LockedPackage[], options: FeedRequestOptions): Promise<FeedAnswer> {
-  const body: Record<string, string[]> = {}
+  // No prototype, so a package named `constructor` or `toString` is an ordinary key.
+  const body: Record<string, string[]> = Object.create(null)
   for (const locked of packages) (body[locked.name] ??= []).push(locked.version)
   const signal = options.signal === undefined ? AbortSignal.timeout(options.timeoutMs) : AbortSignal.any([AbortSignal.timeout(options.timeoutMs), options.signal])
   let response: Response
@@ -81,5 +82,6 @@ export async function queryFeed(feed: string, packages: readonly LockedPackage[]
   }
   const result = FeedResponse.safeParse(parsed)
   if (!result.success) throw new FeedFailure(`the advisory feed ${feed} answered with a malformed response: ${z.prettifyError(result.error).replaceAll('\n', '; ')}`)
-  return result.data
+  // The answer is read by package name: without a prototype, a name the feed left out is absent, not `Object`'s member.
+  return Object.assign(Object.create(null) as FeedAnswer, result.data)
 }
