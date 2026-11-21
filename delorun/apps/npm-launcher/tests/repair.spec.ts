@@ -327,6 +327,24 @@ describe('delorun repair', () => {
     })
   })
 
+  describe('--reset-trust and the repair mark', () => {
+    it('names the trust folder in the mark before the download, so a killed repair can be put back', async () => {
+      const other = await fixtureRelease()
+      const shipped = [fixture.roots[0]!, nextRoot(fixture.rootMetadata, fixture.keys, [fixture.keys.root])]
+      await writeFile(join(home, 'trust/root.json'), other.roots[0]!, { mode: 0o600 })
+      let mark: { setAside?: string, trustSetAside?: string } | undefined
+      const paths = new StorePaths(home, 'linux-x64')
+      const install: RepairStore['install'] = async () => {
+        mark = JSON.parse(await readFile(join(home, 'run/repair.json'), 'utf8')) as typeof mark
+        await mkdir(paths.version(version('0.1.1')), { recursive: true })
+        await writeFile(join(paths.version(version('0.1.1')), DATA_FORMATS_FILE), dataFormatsText(FORMATS))
+        return { version: version('0.1.1'), manifest: { dsh: '0.2.2' } } as VerifiedRuntime
+      }
+      expect(await runRepair(options({ line: { ...PLAIN, resetTrust: true }, roots: shipped, install }))).toBe(0)
+      expect(mark).toMatchObject({ setAside: join(home, 'runtimes.set-aside-20261113T120000Z'), trustSetAside: join(home, 'trust.set-aside-20261113T120000Z') })
+    })
+  })
+
   describe('--reset-trust with a stored chain that cannot be read', () => {
     it('keeps the gate shut and moves nothing, naming the by-hand steps', async () => {
       const other = await fixtureRelease()

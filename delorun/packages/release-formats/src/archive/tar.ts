@@ -178,8 +178,26 @@ function checksumMatches(block: Buffer, foreign: boolean): boolean {
   return (foreign ? writerNumber(block, 148, 8, 'checksum', false) : octalField(block, 148, 8, 'checksum')) === sum
 }
 
-function parsePax(records: Buffer): Buffer {
+/** What a pax header says about the entry after it. */
+interface PaxRecords {
+  /** The `path` record, the only record applied. */
+  readonly path: Buffer
+  /** The `size` record, which the entry's own header must agree with; foreign archives only. */
+  readonly size?: number
+}
+
+/**
+ * Read a pax header's records. `path` is the only record applied. A foreign archive (`npm pack`'s node-tar writes them)
+ * may also carry `mtime` and `size`, which are checked and applied to nothing; any other record fails the read.
+ * @param records - the pax header's data.
+ * @param foreign - whether the archive was written by another tool.
+ * @returns the path, and the size record when one is present.
+ * @throws Error on a malformed record, a repeated `mtime` or `size`, a value that is not a number, a record this reader does not accept, or no `path`.
+ */
+function parsePax(records: Buffer, foreign: boolean): PaxRecords {
   let path: Buffer | undefined
+  let size: number | undefined
+  let mtime = false
   let offset = 0
   while (offset < records.byteLength) {
     const space = records.indexOf(0x20, offset)
@@ -190,12 +208,25 @@ function parsePax(records: Buffer): Buffer {
     const equals = record.indexOf(0x3d)
     if (equals < 0 || records[offset + length - 1] !== 0x0a) throw new Error('pax record is malformed')
     const key = record.subarray(0, equals).toString('utf8')
-    if (key !== 'path') throw new Error(`pax record ${JSON.stringify(key)} is not allowed`)
-    path = record.subarray(equals + 1)
+    const value = record.subarray(equals + 1)
+    if (key === 'path') {
+      path = value
+    } else if (foreign && key === 'mtime') {
+      if (mtime) throw new Error('pax record "mtime" appears twice')
+      // Seconds, with an optional fraction, as node-tar writes them; nothing is applied from it.
+      if (!/^\d{1,15}(?:\.\d{1,9})?$/u.test(value.toString('latin1'))) throw new Error('pax record "mtime" is not a number of seconds')
+      mtime = true
+    } else if (foreign && key === 'size') {
+      if (size !== undefined) throw new Error('pax record "size" appears twice')
+      if (!/^\d{1,15}$/u.test(value.toString('latin1'))) throw new Error('pax record "size" is not a whole number')
+      size = Number.parseInt(value.toString('latin1'), 10)
+    } else {
+      throw new Error(`pax record ${JSON.stringify(key)} is not allowed`)
+    }
     offset += length
   }
   if (path === undefined) throw new Error('pax header has no path record')
-  return path
+  return { path, ...size === undefined ? {} : { size } }
 }
 
 /** How {@link readTar} reads. */
@@ -204,7 +235,9 @@ export interface TarReadOptions {
    * The archive was written by a tool other than Delorun's, such as `npm pack`: numeric fields may be padded with
    * spaces or NULs, or be GNU base-256; an empty uid, gid or mtime reads as 0 and a uid, gid or mtime that does not
    * parse reads as 0, since nothing is applied from them. `size`, `mode` and the checksum stay strict (octal or
-   * base-256 for `size`, octal for `mode`), as do the entry type, the path and the size limit.
+   * base-256 for `size`, octal for `mode`), as do the entry type, the path and the size limit. A pax header may also
+   * carry `mtime` and `size` records, as node-tar writes beside a long or non-ASCII `path`: the `mtime` must be a
+   * number of seconds and applies to nothing, and the `size` must equal the header's. Any other pax record fails.
    */
   readonly foreign?: boolean
 }
@@ -221,14 +254,14 @@ export interface TarReadOptions {
 export async function* readTar(source: AsyncIterable<Uint8Array>, maxEntryBytes: number, options: TarReadOptions = {}): AsyncGenerator<TarReadEntry> {
   const foreign = options.foreign === true
   const reader = new ChunkReader(source)
-  let paxPath: Buffer | undefined
+  let pax: PaxRecords | undefined
   for (;;) {
     const block = await reader.read(BLOCK)
     if (block.byteLength < BLOCK) throw new Error('tar stream ends inside a header')
     if (block.every(byte => byte === 0)) {
       const second = await reader.read(BLOCK)
       if (second.byteLength < BLOCK || !second.every(byte => byte === 0)) throw new Error('tar stream has one zero block where two end it')
-      if (paxPath !== undefined) throw new Error('tar stream ends after a pax header')
+      if (pax !== undefined) throw new Error('tar stream ends after a pax header')
       if (!(await reader.atEnd())) throw new Error('tar stream has bytes after its end blocks')
       return
     }
@@ -241,15 +274,16 @@ export async function* readTar(source: AsyncIterable<Uint8Array>, maxEntryBytes:
     const pad = (BLOCK - (size % BLOCK)) % BLOCK
     if ((await reader.read(pad)).byteLength < pad) throw new Error('tar stream ends inside padding')
     if (type === 'x') {
-      if (paxPath !== undefined) throw new Error('tar stream has two pax headers in a row')
-      paxPath = parsePax(data)
+      if (pax !== undefined) throw new Error('tar stream has two pax headers in a row')
+      pax = parsePax(data, foreign)
       continue
     }
     if (type !== '0' && type !== '\0') throw new Error(`tar entry type ${JSON.stringify(type)} is not a regular file`)
     const prefix = field(block, 345, PREFIX_LENGTH)
     const name = field(block, 0, NAME_LENGTH)
-    const path = paxPath ?? (prefix.byteLength > 0 ? Buffer.concat([prefix, Buffer.from('/'), name]) : name)
-    paxPath = undefined
+    if (pax?.size !== undefined && pax.size !== size) throw new Error(`pax size ${String(pax.size)} does not match the header's ${String(size)}`)
+    const path = pax?.path ?? (prefix.byteLength > 0 ? Buffer.concat([prefix, Buffer.from('/'), name]) : name)
+    pax = undefined
     yield {
       path: path.toString('utf8'),
       mode: octalField(block, 100, 8, 'mode'),

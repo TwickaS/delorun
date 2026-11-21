@@ -13,7 +13,7 @@ import { randomBytes } from 'node:crypto'
 import { link, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { DELORUN_HOME_ENTRIES } from '@delorun/contract-home-layout'
-import { RUNTIMES_SET_ASIDE_PREFIX } from '@delorun/update/home-data'
+import { runtimesSetAsideName } from '@delorun/update/home-data'
 import { currentHolder, holderAlive, parseHolder, type ProcessHolder } from '@delorun/home'
 
 /** The record's file name under the home's `run/`. */
@@ -24,6 +24,9 @@ export const REPAIR_MARK_GRACE_ENV = 'DELORUN_REPAIR_MARK_GRACE_SECONDS'
 
 /** The seconds an unparsable mark counts as a repair that is writing it, unless {@link REPAIR_MARK_GRACE_ENV} sets another. */
 const DEFAULT_MARK_GRACE_SECONDS = 5
+
+/** How often {@link checkRepairRecord} looks again after the mark changed under it. */
+const CHECK_ATTEMPTS = 5
 
 /** The longest {@link REPAIR_MARK_GRACE_ENV} may set. */
 const MAX_MARK_GRACE_SECONDS = 60
@@ -47,6 +50,8 @@ export interface RepairRecord extends ProcessHolder {
   readonly startedAt: string
   /** The absolute path the repair sets the old program store aside to; written before the move, so it may not exist. */
   readonly setAside?: string
+  /** The absolute path `repair --reset-trust` sets the old trust records aside to; written before the move, so it may not exist. */
+  readonly trustSetAside?: string
 }
 
 /** What looking at the record found. */
@@ -69,12 +74,20 @@ export function repairRecordPath(home: string): string {
   return join(home, DELORUN_HOME_ENTRIES.run, REPAIR_RECORD_FILE)
 }
 
+/** The mark as read: its exact text, and what the text names. */
+interface ReadMark {
+  /** The file's bytes as text, which {@link removeUnchanged} compares before it removes the file. */
+  readonly text: string
+  /** The record; `null` when the file is not a record. */
+  readonly record: RepairRecord | null
+}
+
 /**
  * Read the record.
  * @param home - the resolved Delorun home.
- * @returns the record; `undefined` when there is none; `null` when the file is not a record.
+ * @returns the mark; `undefined` when there is none.
  */
-async function readRecord(home: string): Promise<RepairRecord | undefined | null> {
+async function readMark(home: string): Promise<ReadMark | undefined> {
   let text: string
   try {
     text = await readFile(repairRecordPath(home), 'utf8')
@@ -87,13 +100,31 @@ async function readRecord(home: string): Promise<RepairRecord | undefined | null
     parsed = JSON.parse(text)
   } catch (_notJson) {
     // A torn or foreign file names no running repair.
-    return null
+    return { text, record: null }
   }
-  if (typeof parsed !== 'object' || parsed === null) return null
+  if (typeof parsed !== 'object' || parsed === null) return { text, record: null }
   const fields = parsed as Record<string, unknown>
   const holder = parseHolder(fields)
-  if (holder === undefined || typeof fields.startedAt !== 'string') return null
-  return { ...holder, startedAt: fields.startedAt, ...typeof fields.setAside === 'string' ? { setAside: fields.setAside } : {} }
+  if (holder === undefined || typeof fields.startedAt !== 'string') return { text, record: null }
+  return { text, record: { ...holder, startedAt: fields.startedAt, ...typeof fields.setAside === 'string' ? { setAside: fields.setAside } : {}, ...typeof fields.trustSetAside === 'string' ? { trustSetAside: fields.trustSetAside } : {} } }
+}
+
+/**
+ * Remove the mark only when it still holds the text that was read. A repair that started after that read replaces the
+ * file with its own mark, which must stay.
+ * @param home - the resolved Delorun home.
+ * @param text - the mark's text as the caller read or wrote it.
+ * @returns `true` when the file is gone, `false` when it holds other text and was left.
+ */
+async function removeUnchanged(home: string, text: string): Promise<boolean> {
+  const now = await readFile(repairRecordPath(home), 'utf8').catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+    throw error
+  })
+  if (now === undefined) return true
+  if (now !== text) return false
+  await rm(repairRecordPath(home), { force: true })
+  return true
 }
 
 /**
@@ -121,12 +152,17 @@ async function youngerThan(home: string, graceSeconds: number, nowMs: number): P
  * @returns what was found; a `stale` record is already removed.
  */
 export async function checkRepairRecord(home: string, graceSeconds: number, nowMs: number = Date.now()): Promise<RepairRecordState> {
-  const record = await readRecord(home)
-  if (record === undefined) return { kind: 'none' }
-  if (record !== null && holderAlive(record)) return { kind: 'running', record }
-  if (record === null && await youngerThan(home, graceSeconds, nowMs)) return { kind: 'writing' }
-  await rm(repairRecordPath(home), { force: true })
-  return { kind: 'stale', record: record ?? undefined }
+  // A mark that changes between the read and the removal belongs to a repair that started meanwhile; it is looked at again.
+  for (let attempt = 0; attempt < CHECK_ATTEMPTS; attempt++) {
+    const mark = await readMark(home)
+    if (mark === undefined) return { kind: 'none' }
+    const { record } = mark
+    if (record !== null && holderAlive(record)) return { kind: 'running', record }
+    if (record === null && await youngerThan(home, graceSeconds, nowMs)) return { kind: 'writing' }
+    if (await removeUnchanged(home, mark.text)) return { kind: 'stale', record: record ?? undefined }
+  }
+  // The mark kept changing under the check: a repair is starting.
+  return { kind: 'writing' }
 }
 
 /**
@@ -134,35 +170,54 @@ export async function checkRepairRecord(home: string, graceSeconds: number, nowM
  * @param home - the resolved Delorun home.
  * @param now - the clock.
  * @param graceSeconds - how long an unparsable file counts as running.
- * @returns the state of a record found before this one (`stale` was removed) and the function that removes this record and the function that
- *   adds the path the old store is set aside to.
+ * @returns the state of a record found before this one (`stale` was removed), the function that removes this record, and the
+ *   functions that add the path the old program store and the old trust records are set aside to.
  * @throws {Error} when another repair runs or is writing its mark.
  */
-export async function beginRepairRecord(home: string, now: Date, graceSeconds: number): Promise<{ readonly found: RepairRecordState, readonly end: () => Promise<void>, readonly noteSetAside: (path: string) => Promise<void> }> {
+export async function beginRepairRecord(home: string, now: Date, graceSeconds: number): Promise<{ readonly found: RepairRecordState, readonly end: () => Promise<void>, readonly noteSetAside: (path: string) => Promise<void>, readonly noteTrustSetAside: (path: string) => Promise<void> }> {
   const found = await checkRepairRecord(home, graceSeconds, now.getTime())
   if (found.kind === 'running') throw new Error(`another repair runs (process ${String(found.record.pid)})`)
   if (found.kind === 'writing') throw new Error('another repair is writing its mark')
   await mkdir(join(home, DELORUN_HOME_ENTRIES.run), { recursive: true, mode: 0o700 })
   const record: RepairRecord = { ...currentHolder(), startedAt: now.toISOString() }
+  // The text this process last wrote to the mark; `end` removes the mark only while it still holds that text.
+  let written = `${JSON.stringify(record)}\n`
   // Written whole under a temporary name, then linked: the mark's name is never a partial file, and `link` fails when a
   // repair that started after the check linked its own first.
   const temporary = `${repairRecordPath(home)}.tmp-${randomBytes(8).toString('hex')}`
   try {
-    await writeFile(temporary, `${JSON.stringify(record)}\n`, { flag: 'wx', mode: 0o600 })
+    await writeFile(temporary, written, { flag: 'wx', mode: 0o600 })
     await link(temporary, repairRecordPath(home))
   } finally {
     await rm(temporary, { force: true })
   }
-  const noteSetAside = async (path: string): Promise<void> => {
+  // What the mark names so far; each note rewrites the whole mark, so a later note keeps an earlier one.
+  let named: RepairRecord = record
+  const note = async (fields: Partial<Pick<RepairRecord, 'setAside' | 'trustSetAside'>>): Promise<void> => {
     const rewritten = `${repairRecordPath(home)}.tmp-${randomBytes(8).toString('hex')}`
+    const next = { ...named, ...fields }
+    const text = `${JSON.stringify(next)}\n`
     try {
-      await writeFile(rewritten, `${JSON.stringify({ ...record, setAside: path })}\n`, { flag: 'wx', mode: 0o600 })
+      await writeFile(rewritten, text, { flag: 'wx', mode: 0o600 })
       await rename(rewritten, repairRecordPath(home))
+      written = text
+      named = next
     } finally {
       await rm(rewritten, { force: true })
     }
   }
-  return { found, end: () => rm(repairRecordPath(home), { force: true }), noteSetAside }
+  return { found, end: async () => { await removeUnchanged(home, written) }, noteSetAside: path => note({ setAside: path }), noteTrustSetAside: path => note({ trustSetAside: path }) }
+}
+
+/**
+ * The name `repair --reset-trust` gives the trust records it sets aside, and the restore command of a stale mark gives the
+ * new ones it moves aside in their place.
+ * @param time - the compact UTC time from {@link stamp}.
+ * @param ordinal - a number that tells a second folder of the same second from the first; none for the first.
+ * @returns `trust.set-aside-<time>`, with `-<ordinal>` when one is given.
+ */
+export function trustSetAsideName(time: string, ordinal?: number): string {
+  return `${DELORUN_HOME_ENTRIES.trust}.set-aside-${time}${ordinal === undefined ? '' : `-${String(ordinal)}`}`
 }
 
 /** A time as the compact UTC stamp that names a set-aside directory. */
@@ -201,14 +256,28 @@ async function exists(path: string): Promise<boolean> {
  */
 export async function staleRepairText(record: RepairRecord | undefined, home: string, now: Date = new Date(), platform: NodeJS.Platform = process.platform): Promise<string> {
   const lead = `A repair${record === undefined ? '' : ` that began ${record.startedAt}`} ended without finishing; its mark in run/${REPAIR_RECORD_FILE} is removed.`
-  const setAside = record?.setAside
-  if (setAside === undefined || !await exists(setAside)) {
+  const setAside = record?.setAside !== undefined && await exists(record.setAside) ? record.setAside : undefined
+  const trustSetAside = record?.trustSetAside !== undefined && await exists(record.trustSetAside) ? record.trustSetAside : undefined
+  if (setAside === undefined && trustSetAside === undefined) {
     return `${lead} No set-aside folder of the old programs was recorded, so there is nothing to put back. Run delorun repair again.`
   }
-  const runtimes = join(home, DELORUN_HOME_ENTRIES.runtimes)
-  const unfinished = `${RUNTIMES_SET_ASIDE_PREFIX}${stamp(now)}-unfinished`
-  const quoted = { runtimes: quoteForShell(runtimes, platform), setAside: quoteForShell(setAside, platform), unfinished: quoteForShell(join(home, unfinished), platform) }
   const move = (from: string, to: string): string => (platform === 'win32' ? `Move-Item -LiteralPath ${from} -Destination ${to}` : `mv ${from} ${to}`)
-  const steps = [...await exists(runtimes) ? [move(quoted.runtimes, quoted.unfinished)] : [], move(quoted.setAside, quoted.runtimes)]
-  return `${lead} If it was killed during its download, the old programs are in ${setAside}, and this puts them back, keeping the unfinished store in ${unfinished}: ${steps.join(platform === 'win32' ? '; ' : ' && ')}. delorun recover status lists the folders.`
+  const joinSteps = (steps: readonly string[]): string => steps.join(platform === 'win32' ? '; ' : ' && ')
+  const parts = [lead]
+  if (setAside !== undefined) {
+    const runtimes = join(home, DELORUN_HOME_ENTRIES.runtimes)
+    // Ordinal 1 keeps it apart from the repair's own set-aside, which may carry the same second; `recover status` lists both.
+    const unfinished = runtimesSetAsideName(stamp(now), 1)
+    const quoted = { runtimes: quoteForShell(runtimes, platform), setAside: quoteForShell(setAside, platform), unfinished: quoteForShell(join(home, unfinished), platform) }
+    const steps = [...await exists(runtimes) ? [move(quoted.runtimes, quoted.unfinished)] : [], move(quoted.setAside, quoted.runtimes)]
+    parts.push(`If it was killed during its download, the old programs are in ${setAside}, and this puts them back, keeping the unfinished store in ${unfinished}: ${joinSteps(steps)}. delorun recover status lists the folders.`)
+  }
+  if (trustSetAside !== undefined) {
+    const trust = join(home, DELORUN_HOME_ENTRIES.trust)
+    const unfinished = trustSetAsideName(stamp(now), 1)
+    const quoted = { trust: quoteForShell(trust, platform), setAside: quoteForShell(trustSetAside, platform), unfinished: quoteForShell(join(home, unfinished), platform) }
+    const steps = [...await exists(trust) ? [move(quoted.trust, quoted.unfinished)] : [], move(quoted.setAside, quoted.trust)]
+    parts.push(`The trust records it set aside for --reset-trust are in ${trustSetAside}, and this puts them back, keeping the new ones in ${unfinished}: ${joinSteps(steps)}. delorun recover status does not list trust folders.`)
+  }
+  return parts.join(' ')
 }

@@ -7,7 +7,8 @@
  *
  * @module @delorun/npm-launcher/bin
  */
-import { spawnSync } from 'node:child_process'
+import { spawn as startProcess } from 'node:child_process'
+import { constants as osConstants } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
@@ -89,9 +90,11 @@ export interface LauncherCommandLine {
 }
 
 /**
- * Split the launcher's own options from the runtime's arguments. The first `--` ends the launcher's options: every
- * argument after it reaches the runtime unchanged, so a runtime option that shares a name with one of the launcher's
- * (`--release`, `--profile`) is the runtime's. The `--` itself is the launcher's and is not passed on.
+ * Split the launcher's own options from the runtime's arguments. The launcher reads `--release` and `--help` only before
+ * the runtime's command word (or after `repair`, the launcher's own command), so `delorun verify --release <version>`
+ * and `delorun start --help` reach the runtime. The first `--` ends the launcher's options: every argument after it
+ * reaches the runtime unchanged, so a runtime option that shares a name with one of the launcher's (`--release`,
+ * `--profile`) is the runtime's. The `--` itself is the launcher's and is not passed on.
  * @param argv - the arguments after the script.
  * @returns the parsed line.
  * @throws {Error} when a flag that takes a value has none.
@@ -100,6 +103,7 @@ export function parseCommandLine(argv: readonly string[]): LauncherCommandLine {
   let profile: string | undefined
   let release: string | undefined
   let help = false
+  let command: string | undefined
   const runtimeArgs: string[] = []
   let passedThrough: string[] = []
   for (let at = 0; at < argv.length; at++) {
@@ -109,9 +113,12 @@ export function parseCommandLine(argv: readonly string[]): LauncherCommandLine {
       runtimeArgs.push(...passedThrough)
       break
     }
-    if (argument === '--help' || argument === '-h') {
+    // After the runtime's command word, `--help` and `--release` are that command's own options; `repair` is the
+    // launcher's command and keeps reading them.
+    const launcherOptions = command === undefined || command === 'repair'
+    if (launcherOptions && (argument === '--help' || argument === '-h')) {
       help = true
-    } else if (argument === RELEASE_FLAG || argument.startsWith(`${RELEASE_FLAG}=`)) {
+    } else if (launcherOptions && (argument === RELEASE_FLAG || argument.startsWith(`${RELEASE_FLAG}=`))) {
       const inline = argument.startsWith(`${RELEASE_FLAG}=`) ? argument.slice(RELEASE_FLAG.length + 1) : undefined
       if (inline !== undefined) {
         release = inline
@@ -127,6 +134,8 @@ export function parseCommandLine(argv: readonly string[]): LauncherCommandLine {
         profile = value
       } else if (argument.startsWith(`${PROFILE_FLAG}=`)) {
         profile = argument.slice(PROFILE_FLAG.length + 1)
+      } else if (command === undefined && !argument.startsWith('-')) {
+        command = argument
       }
       runtimeArgs.push(argument, ...argument === PROFILE_FLAG ? [profile!] : [])
     }
@@ -140,7 +149,7 @@ export function parseCommandLine(argv: readonly string[]): LauncherCommandLine {
  */
 export function usage(): string {
   return [
-    'Usage: delorun [--profile <name>] [--release <version>] [--] [arguments for delorun]',
+    'Usage: delorun [--profile <name>] [--release <version>] [--] [command and arguments for delorun]',
     '',
     'Runs Delorun from the runtime this computer has installed, or installs the release your channel',
     'publishes first. An install checks the release against its signed manifest and the release log',
@@ -155,6 +164,8 @@ export function usage(): string {
     '  It asks you first, in a terminal; the old program is set aside, never deleted.',
     '  --                 end the launcher\'s options; everything after it is passed to delorun',
     '',
+    'The launcher reads --release and --help only before the command word; after it they are the command\'s own.',
+    '',
     'Every other argument is passed to delorun unchanged.',
     '',
     'Every start checks the installed runtime against its signed file list. It hashes every file before',
@@ -166,14 +177,37 @@ export function usage(): string {
 }
 
 /**
+ * The signals the launcher passes on to the runtime. SIGINT is not one: the terminal sends Ctrl-C to the whole foreground
+ * process group, so the runtime already has it, and a second SIGINT would make its stop abrupt (a second one ends it at once).
+ */
+const FORWARDED_SIGNALS = ['SIGTERM', 'SIGHUP'] as const
+
+/**
  * Start a runtime and share this process's standard streams with it, with the environment
- * {@link launchEnvironment} builds.
+ * {@link launchEnvironment} builds. While the runtime runs, a SIGTERM or SIGHUP this process receives is passed on to it,
+ * and a SIGINT is left to the terminal, which sends it to the runtime too; the launcher stays until the runtime has ended.
  * @param command - the command the store built for launch protocol 1.
- * @returns the runtime's exit status, or `1` when it ended without one.
+ * @returns the runtime's exit status; `128` plus the signal's number when a signal ended it.
+ * @throws {Error} when the runtime cannot be started.
  */
 export function spawnRuntime(command: LaunchCommand): Promise<number> {
-  const child = spawnSync(command.command, [...command.args], { stdio: 'inherit', env: launchEnvironment(process.env, command.env) })
-  return Promise.resolve(child.status ?? LAUNCHER_EXIT.failed)
+  return new Promise<number>((resolve, reject) => {
+    const child = startProcess(command.command, [...command.args], { stdio: 'inherit', env: launchEnvironment(process.env, command.env) })
+    const forwards = FORWARDED_SIGNALS.map(signal => [signal, () => { child.kill(signal) }] as const)
+    // Listening for SIGINT replaces Node's default, which would end the launcher while the runtime stops.
+    const interrupt = (): void => undefined
+    for (const [signal, forward] of forwards) process.on(signal, forward)
+    process.on('SIGINT', interrupt)
+    const settle = (): void => {
+      for (const [signal, forward] of forwards) process.off(signal, forward)
+      process.off('SIGINT', interrupt)
+    }
+    child.once('error', (error) => { settle(); reject(error) })
+    child.once('close', (status, signal) => {
+      settle()
+      resolve(status ?? (signal === null ? LAUNCHER_EXIT.failed : 128 + osConstants.signals[signal]))
+    })
+  })
 }
 
 /**
@@ -206,9 +240,9 @@ export interface LauncherContext {
   readonly fetch?: typeof globalThis.fetch | undefined
   /** The clock, in milliseconds; `Date.now` by default. */
   readonly now?: (() => number) | undefined
-  /** The host's `process.platform`, which native Windows and macOS refuse before any download; this process's by default. */
+  /** The host's `process.platform`, which native Windows and macOS refuse before any download, and which names the runtime closure; this process's by default. */
   readonly hostPlatform?: string | undefined
-  /** The host's `process.arch`, which Linux on arm64 refuses before any download; this process's by default. */
+  /** The host's `process.arch`, which Linux on arm64 refuses before any download, and which names the runtime closure; this process's by default. */
   readonly hostArch?: string | undefined
   /** Asks `delorun repair`'s yes/no question; `undefined` answers when there is no terminal. This process's terminal by default. */
   readonly confirm?: ((question: string) => Promise<boolean | undefined>) | undefined
@@ -323,7 +357,6 @@ export async function main(argv: readonly string[], context: LauncherContext = {
 }): Promise<number> {
   let line: LauncherCommandLine
   let profile: string
-  let platform: ReturnType<typeof platformOf>
   let target: RuntimeVersion | undefined
   let fullCheckDays: number
   let repairMarkGraceSeconds: number
@@ -340,7 +373,6 @@ export async function main(argv: readonly string[], context: LauncherContext = {
       return LAUNCHER_EXIT.failed
     }
     profile = launcherProfile(line.profile, context.env)
-    platform = platformOf(process.platform, process.arch)
     target = line.release === undefined ? undefined : parseRuntimeVersion(line.release)
     if (line.release !== undefined && target === undefined) throw new Error(`--release names ${line.release}, which is not a Delorun release version`)
     fullCheckDays = resolveFullCheckDays(context.env[FULL_CHECK_DAYS_ENV])
@@ -350,6 +382,14 @@ export async function main(argv: readonly string[], context: LauncherContext = {
     const refusal = refusalFor(error, { home: '~/.delorun', profile: CLI_PROFILE })
     context.output.stderr(`${refusal.text}\n${usage()}`)
     return LAUNCHER_EXIT.usage
+  }
+  let platform: ReturnType<typeof platformOf>
+  try {
+    platform = platformOf(context.hostPlatform ?? process.platform, context.hostArch ?? process.arch)
+  } catch (error) {
+    // A host no release publishes a runtime for is a refusal of the host, like native Windows and macOS, not a wrong command line.
+    context.output.stderr(`${error instanceof Error ? error.message : String(error)}\n`)
+    return LAUNCHER_EXIT.failed
   }
   const logger = stderrLogger(context.output)
   const report = (event: LauncherProgress): void => {

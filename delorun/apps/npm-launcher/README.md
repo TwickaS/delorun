@@ -29,8 +29,8 @@ This app is what `npx delorun` runs. It starts the runtime this computer has ins
 | --- | --- |
 | `delorun [--profile <name>]` | Starts the installed runtime with the arguments it was given; installs the channel's release first when the store holds no runtime |
 | `--profile <name>` | The CLI profile, also passed to the runtime; the default is `default`, and `DELORUN_PROFILE` supplies it when the flag is absent. A profile name is 1 to 32 lowercase letters, digits, `-` or `_`, starting with a letter or a digit; anything else, and each name [contract C1](../../docs/contracts/c01-home-layout.md#profiles) reserves (`desktop`, `headless`, `data-users` and `node_modules`), is refused before the home is read |
-| `--release <version>` | Installs this release instead of the channel's current one, when the store holds no runtime; a release the fresh timestamp does not name is refused, and with a runtime installed the launcher stops and names both versions rather than ignoring it |
-| `--help`, `-h` | Prints the usage text |
+| `--release <version>` | Read only before the runtime's command word, and after `repair`: in `delorun verify --release <version>` it is the runtime's own option. Installs this release instead of the channel's current one, when the store holds no runtime; a release the fresh timestamp does not name is refused, and with a runtime installed the launcher stops and names both versions rather than ignoring it |
+| `--help`, `-h` | Prints the usage text; read only before the command word, and after `repair`, so `delorun start --help` is the runtime's own help |
 | `--` | Ends the launcher's own options: every argument after it is passed to the runtime unchanged, so the runtime keeps its own `--release` and `--profile` |
 | Every other argument | Passed to the runtime unchanged, because the runtime owns `delorun`'s commands |
 | `DELORUN_RUNTIME_FULL_CHECK_DAYS` | The interval after which a start hashes every runtime file instead of comparing the identities recorded after the last hash: whole days from 0, which hashes at every start, to 30; 7 when unset. The interval runs from the time the identity record names, which a program running as the person can rewrite. `delorun verify` always gets 0. Any other value is refused with the usage text before the home is read |
@@ -63,7 +63,7 @@ A release named with `--release` is installed, and this launcher installs one on
 
 An install resolves the release, asks the store to install it with the channel's `fill` as the download step, and then keeps the two versions the pointers name, removing the rest. A retention the store cannot finish is reported as a warning and retried on the next run; it never fails the launch.
 
-The runtime runs in this process's stead: the launcher spawns it with the environment the store built over this process's own — minus the variables that load code or decide trust, whatever their case: `NODE_OPTIONS`, `NODE_PATH`, `NODE_EXTRA_CA_CERTS`, `NODE_TLS_REJECT_UNAUTHORIZED`, `NODE_COMPILE_CACHE`, `NODE_V8_COVERAGE`, `NODE_ICU_DATA`, `OPENSSL_CONF`, `OPENSSL_MODULES`, `OPENSSL_ENGINES`, `GCONV_PATH`, `LOCPATH`, `LD_*` and `DYLD_*` (a denylist, not an allowlist, because the runtime runs the person's commands and tools, which need `PATH`, proxies, credentials, an SSH agent and toolchain variables that an allowlist would remove), so the shell that ran `npx delorun` cannot load code into the runtime's Node or its dynamic loader, and cannot decide what its HTTPS connections trust (`DROPPED_LAUNCH_ENV` and `inheritableEnvironment` in `@delorun/contract-home-layout`, which an update's successor and the studio's Check now apply too) — shares its standard streams, and exits with the runtime's own status.
+The runtime runs in this process's stead: the launcher spawns it with the environment the store built over this process's own — minus the variables that load code or decide trust, whatever their case: `NODE_OPTIONS`, `NODE_PATH`, `NODE_EXTRA_CA_CERTS`, `NODE_TLS_REJECT_UNAUTHORIZED`, `NODE_COMPILE_CACHE`, `NODE_V8_COVERAGE`, `NODE_ICU_DATA`, `OPENSSL_CONF`, `OPENSSL_MODULES`, `OPENSSL_ENGINES`, `GCONV_PATH`, `LOCPATH`, `LD_*` and `DYLD_*` (a denylist, not an allowlist, because the runtime runs the person's commands and tools, which need `PATH`, proxies, credentials, an SSH agent and toolchain variables that an allowlist would remove), so the shell that ran `npx delorun` cannot load code into the runtime's Node or its dynamic loader, and cannot decide what its HTTPS connections trust (`DROPPED_LAUNCH_ENV` and `inheritableEnvironment` in `@delorun/contract-home-layout`, which an update's successor and the studio's Check now apply too) — shares its standard streams, passes on the SIGTERM and SIGHUP it receives while the runtime runs (a Ctrl-C reaches the runtime through the terminal, so the launcher only waits; a SIGINT sent to the launcher's process alone is ignored, so a script that stops Delorun uses SIGTERM), and exits with the runtime's own status, or 128 plus the signal's number when a signal ended it.
 
 <a id="what-it-prints"></a>
 
@@ -137,7 +137,7 @@ node_modules/.bin/tsx delorun/apps/npm-launcher/src/build.ts --root <root.json>.
 | Code | When |
 | --- | --- |
 | 0 | The runtime ran and ended with status 0, or the usage text was printed |
-| 1 | Delorun refused or failed and nothing ran, or the runtime ended with its own nonzero status |
+| 1 | Delorun refused or failed and nothing ran (a host no release publishes a runtime for included), or the runtime ended with its own nonzero status; a signal that ended the runtime counts as 128 plus its number, such as 130 for Ctrl-C |
 | 2 | The command line was wrong |
 
 <a id="development"></a>

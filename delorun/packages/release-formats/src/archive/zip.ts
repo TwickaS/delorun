@@ -3,7 +3,7 @@
  * central directory record with no extra field, no comment and no data descriptor; names are UTF-8 (flag bit 11);
  * "version made by" is Unix 2.0 so the external attributes carry the mode; the DOS date and time are the release's
  * `SOURCE_DATE_EPOCH` in UTC, rounded down to an even second. An entry is deflated at level 9 unless that is larger
- * than the file, when it is stored. The format has no ZIP64 records, so an archive holds at most 65,535 entries.
+ * than the file, when it is stored. The format has no ZIP64 records, so an archive holds at most 65,534 entries: a count of 65,535 in the end record is the marker of ZIP64.
  *
  * @module @delorun/release-formats/archive/zip
  */
@@ -21,7 +21,8 @@ const END_LENGTH = 22
 const UTF8_FLAG = 0x0800
 const VERSION_NEEDED = 20
 const VERSION_MADE_BY = (3 << 8) | VERSION_NEEDED
-const MAX_ENTRIES = 0xffff
+/** One below the end record's 0xffff, which the reader takes for the ZIP64 marker. */
+const MAX_ENTRIES = 0xfffe
 const REGULAR_FILE = 0o100000
 
 /** One entry as read back from a ZIP archive. */

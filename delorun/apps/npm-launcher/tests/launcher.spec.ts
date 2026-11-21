@@ -6,10 +6,11 @@
  * The release fixture is the install path's own (`../../install/tests/support.ts`), because a launcher's flow is the
  * install path plus the store, and a release is what both are about.
  */
+import { existsSync, readFileSync } from 'node:fs'
 import { chmod, lstat, mkdir, mkdtemp, open, readFile, readdir, rm, stat, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DELORUN_START_CHECK_ENV, TRUST_FILES, type RuntimeVersion } from '@delorun/contract-home-layout'
 import { InstallError, installRemedies, type InstallErrorCode } from '@delorun/install'
 import {
@@ -695,9 +696,58 @@ describe('the environment the runtime starts with', () => {
 })
 
 describe('a runtime that ends without a status', () => {
-  it('counts as a failure, with the launcher’s own failure status', async () => {
+  it('counts as 128 plus the signal that ended it', async () => {
     const status = await spawnRuntime({ command: process.execPath, args: ['-e', 'process.kill(process.pid, "SIGKILL")'], env: {} })
-    expect(status).toBe(LAUNCHER_EXIT.failed)
+    expect(status).toBe(128 + 9)
+  })
+})
+
+describe('a signal sent to the launcher while the runtime runs', () => {
+  let directory: string
+  beforeEach(async () => { directory = await mkdtemp(join(tmpdir(), 'delorun-spawn-signal-')) })
+  afterEach(async () => { await rm(directory, { recursive: true, force: true }) })
+
+  type Forwarded = 'SIGINT' | 'SIGTERM' | 'SIGHUP'
+
+  /** Start a runtime that writes its pid to `ready` and waits, and give back the listeners the launcher added to this process. */
+  async function started(script: string): Promise<{ readonly status: Promise<number>, readonly pid: number, readonly added: (signal: Forwarded) => () => void }> {
+    const before = { SIGINT: process.listeners('SIGINT'), SIGTERM: process.listeners('SIGTERM'), SIGHUP: process.listeners('SIGHUP') }
+    const status = spawnRuntime({ command: process.execPath, args: ['-e', script], env: { READY: join(directory, 'ready') } })
+    const ready = join(directory, 'ready')
+    for (let waited = 0; !existsSync(ready) || readFileSync(ready, 'utf8') === ''; waited += 20) {
+      if (waited > 10_000) throw new Error('the runtime did not start')
+      await new Promise(resolve => setTimeout(resolve, 20))
+    }
+    return { status, pid: Number(readFileSync(ready, 'utf8')), added: signal => process.listeners(signal).find(listener => !before[signal].includes(listener)) as () => void }
+  }
+
+  const READY = 'require("fs").writeFileSync(process.env.READY, String(process.pid)); setInterval(() => undefined, 1000)'
+
+  it('passes SIGTERM on to the runtime, and the launcher exits with the runtime\'s own status', async () => {
+    const { status, added } = await started(`process.on("SIGTERM", () => process.exit(42)); ${READY}`)
+    added('SIGTERM')()
+    expect(await status).toBe(42)
+  })
+
+  it('passes SIGHUP on too, and a runtime it ends by signal counts as 128 plus the number', async () => {
+    const { status, added } = await started(READY)
+    added('SIGHUP')()
+    expect(await status).toBe(128 + 1)
+  })
+
+  it('leaves SIGINT to the terminal: the runtime that Ctrl-C reaches once through the process group gets exactly one', async () => {
+    // The runtime counts its SIGINTs and exits 100 + the count a moment after the first.
+    const { status, added, pid } = await started(`let count = 0; process.on("SIGINT", () => { if (count++ === 0) setTimeout(() => process.exit(100 + count), 300) }); ${READY}`)
+    // Ctrl-C: the terminal signals the runtime, and the launcher receives its own copy.
+    process.kill(pid, 'SIGINT')
+    added('SIGINT')()
+    expect(await status).toBe(101)
+  })
+
+  it('stops listening once the runtime has ended', async () => {
+    const before = ['SIGINT', 'SIGTERM', 'SIGHUP'].map(signal => process.listeners(signal as Forwarded).length)
+    await spawnRuntime({ command: process.execPath, args: ['-e', ''], env: {} })
+    expect(['SIGINT', 'SIGTERM', 'SIGHUP'].map(signal => process.listeners(signal as Forwarded).length)).toEqual(before)
   })
 })
 
@@ -922,6 +972,30 @@ describe('the command line', () => {
     expect(line.passedThrough).toEqual(['--release', '0.2.0', '--profile', 'desktop'])
   })
 
+  it('passes --release and --help after the command word to the runtime', () => {
+    const verify = parseCommandLine(['verify', '--release', '0.1.0'])
+    expect(verify.release).toBeUndefined()
+    expect(verify.runtimeArgs).toEqual(['verify', '--release', '0.1.0'])
+    const inline = parseCommandLine(['--profile', 'work', 'verify', '--release=0.1.0', '--json'])
+    expect(inline.release).toBeUndefined()
+    expect(inline.profile).toBe('work')
+    expect(inline.runtimeArgs).toEqual(['--profile', 'work', 'verify', '--release=0.1.0', '--json'])
+    for (const help of ['--help', '-h']) {
+      const line = parseCommandLine(['start', help])
+      expect(line.help).toBe(false)
+      expect(line.runtimeArgs).toEqual(['start', help])
+    }
+  })
+
+  it('still reads --release and --help before the command word and after repair, the launcher\'s own command', () => {
+    expect(parseCommandLine(['--release', '0.1.0', 'verify']).release).toBe('0.1.0')
+    expect(parseCommandLine(['--profile', 'work', '--help']).help).toBe(true)
+    const repair = parseCommandLine(['repair', '--release', '0.1.1', '--from', '/tmp/r'])
+    expect(repair.release).toBe('0.1.1')
+    expect(repair.runtimeArgs).toEqual(['repair', '--from', '/tmp/r'])
+    expect(parseCommandLine(['repair', '--help']).help).toBe(true)
+  })
+
   it('refuses a profile name that would leave the home', () => {
     expect(() => launcherProfile('../../../etc', {})).toThrow(/is not a profile name/u)
     expect(() => launcherProfile(undefined, { DELORUN_PROFILE: '../../etc' })).toThrow(/is not a profile name/u)
@@ -1049,6 +1123,41 @@ describe('the release-log check at a start', () => {
     // A plain start does not roll back on its own: it prints the refusal and starts nothing.
     const plain = await startWith({ state: 'failed', stop: true, refusal: 'bundle-malformed', detail: 'missing', missingBundle: '/b' }, ['start'])
     expect(plain.started).toBe(false)
+  })
+
+  it('does not start itself again when previous names the same release as current and its bundle is missing', async () => {
+    const fixture = await fixtureRelease()
+    const same = version('0.2.0')
+    const started: LaunchCommand[] = []
+    let checks = 0
+    let printed = ''
+    const store: LauncherStore = {
+      prepareLaunch: request => Promise.resolve({ command: `/home/.delorun/runtimes/${same}/node/bin/node`, args: ['entry.js', ...request.args], env: {}, version: same, check: { full: false, hashed: 6, files: 40, fullCheckAt: 1_700_000_000_000 } }),
+      install: () => Promise.reject(new Error('the launcher must not install')),
+      retain: () => Promise.reject(new Error('the launcher must not retain')),
+      // A kill between the store's two pointer writes leaves both pointers on one release.
+      pointers: () => Promise.resolve({ current: same, previous: same }),
+      checkRuntime: checkedVersion => Promise.resolve({ version: checkedVersion, manifest: {} as VerifiedRuntime['manifest'], files: { files: [] } as Partial<VerifiedRuntime['files']> as VerifiedRuntime['files'], manifestSha256: '0'.repeat(64) }),
+      launchCommand: (launched, _profile, args) => ({ command: `/home/.delorun/runtimes/${launched}/node/bin/node`, args: ['entry.js', ...args], env: {} }),
+    }
+    const status = await runLauncher(launch({
+      home: await home({ root: fixture.roots[0]! }),
+      store,
+      channel: refusingChannel(new InstallError('INSTALL_VERIFY_FAILED', 'the channel', 'the channel must not be asked')),
+      roots: fixture.roots,
+      args: ['recover', 'rollback'],
+      spawn: (command) => { started.push(command); return Promise.resolve(0) },
+      stderr: (text) => { printed += text },
+      startCheck: () => {
+        // Fails the spec instead of hanging it when the launcher starts itself again.
+        if (++checks > 3) return Promise.reject(new Error('the launcher started the same release again and again'))
+        return Promise.resolve({ state: 'failed', stop: true, refusal: 'bundle-malformed', detail: 'missing', missingBundle: '/b' })
+      },
+    }))
+    expect(checks).toBe(1)
+    expect(status).toBe(LAUNCHER_EXIT.failed)
+    expect(started).toEqual([])
+    expect(printed).toContain(`Delorun did not start release ${same}`)
   })
 
   it('redacts a secret the failed check\'s detail quotes before it prints it', async () => {
