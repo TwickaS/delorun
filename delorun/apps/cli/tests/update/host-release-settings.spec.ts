@@ -3,14 +3,17 @@
  * successor accepts a changed row only when its booted config differs from the previous Host's in exactly the keys the
  * two releases' bundles set differently, and tells the person afterwards.
  */
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { RuntimeVersion } from '@delorun/contract-home-layout'
 import type { HealthExpectations } from '@delorun/home-process'
 import { releaseSettingChanges, rowSettingsFact, type LayerFact, type RowSettingsChange } from '@delorun/update'
 import type { BootedRow } from '../../src/delorun-bundles.ts'
-import { bootRowsOf, checkHealth, HEALTH_PATH, type HostHealthFacts } from '../../src/update/host.ts'
+import { bootRowsOf, checkHealth, HEALTH_PATH, personRowsOf, type HostHealthFacts } from '../../src/update/host.ts'
 
 const SEATS = '@delorun/plugin-agent-seats'
 const PREVIOUS = '0.1.0-preview.2.3' as RuntimeVersion
@@ -121,6 +124,57 @@ describe('H3 and the changes a release\'s signed bundles bring', () => {
     expect(await checkHealth(read.facts, expectationsFrom([manager, seats({ seats: [] })], { bundleRows: ['delorun-agent-seats'] }))).toEqual({ passed: true })
   })
 
+  it('fails an id that now loads another plugin, even with the previous config plus the key the release changes', async () => {
+    const port = await studio()
+    const swapped: BootedRow = { id: 'delorun-agent-seats', name: '@scope/other-plugin', disabled: false, state: 'active', config: { seats: [], enabled: true } }
+    const read = facts(port, [manager, swapped], async () => Promise.resolve(turnsOn))
+    expect(await checkHealth(read.facts, expectationsFrom([manager, seats({ seats: [] })]))).toEqual(failed)
+    // The same swap with the plugin protected on this side still differs from the previous Host's plugin.
+    const guarded: BootedRow = { ...manager, config: { protectedPlugins: [SEATS, '@scope/other-plugin'] } }
+    const both = facts(port, [guarded, swapped], async () => Promise.resolve(turnsOn))
+    expect(await checkHealth(both.facts, expectationsFrom([guarded, seats({ seats: [] })]))).toEqual(failed)
+  })
+
+  it('derives nothing for a row the two releases\' bundles load with different plugins', async () => {
+    const port = await studio()
+    const other = (enabled: boolean): LayerFact => ({ layer: 'b', rows: [], settings: [rowSettingsFact('plugin-manager', undefined, { protectedPlugins: [SEATS, '@scope/other-plugin'] }), rowSettingsFact('delorun-agent-seats', enabled ? '@scope/other-plugin' : SEATS, { seats: [], ...enabled ? { enabled: true } : {} })] })
+    const swapped = releaseSettingChanges([other(false)], [other(true)])
+    expect(swapped.map(change => change.change)).toEqual(['removed', 'added'])
+    const read = facts(port, [manager, seats({ seats: [], enabled: true })], async () => Promise.resolve(swapped))
+    expect(await checkHealth(read.facts, expectationsFrom([manager, seats({ seats: [] })]))).toEqual(failed)
+  })
+
+  it('derives nothing when two booted rows share the id', async () => {
+    const port = await studio()
+    const read = facts(port, [manager, seats({ seats: [] }), seats({ seats: [], enabled: true })], async () => Promise.resolve(turnsOn))
+    expect(await checkHealth(read.facts, expectationsFrom([manager, seats({ seats: [] })]))).toEqual(failed)
+  })
+
+  it('derives nothing for a row the person\'s own patch layers touched when the previous Host booted', async () => {
+    const port = await studio()
+    const read = facts(port, [manager, seats({ seats: [], enabled: true })], async () => Promise.resolve(turnsOn))
+    const edited = bootRowsOf([manager, seats({ seats: [] })], new Set(['delorun-agent-seats']))
+    expect(edited.find(row => row.id === 'delorun-agent-seats')).toMatchObject({ personEdited: true })
+    expect(await checkHealth(read.facts, { ...expectationsFrom([]), previousRows: edited })).toEqual(failed)
+    const untouched = bootRowsOf([manager, seats({ seats: [] })], new Set(['another-row']))
+    expect(untouched.find(row => row.id === 'delorun-agent-seats')?.personEdited).toBeUndefined()
+    expect(await checkHealth(read.facts, { ...expectationsFrom([]), previousRows: untouched })).toMatchObject({ passed: true })
+    const unreadable = bootRowsOf([manager, seats({ seats: [] })], 'unreadable')
+    expect(unreadable.find(row => row.id === 'delorun-agent-seats')).toMatchObject({ personEdited: true })
+    expect(unreadable.find(row => row.id === 'plugin-manager')?.personEdited).toBeUndefined()
+  })
+
+  it('checks the sandbox row\'s protection before it accepts any row', async () => {
+    const port = await studio()
+    const sandbox: BootedRow = { id: 'sandbox', name: '@deepseek-ai/dsh-sandbox-local', disabled: false, state: 'active', config: { networkAccess: false } }
+    const guarded: BootedRow = { ...manager, config: { protectedPlugins: [SEATS, '@deepseek-ai/dsh-sandbox-local'] } }
+    const read = facts(port, [guarded, seats({ seats: [], enabled: false }), sandbox], async () => Promise.resolve(turnsOn))
+    const verdict = await checkHealth(read.facts, { ...expectationsFrom([guarded, seats({ seats: [] }), sandbox]), previousProtection: { protectedHome: '/home/x/.delorun', protectedHomeReadable: [], deniedSockets: [], escapeSocketDirectories: [], privateTmp: true } })
+    // The seats row also fails, but the weaker protection is what H3 reports first.
+    expect(verdict.passed ? '' : verdict.detail).toContain('protection is weaker than before the update')
+    expect(read.asked).toEqual([])
+  })
+
   it('derives nothing when the bundles cannot be verified or read, when the reader answers none or the handover names no previous release', async () => {
     const port = await studio()
     const rows = [manager, seats({ seats: [], enabled: true })]
@@ -149,5 +203,38 @@ describe('H3 and the changes a release\'s signed bundles bring', () => {
     const verdict = await checkHealth(read.facts, { ...expectationsFrom(before), previousProtection: { ...wide, protectedHomeReadable: [], escapeSocketDirectories: [] } })
     expect(verdict.passed).toBe(false)
     expect(verdict.passed ? '' : verdict.detail).toContain('protection is weaker than before the update')
+  })
+})
+
+describe('personRowsOf', () => {
+  const homes: string[] = []
+  afterEach(() => {
+    for (const directory of homes.splice(0)) rmSync(directory, { recursive: true, force: true })
+  })
+
+  /**
+   * A home with a profile whose patch files hold the given text.
+   * @param profilePatch - the profile patch's text.
+   * @param homePatch - the home patch's text, when the home has one.
+   * @returns the home.
+   */
+  function homeWith(profilePatch: string, homePatch?: string): string {
+    const home = mkdtempSync(join(tmpdir(), 'dpr-'))
+    homes.push(home)
+    mkdirSync(join(home, 'profiles', 'default'), { recursive: true })
+    writeFileSync(join(home, 'profiles', 'default', 'package.json'), JSON.stringify({ name: 'profile', dsh: { profile: { bundles: [] } } }))
+    writeFileSync(join(home, 'profiles', 'default', 'cordis.patch.yml'), profilePatch)
+    if (homePatch !== undefined) writeFileSync(join(home, 'cordis.patch.yml'), homePatch)
+    return home
+  }
+
+  it('names the rows the profile patch inserts and the rows either patch changes', () => {
+    const home = homeWith('- insert:\n    - id: mine\n      name: plugin-mine\n- id: delorun-agent-seats\n  config: { enabled: true }\n', '- id: delorun-reach\n  config: { enabled: false }\n')
+    expect(personRowsOf(home, 'default')).toEqual(new Set(['mine', 'delorun-agent-seats', 'delorun-reach']))
+  })
+
+  it('names no row when the patches are empty, and answers unreadable for a patch that is not a list', () => {
+    expect(personRowsOf(homeWith('[]\n'), 'default')).toEqual(new Set())
+    expect(personRowsOf(homeWith('not: a list\n'), 'default')).toBe('unreadable')
   })
 })

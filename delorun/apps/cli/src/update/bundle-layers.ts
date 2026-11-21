@@ -86,6 +86,14 @@ export interface BundleLayerOptions {
    * directory on Node's lookup path holds, such as a folder the person owns above the home, is treated as not installed.
    */
   readonly within?: string
+  /**
+   * Read a bundle's `package.json` or patch file as text; the file system by default. A caller that holds the files to a
+   * signed file list passes a reader that throws for a file whose bytes do not hash to its signed digest, which makes
+   * the bundle an unverified skip.
+   * @param path - the absolute path.
+   * @returns the file's text.
+   */
+  readonly readText?: (path: string) => Promise<string>
 }
 
 /** What the target does with its bundle list. */
@@ -157,13 +165,14 @@ function bundleDirectory(bundle: string, anchors: readonly string[], within: str
  * Read a bundle's `package.json`.
  * @param bundle - the bundle's package name.
  * @param directory - its package directory.
+ * @param readText - reads a file as text.
  * @returns the manifest.
  * @throws {BundleReadError} `BUNDLE_MANIFEST_UNREADABLE` when it cannot be read or is not a JSON object.
  */
-async function readManifest(bundle: string, directory: string): Promise<Record<string, unknown>> {
+async function readManifest(bundle: string, directory: string, readText: (path: string) => Promise<string>): Promise<Record<string, unknown>> {
   let value: unknown
   try {
-    value = JSON.parse(await readFile(join(directory, 'package.json'), 'utf8'))
+    value = JSON.parse(await readText(join(directory, 'package.json')))
   } catch (error) {
     throw new BundleReadError('BUNDLE_MANIFEST_UNREADABLE', bundle, `Delorun could not read its package.json: ${firstLine(error)}`, { cause: error })
   }
@@ -308,15 +317,16 @@ function insertedRows(bundle: string, file: string, rows: readonly unknown[]): r
  * @param bundle - the bundle's package name.
  * @param directory - its package directory.
  * @param file - the package-relative file, as `dsh.bundle.patch` writes it.
+ * @param readText - reads a file as text.
  * @returns the rows it inserts, in order, and the ids of the rows it disables: an entry `{ id, disabled: true }` or a disabled inserted row.
  * @throws {BundleReadError} `BUNDLE_PATCH_UNREADABLE` when the file cannot be read, is not YAML, or is not a list of
  *   patch entries with named rows.
  */
-async function readPatch(bundle: string, directory: string, file: string): Promise<PatchRows> {
+async function readPatch(bundle: string, directory: string, file: string, readText: (path: string) => Promise<string>): Promise<PatchRows> {
   let parsed: unknown
   try {
     // `!!js` values stay unevaluated text: a row disabled by an expression counts as loading.
-    parsed = parse(await readFile(join(directory, file), 'utf8'), { logLevel: 'error' })
+    parsed = parse(await readText(join(directory, file)), { logLevel: 'error' })
   } catch (error) {
     throw new BundleReadError('BUNDLE_PATCH_UNREADABLE', bundle, `Delorun could not read its patch ${file}: ${firstLine(error)}`, { cause: error })
   }
@@ -350,7 +360,8 @@ async function readPatch(bundle: string, directory: string, file: string): Promi
 async function readBundle(bundle: string, options: BundleLayerOptions): Promise<LayerFact | string> {
   const directory = bundleDirectory(bundle, options.anchors, options.within)
   if (directory === undefined) return 'neither the target release nor the profile installs it'
-  const manifest = await readManifest(bundle, directory)
+  const readText = options.readText ?? (async path => readFile(path, 'utf8'))
+  const manifest = await readManifest(bundle, directory, readText)
   const declaration = declarationOf(bundle, manifest)
   if (declaration === undefined) return 'its package.json declares no dsh.bundle'
   if (declaration.platforms !== undefined && !declaration.platforms.some(platform => platform === options.platform)) {
@@ -363,7 +374,7 @@ async function readBundle(bundle: string, options: BundleLayerOptions): Promise<
   const disabledRows: string[] = []
   const settings: RowSettingsFact[] = []
   for (const file of files) {
-    const patch = await readPatch(bundle, directory, file)
+    const patch = await readPatch(bundle, directory, file, readText)
     rows.push(...patch.rows)
     disabledRows.push(...patch.disabled)
     settings.push(...patch.settings)

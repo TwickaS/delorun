@@ -359,6 +359,19 @@ describe('the settings a patch gives rows', () => {
     ])
   })
 
+  it('reads through the caller\'s reader, and a file it refuses makes the bundle an unverified skip', async () => {
+    writeBundle('target', 'signed', bundle('signed'))
+    const reads: string[] = []
+    const refusing = async (path: string): Promise<string> => {
+      reads.push(path)
+      if (path.endsWith('cordis.patch.yml')) throw new Error('differs from its signed digest')
+      return (await import('node:fs/promises')).readFile(path, 'utf8')
+    }
+
+    expect(await skipOf('signed', { ...OPTIONS, readText: refusing })).toEqual({ package: 'signed', reason: 'Delorun could not read its patch ./cordis.patch.yml: Error: differs from its signed digest', verification: 'unverified' })
+    expect(reads.map(path => path.slice(path.lastIndexOf('/') + 1))).toEqual(['package.json', 'cordis.patch.yml'])
+  })
+
   it('resolves a bundle only from the release\'s own files when the caller asks for it', async () => {
     writeBundle('profile', 'planted', bundle('planted'))
     writeBundle('target', 'signed', bundle('signed'))

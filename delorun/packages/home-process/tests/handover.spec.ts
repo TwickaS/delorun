@@ -36,6 +36,12 @@ describe('the handover line', () => {
     expect(() => parseHandoverLine(line({ purpose: 'downgrade' }))).toThrow('the handover line is not valid at purpose')
   })
 
+  it('reads whether the person\'s patch layers touched a protected row, and a row from a predecessor that states none', () => {
+    const rows = [{ id: 'a', name: 'p', generated: false, configHash: 'c'.repeat(64), personEdited: true }, { id: 'b', name: 'p', generated: false }]
+    expect(parseHandoverLine(line({}, { previousRows: rows })).health.previousRows).toEqual(rows)
+    expect(() => parseHandoverLine(line({}, { previousRows: [{ ...rows[0], personEdited: 'yes' }] }))).toThrow('personEdited')
+  })
+
   it('drops a field this release does not know, at the top, in the health expectations and in a row', () => {
     const read = parseHandoverLine(line({ later: 1 }, { laterHealth: true, previousRows: [{ id: 'a', name: 'p', generated: false, laterRow: 'x' }], previousProtection: { ...PROTECTION, laterProtection: [] } }))
     expect(read).not.toHaveProperty('later')

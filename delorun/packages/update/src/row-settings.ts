@@ -100,7 +100,8 @@ function differingKeys(before: Readonly<Record<string, SettingValue>>, after: Re
 /**
  * How the two releases' bundles set the rows Delorun protects: a protected row both give with different settings, one
  * only the target gives, and one only the running release gives. A row is protected when either release's
- * `protectedPlugins` names the plugin it loads; a row whose plugin no layer states is left out.
+ * `protectedPlugins` names the plugin it loads; a row whose plugin no layer states is left out, and a row whose plugin
+ * differs between the releases is a removed row and an added row.
  * @param running - the running release's bundle layers.
  * @param target - the target release's bundle layers.
  * @returns one change per protected row that differs, in row id order.
@@ -116,6 +117,11 @@ export function releaseSettingChanges(running: readonly LayerFact[], target: rea
     const plugin = now?.plugin ?? was?.plugin
     if (plugin === undefined || !protectedPlugins.has(plugin)) continue
     const layer = now?.layer ?? was?.layer ?? ''
+    if (was?.plugin !== undefined && now?.plugin !== undefined && was.plugin !== now.plugin) {
+      // Another plugin behind one id is a dropped row and a new row, never a change of settings.
+      changes.push({ id, plugin: was.plugin, layer: was.layer, change: 'removed', keys: wholeRow(was.config, 'before') }, { id, plugin, layer, change: 'added', keys: wholeRow(now.config, 'after') })
+      continue
+    }
     if (was === undefined && now !== undefined) changes.push({ id, plugin, layer, change: 'added', keys: wholeRow(now.config, 'after') })
     else if (was !== undefined && now === undefined) changes.push({ id, plugin, layer, change: 'removed', keys: wholeRow(was.config, 'before') })
     else if (was !== undefined && now !== undefined) {

@@ -119,12 +119,13 @@ function protectedRowName(id: string): string {
 }
 
 /**
- * Whether a setting value is plain enough to name in a sentence.
+ * Whether a setting value may be named in a sentence: a number or a boolean. A string, a list or a mapping is described
+ * in words and never quoted, because a setting can hold a path, a name or a secret.
  * @param value - the value.
- * @returns true for a string, a number or a boolean.
+ * @returns true for a number or a boolean.
  */
-function isPlainValue(value: SettingValue | undefined): value is string | number | boolean {
-  return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+function isPlainValue(value: SettingValue | undefined): value is number | boolean {
+  return typeof value === 'number' || typeof value === 'boolean'
 }
 
 /**

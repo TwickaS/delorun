@@ -91,6 +91,13 @@ export interface BootRow {
   readonly generated: boolean
   /** For a row of a protected plugin (a guard, consent or sandbox row), the SHA-256 of its canonical config. */
   readonly configHash?: string | undefined
+  /**
+   * For a protected row, whether the person's own patch layers (the profile's patch and the home's patch) touched the
+   * row when the Host booted, or the Host could not read them. A successor derives no change of such a row from the
+   * release's bundles, because the previous hash cannot tell a value the person set from the bundle's. Absent for a Host
+   * of an earlier release, which did not state it.
+   */
+  readonly personEdited?: boolean | undefined
 }
 
 /** The health check's answer: passed, or the first criterion that failed. */

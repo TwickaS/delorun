@@ -66,7 +66,7 @@ import { CliError, EXIT } from './exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandOutput, type CommandResult } from './command.ts'
 import { holderAlive, HomeLayoutError, isFailClosedStub, newStartId, readHomeLock, runDirectory, type HolderProbe } from '@delorun/home'
 import { DEFAULT_WORKSPACE_ENV, defaultWorkspaceRequest, resolveDefaultWorkspace } from './default-workspace.ts'
-import { NPM_MIRROR_ENV } from '@delorun/bundle-local/profile'
+import { DELORUN_PROFILE_BUNDLES, NPM_MIRROR_ENV } from '@delorun/bundle-local/profile'
 import { delorunRowIds, inactiveDelorunRows, insertedRowsByLayer, inactivePackRows, inactivePackWarning, inactiveRowsRefusal, type BootedRow, type RowState } from './delorun-bundles.ts'
 import { registerHomeProcess } from './home-exclusion.ts'
 import { inspectorConsent, openDebugger, terminalInspectorConfirm } from './inspector.ts'
@@ -90,7 +90,7 @@ import { removeSandboxOverlay, sandboxOverlayPath } from './sandbox-protection.t
 import { configSchemasOf, guardSecretFields, reportSecretSettlement, settleSecretValues, type SecretSettlement } from './secret-fields.ts'
 import { secretFieldAdmission, type ConfigSchemasOf } from '@delorun/profile-safety'
 import type { VersionAdmission } from '@deepseek-ai/dsh-plugin-manager/history'
-import { bootProtectionOf, bootRowsOf, checkHealth, inactiveRows, serveHealth, watchChats, withAppliedConfig, type HostHealthFacts } from './update/host.ts'
+import { bootProtectionOf, bootRowsOf, checkHealth, inactiveRows, personRowsOf, serveHealth, watchChats, withAppliedConfig, type HostHealthFacts } from './update/host.ts'
 import { signedSettingChanges } from './update/release-settings.ts'
 import { inheritedHandover, runtimeOfFile, type RunningRuntime } from './update/runtime.ts'
 import { checkStoredRuntime, fullCheckDaysOf, storeUpdateSupport, successorStartCheckRecord } from './update/store-support.ts'
@@ -831,7 +831,7 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
     if (stored !== undefined) await dependencies.checkRuntime(request.home, stored.version, logger, launcherAnchor(request.home, request.env).root, fullCheckDaysOf(request.env), stored.composed)
   }, afterChangesBoot({ home: request.home, profile: request.profile, logger }, booted), stored === undefined ? undefined : {
     version: stored.version,
-    settings: previous => signedSettingChanges({ home: request.home, profile: request.profile, running: stored.version, check: version => checkStoredRuntime(request.home, version, logger, launcherAnchor(request.home, request.env).root, fullCheckDaysOf(request.env)) }, previous),
+    settings: previous => signedSettingChanges({ home: request.home, bundles: DELORUN_PROFILE_BUNDLES, running: stored.version, check: version => checkStoredRuntime(request.home, version, logger, launcherAnchor(request.home, request.env).root, fullCheckDaysOf(request.env)) }, previous),
   })
 }
 
@@ -856,7 +856,7 @@ export function runningHost(booted: BootedProfile, request: Pick<StartRequest, '
   booted.watchChats(chats)
   const atBoot = booted.rows()
   const failed = inactiveRows(atBoot)
-  let handedRows = bootRowsOf(atBoot)
+  let handedRows = bootRowsOf(atBoot, personRowsOf(request.home, request.profile))
   const bootReach = atBoot.find(row => row.id === REACH_ROW_ID)?.config
   const atBootProtection = bootProtectionOf(atBoot, startOnly)
   return {

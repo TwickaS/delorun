@@ -70,6 +70,14 @@ describe('releaseSettingChanges', () => {
     expect(releaseSettingChanges([inserted], [inserted, update])).toMatchObject([{ id: 'delorun-agent-seats', layer: '@delorun/bundle-studio', change: 'changed', keys: [{ key: 'enabled', after: true }] }])
   })
 
+  it('names a row another plugin loads in the target as a removed row and an added row, never as changed settings', () => {
+    const other = layer([rowSettingsFact('delorun-agent-seats', '@scope/other', { seats: [], enabled: true })], [SEATS, '@scope/other'])
+    expect(releaseSettingChanges([SEATS_BEFORE], [other])).toEqual([
+      { id: 'delorun-agent-seats', plugin: SEATS, layer: '@delorun/bundle-local', change: 'removed', keys: [{ key: 'seats', before: [] }] },
+      { id: 'delorun-agent-seats', plugin: '@scope/other', layer: '@delorun/bundle-local', change: 'added', keys: [{ key: 'enabled', after: true }, { key: 'seats', after: [] }] },
+    ])
+  })
+
   it('reads a layer that carries no settings as holding none', () => {
     expect(releaseSettingChanges([{ layer: 'a', rows: [] }], [{ layer: 'a', rows: [] }])).toEqual([])
     expect(protectedPluginsOfLayers([{ layer: 'a', rows: [] }]).size).toBe(0)
@@ -109,8 +117,8 @@ describe('the report', () => {
     expect(words({ ...base, change: 'added', keys: [] })).toBe('Delorun 1.0.0 adds row row-x, which Delorun protects.')
     expect(words({ ...base, change: 'removed', keys: [] })).toBe('Delorun 1.0.0 removes row row-x, which Delorun protects.')
     expect(words({ ...base, id: 'delorun-agent-seats', change: 'changed', keys: [{ key: 'enabled', before: true, after: false }] })).toContain('turns off live agents')
-    expect(words({ ...base, change: 'changed', keys: [{ key: 'enabled', after: true }, { key: 'limit', after: 3 }, { key: 'mode', before: 'a', after: 'strict' }, { key: 'seats', after: [] }, { key: 'old', before: 1 }] }))
-      .toBe('Delorun 1.0.0 changes the settings of row row-x: turns on the row; sets limit to 3; sets mode to strict; changes the seats setting; removes the old setting.')
+    expect(words({ ...base, change: 'changed', keys: [{ key: 'enabled', after: true }, { key: 'limit', after: 3 }, { key: 'mode', before: 'a', after: '/home/x/secret' }, { key: 'seats', after: [] }, { key: 'old', before: 1 }] }))
+      .toBe('Delorun 1.0.0 changes the settings of row row-x: turns on the row; sets limit to 3; changes the mode setting; changes the seats setting; removes the old setting.')
   })
 })
 
