@@ -3,7 +3,7 @@
  * `systemPrompt` service while mounted; off it registers nothing.
  */
 import { Context } from '@deepseek-ai/cordis'
-import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
+import SystemPrompt, { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import * as plugin from '../src/prompt-wording.ts'
 
@@ -37,5 +37,12 @@ describe('the prompt wording row', () => {
     expect(ctx.systemPrompt.delorunWording).toBe(true)
     await fiber.dispose()
     expect(ctx.systemPrompt.delorunWording).toBe(false)
+  })
+
+  it('leaves the Delorun identity line in the assembled prompt with the switch on', async () => {
+    const ctx = await world()
+    await ctx.plugin(plugin, plugin.Config({ enabled: true }))
+    expect(ctx.systemPrompt.delorunWording).toBe(true)
+    expect(renderPrompt(await ctx.systemPrompt.assemble())).toContain('You are Delorun, an agent studio.')
   })
 })
