@@ -52,14 +52,16 @@ it('points the agent at the copy, says it needs full access, and leaves every de
   expect(content).toContain('delorun-plugin-authoring')
 })
 
-it('teaches the scaffold in the workspace and leaves turning on to the person', async () => {
+it('teaches the scaffold in the workspace and leaves turning on to the person while protection is on', async () => {
   const { content } = await load(await registered())
   expect(content).toContain('delorun plugin new')
-  expect(content).toMatch(/delorun plugin dev.*person's loop/u)
-  expect(content).toContain('do not run it yourself')
   expect(content).toContain('plugins/<bare name>')
-  expect(content).toMatch(/cannot turn a plugin on/u)
-  expect(content).toMatch(/at their computer/u)
+  // A501: with protection off the agent runs `plugin dev` itself after the full-access approval; with it on the person does.
+  expect(content).toMatch(/delorun plugin dev.*reloads it on each save/u)
+  expect(content).toMatch(/With protection off, once the person has given the full-access approval, you may run it yourself/u)
+  expect(content).toMatch(/with protection on, offer it to the person and do not run it/u)
+  expect(content).toMatch(/\*\*Protection on\.\*\* You cannot turn a plugin on/u)
+  expect(content).toMatch(/turn it on at their computer/u)
 })
 
 it('refuses a skill file with no frontmatter or no description', () => {
