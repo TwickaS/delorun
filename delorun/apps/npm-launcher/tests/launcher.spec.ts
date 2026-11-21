@@ -6,10 +6,11 @@
  * The release fixture is the install path's own (`../../install/tests/support.ts`), because a launcher's flow is the
  * install path plus the store, and a release is what both are about.
  */
+import { existsSync } from 'node:fs'
 import { chmod, lstat, mkdir, mkdtemp, open, readFile, readdir, rm, stat, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DELORUN_START_CHECK_ENV, TRUST_FILES, type RuntimeVersion } from '@delorun/contract-home-layout'
 import { InstallError, installRemedies, type InstallErrorCode } from '@delorun/install'
 import {
@@ -695,9 +696,45 @@ describe('the environment the runtime starts with', () => {
 })
 
 describe('a runtime that ends without a status', () => {
-  it('counts as a failure, with the launcher’s own failure status', async () => {
+  it('counts as 128 plus the signal that ended it', async () => {
     const status = await spawnRuntime({ command: process.execPath, args: ['-e', 'process.kill(process.pid, "SIGKILL")'], env: {} })
-    expect(status).toBe(LAUNCHER_EXIT.failed)
+    expect(status).toBe(128 + 9)
+  })
+})
+
+describe('a signal sent to the launcher while the runtime runs', () => {
+  let directory: string
+  beforeEach(async () => { directory = await mkdtemp(join(tmpdir(), 'delorun-spawn-signal-')) })
+  afterEach(async () => { await rm(directory, { recursive: true, force: true }) })
+
+  /** Start a runtime that writes `ready` and waits, and give back the listeners the launcher added to this process. */
+  async function started(script: string): Promise<{ readonly status: Promise<number>, readonly added: (signal: 'SIGINT' | 'SIGTERM') => () => void }> {
+    const before = { SIGINT: process.listeners('SIGINT'), SIGTERM: process.listeners('SIGTERM') }
+    const status = spawnRuntime({ command: process.execPath, args: ['-e', script], env: { READY: join(directory, 'ready') } })
+    const ready = join(directory, 'ready')
+    for (let waited = 0; !existsSync(ready); waited += 20) {
+      if (waited > 10_000) throw new Error('the runtime did not start')
+      await new Promise(resolve => setTimeout(resolve, 20))
+    }
+    return { status, added: signal => process.listeners(signal).find(listener => !before[signal].includes(listener)) as () => void }
+  }
+
+  it('is passed to the runtime, and the launcher exits with the runtime\'s own status', async () => {
+    const { status, added } = await started('process.on("SIGTERM", () => process.exit(42)); require("fs").writeFileSync(process.env.READY, ""); setInterval(() => undefined, 1000)')
+    added('SIGTERM')()
+    expect(await status).toBe(42)
+  })
+
+  it('is passed to the runtime for SIGINT too, and a runtime it ends by signal counts as 128 plus the number', async () => {
+    const { status, added } = await started('require("fs").writeFileSync(process.env.READY, ""); setInterval(() => undefined, 1000)')
+    added('SIGINT')()
+    expect(await status).toBe(128 + 2)
+  })
+
+  it('stops listening once the runtime has ended', async () => {
+    const before = [process.listeners('SIGINT').length, process.listeners('SIGTERM').length]
+    await spawnRuntime({ command: process.execPath, args: ['-e', ''], env: {} })
+    expect([process.listeners('SIGINT').length, process.listeners('SIGTERM').length]).toEqual(before)
   })
 })
 

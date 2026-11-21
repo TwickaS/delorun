@@ -7,7 +7,8 @@
  *
  * @module @delorun/npm-launcher/bin
  */
-import { spawnSync } from 'node:child_process'
+import { spawn as startProcess } from 'node:child_process'
+import { constants as osConstants } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
@@ -175,15 +176,29 @@ export function usage(): string {
   ].join('\n')
 }
 
+/** The signals the launcher passes on to the runtime it started, which would otherwise end the launcher alone. */
+const FORWARDED_SIGNALS = ['SIGINT', 'SIGTERM'] as const
+
 /**
  * Start a runtime and share this process's standard streams with it, with the environment
- * {@link launchEnvironment} builds.
+ * {@link launchEnvironment} builds. While the runtime runs, a SIGINT or SIGTERM this process receives is passed on to
+ * it, so the launcher ends only when the runtime has.
  * @param command - the command the store built for launch protocol 1.
- * @returns the runtime's exit status, or `1` when it ended without one.
+ * @returns the runtime's exit status; `128` plus the signal's number when a signal ended it.
+ * @throws {Error} when the runtime cannot be started.
  */
 export function spawnRuntime(command: LaunchCommand): Promise<number> {
-  const child = spawnSync(command.command, [...command.args], { stdio: 'inherit', env: launchEnvironment(process.env, command.env) })
-  return Promise.resolve(child.status ?? LAUNCHER_EXIT.failed)
+  return new Promise<number>((resolve, reject) => {
+    const child = startProcess(command.command, [...command.args], { stdio: 'inherit', env: launchEnvironment(process.env, command.env) })
+    const forwards = FORWARDED_SIGNALS.map(signal => [signal, () => { child.kill(signal) }] as const)
+    for (const [signal, forward] of forwards) process.on(signal, forward)
+    const settle = (): void => { for (const [signal, forward] of forwards) process.off(signal, forward) }
+    child.once('error', (error) => { settle(); reject(error) })
+    child.once('close', (status, signal) => {
+      settle()
+      resolve(status ?? (signal === null ? LAUNCHER_EXIT.failed : 128 + osConstants.signals[signal]))
+    })
+  })
 }
 
 /**
