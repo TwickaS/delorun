@@ -481,12 +481,13 @@ function faceStateOf(requester: Requester): FaceState {
  * @param admission - the arrival and the admitted session.
  * @param control - the control the route is.
  * @param devices - the paired devices.
+ * @param confirms - whether the route may answer a second confirmation: only then is a grant hashed without the confirmation fields.
  * @returns the proof, and a renewal of the device's unlock to run once the action succeeded.
  * @throws {RouteRefusal} `403 CROSS_SITE`; `403 LOOPBACK_REQUIRED` when the control stays at the computer for this
  *   request; `403 ELEVATION_REQUIRED` for a device without a grant for this call, with `{ action }` naming the grant's
  *   action (`changes/<control>`) where a grant can lift it.
  */
-async function gate(request: IncomingMessage, admission: { readonly arrival: StudioArrival, readonly peer: object }, control: ChangesControl, devices: RouteDevices): Promise<Decided<AtComputer>> {
+async function gate(request: IncomingMessage, admission: { readonly arrival: StudioArrival, readonly peer: object }, control: ChangesControl, devices: RouteDevices, confirms = false): Promise<Decided<AtComputer>> {
   const requester = await requesterOf(admission, devices)
   if (requester.kind === 'device' ? isCrossSiteDevice(request) : isCrossSite(request)) throw new RouteRefusal(403, 'CROSS_SITE', 'Another site cannot change what your harness runs.')
   if (requester.kind === 'computer') return { presence: attestStudio(admission.arrival), renew: () => {}, ...NO_GRANT }
@@ -503,7 +504,7 @@ async function gate(request: IncomingMessage, admission: { readonly arrival: Stu
     if (!oversized(request)) {
       const bytes = await bodyBytes(request, GRANT_BODY_CAP_BYTES)
       const action = `changes/${control}`
-      const claimed = face.claim(action, { method: 'POST', path: pathAndQueryOf(request), body: grantBody(bytes) }, typeof header === 'string' ? header : undefined)
+      const claimed = face.claim(action, { method: 'POST', path: pathAndQueryOf(request), body: confirms ? grantBody(bytes) : bytes }, typeof header === 'string' ? header : undefined)
       if (claimed !== undefined) {
         return { presence: attestDevice({ remoteSession: true, device: { id: device.id, label: device.label }, freshUnlock: true }), renew: () => {}, ...grantUse(claimed, action) }
       }
@@ -1378,7 +1379,7 @@ const ACTION_CONTROLS: Readonly<Record<ChangesAction, ChangesControl>> = {
  * @returns the handler.
  */
 export function decidingRoute(control: ChangesControl, dependencies: RouteDependencies, run: (body: Readonly<Record<string, unknown>>, ctx: ChangesContext, presence: AtComputer, spend: () => void) => Promise<object>, options: { readonly confirms?: boolean } = {}): RouteHandler {
-  return postRoute(dependencies, (request, admission) => gate(request, admission, control, dependencies.devices), run, options.confirms === true)
+  return postRoute(dependencies, (request, admission) => gate(request, admission, control, dependencies.devices, options.confirms === true), run, options.confirms === true)
 }
 
 /**

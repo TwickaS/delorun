@@ -233,6 +233,42 @@ describe('Changes: one Face ID for a call and its second confirmation (A434)', (
     expect(WHERE_REFUSALS).not.toContain(json(await send(server.port, path, withGrant('none', { id: 'a', confirmedRisk: true }, grant))).code)
   })
 
+  // Leaving the settle on a refusal that is not the 409 lets a failed call keep its grant.
+  it('uses the grant up on a refusal that is not a second confirmation', async () => {
+    const { world, server, path } = await setup()
+    const grant = world.grantFor('protection-off', path, {})
+    expect(json(await send(server.port, path, withGrant('none', { confirmed: 'yes' }, grant))).code).toBe('BAD_REQUEST')
+    expect(json(await send(server.port, path, withGrant('none', { confirmed: true }, grant))).code).toBe('ELEVATION_REQUIRED')
+  })
+
+  // Spending in two steps lets two confirmed requests that arrive together both use one grant.
+  it('admits only one of two confirmed requests that use one grant together', async () => {
+    const { world, server, path } = await setup()
+    const grant = world.grantFor('protection-off', path, {})
+    const replies = await Promise.all([send(server.port, path, withGrant('none', { confirmed: true }, grant)), send(server.port, path, withGrant('none', { confirmed: true }, grant))])
+    expect(replies.map(reply => reply.status).sort()).toEqual([200, 403])
+  })
+
+  it('refuses a grant kept after a 409 on another control or path', async () => {
+    const { world, server, path } = await setup()
+    const grant = world.grantFor('protection-off', path, {})
+    expect((await send(server.port, path, withGrant('none', {}, grant))).status).toBe(409)
+    expect(json(await send(server.port, ACTION_PATHS.apply, withGrant('none', { id: 'a', confirmedRisk: true }, grant))).code).toBe('ELEVATION_REQUIRED')
+    expect(json(await send(server.port, PROTECTION_PATHS.on, withGrant('none', {}, grant))).code).not.toBe('ELEVATION_REQUIRED')
+    expect((await send(server.port, path, withGrant('none', { confirmed: true }, grant))).status).toBe(200)
+  })
+
+  // Stripping the fields on every route gives a route whose `confirmed` means something else a looser binding.
+  it('binds the whole body on a route that asks no second confirmation', async () => {
+    const { ctx } = routeHome()
+    const world = grantWorld()
+    const server = await serveRoutes(ctx, { face: world.face })
+    const path = ACTION_PATHS.undo
+    const grant = world.grantFor('plugin-undo', path, { id: 'a' })
+    expect(json(await send(server.port, path, withGrant('none', { id: 'a', confirmedRisk: true }, grant))).code).toBe('ELEVATION_REQUIRED')
+    expect(WHERE_REFUSALS).not.toContain(json(await send(server.port, path, withGrant('none', { id: 'a' }, grant))).code)
+  })
+
   it('refuses an expired grant', async () => {
     const { world, server, path } = await setup()
     const grant = world.grantFor('protection-off', path, {})
