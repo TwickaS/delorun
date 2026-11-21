@@ -397,6 +397,10 @@ export class ArchiveImporter {
     const documentEntry = manifest.entries.find(entry => entry.kind === 'setup-document')!
     const document = parseSetupDocument(archive.read(documentEntry.path))
     const named = new Set<string>()
+    // Several paths may name one entry, and an import writes every path: the files the document names are counted per path, not per entry.
+    const limits = this.config.limits ?? ARCHIVE_LIMITS
+    let namedFiles = 0
+    let namedBytes = 0
     for (const plugin of document.plugins) {
       if (plugin.source !== 'local') continue
       for (const file of plugin.files) {
@@ -405,6 +409,14 @@ export class ArchiveImporter {
           throw new ArchiveError('ARCHIVE_SCHEMA_INVALID', `the file ${JSON.stringify(file.path)} of ${plugin.name} is not a plugin-file entry of the size the setup names`)
         }
         named.add(file.sha256)
+        namedFiles += 1
+        namedBytes += file.size
+        if (namedFiles > limits.maxEntries) {
+          throw new ArchiveError('ARCHIVE_TOO_MANY_ENTRIES', `the setup names more than ${String(limits.maxEntries)} plugin files, counting each path`)
+        }
+        if (namedBytes > limits.maxTotalBytes) {
+          throw new ArchiveError('ARCHIVE_TOTAL_TOO_LARGE', `the plugin files the setup names add up to more than ${String(limits.maxTotalBytes)} bytes, counting each path`)
+        }
       }
     }
     const stray = manifest.entries.find(entry => entry.kind === 'plugin-file' && !named.has(entry.sha256))

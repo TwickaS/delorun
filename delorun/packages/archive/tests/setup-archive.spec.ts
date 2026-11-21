@@ -60,6 +60,45 @@ function documentBytes(edit: (copy: Record<string, unknown>) => void): Uint8Arra
   return utf8(JSON.stringify(copy))
 }
 
+describe('setup archive limits on the files a document names', () => {
+  /**
+   * @param paths - how many paths of one plugin name the same entry.
+   * @returns a setup archive whose plugin names one entry of 1,000 bytes from every path.
+   */
+  function manyPathsToOneEntry(paths: number): Uint8Array {
+    const blob = new Uint8Array(1000).fill(120)
+    const names = Array.from({ length: paths }, (_unused, index) => `copy-${String(index)}.js`)
+    const local = { name: 'my-plugin', source: 'local' as const, version: '1.0.0', files: [fileOf(PACKAGE_JSON, 'package.json'), ...names.map(name => fileOf(blob, name))] }
+    return exportSetupArchive({
+      createdBy: 'test', origin: { homeKeyId: HOME_KEY_ID, publicKey: HOME_PUBLIC_KEY },
+      document: { ...document, plugins: [local] },
+      files: new Map([[sha256(PACKAGE_JSON), PACKAGE_JSON], [sha256(blob), blob]]),
+    })
+  }
+
+  /**
+   * @param limits - the limits to apply.
+   * @returns an importer that applies them.
+   */
+  function limited(limits: ConstructorParameters<typeof ArchiveImporter>[0]['limits']): ArchiveImporter {
+    return new ArchiveImporter({ stagingParent: makeScratch().stagingParent, store: new RecordingStore(), trustedPublicKeys: [], limits })
+  }
+
+  const wide = { maxEntries: 100, maxTotalBytes: 1_000_000, maxEntryBytes: 1_000_000, maxCompressionRatio: 100_000 }
+
+  // Counting entries instead of paths lets one 1,000 byte entry named from thousands of paths pass, and Apply writes every path.
+  it('counts the bytes of every path that names an entry, not of the entries', () => {
+    const archive = manyPathsToOneEntry(20)
+    expect(() => limited({ ...wide, maxTotalBytes: 10_000 }).openSetup(archive)).toThrow(expect.objectContaining({ code: 'ARCHIVE_TOTAL_TOO_LARGE' }))
+    expect(limited({ ...wide, maxTotalBytes: 40_000 }).openSetup(archive).document.plugins).toHaveLength(1)
+  })
+
+  it('counts every path against the entry limit', () => {
+    const archive = manyPathsToOneEntry(20)
+    expect(() => limited({ ...wide, maxEntries: 10 }).openSetup(archive)).toThrow(expect.objectContaining({ code: expect.stringMatching(/^ARCHIVE_TOO_MANY_ENTRIES$/u) }))
+  })
+})
+
 describe('setup archive round trip', () => {
   it('returns the document and the files, as unverified for an unknown signer or none and as verified for a vouched key', () => {
     const key = makeKey()

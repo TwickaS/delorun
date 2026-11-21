@@ -254,6 +254,18 @@ describe('applySetupImport', () => {
     expect(lines[0]).toContain('Before importing a setup')
   })
 
+  it('leaves no half-written folder when a file of a local plugin cannot be written', async () => {
+    const { document, read } = await exported()
+    const fx = target()
+    const failing = (sha256: string): Uint8Array => {
+      const bytes = read(sha256)
+      if (Buffer.from(bytes).toString('utf8').startsWith('export default')) throw new Error('the disk is full')
+      return bytes
+    }
+    await expect(confirmedApply(context(fx), document, { presence: terminal(), reload: NOT_RUNNING, run: operation(fx), readFile: failing, choices: REPLACE_ALL })).rejects.toThrow('could not hold the entry "index.js"')
+    expect(existsSync(join(fx.home, 'archive', 'setup-plugins', PROFILE, 'plug'))).toBe(false)
+  })
+
   it('plans only the plugin whose code still waits for review when the import is run again', async () => {
     const { document, read } = await exported()
     const fx = target()
