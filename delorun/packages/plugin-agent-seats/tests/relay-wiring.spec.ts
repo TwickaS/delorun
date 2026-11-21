@@ -83,7 +83,7 @@ async function world(on: boolean, relay = true) {
   let fiber: ReturnType<Context['plugin']> | undefined
   let mounted: Awaited<ReturnType<typeof mountSeats>> | undefined
   if (relay) {
-    fiber = ctx.plugin(Plugin, Config(null))
+    fiber = ctx.plugin(Plugin, Config({ enabled: true }))
     await fiber.await()
   } else {
     mounted = await mountSeats(ctx, Config(null))
@@ -305,7 +305,7 @@ describe('the preview flag off', () => {
     await ctx.plugin(FakePresets)
     await ctx.plugin(FakeProfile, dir)
     await ctx.plugin(FakeConnection)
-    await ctx.plugin(Plugin, Config(null))
+    await ctx.plugin(Plugin, Config({ enabled: true }))
     expect(ctx.get('seatPrograms')).toBeUndefined()
     expect(ctx.llm.listProviders().map(provider => provider.id)).not.toContain('claude-code-seat')
   })

@@ -87,6 +87,10 @@ ctx.systemPrompt.variable('response_language', () => 'English')
 
 `suppressRuntimeContext()` 移除调用作用域的可选动态上下文，但不禁用拥有这些事实的服务。标记为 `required` 的贡献仍然可见。多个抑制器独立组合；不再存在抑制器时，可选上下文恢复。
 
+### Read Delorun's wording
+
+`delorunWording` is true while at least one `useDelorunWording()` registration is live; the call returns the Cordis effect disposer and announces `system-prompt/change` on each change. Delorun's C16 switch `model_prompt` turns it on, and the harness-dev-context, tool-terminal and tool-workflow plugins read it when they produce their text, never when they load: on, they use Delorun's wording and their tool-offered and checkout rules; off, they keep upstream's text.
+
 -----
 
 <a id="understand-the-implementation"></a>

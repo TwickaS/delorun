@@ -454,6 +454,7 @@ export class SystemPrompt extends Service {
     () => { this.ctx.emit('system-prompt/change') },
   )
   private readonly toolOrder: string[] | undefined
+  private delorunWordingUsers = 0
 
   constructor(ctx: Context, config: Config) {
     super(ctx, 'systemPrompt')
@@ -552,6 +553,32 @@ export class SystemPrompt extends Service {
       layer => layer.contexts.insert(context.name, context),
       { label: 'systemPrompt.context()' },
     )
+  }
+
+  /**
+   * Whether Delorun's wording is on: Delorun's C16 switch `model_prompt`, which `@delorun/bundle-local` turns on in its
+   * composition. Off, the prompt sections that carry a Delorun wording keep upstream's text. Read it when a section's
+   * text is produced, not when the plugin loads.
+   * @returns true while at least one {@link useDelorunWording} registration is live.
+   */
+  get delorunWording(): boolean {
+    return this.delorunWordingUsers > 0
+  }
+
+  /**
+   * Turn Delorun's wording on in the calling context's scope until the returned disposer runs. Multiple
+   * registrations are independent.
+   * @returns the exact Cordis effect disposer.
+   */
+  useDelorunWording(): () => void {
+    return this.ctx.effect(() => {
+      this.delorunWordingUsers += 1
+      this.ctx.emit('system-prompt/change')
+      return () => {
+        this.delorunWordingUsers -= 1
+        this.ctx.emit('system-prompt/change')
+      }
+    }, 'systemPrompt.useDelorunWording()')
   }
 
   /**

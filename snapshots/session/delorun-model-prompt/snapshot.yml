@@ -1,0 +1,10 @@
+version: 1
+scenario: delorun-model-prompt
+profile: headless
+composition: ptc
+recording: live
+header:
+  class: delorun-model-prompt
+  pin: true
+input:
+  task: Reply READY.

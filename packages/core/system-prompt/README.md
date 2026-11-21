@@ -87,6 +87,10 @@ Tool-schema providers are evaluated per assembly and contribute the model-visibl
 
 `suppressRuntimeContext()` removes optional dynamic context for the calling scope without disabling the owning services. Contributions marked `required` remain visible. Multiple suppressors compose; optional context returns when none remains.
 
+### Read Delorun's wording
+
+`delorunWording` is true while at least one `useDelorunWording()` registration is live; the call returns the Cordis effect disposer and announces `system-prompt/change` on each change. Delorun's C16 switch `model_prompt` turns it on, and the harness-dev-context, tool-terminal and tool-workflow plugins read it when they produce their text, never when they load: on, they use Delorun's wording and their tool-offered and checkout rules; off, they keep upstream's text.
+
 -----
 
 <a id="understand-the-implementation"></a>

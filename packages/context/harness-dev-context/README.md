@@ -31,6 +31,8 @@ The shipped Web bundle mounts this plugin as its `harness-dev-context` row. Disa
 
 Two system-prompt sections explain that the checkout differs from the working directory and that "this page" means this GUI, together with the GUI update contract. Two runtime-context lines state the current values: the installation root four directories above this package, and the Web GUI's advertised URL from `webApp.getAdvertisedUrl()`, the same value as `DSH_WEB_URL` and the startup URL. Runtime context follows the shared snapshot rules: an unchanged value adds nothing, and a changed one appends a snapshot before the step's input instead of rewriting earlier messages.
 
+The wording shown under Model Experience is Delorun's: it applies while the `systemPrompt` service's `delorunWording` is on (Delorun's C16 switch `model_prompt`). With it off, the paragraphs and runtime-context lines are upstream's — the DeepSeek Harness names and DSH wording — and are sent whether or not the directory is a real checkout.
+
 ### Sessions from earlier releases
 
 Earlier releases embedded both values in the system prompt. When a Session's latest nonempty system prompt still contains those exact paragraphs, the sections repeat them verbatim, old values included, so upgrading and later port or checkout changes leave that Session's prompt byte-identical; the runtime-context lines still give the current values. Text that only resembles an earlier paragraph receives the current guidance.

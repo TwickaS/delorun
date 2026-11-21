@@ -33,18 +33,19 @@ function baseRowName(id: string): unknown {
 
 describe('the plugin-manager row of @delorun/bundle-local', () => {
   it('protects every row this bundle mounts with a C16 switch on, and nothing it does not mount', () => {
-    // The rename tool only adds one tool that asks, so turning it off removes a convenience and no guard. The start gate of
+    // The rename tool only adds one tool that asks, and the prompt wording only changes words, so turning either off removes a
+    // convenience and no guard. The start gate of
     // live agents holds its switch in `limitRefusal`, and protecting it keeps a model from raising its cap (review D7).
     const switchOn = (config: Patch | undefined): boolean => config?.['enabled'] === true || config?.['limitRefusal'] === true
-    const guards = inserted.filter(row => switchOn(row['config'] as Patch | undefined) && row['disabled'] === undefined && row['name'] !== '@delorun/bundle-local/workspace-rename').map(row => row['name'])
+    const guards = inserted.filter(row => switchOn(row['config'] as Patch | undefined) && row['disabled'] === undefined && row['name'] !== '@delorun/bundle-local/workspace-rename' && row['name'] !== '@delorun/bundle-local/prompt-wording').map(row => row['name'])
     expect(guards).toEqual([
       '@delorun/plugin-instruction-consent', '@delorun/plugin-mcp-consent', '@delorun/plugin-permission-defaults',
-      '@delorun/plugin-schedule-consent', '@delorun/plugin-fetch-guard', '@delorun/plugin-tool-failure-guard', '@delorun/plugin-delegation-consent', '@delorun/external-agents', '@delorun/plugin-changes', '@delorun/bundle-local/update-gate', '@delorun/bundle-local/update-check',
+      '@delorun/plugin-schedule-consent', '@delorun/plugin-fetch-guard', '@delorun/plugin-tool-failure-guard', '@delorun/plugin-delegation-consent', '@delorun/external-agents', '@delorun/plugin-agent-seats', '@delorun/plugin-changes', '@delorun/bundle-local/update-gate', '@delorun/bundle-local/update-check',
       '@delorun/bundle-local/trust', '@delorun/plugin-install-check', '@delorun/reach',
     ])
     // home-auth has no switch; it is protected so no chat points the home's device records elsewhere.
-    // The two live-agent drivers and the seats plugin carry no switch, and are protected so no chat removes or reconfigures them (review D7).
-    const withDrivers = guards.flatMap(name => name === '@delorun/external-agents' ? [name, '@delorun/agent-claude-code', '@delorun/agent-codex', '@delorun/plugin-agent-seats'] : [name])
+    // The two live-agent drivers carry no switch, and are protected so no chat removes or reconfigures them (review D7); the seats plugin's `live_agents` switch is a guard like the others.
+    const withDrivers = guards.flatMap(name => name === '@delorun/external-agents' ? [name, '@delorun/agent-claude-code', '@delorun/agent-codex'] : [name])
     expect(protectedPlugins()).toEqual([...withDrivers, '@delorun/home-auth', baseRowName('sandbox'), baseRowName('sandbox-policy')])
   })
 

@@ -1,0 +1,14 @@
+# C16 switch model_prompt on: the system prompt uses Delorun's wording. The checkout and studio paragraphs say
+# Delorun, and the workflow and terminal paragraphs reach the model only while the step offers the tool. Without this
+# row the sections keep upstream's text, whether or not the tool is offered.
+- id: delorun-prompt-wording
+  name: '@delorun/bundle-local/prompt-wording'
+  config:
+    enabled: true
+# Pins the corpus model. model.cordis.yml pins the model only when a primary Session
+# exists, so a first record needs this row.
+- id: agent-default-model
+  name: '@deepseek-ai/dsh-agent-default-model'
+  config:
+    provider: deepseek-official
+    model: deepseek-v4-flash

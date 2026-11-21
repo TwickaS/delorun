@@ -92,15 +92,15 @@ function readCopy(element: HTMLElement): { lines: number; clipped: boolean; over
 }
 
 /**
- * Tell whether an expanded copy's toggle sits below the copy's last text line.
+ * Tell whether an expanded copy's toggle sits on the copy's last text line instead of a line of its own.
  * @param toggle - the copy's toggle button.
  * @param copy - the expanded question heading or option description.
- * @returns whether the toggle starts at or below the bottom of the text; false without the copy.
+ * @returns whether the toggle starts above the bottom of the text, so it shares a line with it; false without the copy.
  */
-function belowText(toggle: HTMLElement, copy: Element | null): boolean {
+function onLastTextLine(toggle: HTMLElement, copy: Element | null): boolean {
   if (copy === null) return false
   const textBottom = copy.getBoundingClientRect().bottom - parseFloat(getComputedStyle(copy).paddingBottom)
-  return toggle.getBoundingClientRect().top >= textBottom - 0.5
+  return toggle.getBoundingClientRect().top < textBottom - 0.5
 }
 
 // The options carry descriptions on purpose: the squeeze assertion below
@@ -638,7 +638,7 @@ describe('web e2e: resident question composer round trip', () => {
     await expect.poll(() => page.locator('[data-question-key]').count(), { timeout: 10_000 }).toBe(0)
   }, 60_000)
 
-  it.skipIf(MODE === 'record')('keeps short option explanations beside their labels', async () => {
+  it.skipIf(MODE === 'record')('keeps short option explanations under their labels, in the same font and unmasked', async () => {
     const sessionId = answeredSession
     expect(sessionId).toBeDefined()
     const agent = scaffold.ctx.agents.get(sessionId as SessionId)
@@ -682,8 +682,9 @@ describe('web e2e: resident question composer round trip', () => {
         }
       }))
       expect(rows).toHaveLength(4)
+      // The label line is shared with the Recommended chip, so the description takes its own row under the label.
       expect(rows).toEqual(Array.from({ length: 4 }, () => ({
-        sameLine: true, fontSize: '13px', lineHeight: '20px', maskImage: 'none',
+        sameLine: false, fontSize: '13px', lineHeight: '20px', maskImage: 'none',
       })))
       await composer.getByRole('radio', { name: '中（medium）' }).click()
       await composer.getByRole('button', { name: 'Submit', exact: true }).click()
@@ -819,7 +820,7 @@ describe('web e2e: resident question composer round trip', () => {
       const expandedQuestion = await heading.evaluate(readCopy)
       expect(expandedQuestion).toMatchObject({ clipped: false, overflows: false, toggle: 'collapse' })
       expect(expandedQuestion.lines).toBeGreaterThan(3)
-      expect(await questionToggle.evaluate(belowText, await heading.elementHandle())).toBe(true)
+      expect(await questionToggle.evaluate(onLastTextLine, await heading.elementHandle())).toBe(true)
       expect(await readMetrics()).toEqual({ footerFits: true, scrolls: true, titleInScrollport: true })
       await questionToggle.click()
       await expect.poll(() => heading.evaluate(readCopy)).toEqual({ lines: 2, clipped: true, overflows: true, toggle: 'expand' })
@@ -844,7 +845,7 @@ describe('web e2e: resident question composer round trip', () => {
       const expandedDescription = await explicitText.evaluate(readCopy)
       expect(expandedDescription).toMatchObject({ clipped: false, overflows: false, toggle: 'collapse' })
       expect(expandedDescription.lines).toBeGreaterThan(2)
-      expect(await descriptionToggle.evaluate(belowText, await explicitText.elementHandle())).toBe(true)
+      expect(await descriptionToggle.evaluate(onLastTextLine, await explicitText.elementHandle())).toBe(true)
       expect(await explicitText.evaluate((text) => {
         const row = text.closest('[data-option-row]') as HTMLElement
         return [...row.querySelectorAll<HTMLElement>('*')].every(child =>

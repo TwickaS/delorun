@@ -182,6 +182,7 @@ describe('a Delorun CLI profile', () => {
       '@delorun/plugin-update',
       '@delorun/plugin-packs',
       '@delorun/bundle-local/workspace-rename',
+      `${LOCAL_BUNDLE}/prompt-wording`,
       `${LOCAL_BUNDLE}/update-gate`,
       `${LOCAL_BUNDLE}/update-check`,
       `${LOCAL_BUNDLE}/trust`,

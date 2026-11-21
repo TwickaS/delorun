@@ -161,6 +161,7 @@ function backgroundJobId(result: Awaited<ReturnType<typeof call>>): string {
 describe('tool-terminal foreground API', () => {
   it('sends the terminal paragraph only while the step offers terminal_open', async () => {
     const { ctx, agent } = await setup(false)
+    ctx.systemPrompt.useDelorunWording()
     const paragraph = 'Use a terminal session only when'
     const rendered = async (toolSet: ResolvedToolSet) => renderPrompt(await ctx.systemPrompt.assemble({ scope: agent, toolSet }))
     const offered = await ctx.tools.resolve({ agent, modelSelection: { provider: 'mock', model: 'mock' }, signal: testToolSignal })
@@ -168,6 +169,12 @@ describe('tool-terminal foreground API', () => {
     offered.dispose()
     const withheld: ResolvedToolSet = { dispose() {}, view: () => new Map() }
     expect(await rendered(withheld)).not.toContain(paragraph)
+  })
+
+  it('sends the terminal paragraph whether or not the step offers terminal_open while Delorun\'s wording is off', async () => {
+    const { ctx, agent } = await setup(false)
+    const withheld: ResolvedToolSet = { dispose() {}, view: () => new Map() }
+    expect(renderPrompt(await ctx.systemPrompt.assemble({ scope: agent, toolSet: withheld }))).toContain('Use a terminal session only when')
   })
 
   it('registers exactly six schemas and drives the full owner-scoped lifecycle', async () => {

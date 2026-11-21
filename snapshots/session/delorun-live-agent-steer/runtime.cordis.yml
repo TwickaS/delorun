@@ -59,6 +59,8 @@
             - event: { kind: turn-end, outcome: completed, usage: { inputTokens: 1500, outputTokens: 40 } }
     - id: delorun-agent-seats
       name: '@delorun/plugin-agent-seats'
+      config:
+        enabled: true
     - id: live-agent-person
       name: './person.mjs'
 # Pins the corpus model.

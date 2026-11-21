@@ -135,10 +135,18 @@ describe('a set-up CLI profile', { timeout: 60_000 }, () => {
       { id: 'delorun-privacy', name: '@delorun/bundle-local' },
       { id: 'delorun-fetch-guard', name: '@delorun/plugin-fetch-guard' },
       { id: 'delorun-update-gate', name: '@delorun/bundle-local/update-gate' },
+      { id: 'delorun-prompt-wording', name: '@delorun/bundle-local/prompt-wording' },
       { id: 'delorun-mcp-consent', name: '@delorun/plugin-mcp-consent' },
     ]))
     expect(composed.prompts).toBe('safer')
     expect(() => { assertDelorunInvariants(composed, booted(composed)) }).not.toThrow()
+  })
+
+  it('mounts Delorun\'s prompt wording on in the composed studio profile, so C16 switch model_prompt is on wherever Delorun runs', async () => {
+    const composed = await compose()
+    const row = composedRows(composed).find(each => each.id === 'delorun-prompt-wording')
+    expect(row).toMatchObject({ name: '@delorun/bundle-local/prompt-wording', config: { enabled: true } })
+    expect(row?.disabled).not.toBe(true)
   })
 
   it('refuses a home patch that disables the fetch guard, naming the file and the remedy', async () => {
@@ -485,6 +493,7 @@ describe('the headless profile', { timeout: 60_000 }, () => {
       { id: 'delorun-delegation-consent', name: '@delorun/plugin-delegation-consent' },
       { id: 'delorun-plugin-changes', name: '@delorun/plugin-changes' },
       { id: 'delorun-update-gate', name: '@delorun/bundle-local/update-gate' },
+      { id: 'delorun-prompt-wording', name: '@delorun/bundle-local/prompt-wording' },
       { id: 'delorun-plugin-install-check', name: '@delorun/plugin-install-check' },
     ])
     expect(composed.prompts).toBeUndefined()

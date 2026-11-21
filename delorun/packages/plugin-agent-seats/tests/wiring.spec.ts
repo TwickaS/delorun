@@ -81,7 +81,7 @@ describe('the plugin with the preview flag off', () => {
   it('declares the flag and registers nothing else', async () => {
     const { ctx, flags, connection, presets } = await world(false)
     const baseline = surface(ctx)
-    await ctx.plugin(Plugin, Config(null))
+    await ctx.plugin(Plugin, Config({ enabled: true }))
     expect(flags.declared.map(flag => flag.id)).toEqual([LIVE_AGENTS.id])
     expect(surface(ctx)).toEqual(baseline)
     expect(baseline.tools).toEqual([undefined, undefined])
@@ -92,11 +92,25 @@ describe('the plugin with the preview flag off', () => {
   })
 })
 
+describe('the plugin with the preview flag on and the row switched off', () => {
+  it('declares the flag and registers nothing else, which is the parity value of C16 switch live_agents', async () => {
+    const { ctx, flags, connection, presets } = await world(true)
+    const baseline = surface(ctx)
+    await ctx.plugin(Plugin, Config(null))
+    expect(Config(null).enabled).toBe(false)
+    expect(flags.declared.map(flag => flag.id)).toEqual([LIVE_AGENTS.id])
+    expect(surface(ctx)).toEqual(baseline)
+    expect(presets.definitions).toEqual([])
+    expect(connection.routes).toEqual([])
+    expect(ctx.get('seatPrograms')).toBeUndefined()
+  })
+})
+
 describe('the plugin with the preview flag on', () => {
   it('registers the hand-off tools, providers, model routes, presets and Host routes', async () => {
     const { ctx, connection, presets } = await world(true)
     const baseline = surface(ctx)
-    await ctx.plugin(Plugin, Config(null))
+    await ctx.plugin(Plugin, Config({ enabled: true }))
     expect(surface(ctx).tools).toEqual(['claude_code', 'codex'])
     expect(surface(ctx).providers).toEqual(['claude-code-seat', 'codex-seat'])
     expect(surface(ctx).models).toEqual([...baseline.models, 'claude-code-seat', 'codex-seat'].sort())
@@ -107,20 +121,20 @@ describe('the plugin with the preview flag on', () => {
 
   it('declares the JSON media type the studio posts, so the gateway reads the body of each Host route', async () => {
     const { ctx, connection } = await world(true)
-    await ctx.plugin(Plugin, Config(null))
+    await ctx.plugin(Plugin, Config({ enabled: true }))
     expect(connection.routes.map(route => route.requestMediaType)).toEqual(['application/json', 'application/json'])
   })
 
   it('lists no model for a seat route, so no picker shows it', async () => {
     const { ctx } = await world(true)
-    await ctx.plugin(Plugin, Config(null))
+    await ctx.plugin(Plugin, Config({ enabled: true }))
     await expect(ctx.llm.listModels('claude-code-seat')).resolves.toEqual([])
     await expect(ctx.llm.listModels('codex-seat')).resolves.toEqual([])
   })
 
   it('admits no reach device to a Host route while the home is not mounted', async () => {
     const { ctx, connection } = await world(true)
-    await ctx.plugin(Plugin, Config(null))
+    await ctx.plugin(Plugin, Config({ enabled: true }))
         const route = connection.routes.find(candidate => candidate.path === RESUME_PATH)!
     // No home-auth service is mounted, so no device is admitted; the owner's Peer never reaches admitPeer.
     const peer = { principal: { kind: 'reach-device' } } as Parameters<NonNullable<typeof route.admitPeer>>[1]
@@ -131,7 +145,7 @@ describe('the plugin with the preview flag on', () => {
   it('admits any approved device to Resume and the model choice once the home is mounted, with no prompt, and nothing else', async () => {
     const { ctx, connection } = await world(true)
     ctx.provide('homeAuth', {} as never)
-    await ctx.plugin(Plugin, Config(null))
+    await ctx.plugin(Plugin, Config({ enabled: true }))
     for (const path of [RESUME_PATH, CHOOSE_MODEL_PATH]) {
       const route = connection.routes.find(candidate => candidate.path === path)!
       const request = new Request(`http://127.0.0.1${path}`, { method: 'POST' })
@@ -142,7 +156,7 @@ describe('the plugin with the preview flag on', () => {
 
   it('withdraws everything when the plugin stops', async () => {
     const { ctx, connection, presets } = await world(true)
-    const fiber = ctx.plugin(Plugin, Config(null))
+    const fiber = ctx.plugin(Plugin, Config({ enabled: true }))
     await fiber.await()
     await fiber.dispose()
     expect(surface(ctx).tools).toEqual([undefined, undefined])
@@ -154,7 +168,7 @@ describe('the plugin with the preview flag on', () => {
   it('fails loud on a seat list the provider side cannot serve, before registering a route', async () => {
     const { ctx, connection } = await world(true)
     const [first] = Config(null).seats
-    await expect(mountSeats(ctx, { seats: [{ ...first!, provider: 'gemini' }] })).rejects.toThrow(/not an external agent/)
+    await expect(mountSeats(ctx, { enabled: true, seats: [{ ...first!, provider: 'gemini' }] })).rejects.toThrow(/not an external agent/)
     expect(connection.routes).toEqual([])
   })
 })

@@ -198,8 +198,8 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
   {
     id: 'delorun-agent-seats',
     kind: 'added',
-    reason: 'Live external agents behind the `externalAgents.liveAgents` preview flag, off unless a profile row sets it: with it on, the lead\'s model gets a hand-off tool per agent, and the agent\'s chat, approvals and lists appear; with it off the row adds no tool and no UI. Upstream has no live agents.',
-    parity: { kind: 'disabled', reason: 'A disabled row mounts nothing: no hand-off tool, seat provider or seat UI exists, and the one-shot subagent tools run as upstream\'s do.' },
+    reason: 'The C16 switch `live_agents` on, with live external agents behind the `externalAgents.liveAgents` preview flag, off unless a profile row sets it: with it on, the lead\'s model gets a hand-off tool per agent, and the agent\'s chat, approvals and lists appear; with it off the row adds no tool and no UI. Upstream has no live agents.',
+    parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: no hand-off tool, seat provider or seat UI exists, and the one-shot subagent tools run as upstream\'s do.' },
   },
   {
     id: 'delorun-multiview',
@@ -230,6 +230,12 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     kind: 'added',
     reason: 'The C16 switch `rename_workspace_tool` on: the agent has a `rename_workspace` tool that renames a workspace through the workspace registry, the way the studio\'s rename does, after the person allows it; the plugin\'s own default, off, is the parity value.',
     parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: the model has no tool for renaming a workspace.' },
+  },
+  {
+    id: 'delorun-prompt-wording',
+    kind: 'added',
+    reason: 'The C16 switch `model_prompt` on: the system prompt\'s checkout and studio paragraphs say Delorun, and the workflow and terminal paragraphs and the checkout text follow Delorun\'s rules (a tool\'s paragraph only while the step offers the tool; the checkout text only in a real checkout); the plugin\'s own default, off, is the parity value.',
+    parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: the prompt sections keep upstream\'s text.' },
   },
   {
     id: 'delorun-update-gate',
