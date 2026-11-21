@@ -50,6 +50,7 @@ This is everything that differs from DeepSeek Harness `dsh-v0.2.2-rc.3` in the l
 - `delorun update --report` and `delorun update` show, under a plugin the update turns off because its DeepSeek Harness version range excludes the new release, the command that accepts the risk for that exact version and say that the health check after the switch rolls the update back if the plugin then fails to load. A new guide page, "Update Delorun with many plugins", walks through saving, checking, updating and going back.
 - The launcher names the version it is installing when it refuses native Windows or macOS, and the install guide's sample output shows a preview version.
 - While the connection is lost, Delorun is reconnecting, or an update waits or switches, the state shows as a compact alert in the sidebar until it ends, with its Cancel update button; on a phone it also shows as a toast at the top that you can close. After an update, the outcome card shows up to five one-line highlights from the release notes of every version the update skipped, with a Read more button that opens the full change log of those versions in a sheet (full screen on a phone). It reads the notes the update shipped, so it works offline. The card keeps each version number on one line and shows the finish time in your own time zone.
+- Until `1.0.0`, a release that the maintainer built and signed on the maintainer's PC installs from the release channel at releases.delorun.com, so `npx delorun` installs it. Nothing rebuilds such a release independently, and the trust page says so. A `1.0.0` release, or a release under a later signing root, that was built this way is refused.
 - **Fixed:** `delorun recover restore` and `rollback` no longer say "Your rows and settings are unchanged" when the restore changed your profile's `cordis.patch.yml`. They say whether your rows and settings now match that version or already did, and say nothing when the file could not be read.
 - **Fixed:** An update no longer rolls back with "the settings of protected row delorun-reach changed" after you turned remote access on or off with `delorun reach` while Delorun was running. The running version now hands the health check the remote-access settings it applied, not the ones it started with. A new version that boots with remote-access settings other than the ones applied still fails the check unless the update report names the change.
 - **Fixed:** Updating from an earlier preview no longer fails and rolls back when plugin packs were added with protection off. The new release now points the saved copies of those packs at its own files before it starts, so its safety check no longer refuses them.
@@ -619,6 +620,14 @@ This is everything that differs from DeepSeek Harness `dsh-v0.2.2-rc.3` in the l
 - The Host answers "bad request" to a request with more than one `Host` header, on every address it serves, and holds a request for a path such as `/x/../api/...` to the same rules as one for `/api/...`.
 - Delorun's own wording in the model's prompt (the Delorun name in the checkout and studio paragraphs, and the tool paragraphs sent only while a tool is offered) applies in the profiles Delorun starts; upstream's bare `dsh` web launcher shows DeepSeek Harness's own wording.
 - **Fixed:** A script, or the desktop app's own requests, that talks to a Delorun Host on the same computer with the Host's cookie is accepted again; the Host had answered "forbidden" to any request that changes something and states no origin. A request from a web page on another site or another local port is still refused.
+
+## 0.1.0-preview.2.7 (2026-11-21)
+
+### Install and update
+- Until `1.0.0`, a release that the maintainer built and signed on the maintainer's PC installs from the release channel at releases.delorun.com, so `npx delorun` installs it. Nothing rebuilds such a release independently, and the trust page says so. A `1.0.0` release, or a release under a later signing root, that was built this way is refused.
+
+### From upstream
+- Based on DeepSeek Harness `dsh-v0.2.2-rc.3`.
 
 ## 0.1.0-preview.2.6 (2026-11-21)
 

@@ -233,6 +233,11 @@
     },
     {
       "area": "Install and update",
+      "section": "Changed",
+      "text": "Until `1.0.0`, a release that the maintainer built and signed on the maintainer's PC installs from the release channel at releases.delorun.com, so `npx delorun` installs it. Nothing rebuilds such a release independently, and the trust page says so. A `1.0.0` release, or a release under a later signing root, that was built this way is refused."
+    },
+    {
+      "area": "Install and update",
       "section": "Fixed",
       "text": "`delorun recover restore` and `rollback` no longer say \"Your rows and settings are unchanged\" when the restore changed your profile's `cordis.patch.yml`. They say whether your rows and settings now match that version or already did, and say nothing when the file could not be read."
     },
@@ -2998,6 +3003,27 @@
     }
   ],
   "versions": [
+    {
+      "version": "0.1.0-preview.2.7",
+      "date": "2026-11-21",
+      "preview": true,
+      "areas": [
+        {
+          "area": "Install and update",
+          "items": [
+            {
+              "section": "Changed",
+              "text": "Until `1.0.0`, a release that the maintainer built and signed on the maintainer's PC installs from the release channel at releases.delorun.com, so `npx delorun` installs it. Nothing rebuilds such a release independently, and the trust page says so. A `1.0.0` release, or a release under a later signing root, that was built this way is refused."
+            }
+          ]
+        }
+      ],
+      "fromUpstream": {
+        "ref": "dsh-v0.2.2-rc.3",
+        "items": []
+      },
+      "previews": []
+    },
     {
       "version": "0.1.0-preview.2.6",
       "date": "2026-11-21",
