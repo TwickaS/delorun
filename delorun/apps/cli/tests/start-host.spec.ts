@@ -131,6 +131,8 @@ describe('runningHost', () => {
     // @delorun/bundle-local's row, which the Host booted with before `delorun reach on` wrote the profile's own.
     const boot = { enabled: true, tailscalePrivate: { enabled: false, address: '', servePort: 443 } }
     const on = { enabled: true, tailscalePrivate: { enabled: true, address: 'https://home.example-tailnet.ts.net', servePort: 443, listenerPort: 31318, serveCheckIntervalMs: 60000, elevationMinutes: 15 } }
+    // The profile's patch holds the reach row in every case, so the Host marks it `personEdited` at boot and after an apply (H3 derives no change for it).
+    const inPatch = (rows: readonly BootedRow[]): ReturnType<typeof bootRowsOf> => bootRowsOf(rows, new Set(['delorun-reach']))
     const homes: string[] = []
     afterEach(() => { for (const home of homes.splice(0)) rmSync(home, { recursive: true, force: true }) })
 
@@ -157,23 +159,23 @@ describe('runningHost', () => {
 
     it('hands over the hash a boot from the file `delorun reach on` wrote gives, once the service applied its option', async () => {
       const { host, restarted } = reachHost([{ id: 'delorun-reach', config: on }], [{ option: 'tailscale-private', state: 'ready' }])
-      expect(host.rows()).toEqual(bootRowsOf([manager, reachRow(boot)]))
+      expect(host.rows()).toEqual(inPatch([manager, reachRow(boot)]))
       await host.reach?.apply()
       expect(restarted.map(rows => rows.tailscalePrivate?.address)).toEqual(['https://home.example-tailnet.ts.net'])
-      expect(host.rows()).toEqual(bootRowsOf([manager, reachRow(on)]))
+      expect(host.rows()).toEqual(inPatch([manager, reachRow(on)]))
     })
 
     it('keeps the boot config of every key but the applied option, so the file\'s other changes still show', async () => {
       const { host } = reachHost([{ id: 'delorun-reach', config: { ...on, enabled: false, other: 1 } }], [{ option: 'tailscale-private', state: 'ready' }])
       await host.reach?.apply()
-      expect(host.rows()).toEqual(bootRowsOf([manager, reachRow({ ...boot, tailscalePrivate: on.tailscalePrivate })]))
-      expect(host.rows()).not.toEqual(bootRowsOf([manager, reachRow({ ...on, enabled: false, other: 1 })]))
+      expect(host.rows()).toEqual(inPatch([manager, reachRow({ ...boot, tailscalePrivate: on.tailscalePrivate })]))
+      expect(host.rows()).not.toEqual(inPatch([manager, reachRow({ ...on, enabled: false, other: 1 })]))
     })
 
     it('keeps the boot hash when the service did not run the apply', async () => {
       const { host } = reachHost([{ id: 'delorun-reach', config: on }], undefined)
       await host.reach?.apply()
-      expect(host.rows()).toEqual(bootRowsOf([manager, reachRow(boot)]))
+      expect(host.rows()).toEqual(inPatch([manager, reachRow(boot)]))
     })
   })
 })

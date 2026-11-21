@@ -1,11 +1,15 @@
+import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { fontNotice, readNotices, t3Notice } from '../scripts/notices.ts'
 
 const packages = fileURLToPath(new URL('../..', import.meta.url))
+const pinned = (manifest: string): string | undefined => (JSON.parse(readFileSync(fileURLToPath(new URL(manifest, import.meta.url)), 'utf8')) as { dependencies?: Record<string, string> }).dependencies?.sonner
 
 describe('the notices', () => {
-  const notices = readNotices({ packages, sonnerLicence: fileURLToPath(new URL('../../../apps/website/node_modules/sonner/LICENSE.md', import.meta.url)) })
+  // The website installs on its own, so this reads the licence from the root workspace's copy in `packages/brand`;
+  // the next test holds the website's pin to the same version, so the two copies hold the same text.
+  const notices = readNotices({ packages, sonnerLicence: fileURLToPath(new URL('../../brand/node_modules/sonner/LICENSE.md', import.meta.url)) })
 
   it('carry the T3 Code copyright line and licence', () => {
     const t3 = notices.find(each => each.id === 't3-code')
@@ -23,6 +27,11 @@ describe('the notices', () => {
 
   it('carry Sonner\'s MIT licence', () => {
     expect(notices.find(each => each.id === 'sonner')?.copyright).toBe('Copyright (c) 2023 Emil Kowalski')
+  })
+
+  it('read Sonner from the version the website bundles', () => {
+    expect(pinned('../../brand/package.json')).toBeDefined()
+    expect(pinned('../../../apps/website/package.json')).toBe(pinned('../../brand/package.json'))
   })
 
   it('refuse a file that is not the licence it should be', () => {

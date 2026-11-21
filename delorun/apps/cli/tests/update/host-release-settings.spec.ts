@@ -13,6 +13,7 @@ import type { RuntimeVersion } from '@delorun/contract-home-layout'
 import type { HealthExpectations } from '@delorun/home-process'
 import { releaseSettingChanges, rowSettingsFact, type LayerFact, type RowSettingsChange } from '@delorun/update'
 import type { BootedRow } from '../../src/delorun-bundles.ts'
+import { appliedReachConfig } from '../../src/reach/host.ts'
 import { bootRowsOf, checkHealth, HEALTH_PATH, personRowsOf, withAppliedConfig, type HostHealthFacts } from '../../src/update/host.ts'
 
 const SEATS = '@delorun/plugin-agent-seats'
@@ -210,6 +211,52 @@ describe('H3 and the changes a release\'s signed bundles bring', () => {
     const verdict = await checkHealth(read.facts, { ...expectationsFrom(before), previousProtection: { ...wide, protectedHomeReadable: [], escapeSocketDirectories: [] } })
     expect(verdict.passed).toBe(false)
     expect(verdict.passed ? '' : verdict.detail).toContain('protection is weaker than before the update')
+  })
+
+  describe('H3 after the previous Host applied a reach option while it ran', () => {
+    const REACH = '@delorun/reach'
+    const reachManager: BootedRow = { id: 'plugin-manager', name: '@deepseek-ai/dsh-plugin-manager', disabled: false, state: 'active', config: { protectedPlugins: [REACH, SEATS] } }
+    const reach = (config: unknown): BootedRow => ({ id: 'delorun-reach', name: REACH, disabled: false, state: 'active', config })
+    const layer = (grace: number, live = false): LayerFact => ({
+      layer: '@delorun/bundle-local',
+      rows: [],
+      settings: [rowSettingsFact('plugin-manager', undefined, { protectedPlugins: [REACH, SEATS] }), rowSettingsFact('delorun-reach', REACH, { enabled: true, grace }), rowSettingsFact('delorun-agent-seats', SEATS, live ? { seats: [], enabled: true } : { seats: [] })],
+    })
+    const plain = seats({ seats: [] })
+    const option = { enabled: true, address: 'https://home.example-tailnet.ts.net', servePort: 443, listenerPort: 31318, serveCheckIntervalMs: 60000, elevationMinutes: 15 }
+    const booted = { enabled: true, grace: 1, tailscalePrivate: { enabled: false, address: '', servePort: 443 } }
+    // `delorun reach on` wrote the whole option into the profile's patch; the running Host applied it and handed its hash over.
+    const handed = withAppliedConfig(bootRowsOf([reachManager, reach(booted), plain], new Set(['delorun-reach'])), 'delorun-reach', appliedReachConfig(booted, option))
+    const restated = { ...booted, tailscalePrivate: option }
+    const unnamed = { passed: false, criterion: 'H3-only-named-disabled', detail: 'the settings of protected row delorun-reach changed and the report did not name it' }
+
+    it('passes without deriving the reach row, whatever else the release changes', async () => {
+      const port = await studio()
+      const read = facts(port, [reachManager, reach(restated), seats({ seats: [], enabled: true })], async () => Promise.resolve(releaseSettingChanges([layer(5)], [layer(5, true)])))
+      expect(await checkHealth(read.facts, { ...expectationsFrom([]), previousRows: handed })).toEqual({ passed: true, rowChanges: [NOTE] })
+    })
+
+    it('still fails an unnamed hand edit of the reach row after the handover, even one the release\'s own change would explain', async () => {
+      const port = await studio()
+      const brought = releaseSettingChanges([layer(1)], [layer(2)])
+      const edited = facts(port, [reachManager, reach({ ...restated, grace: 2 }), plain], async () => Promise.resolve(brought))
+      expect(await checkHealth(edited.facts, { ...expectationsFrom([]), previousRows: handed })).toEqual(unnamed)
+      const another = facts(port, [reachManager, reach({ ...restated, other: 1 }), plain], async () => Promise.resolve(brought))
+      expect(await checkHealth(another.facts, { ...expectationsFrom([]), previousRows: handed })).toEqual(unnamed)
+    })
+
+    it('would derive that change for the same row had the Host handed it over without the mark, which is what the mark prevents', async () => {
+      const port = await studio()
+      const unmarked = handed.map(({ personEdited: _marked, ...row }) => row)
+      const read = facts(port, [reachManager, reach({ ...restated, grace: 2 }), plain], async () => Promise.resolve(releaseSettingChanges([layer(1)], [layer(2)])))
+      expect(await checkHealth(read.facts, { ...expectationsFrom([]), previousRows: unmarked })).toMatchObject({ passed: true })
+    })
+
+    it('passes when the report names the reach row', async () => {
+      const port = await studio()
+      const read = facts(port, [reachManager, reach({ ...restated, other: 1 }), plain], async () => Promise.resolve(undefined))
+      expect(await checkHealth(read.facts, { ...expectationsFrom([]), namedRows: ['delorun-reach'], previousRows: handed })).toEqual({ passed: true })
+    })
   })
 })
 
