@@ -19,8 +19,11 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import type { ReachListenerId, StudioAddress } from '@delorun/contract-admission'
 import { ELEVATION_LIMITS, type IdentityFactor } from '@delorun/contract-oidc-passkeys'
 import { isElevationMinutes } from '@delorun/home-auth'
-import { REACH_OPTION_LISTENERS, type ReachConfigRows, type ReachOptionId } from '@delorun/contract-reach-providers'
+import { MIN_SERVE_CHECK_INTERVAL_MS, REACH_OPTION_LISTENERS, type ReachConfigRows, type ReachOptionId } from '@delorun/contract-reach-providers'
 import { ReachError, readServeRules, readTailscale, removeServe, serve, serveTarget, type TailscaleRunner } from './tailscale.ts'
+
+/** The longest delay a timer takes: Node runs `setInterval` with a longer one every millisecond. */
+export const MAX_SERVE_CHECK_INTERVAL_MS = 2_147_483_647
 
 /** What a provider resolved from its rows: every value it would otherwise default. */
 export interface ReachSpec {
@@ -57,7 +60,7 @@ export interface ReachProvider {
    * Resolve the option's rows.
    * @param rows - the plugin's configuration rows.
    * @returns the spec, or undefined when the option is off.
-   * @throws {ReachError} for a row that is missing or invalid.
+   * @throws {ReachError} for a row that is missing or invalid; a plain `Error` for a `serveCheckIntervalMs` outside the range a timer takes, which has no C7 code and so fails the load or the apply that carries it.
    */
   resolve(rows: ReachConfigRows): ReachSpec | undefined
   /**
@@ -126,6 +129,9 @@ export class TailscalePrivateProvider implements ReachProvider {
     }
     if (!isElevationMinutes(row.elevationMinutes)) {
       throw new ReachError('ELEVATION_MINUTES_INVALID', `tailscalePrivate.elevationMinutes must be a whole number of minutes from 1 to ${String(ELEVATION_LIMITS.maxMinutes)}, got ${String(row.elevationMinutes)}`)
+    }
+    if (!Number.isInteger(row.serveCheckIntervalMs) || row.serveCheckIntervalMs < MIN_SERVE_CHECK_INTERVAL_MS || row.serveCheckIntervalMs > MAX_SERVE_CHECK_INTERVAL_MS) {
+      throw new Error(`tailscalePrivate.serveCheckIntervalMs must be a whole number of milliseconds from ${String(MIN_SERVE_CHECK_INTERVAL_MS)} to ${String(MAX_SERVE_CHECK_INTERVAL_MS)}, got ${String(row.serveCheckIntervalMs)}`)
     }
     const address = URL.parse(row.address)
     if (address?.protocol !== 'https:' || !address.hostname.endsWith('.ts.net') || address.origin !== row.address) {

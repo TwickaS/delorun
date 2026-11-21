@@ -20,7 +20,7 @@ export const SHOW_PATH = `${CHANGES_ROUTE_PREFIX}/show`
 /** The workspaces a plugin may be created in, and whether this request is at the computer. */
 export const WORKSPACES_PATH = `${CHANGES_ROUTE_PREFIX}/workspaces`
 
-/** The setup routes, each a `POST` at the computer: write the profile's setup as a file, read a file and plan its import, apply a planned import. */
+/** The setup routes, each a `POST` under the `plugin-other` control (the computer, or a paired device with a one-call Face ID or PIN grant): write the profile's setup as a file, read a file and plan its import, apply a planned import. */
 export const SETUP_PATHS = {
   export: `${CHANGES_ROUTE_PREFIX}/setup-export`,
   inspect: `${CHANGES_ROUTE_PREFIX}/setup-inspect`,

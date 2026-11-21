@@ -240,9 +240,10 @@ describe('the protection switch', () => {
     // With a PIN grant for the call it can, after the second ask; the change is kept as a notice for the computer.
     const world = grantWorld({ hasPasskey: false })
     const full = await serveRoutes(ctx, { face: world.face })
+    // A grant covers the call without its confirmation field, so the one for `{}` admits the ask and the confirmed request alike.
     const withPin = (body: object) => {
       const base = fromDevice('none', body)
-      return { ...base, headers: [...base.headers ?? [], `Delorun-Grant: ${world.grantFor('protection-off', PROTECTION_PATHS.off, body, 'pin')}`] }
+      return { ...base, headers: [...base.headers ?? [], `Delorun-Grant: ${world.grantFor('protection-off', PROTECTION_PATHS.off, {}, 'pin')}`] }
     }
     expect(json(await send(full.port, PROTECTION_PATHS.off, fromDevice('fresh', { confirmed: true })))).toMatchObject({ code: 'ELEVATION_REQUIRED' })
     expect(json(await send(full.port, PROTECTION_PATHS.off, withPin({})))).toMatchObject({ code: 'CONFIRM_PROTECTION' })

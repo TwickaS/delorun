@@ -21,14 +21,14 @@ export function faceAccessOf(grants: GrantStore | undefined, hasPasskey: boolean
   return {
     enabled: grants !== undefined,
     hasPasskey,
-    take: (action, call, grantId) => {
+    claim: (action, call, grantId) => {
       // The device's live Face ID pass on this listener admits a Changes control whose row is `face` (A499); the grant header is then not read.
-      if (grants !== undefined && action.startsWith(CHANGES_PREFIX) && passAdmitsRow(grants, holder, `changes:${action.slice(CHANGES_PREFIX.length)}`)) return true
+      if (grants !== undefined && action.startsWith(CHANGES_PREFIX) && passAdmitsRow(grants, holder, `changes:${action.slice(CHANGES_PREFIX.length)}`)) return () => true
       const hash = hashRequest(call)
-      if (grants === undefined || hash === undefined || grantId === undefined) return false
+      if (grants === undefined || hash === undefined || grantId === undefined) return undefined
       // The header only names the grant; the home checks the hash of the bytes it read itself.
-      if (grants.peek(holder, action, hash)?.grantId !== grantId) return false
-      return grants.consume(holder, action, hash) !== undefined
+      if (grants.peek(holder, action, hash)?.grantId !== grantId) return undefined
+      return () => grants.consume(holder, action, hash) !== undefined
     },
   }
 }

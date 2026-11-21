@@ -48,7 +48,7 @@ describe('the update routes\' fence and levels', () => {
     expect(update.channel.requests).toEqual([])
   })
 
-  // Removing the `grant` rows of update-begin and update-rollback in LEGACY_LEVELS lets an unlock the person entered open them for a phone with no passkey.
+  // Moving update-begin and update-rollback from `face` in CONTROL_LEVELS lets an unlock the person entered open them for a phone with no passkey.
   it('update-begin-refused-phone-with-unlock-only and update-rollback-refused-phone-with-unlock-only: Face ID on, no passkey, no grant: no unlock opens them', async () => {
     const update = await serveUpdate({ face: grantWorld({ hasPasskey: false }).face })
     for (const unlock of ['none', 'grace', 'fresh'] as const) {
@@ -164,6 +164,18 @@ describe('prepare and apply', () => {
     expect(json(declined)).toMatchObject({ code: 'ACKNOWLEDGEMENT_MISSING', missing: ['data-no-copy'] })
     expect(update.channel.ops()).not.toContain('update.apply')
     const accepted = await post(update.server.port, UPDATE_PATHS.apply, { handle, chats: 'wait', dataCopy: false, acknowledged: ['item:0', 'log', 'data-no-copy'] })
+    expect(accepted.status, accepted.body).toBe(200)
+  })
+
+  it('update-confirm-requires-freshness-tick: a release the channel could not confirm needs its own tick', async () => {
+    const update = await serveUpdate()
+    const handle = await prepared(update, report([], { freshness: 'unchecked' }))
+    const state = json(await get(update.server.port, UPDATE_PATHS.state)).prepared as { confirm: { ticks: string[] } }
+    expect(state.confirm.ticks).toEqual(['freshness'])
+    const none = await post(update.server.port, UPDATE_PATHS.apply, { handle, chats: 'wait', dataCopy: true, acknowledged: [] })
+    expect(json(none)).toMatchObject({ code: 'ACKNOWLEDGEMENT_MISSING', missing: ['freshness'] })
+    expect(update.channel.ops()).not.toContain('update.apply')
+    const accepted = await post(update.server.port, UPDATE_PATHS.apply, { handle, chats: 'wait', dataCopy: true, acknowledged: ['freshness'] })
     expect(accepted.status, accepted.body).toBe(200)
   })
 

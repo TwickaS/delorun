@@ -30,7 +30,7 @@ import {
   DEFAULT_SERVE_CHECK_INTERVAL_MS, DEFAULT_SERVE_PORT, MIN_SERVE_CHECK_INTERVAL_MS, type ReachConfigRows, type ReachErrorCode, type ReachOptionId, type ReachState, type ReachStateChange,
 } from '@delorun/contract-reach-providers'
 import { openFront, type LoopbackFront } from './front.ts'
-import { TailscalePrivateProvider, type ReachProvider, type ReachSpec } from './provider.ts'
+import { MAX_SERVE_CHECK_INTERVAL_MS, TailscalePrivateProvider, type ReachProvider, type ReachSpec } from './provider.ts'
 import { ReachError, readComputerUser, systemTailscale, type TailscaleRunner } from './tailscale.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -78,8 +78,8 @@ export const Config: schema<Config> = schema.object({
     servePort: schema.natural().max(65_535).default(DEFAULT_SERVE_PORT).description('The port Tailscale serves HTTPS on.'),
     listenerPort: schema.natural().max(65_535).default(0)
       .description('The fixed port on 127.0.0.1 that tailscale serve forwards to, which delorun reach on tailscale chooses once and writes here. 0 means none is chosen, and an enabled option then fails at load.'),
-    serveCheckIntervalMs: schema.natural().min(MIN_SERVE_CHECK_INTERVAL_MS).default(DEFAULT_SERVE_CHECK_INTERVAL_MS)
-      .description('How often, in milliseconds, a ready option rereads tailscale serve status for Funnel.'),
+    serveCheckIntervalMs: schema.natural().min(MIN_SERVE_CHECK_INTERVAL_MS).max(MAX_SERVE_CHECK_INTERVAL_MS).default(DEFAULT_SERVE_CHECK_INTERVAL_MS)
+      .description('How often, in milliseconds, a ready option rereads tailscale serve status for Funnel, from 1000 to 2147483647.'),
     elevationMinutes: schema.natural().min(1).max(ELEVATION_LIMITS.maxMinutes).default(ELEVATION_LIMITS.defaultMinutes)
       .description('How many minutes sensitive actions stay unlocked on a device after the person approves it at this computer, from 1 to 60.'),
   }).default({ enabled: false, address: '', servePort: DEFAULT_SERVE_PORT, listenerPort: 0, serveCheckIntervalMs: DEFAULT_SERVE_CHECK_INTERVAL_MS, elevationMinutes: ELEVATION_LIMITS.defaultMinutes }),
@@ -222,7 +222,7 @@ export class ReachService extends Service {
    */
   protected async [Service.init](): Promise<void> {
     if (!this.config.enabled) return
-    this.ctx.effect(() => this.ctx.webServer.register({ kind: 'exact', path: REACH_STATUS_PATH, handler: (request, response) => { void this.answerStatus(request, response) } }), 'reach status route')
+    this.ctx.effect(() => this.ctx.webServer.register({ kind: 'exact', path: REACH_STATUS_PATH, handler: (request, response) => { this.answerStatus(request, response).catch((error: unknown) => { this.statusFailed(response, error) }) } }), 'reach status route')
     this.ctx.effect(() => this.register(new TailscalePrivateProvider(this.tailscale())), 'reach tailscale-private provider')
     this.ctx.effect(() => async () => { await this.serialize(() => this.stopAll()) }, 'reach options')
     const rows: ReachConfigRows = {
@@ -275,6 +275,21 @@ export class ReachService extends Service {
   }
 
   /**
+   * Answer a status request whose handler threw: log it and send `500` unless the response already started.
+   * @param response - the response.
+   * @param error - what the handler threw, such as an unreadable owner record.
+   */
+  private statusFailed(response: ServerResponse, error: unknown): void {
+    this.ctx.logger.warn(`reach: the status request failed: ${error instanceof Error ? error.message : String(error)}`)
+    if (response.headersSent) {
+      response.destroy()
+      return
+    }
+    response.statusCode = 500
+    response.end(JSON.stringify({ error: 'STATUS_UNAVAILABLE', message: 'The reach status could not be read; the Host log says why' }))
+  }
+
+  /**
    * Start one option: serve its listener, hold its fixed port, open the reach listener, relay the fixed port to it and
    * connect the provider; watch it while ready, and record how {@link stopAll} stops it.
    * @param provider - the option's provider.
@@ -285,15 +300,22 @@ export class ReachService extends Service {
     // Only the private option sits behind `tailscale serve`, whose `Tailscale-User-*` headers name the person; another
     // option's clients could send any value, so its listener neither reads them nor compares them with the computer's user.
     const readsTailscaleIdentity = spec.option === 'tailscale-private'
-    const computerUser = readsTailscaleIdentity ? await readComputerUser(this.tailscale()) : undefined
-    const unserve = this.ctx.homeAuth.serve({
-      listener: spec.listener, address: spec.address, factor: provider.factor, elevationMinutes: spec.elevationMinutes,
-      ...(readsTailscaleIdentity ? { readsTailscaleIdentity } : {}),
-      ...(computerUser === undefined ? {} : { computerUser }),
-    })
+    let unserve: () => void
+    try {
+      const computerUser = readsTailscaleIdentity ? await readComputerUser(this.tailscale()) : undefined
+      unserve = this.ctx.homeAuth.serve({
+        listener: spec.listener, address: spec.address, factor: provider.factor, elevationMinutes: spec.elevationMinutes,
+        ...(readsTailscaleIdentity ? { readsTailscaleIdentity } : {}),
+        ...(computerUser === undefined ? {} : { computerUser }),
+      })
+    } catch (error) {
+      // Home auth refuses a row whose elevation passes its cap, or a listener it serves already; nothing is held yet.
+      this.refuse(spec, error, undefined)
+      return
+    }
     let front: LoopbackFront
     try {
-      front = await openFront(spec.listenerPort)
+      front = await openFront(spec.listenerPort, (error) => { this.ctx.logger.warn(`reach: the ${spec.option} fixed port server failed: ${error.message}`) })
     } catch (error) {
       // A rule left by an earlier run would point at a port another program holds.
       const removal = await stopProvider(provider, spec)

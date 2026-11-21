@@ -84,14 +84,14 @@ export async function applySetupImport(ctx: ChangesContext, document: SetupDocum
   const removed: string[] = []
   const installed: { name: string, reviewChange?: ChangeId }[] = []
   for (const name of plan.remove) {
-    const entry = await recordPluginRequest(ctx, { action: 'remove', spec: name })
+    const entry = await recordPluginRequest(ctx, { action: 'remove', spec: name, by: 'person' })
     await applyInstallChange(ctx, entry.id, options.presence, { reload: options.reload, run: options.run })
     removed.push(name)
     options.progress?.(`Removed ${name}.`)
   }
   for (const { plugin } of plan.install) {
     const spec = plugin.source === 'registry' ? `${plugin.name}@${plugin.version}` : `link:${await stageLocalPlugin(ctx, plugin, options.readFile)}`
-    const entry = await recordPluginRequest(ctx, { action: 'install', spec })
+    const entry = await recordPluginRequest(ctx, { action: 'install', spec, by: 'person' })
     const checked = plugin.source === 'registry' && plugin.integrity !== undefined ? plugin : undefined
     // The integrity is checked before the Host reloads, so a swapped package is never loaded.
     const result = await applyInstallChange(ctx, entry.id, options.presence, {
@@ -132,7 +132,7 @@ async function requireIntegrity(ctx: ChangesContext, name: string, version: stri
  * @param plugin - the plugin.
  * @param read - reads a file from the archive.
  * @returns the folder's absolute path.
- * @throws {ChangesError} `SETUP_REFUSED` when the plugin's package.json names another package.
+ * @throws {ChangesError} `SETUP_REFUSED` when the plugin's package.json names another package; the write's own error, after the folder is removed, when a file cannot be written.
  */
 async function stageLocalPlugin(ctx: ChangesContext, plugin: SetupLocalPlugin, read: (sha256: string) => Uint8Array): Promise<string> {
   const manifest = plugin.files.find(file => file.path === 'package.json')!
@@ -148,8 +148,14 @@ async function stageLocalPlugin(ctx: ChangesContext, plugin: SetupLocalPlugin, r
   await refuseLinkedDirectory(parent)
   const folder = join(parent, pluginSlug(plugin.name))
   await removeEarlierImport(folder)
-  await writeStaging(folder, plugin.files.map(file => ({ path: file.path, bytes: () => read(file.sha256) })))
-  for (const file of plugin.files) if (file.executable) await chmod(join(folder, file.path), 0o700)
+  try {
+    await writeStaging(folder, plugin.files.map(file => ({ path: file.path, bytes: () => read(file.sha256) })))
+    for (const file of plugin.files) if (file.executable) await chmod(join(folder, file.path), 0o700)
+  } catch (error) {
+    // A write that fails partway leaves no half-written folder for a later import or a person to find.
+    await rm(folder, { recursive: true, force: true })
+    throw error
+  }
   return folder
 }
 

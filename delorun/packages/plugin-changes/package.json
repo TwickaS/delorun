@@ -32,8 +32,10 @@
     "typecheck": "tsc --noEmit -p tsconfig.host.json && tsc -b tsconfig.client.json && tsc --noEmit -p tsconfig.tests.client.json"
   },
   "dependencies": {
+    "@deepseek-ai/dsh-util-values": "workspace:*",
     "@delorun/archive": "workspace:*",
     "@delorun/changes": "workspace:*",
+    "@delorun/contract-archive-and-trash": "workspace:*",
     "@delorun/contract-home-layout": "workspace:*",
     "@delorun/contract-plugin-versions": "workspace:*",
     "@delorun/home": "workspace:*",

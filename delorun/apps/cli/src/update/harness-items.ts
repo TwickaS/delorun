@@ -11,6 +11,7 @@
  */
 import { createHash } from 'node:crypto'
 import { brandString } from '@deepseek-ai/dsh-brand'
+import { assertNever } from '@deepseek-ai/dsh-util-values'
 import { mergedDiffs, planHarnessCarry, readHarnessLog, readHarnessRecord, runningHarnessRecord, signedHarnessReader, type HarnessCarryPlan, type HarnessMergeResult, type SignedRuntime } from '@delorun/changes'
 import type { Sha256Hex } from '@delorun/contract-release-manifest'
 import type { HarnessMerge, HarnessResult } from '@delorun/contract-update-report'
@@ -29,6 +30,8 @@ export function mergeOf(result: HarnessMergeResult): HarnessMerge {
       return result.carry
     case 'conflict':
       return result.conflict
+    default:
+      return assertNever(result)
   }
 }
 

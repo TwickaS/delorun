@@ -36,8 +36,8 @@
  *
  * @module @delorun/plugin-changes/routes
  */
-import { realpathSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { assertNever } from '@deepseek-ai/dsh-util-values'
 import {
   applyChange,
   applyHarnessChange,
@@ -106,6 +106,7 @@ import {
 } from '@delorun/changes'
 import { isForeignFetchSite, isSameLoopbackOrigin, listenerOf, loopbackAddressOf, type LoopbackPort, type StampedRequest } from '@delorun/home'
 import { GRANT_BODY_CAP_BYTES } from '@delorun/home-auth'
+import { HOME_IN_ANSWERS, homeSpellings, withHomePlaceholder } from './home-words.ts'
 import { accessView, CONTROL_LEVELS, mayUse, type FaceState } from './access.ts'
 import { isProfileSafetyError, readSafeMode, recover } from '@delorun/profile-safety'
 import {
@@ -181,8 +182,7 @@ export const FACE_REQUIRED_SENTENCE = 'Confirm with Face ID or your PIN first.'
 /** The sentence that stands for a failure's words when they name the Delorun home's path, which the Host log keeps. */
 export const HOME_WITHHELD_SENTENCE = 'Its details name files Delorun keeps; the Host log has them.'
 
-/** What a recorded failure's text in an answer says in place of the Delorun home's path. */
-export const HOME_IN_ANSWERS = '<Delorun home>'
+export { HOME_IN_ANSWERS }
 
 /** The fields of an answer that carry a recorded failure's text: a failed load, start or reload. */
 const FAILURE_FIELDS: ReadonlySet<string> = new Set(['failure', 'error'])
@@ -287,13 +287,13 @@ export interface FaceAccess {
   /** Whether the device holds a passkey. A device with one is admitted by a grant alone. */
   readonly hasPasskey: boolean
   /**
-   * Use up the grant for exactly one call.
+   * Find the live grant for exactly one call without using it up.
    * @param action - the grant's action name.
    * @param call - the method, the path as received and the body bytes the route read itself.
    * @param grantId - the `Delorun-Grant` header's value.
-   * @returns whether a live grant for this action and this method, path and body was used up and the header names it.
+   * @returns undefined when no live grant for this action and this method, path and body is named by the header; otherwise the function that uses the grant up, which returns whether it did.
    */
-  readonly take: (action: string, call: { readonly method: string, readonly path: string, readonly body: Uint8Array }, grantId: string | undefined) => boolean
+  readonly claim: (action: string, call: { readonly method: string, readonly path: string, readonly body: Uint8Array }, grantId: string | undefined) => (() => boolean) | undefined
 }
 
 /** What the routes read of paired devices. */
@@ -481,15 +481,16 @@ function faceStateOf(requester: Requester): FaceState {
  * @param admission - the arrival and the admitted session.
  * @param control - the control the route is.
  * @param devices - the paired devices.
+ * @param confirms - whether the route may answer a second confirmation: only then is a grant hashed without the confirmation fields.
  * @returns the proof, and a renewal of the device's unlock to run once the action succeeded.
  * @throws {RouteRefusal} `403 CROSS_SITE`; `403 LOOPBACK_REQUIRED` when the control stays at the computer for this
  *   request; `403 ELEVATION_REQUIRED` for a device without a grant for this call, with `{ action }` naming the grant's
  *   action (`changes/<control>`) where a grant can lift it.
  */
-async function gate(request: IncomingMessage, admission: { readonly arrival: StudioArrival, readonly peer: object }, control: ChangesControl, devices: RouteDevices): Promise<{ readonly presence: AtComputer, readonly renew: () => void }> {
+async function gate(request: IncomingMessage, admission: { readonly arrival: StudioArrival, readonly peer: object }, control: ChangesControl, devices: RouteDevices, confirms = false): Promise<Decided<AtComputer>> {
   const requester = await requesterOf(admission, devices)
   if (requester.kind === 'device' ? isCrossSiteDevice(request) : isCrossSite(request)) throw new RouteRefusal(403, 'CROSS_SITE', 'Another site cannot change what your harness runs.')
-  if (requester.kind === 'computer') return { presence: attestStudio(admission.arrival), renew: () => {} }
+  if (requester.kind === 'computer') return { presence: attestStudio(admission.arrival), renew: () => {}, ...NO_GRANT }
   if (requester.kind === 'other') throw new RouteRefusal(403, LOOPBACK_REQUIRED, LOOPBACK_REQUIRED_SENTENCE)
   const { device } = requester
   const face = device.face
@@ -502,8 +503,10 @@ async function gate(request: IncomingMessage, admission: { readonly arrival: Stu
     // A body over the grant cap cannot be hashed, so no grant covers it; its stream is left unread for the route's own limit.
     if (!oversized(request)) {
       const bytes = await bodyBytes(request, GRANT_BODY_CAP_BYTES)
-      if (face.take(`changes/${control}`, { method: 'POST', path: pathAndQueryOf(request), body: bytes }, typeof header === 'string' ? header : undefined)) {
-        return { presence: attestDevice({ remoteSession: true, device: { id: device.id, label: device.label }, freshUnlock: true }), renew: () => {} }
+      const action = `changes/${control}`
+      const claimed = face.claim(action, { method: 'POST', path: pathAndQueryOf(request), body: confirms ? grantBody(bytes) : bytes }, typeof header === 'string' ? header : undefined)
+      if (claimed !== undefined) {
+        return { presence: attestDevice({ remoteSession: true, device: { id: device.id, label: device.label }, freshUnlock: true }), renew: () => {}, ...grantUse(claimed, action) }
       }
     }
   }
@@ -513,7 +516,65 @@ async function gate(request: IncomingMessage, admission: { readonly arrival: Stu
       // A face refusal names the grant's action, so the client knows what to confirm; the body holds no secret or hash.
       : may.needs === 'face' ? new RouteRefusal(403, ELEVATION_REQUIRED, FACE_REQUIRED_SENTENCE, oversized(request) ? {} : { action: `changes/${control}` }) : new RouteRefusal(403, ELEVATION_REQUIRED, ELEVATION_REQUIRED_SENTENCE)
   }
-  return { presence: attestDevice({ remoteSession: true, device: { id: device.id, label: device.label }, freshUnlock: device.unlock === 'fresh', ...CONTROL_LEVELS[control] === 'free' ? { freeControl: true as const } : {} }), renew: device.renew }
+  return { presence: attestDevice({ remoteSession: true, device: { id: device.id, label: device.label }, freshUnlock: device.unlock === 'fresh', ...CONTROL_LEVELS[control] === 'free' ? { freeControl: true as const } : {} }), renew: device.renew, ...NO_GRANT }
+}
+
+/** What {@link gate} decided: the proof, the renewal, and how a Face ID grant is used up. */
+interface Decided<P> {
+  readonly presence: P
+  readonly renew: () => void
+  /**
+   * Use up the grant that admitted the request; a request admitted without one has nothing to use up.
+   * @throws {RouteRefusal} `403 ELEVATION_REQUIRED` when another request used the grant up first.
+   */
+  readonly spend: () => void
+  /** Use up the grant if it is not used up yet, and never throw: a request that ended with any answer but a second confirmation has used its grant. */
+  readonly settle: () => void
+}
+
+/** A request admitted without a grant to use up. */
+const NO_GRANT = { spend: () => {}, settle: () => {} } as const
+
+/**
+ * @param claimed - the function that uses the grant up, from {@link FaceAccess.claim}.
+ * @param action - the grant's action, named in the refusal.
+ * @returns how the route uses the grant up, once.
+ */
+function grantUse(claimed: () => boolean, action: string): Pick<Decided<never>, 'spend' | 'settle'> {
+  let outcome: 'unspent' | 'spent' | 'gone' = 'unspent'
+  const spend = (): void => {
+    if (outcome === 'unspent') outcome = claimed() ? 'spent' : 'gone'
+    if (outcome === 'gone') throw new RouteRefusal(403, ELEVATION_REQUIRED, FACE_REQUIRED_SENTENCE, { action })
+  }
+  return {
+    spend,
+    settle: () => {
+      if (outcome !== 'unspent') return
+      outcome = claimed() ? 'spent' : 'gone'
+    },
+  }
+}
+
+/** The body fields that answer a second confirmation; a grant covers the call with or without them. */
+const CONFIRMATION_FIELDS = ['confirmedRisk', 'confirmed'] as const
+
+/**
+ * The body a grant is hashed over: the body without the fields that answer a second confirmation, so one Face ID covers
+ * a call and its confirmed retry and nothing else of the body may change. A body that is not a JSON object, or holds
+ * none of them, is as it was read.
+ * @param bytes - the body as read.
+ * @returns the bytes to hash.
+ */
+function grantBody(bytes: Buffer): Uint8Array {
+  let value: unknown
+  try {
+    value = JSON.parse(bytes.toString('utf8'))
+  } catch (_notJson) {
+    // A body that is not JSON has no confirmation field, so the grant covers it as it is.
+    return bytes
+  }
+  if (typeof value !== 'object' || value === null || Array.isArray(value) || !CONFIRMATION_FIELDS.some(field => Object.hasOwn(value, field))) return bytes
+  return Buffer.from(JSON.stringify(Object.fromEntries(Object.entries(value).filter(([field]) => !(CONFIRMATION_FIELDS as readonly string[]).includes(field)))))
 }
 
 /**
@@ -566,7 +627,19 @@ async function bodyBytes(request: IncomingMessage, limit: number): Promise<Buffe
  * @returns the refusal.
  */
 function tooLarge(limit: number): RouteRefusal {
-  return new RouteRefusal(413, 'BODY_TOO_LARGE', limit === MAX_BODY_BYTES ? `A request names one change or plugin in at most ${String(MAX_BODY_BYTES)} bytes.` : `A setup file larger than ${String(limit / 1024 / 1024)} MiB is imported with delorun setup import.`)
+  return new RouteRefusal(413, 'BODY_TOO_LARGE', tooLargeSentence(limit))
+}
+
+/**
+ * @param limit - the limit a body exceeded.
+ * @returns what the person reads: the limit of a request that names one change or plugin, of a setup file, or of the body a Face ID confirmation covers.
+ */
+function tooLargeSentence(limit: number): string {
+  switch (limit) {
+    case MAX_BODY_BYTES: return `A request names one change or plugin in at most ${String(MAX_BODY_BYTES)} bytes.`
+    case MAX_SETUP_BODY_BYTES: return `A setup file larger than ${String(MAX_SETUP_FILE_BYTES / 1024 / 1024)} MiB is imported with delorun setup import.`
+    default: return `A request over ${String(limit / 1024 / 1024)} MiB cannot carry a Face ID confirmation.`
+  }
 }
 
 /**
@@ -715,8 +788,16 @@ function entryView(entry: ChangeEntry): EntryView {
     ...entry.decidedOn === undefined ? {} : { decidedOn: entry.decidedOn.label },
     ...entry.lastFailure === undefined ? {} : { lastFailure: entry.lastFailure },
     ...entry.leftOut === undefined ? {} : { leftOut: entry.leftOut },
-    undoable: entry.state === 'applied' && (entry.kind === 'plugin-off' || entry.kind === 'plugin-on' || isAgentAction(entry) || ((entry.kind === 'plugin-edit' || entry.kind === 'plugin-install') && !isPluginRequest(entry))),
+    undoable: entry.state === 'applied' && (entry.kind === 'plugin-off' || entry.kind === 'plugin-on' || isUndoableAgentAction(entry) || ((entry.kind === 'plugin-edit' || entry.kind === 'plugin-install') && !isPluginRequest(entry))),
   }
+}
+
+/**
+ * @param entry - a log entry.
+ * @returns whether it is an agent's action that `undoAgentAction` can restore: one that holds the profile versions on both sides of it.
+ */
+function isUndoableAgentAction(entry: ChangeEntry): boolean {
+  return isAgentAction(entry) && entry.historyVersion !== undefined && entry.historyBefore !== undefined
 }
 
 /**
@@ -780,15 +861,7 @@ interface HomeWords {
  * @returns the home as the Host names it and, when that differs, its real path.
  */
 function homeWords(home: string, logger: RouteDependencies['logger']): HomeWords {
-  let real: string | undefined
-  try {
-    real = realpathSync(home)
-  } catch (_unresolved) {
-    // A home that does not resolve has only the spelling the Host names, which every failure under it carries.
-    real = undefined
-  }
-  // The longer spelling first, so one that contains the other is replaced whole.
-  return { homes: real === undefined || real === home ? [home] : [home, real].sort((a, b) => b.length - a.length), logger }
+  return { homes: homeSpellings(home), logger }
 }
 
 /**
@@ -816,7 +889,7 @@ function withoutHome(value: unknown, homes: readonly string[]): unknown {
   if (typeof value !== 'object' || value === null) return value
   return Object.fromEntries(Object.entries(value).map(([key, field]) => [
     key,
-    FAILURE_FIELDS.has(key) && typeof field === 'string' ? homes.reduce((text, home) => text.replaceAll(home, HOME_IN_ANSWERS), field) : withoutHome(field, homes),
+    FAILURE_FIELDS.has(key) && typeof field === 'string' ? withHomePlaceholder(field, homes) : withoutHome(field, homes),
   ]))
 }
 
@@ -1075,7 +1148,7 @@ function doneView(done: WorkDone): DoneView {
 }
 
 /**
- * Run one of Create a plugin's actions for a request at the computer.
+ * Run one of Create a plugin's actions for a request the route admitted (the computer, or a device with its grant).
  * @param action - the route.
  * @param body - the request's body.
  * @param ctx - the profile.
@@ -1099,17 +1172,18 @@ async function createActionOf(action: 'create' | 'request' | 'reveal', body: Rea
 }
 
 /**
- * Run one action for a request at the computer.
+ * Run one action for a request the route admitted (the computer, or a device with the grant its control needs).
  * @param action - the route.
  * @param body - the request's body.
  * @param ctx - the profile.
  * @param presence - the studio proof.
  * @param dependencies - the Host's reload and the installation's bundles.
+ * @param spend - uses up the Face ID grant; Apply and Done call it once no second confirmation is asked, the other actions have it used up already.
  * @returns what the person reads.
  * @throws {RouteRefusal} for a body the action does not take, a change to Delorun itself, an unconfirmed risk or agent's
  *   plugin request, or safe mode without the installation's bundles; {@link ChangesError} for a refusal of Changes.
  */
-async function act(action: ChangesAction, body: Readonly<Record<string, unknown>>, ctx: ChangesContext, presence: AtComputer, dependencies: RouteDependencies): Promise<ActionView | InstallView | DiscardView | StartedView | DoneView | CreatedView | RequestedView | RevealedView | { readonly lines: readonly string[], readonly skipped: readonly string[] | undefined }> {
+async function act(action: ChangesAction, body: Readonly<Record<string, unknown>>, ctx: ChangesContext, presence: AtComputer, dependencies: RouteDependencies, spend: () => void): Promise<ActionView | InstallView | DiscardView | StartedView | DoneView | CreatedView | RequestedView | RevealedView | { readonly lines: readonly string[], readonly skipped: readonly string[] | undefined }> {
   const options = { reload: dependencies.reload }
   switch (action) {
     case 'apply': {
@@ -1120,9 +1194,11 @@ async function act(action: ChangesAction, body: Readonly<Record<string, unknown>
       const shown = await showChange(ctx, id)
       if (shown.kind === 'logged' && isPluginRequest(shown.entry)) {
         requireRequestConfirmation(shown.entry, confirmed)
+        spend()
         return installView(await applyInstallChange(ctx, id, presence, { reload: dependencies.reload, run: dependencies.pluginOperation(ctx) }))
       }
       if (shown.kind === 'pending') requireRiskConfirmation(shown.change.risk, confirmed)
+      spend()
       return actionView(await applyChange(ctx, id, presence, options))
     }
     case 'discard':
@@ -1154,6 +1230,7 @@ async function act(action: ChangesAction, body: Readonly<Record<string, unknown>
       const review = await reviewWork(ctx, plugin)
       if (review.folder !== version) throw new RouteRefusal(409, CHANGED_SINCE_REVIEW, `The folder of ${plugin} changed since you were shown it; look at it again.`)
       if (review.change !== undefined) requireRiskConfirmation(review.change.risk, confirmed)
+      spend()
       return doneView(await finishWork(ctx, plugin, presence, { ...options, approve: version }))
     }
     case 'create':
@@ -1186,6 +1263,8 @@ async function act(action: ChangesAction, body: Readonly<Record<string, unknown>
       // The safe-mode overlay file the last start left is read only by a start in safe mode, which rewrites or removes it.
       return { lines: report.lines, skipped: [] }
     }
+    default:
+      return assertNever(action)
   }
 }
 
@@ -1295,11 +1374,20 @@ const ACTION_CONTROLS: Readonly<Record<ChangesAction, ChangesControl>> = {
  * succeeds. The Restart route builds its handler with it, so it has Apply's fence and level.
  * @param control - the control the route is.
  * @param dependencies - what the routes reach.
- * @param run - the action, given the body, the profile and the proof.
+ * @param run - the action, given the body, the profile, the proof and the function that uses up the Face ID grant that admitted the request.
+ * @param options - `confirms` for an action that may answer a second confirmation: its grant is then used up by `run`'s call of `spend` once the confirmation is given, not when the request starts, so a refused confirmation leaves the grant for the confirmed retry; any other answer uses the grant up.
  * @returns the handler.
  */
-export function decidingRoute(control: ChangesControl, dependencies: RouteDependencies, run: (body: Readonly<Record<string, unknown>>, ctx: ChangesContext, presence: AtComputer) => Promise<object>): RouteHandler {
-  return postRoute(dependencies, (request, admission) => gate(request, admission, control, dependencies.devices), run)
+export function decidingRoute(control: ChangesControl, dependencies: RouteDependencies, run: (body: Readonly<Record<string, unknown>>, ctx: ChangesContext, presence: AtComputer, spend: () => void) => Promise<object>, options: { readonly confirms?: boolean } = {}): RouteHandler {
+  return postRoute(dependencies, (request, admission) => gate(request, admission, control, dependencies.devices, options.confirms === true), run, options.confirms === true)
+}
+
+/**
+ * @param error - what a route threw.
+ * @returns whether it is the `409` that asks the person for a second confirmation.
+ */
+function isConfirmationRefusal(error: unknown): boolean {
+  return error instanceof RouteRefusal && error.status === 409 && (error.code === CONFIRM_RISK || error.code === CONFIRM_PROTECTION)
 }
 
 /**
@@ -1315,8 +1403,8 @@ function openRoute(dependencies: RouteDependencies, run: (body: Readonly<Record<
     const requester = await requesterOf(admission, dependencies.devices)
     if (requester.kind === 'device' ? isCrossSiteDevice(request) : isCrossSite(request)) throw new RouteRefusal(403, 'CROSS_SITE', 'Another site cannot change what your harness runs.')
     if (requester.kind === 'other') throw new RouteRefusal(403, LOOPBACK_REQUIRED, LOOPBACK_REQUIRED_SENTENCE)
-    return { presence: undefined, renew: () => {} }
-  }, (body, ctx) => run(body, ctx))
+    return { presence: undefined, renew: () => {}, ...NO_GRANT }
+  }, (body, ctx) => run(body, ctx), false)
 }
 
 /**
@@ -1326,18 +1414,27 @@ function openRoute(dependencies: RouteDependencies, run: (body: Readonly<Record<
  * @param run - the action.
  * @returns the handler.
  */
-function postRoute<P>(dependencies: RouteDependencies, decide: (request: IncomingMessage, admission: { readonly arrival: StudioArrival, readonly peer: object }) => Promise<{ readonly presence: P, readonly renew: () => void }>, run: (body: Readonly<Record<string, unknown>>, ctx: ChangesContext, presence: P) => Promise<object>): RouteHandler {
+function postRoute<P>(dependencies: RouteDependencies, decide: (request: IncomingMessage, admission: { readonly arrival: StudioArrival, readonly peer: object }) => Promise<Decided<P>>, run: (body: Readonly<Record<string, unknown>>, ctx: ChangesContext, presence: P, spend: () => void) => Promise<object>, confirms: boolean): RouteHandler {
   return async (request, response) => {
     const admission = admitted(request, response, dependencies.connection, dependencies.loopbackPort)
     if (admission === undefined) return
     let home: HomeWords | undefined
     try {
       if (request.method !== 'POST') throw new RouteRefusal(405, 'METHOD_NOT_ALLOWED', 'Changes are made with a POST.')
-      const { presence, renew } = await decide(request, admission)
+      const { presence, renew, spend, settle } = await decide(request, admission)
       const ctx = profileOf(dependencies)
       home = homeWords(ctx.home, dependencies.logger)
       const body = await readBody(request)
-      const answer = await run(body, ctx, presence)
+      if (!confirms) spend()
+      let answer: object
+      try {
+        answer = await run(body, ctx, presence, spend)
+      } catch (error) {
+        // A second-confirmation answer leaves the grant for the confirmed retry; any other end has used it.
+        if (!isConfirmationRefusal(error)) settle()
+        throw error
+      }
+      settle()
       renew()
       sendJson(response, 200, withoutHome(answer, home.homes), admission.setCookie)
     } catch (error) {
@@ -1353,7 +1450,7 @@ function postRoute<P>(dependencies: RouteDependencies, decide: (request: Incomin
  * @returns the handler.
  */
 function actionRoute(action: ChangesAction, dependencies: RouteDependencies): RouteHandler {
-  return decidingRoute(ACTION_CONTROLS[action], dependencies, (body, ctx, presence) => act(action, body, ctx, presence, dependencies))
+  return decidingRoute(ACTION_CONTROLS[action], dependencies, (body, ctx, presence, spend) => act(action, body, ctx, presence, dependencies, spend), { confirms: action === 'apply' || action === 'done' })
 }
 
 /**
@@ -1382,11 +1479,12 @@ const HARNESS_CONTROLS: Readonly<Record<HarnessAction, ChangesControl>> = {
  * @param harness - the running runtime's harness.
  * @param presence - the proof.
  * @param dependencies - the effect of a decided change, and the log.
+ * @param spend - uses up the Face ID grant; Apply calls it once no second confirmation is asked, the other actions have it used up already.
  * @returns what the person reads.
  * @throws {RouteRefusal} for a body the action does not take or an unconfirmed risk; {@link ChangesError} for a
  *   refusal of Changes.
  */
-async function harnessAct(action: HarnessAction, body: Readonly<Record<string, unknown>>, harness: HarnessContext, presence: AtComputer, dependencies: RouteDependencies): Promise<HarnessActionView | HarnessDiscardView | HarnessCopyView> {
+async function harnessAct(action: HarnessAction, body: Readonly<Record<string, unknown>>, harness: HarnessContext, presence: AtComputer, dependencies: RouteDependencies, spend: () => void): Promise<HarnessActionView | HarnessDiscardView | HarnessCopyView> {
   switch (action) {
     case 'apply': {
       onlyFields(body, ['id', 'to', 'confirmedRisk'])
@@ -1395,6 +1493,7 @@ async function harnessAct(action: HarnessAction, body: Readonly<Record<string, u
       const confirmed = confirmedRiskOf(body.confirmedRisk)
       const review = await showHarnessChange(harness, id)
       if (review !== undefined) requireRiskConfirmation(review.risk, confirmed)
+      spend()
       const entry = await applyHarnessChange(harness, id, presence, { reviewedTo: body.to as ContentVersion })
       return { kind: 'harness', entry: harnessEntryView(entry, harness.runtime)!, effect: await dependencies.harnessEffect(entry) }
     }
@@ -1412,8 +1511,10 @@ async function harnessAct(action: HarnessAction, body: Readonly<Record<string, u
     case 'copy': {
       onlyFields(body, [])
       const copy = await createHarnessCopy(harness, presence)
-      return { kind: 'copy', created: copy.created, runtime: harness.runtime, place: homeWords(harness.home, dependencies.logger).homes.reduce((text, path) => text.replaceAll(path, HOME_IN_ANSWERS), copy.directory) }
+      return { kind: 'copy', created: copy.created, runtime: harness.runtime, place: withHomePlaceholder(copy.directory, homeSpellings(harness.home)) }
     }
+    default:
+      return assertNever(action)
   }
 }
 
@@ -1424,7 +1525,7 @@ async function harnessAct(action: HarnessAction, body: Readonly<Record<string, u
  * @returns the handler.
  */
 function harnessRoute(action: HarnessAction, dependencies: RouteDependencies): RouteHandler {
-  return decidingRoute(HARNESS_CONTROLS[action], dependencies, (body, _ctx, presence) => harnessAct(action, body, harnessOf(dependencies), presence, dependencies))
+  return decidingRoute(HARNESS_CONTROLS[action], dependencies, (body, _ctx, presence, spend) => harnessAct(action, body, harnessOf(dependencies), presence, dependencies, spend), { confirms: action === 'apply' })
 }
 
 /**
@@ -1455,7 +1556,7 @@ async function confirmProtectionOff(ctx: ChangesContext, harness: HarnessContext
  * @returns the handler.
  */
 function protectionRoute(level: 'on' | 'off', dependencies: RouteDependencies): RouteHandler {
-  return decidingRoute(level === 'off' ? 'protection-off' : 'protection-on', dependencies, async (body, ctx, presence): Promise<ProtectionChangedView> => {
+  return decidingRoute(level === 'off' ? 'protection-off' : 'protection-on', dependencies, async (body, ctx, presence, spend): Promise<ProtectionChangedView> => {
     if (level === 'on') {
       onlyFields(body, [])
       const loaded = await unreviewedSinceOff(ctx)
@@ -1465,9 +1566,10 @@ function protectionRoute(level: 'on' | 'off', dependencies: RouteDependencies): 
     onlyFields(body, ['confirmed'])
     if (body.confirmed !== undefined && typeof body.confirmed !== 'boolean') throw new RouteRefusal(400, 'BAD_REQUEST', 'confirmed is true or false.')
     if (body.confirmed !== true) throw await confirmProtectionOff(ctx, dependencies.harness())
+    spend()
     await changeProtection(ctx, 'off', presence)
     return { protection: 'off', unreviewedSinceOff: 0 }
-  })
+  }, { confirms: level === 'off' })
 }
 
 /**
@@ -1516,7 +1618,8 @@ function setupRoute(kind: keyof typeof SETUP_PATHS, dependencies: RouteDependenc
     let home: HomeWords | undefined
     try {
       if (request.method !== 'POST') throw new RouteRefusal(405, 'METHOD_NOT_ALLOWED', 'A setup is moved with a POST.')
-      const { presence } = await gate(request, admission, 'plugin-other', dependencies.devices)
+      const { presence, spend } = await gate(request, admission, 'plugin-other', dependencies.devices)
+      spend()
       const ctx = profileOf(dependencies)
       home = homeWords(ctx.home, dependencies.logger)
       const body = await readBody(request, kind === 'inspect' ? MAX_SETUP_BODY_BYTES : MAX_BODY_BYTES)
@@ -1596,7 +1699,7 @@ export interface ChangesGate {
    * @param run - the action, given the body, the profile and the proof; a {@link RouteRefusal} it throws answers with its status and code.
    * @returns the handler.
    */
-  post(control: ChangesControl, run: (body: Readonly<Record<string, unknown>>, ctx: ChangesContext, presence: AtComputer) => Promise<object>): RouteHandler
+  post(control: ChangesControl, run: (body: Readonly<Record<string, unknown>>, ctx: ChangesContext, presence: AtComputer, spend: () => void) => Promise<object>): RouteHandler
   /**
    * Build a `POST` route for a control at level `open` (`update-check`): the site fence, then the computer or any paired device, unlocked or not.
    * @param run - the action, given the body and the profile; it receives no proof of presence.

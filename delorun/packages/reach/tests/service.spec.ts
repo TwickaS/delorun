@@ -8,6 +8,7 @@
  * Each test's comment names the check whose removal makes that test fail.
  */
 import { createServer, type Server } from 'node:net'
+
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { ReachListener } from '@deepseek-ai/dsh-client-connection'
@@ -17,6 +18,13 @@ import { TailscalePrivateProvider } from '../src/provider.ts'
 import { chooseListenerPort, isPortFree } from '../src/front.ts'
 import type { TailscaleRunner } from '../src/tailscale.ts'
 import { fakeTailscale, ownRule, type FakeTailscale } from './fake-tailscale.ts'
+
+/** Every server `node:net` created, so a spec can raise an error on the fixed port's server. */
+const createdServers = vi.hoisted((): unknown[] => [])
+vi.mock('node:net', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:net')>()
+  return { ...actual, createServer: (...args: Parameters<typeof actual.createServer>) => { const server = actual.createServer(...args); createdServers.push(server); return server } }
+})
 
 const HOST = 'home.example.ts.net'
 const ADDRESS = `https://${HOST}`
@@ -43,7 +51,7 @@ interface World {
 
 /** The routes the fake web server holds. */
 /** What the faked `homeAuth.owner()` answers: undefined for an unclaimed home. */
-const OWNER: { current: object | undefined } = { current: { claimedAt: 1 } }
+const OWNER: { current: object | undefined; failure: Error | undefined } = { current: { claimedAt: 1 }, failure: undefined }
 const routes = new Map<string, (request: object, response: object) => void>()
 
 /** Servers a test holds a port with. */
@@ -54,7 +62,7 @@ afterEach(async () => {
   await Promise.all(held.splice(0).map(server => new Promise<void>((resolve) => { server.close(() => { resolve() }) })))
 })
 
-function world(options: { readonly open?: () => Promise<Partial<ReachListener>>; readonly answers?: FakeTailscale['answers'] } = {}): World {
+function world(options: { readonly open?: () => Promise<Partial<ReachListener>>; readonly answers?: FakeTailscale['answers']; readonly serveRefuses?: Error } = {}): World {
   const ctx = new Context()
   const events: string[] = []
   const states: ReachStateChange[] = []
@@ -67,13 +75,14 @@ function world(options: { readonly open?: () => Promise<Partial<ReachListener>>;
     },
   } as never)
   ctx.provide('homeAuth', {
-    owner: () => Promise.resolve(OWNER.current),
+    owner: () => OWNER.failure === undefined ? Promise.resolve(OWNER.current) : Promise.reject(OWNER.failure),
     arrivalOf: (request: { readonly headers: { readonly host?: string } }) => ({
       listener: request.headers.host === HOST ? 'reach-tailscale-private' : request.headers.host === 'rebind.example' ? undefined : 'loopback',
       host: request.headers.host,
       source: '127.0.0.1',
     }),
     serve: (served: { readonly listener: string; readonly factor: string; readonly elevationMinutes?: number; readonly computerUser?: string }) => {
+      if (options.serveRefuses !== undefined) throw options.serveRefuses
       events.push(`serve ${served.listener} ${served.factor} user=${String(served.computerUser)}${served.elevationMinutes === 20 ? '' : ` minutes=${String(served.elevationMinutes)}`}`)
       return () => { events.push('unserve') }
     },
@@ -397,6 +406,64 @@ describe('the reach service', () => {
     for (const refused of [await answer('127.0.0.1:3080', 'GET', null), await answer('home.example.ts.net', 'GET', null)]) expect(JSON.stringify(refused.body)).not.toContain('example.ts.net')
     await fiber.dispose()
     expect(routes.size).toBe(0)
+  })
+
+  it('leaves an option whose listener home auth refuses failed instead of starting, holding nothing', async () => {
+    const w = world({ serveRefuses: new Error('an unlock lasts 20 minutes, more than the 1-minute cap on one unlock') })
+    const port = await chooseListenerPort(LISTENER_PORT_RANGE)
+    const fiber = await mount(w, on(port))
+    expect(w.ctx.reach.status()).toEqual([expect.objectContaining({ option: 'tailscale-private', state: 'failed', detail: expect.stringContaining('1-minute cap') })])
+    expect(w.states.map(change => change.state)).toEqual(['starting', 'failed'])
+    expect(w.events).not.toContain('open')
+    expect(writes(w)).toEqual([])
+    await expect(isPortFree(port)).resolves.toBe(true)
+    await fiber.dispose()
+  })
+
+  it('logs a fixed port server error after it bound instead of raising it', async () => {
+    const w = world()
+    const port = await chooseListenerPort(LISTENER_PORT_RANGE)
+    createdServers.length = 0
+    const fiber = await mount(w, on(port))
+    const front = (createdServers as Server[]).find(server => server.listening && (server.address() as { port: number }).port === port)
+    expect(front).toBeDefined()
+    expect(() => front?.emit('error', new Error('accept failed'))).not.toThrow()
+    expect(w.logs).toContainEqual(expect.stringContaining('fixed port server failed: accept failed'))
+    await fiber.dispose()
+  })
+
+  it('answers the reach status with 500 when its handler fails, and logs why', async () => {
+    const w = world()
+    const fiber = await mount(w, on(await chooseListenerPort(LISTENER_PORT_RANGE)))
+    OWNER.failure = new Error('owner.json is readable by others')
+    try {
+      const handler = routes.get('/delorun/reach/status')
+      const reply = await new Promise<{ status: number; body: string }>((resolve) => {
+        const answer = { status: 0, body: '' }
+        handler?.({ method: 'GET', headers: { host: '127.0.0.1:3080', cookie: 'studio' } }, {
+          setHeader: () => {},
+          headersSent: false,
+          set statusCode(value: number) { answer.status = value },
+          end: (text: string) => { answer.body = text; resolve(answer) },
+        })
+      })
+      expect(reply.status).toBe(500)
+      expect(JSON.parse(reply.body)).toMatchObject({ error: 'STATUS_UNAVAILABLE' })
+      expect(w.logs).toContainEqual(expect.stringContaining('owner.json is readable by others'))
+    } finally {
+      OWNER.failure = undefined
+    }
+    await fiber.dispose()
+  })
+
+  it('does not count a serve rule as removed when tailscale timed out answering', async () => {
+    const w = world()
+    const port = await chooseListenerPort(LISTENER_PORT_RANGE)
+    const fiber = await mount(w, on(port))
+    w.tailscale.answers['serve status'] = { code: null, stdout: '', stderr: 'tailscale did not finish within 15 seconds', failure: 'timeout' }
+    await fiber.dispose()
+    // Pins the error mapping: a hung tailscaled is not a missing binary, so the rule may still stand and the stop says so.
+    expect(w.logs.some(line => line.startsWith('error reach: tailscale-private stopped, but') && line.includes('did not finish within 15 seconds'))).toBe(true)
   })
 
   it('uses the system tailscale by default', () => {

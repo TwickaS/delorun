@@ -70,6 +70,15 @@ describe('recordPluginRequest', () => {
     expect([install, update, remove, folderSpec].every(isPluginRequest)).toBe(true)
   })
 
+  it('words a request the person made as theirs and an agent\'s as the agent\'s', async () => {
+    const fx = fixture()
+    const own = await recordPluginRequest(context(fx), { action: 'install', spec: 'new-plugin@2.0.0', by: 'person' })
+    expect(own.summary).toBe('You asked to install new-plugin@2.0.0')
+    expect((await recordPluginRequest(context(fx), { action: 'install', spec: 'left-pad@2.0.0', by: 'person' })).summary).toBe('You asked to move left-pad to left-pad@2.0.0')
+    expect((await recordPluginRequest(context(fx), { action: 'remove', spec: 'left-pad', by: 'person' })).summary).toBe('You asked to remove left-pad')
+    expect((await recordPluginRequest(context(fx), { action: 'install', spec: 'other@1.0.0', by: 'agent' })).summary).toBe('The agent asks to install other@1.0.0')
+  })
+
   it('keeps one entry for a request that is still waiting, and gives a decided one\'s repeat a new id', async () => {
     const fx = fixture()
     const first = await recordPluginRequest(context(fx), { action: 'install', spec: 'new-plugin' })

@@ -9,6 +9,7 @@
  *
  * @module @delorun/plugin-changes/restart-route
  */
+import { assertNever } from '@deepseek-ai/dsh-util-values'
 import { harnessDrift, type ChangesRestartHost, type HarnessContext } from '@delorun/changes'
 import { decidingRoute, flag, onlyFields, RouteRefusal, type ChangesRoute, type RouteDependencies } from './routes.ts'
 import { RESTART_IN_PROGRESS, RESTART_PATHS, RESTART_UNAVAILABLE, UPDATE_IN_PROGRESS, type RestartBegunView, type RestartCancelView, type RestartStateView } from './wire.ts'
@@ -105,5 +106,7 @@ export async function restartStateOf(restart: ChangesRestartHost | undefined, ha
       if (!drift.unknown && drift.restart.length === 0) return undefined
       return { kind: 'needed', changes: Math.max(drift.restart.length, 1), runningChats: restart.runningChats(), available: true }
     }
+    default:
+      return assertNever(view)
   }
 }

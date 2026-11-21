@@ -7,8 +7,8 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { harnessCopyDirectory, readHarnessLog, type ChangesRestartHost, type HarnessContext, type RunningComposition } from '@delorun/changes'
-import { describe, expect, it } from 'vitest'
-import { harnessEffectOf, LiveAssets, type LiveRouteServer } from '../src/live-apply.ts'
+import { describe, expect, it, vi } from 'vitest'
+import { harnessEffectOf, LiveAssets, LiveRefreshError, type LiveRouteServer } from '../src/live-apply.ts'
 import { HARNESS_PATHS, SHOW_PATH } from '../src/wire.ts'
 import { get, json, post, routeHome, RUNTIME, serveRoutes } from './routes-fixture.ts'
 
@@ -16,6 +16,8 @@ import { get, json, post, routeHome, RUNTIME, serveRoutes } from './routes-fixtu
 const ASSET = 'app/node_modules/@deepseek-ai/dsh-web-frontend/dist/assets/index-1a2b.js'
 /** Its URL path. */
 const ASSET_PATH = '/assets/index-1a2b.js'
+/** A second built studio asset, for specs that change two live files. */
+const SECOND_ASSET = 'app/node_modules/@deepseek-ai/dsh-web-frontend/dist/assets/other-3c4d.js'
 /** A server file of the fixture runtime, which is never live. */
 const SERVER_FILE = 'app/node_modules/delorun/lib/start.js'
 
@@ -37,9 +39,9 @@ class FakeWebServer implements LiveRouteServer {
  * @param home - the Delorun home.
  * @returns the harness.
  */
-function assetHarness(home: string): HarnessContext {
+function assetHarness(home: string, extra: Readonly<Record<string, string>> = {}): HarnessContext {
   const directory = join(home, 'runtimes', RUNTIME)
-  const files = { 'app/package.json': '{"name":"closure"}\n', [SERVER_FILE]: 'export const start = 1\n', [ASSET]: 'console.log("signed")\n' }
+  const files = { 'app/package.json': '{"name":"closure"}\n', [SERVER_FILE]: 'export const start = 1\n', [ASSET]: 'console.log("signed")\n', ...extra }
   for (const [path, text] of Object.entries(files)) {
     mkdirSync(dirname(join(directory, path)), { recursive: true })
     writeFileSync(join(directory, path), text)
@@ -102,6 +104,44 @@ async function liveStudio(running?: RunningComposition) {
   }
   return { ctx, harness, web, live, restart, server, warnings, edit, fetchAsset, breakLiveReads }
 }
+
+describe('a live refresh that fails', () => {
+  it('names each file it could not serve, and serves none of the others', async () => {
+    const { ctx } = routeHome()
+    const harness = assetHarness(ctx.home, { [SECOND_ASSET]: 'console.log("other")\n' })
+    const web = new FakeWebServer()
+    const live = new LiveAssets(web, fence)
+    const server = await serveRoutes(ctx, { harness: () => harness })
+    expect(json(await post(server.port, HARNESS_PATHS.copy, {}))).toMatchObject({ kind: 'copy', created: true })
+    for (const file of [ASSET, SECOND_ASSET]) writeFileSync(join(harnessCopyDirectory(ctx.home, RUNTIME), file), `console.log("${file}")\n`)
+    const changes = ((json(await get(server.port, `${SHOW_PATH}?pending`)).harness) as { id: string, to: string }[])
+    for (const change of changes) await post(server.port, HARNESS_PATHS.apply, { id: change.id, to: change.to })
+    // The signed installation can be read once: the first live file fails and the second would have been served.
+    let reads = 0
+    const flaky: HarnessContext = { ...harness, signed: () => (reads++ === 0 ? Promise.reject(new Error('the first read fails')) : harness.signed()) }
+    const failure = await live.refresh(flaky, { kind: 'known', files: {} }).catch((error: unknown) => error)
+    expect(failure).toBeInstanceOf(LiveRefreshError)
+    expect([...(failure as LiveRefreshError).failures.keys()]).toHaveLength(1)
+    expect(web.routes.size).toBe(0)
+  })
+
+  it('leaves a change applied for the next start when the failure is about another file', async () => {
+    const warnings: string[] = []
+    const { ctx } = routeHome()
+    const harness = assetHarness(ctx.home)
+    const live = new LiveAssets(new FakeWebServer(), fence)
+    vi.spyOn(live, 'refresh').mockRejectedValue(new LiveRefreshError(new Map([[SECOND_ASSET, new Error('the signed file does not match its digest')]])))
+    const effect = harnessEffectOf({
+      restart: () => bootedSigned(),
+      harness: () => harness,
+      live,
+      logger: { warn: (message) => { warnings.push(message) } },
+    })
+    expect(await effect({ id: 'c1', state: 'applied', subject: { file: ASSET } } as Parameters<typeof effect>[0])).toEqual({ kind: 'restart' })
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]).not.toContain('could not leave')
+  })
+})
 
 describe('live changes to the studio\'s assets', () => {
   it('a reloadable change takes effect without restart', async () => {

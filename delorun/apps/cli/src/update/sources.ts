@@ -21,6 +21,7 @@ import { DELORUN_HOME_ENTRIES, STATUS_FILES, type RuntimeVersion } from '@deloru
 import { EXEMPTION_FILES, type ExemptionRecord, type VersionAxis } from '@delorun/contract-plugin-versions'
 import type { SemanticVersion, Sha256Hex, UtcTimestamp } from '@delorun/contract-release-manifest'
 import type { InstallationStatus, ReportVersions } from '@delorun/contract-update-report'
+import { storedChannelRelease } from '@delorun/install'
 import { bundleListOf, dependenciesOf, readInventory } from '@delorun/profile-safety'
 import type { RuntimeStore, TrustedRootSource, VerifiedRuntime } from '@delorun/runtime-store'
 import { planDataCopy, predictBundleList, readDataFormats, readInstalledPlugin, type BundleFacts, type DataFacts, type InstallationStatusFacts, type InstalledPluginFact, type LayerFact, type ProfileFacts, type ReportSources, type TargetFacts } from '@delorun/update'
@@ -287,8 +288,10 @@ export function storeReportSources(options: StoreSourcesOptions): ReportSources 
       })
       return {
         versions,
-        // The store verified the signature now; the install verified freshness and recorded the log check's state.
-        release: { manifest: brandString<Sha256Hex>(createHash('sha256').update(manifestBytes).digest('hex')), signature: 'passed', freshness: 'passed', log: await recordedLogCheck(home, runtime.version) },
+        // The store verified the signature now and the install recorded the log check's state. The install stores a timestamp only when it
+        // verified one fresh, and an install the channel could not confirm (`--from`) stores none for its release, so freshness passed
+        // only where the stored timestamp names this release.
+        release: { manifest: brandString<Sha256Hex>(createHash('sha256').update(manifestBytes).digest('hex')), signature: 'passed', freshness: await storedChannelRelease(home, runtime.manifest.channel) === runtime.manifest.version ? 'passed' : 'unchecked', log: await recordedLogCheck(home, runtime.version) },
         bundles: { ...listed, skipped: loaded.skipped, layers: loaded.layers, runningLayers: runningBundles.layers },
         revocations: [],
         notChecked: ['revocations'],

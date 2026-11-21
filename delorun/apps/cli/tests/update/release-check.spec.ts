@@ -9,6 +9,7 @@ import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { RuntimeVersion } from '@delorun/contract-home-layout'
 import { ensureHomeTree } from '@delorun/home'
+import { writeChannelRecord } from '@delorun/install'
 import { StorePaths } from '@delorun/runtime-store'
 import { processReleaseCheck, releaseLogStartCheck } from '../../src/update/release-check.ts'
 import { fixtureRelease, logService, NOW, unreachableLog, VERSION, type Fixture } from '../../../install/tests/support.ts'
@@ -69,9 +70,23 @@ describe('the release-log start check before a home process starts', () => {
     await expect(releaseLogStartCheck(home, fixture.platform, VERSION as RuntimeVersion, fixture.rootMetadata, { transport: () => unreachableLog(), now: () => NOW * 1000 })).rejects.toMatchObject({ code: 'EISDIR' })
   })
 
+  it('asks the log the installation recorded instead of the root\'s', async () => {
+    const fixture = await fixtureRelease()
+    storeRelease(fixture, fixture.bundleBytes)
+    await writeChannelRecord(home, { logOrigin: 'http://127.0.0.1:9' })
+    const asked: string[] = []
+    const environment = processReleaseCheck((input) => {
+      asked.push(String(input instanceof Request ? input.url : input))
+      return Promise.reject(new Error('no network in this spec'))
+    })
+    await releaseLogStartCheck(home, fixture.platform, VERSION as RuntimeVersion, fixture.rootMetadata, { ...environment, now: () => NOW * 1000 })
+    expect(asked.length).toBeGreaterThan(0)
+    expect(asked.every(url => url.startsWith('http://127.0.0.1:9/'))).toBe(true)
+  })
+
   it('reads the log the root names through this process\'s fetch', () => {
     const environment = processReleaseCheck(() => Promise.reject(new Error('no network in this spec')))
-    expect(typeof environment.transport({ log: { origin: 'log.example.test', vkey: 'x' } } as Parameters<typeof environment.transport>[0]).latestCheckpoint).toBe('function')
+    expect(typeof environment.transport({ log: { origin: 'log.example.test', vkey: 'x' } } as Parameters<typeof environment.transport>[0], {}).latestCheckpoint).toBe('function')
     expect(environment.now()).toBeGreaterThan(0)
   })
 })

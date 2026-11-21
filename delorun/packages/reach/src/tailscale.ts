@@ -20,12 +20,26 @@ import { execFile } from 'node:child_process'
 import { REACH_LISTENER_BIND_HOST } from '@delorun/contract-admission'
 import { TAILSCALE_OPERATOR_COMMAND, type ReachErrorCode } from '@delorun/contract-reach-providers'
 
+/** Why a `tailscale` invocation gave no exit code although the binary exists: it ran too long, printed too much, or did not run. */
+export type TailscaleFailure = 'timeout' | 'output-too-large' | 'not-run'
+
 /** What one `tailscale` invocation answered. */
 export interface TailscaleResult {
-  /** The exit code; `null` when the process did not start, which a missing binary causes. */
+  /** The exit code; `null` when the process gave none: a missing binary, or the {@link TailscaleResult.failure} that says otherwise. */
   readonly code: number | null
   readonly stdout: string
+  /** The standard error, or for a {@link TailscaleResult.failure} the sentence that says what happened. */
   readonly stderr: string
+  /** Set when `code` is `null` for a reason other than a missing binary. */
+  readonly failure?: TailscaleFailure
+}
+
+/**
+ * @param result - what an invocation answered.
+ * @returns whether `tailscale` is not installed: the process did not start for lack of the binary.
+ */
+export function isMissing(result: TailscaleResult): boolean {
+  return result.code === null && result.failure === undefined
 }
 
 /** Runs `tailscale` with an argument list. */
@@ -50,17 +64,32 @@ export class ReachError extends Error {
   }
 }
 
+/** The most output one `tailscale` invocation may print: `tailscale status --json` lists every peer of the tailnet. */
+export const TAILSCALE_OUTPUT_LIMIT_BYTES = 32 * 1024 * 1024
+
 /**
  * The runner that starts the system's `tailscale` without a shell.
  * @param binary - the executable, `tailscale` on the person's path.
  * @param timeoutMs - the longest one invocation may take.
- * @returns the runner.
+ * @param outputLimitBytes - the most output one invocation may print before it is stopped and refused.
+ * @returns the runner. A process that did not start for lack of the binary answers `code: null` with no `failure`; a timeout, an output over the limit or any other error that gave no exit code answers `code: null` with its `failure`.
  */
-export function systemTailscale(binary = 'tailscale', timeoutMs = 15_000): TailscaleRunner {
+export function systemTailscale(binary = 'tailscale', timeoutMs = 15_000, outputLimitBytes = TAILSCALE_OUTPUT_LIMIT_BYTES): TailscaleRunner {
   return args => new Promise((resolve) => {
-    execFile(binary, [...args], { timeout: timeoutMs, shell: false, windowsHide: true }, (error, stdout, stderr) => {
-      const code = error === null ? 0 : typeof error.code === 'number' ? error.code : null
-      resolve({ code, stdout, stderr })
+    execFile(binary, [...args], { timeout: timeoutMs, maxBuffer: outputLimitBytes, shell: false, windowsHide: true }, (error, stdout, stderr) => {
+      if (error === null) {
+        resolve({ code: 0, stdout, stderr })
+      } else if (typeof error.code === 'number') {
+        resolve({ code: error.code, stdout, stderr })
+      } else if (error.code === 'ENOENT') {
+        resolve({ code: null, stdout, stderr })
+      } else if (error.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {
+        resolve({ code: null, stdout: '', stderr: `tailscale printed more than ${String(outputLimitBytes / 1024 / 1024)} MiB, which Delorun does not read`, failure: 'output-too-large' })
+      } else if (error.killed === true) {
+        resolve({ code: null, stdout, stderr: `tailscale did not finish within ${String(timeoutMs / 1000)} seconds`, failure: 'timeout' })
+      } else {
+        resolve({ code: null, stdout, stderr: `tailscale did not run: ${error.message}`, failure: 'not-run' })
+      }
     })
   })
 }
@@ -75,14 +104,16 @@ export interface TailscaleFacts {
  * Check that Tailscale is installed, runs, is logged in and has HTTPS certificates on for this machine.
  * @param run - the runner.
  * @returns this machine's `ts.net` name.
- * @throws {ReachError} `TAILSCALE_NOT_INSTALLED`, `TAILSCALE_NOT_LOGGED_IN` or `TAILSCALE_HTTPS_DISABLED`.
+ * @throws {ReachError} `TAILSCALE_NOT_INSTALLED` for a missing binary only, `TAILSCALE_NOT_LOGGED_IN` (also for an invocation that timed out, printed too much or did not run) or `TAILSCALE_HTTPS_DISABLED`.
  */
 export async function readTailscale(run: TailscaleRunner): Promise<TailscaleFacts> {
   const version = await run(['version'])
-  if (version.code === null) {
+  if (isMissing(version)) {
     throw new ReachError('TAILSCALE_NOT_INSTALLED', 'Tailscale is not installed on this computer. Install it from tailscale.com/download, sign in, and try again')
   }
+  if (version.failure !== undefined) throw new ReachError('TAILSCALE_NOT_LOGGED_IN', `tailscale version failed: ${firstLine(version.stderr)}`)
   const status = await run(['status', '--json'])
+  if (status.failure !== undefined) throw new ReachError('TAILSCALE_NOT_LOGGED_IN', `tailscale status failed: ${firstLine(status.stderr)}`)
   const parsed = parseStatus(status.stdout)
   if (status.code !== 0 || parsed === undefined || parsed.backendState !== 'Running' || parsed.dnsName === '') {
     throw new ReachError('TAILSCALE_NOT_LOGGED_IN', 'Tailscale is not running and signed in to a tailnet on this computer. Run tailscale up, sign in, and try again')
@@ -164,13 +195,13 @@ export interface ServeRules {
  * @param servePort - the port.
  * @param target - this home's serve target, {@link serveTarget}.
  * @returns the rules.
- * @throws {ReachError} `TAILSCALE_NOT_INSTALLED` when `tailscale` does not start, `TAILSCALE_SERVE_NOT_PERMITTED` when
+ * @throws {ReachError} `TAILSCALE_NOT_INSTALLED` when the binary is missing, `TAILSCALE_SERVE_NOT_PERMITTED` when
  *   the person's user may not read the serve configuration, and `TAILSCALE_NOT_LOGGED_IN` for any other failure or
  *   output that is not the configuration's JSON.
  */
 export async function readServeRules(run: TailscaleRunner, host: string, servePort: number, target: string): Promise<ServeRules> {
   const result = await run(['serve', 'status', '--json'])
-  if (result.code === null) {
+  if (isMissing(result)) {
     throw new ReachError('TAILSCALE_NOT_INSTALLED', 'Tailscale is not installed on this computer. Install it from tailscale.com/download, sign in, and try again')
   }
   if (result.code !== 0 && isPermissionRefusal(result.stderr)) {

@@ -62,7 +62,9 @@ export function watchChats(ctx: Context, gate: CountingChatGate): void {
   ctx.inject(['jobs'], (scope) => {
     scope.effect(() => scope.jobs.events.subscribe({ owners: 'all' }, (event) => {
       if (event.type === 'registered') {
-        const { id, owner } = event.job
+        const { id, owner, status } = event.job
+        // Only a job that runs counts, and a job counts once: a second registration of an id keeps its first count.
+        if (status !== 'running' || jobs.has(id)) return
         jobs.set(id, gate.track(() => {
           try {
             scope.jobs.kill(id, owner, STOP_REASON)
@@ -73,13 +75,19 @@ export function watchChats(ctx: Context, gate: CountingChatGate): void {
         return
       }
       if (event.type !== 'settled' && event.type !== 'removed') return
-      jobs.get(event.job.id)?.()
+      const end = jobs.get(event.job.id)
+      if (end === undefined) return
+      end()
       jobs.delete(event.job.id)
+      // The plugin packs' queue waits on this notice, as it does for an agent that goes idle.
+      ctx.get('delorunChatGate')?.chatEnded()
     }))
     // The registry settles its jobs when it goes; a job it never reported settled is not running either.
     scope.effect(() => () => {
+      const counted = jobs.size
       for (const end of jobs.values()) end()
       jobs.clear()
+      if (counted > 0) ctx.get('delorunChatGate')?.chatEnded()
     })
   })
   // The chats the studio's "Stop running chats and update" names and stops: the sessions of the running agents.

@@ -90,7 +90,7 @@ A report is built for one installation and one target release, after the target'
 | `schema` | `delorun.update-report/3` | The report format. |
 | `installation` | `cli-home` or `desktop-host` | The installation being updated. |
 | `from`, `to` | `{ "delorun", "dsh", "channel" }` | The running and target versions ([C17](c17-plugin-versions.md#the-two-versions)). |
-| `release` | `{ "manifest": sha256, "signature", "freshness", "log" }` | The target's manifest digest and each check's result. `signature` and `freshness` are `passed` or `failed`: the store verifies the signature when it builds the report, and the install verified freshness before the files landed. `log` is the state the install recorded in `trust/release-log.json` ([C18](c18-release-log.md)): `passed` for `verified`, `unchecked` when the online check did not complete or no state is recorded, `failed` for a verifiable failure. A report is made for `passed` and `unchecked`, and the report says when the log was not reached. |
+| `release` | `{ "manifest": sha256, "signature", "freshness", "log" }` | The target's manifest digest and each check's result. `signature` is `passed` or `failed`: the store verifies the signature when it builds the report. `freshness` is `passed` when the signed timestamp the install verified and stored names this release, `unchecked` when the release channel could not confirm the release is current and the person agreed at a terminal to install it anyway (`delorun update --from`), and `failed` for a verifiable failure; a reader that compares it with `passed` treats `unchecked` as not passed. `log` is the state the install recorded in `trust/release-log.json` ([C18](c18-release-log.md)): `passed` for `verified`, `unchecked` when the online check did not complete or no state is recorded, `failed` for a verifiable failure. A report is made for `passed` and `unchecked`, and the report says when the log was not reached. |
 | `generated` | timestamp | When the report was built. |
 | `installations` | list of `{ "id", "delorun", "dsh", "state", "target"? }` | Both installations' versions and update states. |
 | `items` | list of item | Everything that changes, sorted by kind, then subject. |
@@ -248,7 +248,7 @@ The report's `schema` names its major version; reason codes form a closed list i
 ### Requirements
 
 - R1. No update disables, removes or changes a plugin, bundle or row the report did not name; the health check enforces it and rolls back otherwise.
-- R2. Nothing applies before the person confirms the report, and a report exists only for a target that passed signature and freshness checks and whose log check did not fail; a log check that did not complete is shown as `unchecked`, and `--yes` does not confirm it.
+- R2. Nothing applies before the person confirms the report, and a report exists only for a target that passed the signature check and whose freshness and log checks did not fail; a freshness or log check that did not complete is shown as `unchecked`, `--yes` does not confirm it, and the studio asks for a tick for each.
 - R3. Unverified items are shown as such and never counted as safe.
 - R4. A failed health check rolls back automatically; the person can roll back at any later time; a rollback changes the profile and the runtime store, and chat data only by restoring a copy the person took, with the newer data set aside.
 - R5. Undo and restore run the install-time plugin checks over what they bring back and list the plugins, builds and exemptions that change before applying.

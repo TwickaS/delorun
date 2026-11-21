@@ -1,6 +1,8 @@
 /**
- * The studio's Create a plugin: the three actions behind its section, each a `POST` that `routes.ts` admits only for
- * the person at their computer before the body is read. A new plugin lives in a workspace, never in the protected Delorun
+ * The studio's Create a plugin: the three actions behind its section, each a `POST` that `routes.ts` decides before the
+ * body is read under the `plugin-other` control: the person at their computer may use it, and a paired device needs one
+ * Face ID or PIN grant for exactly that call. The answers name the plugin's folder by its absolute path, which the
+ * workspaces list withholds from a device. A new plugin lives in a workspace, never in the protected Delorun
  * home, so the person and the agent work on its files with the chat's normal approvals. `create` writes a new plugin's
  * files with the scaffold `delorun plugin new` uses, into `<workspace>/plugins/<name without its scope>` of a workspace
  * the registry knows (the first one by default) and nowhere else. `request` records the install from that folder as a
@@ -215,7 +217,7 @@ async function createdFolder(workspaces: readonly WorkspaceChoice[], body: { rea
  */
 export async function requestAction(ctx: ChangesContext, workspaces: readonly WorkspaceChoice[], body: { readonly workspace?: unknown, readonly name: unknown }, toView: (entry: ChangeEntry) => RequestedView['entry']): Promise<RequestedView> {
   const folder = await createdFolder(workspaces, body)
-  return { kind: 'requested', entry: toView(await recordPluginRequest(ctx, { action: 'install', spec: `link:${folder}` })) }
+  return { kind: 'requested', entry: toView(await recordPluginRequest(ctx, { action: 'install', spec: `link:${folder}`, by: 'person' })) }
 }
 
 /**

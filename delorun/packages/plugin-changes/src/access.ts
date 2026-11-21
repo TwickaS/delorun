@@ -44,26 +44,6 @@ export const CONTROL_LEVELS: Readonly<Record<ChangesControl, ControlLevel>> = {
   'stop': 'face',
 }
 
-/**
- * What every `face` control asks of a device: a grant for exactly the call, from Face ID or, on a device with no passkey, from its PIN, and nothing
- * while the home keeps no grant store. No unlock window, code or approval grace opens any of them (A483).
- */
-export const LEGACY_LEVELS: Readonly<Record<Exclude<ChangesControl, 'protection-on' | 'notice-seen' | 'update-check' | 'update-cancel' | 'update-dismiss' | 'update-continue'>, 'grant'>> = {
-  'plugin-undo': 'grant',
-  'plugin-discard': 'grant',
-  'harness-discard': 'grant',
-  'stop': 'grant',
-  'plugin-apply': 'grant',
-  'plugin-other': 'grant',
-  'harness-apply': 'grant',
-  'harness-undo': 'grant',
-  'protection-off': 'grant',
-  'make-copy': 'grant',
-  'restart': 'grant',
-  'update-begin': 'grant',
-  'update-rollback': 'grant',
-}
-
 /** What the home asks of a device for Face ID: whether the home keeps a grant store, and whether the device holds a passkey. */
 export interface FaceState {
   readonly enabled: boolean

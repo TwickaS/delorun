@@ -8,7 +8,7 @@ import { createHash, generateKeyPairSync, type KeyObject } from 'node:crypto'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { brandString } from '@deepseek-ai/dsh-brand'
-import type { RuntimeVersion } from '@delorun/contract-home-layout'
+import { DELORUN_HOME_ENTRIES, TRUST_FILES, type RuntimeVersion } from '@delorun/contract-home-layout'
 import {
   DESKTOP_PLATFORMS,
   RELEASE_REPOSITORY_URL,
@@ -262,6 +262,8 @@ export class FakeChannel implements UpdateReleaseChannel {
   async resolve(target: RuntimeVersion | undefined): Promise<ChannelRelease> {
     const version = target ?? this.next
     for (const text of progressLines({ step: 'resolved', channel: 'stable', version: brandString<SemanticVersion>(version) })) this.line(text)
+    // As the launcher's channel stores the timestamp it verified, which names the release it confirmed as current.
+    writeFileSync(join(this.home, DELORUN_HOME_ENTRIES.trust, TRUST_FILES.timestamp), JSON.stringify({ signed: { version: 1, channels: { stable: { release: version } } } }), { mode: 0o600 })
     return Promise.resolve({ version, root: this.root })
   }
 

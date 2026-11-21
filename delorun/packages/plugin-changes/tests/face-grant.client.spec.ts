@@ -7,7 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ChangesController } from '../src/client/controller.ts'
 import { PASS_GRANT_ID, type FaceGrant } from '../src/client/face-grant.ts'
-import { ACTION_PATHS, type ChangesControl, type ChangesStateView, type MayView } from '../src/wire.ts'
+import { ACTION_PATHS, PROTECTION_PATHS, type ChangesControl, type ChangesStateView, type MayView } from '../src/wire.ts'
 
 const posts: { path: string; body: unknown; grant: string | null }[] = []
 
@@ -80,6 +80,30 @@ describe('the Changes controller\'s Face ID step', () => {
     expect(await changes.discard('c1')).toEqual({ kind: 'done' })
     expect(grant).toHaveBeenCalledTimes(2)
     expect(posts.map(post => post.grant)).toEqual([PASS_GRANT_ID, 'g2'])
+  })
+  it('asks Face ID once for a call and its second confirmation, and again for a call it did not carry the grant to', async () => {
+    // Asking for the confirmed request again makes the person confirm with Face ID twice (A434).
+    let first = true
+    vi.stubGlobal('fetch', vi.fn(async (path: string, init?: RequestInit) => {
+      const headers = new Headers(init?.headers)
+      const body: unknown = JSON.parse(String(init?.body))
+      posts.push({ path, body, grant: headers.get('Delorun-Grant') })
+      if (first) {
+        first = false
+        return new Response(JSON.stringify({ error: 'CONFIRM_PROTECTION', code: 'CONFIRM_PROTECTION', message: 'm', willLoad: { plugins: [], harnessFiles: 0 } }), { status: 409 })
+      }
+      return new Response('{}', { status: 200 })
+    }))
+    const grant = vi.fn<FaceGrant>(async () => 'g1')
+    const changes = controller({ 'protection-off': { ok: false, needs: 'face' } }, () => grant)
+    expect(await changes.protectionOff(false)).toMatchObject({ kind: 'confirm-protection' })
+    expect(await changes.protectionOff(true)).toMatchObject({ kind: 'done' })
+    // The grant covers the call without its confirmation field, as the home hashes it.
+    expect(grant).toHaveBeenCalledExactlyOnceWith({ action: 'changes/protection-off', call: { method: 'POST', path: PROTECTION_PATHS.off, body: {} } })
+    expect(posts.map(post => post.grant)).toEqual(['g1', 'g1'])
+    // A grant is carried once: the next confirmed call asks again.
+    await changes.protectionOff(true)
+    expect(grant).toHaveBeenCalledTimes(2)
   })
   it('sends plain when the page has no Face ID service', async () => {
     // Without the bundle's row the home's own refusal is the answer; the page must not hang on a missing service.

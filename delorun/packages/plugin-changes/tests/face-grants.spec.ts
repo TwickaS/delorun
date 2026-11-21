@@ -5,7 +5,7 @@
  */
 import { authClassOf, GRANT_BODY_CAP_BYTES } from '@delorun/home-auth'
 import { describe, expect, it, vi } from 'vitest'
-import { CONTROL_LEVELS, LEGACY_LEVELS } from '../src/access.ts'
+import { CONTROL_LEVELS } from '../src/access.ts'
 import { ACTION_PATHS, HARNESS_PATHS, NOTICE_SEEN_PATH, PROTECTION_PATHS, SETUP_PATHS, STATE_PATH } from '../src/routes.ts'
 import { CREDENTIAL, DEVICE_HOST, grantWorld, fromDevice, json, post, routeHome, send, serveRoutes } from './routes-fixture.ts'
 
@@ -32,7 +32,7 @@ const FACE_ROUTES = [
 /** The face controls a live Face ID pass admits: every one but protection off, which always asks (F48). */
 const PASS_ROUTES = FACE_ROUTES.filter(route => route.control !== 'protection-off')
 
-/** The routes of the controls LEGACY_LEVELS holds to a grant: the set an unlocked phone could once open. */
+/** The routes of the controls CONTROL_LEVELS holds to a grant: the set an unlocked phone could once open. */
 const FORMER_FULL_ROUTES = [
   { control: 'plugin-apply', path: ACTION_PATHS.apply },
   { control: 'plugin-other', path: ACTION_PATHS.off },
@@ -43,10 +43,10 @@ const FORMER_FULL_ROUTES = [
 ] as const
 
 describe('Changes: face controls', () => {
-  // Adding a control to the `grant` set without a route here, or in the restart and update specs, leaves it without a denial case.
-  it('cover every control LEGACY_LEVELS holds to a grant here or in the restart and update specs', () => {
+  // Adding a `face` control without a route here, or in the restart and update specs, leaves it without a denial case.
+  it('cover every `face` control of CONTROL_LEVELS here or in the restart and update specs', () => {
     const covered: readonly string[] = [...FORMER_FULL_ROUTES, ...FACE_ROUTES].map(route => route.control)
-    const held = Object.entries(LEGACY_LEVELS).filter(([, level]) => level === 'grant').map(([control]) => control)
+    const held = Object.entries(CONTROL_LEVELS).filter(([, level]) => level === 'face').map(([control]) => control)
     expect(held.filter(control => !covered.includes(control)).sort()).toEqual(['restart', 'stop', 'update-begin', 'update-rollback'])
   })
 
@@ -72,7 +72,7 @@ describe('Changes: face controls', () => {
     }
   })
 
-  // Removing the `grant` rows of LEGACY_LEVELS, or the grant-store check in `mayUse`, lets a running unlock (a code or a PIN window) open the set an unlocked phone could once open, for a device with no passkey.
+  // Moving a control from `face` in CONTROL_LEVELS, or removing the grant-store check in `mayUse`, lets a running unlock (a code or a PIN window) open the set an unlocked phone could once open, for a device with no passkey.
   it('refuse every control that changes what runs to a device with no passkey and a running unlock, and open it to a PIN grant for the call', async () => {
     const { ctx } = routeHome()
     const world = grantWorld({ hasPasskey: false })
@@ -189,6 +189,99 @@ describe('Changes: face controls', () => {
     const server = await serveRoutes(ctx, { face: grantWorld().face })
     const state = json(await send(server.port, STATE_PATH, { host: DEVICE_HOST, headers: [CREDENTIAL, 'x-test-remote: 1', 'x-test-unlock: fresh'] }))
     expect(state).toMatchObject({ access: { may: { 'plugin-apply': { ok: false, needs: 'face' }, 'protection-on': { ok: true }, 'notice-seen': { ok: false, needs: 'computer' } } } })
+  })
+})
+
+describe('Changes: one Face ID for a call and its second confirmation (A434)', () => {
+  /** A device that holds a grant store, and the protection-off route, which always asks a second confirmation. */
+  async function setup() {
+    const { ctx } = routeHome()
+    const world = grantWorld()
+    const server = await serveRoutes(ctx, { face: world.face })
+    return { world, server, path: PROTECTION_PATHS.off }
+  }
+
+  // Spending the grant before the route's 409 makes the confirmed retry ask for Face ID again.
+  it('lets one grant carry the call through its 409 to the confirmed retry', async () => {
+    const { world, server, path } = await setup()
+    const grant = world.grantFor('protection-off', path, {})
+    const asked = await send(server.port, path, withGrant('none', {}, grant))
+    expect(asked.status).toBe(409)
+    expect(json(asked).code).toBe('CONFIRM_PROTECTION')
+    const confirmed = await send(server.port, path, withGrant('none', { confirmed: true }, grant))
+    expect(confirmed.status, confirmed.body).toBe(200)
+  })
+
+  // Removing the single use, or leaving a field of the body out of the hash, lets one grant do more than it was made for.
+  it('refuses the same grant after the call proceeded', async () => {
+    const { world, server, path } = await setup()
+    const grant = world.grantFor('protection-off', path, {})
+    expect((await send(server.port, path, withGrant('none', { confirmed: true }, grant))).status).toBe(200)
+    expect(json(await send(server.port, path, withGrant('none', { confirmed: true }, grant))).code).toBe('ELEVATION_REQUIRED')
+  })
+
+  it('refuses the same grant with a changed body, whatever the confirmation field says', async () => {
+    const { ctx } = routeHome()
+    const world = grantWorld()
+    const server = await serveRoutes(ctx, { face: world.face })
+    const path = ACTION_PATHS.apply
+    const grant = world.grantFor('plugin-apply', path, { id: 'a' })
+    for (const body of [{ id: 'b', confirmedRisk: true }, { id: 'b' }, { id: 'a', confirmedRisk: true, extra: 1 }]) {
+      expect(json(await send(server.port, path, withGrant('none', body, grant))).code, JSON.stringify(body)).toBe('ELEVATION_REQUIRED')
+    }
+    // Neither refusal used the grant up: the call it was made for, with or without the confirmation, is still admitted.
+    expect(WHERE_REFUSALS).not.toContain(json(await send(server.port, path, withGrant('none', { id: 'a', confirmedRisk: true }, grant))).code)
+  })
+
+  // Leaving the settle on a refusal that is not the 409 lets a failed call keep its grant.
+  it('uses the grant up on a refusal that is not a second confirmation', async () => {
+    const { world, server, path } = await setup()
+    const grant = world.grantFor('protection-off', path, {})
+    expect(json(await send(server.port, path, withGrant('none', { confirmed: 'yes' }, grant))).code).toBe('BAD_REQUEST')
+    expect(json(await send(server.port, path, withGrant('none', { confirmed: true }, grant))).code).toBe('ELEVATION_REQUIRED')
+  })
+
+  // Spending in two steps lets two confirmed requests that arrive together both use one grant.
+  it('admits only one of two confirmed requests that use one grant together', async () => {
+    const { world, server, path } = await setup()
+    const grant = world.grantFor('protection-off', path, {})
+    const replies = await Promise.all([send(server.port, path, withGrant('none', { confirmed: true }, grant)), send(server.port, path, withGrant('none', { confirmed: true }, grant))])
+    expect(replies.map(reply => reply.status).sort()).toEqual([200, 403])
+  })
+
+  it('refuses a grant kept after a 409 on another control or path', async () => {
+    const { world, server, path } = await setup()
+    const grant = world.grantFor('protection-off', path, {})
+    expect((await send(server.port, path, withGrant('none', {}, grant))).status).toBe(409)
+    expect(json(await send(server.port, ACTION_PATHS.apply, withGrant('none', { id: 'a', confirmedRisk: true }, grant))).code).toBe('ELEVATION_REQUIRED')
+    expect(json(await send(server.port, PROTECTION_PATHS.on, withGrant('none', {}, grant))).code).not.toBe('ELEVATION_REQUIRED')
+    expect((await send(server.port, path, withGrant('none', { confirmed: true }, grant))).status).toBe(200)
+  })
+
+  // Stripping the fields on every route gives a route whose `confirmed` means something else a looser binding.
+  it('binds the whole body on a route that asks no second confirmation', async () => {
+    const { ctx } = routeHome()
+    const world = grantWorld()
+    const server = await serveRoutes(ctx, { face: world.face })
+    const path = ACTION_PATHS.undo
+    const grant = world.grantFor('plugin-undo', path, { id: 'a' })
+    expect(json(await send(server.port, path, withGrant('none', { id: 'a', confirmedRisk: true }, grant))).code).toBe('ELEVATION_REQUIRED')
+    expect(WHERE_REFUSALS).not.toContain(json(await send(server.port, path, withGrant('none', { id: 'a' }, grant))).code)
+  })
+
+  it('refuses an expired grant', async () => {
+    const { world, server, path } = await setup()
+    const grant = world.grantFor('protection-off', path, {})
+    expect((await send(server.port, path, withGrant('none', {}, grant))).status).toBe(409)
+    world.clock.at += 60 * 60_000
+    expect(json(await send(server.port, path, withGrant('none', { confirmed: true }, grant))).code).toBe('ELEVATION_REQUIRED')
+  })
+
+  it('refuses the confirmation without any grant', async () => {
+    const { server, path } = await setup()
+    const reply = await send(server.port, path, withGrant('none', { confirmed: true }, undefined))
+    expect(reply.status).toBe(403)
+    expect(json(reply).code).toBe('ELEVATION_REQUIRED')
   })
 })
 
