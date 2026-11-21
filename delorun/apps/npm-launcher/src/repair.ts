@@ -31,7 +31,7 @@ import { parseRuntimeVersion, type ChannelRelease, type StorePaths, type Verifie
 import { readCopyRecord, readDataFormats, readHomeDataFormat, relateHomeData, restoreDataCopy, runtimesSetAsideName, writeHomeDataFormat } from '@delorun/update/home-data'
 import semver from 'semver'
 import type { LauncherOutput } from './launcher.ts'
-import { beginRepairRecord, REPAIR_RECORD_FILE, stamp, staleRepairText, type resolveRepairMarkGraceSeconds } from './repair-record.ts'
+import { beginRepairRecord, REPAIR_RECORD_FILE, stamp, staleRepairText, trustSetAsideName, type resolveRepairMarkGraceSeconds } from './repair-record.ts'
 import { LAUNCHER_EXIT, refusalFor, renderLauncherRefusal } from './refusals.ts'
 
 /** The flags `delorun repair` reads, beside `--profile`. */
@@ -394,7 +394,7 @@ async function repair(options: RepairOptions, log: Record<string, unknown>, undo
     await assertResetTrustAllowed(options)
     const answer = await options.confirm('This launcher trusts release keys that this home did not know. Continue only if you installed it with npx delorun@latest from npm yourself. Move the home\'s trust records aside and trust only this launcher\'s keys? [y/N]')
     assertAnswered(answer)
-    const aside = join(home, `trust.set-aside-${stampNow}`)
+    const aside = join(home, trustSetAsideName(stampNow))
     await marks.noteTrustSetAside(aside)
     await rename(trust, aside)
     await mkdir(trust, { mode: 0o700 })

@@ -214,12 +214,12 @@ function parsePax(records: Buffer, foreign: boolean): PaxRecords {
     } else if (foreign && key === 'mtime') {
       if (mtime) throw new Error('pax record "mtime" appears twice')
       // Seconds, with an optional fraction, as node-tar writes them; nothing is applied from it.
-      if (!/^\d{1,15}(?:\.\d{1,9})?$/u.test(value.toString('ascii'))) throw new Error('pax record "mtime" is not a number of seconds')
+      if (!/^\d{1,15}(?:\.\d{1,9})?$/u.test(value.toString('latin1'))) throw new Error('pax record "mtime" is not a number of seconds')
       mtime = true
     } else if (foreign && key === 'size') {
       if (size !== undefined) throw new Error('pax record "size" appears twice')
-      if (!/^\d{1,15}$/u.test(value.toString('ascii'))) throw new Error('pax record "size" is not a whole number')
-      size = Number.parseInt(value.toString('ascii'), 10)
+      if (!/^\d{1,15}$/u.test(value.toString('latin1'))) throw new Error('pax record "size" is not a whole number')
+      size = Number.parseInt(value.toString('latin1'), 10)
     } else {
       throw new Error(`pax record ${JSON.stringify(key)} is not allowed`)
     }

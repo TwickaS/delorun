@@ -211,6 +211,23 @@ describe('a tarball that is still refused', () => {
     await refused(bad([['path', long], ['size', '5'], ['size', '5']]), /pax record "size" appears twice/u)
   })
 
+  it('refuses a pax mtime or size whose bytes are not ASCII digits, even when their low seven bits are', async () => {
+    const long = `package/${'d'.repeat(120)}/a.txt`
+    // 0xb1 0xb2 are the digits 1 and 2 with the high bit set; an ASCII decode would drop the bit.
+    const record = (key: string, value: Buffer): Buffer => {
+      const body = Buffer.concat([Buffer.from(` ${key}=`), value, Buffer.from('\n')])
+      let length = body.length + 1
+      while (String(length).length + body.length !== length) length = String(length).length + body.length
+      return Buffer.concat([Buffer.from(String(length)), body])
+    }
+    const withRecords = (...records: Buffer[]): Buffer => {
+      const data = Buffer.concat([record('path', Buffer.from(long)), ...records])
+      return Buffer.concat([npmHeader({ path: 'PaxHeader/x', size: data.byteLength, type: 'x' }), data, padding(data.byteLength), npmHeader({ path: long.slice(0, 90), size: 5 }), Buffer.from('hello'), padding(5)])
+    }
+    await refused(tarball(withRecords(record('mtime', Buffer.from([0xb1, 0xb2])))), /pax record "mtime" is not a number/u)
+    await refused(tarball(withRecords(record('size', Buffer.from([0xb5])))), /pax record "size" is not a whole number/u)
+  })
+
   it.each(['uid', 'gid', 'uname', 'gname', 'linkpath', 'atime', 'ctime', 'comment', 'charset', 'SCHILY.xattr.user.x'])('refuses a pax %s record, so only path, mtime and size are read', async (key) => {
     const long = `package/${'d'.repeat(120)}/a.txt`
     await refused(tarball(paxFile([['path', long], [key, '0']], long, 'hello')), new RegExp(`pax record "${key.replaceAll('.', '\\.')}" is not allowed`, 'u'))

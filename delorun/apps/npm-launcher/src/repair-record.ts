@@ -209,6 +209,17 @@ export async function beginRepairRecord(home: string, now: Date, graceSeconds: n
   return { found, end: async () => { await removeUnchanged(home, written) }, noteSetAside: path => note({ setAside: path }), noteTrustSetAside: path => note({ trustSetAside: path }) }
 }
 
+/**
+ * The name `repair --reset-trust` gives the trust records it sets aside, and the restore command of a stale mark gives the
+ * new ones it moves aside in their place.
+ * @param time - the compact UTC time from {@link stamp}.
+ * @param ordinal - a number that tells a second folder of the same second from the first; none for the first.
+ * @returns `trust.set-aside-<time>`, with `-<ordinal>` when one is given.
+ */
+export function trustSetAsideName(time: string, ordinal?: number): string {
+  return `${DELORUN_HOME_ENTRIES.trust}.set-aside-${time}${ordinal === undefined ? '' : `-${String(ordinal)}`}`
+}
+
 /** A time as the compact UTC stamp that names a set-aside directory. */
 export function stamp(time: Date): string {
   return time.toISOString().replace(/[-:]/gu, '').replace(/\.\d+Z$/u, 'Z')
@@ -263,7 +274,7 @@ export async function staleRepairText(record: RepairRecord | undefined, home: st
   }
   if (trustSetAside !== undefined) {
     const trust = join(home, DELORUN_HOME_ENTRIES.trust)
-    const unfinished = `${DELORUN_HOME_ENTRIES.trust}.set-aside-${stamp(now)}-1`
+    const unfinished = trustSetAsideName(stamp(now), 1)
     const quoted = { trust: quoteForShell(trust, platform), setAside: quoteForShell(trustSetAside, platform), unfinished: quoteForShell(join(home, unfinished), platform) }
     const steps = [...await exists(trust) ? [move(quoted.trust, quoted.unfinished)] : [], move(quoted.setAside, quoted.trust)]
     parts.push(`The trust records it set aside for --reset-trust are in ${trustSetAside}, and this puts them back, keeping the new ones in ${unfinished}: ${joinSteps(steps)}. delorun recover status does not list trust folders.`)
