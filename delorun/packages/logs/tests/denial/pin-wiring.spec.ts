@@ -1,7 +1,7 @@
 /**
  * Denial test for PIN mode on the home process's production path: the Host starts through `runHost` with the home log
  * attached, `HomeAuthService` reads `ctx.delorunSecrets` itself (the real registry, which refuses a value under 8
- * characters), and `delorun devices pin set` and the device unlock route run against it. A 6-digit PIN and a wrong guess
+ * characters), and `delorun devices pin set` and the device PIN grant route run against it. A 6-digit PIN and a wrong guess
  * must be registered nowhere and appear in no log file, secrets file, output or response body, in any common encoding.
  */
 import { Context } from '@deepseek-ai/cordis'
@@ -28,6 +28,8 @@ const ADDRESS = brandString<StudioAddress>('https://home.example.ts.net')
 const LISTENER = 'reach-tailscale-private'
 const PIN = '482193'
 const WRONG = '582193'
+const ACTION = 'pluginManager/installBundle'
+const HASH = 'a'.repeat(64)
 
 let context: Context | undefined
 let temp: TempHome | undefined
@@ -93,18 +95,19 @@ describe('PIN mode on the production path of the home process', () => {
       pin: { secret: () => Promise.resolve(typed.shift()), stdinLine: () => Promise.resolve(line), interactive: line === undefined, stdinIsTerminal: false, now: Date.now },
     })
 
-    // A device with a live session, and a real HTTP server for the unlock route.
+    // A device with a live session, and a real HTTP server for the PIN routes.
     service.serve({ listener: LISTENER, address: ADDRESS, factor: 'tailnet-membership', elevationMinutes: 20 })
     const issued = await service.issueOwnerCode()
     await service.claim(claimOf(issued.code, { address: ADDRESS }))
     const opened = await service.openSession({ deviceId: deviceIdOf(keyOf(1)), listener: LISTENER, address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: SESSION_LIMITS.reach.absoluteMs })
+    const grantRoute = handlers.get('/auth/passkey/pin')
     const unlock = handlers.get('/auth/pin/unlock')
-    if (unlock === undefined) throw new Error('the unlock route is not registered')
-    server = createServer((request, response) => { stampListener(request, LISTENER); void unlock(request, response) })
+    if (grantRoute === undefined || unlock === undefined) throw new Error('a PIN route is not registered')
+    server = createServer((request, response) => { stampListener(request, LISTENER); void (request.url === '/auth/pin/unlock' ? unlock : grantRoute)(request, response) })
     await new Promise<void>(resolve => server?.listen(0, '127.0.0.1', resolve))
-    const url = `http://127.0.0.1:${String((server.address() as AddressInfo).port)}/auth/pin/unlock`
-    const post = async (body: string): Promise<{ status: number; text: string }> => {
-      const reply = await fetch(url, { method: 'POST', headers: { cookie: `${REACH_SESSION_COOKIE}=${opened.token}`, 'content-type': 'application/json' }, body })
+    const base = `http://127.0.0.1:${String((server.address() as AddressInfo).port)}`
+    const post = async (body: string, path = '/auth/passkey/pin'): Promise<{ status: number; text: string }> => {
+      const reply = await fetch(`${base}${path}`, { method: 'POST', headers: { cookie: `${REACH_SESSION_COOKIE}=${opened.token}`, 'content-type': 'application/json' }, body })
       const text = await reply.text()
       responses.push(text)
       return { status: reply.status, text }
@@ -113,14 +116,19 @@ describe('PIN mode on the production path of the home process', () => {
     // The set succeeds, with the real registry refusing anything under 8 characters.
     await expect(pinCommand([PIN, PIN]).run(['pin', 'set'], commandContext)).resolves.toBe(EXIT.ok)
     expect(out.stdout).toContain('PIN mode is on, with a PIN.')
-    // The unlocks: wrong, malformed, correct.
-    const wrong = await post(JSON.stringify({ secret: WRONG }))
+    // The PIN confirmations of one action (a device has no unlock window since A483): wrong, malformed, correct.
+    const actions = [{ action: ACTION, hash: HASH }]
+    const wrong = await post(JSON.stringify({ secret: WRONG, actions }))
     expect(wrong.status).toBe(403)
     expect(wrong.text).toContain('PIN_INVALID')
     expect((await post(`{"secret": ${PIN}`)).status).toBe(400)
-    expect((await post(JSON.stringify({ secret: Number(PIN) }))).status).toBe(400)
-    const good = await post(JSON.stringify({ secret: PIN }))
+    expect((await post(JSON.stringify({ secret: Number(PIN), actions }))).status).toBe(400)
+    const good = await post(JSON.stringify({ secret: PIN, actions }))
     expect(good.status).toBe(200)
+    // The unlock route refuses a device whatever it sends, and echoes none of it.
+    const unlocked = await post(JSON.stringify({ secret: PIN }), '/auth/pin/unlock')
+    expect(unlocked.status).toBe(403)
+    expect(unlocked.text).toContain('ELEVATION_REQUIRED')
     // A re-set, and a bad input line made of the PIN's digits.
     await expect(pinCommand([PIN, PIN]).run(['pin', 'set'], commandContext)).resolves.toBe(EXIT.ok)
     await expect(pinCommand([], PIN.slice(0, 5)).run(['pin', 'set', '--stdin'], commandContext)).resolves.toBe(EXIT.failed)
