@@ -36,7 +36,6 @@
  *
  * @module @delorun/plugin-changes/routes
  */
-import { realpathSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
 import {

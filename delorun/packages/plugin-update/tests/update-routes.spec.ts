@@ -167,6 +167,18 @@ describe('prepare and apply', () => {
     expect(accepted.status, accepted.body).toBe(200)
   })
 
+  it('update-confirm-requires-freshness-tick: a release the channel could not confirm needs its own tick', async () => {
+    const update = await serveUpdate()
+    const handle = await prepared(update, report([], { freshness: 'unchecked' }))
+    const state = json(await get(update.server.port, UPDATE_PATHS.state)).prepared as { confirm: { ticks: string[] } }
+    expect(state.confirm.ticks).toEqual(['freshness'])
+    const none = await post(update.server.port, UPDATE_PATHS.apply, { handle, chats: 'wait', dataCopy: true, acknowledged: [] })
+    expect(json(none)).toMatchObject({ code: 'ACKNOWLEDGEMENT_MISSING', missing: ['freshness'] })
+    expect(update.channel.ops()).not.toContain('update.apply')
+    const accepted = await post(update.server.port, UPDATE_PATHS.apply, { handle, chats: 'wait', dataCopy: true, acknowledged: ['freshness'] })
+    expect(accepted.status, accepted.body).toBe(200)
+  })
+
   it('update-conflicted-harness-cannot-confirm and update-failed-log-check-cannot-confirm: no tick makes them apply', async () => {
     for (const [items, release, blocked] of [[[CONFLICTED_HARNESS], {}, 'harness-conflict'], [[], { log: 'failed' as const }, 'log-failed']] as const) {
       const update = await serveUpdate()

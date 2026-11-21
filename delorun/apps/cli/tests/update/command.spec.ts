@@ -329,6 +329,24 @@ describe('runUpdate', () => {
     expect(sent('update.apply')).toHaveLength(0)
   })
 
+  it('c03-yes-refuses-unchecked-freshness: --yes refuses a release the channel could not confirm, and applies nothing', async () => {
+    await homeAnswering({ prepare: prepared(report({ release: { manifest: brandString<Sha256Hex>('c'.repeat(64)), signature: 'passed', freshness: 'unchecked', log: 'passed' } })) })
+
+    await expect(update(['--yes'])).rejects.toMatchObject({ exit: EXIT.failed, message: expect.stringContaining('could not confirm that Delorun 1.1.0 is current') })
+
+    expect(sent('update.apply')).toHaveLength(0)
+  })
+
+  it('shows an unchecked freshness in the report and lets the person decide', async () => {
+    await homeAnswering({ prepare: prepared(report({ release: { manifest: brandString<Sha256Hex>('c'.repeat(64)), signature: 'passed', freshness: 'unchecked', log: 'passed' } })) })
+
+    expect(await update(['--report'])).toBe(EXIT.ok)
+
+    expect(output.stdout).toContain('Release checks: signature passed, freshness unchecked, log passed.\n')
+    expect(output.stdout).toContain('The release channel could not confirm that this release is current')
+    expect(sent('update.apply')).toHaveLength(0)
+  })
+
   it('shows an unchecked release-log state in the report and lets the person decide', async () => {
     await homeAnswering({ prepare: prepared(report({ release: { manifest: brandString<Sha256Hex>('c'.repeat(64)), signature: 'passed', freshness: 'passed', log: 'unchecked' } })) })
 

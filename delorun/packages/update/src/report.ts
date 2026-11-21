@@ -23,8 +23,6 @@ import type { AxisVersions } from './versions.ts'
 /** The order C3's item table lists the kinds in, which the report sorts by first. */
 const KIND_ORDER: Readonly<Record<ReportItem['kind'], number>> = { plugin: 0, bundle: 1, row: 2, data: 3, harness: 4 }
 
-/** The three checks C3 requires to have passed before any report is shown. */
-const RELEASE_CHECKS = ['signature', 'freshness', 'log'] as const
 
 /**
  * The subject text an item is sorted by within its kind.
@@ -87,13 +85,17 @@ function installationStatuses(statuses: ReportInput['statuses']): readonly Insta
 }
 
 /**
- * Refuse a target whose signature or freshness check did not pass, or whose release-log check failed. A log check that
- * did not complete (`unchecked`) gets a report, which states it, and `delorun update --yes` does not confirm it.
+ * Refuse a target whose signature check did not pass or whose freshness or release-log check failed. A freshness or log
+ * check that did not complete (`unchecked`) gets a report, which states it, and `delorun update --yes` does not confirm it.
  * @param target - the staged target.
  * @throws {UpdateReportError} `REPORT_TARGET_UNVERIFIED` naming the checks that failed.
  */
 function assertVerified(target: TargetFacts): void {
-  const failed = RELEASE_CHECKS.filter(check => check === 'log' ? target.release.log === 'failed' : target.release[check] !== 'passed')
+  const failed = [
+    ...target.release.signature === 'passed' ? [] : ['signature'],
+    ...target.release.freshness === 'failed' ? ['freshness'] : [],
+    ...target.release.log === 'failed' ? ['log'] : [],
+  ]
   if (failed.length > 0) throw new UpdateReportError('REPORT_TARGET_UNVERIFIED', `the target's ${failed.join(', ')} check did not pass; no report is made for it`)
 }
 

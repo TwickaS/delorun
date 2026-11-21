@@ -89,6 +89,6 @@ export async function recordedLogCheck(home: string, version: RuntimeVersion): P
     case 'failed':
       return 'failed'
     default:
-      return assertNever(record)
+      return assertNever(record.state)
   }
 }

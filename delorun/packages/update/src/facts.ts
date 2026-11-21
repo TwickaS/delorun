@@ -9,7 +9,7 @@
  */
 import type { ExemptionRecord, VersionAxis } from '@delorun/contract-plugin-versions'
 import type { SemanticVersion, Sha256Hex, UtcTimestamp } from '@delorun/contract-release-manifest'
-import type { Installation, InstallationStatus, ItemVerification, LogCheckResult, ReleaseCheckResult, ReportVersions, SettingValue, UncheckedSource } from '@delorun/contract-update-report'
+import type { Installation, InstallationStatus, ItemVerification, FreshnessCheckResult, LogCheckResult, ReleaseCheckResult, ReportVersions, SettingValue, UncheckedSource } from '@delorun/contract-update-report'
 import type { DataFacts } from './data-formats.ts'
 import type { HarnessFact } from './harness-items.ts'
 import type { InstalledPluginFact } from './manifest.ts'
@@ -20,8 +20,8 @@ export interface ReleaseChecks {
   readonly manifest: Sha256Hex
   /** C2's signature check. */
   readonly signature: ReleaseCheckResult
-  /** C2's freshness check: the signed timestamp is current and not replayed. */
-  readonly freshness: ReleaseCheckResult
+  /** C2's freshness check: the signed timestamp is current and not replayed; `unchecked` for a release the channel could not confirm and the person installed anyway. */
+  readonly freshness: FreshnessCheckResult
   /** C18's release-log check, as the install recorded it; `unchecked` when its online check did not complete. */
   readonly log: LogCheckResult
 }

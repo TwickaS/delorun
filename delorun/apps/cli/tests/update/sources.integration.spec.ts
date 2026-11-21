@@ -204,7 +204,26 @@ describe('storeReportSources', () => {
       expect(await sources().running()).toEqual({ delorun: '1.0.0', dsh: '0.2.2', channel: 'stable' })
     })
 
+    /**
+     * Store the timestamp an install verified, which names a channel's current release.
+     * @param release - the release the channel names.
+     */
+    const storeTimestamp = (release: string): void => {
+      mkdirSync(join(home, DELORUN_HOME_ENTRIES.trust), { recursive: true, mode: 0o700 })
+      writeFileSync(join(home, DELORUN_HOME_ENTRIES.trust, TRUST_FILES.timestamp), JSON.stringify({ signed: { version: 1, channels: { stable: { release } } } }), { mode: 0o600 })
+    }
+
+    it('reports freshness unchecked for a release the stored timestamp does not name, as an install the channel could not confirm leaves it', TIMEOUT, async () => {
+      const read = sources(async () => Promise.resolve(TABLES))
+      expect((await read.target('1.1.0')).release.freshness).toBe('unchecked')
+      storeTimestamp('1.2.0')
+      expect((await read.target('1.1.0')).release.freshness).toBe('unchecked')
+      storeTimestamp('1.1.0')
+      expect((await read.target('1.1.0')).release.freshness).toBe('passed')
+    })
+
     it('reads the target\'s versions, the digest of its manifest and the checks the install made', TIMEOUT, async () => {
+      storeTimestamp('1.1.0')
       await recordResult(home, '1.1.0', 1_800_000_000, { state: 'verified', stop: false })
       const target = await sources(async () => Promise.resolve(TABLES)).target('1.1.0')
 

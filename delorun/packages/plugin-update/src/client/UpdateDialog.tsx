@@ -134,6 +134,7 @@ export function UpdateDialog({ state, t, actions, onClose, openChanges }: Update
       {blocked === 'harness-conflict' ? <div><Button variant="outline" size="sm" onClick={() => { onClose(); openChanges() }}>{t('blocked.changes')}</Button></div> : null}
       <Items report={report} versions={versions} ticks={confirm.ticks} ticked={ticked} toggle={toggle} t={t} />
       {report.notChecked.length === 0 ? null : <p className={css.meta}>{t('report.notChecked', { what: report.notChecked.map(uncheckedMessage).join(' ') })}</p>}
+      {confirm.ticks.includes('freshness') ? <Checkbox className={css.tick} checked={ticked.has('freshness')} onChange={() => { toggle('freshness') }} label={t('tick.freshness')} /> : null}
       {confirm.ticks.includes('log') ? <Checkbox className={css.tick} checked={ticked.has('log')} onChange={() => { toggle('log') }} label={t('tick.log')} /> : null}
       {confirm.dataItem === undefined ? null : <DataCopy report={report} item={report.items[confirm.dataItem]} dataCopy={dataCopy} setDataCopy={setDataCopy} versions={versions} tickedNoCopy={ticked.has('data-no-copy')} toggleNoCopy={() => { toggle('data-no-copy') }} t={t} />}
       <p className={css.body} role="status">{prepared.runningChats === 0 ? t('chats.none') : t(pluralKey('chats', prepared.runningChats), { count: prepared.runningChats })}</p>

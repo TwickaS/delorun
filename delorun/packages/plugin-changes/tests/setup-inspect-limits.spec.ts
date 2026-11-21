@@ -5,6 +5,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import { exportSetupArchive, loadHomeKey } from '@delorun/archive'
+import { DEFAULT_IMPORT_OPTIONS } from '@delorun/changes/setup-transfer'
 import { HeldSetups, inspectSetup, MAX_SETUP_FILE_BYTES, SETUP_INSPECT_LIMITS, SetupRefusal } from '../src/setup-actions.ts'
 import { SETUP_PATHS } from '../src/wire.ts'
 import { json, post, routeHome, serveRoutes } from './routes-fixture.ts'
@@ -35,7 +36,7 @@ describe('setup inspect limits', () => {
   it('refuses an entry that declares more than a setup file of the studio\'s size can hold, naming the limit', async () => {
     const { ctx } = routeHome()
     const file = await setupDeclaring(ctx.home, SETUP_INSPECT_LIMITS.maxEntryBytes + 1)
-    const refusal = await inspectSetup(ctx, { file }, new HeldSetups(), {}).catch((error: unknown) => error)
+    const refusal = await inspectSetup(ctx, { file }, new HeldSetups(), DEFAULT_IMPORT_OPTIONS).catch((error: unknown) => error)
     expect(refusal).toBeInstanceOf(SetupRefusal)
     expect(refusal).toMatchObject({ status: 422, code: 'ARCHIVE_ENTRY_TOO_LARGE' })
   })
@@ -45,7 +46,7 @@ describe('setup inspect limits', () => {
     expect(SETUP_INSPECT_LIMITS.maxEntryBytes).toBeLessThan(1024 * 1024 * 1024)
     expect(SETUP_INSPECT_LIMITS.maxTotalBytes).toBeLessThan(4 * 1024 * 1024 * 1024)
     const file = await setupDeclaring(ctx.home, 1024 * 1024)
-    expect(await inspectSetup(ctx, { file }, new HeldSetups(), {})).toMatchObject({ named: [], install: [{ name: 'big' }] })
+    expect(await inspectSetup(ctx, { file }, new HeldSetups(), DEFAULT_IMPORT_OPTIONS)).toMatchObject({ named: [], install: [{ name: 'big' }] })
   })
 })
 

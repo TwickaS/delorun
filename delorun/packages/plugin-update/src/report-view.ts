@@ -15,6 +15,9 @@ import type { PreparedUpdateView, UpdateConfirmView } from './wire.ts'
 /** The tick key of an item of the report. */
 export const itemTick = (index: number): string => `item:${String(index)}`
 
+/** The tick key of a release the release channel could not confirm is current. */
+export const FRESHNESS_TICK = 'freshness'
+
 /** The tick key of a release whose log check did not complete. */
 export const LOG_TICK = 'log'
 
@@ -50,7 +53,7 @@ export function isUpdateReport(value: unknown): value is UpdateReport {
  */
 export function confirmOf(report: UpdateReport): UpdateConfirmView {
   const needs = confirmationNeeds(report)
-  const ticks = [...needs.items.map(itemTick), ...needs.log && report.release.log === 'unchecked' ? [LOG_TICK] : []]
+  const ticks = [...needs.items.map(itemTick), ...needs.freshness ? [FRESHNESS_TICK] : [], ...needs.log && report.release.log === 'unchecked' ? [LOG_TICK] : []]
   const dataItem = report.items.findIndex(item => item.kind === 'data')
   const conflicted = report.items.some(item => item.reason === 'harness-change-conflicts')
   const blocked = conflicted ? 'harness-conflict' : report.release.log === 'failed' ? 'log-failed' : undefined

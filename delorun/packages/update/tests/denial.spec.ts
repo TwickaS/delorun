@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { evaluatePluginCompatibility } from '@deepseek-ai/dsh-app-boot'
-import { UpdateReportError, buildUpdateReport, confirmsWithoutAsking, disabledPluginNames, readInstalledPlugin, reasonMessage, requirementText } from '../src/index.ts'
+import { UpdateReportError, buildUpdateReport, confirmationNeeds, confirmsWithoutAsking, disabledPluginNames, readInstalledPlugin, reasonMessage, requirementText } from '../src/index.ts'
 import { FROM, TO, input, installed, profile, reasonOf, status, target, unreadable, version } from './support.ts'
 
 /** A profile of one plugin whose `package.json` does not parse. */
@@ -92,6 +92,15 @@ describe('c03-no-report-for-unverified-target', () => {
     // Without items, only the log state decides whether --yes confirms.
     expect(confirmsWithoutAsking({ ...report, items: [] })).toBe(false)
     expect(confirmsWithoutAsking({ ...report, items: [], release: { ...report.release, log: 'passed' } })).toBe(true)
+  })
+
+  it('reports a freshness the channel could not confirm as unchecked, and --yes does not confirm it', () => {
+    const report = buildUpdateReport(input({ target: target({ release: { ...target().release, freshness: 'unchecked' } }) }))
+    expect(report.release.freshness).toBe('unchecked')
+    // Pins the gate: a reader that checks `=== 'passed'` and this one both treat the value as not passed.
+    expect(confirmsWithoutAsking({ ...report, items: [] })).toBe(false)
+    expect(confirmationNeeds({ ...report, items: [] })).toEqual({ items: [], log: false, freshness: true })
+    expect(confirmsWithoutAsking({ ...report, items: [], release: { ...report.release, freshness: 'passed' } })).toBe(true)
   })
 
   it('builds the report once every check passed', () => {
