@@ -64,6 +64,7 @@ import { recordPluginRequest, type PluginRequest } from '@delorun/changes/instal
 import { loadUpstreamChecks, upstreamPluginOperation } from '@delorun/changes/plugin-operation'
 import type { VersionOutput } from '@delorun/contract-plugin-versions'
 import { faceAccessOf } from './face-access.ts'
+import { installationLinks } from './installation-links.ts'
 import { LiveAssets, harnessEffectOf } from './live-apply.ts'
 import { restartRoutes, restartStateOf } from './restart-route.ts'
 import { CHANGES_ROUTE_PREFIX, changesGate, changesRoutes, type ChangesGate, type RouteConnection, type RouteDevice, type RouteDevices } from './routes.ts'
@@ -476,14 +477,18 @@ function runningRelease(): { readonly runningRelease?: string } {
 
 /**
  * The check before a recomposition of the profile: `@delorun/changes`' `prepareReload`, with the links the running Host
- * already loads as the harness's own; what it moved is logged.
+ * already loads and the installation's own packages ({@link installationLinks}) as the harness's own; what it moved is
+ * logged.
  * @param ctx - the plugin context.
  * @param profile - the profile about to be recomposed.
  * @throws {ChangesError} `LOAD_REFUSED` when a link or an active directory is not what Changes keeps, which refuses the
  *   recomposition.
  */
 async function checkReload(ctx: Context, profile: ProfileContext): Promise<void> {
-  const harnessLink = loadedLinks(ctx.get('pluginPackages')?.resolution?.linkedRoots ?? [])
+  const loaded = loadedLinks(ctx.get('pluginPackages')?.resolution?.linkedRoots ?? [])
+  const carried = installationLinks()
+  // A package that failed to import is missing from the published resolution; its link is still the installation's own.
+  const harnessLink = (name: string, target: string): boolean => loaded(name, target) || carried(name, target)
   const changes = await prepareReload({ home: profile.home, profile: profile.name, profileDir: profile.dir, harnessLink, ...runningRelease() })
   const notice = startNotice(changes)
   if (notice !== '') ctx.logger.info(notice.trimEnd())
