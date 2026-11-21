@@ -156,9 +156,22 @@ export function previousConfigsOf(booted: unknown, change: RowSettingsChange): r
 }
 
 /**
+ * A setting value as the report shows it: a number or a boolean as it is, and every other value as a description of its
+ * kind and size, because a setting can hold a path, a name or a secret.
+ * @param value - the value.
+ * @returns the value to show.
+ */
+function shownValue(value: SettingValue): SettingValue {
+  if (typeof value === 'number' || typeof value === 'boolean') return value
+  if (typeof value === 'string') return `<text, ${String(value.length)} chars>`
+  if (Array.isArray(value)) return `<list, ${String(value.length)} items>`
+  return value === null ? null : `<mapping, ${String(Object.keys(value).length)} keys>`
+}
+
+/**
  * The report items for the protected-row changes between the two releases.
  * @param changes - {@link releaseSettingChanges}.
- * @returns one `row-settings-changed` item per change: `changed` for a row with new settings or a new row, `removed` for a row the target drops.
+ * @returns one `row-settings-changed` item per change: `changed` for a row with new settings or a new row, `removed` for a row the target drops. Its values follow {@link shownValue}.
  */
 export function settingsItems(changes: readonly RowSettingsChange[]): readonly ReportItem[] {
   return changes.map((change): ReportItem => {
@@ -170,7 +183,7 @@ export function settingsItems(changes: readonly RowSettingsChange[]): readonly R
       reason: 'row-settings-changed',
       effect,
       verification: 'verified',
-      detail: { settings: { change: change.change, keys: change.keys } },
+      detail: { settings: { change: change.change, keys: change.keys.map(({ key, before, after }): SettingChange => ({ key, ...before === undefined ? {} : { before: shownValue(before) }, ...after === undefined ? {} : { after: shownValue(after) } })) } },
       actions: [],
     }
   })

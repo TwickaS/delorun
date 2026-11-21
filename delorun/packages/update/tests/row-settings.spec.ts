@@ -98,6 +98,20 @@ describe('the report', () => {
     })
   })
 
+  it('shows numbers and booleans as they are and describes every other value, so no path or secret reaches the report', () => {
+    const secret = layer([rowSettingsFact('delorun-agent-seats', SEATS, { token: 'sk-secret', list: [1, 2, 3], map: { a: 1 }, limit: 3, gone: null })])
+    const before = layer([rowSettingsFact('delorun-agent-seats', SEATS, { token: 'old-secret-value', list: [], limit: 2 })])
+    const shown = buildUpdateReport(input({ target: target({ bundles: { ...BUNDLE_FACTS, layers: [secret], runningLayers: [before] } }) })).items.find(candidate => candidate.reason === 'row-settings-changed')
+    expect(shown?.detail.settings?.keys).toEqual([
+      { key: 'gone', after: null },
+      { key: 'limit', before: 2, after: 3 },
+      { key: 'list', before: '<list, 0 items>', after: '<list, 3 items>' },
+      { key: 'map', after: '<mapping, 1 keys>' },
+      { key: 'token', before: '<text, 16 chars>', after: '<text, 9 chars>' },
+    ])
+    expect(JSON.stringify(shown)).not.toContain('secret')
+  })
+
   it('words the change plainly, with the row\'s title and no JSON', () => {
     expect(reasonMessage(item!, report)).toBe(`Delorun ${report.to.delorun} changes the settings of the External agents row (delorun-agent-seats): turns on live agents.`)
     expect(settingsNote(change!, '0.1.0-preview.2.5')).toBe('Delorun 0.1.0-preview.2.5 changes the settings of the External agents row (delorun-agent-seats): turns on live agents.')
