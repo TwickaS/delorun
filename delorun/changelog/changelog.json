@@ -204,17 +204,17 @@
     {
       "area": "Install and update",
       "section": "Added",
-      "text": "Delorun is an agent harness that you shape to your own work: the themes, the sidebar, the plugins, the modes, even Delorun itself. It is built on DeepSeek Harness, runs its plugins and imports your chats, and adds a studio you open in a browser, a guided first run, undo for every change to your setup, protections for what agents may do, and reaching your home from your phone. This first public version, 0.1.0-preview.2.1, is described below: everything that differs from stock DeepSeek Harness, grouped by where you meet it."
+      "text": "Delorun is an agent harness that you shape to your own work: the themes, the sidebar, the plugins, the modes, even Delorun itself. It is built on DeepSeek Harness, runs its plugins and imports your chats, and adds a studio you open in a browser, a guided first run, undo for every change to your setup, protections for what agents may do, and reaching your home from your phone. This first public version, 0.1.0-preview.2.4, is described below: everything that differs from stock DeepSeek Harness, grouped by where you meet it."
     },
     {
       "area": "Install and update",
       "section": "Added",
-      "text": "Run it with `npx delorun`. The first run checks the download against the signed release manifest and the public release log, then guides you through setup. Delorun runs on Linux and on Windows through WSL2."
+      "text": "Run it with `npx delorun`. The first run checks the download against the signed release manifest and the public release log, then guides you through setup. Delorun runs on Linux (x64) and on Windows through WSL2."
     },
     {
       "area": "Install and update",
       "section": "Added",
-      "text": "This is a preview. Releases are signed with preview keys through the 0.x versions, and no outside security review has happened yet; [What you trust when you use Delorun](https://github.com/Delo-Run/delorun/blob/main/delorun/docs/guide/trust.md) says what that means. The rough edges you may meet are on the [known issues](https://github.com/Delo-Run/delorun/blob/main/delorun/docs/guide/known-issues.md) page, each with what to do."
+      "text": "This is a preview. Releases are signed with preview keys through the 0.x versions, and no outside security review has taken place; [What you trust when you use Delorun](https://github.com/Delo-Run/delorun/blob/main/delorun/docs/guide/trust.md) says what that means. The rough edges you may meet are on the [known issues](https://github.com/Delo-Run/delorun/blob/main/delorun/docs/guide/known-issues.md) page, each with what to do."
     },
     {
       "area": "Install and update",
@@ -280,6 +280,11 @@
       "area": "Install and update",
       "section": "Fixed",
       "text": "Settings → Updates opens with its content again. It showed an empty panel, with no title, because the page failed to read its Continue stopped chats switch."
+    },
+    {
+      "area": "Install and update",
+      "section": "Fixed",
+      "text": "Updates no longer leave a pending review on Claude Code. The pack that adds Claude Code named the build's temporary folder in its dependency list, which differed with every build, so Changes showed a dependency change after each update. A pack now names the exact version of each package it carries and no longer ships the install state pnpm leaves behind, and the release build refuses a pack whose files name a folder on the build machine. An update also makes the release's own pack files the new baseline in Changes, once Delorun has checked them against the signed release, so it no longer leaves the previous release's files waiting for review, including the review the earlier build left behind. An edit of your own to a pack, or to any other file of it, still waits."
     },
     {
       "area": "Install and update",
@@ -1488,6 +1493,11 @@
     },
     {
       "area": "Studio",
+      "section": "Fixed",
+      "text": "The reasoning-effort label beside the model name in the message box is readable in every look: it uses the same text colour as the other secondary text, at least 4.5:1 against the page, where it had been too faint in light looks."
+    },
+    {
+      "area": "Studio",
       "section": "Removed",
       "text": "Delorun's setup no longer offers DeepSeek account sign-in, the account entry in the menu is gone, and so are the account's Usage and Top-up pages. Use your own DeepSeek API key, which Delorun's model settings still accept. The account pages stay in upstream's code and are not reachable from Delorun's default setup."
     },
@@ -1785,6 +1795,11 @@
       "area": "Safety and privacy",
       "section": "Changed",
       "text": "Every sensitive action on a phone now confirms in one bottom sheet that shows the action's own icon and title, the workspace and chat it belongs to when known, what it allows as you, what the confirmation covers and what stays afterwards. Confirm is a full-width button with the Face ID icon inside it, or \"Confirm with PIN\" on a phone with no passkey, which opens the keypad inside the same sheet. Cancel is a plain button, and nothing has a focus ring when the sheet opens."
+    },
+    {
+      "area": "Safety and privacy",
+      "section": "Changed",
+      "text": "With protection off, the agent's plugin tool works as it does in stock DeepSeek Harness once you give its single full-access approval: it installs, removes, turns on, configures, undoes and restores plugins, and plugins it installs or links reload when it saves them. Each of these is listed in Changes as a change that loaded without review, and you can undo it there or with `delorun changes undo`. With protection on, nothing changes: installs wait for your review, and turning a plugin on, undoing and restoring are left to you. A protection setting that cannot be read keeps every action held, as with protection on. A chat that already has full access or runs in dangerous mode gives no further prompt, as in DeepSeek Harness. Each action is recorded before it runs, undoing it keeps your own hand edits, your home patch and the plugins kept disabled, and going back to an earlier Delorun release still starts your profile."
     },
     {
       "area": "Safety and privacy",
@@ -2923,11 +2938,76 @@
     },
     {
       "area": "Compatibility",
+      "section": "Changed",
+      "text": "Delorun's own wording in the model's prompt (the Delorun name in the checkout and studio paragraphs, and the tool paragraphs sent only while a tool is offered) applies in the profiles Delorun starts; upstream's bare `dsh` web launcher shows DeepSeek Harness's own wording."
+    },
+    {
+      "area": "Compatibility",
       "section": "Fixed",
       "text": "A script, or the desktop app's own requests, that talks to a Delorun Host on the same computer with the Host's cookie is accepted again; the Host had answered \"forbidden\" to any request that changes something and states no origin. A request from a web page on another site or another local port is still refused."
     }
   ],
   "versions": [
+    {
+      "version": "0.1.0-preview.2.4",
+      "date": "2026-11-21",
+      "preview": true,
+      "areas": [
+        {
+          "area": "Install and update",
+          "items": [
+            {
+              "section": "Added",
+              "text": "Delorun is an agent harness that you shape to your own work: the themes, the sidebar, the plugins, the modes, even Delorun itself. It is built on DeepSeek Harness, runs its plugins and imports your chats, and adds a studio you open in a browser, a guided first run, undo for every change to your setup, protections for what agents may do, and reaching your home from your phone. This first public version, 0.1.0-preview.2.4, is described below: everything that differs from stock DeepSeek Harness, grouped by where you meet it."
+            },
+            {
+              "section": "Added",
+              "text": "Run it with `npx delorun`. The first run checks the download against the signed release manifest and the public release log, then guides you through setup. Delorun runs on Linux (x64) and on Windows through WSL2."
+            },
+            {
+              "section": "Added",
+              "text": "This is a preview. Releases are signed with preview keys through the 0.x versions, and no outside security review has taken place; [What you trust when you use Delorun](https://github.com/Delo-Run/delorun/blob/main/delorun/docs/guide/trust.md) says what that means. The rough edges you may meet are on the [known issues](https://github.com/Delo-Run/delorun/blob/main/delorun/docs/guide/known-issues.md) page, each with what to do."
+            },
+            {
+              "section": "Fixed",
+              "text": "Updates no longer leave a pending review on Claude Code. The pack that adds Claude Code named the build's temporary folder in its dependency list, which differed with every build, so Changes showed a dependency change after each update. A pack now names the exact version of each package it carries and no longer ships the install state pnpm leaves behind, and the release build refuses a pack whose files name a folder on the build machine. An update also makes the release's own pack files the new baseline in Changes, once Delorun has checked them against the signed release, so it no longer leaves the previous release's files waiting for review, including the review the earlier build left behind. An edit of your own to a pack, or to any other file of it, still waits."
+            }
+          ]
+        },
+        {
+          "area": "Studio",
+          "items": [
+            {
+              "section": "Fixed",
+              "text": "The reasoning-effort label beside the model name in the message box is readable in every look: it uses the same text colour as the other secondary text, at least 4.5:1 against the page, where it had been too faint in light looks."
+            }
+          ]
+        },
+        {
+          "area": "Safety and privacy",
+          "items": [
+            {
+              "section": "Changed",
+              "text": "With protection off, the agent's plugin tool works as it does in stock DeepSeek Harness once you give its single full-access approval: it installs, removes, turns on, configures, undoes and restores plugins, and plugins it installs or links reload when it saves them. Each of these is listed in Changes as a change that loaded without review, and you can undo it there or with `delorun changes undo`. With protection on, nothing changes: installs wait for your review, and turning a plugin on, undoing and restoring are left to you. A protection setting that cannot be read keeps every action held, as with protection on. A chat that already has full access or runs in dangerous mode gives no further prompt, as in DeepSeek Harness. Each action is recorded before it runs, undoing it keeps your own hand edits, your home patch and the plugins kept disabled, and going back to an earlier Delorun release still starts your profile."
+            }
+          ]
+        },
+        {
+          "area": "Compatibility",
+          "items": [
+            {
+              "section": "Changed",
+              "text": "Delorun's own wording in the model's prompt (the Delorun name in the checkout and studio paragraphs, and the tool paragraphs sent only while a tool is offered) applies in the profiles Delorun starts; upstream's bare `dsh` web launcher shows DeepSeek Harness's own wording."
+            }
+          ]
+        }
+      ],
+      "fromUpstream": {
+        "ref": "dsh-v0.2.2-rc.3",
+        "items": []
+      },
+      "previews": []
+    },
     {
       "version": "0.1.0-preview.2.1",
       "date": "2026-11-20",
