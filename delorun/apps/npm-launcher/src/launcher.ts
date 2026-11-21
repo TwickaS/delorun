@@ -333,7 +333,8 @@ async function start(options: LauncherOptions, plan: CheckedPlan, args: readonly
       // failed start check of `current` does; the rollback checks `previous`'s own release log first.
       if (check.missingBundle !== undefined && runsOneOf(args, options.passedThrough, [ROLLBACK_ARGS])) {
         const rollback = await previousRollback(options)
-        if (rollback !== undefined && rollback.current === plan.version) {
+        // `previous` naming this same release (a kill between the store's two pointer writes) is no release to roll back to.
+        if (rollback !== undefined && rollback.current === plan.version && rollback.previous !== plan.version) {
           options.output.stderr(`Delorun did not start release ${String(plan.version)}: its release-log bundle is missing. Starting release ${String(rollback.previous)}, the version before the last update, to roll back to it: delorun ${ROLLBACK_ARGS.join(' ')}\n`)
           return start(options, { ...options.store.launchCommand(rollback.previous, options.profile, ROLLBACK_ARGS), version: rollback.previous, root: rollback.root, check: rollback.check, checkedAt: rollback.checkedAt }, ROLLBACK_ARGS)
         }

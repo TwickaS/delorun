@@ -1051,6 +1051,41 @@ describe('the release-log check at a start', () => {
     expect(plain.started).toBe(false)
   })
 
+  it('does not start itself again when previous names the same release as current and its bundle is missing', async () => {
+    const fixture = await fixtureRelease()
+    const same = version('0.2.0')
+    const started: LaunchCommand[] = []
+    let checks = 0
+    let printed = ''
+    const store: LauncherStore = {
+      prepareLaunch: request => Promise.resolve({ command: `/home/.delorun/runtimes/${same}/node/bin/node`, args: ['entry.js', ...request.args], env: {}, version: same, check: { full: false, hashed: 6, files: 40, fullCheckAt: 1_700_000_000_000 } }),
+      install: () => Promise.reject(new Error('the launcher must not install')),
+      retain: () => Promise.reject(new Error('the launcher must not retain')),
+      // A kill between the store's two pointer writes leaves both pointers on one release.
+      pointers: () => Promise.resolve({ current: same, previous: same }),
+      checkRuntime: checkedVersion => Promise.resolve({ version: checkedVersion, manifest: {} as VerifiedRuntime['manifest'], files: { files: [] } as Partial<VerifiedRuntime['files']> as VerifiedRuntime['files'], manifestSha256: '0'.repeat(64) }),
+      launchCommand: (launched, _profile, args) => ({ command: `/home/.delorun/runtimes/${launched}/node/bin/node`, args: ['entry.js', ...args], env: {} }),
+    }
+    const status = await runLauncher(launch({
+      home: await home({ root: fixture.roots[0]! }),
+      store,
+      channel: refusingChannel(new InstallError('INSTALL_VERIFY_FAILED', 'the channel', 'the channel must not be asked')),
+      roots: fixture.roots,
+      args: ['recover', 'rollback'],
+      spawn: (command) => { started.push(command); return Promise.resolve(0) },
+      stderr: (text) => { printed += text },
+      startCheck: () => {
+        // Fails the spec instead of hanging it when the launcher starts itself again.
+        if (++checks > 3) return Promise.reject(new Error('the launcher started the same release again and again'))
+        return Promise.resolve({ state: 'failed', stop: true, refusal: 'bundle-malformed', detail: 'missing', missingBundle: '/b' })
+      },
+    }))
+    expect(checks).toBe(1)
+    expect(status).toBe(LAUNCHER_EXIT.failed)
+    expect(started).toEqual([])
+    expect(printed).toContain(`Delorun did not start release ${same}`)
+  })
+
   it('redacts a secret the failed check\'s detail quotes before it prints it', async () => {
     const key = ['sk', '0123456789abcdef0123456789abcdef'].join('-')
     const run = await startWith({ state: 'failed', stop: true, refusal: 'consistency-proof-invalid', detail: `the log server answered ${key}` })
