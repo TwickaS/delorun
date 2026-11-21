@@ -8,7 +8,6 @@
  *
  * @module @delorun/update/messages
  */
-import type { RowSettingsChange } from './row-settings.ts'
 import type { PluginSubject, ReportItem, ReportVersions, RowSettingsDetail, RowSubject, SettingChange, SettingValue, UncheckedSource } from '@delorun/contract-update-report'
 
 /** The two releases one item is about. */
@@ -162,7 +161,7 @@ function settingsSentence(id: string, settings: RowSettingsDetail, versions: { r
  * @param delorun - the release the bundles belong to.
  * @returns the sentence.
  */
-export function settingsNote(change: RowSettingsChange, delorun: string): string {
+export function settingsNote(change: RowSettingsDetail & { readonly id: string }, delorun: string): string {
   return settingsSentence(change.id, change, { to: { delorun } })
 }
 
