@@ -555,13 +555,11 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
       clients.clear()
     }
   }, `${options.name}.sessions`)
-  /** Start the server for an admitted Session that holds no client; a consent refusal leaves it `refused`. */
-  const start = async (agent: Agent, state: ClientState, signal?: AbortSignal): Promise<void> => {
-    if (!resources.available(agent)) {
-      state.status = 'blocked'
-      refreshBlockedMasks()
-      return
-    }
+  /**
+   * Get the server for a Session; a consent refusal leaves the Session `refused`, running without the server's tools.
+   * @returns whether the server started; false after a consent refusal, any other failure is rethrown.
+   */
+  const getOrRefuse = async (agent: Agent, state: ClientState, signal?: AbortSignal): Promise<boolean> => {
     try {
       await resources.get(agent, signal)
     } catch (error) {
@@ -569,6 +567,18 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
       // The consent keeps the server stopped and lists it for the person's answer; this Session runs without its tools.
       ctx.logger.warn(`${options.name}: the browser tools are off in Session ${agent.id}${error instanceof OutputFolderRefusedError ? '' : " until the server's start is allowed"}: ${error.message}`)
       state.status = 'refused'
+      return false
+    }
+    return true
+  }
+  /** Start the server for an admitted Session that holds no client; a consent refusal leaves it `refused`. */
+  const start = async (agent: Agent, state: ClientState, signal?: AbortSignal): Promise<void> => {
+    if (!resources.available(agent)) {
+      state.status = 'blocked'
+      refreshBlockedMasks()
+      return
+    }
+    if (!await getOrRefuse(agent, state, signal)) {
       refreshBlockedMasks()
       return
     }
@@ -637,13 +647,7 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
       refreshBlockedMasks()
       return
     }
-    try {
-      await resources.get(agent, signal)
-    } catch (error) {
-      if (!isConsentStop(error)) throw error
-      // The consent keeps the server stopped and lists it for the person's answer; this Session runs without its tools.
-      ctx.logger.warn(`${options.name}: the browser tools are off in Session ${agent.id}${error instanceof OutputFolderRefusedError ? '' : " until the server's start is allowed"}: ${error.message}`)
-      state.status = 'refused'
+    if (!await getOrRefuse(agent, state, signal)) {
       clients.set(agent, state)
       refreshBlockedMasks()
       return
