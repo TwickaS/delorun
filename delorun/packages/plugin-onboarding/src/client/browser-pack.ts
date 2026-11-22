@@ -1,12 +1,15 @@
 /**
- * Turning the Browser plugin pack off, for the Browser step's "No browser" choice. Adding it goes through the guide's
- * bundle installer, as every other add does; turning it off asks the plugin manager to disable the bundle, which keeps
- * its checks of protected bundles and of a paired device's unlock.
+ * Turning the Browser plugin pack off, for the Browser step's "No browser" choice, and the browser download Browser
+ * needs, shown in the downloads panel. Adding the pack goes through the guide's bundle installer, as every other add
+ * does; turning it off asks the plugin manager to disable the bundle, which keeps its checks of protected bundles and of
+ * a paired device's unlock.
  * @module @delorun/plugin-onboarding/client/browser-pack
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type { ClientRemote } from '@deepseek-ai/dsh-api-remotes/client'
 import { BROWSER_BUNDLE } from '@delorun/browser-setup'
+import type { BrowserInstallAnswer } from '@delorun/bundle-local/browser-check-api'
+import { BROWSER_DOWNLOAD_KEY, startPageDownload } from '@delorun/plugin-downloads/row'
 
 /** How turning Browser off ended: it is off, it is off after a restart, or it could not be turned off. */
 export type TurnOffOutcome = 'off' | 'restart' | 'failed'
@@ -28,4 +31,18 @@ export async function turnBrowserOff(ctx: Pick<Context, 'get'>): Promise<TurnOff
     console.warn('delorun onboarding: Browser was not turned off', error)
     return 'failed'
   }
+}
+
+/**
+ * Run the browser download with a row in the downloads panel. The download runs outside the Host's install queue and
+ * reports no byte count, so the row's bar moves without a measure until the download ends.
+ * @param run - starts the download on the Host and answers how it ended.
+ * @returns the answer, unchanged.
+ */
+export async function downloadBrowserShown(run: () => Promise<BrowserInstallAnswer>): Promise<BrowserInstallAnswer> {
+  const shown = startPageDownload(BROWSER_DOWNLOAD_KEY)
+  const answer = await run()
+  if (answer.ok) shown.done()
+  else shown.failed(answer.message)
+  return answer
 }

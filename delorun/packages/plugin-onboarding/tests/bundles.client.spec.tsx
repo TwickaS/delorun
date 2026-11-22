@@ -354,6 +354,24 @@ describe('the bundled rows', () => {
     expect(setPluginEnabled).not.toHaveBeenCalled()
   })
 
+  it('lists a row being turned on in the downloads panel as installing, until it is on or failed', async () => {
+    let answer: (value: { ok: true, value: { application: string } }) => void = () => undefined
+    const { installer, setPluginEnabled } = rowBench(false)
+    setPluginEnabled.mockImplementationOnce(() => new Promise((resolve) => { answer = resolve }))
+    installer.refreshRows(['delorun-cost-meter'])
+    await flush()
+    const turning = installer.enableRow('delorun-cost-meter')
+    expect(panelRow('delorun-cost-meter')).toMatchObject({ state: 'installing', title: 'Cost meter', local: { retry: false } })
+    answer({ ok: true, value: { application: 'applied' } })
+    await turning
+    expect(panelRow('delorun-cost-meter')?.state).toBe('ready')
+    const refused = rowBench(false, undefined, { application: 'overridden' })
+    refused.installer.refreshRows(['delorun-cost-meter'])
+    await flush()
+    await refused.installer.enableRow('delorun-cost-meter')
+    expect(panelRow('delorun-cost-meter')?.state).toBe('failed')
+  })
+
   it('turns a row on through the plugin manager by its entry, without a restart', async () => {
     const { installer, setPluginEnabled, rowState } = rowBench(false)
     installer.refreshRows(['delorun-cost-meter'])
