@@ -5,7 +5,8 @@ const spawned = vi.hoisted(() => ({ spawn: vi.fn() }))
 vi.mock('node:child_process', () => ({ spawn: spawned.spawn }))
 
 const {
-  WSL_TIMEOUTS_MS, WslHomeError, acceptLink, listDistros, parseDistroList, parseHomeStatus, readHomeStatus, readSignInLink, runWsl,
+  WSL_TIMEOUTS_MS, WslHomeError, acceptLink, listDistros, parseDistroList, parseHomeStatus, readHomeStatus, readSignInLink,
+  requireListedDistro, runWsl,
 } = await import('../src/wsl-home.ts')
 
 const LINK = 'http://127.0.0.1:18601/?token=SECRET-ONE-TIME'
@@ -50,7 +51,24 @@ describe('home status', () => {
   it('runs `delorun status --json` in the named distribution and profile, with the status deadline', async () => {
     const run = vi.fn().mockResolvedValue(answer(status('0.1.0')))
     expect(await readHomeStatus('Ubuntu', 'work', run)).toMatchObject({ state: 'running' })
-    expect(run).toHaveBeenCalledWith(['-d', 'Ubuntu', '--', 'delorun', 'status', '--json', '--profile', 'work'], WSL_TIMEOUTS_MS.status)
+    expect(run).toHaveBeenCalledWith(['-d', 'Ubuntu', '--exec', 'delorun', 'status', '--json', '--profile', 'work'], WSL_TIMEOUTS_MS.status)
+  })
+
+  it('starts delorun with --exec, so no Linux shell parses the arguments', async () => {
+    const run = vi.fn().mockResolvedValue(answer(status('0.1.0')))
+    await readHomeStatus('Ubuntu', 'work', run)
+    const args = run.mock.calls[0]![0] as string[]
+    expect(args.slice(0, 4)).toEqual(['-d', 'Ubuntu', '--exec', 'delorun'])
+    expect(args).not.toContain('--')
+  })
+
+  it('requires the distribution to be listed by its exact name', async () => {
+    const listed = vi.fn().mockResolvedValue({ code: 0, stdout: utf16('Ubuntu\r\nDebian\r\n') })
+    await expect(requireListedDistro('Ubuntu', listed)).resolves.toBeUndefined()
+    for (const name of ['ubuntu', 'Ubuntu ', 'Ubun', 'Ubuntu\r\nDebian', 'Ubuntu"', 'Fedora']) {
+      await expect(requireListedDistro(name, listed), name).rejects.toMatchObject({ code: 'distro-missing', detail: { distro: name } })
+    }
+    expect(listed).toHaveBeenCalledWith(['-l', '-q'], WSL_TIMEOUTS_MS.list)
   })
 
   it('names the step that failed', async () => {
@@ -74,7 +92,7 @@ describe('one-time sign-in link', () => {
   it('reads the link from stdout; the command line carries no token', async () => {
     const run = vi.fn().mockResolvedValue(answer(`${LINK}\nThis link signs in to the studio once.\n`))
     expect(await readSignInLink('Ubuntu', 'default', STUDIO, run)).toBe(LINK)
-    expect(run).toHaveBeenCalledWith(['-d', 'Ubuntu', '--', 'delorun', 'open', '--print', '--profile', 'default'], WSL_TIMEOUTS_MS.link)
+    expect(run).toHaveBeenCalledWith(['-d', 'Ubuntu', '--exec', 'delorun', 'open', '--print', '--profile', 'default'], WSL_TIMEOUTS_MS.link)
     expect(JSON.stringify(run.mock.calls)).not.toContain('SECRET')
   })
 
@@ -106,12 +124,12 @@ describe('running wsl.exe', () => {
 
   it('starts wsl.exe without a shell, passes every argument separately and returns the output', async () => {
     const process = child()
-    const result = runWsl(['-d', 'Ubuntu', '--', 'delorun', 'status'], 1000)
+    const result = runWsl(['-d', 'Ubuntu', '--exec', 'delorun', 'status'], 1000)
     process.stdout.emit('data', Buffer.from('a'))
     process.stdout.emit('data', Buffer.from('b'))
     process.emit('close', 0)
     expect(await result).toEqual({ code: 0, stdout: Buffer.from('ab') })
-    expect(spawned.spawn).toHaveBeenCalledWith('wsl.exe', ['-d', 'Ubuntu', '--', 'delorun', 'status'], expect.objectContaining({ windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] }))
+    expect(spawned.spawn).toHaveBeenCalledWith('wsl.exe', ['-d', 'Ubuntu', '--exec', 'delorun', 'status'], expect.objectContaining({ windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] }))
     expect(spawned.spawn.mock.calls[0]?.[2]).not.toHaveProperty('shell')
   })
 
@@ -123,6 +141,17 @@ describe('running wsl.exe', () => {
     expect(process.kill).toHaveBeenCalledWith('SIGKILL')
     process.emit('close', null)
     expect(await failure).toMatchObject({ code: 'wsl-timeout' })
+  })
+
+  it('rejects on its own timer when a child keeps its output pipe open after the kill, so the window never waits on a close that does not come', async () => {
+    const process = child()
+    const failure = runWsl(['-d', 'Ubuntu', '--exec', 'delorun', 'status'], 1000).catch((error: unknown) => error)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(process.kill).toHaveBeenCalledWith('SIGKILL')
+    // No 'close' event is emitted: the call must already have settled.
+    expect(await failure).toMatchObject({ code: 'wsl-timeout' })
+    process.stdout.emit('data', Buffer.from('late'))
+    process.emit('close', null)
   })
 
   it('kills a call whose output is too long, and reports wsl.exe that cannot start', async () => {

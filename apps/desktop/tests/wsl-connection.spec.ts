@@ -6,9 +6,13 @@ const STUDIO = 'http://127.0.0.1:18601/'
 const LINK = 'http://127.0.0.1:18601/?token=SECRET-ONE-TIME'
 const rows = [{ kind: 'script', placement: 'head', text: 'globalThis.A=1' }]
 
-/** A `wsl.exe` stand-in: status first, then the link. */
-function runner(version: string, link = LINK, linkCode = 0) {
+/** `wsl.exe -l -q` prints UTF-16LE with a byte-order mark. */
+const listing = (...names: string[]): Buffer => Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(`${names.join('\r\n')}\r\n`, 'utf16le')])
+
+/** A `wsl.exe` stand-in: the distribution list, then the status, then the link. */
+function runner(version: string, link = LINK, linkCode = 0, distros: readonly string[] = ['Ubuntu']) {
   return vi.fn(async (args: readonly string[], _deadline?: number) => {
+    if (args[0] === '-l') return { code: 0, stdout: listing(...distros) }
     const json = args.includes('status')
       ? JSON.stringify({ ok: true, status: { state: 'ready', pid: 1, runtime: { current: version, running: version }, chats: 0, studio: STUDIO } })
       : `${link}\nhint\n`
@@ -35,7 +39,7 @@ describe('connectWslHome', () => {
   it('gives every wsl.exe call a deadline, and puts no link on a command line', async () => {
     const calls = deps()
     await connectWslHome('Ubuntu', 'default', calls)
-    expect(calls.run).toHaveBeenCalledTimes(2)
+    expect(calls.run).toHaveBeenCalledTimes(3)
     for (const [args, deadline] of calls.run.mock.calls) {
       expect(deadline, args.join(' ')).toEqual(expect.any(Number))
       expect(deadline).toBeGreaterThan(0)
@@ -47,7 +51,7 @@ describe('connectWslHome', () => {
     const range = '>=0.1.0-preview.4 <0.2.0-0'
     const older = deps({ run: runner('0.0.9') })
     await expect(connectWslHome('Ubuntu', 'default', older)).rejects.toMatchObject({ code: 'home-too-old', detail: { distro: 'Ubuntu', version: '0.0.9', range } })
-    expect(older.run).toHaveBeenCalledTimes(1)
+    expect(older.run).toHaveBeenCalledTimes(2)
     expect(older.exchange).not.toHaveBeenCalled()
     const newer = deps({ run: runner('0.3.0') })
     await expect(connectWslHome('Ubuntu', 'default', newer)).rejects.toMatchObject({ code: 'home-too-new', detail: { version: '0.3.0', range } })
@@ -63,6 +67,40 @@ describe('connectWslHome', () => {
     expect(JSON.stringify([(failure as Error).message, (failure as WslHomeError).detail, (failure as Error).cause])).not.toContain('SECRET')
   })
 
+  it('runs nothing in a distribution that the list does not hold by its exact name', async () => {
+    for (const listed of [['Debian'], ['ubuntu'], []]) {
+      const calls = deps({ run: runner('0.1.0-preview.4', LINK, 0, listed) })
+      await expect(connectWslHome('Ubuntu', 'default', calls)).rejects.toMatchObject({ code: 'distro-missing', detail: { distro: 'Ubuntu' } })
+      expect(calls.run).toHaveBeenCalledTimes(1)
+      expect(calls.run.mock.calls[0]![0]).toEqual(['-l', '-q'])
+      expect(calls.exchange).not.toHaveBeenCalled()
+    }
+  })
+
+  it('reads a home that accepts the exchange and then does not answer as a missing port forward, not a refused link', async () => {
+    const timeout = deps({ exchange: vi.fn(async () => { throw new DOMException('The operation timed out', 'TimeoutError') }) })
+    await expect(connectWslHome('Ubuntu', 'default', timeout)).rejects.toMatchObject({ code: 'forwarding-unreachable' })
+  })
+
+  it('reports a home whose rows cannot be read in time or at all as a plain failure, never a crash', async () => {
+    for (const failure of [new TypeError('fetch failed'), new DOMException('The operation timed out', 'TimeoutError')]) {
+      const calls = deps({ fetchRows: vi.fn(async () => { throw failure }) })
+      await expect(connectWslHome('Ubuntu', 'default', calls)).rejects.toMatchObject({ code: 'rows-unavailable' })
+    }
+  })
+
+  it('gives its own request for the boot rows a deadline and no redirect', async () => {
+    const fetch = vi.fn(async (_url: URL, _init: RequestInit) => new Response(JSON.stringify(rows)))
+    vi.stubGlobal('fetch', fetch)
+    try {
+      await connectWslHome('Ubuntu', 'default', deps({ fetchRows: undefined }))
+    } finally { vi.unstubAllGlobals() }
+    const init = fetch.mock.calls[0]![1]
+    expect(init.signal).toBeInstanceOf(AbortSignal)
+    expect(init.redirect).toBe('manual')
+    expect(fetch.mock.calls[0]![0].href).toBe('http://127.0.0.1:18601/index-injections.json')
+  })
+
   it('tells a missing port forward from a refused link', async () => {
     const unreachable = deps({ exchange: vi.fn(async () => { throw new TypeError('fetch failed') }) })
     await expect(connectWslHome('Ubuntu', 'default', unreachable)).rejects.toMatchObject({ code: 'forwarding-unreachable' })
@@ -72,7 +110,8 @@ describe('connectWslHome', () => {
     for (const answer of [undefined, '<html></html>', [{ kind: 'eval' }]]) {
       await expect(connectWslHome('Ubuntu', 'default', deps({ fetchRows: vi.fn(async () => answer) }))).rejects.toMatchObject({ code: 'rows-unavailable' })
     }
-    const stopped = deps({ run: vi.fn(async () => ({ code: 3, stdout: Buffer.from('{"ok":false,"state":"not-running"}') })) })
+    const stopped = deps({ run: vi.fn(async (args: readonly string[]) => (args[0] === '-l'
+      ? { code: 0, stdout: listing('Ubuntu') } : { code: 3, stdout: Buffer.from('{"ok":false,"state":"not-running"}') })) })
     await expect(connectWslHome('Ubuntu', 'default', stopped)).rejects.toMatchObject({ code: 'home-not-running' })
   })
 })

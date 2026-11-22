@@ -366,8 +366,15 @@ function createWindow(preload: string, show = false, primary = false): BrowserWi
   window.webContents.on('will-navigate', (event, url) => {
     const destination = new URL(url)
     const current = new URL(window.webContents.getURL())
-    if (destination.protocol !== `${SCHEME}:`
-      && !(destination.protocol === 'http:' && destination.origin === current.origin)) {
+    if (destination.protocol === `${SCHEME}:`) {
+      // Main-frame navigation reaches only the studio's entry document and the shell's own documents. Any other
+      // dsh-app://app address would put a page the home serves in the studio's place, with the full preload bridge
+      // and the vouched Origin (F18, A604).
+      const entry = destination.hostname === 'app' && (destination.pathname === '/' || destination.pathname === '/index.html')
+      if (!entry && destination.hostname !== 'shell') event.preventDefault()
+      return
+    }
+    if (!(destination.protocol === 'http:' && destination.origin === current.origin)) {
       event.preventDefault()
       if (['http:', 'https:'].includes(destination.protocol)) void shell.openExternal(url)
     }

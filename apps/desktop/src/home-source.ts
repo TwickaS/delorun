@@ -17,15 +17,20 @@ export type HomeSource =
 /** A home source that is written wrongly in the environment variable or the settings file. */
 export class HomeSourceError extends Error {}
 
-const PROFILE_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]*$/u
+const PROFILE_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/u
+
+/** The characters of a WSL distribution name the app passes to `wsl.exe -d`: no quote, space, shell character or option form. */
+const DISTRO_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u
 
 /**
- * Whether a distribution name can be passed to `wsl.exe -d` safely: not empty, not an option, no control characters.
+ * Whether a distribution name can be passed to `wsl.exe -d` safely: letters, digits, dot, underscore and hyphen, at most
+ * 64 characters, starting with a letter or a digit. The app also requires an exact match with a name `wsl.exe -l -q` lists
+ * before it runs anything in the distribution.
  * @param name - Distribution name.
  * @returns true when the name is usable.
  */
 export function isUsableDistroName(name: string): boolean {
-  return name.length > 0 && name.length <= 128 && !name.startsWith('-') && !/[\u0000-\u001f]/u.test(name) && name.trim() === name
+  return DISTRO_NAME.test(name)
 }
 
 /**

@@ -6,7 +6,9 @@
  * other request is answered `403 LOOPBACK_REQUIRED`. Two controls hold the result steady over the same path: a request
  * with a foreign `Host` header must be refused, and a request sent from inside WSL must pass. The run reads
  * `wslinfo --networking-mode` and reports it. It never edits `.wslconfig`, never runs `wsl --shutdown`, never restarts WSL,
- * and builds and writes nothing under `/mnt/c`. Run from the repository root after `pnpm run build:artifacts`:
+ * and builds and writes nothing under `/mnt/c`. The one-time link and the cookie reach `curl.exe` in a config on its standard
+ * input, not on its command line; copy that, not a command-line form, into any program that handles a real home's credentials
+ * (the scratch home here holds a placeholder key). Run from the repository root after `pnpm run build:artifacts`:
  *
  * `node_modules/.bin/tsx delorun/apps/tools/src/desktop/loopback-arrival.ts [--port <18660-18679>] [--keep]`
  *
@@ -120,10 +122,27 @@ export interface ProbeResult {
   readonly lines: readonly string[]
 }
 
-/** A Windows-side request through interop. */
-async function windowsRequest(url: string, extra: readonly string[], cookie?: string): Promise<HttpAnswer> {
-  const args = ['-s', '-i', '--max-time', '20', ...extra, ...cookie === undefined ? [] : ['-H', `Cookie: ${cookie}`], url]
-  const { stdout } = await exec('curl.exe', args, { timeout: 30_000, maxBuffer: 4 * 1024 * 1024 })
+/**
+ * The curl config for one request. The URL, which can hold a one-time sign-in link, and the headers, which can hold a
+ * cookie, go to `curl.exe` on its standard input (`-K -`), never on its command line, where any program of the user can read them.
+ * @param url - The request URL.
+ * @param headers - Header lines, such as `Cookie: a=b`.
+ * @returns the config text.
+ * @throws when a value holds a line break, which would end the config line.
+ */
+export function curlConfig(url: string, headers: readonly string[]): string {
+  const quote = (text: string): string => {
+    if (/[\r\n]/u.test(text)) throw new Error('a curl config value holds a line break')
+    return `"${text.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`
+  }
+  return [`url = ${quote(url)}`, ...headers.map(header => `header = ${quote(header)}`), ''].join('\n')
+}
+
+/** A Windows-side request through interop; the link and cookie travel on the standard input, not the command line. */
+async function windowsRequest(url: string, headers: readonly string[], cookie?: string): Promise<HttpAnswer> {
+  const request = exec('curl.exe', ['-s', '-i', '--max-time', '20', '-K', '-'], { timeout: 30_000, maxBuffer: 4 * 1024 * 1024 })
+  request.child.stdin?.end(curlConfig(url, [...headers, ...cookie === undefined ? [] : [`Cookie: ${cookie}`]]))
+  const { stdout } = await request
   return parseCurlOutput(stdout)
 }
 
@@ -180,7 +199,7 @@ export async function runProbe(root: string, port: number, keep: boolean): Promi
     }
     // Control 1: a foreign Host header over the same path must not be admitted. The home's Host fence usually answers
     // before the route's arrival check, so any refusal counts; a 200 would mean the guard is not live on this path.
-    const foreignAnswer = await windowsRequest(`http://127.0.0.1:${String(port)}${GUARDED_PATH}`, ['-H', 'Host: studio.example.test'], windowsCookie)
+    const foreignAnswer = await windowsRequest(`http://127.0.0.1:${String(port)}${GUARDED_PATH}`, ['Host: studio.example.test'], windowsCookie)
     const foreignRefused = foreignAnswer.status >= 400
     lines.push(`Control, Windows with a foreign Host header: HTTP ${String(foreignAnswer.status)}${foreignRefused ? ' (refused, as expected)' : ' (UNEXPECTED)'}`)
     // Control 2: a request from inside WSL, signed in with a fresh link, must pass.

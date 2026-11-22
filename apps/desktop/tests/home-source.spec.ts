@@ -26,7 +26,11 @@ describe('parseHomeSource', () => {
     expect(parseHomeSource('wsl:Ubuntu-24.04:work')).toEqual({ kind: 'wsl', distro: 'Ubuntu-24.04', profile: 'work' })
   })
 
-  it.each(['wsl', 'wsl:', 'wsl:-d', 'wsl:Ubuntu:', 'wsl:Ubuntu:a:b', 'wsl:Ubuntu:-x', 'wsl:Ubuntu:a b', 'remote:host', 'Bundled'])('refuses %j', (value) => {
+  it.each([
+    'wsl', 'wsl:', 'wsl:-d', 'wsl:Ubuntu:', 'wsl:Ubuntu:a:b', 'wsl:Ubuntu:-x', 'wsl:Ubuntu:a b', 'remote:host', 'Bundled',
+    'wsl:Ubu"ntu', 'wsl:Ubuntu 22', 'wsl:Ub$(id)', 'wsl:Ubuntu;x', 'wsl:.hidden', 'wsl:Ubuntu:a;b', 'wsl:Ubuntu:a"b',
+    `wsl:${'u'.repeat(65)}`, `wsl:Ubuntu:${'x'.repeat(65)}`,
+  ])('refuses %j', (value) => {
     expect(() => parseHomeSource(value)).toThrow(HomeSourceError)
   })
 })
@@ -41,6 +45,8 @@ describe('home source setting', () => {
     expect(await readHomeSourceSetting(userData({ updates: {} }))).toBeUndefined()
     await expect(readHomeSourceSetting(userData({ homeSource: { kind: 'wsl' } }))).rejects.toThrow(HomeSourceError)
     await expect(readHomeSourceSetting(userData({ homeSource: { kind: 'wsl', distro: '--shutdown' } }))).rejects.toThrow(HomeSourceError)
+    await expect(readHomeSourceSetting(userData({ homeSource: { kind: 'wsl', distro: 'Ubuntu 22' } }))).rejects.toThrow(HomeSourceError)
+    await expect(readHomeSourceSetting(userData({ homeSource: { kind: 'wsl', distro: 'Ubuntu', profile: 'a"b' } }))).rejects.toThrow(HomeSourceError)
   })
 
   it('lets the environment variable win over the setting, and falls back to the bundled Host', async () => {

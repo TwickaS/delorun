@@ -6,7 +6,7 @@
 
 import { checkHomeVersion } from './version-skew.ts'
 import { INDEX_INJECTIONS_PATH, parseHomeInjections, type HomeInjection } from './home-injections.ts'
-import { readHomeStatus, readSignInLink, runWsl, WslHomeError, type WslRunner } from './wsl-home.ts'
+import { readHomeStatus, readSignInLink, requireListedDistro, runWsl, WslHomeError, type WslRunner } from './wsl-home.ts'
 import { authenticateWebHost } from './web-document.ts'
 
 /** What a connected home gives the main process. */
@@ -31,8 +31,16 @@ export interface WslConnectionDeps {
   readonly fetchRows?: (origin: string, cookie: string) => Promise<unknown>
 }
 
+/**
+ * Deadline of each request to the home during connection, in milliseconds; a forwarded port that accepts the connection
+ * and then hangs would otherwise wait far longer.
+ */
+export const HOME_REQUEST_TIMEOUT_MS = 20_000
+
 async function fetchHomeRows(origin: string, cookie: string): Promise<unknown> {
-  const response = await fetch(new URL(INDEX_INJECTIONS_PATH, origin), { headers: { cookie }, redirect: 'manual' })
+  const response = await fetch(new URL(INDEX_INJECTIONS_PATH, origin), {
+    headers: { cookie }, redirect: 'manual', signal: AbortSignal.timeout(HOME_REQUEST_TIMEOUT_MS),
+  })
   if (response.status !== 200) {
     await response.body?.cancel()
     return undefined
@@ -50,6 +58,7 @@ async function fetchHomeRows(origin: string, cookie: string): Promise<unknown> {
  */
 export async function connectWslHome(distro: string, profile: string, deps: WslConnectionDeps): Promise<WslHomeConnection> {
   const run = deps.run ?? runWsl
+  await requireListedDistro(distro, run)
   const status = await readHomeStatus(distro, profile, run)
   if (status.state === 'not-running') throw new WslHomeError('home-not-running', { distro })
   const verdict = checkHomeVersion(status.version)
@@ -61,11 +70,14 @@ export async function connectWslHome(distro: string, profile: string, deps: WslC
   const origin = new URL(link).origin
   let cookie: string
   try { cookie = await (deps.exchange ?? authenticateWebHost)(link) } catch (error) {
-    // A connection that fails outright means the forwarding did not reach the home; a refusal means the link was stale or used.
-    // The original error is not kept: a transport error can name the request it carried.
-    throw new WslHomeError(error instanceof TypeError ? 'forwarding-unreachable' : 'exchange-failed', { distro })
+    // A connection that fails outright, or does not answer in time, means the forwarding did not reach the home; a refusal
+    // means the link was stale or used. The original error is not kept: a transport error can name the request it carried.
+    const unreachable = error instanceof TypeError || (error instanceof Error && error.name === 'TimeoutError')
+    throw new WslHomeError(unreachable ? 'forwarding-unreachable' : 'exchange-failed', { distro })
   }
-  const injections = parseHomeInjections(await (deps.fetchRows ?? fetchHomeRows)(origin, cookie))
+  // A transport error or a timeout reading the rows is the same plain failure as a home that answers no rows.
+  const answer = await (deps.fetchRows ?? fetchHomeRows)(origin, cookie).catch(() => undefined)
+  const injections = parseHomeInjections(answer)
   if (injections === undefined) throw new WslHomeError('rows-unavailable', { distro, version: status.version })
   return { origin, cookie, version: status.version, injections }
 }

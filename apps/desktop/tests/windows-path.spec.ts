@@ -4,6 +4,7 @@ import { hostPathRefusal, translateWindowsPath } from '../src/windows-path.ts'
 describe('translateWindowsPath', () => {
   it.each([
     ['C:\\x', '/mnt/c/x'],
+    ['C:\\x/y/z.md', '/mnt/c/x/y/z.md'],
     ['C:\\Users\\me\\My Documents\\notes 1.md', '/mnt/c/Users/me/My Documents/notes 1.md'],
     ['d:\\data\\a.txt', '/mnt/d/data/a.txt'],
     ['C:\\', '/mnt/c'],
@@ -40,6 +41,9 @@ describe('translateWindowsPath', () => {
     ['a current-folder segment', 'C:\\x\\.\\y'],
     ['a control character', 'C:\\x\\a\u0007b'],
     ['a forward-slash drive path', 'C:/x/y'],
+    ['a parent segment after a forward slash', 'C:\\x/../../etc/passwd'],
+    ['a parent segment after a forward slash on the distribution', '\\\\wsl$\\Ubuntu\\home/../root'],
+    ['a current-folder segment after a forward slash', 'C:\\x/./y'],
     ['an empty path', ''],
   ])('refuses %s', (_name, nativePath) => {
     expect(translateWindowsPath(nativePath, 'Ubuntu')).toEqual({ ok: false })

@@ -36,6 +36,15 @@ it('requires the Host authentication exchange and retains only its cookie value'
   await expect(authenticateWebHost('http://127.0.0.1:1234/')).rejects.toThrow('authentication failed')
 })
 
+it('gives the Host authentication exchange a deadline, so a port that accepts and then hangs cannot hold the window', async () => {
+  const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 303, headers: { 'set-cookie': 'session=owned' } }))
+  vi.stubGlobal('fetch', fetch)
+  await authenticateWebHost('http://127.0.0.1:1234/?token=owned')
+  const init = (fetch.mock.calls[0] as [string, RequestInit])[1]
+  expect(init.signal).toBeInstanceOf(AbortSignal)
+  expect(init.redirect).toBe('manual')
+})
+
 it('forwards upload bytes and cancellation with Host credentials while keeping the response streaming', async () => {
   const body = new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode('stream')); controller.close() } })
   const fetch = vi.fn().mockResolvedValue(new Response(body, { headers: { 'content-encoding': 'gzip', 'set-cookie': 'private' } }))
@@ -111,7 +120,7 @@ describe('the Origin a home receives', () => {
   }
 
   it('is the home\'s own loopback origin, with a same-origin fetch site, for a home in WSL when the application sent its origin', async () => {
-    const { sent } = await forwarded('wsl', { origin: 'dsh-app://app', 'sec-fetch-site': 'cross-site' })
+    const { sent } = await forwarded('wsl', { origin: 'dsh-app://app', 'sec-fetch-site': 'same-origin' })
     expect(sent?.get('origin')).toBe('http://127.0.0.1:18601')
     expect(sent?.get('sec-fetch-site')).toBe('same-origin')
     expect(sent?.get('cookie')).toBe('session=owned')
@@ -130,8 +139,24 @@ describe('the Origin a home receives', () => {
   })
 
   it.each(['bundled', 'remote'] as const)('is never rewritten for a %s home', async (kind) => {
-    const { sent } = await forwarded(kind, { origin: 'dsh-app://app', 'sec-fetch-site': 'cross-site' })
+    const { sent } = await forwarded(kind, { origin: 'dsh-app://app', 'sec-fetch-site': 'same-origin' })
     expect(sent?.get('origin')).toBeNull()
+    expect(sent?.get('sec-fetch-site')).toBeNull()
+  })
+
+  it.each(['cross-site', 'same-site'])('refuses a %s fetch site, with or without an Origin, without forwarding it', async (site) => {
+    for (const kind of ['wsl', 'bundled', 'remote'] as const) {
+      for (const headers of [{ 'sec-fetch-site': site }, { 'sec-fetch-site': site, origin: 'dsh-app://app' }]) {
+        const { response, fetch } = await forwarded(kind, headers)
+        expect(response.status, `${kind} ${JSON.stringify(headers)}`).toBe(403)
+        expect(fetch).not.toHaveBeenCalled()
+      }
+    }
+  })
+
+  it.each(['same-origin', 'none'])('forwards a %s fetch site and drops the header itself', async (site) => {
+    const { response, sent } = await forwarded('bundled', { 'sec-fetch-site': site })
+    expect(response.status).toBe(200)
     expect(sent?.get('sec-fetch-site')).toBeNull()
   })
 

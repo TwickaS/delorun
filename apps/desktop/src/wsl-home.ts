@@ -65,9 +65,10 @@ export class WslHomeError extends Error {
 }
 
 /**
- * Run `wsl.exe` with a deadline and no shell.
+ * Run `wsl.exe` with a deadline and no Windows shell.
  * @param args - Arguments, passed one by one.
- * @param timeoutMs - Deadline; the process is killed when it passes.
+ * @param timeoutMs - Deadline; the call rejects on its own timer and kills the child, without waiting for the child's
+ *   output pipe to close, which a process that `wsl.exe` started can keep open.
  * @returns exit code and standard output.
  * @throws {WslHomeError} `wsl-unavailable` when `wsl.exe` cannot start, `wsl-timeout` when the deadline passes or the output is too long.
  */
@@ -75,22 +76,27 @@ export const runWsl: WslRunner = (args, timeoutMs) => new Promise((resolve, reje
   const child = spawn('wsl.exe', [...args], { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true })
   const chunks: Buffer[] = []
   let size = 0
-  let failed = false
+  let settled = false
+  const fail = (error: WslHomeError): void => {
+    if (settled) return
+    settled = true
+    clearTimeout(timer)
+    child.kill('SIGKILL')
+    reject(error)
+  }
   // The deadline is our own timer, not a signal check: Windows does not always report the signal that ended a child.
-  const timer = setTimeout(() => { failed = true; child.kill('SIGKILL') }, timeoutMs)
+  const timer = setTimeout(() => { fail(new WslHomeError('wsl-timeout')) }, timeoutMs)
   child.stdout.on('data', (chunk: Buffer) => {
     size += chunk.length
-    if (size > MAX_OUTPUT_BYTES) { failed = true; child.kill('SIGKILL'); return }
-    chunks.push(chunk)
+    if (size > MAX_OUTPUT_BYTES) { fail(new WslHomeError('wsl-timeout')); return }
+    if (!settled) chunks.push(chunk)
   })
-  child.once('error', (error) => {
-    clearTimeout(timer)
-    reject(new WslHomeError('wsl-unavailable', {}, { cause: error }))
-  })
+  child.once('error', (error) => { fail(new WslHomeError('wsl-unavailable', {}, { cause: error })) })
   child.once('close', (code) => {
+    if (settled) return
+    settled = true
     clearTimeout(timer)
-    if (failed) reject(new WslHomeError('wsl-timeout'))
-    else resolve({ code, stdout: Buffer.concat(chunks) })
+    resolve({ code, stdout: Buffer.concat(chunks) })
   })
 })
 
@@ -142,9 +148,12 @@ export function parseHomeStatus(stdout: string): WslHomeStatus | undefined {
   return { state: 'running', version: running, studio: fields.studio }
 }
 
-/** The arguments that run `delorun <command…>` in a distribution and profile. */
+/**
+ * The arguments that run `delorun <command…>` in a distribution and profile. `--exec` starts the program directly, with no
+ * Linux shell parsing the arguments; the distribution and profile names also match strict patterns before they get here.
+ */
 function delorunArgs(distro: string, profile: string, command: readonly string[]): string[] {
-  return ['-d', distro, '--', 'delorun', ...command, '--profile', profile]
+  return ['-d', distro, '--exec', 'delorun', ...command, '--profile', profile]
 }
 
 /**
@@ -197,4 +206,14 @@ export async function readSignInLink(distro: string, profile: string, studio: st
   const link = acceptLink(result.stdout.toString('utf8').split(/\r?\n/u)[0] ?? '', studio)
   if (link === undefined) throw new WslHomeError('link-unusable', { distro })
   return link
+}
+
+/**
+ * Require that a distribution is one `wsl.exe -l -q` lists, by its exact name, before anything runs in it.
+ * @param distro - Distribution name.
+ * @param run - How `wsl.exe` is run.
+ * @throws {WslHomeError} `distro-missing` when the list does not hold the name, or the `wsl.exe` failures.
+ */
+export async function requireListedDistro(distro: string, run: WslRunner = runWsl): Promise<void> {
+  if (!(await listDistros(run)).includes(distro)) throw new WslHomeError('distro-missing', { distro })
 }

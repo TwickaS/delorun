@@ -12,9 +12,9 @@ const DRIVE_PATH = /^([A-Za-z]):\\(.*)$/u
 const WSL_SHARE = /^\\\\(?:wsl\$|wsl\.localhost)\\([^\\]+)(?:\\(.*))?$/iu
 const CONTROL_CHARACTER = /[\u0000-\u001f]/u
 
-/** Split path text into its segments; `undefined` when one is `.`/`..` or holds a control character. */
+/** Split path text on either separator; `undefined` when a segment is `.` or `..` or holds a control character. */
 function segmentsOf(text: string): string[] | undefined {
-  const segments = text.split('\\').filter(segment => segment !== '')
+  const segments = text.split(/[\\/]/u).filter(segment => segment !== '')
   return segments.some(segment => segment === '.' || segment === '..' || CONTROL_CHARACTER.test(segment)) ? undefined : segments
 }
 

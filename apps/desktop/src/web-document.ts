@@ -3,6 +3,9 @@ import { readFile } from 'node:fs/promises'
 import { extname, resolve, sep } from 'node:path'
 import type { DesktopHomeKind } from './ipc.ts'
 
+/** Deadline of the Host authentication exchange, in milliseconds. */
+const AUTHENTICATION_TIMEOUT_MS = 20_000
+
 const MIME: Readonly<Record<string, string>> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json',
@@ -42,7 +45,8 @@ export async function serveWebDocument(request: Request, root: string): Promise<
  * @returns Cookie header for requests forwarded to that Host.
  */
 export async function authenticateWebHost(url: string): Promise<string> {
-  const response = await fetch(url, { redirect: 'manual' })
+  // A deadline: a port that accepts the connection and then hangs would otherwise leave the window loading for minutes.
+  const response = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(AUTHENTICATION_TIMEOUT_MS) })
   const cookie = response.headers.get('set-cookie')
   await response.body?.cancel()
   if (response.status !== 303 || cookie === null) throw new Error('Desktop Host authentication failed')
@@ -107,6 +111,10 @@ export async function forwardWebRequest(
   const origin = request.headers.get('origin')
   // F19 (security fundamentals, owner ruling A604): any origin but the application's own is refused before anything is forwarded.
   if (origin !== null && origin !== 'dsh-app://app') return new Response(null, { status: 403 })
+  // F19 (A604): a fetch site other than the page's own is refused, not dropped, so a cross-site request that carries no
+  // Origin never reaches the home with the cookie; Chromium sends `none` for a navigation and `same-origin` for the page.
+  const site = request.headers.get('sec-fetch-site')
+  if (site !== null && site !== 'same-origin' && site !== 'none') return new Response(null, { status: 403 })
   const target = new URL(host)
   target.pathname = source.pathname
   target.search = source.search

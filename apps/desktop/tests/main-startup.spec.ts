@@ -1307,7 +1307,7 @@ describe('desktop main startup', () => {
     expect(harness.menu).not.toHaveBeenCalled()
   })
 
-  it('opens message links externally while retaining same-origin application navigation', async () => {
+  it('opens message links externally and lets the main window navigate only to the studio\'s entry and the shell\'s own documents', async () => {
     await readyForUpdate()
     const window = harness.windows[0]!
     const openWindow = window.webContents.setWindowOpenHandler.mock.calls[0]![0] as
@@ -1321,9 +1321,18 @@ describe('desktop main startup', () => {
     expect(external.preventDefault).toHaveBeenCalledOnce()
     expect(harness.openExternal).toHaveBeenCalledWith('https://example.com/document')
     harness.openExternal.mockClear()
-    const internal = { preventDefault: vi.fn() }
-    window.webContents.emit('will-navigate', internal, 'dsh-app://app/session/task-1')
-    expect(internal.preventDefault).not.toHaveBeenCalled()
+    for (const entry of ['dsh-app://app/', 'dsh-app://app/index.html', 'dsh-app://shell/update-dialog.html']) {
+      const allowed = { preventDefault: vi.fn() }
+      window.webContents.emit('will-navigate', allowed, entry)
+      expect(allowed.preventDefault, entry).not.toHaveBeenCalled()
+    }
+    // Any other address under dsh-app://app would put a page the home serves in the studio's place (F18, A604).
+    for (const other of ['dsh-app://app/session/task-1', 'dsh-app://app/api/some.route', 'dsh-app://app/index.html/x', 'dsh-app://app/assets/entry.js',
+      'dsh-app://other/', 'dsh-app://app/recovery']) {
+      const refused = { preventDefault: vi.fn() }
+      window.webContents.emit('will-navigate', refused, other)
+      expect(refused.preventDefault, other).toHaveBeenCalledOnce()
+    }
     expect(harness.openExternal).not.toHaveBeenCalled()
   })
 
