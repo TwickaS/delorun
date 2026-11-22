@@ -4,3 +4,4 @@
  */
 export { OnboardingDownloadsRow, type OnboardingDownloadsRowProps } from './Phone.tsx'
 export { createFakeDownloadsSource, currentDownloadsSource, provideDownloadsSource } from './source.ts'
+export { useDownloadRateText } from './rate.ts'

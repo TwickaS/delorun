@@ -488,6 +488,19 @@
   visibility: hidden;
 }
 
+/* The speed and time left under a card while its package downloads; its height stays while the speed is not known. */
+.rate {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--onb-small-size);
+  line-height: var(--onb-small-line);
+  font-variant-numeric: tabular-nums;
+}
+
+.rate[data-empty] {
+  visibility: hidden;
+}
+
 .bar > span {
   display: block;
   height: 100%;

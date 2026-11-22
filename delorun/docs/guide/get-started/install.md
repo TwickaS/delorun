@@ -95,7 +95,7 @@ Keep your projects inside the Ubuntu home folder, such as `~/projects`, because 
 
 ## What the launcher verifies
 
-Before it installs anything, the launcher proves the download is the release the maintainer published. It prints each check as a step with a tick and the time it took, then shows the download with a live bar:
+Before it installs anything, the launcher proves the download is the release the maintainer published. It prints each check as a step with a tick and the time it took, then shows the download with a live bar, its speed and the time left:
 
 ```text
 ✔ Found release <version> on the stable channel                            0.4s

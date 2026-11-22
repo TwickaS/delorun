@@ -10,6 +10,7 @@
     "./wire": "./src/wire.ts",
     "./environment": "./src/environment.ts",
     "./client": "./src/client.ts",
+    "./transfer": "./src/transfer.ts",
     "./routes": "./src/routes.ts",
     "./locale/*.json": "./locale/*.json"
   },
