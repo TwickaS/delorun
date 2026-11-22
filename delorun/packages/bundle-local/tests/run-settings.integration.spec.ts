@@ -22,7 +22,7 @@ afterEach(async () => {
 })
 
 /** A real home with one profile that setup has run for, and a service over it. */
-function setup(runningPort?: number) {
+function setup(runningPort?: number, hot: { readonly hmr?: unknown, readonly reloadWaitMs?: number } = {}) {
   const home = mkdtempSync(join(tmpdir(), 'delorun-run-settings-it-'))
   roots.push(home)
   const profileDir = join(home, 'profiles', 'default')
@@ -30,8 +30,8 @@ function setup(runningPort?: number) {
   writeFileSync(join(profileDir, 'package.json'), '{}\n')
   writeFileSync(join(profileDir, 'cordis.patch.yml'), '[]\n')
   writeFileSync(join(profileDir, 'setup-answers.json'), JSON.stringify({ version: 1, prompts: 'safer', background: true, profile: { name: null, port: null } }))
-  const scope = { get: (name: string) => (name === 'profileContext' ? { name: 'default', dir: profileDir, home } : name === 'webServer' && runningPort !== undefined ? { port: runningPort } : undefined) }
-  const service = new RunSettings({ ...systemDependencies(scope as never), tailscale: fakeTailscale('my-pc.example.ts.net').run, reach: () => undefined, runsAsRoot: () => false })
+  const scope = { get: (name: string) => (name === 'profileContext' ? { name: 'default', dir: profileDir, home } : name === 'webServer' && runningPort !== undefined ? { port: runningPort } : name === 'hmr' ? hot.hmr : undefined) }
+  const service = new RunSettings({ ...systemDependencies(scope as never), ...hot.reloadWaitMs === undefined ? {} : { reloadWaitMs: hot.reloadWaitMs }, tailscale: fakeTailscale('my-pc.example.ts.net').run, reach: () => undefined, runsAsRoot: () => false })
   return { service, home, profileDir, record: (): Record<string, unknown> => JSON.parse(readFileSync(join(profileDir, 'setup-answers.json'), 'utf8')) as Record<string, unknown> }
 }
 
@@ -84,5 +84,34 @@ describe.skipIf(process.platform === 'win32')('the How Delorun runs service on a
     await w.service.prompts('safer')
     expect((await readDangerousGrant(dangerousGrantPath(w.home))).kind).toBe('absent')
     expect((await w.service.state()).dangerous).toBe('off')
+  })
+
+  describe('the hot reload behind the restart note, through the real wiring', () => {
+    /** A fake hot-reload service whose `reconcileProfile` is the given one, run through `runExclusive` as the real one is. */
+    const hmr = (reconcileProfile: () => Promise<unknown>) => ({ runExclusive: <T>(run: () => Promise<T>): Promise<T> => run(), reconcileProfile })
+
+    it('answers no restart for a reload that settles, and one for a failure, a restart reason, no service or a reload that never settles', async () => {
+      // Pins the mapping in `reloaded`: only a settled reload with no restart reason leaves the note off.
+      const answer = async (hot: Parameters<typeof setup>[1]) => (await setup(undefined, hot).service.prompts('stock')).restartNeeded
+      expect(await answer({ hmr: hmr(() => Promise.resolve({ restartReason: undefined })) })).toBe(false)
+      // An entry that was already inactive is reported as a warning only: the reload settled, so nothing needs a restart (as `changes.reload` answers).
+      expect(await answer({ hmr: hmr(() => Promise.resolve({ restartReason: undefined, warnings: ['plugin was inactive'] })) })).toBe(false)
+      expect(await answer({ hmr: hmr(() => Promise.resolve({ restartReason: 'a plugin changed its service' })) })).toBe(true)
+      expect(await answer({ hmr: hmr(() => Promise.reject(new Error('a replacement failed'))) })).toBe(true)
+      expect(await answer({})).toBe(true)
+      expect(await answer({ hmr: hmr(() => new Promise<never>(() => undefined)), reloadWaitMs: 200 })).toBe(true)
+    })
+
+    it('leaves the profile lock free while a reload hangs, so a change that takes it is not blocked', async () => {
+      // Pins the order in `prompts`: written under the real file lock, released, then the bounded wait.
+      const w = setup(undefined, { hmr: hmr(() => new Promise<never>(() => undefined)), reloadWaitMs: 1500 })
+      const hung = w.service.prompts('stock')
+      await new Promise<void>((resolve) => { setTimeout(resolve, 100) })
+      const started = Date.now()
+      await w.service.background(false)
+      expect(Date.now() - started).toBeLessThan(1000)
+      expect(w.record()).toMatchObject({ prompts: 'stock', background: false })
+      expect(await hung).toEqual({ prompts: 'stock', restartNeeded: true })
+    })
   })
 })
