@@ -3,4 +3,4 @@ area: Install and update
 section: Changed
 ---
 
-- The plugin catalogue and the container images are named under TwickaS.
+- Container images are published at ghcr.io/twickas, and the plugin catalogue lives at github.com/TwickaS/delorun-plugins.

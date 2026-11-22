@@ -23,7 +23,7 @@ export const CATALOGUE_SCHEMAS = {
 export const CATALOGUE_ORIGIN = 'https://catalogue.delorun.com'
 
 /** The repository whose publish job signs the catalogue files. */
-export const CATALOGUE_REPOSITORY = 'TwickaS/delo-plugins'
+export const CATALOGUE_REPOSITORY = 'TwickaS/delorun-plugins'
 
 /** A plugin author named in an index entry. */
 export interface CatalogueAuthor {
