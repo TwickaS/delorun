@@ -5,7 +5,7 @@
  * @module @delorun/setup-apply
  */
 export { SetupApplyError } from './errors.ts'
-export { JS_TAG, readPatchRow, setPatchRow, setRowFields, updateRowConfig, type InheritedRow, type PatchRow, type PatchValue } from './patch-file.ts'
+export { JS_TAG, readPatchRow, setPatchRow, setPatchRows, setRowFields, updateRowConfig, type InheritedRow, type PatchRow, type PatchValue } from './patch-file.ts'
 export { FULL_ACCESS_EVERYWHERE_KEY, promptRows, PROMPT_SWITCH_ROWS, readPromptsRows, writePromptRows, type PromptRow } from './prompt-rows.ts'
 export { runsAsRoot } from './dangerous.ts'
 export { DANGEROUS_WARNING_LINES } from './warning.ts'

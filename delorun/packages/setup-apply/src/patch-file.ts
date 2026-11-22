@@ -4,7 +4,8 @@
  *
  * @module @delorun/setup-apply/patch-file
  */
-import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { randomBytes } from 'node:crypto'
+import { closeSync, constants, existsSync, fsyncSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { isDeepStrictEqual } from 'node:util'
 import { parse, stringify } from 'yaml'
 import { SetupApplyError } from './errors.ts'
@@ -68,14 +69,30 @@ export function readPatchRow(path: string, id: string, command: string): Readonl
 }
 
 /**
- * Replace a profile's patch list atomically at mode 0600.
+ * Replace a profile's patch list atomically at mode 0600. The text goes to a temporary file with a name no earlier run
+ * used, created exclusively and without following a link, then reaches the disk before it replaces the patch, so a
+ * link already at a guessable name is never written through and a crash leaves the old patch or the new one.
  * @param path - the profile's `cordis.patch.yml`.
  * @param rows - the rows.
  */
 function writePatchList(path: string, rows: readonly unknown[]): void {
-  const temporary = `${path}.tmp`
-  writeFileSync(temporary, stringify(rows), { mode: 0o600 })
-  renameSync(temporary, path)
+  const temporary = `${path}.${String(process.pid)}.${randomBytes(8).toString('hex')}.tmp`
+  const descriptor = openSync(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0), 0o600)
+  try {
+    writeFileSync(descriptor, stringify(rows))
+    fsyncSync(descriptor)
+  } catch (error) {
+    closeSync(descriptor)
+    unlinkSync(temporary)
+    throw error
+  }
+  closeSync(descriptor)
+  try {
+    renameSync(temporary, path)
+  } catch (error) {
+    unlinkSync(temporary)
+    throw error
+  }
 }
 
 /**
@@ -87,13 +104,26 @@ function writePatchList(path: string, rows: readonly unknown[]): void {
  * @throws {SetupApplyError} when the file is not a YAML patch list; it is left unchanged.
  */
 export function setPatchRow(path: string, row: PatchRow): void {
+  setPatchRows(path, [row])
+}
+
+/**
+ * Merge several rows into a profile's patch list in one replacement, as {@link setPatchRow} merges one: a failure
+ * leaves the file as it was, never with some of the rows written.
+ * @param path - the profile's `cordis.patch.yml`.
+ * @param merged - the rows to set, in order.
+ * @throws {SetupApplyError} when the file is not a YAML patch list; it is left unchanged.
+ */
+export function setPatchRows(path: string, merged: readonly PatchRow[]): void {
   const rows = readPatchList(path, 'delorun setup', '; it was not changed')
-  const existing = rows.find(entry => isRecord(entry) && entry['id'] === row.id)
-  if (isRecord(existing)) {
-    const config = isRecord(existing['config']) ? existing['config'] : {}
-    existing['config'] = { ...config, ...row.config }
-  } else {
-    rows.push({ id: row.id, config: { ...row.config } })
+  for (const row of merged) {
+    const existing = rows.find(entry => isRecord(entry) && entry['id'] === row.id)
+    if (isRecord(existing)) {
+      const config = isRecord(existing['config']) ? existing['config'] : {}
+      existing['config'] = { ...config, ...row.config }
+    } else {
+      rows.push({ id: row.id, config: { ...row.config } })
+    }
   }
   writePatchList(path, rows)
 }

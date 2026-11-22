@@ -1,9 +1,9 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
-import { readPatchRow, setPatchRow, setRowFields, type InheritedRow } from '../src/patch-file.ts'
+import { readPatchRow, setPatchRow, setPatchRows, setRowFields, type InheritedRow } from '../src/patch-file.ts'
 
 let directory: string
 
@@ -40,6 +40,38 @@ describe('the profile patch', () => {
     rmSync(path)
     setPatchRow(path, { id: 'b', config: { enabled: false } })
     expect(parse(readFileSync(path, 'utf8'))).toEqual([{ id: 'b', config: { enabled: false } }])
+  })
+})
+
+describe('writing the profile patch', () => {
+  it('does not write through a link left at the old temporary name, and leaves no temporary file', () => {
+    const path = join(directory, 'cordis.patch.yml')
+    const victim = join(directory, 'victim.txt')
+    writeFileSync(victim, 'keep me')
+    symlinkSync(victim, `${path}.tmp`)
+    setPatchRow(path, { id: 'a', config: { enabled: true } })
+    expect(readFileSync(victim, 'utf8')).toBe('keep me')
+    expect(parse(readFileSync(path, 'utf8'))).toEqual([{ id: 'a', config: { enabled: true } }])
+    expect(lstatSync(`${path}.tmp`).isSymbolicLink()).toBe(true)
+    expect(readdirSync(directory).sort()).toEqual(['cordis.patch.yml', 'cordis.patch.yml.tmp', 'victim.txt'])
+  })
+
+  it('writes the file at mode 0600 whatever mode the one it replaces had', () => {
+    const path = join(directory, 'cordis.patch.yml')
+    writeFileSync(path, '[]\n', { mode: 0o644 })
+    setPatchRow(path, { id: 'a', config: { enabled: true } })
+    expect(lstatSync(path).mode & 0o777).toBe(0o600)
+  })
+
+  it('merges several rows in one replacement, and writes none of them for a file that is not a patch list', () => {
+    const path = join(directory, 'cordis.patch.yml')
+    writeFileSync(path, '- id: a\n  config:\n    keep: 1\n')
+    setPatchRows(path, [{ id: 'a', config: { enabled: true } }, { id: 'b', config: { enabled: false } }])
+    expect(parse(readFileSync(path, 'utf8'))).toEqual([{ id: 'a', config: { keep: 1, enabled: true } }, { id: 'b', config: { enabled: false } }])
+    writeFileSync(path, 'not: a list\n')
+    expect(() => setPatchRows(path, [{ id: 'a', config: { enabled: true } }, { id: 'b', config: { enabled: false } }])).toThrow('is not a patch list')
+    expect(readFileSync(path, 'utf8')).toBe('not: a list\n')
+    expect(existsSync(`${path}.tmp`)).toBe(false)
   })
 })
 

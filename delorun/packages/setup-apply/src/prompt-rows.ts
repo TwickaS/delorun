@@ -10,7 +10,7 @@
  */
 import { PARITY_SWITCHES, type ParitySwitchEntry } from '@delorun/contract-parity-composition'
 import { PROMPTS_OPTIONS, type PromptsAnswer } from '@delorun/contract-setup-answers'
-import { readPatchRow, setPatchRow } from './patch-file.ts'
+import { readPatchRow, setPatchRows } from './patch-file.ts'
 
 /**
  * The switches whose behaviour is a prompt or a permission default, with the row of `@delorun/bundle-local` that
@@ -61,12 +61,12 @@ export function promptRows(answer: PromptsAnswer, registry: readonly ParitySwitc
 }
 
 /**
- * Write the prompts answer into a profile's patch.
+ * Write the prompts answer into a profile's patch, every row in one replacement.
  * @param patchPath - the profile's `cordis.patch.yml`.
  * @param answer - the prompts answer.
  */
 export function writePromptRows(patchPath: string, answer: PromptsAnswer): void {
-  for (const row of promptRows(answer)) setPatchRow(patchPath, row)
+  setPatchRows(patchPath, promptRows(answer))
 }
 
 /**
