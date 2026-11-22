@@ -26,6 +26,14 @@
  * the lock or a slot file without `start` counts for a process only if that process started before the file was last
  * written; a reused id of a later process, or the id of a thread of another process, holds nothing.
  *
+ * A machine hold stops the queue from granting anything new. `hold.json` in the same directory (`{ reason, since, allow }`)
+ * makes every request wait with the reason `machine held: <reason>`, whatever slots are free, except a request whose working
+ * directory is inside one of the worktree roots in `allow`; a request that records no working directory is not exempt.
+ * Holders already running are never interrupted, and when the file goes the waiting requests proceed in their normal order.
+ * A hold file that is not valid counts as a hold with the reason `hold file unreadable`, so a damaged file fails closed;
+ * `run-checks --unhold` removes it. Runs of old worktrees do not read the hold: they take their turn in the previous queue
+ * as before, so a hold binds only runs of a worktree that has this code.
+ *
  * The file system, clock, process table and signals are injected, so the specs start no process.
  *
  * @module @delorun/tools/checks/slots
@@ -88,6 +96,8 @@ export interface SlotDemand {
   readonly priority: 0 | 1
   /** What it runs, for `--queue`: such as the worktree and the checks. */
   readonly label: string
+  /** The working directory it runs in, which a machine hold's allowed worktrees are matched against. */
+  readonly cwd?: string
 }
 
 /** A grant. */
@@ -99,8 +109,17 @@ export interface SlotGrant {
 }
 
 // `start` is the process's start time from QueueHost.startOf; a file without one is checked by the process id alone.
-const Request = z.strictObject({ pid: z.number().int(), start: z.string().optional(), want: z.number().int().positive(), min: z.number().int().positive(), memoryBytes: z.number().nonnegative(), disk: z.boolean(), priority: z.union([z.literal(0), z.literal(1)]), label: z.string(), since: z.number() })
+const Request = z.strictObject({ pid: z.number().int(), start: z.string().optional(), want: z.number().int().positive(), min: z.number().int().positive(), memoryBytes: z.number().nonnegative(), disk: z.boolean(), priority: z.union([z.literal(0), z.literal(1)]), label: z.string(), since: z.number(), cwd: z.string().optional() })
 const Held = z.strictObject({ pid: z.number().int(), start: z.string().optional(), slots: z.number().int().positive(), memoryBytes: z.number().nonnegative(), disk: z.boolean(), priority: z.union([z.literal(0), z.literal(1)]), label: z.string(), since: z.number(), requested: z.number() })
+
+const MAX_DATE_MILLISECONDS = 8.64e15
+const Hold = z.strictObject({ reason: z.string(), since: z.number().min(0).max(MAX_DATE_MILLISECONDS), allow: z.array(z.string()) })
+
+/** A machine hold, as read from `hold.json`. */
+export type SlotHold = z.infer<typeof Hold>
+
+/** The reason of a hold file that cannot be read. */
+export const UNREADABLE_HOLD = 'hold file unreadable'
 
 /** A waiting request, as read from its file. */
 export type SlotRequest = z.infer<typeof Request> & { readonly file: string }
@@ -122,7 +141,12 @@ export interface SlotState {
   readonly oldHolder?: number
   /** Live runs of old worktrees waiting in the previous queue, with the priority and time of their tickets. */
   readonly oldWaiting: readonly { readonly pid: number, readonly priority: number, readonly since: number }[]
+  /** The machine hold, when `hold.json` exists. */
+  readonly hold?: SlotHold
 }
+
+/** The hold file's name in the slots directory. */
+const HOLD_FILE = 'hold.json'
 
 /**
  * Parse a JSON file's text, or give undefined for text that is not JSON.
@@ -137,6 +161,90 @@ function json(text: string): unknown {
     void error
     return undefined
   }
+}
+
+/**
+ * The machine hold, if the slots directory has one. A file that cannot be read or is not a hold counts as a hold, so a
+ * damaged file fails closed.
+ * @param host - the file system.
+ * @param paths - the directories.
+ * @returns the hold, or undefined when there is no `hold.json`.
+ */
+export function readHold(host: QueueHost, paths: SlotPaths): SlotHold | undefined {
+  const path = `${paths.dir}/${HOLD_FILE}`
+  let text: string | undefined
+  try {
+    text = host.fs.read(path)
+  } catch (unreadable) {
+    // EACCES or EISDIR: the file exists but cannot be read, which holds the machine.
+    void unreadable
+    return { reason: UNREADABLE_HOLD, since: host.fs.modified(path) ?? 0, allow: [] }
+  }
+  if (text === undefined) return undefined
+  const parsed = Hold.safeParse(json(text))
+  return parsed.success ? parsed.data : { reason: UNREADABLE_HOLD, since: host.fs.modified(path) ?? 0, allow: [] }
+}
+
+/**
+ * Hold the machine: write `hold.json` in one step, so a reader never sees it half written.
+ * @param host - the file system and clock.
+ * @param paths - the directories.
+ * @param reason - why the machine is held.
+ * @param allow - the worktree roots whose requests are exempt.
+ * @returns the lines to print: the hold as `--queue` shows it.
+ */
+export function holdMachine(host: QueueHost, paths: SlotPaths, reason: string, allow: readonly string[]): string[] {
+  const { fs } = host
+  fs.ensureDir(paths.dir)
+  const path = `${paths.dir}/${HOLD_FILE}`
+  const now = host.now()
+  const hold: SlotHold = { reason, since: now, allow: [...allow] }
+  fs.remove(`${path}.tmp`)
+  fs.create(`${path}.tmp`, JSON.stringify(hold))
+  fs.rename(`${path}.tmp`, path)
+  return describeHold(hold, now)
+}
+
+/**
+ * Lift the machine hold, damaged or not.
+ * @param host - the file system.
+ * @param paths - the directories.
+ * @returns the line to print.
+ */
+export function unholdMachine(host: QueueHost, paths: SlotPaths): string[] {
+  const path = `${paths.dir}/${HOLD_FILE}`
+  const held = host.fs.list(paths.dir).includes(HOLD_FILE)
+  host.fs.remove(path)
+  host.fs.remove(`${path}.tmp`)
+  return [held ? 'machine hold removed; waiting requests proceed in their order' : 'no machine hold was in force']
+}
+
+/**
+ * Whether a working directory is inside one of a hold's allowed worktrees: equal to a root or below it, so `/w/ab` is not
+ * inside `/w/a`.
+ * @param hold - the hold.
+ * @param cwd - the request's working directory, or undefined when it recorded none.
+ * @returns true when the request is exempt.
+ */
+function allowed(hold: SlotHold, cwd: string | undefined): boolean {
+  if (cwd === undefined) return false
+  return hold.allow.some((root) => {
+    const base = root.replace(/\/+$/, '')
+    return cwd === base || cwd.startsWith(`${base}/`)
+  })
+}
+
+/**
+ * The lines that show a hold: the reason, since when, and the allowed worktrees.
+ * @param hold - the hold.
+ * @param now - the current time in milliseconds.
+ * @returns the lines.
+ */
+export function describeHold(hold: SlotHold, now: number): string[] {
+  const lines = [`machine held: ${hold.reason}; since ${new Date(hold.since).toISOString()}, ${String(Math.max(0, Math.round((now - hold.since) / 1000)))} s ago`]
+  if (hold.allow.length === 0) lines.push('  allowed worktrees: none')
+  for (const root of hold.allow) lines.push(`  allowed worktree: ${root}`)
+  return lines
 }
 
 /** How much later than a file's last write a process may start and still be taken for the writer: the boot time's resolution. */
@@ -192,8 +300,9 @@ export function readSlots(host: QueueHost, paths: SlotPaths): SlotState {
   const old = tickets.filter(ticket => ticket.held).map(ticket => ticket.pid)
   const oldWaiting = tickets.filter(ticket => !ticket.held).map(({ pid, priority, since }) => ({ pid, priority, since }))
   const lock = Number(fs.read(paths.oldLock))
+  const hold = readHold(host, paths)
   const oldHolder = old[0] ?? (Number.isInteger(lock) && lock > 0 && lock !== host.pid && !granted.has(lock) && holds(lock, paths.oldLock) ? lock : undefined)
-  return { waiting, holders, oldWaiting, ...oldHolder === undefined ? {} : { oldHolder } }
+  return { waiting, holders, oldWaiting, ...oldHolder === undefined ? {} : { oldHolder }, ...hold === undefined ? {} : { hold } }
 }
 
 /**
@@ -204,6 +313,8 @@ export function readSlots(host: QueueHost, paths: SlotPaths): SlotState {
  * @returns the grant's slots and memory, or why the request waits.
  */
 export function decide(state: SlotState, pid: number, budget: SlotBudget): { readonly slots: number, readonly memoryBytes: number } | { readonly waits: string } {
+  // A held machine grants nothing new to a request outside the allowed worktrees; holders keep what they have.
+  if (state.hold !== undefined && !allowed(state.hold, state.waiting.find(request => request.pid === pid)?.cwd)) return { waits: `machine held: ${state.hold.reason}` }
   if (state.oldHolder !== undefined) return { waits: `an old worktree's run in process ${String(state.oldHolder)} holds the machine` }
   let slots = budget.slots - state.holders.reduce((sum, holder) => sum + holder.slots, 0)
   let memory = budget.memoryBytes - state.holders.reduce((sum, holder) => sum + holder.memoryBytes, 0)
@@ -328,7 +439,7 @@ export async function takeSlots(host: QueueHost, paths: SlotPaths, budget: SlotB
     fs.rename(`${path}.tmp`, path)
   }
   const start = host.startOf(host.pid)
-  const asked = { pid: host.pid, ...start === undefined ? {} : { start }, want, min, memoryBytes: demand.memoryBytes, disk: demand.disk, priority: demand.priority, label: demand.label, since }
+  const asked = { pid: host.pid, ...start === undefined ? {} : { start }, want, min, memoryBytes: demand.memoryBytes, disk: demand.disk, priority: demand.priority, label: demand.label, since, ...demand.cwd === undefined ? {} : { cwd: demand.cwd } }
   write(request, asked)
   // The same ticket in the previous queue keeps an old run that arrived later behind this one.
   fs.create(waitingTicket, '')
@@ -369,12 +480,13 @@ export async function takeSlots(host: QueueHost, paths: SlotPaths, budget: SlotB
  * @param state - the machine's state.
  * @param budget - the machine's budget.
  * @param now - the current time in milliseconds.
- * @returns the lines.
+ * @returns the lines, the machine hold first when there is one.
  */
 export function describeSlots(state: SlotState, budget: SlotBudget, now: number): string[] {
   const gib = (bytes: number): string => `${(bytes / 1024 ** 3).toFixed(1)} GiB`
   const used = state.holders.reduce((sum, holder) => sum + holder.slots, 0)
-  const lines = [`slots: ${String(used)} of ${String(budget.slots)} held, ${String(budget.diskRuns)} disk-heavy places, ${gib(budget.memoryBytes)} of memory; ${String(state.waiting.length)} waiting`]
+  const lines = state.hold === undefined ? [] : describeHold(state.hold, now)
+  lines.push(`slots: ${String(used)} of ${String(budget.slots)} held, ${String(budget.diskRuns)} disk-heavy places, ${gib(budget.memoryBytes)} of memory; ${String(state.waiting.length)} waiting`)
   if (state.oldHolder !== undefined) lines.push(`  an old worktree's run in process ${String(state.oldHolder)} holds the whole machine`)
   if (state.oldWaiting.length > 0) lines.push(`  ${String(state.oldWaiting.length)} run(s) of old worktrees wait in the previous queue`)
   for (const holder of state.holders) lines.push(`  holding: process ${String(holder.pid)}, ${String(holder.slots)} slots, ${gib(holder.memoryBytes)}${holder.disk ? ', disk-heavy' : ''}${holder.priority === 0 ? ', trunk' : ''}, for ${String(Math.round((now - holder.since) / 1000))} s: ${holder.label}`)

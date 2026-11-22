@@ -17,7 +17,9 @@
  *
  * Heavy runs share the machine's CPU slots, memory and disk-heavy places, first come, first served (`checks/slots.ts`);
  * a push to the trunk or `DELORUN_GATE_PRIORITY=trunk` goes ahead of waiting runs, and a light plan takes no slots.
- * `--queue` prints the holders and the waiting runs.
+ * `--queue` prints the machine hold, if any, the holders and the waiting runs. `--hold "<reason>" [--allow <worktree>]...` makes
+ * the queue refuse every new run, except those started inside an allowed worktree, until `--unhold`; runs already holding
+ * slots are not interrupted, and runs of old worktrees do not read the hold.
  *
  * The invocations, which `lefthook.yml` and `pnpm check` use:
  *
@@ -64,7 +66,7 @@ import { catalog, criticalPath, declineClosureOffHost, declineUnansweredDocker, 
 import { checksToRun, fitToGrant, runDemand, withoutIdleNeeds } from './checks/demand.ts'
 import { isLightPlan, gatePriority } from './checks/run-queue.ts'
 import { machineBudget, nodeSlotHost, privateSlotPaths } from './checks/slot-host.ts'
-import { describeSlots, GRANT_ENV, grantFromEnv, grantToEnv, readSlots, takeSlots, type SlotGrant } from './checks/slots.ts'
+import { describeSlots, GRANT_ENV, grantFromEnv, grantToEnv, holdMachine, readSlots, takeSlots, unholdMachine, type SlotGrant } from './checks/slots.ts'
 import { closureHostProblem } from './checks/closure.ts'
 import { gateFailure, logTail, probeDocker, runPlan, type Outcome, type Result } from './checks/run.ts'
 import { findTreePass, recordTreePass, treeOfRef, treePassEnabled, treePassPath, treeRecordsDir, treeState, type RunFacts, type TreeState } from './checks/tree-pass.ts'
@@ -512,8 +514,22 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
       'tier': { type: 'string' },
       'preflight': { type: 'boolean', default: false },
       'queue': { type: 'boolean', default: false },
+      'hold': { type: 'string' },
+      'allow': { type: 'string', multiple: true },
+      'unhold': { type: 'boolean', default: false },
     },
   })
+  // The machine hold only edits the queue's hold file; it needs neither the repository nor the pinned Node.
+  if (values.hold !== undefined || values.unhold || values.allow !== undefined) {
+    if (values.hold !== undefined && values.unhold) throw new Error('--hold and --unhold are separate commands; give one')
+    if (values.hold === undefined && !values.unhold) throw new Error('--allow names a worktree the hold exempts; give it with --hold "<reason>"')
+    if (values.unhold && values.allow !== undefined) throw new Error('--unhold takes no --allow')
+    if (values.hold?.trim() === '') throw new Error('--hold takes a reason: --hold "<reason>"')
+    const host = nodeSlotHost(text => process.stderr.write(text))
+    const paths = privateSlotPaths(tmpdir(), process.getuid?.() ?? -1)
+    for (const line of values.hold === undefined ? unholdMachine(host, paths) : holdMachine(host, paths, values.hold, (values.allow ?? []).map(root => resolve(root)))) console.log(line)
+    return 0
+  }
   // The pre-flight is the lane tier of a change run without its test lanes, and it waits in no queue.
   const preflight = values.preflight
   if (preflight && (values['pre-commit'] || values['pre-push'] || values.changed || values.tier !== undefined)) throw new Error('--preflight is a change run of its own; give it without --pre-commit, --pre-push, --changed or --tier')
@@ -667,7 +683,7 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
   let grant: SlotGrant | undefined = inherited
   if (!light && !preflight && inherited === undefined && running.length > 0 && !isLightPlan(running)) {
     const demand = runDemand(running, slotBudget.slots, gatePriority(env, pushInput !== undefined && pushesTrunk(pushInput)), `${relative(dirname(root), root)}: ${running.map(check => check.id).slice(0, 6).join(', ')}${running.length > 6 ? ', ...' : ''}`)
-    grant = await takeSlots(nodeSlotHost(line => process.stderr.write(line)), privateSlotPaths(tmpdir(), process.getuid?.() ?? -1), slotBudget, demand)
+    grant = await takeSlots(nodeSlotHost(line => process.stderr.write(line)), privateSlotPaths(tmpdir(), process.getuid?.() ?? -1), slotBudget, { ...demand, cwd: process.cwd() })
   }
   if (!light && !preflight && !values['no-scope'] && env[IN_SCOPE] === undefined && canScope()) {
     const [command = '', ...args] = scopeCommand([process.execPath, ...process.execArgv, ...process.argv.slice(1)], memory)

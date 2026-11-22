@@ -2,11 +2,11 @@
  * The machine-wide slot budget against an in-memory file system and process table: grants beside other runs, first come
  * first served, the disk-heavy places, the trunk's priority, dead holders and reused process ids reclaimed, claims that
  * overfill the slots, the memory or the disk-heavy places stepping back,
- * old worktrees' queue and lock, and the position messages.
+ * old worktrees' queue and lock, the position messages, and the machine hold the queue enforces.
  */
 import { describe, expect, it } from 'vitest'
 import type { QueueFs, QueueHost } from '../src/checks/run-queue.ts'
-import { decide, describeSlots, grantFromEnv, grantToEnv, readSlots, SLOT_POLL_MILLISECONDS, stepsBack, takeSlots, WAIT_REPORT_MILLISECONDS, type SlotBudget, type SlotDemand, type SlotGrant, type SlotPaths } from '../src/checks/slots.ts'
+import { decide, describeSlots, grantFromEnv, grantToEnv, holdMachine, readSlots, SLOT_POLL_MILLISECONDS, stepsBack, takeSlots, unholdMachine, WAIT_REPORT_MILLISECONDS, type SlotBudget, type SlotDemand, type SlotGrant, type SlotPaths } from '../src/checks/slots.ts'
 
 const GIB = 1024 ** 3
 const paths: SlotPaths = { dir: '/s', oldQueue: '/q', oldLock: '/old.lock' }
@@ -571,5 +571,154 @@ describe('the files', () => {
     expect(grantFromEnv(undefined)).toBeUndefined()
     expect(() => grantFromEnv('0:1:1')).toThrow('DELORUN_CHECKS_GRANT must be')
     expect(() => grantFromEnv('six')).toThrow('DELORUN_CHECKS_GRANT must be')
+  })
+})
+
+describe('a machine hold', () => {
+  const small: SlotBudget = { slots: 16, memoryBytes: 16 * GIB, diskRuns: 2 }
+  const hold = (machine: Machine, fields: Record<string, unknown> = {}): void => {
+    machine.files.set('/s/hold.json', JSON.stringify({ reason: 'cleanup', since: 500, allow: [], ...fields }))
+  }
+  /** A waiting request written by hand, as another run would. */
+  const ask = (machine: Machine, pid: number, fields: { cwd?: string, since?: number, priority?: 0 | 1, min?: number, want?: number } = {}): void => {
+    const priority = fields.priority ?? 1
+    const since = fields.since ?? 1000
+    machine.live.add(pid)
+    machine.files.set(`/s/req-${String(priority)}-${String(since).padStart(15, '0')}-${String(pid)}.json`, JSON.stringify({ pid, want: 4, min: 4, memoryBytes: 0, disk: false, label: 'x', ...fields, priority, since }))
+  }
+  const decision = (machine: Machine, pid: number, within: SlotBudget = budget) => decide(readSlots(machine.host(pid), paths), pid, within)
+
+  it('makes a request that fits wait with the reason, and grants the same request when the hold is removed', async () => {
+    const machine = new Machine()
+    hold(machine, { reason: 'tests are running' })
+    machine.onSleep = (count) => { if (count === 3) machine.files.delete('/s/hold.json') }
+    const grant = await takeSlots(machine.host(1), paths, budget, demand({ want: 2, min: 2 }))
+    expect(grant.slots).toBe(2)
+    expect(grant.waitedMs).toBe(3000)
+    expect(machine.said).toHaveLength(1)
+    expect(machine.said[0]).toContain('waiting for 2 of 20 slots: machine held: tests are running; position 1 of 1, 0 run(s) holding slots')
+  })
+
+  it('records the working directory in the request', async () => {
+    const machine = new Machine()
+    hold(machine)
+    let recorded: unknown
+    machine.onSleep = () => {
+      recorded = JSON.parse(machine.files.get('/s/req-1-000000000001000-1.json') ?? '{}')
+      machine.files.delete('/s/hold.json')
+    }
+    await takeSlots(machine.host(1), paths, budget, demand({ cwd: '/w/a/sub' }))
+    expect(recorded).toMatchObject({ pid: 1, cwd: '/w/a/sub' })
+  })
+
+  it('grants a request inside an allowed worktree, and not one in a sibling folder whose name starts the same', () => {
+    const machine = new Machine()
+    hold(machine, { allow: ['/w/a', '/v/'] })
+    ask(machine, 1, { cwd: '/w/a', since: 1000 })
+    ask(machine, 2, { cwd: '/w/a/delorun/apps', since: 1001 })
+    ask(machine, 3, { cwd: '/w/ab', since: 1002 })
+    ask(machine, 4, { cwd: '/v/sub', since: 1003 })
+    expect('slots' in decision(machine, 1)).toBe(true)
+    expect('slots' in decision(machine, 2)).toBe(true)
+    expect(decision(machine, 3)).toEqual({ waits: 'machine held: cleanup' })
+    expect('slots' in decision(machine, 4)).toBe(true)
+  })
+
+  it('makes a request without a working directory wait, as an old request file records none', () => {
+    const machine = new Machine()
+    hold(machine, { allow: ['/w/a'] })
+    ask(machine, 1)
+    expect(decision(machine, 1)).toEqual({ waits: 'machine held: cleanup' })
+    machine.files.delete('/s/hold.json')
+    expect('slots' in decision(machine, 1)).toBe(true)
+  })
+
+  it('lets a holder that is running when the hold starts keep its grant, while a new request waits', async () => {
+    const machine = new Machine()
+    const grant = await takeSlots(machine.host(1), paths, budget, demand({ want: 4, min: 4 }))
+    expect(grant.slots).toBe(4)
+    hold(machine)
+    ask(machine, 2)
+    const state = readSlots(machine.host(2), paths)
+    expect(state.holders.map(each => each.pid)).toEqual([1])
+    expect(stepsBack(state, 1, budget)).toBe(false)
+    expect(decide(state, 2, budget)).toEqual({ waits: 'machine held: cleanup' })
+    expect(machine.files.has('/s/held-1.json')).toBe(true)
+  })
+
+  it('counts a hold file that is damaged or unreadable as a hold', () => {
+    for (const text of ['{', '', '[]', JSON.stringify({ reason: 7, since: 1, allow: [] }), JSON.stringify({ reason: 'x', since: 1, allow: [], extra: true }), JSON.stringify({ reason: 'x', since: 1e300, allow: [] })]) {
+      const machine = new Machine()
+      machine.files.set('/s/hold.json', text)
+      ask(machine, 1, { cwd: '/w/a' })
+      expect(decision(machine, 1)).toEqual({ waits: 'machine held: hold file unreadable' })
+    }
+    const machine = new Machine()
+    ask(machine, 1)
+    const host = machine.host(1)
+    const failing: QueueHost = { ...host, fs: { ...host.fs, read: path => { if (path === '/s/hold.json') throw new Error('EACCES'); return host.fs.read(path) } } }
+    machine.files.set('/s/hold.json', '')
+    expect(decide(readSlots(failing, paths), 1, budget)).toEqual({ waits: 'machine held: hold file unreadable' })
+  })
+
+  it('keeps the priority and the backfill rule when the hold lifts', () => {
+    const machine = new Machine()
+    hold(machine)
+    ask(machine, 1, { since: 1000, want: 20 })
+    ask(machine, 2, { since: 2000, priority: 0, want: 20 })
+    expect(decision(machine, 1)).toEqual({ waits: 'machine held: cleanup' })
+    expect(decision(machine, 2)).toEqual({ waits: 'machine held: cleanup' })
+    machine.files.delete('/s/hold.json')
+    expect('slots' in decision(machine, 2)).toBe(true)
+    expect(decision(machine, 1)).toEqual({ waits: '0 of 20 slots are free and it needs 4' })
+
+    const beside = new Machine()
+    beside.hold(9, { slots: 12, since: 0 })
+    hold(beside)
+    ask(beside, 1, { min: 8, want: 8, since: 10 })
+    ask(beside, 2, { min: 2, want: 4, since: 11 })
+    expect(decision(beside, 2, small)).toEqual({ waits: 'machine held: cleanup' })
+    beside.files.delete('/s/hold.json')
+    expect(decision(beside, 1, small)).toEqual({ waits: '4 of 16 slots are free and it needs 8' })
+    expect(decision(beside, 2, small)).toEqual({ slots: 2, memoryBytes: 2 * GIB })
+  })
+
+  it('is written by --hold in one step and printed, replaced by a later --hold, and removed by --unhold', () => {
+    const machine = new Machine()
+    const host = machine.host(1)
+    expect(holdMachine(host, paths, 'tests are running', ['/w/a', '/w/b'])).toEqual([
+      'machine held: tests are running; since 1970-01-01T00:00:01.000Z, 0 s ago',
+      '  allowed worktree: /w/a',
+      '  allowed worktree: /w/b',
+    ])
+    expect(JSON.parse(machine.files.get('/s/hold.json') ?? '')).toEqual({ reason: 'tests are running', since: 1000, allow: ['/w/a', '/w/b'] })
+    expect([...machine.files.keys()]).toEqual(['/s/hold.json'])
+    machine.time = 5000
+    expect(holdMachine(host, paths, 'again', [])).toEqual(['machine held: again; since 1970-01-01T00:00:05.000Z, 0 s ago', '  allowed worktrees: none'])
+    expect(JSON.parse(machine.files.get('/s/hold.json') ?? '')).toMatchObject({ reason: 'again', allow: [] })
+    expect(unholdMachine(host, paths)).toEqual(['machine hold removed; waiting requests proceed in their order'])
+    expect([...machine.files.keys()]).toEqual([])
+    expect(unholdMachine(host, paths)).toEqual(['no machine hold was in force'])
+  })
+
+  it('removes a damaged hold file with --unhold', () => {
+    const machine = new Machine()
+    machine.files.set('/s/hold.json', '{')
+    machine.files.set('/s/hold.json.tmp', '{')
+    expect(unholdMachine(machine.host(1), paths)).toEqual(['machine hold removed; waiting requests proceed in their order'])
+    expect([...machine.files.keys()]).toEqual([])
+  })
+
+  it('is printed first by --queue, with the reason, the time and the allowed worktrees', () => {
+    const machine = new Machine()
+    machine.time = 1000
+    holdMachine(machine.host(1), paths, 'tests are running', ['/w/a'])
+    const lines = describeSlots(readSlots(machine.host(1), paths), budget, 61_000)
+    expect(lines.slice(0, 3)).toEqual([
+      'machine held: tests are running; since 1970-01-01T00:00:01.000Z, 60 s ago',
+      '  allowed worktree: /w/a',
+      'slots: 0 of 20 held, 2 disk-heavy places, 20.0 GiB of memory; 0 waiting',
+    ])
+    expect(describeSlots({ holders: [], waiting: [], oldWaiting: [] }, budget, 0)[0]).toBe('slots: 0 of 20 held, 2 disk-heavy places, 20.0 GiB of memory; 0 waiting')
   })
 })
