@@ -223,7 +223,7 @@ describe('H3 and the changes a release\'s signed bundles bring', () => {
       settings: [rowSettingsFact('plugin-manager', undefined, { protectedPlugins: [REACH, SEATS] }), rowSettingsFact('delorun-reach', REACH, { enabled: true, grace }), rowSettingsFact('delorun-agent-seats', SEATS, live ? { seats: [], enabled: true } : { seats: [] })],
     })
     const plain = seats({ seats: [] })
-    const option = { enabled: true, address: 'https://home.example-tailnet.ts.net', servePort: 443, listenerPort: 31318, serveCheckIntervalMs: 60000, elevationMinutes: 15 }
+    const option = { enabled: true, address: 'https://home.example.ts.net', servePort: 443, listenerPort: 31318, serveCheckIntervalMs: 60000, elevationMinutes: 15 }
     const booted = { enabled: true, grace: 1, tailscalePrivate: { enabled: false, address: '', servePort: 443 } }
     // `delorun reach on` wrote the whole option into the profile's patch; the running Host applied it and handed its hash over.
     const handed = withAppliedConfig(bootRowsOf([reachManager, reach(booted), plain], new Set(['delorun-reach'])), 'delorun-reach', appliedReachConfig(booted, option))

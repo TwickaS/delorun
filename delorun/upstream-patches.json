@@ -2088,7 +2088,7 @@
       "path": "packages/client/ui-approval/src/client/contract/slots.ts",
       "class": "security",
       "reason": "Security entry, same feature and verdict as ApprovalCard.tsx: declares the `conversation.approval.action` list slot, the `ApprovalGrant` values of `@deepseek-ai/dsh-user-approval`, and carries `grants` on the pending request unchanged; the action's `allow` is documented as the Allow button's one-shot answer. `ApprovalGrant` gains `external-agent`; `ApprovalActionOwnerProps` gains `answered` and `canAnswer`. Lead verdict (2026-11-13): approved after the lead review of the merged diff. Declares the `conversation.approval.choice` slot and its owner props (`escalatesTo`, `toolName`, `callId`, `allow`, `answered`, `canAnswer`, `offer`). Lead verdict (2026-11-13): approved after an independent Opus review of the card answer path and the lead review; the choice answers the card through the same one-shot `answer()` as Allow once, only after the chat's permission projection shows the requested preset and while the card still accepts answers, and never lowers a chat raised meanwhile, and `escalatesTo` never reaches a logged event. `ApprovalGrant` gains `real-browser`, mirroring `@deepseek-ai/dsh-user-approval`. `ApprovalAllowGate` and the `gateAllow` owner prop of `ApprovalActionOwnerProps` declare the gate described at ApprovalCard.tsx; they add no answer path. Opus review passed on trust (review-faceid-b2.md).",
-      "sha256": "a54f0c852656de21bc3373455c1a113fc8fc42e599b18a3dfa53d84f45c3e2a8"
+      "sha256": "6bc0320bfd9c8ce0e04f2fabb977a70a389bedea28ca8a27eaa39b3b3481d9a3"
     },
     {
       "path": "packages/client/ui-approval/src/client/index.ts",

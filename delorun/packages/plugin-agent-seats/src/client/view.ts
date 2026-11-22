@@ -19,7 +19,11 @@ declare module '@deepseek-ai/dsh-session-projection/types' {
 /** The program's display name. */
 export const AGENT_NAMES: Readonly<Record<SeatAgent, string>> = { 'claude-code': 'Claude Code', codex: 'Codex' }
 
-/** The sign-in command for a program, as `delorun agents login <agent>`. */
+/**
+ * The sign-in command for a program.
+ * @param agent - the program to sign in.
+ * @returns the command, as `delorun agents login <agent>`.
+ */
 export function loginCommand(agent: SeatAgent): string {
   return `delorun agents login ${agent}`
 }

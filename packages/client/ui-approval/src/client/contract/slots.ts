@@ -144,6 +144,8 @@ export interface ApprovalChoiceOwnerProps {
   offer: (shown: boolean) => void
 }
 
+/* jscpd:ignore-start -- deliberately mirrors `ApprovalRequestEvent` of `@deepseek-ai/dsh-user-approval`:
+   the Client bundle declares its own copy and never imports the Host package. */
 /** Client-visible fields of an approval request projected through Remote Events. */
 export interface ApprovalPresentationRequest {
   /** Tool requesting the decision. */
@@ -165,6 +167,7 @@ export interface ApprovalPresentationRequest {
   /** Cancellation projected from the Host waterfall. */
   readonly signal?: AbortSignal
 }
+/* jscpd:ignore-end */
 
 /** Decisions this interactive Client presentation can return. */
 export type ApprovalDecision = 'allowed-once' | 'rejected'

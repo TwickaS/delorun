@@ -12,7 +12,7 @@ import { applyReplacements, leftoverLabels, removeLabelCitations, rewriteForOpen
 const scratch: string[] = []
 afterEach(() => { for (const path of scratch.splice(0)) rmSync(path, { recursive: true, force: true }) })
 
-const git = (cwd: string, ...args: string[]): string => execFileSync('git', ['-c', 'user.name=T', '-c', 'user.email=t@delorun.com', ...args], { cwd, encoding: 'utf8' }).trim()
+const git = (cwd: string, ...args: string[]): string => execFileSync('git', ['-c', 'user.name=T', '-c', 'user.email=t@delorun.com', ...args], { cwd, encoding: 'utf8', timeout: 30_000 }).trim()
 
 /** A repository with one upstream-tagged commit, then two own commits; the second one removes the private path again. */
 function fixture(): string {

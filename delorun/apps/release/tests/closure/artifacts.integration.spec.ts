@@ -87,7 +87,7 @@ describe('artifactProblems', () => {
     for (const path of ['packages/group/built', 'packages/group/nameless', 'apps/web', 'vendor/tool']) build(directory, path)
     writeBuildStamp(directory, captureBuildStart(directory))
     execFileSync('git', ['commit', '-q', '--allow-empty', '-m', 'next'], { cwd: directory, env: ENV, timeout: 30_000 })
-    const next = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: directory, env: ENV, encoding: 'utf8' }).trim()
+    const next = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: directory, env: ENV, encoding: 'utf8', timeout: 30_000 }).trim()
     expect(artifactProblems(directory, next)).toEqual([`the artifacts were built at ${commit}, not at ${next}; run \`pnpm run build:artifacts\` again, or cut with \`--artifacts build\``])
   })
 
