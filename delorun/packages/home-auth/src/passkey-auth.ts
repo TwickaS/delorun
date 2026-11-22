@@ -380,6 +380,8 @@ export class PasskeyAuth {
    * @throws {HomeAuthError} `PASSKEY_ASSERTION_INVALID`, `PASSKEY_USER_VERIFICATION_REQUIRED` or `PASSKEY_COUNTER_REGRESSED` for a failed check, each with the tries left; `PIN_UNLOCKS_PAUSED` after a home-wide pause.
    */
   async verify(asker: UnlockAsker, address: string, response: AuthenticationResponseJSON): Promise<PasskeyGrantResult> {
+    // Every session may end while this confirmation awaits its checks (device access turned off, or every session rotated).
+    const generation = this.options.grants.generation
     const challengeText = extractChallenge(response.response.clientDataJSON)
     // A challenge that is unknown, used or expired is a sheet left open or a retried request, not a guess: it costs no try.
     const issued = this.assertions.get(challengeText)
@@ -409,6 +411,8 @@ export class PasskeyAuth {
     await this.options.store.recordUse(credential.credentialId, { counter: info.newCounter, backupState: info.credentialBackedUp, lastUsedAt: this.options.now() })
     if (credential.backupState && !info.credentialBackedUp) this.options.log(`home-auth: passkey.backup-state-changed device=${asker.deviceId} from=1 to=0`)
     await this.options.pin.cleared(asker.deviceId)
+    // A confirmation in flight when every session ended mints no grant and opens no pass: the device signs in again first.
+    if (this.options.grants.generation !== generation) throw new HomeAuthError('PASSKEY_ASSERTION_INVALID', 'That confirmation is not current. Try again')
     const minted = this.mint(asker, stored.request, 'passkey')
     const pass = this.openPass(asker, stored.request)
     return pass === undefined ? minted : { ...minted, pass }

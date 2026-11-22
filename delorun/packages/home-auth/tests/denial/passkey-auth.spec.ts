@@ -32,6 +32,8 @@ let grants: GrantStore
 let auth: PasskeyAuth
 /** The minutes the pass setting names for this spec; 0 opens none. */
 let passMinutes: number
+/** Runs while an assertion is being checked, as a sign-out arriving mid-flight would. */
+let midFlight: (() => void) | undefined
 
 beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), 'passkey-auth-'))
@@ -45,10 +47,11 @@ beforeEach(async () => {
   grants = new GrantStore({ now: () => clock.at, random })
   const pin: PasskeyAuthOptions['pin'] = {
     missed: (who, reason, code = 'PASSKEY_ASSERTION_INVALID') => { misses.push(`${who.deviceId}:${reason}`); return Promise.reject(new HomeAuthError(code, reason)) },
-    cleared: (deviceId) => { cleared.push(deviceId); return Promise.resolve() },
+    cleared: (deviceId) => { cleared.push(deviceId); midFlight?.(); return Promise.resolve() },
     verify: (_who, secret) => (secret === '1234' ? Promise.resolve() : Promise.reject(new HomeAuthError('PIN_INVALID', 'wrong'))),
   }
   passMinutes = 0
+  midFlight = undefined
   auth = new PasskeyAuth({ store, grants, pin, now: () => clock.at, random, sameSession: (a, b) => a === b, log: () => {}, passMinutes: () => passMinutes })
 })
 afterEach(async () => { await rm(directory, { recursive: true, force: true }) })
@@ -224,6 +227,21 @@ describe('assertion', () => {
     const phone = await enrol()
     await auth.verify(asker(PHONE), ADDRESS, phone.get(await options(), { origin: ORIGIN, counter: 5 }))
     expect(await code(async () => auth.verify(asker(PHONE), ADDRESS, phone.get(await options(), { origin: ORIGIN, counter: 3 })))).toBe('PASSKEY_COUNTER_REGRESSED')
+  })
+
+  // Removing the generation check lets a confirmation that was in flight during a sign-out open a pass and mint a grant after it.
+  it('mints nothing and opens no pass for an assertion that was in flight when every session ended', async () => {
+    const phone = await enrol()
+    passMinutes = 15
+    const response = phone.get(await options(), { origin: ORIGIN })
+    midFlight = () => { grants.endAll() }
+    expect(await code(() => auth.verify(asker(PHONE), ADDRESS, response))).toBe('PASSKEY_ASSERTION_INVALID')
+    expect(grants.passOf({ deviceId: PHONE, listener: LISTENER })).toBeUndefined()
+    expect(grants.has({ deviceId: PHONE, listener: LISTENER }, 'pluginManager/installBundle', ACTIONS.entries[0].hash)).toBe(false)
+    // The next confirmation, asked after the sign-out, opens its pass.
+    midFlight = undefined
+    const fresh = await auth.verify(asker(PHONE), ADDRESS, phone.get(await options(), { origin: ORIGIN }))
+    expect(fresh.pass).toBeDefined()
   })
 
   // Removing the store removal leaves a removed passkey usable.
