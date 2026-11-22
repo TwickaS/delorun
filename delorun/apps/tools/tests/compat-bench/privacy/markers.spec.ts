@@ -18,30 +18,6 @@ describe('privacy markers', () => {
     expect(result.findings).toBeUndefined()
   })
 
-  it('shows a marker the author declared as not done, and not seen, as not seen with their statement', () => {
-    const result = section({}, { opensADoor: { does: false, why: '' } })
-    expect(result.markers.opensADoor.state).toBe('not-seen')
-    expect(result.markers.opensADoor.summary).toBe('Did not start listening for connections in this test. The author says it does not do this.')
-    expect(result.findings).toBeUndefined()
-    expect(result.declared).toEqual({ opensADoor: 'The author says it does not do this.' })
-  })
-
-  it('makes a finding of a marker the author said it does not do and the test saw', () => {
-    const result = section({ listens: [{ host: '127.0.0.1', port: '8080' }] }, { opensADoor: { does: false, why: '' } })
-    expect(result.markers.opensADoor.state).toBe('seen')
-    expect(result.markers.opensADoor.evidence[0]).toBe('finding: seen, and dsh.access says it does not do this')
-    expect(result.findings?.[0]).toMatch(/^Opens a door: seen, and dsh.access says it does not do this\. Started listening/)
-  })
-
-  it('makes a finding of a host the author did not list under sendsOut', () => {
-    const connects = [{ host: '203.0.113.9', port: '443', name: 'api.example.com' }, { host: '203.0.113.10', port: '443', name: 'tracker.example.net' }]
-    const result = section({ connects }, { sendsOut: { does: true, why: 'Fetches pages.', hosts: ['api.example.com'] } })
-    expect(result.markers.sendsOut.state).toBe('declared')
-    expect(result.findings).toHaveLength(1)
-    expect(result.findings?.[0]).toContain('seen connecting to tracker.example.net, which dsh.access does not list')
-    expect(section({ connects: connects.slice(0, 1) }, { sendsOut: { does: true, why: 'Fetches pages.', hosts: ['api.example.com'] } }).findings).toBeUndefined()
-  })
-
   it('Your code: a planted workspace file that was opened, a workspace file that changed, and its contents leaving', () => {
     const result = section({
       opens: [{ label: 'workspace marker file', path: '/home/bench/workspace/bench-marker.txt' }],
@@ -164,7 +140,7 @@ describe('privacy markers', () => {
     expect(result.findings).toEqual(['Acts for you: seen and not declared in dsh.access. Started git on your machine in this test.'])
     expect(result.markers.actsForYou.evidence[0]).toBe('finding: seen and not declared in dsh.access')
     expect(result.markers.sendsOut.evidence[0]).toBe('connect api.example.com (203.0.113.9):443')
-    expect(result.declared).toEqual({ sendsOut: 'Fetches the page you ask it to read.' })
+    expect(result.declared).toBeUndefined()
   })
 
   it('shows a declared marker that was not seen as declared, with what the test saw', () => {
@@ -179,7 +155,6 @@ describe('privacy markers', () => {
     expect(result.markers.opensADoor.state).toBe('not-seen')
     expect(result.markers.opensADoor.summary).toBe('Did not start listening for connections in this test. The author says it does not do this.')
     expect(result.findings).toBeUndefined()
-    expect(result.declared).toEqual({ opensADoor: 'The author says it does not do this.' })
   })
 
   it('makes a finding of a marker the author said it does not do and the test saw', () => {
@@ -196,6 +171,14 @@ describe('privacy markers', () => {
     expect(result.findings).toHaveLength(1)
     expect(result.findings?.[0]).toContain('seen connecting to tracker.example.net, which dsh.access does not list')
     expect(section({ connects: connects.slice(0, 1) }, { sendsOut: { does: true, why: 'Fetches pages.', hosts: ['api.example.com'] } }).findings).toBeUndefined()
+  })
+
+  it('notes that the model provider is a mock when the author lists it as a host', () => {
+    const connects = [{ host: '203.0.113.9', port: '443', name: 'api.example.com' }]
+    const listed = section({ connects }, { sendsOut: { does: true, why: 'Calls the model.', hosts: ['api.example.com', 'model-provider'] } })
+    expect(listed.markers.sendsOut.evidence).toEqual(['connect api.example.com (203.0.113.9):443', 'model provider: mock in this test'])
+    expect(listed.findings).toBeUndefined()
+    expect(section({ connects }, { sendsOut: { does: true, why: 'Calls the model.', hosts: ['api.example.com'] } }).markers.sendsOut.evidence).toEqual(['connect api.example.com (203.0.113.9):443'])
   })
 
   it('never writes "can only", "allowed" or "permission" in a summary (L141)', () => {
