@@ -105,4 +105,4 @@ Delorun 构建于 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-har
 
 ## 许可证
 
-[MIT](LICENSE)。上游的版权声明保留在许可证文件中，Delorun 自己的改动的版权归 Delo Run 及贡献者所有。第三方依赖及其许可证披露在 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 中。
+[MIT](LICENSE)。上游的版权声明保留在许可证文件中，Delorun 自己的改动的版权归 Delorun 贡献者所有。第三方依赖及其许可证披露在 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 中。

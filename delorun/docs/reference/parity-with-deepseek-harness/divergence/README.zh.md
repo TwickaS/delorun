@@ -71,7 +71,7 @@ Delorun 修改了上游 DeepSeek Harness 的一些文件。差异台账记录其
 | `permission-defaults` | Session 是否没有权限预设 | 已发布的 `plugin-permission-defaults` |
 | `plugin-manager-improvements` | 插件管理器的诊断原因、打开插件的页面，以及 `operations` 为启动器命令行导出的构建脚本批准步骤 | 已发布的 `cli`（`delorun plugin`） |
 | `plugin-version-axis` | 插件的 `engines.delorun` 范围（C17） | 已发布的 `update` 和 `contract-plugin-versions` |
-| `project-identity` | 根 `LICENSE` 中 Delo Run 的版权行，位于上游的声明之下 | 仓库 |
+| `project-identity` | 根 `LICENSE` 中 Delorun 贡献者的版权行，位于上游的声明之下 | 仓库 |
 | `preset-inspect` | `preset_inspect` 工具、其预设行及其目录条目 | C16 开关，关闭 |
 | `product-name` | iOS 主屏幕标题和 Web manifest 中的构建标题 | `tools` 和 `release` 的 Web 构建 |
 | `profile-history` | profile 历史、安全模式以及安装时的插件审计 | 已发布的 `cli`（`delorun recover`）和 `profile-safety` |

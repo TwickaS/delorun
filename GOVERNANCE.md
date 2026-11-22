@@ -2,7 +2,7 @@
 
 ## Maintainers
 
-Delorun is its own product, and it has one maintainer. That person decides what merges, holds the release keys, signs and publishes every release, and answers the support address. The maintainer handles reports under the [Code of Conduct](CODE_OF_CONDUCT.md) and the [security policy](SECURITY.md). Review requests for the paths listed in [CODEOWNERS](.github/CODEOWNERS) go to the maintainers team named there. Delo Run is the organisation that maintains Delorun.
+Delorun is its own product, and it has one maintainer. That person decides what merges, holds the release keys, signs and publishes every release, and answers the support address. The maintainer handles reports under the [Code of Conduct](CODE_OF_CONDUCT.md) and the [security policy](SECURITY.md). Review requests for the paths listed in [CODEOWNERS](.github/CODEOWNERS) go to the maintainers team named there.
 
 ## Decisions
 

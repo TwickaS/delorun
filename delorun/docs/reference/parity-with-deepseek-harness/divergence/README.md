@@ -65,7 +65,7 @@ Each `delorun-feature` and `generic-fix` entry names one feature by a kebab-case
 | `permission-defaults` | Whether a Session holds no permission preset | shipped `plugin-permission-defaults` |
 | `plugin-manager-improvements` | Plugin-manager diagnostic reasons, opening a plugin's page, and the build-script approval steps `operations` exports for a launcher's command line | shipped `cli` (`delorun plugin`) |
 | `plugin-version-axis` | A plugin's `engines.delorun` range (C17) | shipped `update` and `contract-plugin-versions` |
-| `project-identity` | Delo Run's copyright line in the root `LICENSE`, under upstream's notice | the repository |
+| `project-identity` | Delorun contributors' copyright line in the root `LICENSE`, under upstream's notice | the repository |
 | `preset-inspect` | The `preset_inspect` tool, its preset rows and its catalogue entry | a C16 switch, off |
 | `product-name` | The build title in the iOS home-screen title and the web manifest | the Web build of `tools` and `release` |
 | `profile-history` | Profile history, safe mode and the plugin audit on install | shipped `cli` (`delorun recover`) and `profile-safety` |
