@@ -40,15 +40,3 @@ export function writeMayAskAt(path: string, mayAskWithoutWindow: WindowlessMode)
   const others = typeof current === 'object' && current !== null && !Array.isArray(current) ? Object.fromEntries(Object.entries(current).filter(([key, value]) => key !== 'mayAskWithoutWindow' && ['string', 'number', 'boolean'].includes(typeof value))) : {}
   setPatchRow(path, { id: HOME_AUTH_ROW_ID, config: { pairing: { ...others, mayAskWithoutWindow } as Record<string, string | number | boolean> } })
 }
-
-/**
- * The home-auth secrets directory a profile's patch sets, if it sets one: the bundle and a hand-written row may name it,
- * and the CLI's own writes omit it, so the plugin takes the Delorun home's own.
- * @param path - the profile's `cordis.patch.yml`.
- * @returns the absolute directory the row names, or undefined when the row names none or a relative one.
- * @throws {SetupApplyError} when the patch is not a patch list.
- */
-export function readSecretsDirectoryAt(path: string): string | undefined {
-  const directory: unknown = readPatchRow(path, HOME_AUTH_ROW_ID, 'delorun reach')?.['secretsDirectory']
-  return typeof directory === 'string' && directory.startsWith('/') ? directory : undefined
-}

@@ -30,8 +30,7 @@ import { pinOffHint } from '../devices/pin.ts'
 import { DEFAULT_SERVE_PORT } from '@delorun/contract-reach-providers'
 import type { ReachOptionStatus } from '@delorun/contract-home-process'
 import { checkServeAccess, ReachError, readTailscale, removeServe, serveTarget, systemTailscale, tailscaleAddress, type TailscaleRunner } from '@delorun/reach'
-import { listenerPortFor, readPairingAt, readSecretsDirectoryAt, signInAddress, TRUST_STATEMENT, writeMayAskAt } from '@delorun/setup-apply'
-import { join } from 'node:path'
+import { listenerPortFor, readPairingAt, signInAddress, TRUST_STATEMENT, writeMayAskAt } from '@delorun/setup-apply'
 import { processExists, readHomeLock, resolveDelorunHome, runDirectory } from '@delorun/home'
 import { sendHomeRequest, type ResponseLine, type UnsignedRequest } from '@delorun/home-process'
 import { HomeAuth, HomeAuthError, type PairingSpec } from '@delorun/home-auth'
@@ -42,6 +41,7 @@ import { profileFlag } from '../open/studio.ts'
 import { printable } from '../terminal-text.ts'
 import { askOnTerminal, isYes } from '../trash/terminal.ts'
 import { profilePatchPath, readReachRow, writeReachRow } from './row.ts'
+import { homeAuthDirectory } from './secrets-directory.ts'
 
 /** What the command runs against. */
 export interface ReachDependencies {
@@ -71,6 +71,8 @@ export interface ReachDependencies {
   readonly ask: (question: string) => Promise<string>
   /** Whether a terminal can answer {@link ReachDependencies.ask}. */
   readonly terminal: boolean
+  /** @returns the installation's `package.json`, which a profile's bundles resolve from. */
+  readonly installAnchor: () => Promise<string>
 }
 
 /** The usage line. */
@@ -109,7 +111,7 @@ export function createReachCommand(dependencies: ReachDependencies): CliCommand 
 }
 
 /** `delorun reach`, over the system's `tailscale`, the home lock and the home socket. */
-export const reachCommand: CliCommand = createReachCommand({ tailscale: systemTailscale(), running: homeRuns, send: sendHomeRequest, ask: askOnTerminal, terminal: process.stdin.isTTY === true && process.stdout.isTTY === true })
+export const reachCommand: CliCommand = createReachCommand({ tailscale: systemTailscale(), running: homeRuns, send: sendHomeRequest, ask: askOnTerminal, terminal: process.stdin.isTTY === true && process.stdout.isTTY === true, installAnchor: async () => (await import('@deepseek-ai/dsh/profile-boot')).INSTALL_ANCHOR })
 
 /**
  * The home and profile of a command that changes the profile, refusing a home without the CLI profile.
@@ -329,12 +331,21 @@ async function turnOff(args: readonly string[], context: CommandContext, depende
   }
   if (!signedOut) {
     let stored: string | undefined
+    // The directory the home itself would open; when it cannot be told, nothing is signed out and nothing is claimed.
+    let directory: string | undefined
     try {
-      await new HomeAuth({ directory: readSecretsDirectoryAt(profilePatchPath(home, profile)) ?? join(home, 'secrets', 'home-auth') }).signAllDevicesOut()
-      signedOut = true
+      directory = homeAuthDirectory(home, profile, await dependencies.installAnchor())
     } catch (error) {
-      if (!(error instanceof HomeAuthError)) throw error
-      stored = `the paired devices could not be signed out: ${error.message}`
+      stored = `the paired devices could not be signed out: the secrets directory of the home could not be resolved (${error instanceof Error ? error.message : String(error)})`
+    }
+    if (directory !== undefined) {
+      try {
+        await new HomeAuth({ directory }).signAllDevicesOut()
+        signedOut = true
+      } catch (error) {
+        if (!(error instanceof HomeAuthError)) throw error
+        stored = `the paired devices could not be signed out: ${error.message}`
+      }
     }
     // A home that started while the stored sessions were removed holds the old ones in memory: have it sign out too.
     if (!running && dependencies.running(home, profile)) {

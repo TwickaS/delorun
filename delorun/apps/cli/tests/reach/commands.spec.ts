@@ -70,6 +70,7 @@ function reach(overrides: Partial<ReachDependencies> = {}): ReturnType<typeof cr
     send: () => Promise.resolve([{ stream: 'out', line: '' }] as never),
     ask: () => Promise.resolve('y'),
     terminal: true,
+    installAnchor: () => Promise.resolve(join(delorunHome, 'package.json')),
     ...overrides,
   })
 }
@@ -260,14 +261,51 @@ describe('delorun reach', () => {
     expect(out.stdout).toContain('Every paired device is signed out')
   })
 
-  it('signs out the sessions in the secrets directory the profile configures, not a fixed one', async () => {
+  /** The home-level patch, which applies over every profile's own; it inserts the row, as a bundle's patch does in a real profile. */
+  function homePatch(secretsDirectory: string): void {
+    writeFileSync(join(delorunHome, 'cordis.patch.yml'), `- insert:\n    - id: delorun-home-auth\n      name: '@delorun/home-auth'\n      config:\n        secretsDirectory: ${secretsDirectory}\n`)
+  }
+
+  it('signs out the sessions in the secrets directory the home-level patch sets, not a fixed one', async () => {
+    // Pins the layers: the profile's own patch names no directory, so reading it alone finds the default and leaves these sessions.
     const { old, live } = await pairedWithSession(join('secrets', 'configured-auth'))
     await reach().run(['on', 'tailscale'], context)
-    const patch = join(delorunHome, 'profiles', 'default', 'cordis.patch.yml')
-    writeFileSync(patch, `${readFileSync(patch, 'utf8')}- id: delorun-home-auth\n  config:\n    secretsDirectory: ${join(delorunHome, 'secrets', 'configured-auth')}\n`)
+    homePatch(join(delorunHome, 'secrets', 'configured-auth'))
     expect(await live(old.token)).toBe(true)
     await expect(reach({ running: () => false }).run(['off'], context)).resolves.toBe(EXIT.ok)
     expect(await live(old.token)).toBe(false)
+    expect(out.stdout).toContain('Every paired device is signed out')
+  })
+
+  it('reads the studio bundle\'s expression for the home\'s own directory as that directory, and refuses any other expression', async () => {
+    // Pins the expression: the real bundle sets the directory with it, so refusing it would leave no real profile able to sign out with Delorun stopped.
+    const { old, live } = await pairedWithSession()
+    await reach().run(['on', 'tailscale'], context)
+    const row = (expression: string): string => `- insert:\n    - id: delorun-home-auth\n      name: '@delorun/home-auth'\n      config:\n        secretsDirectory: !!js ${expression}\n`
+    writeFileSync(join(delorunHome, 'cordis.patch.yml'), row('process.env.ELSEWHERE'))
+    await expect(reach({ running: () => false }).run(['off'], context)).resolves.toBe(EXIT.failed)
+    expect(out.stderr).toContain('could not be resolved')
+    expect(await live(old.token)).toBe(true)
+    out.stdout = ''
+    writeFileSync(join(delorunHome, 'cordis.patch.yml'), row("dshHomePath('secrets', 'home-auth')"))
+    await expect(reach({ running: () => false }).run(['off'], context)).resolves.toBe(EXIT.ok)
+    expect(await live(old.token)).toBe(false)
+    expect(out.stdout).toContain('Every paired device is signed out')
+  })
+
+  it('does not say the devices are signed out when the home would refuse the configured directory, and still removes the serve rule', async () => {
+    // Pins the home's own check that the directory lies in `secrets`: a directory elsewhere is one the home never opens.
+    const { old, live } = await pairedWithSession(join('elsewhere', 'home-auth'))
+    await reach().run(['on', 'tailscale'], context)
+    homePatch(join(delorunHome, 'elsewhere', 'home-auth'))
+    out.stdout = ''
+    const served = fakeTailscale(HOST)
+    served.config = ownRule(HOST, 443, readReachRow(delorunHome, 'default').listenerPort)
+    await expect(reach({ tailscale: served.run, running: () => false }).run(['off'], context)).resolves.toBe(EXIT.failed)
+    expect(out.stdout).not.toContain('signed out')
+    expect(out.stderr).toContain('could not be resolved')
+    expect(served.config).toEqual({ TCP: {}, Web: {} })
+    expect(await live(old.token)).toBe(true)
   })
 
   it('has a home that started while the stored sessions were removed sign out too', async () => {

@@ -241,7 +241,7 @@ describe('delorun devices pin', () => {
   }, 60_000)
 
   it('is mentioned in one line by reach status when remote access is on and the mode is off', async () => {
-    const reach = createReachCommand({ tailscale: () => Promise.resolve({ code: 1, stdout: '', stderr: '' }), running: () => false, send: () => Promise.resolve([]), ask: () => Promise.resolve('y'), terminal: false })
+    const reach = createReachCommand({ tailscale: () => Promise.resolve({ code: 1, stdout: '', stderr: '' }), running: () => false, send: () => Promise.resolve([]), ask: () => Promise.resolve('y'), terminal: false, installAnchor: () => Promise.resolve('/unused/package.json') })
     await reach.run(['status'], context)
     expect(out.stdout).not.toContain('PIN mode')
     mkdirSync(join(home, 'profiles', PROFILE), { recursive: true, mode: 0o700 })
