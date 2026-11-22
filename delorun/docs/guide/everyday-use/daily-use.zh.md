@@ -211,6 +211,8 @@ delorun recover exit-safe-mode   # once it works: the next start loads everythin
 
 ## 接下来
 
+- Open the studio from your phone: [Reach the studio from your phone](reach.zh.md).
+- Hand a task to Claude Code or Codex: [Hand work to Claude Code or Codex](agents.zh.md).
 - 让 Delorun 保持最新：[更新](../safety-and-updates/updates.zh.md)。
 - 选择模型：[模型提供方](../get-started/providers.zh.md)。
 - 了解这些保护：[Delorun 保护什么](../safety-and-updates/safety.zh.md)。

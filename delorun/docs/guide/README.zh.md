@@ -10,7 +10,15 @@ description: "Delorun 用户指南，按你想做的事组织成一张地图：�
 
 ## 摘要
 
-用户指南面向安装并使用 Delorun 的人。Delorun 是一个可以按你自己的工作来塑造的 agent harness，构建在 DeepSeek Harness 之上；无论你对两者都是新手，还是从 stock DeepSeek Harness 切换而来，都适用。Delorun 运行在你自己的电脑上。本页是一张地图：找到你想做的事，再沿链接进入对应的页面与章节。如果你是新手，请先读[安装与首次运行](get-started/install.zh.md)，再读[日常使用](everyday-use/daily-use.zh.md)。技术术语会链接到[术语表](../reference/glossary.zh.md)。
+用户指南面向安装并使用 Delorun 的人。Delorun 是一个可以按你自己的工作来塑造的 agent harness，构建在 DeepSeek Harness 之上；无论你对两者都是新手，还是从 stock DeepSeek Harness 切换而来，都适用。Delorun 运行在你自己的电脑上。本页是一张地图：找到你想做的事，再沿链接进入对应的页面与章节。技术术语会链接到[术语表](../reference/glossary.zh.md)。
+
+If you are new, these three pages are the whole path to a working Delorun:
+
+1. [Install and first run](get-started/install.zh.md): one command, a few questions and your first chat.
+2. [Model providers](get-started/providers.zh.md): the key for the model you want to use.
+3. [Daily use](everyday-use/daily-use.zh.md): start, open and stop Delorun, and choose what the model may change.
+
+The rest of this page is for when you need it.
 
 ## 目录
 
@@ -30,7 +38,7 @@ description: "Delorun 用户指南，按你想做的事组织成一张地图：�
 - **Decide whether Delorun suits me, and how it compares with other tools:** [Why Delorun](why-delorun.zh.md). It covers what you get, what Delorun changes from DeepSeek Harness and when another tool fits better.
 - **安装 Delorun 并进行第一次 chat：**[安装与首次运行](get-started/install.zh.md)。它涵盖你需要先准备什么、[按使用方式进行 setup](get-started/install.zh.md#setup-how-you-will-use-delorun)、[studio 与你的第一次 chat](get-started/install.zh.md#the-studio-and-your-first-chat)，以及[没有浏览器的电脑](get-started/install.zh.md#a-computer-without-a-browser)。
 - **带上我的 DeepSeek Harness chat：**[从 DeepSeek Harness 切换](get-started/switching.zh.md)。它说明哪些保持不变、哪些不同，哪些内容会被复制、哪些会留在原处，以及[如何切换回去](get-started/switching.zh.md#going-back)。
-- **了解 Delorun 是做什么的、将走向哪里：**[路线图](roadmap.zh.md)。它说明现在正在构建什么、接下来是什么、之后是什么。
+- **Find out whether it is safe and what the catch is:** [Questions and answers](help/questions.zh.md).
 
 <a id="i-want-to-use-it-every-day"></a>
 
@@ -49,6 +57,7 @@ description: "Delorun 用户指南，按你想做的事组织成一张地图：�
 - **查看一次 chat 花了多少钱：**[查看一次 chat 的花费](everyday-use/cost-meter.zh.md)。
 - **让智能体以我的登录状态在我自己的 Chrome 中操作：**[使用你自己的浏览器](everyday-use/use-your-own-browser.zh.md)。
 - **逐字阅读模型的思考过程：**[逐字阅读模型的思考过程](everyday-use/thinking-tab.zh.md)。
+- **Hand a task to Claude Code or Codex from a chat:** [Hand work to Claude Code or Codex](everyday-use/agents.zh.md).
 
 <a id="i-want-to-choose-or-change-the-model"></a>
 
@@ -86,9 +95,12 @@ description: "Delorun 用户指南，按你想做的事组织成一张地图：�
 - **看不懂的消息或代码：**[故障排查](help/troubleshooting.zh.md)。它解释[如何读懂一次拒绝](help/troubleshooting.zh.md#reading-a-refusal)，并按代码列出常见情况及修复办法。
 - **Delorun 无法启动：**[启动与停止](help/troubleshooting.zh.md#starting-and-stopping)，然后运行 `delorun doctor`（见[日常使用](everyday-use/daily-use.zh.md#check-the-release-and-your-setup)）。
 - **更新失败：**[更新与回退](help/troubleshooting.zh.md#updates-and-rollback)。
+- **Check whether it is a known problem:** [Known issues](help/known-issues.zh.md) lists the rough edges of this preview, each with what to do.
 
 <a id="for-the-technically-curious"></a>
 
 ## 给想深入了解的人
 
 这些页面描述的是你看到的和你要做的。[Delorun 文档索引](../README.zh.md)通向定义确切规则的约定、设计和威胁模型；每个指南页面的末尾都链接到它所依赖的那些文档。
+
+The [Roadmap](roadmap.zh.md) says what is being built now, what comes next and what comes later, and the [changelog](https://docs.delorun.com/changelog) lists what changed in each version.

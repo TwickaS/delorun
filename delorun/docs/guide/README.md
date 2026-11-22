@@ -8,7 +8,15 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-The user guide is for people who install and use Delorun, the agent harness you shape to your own work and that is built on DeepSeek Harness, whether new to both or switching from stock DeepSeek Harness. Delorun runs on your own computer. This page is a map: find what you want to do, and follow the link to the page and section. If you are new, read [Install and first run](get-started/install.md) first, then [Daily use](everyday-use/daily-use.md). Technical terms link to the [glossary](../reference/glossary.md).
+The user guide is for people who install and use Delorun, the agent harness you shape to your own work and that is built on DeepSeek Harness, whether new to both or switching from stock DeepSeek Harness. Delorun runs on your own computer. This page is a map: find what you want to do, and follow the link to the page and section. Technical terms link to the [glossary](../reference/glossary.md).
+
+If you are new, these three pages are the whole path to a working Delorun:
+
+1. [Install and first run](get-started/install.md): one command, a few questions and your first chat.
+2. [Model providers](get-started/providers.md): the key for the model you want to use.
+3. [Daily use](everyday-use/daily-use.md): start, open and stop Delorun, and choose what the model may change.
+
+The rest of this page is for when you need it.
 
 ## Contents
 
@@ -26,7 +34,7 @@ The user guide is for people who install and use Delorun, the agent harness you 
 - **Decide whether Delorun suits me, and how it compares with other tools:** [Why Delorun](why-delorun.md). It covers what you get, what Delorun changes from DeepSeek Harness and when another tool fits better.
 - **Install Delorun and have a first chat:** [Install and first run](get-started/install.md). It covers what you need first, [setup by how you will use Delorun](get-started/install.md#setup-how-you-will-use-delorun), [the studio and your first chat](get-started/install.md#the-studio-and-your-first-chat) and [a computer without a browser](get-started/install.md#a-computer-without-a-browser).
 - **Bring my DeepSeek Harness chats:** [Switching from DeepSeek Harness](get-started/switching.md). It explains what stays the same and what is different, what is copied, what stays behind and [how to go back](get-started/switching.md#going-back).
-- **See what Delorun is for and where it is going:** [Roadmap](roadmap.md). It says what is being built now, what comes next and what comes later.
+- **Find out whether it is safe and what the catch is:** [Questions and answers](help/questions.md).
 
 ## I want to use it every day
 
@@ -43,6 +51,7 @@ The user guide is for people who install and use Delorun, the agent harness you 
 - **See what a chat costs:** [See what a chat costs](everyday-use/cost-meter.md).
 - **Let the agent work in my own Chrome, signed in as me:** [Use your own browser](everyday-use/use-your-own-browser.md).
 - **Read the model's thinking word by word:** [Read the model's thinking word by word](everyday-use/thinking-tab.md).
+- **Hand a task to Claude Code or Codex from a chat:** [Hand work to Claude Code or Codex](everyday-use/agents.md).
 
 ## I want to choose or change the model
 
@@ -70,7 +79,10 @@ The user guide is for people who install and use Delorun, the agent harness you 
 - **A message or code I do not understand:** [Troubleshooting](help/troubleshooting.md). It explains [how to read a refusal](help/troubleshooting.md#reading-a-refusal) and lists the common ones by code, with fixes.
 - **Delorun does not start:** [Starting and stopping](help/troubleshooting.md#starting-and-stopping), then `delorun doctor` ([Daily use](everyday-use/daily-use.md#check-the-release-and-your-setup)).
 - **An update failed:** [Updates and rollback](help/troubleshooting.md#updates-and-rollback).
+- **Check whether it is a known problem:** [Known issues](help/known-issues.md) lists the rough edges of this preview, each with what to do.
 
 ## For the technically curious
 
-These pages describe what you see and do. The [Delorun documentation index](../README.md) leads to the contracts, designs and threat model that define the exact rules; each guide page ends with links to the ones it relies on.
+These pages describe what you see and do. The [Delorun documentation index](../README.md), on GitHub, leads to the contracts, designs and threat model that define the exact rules; each guide page ends with links to the ones it relies on.
+
+The [Roadmap](roadmap.md) says what is being built now, what comes next and what comes later, and the [changelog](https://docs.delorun.com/changelog) lists what changed in each version.

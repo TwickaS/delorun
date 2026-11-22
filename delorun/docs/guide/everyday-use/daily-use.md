@@ -193,6 +193,8 @@ These commands change chat data the studio uses, so stop Delorun first. They ref
 
 ## Next
 
+- Open the studio from your phone: [Reach the studio from your phone](reach.md).
+- Hand a task to Claude Code or Codex: [Hand work to Claude Code or Codex](agents.md).
 - Keep Delorun current: [Updates](../safety-and-updates/updates.md).
 - Choose the model: [Model providers](../get-started/providers.md).
 - Understand the protections: [What Delorun protects](../safety-and-updates/safety.md).

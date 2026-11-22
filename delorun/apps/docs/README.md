@@ -21,7 +21,7 @@ This package builds Delorun's documentation website: the user guide and the refe
 
 A page's English and Chinese routes are the same slug under the locale prefix.
 
-The guide sidebar has two halves: **Using Delorun** (`get-started`, `everyday-use`, `safety-and-updates`, `help`) and **Building on Delorun** (`customising`, `plugin-guides`, then a link to the Reference tab). Each group is a collapsible folder, and only the folder holding the current page is open. A group's folder holds its pages' files under `delorun/docs/guide/`, and its `meta.json` (`meta.zh.json` in Chinese) names the group and lists its pages in reading order. The header's Guide, Reference, Changelog and Roadmap links are tabs above the page, and the sidebar drawer's tab menu on narrow screens.
+The guide sidebar has two halves: **Using Delorun** (`why-delorun`, then the groups `get-started`, `everyday-use`, `safety-and-updates` and `help`) and **Customise and build** (`customising`, `plugin-guides`). A separator inside a group's `meta.json` splits it, as **Coming from DeepSeek** does in `get-started`. Each group is a collapsible folder, and only the folder holding the current page is open. A group's folder holds its pages' files under `delorun/docs/guide/`, and its `meta.json` (`meta.zh.json` in Chinese) names the group and lists its pages in reading order. The header's Guide, Reference, Changelog and Roadmap links are tabs above the page, and the sidebar drawer's tab menu on narrow screens.
 
 Pages that moved into a group keep their old addresses as permanent redirects, in both locales and for the Markdown routes. `src/site/redirects.ts` lists the moved pages, and the build writes the redirects as `out/_redirects`, which Cloudflare reads beside `_headers`. `pnpm run preview` serves them too. A page that moves again adds an entry. A page in one locale links to its counterpart in the same locale: a Chinese page's link to `trust.md` becomes its Chinese route.
 
@@ -31,7 +31,7 @@ Each relative link in a page resolves at build time. The build fails on a link t
 
 - A link to a published page becomes that page's route.
 - A link to an upstream repository file becomes its URL in [`deepseek-ai/deepseek-harness`](https://github.com/deepseek-ai/deepseek-harness).
-- A link to another Delorun file, such as a contract or the threat model, becomes code text that names the file, because the site publishes only the guide and the references.
+- A link to another Delorun file, such as a contract or the threat model, becomes its URL in Delorun's GitHub repository, because the site publishes only the guide and the references.
 - A Chinese page takes the English page's heading ids, by position, so the table-of-contents links, which the pair's consistency record fixes, resolve in both locales.
 
 The dead-link check runs after the build. It checks every internal link and fragment in the built HTML and in the Markdown and `llms.txt` files against a built file or an id on the page. It does not fetch external links.

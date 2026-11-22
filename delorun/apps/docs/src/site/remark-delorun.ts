@@ -1,6 +1,6 @@
 /**
- * The remark transform every Delorun page passes through at build time: relative links resolve to routes, upstream files,
- * or code text (see {@link resolveLink}), a Chinese page's headings take the English page's ids, and a folded
+ * The remark transform every Delorun page passes through at build time: relative links resolve to routes, upstream files
+ * or Delorun files on GitHub (see {@link resolveLink}), a Chinese page's headings take the English page's ids, and a folded
  * `<details>` block (see {@link foldDetails}) becomes a `details` element holding its Markdown, and an inline anchor
  * `<a id="…"></a>` (see {@link keepAnchors}) becomes an empty element that keeps its id.
  *
@@ -52,22 +52,13 @@ function isBareLanguageName(node: RootContent): boolean {
 }
 
 /**
- * Rewrite one link in place: a route or upstream URL, or code text for an unpublished Delorun file.
+ * Rewrite one link in place: a route, or a file's URL in the upstream or the Delorun repository.
  * @param node - the link.
  * @param path - the page's absolute path.
  * @param root - the repository root.
  */
 function rewrite(node: Link, path: string, root: string): void {
-  const resolved = resolveLink(path, node.url, root)
-  if (resolved.kind === 'href') {
-    node.url = resolved.href
-    return
-  }
-  // The page links no unpublished file: its path reads as code, which keeps the reference without a dead link.
-  const code = { type: 'inlineCode' as const, value: resolved.path }
-  Object.assign(node, code)
-  delete (node as Partial<Link>).url
-  delete (node as Partial<Link>).children
+  node.url = resolveLink(path, node.url, root).href
 }
 
 /**
