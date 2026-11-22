@@ -31,7 +31,7 @@ function setup(runningPort?: number) {
   writeFileSync(join(profileDir, 'cordis.patch.yml'), '[]\n')
   writeFileSync(join(profileDir, 'setup-answers.json'), JSON.stringify({ version: 1, prompts: 'safer', background: true, profile: { name: null, port: null } }))
   const scope = { get: (name: string) => (name === 'profileContext' ? { name: 'default', dir: profileDir, home } : name === 'webServer' && runningPort !== undefined ? { port: runningPort } : undefined) }
-  const service = new RunSettings({ ...systemDependencies(scope as never), tailscale: fakeTailscale('laptop.tail1234.ts.net').run, reach: () => undefined, runsAsRoot: () => false })
+  const service = new RunSettings({ ...systemDependencies(scope as never), tailscale: fakeTailscale('my-pc.example.ts.net').run, reach: () => undefined, runsAsRoot: () => false })
   return { service, home, profileDir, record: (): Record<string, unknown> => JSON.parse(readFileSync(join(profileDir, 'setup-answers.json'), 'utf8')) as Record<string, unknown> }
 }
 

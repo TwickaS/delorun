@@ -34,7 +34,7 @@ let recording: Recording
  * Set up the profile with the main flow's own answer, no phone.
  * @returns the exit code.
  */
-async function setUp(): Promise<number> {
+async function setUp(): Promise<number | undefined> {
   return runSetup({
     home,
     profile: PROFILE,
@@ -75,7 +75,7 @@ async function again(script: readonly Answer[]): Promise<number> {
  * @param promptsAnswer - the answer the flags gave, if any.
  * @returns the exit code.
  */
-async function yes(promptsAnswer?: SetupRequest['promptsAnswer']): Promise<number> {
+async function yes(promptsAnswer?: SetupRequest['promptsAnswer']): Promise<number | undefined> {
   return runSetup({
     home, profile: PROFILE, output: { stdout: () => undefined, stderr: () => undefined }, env: {}, form: { kind: 'yes' }, portIsFree: () => Promise.resolve(true),
     ...promptsAnswer === undefined ? {} : { promptsAnswer },

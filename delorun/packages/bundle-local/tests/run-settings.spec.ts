@@ -21,7 +21,7 @@ import { CONFIRMATION_MS, registerRunRoutes, RunSettings, type RunDependencies, 
 const roots: string[] = []
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }) })
 
-const HOST = 'laptop.tail1234.ts.net'
+const HOST = 'my-pc.example.ts.net'
 const START = Date.UTC(2026, 10, 22, 12, 0, 0)
 
 interface Options {
@@ -337,7 +337,7 @@ describe('phone access', () => {
     const tailscale = fakeTailscale(HOST)
     const w = world({ tailscale })
     const { ticket } = await w.service.reachPreview()
-    tailscale.answers.status = { code: 0, stdout: JSON.stringify({ BackendState: 'Running', Self: { DNSName: 'other.tail1234.ts.net.' }, CertDomains: ['other.tail1234.ts.net'] }), stderr: '' }
+    tailscale.answers.status = { code: 0, stdout: JSON.stringify({ BackendState: 'Running', Self: { DNSName: 'other-pc.example.ts.net.' }, CertDomains: ['other-pc.example.ts.net'] }), stderr: '' }
     await expect(w.service.reach({ on: true, ticket })).rejects.toMatchObject({ code: 'TICKET_INVALID' })
     expect(w.files.patchText()).toBe('[]\n')
   })
