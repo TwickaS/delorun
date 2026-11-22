@@ -243,6 +243,7 @@ export function applyStudio(ctx: Context): void {
   const installer = createBundleInstaller(ctx, {
     addWaitMs: () => (progress.getSnapshot().value?.addWaitSeconds ?? DEFAULT_SETTINGS.addWaitSeconds) * 1000,
     pollMs: 3000,
+    resolveText: text => ctx.locale.resolveText(text),
   })
   const services = (): StaticServices => ({
     notice: notice(),
