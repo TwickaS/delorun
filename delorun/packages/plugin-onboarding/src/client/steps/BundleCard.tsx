@@ -3,7 +3,7 @@
  * check) and the state line under the card (checking, adding, restart, unavailable or failed with what to do next).
  */
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
-import { currentDownloadsSource } from '@delorun/plugin-downloads/row'
+import { currentDownloadsSource, useDownloadRateText } from '@delorun/plugin-downloads/row'
 import { useCallback, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import type { BundleState } from '../bundles.ts'
@@ -56,15 +56,28 @@ function Adding({ label, progress }: { readonly label: string; readonly progress
 }
 
 /**
- * How far the install queue says a package's download has come.
+ * How far the install queue says a package's download has come, and how fast it runs.
  * @param name - the package name.
- * @returns the fraction from 0 to 1, or undefined when the queue holds no size for it.
+ * @returns the fraction from 0 to 1, undefined when the queue holds no size for it, and the speed and time left, empty
+ *   until they are known.
  */
-function useDownloadProgress(name: string): number | undefined {
+function useDownloadProgress(name: string): { readonly progress: number | undefined, readonly rate: string } {
   const source = currentDownloadsSource()
   const items = useSyncExternalStore(source.subscribe, source.snapshot, source.snapshot)
   const item = items.find(each => each.key === name)
-  return item?.totalBytes === undefined || item.totalBytes <= 0 ? undefined : Math.min(1, item.receivedBytes / item.totalBytes)
+  const rate = useDownloadRateText(item)
+  return { progress: item?.totalBytes === undefined || item.totalBytes <= 0 ? undefined : Math.min(1, item.receivedBytes / item.totalBytes), rate }
+}
+
+/**
+ * The speed and time left under a card while its package downloads. The line keeps its height while the speed is not
+ * known yet, so the card does not grow a second after the add starts; it is not a live region, since it changes every
+ * second.
+ * @param props - the text, empty while the speed is not known.
+ * @returns the line.
+ */
+function RateLine({ text }: { readonly text: string }): ReactNode {
+  return <p className={css.rate} data-empty={text === '' || undefined}>{text === '' ? '\u00a0' : text}</p>
 }
 
 /** The props of an addable card. */
@@ -85,6 +98,8 @@ interface AddableProps {
   readonly description?: string | undefined
   /** How far the download has come, from 0 to 1, when the install queue knows it. */
   readonly progress?: number | undefined
+  /** The download's speed and time left, empty until they are known; shown while the package is being added. */
+  readonly rate?: string | undefined
   /** Add it; the agents' card opens its confirmation here. */
   readonly onAdd: () => void
   /** Extra state lines and content under the card. */
@@ -96,9 +111,10 @@ interface AddableProps {
  * @param props - the package's state, text and Add handler.
  * @returns the card.
  */
-export function AddableCard({ services, state, reason, packsReason, title, icon, description, progress, onAdd, children }: AddableProps): ReactNode {
+export function AddableCard({ services, state, reason, packsReason, title, icon, description, progress, rate, onAdd, children }: AddableProps): ReactNode {
   const { t } = services
   let action: ReactNode
+  let speed: ReactNode
   let line: ReactNode
   switch (state) {
     case 'checking':
@@ -109,12 +125,14 @@ export function AddableCard({ services, state, reason, packsReason, title, icon,
       break
     case 'installing':
       action = <Adding label={t('bundle.adding')} progress={progress} />
+      speed = rate === undefined ? undefined : <RateLine text={rate} />
       break
     case 'offline':
       line = <StateLine tone="info">{t('bundle.offline')}</StateLine>
       break
     case 'slow':
       action = <Adding label={t('bundle.adding')} progress={progress} />
+      speed = rate === undefined ? undefined : <RateLine text={rate} />
       line = <StateLine tone="loading">{t('bundle.slow')}</StateLine>
       break
     case 'installed':
@@ -138,6 +156,7 @@ export function AddableCard({ services, state, reason, packsReason, title, icon,
     <li>
       <Card title={title} icon={icon} description={description} labels={{ more: t('more'), less: t('less') }} action={action === undefined ? undefined : <div className={css.slot}>{action}</div>}>
         {children}
+        {speed}
         {line}
       </Card>
     </li>
@@ -172,10 +191,10 @@ export function BundleCard({ name, title, description, services, onAdd, children
   readonly children?: ReactNode
 }): ReactNode {
   const view = useBundle(services, name)
-  const progress = useDownloadProgress(name)
+  const { progress, rate } = useDownloadProgress(name)
   if (title === undefined) return <SkeletonCard />
   return (
-    <AddableCard services={services} state={view?.state ?? 'checking'} reason={view?.reason} packsReason={view?.packsReason} title={title ?? ''} description={description} progress={progress}
+    <AddableCard services={services} state={view?.state ?? 'checking'} reason={view?.reason} packsReason={view?.packsReason} title={title ?? ''} description={description} progress={progress} rate={rate}
       onAdd={onAdd ?? (() => { void services.bundles.install(name) })}>
       {children}
     </AddableCard>

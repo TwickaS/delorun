@@ -16,7 +16,7 @@ The studio's downloads panel. It lists every plugin the install queue is working
 | A phone, in the setup guide | `OnboardingDownloadsRow`: one muted line above Back and Continue with a thin grey progress line. No accent, no motion beyond the progress. A failure shows as a small neutral marker. Tapping the line lists the plugins in place. |
 | A phone, elsewhere | A header download icon with a count badge. It opens a bottom sheet with the same list. |
 
-The card appears only while something is queued or has just finished. Reduced motion turns the fades and the fold off. A polite live region speaks a completion or a new failure once; it never speaks a percentage.
+A running download's status gives its percentage (the bytes received while the queue holds no size), then its speed and, with a known size, the time left, such as `25% · 4.0 MB/s · ~3.8s left`. The page measures them from the received bytes over the last five seconds, with the formats of the terminal's install display (`@delorun/install/transfer`, reached through `@delorun/plugin-packs/transfer`); the speed shows once two readings a second apart exist and goes when no byte has arrived for three seconds. The progress bar's text keeps to the percentage. The card appears only while something is queued or has just finished. Reduced motion turns the fades and the fold off. A polite live region speaks a completion or a new failure once; it never speaks a percentage.
 
 ## The data seat
 

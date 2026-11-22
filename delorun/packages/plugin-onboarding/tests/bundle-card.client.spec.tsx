@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, render, screen } from '@testing-library/react'
+import { createFakeDownloadsSource, provideDownloadsSource } from '@delorun/plugin-downloads/row'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AddableCard } from '../src/client/steps/BundleCard.tsx'
+import { AddableCard, BundleCard } from '../src/client/steps/BundleCard.tsx'
 import { en } from '../src/client/locales.ts'
 import type { BundleState } from '../src/client/bundles.ts'
-import { stepServices } from './fixtures.client.ts'
+import { installerFake, stepServices } from './fixtures.client.ts'
 
 afterEach(cleanup)
 
@@ -64,5 +65,37 @@ describe('the state slot of a row', () => {
     expect(button.querySelector('svg')).not.toBeNull()
     expect(button.textContent).toBe(en['bundle.add'])
     expect(container.querySelectorAll('[class*="slot"]').length).toBeGreaterThan(0)
+  })
+})
+
+describe('the speed of a package being added', () => {
+  const MB = 1_000_000
+
+  it('shows the speed and the time left under the card once the queue reports bytes a second apart, keeping the line\'s height before', () => {
+    vi.useFakeTimers()
+    const source = createFakeDownloadsSource([{ key: 'pi', state: 'downloading', receivedBytes: 1 * MB, totalBytes: 20 * MB }])
+    const withdraw = provideDownloadsSource(source)
+    try {
+      const bundles = installerFake({ pi: { state: 'installing' } })
+      const { container } = render(<ul><BundleCard name="pi" title="Pi" description="About it" services={stepServices({ bundles: bundles.installer })} /></ul>)
+      const line = (): Element | null => container.querySelector('p[class*="rate"]')
+      expect(line()?.hasAttribute('data-empty')).toBe(true)
+      act(() => { vi.advanceTimersByTime(1000) })
+      act(() => { source.update('pi', { receivedBytes: 5 * MB }) })
+      expect(line()?.textContent).toBe('4.0 MB/s · ~3.8s left')
+      expect(line()?.hasAttribute('data-empty')).toBe(false)
+      expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('25')
+      // A download that stands still shows no speed, and the line keeps its place.
+      act(() => { vi.advanceTimersByTime(3000) })
+      expect(line()?.hasAttribute('data-empty')).toBe(true)
+    } finally {
+      withdraw()
+      vi.useRealTimers()
+    }
+  })
+
+  it('shows no speed line once the package is added', () => {
+    const { container } = render(<ul><AddableCard services={stepServices()} state="installed" rate="4.0 MB/s" title="Pi" description={undefined} onAdd={vi.fn()} /></ul>)
+    expect(container.querySelector('p[class*="rate"]')).toBeNull()
   })
 })
