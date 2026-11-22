@@ -8,8 +8,10 @@
  *   who may not gets `TAILSCALE_SERVE_NOT_PERMITTED` with the one command the person runs, and nothing is written;
  *   nothing runs through `sudo`. It then writes the profile's `delorun-reach` row with this machine's `ts.net` address
  *   and the fixed listener port, chosen once, and prints the address, the sign-in address and the trust statement.
- * - `off` turns the option off in the row, removes whatever Tailscale serves on the serve port at once, and confirms it
- *   is gone; a removal it cannot confirm exits non-zero with the reason.
+ * - `off` turns the option off in the row, signs every paired device out (the device list stays; a home that runs does
+ *   it itself when it applies the row, one that does not has its stored sessions removed), resets who may ask to pair
+ *   without a window, removes whatever Tailscale serves on the serve port at once, and confirms it is gone; a removal
+ *   it cannot confirm exits non-zero with the reason.
  * - While the profile's home runs, `on` and `off` ask it over the update channel's `reach.apply` (C19) to restart its
  *   options from the row, and print the state it answers; a home that cannot apply it, or a start that is not
  *   `ready`, exits non-zero with the reason and the restart command.
@@ -23,10 +25,11 @@ import { pinOffHint } from '../devices/pin.ts'
 import { DEFAULT_SERVE_PORT } from '@delorun/contract-reach-providers'
 import type { ReachOptionStatus } from '@delorun/contract-home-process'
 import { checkServeAccess, ReachError, readTailscale, removeServe, serveTarget, systemTailscale, tailscaleAddress, type TailscaleRunner } from '@delorun/reach'
-import { listenerPortFor, readPairingAt, signInAddress, TRUST_STATEMENT } from '@delorun/setup-apply'
+import { listenerPortFor, readPairingAt, signInAddress, TRUST_STATEMENT, writeMayAskAt } from '@delorun/setup-apply'
+import { join } from 'node:path'
 import { processExists, readHomeLock, resolveDelorunHome, runDirectory } from '@delorun/home'
 import { sendHomeRequest, type ResponseLine, type UnsignedRequest } from '@delorun/home-process'
-import type { PairingSpec } from '@delorun/home-auth'
+import { HomeAuth, HomeAuthError, type PairingSpec } from '@delorun/home-auth'
 import { CliError, EXIT } from '../exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandContext } from '../command.ts'
 import { hasCliProfile, selectProfile } from '../profile.ts'
@@ -289,8 +292,21 @@ async function turnOff(args: readonly string[], context: CommandContext, depende
   const { home, profile } = await preparedProfile('off', args, context)
   const row = readReachRow(home, profile)
   writeReachRow(home, profile, { ...row, enabled: false })
+  // Who may ask to pair without an approval window goes back to the safe default, as in Settings.
+  writeMayAskAt(profilePatchPath(home, profile), 'own-user')
   const running = dependencies.running(home, profile)
-  const lines = [`Remote access is off for the profile ${profile}.`]
+  const lines = [`Remote access is off for the profile ${profile}.`, 'Every paired device is signed out and stays on the list; each signs in again when remote access is on.']
+  // A running home signs the devices out itself when it applies the row, below. A home that is not running has only
+  // stored sessions, which go now, so none is there when it starts.
+  if (!running) {
+    try {
+      await new HomeAuth({ directory: join(home, 'secrets', 'home-auth') }).signAllDevicesOut()
+    } catch (error) {
+      if (!(error instanceof HomeAuthError)) throw error
+      context.stderr(`delorun reach: the paired devices could not be signed out: ${error.message}\n`)
+      return EXIT.failed
+    }
+  }
   try {
     const host = URL.parse(row.address)?.hostname ?? (await readTailscale(dependencies.tailscale)).dnsName
     await removeServe(dependencies.tailscale, host, row.servePort, serveTarget(row.listenerPort))

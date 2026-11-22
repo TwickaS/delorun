@@ -187,6 +187,59 @@ describe('delorun reach', () => {
     await expect(reach({ tailscale: () => Promise.reject(new Error('broken runner')) }).run(['off'], context)).rejects.toThrow('broken runner')
   })
 
+  it('signs every paired device out when it turns off with Delorun stopped, keeps the list, and restores no session when turned on again', async () => {
+    // Pins `signAllDevicesOut` in `turnOff`: a stored session that survived would be admitted again once access is on.
+    const directory = join(delorunHome, 'secrets', 'home-auth')
+    const address = brandString<StudioAddress>('http://127.0.0.1:3080')
+    const paired = new HomeAuth({ directory })
+    await paired.start()
+    const { device } = await paired.claim({ listener: 'loopback', host: '127.0.0.1:3080', source: 'local', ownerCode: (await paired.issueOwnerCode()).code, devicePublicKey: { kty: 'EC', crv: 'P-256', x: brandString<Base64Url>('A'.repeat(43)), y: brandString<Base64Url>('B'.repeat(43)) }, label: 'Phone', address })
+    const open = (): Promise<{ token: string }> => paired.openSession({ deviceId: device.id, listener: 'reach-tailscale-private', address, factor: 'tailnet-membership', lifetimeMs: 60 * 60 * 1000 })
+    const old = await open()
+    await paired.stop()
+    const live = async (token: string): Promise<boolean> => {
+      const reader = new HomeAuth({ directory })
+      await reader.start()
+      try { return (await reader.sessionOf(token)) !== undefined } finally { await reader.stop() }
+    }
+    expect(await live(old.token)).toBe(true)
+    await reach().run(['on', 'tailscale'], context)
+    writeFileSync(join(delorunHome, 'profiles', 'default', 'cordis.patch.yml'), readFileSync(join(delorunHome, 'profiles', 'default', 'cordis.patch.yml'), 'utf8') + '- id: delorun-home-auth\n  config:\n    pairing:\n      mayAskWithoutWindow: tailnet\n')
+    out.stdout = ''
+    await expect(reach({ running: () => false }).run(['off'], context)).resolves.toBe(EXIT.ok)
+    expect(out.stdout).toContain('Every paired device is signed out and stays on the list')
+    expect(await live(old.token)).toBe(false)
+    const home = (patchRows() as { id: string, config: Record<string, unknown> }[]).find(row => row.id === 'delorun-home-auth')
+    expect(home?.config).toMatchObject({ pairing: { mayAskWithoutWindow: 'own-user' } })
+    const after = new HomeAuth({ directory })
+    await after.start()
+    expect((await after.devices()).devices.map(listed => listed.id)).toEqual([device.id])
+    await after.stop()
+    // Turned on again, the old cookie is still refused; a fresh sign-in gets a new one.
+    await reach().run(['on', 'tailscale'], context)
+    expect(await live(old.token)).toBe(false)
+    const again = new HomeAuth({ directory })
+    await again.start()
+    const fresh = await again.openSession({ deviceId: device.id, listener: 'reach-tailscale-private', address, factor: 'tailnet-membership', lifetimeMs: 60 * 60 * 1000 })
+    await again.stop()
+    expect(await live(fresh.token)).toBe(true)
+    expect(await live(old.token)).toBe(false)
+  })
+
+  it('has the running Host sign the devices out before it applies a row that leaves access off, and not for one that turns it on', async () => {
+    const signedOut = vi.fn(() => Promise.resolve(1))
+    const order: string[] = []
+    const service = { mounted: true, status: () => [], apply: async () => { order.push('applied'); return Promise.resolve([{ option: 'tailscale-private', state: 'off' }]) } }
+    const homeAuth = { signAllDevicesOut: () => { order.push('signed out'); return signedOut() } }
+    const host = (rows: ReturnType<typeof reachRowsOf>) => localReach({ get: (name: string) => (name === 'homeAuth' ? homeAuth : service) } as never, () => rows)
+    await host(reachRowsOf({ ...REACH_OFF, enabled: false }))?.apply()
+    expect(order).toEqual(['signed out', 'applied'])
+    await host({})?.apply()
+    expect(signedOut).toHaveBeenCalledTimes(2)
+    await host(reachRowsOf({ ...REACH_OFF, enabled: true, address: `https://${HOST}` }))?.apply()
+    expect(signedOut).toHaveBeenCalledTimes(2)
+  })
+
   it('reports the row, and the running home\'s state', async () => {
     await reach().run(['status'], context)
     expect(out.stdout).toContain('Remote access is off. Turn it on with delorun reach on tailscale.')
