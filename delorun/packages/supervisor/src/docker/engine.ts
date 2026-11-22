@@ -46,7 +46,7 @@ export interface Engine {
   call(method: 'GET' | 'POST' | 'DELETE', path: string, body?: unknown): Promise<unknown>
   /**
    * Pull one image by digest and wait for the pull to finish.
-   * @param repository - the repository, such as `ghcr.io/delo-run/delorun-workspace-s2`.
+   * @param repository - the repository, such as `ghcr.io/twickas/delorun-workspace-s2`.
    * @param digest - the `sha256:` digest; never a tag.
    * @throws {EngineError} when the engine refuses the pull or reports an error in its progress stream.
    */

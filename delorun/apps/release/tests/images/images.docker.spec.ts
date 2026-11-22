@@ -28,7 +28,7 @@ describe.runIf(process.env.DELORUN_DOCKER_SPECS === '1')('S2 and S3 images', () 
     }
     expect(digests[1]).toBe(digests[0])
     const file = JSON.parse(digests[0]!) as { debian: Record<'s2' | 's3', Record<'linux/amd64' | 'linux/arm64', Array<{ name: string, architecture: string }>>> }
-    expect(file).toMatchObject({ s2: { repository: 'ghcr.io/delo-run/delorun-workspace-s2' }, s3: { repository: 'ghcr.io/delo-run/delorun-harness-s3' } })
+    expect(file).toMatchObject({ s2: { repository: 'ghcr.io/twickas/delorun-workspace-s2' }, s3: { repository: 'ghcr.io/twickas/delorun-harness-s3' } })
     expect(file.debian.s3['linux/arm64'].find(item => item.name === 'base-files')?.architecture).toBe('arm64')
     expect(file.debian.s2['linux/amd64'].find(item => item.name === 'base-files')?.architecture).toBe('amd64')
   })

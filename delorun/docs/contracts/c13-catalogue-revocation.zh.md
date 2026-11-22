@@ -10,7 +10,7 @@ description: "约定 C13：Discover 首先列出的已签名插件索引文件�
 
 ## 摘要
 
-插件索引是一份公开的插件清单，位于 `Delo-Run` 的仓库 `Delo-Run/delo-plugins` 中，添加插件的方式是提交一个 PR（Pull Request）。它的发布任务使用 [C2](c02-release-manifest.zh.md#key-roles) 的插件索引密钥为两个文件签名，即索引文件与撤销列表，GitHub Pages 在 `catalogue.delorun.com` 上提供它们；该托管方不受信任，因为客户端会拒绝签名无法验证的文件。索引条目固定确切的插件版本及其完整性哈希，带有来自兼容性语料库的「tested with Delorun X」徽章，并且可以列出发现，studio 会把这些发现显示为插件作者或具名评审者的主张：Delorun 不执行插件审计，也不核实这些发现。撤销列表列出 Delorun 会在其下一次加载时停用的插件版本，并带有防止回放的序列号、一个过期时间以及 24 小时的最长缓存时长；超过该时长后，studio 进入陈旧状态。这些类型位于 [`@delorun/contract-catalogue-revocation`](../../packages/contract-catalogue-revocation/README.zh.md)。
+插件索引是一份公开的插件清单，位于仓库 `TwickaS/delo-plugins` 中，添加插件的方式是提交一个 PR（Pull Request）。它的发布任务使用 [C2](c02-release-manifest.zh.md#key-roles) 的插件索引密钥为两个文件签名，即索引文件与撤销列表，GitHub Pages 在 `catalogue.delorun.com` 上提供它们；该托管方不受信任，因为客户端会拒绝签名无法验证的文件。索引条目固定确切的插件版本及其完整性哈希，带有来自兼容性语料库的「tested with Delorun X」徽章，并且可以列出发现，studio 会把这些发现显示为插件作者或具名评审者的主张：Delorun 不执行插件审计，也不核实这些发现。撤销列表列出 Delorun 会在其下一次加载时停用的插件版本，并带有防止回放的序列号、一个过期时间以及 24 小时的最长缓存时长；超过该时长后，studio 进入陈旧状态。这些类型位于 [`@delorun/contract-catalogue-revocation`](../../packages/contract-catalogue-revocation/README.zh.md)。
 
 <a id="status"></a>
 
@@ -222,7 +222,7 @@ studio 仅对 `passed` 显示徽章，并且只显示为「Tested with Delorun <
 
 ## 消费方
 
-- `Delo-Run/delo-plugins`：索引文件、其 schema 检查、语料库与发布任务。
+- `TwickaS/delo-plugins`：索引文件、其 schema 检查、语料库与发布任务。
 - `delorun/packages/catalogue/src/revocation/`：获取、陈旧状态与加载时停用。
 - Discover 的配置与 studio 插件：列出条目、徽章、发现与安装。
 - `delorun verify`（[C15](c15-verification-checks.zh.md)）与更新报告（[C3](c03-update-report.zh.md)）。
@@ -275,6 +275,6 @@ studio 仅对 `passed` 显示徽章，并且只显示为「Tested with Delorun <
 ### 这些检查不能证明什么
 
 - **撤销在下次加载时生效。** 新近被撤销的版本会一直运行，直到 Host 再次加载它；撤销列表无法停止已经在运行的插件代码。从撤销到生效之间，最多有 6 小时等待下一次刷新，另加本人重启之前的时间。
-- **徽章的写入。** 只有发布作业才能写入徽章，这一点由 `Delo-Run/delo-plugins` 的 CI 配置保证：语料作业不持有写入令牌，由单独的作业发布，工作流 lint 拒绝 `pull_request_target`。客户端只验证插件索引密钥的签名，因此被攻破的发布作业或插件索引密钥可以签署任何徽章；徽章写入的拒绝测试在那个仓库中运行，而不在本仓库中。
+- **徽章的写入。** 只有发布作业才能写入徽章，这一点由 `TwickaS/delo-plugins` 的 CI 配置保证：语料作业不持有写入令牌，由单独的作业发布，工作流 lint 拒绝 `pull_request_target`。客户端只验证插件索引密钥的签名，因此被攻破的发布作业或插件索引密钥可以签署任何徽章；徽章写入的拒绝测试在那个仓库中运行，而不在本仓库中。
 - **列出的发现。** Delorun 不核实列出的发现。一条发现陈述的是其作者的主张；没有列出发现，并不说明插件的任何情况。
 - **对时钟的依赖。** 最大缓存时长、撤销列表的过期时间与索引的过期时间都以客户端的时钟为准；时钟被调慢时，撤销列表可能在实际过期后仍被使用。
