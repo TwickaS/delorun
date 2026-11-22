@@ -77,7 +77,7 @@ describe('setup on a finished profile in a terminal', { timeout: TIMEOUT_MS }, (
     expect(await run(['no'])).toBe(EXIT.ok)
     expect(lines.join('')).toContain('asks every question again with your current choices selected')
     expect(lines.join('')).toContain('Kept as they were:')
-    expect(recording.asked).toEqual(['select: Use it from your phone too?'])
+    expect(recording.asked).toEqual(['select: Use Delorun from your other devices too? (phone, tablet, another computer, over Tailscale)'])
     expect(recording.screen).toContain('> No, just this computer')
     expect(recording.screen.join('\n')).not.toContain(KEY)
     expect(lines.join('')).not.toContain(KEY)

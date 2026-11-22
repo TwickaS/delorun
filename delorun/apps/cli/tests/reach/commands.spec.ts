@@ -742,7 +742,7 @@ describe('setup\'s reach section', () => {
     expect(readReachRow(delorunHome, 'default').listenerPort).toBe(row.listenerPort)
   })
 
-  it('asks "Use it from your phone too?" in the main flow with No preselected, runs the checks on Yes and keeps the safe pairing without asking', async () => {
+  it('asks "Use Delorun from your other devices too? (phone, tablet, another computer, over Tailscale)" in the main flow with No preselected, runs the checks on Yes and keeps the safe pairing without asking', async () => {
     const notes: string[] = []
     const initials: string[] = []
     const asked: string[] = []
@@ -757,7 +757,7 @@ describe('setup\'s reach section', () => {
     const section = reachSection(tailscale(), () => false)
     const environment = { home: delorunHome, profile: 'default' } as never
     await expect(section.ask(mainIo(['no']), mainDraft, environment)).resolves.toEqual({ answers: { useCase: 'local', reach: { option: 'none', identityFactor: null } }, status: 'answered' })
-    expect(asked).toEqual(['Use it from your phone too? No, just this computer / Yes, over Tailscale'])
+    expect(asked).toEqual(['Use Delorun from your other devices too? (phone, tablet, another computer, over Tailscale) No, just this computer / Yes, over Tailscale'])
     expect(initials).toEqual(['no'])
     await expect(section.ask(mainIo(['yes']), mainDraft, environment)).resolves.toEqual({ answers: { useCase: 'remote', reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership', pairing: 'own-user' } }, status: 'answered' })
     expect(asked).toHaveLength(2)

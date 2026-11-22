@@ -1,8 +1,15 @@
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { SETUP_DEFAULTS, type SetupAnswers } from '@delorun/contract-setup-answers'
-import { FIRST_CHAT_PAGE, foregroundEnding, installLine, isProductionChannel, launcherVersion, nextSteps } from '../../src/setup/ending.ts'
+import { deviceAddress, deviceLines, FIRST_CHAT_PAGE, foregroundEnding, installLine, isProductionChannel, launcherVersion, nextSteps } from '../../src/setup/ending.ts'
 
 const KEY_SET = { DEEPSEEK_API_KEY: 'env-key' }
+const THIS_COMPUTER_ONLY = 'The studio opens on this computer only. Turn on device access later in Settings → General → How Delorun runs, or with delorun setup reach.'
+const FINISH_HERE = 'Finish setup here, or on any device signed in to your Tailscale: https://my-pc.example.ts.net'
+const PAIRING = 'A new device asks to pair: approve it here at this computer, or unlock it with the PIN.'
+const DEVICES_ON: Pick<SetupAnswers, 'useCase' | 'reach'> = { useCase: 'remote', reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership' } }
 const DEEPSEEK_ENV: SetupAnswers['modelProvider'] = { id: 'deepseek-official', credential: { source: 'environment', name: 'DEEPSEEK_API_KEY' }, baseURL: null, model: null }
 
 /** @returns the next steps of a profile with the answers that differ from the defaults. */
@@ -39,6 +46,8 @@ describe('the next steps', () => {
       'Next:',
       '  1. Start Delorun and open the studio: delorun',
       `     Send a first message in a new chat. The install guide's section on your first chat walks through it: ${FIRST_CHAT_PAGE}`,
+      '',
+      THIS_COMPUTER_ONLY,
       '',
       'Change an answer later: delorun setup <section> (delorun setup --list shows the sections).',
       'If something looks wrong: delorun doctor.',
@@ -82,6 +91,14 @@ describe('the next steps', () => {
     for (const useCase of ['remote', 'local'] as const) expect(steps({ useCase })).not.toMatch(/phone|Remote access|devices approve/u)
   })
 
+  it('say where to finish setup and how a device pairs when device access is on, and that the studio is this computer only when it is off', () => {
+    const on = nextSteps({ profile: 'default', answers: { ...SETUP_DEFAULTS, modelProvider: DEEPSEEK_ENV, ...DEVICES_ON }, env: KEY_SET, deviceAddress: 'https://my-pc.example.ts.net' })
+    expect(on).toContain(`\n\n${FINISH_HERE}\n${PAIRING}\n\nChange an answer later`)
+    expect(on).not.toContain(THIS_COMPUTER_ONLY)
+    expect(steps({})).toContain(`\n\n${THIS_COMPUTER_ONLY}\n\nChange an answer later`)
+    expect(steps({ useCase: 'automation' })).not.toContain('this computer only')
+  })
+
   it('name the chosen port in the studio address', () => {
     expect(steps({ profile: { name: null, port: 3123 } })).toContain('Studio: http://127.0.0.1:3123\n')
   })
@@ -89,7 +106,9 @@ describe('the next steps', () => {
 
 describe('the ending of a run that started Delorun', () => {
   it('names the profile in each command and shows the sandbox fix first', () => {
-    expect(foregroundEnding('default', undefined)).toBe([
+    expect(foregroundEnding('default', undefined, undefined)).toBe([
+      '',
+      THIS_COMPUTER_ONLY,
       '',
       'Delorun runs in this terminal. Ctrl+C stops it.',
       'To keep it running after you close the terminal: delorun start --background',
@@ -98,8 +117,8 @@ describe('the ending of a run that started Delorun', () => {
       'If something looks wrong: delorun doctor',
       '',
     ].join('\n'))
-    const text = foregroundEnding('work', { name: 'sandbox', status: 'fail', message: 'bwrap missing' })
-    expect(text.startsWith('\nSandbox: bwrap missing\n\nDelorun runs in this terminal.')).toBe(true)
+    const text = foregroundEnding('work', { name: 'sandbox', status: 'fail', message: 'bwrap missing' }, undefined)
+    expect(text.startsWith(`\nSandbox: bwrap missing\n\n${THIS_COMPUTER_ONLY}\n\nDelorun runs in this terminal.`)).toBe(true)
     expect(text).toContain('delorun start --profile work --background')
     expect(text).toContain('delorun doctor --profile work\n')
   })
@@ -125,5 +144,29 @@ describe('the ending of a run that started Delorun', () => {
     expect(local).not.toMatch(/phone|devices approve|Remote access|Tailscale/u)
     const chosen = steps({ useCase: 'local', reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership' } })
     expect(chosen).toContain('  2. Add your phone or another device: delorun devices approve, then type the code it shows.')
+  })
+
+  it('puts the address and the pairing line before the Ctrl+C line when device access is on', () => {
+    const text = foregroundEnding('default', undefined, 'https://my-pc.example.ts.net')
+    expect(text).toContain(`\n${FINISH_HERE}\n${PAIRING}\n\nDelorun runs in this terminal. Ctrl+C stops it.`)
+    expect(text).not.toContain(THIS_COMPUTER_ONLY)
+  })
+})
+
+describe('the lines about other devices', () => {
+  it('keep the pairing line when the address is not known', () => {
+    expect(deviceLines('')).toEqual([PAIRING])
+  })
+})
+
+describe('the address of other devices', () => {
+  it('is the one the reach row holds, and none when the answers leave device access off', () => {
+    const home = mkdtempSync(join(tmpdir(), 'delorun-ending-'))
+    try {
+      mkdirSync(join(home, 'profiles', 'default'), { recursive: true })
+      writeFileSync(join(home, 'profiles', 'default', 'cordis.patch.yml'), '- id: delorun-reach\n  config:\n    enabled: true\n    tailscalePrivate:\n      enabled: true\n      address: https://my-pc.example.ts.net\n')
+      expect(deviceAddress(home, 'default', { ...SETUP_DEFAULTS, ...DEVICES_ON })).toBe('https://my-pc.example.ts.net')
+      expect(deviceAddress(home, 'default', SETUP_DEFAULTS)).toBeUndefined()
+    } finally { rmSync(home, { recursive: true, force: true }) }
   })
 })

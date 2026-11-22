@@ -31,7 +31,7 @@ import { promptsFromFlags } from './dangerous.ts'
 import { channelOriginOf } from './channel-origin.ts'
 import { checkSandboxHere } from '../doctor/sandbox.ts'
 import type { CheckResult } from '../doctor/checks.ts'
-import { nextSteps } from './ending.ts'
+import { deviceAddress, nextSteps } from './ending.ts'
 import { runForeground, terminalForeground, type ForegroundDependencies } from './foreground.ts'
 import { styleOf } from '../style.ts'
 import { delorunVersion } from '../version.ts'
@@ -95,7 +95,7 @@ export interface SetupRequest {
   readonly checkEnvironmentKey?: boolean
   /** Whether the release check is turned off whatever the form says (`--no-update-check`); Full asks with No preselected. */
   readonly noUpdateCheck?: boolean
-  /** The flags `--phone`, `--import-dsh` and `--port`: answers that pre-select a question, or take it without one. */
+  /** The flags `--phone` (or `--devices`), `--import-dsh` and `--port`: answers that pre-select a question, or take it without one. */
   readonly answerFlags?: AnswerFlags
   /** Whether a local port is free; a listen on the loopback address by default. */
   readonly portIsFree?: (port: number) => Promise<boolean>
@@ -449,7 +449,7 @@ export async function runSetup(given: SetupRequest): Promise<CommandResult> {
   if (request.foreground !== undefined && request.form.kind === 'interactive' && !finished) {
     return runForeground({ home: request.home, profile, output: request.output, env: request.env, answers: progress.answers, prompter: prompterFor(request.form), channelOrigin, sandbox, dependencies: request.foreground })
   }
-  request.output.stdout(nextSteps({ profile, answers: progress.answers, env: request.env, channelOrigin, sandbox }))
+  request.output.stdout(nextSteps({ profile, answers: progress.answers, env: request.env, channelOrigin, sandbox, deviceAddress: deviceAddress(request.home, profile, progress.answers) }))
   return EXIT.ok
 }
 
@@ -524,9 +524,9 @@ export function providerChoiceFromFlags(values: Readonly<Partial<Record<(typeof 
 }
 
 /**
- * `delorun setup [<section>] [--profile <name>] [--yes | --config <file>] [--phone] [--import-dsh] [--port <n>] [--provider <id> [--model <id>] [--base-url <url>] [--key-env <NAME>]] [--prompts <safer|stock|dangerous> [--accept-dangerous-mode]] [--check-key] [--no-update-check] [--list]`.
+ * `delorun setup [<section>] [--profile <name>] [--yes | --config <file>] [--phone | --devices] [--import-dsh] [--port <n>] [--provider <id> [--model <id>] [--base-url <url>] [--key-env <NAME>]] [--prompts <safer|stock|dangerous> [--accept-dangerous-mode]] [--check-key] [--no-update-check] [--list]`.
  * Without `--config`, `--yes` or a section, a standard input that is not a terminal makes the run take the defaults, as `--yes` does.
- * `--phone`, `--import-dsh` and `--port` answer a question of the whole setup: they pre-select it in a terminal and take it
+ * `--phone` and its alias `--devices` (device access over Tailscale), `--import-dsh` and `--port` answer a question of the whole setup: they pre-select it in a terminal and take it
  * without questions otherwise.
  */
 export const setupCommand: CliCommand = {
@@ -542,7 +542,7 @@ export const setupCommand: CliCommand = {
           'no-update-check': { type: 'boolean', default: false }, 'list': { type: 'boolean', default: false },
           'provider': { type: 'string' }, 'model': { type: 'string' }, 'base-url': { type: 'string' }, 'key-env': { type: 'string' },
           'prompts': { type: 'string' }, 'accept-dangerous-mode': { type: 'boolean', default: false },
-          'phone': { type: 'boolean', default: false }, 'import-dsh': { type: 'boolean', default: false }, 'port': { type: 'string' },
+          'phone': { type: 'boolean', default: false }, 'devices': { type: 'boolean', default: false }, 'import-dsh': { type: 'boolean', default: false }, 'port': { type: 'string' },
         }, strict: true, allowPositionals: true })
       } catch (error) {
         // parseArgs throws a TypeError with an ERR_PARSE_ARGS_* code for an unknown or malformed option.
@@ -558,9 +558,9 @@ export const setupCommand: CliCommand = {
     if (values.yes && values.config !== undefined) throw new CliError(EXIT.usage, 'delorun setup: --yes and --config are two forms of the same answers; give one')
     if (values['no-update-check'] && positionals.length > 0) throw new CliError(EXIT.usage, 'delorun setup: --no-update-check applies to a whole setup; delorun setup privacy asks about the release check')
     const [section] = positionals
-    const answerFlags: AnswerFlags = { ...values.phone ? { phone: true } : {}, ...values['import-dsh'] ? { importDsh: true } : {}, ...values.port === undefined ? {} : { port: portFromFlag(values.port) } }
-    if (Object.keys(answerFlags).length > 0 && section !== undefined) throw new CliError(EXIT.usage, 'delorun setup: --phone, --import-dsh and --port apply to a whole setup; delorun setup reach, import and profile ask the same questions')
-    if (Object.keys(answerFlags).length > 0 && values.config !== undefined) throw new CliError(EXIT.usage, 'delorun setup: --phone, --import-dsh and --port apply to --yes and to a terminal run; a --config document holds its own answers')
+    const answerFlags: AnswerFlags = { ...values.phone || values.devices ? { phone: true } : {}, ...values['import-dsh'] ? { importDsh: true } : {}, ...values.port === undefined ? {} : { port: portFromFlag(values.port) } }
+    if (Object.keys(answerFlags).length > 0 && section !== undefined) throw new CliError(EXIT.usage, 'delorun setup: --phone (or --devices), --import-dsh and --port apply to a whole setup; delorun setup reach, import and profile ask the same questions')
+    if (Object.keys(answerFlags).length > 0 && values.config !== undefined) throw new CliError(EXIT.usage, 'delorun setup: --phone (or --devices), --import-dsh and --port apply to --yes and to a terminal run; a --config document holds its own answers')
     // A whole setup without a terminal takes the defaults, so the flags that apply to `--yes` apply to it.
     const unattended = values.yes || (section === undefined && values.config === undefined && process.stdin.isTTY !== true)
     const providerChoice = providerChoiceFromFlags(values, section, unattended)

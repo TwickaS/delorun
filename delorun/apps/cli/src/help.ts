@@ -43,9 +43,9 @@ const JSON_OUTPUT: HelpEntry = { name: '--json', text: 'Print the result as JSON
 /** Every command's help, by command name. */
 export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   setup: {
-    usage: ['delorun setup [<section>] [--profile <name>] [--yes] [--phone] [--import-dsh] [--port <n>] [--list]'],
+    usage: ['delorun setup [<section>] [--profile <name>] [--yes] [--phone | --devices] [--import-dsh] [--port <n>] [--list]'],
     about: [
-      'Sets up Delorun with a few questions: whether to use it from your phone, whether to copy your DeepSeek Harness chats (only when you have some), and the studio port when 3080 is busy. You add your model key in the studio.',
+      'Sets up Delorun with a few questions: whether to use it from your other devices too, whether to copy your DeepSeek Harness chats (only when you have some), and the studio port when 3080 is busy. You add your model key in the studio.',
       'Without a terminal, delorun setup takes the safe defaults and asks nothing, as --yes does.',
       'Name a section (key, prompts, background, privacy, reach, changes-protection, profile) to answer one question again. delorun setup --list shows the sections.',
     ],
@@ -53,7 +53,7 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
       PROFILE,
       { name: '--list', text: 'List the sections you can run again.' },
       { name: '--yes', text: 'Accept the defaults without asking (for scripts). Also the form without a terminal.' },
-      { name: '--phone', text: 'Turn on phone access over Tailscale. Fails with the reason when Tailscale is not ready. In a terminal it pre-selects Yes.' },
+      { name: '--phone', text: 'Turn on access from your other devices over Tailscale (phone, tablet, another computer); --devices means the same. Fails with the reason when Tailscale is not ready. In a terminal it pre-selects Yes.' },
       { name: '--import-dsh', text: 'Copy your DeepSeek Harness chats after printing what is copied and what stays behind. Only when a DeepSeek Harness home exists.' },
       { name: '--port <n>', text: 'The studio port, from 1024 to 65535, instead of 3080 or the next free port.' },
       { name: '--config <file>', text: 'Take the answers from a JSON answers file instead of asking.' },

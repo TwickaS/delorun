@@ -243,7 +243,7 @@ describe('setup\'s import section', () => {
       portIsFree: async () => true,
     })
     expect(code).toBe(EXIT.ok)
-    expect(recording.asked).toEqual(['select: Use it from your phone too?', QUESTION])
+    expect(recording.asked).toEqual(['select: Use Delorun from your other devices too? (phone, tablet, another computer, over Tailscale)', QUESTION])
     expect(readFileSync(join(home, 'sessions/_no-cwd/s2/session.v4.jsonl.zstd'))).toEqual(chatLog('s2', undefined))
     expect(existsSync(join(home, 'profiles/web/package.json'))).toBe(false)
     const record = JSON.parse(readFileSync(join(profileDirectory(home, 'default'), 'setup-answers.json'), 'utf8')) as SetupAnswers

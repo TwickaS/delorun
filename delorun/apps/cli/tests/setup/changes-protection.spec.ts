@@ -116,7 +116,7 @@ afterEach(() => {
 describe('the changes protection question', { timeout: TIMEOUT_MS }, () => {
   it('is asked right after a phone Yes, with no preselected, after a one-line explanation', async () => {
     expect(await runSetup(request([...PHONE_YES, 'no']))).toBe(EXIT.ok)
-    expect(recording.asked.slice(0, 2)).toEqual(['select: Use it from your phone too?', `select: ${PROTECTION_QUESTION}`])
+    expect(recording.asked.slice(0, 2)).toEqual(['select: Use Delorun from your other devices too? (phone, tablet, another computer, over Tailscale)', `select: ${PROTECTION_QUESTION}`])
     expect(screen()).toContain([
       '# Changes protection',
       '  Off by default: changes load at once and are recorded, so you can undo them with delorun changes list.',
@@ -145,7 +145,7 @@ describe('the changes protection question', { timeout: TIMEOUT_MS }, () => {
 
   it('is not asked after a phone No, which leaves the home at the default', async () => {
     expect(await runSetup(request(PHONE_NO))).toBe(EXIT.ok)
-    expect(recording.asked).toEqual(['select: Use it from your phone too?'])
+    expect(recording.asked).toEqual(['select: Use Delorun from your other devices too? (phone, tablet, another computer, over Tailscale)'])
     expect(screen()).not.toContain('# Changes protection')
     expect(existsSync(protectionPath(home))).toBe(false)
     expect(sectionStatus('changes-protection')).toBe('skipped')
@@ -155,14 +155,14 @@ describe('the changes protection question', { timeout: TIMEOUT_MS }, () => {
     const funnel = fakeTailscale(HOST)
     funnel.config = { AllowFunnel: { [`${HOST}:443`]: true } }
     expect(await runSetup(request(PHONE_YES, AT_TERMINAL, registryWith(AT_TERMINAL, funnel.run)))).toBe(EXIT.ok)
-    expect(recording.asked).toEqual(['select: Use it from your phone too?'])
+    expect(recording.asked).toEqual(['select: Use Delorun from your other devices too? (phone, tablet, another computer, over Tailscale)'])
     expect(screen()).toContain('Remote access stays off')
     expect(sectionStatus('changes-protection')).toBe('skipped')
   })
 
   it('goes back to the phone question', async () => {
     expect(await runSetup(request([...PHONE_YES, BACK_CHOICE, 'yes', 'yes']))).toBe(EXIT.ok)
-    expect(recording.asked.filter(asked => asked === 'select: Use it from your phone too?')).toHaveLength(2)
+    expect(recording.asked.filter(asked => asked === 'select: Use Delorun from your other devices too? (phone, tablet, another computer, over Tailscale)')).toHaveLength(2)
     expect(protectionRecord()?.level).toBe('on')
   })
 })

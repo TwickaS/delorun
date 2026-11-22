@@ -30,7 +30,7 @@ vi.mock('../../src/delorun-bundles.ts', async (importOriginal) => ({
 const PROFILE = 'default'
 const HOST = 'home.example.ts.net'
 const TIMEOUT_MS = 60_000
-const PHONE = 'select: Use it from your phone too?'
+const PHONE = 'select: Use Delorun from your other devices too? (phone, tablet, another computer, over Tailscale)'
 const PRIVACY_LINE = 'Delorun sends nothing about you. Details: https://delorun.com/privacy'
 
 let osHome: string
@@ -95,7 +95,7 @@ describe('a fresh home', { timeout: TIMEOUT_MS }, () => {
     expect(questions()).toEqual([PHONE])
     expect(screen()).toMatch(/^delorun .* · new home in /mu)
     expect(screen()).toContain(`# Privacy\n  ${PRIVACY_LINE}`)
-    expect(screen()).toContain('? Use it from your phone too?\n> No, just this computer\n  Yes, over Tailscale\n= No, just this computer')
+    expect(screen()).toContain('? Use Delorun from your other devices too? (phone, tablet, another computer, over Tailscale)\n> No, just this computer\n  Yes, over Tailscale\n= No, just this computer')
     expect(screen()).not.toContain('← Back')
     for (const gone of ['How will you use Delorun?', '# Review', 'More settings', 'Nothing is saved until', 'Release check', 'Check for new releases?']) expect(screen()).not.toContain(gone)
   })
@@ -290,6 +290,18 @@ describe('--phone, --import-dsh and --port', { timeout: TIMEOUT_MS }, () => {
     expect(recordOf()).toMatchObject({ useCase: 'remote', reach: { option: 'tailscale-private', pairing: 'own-user' } })
     expect(readReachRow(home, PROFILE).enabled).toBe(true)
     expect(recordOf().sections.find(record => record.id === 'reach')?.status).toBe('answered')
+  })
+
+  it('--phone ends with where to finish setup from another device and how a device pairs, with the address the reach row holds', async () => {
+    expect(await yes({ answerFlags: { phone: true } })).toBe(EXIT.ok)
+    expect(screen()).toContain(`Finish setup here, or on any device signed in to your Tailscale: ${readReachRow(home, PROFILE).address}\nA new device asks to pair: approve it here at this computer, or unlock it with the PIN.`)
+    expect(screen()).not.toContain('The studio opens on this computer only')
+  })
+
+  it('a run without --phone ends with the this-computer-only line', async () => {
+    expect(await yes({})).toBe(EXIT.ok)
+    expect(screen()).toContain('The studio opens on this computer only. Turn on device access later in Settings → General → How Delorun runs, or with delorun setup reach.')
+    expect(screen()).not.toContain('Finish setup here')
   })
 
   it('--phone fails with the check\'s message when Tailscale is not ready, and writes nothing', async () => {

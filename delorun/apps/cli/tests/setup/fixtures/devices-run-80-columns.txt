@@ -1,0 +1,73 @@
+delorun <version> · new home in ~/.delorun
+# Privacy
+  Delorun sends nothing about you. Details: https://delorun.com/privacy
+? Use Delorun from your other devices too? (phone, tablet, another computer,
+over Tailscale)
+> No, just this computer
+  Yes, over Tailscale
+= Yes, over Tailscale
+# Remote access
+  Any device on your tailnet can open the sign-in page at this address.
+  Only a device you approve at this computer, by typing the code it shows, can
+  open your chats.
+  An approved phone can read chats, reply, start chats in your workspaces,
+  rename and pin chats, answer ordinary prompts and stop a run.
+  Each sensitive action it takes asks for Face ID or that phone's PIN, once per
+  action, and nothing stays unlocked: changing settings, installing plugins,
+  opening a terminal, granting full access or starting an external agent.
+  Removing another device takes Face ID itself, never the PIN.
+  A terminal runs commands with your authority. Approving devices, changing
+  remote access and setting the PIN stay at this computer, whatever the phone
+  confirms.
+  A workspace you already put on full access at this computer can still be
+  driven from it, and a command there can do anything your user can.
+  What protects you: the phone's own lock, removing the device with delorun
+  devices remove, and the sign-out after 12 hours unused or 14 days after
+  sign-in.
+  No outside security review of remote access has happened.
+# Changes protection
+  Off by default: changes load at once and are recorded, so you can undo them
+  with delorun changes list.
+? Hold changes to your plugins and to Delorun itself for your review before they
+load?
+  Yes
+> No
+  ← Back
+= No
+Remote access starts with Delorun. Open the sign-in address on your phone and
+ask to pair; type the code it shows when the studio at this computer asks.
+No model provider was set up now, and no provider setting changed. New chats
+still start on deepseek-flash from DeepSeek, which reads its key from
+DEEPSEEK_API_KEY unless the profile names another variable. Add your model key
+in the studio (the welcome screen asks for it), or run delorun setup key (in a
+terminal, or with --provider <id> and its flags); Settings → Agent → Models adds
+a provider too.
+Run delorun open to open the studio in your browser.
+? Set a PIN for your other devices now? (6 digits or more; asked for each
+sensitive action) (Yes)
+= Yes
+PIN mode is on, with a PIN.
+A device you approved confirms each sensitive action by typing the PIN when it
+asks, one action at a time; nothing stays unlocked.
+It covers the Tailscale private address only. Setting or changing the PIN,
+turning the mode on or off, and approving a device stay at this computer.
+Ten wrong tries across the home pause the PIN and Face ID until you run delorun
+devices pin resume; five on one device remove that device and sign it out, and
+you approve it again at this computer.
+Turn it off with delorun devices pin off.
+? Keep the delorun command?
+Runs: npm install -g delorun@0.1.0
+> Yes
+  No, keep using npx
+= No, keep using npx
+
+Finish setup here, or on any device signed in to your Tailscale:
+https://my-pc.example.ts.net
+A new device asks to pair: approve it here at this computer, or unlock it with
+the PIN.
+
+Delorun runs in this terminal. Ctrl+C stops it.
+To keep it running after you close the terminal: delorun start --background
+(or Settings → General → How Delorun runs).
+Change an answer later: delorun setup <section> (delorun setup --list)
+If something looks wrong: delorun doctor

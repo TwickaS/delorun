@@ -349,7 +349,7 @@ describe('the section registry', () => {
       ask: (io) => io.confirm('Example question?', false).then(answer => typeof answer === 'boolean' ? { answers: { background: answer }, status: 'answered' as const } : answer),
     }, { order: 16 })
     expect(await interactive(['no', 'yes'], { registry })).toBe(EXIT.ok)
-    expect(recording.asked).toEqual(['select: Use it from your phone too?', 'select: Example question?'])
+    expect(recording.asked).toEqual(['select: Use Delorun from your other devices too? (phone, tablet, another computer, over Tailscale)', 'select: Example question?'])
     expect(recordOf().sections.map(record => record.id)).toEqual(['privacy', 'reach', 'changes-protection', 'import', 'example', 'key', 'prompts', 'background', 'profile'])
     expect(recordOf().background).toBe(true)
   })

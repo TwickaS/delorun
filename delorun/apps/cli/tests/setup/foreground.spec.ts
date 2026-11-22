@@ -25,9 +25,9 @@ vi.mock('../../src/delorun-bundles.ts', async (importOriginal) => ({
 
 const PROFILE = 'default'
 const PIN = '739104'
-const PIN_QUESTION = 'confirm: Set a PIN for your phone now? (6 digits or more; asked for each sensitive action)'
+const PIN_QUESTION = 'confirm: Set a PIN for your other devices now? (6 digits or more; asked for each sensitive action)'
 const KEEP_QUESTION = 'select: Keep the delorun command?\nRuns: npm install -g delorun@0.1.0'
-const PHONE_QUESTION = 'select: Use it from your phone too?'
+const PHONE_QUESTION = 'select: Use Delorun from your other devices too? (phone, tablet, another computer, over Tailscale)'
 const PHONE_ON: SetupAnswers = { ...SETUP_DEFAULTS, useCase: 'remote', reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership', pairing: 'own-user' } }
 const LAUNCHED = { DELORUN_LAUNCHER_VERSION: '0.1.0' }
 const IS_INSTALLED = '✔ delorun is installed. Next time: delorun'
@@ -144,7 +144,7 @@ describe('a run that starts Delorun in this terminal', () => {
     expect(await foreground([true, 'no'], { answers: PHONE_ON, env: LAUNCHED })).toBeUndefined()
     expect(started).toHaveLength(1)
     expect(started[0]).toMatchObject({ home: '/h', profile: PROFILE, open: true })
-    expect(recording.screen.indexOf('Run delorun open to open the studio in your browser.')).toBeLessThan(recording.screen.indexOf(`? Set a PIN for your phone now? (6 digits or more; asked for each sensitive action) (Yes)`))
+    expect(recording.screen.indexOf('Run delorun open to open the studio in your browser.')).toBeLessThan(recording.screen.indexOf(`? Set a PIN for your other devices now? (6 digits or more; asked for each sensitive action) (Yes)`))
     expect(recording.asked).toEqual([PIN_QUESTION, KEEP_QUESTION])
     expect(screen().endsWith(`${ENDING_LINES.join('\n')}`)).toBe(true)
     expect(screen()).not.toContain('Nothing is running yet')
@@ -330,6 +330,17 @@ describe('runSetup', () => {
     expect(npmCalls).toEqual([['install', '-g', 'delorun@0.1.0']])
     const text = `${recording.screen.map(line => wrapAt80(line.replaceAll(osHome, '~').replace(/^delorun .* · new home/u, 'delorun <version> · new home'))).join('\n')}\n`
     await expect(text).toMatchFileSnapshot('./fixtures/fresh-run-80-columns.txt')
+  })
+
+  it('a devices Yes run names the address and the pairing in its terminal at 80 columns, as the second fixture', { timeout: 60_000 }, async () => {
+    const result = await run({ kind: 'interactive', prompter: scriptedPrompter(['yes', 'no', true, 'no'], recording) }, { registry: registryWithTailscale(fakeTailscale('my-pc.example.ts.net').run) })
+    expect(result).toBeUndefined()
+    expect(screen()).toContain('Finish setup here, or on any device signed in to your Tailscale: https://my-pc.example.ts.net')
+    expect(screen()).toContain('A new device asks to pair: approve it here at this computer, or unlock it with the PIN.')
+    expect(screen().indexOf('Finish setup here')).toBeLessThan(screen().indexOf('Delorun runs in this terminal. Ctrl+C stops it.'))
+    expect(screen()).not.toContain('The studio opens on this computer only')
+    const text = `${recording.screen.map(line => wrapAt80(line.replaceAll(osHome, '~').replace(/^delorun .* · new home/u, 'delorun <version> · new home'))).join('\n')}\n`
+    await expect(text).toMatchFileSnapshot('./fixtures/devices-run-80-columns.txt')
   })
 
   it('a form without a terminal starts nothing and prints the plain ending', { timeout: 60_000 }, async () => {

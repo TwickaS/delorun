@@ -137,8 +137,10 @@ describe('delorun setup', { timeout: 60_000 }, () => {
     expect(readFileSync(join(osHome, '.delorun', 'profiles', 'default', 'setup-answers.json'), 'utf8')).toContain('"id": "deepseek-official"')
   })
 
-  it('--phone, --import-dsh and --port are refused for a section and for a --config document, and --port needs a usable port', async () => {
+  it('--phone and its alias --devices, --import-dsh and --port are refused for a section and for a --config document, and --port needs a usable port', async () => {
     expect((await refusal(['privacy', '--phone'])).message).toContain('apply to a whole setup')
+    expect((await refusal(['privacy', '--devices'])).message).toBe((await refusal(['privacy', '--phone'])).message)
+    expect((await refusal(['--config', 'x.json', '--devices'])).message).toContain('a --config document holds its own answers')
     expect((await refusal(['--config', 'x.json', '--import-dsh'])).message).toContain('a --config document holds its own answers')
     for (const value of ['abc', '80', '70000', '']) expect((await refusal(['--port', value])).exit).toBe(EXIT.usage)
     expect((await refusal(['--port', '80'])).message).toBe('delorun setup: --port 80: Enter a port from 1024 to 65535; ports under 1024 need administrator rights.')

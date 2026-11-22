@@ -1,6 +1,6 @@
 /**
- * Setup's `reach` section, asked in the main flow as "Use it from your phone too?" and as `delorun setup reach`: whether
- * the studio is reachable from the person's phone over their own tailnet. Turning it on runs the Tailscale checks of `delorun reach on tailscale`, Funnel,
+ * Setup's `reach` section, asked in the main flow as "Use Delorun from your other devices too?" and as `delorun setup reach`: whether
+ * the studio is reachable from the person's other devices (phone, tablet, another computer) over their own tailnet. Turning it on runs the Tailscale checks of `delorun reach on tailscale`, Funnel,
  * the removal of a serve rule the home would not keep and the test that the person's user may configure
  * `tailscale serve` included (`checkServeAccess`), and shows the trust statement; a check that fails leaves remote
  * access off and names what to fix, with the one command to run for a user who may not configure serve. Applying it
@@ -39,7 +39,7 @@ export function reachSection(tailscale: TailscaleRunner, running: (home: string,
     async ask(io, draft, environment) {
       let on: boolean | typeof BACK
       if (draft.phase === 'main') {
-        const answer = await io.select('Use it from your phone too?', [
+        const answer = await io.select('Use Delorun from your other devices too? (phone, tablet, another computer, over Tailscale)', [
           { value: 'no', label: 'No, just this computer' },
           { value: 'yes', label: 'Yes, over Tailscale' },
         ], draft.answers.reach.option === 'tailscale-private' ? 'yes' : 'no')
@@ -49,7 +49,7 @@ export function reachSection(tailscale: TailscaleRunner, running: (home: string,
         on = await io.confirm('Open Delorun from your phone or another device over Tailscale?', draft.answers.reach.option === 'tailscale-private')
       }
       if (on === BACK) return BACK
-      // The main flow's phone answer is the one place the use case is set: Yes is `remote` even when the check below leaves access off.
+      // The main flow's devices answer is the one place the use case is set: Yes is `remote` even when the check below leaves access off.
       const useCase = draft.phase === 'main' ? { useCase: on ? 'remote' : 'local' } as const : {}
       if (!on) return { answers: { ...useCase, reach: { option: 'none', identityFactor: null } }, status: 'answered' }
       try {

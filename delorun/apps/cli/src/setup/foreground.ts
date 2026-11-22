@@ -1,6 +1,6 @@
 /**
  * The end of a fresh terminal setup: Delorun starts in this terminal and opens the studio, and while it runs setup asks
- * the questions that need the running home. They are the phone PIN (`delorun devices pin set`, which goes over the home
+ * the questions that need the running home. They are the PIN for other devices (`delorun devices pin set`, which goes over the home
  * socket) and whether to keep the `delorun` command, which `npx` does not keep. Then it prints the ending
  * ({@link foregroundEnding}). The home process runs the whole time: these steps are the start's `afterStart` work.
  *
@@ -18,7 +18,7 @@ import { EXIT, type ExitCode } from '../exit.ts'
 import type { CommandOutput, CommandResult } from '../command.ts'
 import { homeRuns } from '../reach/command.ts'
 import type { StartRequest } from '../start.ts'
-import { foregroundEnding, installLine, launcherVersion, localInstallLine, nextSteps } from './ending.ts'
+import { deviceAddress, foregroundEnding, installLine, launcherVersion, localInstallLine, nextSteps } from './ending.ts'
 import { SetupCancelled, type Prompter } from './prompts.ts'
 
 /** What npm did. */
@@ -109,13 +109,13 @@ export function terminalForeground(): ForegroundDependencies {
 }
 
 /**
- * Ask whether to set the phone PIN now, and set it.
+ * Ask whether to set the PIN for other devices now, and set it.
  * @param request - the run.
  * @throws {SetupCancelled} when the person cancels the question.
  */
 async function offerPin(request: ForegroundRequest): Promise<void> {
   const { output, prompter, dependencies } = request
-  if (!await prompter.confirm('Set a PIN for your phone now? (6 digits or more; asked for each sensitive action)', true)) {
+  if (!await prompter.confirm('Set a PIN for your other devices now? (6 digits or more; asked for each sensitive action)', true)) {
     output.stdout(`${PIN_LATER}\n`)
     return
   }
@@ -171,7 +171,7 @@ async function offerCommand(request: ForegroundRequest): Promise<void> {
 }
 
 /**
- * The steps after the start: the phone PIN when phone access is on, the question about the `delorun` command, and the
+ * The steps after the start: the PIN when device access is on, the question about the `delorun` command, and the
  * ending. A cancelled question is Ctrl+C: Delorun stops and nothing more is printed.
  * @param request - the run.
  */
@@ -184,7 +184,7 @@ async function afterStart(request: ForegroundRequest): Promise<void> {
     request.dependencies.interrupt()
     return
   }
-  request.output.stdout(foregroundEnding(request.profile, request.sandbox))
+  request.output.stdout(foregroundEnding(request.profile, request.sandbox, deviceAddress(request.home, request.profile, request.answers)))
 }
 
 /**
@@ -197,6 +197,6 @@ export async function runForeground(request: ForegroundRequest): Promise<Command
   const { home, profile, output, env, dependencies } = request
   let asked = false
   const result = await dependencies.start({ home, profile, open: true, output, env, afterStart: async () => { asked = true; await afterStart(request) } })
-  if (!asked) output.stdout(nextSteps({ profile, answers: request.answers, env, channelOrigin: request.channelOrigin, sandbox: request.sandbox }))
+  if (!asked) output.stdout(nextSteps({ profile, answers: request.answers, env, channelOrigin: request.channelOrigin, sandbox: request.sandbox, deviceAddress: deviceAddress(home, profile, request.answers) }))
   return result
 }

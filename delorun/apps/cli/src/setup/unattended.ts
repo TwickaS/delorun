@@ -1,5 +1,5 @@
 /**
- * The answers of the setup flags `--phone`, `--import-dsh` and `--port <n>` in a run that asks no questions (`--yes`, or
+ * The answers of the setup flags `--phone` (or its alias `--devices`), `--import-dsh` and `--port <n>` in a run that asks no questions (`--yes`, or
  * `delorun setup` without a terminal). `--phone` and `--import-dsh` run the same section as the questions do, over a
  * prompter that accepts each question's preselected answer and prints each note, so the checks, the summary and the
  * import's plan are the ones a terminal run shows.
@@ -16,7 +16,7 @@ import type { Prompter } from './prompts.ts'
 
 /** The setup flags that answer a question of the main flow. */
 export interface AnswerFlags {
-  /** `--phone`: turn phone access on. */
+  /** `--phone` or `--devices`: turn device access on. */
   readonly phone?: boolean
   /** `--import-dsh`: copy the DeepSeek Harness chats. */
   readonly importDsh?: boolean

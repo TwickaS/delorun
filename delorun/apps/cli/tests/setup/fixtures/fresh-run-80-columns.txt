@@ -1,7 +1,8 @@
 delorun <version> · new home in ~/.delorun
 # Privacy
   Delorun sends nothing about you. Details: https://delorun.com/privacy
-? Use it from your phone too?
+? Use Delorun from your other devices too? (phone, tablet, another computer,
+over Tailscale)
 > No, just this computer
   Yes, over Tailscale
 = No, just this computer
@@ -18,6 +19,9 @@ Runs: npm install -g delorun@0.1.0
   No, keep using npx
 = Yes
 ✔ delorun is installed. Next time: delorun
+
+The studio opens on this computer only. Turn on device access later in Settings
+→ General → How Delorun runs, or with delorun setup reach.
 
 Delorun runs in this terminal. Ctrl+C stops it.
 To keep it running after you close the terminal: delorun start --background
