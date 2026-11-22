@@ -12,7 +12,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DANGEROUS_PHRASE } from '@delorun/contract-setup-answers'
 import { REACH_DEVICE } from '@delorun/home-auth'
 import { dangerousGrantPath, readDangerousGrant } from '@delorun/plugin-permission-defaults/store'
-import { DANGEROUS_WARNING_LINES, readPatchRow, REACH_OFF, TRUST_STATEMENT, writeReachRowAt } from '@delorun/setup-apply'
+import { DANGEROUS_WARNING_LINES, readPatchRow, readReachRowAt, REACH_OFF, TRUST_STATEMENT, writeReachRowAt } from '@delorun/setup-apply'
 import { faceWorld, type FaceWorld } from '../../plugin-changes/tests/face-world.ts'
 import { fakeTailscale, type FakeTailscale } from '../../reach/tests/fake-tailscale.ts'
 import { MAX_RUN_REQUEST_BYTES, RUN_ROUTES } from '../src/client/run-settings-api.ts'
@@ -415,6 +415,23 @@ describe('phone access', () => {
     expect(w.applied).toHaveLength(2)
   })
 
+  it('keeps a change made to the phone-access row while the checks ran, because it reads the row under the write lock', async () => {
+    // Pins the read inside `locked`: a row read before the checks would write its stale fields over the change.
+    const tailscale = fakeTailscale(HOST)
+    let changed = false
+    const w = world({ tailscale: { ...tailscale, run: async (args) => {
+      if (!changed) {
+        changed = true
+        const path = join(w.profileDir, 'cordis.patch.yml')
+        writeReachRowAt(path, { ...readReachRowAt(path), serveCheckIntervalMs: 12_345 })
+      }
+      return tailscale.run(args)
+    } } })
+    const { ticket } = await w.service.reachPreview()
+    expect(await w.service.reach({ on: true, ticket })).toMatchObject({ on: true })
+    expect(w.files.row('delorun-reach')).toMatchObject({ tailscalePrivate: { enabled: true, serveCheckIntervalMs: 12_345 } })
+  })
+
   it('says a restart is needed when the running home cannot apply the rows', async () => {
     const w = world({ applied: false })
     const { ticket } = await w.service.reachPreview()
@@ -485,7 +502,8 @@ describe('the routes', () => {
     const unplaced = routesOver(world(), undefined)
     for (const path of COMPUTER_ONLY) expect(await through(unplaced, { url: path, headers: STUDIO })).toMatchObject({ reached: false, status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
     const rebound = routesOver(world(), 'loopback')
-    for (const path of COMPUTER_ONLY) expect(await through(rebound, { url: path, headers: { host: 'attacker.example:4500', origin: 'http://attacker.example:4500' } })).toMatchObject({ reached: false, status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
+    // The three routes a device may use are refused a foreign Host on the loopback listener too: a rebinding page could otherwise read the state.
+    for (const path of [...COMPUTER_ONLY, RUN_ROUTES.state, RUN_ROUTES.prompts, RUN_ROUTES.background]) expect(await through(rebound, { url: path, headers: { host: 'attacker.example:4500', origin: 'http://attacker.example:4500' } }), path).toMatchObject({ reached: false, status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
     for (const url of ['/api/x/../delorunRun.dangerousConfirm', '/api/%2e%2e/api/delorunRun.port', '/api\\delorunRun.reach?x=1']) {
       expect(await through(rebound, { url, headers: { host: 'home.example.ts.net' } })).toMatchObject({ reached: false, status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
     }
@@ -555,6 +573,21 @@ describe('the routes', () => {
     }
     expect(w.files.patchText()).toBe('[]\n')
     expect((await routes.studio(RUN_ROUTES.port, JSON.stringify({ port: 4100 }))).status).toBe(200)
+  })
+
+  it('answer a body whose declared length is over the cap with 400 before reading it, and a stream that passes the cap with 400', async () => {
+    // Pins `boundedBytes`: the cap holds on the length the request declares and on the bytes that arrive, not only on a buffered body.
+    const w = world()
+    const routes = routesOver(w, 'loopback')
+    const record = w.files.recordText()
+    const declared = await routes.routes.get(RUN_ROUTES.background)!.fetch(new Request(`http://localhost${RUN_ROUTES.background}`, { method: 'POST', body: '{"on":false}', headers: { 'content-length': String(MAX_RUN_REQUEST_BYTES + 1) } }))
+    expect(declared.status).toBe(400)
+    let pulled = 0
+    const endless = new ReadableStream<Uint8Array>({ pull: (controller) => { pulled += 1; controller.enqueue(new Uint8Array(1024)) } })
+    const streamed = await routes.routes.get(RUN_ROUTES.background)!.fetch(new Request(`http://localhost${RUN_ROUTES.background}`, { method: 'POST', body: endless, duplex: 'half' } as RequestInit))
+    expect(streamed.status).toBe(400)
+    expect(pulled).toBeLessThan(20)
+    expect(w.files.recordText()).toBe(record)
   })
 
   it('answer a port web browsers block, or the one phone access listens on, with 400, and write nothing', async () => {
@@ -644,7 +677,7 @@ describe('the routes', () => {
   it('refuse a device without a PIN or a passkey the stock answer and the background', async () => {
     const w = world()
     const routes = routesOver(w, 'reach-tailscale-private', faceWorld('phone', 'reach-tailscale-private', false))
-    for (const [path, body] of [[RUN_ROUTES.prompts, { answer: 'stock' }], [RUN_ROUTES.background, { on: true }]] as const) {
+    for (const [path, body] of [[RUN_ROUTES.prompts, { answer: 'stock' }], [RUN_ROUTES.background, { on: false }]] as const) {
       const refused = await routes.device(path, JSON.stringify(body))
       expect([path, refused.status]).toEqual([path, 403])
     }

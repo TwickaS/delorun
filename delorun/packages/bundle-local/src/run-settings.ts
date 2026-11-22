@@ -347,22 +347,24 @@ export class RunSettings {
       throw unavailable(error)
     }
     const address = tailscaleAddress(dnsName, DEFAULT_SERVE_PORT)
-    const next: TailscalePrivateRow = { ...row, enabled: true, address, servePort: DEFAULT_SERVE_PORT, listenerPort }
-    await this.dependencies.locked(where.profileDir, () => {
-      writeReachRowAt(patchOf(where), next)
+    // The row is read again under the lock, so a change made through the command while the checks ran is kept, not overwritten.
+    const next = await this.dependencies.locked(where.profileDir, () => {
+      const current: TailscalePrivateRow = { ...readReachRowAt(patchOf(where)), enabled: true, address, servePort: DEFAULT_SERVE_PORT, listenerPort }
+      writeReachRowAt(patchOf(where), current)
       // Who may ask to pair without an approval window goes back to the safe default; only a terminal widens it.
       writeMayAskAt(patchOf(where), 'own-user')
-      return Promise.resolve()
+      return Promise.resolve(current)
     })
     return this.applied(reach, next, true)
   }
 
   private async reachOff(where: RunWhere): Promise<ReachWritten> {
-    const row = readReachRowAt(patchOf(where))
-    const next: TailscalePrivateRow = { ...row, enabled: false }
-    await this.dependencies.locked(where.profileDir, () => {
+    // The row is read under the lock, so a change made through the command meanwhile is kept; `row` is what was served.
+    const { row, next } = await this.dependencies.locked(where.profileDir, () => {
+      const row = readReachRowAt(patchOf(where))
+      const next: TailscalePrivateRow = { ...row, enabled: false }
       writeReachRowAt(patchOf(where), next)
-      return Promise.resolve()
+      return Promise.resolve({ row, next })
     })
     let stillServed: string | undefined
     try {
@@ -507,14 +509,39 @@ function json(status: number, body: object): Response {
 }
 
 /**
+ * Read a request body, stopping at {@link MAX_RUN_REQUEST_BYTES}: a declared length over the cap is refused before a byte
+ * is read, and a body with no declared length is read chunk by chunk and abandoned when it passes the cap.
+ * @param request - the request.
+ * @returns the bytes, or undefined for a body over the cap.
+ */
+async function boundedBytes(request: Request): Promise<Uint8Array | undefined> {
+  if (Number(request.headers.get('content-length') ?? 0) > MAX_RUN_REQUEST_BYTES) return undefined
+  const reader = request.body?.getReader()
+  if (reader === undefined) return new Uint8Array()
+  const chunks: Uint8Array[] = []
+  let total = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    total += value.byteLength
+    if (total > MAX_RUN_REQUEST_BYTES) {
+      await reader.cancel()
+      return undefined
+    }
+    chunks.push(value)
+  }
+  return Buffer.concat(chunks)
+}
+
+/**
  * Parse a bounded JSON body against a schema.
  * @param request - the request.
  * @param schema - the message.
  * @returns the message, or undefined for a body over {@link MAX_RUN_REQUEST_BYTES}, not JSON or not the message.
  */
 async function bodyOf<T>(request: Request, schema: z.ZodType<T>): Promise<T | undefined> {
-  const bytes = await request.arrayBuffer()
-  if (bytes.byteLength > MAX_RUN_REQUEST_BYTES) return undefined
+  const bytes = await boundedBytes(request)
+  if (bytes === undefined) return undefined
   let value: unknown
   try {
     value = JSON.parse(new TextDecoder().decode(bytes))
