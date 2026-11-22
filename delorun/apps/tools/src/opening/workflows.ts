@@ -101,6 +101,15 @@ export function keepJobs(text: string, keep: readonly string[]): string {
   return out.join('\n').replace(/^( {4}needs: )\[([^\]]*)\]/gmu, (_all, head: string, list: string) => `${head}[${list.split(',').map(item => item.trim()).filter(item => keep.includes(item)).join(', ')}]`)
 }
 
+/**
+ * The workflow files in a directory: every `.yml` and `.yaml` file, so a file with either extension is classified.
+ * @param dir - the `.github/workflows` directory.
+ * @returns the file names, sorted.
+ */
+export function workflowFiles(dir: string): string[] {
+  return readdirSync(dir).filter(name => /\.ya?ml$/u.test(name)).sort()
+}
+
 function main(argv: readonly string[]): number {
   const { values } = parseArgs({ args: [...argv], options: { repo: { type: 'string' }, apply: { type: 'boolean', default: false } } })
   if (values.repo === undefined) {
@@ -108,7 +117,7 @@ function main(argv: readonly string[]): number {
     return 2
   }
   const dir = join(values.repo, '.github', 'workflows')
-  const files = readdirSync(dir).filter(name => name.endsWith('.yml'))
+  const files = workflowFiles(dir)
   const { unclassified, missing, remaining } = classify(files)
   if (unclassified.length > 0) console.error(`unclassified workflows: ${unclassified.join(', ')}`)
   if (missing.length > 0) console.error(`kept workflows that are missing: ${missing.join(', ')}`)

@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import { runInNewContext } from 'node:vm'
 import * as yaml from 'js-yaml'
 import { describe, expect, it } from 'vitest'
+import { gatesForMode } from './run-gates.ts'
 import { upstreamRunsOn } from './tests/delorun-repository-guard.ts'
 
 function evaluateRunsOn(selector: unknown, context: Record<string, unknown>): unknown {
@@ -111,6 +112,61 @@ describe('CI workflow', () => {
     ))
     expect(pnpmSetupIndex, `${jobKey} must run pnpm/action-setup`).toBeGreaterThan(-1)
     expect(redirectStepIndex, `${jobKey} must redirect before pnpm/action-setup runs pnpm`).toBeLessThan(pnpmSetupIndex)
+  })
+
+  it('runs the expected-filenames check on hosted Linux unless Blacksmith is selected', () => {
+    const job = workflowJob(loadWorkflow('.github/workflows/expected-filenames.yml'), 'expected-filenames')
+    expect(job['runs-on']).toContain('DSH_CI_FAILOVER_LINUX')
+    expect(job['runs-on']).toContain("== 'blacksmith'")
+    expect(job['runs-on']).toContain('blacksmith-4vcpu-ubuntu-2404')
+    expect(job['runs-on']).toContain("'ubuntu-latest'")
+  })
+
+  it('keeps the host build and typecheck scripts in the shape the gates rely on', () => {
+    const scripts = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as { scripts: Record<string, string> }
+    const hostSteps = scripts.scripts['build:lib:host']!.split(' && ')
+    expect(hostSteps[0]).toBe('tsx scripts/compile-referenced-projects.ts host-libraries')
+    expect(hostSteps).toContain('node --max-old-space-size=8192 ./node_modules/typescript/bin/tsc -p tsconfig.host.json')
+    expect(hostSteps.at(-1)).toBe('pnpm --filter @deepseek-ai/dsh-desktop run bundle')
+    expect(scripts.scripts['build:lib:client']).toContain('tsc -b tsconfig.client.json')
+    expect(scripts.scripts.typecheck).toBe('tsx scripts/build.ts --scope typecheck')
+  })
+
+  it('splits both Wine TypeScript faces and retains their aggregate heap budgets', () => {
+    const wineGates = readFileSync(resolve(root, 'scripts/wine-windows-gates.sh'), 'utf8')
+
+    const references = wineGates.indexOf(
+      'wine_node "$scratch/logs/host-references.log" --import tsx/esm scripts/compile-referenced-projects.ts host',
+    )
+    const aggregate = wineGates.indexOf(
+      'wine_node "$scratch/logs/host-tsc.log" --max-old-space-size=8192 "$tsc_js" -p tsconfig.host.json --pretty false',
+    )
+    const metadata = wineGates.indexOf('wine_node "$scratch/logs/host-typert.log" --import tsx/esm scripts/generate-typert.ts')
+    expect(metadata).toBeGreaterThan(-1)
+    expect(references).toBeGreaterThan(metadata)
+    expect(aggregate).toBeGreaterThan(references)
+    expect(wineGates).not.toContain('-b tsconfig.host.json')
+    const clientReferences = wineGates.indexOf('wine_node "$scratch/logs/client-references.log" --import tsx/esm scripts/compile-referenced-projects.ts client')
+    const clientAggregate = wineGates.indexOf('wine_node "$scratch/logs/client-tsc.log" --max-old-space-size=8192 "$tsc_js" -p tsconfig.client.json --pretty false')
+    expect(clientReferences).toBeGreaterThan(aggregate)
+    expect(clientAggregate).toBeGreaterThan(clientReferences)
+    expect(wineGates).not.toContain('-b tsconfig.client.json')
+    expect(wineGates).toContain('  "$scratch/logs/client-references.log" \\')
+  })
+
+  it('keeps Wine out of the Linux and Windows gate graphs', () => {
+    // Graph construction needs a pnpm entrypoint but never launches it.
+    const previous = process.env.npm_execpath
+    process.env.npm_execpath = '/test/pnpm.cjs'
+    try {
+      for (const mode of ['ci-linux-primary', 'ci-windows-complete'] as const) {
+        expect(gatesForMode(mode).map(gate => gate.displayCommand).join('\n')).not.toMatch(/wine/i)
+      }
+    } finally {
+      if (previous === undefined) Reflect.deleteProperty(process.env, 'npm_execpath')
+      else process.env.npm_execpath = previous
+    }
+    expect(process.env.npm_execpath).toBe(previous)
   })
 
   it('keeps every Vitest project process-isolated on native Windows', () => {

@@ -205,6 +205,36 @@ test('keeps Bug reports limited to the problem report', () => {
   )
 })
 
+test('keeps Brief forms limited to the brief fields', () => {
+  const source = readFileSync(new URL('../ISSUE_TEMPLATE/brief.yml', import.meta.url), 'utf8')
+  assert.deepEqual(
+    [...source.matchAll(/^ {6}label: (.+)$/gm)].map(([, label]) => label),
+    [
+      'Package',
+      'Size and review',
+      'Model',
+      'Repository and branch',
+      'Read first',
+      'Goal',
+      'You own',
+      'Contracts consumed',
+      'Interfaces',
+      'Pattern to follow',
+      'Steps',
+      'Acceptance',
+      'Security notes',
+      'Documentation',
+      'Report',
+      'Never',
+    ],
+  )
+})
+
+test('keeps the selective-preflight marker the policy reads', () => {
+  const marker = JSON.parse(readFileSync(new URL('selective-preflight.json', import.meta.url), 'utf8'))
+  assert.deepEqual(marker, { version: 1 })
+})
+
 test('keeps Task Issues limited to summary and deliverables', () => {
   const source = readFileSync(new URL('../ISSUE_TEMPLATE/task.md', import.meta.url), 'utf8')
   assert.deepEqual(

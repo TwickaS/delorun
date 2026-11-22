@@ -1,7 +1,8 @@
-import { readdirSync, readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { classify, KEPT, KEPT_CI_JOBS, keepJobs, REMOVED } from '../src/opening/workflows.ts'
+import { classify, KEPT, KEPT_CI_JOBS, keepJobs, REMOVED, workflowFiles } from '../src/opening/workflows.ts'
 
 const repository = resolve(import.meta.dirname, '../../../..')
 const workflowDirectory = join(repository, '.github', 'workflows')
@@ -13,6 +14,18 @@ describe('opening workflows', () => {
       missing: ['expected-filenames.yml', 'ci.yml'],
       remaining: ['release.yml'],
     })
+  })
+
+  it('lists both `.yml` and `.yaml` files, so a `.yaml` workflow is classified too', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'opening-workflows-'))
+    try {
+      for (const name of ['gates.yml', 'extra.yaml', 'notes.txt']) writeFileSync(join(directory, name), '')
+      const files = workflowFiles(directory)
+      expect(files).toEqual(['extra.yaml', 'gates.yml'])
+      expect(classify(files).unclassified).toEqual(['extra.yaml'])
+    } finally {
+      rmSync(directory, { recursive: true, force: true })
+    }
   })
 
   it('keeps no workflow in both lists', () => {
@@ -51,7 +64,7 @@ describe('opening workflows', () => {
   })
 
   it('leaves this repository with exactly the kept workflows and the kept jobs of ci.yml', () => {
-    const files = readdirSync(workflowDirectory).filter(name => name.endsWith('.yml'))
+    const files = workflowFiles(workflowDirectory)
     expect(classify(files)).toEqual({ unclassified: [], missing: [], remaining: [] })
     const ciJobs = [...readFileSync(join(workflowDirectory, 'ci.yml'), 'utf8').matchAll(/^ {2}([a-z0-9-]+):\s*$/gmu)]
       .map(match => match[1])

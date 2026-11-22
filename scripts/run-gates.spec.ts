@@ -1,8 +1,9 @@
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi, type MockInstance } from 'vitest'
 import {
+  BUILD_BACKED_NODE_COMPAT_VERSION,
   cliGateOptions,
   ciWorkerEnvironment,
   collectDescendants,
@@ -1462,5 +1463,14 @@ describe('Windows tree termination', () => {
 
   it('terminates the root alone when no descendant was captured', () => {
     expect(taskkillArgs(100, [])).toEqual([['/PID', '100', '/T', '/F']])
+  })
+})
+
+describe('Node compatibility minor', () => {
+  it('is declared for installed CLI users in the root and CLI manifests', () => {
+    for (const manifest of ['package.json', 'apps/cli/package.json']) {
+      const pkg = JSON.parse(readFileSync(resolve(import.meta.dirname, '..', manifest), 'utf8')) as { engines: { node: string } }
+      expect(pkg.engines.node).toBe(`>=${BUILD_BACKED_NODE_COMPAT_VERSION}.0`)
+    }
   })
 })
