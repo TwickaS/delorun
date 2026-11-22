@@ -8,7 +8,9 @@
  *
  * It waits first come, first served for `--slots` slots (default 4), takes a disk-heavy place with `--disk` (installs, builds,
  * the fork suite), runs the command with the grant in `DELORUN_SLOTS` (a test runner's worker count), releases the slots when
- * the command ends or the wrapper is interrupted, and exits with the command's status.
+ * the command ends or the wrapper is interrupted, and exits with the command's status. While a machine hold is in force
+ * (`run-checks --hold`) it waits, with the hold's reason in its wait report, unless its working directory is inside an allowed
+ * worktree.
  *
  * @module @delorun/tools/with-slots
  */
@@ -33,6 +35,8 @@ export interface WrapperHost {
   readonly paths: SlotPaths
   readonly budget: SlotBudget
   readonly env: NodeJS.ProcessEnv
+  /** The working directory the command runs in, which a machine hold's allowed worktrees are matched against. */
+  readonly cwd?: string
   /**
    * Run the command with the grant and resolve with its exit status.
    * @param argv - the command and its arguments.
@@ -56,7 +60,7 @@ export async function withSlots(argv: readonly string[], host: WrapperHost): Pro
   const memoryGiB = values['memory-gib'] === undefined ? 0 : Number(values['memory-gib'])
   if (!(memoryGiB >= 0)) throw new Error(`--memory-gib takes a number of GiB, got ${String(values['memory-gib'])}`)
   if (positionals.length === 0) throw new Error('give the command after --, such as `-- node_modules/.bin/tsc -p delorun/apps/tools/tsconfig.json --noEmit`')
-  const grant = await takeSlots(host.slots, host.paths, host.budget, { want: slots, min: slots, memoryBytes: memoryGiB * GIB, disk: values.disk, priority: gatePriority(host.env, false), label: `with-slots: ${positionals.join(' ').replace(/\s+/g, ' ').slice(0, 160)}` })
+  const grant = await takeSlots(host.slots, host.paths, host.budget, { want: slots, min: slots, memoryBytes: memoryGiB * GIB, disk: values.disk, priority: gatePriority(host.env, false), label: `with-slots: ${positionals.join(' ').replace(/\s+/g, ' ').slice(0, 160)}`, ...host.cwd === undefined ? {} : { cwd: host.cwd } })
   if (grant.waitedMs >= 1000) host.slots.say(`with-slots: waited ${String(Math.round(grant.waitedMs / 1000))} s for ${String(grant.slots)} slots\n`)
   return host.run(positionals, { ...host.env, DELORUN_SLOTS: String(grant.slots) })
 }
@@ -86,6 +90,7 @@ if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.a
     paths: privateSlotPaths(tmpdir(), process.getuid?.() ?? -1),
     budget: machineBudget(budget.cpus, runMemoryBytes(budget.memoryBytes), process.env),
     env: process.env,
+    cwd: process.cwd(),
     run: runInherited,
   }).catch((error: unknown) => {
     process.stderr.write(`with-slots: ${error instanceof Error ? error.message : String(error)}\n`)
