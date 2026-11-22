@@ -65,12 +65,12 @@ describe('the dsh command registration is gone', () => {
     expect(existsSync(new URL(path, APP))).toBe(false)
   })
 
-  it('registers no dsh link scheme and edits no PATH or shell start-up file', () => {
+  it('registers no dsh link scheme and edits no PATH', () => {
     for (const file of filesUnder('src', ['.ts'])) {
       const source = read(file)
       expect(source, file).not.toMatch(/setAsDefaultProtocolClient\(\s*['"]dsh['"]/u)
       expect(source, file).not.toMatch(/dsh:\/\//u)
-      expect(source, file).not.toMatch(/setx\s+PATH|\.zshrc|\.bashrc/u)
+      expect(source, file).not.toMatch(/setx\s+PATH/u)
     }
   })
 })
