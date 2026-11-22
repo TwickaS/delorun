@@ -29,6 +29,10 @@
  * A machine hold stops the queue from granting anything new. `hold.json` in the same directory (`{ reason, since, allow }`)
  * makes every request wait with the reason `machine held: <reason>`, whatever slots are free, except a request whose working
  * directory is inside one of the worktree roots in `allow`; a request that records no working directory is not exempt.
+ * The working directory is written to `cwd-<pid>.json` (`{ pid, start, cwd }`) before the request and removed when the
+ * request is granted or the process ends, never into the request file: an older worktree's reader rejects a request file
+ * with a key it does not know and removes it, while it skips every file that starts with neither `req-` nor `held-`. The
+ * files of dead processes are removed like the others.
  * Holders already running are never interrupted, and when the file goes the waiting requests proceed in their normal order.
  * A hold file that is not valid counts as a hold with the reason `hold file unreadable`, so a damaged file fails closed;
  * `run-checks --unhold` removes it. Runs of old worktrees do not read the hold: they take their turn in the previous queue
@@ -109,7 +113,9 @@ export interface SlotGrant {
 }
 
 // `start` is the process's start time from QueueHost.startOf; a file without one is checked by the process id alone.
-const Request = z.strictObject({ pid: z.number().int(), start: z.string().optional(), want: z.number().int().positive(), min: z.number().int().positive(), memoryBytes: z.number().nonnegative(), disk: z.boolean(), priority: z.union([z.literal(0), z.literal(1)]), label: z.string(), since: z.number(), cwd: z.string().optional() })
+const Request = z.strictObject({ pid: z.number().int(), start: z.string().optional(), want: z.number().int().positive(), min: z.number().int().positive(), memoryBytes: z.number().nonnegative(), disk: z.boolean(), priority: z.union([z.literal(0), z.literal(1)]), label: z.string(), since: z.number() })
+// The working directory of a waiting request lives in its own file, so the request file keeps the format older worktrees read.
+const Cwd = z.strictObject({ pid: z.number().int(), start: z.string().optional(), cwd: z.string() })
 const Held = z.strictObject({ pid: z.number().int(), start: z.string().optional(), slots: z.number().int().positive(), memoryBytes: z.number().nonnegative(), disk: z.boolean(), priority: z.union([z.literal(0), z.literal(1)]), label: z.string(), since: z.number(), requested: z.number() })
 
 const MAX_DATE_MILLISECONDS = 8.64e15
@@ -122,7 +128,7 @@ export type SlotHold = z.infer<typeof Hold>
 export const UNREADABLE_HOLD = 'hold file unreadable'
 
 /** A waiting request, as read from its file. */
-export type SlotRequest = z.infer<typeof Request> & { readonly file: string }
+export type SlotRequest = z.infer<typeof Request> & { readonly file: string, readonly cwd?: string }
 /** A holder, as read from its file. */
 export type SlotHolder = z.infer<typeof Held> & { readonly file: string }
 
@@ -273,21 +279,28 @@ export function readSlots(host: QueueHost, paths: SlotPaths): SlotState {
   const { fs } = host
   const waiting: SlotRequest[] = []
   const holders: SlotHolder[] = []
+  const directories = new Map<number, string>()
   // A process is the one that wrote the file when it runs, is not a thread of another process, and started when the file
   // says; a file without a start time counts only for a process that started before the file was last written.
   const holds = (pid: number, path: string, start?: string): boolean => pid === host.pid
     || (host.alive(pid) && !host.isThread(pid) && (start === undefined ? startedBefore(host, pid, fs.modified(path)) : host.startOf(pid) === start))
   for (const file of fs.list(paths.dir)) {
     const path = `${paths.dir}/${file}`
-    const schema = file.startsWith('req-') ? Request : file.startsWith('held-') ? Held : undefined
+    const schema = file.startsWith('req-') ? Request : file.startsWith('held-') ? Held : file.startsWith('cwd-') ? Cwd : undefined
     if (schema === undefined) continue
     const text = fs.read(path)
     if (text === undefined) continue
     const parsed = schema.safeParse(json(text))
     if (parsed.success && holds(parsed.data.pid, path, parsed.data.start)) {
-      if ('slots' in parsed.data) holders.push({ ...parsed.data, file })
+      if ('cwd' in parsed.data) directories.set(parsed.data.pid, parsed.data.cwd)
+      else if ('slots' in parsed.data) holders.push({ ...parsed.data, file })
       else waiting.push({ ...parsed.data, file })
     } else if (parsed.success || !file.endsWith('.tmp')) fs.remove(path)
+  }
+  // A request's working directory comes from the sidecar of the same process; a request without one records none.
+  for (const [index, request] of waiting.entries()) {
+    const cwd = directories.get(request.pid)
+    if (cwd !== undefined) waiting[index] = { ...request, cwd }
   }
   waiting.sort((a, b) => a.priority - b.priority || a.since - b.since || a.pid - b.pid)
   // A new run holds a ticket in the previous queue too, waiting or held, so an old run keeps its place; it is not an old run.
@@ -432,6 +445,7 @@ export async function takeSlots(host: QueueHost, paths: SlotPaths, budget: SlotB
   const stamp = `${String(demand.priority)}-${String(since).padStart(MILLISECONDS_WIDTH, '0')}-${String(host.pid)}`
   const request = `${paths.dir}/req-${stamp}.json`
   const held = `${paths.dir}/held-${String(host.pid)}.json`
+  const directory = `${paths.dir}/cwd-${String(host.pid)}.json`
   const waitingTicket = `${paths.oldQueue}/${stamp}`
   const ticket = `${waitingTicket}.held`
   // The rename replaces the file in one step, so a reader never finds it missing while it is rewritten.
@@ -441,11 +455,13 @@ export async function takeSlots(host: QueueHost, paths: SlotPaths, budget: SlotB
     fs.rename(`${path}.tmp`, path)
   }
   const start = host.startOf(host.pid)
-  const asked = { pid: host.pid, ...start === undefined ? {} : { start }, want, min, memoryBytes: demand.memoryBytes, disk: demand.disk, priority: demand.priority, label: demand.label, since, ...demand.cwd === undefined ? {} : { cwd: demand.cwd } }
+  const asked = { pid: host.pid, ...start === undefined ? {} : { start }, want, min, memoryBytes: demand.memoryBytes, disk: demand.disk, priority: demand.priority, label: demand.label, since }
+  // The sidecar is written first, so a reader that finds the request finds its working directory.
+  if (demand.cwd !== undefined) write(directory, { pid: host.pid, ...start === undefined ? {} : { start }, cwd: demand.cwd })
   write(request, asked)
   // The same ticket in the previous queue keeps an old run that arrived later behind this one.
   fs.create(waitingTicket, '')
-  host.guard(() => { fs.remove(request); fs.remove(held); fs.remove(waitingTicket); fs.remove(ticket) })
+  host.guard(() => { fs.remove(request); fs.remove(directory); fs.remove(held); fs.remove(waitingTicket); fs.remove(ticket) })
   let said: string | undefined
   let lastReport = since
   for (;;) {
@@ -457,6 +473,7 @@ export async function takeSlots(host: QueueHost, paths: SlotPaths, budget: SlotB
       // Another run may have claimed in the same instant: the later claim on each overfilled resource steps back.
       const after = readSlots(host, paths)
       if (!stepsBack(after, host.pid, budget)) {
+        fs.remove(directory)
         fs.rename(waitingTicket, ticket)
         return { slots: decision.slots, memoryBytes: decision.memoryBytes, waitedMs: host.now() - since }
       }
