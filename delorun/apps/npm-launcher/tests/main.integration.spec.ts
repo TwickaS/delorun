@@ -87,9 +87,9 @@ async function surroundings(options: { readonly roots?: boolean } = {}): Promise
 
 describe('the launcher’s main function', () => {
   it.each([
-    ['win32', 'Delorun 0.4.2 runs in WSL2, not on native Windows. Nothing was downloaded. Open a WSL2 terminal and run it there: https://docs.delorun.com/guide/install#windows-through-wsl2\n'],
-    ['darwin', 'Delorun 0.4.2 does not run on macOS. Nothing was downloaded. It runs on Linux (x64), and on Windows through WSL2: https://docs.delorun.com/guide/install#windows-through-wsl2\n'],
-    ['linux', 'Delorun 0.4.2 does not run on Linux on ARM (arm64). Nothing was downloaded. It runs on Linux (x64), and on Windows through WSL2: https://docs.delorun.com/guide/install#windows-through-wsl2\n'],
+    ['win32', 'Delorun 0.4.2 runs in WSL2, not on native Windows. Nothing was downloaded. Open a WSL2 terminal and run it there: https://docs.delorun.com/guide/get-started/install#windows-through-wsl2\n'],
+    ['darwin', 'Delorun 0.4.2 does not run on macOS. Nothing was downloaded. It runs on Linux (x64), and on Windows through WSL2: https://docs.delorun.com/guide/get-started/install#windows-through-wsl2\n'],
+    ['linux', 'Delorun 0.4.2 does not run on Linux on ARM (arm64). Nothing was downloaded. It runs on Linux (x64), and on Windows through WSL2: https://docs.delorun.com/guide/get-started/install#windows-through-wsl2\n'],
   ])('stops on %s before it reads the channel or creates a home', async (hostPlatform, message) => {
     const world = await surroundings()
     expect(await main([], world.context({ hostPlatform, hostArch: hostPlatform === 'linux' ? 'arm64' : 'x64' }))).toBe(1)

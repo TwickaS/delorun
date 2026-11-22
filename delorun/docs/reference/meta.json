@@ -1,3 +1,8 @@
 {
-  "pages": ["glossary", "divergence", "parity", "parity-baseline", "harness-feedback", "..."]
+  "pages": [
+    "README",
+    "glossary",
+    "parity-with-deepseek-harness",
+    "harness-feedback"
+  ]
 }

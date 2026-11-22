@@ -130,7 +130,7 @@ No shipped file names the builder. When the build has written every file, `build
 | `update-after-clock` | 时钟恢复后，下一个已签名的发布无需任何其他操作即可更新 |
 | `repair` | `delorun repair` 替换文件已改变的程序并保留数据，`delorun recover status` 与 `recover discard` 列出并删除它放到一边的程序存储 |
 | `from` | `delorun update --from <folder>` 在关闭渠道的情况下安装，较低的发布会被拒绝 |
-| `by-hand` | [最后手段，手动操作](../../docs/guide/troubleshooting.zh.md#by-hand)的各步骤，逐字输入，得到一个可用的程序 |
+| `by-hand` | [最后手段，手动操作](../../docs/guide/help/troubleshooting.zh.md#by-hand)的各步骤，逐字输入，得到一个可用的程序 |
 
 启动器会从运行时的环境中移除 `NODE_OPTIONS`，所以时钟预加载作用于启动器而不作用于运行时；运行时在 `delorun update` 时自己的时间戳检查，由 `c02-refuses-expired-timestamp` 以及启动器相同的检查覆盖。它需要的磁盘很大：每个发布解开后约 1.5 GB，by-hand 场景按指南第 2 步所说复制 home，当磁盘放不下副本时则省略 `runtimes/`。
 

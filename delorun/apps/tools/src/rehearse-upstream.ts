@@ -6,7 +6,7 @@
  * `HEAD`, prints the conflicted paths and the ledger's growth per class against the budget's caps, and exits 1 when the
  * merge breaks the budget. The scratch worktree lives in a temporary directory and is removed on every path; the
  * checkout it starts from, its branches, index and working tree stay unchanged. The budget's rules are in
- * `delorun/docs/reference/divergence/README.md`.
+ * `delorun/docs/reference/parity-with-deepseek-harness/divergence/README.md`.
  *
  * @module @delorun/tools/rehearse-upstream
  */

@@ -21,7 +21,7 @@ This recipe is for the maintainer. It covers a published release that breaks peo
 
 Delorun protects most installations before you act:
 
-- An update checks the new release after it switches. When the health check fails, Delorun goes back on its own to the release and profile the person had ([Updates](../guide/updates.md#what-happens-during-an-update)).
+- An update checks the new release after it switches. When the health check fails, Delorun goes back on its own to the release and profile the person had ([Updates](../guide/safety-and-updates/updates.md#what-happens-during-an-update)).
 - Delorun keeps two releases installed, the running one and the one before, so a person can go back one release.
 - No release channel moves to a lower version, so a bad release cannot be withdrawn by pointing the channel at an older one. A fixed release has to carry a higher version.
 
@@ -42,7 +42,7 @@ A person who installed the bad release and has not yet updated runs:
 delorun recover rollback
 ```
 
-It goes back to the release before the last update, with the profile snapshot taken before it. It works whether Delorun is running or not. If the update changed the format of chat data, it sets the newer data aside and puts the copy taken before the update back. Without that copy it refuses with `ROLLBACK_NEEDS_DATA_COPY`, and `delorun recover rollback --profile-only` restores only the profile ([Updates](../guide/updates.md#going-back)). The channel keeps naming the bad release until the fixed one is published, so a person who went back and runs `delorun update` is offered the bad release again. Once the fixed release is out, `delorun update` moves the person forward.
+It goes back to the release before the last update, with the profile snapshot taken before it. It works whether Delorun is running or not. If the update changed the format of chat data, it sets the newer data aside and puts the copy taken before the update back. Without that copy it refuses with `ROLLBACK_NEEDS_DATA_COPY`, and `delorun recover rollback --profile-only` restores only the profile ([Updates](../guide/safety-and-updates/updates.md#going-back)). The channel keeps naming the bad release until the fixed one is published, so a person who went back and runs `delorun update` is offered the bad release again. Once the fixed release is out, `delorun update` moves the person forward.
 
 ## Rehearse on a test channel
 

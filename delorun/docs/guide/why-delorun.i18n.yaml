@@ -1,0 +1,46 @@
+# Bilingual-pair consistency record for why-delorun.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/guide/why-delorun.md
+/:
+  en: cbdd80bd85a217e0
+  zh: cbdd80bd85a217e0
+/why-delorun:
+  en: f2288fd4693617ae
+  zh: 0a97e81c8ec48aa3
+/why-delorun/summary:
+  en: 9c8d94b95ad0db09
+  zh: 9c8d94b95ad0db09
+/why-delorun/contents:
+  en: 134a10ceced1ca79
+  zh: 134a10ceced1ca79
+/why-delorun/what-you-get:
+  en: 51110ada303f1268
+  zh: 51110ada303f1268
+/why-delorun/what-you-get/web-first-phone-included:
+  en: 2c12a09cc8170599
+  zh: 2c12a09cc8170599
+/why-delorun/what-you-get/bring-your-own-inference:
+  en: 4ee246a97b3b13d6
+  zh: 4ee246a97b3b13d6
+/why-delorun/what-you-get/open-by-design:
+  en: 82da8657825dc932
+  zh: 82da8657825dc932
+/why-delorun/what-delorun-changes-from-deepseek-harness:
+  en: 3e26c53f59a1b54a
+  zh: 3e26c53f59a1b54a
+/why-delorun/how-it-compares:
+  en: feb733847af41488
+  zh: feb733847af41488
+/why-delorun/when-another-tool-fits-better:
+  en: 8b4e50b2b50e6b0f
+  zh: 8b4e50b2b50e6b0f
+/why-delorun/try-it:
+  en: 1f656289a6267d68
+  zh: 1f656289a6267d68
+/why-delorun/next:
+  en: 62ca292fd0969bf6
+  zh: 62ca292fd0969bf6
+/why-delorun/sources:
+  en: c5ffa3f60346e614
+  zh: c5ffa3f60346e614

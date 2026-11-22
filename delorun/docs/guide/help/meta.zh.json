@@ -1,0 +1,10 @@
+{
+  "title": "帮助",
+  "pages": [
+    "troubleshooting",
+    "known-issues",
+    "logs",
+    "questions",
+    "[术语表](/zh/reference/glossary)"
+  ]
+}

@@ -4,7 +4,7 @@ Delorun is a community fork of DeepSeek Harness (DSH), an all-plugin Cordis agen
 
 ## Rules that are never traded away
 
-The [threat model](delorun/docs/security/threat-model.md) and [Trust page](delorun/docs/guide/trust.md) state them in full.
+The [threat model](delorun/docs/security/threat-model.md) and [Trust page](delorun/docs/guide/safety-and-updates/trust.md) state them in full.
 
 1. **Delorun holds no studio keys.** Delorun infrastructure never holds a studio's TLS or device keys, forges an approval or commands a machine; every relay passes encrypted bytes it cannot read.
 2. **Updates never take a person's work away.** Nothing disables, deletes or rewrites a person's plugins, modes, settings, chats or workspaces without showing it first and keeping a way back.
@@ -16,7 +16,7 @@ The [threat model](delorun/docs/security/threat-model.md) and [Trust page](delor
 
 ## Pre-stable APIs and released Session data
 
-Public APIs are pre-stable; update every consumer. Delorun keeps upstream's plugin API, profile, bundle, slot, Session, id and wire formats compatible; every model-visible Delorun change is switchable and off in the parity composition, which replays upstream's scenarios unchanged ([the parity checklist](delorun/docs/reference/parity.md)). Follow [version/status](docs/session-format-status.md) and [type acknowledgements](docs/cookbook/reviewing-persistence-type-changes.md). [Adjacent migration](.agents/notes/implemented/architecture/2026-08-31-released-session-format-migrations.md) may add a version-named successor but never move, overwrite, or delete committed generations; predecessors imply neither fallback nor downgrade support. SQLite uses monotonic `SCHEMA_VERSION`.
+Public APIs are pre-stable; update every consumer. Delorun keeps upstream's plugin API, profile, bundle, slot, Session, id and wire formats compatible; every model-visible Delorun change is switchable and off in the parity composition, which replays upstream's scenarios unchanged ([the parity checklist](delorun/docs/reference/parity-with-deepseek-harness/parity.md)). Follow [version/status](docs/session-format-status.md) and [type acknowledgements](docs/cookbook/reviewing-persistence-type-changes.md). [Adjacent migration](.agents/notes/implemented/architecture/2026-08-31-released-session-format-migrations.md) may add a version-named successor but never move, overwrite, or delete committed generations; predecessors imply neither fallback nor downgrade support. SQLite uses monotonic `SCHEMA_VERSION`.
 
 Acknowledge [declared persistence-type changes](docs/cookbook/reviewing-persistence-type-changes.md).
 
@@ -28,8 +28,8 @@ Record each externally perceptible breaking change immediately in an [upgrade gu
 
 - **Extension point first.** Delorun behaviour lives under `delorun/` on upstream's extension points; a missing extension point is added upstream as an extension point (hook, Service Definition, configuration field), not as the behaviour.
 - **Upstream edits are made in place**, in upstream's style; a defect in upstream code is fixed where it lives, as a ledger entry, never worked around in Delorun code; updating in the same change the package README, subsystems page, `docs/architecture.md` for agent-loop changes, upgrade guide, persistence acknowledgements, snapshots, both SDKs' expected outputs and each Chinese pair.
-- **Ledger.** Every changed or added upstream source file has a `delorun/upstream-patches.json` entry with reason and class (`delorun-feature` or `generic-fix` naming its feature, `security` with its digest), every other changed file outside `delorun/`, this one included, an entry or a path rule, and a substantial plugin change a [divergence record](delorun/docs/reference/divergence/README.md); `ledger-record.ts` writes entries and digests; generic fixes get their own commits.
-- **Budget.** Ledger growth per release stays within the [divergence budget](delorun/docs/reference/divergence/README.md#divergence-budget), measured by a rehearsal merge onto upstream's newest tag; going beyond it, or a conflicted `security` file, needs a lead decision.
+- **Ledger.** Every changed or added upstream source file has a `delorun/upstream-patches.json` entry with reason and class (`delorun-feature` or `generic-fix` naming its feature, `security` with its digest), every other changed file outside `delorun/`, this one included, an entry or a path rule, and a substantial plugin change a [divergence record](delorun/docs/reference/parity-with-deepseek-harness/divergence/README.md); `ledger-record.ts` writes entries and digests; generic fixes get their own commits.
+- **Budget.** Ledger growth per release stays within the [divergence budget](delorun/docs/reference/parity-with-deepseek-harness/divergence/README.md#divergence-budget), measured by a rehearsal merge onto upstream's newest tag; going beyond it, or a conflicted `security` file, needs a lead decision.
 - **Upstream merges** update the ledger, rerun the parity replay and plugin corpus, and record a verdict for every clean-applying changed file, grouped by feature. Upstream's changes to Delorun-edited files, this one and `docs/AGENTS.md` included, merge by hand; generated files are regenerated.
 - **Root workspace files** are reconciled per file, never replaced; `pnpm-workspace.yaml` keeps the `@simplewebauthn/server>@peculiar/asn1-schema` override, without which every ECDSA passkey check fails.
 

@@ -19,7 +19,7 @@ function rootOf(version: number, sha256: string): TrustedRoot {
 
 describe('localBuilderAllowed', () => {
   it('pins the digest of root 1 that the trust page publishes', () => {
-    const page = readFileSync(new URL('../../../docs/guide/trust.md', import.meta.url), 'utf8')
+    const page = readFileSync(new URL('../../../docs/guide/safety-and-updates/trust.md', import.meta.url), 'utf8')
     expect(page).toContain(`| Release root 1, SHA-256 of \`1.root.json\` | \`${PREVIEW_ROOT_SHA256}\` |`)
   })
 

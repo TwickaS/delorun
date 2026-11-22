@@ -421,7 +421,7 @@ describe('the documentation website check', () => {
   })
 
   it('is selected by a change under the site, under delorun/docs, or to the release version the site names, and by no other change', () => {
-    for (const path of ['delorun/apps/docs/source.config.ts', 'delorun/docs/guide/trust.md', 'delorun/docs/reference/divergence/README.zh.md', 'delorun/apps/release/package.json']) expect(selected([path])).toContain('docs-site')
+    for (const path of ['delorun/apps/docs/source.config.ts', 'delorun/docs/guide/safety-and-updates/trust.md', 'delorun/docs/reference/parity-with-deepseek-harness/divergence/README.zh.md', 'delorun/apps/release/package.json']) expect(selected([path])).toContain('docs-site')
     for (const path of ['delorun/apps/cell/src/index.ts', 'delorun/apps/release/src/index.ts', 'packages/core/session/src/index.ts', 'docs/architecture.md']) expect(selected([path])).not.toContain('docs-site')
   })
 

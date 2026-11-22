@@ -140,7 +140,7 @@ describe('the pre-login routes', () => {
     const loaded = [...SIGN_IN_PAGE.matchAll(/\s(?:src|href)="([^"#][^"]*)"/g)].map(match => match[1])
     const names = [...SIGN_IN_ASSETS.keys()]
     const [script, style, light, dark, png, touch] = names.map(name => `${REACH_PATHS.assets}/${name}`)
-    expect(loaded).toEqual([light, dark, light, png, touch, style, script, 'https://docs.delorun.com/guide/reach'])
+    expect(loaded).toEqual([light, dark, light, png, touch, style, script, 'https://docs.delorun.com/guide/everyday-use/reach'])
     expect(SIGN_IN_PAGE).not.toContain('{{')
     expect(names).toEqual([expect.stringMatching(/^sign-in-[0-9a-f]{12}\.js$/), expect.stringMatching(/^sign-in-[0-9a-f]{12}\.css$/), expect.stringMatching(/^favicon-light-[0-9a-f]{12}\.svg$/), expect.stringMatching(/^favicon-dark-[0-9a-f]{12}\.svg$/), expect.stringMatching(/^favicon-32-[0-9a-f]{12}\.png$/), expect.stringMatching(/^apple-touch-icon-[0-9a-f]{12}\.png$/)])
   })
@@ -164,7 +164,7 @@ describe('the pre-login routes', () => {
   it('name only symbols of its own sprite and link the guide safely', () => {
     // Every internal reference names an icon of the page's own sprite.
     for (const [, id] of SIGN_IN_PAGE.matchAll(/href="#([^"]+)"/g)) expect(SIGN_IN_PAGE).toContain(`<symbol id="${id ?? ''}"`)
-    expect(SIGN_IN_PAGE).toContain('<a href="https://docs.delorun.com/guide/reach" target="_blank" rel="noopener noreferrer">')
+    expect(SIGN_IN_PAGE).toContain('<a href="https://docs.delorun.com/guide/everyday-use/reach" target="_blank" rel="noopener noreferrer">')
   })
 
   it('read and refuse request messages', async () => {

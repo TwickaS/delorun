@@ -68,7 +68,7 @@
         ],
         "fix": {
           "kind": "docs",
-          "url": "https://docs.delorun.com/guide/customise#optional-plugins"
+          "url": "https://docs.delorun.com/guide/customising/customise#optional-plugins"
         }
       },
       "ptc-runtime-python": {
@@ -89,7 +89,7 @@
         ],
         "fix": {
           "kind": "docs",
-          "url": "https://docs.delorun.com/guide/customise#optional-plugins"
+          "url": "https://docs.delorun.com/guide/customising/customise#optional-plugins"
         }
       }
     }

@@ -1,0 +1,55 @@
+# Bilingual-pair consistency record for safety.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/guide/safety-and-updates/safety.md
+/:
+  en: 30a7080b34c01118
+  zh: 455ed2e0646ad256
+/what-delorun-protects:
+  en: 646db822730614b9
+  zh: 8caf14abe26022ae
+/what-delorun-protects/summary:
+  en: 94827d7a932f3c07
+  zh: 631273644d557197
+/what-delorun-protects/contents:
+  en: 61f7e1cda134adef
+  zh: 716dff89902f627e
+/what-delorun-protects/where-the-protections-apply:
+  en: 486a9b761c7f31cf
+  zh: b9e2d46400569265
+/what-delorun-protects/the-sandbox:
+  en: 5c5177f0d6c65c33
+  zh: 511b32e410fa2bee
+/what-delorun-protects/full-access:
+  en: 8db696e0faee9b3f
+  zh: da3cfca0cb52df32
+/what-delorun-protects/consents:
+  en: 6322b78c77f3b8d4
+  zh: e252fee9582870e0
+/what-delorun-protects/consents/what-an-unlocked-phone-can-do-with-never-ask:
+  en: d76e10963abd5924
+  zh: e53bf9608ed35200
+/what-delorun-protects/consents/mcp-servers:
+  en: 03039051b97dc358
+  zh: 1ae6c5c71df1fc8b
+/what-delorun-protects/consents/external-agents:
+  en: bfa868a536964e19
+  zh: 5d5c4a77f419f549
+/what-delorun-protects/the-network-setting:
+  en: c54098b643eeba16
+  zh: 85d157c5da31a663
+/what-delorun-protects/the-web-fetch-guard:
+  en: 4739dbe50de40156
+  zh: faaa14df353fdd8c
+/what-delorun-protects/release-checks:
+  en: 69a6010905b2a54f
+  zh: 513dc691bf064835
+/what-delorun-protects/what-delorun-does-not-protect-against:
+  en: 1611121c7b63dd53
+  zh: 4b033b255eb28fde
+/what-delorun-protects/next:
+  en: 39dedadbd2babd49
+  zh: ecc611f1d70940b6
+/what-delorun-protects/for-the-technically-curious:
+  en: ffa766231b2ecce0
+  zh: 261af8cf445d7457

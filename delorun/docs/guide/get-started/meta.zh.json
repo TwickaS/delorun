@@ -1,0 +1,9 @@
+{
+  "title": "入门",
+  "pages": [
+    "install",
+    "providers",
+    "switching",
+    "import-deepseek-chats"
+  ]
+}

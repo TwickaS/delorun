@@ -4,7 +4,7 @@
 
 > 英文页面是当前版本；本页可能落后于它。
 
-「思考」标签页：在 studio 的右侧栏中，随模型写作逐词阅读它的推理和回复。默认关闭：在侧栏「插件」的 Delorun studio 页面中，于「组件」下开启。用户指南是[逐词阅读模型的思考](../../docs/guide/thinking-tab.zh.md)。
+「思考」标签页：在 studio 的右侧栏中，随模型写作逐词阅读它的推理和回复。默认关闭：在侧栏「插件」的 Delorun studio 页面中，于「组件」下开启。用户指南是[逐词阅读模型的思考](../../docs/guide/everyday-use/thinking-tab.zh.md)。
 
 ## 使用标签页
 

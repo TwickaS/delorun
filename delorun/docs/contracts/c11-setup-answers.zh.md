@@ -65,7 +65,7 @@ Each topic is a registered section with an id, a title, a main-flow placement, a
 
 第一个问题之后的每个问题都可以回到最近一个被询问过的前面的问题，包括从第一个「More settings」问题回到审查：选择题或是否题提供「← Back」，文本或密钥问题把空输入当作「返回」。审查屏幕在写入任何内容之前列出各个回答。
 
-每种形式都以同样的方式结束且不启动任何东西：它打印「Delorun is set up. Nothing is running yet.」，以及针对该使用场景的编号后续步骤。对于 `local` 和 `remote`：用 `delorun` 启动 Delorun 并打开 studio，以及安装指南的首个 chat 一节（`https://docs.delorun.com/guide/install#the-studio-and-your-first-chat`）。对于 `remote`，还有 `delorun devices approve`，或在 Tailscale 检查失败时如何开启远程访问。对于 `automation`：`delorun headless "your task"`。需要时，某一步会排在最前：当 `npx` 启动了这次运行时，按启动器的版本（`DELORUN_LAUNCHER_VERSION`）安装 `delorun` 命令，在没有选择任何密钥时添加模型密钥，或设置未设置的密钥变量。最后几行说明如何更改某个回答（`delorun setup <section>`、`delorun setup --list`）并指出 `delorun doctor`。在任何问题处的中断（Ctrl-C）都以代码 130 退出，并打印「Setup cancelled. Nothing was saved. Run delorun to start again.」；在保留着先前运行的回答期间发生的中断则说明这一点。
+每种形式都以同样的方式结束且不启动任何东西：它打印「Delorun is set up. Nothing is running yet.」，以及针对该使用场景的编号后续步骤。对于 `local` 和 `remote`：用 `delorun` 启动 Delorun 并打开 studio，以及安装指南的首个 chat 一节（`https://docs.delorun.com/guide/get-started/install#the-studio-and-your-first-chat`）。对于 `remote`，还有 `delorun devices approve`，或在 Tailscale 检查失败时如何开启远程访问。对于 `automation`：`delorun headless "your task"`。需要时，某一步会排在最前：当 `npx` 启动了这次运行时，按启动器的版本（`DELORUN_LAUNCHER_VERSION`）安装 `delorun` 命令，在没有选择任何密钥时添加模型密钥，或设置未设置的密钥变量。最后几行说明如何更改某个回答（`delorun setup <section>`、`delorun setup --list`）并指出 `delorun doctor`。在任何问题处的中断（Ctrl-C）都以代码 130 退出，并打印「Setup cancelled. Nothing was saved. Run delorun to start again.」；在保留着先前运行的回答期间发生的中断则说明这一点。
 
 <a id="questions"></a>
 ### 问题

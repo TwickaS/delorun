@@ -3,8 +3,8 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/packages/plugin-thinking-rsvp/README.md
 /delorun-plugin-thinking-rsvp:
-  en: 3f8acd5118dfc9d0
-  zh: 1fa734286e5047e4
+  en: 17a4c05af8e35a68
+  zh: 9aac59029b1fdb72
 /delorun-plugin-thinking-rsvp/using-the-tab:
   en: 7fa6aab5c0614cba
   zh: 81220fdd0a7bcc9f

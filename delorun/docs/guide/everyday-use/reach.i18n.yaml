@@ -1,0 +1,58 @@
+# Bilingual-pair consistency record for reach.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/guide/everyday-use/reach.md
+/:
+  en: 04cd32140c511c70
+  zh: 6faa5e32603802ac
+/reach-the-studio-from-your-phone:
+  en: cc79ef287438dd90
+  zh: 51d265358fdd305f
+/reach-the-studio-from-your-phone/summary:
+  en: af3390315b23c010
+  zh: c289c3f92f5b58cb
+/reach-the-studio-from-your-phone/contents:
+  en: a37ccfc10cd8b358
+  zh: b56b3b14e8c70fb9
+/reach-the-studio-from-your-phone/what-you-need:
+  en: 6df2a894183c3810
+  zh: 943ad582f0e2dea9
+/reach-the-studio-from-your-phone/start-from-nothing:
+  en: b3ed7f36c05d91cc
+  zh: 3f69eab35e31bb9e
+/reach-the-studio-from-your-phone/turn-remote-access-on:
+  en: 5aa3a9b5c592b63a
+  zh: 33c23d002eb7bef0
+/reach-the-studio-from-your-phone/approve-a-device:
+  en: bbe2578864159905
+  zh: d6bd5358df1cf376
+/reach-the-studio-from-your-phone/keep-approval-yours:
+  en: 1cae63146d1f72d8
+  zh: 67f6f28531c3328e
+/reach-the-studio-from-your-phone/what-an-approved-phone-can-and-cannot-do:
+  en: 2c553af12f8d4f91
+  zh: 65f30337d3718848
+/reach-the-studio-from-your-phone/confirm-with-face-id:
+  en: 0b92722f42c87f56
+  zh: 63a180fd3c3cfa6a
+/reach-the-studio-from-your-phone/confirm-with-a-pin:
+  en: 42ccd68bcd39dba7
+  zh: b60423252ceacb90
+/reach-the-studio-from-your-phone/remove-a-device:
+  en: b96680bae01a0e7f
+  zh: 00120dc544c97d4d
+/reach-the-studio-from-your-phone/turn-remote-access-off:
+  en: db2ea78672741c98
+  zh: 8b8718e439ad378f
+/reach-the-studio-from-your-phone/get-a-one-time-owner-code:
+  en: 606bb48ac13be824
+  zh: f39939cc4a100d96
+/reach-the-studio-from-your-phone/what-tailscale-sees:
+  en: 8b61e12a26d11104
+  zh: a99447dbe86f7275
+/reach-the-studio-from-your-phone/next:
+  en: 0aeff3b08468c139
+  zh: 187834967c4fb89b
+/reach-the-studio-from-your-phone/for-the-technically-curious:
+  en: 282b0f02a0588a86
+  zh: 2ced41da41cad771

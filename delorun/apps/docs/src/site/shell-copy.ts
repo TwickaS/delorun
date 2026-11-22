@@ -6,8 +6,8 @@
  */
 import { LOOK_NAMES, LOOK_NAMES_ZH } from '@design/looks.ts'
 import type { FooterCopy, ShellLink, ThemeCopy } from '@design/shell-copy.ts'
-import { PRODUCT_URL } from '@/site/config.ts'
-import type { Locale } from '@/site/locale.ts'
+import { PRODUCT_URL } from './config.ts'
+import type { Locale } from './locale.ts'
 
 /** Delorun's repository. */
 const GITHUB_URL = 'https://github.com/twickas/delorun'
@@ -17,10 +17,10 @@ const UPSTREAM_URL = 'https://github.com/deepseek-ai/deepseek-harness'
 
 /** The theme control's text by locale. */
 export const THEME_COPY: Readonly<Record<Locale, ThemeCopy>> = {
-  en: { open: 'Change the look of this page', title: 'Look', themes: 'Theme', scheme: 'Mode', device: 'System', light: 'Light', dark: 'Dark', back: 'Back to how it started', current: (name, scheme) => `This page is in ${name}${scheme === undefined ? '' : `, ${scheme.toLowerCase()}`}.`, names: LOOK_NAMES,
+  en: { open: 'Change the look of this page', title: 'Look', themes: 'Theme', scheme: 'Mode', device: 'System', light: 'Light', dark: 'Dark', back: 'Back to how it started', trigger: (name, scheme) => `Look: ${name}, ${scheme.toLowerCase()}`, current: (name, scheme) => `This page is in ${name}${scheme === undefined ? '' : `, ${scheme.toLowerCase()}`}.`, names: LOOK_NAMES,
     toast: { region: 'Notifications', theme: name => `The page now looks like ${name}.`, scheme: name => `The page is now ${name.toLowerCase()}.`, undo: name => `Back to ${name}`, reset: 'The page is back to how it started.' },
   },
-  zh: { open: '更改页面外观', title: '外观', themes: '主题', scheme: '模式', device: '跟随系统', light: '浅色', dark: '深色', back: '恢复初始外观', current: (name, scheme) => `页面现在是“${name}”外观${scheme === undefined ? '' : `，${scheme}`}。`, names: LOOK_NAMES_ZH,
+  zh: { open: '更改页面外观', title: '外观', themes: '主题', scheme: '模式', device: '跟随系统', light: '浅色', dark: '深色', back: '恢复初始外观', trigger: (name, scheme) => `外观：${name}，${scheme}`, current: (name, scheme) => `页面现在是“${name}”外观${scheme === undefined ? '' : `，${scheme}`}。`, names: LOOK_NAMES_ZH,
     toast: { region: '通知', theme: name => `页面现在是“${name}”外观。`, scheme: name => `页面现在是${name}模式。`, undo: name => `恢复为“${name}”`, reset: '页面已恢复为初始外观。' },
   },
 }

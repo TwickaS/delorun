@@ -51,7 +51,7 @@ description: "Delorun 首次运行的设计：从安装到第一次 chat 只需�
 
 ## 本设计不防护什么
 
-- `npx delorun` 在任何 Delorun 检查之前运行 npm 所提供的启动器。没有任何工作流发布它，所以它不带 npm 构建证明；此人按[信任页面](../guide/trust.zh.md#checking-it-yourself)所描述的方式在带外检查它，[威胁模型](../security/threat-model.zh.md#releases-the-log-and-the-rebuild)陈述了这一局限。
+- `npx delorun` 在任何 Delorun 检查之前运行 npm 所提供的启动器。没有任何工作流发布它，所以它不带 npm 构建证明；此人按[信任页面](../guide/safety-and-updates/trust.zh.md#checking-it-yourself)所描述的方式在带外检查它，[威胁模型](../security/threat-model.zh.md#releases-the-log-and-the-rebuild)陈述了这一局限。
 - `npm install -g delorun@<version>` 以此人自己的权限安装到此人的全局 npm 前缀中。
 - 后台启动让 Delorun 在终端关闭之后继续运行；此人用 `delorun stop` 停止它。
 

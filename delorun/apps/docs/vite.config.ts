@@ -9,6 +9,7 @@ import { defineConfig, type Plugin } from 'vite'
 import { loadView, type ChangelogView } from '../../packages/site-design/src/changelog.ts'
 import { repositoryRoot } from './src/site/doc-links.ts'
 import { prerenderPaths } from './src/site/pages.ts'
+import { redirectsFile } from './src/site/redirects.ts'
 import { pagePaths, sitemapXml } from './src/site/sitemap.ts'
 
 /** The static site's directory: the client build, with every prerendered page. */
@@ -62,6 +63,19 @@ function sitemapFile(): Plugin {
 }
 
 /**
+ * Writes `_redirects` into the client output: the permanent redirects from the addresses pages had before they moved
+ * into groups. The host reads the file as redirect rules, beside `_headers`.
+ * @returns the plugin.
+ */
+function redirectsRules(): Plugin {
+  return {
+    name: 'delorun-redirects',
+    apply: 'build',
+    closeBundle: { order: 'post', sequential: true, handler() { writeFileSync(join(OUT_DIR, '_redirects'), redirectsFile()) } },
+  }
+}
+
+/**
  * Copies the guide's pictures into the client output at `/guide/pictures/`. The pages' HTML bundles each picture with a
  * content hash; the Markdown routes keep the relative path `pictures/<file>`, which resolves there.
  * @returns the plugin.
@@ -82,6 +96,7 @@ export default defineConfig({
   plugins: [
     changelogModule(changelog),
     sitemapFile(),
+    redirectsRules(),
     guidePictures(),
     fumadocsMdx(),
     tailwindcss(),

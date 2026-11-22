@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for questions.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/guide/help/questions.md
+/:
+  en: 4c8427dea8d50d65
+  zh: d874c94d52e8eb0b
+/questions-and-answers:
+  en: 24874c0fbdd479fa
+  zh: c877ac7e6cf78eb9
+/questions-and-answers/summary:
+  en: a9bea22c513645c4
+  zh: 6259d980f4f30f77
+/questions-and-answers/contents:
+  en: 039d5fc98c7a4f40
+  zh: fabc0d36b0e426ff
+/questions-and-answers/why-is-delorun-built-on-deepseek-harness:
+  en: 35839b4e951921f7
+  zh: 9a592bb7c100ebef
+/questions-and-answers/why-not-just-plugins-on-stock:
+  en: 348c9fc61bf4e10e
+  zh: 43303156a14029b7
+/questions-and-answers/agents-wrote-most-of-it-why-should-i-trust-that:
+  en: 8c4577d46631c514
+  zh: 58d7b111738aab95
+/questions-and-answers/how-safe-is-it:
+  en: 4e7fd977a71f5e30
+  zh: 2c8c04087bb90a8e
+/questions-and-answers/what-does-undo-everything-cover:
+  en: a1427c6a1f18e54f
+  zh: 9c075eb1aa2930e1
+/questions-and-answers/what-is-the-catch:
+  en: 4121411f0012ff94
+  zh: 7e9f6e6e6dbec8c7
+/questions-and-answers/where-do-i-go-next:
+  en: 529bf87a38c59085
+  zh: 2a19dcb5b8a88119

@@ -25,7 +25,7 @@ The maintainers report a vulnerability in DeepSeek Harness's code privately to i
 
 ## Outside review
 
-Nobody outside the project has reviewed Delorun's security, and releases are signed with preview keys. [What you trust when you use Delorun](delorun/docs/guide/trust.md) explains what that means.
+Nobody outside the project has reviewed Delorun's security, and releases are signed with preview keys. [What you trust when you use Delorun](delorun/docs/guide/safety-and-updates/trust.md) explains what that means.
 
 ## Supported versions
 

@@ -1,0 +1,49 @@
+# Bilingual-pair consistency record for updates.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/guide/safety-and-updates/updates.md
+/:
+  en: f82dd9d83735dc87
+  zh: b886619fceeb72d1
+/updates:
+  en: 498afb1ed1c74504
+  zh: 5ca4abe72b9af23c
+/updates/summary:
+  en: 3c4e5683d2ffc917
+  zh: 3798d5dbe0c836c3
+/updates/contents:
+  en: 3f17599a28f363c8
+  zh: 95a0b0a7a6a4a496
+/updates/the-update-notice:
+  en: 705ca9fc326a9734
+  zh: 05c3db59e4b929a6
+/updates/check-and-read-the-report:
+  en: d36b6c996345e230
+  zh: ec97c6f54b53a284
+/updates/apply-an-update:
+  en: 98524bb956d55405
+  zh: 4bfd5d0130fae6a6
+/updates/what-happens-during-an-update:
+  en: 8831ead89d7af86e
+  zh: 41705958c311e9b0
+/updates/chat-data-that-changes-format:
+  en: ac06c22e492240b7
+  zh: a91db5ef7e74a8d3
+/updates/going-back:
+  en: 35d71ac0a017aeb0
+  zh: 67e18eed843695c5
+/updates/update-from-files-you-downloaded:
+  en: 2061c00e75bc6448
+  zh: 5501f37135ef7195
+/updates/try-another-setup-in-the-studio:
+  en: eb0516d0112a32ab
+  zh: d2df01dfbb305394
+/updates/channels:
+  en: eccd80ae3729db39
+  zh: c839639db043f404
+/updates/next:
+  en: 1102e63c154fe817
+  zh: b6dcdedd8f291ddf
+/updates/for-the-technically-curious:
+  en: 3dcba654e9dedef6
+  zh: c847f9ab60244148

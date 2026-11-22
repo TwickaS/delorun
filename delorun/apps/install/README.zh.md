@@ -36,7 +36,7 @@ description: "Delo 的安装路径：启动器通过 HTTPS 获取的发布文件
 
 1. 从启动器内置的根开始的根链，每个根都由前一个版本校验，最新的根还要满足自身的阈值与有效期。
 2. 时间戳的签名、生存期、有效期，以及它相对于本 home 已存储版本的版本号，从而拒绝重放。
-3. 频道清单：新时间戳指定的摘要与 targets 阈值的签名，以及当有人指定版本时该人的版本号。构建者为 `local release (no independent rebuild)`（`LOCAL_RELEASE_BUILDER`）的清单只有 `local-release.ts` 会写出，它在维护者的电脑上构建并签名，没有第二个构建者重建过它。从约定 C2 的生产发布获取内容、或其根为生产根的通道，只在 `localBuilderAllowed`（`src/local-builder.ts`）成立时才安装这种清单：该版本是 0.x 版本，且验证它的根是预览根，即根版本 1，其 SHA-256 为[信任页](../../docs/guide/trust.zh.md#how-releases-are-signed-in-the-preview)所公布的值。1.0 版本（包括 `1.0.0-rc.1`）、更晚的根或其他根会以 `INSTALL_VERIFY_FAILED` 拒绝。这是唯一的例外：每一项签名、摘要、阈值、发布日志、新鲜度和路径检查仍会先运行。
+3. 频道清单：新时间戳指定的摘要与 targets 阈值的签名，以及当有人指定版本时该人的版本号。构建者为 `local release (no independent rebuild)`（`LOCAL_RELEASE_BUILDER`）的清单只有 `local-release.ts` 会写出，它在维护者的电脑上构建并签名，没有第二个构建者重建过它。从约定 C2 的生产发布获取内容、或其根为生产根的通道，只在 `localBuilderAllowed`（`src/local-builder.ts`）成立时才安装这种清单：该版本是 0.x 版本，且验证它的根是预览根，即根版本 1，其 SHA-256 为[信任页](../../docs/guide/safety-and-updates/trust.zh.md#how-releases-are-signed-in-the-preview)所公布的值。1.0 版本（包括 `1.0.0-rc.1`）、更晚的根或其他根会以 `INSTALL_VERIFY_FAILED` 拒绝。这是唯一的例外：每一项签名、摘要、阈值、发布日志、新鲜度和路径检查仍会先运行。
 4. 平台的清单文件，需满足清单中的长度与 SHA-256，以及该文件自身的签名。
 5. 归档本身，在从磁盘读取时满足清单中的长度与 SHA-256。
 

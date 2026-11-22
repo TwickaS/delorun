@@ -33,7 +33,7 @@ Only the maintainer can sign and publish a release, so releases stop if he canno
 These items are open and are not satisfied today:
 
 - A second person who can sign and publish releases, or a published reason why there is none.
-- The key ceremony for production keys, which comes with `1.0.0` ([What you trust when you use Delorun](delorun/docs/guide/trust.md#how-releases-are-signed-in-the-preview)).
+- The key ceremony for production keys, which comes with `1.0.0` ([What you trust when you use Delorun](delorun/docs/guide/safety-and-updates/trust.md#how-releases-are-signed-in-the-preview)).
 
 ## Changes to this document
 

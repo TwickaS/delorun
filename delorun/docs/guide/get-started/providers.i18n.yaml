@@ -1,0 +1,46 @@
+# Bilingual-pair consistency record for providers.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/guide/get-started/providers.md
+/:
+  en: 8b3de8b4e17fbda7
+  zh: 3e5dbdad3fe12960
+/model-providers:
+  en: 29018ffb603e4b71
+  zh: 703c5140ed872cf2
+/model-providers/summary:
+  en: 16ce8e332c38a903
+  zh: 6177d4e6a75d1f87
+/model-providers/contents:
+  en: 21f826781d1f136a
+  zh: 9c83c7c5a9e7ddb5
+/model-providers/choose-a-provider-in-setup:
+  en: f932fd03f5813319
+  zh: 3d48e3d5aca7c78e
+/model-providers/the-providers:
+  en: 4ce613ff4ca2c49f
+  zh: ce964e223c903326
+/model-providers/an-openai-compatible-endpoint:
+  en: 69c7c6189b47e65d
+  zh: 7a4e883d0bcbf0d5
+/model-providers/how-setup-checks-a-key:
+  en: 55a266e5cd2ced31
+  zh: 588eaa14679cafc3
+/model-providers/where-the-key-is-kept:
+  en: fc95db5af1bd5e69
+  zh: 78e7b1a54cbd6f4e
+/model-providers/set-up-without-questions:
+  en: ca53136776632332
+  zh: 5236b140d54226b4
+/model-providers/change-the-provider-later:
+  en: d3c9cd7ff6e3315e
+  zh: c25768224b085648
+/model-providers/providers-set-up-in-the-studio:
+  en: 566ed5b8a51fba60
+  zh: ec16c2b1693edfd4
+/model-providers/next:
+  en: ce90e33a51116d5e
+  zh: 443d368cf90ef664
+/model-providers/for-the-technically-curious:
+  en: d321454f7e85d31c
+  zh: a440c7a6875a5bb8

@@ -54,7 +54,7 @@ Delorun 像对待其他 pull request 一样接受借助 AI 智能体编写的 pu
 
 Delorun 不被僵硬地绑定在上游上，随着时间推移可能与其产生差异。Delorun 的行为位于 `delorun/` 下，依托上游的接缝实现：钩子、Service Definition 和配置字段。
 
-对上游文件（位于 `delorun/` 之外）的改动，只要能让产品更好就受欢迎。请在 pull request 中说明原因，并指出该改动所服务的 Delorun 功能。维护者的工具会在合并时写入 [delorun/upstream-patches.json](delorun/upstream-patches.json) 中的条目，因此不要手动编辑该文件。通用修复请放在单独的提交中。每次合并上游时，维护者都会报告 Delorun 的差异程度（[差异索引](delorun/docs/reference/divergence/README.zh.md)）。
+对上游文件（位于 `delorun/` 之外）的改动，只要能让产品更好就受欢迎。请在 pull request 中说明原因，并指出该改动所服务的 Delorun 功能。维护者的工具会在合并时写入 [delorun/upstream-patches.json](delorun/upstream-patches.json) 中的条目，因此不要手动编辑该文件。通用修复请放在单独的提交中。每次合并上游时，维护者都会报告 Delorun 的差异程度（[差异索引](delorun/docs/reference/parity-with-deepseek-harness/divergence/README.zh.md)）。
 
 DeepSeek Harness 不接受外部 pull request。对上游自身代码的修复可以提交到这里。也请在上游仓库中把该 bug 作为 Issue 提交。
 

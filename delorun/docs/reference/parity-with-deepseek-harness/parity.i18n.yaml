@@ -1,0 +1,55 @@
+# Bilingual-pair consistency record for parity.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/reference/parity-with-deepseek-harness/parity.md
+/parity-checklist:
+  en: 2aab01ce65f2c142
+  zh: efe97f98c7c955e0
+/parity-checklist/how-rows-are-judged:
+  en: 869e7b361599647f
+  zh: 88dbc0c5f4b27750
+/parity-checklist/liveshare:
+  en: 59026256666f7bf5
+  zh: 802932c342d6893a
+/parity-checklist/desktop-app-payload:
+  en: 15e28efa82365070
+  zh: 3c237a9d99e1031f
+/parity-checklist/sdk-runtime-selection:
+  en: 243fac0490ea6311
+  zh: c04cda931fe7d9f5
+/parity-checklist/deliberate-differences:
+  en: 805ff9c9d820573b
+  zh: 2c9712039c51bbcd
+/parity-checklist/deliberate-differences/home-and-account:
+  en: 014093c2cb313291
+  zh: c77a5c5da8e0714d
+/parity-checklist/deliberate-differences/setup-and-model-providers:
+  en: 5831a8874ac9cf81
+  zh: d404d0c06dead390
+/parity-checklist/deliberate-differences/permissions:
+  en: 3219f0c51c914b95
+  zh: ad855084c04df712
+/parity-checklist/deliberate-differences/model-visible-tools:
+  en: 7f42427934ca39dd
+  zh: dcb2b8f01008201c
+/parity-checklist/deliberate-differences/data-sharing:
+  en: 1de8ba2686f0b2f3
+  zh: 25f538fa47e5945d
+/parity-checklist/deliberate-differences/web-fetch:
+  en: db7fe75607e6b296
+  zh: 9700f2b0352b0d7b
+/parity-checklist/deliberate-differences/consents:
+  en: 06a36b1ed0488f90
+  zh: a654697988c7ccc5
+/parity-checklist/deliberate-differences/browser:
+  en: 749fd1a64d7893e0
+  zh: 4b41f0cd2ed66f07
+/parity-checklist/deliberate-differences/confinement-and-containers:
+  en: dd6eea069043cff0
+  zh: cf89f6f31bcdb7c0
+/parity-checklist/deliberate-differences/studio-and-other-c16-switches:
+  en: e93cf2e481e7dc58
+  zh: f11e3a614090a753
+/parity-checklist/where-to-go-next:
+  en: 79fe937b3391b490
+  zh: d06b9718afb003c9

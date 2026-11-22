@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-The Thinking tab: read the model's reasoning and its reply word by word, in the studio's right sidebar, as the model writes them. Off by default: a person turns it on under Components on the Delorun studio page of the sidebar's Plugins. The user guide is [Read the model's thinking word by word](../../docs/guide/thinking-tab.md).
+The Thinking tab: read the model's reasoning and its reply word by word, in the studio's right sidebar, as the model writes them. Off by default: a person turns it on under Components on the Delorun studio page of the sidebar's Plugins. The user guide is [Read the model's thinking word by word](../../docs/guide/everyday-use/thinking-tab.md).
 
 ## Using the tab
 

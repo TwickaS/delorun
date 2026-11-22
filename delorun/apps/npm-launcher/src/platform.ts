@@ -38,7 +38,7 @@ export function platformOf(platform: string, arch: string): RuntimePlatform {
 }
 
 /** The guide section that explains how to run Delorun in WSL2; the refusals below link to it. */
-export const WSL_GUIDE = 'https://docs.delorun.com/guide/install#windows-through-wsl2'
+export const WSL_GUIDE = 'https://docs.delorun.com/guide/get-started/install#windows-through-wsl2'
 
 /**
  * Why this Delorun does not run on a host, before any download.

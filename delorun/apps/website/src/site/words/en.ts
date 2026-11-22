@@ -26,13 +26,13 @@ export const EN = {
     platform: {
       before: 'Runs on Linux and on ',
       linkText: 'Windows through WSL2',
-      href: `${DOCS_URL}/guide/install#windows-through-wsl2`,
+      href: `${DOCS_URL}/guide/get-started/install#windows-through-wsl2`,
       after: '. ',
     },
     status: {
       before: 'This is a preview: ',
       linkText: 'what that means',
-      href: `${DOCS_URL}/guide/trust#how-releases-are-signed-in-the-preview`,
+      href: `${DOCS_URL}/guide/safety-and-updates/trust#how-releases-are-signed-in-the-preview`,
       after: '.',
     },
   },
@@ -62,11 +62,12 @@ export const EN = {
   signup: {
     footerHeading: 'Release news by email',
   },
-  nav: { docs: 'Docs', blog: 'Blog', github: 'GitHub', privacy: 'Privacy', changelog: 'Changelog', roadmap: 'Roadmap' },
+  nav: { why: 'Why Delorun', docs: 'Docs', blog: 'Blog', github: 'GitHub', privacy: 'Privacy', changelog: 'Changelog', roadmap: 'Roadmap' },
   footer: {
     docs: 'Docs',
     changelog: 'Changelog',
     roadmap: 'Roadmap',
+    why: 'Why Delorun',
     questions: 'Questions and answers',
     knownIssues: 'Known issues',
     blog: 'Blog',

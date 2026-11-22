@@ -18,7 +18,7 @@ const OWNED = { ownedPaths: true }
 describe('public URLs', () => {
   it('accepts https URLs on the public repository and the documentation host', () => {
     expect(referenceErrors('See https://github.com/twickas/delorun/issues/12 and https://github.com/twickas/delorun.', context)).toEqual([])
-    expect(referenceErrors('[guide](https://docs.delorun.com/guide/trust)', context)).toEqual([])
+    expect(referenceErrors('[guide](https://docs.delorun.com/guide/safety-and-updates/trust)', context)).toEqual([])
     expect(urlProblem('https://github.com/twickas/delorun/blob/main/delorun/docs/contracts/README.md#c16')).toBeUndefined()
   })
 

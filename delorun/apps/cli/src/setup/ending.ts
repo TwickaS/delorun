@@ -23,7 +23,7 @@ import { SETUP_PROVIDERS } from './providers.ts'
 export const DOCS_ORIGIN = 'https://docs.delorun.com'
 
 /** The install guide's section on the studio and the first chat. */
-export const FIRST_CHAT_PAGE = `${DOCS_ORIGIN}/guide/install#the-studio-and-your-first-chat`
+export const FIRST_CHAT_PAGE = `${DOCS_ORIGIN}/guide/get-started/install#the-studio-and-your-first-chat`
 
 /**
  * The command that installs the `delorun` command: the launcher package at one exact version.

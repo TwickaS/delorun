@@ -1,0 +1,52 @@
+# Bilingual-pair consistency record for changing-your-harness.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/guide/customising/changing-your-harness.md
+/:
+  en: 6433c52151eadf52
+  zh: 8b568798a148ca3c
+/changing-your-harness:
+  en: d63002471add4c4e
+  zh: eeab025f50d736b8
+/changing-your-harness/summary:
+  en: d6fc85c7bdcc77ee
+  zh: f00d4cdd189d6ccd
+/changing-your-harness/contents:
+  en: 77f819e80291a3be
+  zh: 1aca33036c7aa00c
+/changing-your-harness/plugins-you-link-from-a-folder:
+  en: 8eb695f4ab01c88e
+  zh: 1bebf12e0169eb24
+/changing-your-harness/seeing-what-waits-for-review:
+  en: 59965887eb3369b5
+  zh: 30bd5aa3e68ea6dd
+/changing-your-harness/applying-discarding-and-undoing:
+  en: 09cb9882add2886b
+  zh: 756bf519388b8488
+/changing-your-harness/the-second-confirmation:
+  en: 9aad5ec8f7904d57
+  zh: 2119a752f46824c9
+/changing-your-harness/plugin-code-from-an-imported-setup:
+  en: b3b5473a2d25caab
+  zh: c0e89c8726b19501
+/changing-your-harness/working-on-a-plugin:
+  en: cbc5074dc4139d7b
+  zh: 1742823a26d34ad7
+/changing-your-harness/when-your-agent-changes-a-plugin:
+  en: 0492060b2e713c63
+  zh: 11dfb16b62ffada3
+/changing-your-harness/changing-delorun-itself:
+  en: 1cd4663af00fae2b
+  zh: a3cc21213886cfe5
+/changing-your-harness/turning-one-plugin-off:
+  en: 66e24d95e30ce89a
+  zh: 34dee4908d64aae3
+/changing-your-harness/when-a-change-stops-delorun-from-starting:
+  en: 6373eb00089a717f
+  zh: 2093612a115274f1
+/changing-your-harness/the-protection-setting:
+  en: ab96a0bb882cf7fb
+  zh: 04dd9621716fdd55
+/changing-your-harness/in-the-studio:
+  en: c60f4de36cca8136
+  zh: 03566047faf3e9ac

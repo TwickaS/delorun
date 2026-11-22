@@ -54,4 +54,4 @@
 
 ## 下一步
 
-[对等基线](parity-baseline.zh.md)记录了若干条目所依赖的主机状态。[参考资料索引](README.zh.md)列出其他开发者页面。
+[对等基线](parity-with-deepseek-harness/parity-baseline.zh.md)记录了若干条目所依赖的主机状态。[参考资料索引](README.zh.md)列出其他开发者页面。
