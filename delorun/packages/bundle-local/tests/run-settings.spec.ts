@@ -34,6 +34,8 @@ interface Options {
   readonly applied?: boolean
   /** Whether the hot-reload service is mounted; true unless a spec says otherwise. */
   readonly hotReload?: boolean
+  /** Whether the hot-reload service, when mounted, fails to reload the changed rows; false unless a spec says otherwise. */
+  readonly reloadFails?: boolean
   /** Runs inside the reach service's apply, as a device signing in again would while the listener is still up. */
   readonly duringApply?: () => void
   /** Runs when every device is signed out. */
@@ -66,7 +68,7 @@ function world(options: Options = {}) {
     where: () => ({ profile: 'default', profileDir, homeDir: home }),
     runningPort: () => options.runningPort,
     reach: () => reach,
-    hotReload: () => options.hotReload !== false,
+    reloaded: () => Promise.resolve(options.hotReload !== false && options.reloadFails !== true),
     signOutDevices: () => { signedOut += 1; options.onSignOut?.(); return Promise.resolve(1) },
     isPortFree: async port => !(options.busy ?? []).includes(port),
     tailscale: tailscale.run,
@@ -140,6 +142,14 @@ describe('how much Delorun asks', () => {
     const { service, files } = world({ record: { version: 1, prompts: 'stock' }, hotReload: false })
     expect(await service.prompts('safer')).toEqual({ prompts: 'safer', restartNeeded: true })
     expect(files.row('delorun-mcp-consent')).toEqual({ enabled: true })
+  })
+
+  it('says a restart is needed when the hot-reload service is mounted but the reload fails, and the same for dangerous mode', async () => {
+    const { service, files } = world({ record: { version: 1, prompts: 'stock' }, hotReload: true, reloadFails: true })
+    expect(await service.prompts('safer')).toEqual({ prompts: 'safer', restartNeeded: true })
+    expect(files.row('delorun-mcp-consent')).toEqual({ enabled: true })
+    await service.dangerousBegin()
+    expect(await service.dangerousConfirm({ nonce: 'code-1', understood: true, phrase: DANGEROUS_PHRASE })).toEqual({ dangerous: 'on', restartNeeded: true })
   })
 
   it('says no restart is needed when the hot-reload service is mounted', async () => {

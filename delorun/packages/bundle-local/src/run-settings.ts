@@ -83,7 +83,7 @@ const LOCK_WAIT_MS = 10_000
  * Whether each change applies only after Delorun restarts, for the changes that do not depend on the running home. The
  * background answer is read by the next start and the port is bound at start; phone access is applied to the running
  * home. The prompts rows are read by plugins that the hot-reload service restarts when the patch file changes, so they
- * need a restart exactly when no such service is mounted: see {@link RunDependencies.hotReload}.
+ * need a restart unless that reload has run and settled without a failure: see {@link RunDependencies.reloaded}.
  */
 export const RESTART_NEEDED = { background: false, port: true, reach: false } as const
 
@@ -134,8 +134,11 @@ export interface RunDependencies {
   reach(): RunReach | undefined
   /** Signs every paired device out, keeping the device list. @returns how many sessions ended; none when the home has no device sign-in. */
   signOutDevices(): Promise<number>
-  /** @returns whether the hot-reload service is mounted, so a change to the profile's patch file reaches running plugins without a restart. */
-  hotReload(): boolean
+  /**
+   * Make the running plugins read the profile's patch file now, and wait until that has settled.
+   * @returns true when the hot-reload service is mounted and the reload ended without a failure or a restart reason; false otherwise, so the change reaches plugins only at the next start.
+   */
+  reloaded(): Promise<boolean>
   /** Whether a port is free on this computer. @param port - the port. @returns whether nothing listens on it. */
   isPortFree(port: number): Promise<boolean>
   /** Runs `tailscale`. */
@@ -160,7 +163,17 @@ export function systemDependencies(ctx: Pick<Context, 'get'>): RunDependencies {
     runningPort: () => ctx.get('webServer')?.port,
     reach: () => ctx.get('reach'),
     signOutDevices: async () => (await ctx.get('homeAuth')?.signAllDevicesOut()) ?? 0,
-    hotReload: () => ctx.get('hmr') !== undefined,
+    reloaded: async () => {
+      const hmr = ctx.get('hmr')
+      if (hmr === undefined) return false
+      try {
+        // The same recomposition `changes.reload` runs. A failed replacement leaves the plugin inactive, and the watcher's own reload would only log it.
+        const { restartReason } = await hmr.runExclusive(() => hmr.reconcileProfile())
+        return restartReason === undefined
+      } catch {
+        return false
+      }
+    },
     isPortFree,
     tailscale: systemTailscale(),
     now: () => Date.now(),
@@ -223,7 +236,7 @@ export class RunSettings {
       writePromptRows(patchOf(where), answer)
       await removeDangerousGrant(where.homeDir)
       await updateAnswersRecord(where.profileDir, record => ({ ...record, prompts: answer }))
-      return { prompts: answer, restartNeeded: !this.dependencies.hotReload() }
+      return { prompts: answer, restartNeeded: !(await this.dependencies.reloaded()) }
     })
   }
 
@@ -266,7 +279,7 @@ export class RunSettings {
       writePromptRows(patchOf(where), 'dangerous')
       await writeDangerousGrant(where.homeDir, new Date(this.dependencies.now()))
       await updateAnswersRecord(where.profileDir, current => ({ ...current, prompts: 'dangerous' }))
-      return { dangerous: 'on', restartNeeded: !this.dependencies.hotReload() }
+      return { dangerous: 'on', restartNeeded: !(await this.dependencies.reloaded()) }
     })
   }
 
