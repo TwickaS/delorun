@@ -6,10 +6,13 @@ import { DESKTOP_IPC, assertDesktopSender } from './ipc.ts'
 /**
  * Install the application-lifetime directory picker IPC handler.
  * @param getWindow - Current local application window; shell pages and subframes cannot open dialogs.
+ * @param available - Whether the native dialog may be offered: it browses this PC's Windows paths, which a home in WSL
+ *   or on another machine cannot open, so only the bundled Host's home answers true.
  */
-export function installDesktopDirectoryPicker(getWindow: () => BrowserWindow | undefined): void {
+export function installDesktopDirectoryPicker(getWindow: () => BrowserWindow | undefined, available: () => boolean = () => true): void {
   const pending = new WeakMap<BrowserWindow, Promise<string | null>>()
   ipcMain.handle(DESKTOP_IPC.directoryPick, async (event) => {
+    if (!available()) throw new Error('dsh desktop: the native directory picker is not offered for this home')
     const window = getWindow()
     if (window === undefined || window.isDestroyed() || event.sender !== window.webContents
       || event.senderFrame !== window.webContents.mainFrame) {

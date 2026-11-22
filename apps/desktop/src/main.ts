@@ -22,6 +22,7 @@ import {
   protocol,
   session,
   shell,
+  type IpcMainEvent,
   type IpcMainInvokeEvent,
   type MenuItemConstructorOptions,
 } from 'electron'
@@ -32,6 +33,7 @@ import { DesktopHostFatalError, DesktopHostProcess, DesktopHostUncleanExitError 
 import { DesktopPlatformView, PLATFORM_IPC, platformBounds } from './platform-view.ts'
 import { installDesktopFileDrag } from './file-drag.ts'
 import { installDesktopDirectoryPicker } from './directory-picker.ts'
+import { hostPathRefusal, translateWindowsPath } from './windows-path.ts'
 import { installMicrophonePermissions } from './microphone-permissions.ts'
 import { DesktopBackendController } from './backend-controller.ts'
 import { DESKTOP_IPC, SCHEME, assertDesktopSender, type DesktopUpdateState } from './ipc.ts'
@@ -772,12 +774,14 @@ async function main(): Promise<void> {
       if (backend.host === undefined || hostUrl === undefined || hostCookie === undefined) {
         return Promise.resolve(new Response(null, { status: 503 }))
       }
-      return forwardWebRequest(request, hostUrl, hostCookie)
+      // Only this handler, registered for the default session, reaches the forwarder: a guest webview or another
+      // session partition has no handler for the scheme.
+      return forwardWebRequest(request, hostUrl, hostCookie, homeSource.kind === 'wsl' ? 'wsl' : 'bundled')
     }
     return Promise.resolve(new Response(null, { status: 404 }))
   })
 
-  installDesktopDirectoryPicker(() => mainWindow)
+  installDesktopDirectoryPicker(() => mainWindow, () => homeSource.kind === 'bundled')
   installMicrophonePermissions(session.defaultSession, () => mainWindow?.webContents)
   const shortcuts = installDesktopShortcuts(() => mainWindow, app.getPath('userData'),
     process.platform === 'darwin' ? 'macos' : process.platform === 'win32' ? 'windows' : 'linux', () => { refreshApplicationMenu() }, window => updateOverlays.input(window))
@@ -824,6 +828,30 @@ async function main(): Promise<void> {
     return owner
   }
   installFileActions(assertMainApplication, () => hostUrl)
+  /** Whether a synchronous request comes from the application document in the main window's top frame. */
+  const fromMainApplication = (event: IpcMainEvent): boolean => {
+    const owner = mainWindow
+    return owner !== undefined && !owner.isDestroyed() && event.sender === owner.webContents
+      && event.senderFrame === owner.webContents.mainFrame && event.senderFrame.url.startsWith(`${SCHEME}://app/`)
+  }
+  // The home kind is a value only: the document reads it to choose what to show; the home's own checks decide.
+  ipcMain.on(DESKTOP_IPC.homeKind, (event) => {
+    event.returnValue = fromMainApplication(event) ? homeSource.kind : null
+  })
+  // A file of this PC, named for a home in WSL: the Linux path, or '' with a plain message when the path cannot be
+  // translated. A home that is not in WSL gets no path from here.
+  let refusalShown = false
+  ipcMain.on(DESKTOP_IPC.hostPath, (event, nativePath: unknown) => {
+    event.returnValue = ''
+    if (homeSource.kind !== 'wsl' || !fromMainApplication(event) || typeof nativePath !== 'string') return
+    const translated = translateWindowsPath(nativePath, homeSource.distro)
+    if (translated.ok) { event.returnValue = translated.path; return }
+    if (refusalShown || mainWindow === undefined || mainWindow.isDestroyed()) return
+    refusalShown = true
+    void dialog.showMessageBox(mainWindow, {
+      type: 'info', title: DESKTOP_PRODUCT_NAME, message: hostPathRefusal(homeSource.distro), buttons: ['OK'],
+    }).catch((error: unknown) => { console.error(error) }).finally(() => { refusalShown = false })
+  })
   ipcMain.on(PLATFORM_IPC.bootstrap, (event) => {
     try { event.returnValue = platformView.bootstrap(event) }
     catch { event.returnValue = null }

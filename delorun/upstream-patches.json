@@ -4063,6 +4063,30 @@
       "class": "delorun-feature",
       "feature": "desktop-shell",
       "reason": "Removed with the `dsh` command (L157): the app packs no terminal launcher; `resources/runtime` keeps only the `bin/node` launcher. The `delorun` command lives inside the WSL distribution."
+    },
+    {
+      "path": "apps/desktop/src/web-document.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "The request forwarder takes the home kind. For a Delorun home in WSL2 on this computer (L175) a request that carried the application's origin goes out with the home's exact loopback origin and `Sec-Fetch-Site: same-origin`, as the person's own browser would send them, so the home's computer-only gate sees the person at the computer; no Origin in, none out, and any other origin is still refused. Upstream's bundled Host receives no Origin as before. Trust path: review pending."
+    },
+    {
+      "path": "apps/desktop/src/ipc.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Two private channels and the home kind type (`bundled`, `wsl`, `remote`) the shell tells the application document, a value and never a credential (L175)."
+    },
+    {
+      "path": "apps/desktop/src/directory-picker.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "The native folder dialog is offered only for the bundled Host's home: it browses this PC's Windows paths, which a home in WSL or on another machine cannot open, so the studio's browse picker serves those (L175)."
+    },
+    {
+      "path": "apps/desktop/src/windows-path.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Delorun's own module of the desktop shell: turns a dropped file's Windows path into the path a WSL distribution sees, and refuses any other (L175)."
     }
   ],
   "retired": []

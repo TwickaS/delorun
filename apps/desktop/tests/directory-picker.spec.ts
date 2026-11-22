@@ -80,3 +80,23 @@ describe('Desktop directory picker', () => {
     expect(electron.showOpenDialog).not.toHaveBeenCalled()
   })
 })
+
+describe('Desktop directory picker for a home the native dialog cannot browse', () => {
+  it('refuses every caller, even the owned application document, while the dialog is not offered', async () => {
+    const frame = { url: 'dsh-app://app/' }
+    const window = {
+      webContents: { mainFrame: frame }, isDestroyed: vi.fn(() => false), isMinimized: vi.fn(() => false),
+      restore: vi.fn(), show: vi.fn(), focus: vi.fn(),
+    }
+    let offered = false
+    installDesktopDirectoryPicker(() => window as unknown as BrowserWindow, () => offered)
+    const handler = electron.handle.mock.calls[0]![1]
+    const event = { sender: window.webContents, senderFrame: frame } as unknown as IpcMainInvokeEvent
+    await expect(handler(event)).rejects.toThrow('not offered')
+    expect(electron.showOpenDialog).not.toHaveBeenCalled()
+    expect(window.show).not.toHaveBeenCalled()
+    offered = true
+    electron.showOpenDialog.mockResolvedValue({ canceled: false, filePaths: ['/workspace'] })
+    await expect(handler(event)).resolves.toBe('/workspace')
+  })
+})

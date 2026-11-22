@@ -2700,6 +2700,126 @@ describe('Delorun shell', () => {
       await harness.quitCompleted.promise
       expect(harness.hosts).toHaveLength(0)
     })
+
+    const appRequest = () => new Request('dsh-app://app/api/consents.change', { method: 'POST', body: '{}', headers: { origin: 'dsh-app://app' } })
+    /** The synchronous listener main registered for a channel, called as the main window's application document. */
+    function askMain(channel: string, window: InstanceType<typeof harness.FakeWindow>, ...args: unknown[]) {
+      const listener = harness.ipcOn.mock.calls.find(([name]) => name === channel)![1] as
+        (event: { sender: unknown; senderFrame: unknown; returnValue?: unknown }, ...rest: unknown[]) => void
+      const event: { sender: unknown; senderFrame: unknown; returnValue?: unknown } = {
+        sender: window.webContents, senderFrame: window.webContents.mainFrame,
+      }
+      listener(event, ...args)
+      return event.returnValue
+    }
+
+    it('forwards the application\'s requests as a home in WSL, so the home sees the person at the computer', async () => {
+      await connectedWindow()
+      const { forwardWebRequest } = await import('../src/web-document.ts')
+      const request = appRequest()
+      await harness.protocolHandle.mock.calls[0]![1](request)
+      expect(forwardWebRequest).toHaveBeenCalledExactlyOnceWith(request, 'http://127.0.0.1:18601', 'dsh-auth-1=SECRET-COOKIE', 'wsl')
+    })
+
+    it('registers the application\'s protocol only for the default session, so no guest or other partition reaches the forwarder', async () => {
+      await connectedWindow()
+      expect(harness.protocolHandle).toHaveBeenCalledOnce()
+      expect(harness.protocolHandle.mock.calls[0]![0]).toBe('dsh-app')
+      const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8')
+      const guests = readFileSync(new URL('../src/browser-guests.ts', import.meta.url), 'utf8')
+      expect(main.match(/forwardWebRequest\(/gu)).toHaveLength(1)
+      expect(main).not.toMatch(/fromPartition\([^)]*\)\.protocol/u)
+      expect(guests).not.toMatch(/protocol\.(handle|registerSchemesAsPrivileged)|forwardWebRequest/u)
+    })
+
+    it('tells the application document that the home is in WSL, and nobody else', async () => {
+      const { window } = await connectedWindow()
+      window.webContents.mainFrame.url = 'dsh-app://app/'
+      expect(askMain(DESKTOP_IPC.homeKind, window)).toBe('wsl')
+      window.webContents.mainFrame.url = 'dsh-app://shell/update-dialog.html'
+      expect(askMain(DESKTOP_IPC.homeKind, window)).toBeNull()
+      window.webContents.mainFrame.url = 'https://example.com/'
+      expect(askMain(DESKTOP_IPC.homeKind, window)).toBeNull()
+      window.webContents.mainFrame.url = 'dsh-app://app/'
+      const listener = harness.ipcOn.mock.calls.find(([name]) => name === DESKTOP_IPC.homeKind)![1]
+      const foreign = { sender: {}, senderFrame: window.webContents.mainFrame, returnValue: undefined as unknown }
+      listener(foreign)
+      expect(foreign.returnValue).toBeNull()
+    })
+
+    it('does not offer the native directory picker for a home in WSL', async () => {
+      const { window } = await connectedWindow()
+      const handler = harness.handlers.get(DESKTOP_IPC.directoryPick) as (event: IpcMainInvokeEvent) => Promise<string | null>
+      window.webContents.mainFrame.url = 'dsh-app://app/'
+      const event = { sender: window.webContents, senderFrame: window.webContents.mainFrame } as unknown as IpcMainInvokeEvent
+      await expect(handler(event)).rejects.toThrow('not offered')
+      expect(harness.dialog.showOpenDialog).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      ['C:\\Users\\me\\notes.md', '/mnt/c/Users/me/notes.md'],
+      ['\\\\wsl$\\Ubuntu\\home\\me\\notes.md', '/home/me/notes.md'],
+      ['\\\\wsl.localhost\\ubuntu\\home\\me', '/home/me'],
+    ])('translates the dropped path %s for the distribution', async (nativePath, linuxPath) => {
+      const { window } = await connectedWindow()
+      window.webContents.mainFrame.url = 'dsh-app://app/'
+      expect(askMain(DESKTOP_IPC.hostPath, window, nativePath)).toBe(linuxPath)
+      expect(harness.dialog.showMessageBox).not.toHaveBeenCalled()
+    })
+
+    it('refuses any other dropped path with one plain message and gives the studio no path', async () => {
+      harness.dialog.showMessageBox.mockResolvedValue({ response: 0 })
+      const { window } = await connectedWindow()
+      window.webContents.mainFrame.url = 'dsh-app://app/'
+      expect(askMain(DESKTOP_IPC.hostPath, window, '\\\\wsl$\\Debian\\home\\me\\notes.md')).toBe('')
+      expect(askMain(DESKTOP_IPC.hostPath, window, '\\\\server\\share\\notes.md')).toBe('')
+      expect(harness.dialog.showMessageBox).toHaveBeenCalledOnce()
+      const options = harness.dialog.showMessageBox.mock.calls[0]!.at(-1) as MessageBoxOptions
+      expect(options.message).toContain('"Ubuntu"')
+      expect(options.message).not.toMatch(/SECRET|token|\\\\server/iu)
+    })
+
+    it('translates nothing for a request that does not come from the application document or carries no text', async () => {
+      const { window } = await connectedWindow()
+      window.webContents.mainFrame.url = 'https://example.com/'
+      expect(askMain(DESKTOP_IPC.hostPath, window, 'C:\\Users\\me\\notes.md')).toBe('')
+      window.webContents.mainFrame.url = 'dsh-app://app/'
+      expect(askMain(DESKTOP_IPC.hostPath, window, 42)).toBe('')
+      expect(askMain(DESKTOP_IPC.hostPath, window)).toBe('')
+    })
+  })
+
+  describe('bundled Host requests', () => {
+    it('forwards the application\'s requests as upstream\'s Host, with no home in WSL named', async () => {
+      await import('../src/main.ts')
+      await harness.preparing.promise
+      harness.prepared.resolve()
+      await harness.hostStarted.promise
+      harness.hosts[0]!.ready.resolve()
+      await Promise.resolve(invoke(DESKTOP_IPC.boot))
+      const { forwardWebRequest } = await import('../src/web-document.ts')
+      const request = new Request('dsh-app://app/api/read', { method: 'POST', body: '{}', headers: { origin: 'dsh-app://app' } })
+      await harness.protocolHandle.mock.calls[0]![1](request)
+      expect(forwardWebRequest).toHaveBeenCalledExactlyOnceWith(request, expect.any(String), 'test-cookie', 'bundled')
+    })
+
+    it('tells the application document the home is bundled and keeps the native directory picker', async () => {
+      await import('../src/main.ts')
+      await harness.preparing.promise
+      harness.prepared.resolve()
+      await harness.hostStarted.promise
+      harness.hosts[0]!.ready.resolve()
+      await Promise.resolve(invoke(DESKTOP_IPC.boot))
+      const window = harness.windows[0]!
+      window.webContents.mainFrame.url = 'dsh-app://app/'
+      const listener = harness.ipcOn.mock.calls.find(([name]) => name === DESKTOP_IPC.homeKind)![1]
+      const event = { sender: window.webContents, senderFrame: window.webContents.mainFrame, returnValue: undefined as unknown }
+      listener(event)
+      expect(event.returnValue).toBe('bundled')
+      const hostPath = { sender: window.webContents, senderFrame: window.webContents.mainFrame, returnValue: undefined as unknown }
+      harness.ipcOn.mock.calls.find(([name]) => name === DESKTOP_IPC.hostPath)![1](hostPath, 'C:\\Users\\me\\notes.md')
+      expect(hostPath.returnValue).toBe('')
+    })
   })
 
   describe('WSL home failure', () => {

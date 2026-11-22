@@ -7,7 +7,7 @@ import { DESKTOP_IPC, type DshDesktopProductApi } from '../src/ipc.ts'
 
 const electron = vi.hoisted(() => ({
   contextBridge: { exposeInMainWorld: vi.fn() },
-  ipcRenderer: { invoke: vi.fn(), on: vi.fn(), off: vi.fn(), send: vi.fn() },
+  ipcRenderer: { invoke: vi.fn(), on: vi.fn(), off: vi.fn(), send: vi.fn(), sendSync: vi.fn() },
   webUtils: { getPathForFile: vi.fn() },
 }))
 vi.mock('electron', () => electron)
@@ -15,7 +15,17 @@ vi.mock('../src/preload-platform.ts', () => ({ markDocumentPlatform: vi.fn(), sy
 vi.mock('../src/preload-theme.ts', () => ({ syncNativeTheme: vi.fn() }))
 vi.mock('../src/preload-windows.ts', () => ({ syncWindowsAppearance: vi.fn() }))
 
-beforeEach(() => { vi.stubGlobal('process', { ...process, isMainFrame: true }) })
+/** What main answers the synchronous home-kind and host-path requests. */
+function answerMain(kind: unknown, hostPath: (nativePath: string) => unknown = () => ''): void {
+  electron.ipcRenderer.sendSync.mockImplementation((channel: string, nativePath?: string) => {
+    if (channel === DESKTOP_IPC.homeKind) return kind
+    return channel === DESKTOP_IPC.hostPath ? hostPath(nativePath ?? '') : undefined
+  })
+}
+beforeEach(() => {
+  vi.stubGlobal('process', { ...process, isMainFrame: true })
+  answerMain('bundled')
+})
 afterEach(() => { document.body.replaceChildren(); vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.clearAllMocks(); vi.resetModules() })
 
 it('reads only native login API-key presence through the onboarding bridge', async () => {
@@ -297,4 +307,67 @@ it('exposes channel choices and scoped subscriptions without exposing updater ob
   expect(listener).toHaveBeenCalledWith(state)
   dispose()
   expect(electron.ipcRenderer.off).toHaveBeenCalledWith(DESKTOP_IPC.updatesChannelChanged, handler)
+})
+
+const exposed = (name: string): unknown => electron.contextBridge.exposeInMainWorld.mock.calls
+  .find(([exposedName]) => exposedName === name)?.[1]
+
+it.each(['bundled', 'wsl', 'remote'] as const)('tells the application document the home kind %s as a plain value', async (kind) => {
+  answerMain(kind)
+  vi.stubGlobal('location', new URL('dsh-app://app/'))
+  await import('../src/preload-app.ts')
+  expect(exposed('__DSH_HOME_KIND__')).toBe(kind)
+  expect(electron.ipcRenderer.sendSync).toHaveBeenCalledWith(DESKTOP_IPC.homeKind)
+})
+
+it.each([undefined, null, 'local', 7, { kind: 'wsl' }])('exposes no home kind when main answers %j', async (answer) => {
+  answerMain(answer)
+  vi.stubGlobal('location', new URL('dsh-app://app/'))
+  await import('../src/preload-app.ts')
+  expect(electron.contextBridge.exposeInMainWorld.mock.calls.some(([name]) => name === '__DSH_HOME_KIND__')).toBe(false)
+  expect(exposed('__DSH_DIRECTORY_PICKER__')).toBeUndefined()
+})
+
+it.each(['dsh-app://shell/startup.html', 'https://example.com/'])('asks main for no home kind from %s', async (url) => {
+  vi.stubGlobal('location', new URL(url))
+  await import('../src/preload-app.ts')
+  expect(electron.contextBridge.exposeInMainWorld.mock.calls.some(([name]) => name === '__DSH_HOME_KIND__')).toBe(false)
+  expect(electron.ipcRenderer.sendSync).not.toHaveBeenCalled()
+})
+
+it.each(['wsl', 'remote'] as const)('does not expose the native directory picker for a %s home', async (kind) => {
+  answerMain(kind)
+  vi.stubGlobal('location', new URL('dsh-app://app/'))
+  await import('../src/preload-app.ts')
+  expect(exposed('__DSH_DIRECTORY_PICKER__')).toBeUndefined()
+})
+
+it('gives a home in WSL the path main translated, and nothing when main refuses it', async () => {
+  answerMain('wsl', nativePath => nativePath === 'C:\\Users\\me\\notes.md' ? '/mnt/c/Users/me/notes.md' : '')
+  vi.stubGlobal('location', new URL('dsh-app://app/'))
+  await import('../src/preload-app.ts')
+  const api = exposed('__DSH_HOST_PATHS__') as { pathFor(file: File): string }
+  const dropped = new File(['x'], 'notes.md')
+  electron.webUtils.getPathForFile.mockReturnValueOnce('C:\\Users\\me\\notes.md')
+  expect(api.pathFor(dropped)).toBe('/mnt/c/Users/me/notes.md')
+  expect(electron.ipcRenderer.sendSync).toHaveBeenLastCalledWith(DESKTOP_IPC.hostPath, 'C:\\Users\\me\\notes.md')
+  electron.webUtils.getPathForFile.mockReturnValueOnce('\\\\server\\share\\notes.md')
+  expect(api.pathFor(dropped)).toBe('')
+  electron.webUtils.getPathForFile.mockReturnValueOnce('')
+  electron.ipcRenderer.sendSync.mockClear()
+  expect(api.pathFor(dropped)).toBe('')
+  expect(electron.ipcRenderer.sendSync).not.toHaveBeenCalled()
+})
+
+it('reports a path of this PC to no home that is not on it, and never a non-text answer from main', async () => {
+  answerMain('remote')
+  vi.stubGlobal('location', new URL('dsh-app://app/'))
+  await import('../src/preload-app.ts')
+  electron.webUtils.getPathForFile.mockReturnValue('C:\\Users\\me\\notes.md')
+  expect((exposed('__DSH_HOST_PATHS__') as { pathFor(file: File): string }).pathFor(new File(['x'], 'notes.md'))).toBe('')
+  vi.resetModules()
+  electron.contextBridge.exposeInMainWorld.mockClear()
+  answerMain('wsl', () => 42)
+  await import('../src/preload-app.ts')
+  expect((exposed('__DSH_HOST_PATHS__') as { pathFor(file: File): string }).pathFor(new File(['x'], 'notes.md'))).toBe('')
 })

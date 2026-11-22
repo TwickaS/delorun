@@ -32,6 +32,8 @@ export const DESKTOP_IPC = {
   fileDragStart: 'dsh-desktop:file-drag-start',
   fileDragRelease: 'dsh-desktop:file-drag-release',
   deviceInfo: 'dsh-desktop:device-info',
+  homeKind: 'dsh-desktop:home-kind',
+  hostPath: 'dsh-desktop:host-path',
   localeBootstrap: 'dsh-desktop:locale-bootstrap',
   localeChanged: 'dsh-desktop:locale-changed',
   updatesChannelGet: 'dsh-desktop:updates-channel-get',
@@ -125,4 +127,21 @@ export function assertDesktopSender(event: IpcMainInvokeEvent, hostnames: readon
   if (url.protocol !== `${SCHEME}:` || !hostnames.includes(url.hostname)) {
     throw new Error('dsh desktop: rejected IPC from an unowned renderer')
   }
+}
+
+/**
+ * Where the open home runs, as the shell tells the application document (a value, never a credential).
+ * `bundled` is upstream's Host that the app starts on this computer; `wsl` is a Delorun home in a WSL2 distribution on
+ * this computer, which treats the app as the person at the computer; `remote` is a home on another machine, where the
+ * app is a device. The server's own checks stay the authority; the document reads this only to choose what to show.
+ */
+export type DesktopHomeKind = 'bundled' | 'wsl' | 'remote'
+
+/**
+ * Read a home kind from an IPC answer.
+ * @param value - The answer to `homeKind`.
+ * @returns the kind, or `undefined` when the answer is not one of the three.
+ */
+export function parseDesktopHomeKind(value: unknown): DesktopHomeKind | undefined {
+  return value === 'bundled' || value === 'wsl' || value === 'remote' ? value : undefined
 }

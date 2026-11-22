@@ -84,6 +84,12 @@ For a WSL home the main process does everything with the credential; the page ne
 
 The app never starts, stops or updates a WSL home; quitting or updating the app interrupts none of its work. `src/home-source.ts`, `wsl-home.ts`, `wsl-connection.ts` and `home-error-page.ts` hold the code. The loopback arrival of the connection is measured by `delorun/apps/tools/src/desktop/loopback-arrival.ts`, and every difference from the web studio is listed in the Delorun plans' `desktop-differences.md`.
 
+For a home in WSL the app is the person at the computer, so three things differ from the bundled Host:
+
+- **Origin.** The forwarder (`src/web-document.ts`) sends a request that carried the application's origin (`dsh-app://app`) to the home with `Origin` set to the home's exact loopback origin and `Sec-Fetch-Site: same-origin`, as the person's own browser on the computer would. The home's computer-only gate needs both for every state-changing action. A request without `Origin` gets none, any other origin is refused, and the bundled Host receives no `Origin` as before. Only the protocol handler of the default session reaches the forwarder; a guest webview or another session partition has none.
+- **Home kind.** The preload tells the application document where the home runs as `globalThis.__DSH_HOME_KIND__`, `bundled`, `wsl` or `remote`: a value only, never a credential. The home's own checks stay the authority.
+- **Paths.** The native folder dialog is offered only for the bundled Host, so the studio uses its own browse picker for a WSL home. A dropped file's path is translated for the distribution (`src/windows-path.ts`): `C:\x` becomes `/mnt/c/x`, and `\\wsl$\<distribution>\…` or `\\wsl.localhost\<distribution>\…` becomes the Linux path when the distribution is the home's. Any other path is refused with a plain message and the studio gets no path for the file.
+
 ## Closing the window and quitting
 
 Closing the main window (macOS close button and ⌘W; Windows ×, Alt+F4, and the taskbar Close window command) hides it; Windows asks for acknowledgement before the first hide. The page and the Host keep running, tasks continue, and the next show presents the same document with its session, drafts, and scroll position; a fullscreen macOS window leaves fullscreen before hiding. The window returns through the Dock icon, a second launch, or `delorun://open` on macOS, and through the tray on Windows. Minimize is unchanged.

@@ -1,8 +1,9 @@
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { authenticateWebHost, forwardWebRequest, removeLegacyHostCookies, serveWebDocument } from '../src/web-document.ts'
+import type { DesktopHomeKind } from '../src/ipc.ts'
 
 const roots: string[] = []
 afterEach(async () => {
@@ -96,4 +97,48 @@ it('removes only legacy Host authentication cookies for the Host hostname', asyn
   await removeLegacyHostCookies(cookies, 'http://127.0.0.1:1234/?token=secret')
   expect(cookies.get).toHaveBeenCalledExactlyOnceWith({ url: 'http://127.0.0.1:1234' })
   expect(removed).toEqual([['http://127.0.0.1:1234', 'dsh-auth-old'], ['http://127.0.0.1:1234', 'dsh-auth-older']])
+})
+
+describe('the Origin a home receives', () => {
+  const home = 'http://127.0.0.1:18601/?token=secret'
+  const forwarded = async (kind: DesktopHomeKind, headers: Record<string, string>) => {
+    const fetch = vi.fn().mockResolvedValue(new Response('ok'))
+    vi.stubGlobal('fetch', fetch)
+    const request = new Request('dsh-app://app/api/consents.change', { method: 'POST', body: '{}', headers })
+    const response = await forwardWebRequest(request, home, 'session=owned', kind)
+    const first = fetch.mock.calls[0] as [URL, RequestInit] | undefined
+    return { response, fetch, sent: first === undefined ? undefined : new Headers(first[1].headers) }
+  }
+
+  it('is the home\'s own loopback origin, with a same-origin fetch site, for a home in WSL when the application sent its origin', async () => {
+    const { sent } = await forwarded('wsl', { origin: 'dsh-app://app', 'sec-fetch-site': 'cross-site' })
+    expect(sent?.get('origin')).toBe('http://127.0.0.1:18601')
+    expect(sent?.get('sec-fetch-site')).toBe('same-origin')
+    expect(sent?.get('cookie')).toBe('session=owned')
+  })
+
+  it('is none for a request that carried none, even for a home in WSL', async () => {
+    const { sent } = await forwarded('wsl', { 'sec-fetch-site': 'same-origin' })
+    expect(sent?.get('origin')).toBeNull()
+    expect(sent?.get('sec-fetch-site')).toBeNull()
+  })
+
+  it.each(['https://other.example', 'http://127.0.0.1:18601', 'null', 'dsh-app://shell', 'DSH-APP://app/'])('refuses %s for a home in WSL without forwarding it', async (origin) => {
+    const { response, fetch } = await forwarded('wsl', { origin })
+    expect(response.status).toBe(403)
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it.each(['bundled', 'remote'] as const)('is never rewritten for a %s home', async (kind) => {
+    const { sent } = await forwarded(kind, { origin: 'dsh-app://app', 'sec-fetch-site': 'cross-site' })
+    expect(sent?.get('origin')).toBeNull()
+    expect(sent?.get('sec-fetch-site')).toBeNull()
+  })
+
+  it('is none when the caller names no kind, as upstream\'s Host expects', async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response('ok'))
+    vi.stubGlobal('fetch', fetch)
+    await forwardWebRequest(new Request('dsh-app://app/api/x', { method: 'POST', body: '{}', headers: { origin: 'dsh-app://app' } }), home, 'c')
+    expect(new Headers((fetch.mock.calls[0] as [URL, RequestInit])[1].headers).get('origin')).toBeNull()
+  })
 })

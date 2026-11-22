@@ -1,6 +1,7 @@
 /** Local Web document and authenticated HTTP forwarding for the application window. */
 import { readFile } from 'node:fs/promises'
 import { extname, resolve, sep } from 'node:path'
+import type { DesktopHomeKind } from './ipc.ts'
 
 const MIME: Readonly<Record<string, string>> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
@@ -92,9 +93,16 @@ const PLUGIN_BUNDLE_PATH = /^\/plugins\//u
  * @param request - Request from the application origin.
  * @param host - Owned Host URL.
  * @param cookie - Host-issued authentication cookie.
+ * @param homeKind - `bundled` (and `remote`, a device) for a home that receives no `Origin`; `wsl` for a Delorun home on this
+ *   computer, which treats the application as the person's own browser: a request that carried the application's
+ *   origin goes out with the home's exact loopback origin and `Sec-Fetch-Site: same-origin`, as a browser on the
+ *   computer would send them (`personAtComputer` needs both for every state-changing computer action). A request
+ *   with no `Origin` gets neither, and another origin is refused before this point for both kinds.
  * @returns Host response without connection-level headers.
  */
-export async function forwardWebRequest(request: Request, host: string, cookie: string): Promise<Response> {
+export async function forwardWebRequest(
+  request: Request, host: string, cookie: string, homeKind: DesktopHomeKind = 'bundled',
+): Promise<Response> {
   const source = new URL(request.url)
   const origin = request.headers.get('origin')
   if (origin !== null && origin !== 'dsh-app://app') return new Response(null, { status: 403 })
@@ -104,6 +112,10 @@ export async function forwardWebRequest(request: Request, host: string, cookie: 
   const headers = new Headers(request.headers)
   for (const name of ['host', 'origin', 'cookie', 'sec-fetch-site']) headers.delete(name)
   headers.set('cookie', cookie)
+  if (homeKind === 'wsl' && origin !== null) {
+    headers.set('origin', target.origin)
+    headers.set('sec-fetch-site', 'same-origin')
+  }
   const init = { method: request.method, headers, body: request.body, signal: request.signal, duplex: 'half', redirect: 'manual' as const }
   const response = await fetch(target, init)
   const outgoing = new Headers(response.headers)

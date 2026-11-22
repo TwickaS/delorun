@@ -4,7 +4,7 @@ import type { FileSaveResult } from '@deepseek-ai/dsh-client-ui-file-actions/typ
 import type { DesktopChannelState, DesktopChannelChangeResult } from '@deepseek-ai/dsh-client-ui-settings-general/types'
 import type { DesktopShortcutInput, ShortcutConfigSnapshot, ShortcutSaveResult } from '@deepseek-ai/dsh-client-shortcuts/protocol'
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import { DESKTOP_IPC, SCHEME, type DshDesktopProductApi, type DesktopUpdatePresentation } from './ipc.ts'
+import { DESKTOP_IPC, SCHEME, parseDesktopHomeKind, type DshDesktopProductApi, type DesktopUpdatePresentation } from './ipc.ts'
 import { PLATFORM_IPC } from './platform-ipc.ts'
 import { markDocumentPlatform, syncWindowFullscreen } from './preload-platform.ts'
 import { syncNativeTheme } from './preload-theme.ts'
@@ -99,14 +99,31 @@ if (location.protocol === `${SCHEME}:` && location.hostname === 'app') {
     else body.setAttribute('tabindex', previous)
   })
   syncWindowsAppearance()
-  contextBridge.exposeInMainWorld('__DSH_DIRECTORY_PICKER__', {
-    pick: () => ipcRenderer.invoke(DESKTOP_IPC.directoryPick) as Promise<string | null>,
-  })
+  // Where the home runs: a value only, never a credential. The studio reads it to choose what to show; the home's own
+  // checks stay the authority.
+  const homeKind = parseDesktopHomeKind(ipcRenderer.sendSync(DESKTOP_IPC.homeKind))
+  if (homeKind !== undefined) contextBridge.exposeInMainWorld('__DSH_HOME_KIND__', homeKind)
+  // The native dialog browses this PC's Windows paths, which a home in WSL or on another machine cannot open, so only
+  // the bundled Host gets it; the studio's own browse picker serves every other home.
+  if (homeKind === 'bundled') {
+    contextBridge.exposeInMainWorld('__DSH_DIRECTORY_PICKER__', {
+      pick: () => ipcRenderer.invoke(DESKTOP_IPC.directoryPick) as Promise<string | null>,
+    })
+  }
   // The composer cites dropped, picked, and pasted files and folders that
   // have a real path as `@path` references instead of uploading them; a
-  // File without one (pasted bytes) answers '' and uploads as before.
+  // File without one (pasted bytes) answers '' and uploads as before. A home
+  // in WSL gets the path as the distribution sees it, translated by main
+  // (a refused path answers '' and main tells the person why); a home on
+  // another machine has no path for a file of this PC.
   contextBridge.exposeInMainWorld('__DSH_HOST_PATHS__', {
-    pathFor: (file: File) => webUtils.getPathForFile(file),
+    pathFor: (file: File) => {
+      const nativePath = webUtils.getPathForFile(file)
+      if (homeKind === 'bundled') return nativePath
+      if (homeKind !== 'wsl' || nativePath === '') return ''
+      const translated: unknown = ipcRenderer.sendSync(DESKTOP_IPC.hostPath, nativePath)
+      return typeof translated === 'string' ? translated : ''
+    },
   })
   contextBridge.exposeInMainWorld('dshDesktopBoot', {
     ready: () => ipcRenderer.invoke(DESKTOP_IPC.boot) as Promise<unknown>,
