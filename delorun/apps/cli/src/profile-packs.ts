@@ -120,6 +120,6 @@ export const fetchPacksFromRelease: FetchProfilePacks = async (context, folders)
       return { name: entry.name, bytes: packDownloadSize(entry, release.paths.platform) }
     },
     fetch: (name, onBytes) => fetchPack(release, name, environment.files, { onBytes }),
-    install: (fetched) => installFetchedPack(release, fetched),
+    install: async (fetched) => { await installFetchedPack(release, fetched) },
   }, createRenderer(text => { context.output.stdout(text) }, process.stdout, process.env))
 }

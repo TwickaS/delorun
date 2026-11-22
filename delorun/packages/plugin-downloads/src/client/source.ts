@@ -298,7 +298,7 @@ export function startPageDownload(key: string, options: { readonly title?: strin
     changePage((page) => {
       const entry = page.entries.get(key)
       // A newer start under the same key owns the entry, and a removed one stays removed.
-      if (entry?.item.local !== start.local) return
+      if (entry === undefined || entry.item.local !== start.local) return
       const { failure: _failure, ...rest } = entry.item
       page.entries.set(key, { ...entry, item: { ...rest, ...next } })
     })

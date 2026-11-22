@@ -43,7 +43,8 @@ describe('the speed of a download in the panel', () => {
   })
 
   it('shows the bytes and the speed but no time left while the size is unknown', () => {
-    const source = createFakeDownloadsSource([downloading({ receivedBytes: 2 * MB, totalBytes: undefined })])
+    const { totalBytes: _size, ...unsized } = downloading({ receivedBytes: 2 * MB })
+    const source = createFakeDownloadsSource([unsized])
     render(<List source={source} />)
     expect(status()).toBe('2.0 MB')
     later(1000)
