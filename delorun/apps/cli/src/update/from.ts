@@ -15,9 +15,9 @@ import { stat } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import type { RuntimeVersion } from '@delorun/contract-home-layout'
 import { isInstallError, LauncherChannel, manualSource, messageOf, newestManifestVersion, readChannelRecord } from '@delorun/install'
-import type { RuntimeStore } from '@delorun/runtime-store'
+import type { RuntimeStore, UpdateInstallEvent } from '@delorun/runtime-store'
 import { CliError, EXIT } from '../exit.ts'
-import { installLines, recordedLogTransport } from './channel.ts'
+import { recordedLogTransport } from './channel.ts'
 import type { LauncherAnchor } from './trusted-root.ts'
 
 /** What {@link installFrom} needs. */
@@ -42,8 +42,8 @@ export interface InstallFromOptions {
    * @returns the answer, or `undefined` when there is no terminal to ask.
    */
   readonly confirm: (message: string) => Promise<boolean | undefined>
-  /** Writes each line of the install's progress. */
-  readonly line: (text: string) => void
+  /** Told of each step of the install, which the command draws. */
+  readonly report: (event: UpdateInstallEvent) => void
   /** The `fetch` of the release log; this process's by default. */
   readonly fetch?: typeof globalThis.fetch
   /** The clock in milliseconds; `Date.now` by default. */
@@ -94,7 +94,7 @@ export async function installFrom(options: InstallFromOptions): Promise<RuntimeV
       productionRoot: origins.channelOrigin === undefined,
       source: manual.source,
       downloader: manual.downloader,
-      progress: installLines(options.line),
+      progress: options.report,
       ...options.now === undefined ? {} : { now: options.now },
       unconfirmed: {
         ...version === undefined ? {} : { version },
@@ -109,8 +109,17 @@ export async function installFrom(options: InstallFromOptions): Promise<RuntimeV
     })
     const release = await channel.resolve()
     if (release.version === current) return release.version
-    await options.store.install({ version: release.version, root: release.root, fill: directory => channel.fill(release, directory) })
+    await options.store.install({
+      version: release.version,
+      root: release.root,
+      fill: async (directory) => {
+        const files = await channel.fill(release, directory)
+        options.report({ step: 'installing', version: release.version })
+        return files
+      },
+    })
     await channel.recordInstalled(release)
+    options.report({ step: 'installed', version: release.version })
     return release.version
   } catch (error) {
     throw error instanceof CliError ? error : fail(error)

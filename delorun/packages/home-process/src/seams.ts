@@ -21,6 +21,12 @@ import type { LocalReach } from './reach.ts'
 import type { LocalAgentAccounts } from './agents.ts'
 import type { RestartControl } from './restart.ts'
 
+/**
+ * One step of an install, as the update carries it to `delorun update`: `@delorun/install`'s `InstallerProgress`, which
+ * this package does not depend on. Its `step` names the step.
+ */
+export type InstallEvent = Readonly<Record<string, unknown>> & { readonly step: string }
+
 /** C1's two pointers. */
 export interface RuntimePointers {
   /** The version `current` names. */
@@ -150,11 +156,11 @@ export interface RuntimeStore {
    * person's channel, install it unless it is installed and its files match its manifest, and compute the report.
    * @param target - the version, or `undefined` for the newest release.
    * @param phase - called as each phase starts.
-   * @param line - writes one line of the target's install progress, as the launcher prints it.
+   * @param report - told of each step of the target's install, which `delorun update` draws.
    * @returns the prepared version.
    * @throws {HomeProcessError} `VERIFY_FAILED` when a check fails.
    */
-  prepare(target: RuntimeVersion | undefined, phase: (phase: 'checking' | 'installing' | 'reporting') => void, line: (text: string) => void): Promise<PreparedRuntime>
+  prepare(target: RuntimeVersion | undefined, phase: (phase: 'checking' | 'installing' | 'reporting') => void, report: (event: InstallEvent) => void): Promise<PreparedRuntime>
   /**
    * The `reporting` phase of a rollback: the report against an installed version, installing nothing.
    * @param target - the version `previous` names.

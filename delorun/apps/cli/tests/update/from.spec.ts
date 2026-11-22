@@ -78,7 +78,7 @@ async function run(fixture: Fixture, change: { readonly from?: (folder: string) 
     }),
     fullCheckDays: 7,
     confirm: async (question) => { questions.push(question); return 'answer' in change ? change.answer : true },
-    line: () => {},
+    report: () => {},
     fetch: async () => Promise.reject(new Error('the release log is not reachable in this spec')),
     now: () => NOW * 1000 + (change.late === true ? FOUR_DAYS_MS : 0),
   }

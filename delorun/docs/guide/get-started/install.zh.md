@@ -108,11 +108,11 @@ Delorun 在 Windows 中通过 WSL2 运行，WSL2 是 Windows 的一项功能，�
 在安装任何东西之前，启动器会证明下载的内容就是维护者发布的那个发布版本。它会打印每项检查：
 
 ```text
-Resolving the release: the stable channel names <version>.
-Checking the signature: <version> is signed under release root 1.
-Checking the release log: verified.
-Downloading delorun-<version>-linux-x64.tar.gz (…).
-Installing release <version>.
+✔ Found release <version> on the stable channel                            0.4s
+✔ Signature checked (release root 1)                                       0.1s
+✔ Release log checked                                                      0.6s
+⠹ Downloading delorun-<version>-linux-x64.tar.gz
+  ██████████████░░░░░░░░░░   58%  126.4 / 218.0 MB  6.7 MB/s  ~14s left
 ```
 
 - **渠道。**预览版发布在名为 `stable` 的渠道上，所以第一行这样写。

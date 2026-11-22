@@ -280,6 +280,14 @@ function launcherLines(finished: Finished): string[] {
   return finished.stderr.split('\n').filter(line => line !== '' && !line.startsWith('npm '))
 }
 
+/**
+ * The checklist a launcher install prints to a log, without the durations and the percentage lines, whose number depends
+ * on the sizes and the speed of the machine.
+ */
+function installChecklist(finished: Finished): string[] {
+  return launcherLines(finished).filter(line => !/^ {2}\d+%/u.test(line)).map(line => line.replace(/ {2}\d+(\.\d)?s$|  \d+m \d{2}s$/u, ''))
+}
+
 /** What step 3 customised, for later steps to find again. */
 const customised: { files?: Record<string, string>, removedBundle?: string, disabledRow?: string | undefined, presetId?: string } = {}
 /** The rows step 1 found, from which step 3 picks the row the person turns off. */
@@ -382,12 +390,17 @@ describe.runIf(SELECTED)('the journey of an installed release', () => {
   it('step 1: npx installs release 1 with the log agreeing, setup runs, and Delorun starts with the studio answering', async () => {
     const { launcherFile } = parts()
     const first = await run(['npm', 'exec', '--yes', '--offline', `--package=${launcherFile}`, '--', 'delorun', '--version'])
-    expect(launcherLines(first)).toEqual([
-      `Resolving the release: the stable channel names ${R1}.`,
-      `Checking the signature: ${R1} is signed under release root 1.`,
-      'Checking the release log: verified.',
-      expect.stringMatching(new RegExp(`^Downloading ${closureFileNames(R1, 'linux-x64').archive.replaceAll('.', '\\.')} \\(\\d+(\\.\\d)? (kB|MB)\\)\\.$`, 'u')),
-      `Installing release ${R1}.`,
+    expect(installChecklist(first)).toEqual([
+      `✔ Found release ${R1} on the stable channel`,
+      '✔ Signature checked (release root 1)',
+      '✔ Release log checked',
+      `Downloading ${closureFileNames(R1, 'linux-x64').archive}…`,
+      expect.stringMatching(/^✔ Downloaded \d+(\.\d)? (kB|MB)( at \d+(\.\d)? (kB|MB)\/s average)?$/u),
+      '✔ Download matches its signed hash',
+      'Unpacking the runtime…',
+      expect.stringMatching(/^✔ Unpacked the runtime \([\d,]+ files\)$/u),
+      `✔ Installed release ${R1}`,
+      '✔ Starting Delorun',
     ])
     expect(first.stdout).toMatch(new RegExp(`^Delorun ${R1.replaceAll('.', '\\.')}\\nDSH \\d+\\.\\d+\\.\\d+`, 'u'))
     expect(first.status).toBe(0)
@@ -441,10 +454,10 @@ describe.runIf(SELECTED)('the journey of an installed release', () => {
     log.mode = 'silent'
     try {
       const silent = await delorun(['--version'], { DELORUN_HOME: `${PERSON_HOME}/silent-home` })
-      expect(launcherLines(silent)).toEqual(expect.arrayContaining([
-        expect.stringMatching(/^Checking the release log: not checked \(.+\)\.$/u),
-        `Warning: Release ${R1} has not been checked against the release log; Delorun checks it at the next connection.`,
-        `Installing release ${R1}.`,
+      expect(installChecklist(silent)).toEqual(expect.arrayContaining([
+        expect.stringMatching(/^! Release log not checked \(.+\)$/u),
+        `  Warning: Release ${R1} has not been checked against the release log; Delorun checks it at the next connection.`,
+        `✔ Installed release ${R1}`,
       ]))
       expect(silent.status).toBe(0)
       const record = await readJson<{ releases: Record<string, { state: string }> }>(`${PERSON_HOME}/silent-home/trust/release-log.json`)

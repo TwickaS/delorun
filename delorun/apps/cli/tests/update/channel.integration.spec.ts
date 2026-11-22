@@ -8,12 +8,11 @@ import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { brandString } from '@deepseek-ai/dsh-brand'
 import { DELORUN_HOME_ENTRIES } from '@delorun/contract-home-layout'
 import { ensureHomeTree, writeProtectedFile } from '@delorun/home'
 import { LauncherChannel, writeChannelRecord } from '@delorun/install'
-import { RELEASE_METADATA_ORIGIN, type SemanticVersion } from '@delorun/contract-release-manifest'
-import { homeReleaseChannel, installLines, runtimePlatformOf } from '../../src/update/channel.ts'
+import { RELEASE_METADATA_ORIGIN } from '@delorun/contract-release-manifest'
+import { homeReleaseChannel, runtimePlatformOf } from '../../src/update/channel.ts'
 import { throwawayRoot } from './support.ts'
 
 const directories: string[] = []
@@ -99,22 +98,5 @@ describe('homeReleaseChannel', () => {
     await writeChannelRecord(home, { channelOrigin: 'http://192.0.2.1:8123' })
 
     await expect(homeReleaseChannel(home, 'linux-x64', 'stable', [throwawayRoot().bytes], () => {})).rejects.toMatchObject({ code: 'TRUST_STATE_INVALID', message: expect.stringContaining('must use https, or http on this machine\'s loopback address') })
-  })
-})
-
-describe('installLines', () => {
-  it('writes the launcher\'s lines for each step, both lines of a log check that did not run', () => {
-    const written: string[] = []
-    const write = installLines((text) => { written.push(text) })
-    const version = brandString<SemanticVersion>('1.1.0')
-
-    write({ step: 'resolved', channel: 'stable', version })
-    write({ step: 'log-checked', version, state: 'unchecked', detail: 'the log did not answer' })
-
-    expect(written).toEqual([
-      'Resolving the release: the stable channel names 1.1.0.\n',
-      'Checking the release log: not checked (the log did not answer).\n',
-      'Warning: Release 1.1.0 has not been checked against the release log; Delorun checks it at the next connection.\n',
-    ])
   })
 })

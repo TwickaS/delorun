@@ -13,10 +13,10 @@
  * @module @delorun/cli/update/channel
  */
 import { RUNTIME_PLATFORMS, type ReleaseChannel, type RootMetadata, type RuntimePlatform } from '@delorun/contract-release-manifest'
-import { Downloader, LauncherChannel, progressLines, readChannelRecord, RELEASE_TIMINGS, type ChannelOrigins, type HostRule, type InstallProgress, type ReleaseSource } from '@delorun/install'
+import { Downloader, LauncherChannel, readChannelRecord, RELEASE_TIMINGS, type ChannelOrigins, type HostRule, type ReleaseSource } from '@delorun/install'
 import { channelPlan, logPlan } from '@delorun/npm-launcher'
 import { tilesTransport, type Fetch, type ReleaseLogTransport } from '@delorun/release-verify'
-import type { UpdateReleaseChannel } from '@delorun/runtime-store'
+import type { UpdateInstallEvent, UpdateReleaseChannel } from '@delorun/runtime-store'
 
 /**
  * The runtime platform of this machine, as contract C2 names it.
@@ -30,17 +30,6 @@ export function runtimePlatformOf(platform: string, arch: string): RuntimePlatfo
   const known = RUNTIME_PLATFORMS.find(candidate => candidate === name)
   if (known === undefined) throw new Error(`Delorun publishes no runtime for ${name}`)
   return known
-}
-
-/**
- * The launcher's install lines for each step of an install, written one by one.
- * @param line - writes one line.
- * @returns the channel's progress listener.
- */
-export function installLines(line: (text: string) => void): (event: InstallProgress) => void {
-  return (event) => {
-    for (const text of progressLines(event)) line(text)
-  }
 }
 
 /**
@@ -68,12 +57,12 @@ export function recordedLogTransport(origins: ChannelOrigins, root: RootMetadata
  * @param platform - the runtime platform.
  * @param channel - the person's release channel.
  * @param shipped - the root files the launcher that started this runtime ships, oldest first.
- * @param line - writes each line of the install's progress, the lines the launcher prints while it installs.
+ * @param report - told of each step of the install, which the CLI draws as the launcher does.
  * @returns the channel.
  * @throws {InstallError} `TRUST_STATE_INVALID` when the channel record does not read; the launcher's refusal of a
  *   recorded origin that breaks its rule.
  */
-export async function homeReleaseChannel(home: string, platform: RuntimePlatform, channel: ReleaseChannel, shipped: readonly Uint8Array[], line: (text: string) => void): Promise<UpdateReleaseChannel> {
+export async function homeReleaseChannel(home: string, platform: RuntimePlatform, channel: ReleaseChannel, shipped: readonly Uint8Array[], report: (event: UpdateInstallEvent) => void): Promise<UpdateReleaseChannel> {
   const origins = await readChannelRecord(home) ?? {}
   const plan = channelPlan(origins)
   const fetch = globalThis.fetch.bind(globalThis)
@@ -82,7 +71,7 @@ export async function homeReleaseChannel(home: string, platform: RuntimePlatform
     log: trusted => recordedLogTransport(origins, trusted, fetch),
     source: plan.source,
     downloader: new Downloader({ hosts: plan.rule }),
-    progress: installLines(line),
+    progress: report,
   })
 }
 

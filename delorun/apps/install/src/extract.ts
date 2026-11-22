@@ -31,6 +31,8 @@ export interface ExtractRequest {
   readonly files: RuntimeFileList
   /** The new staging directory. */
   readonly directory: string
+  /** Told how many files are written after each one; a display only, which decides nothing. */
+  readonly onFile?: (written: number, total: number) => void
 }
 
 /**
@@ -184,6 +186,7 @@ export async function extractArchive(request: ExtractRequest): Promise<Extracted
           const failed = await created
           if (failed !== undefined) throw failed.error
           written.set(path, await writeEntry(target, data, installedFileMode(expected.mode)))
+          request.onFile?.(written.size, request.files.files.length)
         } catch (error) {
           // An entry whose file already exists names one the archive already wrote under another spelling, such as
           // a name that differs only by case on a file system that ignores case: the archive does not fit this one.

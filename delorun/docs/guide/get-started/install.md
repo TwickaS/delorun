@@ -95,17 +95,19 @@ Keep your projects inside the Ubuntu home folder, such as `~/projects`, because 
 
 ## What the launcher verifies
 
-Before it installs anything, the launcher proves the download is the release the maintainer published. It prints each check:
+Before it installs anything, the launcher proves the download is the release the maintainer published. It prints each check as a step with a tick and the time it took, then shows the download with a live bar:
 
 ```text
-Resolving the release: the stable channel names <version>.
-Checking the signature: <version> is signed under release root 1.
-Checking the release log: verified.
-Downloading delorun-<version>-linux-x64.tar.gz (…).
-Installing release <version>.
+✔ Found release <version> on the stable channel                            0.4s
+✔ Signature checked (release root 1)                                       0.1s
+✔ Release log checked                                                      0.6s
+⠹ Downloading delorun-<version>-linux-x64.tar.gz
+  ██████████████░░░░░░░░░░   58%  126.4 / 218.0 MB  6.7 MB/s  ~14s left
 ```
 
-- **Channel.** A preview is published on the channel named `stable`, so the first line says so.
+When the output goes to a file or a pipe instead of a terminal, each step is one plain line and the download adds a line for each tenth. When the command says what comes next, it ends with a short `Next:` line, such as `Next: a few setup questions`.
+
+- **Channel.** A preview is published on the channel named `stable`, so the first step says so.
 - **Signature.** Delorun's release keys sign the release. The launcher checks the signatures and that the downloaded file matches. If anything does not match, nothing is installed.
 - **Built on one machine.** Until `1.0.0`, the maintainer builds and signs each release on the maintainer's PC, and no second builder rebuilds it. The launcher installs such a 0.x release when it verifies under the preview root. It refuses a release built this way when it is a `1.0.0` release or is signed under a later root ([What you trust](../safety-and-updates/trust.md#how-releases-are-signed-in-the-preview)).
 - **Public release log.** Every release is also entered in a public, append-only [release log](../../reference/glossary.md#release-log). The launcher checks the entry. If the log cannot be reached, the launcher installs the release on its signature alone, prints a warning, and checks the log again at the next start that can reach it.

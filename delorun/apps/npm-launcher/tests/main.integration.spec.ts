@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { parseRuntimeVersion, StorePaths, type LaunchCommand } from '@delorun/runtime-store'
-import { main, stderrLogger, type LauncherContext } from '../src/bin.ts'
+import { installedNext, main, parseCommandLine, stderrLogger, type LauncherContext } from '../src/bin.ts'
 import { platformOf } from '../src/platform.ts'
 import { fixtureRelease, NOW, releasePaths, standIn, VERSION, type Fixture, type StandIn } from '../../install/tests/support.ts'
 
@@ -85,6 +85,15 @@ async function surroundings(options: { readonly roots?: boolean } = {}): Promise
   }
 }
 
+/**
+ * The lines of a plain install log, without the durations and the percentage lines, whose number depends on the timing.
+ * @param stderr - what the launcher wrote to standard error.
+ * @returns the lines.
+ */
+function checklist(stderr: string): string[] {
+  return stderr.split('\n').filter(line => line !== '' && !/^ {2}\d+%/u.test(line)).map(line => line.replace(/ {2}\d+(\.\d)?s$/u, ''))
+}
+
 describe('the launcher’s main function', () => {
   it.each([
     ['win32', 'Delorun 0.4.2 runs in WSL2, not on native Windows. Nothing was downloaded. Open a WSL2 terminal and run it there: https://docs.delorun.com/guide/get-started/install#windows-through-wsl2\n'],
@@ -111,18 +120,35 @@ describe('the launcher’s main function', () => {
   it('installs the channel’s release, prints each step and the log warning, records the check, and starts the runtime', async () => {
     const world = await surroundings()
     expect(await main([], world.context())).toBe(0)
-    expect(world.stderr.join('').split('\n').filter(Boolean)).toEqual([
-      `Resolving the release: the stable channel names ${VERSION}.`,
-      `Checking the signature: ${VERSION} is signed under release root 1.`,
-      expect.stringMatching(/^Checking the release log: not checked \(the release log gave no checkpoint \(.+\)\)\.$/u),
-      `Warning: Release ${VERSION} has not been checked against the release log; Delorun checks it at the next connection.`,
-      expect.stringMatching(new RegExp(`^Downloading delorun-${VERSION.replaceAll('.', '\\.')}-${platformOf(process.platform, process.arch)}\\.tar\\.gz \\(\\d+ kB\\)\\.$`, 'u')),
-      `Installing release ${VERSION}.`,
+    expect(checklist(world.stderr.join(''))).toEqual([
+      `✔ Found release ${VERSION} on the stable channel`,
+      '✔ Signature checked (release root 1)',
+      expect.stringMatching(/^! Release log not checked \(the release log gave no checkpoint \(.+\)\)$/u),
+      `  Warning: Release ${VERSION} has not been checked against the release log; Delorun checks it at the next connection.`,
+      `Downloading delorun-${VERSION}-${platformOf(process.platform, process.arch)}.tar.gz…`,
+      expect.stringMatching(/^✔ Downloaded \d+ kB/u),
+      '✔ Download matches its signed hash',
+      'Unpacking the runtime…',
+      expect.stringMatching(/^✔ Unpacked the runtime \(\d+ files\)$/u),
+      `✔ Installed release ${VERSION}`,
+      '✔ Starting Delorun',
+      'Next: a few setup questions',
     ])
     expect(world.started).toHaveLength(1)
     expect(world.started[0]!.command).toBe(join(world.home, 'runtimes', VERSION, 'node', 'bin', 'node'))
     const state = JSON.parse(await readFile(join(world.home, 'trust', 'release-log.json'), 'utf8')) as { releases: Record<string, { state: string }> }
     expect(state.releases[VERSION]?.state).toBe('unchecked')
+  })
+
+  it('draws the install as a redrawn checklist on a terminal, without colour when NO_COLOR is set, and prints it to nothing but standard error', async () => {
+    const world = await surroundings()
+    const context = world.context()
+    expect(await main([], { ...context, env: { ...context.env, NO_COLOR: '1' }, progressStream: { isTTY: true, columns: 80 } })).toBe(0)
+    const drawn = world.stderr.join('')
+    expect(drawn).toContain('\u001B[')
+    expect(drawn).not.toMatch(/\u001B\[\d+m/u)
+    expect(drawn).toContain('✔ Installed release')
+    expect(drawn).toContain('Next: a few setup questions')
   })
 
   it('starts the installed runtime on a later run with no network, warning that the release log was not reached', async () => {
@@ -163,7 +189,7 @@ describe('the launcher’s main function', () => {
     // The fixture's Node is a script that exits 0.
     expect(await main([], world.context({ spawn: undefined }))).toBe(0)
     expect(world.started).toEqual([])
-    expect(world.stderr.join('')).toContain(`Installing release ${VERSION}.`)
+    expect(world.stderr.join('')).toContain(`✔ Installed release ${VERSION}`)
   })
 
   it('trusts the roots of its own package when it is given no other directory, and its own package ships none in the source tree', async () => {
@@ -250,5 +276,29 @@ describe('the logger an early failure is reported through', () => {
     logger.info('three')
     logger.debug('four')
     expect(lines).toEqual(['one\n', 'two\n'])
+  })
+})
+
+describe('what a first install says comes next', () => {
+  it('names setup for a bare delorun on a home without the CLI profile, and the studio on one that has it', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'delorun-next-'))
+    try {
+      expect(installedNext(parseCommandLine([]), home, 'default')).toBe('a few setup questions')
+      await mkdir(join(home, 'profiles', 'default'), { recursive: true })
+      await writeFile(join(home, 'profiles', 'default', 'package.json'), '{}')
+      expect(installedNext(parseCommandLine([]), home, 'default')).toBe('opening the studio')
+      expect(installedNext(parseCommandLine(['--profile', 'other']), home, 'other')).toBe('a few setup questions')
+    } finally {
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
+  it('names setup and the studio for the commands that are them, and nothing for any other command', () => {
+    expect(installedNext(parseCommandLine(['setup']), '/none', 'default')).toBe('a few setup questions')
+    expect(installedNext(parseCommandLine(['start']), '/none', 'default')).toBe('opening the studio')
+    expect(installedNext(parseCommandLine(['--version']), '/none', 'default')).toBeUndefined()
+    expect(installedNext(parseCommandLine(['status']), '/none', 'default')).toBeUndefined()
+    expect(installedNext(parseCommandLine(['--foreground']), '/none', 'default')).toBe('a few setup questions')
+    expect(installedNext(parseCommandLine(['--', 'setup']), '/none', 'default')).toBe('a few setup questions')
   })
 })

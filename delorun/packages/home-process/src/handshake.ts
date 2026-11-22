@@ -230,7 +230,7 @@ export class UpdateHandshake {
       const prepared = await this.support.store.prepare(target, (phase) => {
         this.current = { phase, target: target ?? this.subject.running }
         progress({ phase })
-      }, (line) => { progress({ line }) })
+      }, (install) => { progress({ install }) })
       this.expireReports()
       const reportId = randomId()
       this.reports.set(reportId, { prepared, expiresAt: Date.now() + REPORT_LIFETIME_MS })

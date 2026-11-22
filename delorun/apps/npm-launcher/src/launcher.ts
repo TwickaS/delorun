@@ -143,7 +143,7 @@ export interface LauncherOptions {
   readonly output: LauncherOutput
   /** The release a person named, when one was named. */
   readonly target?: RuntimeVersion
-  /** Told of the step the launcher itself reports, `installing`; the channel reports the others. Nothing by default. */
+  /** Told of the steps the launcher itself reports, `installing`, `installed`, `starting` and `failed`; the channel reports the others. Nothing by default. */
   readonly report?: (event: LauncherProgress) => void
   /**
    * Contract C18's start check of the installed runtime's release: its stored release-log bundle offline and, with a
@@ -175,6 +175,7 @@ export async function runLauncher(options: LauncherOptions): Promise<number> {
     if (await refuseDuringRepair(options)) return LAUNCHER_EXIT.failed
     return await startOrInstall(options)
   } catch (error) {
+    options.report?.({ step: 'failed' })
     const refusal = refusalFor(error, context)
     options.output.stderr(refusal.text)
     return refusal.exit
@@ -305,7 +306,9 @@ async function startOrInstall(options: LauncherOptions): Promise<number> {
   }
   if (plan === undefined) {
     await install(options)
-    return options.spawn(handedOver(options, await prepare(options)))
+    const prepared = await prepare(options)
+    options.report?.({ step: 'starting' })
+    return options.spawn(handedOver(options, prepared))
   }
   // A release named with `--release` is installed, and this launcher installs one only when the store holds no
   // runtime: it never replaces the runtime a person already has. Starting the installed runtime instead would
@@ -531,6 +534,7 @@ async function install(options: LauncherOptions): Promise<void> {
     },
   })
   await options.channel.recordInstalled?.(release)
+  options.report?.({ step: 'installed', version: release.version })
   await options.store.retain().catch((error: unknown) => {
     options.logger.warn('the runtime store could not finish its retention after an install; the next run retries it', { err: error })
   })

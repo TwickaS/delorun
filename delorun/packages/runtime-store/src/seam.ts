@@ -76,12 +76,19 @@ export interface UpdateReleaseChannel extends RuntimeChannel {
 }
 
 /**
+ * One step of an install as the update reports it: `@delorun/install`'s `InstallerProgress`, which this package cannot
+ * import because that package imports this one. The home process carries it to `delorun update` as it is, and the CLI
+ * checks its `step` before it draws it.
+ */
+export type UpdateInstallEvent = Readonly<Record<string, unknown>> & { readonly step: string }
+
+/**
  * Opens the release channel for one prepare, whose resolve, fill and record run on the one channel it returns.
- * @param line - writes one line of the release's install progress for the person, as the launcher prints it.
+ * @param report - told of each step of the release's install, for the person to see.
  * @returns the channel.
  * @throws when the channel cannot be opened, such as a home that stores no verified release root.
  */
-export type OpenUpdateChannel = (line: (text: string) => void) => Promise<UpdateReleaseChannel>
+export type OpenUpdateChannel = (report: (event: UpdateInstallEvent) => void) => Promise<UpdateReleaseChannel>
 
 /** What C3's health check holds a target to, as the report predicts it. */
 export interface ReportedHealth {
@@ -271,26 +278,26 @@ export class HomeRuntimeStore {
    * checks of both.
    * @param target - the version, or `undefined` for the newest release.
    * @param phase - called as each phase starts; `installing` is skipped when nothing installs.
-   * @param line - writes each line of the release's install progress, as the launcher prints it; nothing is written
-   *   when the target is installed and intact.
+   * @param steps - told of each step of the release's install; nothing is reported when the target is installed and
+   *   intact.
    * @returns the prepared version.
    * @throws {RuntimeStoreError} `INSTALL_VERIFY_FAILED` when a check of the fetched release fails; `TARGET_LOWER` when
    *   the target, or the newest release on the channel, is lower than the version `current` names, before anything
    *   installs; `NO_ACTIVE_RUNTIME` when the store has no usable runtime; `STORE_BUSY` while another install, switch or
    *   removal holds the lock.
    */
-  async prepare(target: RuntimeVersion | undefined, phase: (phase: PreparePhase) => void, line: (text: string) => void): Promise<PreparedRuntime> {
-    return this.options.store.shareChecks(() => this.prepareShared(target, phase, line))
+  async prepare(target: RuntimeVersion | undefined, phase: (phase: PreparePhase) => void, steps: (event: UpdateInstallEvent) => void): Promise<PreparedRuntime> {
+    return this.options.store.shareChecks(() => this.prepareShared(target, phase, steps))
   }
 
   /**
    * {@link prepare}'s phases, inside its shared checks.
    * @param target - the version, or `undefined` for the newest release.
    * @param phase - called as each phase starts.
-   * @param line - writes each line of the release's install progress.
+   * @param steps - told of each step of the release's install.
    * @returns the prepared version.
    */
-  private async prepareShared(target: RuntimeVersion | undefined, phase: (phase: PreparePhase) => void, line: (text: string) => void): Promise<PreparedRuntime> {
+  private async prepareShared(target: RuntimeVersion | undefined, phase: (phase: PreparePhase) => void, steps: (event: UpdateInstallEvent) => void): Promise<PreparedRuntime> {
     phase('checking')
     const { current } = await this.options.store.pointers()
     let version: RuntimeVersion
@@ -298,7 +305,7 @@ export class HomeRuntimeStore {
       this.refuseLower(target, current)
       version = target
     } else {
-      const channel = await this.options.openChannel(line)
+      const channel = await this.options.openChannel(steps)
       const resolved = await channel.resolve(target)
       this.refuseLower(resolved.version, current)
       if (!await this.intact(resolved.version)) {
@@ -306,9 +313,14 @@ export class HomeRuntimeStore {
         await this.options.store.install({
           version: resolved.version,
           root: resolved.root,
-          fill: directory => channel.fill(resolved, directory),
+          fill: async (directory) => {
+            const files = await channel.fill(resolved, directory)
+            steps({ step: 'installing', version: resolved.version })
+            return files
+          },
         })
         await channel.recordInstalled(resolved)
+        steps({ step: 'installed', version: resolved.version })
       }
       version = resolved.version
     }

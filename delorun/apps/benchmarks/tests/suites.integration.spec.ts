@@ -47,7 +47,7 @@ describe('the CLI suite', () => {
 
 describe('the install suite', () => {
   it('reads the install\'s steps from the launcher\'s progress lines', () => {
-    const run = finished([[1500, 'Resolving the release: the stable channel names 0.1.0.'], [1600, 'Checking the signature: 0.1.0 is signed under release root 1.'], [1700, 'Checking the release log: verified.'], [1710, 'Downloading delorun-0.1.0-linux-x64.tar.gz (90 MB).'], [5000, 'Installing release 0.1.0.'], [8000, 'Delorun 0.1.0']])
+    const run = finished([[1500, '✔ Found release 0.1.0 on the stable channel  0.4s'], [1600, '✔ Signature checked (release root 1)  0.1s'], [1700, '✔ Release log checked  0.1s'], [1710, 'Downloading delorun-0.1.0-linux-x64.tar.gz…'], [5000, '✔ Unpacked the runtime (3,516 files)  3.3s'], [8000, 'Delorun 0.1.0']])
     expect(installItems(run)).toEqual({ 'install': 8000, 'install:resolve': 500, 'install:signature': 100, 'install:log': 100, 'install:download': 3290, 'install:store-and-start': 3000 })
     expect(installItems(finished([]))).toEqual({ install: 8000 })
     expect(Object.keys(installItems(run)).every(item => item in INSTALL_ITEMS)).toBe(true)

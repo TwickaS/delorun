@@ -13,7 +13,8 @@ import { existsSync } from 'node:fs'
 import { join, relative, sep, resolve } from 'node:path'
 import { DELORUN_HOME_ENTRIES } from '@delorun/contract-home-layout'
 import { hostPacksEnvironment } from '@delorun/plugin-packs/environment'
-import { acquirePacks, fetchPack, installFetchedPack, readStoredPacks } from '@delorun/runtime-store'
+import { createRenderer } from '@delorun/install'
+import { acquirePacks, fetchPack, installFetchedPack, packDownloadSize, readStoredPacks } from '@delorun/runtime-store'
 import { profileDirectory } from './profile.ts'
 import type { PreStartContext } from './pre-start.ts'
 
@@ -73,10 +74,21 @@ export const fetchPacksFromRelease: FetchProfilePacks = async (context, folders)
   const release = await environment.release()
   const packs = await readStoredPacks(release) ?? await acquirePacks(release, environment.files)
   if (packs === undefined) throw new Error(`release ${release.version} publishes no plugin packs`)
-  for (const folder of folders) {
-    const entry = packs.packs.find(each => each.name.replaceAll('/', '__') === folder)
-    if (entry === undefined) throw new Error(`release ${release.version} publishes no plugin pack ${folder.replace('__', '/')}`)
-    await installFetchedPack(release, await fetchPack(release, entry.name, environment.files))
-    context.output.stdout(`Fetched ${entry.name}\n`)
+  const display = createRenderer(text => { context.output.stdout(text) }, process.stdout, process.env)
+  try {
+    for (const folder of folders) {
+      const entry = packs.packs.find(each => each.name.replaceAll('/', '__') === folder)
+      if (entry === undefined) throw new Error(`release ${release.version} publishes no plugin pack ${folder.replace('__', '/')}`)
+      const total = packDownloadSize(entry, release.paths.platform)
+      display.handle({ step: 'pack-downloading', name: entry.name, bytes: total })
+      const fetched = await fetchPack(release, entry.name, environment.files, { onBytes: (received) => { display.handle({ step: 'pack-bytes', name: entry.name, received, total }) } })
+      display.handle({ step: 'pack-installing', name: entry.name, bytes: total })
+      await installFetchedPack(release, fetched)
+      display.handle({ step: 'pack-installed', name: entry.name })
+    }
+  } catch (error) {
+    display.fail()
+    throw error
   }
+  display.close()
 }

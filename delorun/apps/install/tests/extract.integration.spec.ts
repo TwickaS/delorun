@@ -60,6 +60,15 @@ function manyEntries(count: number): ArchiveEntry[] {
 }
 
 describe('an archive of many files', () => {
+  it('tells how many files are written, each count once, ending on the whole list', async () => {
+    const entries = manyEntries(EXTRACT_WRITES * 3)
+    const counts: Array<readonly [number, number]> = []
+    await extractArchive({ archive: await archiveOf(entries), format: 'tar.gz', files: fileList(entries), directory: await scratch(), onFile: (written, total) => { counts.push([written, total]) } })
+    expect(counts).toHaveLength(entries.length)
+    expect(counts.map(([written]) => written).sort((left, right) => left - right)).toEqual(entries.map((_, index) => index + 1))
+    expect(new Set(counts.map(([, total]) => total))).toEqual(new Set([entries.length]))
+  })
+
   it('writes every file whole, at its mode, with the identity it has on disk, when more files arrive than are written at once', async () => {
     const directory = await scratch()
     const entries = manyEntries(EXTRACT_WRITES * 20)

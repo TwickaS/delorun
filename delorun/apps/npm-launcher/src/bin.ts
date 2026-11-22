@@ -10,6 +10,7 @@
 import { spawn as startProcess } from 'node:child_process'
 import { constants as osConstants } from 'node:os'
 import { fileURLToPath } from 'node:url'
+import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { CLI_PROFILE, DELORUN_LAUNCHER_ROOTS_ENV, DELORUN_LAUNCHER_VERSION_ENV, DROPPED_LAUNCH_ENV, inheritableEnvironment, type RuntimeVersion } from '@delorun/contract-home-layout'
@@ -26,7 +27,7 @@ import { createInterface } from 'node:readline/promises'
 import { REPAIR_MARK_GRACE_ENV, resolveRepairMarkGraceSeconds } from './repair-record.ts'
 import { installedChannel, parseRepairLine, repairUnconfirmed, runRepair, type RepairLine } from './repair.ts'
 import { runLauncher, launcherProfile, runtimeCommand, type LauncherOutput, type LauncherStartCheck, type SpawnRuntime } from './launcher.ts'
-import { progressLines, type LauncherProgress } from './progress.ts'
+import { createRenderer, type LauncherProgress, type RenderStream } from './progress.ts'
 import { LAUNCHER_EXIT, refusalFor } from './refusals.ts'
 import { readEmbeddedRoots, ROOTS_DIRECTORY } from './root.ts'
 import { BUILD_CONSTANTS, channelPlan, hostRefusal, logPlan, platformOf, type BuildConstants } from './platform.ts'
@@ -246,6 +247,39 @@ export interface LauncherContext {
   readonly hostArch?: string | undefined
   /** Asks `delorun repair`'s yes/no question; `undefined` answers when there is no terminal. This process's terminal by default. */
   readonly confirm?: ((question: string) => Promise<boolean | undefined>) | undefined
+  /** The stream the install's progress is drawn on, for its terminal flag and width; standard error by default. */
+  readonly progressStream?: RenderStream | undefined
+}
+
+/**
+ * Whether the arguments are those of a bare `delorun`: nothing but `--profile` with its value and the two start options,
+ * so `delorun --version` is not.
+ * @param args - the runtime's arguments.
+ * @returns true when no other argument is given.
+ */
+function isBare(args: readonly string[]): boolean {
+  for (let at = 0; at < args.length; at++) {
+    if (args[at] === '--profile') at++
+    else if (args[at] !== '--foreground' && args[at] !== '--background') return false
+  }
+  return true
+}
+
+/**
+ * What a first install tells the person comes next, or nothing when the command they gave says it already: a bare
+ * `delorun` starts setup on a home without the CLI profile (its `package.json` under `profiles/<profile>`) and the
+ * studio on one that has it, and `setup` and `start` name theirs.
+ * @param line - the parsed command line.
+ * @param home - the resolved Delorun home.
+ * @param profile - the CLI profile.
+ * @returns the line without its `Next:`, or `undefined` for any other command.
+ */
+export function installedNext(line: LauncherCommandLine, home: string, profile: string): string | undefined {
+  const command = runtimeCommand(line.runtimeArgs)
+  if (command === 'setup') return 'a few setup questions'
+  if (command === 'start') return 'opening the studio'
+  if (command !== undefined || !isBare(line.runtimeArgs)) return undefined
+  return existsSync(join(home, 'profiles', profile, 'package.json')) ? 'opening the studio' : 'a few setup questions'
 }
 
 /**
@@ -392,11 +426,16 @@ export async function main(argv: readonly string[], context: LauncherContext = {
     return LAUNCHER_EXIT.failed
   }
   const logger = stderrLogger(context.output)
+  // The home is resolved inside the try below; `starting` comes after it.
+  let homePath = ''
+  const progress = createRenderer(text => { context.output.stderr(text) }, context.progressStream ?? process.stderr, context.env)
   const report = (event: LauncherProgress): void => {
-    for (const line of progressLines(event)) context.output.stderr(line)
+    progress.handle(event)
+    if (event.step === 'starting') progress.finish(installedNext(line, homePath, profile))
   }
   try {
     const home = await resolveDelorunHome(context.env)
+    homePath = home.path
     await ensureHomeTree(home.path, profile)
     const channel = channelPlan(context.constants)
     const downloader = new Downloader({ hosts: channel.rule })
@@ -416,7 +455,16 @@ export async function main(argv: readonly string[], context: LauncherContext = {
     const store = new RuntimeStore({ home: home.path, platform, logger })
     if (repairLine !== undefined) {
       const manual = repairLine.from === undefined ? undefined : manualSource(repairLine.from)
-      const confirm = context.confirm ?? terminalConfirm
+      const ask = context.confirm ?? terminalConfirm
+      // A question is asked on the terminal the checklist is drawn on, so the checklist waits for the answer.
+      const confirm = async (question: string): Promise<boolean | undefined> => {
+        progress.suspend()
+        try {
+          return await ask(question)
+        } finally {
+          progress.resume()
+        }
+      }
       const unconfirmed = await repairUnconfirmed(repairLine, confirm)
       const releaseChannel = await installedChannel(home.path, store, roots)
       return await runRepair({
@@ -437,6 +485,7 @@ export async function main(argv: readonly string[], context: LauncherContext = {
         output: context.output,
         now: () => new Date((context.now ?? Date.now)()),
         repairMarkGraceSeconds,
+        progress,
       })
     }
     return await runLauncher({
@@ -473,6 +522,7 @@ export async function main(argv: readonly string[], context: LauncherContext = {
       ...target === undefined ? {} : { target },
     })
   } catch (error) {
+    progress.fail()
     const refusal = refusalFor(error, { home: '~/.delorun', profile })
     context.output.stderr(refusal.text)
     return refusal.exit
