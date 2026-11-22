@@ -2188,6 +2188,9 @@ importers:
       '@deepseek-ai/dsh-atomic-write':
         specifier: workspace:*
         version: link:../../../packages/util/atomic-write
+      '@deepseek-ai/dsh-hmr':
+        specifier: workspace:*
+        version: link:../../../packages/boot/hmr
       '@deepseek-ai/dsh-home-paths':
         specifier: workspace:*
         version: link:../../../packages/util/home-paths

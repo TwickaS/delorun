@@ -32,6 +32,8 @@ interface Options {
   readonly root?: boolean
   readonly tailscale?: FakeTailscale
   readonly applied?: boolean
+  /** Whether the hot-reload service is mounted; true unless a spec says otherwise. */
+  readonly hotReload?: boolean
 }
 
 /** A temporary home and profile, and a service over them with its dependencies faked. */
@@ -58,6 +60,7 @@ function world(options: Options = {}) {
     where: () => ({ profile: 'default', profileDir, homeDir: home }),
     runningPort: () => options.runningPort,
     reach: () => reach,
+    hotReload: () => options.hotReload !== false,
     isPortFree: async port => !(options.busy ?? []).includes(port),
     tailscale: tailscale.run,
     now: () => now,
@@ -124,6 +127,17 @@ describe('how much Delorun asks', () => {
     expect(files.record()).toMatchObject({ prompts: 'stock', background: true })
     expect(files.row('delorun-permission-defaults')).toMatchObject({ fullAccessEverywhere: false })
     expect(files.row('delorun-mcp-consent')).toEqual({ enabled: false })
+  })
+
+  it('says a restart is needed when no hot-reload service is mounted, because the rows reach plugins only at the next start', async () => {
+    const { service, files } = world({ record: { version: 1, prompts: 'stock' }, hotReload: false })
+    expect(await service.prompts('safer')).toEqual({ prompts: 'safer', restartNeeded: true })
+    expect(files.row('delorun-mcp-consent')).toEqual({ enabled: true })
+  })
+
+  it('says no restart is needed when the hot-reload service is mounted', async () => {
+    const { service } = world({ record: { version: 1, prompts: 'stock' }, hotReload: true })
+    expect(await service.prompts('safer')).toEqual({ prompts: 'safer', restartNeeded: false })
   })
 
   it('writes Delorun\'s own answer for safer', async () => {
@@ -227,6 +241,12 @@ describe('turning dangerous mode on', () => {
     expect(codeOfThrown(() => w.service.dangerousBegin())).toBe('NOT_SET_UP')
     await expect(w.service.dangerousConfirm(confirm)).rejects.toMatchObject({ code: 'CODE_EXPIRED' })
     expect(await w.files.grant()).toBe('absent')
+  })
+
+  it('says a restart is needed for dangerous mode when no hot-reload service is mounted', async () => {
+    const w = world({ hotReload: false })
+    w.service.dangerousBegin()
+    expect(await w.service.dangerousConfirm(confirm)).toEqual({ dangerous: 'on', restartNeeded: true })
   })
 
   it('changes nothing when dangerous mode already holds with a valid grant', async () => {

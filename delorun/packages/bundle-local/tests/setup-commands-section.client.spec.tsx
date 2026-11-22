@@ -109,6 +109,20 @@ describe('how much Delorun asks', () => {
     await waitFor(() => { expect(host.count(`GET ${RUN_ROUTES.state}`)).toBe(2) })
   })
 
+  it('shows the restart note when the home answers that the new prompts apply only after a restart, and not otherwise', async () => {
+    const { host } = renderSection({ ...reads(), [`POST ${RUN_ROUTES.prompts}`]: ok({ prompts: 'stock', restartNeeded: true }) })
+    fireEvent.click(await within(row('prompts')).findByRole('radio', { name: en['prompts.stock'] }))
+    await waitFor(() => { expect(posts(host, RUN_ROUTES.prompts)).toEqual([{ answer: 'stock' }]) })
+    expect(await screen.findByText(en['restart.hint'])).toBeTruthy()
+  })
+
+  it('does not show the restart note when the prompts apply at once', async () => {
+    const { host } = renderSection({ ...reads(), [`POST ${RUN_ROUTES.prompts}`]: ok({ prompts: 'stock', restartNeeded: false }) })
+    fireEvent.click(await within(row('prompts')).findByRole('radio', { name: en['prompts.stock'] }))
+    await waitFor(() => { expect(host.count(`GET ${RUN_ROUTES.state}`)).toBe(2) })
+    expect(screen.queryByText(en['restart.hint'])).toBeNull()
+  })
+
   it('tells a device that needs Face ID or its PIN to confirm and try again', async () => {
     renderSection({ ...reads(), [`POST ${RUN_ROUTES.prompts}`]: refused(403, 'ELEVATION_REQUIRED', 'Confirm with your PIN first', { action: 'bundle-local/run-prompts' }) })
     fireEvent.click(await within(row('prompts')).findByRole('radio', { name: en['prompts.stock'] }))

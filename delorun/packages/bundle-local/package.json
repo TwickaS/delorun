@@ -107,6 +107,7 @@
   "dependencies": {
     "@deepseek-ai/dsh-app-boot": "workspace:*",
     "@deepseek-ai/dsh-atomic-write": "workspace:*",
+    "@deepseek-ai/dsh-hmr": "workspace:*",
     "@deepseek-ai/dsh-home-paths": "workspace:*",
     "@deepseek-ai/dsh-native-command": "workspace:*",
     "@deepseek-ai/dsh-official-bundles": "workspace:*",

@@ -25,6 +25,8 @@ import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: the ctx.connection merge and its `connection/request` event.
 import type {} from '@deepseek-ai/dsh-client-connection'
+// Type-only: the `ctx.hmr` service, whose presence says the profile's patch file is watched and reloaded.
+import type {} from '@deepseek-ai/dsh-hmr'
 import { withFileLock } from '@deepseek-ai/dsh-atomic-write'
 import { DEFAULT_SERVE_PORT } from '@delorun/contract-reach-providers'
 import { DANGEROUS_PHRASE, SETUP_DEFAULT_PORT } from '@delorun/contract-setup-answers'
@@ -78,11 +80,12 @@ export const CONFIRMATION_MS = 5 * 60_000
 const LOCK_WAIT_MS = 10_000
 
 /**
- * Whether each change applies only after Delorun restarts. The prompts rows and the grant file are read by running
- * plugins, which the profile's reload restarts; the background answer is read by the next start; the port is bound at
- * start; phone access is applied to the running home.
+ * Whether each change applies only after Delorun restarts, for the changes that do not depend on the running home. The
+ * background answer is read by the next start and the port is bound at start; phone access is applied to the running
+ * home. The prompts rows are read by plugins that the hot-reload service restarts when the patch file changes, so they
+ * need a restart exactly when no such service is mounted: see {@link RunDependencies.hotReload}.
  */
-export const RESTART_NEEDED = { prompts: false, dangerous: false, background: false, port: true, reach: false } as const
+export const RESTART_NEEDED = { background: false, port: true, reach: false } as const
 
 /** The sentence a request that is not the computer's own is told. */
 const ACTION = 'Changing how Delorun runs'
@@ -129,6 +132,8 @@ export interface RunDependencies {
   runningPort(): number | undefined
   /** @returns the reach service, or undefined when the profile does not load it. */
   reach(): RunReach | undefined
+  /** @returns whether the hot-reload service is mounted, so a change to the profile's patch file reaches running plugins without a restart. */
+  hotReload(): boolean
   /** Whether a port is free on this computer. @param port - the port. @returns whether nothing listens on it. */
   isPortFree(port: number): Promise<boolean>
   /** Runs `tailscale`. */
@@ -152,6 +157,7 @@ export function systemDependencies(ctx: Pick<Context, 'get'>): RunDependencies {
     },
     runningPort: () => ctx.get('webServer')?.port,
     reach: () => ctx.get('reach'),
+    hotReload: () => ctx.get('hmr') !== undefined,
     isPortFree,
     tailscale: systemTailscale(),
     now: () => Date.now(),
@@ -214,7 +220,7 @@ export class RunSettings {
       writePromptRows(patchOf(where), answer)
       await removeDangerousGrant(where.homeDir)
       await updateAnswersRecord(where.profileDir, record => ({ ...record, prompts: answer }))
-      return { prompts: answer, restartNeeded: RESTART_NEEDED.prompts }
+      return { prompts: answer, restartNeeded: !this.dependencies.hotReload() }
     })
   }
 
@@ -254,7 +260,7 @@ export class RunSettings {
       writePromptRows(patchOf(where), 'dangerous')
       await writeDangerousGrant(where.homeDir, new Date(this.dependencies.now()))
       await updateAnswersRecord(where.profileDir, current => ({ ...current, prompts: 'dangerous' }))
-      return { dangerous: 'on', restartNeeded: RESTART_NEEDED.dangerous }
+      return { dangerous: 'on', restartNeeded: !this.dependencies.hotReload() }
     })
   }
 
