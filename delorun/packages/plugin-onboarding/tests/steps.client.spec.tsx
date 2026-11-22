@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { packTitle } from '@delorun/plugin-downloads/row'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AGENT_BUNDLES, AGENTS_GUIDE_URL, AgentsStep } from '../src/client/steps/Agents.tsx'
 import { LookStep } from '../src/client/steps/Look.tsx'
@@ -649,7 +650,7 @@ describe('the recommended plugins step', () => {
     const fake = installerFake({ [name]: { state: 'available' } })
     render(<PluginsStep services={stepServices({ bundles: fake.installer, plugins: [name] })} guide={guideOf(hostFake({ recommend: undefined }).host)} />)
     await settle()
-    expect(screen.getAllByRole('heading', { level: 4 }).map(each => each.textContent)).toEqual([en['plugins.pack.computerUseDriver.title']])
+    expect(screen.getAllByRole('heading', { level: 4 }).map(each => each.textContent)).toEqual([packTitle(name)])
     expect(screen.getByText(en['plugins.pack.computerUseDriver.description'])).toBeTruthy()
     expect(en['plugins.pack.computerUseDriver.description']).toMatch(/^Experimental\..*control the windows on this computer's desktop/u)
     expect(zh['plugins.pack.computerUseDriver.description']).toMatch(/^实验性功能。.*控制这台电脑桌面上的窗口/u)
@@ -662,10 +663,10 @@ describe('the recommended plugins step', () => {
     const fake = installerFake(Object.fromEntries(plugins.map(name => [name, { state: 'available' as const, title: 'Package title' }])))
     render(<PluginsStep services={stepServices({ bundles: fake.installer, plugins })} guide={guideOf(hostFake({ recommend: undefined }).host)} />)
     await settle()
-    expect(screen.getAllByRole('heading', { level: 4 }).map(each => each.textContent)).toEqual([
-      en['plugins.pack.agentHooks.title'], en['plugins.pack.externalAgents.title'], en['plugins.pack.realBrowser.title'],
-    ])
-    expect(new Set([en['plugins.pack.agentHooks.title'], en['plugins.pack.externalAgents.title'], en['agents.claude.title'], en['agents.codex.title']]).size).toBe(4)
+    // The downloads panel's words, so a pack reads the same in the guide and in the panel.
+    expect(screen.getAllByRole('heading', { level: 4 }).map(each => each.textContent)).toEqual(['Hooks from Claude Code and Codex', 'Claude Code or Codex already installed', 'Your own Chrome'])
+    expect(plugins.slice(1).map(packTitle)).toEqual(['Hooks from Claude Code and Codex', 'Claude Code or Codex already installed', 'Your own Chrome'])
+    expect(new Set([packTitle('@delorun/bundle-agent-hooks'), packTitle('@delorun/bundle-external-agents'), en['agents.claude.title'], en['agents.codex.title']]).size).toBe(4)
   })
 
   it('names a plugin whose title is not known yet in words, never by its package id', () => {
