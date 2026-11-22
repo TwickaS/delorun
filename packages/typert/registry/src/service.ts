@@ -312,7 +312,8 @@ class LookupStore {
       throw new Error(`typert: lookup "${key}" changed its wire declaration during this registry lifetime`)
     }
     const owner = {}
-    const entry: ProviderEntry<TypertLookupProvider> = { provider, owner }
+    // The table holds providers of every Host and Wire type, so each is stored under the erased defaults.
+    const entry: ProviderEntry<TypertLookupProvider> = { provider: provider as TypertLookupProvider, owner }
     const { definitions, providers, changes } = this
     return ctx.effect(function* () {
       definitions.set(key, definition)
@@ -411,7 +412,8 @@ class ContextStore {
     validateSegment('Context key', key)
     validateWireName('Context wire field', adapter.wire)
     validateNonempty('Context wire type symbol', adapter.wireTypeSymbol)
-    return this.registerProvider(ctx, this.hosts, 'host-context', key, adapter)
+    // The table holds adapters of every Wire type, so each is stored under the erased default.
+    return this.registerProvider(ctx, this.hosts, 'host-context', key, adapter as TypertHostContextAdapter)
   }
 
   private registerClient<Wire>(ctx: Context, key: string, adapter: TypertClientContextAdapter<Wire>): TypertDisposer {

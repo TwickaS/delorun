@@ -252,7 +252,9 @@ Typed Remote control of transient Session-owned terminal processes.
 @Remote shells(agent: Agent, signal: AbortSignal): Promise<TerminalShell[]>
 
 /**
- * List retained terminals without resolving or activating an Agent.
+ * List retained terminals without resolving or activating an Agent. A failed terminal's `error` is free text from the
+ * process or its provider, so only the Host's owner and in-process callers read it; any other Remote caller receives
+ * {@link LAUNCH_ERROR_WITHHELD} in its place, with `errorCode: 'withheld'`.
  * @param sessionId - displayed Session identity, including offline history.
  * @returns terminals retained for this Host lifetime.
  */

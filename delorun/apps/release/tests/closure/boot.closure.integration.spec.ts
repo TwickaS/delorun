@@ -226,6 +226,7 @@ describe.runIf(ARCHIVE !== undefined)('an extracted runtime closure', { timeout:
       mcp: ['mcp', 'list'],
       workspace: ['workspace', 'full-access'],
       agents: ['agents', '--help'],
+      preview: ['preview', 'list'],
     }
     const help = run(['--help']).output
     // The help lists the commands in groups, each command at a two-space indent; the words and exit codes follow them.

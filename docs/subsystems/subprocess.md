@@ -279,7 +279,7 @@ Abstract subprocess service. Subclass, implement spawn, and load the subclass as
 Implementations must honor these semantics:
 
 - Executable paths belong to one execution world shared with the mounted filesystem provider.
-- spawn returns a live handle synchronously. Target identity remains provider-private; `done` resolves with the spawned command's exit facts and may reject for spawn or provider failures.
+- spawn returns a live handle synchronously. The handle names the managed range's leader (`pid`) and systemd scope (`unit`) only when the provider has them, for a caller that records a process's identity; signals and teardown stay with the provider. `done` resolves with the spawned command's exit facts and may reject for spawn or provider failures.
 - Collect-mode readers are offset-based and non-consuming, so independent readers never consume one another's output; lossy reads report truncation and the spill file holding the complete stream when one exists. Piped streams are handed to the caller raw and never buffered here.
 - SubprocessHandle.terminate (and the spec's abort signal) starts the provider's documented procedure against its managed range. SubprocessHandle.waitForExit observes that same range so a consumer-owned teardown ladder can hold each tier on real quiescence; each provider documents its signalling and observability limits.
 - Disposal of the service terminates all still-running managed processes and awaits their exit.

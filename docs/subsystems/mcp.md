@@ -244,6 +244,31 @@ Source: [`packages/mcp/mcp-resources/src/index.ts`](../../packages/mcp/mcp-resou
 
 ### `mcp-client/*` events
 
+<a id="mcp-clientcall-arguments--bail"></a>
+
+#### `mcp-client/call-arguments` — bail
+
+Before a tool call is sent to an MCP server, after every `tools/execute` guard has let it run: a listener may replace the arguments object the server receives, such as a path the server would open by a Host-made copy, and nothing else; the server, the tool name and the execution are fixed. The call's logged arguments stay what the model sent. A listener that throws fails the call; the model's arguments are never sent in its place.
+
+```ts cordis-catalog
+/**
+ * Before a tool call is sent to an MCP server, after every `tools/execute` guard has let it run: a listener may
+ * replace the arguments object the server receives, such as a path the server would open by a Host-made copy, and
+ * nothing else; the server, the tool name and the execution are fixed. The call's logged arguments stay what the
+ * model sent. A listener that throws fails the call; the model's arguments are never sent in its place.
+ * @mode bail
+ * @param serverName - the server's configured namespace.
+ * @param args - the arguments the model sent.
+ * @param execution - the call, whose `agent` identifies the Session.
+ * @returns the arguments to send, or `undefined` to leave them to the next listener, and then the model's arguments.
+ */
+'mcp-client/call-arguments'(serverName: string, args: Record<string, unknown>, execution: ToolExecution): Record<string, unknown> | undefined | Promise<Record<string, unknown> | undefined>
+```
+
+Types: [ToolExecution](tools.md)
+
+Source: [`packages/mcp/mcp-client/src/tools.ts`](../../packages/mcp/mcp-client/src/tools.ts)
+
 <a id="mcp-clientconsent-accepted--parallel"></a>
 
 #### `mcp-client/consent-accepted` — parallel

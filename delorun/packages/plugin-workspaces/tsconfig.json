@@ -11,6 +11,8 @@
   "include": ["src", "tests"],
   "references": [
     { "path": "../../../vendor/cordis" },
+    { "path": "../../../vendor/include" },
+    { "path": "../../../vendor/loader" },
     { "path": "../../../packages/util/brand" },
     { "path": "../../../packages/workspace/workspace" },
     { "path": "../../../packages/subprocess/subprocess" },

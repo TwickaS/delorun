@@ -521,7 +521,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ClientRemote',
-    declaration: 'export interface ClientRemote extends TypertClientRemote {\n    $stream<Item>(options: RemoteStreamOptions<Item>): RemoteStream<Item>;\n    readonly $host: RemoteHostFacts;\n}',
+    declaration: 'export interface ClientRemote extends TypertClientRemote {\n    $stream<Item>(options: RemoteStreamOptions<Item>): RemoteStream<Item>;\n    readonly $host: RemoteHostFacts;\n    $liftDenials(lift: RemoteDenialLift): () => void;\n}',
   },
   {
     name: 'CommonKeyOf',
@@ -850,6 +850,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'RegisterFactoryOptions',
     declaration: 'export type RegisterFactoryOptions<F extends keyof SlotFactoryMap & string> = {\n    name: F;\n    scope: FactoryDefOf<F>[\'scope\'];\n} & FactoryField<F, \'children\', FactoryChildrenOf<F>> & FactoryField<F, \'store\', FactoryStoreOf<F> | (() => FactoryStoreOf<F>)> & FactoryField<F, \'inject\', (...args: FactoryInjectParams<F>) => FactoryInjectOf<F>> & FactoryField<F, \'locale\', FactoryLocaleOf<F>> & FactoryField<F, \'slots\', RuntimeFactorySlots<F>> & FactoryCollisionCheck<F> & FactoryChildrenCheck<F>;',
+  },
+  {
+    name: 'RemoteCallDenial',
+    declaration: 'export interface RemoteCallDenial {\n    readonly endpoint: string;\n    readonly reason: string | undefined;\n}',
+  },
+  {
+    name: 'RemoteDenialLift',
+    declaration: 'export type RemoteDenialLift = (denial: RemoteDenialQuestion) => Promise<boolean>;',
+  },
+  {
+    name: 'RemoteDenialQuestion',
+    declaration: 'export interface RemoteDenialQuestion extends RemoteCallDenial {\n    readonly args: Readonly<Record<string, unknown>>;\n    readonly signal: AbortSignal;\n}',
   },
   {
     name: 'RemoteHostFacts',
