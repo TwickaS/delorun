@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for first-plugin.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/guide/plugin-guides/first-plugin.md
+/:
+  en: 64deff82052b23c6
+  zh: 3e5e8ef813cf0307
+/your-first-plugin:
+  en: cf799c1e6dbc0f85
+  zh: f3a2087016ce9552
+/your-first-plugin/summary:
+  en: cfa7ffa8ff7b0ea0
+  zh: 5ced21046576d9ea
+/your-first-plugin/contents:
+  en: d8200d9f43c6b063
+  zh: 2b441f94fa36a838
+/your-first-plugin/what-you-need:
+  en: 8fbd63ad588d7a10
+  zh: 27b6fe3a91400ff9
+/your-first-plugin/make-the-plugin:
+  en: a4858857cf660d45
+  zh: 699be5e7638e4b93
+/your-first-plugin/load-it:
+  en: 59a63aaf8033605d
+  zh: e5206479df27bda7
+/your-first-plugin/see-it-in-the-studio:
+  en: 0c02e9b8afc14d02
+  zh: 5feb50d99987d35f
+/your-first-plugin/change-it-while-it-runs:
+  en: e7cdc1d9c28c5f51
+  zh: 64124f7ad709a436
+/your-first-plugin/remove-it:
+  en: d6fe950cd103f692
+  zh: 8f63de459551d005
+/your-first-plugin/go-further:
+  en: ab5a3fb1493ee0f8
+  zh: cfd43fce71df464f

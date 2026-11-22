@@ -15,27 +15,27 @@ export const SECTIONS_EN = {
       {
         text: 'Change its look, its plugins and its code.',
         detail: 'Pick a theme, add plugins, write your own, or edit Delorun itself.',
-        href: `${DOCS_URL}/guide/customise`,
+        href: `${DOCS_URL}/guide/customising/customise`,
       },
       {
         text: 'Go back to an earlier setup.',
         detail: 'Switch at your computer; going back covers Delorun and your chats, not the files an agent changed.',
-        href: `${DOCS_URL}/guide/updates#going-back`,
+        href: `${DOCS_URL}/guide/safety-and-updates/updates#going-back`,
       },
       {
         text: 'Carry on a chat from your phone.',
         detail: 'Over your own Tailscale network, once you approve the phone at your computer.',
-        href: `${DOCS_URL}/guide/reach`,
+        href: `${DOCS_URL}/guide/everyday-use/reach`,
       },
       {
         text: 'Risky changes ask for your consent first.',
         detail: 'Commands run in a sandbox unless you grant full access.',
-        href: `${DOCS_URL}/guide/safety`,
+        href: `${DOCS_URL}/guide/safety-and-updates/safety`,
       },
       {
         text: 'Open source, built on DeepSeek Harness.',
         detail: 'MIT licensed, and one command brings your DeepSeek Harness chats across.',
-        href: `${DOCS_URL}/guide/switching`,
+        href: `${DOCS_URL}/guide/get-started/switching`,
       },
     ],
   },
@@ -43,22 +43,22 @@ export const SECTIONS_EN = {
     makeItYours: {
       heading: 'Make it yours',
       lead: 'This page is a setup. Change it, see what Delorun would write, and go back.',
-      link: { text: 'Change one thing, see it, undo it', href: `${DOCS_URL}/guide/customise#change-one-thing-see-it-undo-it` },
+      link: { text: 'Change one thing, see it, undo it', href: `${DOCS_URL}/guide/customising/customise#change-one-thing-see-it-undo-it` },
     },
     parts: {
       heading: 'Made of parts you can change',
       lead: 'Delorun is built from plugins. These are the ones it ships with, in the words the studio uses.',
-      link: { text: 'Write your first plugin', href: `${DOCS_URL}/guide/first-plugin` },
+      link: { text: 'Write your first plugin', href: `${DOCS_URL}/guide/plugin-guides/first-plugin` },
     },
     replays: {
       heading: 'Watch it change',
       lead: 'Four chapters of one replay: every change to Delorun listed, undoing one, the versions of your setup, and the same from the terminal.',
-      link: { text: 'How changes to Delorun are reviewed', href: `${DOCS_URL}/guide/changing-your-harness` },
+      link: { text: 'How changes to Delorun are reviewed', href: `${DOCS_URL}/guide/customising/changing-your-harness` },
     },
     phone: {
       heading: 'From your phone',
       lead: 'Your chats from your computer, on your phone. A few sensitive steps need your approval at the computer.',
-      link: { text: 'Reach the studio from your phone', href: `${DOCS_URL}/guide/reach#start-from-nothing` },
+      link: { text: 'Reach the studio from your phone', href: `${DOCS_URL}/guide/everyday-use/reach#start-from-nothing` },
     },
   },
   whatsNew: {

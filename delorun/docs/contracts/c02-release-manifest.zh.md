@@ -306,7 +306,7 @@ acceptances:
 
 ## npm 发布
 
-`delorun/apps/npm-launcher/src/build.ts` 用给定的发布根打包 `delorun` 包，没有任何发布根时拒绝构建。manifest 记录每个 tarball 的 integrity。启动器没有运行时依赖；`npx` 会在任何 Delorun 检查运行之前运行 npm 提供的启动器，因此 npm 启动器是安装前的信任锚点。启动器在 `DELORUN_LAUNCHER_VERSION` 中把自己的版本告诉它启动的运行时：`delorun setup` 把 `delorun` 命令安装为 `delorun@<that version>`，从不安装 npm 提供的最新版本，`delorun verify` 打印已安装发布的 manifest 为该版本记录的 integrity，供本人与 `npm view delorun@<version> dist.integrity` 比较（[Trust 页面](../guide/trust.zh.md)）。没有任何工作流发布它；不使用 npm 令牌、通过 npm 可信发布进行发布的做法见[发布工作流设计](../design/release-workflow.zh.md)。
+`delorun/apps/npm-launcher/src/build.ts` 用给定的发布根打包 `delorun` 包，没有任何发布根时拒绝构建。manifest 记录每个 tarball 的 integrity。启动器没有运行时依赖；`npx` 会在任何 Delorun 检查运行之前运行 npm 提供的启动器，因此 npm 启动器是安装前的信任锚点。启动器在 `DELORUN_LAUNCHER_VERSION` 中把自己的版本告诉它启动的运行时：`delorun setup` 把 `delorun` 命令安装为 `delorun@<that version>`，从不安装 npm 提供的最新版本，`delorun verify` 打印已安装发布的 manifest 为该版本记录的 integrity，供本人与 `npm view delorun@<version> dist.integrity` 比较（[Trust 页面](../guide/safety-and-updates/trust.zh.md)）。没有任何工作流发布它；不使用 npm 令牌、通过 npm 可信发布进行发布的做法见[发布工作流设计](../design/release-workflow.zh.md)。
 
 <a id="desktop-updates-and-rollback"></a>
 

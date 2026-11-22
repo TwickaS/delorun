@@ -4,10 +4,8 @@
  * @module @delorun/docs/head
  */
 import { SITE_URL } from './config.ts'
+import { COPY } from './copy.ts'
 import { htmlLangOf, type Locale } from './locale.ts'
-
-/** The product name that link previews show as the site. */
-const SITE_NAME = 'Delorun documentation'
 
 /** The meta tags and links a route's `head` option returns. */
 export interface PageHead {
@@ -19,7 +17,7 @@ export interface PageHead {
 
 /**
  * The head of a page.
- * @param page - the page's title, its summary (`undefined` leaves out the description and the preview summary), its route on the published site such as `/guide/trust`, and its locale.
+ * @param page - the page's title, its summary (`undefined` leaves out the description and the preview summary), its route on the published site such as `/guide/safety-and-updates/trust`, and its locale.
  * @returns the title, the description, the canonical address and the link-preview (Open Graph) tags.
  */
 export function pageHead(page: { title: string, description: string | undefined, path: string, locale: Locale }): PageHead {
@@ -32,7 +30,7 @@ export function pageHead(page: { title: string, description: string | undefined,
       { property: 'og:title', content: title },
       { property: 'og:type', content: 'website' },
       { property: 'og:url', content: url },
-      { property: 'og:site_name', content: SITE_NAME },
+      { property: 'og:site_name', content: COPY[locale].siteTitle },
       { property: 'og:locale', content: htmlLangOf(locale) === 'zh-Hans' ? 'zh_CN' : 'en_GB' },
       { name: 'twitter:card', content: 'summary' },
     ],

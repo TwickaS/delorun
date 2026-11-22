@@ -1,0 +1,9 @@
+{
+  "title": "安全与更新",
+  "pages": [
+    "safety",
+    "trust",
+    "prompt-injection",
+    "updates"
+  ]
+}

@@ -1,8 +1,8 @@
 // Serves the built site on 127.0.0.1 the way a static host does: a path names its file, its `.html` page or its
-// directory's index, an unknown path gets 404.html with status 404, and the Markdown routes, which have no extension,
-// are text/markdown. For checking the build locally; it is not the deployment.
+// directory's index, a path in out/_redirects gets its redirect, an unknown path gets 404.html with status 404, and the
+// Markdown routes, which have no extension, are text/markdown. For checking the build locally; it is not the deployment.
 // Usage: node scripts/serve-static.mjs [out-dir] [port]. Port 0 picks a free port; the URL is printed.
-import { createReadStream, existsSync, statSync } from 'node:fs'
+import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { extname, join, resolve, sep } from 'node:path'
 
@@ -11,6 +11,16 @@ const port = Number(process.argv[3] ?? 4173)
 if (!existsSync(outDir)) {
   console.error(`serve-static: ${outDir} does not exist; run the build first`)
   process.exit(1)
+}
+
+/** The redirect rules of `_redirects`: each line is `<from> <to> <status>`, and lines starting with `#` are comments. */
+const redirects = new Map()
+const redirectsFile = join(outDir, '_redirects')
+if (existsSync(redirectsFile)) {
+  for (const line of readFileSync(redirectsFile, 'utf8').split('\n')) {
+    const [from, to, status] = line.trim().split(/\s+/)
+    if (from !== undefined && to !== undefined && !from.startsWith('#')) redirects.set(from, { to, status: Number(status ?? 302) })
+  }
 }
 
 const TYPES = {
@@ -46,6 +56,12 @@ function typeOf(file) {
 
 const server = createServer((request, response) => {
   const urlPath = decodeURIComponent(new URL(request.url ?? '/', 'http://127.0.0.1').pathname)
+  const redirect = redirects.get(urlPath)
+  if (redirect !== undefined) {
+    response.writeHead(redirect.status, { location: redirect.to })
+    response.end()
+    return
+  }
   const file = fileFor(urlPath)
   const served = file ?? join(outDir, '404.html')
   response.writeHead(file === undefined ? 404 : 200, { 'content-type': typeOf(served) })

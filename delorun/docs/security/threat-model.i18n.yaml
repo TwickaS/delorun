@@ -15,8 +15,8 @@
   en: 9f4840a6d4c1d6ff
   zh: f92e6b1327f75fe0
 /delorun-threat-model/goal:
-  en: 78af2c201262f7ad
-  zh: 20d92add1b1001c9
+  en: bb96b7ec7ee15a6a
+  zh: 7f7cff83ee1ead49
 /delorun-threat-model/where-delorun-s-protections-apply:
   en: 23541ee6f04a9a08
   zh: 100de51c58d69517
@@ -60,8 +60,8 @@
   en: 48b5e578bba0381b
   zh: 58b49d245690f953
 /delorun-threat-model/boundaries-and-their-defences/confinement-of-native-commands:
-  en: 4d872d345f2457a1
-  zh: 1088d4fa74796d53
+  en: c8238dd568fe371d
+  zh: 55a77ea03fd35876
 /delorun-threat-model/boundaries-and-their-defences/the-home-s-control-channels:
   en: de80cef4a0694ac5
   zh: 3a5015571f22112c
@@ -81,8 +81,8 @@
   en: 8a54cea338f21850
   zh: 0ca38c8613f39b68
 /delorun-threat-model/boundaries-and-their-defences/releases-the-log-and-the-rebuild:
-  en: 0ae56ebd41c67812
-  zh: f3c6d8e403db2a8d
+  en: d8b1579efc94976a
+  zh: 8ef6a4a5ae37a806
 /delorun-threat-model/boundaries-and-their-defences/the-catalogue-and-revocation:
   en: 31a63bd78844747d
   zh: b9ce9ad030542d2b
@@ -108,8 +108,8 @@
   en: b4c38569927d7b83
   zh: 9af0f46b620066ef
 /delorun-threat-model/what-delorun-does-not-protect-against:
-  en: 2deb7dc06bba40e4
-  zh: fbbf1051004a8e99
+  en: 08eaea41707b8eee
+  zh: fc190dd87a47ca15
 /delorun-threat-model/how-changes-keep-this-true:
   en: 746e0c0b67faf9bd
   zh: 6c7364b848cef403

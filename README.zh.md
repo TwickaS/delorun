@@ -14,15 +14,15 @@ Delorun 是一个开源的 agent harness（智能体框架），运行在你自�
 
 ## 状态
 
-Delorun 目前是预览版，使用预览密钥签名，尚未经过外部安全评审。[使用 Delorun 时你要信任什么](delorun/docs/guide/trust.zh.md)说明了这意味着什么，以及何时会改变。Delorun 可在 Linux 上运行，也可通过 WSL2 在 Windows 上运行。
+Delorun 目前是预览版，使用预览密钥签名，尚未经过外部安全评审。[使用 Delorun 时你要信任什么](delorun/docs/guide/safety-and-updates/trust.zh.md)说明了这意味着什么，以及何时会改变。Delorun 可在 Linux 上运行，也可通过 WSL2 在 Windows 上运行。
 
 ## 你可以做什么
 
-- **按你的方式改。** 主题以及你自己的名称和图标、设置、agent 预设、插件、你自己写的插件、某个自带插件的修改副本，或 harness 本身的代码。[哪些东西在哪一层自定义](delorun/docs/guide/customise.zh.md)展示了每一层，以及更新会让它付出什么代价。
-- **试一套配置，然后保留或退回。** 保存你的配置，用平实的话看另一个版本会改变什么，然后切换。更新在应用前会显示它将改变什么，先保存你的配置，并且在新版本未通过检查时自动退回。已删除的聊天和工作区会进入回收站。这涵盖 harness 和你的聊天；它不会撤销 agent 对你的文件所做的改动，所以请用 git 管理你的项目。[更新](delorun/docs/guide/updates.zh.md)。
-- **在手机上使用。** 通过你自己的 Tailscale 网络，在手机上打开同样的聊天。每台新设备都要在你的电脑上批准。[在手机上访问 studio](delorun/docs/guide/reach.zh.md)。
-- **使用你选择的模型。** DeepSeek、Anthropic、OpenAI、Google Gemini 等，或任何兼容 OpenAI 的端点，其中包括运行在你自己机器上的模型。[模型提供方](delorun/docs/guide/providers.zh.md)。
-- **保持掌控。** 有风险的变更会先征求你的同意，每个版本在运行前都会对照其签名检查，Delorun 没有遥测；默认有两项发布检查会访问互联网。[安全](delorun/docs/guide/safety.zh.md)和[什么会离开你的机器](delorun/docs/guide/trust.zh.md#what-leaves-your-machine)。
+- **按你的方式改。** 主题以及你自己的名称和图标、设置、agent 预设、插件、你自己写的插件、某个自带插件的修改副本，或 harness 本身的代码。[哪些东西在哪一层自定义](delorun/docs/guide/customising/customise.zh.md)展示了每一层，以及更新会让它付出什么代价。
+- **试一套配置，然后保留或退回。** 保存你的配置，用平实的话看另一个版本会改变什么，然后切换。更新在应用前会显示它将改变什么，先保存你的配置，并且在新版本未通过检查时自动退回。已删除的聊天和工作区会进入回收站。这涵盖 harness 和你的聊天；它不会撤销 agent 对你的文件所做的改动，所以请用 git 管理你的项目。[更新](delorun/docs/guide/safety-and-updates/updates.zh.md)。
+- **在手机上使用。** 通过你自己的 Tailscale 网络，在手机上打开同样的聊天。每台新设备都要在你的电脑上批准。[在手机上访问 studio](delorun/docs/guide/everyday-use/reach.zh.md)。
+- **使用你选择的模型。** DeepSeek、Anthropic、OpenAI、Google Gemini 等，或任何兼容 OpenAI 的端点，其中包括运行在你自己机器上的模型。[模型提供方](delorun/docs/guide/get-started/providers.zh.md)。
+- **保持掌控。** 有风险的变更会先征求你的同意，每个版本在运行前都会对照其签名检查，Delorun 没有遥测；默认有两项发布检查会访问互联网。[安全](delorun/docs/guide/safety-and-updates/safety.zh.md)和[什么会离开你的机器](delorun/docs/guide/safety-and-updates/trust.zh.md#what-leaves-your-machine)。
 
 ## 命令
 
@@ -49,7 +49,7 @@ Delorun 目前是预览版，使用预览密钥签名，尚未经过外部安全
 
 ## 运行
 
-安装 Node.js 24.9 或更高版本（每次启动 Delorun 都需要它），在 Linux 上还要安装 bubblewrap，然后运行 `npx delorun`。[安装与首次运行](delorun/docs/guide/install.zh.md)带你完成设置和第一次聊天。
+安装 Node.js 24.9 或更高版本（每次启动 Delorun 都需要它），在 Linux 上还要安装 bubblewrap，然后运行 `npx delorun`。[安装与首次运行](delorun/docs/guide/get-started/install.zh.md)带你完成设置和第一次聊天。
 
 <a id="run-from-source"></a>
 
@@ -67,7 +67,7 @@ pnpm dsh web
 
 ## 已知问题与常见问题
 
-[已知问题](delorun/docs/guide/known-issues.zh.md)页面列出你可能遇到的毛边，每条都写明会发生什么以及该怎么做。[问答](delorun/docs/guide/questions.zh.md)页面回答那些难回答的问题：为什么 Delorun 构建在 DeepSeek Harness 之上，为什么它不是装在原版上的一组插件，大部分代码由 agent 编写意味着什么，它有多安全，以及代价是什么。
+[已知问题](delorun/docs/guide/help/known-issues.zh.md)页面列出你可能遇到的毛边，每条都写明会发生什么以及该怎么做。[问答](delorun/docs/guide/help/questions.zh.md)页面回答那些难回答的问题：为什么 Delorun 构建在 DeepSeek Harness 之上，为什么它不是装在原版上的一组插件，大部分代码由 agent 编写意味着什么，它有多安全，以及代价是什么。
 
 ## Delorun 是怎样构建的
 
@@ -79,11 +79,11 @@ Delorun 可以通过定制插件、模式和集成，按团队的工作方式来
 
 ## 与原版的兼容性
 
-DeepSeek Harness 的插件和你的聊天数据与 Delorun 保持兼容。其余一切，包括界面和默认设置，都是 Delorun 自己的。[从 DeepSeek Harness 切换](delorun/docs/guide/switching.zh.md)说明了哪些不同。
+DeepSeek Harness 的插件和你的聊天数据与 Delorun 保持兼容。其余一切，包括界面和默认设置，都是 Delorun 自己的。[从 DeepSeek Harness 切换](delorun/docs/guide/get-started/switching.zh.md)说明了哪些不同。
 
 ## 与上游的关系
 
-Delorun 构建于 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（`dsh`）之上，后者是 [DeepSeek AI](https://deepseek.com) 的开源 agent harness。Delorun 自己的代码位于 `delorun/` 下，对上游文件的改动会连同它所服务的功能一起记录。[差异索引](delorun/docs/reference/divergence/README.zh.md)说明了这份记录。原版文档请见[上游仓库](https://github.com/deepseek-ai/deepseek-harness)及其[文档站点](https://deepseek-harness.github.io/deepseek-harness/)。
+Delorun 构建于 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（`dsh`）之上，后者是 [DeepSeek AI](https://deepseek.com) 的开源 agent harness。Delorun 自己的代码位于 `delorun/` 下，对上游文件的改动会连同它所服务的功能一起记录。[差异索引](delorun/docs/reference/parity-with-deepseek-harness/divergence/README.zh.md)说明了这份记录。原版文档请见[上游仓库](https://github.com/deepseek-ai/deepseek-harness)及其[文档站点](https://deepseek-harness.github.io/deepseek-harness/)。
 
 ## 文档
 

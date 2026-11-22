@@ -16,7 +16,7 @@ import type { PluginBrowserWords } from './words.ts'
 
 type Tab = 'plugins' | 'make'
 
-const FIRST_PLUGIN_GUIDE = `${DOCS_URL}/guide/first-plugin`
+const FIRST_PLUGIN_GUIDE = `${DOCS_URL}/guide/plugin-guides/first-plugin`
 
 function Detail({ plugin, words }: { readonly plugin: PluginEntry; readonly words: PluginBrowserWords }) {
   return (

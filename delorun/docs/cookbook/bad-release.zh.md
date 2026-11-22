@@ -24,7 +24,7 @@ description: "维护者在已发布的 Delorun 版本出问题或被篡改时使
 
 在你采取行动之前，Delorun 已经保护了大多数安装：
 
-- 更新在切换之后会检查新版本。健康检查失败时，Delorun 会自动回到用户原来的版本和 profile（[更新](../guide/updates.zh.md#what-happens-during-an-update)）。
+- 更新在切换之后会检查新版本。健康检查失败时，Delorun 会自动回到用户原来的版本和 profile（[更新](../guide/safety-and-updates/updates.zh.md#what-happens-during-an-update)）。
 - Delorun 保留两个已安装的版本，即正在运行的版本和它之前的版本，所以用户可以回退一个版本。
 - 没有任何发布渠道会移动到更低的版本，所以不能通过把渠道指向旧版本来撤回有问题的版本。修复版本必须使用更高的版本号。
 
@@ -47,7 +47,7 @@ description: "维护者在已发布的 Delorun 版本出问题或被篡改时使
 delorun recover rollback
 ```
 
-它会回到上一次更新之前的版本，并使用在此之前拍下的 profile 快照。无论 Delorun 是否在运行，它都可以工作。如果更新改变了聊天数据的格式，它会把较新的数据放到一边，并把更新前所做的副本放回原位。没有该副本时，它会以 `ROLLBACK_NEEDS_DATA_COPY` 拒绝，而 `delorun recover rollback --profile-only` 只恢复 profile（[更新](../guide/updates.zh.md#going-back)）。在修复版本发布之前，渠道一直指向有问题的版本，所以已回退的用户运行 `delorun update` 会再次被提供该版本。修复版本发布后，`delorun update` 会把用户带向前。
+它会回到上一次更新之前的版本，并使用在此之前拍下的 profile 快照。无论 Delorun 是否在运行，它都可以工作。如果更新改变了聊天数据的格式，它会把较新的数据放到一边，并把更新前所做的副本放回原位。没有该副本时，它会以 `ROLLBACK_NEEDS_DATA_COPY` 拒绝，而 `delorun recover rollback --profile-only` 只恢复 profile（[更新](../guide/safety-and-updates/updates.zh.md#going-back)）。在修复版本发布之前，渠道一直指向有问题的版本，所以已回退的用户运行 `delorun update` 会再次被提供该版本。修复版本发布后，`delorun update` 会把用户带向前。
 
 <a id="rehearse-on-a-test-channel"></a>
 ## 在测试渠道上演练

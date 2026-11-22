@@ -25,6 +25,8 @@ export interface ThemeCopy {
   readonly back: string
   /** The line that names the look the page is in, shown beside the button while a look is chosen; `scheme` is the light or dark word, when one was chosen. */
   readonly current: (name: string, scheme: string | undefined) => string
+  /** The row variant's accessible name and tooltip, which name the theme and the scheme the page is in; `scheme` is the light or dark word. Without it the title, the theme's name and the scheme are joined. */
+  readonly trigger?: (name: string, scheme: string) => string
   /** The name of each preset theme. */
   readonly names: Readonly<Record<LookId, string>>
   /** The toast that follows a change from the control. */

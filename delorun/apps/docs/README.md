@@ -9,8 +9,8 @@ This package builds Delorun's documentation website: the user guide and the refe
 | Route | Serves |
 | --- | --- |
 | `/` | The home page, which links the two sections and, when a version is assembled, shows What's new with the latest version |
-| `/guide`, `/guide/<page>` | The user guide in English |
-| `/reference`, `/reference/<page>` | The references in English |
+| `/guide`, `/guide/<group>/<page>` | The user guide in English. A page lives in the folder of its sidebar group, such as `/guide/get-started/install`; `/guide/roadmap` stays at the top level, linked from the header |
+| `/reference`, `/reference/<page>`, `/reference/parity-with-deepseek-harness/<page>` | The references in English |
 | `/changelog` | The changelog: the standing comparison with the upstream release, then every assembled version, newest first; absent when no version is assembled |
 | `/zh/...` | The same routes in Chinese; a page without a Chinese pair shows its English text |
 | `/llms.mdx/<section>/<page>` and `/zh/llms.mdx/...` | Each page as Markdown. A section's index is `/llms.mdx/<section>/index`, and a directory's index page is `/llms.mdx/<section>/<directory>/index` |
@@ -19,7 +19,11 @@ This package builds Delorun's documentation website: the user guide and the refe
 | `/search.json` | The search index of every page in both locales, which the search dialog downloads |
 | `/404` | The page a host serves, from `404.html`, for an address no file has |
 
-A page's English and Chinese routes are the same slug under the locale prefix. A page in one locale links to its counterpart in the same locale: a Chinese page's link to `trust.md` becomes its Chinese route.
+A page's English and Chinese routes are the same slug under the locale prefix.
+
+The guide sidebar has two halves: **Using Delorun** (`get-started`, `everyday-use`, `safety-and-updates`, `help`) and **Building on Delorun** (`customising`, `plugin-guides`, then a link to the Reference tab). Each group is a collapsible folder, and only the folder holding the current page is open. A group's folder holds its pages' files under `delorun/docs/guide/`, and its `meta.json` (`meta.zh.json` in Chinese) names the group and lists its pages in reading order. The header's Guide, Reference, Changelog and Roadmap links are tabs above the page, and the sidebar drawer's tab menu on narrow screens.
+
+Pages that moved into a group keep their old addresses as permanent redirects, in both locales and for the Markdown routes. `src/site/redirects.ts` lists the moved pages, and the build writes the redirects as `out/_redirects`, which Cloudflare reads beside `_headers`. `pnpm run preview` serves them too. A page that moves again adds an entry. A page in one locale links to its counterpart in the same locale: a Chinese page's link to `trust.md` becomes its Chinese route.
 
 ## Links
 

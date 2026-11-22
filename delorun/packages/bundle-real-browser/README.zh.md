@@ -10,7 +10,7 @@ description: "在你允许的 chat 中，让智能体通过 browse 在你自己�
 
 ## 摘要
 
-在“插件”中添加 **你自己的浏览器**，即可让智能体在你已登录的 Chrome 中，完成你在 chat 里允许的任务。智能体会先询问；你没有允许的 chat 永远碰不到你的浏览器，[`@delorun/bundle-browser`](../bundle-browser/README.zh.md) 的隔离浏览器保持不变。指南见[使用你自己的浏览器](../../docs/guide/use-your-own-browser.zh.md)。
+在“插件”中添加 **你自己的浏览器**，即可让智能体在你已登录的 Chrome 中，完成你在 chat 里允许的任务。智能体会先询问；你没有允许的 chat 永远碰不到你的浏览器，[`@delorun/bundle-browser`](../bundle-browser/README.zh.md) 的隔离浏览器保持不变。指南见[使用你自己的浏览器](../../docs/guide/everyday-use/use-your-own-browser.zh.md)。
 
 此 bundle 带有 Delorun 固定版本的 [browse](https://github.com/anomalyco/browse)（MIT，Anomaly 出品）：每个平台的变体都带有该系统的 browse 程序，构建发行版时逐字节对照锁文件中的固定值检查；linux-x64 变体还带有 Windows 程序，供在 WSL 中使用、而 Chrome 在 Windows 上时使用（在驱动行上设置 `variant: windows-x64`）。这份副本从不自行更新。它的行是 browse 驱动 `browser-use-browse`（在你开启前保持关闭），以及技能 [`@delorun/skill-real-browser`](../skill-real-browser/package.json)，智能体只在驱动开启时加载它。驱动在 home 的同一个文件夹中运行 browse 的程序，所以一次 MCP 同意即可覆盖所有 chat。browse 没有 Windows on Arm 版本的程序。它是实验性的。
 

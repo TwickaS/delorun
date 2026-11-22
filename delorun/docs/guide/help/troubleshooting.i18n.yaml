@@ -1,0 +1,79 @@
+# Bilingual-pair consistency record for troubleshooting.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/guide/help/troubleshooting.md
+/:
+  en: 69b2365178b06978
+  zh: 585084b238b2cd16
+/troubleshooting:
+  en: a0371bb0bb0643de
+  zh: f1bdbfc91a20178d
+/troubleshooting/summary:
+  en: d1b0ef0a27d5f9d6
+  zh: 73fec8331f5a29cc
+/troubleshooting/contents:
+  en: 7e76da7890551c3a
+  zh: 196b6e6e1f8635de
+/troubleshooting/reading-a-refusal:
+  en: 127017ba5eeb1ad7
+  zh: b3e8eeea5b414b21
+/troubleshooting/the-home-and-its-files:
+  en: d041ede3d70f19ab
+  zh: d26c00ac1a235982
+/troubleshooting/the-first-day:
+  en: bac0183083736e9a
+  zh: 4834887c9165eb22
+/troubleshooting/starting-and-stopping:
+  en: a9d1e76cc5cbe2c5
+  zh: 7c53b6ae695dec5c
+/troubleshooting/starting-and-stopping/the-studio-port-is-busy:
+  en: 285eceb9ff1ef63e
+  zh: 212420964ad71051
+/troubleshooting/setup-and-the-model-key:
+  en: 8614ab844bdba618
+  zh: 18bbdbd9c94d90da
+/troubleshooting/installs-and-release-checks:
+  en: 3352e92732290274
+  zh: 806d16df5620c3f8
+/troubleshooting/updates-and-rollback:
+  en: 6d8121e30cc60565
+  zh: 7a10a64e70ff4358
+/troubleshooting/repair-the-program-and-keep-your-data:
+  en: cffd0581def956ca
+  zh: ca78c7c6d889423f
+/troubleshooting/last-resort-by-hand:
+  en: 8e39a3b2325f3ddf
+  zh: 6ba8181f36589c65
+/troubleshooting/protections-and-plugins:
+  en: bafb1f8cc7930a24
+  zh: 4663836eabcbea24
+/troubleshooting/protections-and-plugins/letting-bubblewrap-run-under-ubuntu-s-apparmor-restriction:
+  en: 9c3d720781ca9a4f
+  zh: c73eeab2bcfa6574
+/troubleshooting/remote-access-and-devices:
+  en: b57b114d2fe25414
+  zh: eaecf7e07c5860c5
+/troubleshooting/remote-access-and-devices/what-a-phone-shows-when-it-cannot-sign-in:
+  en: efa24ca279904444
+  zh: a30d201a9a718bbc
+/troubleshooting/archives-imports-and-the-trash:
+  en: 17a46b710fb88a5e
+  zh: df4279aff374162c
+/troubleshooting/the-workspace-list:
+  en: a77546dd899edac9
+  zh: 07f49e785e7160b6
+/troubleshooting/when-nothing-here-fits:
+  en: 13a640a6e1884319
+  zh: 7c1188a42e968802
+/troubleshooting/when-nothing-here-fits/report-a-problem-that-is-not-listed:
+  en: 0ae02ea8b177c20d
+  zh: 04e1eb58a1ff0408
+/troubleshooting/remove-delorun:
+  en: 866601be68b41951
+  zh: fab1528ce5b68b64
+/troubleshooting/next:
+  en: b11fc252e3291631
+  zh: 2d3079a5919c943c
+/troubleshooting/for-the-technically-curious:
+  en: e67b5aaa959045c8
+  zh: 29d25e1a78611371

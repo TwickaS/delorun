@@ -27,7 +27,7 @@ export const AGENT_BUNDLES = [
 const SIGN_IN_TONES: Readonly<Record<AgentSignIn, StateTone>> = { found: 'info', missing: 'info', unknown: 'info' }
 
 /** Where the guide explains how a chat uses an agent. */
-export const AGENTS_GUIDE_URL = 'https://docs.delorun.com/guide/agents'
+export const AGENTS_GUIDE_URL = 'https://docs.delorun.com/guide/everyday-use/agents'
 
 /**
  * One coding agent: how a chat uses it, the use-at-your-own-risk warning, where its sign-in stands and one Add that

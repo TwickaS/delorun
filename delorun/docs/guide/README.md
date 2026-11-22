@@ -8,7 +8,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-The user guide is for people who install and use Delorun, the agent harness you shape to your own work and that is built on DeepSeek Harness, whether new to both or switching from stock DeepSeek Harness. Delorun runs on your own computer. This page is a map: find what you want to do, and follow the link to the page and section. If you are new, read [Install and first run](install.md) first, then [Daily use](daily-use.md). Technical terms link to the [glossary](../reference/glossary.md).
+The user guide is for people who install and use Delorun, the agent harness you shape to your own work and that is built on DeepSeek Harness, whether new to both or switching from stock DeepSeek Harness. Delorun runs on your own computer. This page is a map: find what you want to do, and follow the link to the page and section. If you are new, read [Install and first run](get-started/install.md) first, then [Daily use](everyday-use/daily-use.md). Technical terms link to the [glossary](../reference/glossary.md).
 
 ## Contents
 
@@ -24,52 +24,52 @@ The user guide is for people who install and use Delorun, the agent harness you 
 ## I want to get started
 
 - **Decide whether Delorun suits me, and how it compares with other tools:** [Why Delorun](why-delorun.md). It covers what you get, what Delorun changes from DeepSeek Harness and when another tool fits better.
-- **Install Delorun and have a first chat:** [Install and first run](install.md). It covers what you need first, [setup by how you will use Delorun](install.md#setup-how-you-will-use-delorun), [the studio and your first chat](install.md#the-studio-and-your-first-chat) and [a computer without a browser](install.md#a-computer-without-a-browser).
-- **Bring my DeepSeek Harness chats:** [Switching from DeepSeek Harness](switching.md). It explains what stays the same and what is different, what is copied, what stays behind and [how to go back](switching.md#going-back).
+- **Install Delorun and have a first chat:** [Install and first run](get-started/install.md). It covers what you need first, [setup by how you will use Delorun](get-started/install.md#setup-how-you-will-use-delorun), [the studio and your first chat](get-started/install.md#the-studio-and-your-first-chat) and [a computer without a browser](get-started/install.md#a-computer-without-a-browser).
+- **Bring my DeepSeek Harness chats:** [Switching from DeepSeek Harness](get-started/switching.md). It explains what stays the same and what is different, what is copied, what stays behind and [how to go back](get-started/switching.md#going-back).
 - **See what Delorun is for and where it is going:** [Roadmap](roadmap.md). It says what is being built now, what comes next and what comes later.
 
 ## I want to use it every day
 
-- **Start, open, stop or check Delorun:** [Start, open and stop](daily-use.md#start-open-and-stop) and [Check the release and your setup](daily-use.md#check-the-release-and-your-setup).
-- **Decide what the model may change in a folder:** [Workspaces and what the model may change](daily-use.md#workspaces-and-what-the-model-may-change).
-- **Recover from a plugin that stops Delorun starting:** [Safe mode and recovery](daily-use.md#safe-mode-and-recovery).
-- **Restore a deleted chat, or move chats between homes:** [Trash, export and import](daily-use.md#trash-export-and-import).
-- **Move to a new release, or back:** [Updates](updates.md) and [Going back](updates.md#going-back).
-- **Update when I run many third-party plugins:** [Update Delorun with many plugins](updating-with-plugins.md). It covers what is saved first, reading the report's `disabled` lines, trying a plugin anyway with a version exemption, and going back.
-- **Move my plugins, model choices and settings to another computer:** [Move your setup to another computer](move-your-setup.md). It covers what the file holds and never holds, what the import replaces and how to undo it.
-- **Find where my data lives, move it, or use two profiles:** [Your Delorun home](home.md).
-- **Find out why something failed:** [Where Delorun keeps its logs](logs.md).
-- **Bring my chats from the DeepSeek website:** [Import your DeepSeek website chats](import-deepseek-chats.md).
-- **See what a chat costs:** [See what a chat costs](cost-meter.md).
-- **Let the agent work in my own Chrome, signed in as me:** [Use your own browser](use-your-own-browser.md).
-- **Read the model's thinking word by word:** [Read the model's thinking word by word](thinking-tab.md).
+- **Start, open, stop or check Delorun:** [Start, open and stop](everyday-use/daily-use.md#start-open-and-stop) and [Check the release and your setup](everyday-use/daily-use.md#check-the-release-and-your-setup).
+- **Decide what the model may change in a folder:** [Workspaces and what the model may change](everyday-use/daily-use.md#workspaces-and-what-the-model-may-change).
+- **Recover from a plugin that stops Delorun starting:** [Safe mode and recovery](everyday-use/daily-use.md#safe-mode-and-recovery).
+- **Restore a deleted chat, or move chats between homes:** [Trash, export and import](everyday-use/daily-use.md#trash-export-and-import).
+- **Move to a new release, or back:** [Updates](safety-and-updates/updates.md) and [Going back](safety-and-updates/updates.md#going-back).
+- **Update when I run many third-party plugins:** [Update Delorun with many plugins](plugin-guides/updating-with-plugins.md). It covers what is saved first, reading the report's `disabled` lines, trying a plugin anyway with a version exemption, and going back.
+- **Move my plugins, model choices and settings to another computer:** [Move your setup to another computer](customising/move-your-setup.md). It covers what the file holds and never holds, what the import replaces and how to undo it.
+- **Find where my data lives, move it, or use two profiles:** [Your Delorun home](customising/home.md).
+- **Find out why something failed:** [Where Delorun keeps its logs](help/logs.md).
+- **Bring my chats from the DeepSeek website:** [Import your DeepSeek website chats](get-started/import-deepseek-chats.md).
+- **See what a chat costs:** [See what a chat costs](everyday-use/cost-meter.md).
+- **Let the agent work in my own Chrome, signed in as me:** [Use your own browser](everyday-use/use-your-own-browser.md).
+- **Read the model's thinking word by word:** [Read the model's thinking word by word](everyday-use/thinking-tab.md).
 
 ## I want to choose or change the model
 
-- **Pick a provider and key, or run a model on my own computer:** [Model providers](providers.md). It lists every provider setup knows and how to [change the provider later](providers.md#change-the-provider-later).
+- **Pick a provider and key, or run a model on my own computer:** [Model providers](get-started/providers.md). It lists every provider setup knows and how to [change the provider later](get-started/providers.md#change-the-provider-later).
 
 ## I want to reach it from my phone
 
-- **Turn on remote access, approve a device, or remove one:** [Reach the studio from your phone](reach.md).
+- **Turn on remote access, approve a device, or remove one:** [Reach the studio from your phone](everyday-use/reach.md).
 
 ## I want to make it mine
 
-- **Choose the right way to change Delorun:** [Where to customise what](customise.md) compares settings, the profile patch, agent presets, your own plugin, a renamed fork of a shipped plugin and editing Delorun itself, with what each costs you at every update.
-- **Make a first plugin and see it in the studio:** [Your first plugin](first-plugin.md) builds one, shows it under Plugins, and removes it again.
-- **Write a plugin:** [Write a plugin for Delorun](plugins.md) goes from `delorun plugin new` to a plugin that loads in your studio.
-- **See, protect or undo changes:** [Changing your harness](changing-your-harness.md) explains what `delorun changes` records, protection, and undo.
+- **Choose the right way to change Delorun:** [Where to customise what](customising/customise.md) compares settings, the profile patch, agent presets, your own plugin, a renamed fork of a shipped plugin and editing Delorun itself, with what each costs you at every update.
+- **Make a first plugin and see it in the studio:** [Your first plugin](plugin-guides/first-plugin.md) builds one, shows it under Plugins, and removes it again.
+- **Write a plugin:** [Write a plugin for Delorun](plugin-guides/plugins.md) goes from `delorun plugin new` to a plugin that loads in your studio.
+- **See, protect or undo changes:** [Changing your harness](customising/changing-your-harness.md) explains what `delorun changes` records, protection, and undo.
 
 ## I want to know what is safe
 
-- **Understand the sandbox, full access and the consents:** [What Delorun protects](safety.md).
-- **Understand prompt injection and what leaves my computer:** [Prompt injection and data exfiltration](prompt-injection.md).
-- **Know what I trust when I use Delorun:** [What you trust when you use Delorun](trust.md).
+- **Understand the sandbox, full access and the consents:** [What Delorun protects](safety-and-updates/safety.md).
+- **Understand prompt injection and what leaves my computer:** [Prompt injection and data exfiltration](safety-and-updates/prompt-injection.md).
+- **Know what I trust when I use Delorun:** [What you trust when you use Delorun](safety-and-updates/trust.md).
 
 ## Something went wrong
 
-- **A message or code I do not understand:** [Troubleshooting](troubleshooting.md). It explains [how to read a refusal](troubleshooting.md#reading-a-refusal) and lists the common ones by code, with fixes.
-- **Delorun does not start:** [Starting and stopping](troubleshooting.md#starting-and-stopping), then `delorun doctor` ([Daily use](daily-use.md#check-the-release-and-your-setup)).
-- **An update failed:** [Updates and rollback](troubleshooting.md#updates-and-rollback).
+- **A message or code I do not understand:** [Troubleshooting](help/troubleshooting.md). It explains [how to read a refusal](help/troubleshooting.md#reading-a-refusal) and lists the common ones by code, with fixes.
+- **Delorun does not start:** [Starting and stopping](help/troubleshooting.md#starting-and-stopping), then `delorun doctor` ([Daily use](everyday-use/daily-use.md#check-the-release-and-your-setup)).
+- **An update failed:** [Updates and rollback](help/troubleshooting.md#updates-and-rollback).
 
 ## For the technically curious
 

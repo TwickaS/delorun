@@ -126,7 +126,7 @@ Its scenarios, in order, each printing `PASS` or `FAIL` with what the person saw
 | `update-after-clock` | with the clock back, the next signed release updates with no other action |
 | `repair` | `delorun repair` replaces a program whose file changed and keeps the data, and `delorun recover status` and `recover discard` list and remove the program store it set aside |
 | `from` | `delorun update --from <folder>` installs with the channel switched off, and a lower release is refused |
-| `by-hand` | the steps of [Last resort, by hand](../../docs/guide/troubleshooting.md#by-hand), typed literally, give a working program |
+| `by-hand` | the steps of [Last resort, by hand](../../docs/guide/help/troubleshooting.md#by-hand), typed literally, give a working program |
 
 The launcher removes `NODE_OPTIONS` from the runtime's environment, so the clock preload reaches the launcher and not the runtime; the runtime's own timestamp check at `delorun update` is covered by `c02-refuses-expired-timestamp` and by the launcher's identical check. The disk it needs is large: each release unpacks to about 1.5 GB, and the by-hand scenario copies the home as the guide's step 2 says, leaving out `runtimes/` when the disk could not hold the copy.
 

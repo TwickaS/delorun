@@ -124,7 +124,7 @@ describe('the plugin browser with scripts', () => {
     const screen = [...host.querySelectorAll<HTMLElement>('button')].find((button) => button.textContent === ENGLISH_WORDS.kinds.ui.name)!
     await act(async () => { screen.click() })
     expect(host.textContent).toContain('src/client/index.tsx')
-    expect(host.querySelector(`a[href$="/guide/first-plugin"]`)).not.toBeNull()
+    expect(host.querySelector(`a[href$="/guide/plugin-guides/first-plugin"]`)).not.toBeNull()
   })
 })
 

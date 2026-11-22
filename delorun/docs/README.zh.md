@@ -10,7 +10,7 @@ description: "Delorun 文档索引：各层级的内容（用户指南、实操�
 
 Delorun 的文档按层级组织在 `delorun/docs/` 下，与上游位于 `docs/` 下的文档并列。每个事实只有一个归属，即承担其职责的层级，其他页面链接到那里。涉及上游的页面链接到上游文档，而不重复其内容。[指南](guide/README.zh.md)面向使用 Delorun 的人。其他每个层级面向开发者与维护者，他们需要对行为有精确的定义。
 
-- [指南](guide/README.zh.md)：面向安装并使用 Delorun 的人的用户指南，用平实的语言写成，技术术语在首次出现处加以解释，从[安装与首次运行](guide/install.zh.md)开始。[路线图与愿景](guide/roadmap.zh.md)是唯一一页关于计划工作的页面。
+- [指南](guide/README.zh.md)：面向安装并使用 Delorun 的人的用户指南，用平实的语言写成，技术术语在首次出现处加以解释，从[安装与首次运行](guide/get-started/install.zh.md)开始。[路线图与愿景](guide/roadmap.zh.md)是唯一一页关于计划工作的页面。
 - [实操手册](cookbook/README.zh.md)：面向任务的分步指南，每份指南以带编号的验证步骤结束。实操手册目前没有任何指南。
 - [参考资料](reference/README.zh.md)：供需要精确定义的人查阅的页面，从[术语表](reference/glossary.zh.md)开始，其条目以一句平实的话开头。其他页面面向开发者与维护者。
 - [防御性模式](defensive-patterns/README.zh.md)：Delorun 代码评审所执行的规则，扩展了上游的[防御性模式](../../docs/defensive-patterns/README.zh.md)。Delorun 没有自己的模式。

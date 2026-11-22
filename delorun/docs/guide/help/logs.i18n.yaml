@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for logs.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/guide/help/logs.md
+/:
+  en: 6c618cd9a908a76a
+  zh: 08571bdd749409cf
+/where-delorun-keeps-its-logs:
+  en: 59ecb89f00800023
+  zh: 556ad29ec7b3bda4
+/where-delorun-keeps-its-logs/summary:
+  en: a1bc482cf3162e52
+  zh: 7dbd01f2afee4253
+/where-delorun-keeps-its-logs/contents:
+  en: 5dfa08a93a03f19b
+  zh: 4d2603dd0e586e2c
+/where-delorun-keeps-its-logs/log-locations:
+  en: e91253f0665a3ed5
+  zh: e5fc7ba2db76115e
+/where-delorun-keeps-its-logs/what-a-log-holds:
+  en: b63ce87a290a333f
+  zh: ede0a543fb4b626e
+/where-delorun-keeps-its-logs/how-long-logs-are-kept:
+  en: dab0fb77169b1609
+  zh: 6df15f2fd87fd4bf
+/where-delorun-keeps-its-logs/reading-logs-with-delorun-logs:
+  en: e8d3df07be6d6535
+  zh: 73f9b62491a06dfa
+/where-delorun-keeps-its-logs/clearing-logs:
+  en: 1e5af702ebab9e78
+  zh: 5c43473016c5f2f0
+/where-delorun-keeps-its-logs/next:
+  en: 5790544f1646cb90
+  zh: f312e7c215faa886
+/where-delorun-keeps-its-logs/for-the-technically-curious:
+  en: 9fdaf455b8b65bc8
+  zh: 2de286d7c8719fb3

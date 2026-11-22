@@ -1,3 +1,15 @@
 {
-  "pages": ["why-delorun", "install", "providers", "daily-use", "customise", "plugins", "first-plugin", "changing-your-harness", "move-your-setup", "switching", "import-deepseek-chats", "home", "cost-meter", "thinking-tab", "use-your-own-browser", "logs", "reach", "safety", "agents", "trust", "prompt-injection", "updates", "updating-with-plugins", "troubleshooting", "known-issues", "questions", "roadmap", "[Glossary](/reference/glossary)", "..."]
+  "pages": [
+    "README",
+    "---Using Delorun---",
+    "why-delorun",
+    "get-started",
+    "everyday-use",
+    "safety-and-updates",
+    "help",
+    "---Building on Delorun---",
+    "customising",
+    "plugin-guides",
+    "[Reference](/reference)"
+  ]
 }

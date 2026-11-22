@@ -42,7 +42,7 @@
 
 ## 差异台账
 
-[`delorun/upstream-patches.json`](../../upstream-patches.json) 记录本树与上游的差异；[差异索引](../../docs/reference/divergence/README.zh.md)定义了上游源码、路径规则、类别与功能 id。
+[`delorun/upstream-patches.json`](../../upstream-patches.json) 记录本树与上游的差异；[差异索引](../../docs/reference/parity-with-deepseek-harness/divergence/README.zh.md)定义了上游源码、路径规则、类别与功能 id。
 `upstream.commit` 锁定上游提交，各项差异以它为基准计量。
 `forkOwned` 列出 Delorun 完全自有的路径与 glob。`*` 匹配单个路径段内的字符，`**` 跨路径段匹配。一条目覆盖它所匹配的路径，以及匹配目录之下的所有路径。
 `rules` 列出路径规则，每条含 `pattern`、`kind` 与 `reason`。规则覆盖其 glob 所匹配、且不属于上游源码的有差异路径；只有精确的 `generated` 规则可以指名源文件，且没有任何规则覆盖 `vendor/` 下的路径。模式由 `path.posix.matchesGlob` 整体且区分大小写地匹配，其 `*` 与 `**` 不匹配以 `.` 开头的路径段。
@@ -90,7 +90,7 @@ git config merge.delorun-ledger.driver 'node_modules/.bin/tsx delorun/apps/tools
 
 ## 预演合并
 
-[`src/rehearse-upstream.ts`](src/rehearse-upstream.ts) 预演合并某个上游提交，并按[差异预算](../../docs/reference/divergence/README.zh.md#divergence-budget)检验结果。在仓库根目录运行它，`--tag` 与 `--ref` 恰好给其中一个：
+[`src/rehearse-upstream.ts`](src/rehearse-upstream.ts) 预演合并某个上游提交，并按[差异预算](../../docs/reference/parity-with-deepseek-harness/divergence/README.zh.md#divergence-budget)检验结果。在仓库根目录运行它，`--tag` 与 `--ref` 恰好给其中一个：
 
 ```sh
 node_modules/.bin/tsx delorun/apps/tools/src/rehearse-upstream.ts --tag <tag>
@@ -259,11 +259,11 @@ node_modules/.bin/tsx delorun/apps/tools/src/demo-home.ts --home /tmp/delorun-fr
 | 图片 | 文件 | 页面 | 窗口 | 路径与步骤 |
 | --- | --- | --- | --- | --- |
 | 打开了一个 chat 的 studio | `delorun/apps/website/public/hero-studio.webp` | 网站首页 | 1440 × 900 | 演示主目录。打开“Lay out four raised beds”，向上滚动到它的表格出现。 |
-| 首次运行向导 | `delorun/docs/guide/pictures/first-run-guide.webp` | [安装与首次运行](../../docs/guide/install.zh.md) | 1440 × 900 | 没有 chat 的主目录。studio 打开时的 Welcome 步骤。 |
-| 更改主题，之前 | `delorun/docs/guide/pictures/theme-soft.webp` | [自定义](../../docs/guide/customise.zh.md) | 1440 × 900 | 演示主目录。Settings，然后 Appearance。 |
-| 更改主题，之后 | `delorun/docs/guide/pictures/theme-ocean.webp` | [自定义](../../docs/guide/customise.zh.md) | 1440 × 900 | 在 Theme 下选择 Ocean 之后的同一页。之后再选回 Soft。 |
-| 设置版本 | `delorun/docs/guide/pictures/setup-versions.webp` | [更新](../../docs/guide/updates.zh.md) | 1440 × 900 | 更改主题之后：Settings，然后 Data 下的 Setup versions。 |
-| 手机上的 studio | `delorun/docs/guide/pictures/phone-chat.webp` | [远程访问](../../docs/guide/reach.zh.md) | 390 × 844，倍率 2，移动端；`--scale css` | 演示主目录。用 `"deviceScaleFactor":2,"mobile":true` 运行 `browse emulate`，重新加载，打开“Lay out four raised beds”。 |
+| 首次运行向导 | `delorun/docs/guide/pictures/first-run-guide.webp` | [安装与首次运行](../../docs/guide/get-started/install.zh.md) | 1440 × 900 | 没有 chat 的主目录。studio 打开时的 Welcome 步骤。 |
+| 更改主题，之前 | `delorun/docs/guide/pictures/theme-soft.webp` | [自定义](../../docs/guide/customising/customise.zh.md) | 1440 × 900 | 演示主目录。Settings，然后 Appearance。 |
+| 更改主题，之后 | `delorun/docs/guide/pictures/theme-ocean.webp` | [自定义](../../docs/guide/customising/customise.zh.md) | 1440 × 900 | 在 Theme 下选择 Ocean 之后的同一页。之后再选回 Soft。 |
+| 设置版本 | `delorun/docs/guide/pictures/setup-versions.webp` | [更新](../../docs/guide/safety-and-updates/updates.zh.md) | 1440 × 900 | 更改主题之后：Settings，然后 Data 下的 Setup versions。 |
+| 手机上的 studio | `delorun/docs/guide/pictures/phone-chat.webp` | [远程访问](../../docs/guide/everyday-use/reach.zh.md) | 390 × 844，倍率 2，移动端；`--scale css` | 演示主目录。用 `"deviceScaleFactor":2,"mobile":true` 运行 `browse emulate`，重新加载，打开“Lay out four raised beds”。 |
 
 更新报告是 `delorun update --report` 的输出，它需要两个版本和一个正在运行的已安装 Delorun，所以“更新”页改为展示设置版本。指南的图片放在 `delorun/docs/guide/pictures/`；页面用 `pictures/phone-chat.webp` 这样的相对路径引用图片，文档站点的构建会带内容哈希地把它打包进页面，并把该文件夹复制到 `/guide/pictures/`，供 Markdown 路由使用。
 
@@ -333,7 +333,7 @@ fork 套件分两个阶段运行，使启动进程的规范绝不与单元阶段
 
 上游的 `build:artifacts` 不构建 Delorun 的包，所以运行器单独检查它们。当 Delorun 包的 manifest 在 `lib/` 下所指名的运行时文件（`exports` 或 `files` 中的 JavaScript 文件，不含模式或声明文件）不存在，或其最新的 `src` 文件比其最新的输出更新时，带 `build` 脚本的包就是过期的；`build:delorun` 检查随后在 `build:artifacts` 之后，在这次运行的锁和内存预算之下构建过期的包，加载构建代码的 lane 等待它：fork 套件的两个阶段、`tests:snapshots`、`tests:upstream-changed`、`parity-replay` 与 `parity-replay:control`。规范从不自己构建包；需要已构建包而发现它缺失的规范会失败，并指名 `--only build:delorun`。没有 `build` 脚本、或其 manifest 没有指名这样的文件的包从不过期。因此，变基给了它新的已构建包的工作树会在运行中构建它，lane 不手动构建它。
 
-每个检查继承运行器的环境，但不含 git 的仓库变量，并且在 WSL 上不含 `PATH` 中的 Windows 目录和 Windows 侧的变量，其中包括 `NoDefaultCurrentDirectoryInExePath`（[`src/checks/machine.ts`](src/checks/machine.ts)）。当一次运行规划了运行 pnpm 的检查，或规划了 `tests:upstream-changed`（其规范自己启动 pnpm）时，它给每个检查 `pnpm run` 给脚本的环境：固定版本的 pnpm 排在 `PATH` 最前并作为 `npm_execpath`，以及 `pnpm_config_verify_deps_before_run=false`。上游的整个单元套件不是一个 lane；绿色基线运行它，其流程和前提见[对等基线](../../docs/reference/parity-baseline.zh.md#green-base-on-main)。
+每个检查继承运行器的环境，但不含 git 的仓库变量，并且在 WSL 上不含 `PATH` 中的 Windows 目录和 Windows 侧的变量，其中包括 `NoDefaultCurrentDirectoryInExePath`（[`src/checks/machine.ts`](src/checks/machine.ts)）。当一次运行规划了运行 pnpm 的检查，或规划了 `tests:upstream-changed`（其规范自己启动 pnpm）时，它给每个检查 `pnpm run` 给脚本的环境：固定版本的 pnpm 排在 `PATH` 最前并作为 `npm_execpath`，以及 `pnpm_config_verify_deps_before_run=false`。上游的整个单元套件不是一个 lane；绿色基线运行它，其流程和前提见[对等基线](../../docs/reference/parity-with-deepseek-harness/parity-baseline.zh.md#green-base-on-main)。
 
 命令，在仓库根目录运行：
 

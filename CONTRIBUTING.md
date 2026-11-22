@@ -54,7 +54,7 @@ Give each commit a Conventional Commits subject, such as `docs(contributing): ex
 
 Delorun is not held rigidly to upstream and may diverge from it over time. Delorun's behaviour lives under `delorun/`, built on upstream's seams: hooks, Service Definitions and configuration fields.
 
-A change to one of upstream's files, which lie outside `delorun/`, is welcome when it makes the product better. In the pull request, describe the reason and name the Delorun feature the change serves. Maintainers' tooling writes the entry in [delorun/upstream-patches.json](delorun/upstream-patches.json) at merge, so do not edit that file by hand. Put a generic fix in its own commit. At each upstream merge the maintainers report how far Delorun has diverged ([divergence index](delorun/docs/reference/divergence/README.md)).
+A change to one of upstream's files, which lie outside `delorun/`, is welcome when it makes the product better. In the pull request, describe the reason and name the Delorun feature the change serves. Maintainers' tooling writes the entry in [delorun/upstream-patches.json](delorun/upstream-patches.json) at merge, so do not edit that file by hand. Put a generic fix in its own commit. At each upstream merge the maintainers report how far Delorun has diverged ([divergence index](delorun/docs/reference/parity-with-deepseek-harness/divergence/README.md)).
 
 DeepSeek Harness takes no outside pull requests. A fix to upstream's own code can go here. Please also file the bug as an issue in upstream's repository.
 
