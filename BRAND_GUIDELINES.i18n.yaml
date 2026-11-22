@@ -2,6 +2,18 @@
 # section, a hash of its English and Chinese blocks outside code blocks and generated regions.
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write BRAND_GUIDELINES.md
-/deepseek-harness-brand-asset-usage-guidelines:
-  en: 23933888033edf18
-  zh: eaa5afb9e2cb4d25
+/delorun-brand-guidelines:
+  en: 36f48ce8e18d2192
+  zh: bb60934f69e03178
+/delorun-brand-guidelines/the-name:
+  en: 4381f08244ba91a8
+  zh: 4381f08244ba91a8
+/delorun-brand-guidelines/the-mark-and-colours:
+  en: 685d1dfd15ab0ba4
+  zh: 685d1dfd15ab0ba4
+/delorun-brand-guidelines/forks-and-plugins:
+  en: 297ffbc99c8f4c1c
+  zh: 297ffbc99c8f4c1c
+/delorun-brand-guidelines/naming-the-upstream:
+  en: a5c0417d32582740
+  zh: a5c0417d32582740

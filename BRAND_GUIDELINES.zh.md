@@ -1,12 +1,42 @@
-# DeepSeek Harness 品牌素材使用规范
+# Delorun brand guidelines
 
 [English](BRAND_GUIDELINES.md) | 中文
 
-为了维护 DeepSeek Harness 生态的长期健康发展，避免用户混淆，方便用户对相关资源进行检索和识别，我们特别制定本规范，希望大家共同遵守：
+These guidelines say how to write Delorun's name, how to use its mark and colours, what a fork or a plugin may call itself, and how Delorun names its upstream. The colour values come from [`@delorun/brand`](delorun/packages/brand/README.zh.md), which is their one source.
 
-- 在项目的描述性文字中，您可以使用“DeepSeek Harness”真实、准确地说明您的项目与 DeepSeek Harness 的关系，例如“基于 DeepSeek Harness 构建”或“兼容 DeepSeek Harness”等。这类说明符合许可证的要求，也有助于用户理解项目的定位。
-- 如果您希望项目名称能体现与 DeepSeek Harness 生态的关联，我们建议使用缩写的 **“DSH”** 标识来命名，这样既清晰又便于社区内的交流。
-- 在项目命名时，请避免直接使用完整的 **“DeepSeek Harness”** 商标。**“DeepSeek Harness”** 是深度求索公司的注册商标，未经授权用于项目名，容易引发用户的误解和混淆，从而影响整个生态的清晰度。同时，也可能涉及商标侵权行为。
-- 此外，请您避免在宣传或展示时，以容易引起误解的方式使用官方品牌素材，以免让用户产生官方背书、合作或授权等不实印象。
+## The name
 
-我们相信，一个清晰、有序的社区环境，能让每一位开发者的努力都更容易被看见和认可。对于少数不符合上述规范的情况，我们可能会联系相关方进行适当的调整，以维护生态整体的秩序。感谢大家的理解与支持，让我们一起构建一个更友好、更可持续发展的开源社区。
+- The name is "Delorun": one word, a capital D, the rest lower case.
+- The command is `delorun`, in code font.
+- Never write "Delo", "Delo Run", "Delo-Run" or "DeloRun".
+- "Delorun" names the product, the project and the hosted service at delorun.com alike.
+
+## The mark and colours
+
+- The mark is the hex mark: a nut that takes the text colour and a plug that takes the brand colour. Use the files and the `Mark` component from `@delorun/brand`; do not redraw it.
+- The brand colour is peach, `#E5734A`: fills, focus rings and the mark's plug. Text on a peach fill is `#111110`, because white on peach reaches only 3.05:1.
+- Links and accent text on a light page use the text-safe peach, `#B84A1B`, which reaches 5.21:1 on white. On a dark page, peach itself reaches 6.19:1 on `#111110`.
+- Text is set in Schibsted Grotesk and code in JetBrains Mono.
+
+Do:
+
+- Show the mark with the nut in the text colour and the plug in peach.
+- Keep the contrast ratios above.
+
+Do not:
+
+- Stretch, rotate, outline, recolour or add effects to the mark.
+- Set body text in peach `#E5734A` on a light page.
+- Replace the typefaces with look-alikes in material that presents itself as Delorun's.
+
+## Forks and plugins
+
+- "For Delorun" and "works with Delorun" are fine in a plugin's or a project's description.
+- A fork must not use "Delorun" in its name, its command, its package scope or its icon, and must not look official, endorsed or authorised by Delorun.
+- A plugin's own name and icon are its own; they do not use the Delorun mark.
+
+## Naming the upstream
+
+Delorun is a community fork of DeepSeek Harness. Delorun says so in truthful words: "Built on DeepSeek Harness", "Import from DSH", "compared with DeepSeek Harness". It never uses "DeepSeek Harness", "DSH" or DeepSeek's own brand material as or inside Delorun's name, and nothing it publishes suggests that DeepSeek endorses, cooperates in or authorises Delorun.
+
+A project that describes its relationship to DeepSeek Harness follows DeepSeek's own guidelines for that name.
