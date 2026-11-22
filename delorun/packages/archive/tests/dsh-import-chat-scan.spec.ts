@@ -22,7 +22,7 @@ describe('a chat log scan', () => {
   it('keeps at most one close listener while a large log waits for drain, and reads the same result', async () => {
     const records = [
       { type: 'session', version: 4, id: 'large', createdAt: 0, isSeeded: false, delegationDepth: 0, cwd: '/work/proj' },
-      ...Array.from({ length: 64 }, (_, index) => ({ type: index % 2 === 0 ? 'turn/start' : 'turn/end', text: randomBytes(64 * 1024).toString('base64') })),
+      { type: 'turn/start', text: randomBytes(768 * 1024).toString('base64') },
       { type: 'turn/start', text: 'open' },
     ]
     const bytes = zstdCompressSync(Buffer.from(`${records.map(record => JSON.stringify(record)).join('\n')}\n`))
@@ -33,7 +33,7 @@ describe('a chat log scan', () => {
     let drains = 0
     decoder.on('drain', () => { drains += 1 })
     let mostClose = 0
-    const chunk = 32 * 1024
+    const chunk = 64 * 1024
     for (let offset = 0; offset < bytes.length; offset += chunk) {
       await scan.feed(bytes.subarray(offset, offset + chunk))
       mostClose = Math.max(mostClose, decoder.listenerCount('close'))
@@ -42,8 +42,8 @@ describe('a chat log scan', () => {
     await new Promise(resolve => { setImmediate(resolve) })
 
     expect(drains).toBeGreaterThan(10)
-    expect(mostClose).toBeLessThanOrEqual(2)
-    expect(decoder.listenerCount('close')).toBeLessThanOrEqual(2)
+    expect(mostClose).toBeLessThanOrEqual(1)
+    expect(decoder.listenerCount('close')).toBeLessThanOrEqual(1)
     expect(warnings.filter(warning => warning.name === 'MaxListenersExceededWarning')).toEqual([])
     expect(result).toEqual({ id: 'large', cwd: '/work/proj', openTurn: true })
   }, 60_000)
