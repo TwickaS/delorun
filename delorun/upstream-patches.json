@@ -3289,6 +3289,12 @@
       "class": "delorun-feature",
       "feature": "contributor-templates",
       "reason": "The PR description skill asks for English descriptions in the pull request template's sections, with a plain AI usage section instead of upstream's AI-DECLARATION block and stage table."
+    },
+    {
+      "path": "packages/typert/registry/src/service.ts",
+      "class": "generic-fix",
+      "feature": "typecheck-strictness",
+      "reason": "Type-parameter erasure for a mixed table; offer upstream."
     }
   ],
   "retired": []
