@@ -47,20 +47,22 @@ export type PrivacyReport = PrivacySection & Readonly<{
 }>
 
 /** One event of the in-process hooks' log (`events.jsonl`), one JSON object per line. */
-export type HookEvent =
-  | Readonly<{ t: 'start'; pid: number; cmd: string }>
+export type HookEvent = Readonly<{ ts?: number }> & (
+  | Readonly<{ t: 'start'; pid: number; ppid?: number; cmd: string }>
   | Readonly<{ t: 'connect'; pid: number; host: string; port: string; proto: 'tcp' | 'udp' }>
   | Readonly<{ t: 'connected'; pid: number; host: string; port: string; address: string }>
   | Readonly<{ t: 'listen'; pid: number; host: string; port: string }>
   | Readonly<{ t: 'exec'; pid: number; file: string; args: string }>
   | Readonly<{ t: 'env'; pid: number; name: string }>
   | Readonly<{ t: 'open'; pid: number; label: string; path: string }>
+)
 
 /** A connect or listen seen at the container level (the helper's socket poll or its proxy). */
-export type NetEvent =
+export type NetEvent = Readonly<{ ts?: number }> & (
   | Readonly<{ t: 'connect'; host: string; port: string; name?: string }>
   | Readonly<{ t: 'listen'; host: string; port: string }>
   | Readonly<{ t: 'exec'; cmd: string }>
+)
 
 /** One host the proxy saw traffic to, and which canaries appeared in what it carried. */
 export type ProxyHost = Readonly<{

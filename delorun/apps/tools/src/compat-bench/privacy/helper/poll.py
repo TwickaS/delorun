@@ -35,6 +35,37 @@ def sockets(path: str):
         return
 
 
+def command_of(pid: str) -> str:
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as handle:
+            return handle.read().replace(b"\0", b" ").decode("utf-8", "replace").strip()
+    except OSError:
+        return ""
+
+
+def parent_of(pid: str) -> str:
+    try:
+        with open(f"/proc/{pid}/stat") as handle:
+            stat = handle.read()
+        return stat[stat.rindex(")") + 2:].split()[1]
+    except (OSError, ValueError, IndexError):
+        return "0"
+
+
+def runner_owned(pid: str, command: str) -> bool:
+    """The bench's own scripts, the container runtime, and the browser the bench drives are not the plugin's."""
+    if "/opt/bench/" in command or command.startswith("runc"):
+        return True
+    ancestor = parent_of(pid)
+    for _ in range(12):
+        if ancestor in ("0", "1", ""):
+            return False
+        if "/opt/bench/browse.mjs" in command_of(ancestor):
+            return True
+        ancestor = parent_of(ancestor)
+    return False
+
+
 def is_local(ip: str) -> bool:
     return ip.startswith("127.") or ip in ("::1", "0.0.0.0", "::") or ip.startswith("::ffff:127.")
 
@@ -42,13 +73,14 @@ def is_local(ip: str) -> bool:
 def main() -> None:
     seen: set[str] = set()
     # What runs now is the helper's own (the proxy, this script's parent); only later processes are reported.
-    pids: set[str] = {entry for entry in os.listdir("/proc") if entry.isdigit()}
+    initial = {entry for entry in os.listdir("/proc") if entry.isdigit()}
+    known: dict[str, str] = {}
     with open(OUT, "a", buffering=1) as out:
         def emit(event: dict) -> None:
             key = json.dumps(event, sort_keys=True)
             if key not in seen:
                 seen.add(key)
-                out.write(key + "\n")
+                out.write(json.dumps({**event, "ts": int(time.time() * 1000)}, sort_keys=True) + "\n")
 
         while True:
             rows = [row for table in ("/proc/net/tcp", "/proc/net/tcp6") for row in sockets(table)]
@@ -60,17 +92,20 @@ def main() -> None:
                     # A socket on a listening port is an accepted one (the proxy's, or a plugin server's): inbound, not a connect.
                     emit({"t": "connect", "host": remote[0], "port": remote[1]})
             me = os.getpid()
-            for entry in os.listdir("/proc"):
-                if not entry.isdigit() or entry in pids or int(entry) == me:
+            alive = [entry for entry in os.listdir("/proc") if entry.isdigit() and int(entry) != me]
+            for entry in alive:
+                command = command_of(entry)
+                # A process shows its parent's command line until it executes its own program, so a change of command
+                # line is a new program, not only a new process.
+                if not command or known.get(entry) == command:
                     continue
-                try:
-                    with open(f"/proc/{entry}/cmdline", "rb") as handle:
-                        command = handle.read().replace(b"\0", b" ").decode("utf-8", "replace").strip()
-                except OSError:
+                known[entry] = command
+                if entry in initial or any(command.startswith(own) for own in OWN) or runner_owned(entry, command):
                     continue
-                pids.add(entry)
-                if command and not any(command.startswith(own) for own in OWN):
-                    emit({"t": "exec", "cmd": command[:200]})
+                emit({"t": "exec", "cmd": command[:200]})
+            for entry in set(known) - set(alive):
+                del known[entry]
+                initial.discard(entry)
             time.sleep(INTERVAL)
 
 

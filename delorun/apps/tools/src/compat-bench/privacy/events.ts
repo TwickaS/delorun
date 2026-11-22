@@ -23,6 +23,25 @@ export function parseEvents(text: string): ReadonlyArray<HookEvent> {
   return events
 }
 
+/**
+ * @param command - a started program: the file and its arguments, or a whole command line.
+ * @returns whether the bench's own scripts or the container runtime started it, so it is not the plugin's behaviour.
+ */
+export function isRunnerCommand(command: string): boolean {
+  return command.includes('/opt/bench/') || command.startsWith('runc ') || command === 'runc init'
+}
+
+/**
+ * Make a started program comparable between runs: the program's file name and its arguments with random ids and long
+ * numbers replaced.
+ * @param command - the file and arguments, or a command line.
+ * @returns the key.
+ */
+export function execKey(command: string): string {
+  const [file = '', ...rest] = command.trim().split(' ')
+  return [file.split('/').pop() ?? file, ...rest].join(' ').replace(/[0-9a-f]{8,}|\d{4,}/gi, '*')
+}
+
 /** The hooks' events, reduced to sets without repeats. */
 export type EventSummary = Readonly<{
   /** `host:port` of every connect, with the address the name resolved to, when known. */
@@ -70,7 +89,8 @@ export function summarise(events: ReadonlyArray<HookEvent>): EventSummary {
     } else if (event.t === 'listen') {
       listens.set(`${event.host}:${event.port}`, { host: event.host, port: event.port })
     } else if (event.t === 'exec') {
-      execs.add(event.args === '' ? event.file : `${event.file} ${event.args}`)
+      const command = event.args === '' ? event.file : `${event.file} ${event.args}`
+      if (!isRunnerCommand(command)) execs.add(command)
     } else if (event.t === 'env') {
       if (event.name === '*') envEnumerated = true
       else envNames.add(event.name)
@@ -85,8 +105,9 @@ export function summarise(events: ReadonlyArray<HookEvent>): EventSummary {
 const EPHEMERAL_FROM = 32768
 
 /**
- * Remove from a run's summary everything the no-plugin baseline also did. A started program is compared by its file
- * name only, since Delorun's own helper programs carry arguments that differ between runs (temporary paths). A listen
+ * Remove from a run's summary everything the no-plugin baseline also did. A started program is compared by its
+ * file name and its arguments with ids and long numbers hidden, since Delorun's own helper programs carry arguments
+ * that differ between runs (temporary paths). A listen
  * on a system-chosen port is removed once per such listen the baseline made on the same address, since the port
  * differs between runs.
  * @param run - the plugin run's summary.
@@ -94,7 +115,7 @@ const EPHEMERAL_FROM = 32768
  * @returns the run's summary without the baseline's items.
  */
 export function subtractBaseline(run: EventSummary, baseline: EventSummary): EventSummary {
-  const baselineExecFiles = new Set([...baseline.execs].map(exec => exec.split(' ')[0] ?? exec))
+  const baselineExecs = new Set([...baseline.execs].map(execKey))
   const baselineConnects = new Set([...baseline.connects.values()].flatMap(connect => [`${connect.host}:${connect.port}`, ...connect.name === undefined ? [] : [`${connect.name}:${connect.port}`]]))
   const ephemeralBudget = new Map<string, number>()
   for (const listen of baseline.listens.values()) {
@@ -113,7 +134,7 @@ export function subtractBaseline(run: EventSummary, baseline: EventSummary): Eve
   return {
     connects: new Map([...run.connects].filter(([, connect]) => !baselineConnects.has(`${connect.host}:${connect.port}`) && (connect.name === undefined || !baselineConnects.has(`${connect.name}:${connect.port}`)))),
     listens,
-    execs: new Set([...run.execs].filter(exec => !baseline.execs.has(exec) && !baselineExecFiles.has(exec.split(' ')[0] ?? exec))),
+    execs: new Set([...run.execs].filter(exec => !baselineExecs.has(execKey(exec)))),
     envNames: new Set([...run.envNames].filter(name => !baseline.envNames.has(name))),
     envEnumerated: run.envEnumerated && !baseline.envEnumerated,
     opens: new Map([...run.opens].filter(([path]) => !baseline.opens.has(path))),

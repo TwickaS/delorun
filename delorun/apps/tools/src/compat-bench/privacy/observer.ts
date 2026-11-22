@@ -14,12 +14,14 @@ import { DEFAULT_LAYOUT, MODEL_KEY_ENV, makeCanaries, watchList } from './canari
 import type { Canaries, CanaryLayout } from './canaries.ts'
 import { realDocker } from './docker.ts'
 import type { Docker } from './docker.ts'
-import { parseEvents, summarise } from './events.ts'
+import { execKey, parseEvents, summarise } from './events.ts'
+import type { EventSummary } from './events.ts'
 import { buildHelperImage, collectHelper, removeStaleHelpers, startHelper, stopHelper } from './helper/image.ts'
 import { buildPrivacy } from './markers.ts'
 import { assemble } from './observed.ts'
 import type { RunFacts } from './observed.ts'
 import { signatureOf } from './requests.ts'
+import { attributedWindows, parseMarks, withinWindows } from './stages.ts'
 import type { HelperReport, NetEvent, PrivacyAdditions, PrivacyReport, PrivacyRunContext, ProxyHost } from './types.ts'
 
 /**
@@ -94,6 +96,16 @@ export async function readHelperReport(folder: string): Promise<HelperReport> {
     }
   } catch { /* no net log */ }
   return { hosts, net }
+}
+
+/**
+ * Leave out the programs the runner itself started (its `commands.log`).
+ * @param summary - the hooks' summary.
+ * @param runnerCommands - the runner's commands, as {@link execKey} keys.
+ * @returns the summary without them.
+ */
+function withoutRunnerCommands(summary: EventSummary, runnerCommands: ReadonlySet<string>): EventSummary {
+  return { ...summary, execs: new Set([...summary.execs].filter(exec => !runnerCommands.has(execKey(exec)))) }
 }
 
 /**
@@ -183,12 +195,18 @@ export function createPrivacyObserver(options: PrivacyObserverOptions = {}): Obs
       const helperFolder = await collectHelper(docker, state.helper, run.outDir).catch(() => undefined)
       await stopHelper(docker, state.helper)
       states.delete(run.runId)
-      const events = parseEvents(await readFile(join(folder, 'events.jsonl'), 'utf8').catch(() => ''))
+      const marks = parseMarks(await readFile(join(folder, 'stages.jsonl'), 'utf8').catch(() => ''))
+      // Only what happened while the plugin was running counts; with no stage marked there is nothing to attribute, so all counts.
+      const windows = run.baseline ? [] : attributedWindows(marks, now().getTime())
+      const counted = <T extends Readonly<{ ts?: number }>>(events: ReadonlyArray<T>): ReadonlyArray<T> => windows.length === 0 ? events : withinWindows(events, windows)
+      const runnerCommands = new Set((await readFile(join(run.outDir, 'logs', 'commands.log'), 'utf8').catch(() => '')).split('\n').map(line => execKey(line.replace(/^\S+ /, ''))).filter(key => key !== ''))
+      const events = counted(parseEvents(await readFile(join(folder, 'events.jsonl'), 'utf8').catch(() => '')))
       const requests = await readFile(join(run.outDir, 'logs', 'mock-requests.jsonl'), 'utf8').catch(() => '')
       const request = signatureOf(requests, state.canaries.chatWord)
+      const helperReport = helperFolder === undefined ? undefined : await readHelperReport(helperFolder)
       const facts: RunFacts = {
-        hooks: summarise(events),
-        ...helperFolder === undefined ? {} : { helper: await readHelperReport(helperFolder) },
+        hooks: withoutRunnerCommands(summarise(events), runnerCommands),
+        ...helperReport === undefined ? {} : { helper: { ...helperReport, net: counted(helperReport.net).filter(event => event.t !== 'exec' || !runnerCommands.has(execKey(event.cmd))) } },
         fileChanges: state.snapshot?.fileChanges ?? [],
         leftCanaries: state.snapshot?.leftCanaries ?? [],
         ...request === undefined ? {} : { request },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseEvents, subtractBaseline, summarise } from '../../../src/compat-bench/privacy/events.ts'
+import { execKey, isRunnerCommand, parseEvents, subtractBaseline, summarise } from '../../../src/compat-bench/privacy/events.ts'
 import type { HookEvent } from '../../../src/compat-bench/privacy/types.ts'
 
 const lines = (events: object[]): string => events.map(event => JSON.stringify(event)).join('\n')
@@ -44,7 +44,7 @@ describe('hook events', () => {
       { t: 'connected', pid: 1, host: 'mock.local', port: '8000', address: '198.51.100.5' },
       { t: 'listen', pid: 1, host: '127.0.0.1', port: '18750' },
       { t: 'listen', pid: 1, host: '127.0.0.1', port: '40001' },
-      { t: 'exec', pid: 1, file: '/usr/bin/node', args: '/tmp/a1/worker.js' },
+      { t: 'exec', pid: 1, file: '/usr/bin/node', args: '/tmp/0a1b2c3d4e/worker.js' },
       { t: 'env', pid: 1, name: 'HOME' },
       { t: 'env', pid: 1, name: '*' },
       { t: 'open', pid: 1, label: 'Delorun key store', path: '/home/bench/.delorun/credentials.yaml' },
@@ -56,7 +56,8 @@ describe('hook events', () => {
       { t: 'listen', pid: 2, host: '127.0.0.1', port: '40555' },
       { t: 'listen', pid: 2, host: '127.0.0.1', port: '40556' },
       { t: 'listen', pid: 2, host: '0.0.0.0', port: '4000' },
-      { t: 'exec', pid: 2, file: '/usr/bin/node', args: '/tmp/b2/worker.js' },
+      { t: 'exec', pid: 2, file: '/usr/bin/node', args: '/tmp/f0e1d2c3b4/worker.js' },
+      { t: 'exec', pid: 2, file: '/usr/bin/node', args: '/home/bench/plugin/server.js' },
       { t: 'exec', pid: 2, file: '/usr/bin/git', args: 'status' },
       { t: 'env', pid: 2, name: 'HOME' },
       { t: 'env', pid: 2, name: 'GITHUB_TOKEN' },
@@ -68,9 +69,26 @@ describe('hook events', () => {
     expect([...reduced.connects.keys()]).toEqual(['203.0.113.9:443'])
     // One system-chosen port at 127.0.0.1 is the baseline's pattern; the second one and the 0.0.0.0 listen are new.
     expect([...reduced.listens.keys()]).toEqual(['127.0.0.1:40556', '0.0.0.0:4000'])
-    expect([...reduced.execs]).toEqual(['/usr/bin/git status'])
+    expect([...reduced.execs]).toEqual(['/usr/bin/node /home/bench/plugin/server.js', '/usr/bin/git status'])
     expect([...reduced.envNames]).toEqual(['GITHUB_TOKEN'])
     expect(reduced.envEnumerated).toBe(false)
     expect([...reduced.opens.keys()]).toEqual(['/home/bench/.ssh/id_ed25519'])
+  })
+
+  it('leaves out the programs the bench and the container runtime start', () => {
+    expect(isRunnerCommand('node /opt/bench/ctl.mjs plugin-add x')).toBe(true)
+    expect(isRunnerCommand('/usr/bin/node /opt/bench/browse.mjs shot')).toBe(true)
+    expect(isRunnerCommand('runc init')).toBe(true)
+    expect(isRunnerCommand('git status')).toBe(false)
+    const summary = summarise([
+      { t: 'exec', pid: 1, file: '/usr/local/bin/node', args: '/opt/bench/ctl.mjs link' },
+      { t: 'exec', pid: 1, file: '/usr/bin/git', args: 'log' },
+    ] as HookEvent[])
+    expect([...summary.execs]).toEqual(['/usr/bin/git log'])
+  })
+
+  it('compares started programs by name and arguments with ids hidden', () => {
+    expect(execKey('/usr/local/bin/node /tmp/0a1b2c3d4e5f/x.js --port 18590')).toBe('node /tmp/*/x.js --port *')
+    expect(execKey('git')).toBe('git')
   })
 })
