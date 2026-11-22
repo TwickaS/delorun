@@ -218,8 +218,21 @@ function pageDownloads(): PageDownloads {
 }
 
 /**
- * A source that lists the Host's items, then the page's own downloads the Host does not list. The Host's actions
- * serve its items; a page download is removed here, retried by its starter, and never cancelled.
+ * Whether the page's download of a key stands for it over the Host's item of the same key: when the Host's item is
+ * over (failed or cancelled) and the page's runs or has finished, as when an add after a failed pack install goes
+ * through the plugin manager.
+ * @param host - the Host's item.
+ * @param page - the page's download.
+ * @returns true when the page's download is the one to show.
+ */
+function pageStandsFor(host: DownloadItem, page: DownloadItem): boolean {
+  return (host.state === 'failed' || host.state === 'cancelled') && (isActive(page) || isDone(page))
+}
+
+/**
+ * A source that lists the Host's items, then the page's own downloads the Host does not list; a page download that
+ * {@link pageStandsFor} the Host's item takes that item's place. The Host's actions serve its items; a page download is
+ * removed here, retried by its starter, and never cancelled.
  * @param raw - the provided source.
  * @returns the source.
  */
@@ -229,11 +242,23 @@ function withPageDownloads(raw: DownloadsSource): DownloadsSource {
     const host = raw.snapshot()
     const page = pageDownloads()
     if (cache?.host === host && cache.version === page.version) return cache.items
+    if (page.entries.size === 0) {
+      cache = { host, version: page.version, items: host }
+      return host
+    }
+    const shown = host.map((item) => {
+      const own = page.entries.get(item.key)?.item
+      return own !== undefined && pageStandsFor(item, own) ? own : item
+    })
     const own = [...page.entries.values()].map(entry => entry.item).filter(item => !host.some(each => each.key === item.key))
-    cache = { host, version: page.version, items: own.length === 0 ? host : [...host, ...own] }
+    cache = { host, version: page.version, items: [...shown, ...own] }
     return cache.items
   }
-  const ownEntry = (key: string) => (raw.snapshot().some(item => item.key === key) ? undefined : pageDownloads().entries.get(key))
+  const ownEntry = (key: string) => {
+    const entry = pageDownloads().entries.get(key)
+    const host = raw.snapshot().find(item => item.key === key)
+    return entry !== undefined && (host === undefined || pageStandsFor(host, entry.item)) ? entry : undefined
+  }
   return {
     snapshot,
     subscribe: (listener) => {
