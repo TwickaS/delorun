@@ -7,7 +7,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./dangerous": "./src/dangerous.ts",
+    "./warning": "./src/warning.ts",
     "./trust": "./src/trust.ts"
   },
   "dependencies": {

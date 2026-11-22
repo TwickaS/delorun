@@ -19,7 +19,7 @@ This package holds the writes that turn a setup answer into the files a profile 
 - `readAnswersRecord`, `promptsOf`, `backgroundOf`, `updateAnswersRecord` and `ANSWERS_FILENAME`: read `setup-answers.json`, the prompts and background answers it holds (setup's defaults for a missing or unreadable record), and rewrite it atomically at mode 0600. A profile with no record is refused a rewrite, because it never ran setup.
 - `SetupApplyError`: the refusal of a file this package cannot use. Its message is a complete sentence.
 
-Two leaf modules are also exported on their own, so a browser spec can read them without the Node-only rest: `@delorun/setup-apply/dangerous` (the warning and the root check) and `@delorun/setup-apply/trust`.
+Two leaf modules are also exported on their own, so a browser spec can read them without the Node-only rest: `@delorun/setup-apply/warning` (the dangerous-mode warning) and `@delorun/setup-apply/trust`.
 
 ## Limits
 

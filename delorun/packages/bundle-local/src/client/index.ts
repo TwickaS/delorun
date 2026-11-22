@@ -25,8 +25,9 @@
  * It registers the trust badge at the sidebar's foot (`sidebar.footer.action`), which opens the trust panel: what this
  * Delorun runs and how much of it was checked, from the `delorun-trust` row's bill, with Check now on the home's own computer.
  *
- * It registers the "How Delorun runs" section (`delorun-setup-commands`), which shows the command for each choice the first-run guide
- * leaves to the terminal; Delorun's Settings layout places it under General.
+ * It registers the "How Delorun runs" section (`delorun-setup-commands`), where how much Delorun asks, running in the
+ * background, the studio's port and phone access are changed beside the terminal command for each; dangerous mode, the port
+ * and phone access are changed at the home's own computer. Delorun's Settings layout places it under General.
  *
  * Other surfaces open the sections with `ctx.settingsShell.openSection(PRIVACY_SECTION_ID)`,
  * `ctx.settingsShell.openSection(DEVICES_SECTION_ID)` or `ctx.settingsShell.openSection(NETWORK_SECTION_ID)`.
@@ -609,7 +610,9 @@ export function apply(ctx: Context): void {
   }, NetworkSection))
   ctx.effect(() => ctx.locale.register(SETUP_COMMANDS_NS, { en: setupCommandsEn, zh: setupCommandsZh }), 'delorun-setup-commands: section dictionaries')
   const setupCommandsT = ctx.locale.bind(SETUP_COMMANDS_NS)
-  const setupCommandsFace = (): SetupCommandsSectionInjected => ({ fetch: studioFetch })
+  const setupCommandsFace = (): SetupCommandsSectionInjected => ({
+    fetch: studioFetch, atComputer: () => (ctx.get('connection') as ConnectionHandle).isLoopback, openPin: () => { ctx.get('settingsShell')?.openSection(PIN_MODE_SECTION_ID) },
+  })
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: SETUP_COMMANDS_SECTION_ID,
