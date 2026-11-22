@@ -7,4 +7,4 @@ export { createFakeDownloadsSource, currentDownloadsSource, provideDownloadsSour
 export { useDownloadStatusText } from './Items.tsx'
 export type { DownloadItem } from './source.ts'
 export { startPageDownload, type PageDownload } from './source.ts'
-export { BROWSER_DOWNLOAD_KEY } from './names.ts'
+export { BROWSER_DOWNLOAD_KEY, packTitle } from './names.ts'

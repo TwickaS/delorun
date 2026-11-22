@@ -5,6 +5,7 @@
  */
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import { BROWSER_BUNDLE } from '@delorun/browser-setup'
+import { packTitle } from '@delorun/plugin-downloads/row'
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import { fits, presentConnections } from '../guide.ts'
@@ -33,18 +34,19 @@ export function connectionName(id: string, t: StepServices['t'], providers: Read
 export { readableName }
 
 /**
- * The guide's own words for Delorun's plugin packs. They win over the package's own title, so the packs that touch Claude
- * Code, Codex or a browser read apart from the Agents and Browser steps, and a pack not in the profile yet, whose
- * package the studio cannot read before it downloads, still has a title.
+ * The guide's descriptions of Delorun's plugin packs; their titles are the downloads panel's (`packTitle`), so a pack
+ * reads the same in both. Both win over the package's own words, so the packs that touch Claude Code, Codex or a
+ * browser read apart from the Agents and Browser steps, and a pack not in the profile yet, whose package the studio
+ * cannot read before it downloads, still has a title.
  */
-const PACK_CARDS: Readonly<Record<string, { readonly title: OnboardingLocaleKey, readonly description: OnboardingLocaleKey }>> = {
-  '@delorun/bundle-browser': { title: 'plugins.pack.browser.title', description: 'plugins.pack.browser.description' },
-  '@delorun/bundle-real-browser': { title: 'plugins.pack.realBrowser.title', description: 'plugins.pack.realBrowser.description' },
-  '@delorun/bundle-code-intelligence': { title: 'plugins.pack.codeIntelligence.title', description: 'plugins.pack.codeIntelligence.description' },
-  '@delorun/bundle-agent-hooks': { title: 'plugins.pack.agentHooks.title', description: 'plugins.pack.agentHooks.description' },
-  '@delorun/bundle-webhooks': { title: 'plugins.pack.webhooks.title', description: 'plugins.pack.webhooks.description' },
-  '@delorun/bundle-external-agents': { title: 'plugins.pack.externalAgents.title', description: 'plugins.pack.externalAgents.description' },
-  '@delorun/bundle-computer-use-driver': { title: 'plugins.pack.computerUseDriver.title', description: 'plugins.pack.computerUseDriver.description' },
+const PACK_CARDS: Readonly<Record<string, OnboardingLocaleKey>> = {
+  '@delorun/bundle-browser': 'plugins.pack.browser.description',
+  '@delorun/bundle-real-browser': 'plugins.pack.realBrowser.description',
+  '@delorun/bundle-code-intelligence': 'plugins.pack.codeIntelligence.description',
+  '@delorun/bundle-agent-hooks': 'plugins.pack.agentHooks.description',
+  '@delorun/bundle-webhooks': 'plugins.pack.webhooks.description',
+  '@delorun/bundle-external-agents': 'plugins.pack.externalAgents.description',
+  '@delorun/bundle-computer-use-driver': 'plugins.pack.computerUseDriver.description',
 }
 
 /** How long the plugin manager may take to answer before the step says so and offers Try again. */
@@ -104,8 +106,8 @@ export function PluginsStep({ services, guide }: StepProps): ReactNode {
           const pack = Object.hasOwn(PACK_CARDS, name) ? PACK_CARDS[name] : undefined
           return (
             <BundleCard key={name} name={name} services={services}
-              title={pack !== undefined ? t(pack.title) : view?.title !== undefined ? resolveText(view.title) : !slow && (view === undefined || view.state === 'checking') ? undefined : readableName(name)}
-              description={pack !== undefined ? t(pack.description) : view?.description !== undefined ? resolveText(view.description) : undefined}>
+              title={pack !== undefined ? packTitle(name) ?? readableName(name) : view?.title !== undefined ? resolveText(view.title) : !slow && (view === undefined || view.state === 'checking') ? undefined : readableName(name)}
+              description={pack !== undefined ? t(pack) : view?.description !== undefined ? resolveText(view.description) : undefined}>
               {matches.length > 0 && <StateLine tone="success">{t('plugins.fits', { names: matches.map(id => connectionName(id, t, names)).join(', ') })}</StateLine>}
             </BundleCard>
           )
