@@ -100,6 +100,7 @@ export function ReachRow({ t, fetch, state, computer, openPin, onChanged }: Reac
           onChange={(next) => { void turn(next) }} />
       </div>
       : null}
+    {computer && on ? <p className={css.note}>{t('reach.signOut')}</p> : null}
     {preview === 'checking' ? <p className={css.note} role="status">{t('reach.checking')}</p> : null}
     {preview !== undefined && preview !== 'checking'
       ? <div className={css.panel} data-reach-preview>

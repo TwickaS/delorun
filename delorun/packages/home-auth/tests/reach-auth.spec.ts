@@ -410,6 +410,36 @@ describe('admitting a session token', () => {
     }
   })
 
+  it('signing every device out ends their sessions and passes, keeps the device list, and restores nothing when access is turned on again', async () => {
+    const home = await served()
+    try {
+      const phone = device()
+      await approve(home.auth, phone)
+      const first = await signIn(home.auth, phone)
+      const holder = { deviceId: phone.id, listener: 'reach-tailscale-private' } as const
+      home.auth.grants.openPass(holder, 15)
+      expect(home.auth.grants.passOf(holder)).toBeDefined()
+      expect(home.auth.admitToken(first.token, 'reach-tailscale-private').kind).toBe('admitted')
+      // Pins `signAllDevicesOut`: a home that only stopped listening would keep the cookie and the pass for the next turn-on.
+      expect(await home.auth.signAllDevicesOut()).toBe(1)
+      expect(home.auth.admitToken(first.token, 'reach-tailscale-private')).toEqual({ kind: 'refused', code: 'NOT_SIGNED_IN' })
+      expect(home.auth.grants.passOf(holder)).toBeUndefined()
+      expect((await home.auth.devices()).devices.map(listed => listed.id)).toEqual([phone.id])
+      expect(JSON.parse(await readFile(join(home.directory, SESSIONS_FILE), 'utf8')) as { sessions: Record<string, unknown> }).toMatchObject({ sessions: {} })
+      // Access is turned on again, which serves the same listener: the old cookie and pass stay refused until a fresh sign-in.
+      home.clock.advance(1000)
+      expect(home.auth.admitToken(first.token, 'reach-tailscale-private')).toEqual({ kind: 'refused', code: 'NOT_SIGNED_IN' })
+      expect(home.auth.grants.passOf(holder)).toBeUndefined()
+      const again = await signIn(home.auth, phone, first.token)
+      expect(again.token).not.toBe(first.token)
+      expect(home.auth.admitToken(again.token, 'reach-tailscale-private').kind).toBe('admitted')
+      expect(home.auth.admitToken(first.token, 'reach-tailscale-private')).toEqual({ kind: 'refused', code: 'NOT_SIGNED_IN' })
+      expect(home.auth.grants.passOf(holder)).toBeUndefined()
+    } finally {
+      await home.dispose()
+    }
+  })
+
   it('removal ends the device\'s sessions at once and calls the removal listeners', async () => {
     const home = await served()
     try {

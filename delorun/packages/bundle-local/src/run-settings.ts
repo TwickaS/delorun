@@ -132,6 +132,8 @@ export interface RunDependencies {
   runningPort(): number | undefined
   /** @returns the reach service, or undefined when the profile does not load it. */
   reach(): RunReach | undefined
+  /** Signs every paired device out, keeping the device list. @returns how many sessions ended; none when the home has no device sign-in. */
+  signOutDevices(): Promise<number>
   /** @returns whether the hot-reload service is mounted, so a change to the profile's patch file reaches running plugins without a restart. */
   hotReload(): boolean
   /** Whether a port is free on this computer. @param port - the port. @returns whether nothing listens on it. */
@@ -157,6 +159,7 @@ export function systemDependencies(ctx: Pick<Context, 'get'>): RunDependencies {
     },
     runningPort: () => ctx.get('webServer')?.port,
     reach: () => ctx.get('reach'),
+    signOutDevices: async () => (await ctx.get('homeAuth')?.signAllDevicesOut()) ?? 0,
     hotReload: () => ctx.get('hmr') !== undefined,
     isPortFree,
     tailscale: systemTailscale(),
@@ -318,7 +321,9 @@ export class RunSettings {
 
   /**
    * Turn phone access on with the ticket of a preview, or off. Turning it on changes Tailscale, as `delorun reach on
-   * tailscale` does: the serve access check runs first, and a failed check writes nothing.
+   * tailscale` does: the serve access check runs first, and a failed check writes nothing. Turning it off signs every
+   * paired device out (sessions and Face ID passes end, so turning it on again restores none) and resets who may ask to
+   * pair without an approval window; the paired list stays.
    * @param request - `{ on: false }`, or `{ on: true, ticket }`.
    * @returns the state of the phone listener.
    * @throws {RunError} `NOT_SET_UP`, `TICKET_INVALID` for a missing, wrong, spent or expired ticket or one for another Tailscale name, `TAILSCALE_UNAVAILABLE`.
@@ -364,8 +369,13 @@ export class RunSettings {
       const row = readReachRowAt(patchOf(where))
       const next: TailscalePrivateRow = { ...row, enabled: false }
       writeReachRowAt(patchOf(where), next)
+      // A pairing widened to answer without an approval window goes back to the safe default, as turning access on resets it.
+      writeMayAskAt(patchOf(where), 'own-user')
       return Promise.resolve({ row, next })
     })
+    // Every paired device signs in again after access is turned on: the list stays, no session or pass does. This runs
+    // whatever Tailscale answers next, so a failed serve removal cannot leave a device signed in.
+    await this.dependencies.signOutDevices()
     let stillServed: string | undefined
     try {
       const host = URL.parse(row.address)?.hostname ?? (await readTailscale(this.dependencies.tailscale)).dnsName

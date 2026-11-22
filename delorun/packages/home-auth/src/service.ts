@@ -805,6 +805,15 @@ export class HomeAuthService extends Service {
   }
 
   /**
+   * Sign every paired device out and keep the device list: every session, Face ID pass and unlock ends and their reach
+   * connections close, so no earlier cookie or pass is admitted again; a device signs in afresh.
+   * @returns how many sessions were removed.
+   */
+  signAllDevicesOut(): Promise<number> {
+    return this.state().signAllDevicesOut()
+  }
+
+  /**
    * Revoke a device, ending its live sessions and their reach connections.
    * @param deviceId - the device.
    * @returns what was removed, invalidated and closed.

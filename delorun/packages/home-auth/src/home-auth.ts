@@ -535,6 +535,27 @@ export class HomeAuth {
   }
 
   /**
+   * Sign every paired device out and keep the device list: remove every session, so each token is refused from this
+   * call on; end every Face ID pass, elevation, grant and hold; and close the reach connections the sessions admitted.
+   * Turning device access off calls this, so turning it on again restores no session: a device signs in again. The
+   * records of the devices, and their passkeys, stay.
+   * @returns how many sessions were removed.
+   */
+  async signAllDevicesOut(): Promise<number> {
+    return this.changing(async () => {
+      const ids = Object.keys(await this.sessions.all())
+      this.elevations.endAll('session-ended')
+      this.grants.endAll()
+      this.view?.sessions.clear()
+      for (const armed of this.expiries.values()) clearTimeout(armed.timer)
+      this.expiries.clear()
+      for (const id of ids) this.closeReachConnections?.({ sessionId: id })
+      await this.sessions.remove(ids)
+      return ids.length
+    })
+  }
+
+  /**
    * Mint a session token for a device and record the session under its digest.
    *
    * A session speaks for a trusted device at the address it is trusted on and nothing else, so the home refuses to mint

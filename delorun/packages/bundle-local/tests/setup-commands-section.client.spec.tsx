@@ -301,6 +301,8 @@ describe('phone access', () => {
     })
     fireEvent.click(await within(row('reach')).findByRole('button', { name: en['reach.pin'] }))
     expect(openPin).toHaveBeenCalledOnce()
+    // Before it is turned off, the row says what turning it off does to the paired devices.
+    expect(within(row('reach')).getByText(en['reach.signOut'])).toBeTruthy()
     const protection = await within(row('reach')).findByRole('switch', { name: en['reach.protection'] })
     expect(protection.getAttribute('aria-checked')).toBe('false')
     fireEvent.click(protection)
@@ -309,6 +311,7 @@ describe('phone access', () => {
     fireEvent.click(within(row('reach')).getByRole('switch', { name: en['reach.switch'] }))
     await waitFor(() => { expect(posts(host, RUN_ROUTES.reach)).toEqual([{ on: false }]) })
     expect(await screen.findByText(en['reach.offDone'])).toBeTruthy()
+    expect(en['reach.offDone']).toContain('signed out')
   })
 
   it('says Tailscale may still serve the studio when turning it off could not remove the rule', async () => {

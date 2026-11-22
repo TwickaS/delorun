@@ -47,6 +47,7 @@ function world(options: Options = {}) {
   writeFileSync(join(profileDir, 'cordis.patch.yml'), options.patch ?? '[]\n')
   let now = START
   let codes = 0
+  let signedOut = 0
   const tailscale = options.tailscale ?? fakeTailscale(HOST)
   const applied: unknown[] = []
   const reach: RunReach = {
@@ -61,6 +62,7 @@ function world(options: Options = {}) {
     runningPort: () => options.runningPort,
     reach: () => reach,
     hotReload: () => options.hotReload !== false,
+    signOutDevices: () => { signedOut += 1; return Promise.resolve(1) },
     isPortFree: async port => !(options.busy ?? []).includes(port),
     tailscale: tailscale.run,
     now: () => now,
@@ -77,7 +79,7 @@ function world(options: Options = {}) {
     grant: async () => (await readDangerousGrant(dangerousGrantPath(home))).kind,
     grantPath: dangerousGrantPath(home),
   }
-  return { service, files, home, profileDir, tailscale, applied, advance: (ms: number) => { now += ms }, dependencies }
+  return { service, files, home, profileDir, tailscale, applied, signedOut: () => signedOut, advance: (ms: number) => { now += ms }, dependencies }
 }
 
 /**
@@ -413,6 +415,31 @@ describe('phone access', () => {
     expect(w.files.row('delorun-reach')).toMatchObject({ tailscalePrivate: { enabled: false } })
     expect(w.tailscale.calls.some(call => call[0] === 'serve' && call.includes('off'))).toBe(true)
     expect(w.applied).toHaveLength(2)
+  })
+
+  it('signs every paired device out when it turns off, resets who may ask to pair without a window, and signs none out when it turns on', async () => {
+    // Pins the sign-out in `reachOff`: a home that only stopped listening would restore every old session on the next turn-on.
+    const w = world({ patch: '- id: delorun-home-auth\n  config:\n    pairing:\n      mayAskWithoutWindow: tailnet\n' })
+    const { ticket } = await w.service.reachPreview()
+    await w.service.reach({ on: true, ticket })
+    expect(w.signedOut()).toBe(0)
+    // A terminal widened the pairing default meanwhile.
+    writeFileSync(join(w.profileDir, 'cordis.patch.yml'), w.files.patchText().replace('own-user', 'tailnet'))
+    await w.service.reach({ on: false })
+    expect(w.signedOut()).toBe(1)
+    expect(w.files.row('delorun-home-auth')).toMatchObject({ pairing: { mayAskWithoutWindow: 'own-user' } })
+    expect(w.files.row('delorun-reach')).toMatchObject({ tailscalePrivate: { enabled: false } })
+  })
+
+  it('signs the devices out even when Tailscale could not remove its serve rule', async () => {
+    const w = world()
+    const { ticket } = await w.service.reachPreview()
+    await w.service.reach({ on: true, ticket })
+    for (const call of ['serve status', 'serve off'] as const) w.tailscale.answers[call] = { code: 1, stdout: '', stderr: 'boom' }
+    const answer = await w.service.reach({ on: false })
+    expect(w.signedOut()).toBe(1)
+    expect(answer.on).toBe(false)
+    expect(w.files.row('delorun-reach')).toMatchObject({ tailscalePrivate: { enabled: false } })
   })
 
   it('keeps a change made to the phone-access row while the checks ran, because it reads the row under the write lock', async () => {
