@@ -261,13 +261,22 @@ describe('the Browser step\'s place in the guide', () => {
   const ids = (change: { readonly plugins?: readonly string[], readonly browserAdded?: boolean, readonly covered?: boolean } = {}): string[] => buildSteps({
     services: stepServices({ plugins: change.plugins ?? [] }), guide: createGuide(hostFake().host),
     record: change.covered === true ? { ...NO_RECORD, sections: ['plugins'] } : NO_RECORD,
-    extra: [], reach: 'absent', phone: 'untouched', target: { kind: 'other' }, notice: undefined, keepCurrent: false,
+    extra: [], reach: 'absent', phone: 'untouched', target: { kind: 'other' }, notice: undefined, keepCurrent: false, first: false,
     ...change.browserAdded === undefined ? {} : { browserAdded: change.browserAdded },
   }).map(step => step.id)
 
   it('follows Recommended plugins while the guide offers the Browser pack', () => {
     const steps = ids({ plugins: ['@scope/other', BROWSER_BUNDLE] })
     expect(steps.slice(steps.indexOf(STEPS.plugins.id), steps.indexOf(STEPS.plugins.id) + 2)).toEqual(['plugins', 'browser'])
+  })
+
+  it('is left out of a first open, where the pack is offered or added', () => {
+    const first = (browserAdded: boolean): string[] => buildSteps({
+      services: stepServices({ plugins: [BROWSER_BUNDLE] }), guide: createGuide(hostFake().host), record: NO_RECORD,
+      extra: [], reach: 'absent', phone: 'untouched', target: { kind: 'other' }, notice: undefined, keepCurrent: false, first: true, browserAdded,
+    }).map(step => step.id)
+    expect(first(true)).not.toContain('browser')
+    expect(first(false)).not.toContain('plugins')
   })
 
   it('is left out where the pack is neither offered nor added', () => {
@@ -286,7 +295,7 @@ describe('the Browser step\'s place in the guide', () => {
   it('is in the dialog for a pack the Host already reports, which the dialog reads before it shows its steps', async () => {
     const browser = browserFake({ kind: 'ready' })
     const props = {
-      t, complete: vi.fn(), completeStep: vi.fn(), renderSection: (id: string) => `section ${id}`,
+      t, complete: vi.fn(), completeStep: vi.fn(), renderSection: (id: string) => `section ${id}`, explicit: true,
       progress: liveForm<OnboardingSettings>(settings()).form, extra: createSnapshotStore<readonly OnboardingStep[]>([]), loadRecord: () => Promise.resolve(NO_RECORD),
       services: stepServices({ browser: browser.face }), startChat: () => Promise.resolve(), aside: createSnapshotStore(false), deferredOnly: createSnapshotStore(false),
     } satisfies OnboardingStepEntryProps

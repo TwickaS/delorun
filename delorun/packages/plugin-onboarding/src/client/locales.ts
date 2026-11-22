@@ -311,6 +311,7 @@ export const en = {
   'ready.workspace.last': 'The workspace you used last',
   'ready.ideas': 'Ideas to try',
   'ready.ideas.copyNamed': 'Copy the idea “{label}”',
+  'ready.more': 'Look, agents, plugins and phone access are in Settings. Settings → General → Getting started opens the full guide.',
   'start.later': 'Settings → General → Getting started shows this guide again.',
 
   'keyBanner.text': 'Add a model key to start chatting',
@@ -668,6 +669,7 @@ export const zh: Record<OnboardingLocaleKey, string> = {
   'ready.workspace.last': '你上次使用的工作区',
   'ready.ideas': '不妨试试',
   'ready.ideas.copyNamed': '复制想法“{label}”',
+  'ready.more': '外观、智能体、插件和手机访问都在“设置”中。“设置 → 通用 → 开始使用”可打开完整引导。',
   'start.later': '“设置 → 通用 → 开始使用”中可以再次打开本引导。',
 
   'keyBanner.text': '添加模型密钥后即可开始对话',

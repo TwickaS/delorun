@@ -197,11 +197,30 @@ describe('the PIN step', () => {
 })
 
 describe('where the PIN step shows', () => {
-  const ids = (reach: ReachState, phone: 'untouched' | 'on' | 'skipped' | 'done' = 'untouched'): string[] => {
+  const ids = (reach: ReachState, phone: 'untouched' | 'on' | 'skipped' | 'done' = 'untouched', options: { readonly first?: boolean; readonly pinOn?: boolean } = {}): string[] => {
     const guide = createGuide(hostFake().host)
     const record = { reachSetUp: false } as SetupRecord
-    return buildSteps({ services: stepServices(), guide, record, extra: [], reach, phone, target: { kind: 'other' }, notice: undefined, keepCurrent: false }).map(step => step.id)
+    return buildSteps({ services: stepServices(), guide, record, extra: [], reach, phone, target: { kind: 'other' }, notice: undefined, keepCurrent: false, first: options.first ?? false, pinOn: options.pinOn ?? false }).map(step => step.id)
   }
+
+  it('shows on a first open at the computer with reach set up and PIN mode off, and leaves out the Phone access step', () => {
+    expect(ids('set-up', 'untouched', { first: true })).toEqual([STEPS.welcome.id, STEPS.providers.id, STEPS.pin.id, STEPS.ready.id])
+  })
+
+  it('leaves out of a first open at the computer where PIN mode is already on, and keeps in the full guide', () => {
+    expect(ids('set-up', 'untouched', { first: true, pinOn: true })).toEqual([STEPS.welcome.id, STEPS.providers.id, STEPS.ready.id])
+    expect(ids('set-up', 'untouched', { pinOn: true })).toContain(STEPS.pin.id)
+  })
+
+  it('shows the computer-only version on a first open at a phone, and not where PIN mode is on', () => {
+    expect(ids('remote', 'untouched', { first: true })).toEqual([STEPS.welcome.id, STEPS.providers.id, STEPS.pin.id, STEPS.ready.id])
+    expect(ids('remote', 'untouched', { first: true, pinOn: true })).toEqual([STEPS.welcome.id, STEPS.providers.id, STEPS.ready.id])
+  })
+
+  it('leaves out of a first open where the home has no reach, or reach is off', () => {
+    expect(ids('absent', 'untouched', { first: true })).not.toContain(STEPS.pin.id)
+    expect(ids('off', 'untouched', { first: true })).toEqual([STEPS.welcome.id, STEPS.providers.id, STEPS.ready.id])
+  })
 
   it('shows after Phone access at the computer with reach already on', () => {
     expect(ids('set-up')).toContain(STEPS.pin.id)

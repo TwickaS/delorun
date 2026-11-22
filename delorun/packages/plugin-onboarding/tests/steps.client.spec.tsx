@@ -733,8 +733,8 @@ describe('the phone access step', () => {
 })
 
 describe('the ready step', () => {
-  const ready = (guide: Guide, options: { readonly target?: StartTarget; readonly reach?: 'absent' | 'set-up' | 'off'; readonly services?: StepServices } = {}) =>
-    render(<ReadyStep services={options.services ?? stepServices()} guide={guide} reach={options.reach ?? 'off'} target={options.target ?? { kind: 'checking' }} keepCurrent={false} />)
+  const ready = (guide: Guide, options: { readonly target?: StartTarget; readonly reach?: 'absent' | 'set-up' | 'off'; readonly services?: StepServices; readonly first?: boolean } = {}) =>
+    render(<ReadyStep services={options.services ?? stepServices()} guide={guide} reach={options.reach ?? 'off'} target={options.target ?? { kind: 'checking' }} keepCurrent={false} first={options.first ?? false} />)
   // A value's own text; the workspace's path sits in a span under its folder name.
   const rows = () => [...document.querySelectorAll('dt')].map(each => [each.textContent, each.nextElementSibling?.firstChild?.textContent, each.nextElementSibling?.getAttribute('data-tone') ?? undefined])
   const workspacePath = () => document.querySelector('dd > span')?.textContent
@@ -780,6 +780,27 @@ describe('the ready step', () => {
       ['Workspace', en['ready.workspace.none'], 'attention'],
     ])
     expect(screen.queryByText(en['ready.ideas'])).toBeNull()
+  })
+
+  it('lists only the model and the workspace on a first open, and points to Settings in one sentence', async () => {
+    const [claude] = AGENT_BUNDLES
+    ready(guideOf(), {
+      first: true, reach: 'set-up', target: { kind: 'default', workspaceId: DEFAULT_WORKSPACE, path: DEFAULT_PATH },
+      services: stepServices({ bundles: installerFake({ [claude.name]: { state: 'installed' } }).installer }),
+    })
+    await settle()
+    expect(rows()).toEqual([['Model', 'DeepSeek', undefined], ['Workspace', 'Delorun', undefined]])
+    expect(screen.getByText(en['ready.more'])).toBeTruthy()
+    expect(screen.queryByText(en['start.later'])).toBeNull()
+    expect(en['ready.more']).toBe('Look, agents, plugins and phone access are in Settings. Settings → General → Getting started opens the full guide.')
+  })
+
+  it('keeps the full checklist and the Getting started line when the guide is opened from Settings', async () => {
+    ready(guideOf(), { reach: 'set-up', target: { kind: 'other' } })
+    await settle()
+    expect(rows().map(row => row[0])).toEqual(['Model', 'Look', 'Agents', 'Plugins', 'Phone access', 'Workspace'])
+    expect(screen.getByText(en['start.later'])).toBeTruthy()
+    expect(screen.queryByText(en['ready.more'])).toBeNull()
   })
 
   it('names the last-used workspace with the general prompts, and phone access as off', async () => {
@@ -910,7 +931,7 @@ describe('what the guide shows after the audit', () => {
   })
 
   it('reads one key state on Ready and Models: a found key the test could not reach is named, not called missing', async () => {
-    render(<ReadyStep services={stepServices()} guide={guideOf(hostFake({ keys: { providers: [{ provider: 'deepseek-official', name: 'DeepSeek', result: 'unreachable' }] } }).host)} reach="absent" target={{ kind: 'none' }} keepCurrent={false} />)
+    render(<ReadyStep services={stepServices()} guide={guideOf(hostFake({ keys: { providers: [{ provider: 'deepseek-official', name: 'DeepSeek', result: 'unreachable' }] } }).host)} reach="absent" target={{ kind: 'none' }} keepCurrent={false} first={false} />)
     await settle()
     expect(screen.getByText('DeepSeek (key found, not checked)')).toBeTruthy()
   })

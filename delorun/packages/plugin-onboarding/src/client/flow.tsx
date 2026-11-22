@@ -82,6 +82,11 @@ export interface FlowInput {
   readonly pinOn?: boolean
   /** Whether the Browser plugin pack is in the profile and loaded; the Browser step then shows even where the guide does not offer the pack. */
   readonly browserAdded?: boolean
+  /**
+   * Whether this is the first open of the studio, where the guide is short: Welcome, Models, Workspace only without a default workspace,
+   * the PIN step where phone access is set up, and Ready. False for the guide opened from Settings, which builds every step.
+   */
+  readonly first: boolean
   /** The deferred steps to show alone, from the Finish setup entry at the computer; absent shows the whole guide. */
   readonly only?: readonly DeferrableStep[]
 }
@@ -91,23 +96,26 @@ export interface FlowInput {
  * @param input - the services and what decides which steps apply.
  * @returns the steps, ascending by order.
  */
-export function buildSteps({ services, guide, record, extra, reach, phone, target, notice, keepCurrent, pinOn = false, browserAdded = false, only }: FlowInput): FlowStep[] {
+export function buildSteps({ services, guide, record, extra, reach, phone, target, notice, keepCurrent, first, pinOn = false, browserAdded = false, only }: FlowInput): FlowStep[] {
   const { t, plugins, optionalRows } = services
   if (only !== undefined) return deferredSteps({ services, guide, only })
   const covered = (id: string): boolean => record.sections?.includes(id) === true
   const props = { services, guide }
   const built: FlowStep[] = [{ ...STEPS.welcome, title: () => t('step.welcome'), render: () => <WelcomeStep {...props} notice={notice} />, ...notice === undefined ? {} : { onContinue: notice.acknowledge } }]
   built.push({ ...STEPS.providers, title: () => t('step.providers'), render: (next, back) => <ModelsStep {...props} next={next} back={back} remote={reach === 'remote'} pinOn={pinOn} /> })
-  if (!covered(STEPS.look.id)) built.push({ ...STEPS.look, title: () => t('step.look'), render: next => <LookStep {...props} next={next} /> })
-  if (!covered(STEPS.agents.id)) built.push({ ...STEPS.agents, title: () => t('step.agents'), render: () => <AgentsStep {...props} /> })
-  if ((plugins.length > 0 || optionalRows.length > 0) && !covered(STEPS.plugins.id)) built.push({ ...STEPS.plugins, title: () => t('step.plugins'), render: () => <PluginsStep {...props} /> })
-  // Browser has its own step where the plugins step offers its pack, or the pack is already in the profile.
-  const browserOffered = plugins.includes(BROWSER_BUNDLE) && !covered(STEPS.plugins.id)
-  if (browserOffered || browserAdded) built.push({ ...STEPS.browser, title: () => t('step.browser'), render: () => <BrowserStep {...props} /> })
-  // A studio opened from a phone is already on one, so it has no Phone access step.
-  if (reach === 'off' && !record.reachSetUp) built.push({ ...STEPS.reach, title: () => t('step.reach'), continueLabel: () => { const read = guide.readiness.getSnapshot(); return read.status === 'ready' && read.value.tailscale.state === 'ready' ? t('continue') : t('reach.done') }, onSkip: () => { guide.setPhone('skipped') }, onContinue: () => { void services.host.reach().then((now) => { guide.setPhone(now === 'set-up' ? 'on' : 'done') }) }, render: () => <ReachStep {...props} /> })
+  // The first open leaves out Look, Agents, Recommended plugins, Browser and Phone access: Settings holds them and the full guide shows them.
+  if (!first) {
+    if (!covered(STEPS.look.id)) built.push({ ...STEPS.look, title: () => t('step.look'), render: next => <LookStep {...props} next={next} /> })
+    if (!covered(STEPS.agents.id)) built.push({ ...STEPS.agents, title: () => t('step.agents'), render: () => <AgentsStep {...props} /> })
+    if ((plugins.length > 0 || optionalRows.length > 0) && !covered(STEPS.plugins.id)) built.push({ ...STEPS.plugins, title: () => t('step.plugins'), render: () => <PluginsStep {...props} /> })
+    // Browser has its own step where the plugins step offers its pack, or the pack is already in the profile.
+    const browserOffered = plugins.includes(BROWSER_BUNDLE) && !covered(STEPS.plugins.id)
+    if (browserOffered || browserAdded) built.push({ ...STEPS.browser, title: () => t('step.browser'), render: () => <BrowserStep {...props} /> })
+    // A studio opened from a phone is already on one, so it has no Phone access step.
+    if (reach === 'off' && !record.reachSetUp) built.push({ ...STEPS.reach, title: () => t('step.reach'), continueLabel: () => { const read = guide.readiness.getSnapshot(); return read.status === 'ready' && read.value.tailscale.state === 'ready' ? t('continue') : t('reach.done') }, onSkip: () => { guide.setPhone('skipped') }, onContinue: () => { void services.host.reach().then((now) => { guide.setPhone(now === 'set-up' ? 'on' : 'done') }) }, render: () => <ReachStep {...props} /> })
+  }
   // The PIN step is for the home's own computer with phone access on: reach was already set up, or the Phone access step just found it on.
-  if (reach === 'set-up' || (reach === 'off' && phone === 'on')) built.push({ ...STEPS.pin, title: () => t('step.pin'), render: () => <PinStep {...props} /> })
+  if ((reach === 'set-up' && !(first && pinOn)) || (reach === 'off' && phone === 'on')) built.push({ ...STEPS.pin, title: () => t('step.pin'), render: () => <PinStep {...props} /> })
   // A phone cannot set the PIN, so it says so and offers to leave it for the computer; a step already deferred or already done is left out.
   if (reach === 'remote' && !pinOn && record.deferred?.includes('pin') !== true) {
     built.push({
@@ -116,9 +124,10 @@ export function buildSteps({ services, guide, record, extra, reach, phone, targe
       render: () => <ComputerOnlyStep services={services} id="pin" />,
     })
   }
+  // A first open needs the Workspace step only where there is no default workspace for the first chat to open in.
+  if (!first || target.kind === 'none') built.push({ ...STEPS.workspace, title: () => t('step.workspace'), render: () => <WorkspaceStep {...props} target={target} keepCurrent={keepCurrent} /> })
   built.push(
-    { ...STEPS.workspace, title: () => t('step.workspace'), render: () => <WorkspaceStep {...props} target={target} keepCurrent={keepCurrent} /> },
-    { ...STEPS.ready, title: () => t('step.ready'), render: () => <ReadyStep {...props} reach={record.reachSetUp || reach === 'remote' ? 'set-up' : reach} target={target} keepCurrent={keepCurrent} /> },
+    { ...STEPS.ready, title: () => t('step.ready'), render: () => <ReadyStep {...props} reach={record.reachSetUp || reach === 'remote' ? 'set-up' : reach} target={target} keepCurrent={keepCurrent} first={first} /> },
   )
   const added = extra.map((step): FlowStep => ({ id: step.id, order: step.order, title: step.title, render: next => { const Body = step.component; return <Body next={next} /> } }))
   return [...built, ...added].sort((a, b) => a.order - b.order)

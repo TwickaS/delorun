@@ -48,10 +48,10 @@ function Idea({ t, label, prompt }: { readonly t: StepServices['t']; readonly la
 
 /**
  * Ready: what the guide set, line by line, and a few ideas to try in the chosen folder.
- * @param props - the services, the guide, the reach state and where the chat opens without a choice.
+ * @param props - the services, the guide, the reach state, where the chat opens without a choice and whether this is the first open, which lists only the model and the workspace.
  * @returns the step body.
  */
-export function ReadyStep({ services, guide, reach, target, keepCurrent }: StepProps & { readonly reach: ReachState; readonly target: StartTarget; readonly keepCurrent: boolean }): ReactNode {
+export function ReadyStep({ services, guide, reach, target, keepCurrent, first }: StepProps & { readonly reach: ReachState; readonly target: StartTarget; readonly keepCurrent: boolean; readonly first: boolean }): ReactNode {
   const { t, appearance, look, scheme, plugins, optionalRows, bundles } = services
   const mode = useSyncExternalStore(useCallback(listener => scheme.subscribe(listener), [scheme]), () => scheme.get())
   const keys = useStore(guide.keys)
@@ -67,7 +67,7 @@ export function ReadyStep({ services, guide, reach, target, keepCurrent }: StepP
   const agents = AGENT_BUNDLES.filter(each => added(each.name)).map(each => t(`agents.${each.key}.title`))
   const rowViews = useSyncExternalStore(useCallback(listener => bundles.rows.subscribe(listener), [bundles]), () => bundles.rows.getSnapshot())
   const extra = plugins.filter(added).length + optionalRows.filter(id => rowViews[id]?.state === 'installed' || rowViews[id]?.state === 'restart').length
-  const lines: CheckLine[] = [
+  const all: CheckLine[] = [
     working.length > 0
       ? { key: 'model', label: t('ready.model'), value: working.map(each => each.result === 'works' ? each.name : t('ready.model.unverified', { name: each.name })).join(', '), tone: undefined }
       : { key: 'model', label: t('ready.model'), value: t('ready.model.none'), tone: 'attention' },
@@ -83,6 +83,8 @@ export function ReadyStep({ services, guide, reach, target, keepCurrent }: StepP
           ? { key: 'workspace', label: t('ready.workspace'), value: t('ready.workspace.last'), tone: undefined }
           : { key: 'workspace', label: t('ready.workspace'), value: t('ready.workspace.none'), tone: 'attention' },
   ]
+  // A first open sets only the model and the workspace; the rest is in Settings.
+  const lines = first ? all.filter(line => line.key === 'model' || line.key === 'workspace') : all
   const set = starterSet(folderOf(workspace) ?? '')
   return (
     <div className={css.stack}>
@@ -106,7 +108,7 @@ export function ReadyStep({ services, guide, reach, target, keepCurrent }: StepP
         </div>
       )}
       {stock && <p className={css.hint} role="status">{t('ready.stock')}</p>}
-      <p className={`${css.hint} ${css.closing}`}>{t('start.later')}</p>
+      <p className={`${css.hint} ${css.closing}`}>{t(first ? 'ready.more' : 'start.later')}</p>
     </div>
   )
 }
