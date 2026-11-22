@@ -20,7 +20,7 @@
  *
  * @module @delorun/bundle-local/run-settings
  */
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: the ctx.connection merge and its `connection/request` event.
@@ -240,18 +240,21 @@ export class RunSettings {
   }
 
   /**
-   * Finish turning dangerous mode on. Checks the root user, the yes, the code and the phrase, all before it writes; the
-   * code works once, whatever the outcome. Staying on dangerous mode with a valid grant file changes nothing.
+   * Finish turning dangerous mode on. Checks the root user, the yes, the code and the phrase, all before it writes. The
+   * code is spent first, so it works once whatever the outcome, and a call refused for another reason still uses it
+   * up. Staying on dangerous mode with a valid grant file changes nothing.
    * @param request - the code, whether the person answered yes to the first question, and what they typed.
    * @returns whether dangerous mode now holds.
    * @throws {RunError} `ROOT_REFUSED`, `NOT_CONFIRMED`, `CODE_EXPIRED` for a code that is wrong, spent or past its time, `PHRASE_WRONG`, `NOT_SET_UP`.
    */
   async dangerousConfirm(request: { readonly nonce: string, readonly understood: boolean, readonly phrase: string }): Promise<DangerousConfirmed> {
+    // The code is spent before any check that can throw, so no outcome leaves it for another try, and a second call that
+    // starts before the first one finishes finds none.
+    const issued = this.begun
+    this.begun = undefined
     const where = this.located()
     this.refuseRoot()
     if (!request.understood) throw new RunError('NOT_CONFIRMED', 'Dangerous mode stays off: the first question was not answered yes.')
-    const issued = this.begun
-    this.begun = undefined
     this.redeem(issued, request.nonce, 'Start again: the code for turning dangerous mode on was not issued, was used already or has run out.')
     if (request.phrase !== DANGEROUS_PHRASE) throw new RunError('PHRASE_WRONG', `Dangerous mode stays off: the phrase was not typed exactly as ${DANGEROUS_PHRASE}.`)
     return this.dependencies.locked(where.profileDir, async () => {
@@ -405,7 +408,7 @@ export class RunSettings {
    * @throws {RunError} when no code was issued, it differs, or it has run out.
    */
   private redeem(issued: { readonly code: string, readonly pending: Pending } | undefined, code: string, message: string, refusal: 'CODE_EXPIRED' | 'TICKET_INVALID' = 'CODE_EXPIRED'): Pending {
-    if (issued === undefined || issued.code !== code || this.dependencies.now() > issued.pending.expiresAt) throw new RunError(refusal, message)
+    if (issued === undefined || !sameCode(issued.code, code) || this.dependencies.now() > issued.pending.expiresAt) throw new RunError(refusal, message)
     return issued.pending
   }
 
@@ -420,6 +423,16 @@ export class RunSettings {
     if (record === undefined) throw new RunError('NOT_SET_UP', 'This profile has not been through setup, so there is no answer to change. Run delorun setup in a terminal first.')
     return record
   }
+}
+
+/**
+ * Compare two codes in time that does not depend on where they differ: both are hashed to one length first.
+ * @param issued - the code the home issued.
+ * @param offered - the code a request names.
+ * @returns whether they are the same text.
+ */
+function sameCode(issued: string, offered: string): boolean {
+  return timingSafeEqual(createHash('sha256').update(issued).digest(), createHash('sha256').update(offered).digest())
 }
 
 /**

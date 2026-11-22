@@ -220,6 +220,25 @@ describe('turning dangerous mode on', () => {
     await untouched(replayed)
   })
 
+  it('spends the code on a confirmation that says no, so a valid one afterwards is refused', async () => {
+    // Pins the order in `dangerousConfirm`: a code that survived a refused call could be tried again with the right phrase.
+    const w = world()
+    w.service.dangerousBegin()
+    await expect(w.service.dangerousConfirm({ ...confirm, understood: false })).rejects.toMatchObject({ code: 'NOT_CONFIRMED' })
+    await expect(w.service.dangerousConfirm(confirm)).rejects.toMatchObject({ code: 'CODE_EXPIRED' })
+    await untouched(w)
+  })
+
+  it('answers two confirmations with the same code at once with exactly one success', async () => {
+    // Pins the code being cleared before the first await: two calls that both saw it would both write.
+    const w = world()
+    w.service.dangerousBegin()
+    const results = await Promise.allSettled([w.service.dangerousConfirm(confirm), w.service.dangerousConfirm(confirm)])
+    expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1)
+    expect(results.filter(result => result.status === 'rejected').map(result => (result.reason as { code: string }).code)).toEqual(['CODE_EXPIRED'])
+    expect(await w.files.grant()).toBe('valid')
+  })
+
   it('lets a later begin replace the earlier code', async () => {
     const w = world()
     w.service.dangerousBegin()
@@ -515,6 +534,15 @@ describe('the routes', () => {
     expect(w.files.patchText()).toBe(patch)
     expect(w.files.recordText()).toBe(record)
     expect(await w.files.grant()).toBe('absent')
+  })
+
+  it('answer two confirmations of one code sent at once with exactly one 200', async () => {
+    const w = world()
+    const routes = routesOver(w, 'loopback')
+    w.service.dangerousBegin()
+    const body = JSON.stringify({ nonce: 'code-1', understood: true, phrase: DANGEROUS_PHRASE })
+    const statuses = (await Promise.all([routes.studio(RUN_ROUTES.dangerousConfirm, body), routes.studio(RUN_ROUTES.dangerousConfirm, body)])).map(response => response.status)
+    expect(statuses.sort()).toEqual([200, 409])
   })
 
   it('answer a port that is a string, below 1024, above 65535 or a fraction with 400, and write nothing', async () => {
