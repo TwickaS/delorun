@@ -78,6 +78,8 @@ export const CONFIRMATION_MS = 5 * 60_000
 
 /** How long a change waits for the profile's write lock, in milliseconds. */
 const LOCK_WAIT_MS = 10_000
+/** How long a change waits for the plugins to reload before it answers that a restart is needed. */
+export const RELOAD_WAIT_MS = 30_000
 
 /**
  * Whether each change applies only after Delorun restarts, for the changes that do not depend on the running home. The
@@ -139,6 +141,8 @@ export interface RunDependencies {
    * @returns true when the hot-reload service is mounted and the reload ended without a failure or a restart reason; false otherwise, so the change reaches plugins only at the next start.
    */
   reloaded(): Promise<boolean>
+  /** How long a change waits for `reloaded`, in milliseconds; `RELOAD_WAIT_MS` when absent. A spec shortens it. */
+  readonly reloadWaitMs?: number
   /** Whether a port is free on this computer. @param port - the port. @returns whether nothing listens on it. */
   isPortFree(port: number): Promise<boolean>
   /** Runs `tailscale`. */
@@ -231,13 +235,25 @@ export class RunSettings {
    */
   async prompts(answer: SettablePrompts): Promise<PromptsWritten> {
     const where = this.located()
-    return this.dependencies.locked(where.profileDir, async () => {
+    await this.dependencies.locked(where.profileDir, async () => {
       this.recorded(where)
       writePromptRows(patchOf(where), answer)
       await removeDangerousGrant(where.homeDir)
       await updateAnswersRecord(where.profileDir, record => ({ ...record, prompts: answer }))
-      return { prompts: answer, restartNeeded: !(await this.dependencies.reloaded()) }
     })
+    // The lock is released first: a reload that hangs must not hold it, or turning phone access off would wait on it.
+    return { prompts: answer, restartNeeded: !(await this.reloadedWithinLimit()) }
+  }
+
+  /** @returns whether the plugins reloaded the changed rows; false when the reload failed, was not possible or took longer than `RELOAD_WAIT_MS`. */
+  private async reloadedWithinLimit(): Promise<boolean> {
+    let timer: NodeJS.Timeout | undefined
+    const limit = new Promise<false>((resolve) => { timer = setTimeout(() => { resolve(false) }, this.dependencies.reloadWaitMs ?? RELOAD_WAIT_MS) })
+    try {
+      return await Promise.race([this.dependencies.reloaded().catch(() => false), limit])
+    } finally {
+      clearTimeout(timer)
+    }
   }
 
   /**
@@ -273,14 +289,17 @@ export class RunSettings {
     if (!request.understood) throw new RunError('NOT_CONFIRMED', 'Dangerous mode stays off: the first question was not answered yes.')
     this.redeem(issued, request.nonce, 'Start again: the code for turning dangerous mode on was not issued, was used already or has run out.')
     if (request.phrase !== DANGEROUS_PHRASE) throw new RunError('PHRASE_WRONG', `Dangerous mode stays off: the phrase was not typed exactly as ${DANGEROUS_PHRASE}.`)
-    return this.dependencies.locked(where.profileDir, async () => {
+    const unchanged = await this.dependencies.locked(where.profileDir, async () => {
       const record = this.recorded(where)
-      if (promptsOf(record) === 'dangerous' && (await readDangerousGrant(dangerousGrantPath(where.homeDir))).kind === 'valid') return { dangerous: 'on', restartNeeded: false }
+      if (promptsOf(record) === 'dangerous' && (await readDangerousGrant(dangerousGrantPath(where.homeDir))).kind === 'valid') return true
       writePromptRows(patchOf(where), 'dangerous')
       await writeDangerousGrant(where.homeDir, new Date(this.dependencies.now()))
       await updateAnswersRecord(where.profileDir, current => ({ ...current, prompts: 'dangerous' }))
-      return { dangerous: 'on', restartNeeded: !(await this.dependencies.reloaded()) }
+      return false
     })
+    if (unchanged) return { dangerous: 'on', restartNeeded: false }
+    // After the lock: see `prompts`.
+    return { dangerous: 'on', restartNeeded: !(await this.reloadedWithinLimit()) }
   }
 
   /**

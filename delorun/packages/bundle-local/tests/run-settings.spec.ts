@@ -36,6 +36,12 @@ interface Options {
   readonly hotReload?: boolean
   /** Whether the hot-reload service, when mounted, fails to reload the changed rows; false unless a spec says otherwise. */
   readonly reloadFails?: boolean
+  /** Replaces the reload, so a spec can make it hang or fail; `hotReload` and `reloadFails` are ignored when it is set. */
+  readonly reload?: () => Promise<boolean>
+  /** Shortens how long a change waits for the reload. */
+  readonly reloadWaitMs?: number
+  /** Makes `locked` a real mutex, as the profile's file lock is, so a spec can see who holds it. */
+  readonly mutex?: boolean
   /** Runs inside the reach service's apply, as a device signing in again would while the listener is still up. */
   readonly duringApply?: () => void
   /** Runs when every device is signed out. */
@@ -64,18 +70,25 @@ function world(options: Options = {}) {
       return options.applied === false ? undefined : [{ option: 'tailscale-private', state: 'ready' }] as never
     },
   }
+  let tail: Promise<unknown> = Promise.resolve()
   const dependencies: RunDependencies = {
     where: () => ({ profile: 'default', profileDir, homeDir: home }),
     runningPort: () => options.runningPort,
     reach: () => reach,
-    reloaded: () => Promise.resolve(options.hotReload !== false && options.reloadFails !== true),
+    reloaded: options.reload ?? (() => Promise.resolve(options.hotReload !== false && options.reloadFails !== true)),
     signOutDevices: () => { signedOut += 1; options.onSignOut?.(); return Promise.resolve(1) },
+    reloadWaitMs: options.reloadWaitMs,
     isPortFree: async port => !(options.busy ?? []).includes(port),
     tailscale: tailscale.run,
     now: () => now,
     newCode: () => `code-${String((codes += 1))}`,
     runsAsRoot: () => options.root === true,
-    locked: (_dir, run) => run(),
+    locked: (_dir, run) => {
+      if (options.mutex !== true) return run()
+      const next = tail.then(run, run)
+      tail = next.catch(() => undefined)
+      return next
+    },
   }
   const service = new RunSettings(dependencies)
   const files = {
@@ -150,6 +163,29 @@ describe('how much Delorun asks', () => {
     expect(files.row('delorun-mcp-consent')).toEqual({ enabled: true })
     await service.dangerousBegin()
     expect(await service.dangerousConfirm({ nonce: 'code-1', understood: true, phrase: DANGEROUS_PHRASE })).toEqual({ dangerous: 'on', restartNeeded: true })
+  })
+
+  it('answers restartNeeded within the limit when the reload never finishes, and does not hold the write lock while it waits', async () => {
+    // Pins the order in `prompts` and `dangerousConfirm`: written under the lock, lock released, then the bounded wait. A hung
+    // plugin reload must neither hang the route nor block turning phone access off, which takes the same lock.
+    const w = world({ record: { version: 1, prompts: 'stock' }, reload: () => new Promise<boolean>(() => undefined), mutex: true, reloadWaitMs: 400 })
+    const { ticket } = await w.service.reachPreview()
+    await w.service.reach({ on: true, ticket })
+    let answered: unknown
+    const pending = w.service.prompts('safer').then((a) => { answered = a })
+    // The rows are written and the lock is free while the reload hangs: turning access off finishes and signs the devices out.
+    await w.service.reach({ on: false })
+    expect(w.signedOut()).toBe(1)
+    expect(w.files.row('delorun-reach')).toMatchObject({ tailscalePrivate: { enabled: false } })
+    expect(w.files.row('delorun-mcp-consent')).toEqual({ enabled: true })
+    await pending
+    expect(answered).toEqual({ prompts: 'safer', restartNeeded: true })
+    // The same for dangerous mode.
+    w.service.dangerousBegin()
+    const confirming = w.service.dangerousConfirm({ nonce: 'code-2', understood: true, phrase: DANGEROUS_PHRASE })
+    await w.service.reach({ on: false })
+    expect(w.signedOut()).toBe(2)
+    expect(await confirming).toEqual({ dangerous: 'on', restartNeeded: true })
   })
 
   it('says no restart is needed when the hot-reload service is mounted', async () => {
