@@ -10,7 +10,7 @@ English | [中文](why-delorun.zh.md)
 
 Delorun is an open-source coding agent studio built on DeepSeek Harness, for open models, in your browser, on your desktop\* and on your phone. This page is for developers comparing coding agents: what you get, what Delorun changes from DeepSeek Harness, how it compares with six other tools, and when one of them fits better. Each claim links to the page that holds its detail and limits. Delorun is a preview that runs on Linux and on Windows through WSL2 ([Known issues](known-issues.md#where-delorun-runs)).
 
-\* The desktop app is a fast follow and isn't out yet; the web studio has everything today.
+\* Windows preview, unsigned.
 
 ## Contents
 
@@ -99,7 +99,7 @@ Checked on 2026-11-22 against each maker's own pages. "Not verified" means those
 
 | Tool | Runs on | On a phone | Models | Open source | Safety controls |
 | --- | --- | --- | --- | --- | --- |
-| Delorun | Web studio in any browser, desktop app\*; its home on Linux and WSL2 | The phone's browser, over your own Tailscale; installs from the browser | DeepSeek first; other providers; any OpenAI-compatible endpoint | Yes, MIT | Consents on by default, sandbox, signed releases, updates that roll back |
+| Delorun | Web studio in any browser; Windows desktop app: in preview, not out yet\*; its home on Linux and WSL2 | The phone's browser, over your own Tailscale; installs from the browser | DeepSeek first; other providers; any OpenAI-compatible endpoint | Yes, MIT | Consents on by default, sandbox, signed releases, updates that roll back |
 | DeepSeek Harness | Desktop app (macOS, Windows), terminal, local web UI | Not verified | DeepSeek, plus other providers | Yes, MIT | Approvals under a permission policy; default not verified |
 | T3 Code | Desktop app, web app, your own server | iOS and Android apps, hosted web app | Those of the agents it runs | Yes, MIT | Four permission modes, starting on Full access; optional git worktree per thread |
 | Claude Code | Terminal, IDE extensions, desktop app, web | Claude mobile app, for cloud sessions and Remote Control | Claude models | No | Permission modes; system sandbox available, off by default; cloud sessions in a managed VM |
