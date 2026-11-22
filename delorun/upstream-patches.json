@@ -4067,7 +4067,8 @@
     {
       "path": "apps/desktop/src/web-document.ts",
       "class": "security",
-      "reason": "The request forwarder takes the home kind. For a Delorun home in WSL2 on this computer (L175) a request that carried the application's origin goes out with the home's exact loopback origin and `Sec-Fetch-Site: same-origin`, as the person's own browser would send them, so the home's computer-only gate sees the person at the computer; no Origin in, none out, and any other origin is still refused. Upstream's bundled Host receives no Origin as before. Lead verdict: pending; no lead review of this change is recorded yet. The digest is written by ledger-record.ts after the hold."
+      "reason": "The request forwarder takes the home kind. For a Delorun home in WSL2 on this computer (L175) a request that carried the application's origin goes out with the home's exact loopback origin and `Sec-Fetch-Site: same-origin`, as the person's own browser would send them, so the home's computer-only gate sees the person at the computer; no Origin in, none out, and any other origin is still refused. Upstream's bundled Host receives no Origin as before. Lead verdict: pending; no lead review of this change is recorded yet. The digest is written by ledger-record.ts after the hold.",
+      "sha256": "2e4161e82b163a256ee46780e9bbe2df3865eeb0e8f29d14b27380a71803e9d7"
     },
     {
       "path": "apps/desktop/src/ipc.ts",
