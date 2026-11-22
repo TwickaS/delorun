@@ -273,18 +273,23 @@ describe('delorun reach', () => {
     expect(live.config).toEqual({ TCP: {}, Web: {} })
   })
 
-  it('has the running Host sign the devices out before it applies a row that leaves access off, and not for one that turns it on', async () => {
+  it('has the running Host sign the devices out after it has applied a row that leaves access off, even when the apply fails, and not for one that turns it on', async () => {
     const signedOut = vi.fn(() => Promise.resolve(1))
     const order: string[] = []
-    const service = { mounted: true, status: () => [], apply: async () => { order.push('applied'); return Promise.resolve([{ option: 'tailscale-private', state: 'off' }]) } }
+    const service = { mounted: true, status: () => [], apply: async (): Promise<unknown> => { order.push('applied'); return Promise.resolve([{ option: 'tailscale-private', state: 'off' }]) } }
     const homeAuth = { signAllDevicesOut: () => { order.push('signed out'); return signedOut() } }
     const host = (rows: ReturnType<typeof reachRowsOf>) => localReach({ get: (name: string) => (name === 'homeAuth' ? homeAuth : service) } as never, () => rows)
     await host(reachRowsOf({ ...REACH_OFF, enabled: false }))?.apply()
-    expect(order).toEqual(['signed out', 'applied'])
+    expect(order).toEqual(['applied', 'signed out'])
     await host({})?.apply()
     expect(signedOut).toHaveBeenCalledTimes(2)
     await host(reachRowsOf({ ...REACH_OFF, enabled: true, address: `https://${HOST}` }))?.apply()
     expect(signedOut).toHaveBeenCalledTimes(2)
+    // A listener that fails to stop still has the devices signed out, after it.
+    order.length = 0
+    service.apply = async () => { order.push('failed'); return Promise.reject(new Error('stuck')) }
+    await expect(host(reachRowsOf({ ...REACH_OFF, enabled: false }))?.apply()).rejects.toThrow('stuck')
+    expect(order).toEqual(['failed', 'signed out'])
   })
 
   it('reports the row, and the running home\'s state', async () => {

@@ -34,6 +34,10 @@ interface Options {
   readonly applied?: boolean
   /** Whether the hot-reload service is mounted; true unless a spec says otherwise. */
   readonly hotReload?: boolean
+  /** Runs inside the reach service's apply, as a device signing in again would while the listener is still up. */
+  readonly duringApply?: () => void
+  /** Runs when every device is signed out. */
+  readonly onSignOut?: () => void
 }
 
 /** A temporary home and profile, and a service over them with its dependencies faked. */
@@ -54,6 +58,7 @@ function world(options: Options = {}) {
     mounted: true,
     apply: async (rows) => {
       applied.push(rows)
+      options.duringApply?.()
       return options.applied === false ? undefined : [{ option: 'tailscale-private', state: 'ready' }] as never
     },
   }
@@ -62,7 +67,7 @@ function world(options: Options = {}) {
     runningPort: () => options.runningPort,
     reach: () => reach,
     hotReload: () => options.hotReload !== false,
-    signOutDevices: () => { signedOut += 1; return Promise.resolve(1) },
+    signOutDevices: () => { signedOut += 1; options.onSignOut?.(); return Promise.resolve(1) },
     isPortFree: async port => !(options.busy ?? []).includes(port),
     tailscale: tailscale.run,
     now: () => now,
@@ -429,6 +434,19 @@ describe('phone access', () => {
     expect(w.signedOut()).toBe(1)
     expect(w.files.row('delorun-home-auth')).toMatchObject({ pairing: { mayAskWithoutWindow: 'own-user' } })
     expect(w.files.row('delorun-reach')).toMatchObject({ tailscalePrivate: { enabled: false } })
+  })
+
+  it('leaves no session open that was opened after the sign-out would have run: it signs out once the listener has stopped', async () => {
+    // Pins the order in `reachOff`: a device that reconnects while the listener is still up signs in again, and a sign-out
+    // that ran before the stop would leave that session for the next turn-on.
+    const sessions = new Set<string>(['phone'])
+    const w = world({ duringApply: () => { sessions.add('reconnected') }, onSignOut: () => { sessions.clear() } })
+    const { ticket } = await w.service.reachPreview()
+    await w.service.reach({ on: true, ticket })
+    sessions.add('phone')
+    await w.service.reach({ on: false })
+    expect([...sessions]).toEqual([])
+    expect(w.signedOut()).toBe(1)
   })
 
   it('signs the devices out even when Tailscale could not remove its serve rule', async () => {

@@ -41,8 +41,9 @@ function optionLine(status: ReachStatus): ReachOptionStatus {
 }
 
 /**
- * The reach operations of a booted Host. An `apply` whose row leaves phone access off first signs every paired device
- * out and keeps the list, as turning access off in Settings does, so turning it on again restores no session.
+ * The reach operations of a booted Host. An `apply` whose row leaves phone access off signs every paired device out and
+ * keeps the list once the listener has stopped, as turning access off in Settings does, so turning it on again restores
+ * no session.
  * @param ctx - the Host's root context.
  * @param rows - reads the profile's rows when `reach.apply` arrives.
  * @returns the operations, or undefined when the profile does not load `@delorun/reach`.
@@ -54,8 +55,12 @@ export function localReach(ctx: Pick<Context, 'get'>, rows: () => ReachConfigRow
     status: () => (reach.mounted ? reach.status().map(optionLine) : undefined),
     apply: async () => {
       const wanted = rows()
-      if (wanted.tailscalePrivate?.enabled !== true) await ctx.get('homeAuth')?.signAllDevicesOut()
-      return (await reach.apply(wanted))?.map(optionLine)
+      try {
+        return (await reach.apply(wanted))?.map(optionLine)
+      } finally {
+        // After the listener has stopped, so a device that signed in again in the gap is signed out too; a failed apply still signs out.
+        if (wanted.tailscalePrivate?.enabled !== true) await ctx.get('homeAuth')?.signAllDevicesOut()
+      }
     },
   }
 }

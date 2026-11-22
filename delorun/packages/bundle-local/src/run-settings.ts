@@ -373,19 +373,24 @@ export class RunSettings {
       writeMayAskAt(patchOf(where), 'own-user')
       return Promise.resolve({ row, next })
     })
-    // Every paired device signs in again after access is turned on: the list stays, no session or pass does. This runs
-    // whatever Tailscale answers next, so a failed serve removal cannot leave a device signed in.
-    await this.dependencies.signOutDevices()
     let stillServed: string | undefined
+    let answer: ReachWritten
     try {
-      const host = URL.parse(row.address)?.hostname ?? (await readTailscale(this.dependencies.tailscale)).dnsName
-      await removeServe(this.dependencies.tailscale, host, row.servePort, serveTarget(row.listenerPort))
-    } catch (error) {
-      // Tailscale that is not installed serves nothing; any other failure leaves a rule the person must remove.
-      if (!(error instanceof ReachError)) throw error
-      if (error.code !== 'TAILSCALE_NOT_INSTALLED') stillServed = error.detail
+      try {
+        const host = URL.parse(row.address)?.hostname ?? (await readTailscale(this.dependencies.tailscale)).dnsName
+        await removeServe(this.dependencies.tailscale, host, row.servePort, serveTarget(row.listenerPort))
+      } catch (error) {
+        // Tailscale that is not installed serves nothing; any other failure leaves a rule the person must remove.
+        if (!(error instanceof ReachError)) throw error
+        if (error.code !== 'TAILSCALE_NOT_INSTALLED') stillServed = error.detail
+      }
+      answer = await this.applied(this.dependencies.reach(), next, false)
+    } finally {
+      // Every paired device signs in again after access is turned on: the list stays, no session or pass does. This runs
+      // after the listener has stopped, so a device that reconnected meanwhile and signed in again is signed out too, and
+      // whatever Tailscale answered, so a failed serve removal or apply cannot leave a device signed in.
+      await this.dependencies.signOutDevices()
     }
-    const answer = await this.applied(this.dependencies.reach(), next, false)
     return stillServed === undefined ? answer : { ...answer, stillServed }
   }
 
