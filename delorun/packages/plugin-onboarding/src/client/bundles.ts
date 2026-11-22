@@ -385,8 +385,10 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
     }
     if (before?.state !== 'available' || bundle === undefined || remote === undefined) return
     set(name, { ...before, state: 'installing' })
+    const target = bundle.availability === 'missing' ? bundle.installTarget : undefined
     // The plugin manager's own install is not in the Host's install queue; the downloads panel shows it from this page.
-    const shown = startPageDownload(name, { title: textOf(before.title) })
+    // Switching on a bundle the installation ships downloads nothing, so it shows as installing.
+    const shown = startPageDownload(name, { title: textOf(before.title), state: target === undefined ? 'installing' : 'downloading' })
     let done = false
     const finish = (view: BundleView): void => {
       if (done) return
@@ -407,7 +409,6 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
       }, () => undefined)
     }, options.pollMs)
     try {
-      const target = bundle.availability === 'missing' ? bundle.installTarget : undefined
       const result = target === undefined
         ? await remote.setBundleEnabled(name, true)
         : await remote.installBundle(target.spec, {
@@ -458,7 +459,8 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
       const before = rows.getSnapshot()[id]
       if (before?.state !== 'available' || entry === undefined || remote === undefined) return
       setRow(id, { ...before, state: 'installing' })
-      const shown = startPageDownload(id, { title: textOf(before.title) })
+      // Turning on a row downloads nothing, so it shows as installing.
+      const shown = startPageDownload(id, { title: textOf(before.title), state: 'installing' })
       inflightRows.add(id)
       try {
         const result = await remote.setPluginEnabled(entry, true)

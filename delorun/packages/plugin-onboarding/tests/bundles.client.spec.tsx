@@ -510,7 +510,10 @@ describe('the downloads panel during an add the plugin manager runs', () => {
     const { installer, pluginManager } = bench([row({ name: 'a' }), row({ name: 'b' })], { change: { application: 'restart-required' } })
     installer.refresh(['a', 'b'])
     await flush()
-    await installer.install('a')
+    const switching = installer.install('a')
+    // A shipped bundle downloads nothing, so its row starts as installing.
+    expect(panelRow('a')?.state).toBe('installing')
+    await switching
     expect(panelRow('a')?.state).toBe('needs-reload')
     pluginManager.setBundleEnabled.mockResolvedValueOnce({ ok: false, error: { code: 'refused', message: 'no', diagnostic: 'Not allowed here' } } as never)
     await installer.install('b')
