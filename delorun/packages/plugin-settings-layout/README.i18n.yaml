@@ -4,28 +4,28 @@
 #   pnpm run verify-translation-pairing --write delorun/packages/plugin-settings-layout/README.md
 /:
   en: 3496c434aa36f827
-  zh: 23ea84015134e79b
+  zh: 8e950a70cf86e057
 /delorun-plugin-settings-layout:
   en: 9dfd95c6a3bfff62
   zh: 36e54ecac74d14a4
 /delorun-plugin-settings-layout/summary:
   en: 65dfc223f6e208f6
-  zh: ebe781c02aa85e59
+  zh: 7661719be55ef975
 /delorun-plugin-settings-layout/contents:
   en: e0301d4a55b0e507
   zh: aa8e0746acabfb73
 /delorun-plugin-settings-layout/using-settings:
   en: 4c07f490e78eb6b5
-  zh: eaed0dfded335a26
+  zh: de6e0a0e8fed455d
 /delorun-plugin-settings-layout/contract:
   en: 62f427b05de1cc4f
-  zh: 04f5cfdb6c1176cf
+  zh: 69f9a7d6e1b2c74f
 /delorun-plugin-settings-layout/tests:
   en: f0ba6d5b6e66a661
   zh: 327e771c378ff738
 /delorun-plugin-settings-layout/development:
   en: dcdc1f837950877c
-  zh: e30e3fa4a1bdc1f9
+  zh: 3716f7904518c370
 /delorun-plugin-settings-layout/limits:
   en: 07b1fd9f76b2f1c7
   zh: aef47b87ed7bfcd4

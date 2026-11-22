@@ -1,5 +1,5 @@
 ---
-description: "Delo 的 `web_fetch` 拒绝背后的连接前抓取防护，供维护者修改 HTTP 抓取提供方在建立连接之前拒绝哪些目的地，以及拒绝如何送达模型。"
+description: "Delorun 的 `web_fetch` 拒绝背后的连接前抓取防护，供维护者修改 HTTP 抓取提供方在建立连接之前拒绝哪些目的地，以及拒绝如何送达模型。"
 ---
 
 # @delorun/plugin-fetch-guard
@@ -10,7 +10,7 @@ description: "Delo 的 `web_fetch` 拒绝背后的连接前抓取防护，供维
 
 ## 摘要
 
-`@delorun/plugin-fetch-guard` 提供 `fetchGuard` 服务，[`@deepseek-ai/dsh-web-fetch-http`](../../../packages/web/web-fetch-http) 的 `http` 抓取提供方在一次抓取的每一跳之前——初始请求与每个重定向目标——都会询问它。提供方先解析跳的主机名，因此守卫分类的是连接实际会使用的地址，而不只是名称；拒绝会抛出一个类型化错误，作为抓取的失败向外传播，模型原样读到它，并且不建立任何连接。该服务对消费方是可选的：提供方在每一跳用 `ctx.get()` 读取它，因此挂载或卸载本插件会改变下一个请求，而无需重新加载提供方；没有挂载守卫时，每一跳不做解析。stock 的组合不挂载本插件，因此 stock 的 `web_fetch` 会抓取回环与私有网络目的地。`@delorun/bundle-local` 将它挂载为开启，因此 `delorun` 启动的 CLI profile 会拒绝这些目的地；`@delorun/bundle-headless` 为 `delorun headless` 将它挂载为开启；两种启动都要求该行，若该行未能启动或 `fetchGuard` 服务不存在，Host 会在启动后被停止，因此 `web_fetch` 在它们之下从不无守卫地运行（[`compose.ts`](../../apps/cli/src/compose.ts)）；桌面应用运行上游的 profile，它们不挂载本插件，与 stock 一样抓取这些目的地；Config 默认值仍是对等值——关闭，而对等组合让该行保持禁用，于是录制下来的 stock 场景仍然不加守卫地重放。这就是 Delo 的 C16 开关 `fetch_guard`。
+`@delorun/plugin-fetch-guard` 提供 `fetchGuard` 服务，[`@deepseek-ai/dsh-web-fetch-http`](../../../packages/web/web-fetch-http) 的 `http` 抓取提供方在一次抓取的每一跳之前——初始请求与每个重定向目标——都会询问它。提供方先解析跳的主机名，因此守卫分类的是连接实际会使用的地址，而不只是名称；拒绝会抛出一个类型化错误，作为抓取的失败向外传播，模型原样读到它，并且不建立任何连接。该服务对消费方是可选的：提供方在每一跳用 `ctx.get()` 读取它，因此挂载或卸载本插件会改变下一个请求，而无需重新加载提供方；没有挂载守卫时，每一跳不做解析。stock 的组合不挂载本插件，因此 stock 的 `web_fetch` 会抓取回环与私有网络目的地。`@delorun/bundle-local` 将它挂载为开启，因此 `delorun` 启动的 CLI profile 会拒绝这些目的地；`@delorun/bundle-headless` 为 `delorun headless` 将它挂载为开启；两种启动都要求该行，若该行未能启动或 `fetchGuard` 服务不存在，Host 会在启动后被停止，因此 `web_fetch` 在它们之下从不无守卫地运行（[`compose.ts`](../../apps/cli/src/compose.ts)）；桌面应用运行上游的 profile，它们不挂载本插件，与 stock 一样抓取这些目的地；Config 默认值仍是对等值——关闭，而对等组合让该行保持禁用，于是录制下来的 stock 场景仍然不加守卫地重放。这就是 Delorun 的 C16 开关 `fetch_guard`。
 
 ## 目录
 

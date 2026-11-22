@@ -4,16 +4,16 @@
 #   pnpm run verify-translation-pairing --write .agents/notes/proposed/process/2026-11-06-delorun-check-tiers.md
 /agent-note-delorun-s-checks-run-in-tiers-and-the-full-uncached-run-is-the-correctness-evidence:
   en: 581dc9a0a9e7d766
-  zh: 15fff12e391b73ca
+  zh: 6c6fb74e2042e739
 /agent-note-delorun-s-checks-run-in-tiers-and-the-full-uncached-run-is-the-correctness-evidence/problem:
   en: da2a09b96d567c11
   zh: 33eed4c75707eb5d
 /agent-note-delorun-s-checks-run-in-tiers-and-the-full-uncached-run-is-the-correctness-evidence/proposal:
   en: 179a593f4a81350f
-  zh: a3ee05807ec5c3d7
+  zh: 97e8b69d90ca0d33
 /agent-note-delorun-s-checks-run-in-tiers-and-the-full-uncached-run-is-the-correctness-evidence/related:
   en: 7d77fc883362729a
-  zh: 81a1a531655d3363
+  zh: 518850d4bae0937b
 /agent-note-delorun-s-checks-run-in-tiers-and-the-full-uncached-run-is-the-correctness-evidence/alternatives-considered:
   en: ba876832fd03d393
   zh: be15d5949330a49d

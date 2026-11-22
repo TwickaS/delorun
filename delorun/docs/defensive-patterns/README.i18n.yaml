@@ -4,7 +4,7 @@
 #   pnpm run verify-translation-pairing --write delorun/docs/defensive-patterns/README.md
 /:
   en: 4eb5e15e5e2c78ef
-  zh: e2b96c1606c553bd
+  zh: 9cab9af431c6ef3d
 /delorun-defensive-patterns:
   en: 41c2b07d98569a03
-  zh: 2533c52b85871afe
+  zh: 991b6ee0dbd6ffc1

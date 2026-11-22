@@ -1,5 +1,5 @@
 ---
-description: "Delo home 进程与更新握手约定（C19）的类型与常量，供 home 进程、delorun 命令与 studio 的更新插件使用。"
+description: "Delorun home 进程与更新握手约定（C19）的类型与常量，供 home 进程、delorun 命令与 studio 的更新插件使用。"
 ---
 
 # @delorun/contract-home-process

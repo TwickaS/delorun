@@ -4,13 +4,13 @@
 #   pnpm run verify-translation-pairing --write delorun/apps/docs/README.md
 /delorun-documentation-website:
   en: e51621c731af1c35
-  zh: ae6202fc032cd0ad
+  zh: 151a68639e62caa1
 /delorun-documentation-website/routes:
   en: 871768cfc764d700
   zh: 0df333c77850f2da
 /delorun-documentation-website/links:
   en: e5f64ee71e0cced5
-  zh: fc7636e8f314973c
+  zh: 289bb82bd4e32f2e
 /delorun-documentation-website/version:
   en: a26f871522a2d686
   zh: 9fdf8269f70af1b0
@@ -25,7 +25,7 @@
   zh: 2ed2da4fa21dcbd9
 /delorun-documentation-website/deployment:
   en: dc0325b2f8e8d1a7
-  zh: 611a7f32fee9e454
+  zh: 4785fb6937002361
 /delorun-documentation-website/pairing:
   en: 98fe4971bb87b905
   zh: 920a8c6b900c83eb

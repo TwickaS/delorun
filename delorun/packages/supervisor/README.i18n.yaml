@@ -4,19 +4,19 @@
 #   pnpm run verify-translation-pairing --write delorun/packages/supervisor/README.md
 /:
   en: 42ce7a282943d0ca
-  zh: 8d61ab356cbfc34c
+  zh: 6cf2750bf85b2eab
 /delorun-supervisor:
   en: a95fc0e0157008fd
   zh: 50deba7a9323b71c
 /delorun-supervisor/summary:
   en: edda8862819182ed
-  zh: f7e666b28c1793d8
+  zh: 2b6080f46b3ee639
 /delorun-supervisor/contents:
   en: 0b23dd251b2d7c72
   zh: 46879c9e8c45f77b
 /delorun-supervisor/launching-the-supervisor:
   en: 41cb08d20fbb9ec7
-  zh: 11cce261937aea82
+  zh: 88541c543875e09c
 /delorun-supervisor/the-socket-and-the-token:
   en: 28a30848d31d9719
   zh: 2e24ef784087cb9c
@@ -25,7 +25,7 @@
   zh: 8b53cf86ccc05311
 /delorun-supervisor/supervisor-roots:
   en: 2462a499125d5721
-  zh: 38ea97cd2695a891
+  zh: 636bf5f35d4b0b3e
 /delorun-supervisor/images-and-the-verified-manifest:
   en: 61e7fe1f52488651
   zh: 4cac76367a0a6047
@@ -34,7 +34,7 @@
   zh: a876c179142a21d1
 /delorun-supervisor/workspace-containers:
   en: 3797733f340cf6e8
-  zh: 887f511e2294ecaf
+  zh: 46ba91c7d4c3c4c6
 /delorun-supervisor/the-operational-log:
   en: 87a5fb2c58d42905
   zh: e72da2e5f4a25bee

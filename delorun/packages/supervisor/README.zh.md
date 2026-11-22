@@ -1,5 +1,5 @@
 ---
-description: "@delorun/supervisor 包，供 home 进程与 Docker 运行时的维护者使用：Delo 的 Docker 监管器，其固定模式的 API 位于 ~/.delorun 下的套接字上，包括启动令牌检查、监管器根目录、依据已验证发布 manifest 的镜像检查、通过检视构建的能力报告、加固的工作区容器及其运行日志。"
+description: "@delorun/supervisor 包，供 home 进程与 Docker 运行时的维护者使用：Delorun 的 Docker 监管器，其固定模式的 API 位于 ~/.delorun 下的套接字上，包括启动令牌检查、监管器根目录、依据已验证发布 manifest 的镜像检查、通过检视构建的能力报告、加固的工作区容器及其运行日志。"
 ---
 
 # @delorun/supervisor
@@ -10,7 +10,7 @@ description: "@delorun/supervisor 包，供 home 进程与 Docker 运行时的�
 
 ## 摘要
 
-本包是 [约定 C9](../../docs/contracts/c09-runtime-supervisor.zh.md) 中的 Docker 监管器，是 Delo 中唯一调用 Docker 的组件。它作为本人用户的独立进程运行，由 home 进程（home process）启动。它在 Delo home 下的 `run/<profile>/supervisor.sock` 上提供固定模式的 API，并且只接受携带当前这次 home 进程启动的令牌（[C1](../../docs/contracts/c01-home-layout.zh.md)）的请求。它通过检查探测容器构建能力报告（capability report），依据只由 `delorun setup` 写入的根目录文件解析每个工作区根目录，只运行摘要（digest）被已验证发布 manifest（release manifest）所列出的镜像，它将日志写入 [C20](../../docs/contracts/c20-operational-logs.zh.md) 的 `supervisor-<profile>` 入口，写入时经由 [`@delorun/logs`](../logs/README.zh.md)。约定的取值与类型来自 [`@delorun/contract-runtime-supervisor`](../contract-runtime-supervisor/README.zh.md)。
+本包是 [约定 C9](../../docs/contracts/c09-runtime-supervisor.zh.md) 中的 Docker 监管器，是 Delorun 中唯一调用 Docker 的组件。它作为本人用户的独立进程运行，由 home 进程（home process）启动。它在 Delorun home 下的 `run/<profile>/supervisor.sock` 上提供固定模式的 API，并且只接受携带当前这次 home 进程启动的令牌（[C1](../../docs/contracts/c01-home-layout.zh.md)）的请求。它通过检查探测容器构建能力报告（capability report），依据只由 `delorun setup` 写入的根目录文件解析每个工作区根目录，只运行摘要（digest）被已验证发布 manifest（release manifest）所列出的镜像，它将日志写入 [C20](../../docs/contracts/c20-operational-logs.zh.md) 的 `supervisor-<profile>` 入口，写入时经由 [`@delorun/logs`](../logs/README.zh.md)。约定的取值与类型来自 [`@delorun/contract-runtime-supervisor`](../contract-runtime-supervisor/README.zh.md)。
 
 ## 目录
 
@@ -33,7 +33,7 @@ home 进程（[C19](../../docs/contracts/c19-home-process.zh.md)，[`@delorun/ho
 | 字段 | 取值 |
 | --- | --- |
 | `v` | 1 |
-| `home`、`profile` | 解析后的 Delo home 与 CLI profile |
+| `home`、`profile` | 解析后的 Delorun home 与 CLI profile |
 | `startId` | 本次启动在 C1 中的启动 id |
 | `token` | 本次启动的令牌 |
 | `manifest` | home 进程为所运行的运行时验证过的发布 manifest 中的 `images` 条目 |
@@ -69,7 +69,7 @@ home 进程（[C19](../../docs/contracts/c19-home-process.zh.md)，[`@delorun/ho
 
 `loadRootRules` 在监管器启动时通过 C1 的受保护文件检查读取 `supervisor/roots.json`；文件缺失表示没有父目录，因此每个根目录都会被拒绝。记录若不是 `{"v":1,"parents":[...]}`（父目录至多 16 个），或其父目录未以已存在的规范路径保存，或是 setup 所拒绝的父目录，则会中止本次启动。本包中没有任何代码写入该文件。
 
-`resolveWorkspaceRoot` 使用 `realpath` 解析请求的根目录，并按文件身份（根目录及其每个祖先目录的设备号与 inode）比较，因此绑定挂载之类的别名视同它所展示的目录。它以 `ROOT_REFUSED` 拒绝以下情形：文件系统根目录、操作系统的主目录或包含它的路径、Delo home 或包含它或位于其内的路径、位于引擎上任何其他带有 Delo 标签的工作区容器（无论其 home 与 profile）的根目录之内或包含该根目录的路径、无法解析的路径，以及任何不是本人所拥有目录的对象。未严格位于某个父目录之内的根目录会以 `ROOT_NOT_UNDER_PARENT` 被拒绝。`recheckMountedRoot` 在每次启动之前运行：已记录的根目录必须仍解析为其自身，并通过同样的规则。
+`resolveWorkspaceRoot` 使用 `realpath` 解析请求的根目录，并按文件身份（根目录及其每个祖先目录的设备号与 inode）比较，因此绑定挂载之类的别名视同它所展示的目录。它以 `ROOT_REFUSED` 拒绝以下情形：文件系统根目录、操作系统的主目录或包含它的路径、Delorun home 或包含它或位于其内的路径、位于引擎上任何其他带有 Delorun 标签的工作区容器（无论其 home 与 profile）的根目录之内或包含该根目录的路径、无法解析的路径，以及任何不是本人所拥有目录的对象。未严格位于某个父目录之内的根目录会以 `ROOT_NOT_UNDER_PARENT` 被拒绝。`recheckMountedRoot` 在每次启动之前运行：已记录的根目录必须仍解析为其自身，并通过同样的规则。
 
 <a id="images-and-the-verified-manifest"></a>
 ## 镜像与已验证的 manifest
@@ -110,7 +110,7 @@ home 进程（[C19](../../docs/contracts/c19-home-process.zh.md)，[`@delorun/ho
 
 每次 `workspace.start` 之前，监管器都会再次检查这些容器：所有者标签、经 `recheckMountedRoot` 检查的根目录挂载、辅助程序目录及其通道目录、C9 所允许的挂载与网络，以及每条 inspect 记录与 `workspace.create` 所构建请求体的比较，包括镜像、用户与每项设置，还包括容器在 `delorun.limits` 标签中记录的限额，因此创建之后被机器提高的限额会以 `LIMITS_MISSING` 拒绝。未通过检查的容器不会启动。通道目录是工作区唯一可写的宿主路径，因此每次启动时都会清空上一次会话遗留的辅助程序套接字，并在其中含有任何其他条目时以 `ROOT_REFUSED` 拒绝；容器中的命令会写入该目录，因此使用它的主机端代码（例如 S2 辅助程序的客户端）绝不能跟随其中的路径。
 
-随后，`workspace.start` 会从容器内部对刚刚启动的容器进行闸门检查（[`confine.ts`](src/confine.ts)，C9 的容器、网络与根目录各节），并要求两部分都成立，因为任何一部分单独都可能被蒙骗。在探测运行之后重新读取的 inspect 记录只能带有 C9 允许的绑定挂载——解析后的根目录挂载在其自身路径上、辅助程序目录（只读）及其下方可写的通道目录，以及引擎自身的 `/etc/hosts`、`/etc/hostname` 与 `/etc/resolv.conf`——其挂载源不得位于 OS home、Delo home 或 Docker 套接字之中，并且容器只能属于它自己的内部网络，不加入宿主的任何命名空间。随后每个属性各有一条固定的探测命令，仅凭退出码读取容器自身的视图：能力集合为空、`no-new-privileges`、seccomp、根文件系统只读、工作区根目录可写、辅助程序目录只读而其通道目录可写，且除根目录、通道目录、`/tmp` 与引擎自身的文件系统及文件之外没有其他可写挂载、Delo home 与本机 Docker 套接字不存在、`/tmp` 为预设大小的 tmpfs、预设的 cgroup 限制、工作区用户，以及除 `lo` 之外没有接口带有默认路由。若某个挂载、某项设置、网络或某条探测不通过，或探测无法运行、无法结束，容器会连同其网络与辅助程序目录一起被停止并删除；挂载问题以 `ROOT_REFUSED` 拒绝，其余以 `LIMITS_MISSING` 拒绝，未保持运行的容器以 `ENGINE_REFUSED` 拒绝，探测或其他引擎调用被引擎拒绝时同样如此。此后该工作区在 `reason` 中报告该代码并处于 `failed` 状态，直到 `workspace.create` 重新创建它；被收回的工作区绝不会被启动：即使清理失败、其容器仍然存在，`workspace.inspect` 也会以该代码报告 `failed`，而下一次启动会以同一代码被拒绝。探测不读取任何输出，因此探测命令从不携带机密，容器所显示的内容也不会离开容器。
+随后，`workspace.start` 会从容器内部对刚刚启动的容器进行闸门检查（[`confine.ts`](src/confine.ts)，C9 的容器、网络与根目录各节），并要求两部分都成立，因为任何一部分单独都可能被蒙骗。在探测运行之后重新读取的 inspect 记录只能带有 C9 允许的绑定挂载——解析后的根目录挂载在其自身路径上、辅助程序目录（只读）及其下方可写的通道目录，以及引擎自身的 `/etc/hosts`、`/etc/hostname` 与 `/etc/resolv.conf`——其挂载源不得位于 OS home、Delorun home 或 Docker 套接字之中，并且容器只能属于它自己的内部网络，不加入宿主的任何命名空间。随后每个属性各有一条固定的探测命令，仅凭退出码读取容器自身的视图：能力集合为空、`no-new-privileges`、seccomp、根文件系统只读、工作区根目录可写、辅助程序目录只读而其通道目录可写，且除根目录、通道目录、`/tmp` 与引擎自身的文件系统及文件之外没有其他可写挂载、Delorun home 与本机 Docker 套接字不存在、`/tmp` 为预设大小的 tmpfs、预设的 cgroup 限制、工作区用户，以及除 `lo` 之外没有接口带有默认路由。若某个挂载、某项设置、网络或某条探测不通过，或探测无法运行、无法结束，容器会连同其网络与辅助程序目录一起被停止并删除；挂载问题以 `ROOT_REFUSED` 拒绝，其余以 `LIMITS_MISSING` 拒绝，未保持运行的容器以 `ENGINE_REFUSED` 拒绝，探测或其他引擎调用被引擎拒绝时同样如此。此后该工作区在 `reason` 中报告该代码并处于 `failed` 状态，直到 `workspace.create` 重新创建它；被收回的工作区绝不会被启动：即使清理失败、其容器仍然存在，`workspace.inspect` 也会以该代码报告 `failed`，而下一次启动会以同一代码被拒绝。探测不读取任何输出，因此探测命令从不携带机密，容器所显示的内容也不会离开容器。
 
 每次 Engine API 调用都有截止时间 `engineCallMs`，每次拉取都有 `pullMs`；超过截止时间的调用为 `DOCKER_UNAVAILABLE`，拉取为 `IMAGE_PULL_FAILED`。拉取的进度流按行读取，因此其长度不受限制。
 

@@ -4,10 +4,10 @@
 #   pnpm run verify-translation-pairing --write delorun/apps/runtime-closure/README.md
 /:
   en: 3d630b7aa1c53ded
-  zh: d9ab967a8811e74c
+  zh: d30d355bdec1f48d
 /delorun-runtime-closure:
   en: f74e467526eaea39
   zh: eb17cab3f915014c
 /delorun-runtime-closure/summary:
   en: 931578f0d74d3821
-  zh: 4e2210618a5d2674
+  zh: ec606faf310db97d

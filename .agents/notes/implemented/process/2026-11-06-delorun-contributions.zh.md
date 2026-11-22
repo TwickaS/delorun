@@ -6,11 +6,11 @@ Status: implemented
 
 ## 问题
 
-Delo 是社区 fork，欢迎对其各部分的贡献。上游 DeepSeek Harness 不接受外部拉取请求。若没有贡献规则，提交会缺少许可签署，改动会缺少发布所需的记录，而 issue 文本（任何人都能撰写）会以指令的形式到达 agent。
+Delorun 是社区 fork，欢迎对其各部分的贡献。上游 DeepSeek Harness 不接受外部拉取请求。若没有贡献规则，提交会缺少许可签署，改动会缺少发布所需的记录，而 issue 文本（任何人都能撰写）会以指令的形式到达 agent。
 
 ## 决策
 
-Delo 的各部分都以 MIT 许可接受贡献，每个提交都附有 Developer Certificate of Origin（DCO）的 `Signed-off-by` 行。签署中可以使用假名（pseudonym）。Delo 不使用贡献者许可协议（CLA）。
+Delorun 的各部分都以 MIT 许可接受贡献，每个提交都附有 Developer Certificate of Origin（DCO）的 `Signed-off-by` 行。签署中可以使用假名（pseudonym）。Delorun 不使用贡献者许可协议（CLA）。
 
 提交标题遵循 Conventional Commits。凡人们能够察觉到的改动，都要在 `delorun/changelog/unreleased/` 下添加一个 changelog fragment；其他改动则在提交消息中写明 `Changelog: none (<reason>)`。
 
@@ -22,9 +22,9 @@ Delo 的各部分都以 MIT 许可接受贡献，每个提交都附有 Developer
 
 ## 相关决策
 
-[标签分类体系决策](../process/2026-08-08-unified-github-label-taxonomy.zh.md) 定义了 Delo 所用的 `kind/*` 与 `area/*` 标签。Delo 在该集合上增加了 `brief` 标签。
+[标签分类体系决策](../process/2026-08-08-unified-github-label-taxonomy.zh.md) 定义了 Delorun 所用的 `kind/*` 与 `area/*` 标签。Delorun 在该集合上增加了 `brief` 标签。
 
-上游 DeepSeek Harness 不接受外部拉取请求。本决策偏离这一政策：Delo 的 [CONTRIBUTING.md](../../../../CONTRIBUTING.zh.md) 由上游文件原地编辑而来，并记录在差异台账中，说明 Delo 的欢迎与规则。
+上游 DeepSeek Harness 不接受外部拉取请求。本决策偏离这一政策：Delorun 的 [CONTRIBUTING.md](../../../../CONTRIBUTING.zh.md) 由上游文件原地编辑而来，并记录在差异台账中，说明 Delorun 的欢迎与规则。
 
 ## 曾考虑的替代方案
 

@@ -1,5 +1,5 @@
 ---
-description: "Delo 运行时与监管器约定（C9）的类型与常量，供运行时提供方、Docker 监管器、各 Docker 形态与 studio 的工作区插件使用。"
+description: "Delorun 运行时与监管器约定（C9）的类型与常量，供运行时提供方、Docker 监管器、各 Docker 形态与 studio 的工作区插件使用。"
 ---
 
 # @delorun/contract-runtime-supervisor

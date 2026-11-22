@@ -4,13 +4,13 @@
 #   pnpm run verify-translation-pairing --write delorun/packages/plugin-install-check/README.md
 /:
   en: 64e6b7c7b1f82f51
-  zh: 1e7d715b4d9aa310
+  zh: 4dd2b31003acf0c8
 /delorun-plugin-install-check:
   en: 5c2f62e3e60d6416
   zh: ebe4c3605d10d0c7
 /delorun-plugin-install-check/summary:
   en: 94783dae60959f6f
-  zh: 235b9503b43dfd9f
+  zh: 0e3e68926b36e256
 /delorun-plugin-install-check/contents:
   en: 6e7964bf6f508852
   zh: 0044994e6107d7da
@@ -22,10 +22,10 @@
   zh: 7f43408255e6cda3
 /delorun-plugin-install-check/configuration:
   en: 97a4d7891c593f33
-  zh: 1877d2328acff26e
+  zh: de01d7f1bed00e08
 /delorun-plugin-install-check/known-limitations:
   en: 2bd9ad3919f62dd3
-  zh: c7e8251fdccc4b2f
+  zh: b3f55bda78f8f744
 /delorun-plugin-install-check/tests:
   en: e304cfb6c3076762
   zh: 300fd2522d6216f8

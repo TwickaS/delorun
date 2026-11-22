@@ -4,16 +4,16 @@
 #   pnpm run verify-translation-pairing --write delorun/packages/contract-parity-composition/README.md
 /:
   en: b64db9df811b1277
-  zh: 07339426b5d25ece
+  zh: 51399eb2d1a05d2a
 /delorun-contract-parity-composition:
   en: 4087c3119519b441
   zh: e1ba8855dc39958e
 /delorun-contract-parity-composition/summary:
   en: ddab2667dde4f75b
-  zh: 97254ab4e80c08f0
+  zh: f06a4110f3ea23e2
 /delorun-contract-parity-composition/exports:
   en: 05bfb14f8926826b
-  zh: eb96590fe5ca657d
+  zh: 7da80c27c2863a2c
 /delorun-contract-parity-composition/limits:
   en: ff38efe28fd6ce9d
   zh: e29dec9126b20a9a

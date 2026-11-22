@@ -4,13 +4,13 @@
 #   pnpm run verify-translation-pairing --write delorun/packages/contract-plugin-versions/README.md
 /:
   en: 52e5e28a764dc3ef
-  zh: 75f41ba35e677adc
+  zh: 112033ddd7e84928
 /delorun-contract-plugin-versions:
   en: 19fb25c066bedfe0
   zh: 564cfd80adaa57e1
 /delorun-contract-plugin-versions/summary:
   en: ce8d3c26e0bfff7e
-  zh: 9f4c5c31bfd57322
+  zh: 391f0e6a5646d37d
 /delorun-contract-plugin-versions/contents:
   en: b67c52f41a4f6214
   zh: 143d16412c2a79d8

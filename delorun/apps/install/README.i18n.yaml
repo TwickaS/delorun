@@ -4,7 +4,7 @@
 #   pnpm run verify-translation-pairing --write delorun/apps/install/README.md
 /:
   en: 6614e19a1b3541d9
-  zh: 81825a0091a43549
+  zh: 556b2fff7b58af93
 /delorun-install:
   en: 2a21ef8e7d06dfe4
   zh: 8e9783cdf378f70d

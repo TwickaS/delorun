@@ -4,7 +4,7 @@
 #   pnpm run verify-translation-pairing --write delorun/packages/contract-release-log/README.md
 /:
   en: c3bc404a87191784
-  zh: a5fdb48978881de9
+  zh: 28861edbd49a87b4
 /delorun-contract-release-log:
   en: f0b2eab65247b158
   zh: 76130ee30979c998

@@ -1,5 +1,5 @@
 ---
-description: "Delo 运行日志包，供写入 C20 日志的入口的维护者使用：日志器、脱敏、捕获的输出、Cordis 日志器导出器、轮转与保留、为 delorun logs 提供数据的读取函数，以及跨入口的拒绝测试套件。"
+description: "Delorun 运行日志包，供写入 C20 日志的入口的维护者使用：日志器、脱敏、捕获的输出、Cordis 日志器导出器、轮转与保留、为 delorun logs 提供数据的读取函数，以及跨入口的拒绝测试套件。"
 ---
 
 # @delorun/logs
@@ -10,7 +10,7 @@ description: "Delo 运行日志包，供写入 C20 日志的入口的维护者�
 
 ## 摘要
 
-本包实现[约定 C20](../../docs/contracts/c20-operational-logs.zh.md)：每个保存运行日志的 Delo 进程都通过本包写入日志，因此脱敏、记录格式、轮转与保留在每个入口上的行为保持一致。本包还包含 `delorun logs` 与清除所使用的读取函数、清空操作与期限检查操作，以及跨入口的拒绝测试套件，该套件在树中的每个入口上运行 C20 的拒绝测试。约定的取值与类型来自 [`@delorun/contract-operational-logs`](../contract-operational-logs/README.zh.md)；模式代码来自 [C1](../../docs/contracts/c01-home-layout.zh.md)。
+本包实现[约定 C20](../../docs/contracts/c20-operational-logs.zh.md)：每个保存运行日志的 Delorun 进程都通过本包写入日志，因此脱敏、记录格式、轮转与保留在每个入口上的行为保持一致。本包还包含 `delorun logs` 与清除所使用的读取函数、清空操作与期限检查操作，以及跨入口的拒绝测试套件，该套件在树中的每个入口上运行 C20 的拒绝测试。约定的取值与类型来自 [`@delorun/contract-operational-logs`](../contract-operational-logs/README.zh.md)；模式代码来自 [C1](../../docs/contracts/c01-home-layout.zh.md)。
 
 ## 目录
 
@@ -32,7 +32,7 @@ description: "Delo 运行日志包，供写入 C20 日志的入口的维护者�
 2. 为该进程创建一个 `Redactor`，并用 `register(value, kind)` 登记进程持有的或在加载时读取的每个密钥值；对于之后被丢弃的值，保留返回的释放函数。
 3. 用 `SurfaceLog.open({ location, redactor, pid, level, startId, onFailure, now })` 打开日志。打开时会以 0700 创建目录，并以独占创建方式以 0600 创建活动文件；已存在的目录或文件则由 `@delorun/home` 的 `checkPrivateDirectorySync` 与 `checkProtectedFileSync` 检查，它们是 C1 拒绝规则的唯一实现：符号链接、属于其他用户或带有组或其他用户权限位的路径会抛出带有 `HOME_MODE` 或 `SECRET_FILE_MODE` 的 `HomeLayoutError`，并附带其 `chmod` 修复方法。这样，入口会在启动时即失败，而不是在没有日志的情况下运行。
 4. 运行 `startAgeChecks({ home, now, onReport })`，它一次性清理每个本地入口，此后每隔 3,600 秒清理一次。`delorun` 在每次调用启动时通过 `pruneLocalSurfaces` 清理一次；home 进程的 `startAgeChecks` 随 home 进程的包 `delorun/packages/home-process` 一起到来。
-5. 通过 `log.logger(name)` 写入 Delo 自身的记录；用来自 `@delorun/logs/cordis` 的 `attachCordisLogs(ctx, log)` 挂接 Cordis 应用；并用 `LineCapture`、`captureStream` 或 `interceptStdio` 捕获上游代码的输出。
+5. 通过 `log.logger(name)` 写入 Delorun 自身的记录；用来自 `@delorun/logs/cordis` 的 `attachCordisLogs(ctx, log)` 挂接 Cordis 应用；并用 `LineCapture`、`captureStream` 或 `interceptStdio` 捕获上游代码的输出。
 
 `SurfaceLog.write` 从不抛出异常：无法写入的记录会被丢弃，其 `LogsError` 或 `HomeLayoutError` 交给 `onFailure`，下一条记录会重新打开文件。若入口既保留上游的控制台导出器，又捕获自身的标准输出，则每条 Cordis 消息都会被写入两次，因此它只保留其中之一。
 
@@ -79,7 +79,7 @@ description: "Delo 运行日志包，供写入 C20 日志的入口的维护者�
 | home 进程的已知值 | `home-wiring.spec.ts` | home-auth 存储、凭据提供方包装器与环境所生成的每种机密，以原始与编码形式植入记录和捕获的输出，包括轮转文件 |
 | `log-purge-clear` | `denial.integration.spec.ts` | 套件中每个入口上的清空操作；清除本身在 C8 的清除进入树中之前会被跳过 |
 | `log-desktop-host-file` | 跳过 | 等待桌面 Host 的日志文件 |
-| `log-confined-write-denied` | 跳过 | 等待 Delo 针对 C1 的 `home-write` 规则提供的沙箱配置文件 |
+| `log-confined-write-denied` | 跳过 | 等待 Delorun 针对 C1 的 `home-write` 规则提供的沙箱配置文件 |
 
 <a id="tests"></a>
 ## 测试

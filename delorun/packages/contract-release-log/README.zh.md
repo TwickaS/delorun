@@ -1,5 +1,5 @@
 ---
-description: "Delo 发布日志约定（C18）的类型与固定值，供发布流程、安装程序、启动器的启动检查与桌面更新器使用：Rekor 发布日志 bundle、见证者阈值、检查状态与重试间隔。"
+description: "Delorun 发布日志约定（C18）的类型与固定值，供发布流程、安装程序、启动器的启动检查与桌面更新器使用：Rekor 发布日志 bundle、见证者阈值、检查状态与重试间隔。"
 kind: "package-library"
 ---
 

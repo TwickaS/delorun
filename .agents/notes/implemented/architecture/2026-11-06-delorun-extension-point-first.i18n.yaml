@@ -4,22 +4,22 @@
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-11-06-delorun-extension-point-first.md
 /agent-note-extension-point-first-rule-for-delorun-s-behaviour:
   en: 74a5a9c3af76b90f
-  zh: 1c77f99c9c28dc84
+  zh: a60f82f6afb16ce0
 /agent-note-extension-point-first-rule-for-delorun-s-behaviour/problem:
   en: 984fa7762dfa0d43
-  zh: 5f7b4f3ec2f052b6
+  zh: 6642d2ec7cc86990
 /agent-note-extension-point-first-rule-for-delorun-s-behaviour/decision:
   en: 7ccbaf48ff65cb77
-  zh: 85fd7d4fe7802ccf
+  zh: 0e41faea3519fbdb
 /agent-note-extension-point-first-rule-for-delorun-s-behaviour/verification:
   en: 97783d4e62386b6b
-  zh: 58c5f89dafbd2e8e
+  zh: 81ac666ab27de689
 /agent-note-extension-point-first-rule-for-delorun-s-behaviour/related:
   en: 2a1398a722dce688
-  zh: 41c0cacb38b7e61e
+  zh: 9f3fdf3aaa42debe
 /agent-note-extension-point-first-rule-for-delorun-s-behaviour/alternatives-considered:
   en: 896d9fbd057bdf9c
-  zh: 84bfeee6c259d9a1
+  zh: 5bb8976f29207346
 /agent-note-extension-point-first-rule-for-delorun-s-behaviour/consequences:
   en: 810da5a7e98ba56c
-  zh: 08a3d3186a0b8581
+  zh: 3ba4aa506e127cf8

@@ -4,7 +4,7 @@
 #   pnpm run verify-translation-pairing --write delorun/docs/architecture/README.md
 /:
   en: 94eadee5ebbdbe00
-  zh: 82b2b538b2e12d3f
+  zh: 8bc95c93aea7b60f
 /delorun-architecture-notes:
   en: 3c2b68e51fbd5500
-  zh: 62eefeb0d2e6cae3
+  zh: 0572f2e35b5ac8a9

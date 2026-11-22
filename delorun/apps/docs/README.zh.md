@@ -1,10 +1,10 @@
-# Delo 文档网站
+# Delorun 文档网站
 
 [English](README.md) | 中文
 
 > 英文页面是当前版本；本页可能落后于它。
 
-本包构建 Delo 的文档网站：以静态站点的形式提供中英文的用户指南和参考资料，站点基于 TanStack Start 上的 Fumadocs 构建。站点直接读取 [`delorun/docs/guide/`](../../docs/guide/README.zh.md) 和 [`delorun/docs/reference/`](../../docs/reference/README.zh.md) 下的每一对页面，不复制任何页面。站点是一个独立的私有工作区，拥有自己的锁文件，因此不属于仓库的根工作区。
+本包构建 Delorun 的文档网站：以静态站点的形式提供中英文的用户指南和参考资料，站点基于 TanStack Start 上的 Fumadocs 构建。站点直接读取 [`delorun/docs/guide/`](../../docs/guide/README.zh.md) 和 [`delorun/docs/reference/`](../../docs/reference/README.zh.md) 下的每一对页面，不复制任何页面。站点是一个独立的私有工作区，拥有自己的锁文件，因此不属于仓库的根工作区。
 
 ## 路由
 
@@ -30,7 +30,7 @@
 - 指向已发布页面的链接变为该页面的路由。
 - A link to a file at the repository's top level, such as `SECURITY.md`, `GOVERNANCE.md` or `AGENTS.md`, becomes its URL in Delorun's GitHub repository: those are the project's own files, which upstream lacks or has in another form.
 - 指向上游仓库文件的链接变为它在 [`deepseek-ai/deepseek-harness`](https://github.com/deepseek-ai/deepseek-harness) 中的 URL。
-- 指向其他 Delo 文件（例如契约或威胁模型）的链接变为写明该文件名的代码文本，因为站点只发布用户指南和参考资料。
+- 指向其他 Delorun 文件（例如契约或威胁模型）的链接变为写明该文件名的代码文本，因为站点只发布用户指南和参考资料。
 - 中文页面按位置采用英文页面的标题 id，使目录链接在两种语言中都能解析；这些链接由成对的一致性记录固定。
 
 构建之后运行死链接检查。它检查构建生成的 HTML，以及 Markdown 和 `llms.txt` 文件中的每个内部链接和片段，确认其指向已构建的文件，或该页面上的某个 id。它不抓取外部链接。
@@ -90,7 +90,7 @@ pnpm run typecheck:deploy                         # typechecks alchemy.run.ts
 
 在工作站上，如果账户还没有状态存储，第一次 `plan` 或 `deploy` 也会创建它；设置 `CI=true` 时，缺少状态存储会使运行失败，因此需先在工作站上执行一次初始化。状态存储是一个带 Durable Object 的 Worker，其令牌和加密密钥保存在账户的 Secrets Store 中。
 
-部署作业使用 `CLOUDFLARE_ACCOUNT_ID` 和一个限定于 Delo 账户的 `CLOUDFLARE_API_TOKEN` 进行认证，该令牌需要以下权限：账户级的 `Workers Scripts Write`（Worker、其静态资源、其 `workers.dev` 地址和自定义域名）和 `Secrets Store Write`（读取状态存储的凭据，Alchemy 通过把它们绑定到一个短暂存在的预览 Worker 来读取），以及仅限 `delorun.com` 区域的 `Zone Read`（Alchemy 按名称查找该区域）和 `Workers Routes Read`（Alchemy 读取该区域的 Worker 路由）。`pnpm exec alchemy provider check-env` 会在部署开始前报告缺少的变量。该令牌只能放在一个在默认分支上运行、处于受保护环境且需要指定审核人的部署作业中，任何拉取请求工作流都无法读取其密钥；它从不提交到仓库，也从不提供给拉取请求的构建。
+部署作业使用 `CLOUDFLARE_ACCOUNT_ID` 和一个限定于 Delorun 账户的 `CLOUDFLARE_API_TOKEN` 进行认证，该令牌需要以下权限：账户级的 `Workers Scripts Write`（Worker、其静态资源、其 `workers.dev` 地址和自定义域名）和 `Secrets Store Write`（读取状态存储的凭据，Alchemy 通过把它们绑定到一个短暂存在的预览 Worker 来读取），以及仅限 `delorun.com` 区域的 `Zone Read`（Alchemy 按名称查找该区域）和 `Workers Routes Read`（Alchemy 读取该区域的 Worker 路由）。`pnpm exec alchemy provider check-env` 会在部署开始前报告缺少的变量。该令牌只能放在一个在默认分支上运行、处于受保护环境且需要指定审核人的部署作业中，任何拉取请求工作流都无法读取其密钥；它从不提交到仓库，也从不提供给拉取请求的构建。
 
 ## 配对
 

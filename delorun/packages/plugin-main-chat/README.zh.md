@@ -11,7 +11,7 @@ kind: "package-bundle"
 
 ## 摘要
 
-主对话是位于所有工作区之外的一个 chat，所在目录即容纳这些工作区的目录。本人可以从这里询问并引导其他 chat，也可以在某个工作区中开始工作。它的工具可以列出、搜索并读取本人的 chat，向某个 chat 发送后续消息，停止其轮次，列出工作区，并把一份任务说明委派给新的 chat。挂载了工作区提供方时，这些工具还可以创建、导入、移入回收站和恢复工作区，编辑工作区的 `AGENTS.md`，以及编辑其带日期的所有者备注（owner note）。凡在某个轮次之外变更内容的工具，每一轮都会先询问本人。studio 一侧在侧边栏顶部加入一行「主对话」，点击即可打开它，并为其第一条消息提供专用的输入框。这一切都位于 [C16 开关](../../docs/contracts/c16-parity-composition.zh.md) `studio_additions` 之后，默认关闭；Delo 的 studio bundle 会将其打开。
+主对话是位于所有工作区之外的一个 chat，所在目录即容纳这些工作区的目录。本人可以从这里询问并引导其他 chat，也可以在某个工作区中开始工作。它的工具可以列出、搜索并读取本人的 chat，向某个 chat 发送后续消息，停止其轮次，列出工作区，并把一份任务说明委派给新的 chat。挂载了工作区提供方时，这些工具还可以创建、导入、移入回收站和恢复工作区，编辑工作区的 `AGENTS.md`，以及编辑其带日期的所有者备注（owner note）。凡在某个轮次之外变更内容的工具，每一轮都会先询问本人。studio 一侧在侧边栏顶部加入一行「主对话」，点击即可打开它，并为其第一条消息提供专用的输入框。这一切都位于 [C16 开关](../../docs/contracts/c16-parity-composition.zh.md) `studio_additions` 之后，默认关闭；Delorun 的 studio bundle 会将其打开。
 
 ## 目录
 
@@ -62,11 +62,11 @@ kind: "package-bundle"
 <a id="carry-forward-review"></a>
 ## 沿用审查
 
-本包沿用自 Delo 早先的主对话，并针对本树（其基线为 `dsh-v0.2.2-rc.1`）进行了审查。
+本包沿用自 Delorun 早先的主对话，并针对本树（其基线为 `dsh-v0.2.2-rc.1`）进行了审查。
 
 - **决定：写入类工具总是询问。**早先的守卫只在读取过另一个 chat 文本的轮次中询问，而不受信任的文本还会经由抓取的网页、文件以及其他工作区的 `AGENTS.md` 进入。`workspace_instructions_write`、`workspace_import` 与 `workspace_restore` 现在与 `workspace_trash` 一样，每一轮都询问，被拒绝时以 `MAIN_CHAT_DECLINED` 拒绝；[`untrusted-input.spec.ts`](tests/untrusted-input.spec.ts) 对此予以证明。
-- **随之扩大（lead 决定）。**`workspace_note` 与 `workspace_note_remove` 同样总是询问，因为所有者备注是工作区每个 chat 都会读取的指令。`workspace_instructions` 会记录一次读取，因此其所在轮次的其余部分，在 `workspace_create`、消息或委派之前都会询问。所有非只读的其他工具每一轮都询问，包括 `web_fetch` 与 `run_code`，因为主对话现在运行在容纳所有工作区的目录中，在那里，文件写入、命令或程序能够触及任何工作区的 `AGENTS.md`。`delorunWorkspaces` 的 Service Definition 暂留在本包，直至 Delo 的工作区导入包提供并接管它。
-- **删去。**与托管 cell 相关的一切：命令运行器为主对话设置的独立 home，`/workspace` 等 cell 路径，通过账户控制令牌拉取的私有 GitHub 克隆，以及守卫测试中提到的 cell 发布与发布工具。工作区插件不在此携带；它的操作即上文的 `delorunWorkspaces` seam，由 Delo 的工作区导入包提供。与 Home 一并延后的有：主对话旁的「Your chats」标签页，以及在 Home 上打开 studio。
+- **随之扩大（lead 决定）。**`workspace_note` 与 `workspace_note_remove` 同样总是询问，因为所有者备注是工作区每个 chat 都会读取的指令。`workspace_instructions` 会记录一次读取，因此其所在轮次的其余部分，在 `workspace_create`、消息或委派之前都会询问。所有非只读的其他工具每一轮都询问，包括 `web_fetch` 与 `run_code`，因为主对话现在运行在容纳所有工作区的目录中，在那里，文件写入、命令或程序能够触及任何工作区的 `AGENTS.md`。`delorunWorkspaces` 的 Service Definition 暂留在本包，直至 Delorun 的工作区导入包提供并接管它。
+- **删去。**与托管 cell 相关的一切：命令运行器为主对话设置的独立 home，`/workspace` 等 cell 路径，通过账户控制令牌拉取的私有 GitHub 克隆，以及守卫测试中提到的 cell 发布与发布工具。工作区插件不在此携带；它的操作即上文的 `delorunWorkspaces` seam，由 Delorun 的工作区导入包提供。与 Home 一并延后的有：主对话旁的「Your chats」标签页，以及在 Home 上打开 studio。
 - **按直接效果核查 `GUARD_FREE`。**对所列每个工具的问题是：它能否不经守卫判定的工具调用，就改变会话之外的文件或状态？`run_code` 能，因为 Node 程序在会话的常设文件策略下运行，所以已将它移出，改为每一轮都询问。其余工具都不能：`read`、`read_image`、`glob`、`grep`、`skill`、`job_list`、`job_output`、`get_goal`、`schedule_list`、`list_agents`、`cordis_inspect_list` 与 `cordis_inspect_query` 只读取；`working_directory`、`todo_write`、`present`、`exit_plan_mode` 与 `ask_user_question` 只改变主对话自身的会话；`chat_read`、`chat_search` 与 `workspace_instructions` 只读取，并在主对话的日志中记录这次读取；账户工具在自身执行中询问。
 - **改写。**该行的标签为「主对话」，不用 Home。`preset` 没有默认值，因此组合指定主对话的 preset。插件注册的一切都位于 `studio_additions` 之后。
 

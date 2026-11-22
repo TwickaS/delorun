@@ -4,7 +4,7 @@
 #   pnpm run verify-translation-pairing --write delorun/packages/home-auth/README.md
 /:
   en: aa5388fc40eb9e27
-  zh: 521ebb74e3fe3673
+  zh: 432f22a400f603f1
 /delorun-home-auth:
   en: 50063bab0ef743ba
   zh: 6ed6473762452310
@@ -19,10 +19,10 @@
   zh: 9bfe0deb009d56bf
 /delorun-home-auth/reach-sign-in:
   en: 3be46b57c0a227c3
-  zh: 64563e66b09aebfb
+  zh: 25c7fb9e37638e44
 /delorun-home-auth/the-admission-denial-suite:
   en: 158ff271168e9fed
-  zh: 32ce754ee9bcf5fe
+  zh: 6074e3c198b11cb5
 /delorun-home-auth/the-reach-access-denial-suite:
   en: af84381bb0d02831
   zh: 91d543a534b6ba1e
@@ -40,4 +40,4 @@
   zh: a29a1c520d60df0f
 /delorun-home-auth/tests:
   en: 6e035fdb093146b8
-  zh: 61e2364851f4567f
+  zh: 7aec886e3100ea54

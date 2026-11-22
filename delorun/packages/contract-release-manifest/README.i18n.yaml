@@ -4,13 +4,13 @@
 #   pnpm run verify-translation-pairing --write delorun/packages/contract-release-manifest/README.md
 /:
   en: ea3f44e0135ea938
-  zh: ce07973a0a4bac48
+  zh: 38f65cbbc6fe1bda
 /delorun-contract-release-manifest:
   en: 0f5638855d64014b
   zh: 6bafa5b264ba93da
 /delorun-contract-release-manifest/summary:
   en: 9a28e55b7bb42f0e
-  zh: 9f2ebad04f2b76d0
+  zh: ab4eedc9b3ae9e4f
 /delorun-contract-release-manifest/contents:
   en: b67c52f41a4f6214
   zh: 143d16412c2a79d8

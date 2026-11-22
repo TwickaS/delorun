@@ -4,22 +4,22 @@
 #   pnpm run verify-translation-pairing --write .agents/notes/proposed/process/2026-11-06-delorun-signed-releases.md
 /agent-note-delorun-releases-are-signed-offline-carry-an-sbom-and-a-public-log-entry-and-match-a-rebuild:
   en: 1ea9b95cbc948d85
-  zh: 5f3805b934270c7e
+  zh: 172c3632e10550b1
 /agent-note-delorun-releases-are-signed-offline-carry-an-sbom-and-a-public-log-entry-and-match-a-rebuild/problem:
   en: f99a17b2a1d4287d
-  zh: 96428f6e3fc1d92f
+  zh: ce611631f1dab766
 /agent-note-delorun-releases-are-signed-offline-carry-an-sbom-and-a-public-log-entry-and-match-a-rebuild/proposal:
   en: 45f92d026809b501
-  zh: 7d147c20ab998e67
+  zh: f6889c13756f10db
 /agent-note-delorun-releases-are-signed-offline-carry-an-sbom-and-a-public-log-entry-and-match-a-rebuild/related:
   en: 1df9b66094d40e8a
-  zh: 1f28e33c05e4111a
+  zh: 84bd81a0ddbb436e
 /agent-note-delorun-releases-are-signed-offline-carry-an-sbom-and-a-public-log-entry-and-match-a-rebuild/alternatives-considered:
   en: df810114f1d3b2ce
   zh: 5e55c3e90685f6db
 /agent-note-delorun-releases-are-signed-offline-carry-an-sbom-and-a-public-log-entry-and-match-a-rebuild/acceptance-criteria:
   en: 2060ac7261c35f32
-  zh: 922bdf756d3d8980
+  zh: a1abf7a194a10e26
 /agent-note-delorun-releases-are-signed-offline-carry-an-sbom-and-a-public-log-entry-and-match-a-rebuild/risks:
   en: 31af58ab51ea18d8
-  zh: 8add9abfd994fc30
+  zh: 019c1d9e8aef9ed1
