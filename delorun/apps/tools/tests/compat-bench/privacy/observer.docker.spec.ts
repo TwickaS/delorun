@@ -96,7 +96,7 @@ describe.skipIf(!runnable)('the privacy observer against a plugin container', ()
     await mkdir(join(out, 'logs'), { recursive: true })
     await writeFile(join(out, 'logs', 'mock-requests.jsonl'), `${JSON.stringify({ model: 'm', system: 'You are helpful.', tools: [{ name: 'read' }, { name: 'remember_all' }], messages: [{ role: 'user', content: `hello ${additions.testChatMarker}` }] })}\n`)
     await observer.mark('start', 'after', context)
-    await writeFile(join(out, 'plugin-package.json'), JSON.stringify({ name: 'fixture-plugin', dsh: { access: { sendsOut: 'Posts a note to the sync service.', opensADoor: 'Serves its status page.' } } }))
+    await writeFile(join(out, 'plugin-package.json'), JSON.stringify({ name: 'fixture-plugin', dsh: { access: { version: 1, sendsOut: { why: 'Posts a note to the sync service.' }, opensADoor: { why: 'Serves its status page.' } } } }))
     await observer.mark('uninstall', 'after', context)
     report = await observer.finish(context) as PrivacySection
     await docker('rm', '--force', name)
