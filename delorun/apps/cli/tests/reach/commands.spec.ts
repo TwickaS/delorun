@@ -361,6 +361,15 @@ describe('delorun reach', () => {
     expect(order).toEqual(['failed', 'signed out'])
   })
 
+  it('has a Host without device sign-in refuse an apply that leaves access off, not report a sign-out that did not happen', async () => {
+    // Pins `signedOut`: with the optional call the apply answered ok, and the command printed that the devices were signed out and left the stored sessions.
+    const service = { mounted: true, status: () => [], apply: () => Promise.resolve([{ option: 'tailscale-private', state: 'off' }]) }
+    const host = (rows: ReturnType<typeof reachRowsOf>) => localReach({ get: (name: string) => (name === 'homeAuth' ? undefined : service) } as never, () => rows)
+    await expect(host(reachRowsOf({ ...REACH_OFF, enabled: false }))?.apply()).rejects.toThrow('no paired device was signed out')
+    // Turning access on needs no sign-out.
+    await expect(host(reachRowsOf({ ...REACH_OFF, enabled: true, address: `https://${HOST}` }))?.apply()).resolves.toBeDefined()
+  })
+
   it('reports the row, and the running home\'s state', async () => {
     await reach().run(['status'], context)
     expect(out.stdout).toContain('Remote access is off. Turn it on with delorun reach on tailscale.')

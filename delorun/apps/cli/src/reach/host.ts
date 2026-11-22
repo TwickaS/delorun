@@ -41,6 +41,17 @@ function optionLine(status: ReachStatus): ReachOptionStatus {
 }
 
 /**
+ * Sign every paired device out through the Host's device sign-in.
+ * @param ctx - the Host's root context.
+ * @throws {Error} when the Host loads no device sign-in: nothing was signed out, and the caller must not report that it was.
+ */
+async function signedOut(ctx: Pick<Context, 'get'>): Promise<void> {
+  const homeAuth = ctx.get('homeAuth')
+  if (homeAuth === undefined) throw new Error('this Delorun loads no device sign-in, so no paired device was signed out')
+  await homeAuth.signAllDevicesOut()
+}
+
+/**
  * The reach operations of a booted Host. An `apply` whose row leaves phone access off signs every paired device out and
  * keeps the list once the listener has stopped, as turning access off in Settings does, so turning it on again restores
  * no session.
@@ -59,7 +70,7 @@ export function localReach(ctx: Pick<Context, 'get'>, rows: () => ReachConfigRow
         return (await reach.apply(wanted))?.map(optionLine)
       } finally {
         // After the listener has stopped, so a device that signed in again in the gap is signed out too; a failed apply still signs out.
-        if (wanted.tailscalePrivate?.enabled !== true) await ctx.get('homeAuth')?.signAllDevicesOut()
+        if (wanted.tailscalePrivate?.enabled !== true) await signedOut(ctx)
       }
     },
   }
