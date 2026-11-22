@@ -153,6 +153,11 @@ Setup does not ask for your model key. The studio's welcome screen does ([The st
 Delorun then runs in this terminal. The last lines say so:
 
 ```text
+Finish setup here, or on any device signed in to your Tailscale:
+https://my-pc.example.ts.net
+A new device asks to pair: approve it here at this computer, or unlock it with
+the PIN.
+
 Delorun runs in this terminal. Ctrl+C stops it.
 To keep it running after you close the terminal: delorun start --background
 (or Settings → General → How Delorun runs).

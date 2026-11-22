@@ -48,26 +48,20 @@ setup 回答是 `delorun setup` 所问的内容、存储每个回答的 schema�
 <a id="modes-and-sections"></a>
 ### 使用场景与各节
 
-第一个屏幕询问「How will you use Delorun?」，有三个选项，每个选项都以平实的几行说明它做什么、适合谁以及之后如何更改；推荐选项标有「(recommended)」：
+Setup does not ask how the person will use Delorun. The answers keep the `useCase` field: the main flow sets `remote` when the person answers Yes to the other-devices question, even when the Tailscale check then leaves remote access off, and `local` otherwise; `automation` comes only from a `--config` document. The use case changes no question and no default; the next steps setup prints read it.
 
-| `useCase` | 选项 | 它设定的默认值 |
+Each topic is a registered section with an id, a title, a main-flow placement, a test for whether it applies on this computer, its question and its writes. The placement is `asked` (the main flow asks it), `note` (the main flow shows its note without a question) or `never` (only `delorun setup <section>` asks it); a placement may depend on the answers so far. `delorun setup <section>` runs one section again on a profile that is set up, in full, and `delorun setup --list` lists them. Later packages add sections through the registry in `delorun/apps/cli/src/setup/sections.ts`, each with an order that places it among the others.
+
+| Section | Main flow | What it does |
 | --- | --- | --- |
-| `local` | Just me, on this computer (recommended) | 后台运行开启，远程访问关闭。 |
-| `remote` | Also from my phone or another device | 与 `local` 相同，并在主流程中询问远程访问问题，预选为 Yes。 |
-| `automation` | For scripts and automation | 后台运行关闭，密钥起初来自环境变量。 |
-
-每个主题是一个已注册的节，带有 id、标题、每种使用场景的方案、判断它是否适用于这台计算机的测试、其问题、其写入和一行审查文字。方案为 `asked`（主流程询问它）、`note`（主流程显示其说明，而「More settings」询问该问题）、`more`（只有「More settings」询问它）或 `never`。审查屏幕列出该使用场景保留的每个回答、句子「Nothing is saved until you choose Save and set up」，并提供 Save and set up、More settings（仍有剩余的节时）和 Cancel。「More settings」询问每个剩余的节，然后回到审查。`delorun setup <section>` 在已设置好的 profile 上再次运行一个节，`delorun setup --list` 列出它们。之后的包通过 `delorun/apps/cli/src/setup/sections.ts` 中的注册表添加节，每个节带有把它排在其他节之间的顺序。
-
-| 节 | `local` | `remote` | `automation` | 它做什么 |
-| --- | --- | --- | --- | --- |
-| `privacy` | `note` | `note` | `note` | 显示隐私说明。「More settings」和 `delorun setup privacy` 询问是否检查新发布；主流程什么也不问，并说明在 Delorun 首次启动之前在哪里可以到达该问题。 |
-| `import` | `asked` | `asked` | `never` | 只有当 `~/.dsh` 是目录而不是链接，且 Delorun home 不含任何 chat 时才显示：显示 stock home 导入预览的数据部分，然后询问「Copy your DeepSeek Harness chats, attachments and workspace list?」。 |
-| `key` | `asked` | `asked` | `asked` | 询问模型提供方（DeepSeek、More providers 或 Choose later）、其密钥来自哪里（已知时附带提供方的密钥页面，以及一行关于环境变量是什么的说明），以及新 chat 开始时使用的模型（[模型提供方](#model-providers)）。输入的密钥在存储之前用一次实时请求检查。在终端中未设置的密钥变量会立即产生一条带补救办法的警告。DeepSeek 的模型只由 `delorun setup key` 询问。 |
-| `prompts` | `asked` | `asked` | `asked` | Ask me first（`safer`）、Ask less（`stock`），或 Never ask（dangerous）；后者始终列在最后，打印一条警告，询问一个起始为 No 的是或否问题，然后要求输入确切短语 `full access everywhere`；其他任何输入都保留之前的回答。从确认步骤选择「← Back」会回到提示问题。 |
-| `background` | `more` | `more` | `never` | 终端关闭后 Delorun 是否继续运行。 |
-| `reach` | `more` | `asked` | `never` | 是否可以从本人的手机通过本人自己的 tailnet 访问 studio。回答是会运行 `delorun reach on tailscale` 的 Tailscale 检查（包括 Funnel），并显示信任说明；检查失败则让远程访问保持关闭，并写明需要修复什么。应用它会写入带固定监听器端口的 reach 行。 |
-| `changes-protection` | `more` | `more` | `more` | 用一行说明更改保护（[C21](c21-changes.zh.md)）在其当前设置下的含义，然后询问本人插件和 Delorun 自身的更改是否要在加载之前等待审查。每种使用场景都只在「More settings」下询问它，回答默认为否。 |
-| `profile` | `more` | `more` | `more` | profile 的名称和 studio 的端口。 |
+| `privacy` | `note` | The main flow shows one line, "Delorun sends nothing about you. Details: https://delorun.com/privacy". `delorun setup privacy` shows the privacy statements, including what the release check requests, and asks whether to check for new releases. |
+| `reach` | `asked` | In the main flow, "Use Delorun from your other devices too? (phone, tablet, another computer, over Tailscale)" with "No, just this computer" (the default) and "Yes, over Tailscale". A Yes runs the Tailscale checks of `delorun reach on tailscale`, Funnel included, and shows the trust statement; the pairing choice stays at the safe default (only devices signed in as this computer's Tailscale user). A failed check leaves remote access off and names what to fix. `delorun setup reach` asks the full form, including whether any device on the tailnet may ask to pair. Applying it writes the reach row with a fixed listener port. |
+| `changes-protection` | `asked` after a Yes to other devices, otherwise `never` | Shows one line on what changes protection ([C21](c21-changes.zh.md)) means at its current setting, then asks whether changes to the person's plugins and to Delorun itself wait for their review before they load. The answer defaults to no. After a No to other devices, or a Yes whose check failed, the section is recorded as skipped and `delorun setup changes-protection` asks it. |
+| `import` | `asked` | Shown only when `~/.dsh` is a directory, not a link, and the Delorun home holds no chat: "Copy your N DeepSeek Harness chats?" over a summary ("Will copy: N chats · N attachments · N workspaces", "Stays behind: N unfinished chats · N locks, caches and packages", "Your DeepSeek Harness folder is only read."), with Yes, "Later (delorun import-home)" and "Show what stays behind", which shows the full list and asks again. The full list is also written to `import-preview.txt` in the Delorun home, readable by its owner alone. |
+| `key` | `never` | Asks the model provider (DeepSeek, More providers, or Choose later), where its key comes from, with the provider's key page when one is known and one line on what an environment variable is, and the model new chats start on ([Model providers](#model-providers)). A typed key is checked with one live request before it is stored. A key variable that is unset in the terminal produces a warning with the fix at once. The studio's Models step takes the key on first open. |
+| `prompts` | `never` | Ask me first (`safer`), Ask less (`stock`), or Never ask (dangerous), which is always listed last, prints a warning, asks a yes-or-no that starts on No, and then asks for the exact phrase `full access everywhere`; anything else keeps the previous answer. "← Back" from the confirmation returns to the prompts question. |
+| `background` | `never` | Whether Delorun keeps running after the terminal closes. |
+| `profile` | `asked`, but only when the port is busy | The profile's name and the studio's port. The main flow asks nothing while 3080 is free, and asks "Port 3080 is in use. Use 3081?" with Yes and "Enter another port" when it is busy. It never asks for a profile that is set up, whose own studio may hold the port. `delorun setup profile` asks the name and the port in full. |
 
 第一个问题之后的每个问题都可以回到最近一个被询问过的前面的问题，包括从第一个「More settings」问题回到审查：选择题或是否题提供「← Back」，文本或密钥问题把空输入当作「返回」。审查屏幕在写入任何内容之前列出各个回答。
 
@@ -265,17 +259,21 @@ setup 在每次终端运行开始时显示隐私说明，并在无人值守的�
 
 验收测试：
 
-- `setup states the telemetry statement and that both opt-ins are off`（setup 陈述遥测说明，并说明两项选择加入均为关闭）。
-- `each use case asks the questions its plan names, and the review lists every answer`（每种使用场景询问其方案所指名的问题，审查列出每个回答）。
-- `an interrupt at any question exits 130 and saves nothing`（在任何问题处的中断以 130 退出且不保存任何内容）。
-- `a record with a Quick or Full mode and no use case still reads`（带有 Quick 或 Full 模式而没有使用场景的记录仍可读取）。
-- `Ask less (like DeepSeek Harness) sets every prompt switch to its parity value`（Ask less 把每个提示开关设为其对等取值）。
-- `interactive and --yes runs write identical profile files`（交互运行与 `--yes` 运行写入相同的 profile 文件）。
-- `interrupted setup resumes without a repeated write`（被中断的 setup 恢复时不重复写入）。
-- `consent screen turns each upstream opt-in on alone and off again from the same screen`（同意屏幕可单独开启每一项上游选择加入项，并在同一屏幕上再次关闭）。
-- `a way back returns to the previous question with the earlier answers kept`（返回操作回到前一个问题，并保留之前的回答）。
-- `sits between the privacy note and the key in the main flow, and copies the chats before the key is asked for`（在主流程中位于隐私说明与密钥之间，并在询问密钥之前复制 chat）。
-- `delorun setup privacy shows the note, turns the check off, and turns it on again by removing the row`（`delorun setup privacy` 显示说明、关闭检查，并通过移除该行再次开启它）。
+- `setup states the telemetry statement and that both opt-ins are off`.
+- `a fresh home asks only the phone question, and a phone Yes also asks about changes protection`.
+- `a DeepSeek Harness home adds the import question; Later and Show what stays behind copy nothing and ask again`.
+- `the port is asked only when 3080 is busy`.
+- `a run without a terminal, and --phone, --import-dsh and --port, take their answers without questions`.
+- `delorun setup <section> asks key, prompts, background, privacy, reach and profile in full`.
+- `an interrupt at any question exits 130 and saves nothing`.
+- `a record with a Quick or Full mode and no use case still reads`.
+- `Ask less (like DeepSeek Harness) sets every prompt switch to its parity value`.
+- `interactive and --yes runs write identical profile files`.
+- `interrupted setup resumes without a repeated write`.
+- `consent screen turns each upstream opt-in on alone and off again from the same screen`.
+- `a way back returns to the previous question with the earlier answers kept`.
+- `is asked after the phone question in the main flow and copies the chats before the profile is written`.
+- `delorun setup privacy shows the note, turns the check off, and turns it on again by removing the row`.
 
 <a id="decided-values"></a>
 ## 决定的取值

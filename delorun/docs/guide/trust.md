@@ -110,7 +110,7 @@ Each file these checks download is checked against its signature, so a server th
 
 ### Only when you opt in
 
-Setup never turns on DeepSeek's session-log upload. It turns on reach only when you answer Yes to "Use Delorun from your phone too?" or pass `--phone`; the question starts on No, and `--yes` and `--config` alone never turn it on.
+Setup never turns on DeepSeek's session-log upload. It turns on reach only when you answer Yes to "Use Delorun from your other devices too? (phone, tablet, another computer, over Tailscale)" or pass `--phone` (or `--devices`); the question starts on No, and `--yes` and `--config` alone never turn it on.
 
 - **DeepSeek's session-log upload** is off until you turn it on in Settings, Safety, Privacy. When it is on, each request to DeepSeek's official API also carries the part of your chat's log not sent yet: your messages, the replies, tool calls with their results, workspace paths and feedback.
 - **Analytics.** DeepSeek Harness's own analytics are switched off in the preview. The [profile](../reference/glossary.md#profile) `delorun` runs collects none, and Settings, Privacy says so. Delorun's own opt-in telemetry is not part of the preview.

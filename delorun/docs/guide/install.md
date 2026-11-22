@@ -133,16 +133,21 @@ Delorun sends nothing about you. Details: https://delorun.com/privacy
 
 The details are on the [privacy page](https://delorun.com/privacy); what Delorun asks of the network is in [What you trust](trust.md#what-leaves-your-machine), and the release check has its own switch in Settings → General → Updates. Setup asks these questions in this order:
 
-1. **Phone.** `Use Delorun from your phone too?` offers **No, just this computer** (the default) and **Yes, over Tailscale**. Yes first checks Tailscale on this computer: that it is installed, signed in, and that your user may run `tailscale serve`. A check that fails leaves phone access off and says what to fix; the rest of setup goes on ([Reach the studio from your phone](reach.md)). A phone you approve reads and replies to chats, and each sensitive action asks for its PIN.
+1. **Other devices.** `Use Delorun from your other devices too? (phone, tablet, another computer, over Tailscale)` offers **No, just this computer** (the default) and **Yes, over Tailscale**. Yes first checks Tailscale on this computer: that it is installed, signed in, and that your user may run `tailscale serve`. A check that fails leaves device access off and says what to fix; the rest of setup goes on ([Reach the studio from your phone](reach.md)). A device you approve reads and replies to chats, and each sensitive action asks for its PIN.
 2. **DeepSeek Harness chats.** Only if you used DeepSeek Harness before and this Delorun home has no chats: `Copy your N DeepSeek Harness chats?`, over a summary of what will be copied and what stays behind. Your DeepSeek Harness folder is only read. The choices are **Yes**, **Later (delorun import-home)** and **Show what stays behind** ([Switching from DeepSeek Harness](switching.md)).
 3. **The studio port.** Delorun takes port 3080 and, when another program uses it, the next free port, and says so. In a terminal it asks first: `Port 3080 is in use. Use 3081?` with **Yes** and **Enter another port**.
-4. **The PIN and the command.** (Two questions, asked after the start.) Setup then starts Delorun in this terminal and opens the studio in your browser. If you chose phone access, it asks `Set a PIN for your phone now?` once Delorun runs, because the PIN is stored by the running home. It ends with `Keep the delorun command?`, which runs `npm install -g delorun@<version>` for you on **Yes**, or leaves you with `npx delorun` on **No, keep using npx**.
+4. **The PIN and the command.** (Two questions, asked after the start.) Setup then starts Delorun in this terminal and opens the studio in your browser. If you chose device access, it asks `Set a PIN for your other devices now?` once Delorun runs, because the PIN is stored by the running home. It ends with `Keep the delorun command?`, which runs `npm install -g delorun@<version>` for you on **Yes**, or leaves you with `npx delorun` on **No, keep using npx**.
 
 Setup does not ask for your model key. The studio's welcome screen does ([The studio and your first chat](#the-studio-and-your-first-chat)). Setup also does not ask how much Delorun asks, whether to run in the background, or what to call the profile: it takes safe defaults. **Ask me first** is the default for [prompts](../reference/glossary.md#prompts-answer), so Delorun asks before a chat gets full access to a folder, adds a tool server, edits its own instructions or schedules work ([What Delorun protects](safety.md#consents)). Change any of them in the studio's Settings → General → How Delorun runs, which shows the command for each, or with `delorun setup <section>`.
 
-Delorun then runs in this terminal. The last lines say so:
+Delorun then runs in this terminal. The last lines say so. With device access on, they begin as below: the studio's Tailscale address, where you can finish setup from any device signed in to your Tailscale, and how a new device pairs. Without device access they say that the studio opens on this computer only and where to turn it on later (Settings → General → How Delorun runs, or `delorun setup reach`). `my-pc.example.ts.net` stands for your computer's own Tailscale name:
 
 ```text
+Finish setup here, or on any device signed in to your Tailscale:
+https://my-pc.example.ts.net
+A new device asks to pair: approve it here at this computer, or unlock it with
+the PIN.
+
 Delorun runs in this terminal. Ctrl+C stops it.
 To keep it running after you close the terminal: delorun start --background
 (or Settings → General → How Delorun runs).
@@ -152,7 +157,7 @@ If something looks wrong: delorun doctor
 
 Press Ctrl+C to stop Delorun. The next `delorun` starts it again, in the background unless you turned that off in Settings → General → How Delorun runs.
 
-**Setup without questions.** With no terminal, or with `--yes`, setup asks nothing. It takes the safe defaults: no phone access, no import, **Ask me first**, port 3080 or the next free port. It writes the profile, starts nothing and prints where the studio will be and how to start it:
+**Setup without questions.** With no terminal, or with `--yes`, setup asks nothing. It takes the safe defaults: no device access, no import, **Ask me first**, port 3080 or the next free port. It writes the profile, starts nothing and prints where the studio will be and how to start it:
 
 ```text
 Delorun is set up. Nothing is running yet.
@@ -174,7 +179,7 @@ The install step appears only when the launcher started setup. The key step name
 | Flag | What it answers |
 | --- | --- |
 | `--yes` | Takes every default and asks nothing. |
-| `--phone` | Turns on phone access over Tailscale, and fails with the reason when Tailscale is not ready. In a terminal it pre-selects Yes. |
+| `--phone` (or `--devices`) | Turns on access from your other devices over Tailscale, and fails with the reason when Tailscale is not ready. In a terminal it pre-selects Yes. |
 | `--import-dsh` | Copies your DeepSeek Harness chats after it prints what is copied and what stays behind. |
 | `--port <n>` | Uses this studio port, from 1024 to 65535, instead of 3080 or the next free port. |
 
@@ -235,7 +240,7 @@ The first time, the studio shows a short first-run guide of three steps, ending 
 
 ![The studio's first-run guide on a new home: the Welcome step, with the language choices and the pre-release notice, over an empty chat list.](pictures/first-run-guide.webp)
 
-1. **Welcome.** Choose the language. A pre-release notice says that Delorun is a community fork of DeepSeek Harness that is still in preview; choose Continue to acknowledge it.
+1. **Welcome.** Choose the language. With device access on, it also shows your studio's Tailscale address, where you can finish setup from any device signed in to your Tailscale. A pre-release notice says that Delorun is a community fork of DeepSeek Harness that is still in preview; choose Continue to acknowledge it.
 2. **Models.** This is where you give Delorun its model key. A key that Delorun already has shows as "Key found", with where it came from (for example "From DEEPSEEK_API_KEY in the environment Delorun started with") and a "How does Delorun know?" note. Otherwise paste your DeepSeek key; Delorun tests it with a free request for the provider's model list, and shows `Key works` when the provider accepts it. Other providers are under **Add another provider**, and later in Settings, Agent, Models ([Model providers](providers.md)). You can skip the step and add a key later.
 3. **Ready.** Delorun lists the model and the workspace it will use, and says that the look, agents, plugins and phone access are in Settings. It offers three ideas to try, each with a **Copy** button. **Start a chat** opens a new chat; Delorun never sends a first message for you.
 
