@@ -21,6 +21,15 @@ const ACTION = 'inline-flex min-h-11 items-center justify-center rounded-(--dl-r
 const TEXT_LINK = 'font-medium text-fd-primary underline-offset-4 hover:underline'
 
 /**
+ * A line of home-page text with each part between backticks shown as code, such as a command.
+ * @param props.text - the line.
+ * @returns the line's parts.
+ */
+function WithCode({ text }: { text: string }) {
+  return text.split('`').map((part, index) => index % 2 === 1 ? <code key={index} className="font-mono text-[0.95em] text-fd-foreground">{part}</code> : part)
+}
+
+/**
  * One page in a group: its title and the line that says what it helps you do, as one link.
  * @param props.link - the page.
  * @param props.chinese - whether the home page is the Chinese one.
@@ -31,7 +40,7 @@ function GroupLink({ link, chinese }: { link: HomeLink, chinese: boolean }) {
     <li>
       <Link href={routeOf(link.section, link.slugs, chinese)} className="block rounded-(--dl-radius-sm) px-3 py-3 transition-colors duration-(--dl-motion-quick) hover:bg-fd-accent focus-visible:outline-2 focus-visible:outline-fd-ring">
         <span className="font-medium text-fd-foreground">{link.title}</span>
-        <span className="mt-0.5 block text-sm text-(--dl-text-muted)">{link.text}</span>
+        <span className="mt-0.5 block text-sm text-(--dl-text-muted)"><WithCode text={link.text} /></span>
       </Link>
     </li>
   )

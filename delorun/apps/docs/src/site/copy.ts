@@ -9,6 +9,7 @@ import type { Section } from './routes.ts'
 /** A link on the home page to one page of the site, with the line that says what the page helps you do. */
 export interface HomeLink {
   readonly title: string
+  /** The line under the title; a command between backticks shows as code. */
   readonly text: string
   readonly section: Section
   readonly slugs: readonly string[]
@@ -107,7 +108,7 @@ export const COPY: Readonly<Record<Locale, Copy>> = {
           links: [
             { title: 'Where to customise what', text: 'Settings, agent presets, your own plugin or Delorun itself, and what each costs you at an update.', section: 'guide', slugs: ['customising', 'customise'] },
             { title: 'Your first plugin', text: 'Build a plugin, see it in the studio, then remove it again.', section: 'guide', slugs: ['plugin-guides', 'first-plugin'] },
-            { title: 'Write a plugin for Delorun', text: 'From delorun plugin new to a plugin that loads in your studio.', section: 'guide', slugs: ['plugin-guides', 'plugins'] },
+            { title: 'Write a plugin for Delorun', text: 'From `delorun plugin new` to a plugin that loads in your studio.', section: 'guide', slugs: ['plugin-guides', 'plugins'] },
             { title: 'Changing your harness', text: 'See, protect and undo each change to Delorun.', section: 'guide', slugs: ['customising', 'changing-your-harness'] },
             { title: 'Reference', text: "The glossary, and the notes for people who maintain Delorun's fork of DeepSeek Harness.", section: 'reference', slugs: [] },
           ],
@@ -162,7 +163,7 @@ export const COPY: Readonly<Record<Locale, Copy>> = {
           links: [
             { title: '什么该在哪里定制', text: '设置、agent 预设、你自己的插件或 Delorun 本身，以及每种方式在更新时的代价。', section: 'guide', slugs: ['customising', 'customise'] },
             { title: '你的第一个插件', text: '构建一个插件，在 studio 中看到它，然后再移除它。', section: 'guide', slugs: ['plugin-guides', 'first-plugin'] },
-            { title: '为 Delorun 编写插件', text: '从 delorun plugin new 到一个能在你的 studio 中加载的插件。', section: 'guide', slugs: ['plugin-guides', 'plugins'] },
+            { title: '为 Delorun 编写插件', text: '从 `delorun plugin new` 到一个能在你的 studio 中加载的插件。', section: 'guide', slugs: ['plugin-guides', 'plugins'] },
             { title: '修改你的 harness', text: '查看、保护并撤销对 Delorun 的每一处改动。', section: 'guide', slugs: ['customising', 'changing-your-harness'] },
             { title: '参考资料', text: '术语表，以及面向 Delorun 的 DeepSeek Harness 分支维护者的说明。', section: 'reference', slugs: [] },
           ],
