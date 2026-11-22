@@ -34,6 +34,25 @@ describe('a download the page runs itself', () => {
     expect(currentDownloadsSource().snapshot().map(item => [item.key, item.local === undefined ? 'host' : 'page'])).toEqual([['pack', 'host'], ['@scope/a', 'page']])
   })
 
+  it('takes the place of the Host\'s item of the same name once that one failed, while it runs and once it is added', () => {
+    const host = createFakeDownloadsSource([{ key: 'pack', state: 'failed', receivedBytes: 0 }])
+    withdrawals.push(provideDownloadsSource(host))
+    const shown = startPageDownload('pack', { title: 'Pack' })
+    expect(currentDownloadsSource().snapshot()).toEqual([expect.objectContaining({ key: 'pack', state: 'downloading', local: { retry: false } })])
+    shown.done()
+    expect(currentDownloadsSource().snapshot()).toEqual([expect.objectContaining({ key: 'pack', state: 'ready', local: { retry: false } })])
+    // Its actions are the page's: Remove takes the page's download off, and the Host's failed item shows again.
+    currentDownloadsSource().remove('pack')
+    expect(host.calls).toEqual([])
+    expect(currentDownloadsSource().snapshot()).toEqual([expect.objectContaining({ key: 'pack', state: 'failed' })])
+  })
+
+  it('stays behind a Host item that still runs or was added', () => {
+    withdrawals.push(provideDownloadsSource(createFakeDownloadsSource([{ key: 'pack', state: 'downloading', receivedBytes: 1, totalBytes: 2 }])))
+    startPageDownload('pack')
+    expect(currentDownloadsSource().snapshot()).toEqual([expect.objectContaining({ key: 'pack', state: 'downloading', totalBytes: 2 })])
+  })
+
   it('draws a bar without a measure, says it downloads, and offers no Cancel', () => {
     startPageDownload('@scope/a', { title: 'A' })
     render(<List />)
