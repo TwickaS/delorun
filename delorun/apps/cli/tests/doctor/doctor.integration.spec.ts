@@ -193,8 +193,8 @@ describe('delorun doctor', { timeout: 60_000 }, () => {
   })
 
   it('runs against an empty environment: one line per check, no crash and no key', () => {
-    // Without HOME the home resolves from the account database, so the verdicts of the home and key checks depend on the machine.
-    const result = doctorWithEnvironment(['--port', '1'], {})
+    // Only HOME is set, to the scratch account home, so the run sees no keys and no DELORUN_* setting and never reads the real account's home.
+    const result = doctorWithEnvironment(['--port', '1'], { HOME: osHome })
     const all = (result.stdout + result.stderr).split('\n').filter(line => line !== '' && !SUMMARY.test(line))
     // The `changes` lines report the home's Changes; their own specs are in changes.spec.ts.
     const lines = all.filter(line => !/^[✓!✗] changes: /.test(line))
