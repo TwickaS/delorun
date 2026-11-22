@@ -5,6 +5,7 @@
  * old worktrees' queue and lock, the position messages, and the machine hold the queue enforces.
  */
 import { describe, expect, it } from 'vitest'
+import { z } from 'zod'
 import type { QueueFs, QueueHost } from '../src/checks/run-queue.ts'
 import { decide, describeSlots, grantFromEnv, grantToEnv, holdMachine, readSlots, SLOT_POLL_MILLISECONDS, stepsBack, takeSlots, unholdMachine, WAIT_REPORT_MILLISECONDS, type SlotBudget, type SlotDemand, type SlotGrant, type SlotPaths } from '../src/checks/slots.ts'
 
@@ -584,7 +585,9 @@ describe('a machine hold', () => {
     const priority = fields.priority ?? 1
     const since = fields.since ?? 1000
     machine.live.add(pid)
-    machine.files.set(`/s/req-${String(priority)}-${String(since).padStart(15, '0')}-${String(pid)}.json`, JSON.stringify({ pid, want: 4, min: 4, memoryBytes: 0, disk: false, label: 'x', ...fields, priority, since }))
+    const { cwd, ...rest } = fields
+    if (cwd !== undefined) machine.files.set(`/s/cwd-${String(pid)}.json`, JSON.stringify({ pid, cwd }))
+    machine.files.set(`/s/req-${String(priority)}-${String(since).padStart(15, '0')}-${String(pid)}.json`, JSON.stringify({ pid, want: 4, min: 4, memoryBytes: 0, disk: false, label: 'x', ...rest, priority, since }))
   }
   const decision = (machine: Machine, pid: number, within: SlotBudget = budget) => decide(readSlots(machine.host(pid), paths), pid, within)
 
@@ -599,16 +602,44 @@ describe('a machine hold', () => {
     expect(machine.said[0]).toContain('waiting for 2 of 20 slots: machine held: tests are running; position 1 of 1, 0 run(s) holding slots')
   })
 
-  it('records the working directory in the request', async () => {
+  it('records the working directory beside the request, not in it, and removes it on the grant', async () => {
     const machine = new Machine()
     hold(machine)
-    let recorded: unknown
+    let request: unknown
+    let sidecar: unknown
     machine.onSleep = () => {
-      recorded = JSON.parse(machine.files.get('/s/req-1-000000000001000-1.json') ?? '{}')
+      request = JSON.parse(machine.files.get('/s/req-1-000000000001000-1.json') ?? '{}')
+      sidecar = JSON.parse(machine.files.get('/s/cwd-1.json') ?? '{}')
       machine.files.delete('/s/hold.json')
     }
     await takeSlots(machine.host(1), paths, budget, demand({ cwd: '/w/a/sub' }))
-    expect(recorded).toMatchObject({ pid: 1, cwd: '/w/a/sub' })
+    expect(request).not.toHaveProperty('cwd')
+    expect(sidecar).toMatchObject({ pid: 1, cwd: '/w/a/sub' })
+    expect(machine.files.has('/s/cwd-1.json')).toBe(false)
+    expect(machine.files.has('/s/held-1.json')).toBe(true)
+  })
+
+  it('keeps a new request file for a reader of the previous request format, which rejects an unknown key', async () => {
+    const Previous = z.strictObject({ pid: z.number().int(), start: z.string().optional(), want: z.number().int().positive(), min: z.number().int().positive(), memoryBytes: z.number().nonnegative(), disk: z.boolean(), priority: z.union([z.literal(0), z.literal(1)]), label: z.string(), since: z.number() })
+    const machine = new Machine()
+    hold(machine)
+    const seen: boolean[] = []
+    machine.onSleep = () => {
+      for (const file of machine.files.keys()) if (file.startsWith('/s/req-')) seen.push(Previous.safeParse(JSON.parse(machine.files.get(file) ?? '{}')).success)
+      machine.files.delete('/s/hold.json')
+    }
+    await takeSlots(machine.host(1), paths, budget, demand({ cwd: '/w/a' }))
+    expect(seen).toEqual([true])
+  })
+
+  it('reads a request\'s working directory from its sidecar and removes the sidecar of a dead process', () => {
+    const machine = new Machine()
+    ask(machine, 1, { cwd: '/w/a' })
+    machine.files.set('/s/cwd-5.json', JSON.stringify({ pid: 5, cwd: '/w/dead' }))
+    const state = readSlots(machine.host(2), paths)
+    expect(state.waiting.map(each => each.cwd)).toEqual(['/w/a'])
+    expect(machine.files.has('/s/cwd-5.json')).toBe(false)
+    expect(machine.files.has('/s/cwd-1.json')).toBe(true)
   })
 
   it('grants a request inside an allowed worktree, and not one in a sibling folder whose name starts the same', () => {
