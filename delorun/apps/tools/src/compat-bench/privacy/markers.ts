@@ -276,6 +276,9 @@ const BUILDERS: Readonly<Record<MarkerKey, (input: Input) => RawMarker>> = {
   leavesBehind: leavesBehindMarker,
 }
 
+/** Shown beside "Sends out" when the author lists `model-provider` as a host: the bench's provider is a mock, so that entry is never matched. */
+export const MODEL_PROVIDER_NOTE = 'model provider: mock in this test'
+
 /**
  * @param connects - the run's connects.
  * @param listed - the host names the author listed under `sendsOut.hosts`.
@@ -291,7 +294,7 @@ function unlistedHosts(connects: Observed['connects'], listed: ReadonlyArray<str
  * @param observed - what the run saw, baseline already subtracted.
  * @param declared - what the author said in `dsh.access`, by marker.
  * @param layout - where the canaries were planted.
- * @returns the section, with findings for what was seen and not declared (or declared as not done).
+ * @returns the section, with findings for what was seen and not declared (or declared as not done). It carries no `declared` field: the card keeps the author's own block.
  */
 export function buildPrivacy(observed: Observed, declared: Readonly<Partial<Record<MarkerKey, DeclaredItem>>>, layout: CanaryLayout = DEFAULT_LAYOUT): PrivacyReport {
   const input: Input = { observed, layout }
@@ -312,6 +315,7 @@ export function buildPrivacy(observed: Observed, declared: Readonly<Partial<Reco
       summary = raw.seen ? `${raw.summary} The author declared this: ${reason}` : `The author declared: ${reason} ${raw.summary}`
       const unlisted = key === 'sendsOut' && raw.seen && item?.hosts !== undefined ? unlistedHosts(observed.connects, item.hosts) : []
       if (unlisted.length > 0) note(`seen connecting to ${phrase(unlisted)}, which dsh.access does not list.`)
+      if (key === 'sendsOut' && item?.hosts?.includes('model-provider') === true) evidence = [...evidence, MODEL_PROVIDER_NOTE]
     } else if (denied) {
       summary = raw.seen ? raw.summary : `${raw.summary} The author says it does not do this.`
       if (raw.seen) note('seen, and dsh.access says it does not do this.')
@@ -321,11 +325,9 @@ export function buildPrivacy(observed: Observed, declared: Readonly<Partial<Reco
     if (denied && !raw.seen) state = raw.notChecked === true ? 'not-checked' : 'not-seen'
     return [key, { state, summary, evidence }] as const
   })
-  const reasons = Object.fromEntries(MARKER_KEYS.flatMap(key => declared[key] === undefined ? [] : [[key, declared[key].does ? declared[key].why : 'The author says it does not do this.']]))
   return {
     markers: Object.fromEntries(entries) as PrivacyReport['markers'],
     contentsChecked: observed.contentsChecked && unreadableHosts(input).length === 0,
     ...findings.length > 0 ? { findings } : {},
-    ...Object.keys(reasons).length > 0 ? { declared: reasons } : {},
   }
 }
