@@ -12,7 +12,7 @@ description: "在哪里定制 Delorun：设置、profile 补丁、agent 预设�
 
 ## 摘要
 
-你可以在六个层级上重塑 Delorun，从 studio 中的一项设置，到 harness 自己的源代码。每个层级都比前一个触及得更远，在每次更新时也要付出更多，所以请选择第一个能实现你的更改的层级。没有哪一个会编辑 Delorun 已签名的发布版本，不过最后一个会运行你改动过的文件，而更新会在关闭任何东西之前，先显示它会关闭什么（[更新绝不会拿走你的工作](../safety-and-updates/trust.zh.md)）。
+你可以在六个层级上重塑 Delorun，从 studio 中的一项设置，到 harness 自己的源代码。每个层级都比前一个触及得更远，在每次更新时也要付出更多，所以请选择第一个能实现你的更改的层级。没有哪一个会编辑 Delorun 已签名的发布版本，不过最后一个会运行你改动过的文件，而更新会在关闭任何东西之前，先显示它会关闭什么（见[你信任什么](../safety-and-updates/trust.zh.md)和[更新](../safety-and-updates/updates.zh.md)）。
 
 ## 目录
 

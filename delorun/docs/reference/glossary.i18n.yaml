@@ -3,8 +3,8 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/docs/reference/glossary.md
 /delorun-glossary:
-  en: 2ceb7614565e30b4
-  zh: 87933c303ad02694
+  en: 0c07f2e191382700
+  zh: 6cdf3d58c83e0b56
 /delorun-glossary/contents:
   en: 1b5b9f9ffe3fa53f
   zh: 851d5f5d1f904ca5
