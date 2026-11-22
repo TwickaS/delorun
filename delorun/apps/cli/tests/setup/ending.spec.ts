@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { SETUP_DEFAULTS, type SetupAnswers } from '@delorun/contract-setup-answers'
-import { FIRST_CHAT_PAGE, installLine, launcherVersion, nextSteps } from '../../src/setup/ending.ts'
+import { FIRST_CHAT_PAGE, installLine, isProductionChannel, launcherVersion, nextSteps } from '../../src/setup/ending.ts'
 
 const KEY_SET = { DEEPSEEK_API_KEY: 'env-key' }
 const DEEPSEEK_ENV: SetupAnswers['modelProvider'] = { id: 'deepseek-official', credential: { source: 'environment', name: 'DEEPSEEK_API_KEY' }, baseURL: null, model: null }
@@ -79,5 +79,28 @@ describe('the next steps', () => {
   it('print the device approval for remote use, or the fix when remote access is off', () => {
     expect(steps({ useCase: 'remote', reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership' } })).toContain('  2. Add your phone or another device: delorun devices approve, then type the code it shows.')
     expect(steps({ useCase: 'remote' })).toContain('  2. Remote access is off. To turn it on later, install Tailscale and sign in, then run delorun reach on tailscale.')
+  })
+
+  it('install the npm package, not a package file, for the production launcher whose channel origin is recorded', () => {
+    for (const channelOrigin of ['https://releases.delorun.com', 'https://releases.delorun.com/']) {
+      const text = nextSteps({ profile: 'default', answers: { ...SETUP_DEFAULTS, modelProvider: DEEPSEEK_ENV }, env: { ...KEY_SET, DELORUN_LAUNCHER_VERSION: '0.1.0' }, channelOrigin })
+      expect(text).toContain('  1. Install the delorun command, which npx does not keep:\n     npm install -g delorun@0.1.0\n')
+      expect(text).not.toMatch(/not on the npm registry|\.tgz/u)
+    }
+  })
+
+  it('tell the production origin from the origin of another channel', () => {
+    expect(isProductionChannel(undefined)).toBe(true)
+    expect(isProductionChannel('https://releases.delorun.com')).toBe(true)
+    expect(isProductionChannel('https://releases.delorun.com.example.org')).toBe(false)
+    expect(isProductionChannel('https://releases.delo.run')).toBe(false)
+    expect(isProductionChannel('http://127.0.0.1:18080')).toBe(false)
+  })
+
+  it('print no remote-access step for "Just me" with remote access off, and the device step when it was chosen', () => {
+    const local = steps({ useCase: 'local' })
+    expect(local).not.toMatch(/phone|devices approve|Remote access|Tailscale/u)
+    const chosen = steps({ useCase: 'local', reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership' } })
+    expect(chosen).toContain('  2. Add your phone or another device: delorun devices approve, then type the code it shows.')
   })
 })

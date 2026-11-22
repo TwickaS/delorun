@@ -8,6 +8,7 @@
  * @module @delorun/cli/setup/ending
  */
 import { DELORUN_LAUNCHER_VERSION_ENV } from '@delorun/contract-home-layout'
+import { RELEASE_METADATA_ORIGIN } from '@delorun/contract-release-manifest'
 import type { SetupAnswers } from '@delorun/contract-setup-answers'
 import semver from 'semver'
 import type { CheckResult } from '../doctor/checks.ts'
@@ -40,6 +41,15 @@ export function localInstallLine(version: string): string {
 }
 
 /**
+ * Whether a launcher's recorded channel origin is the production channel, whose launcher is published to npm.
+ * @param channelOrigin - the channel origin recorded for the launcher, or `undefined` when none is recorded.
+ * @returns true for no origin and for {@link RELEASE_METADATA_ORIGIN}; false for the origin of any other release channel.
+ */
+export function isProductionChannel(channelOrigin: string | undefined): boolean {
+  return channelOrigin === undefined || channelOrigin.replace(/\/+$/u, '') === RELEASE_METADATA_ORIGIN
+}
+
+/**
  * The sentence that follows an install line, for a computer where npm refuses a global install without permission.
  * @param installCommand - the install line it follows.
  * @returns one sentence naming the line with a user prefix and the folder to add to `PATH`.
@@ -66,7 +76,7 @@ export interface NextStepsRequest {
   readonly answers: SetupAnswers
   /** The environment `delorun` inherited, which shows whether a key variable is set and whether the launcher started the run. */
   readonly env: Readonly<Record<string, string | undefined>>
-  /** The channel origin of a launcher built for another release channel, or `undefined` for the production channel. */
+  /** The channel origin recorded for the launcher: `undefined` or the production origin for the npm launcher, another origin for a launcher built for another release channel. */
   readonly channelOrigin?: string | undefined
   /** The sandbox check `delorun doctor` has, run at the end of setup on Linux; `undefined` where it does not run. */
   readonly sandbox?: CheckResult | undefined
@@ -108,7 +118,7 @@ export function nextSteps(request: NextStepsRequest): string {
   const steps: string[][] = []
   const version = launcherVersion(request.env)
   if (version !== undefined) {
-    steps.push(request.channelOrigin === undefined
+    steps.push(isProductionChannel(request.channelOrigin)
       ? ['Install the delorun command, which npx does not keep:', `  ${installLine(version)}`, permissionLine(installLine(version))]
       : [`Keep the delorun command, which npx does not keep: ${version} is not on the npm registry, so install the package file this launcher came from:`, `  ${localInstallLine(version)}`, permissionLine(localInstallLine(version))])
   }
@@ -119,11 +129,9 @@ export function nextSteps(request: NextStepsRequest): string {
     steps.push([`To use the studio as well, start it any time with delorun${flag}.`])
   } else {
     steps.push([`Start Delorun and open the studio: delorun${flag}`, `Send a first message in a new chat. The install guide's section on your first chat walks through it: ${FIRST_CHAT_PAGE}`])
-    if (useCase === 'remote') {
-      steps.push(reach.option === 'none'
-        ? ['Remote access is off. To turn it on later, install Tailscale and sign in, then run delorun reach on tailscale.']
-        : [`Add your phone or another device: delorun devices approve${flag}, then type the code it shows.`])
-    }
+    // Pairing a device is a step only for a person who chose remote access, whatever the use case: "Just me" with remote access left off has none.
+    if (reach.option !== 'none') steps.push([`Add your phone or another device: delorun devices approve${flag}, then type the code it shows.`])
+    else if (useCase === 'remote') steps.push(['Remote access is off. To turn it on later, install Tailscale and sign in, then run delorun reach on tailscale.'])
   }
   return `${[
     'Delorun is set up. Nothing is running yet.',
