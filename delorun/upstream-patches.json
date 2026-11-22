@@ -3283,6 +3283,12 @@
       "class": "generic-fix",
       "feature": "build-without-git",
       "reason": "Reading the source commit in a directory that is not a Git checkout fails with an error that names DSH_CLIENT_COMMIT_HASH instead of git's own message. Offer upstream."
+    },
+    {
+      "path": ".agents/skills/dsh-pr-description/SKILL.md",
+      "class": "delorun-feature",
+      "feature": "contributor-templates",
+      "reason": "The PR description skill asks for English descriptions in the pull request template's sections, with a plain AI usage section instead of upstream's AI-DECLARATION block and stage table."
     }
   ],
   "retired": []

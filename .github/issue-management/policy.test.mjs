@@ -220,112 +220,69 @@ test('keeps the pull request template aligned with the dsh-pr-description skill'
   const source = readFileSync(new URL('../pull_request_template.md', import.meta.url), 'utf8')
   const skillPath = '.agents/skills/dsh-pr-description/SKILL.md'
   const skill = readFileSync(new URL(`../../${skillPath}`, import.meta.url), 'utf8')
-  assert.ok(source.startsWith(`<!-- 本 PR 正文按 ${skillPath} 填写。 -->\n`), 'the template points to the skill')
+  assert.ok(
+    source.startsWith(`<!-- Fill in this description following ${skillPath}. -->\n`),
+    'the template points to the skill',
+  )
   assert.deepEqual(source.match(/^## .+$/gm), [
-    '## Motivation',
-    '## Changes',
-    '## Testing',
-    '## AI Usage',
+    '## Problem',
+    '## Change',
+    '## Scope',
+    '## Verification',
+    '## Checklist',
+    '## AI usage',
   ])
   assert.doesNotMatch(source, /^### /m)
-  assert.match(source, /^## Motivation\n\n<!-- [^\n]*Fixes #N[^\n]* -->$/m, 'the template prompts for an Issue reference')
+  assert.match(source, /^## Problem\n\n<!-- [^\n]*Fixes #N[^\n]* -->$/m, 'the template prompts for an Issue reference')
   assert.match(source, /- <!-- [^\n]+ -->\n\n  <details>\n  <summary>Proof<\/summary>/)
   assert.equal(source.match(/<details>/g)?.length, 1)
   assert.equal(source.match(/<\/details>/g)?.length, 1)
 
-  const stagesSection = skill.match(/^### Stages and criteria\n([\s\S]*?)(?=^### )/m)?.[1]
-  assert.ok(stagesSection, 'the skill has a Stages and criteria section')
-  const skillStages = [...stagesSection.matchAll(/^\*\*(.+?)\*\*:/gm)].map(([, stage]) => stage)
-  assert.ok(skillStages.length > 0, 'the skill lists stages')
-  for (const stage of skillStages) {
-    assert.match(stage, /^[a-z]+ [\u4e00-\u9fff]+$/, `stage name pairs one English word with a Chinese name: ${stage}`)
-  }
-  const reviewStage = 'review 评审处理'
-  assert.equal(skillStages.at(-1), reviewStage, 'review is the last stage')
-
+  const labelledLines = [
+    '- **Model and tool:** ',
+    '- **What the agent did:** ',
+    '- **What a person decided or checked:** ',
+  ]
+  const responsibility =
+    'The person who opens the pull request is responsible for it, whether or not an AI agent wrote it. A pull request written with an agent gets the same checks and review as any other.'
   const skillProse = skill.replace(/```[\s\S]*?```/g, '')
-  assert.match(skillProse, /^## AI Usage$/m, 'the skill names the section AI Usage')
-  assert.match(skillProse, /^### Section format$/m, 'the skill has a Section format section')
-  assert.ok(skill.includes('| Level | Meaning | AI involvement |'), 'the skill defines AI involvement')
-  const badgeSection = skill.match(/^### Badge URLs\n([\s\S]*?)(?=^### )/m)?.[1]
-  assert.ok(badgeSection, 'the skill has a Badge URLs section')
-  for (const [level, color] of [
-    ['hint', 'ecfccb'],
-    ['assist', 'fef9c3'],
-    ['pair', 'ffedd5'],
-    ['copilot', 'fee2e2'],
-    ['auto', 'ede9fe'],
-  ]) {
-    assert.ok(
-      badgeSection.includes(`https://img.shields.io/badge/䷼%20AI--DECLARATION-${level}-${color}?labelColor=${color}`),
-      `the skill has the ${level} badge URL`,
-    )
-  }
-  const specVersion = skill.match(/pins specification version (\d+\.\d+\.\d+)/)?.[1]
-  assert.ok(specVersion, 'the skill pins the specification version')
-  const versionLink = `[v${specVersion}](https://ai-declaration.md/en/${specVersion})`
-  assert.ok(skill.includes(versionLink), 'the skill links the pinned specification version')
-  assert.ok(source.includes(versionLink), 'the template links the pinned specification version')
-
-  const sectionFormat = skill.match(/^### Section format\n[\s\S]*?```markdown\n([\s\S]*?)```/m)?.[1]
-  assert.ok(sectionFormat, 'the skill shows the section format')
-  const example = skill.match(/^### Example\n[\s\S]*?```markdown\n([\s\S]*?)```/m)?.[1]
-  assert.ok(example, 'the skill has an example')
-  for (const [label, markdown] of [
-    ['section format', sectionFormat],
-    ['example', example],
-  ]) {
-    assert.match(markdown, /^## AI Usage$/m, `the ${label} uses the AI Usage heading`)
-    assert.match(markdown, /^<!-- ai-declaration:start -->$/m, `the ${label} starts the declaration block`)
-    assert.match(markdown, /^<!-- ai-declaration:end -->$/m, `the ${label} ends the declaration block`)
-    assert.ok(markdown.includes('| 阶段 | 级别 | AI 参与度 | 决策记录 |'), `the ${label} shows the stage table header`)
-    assert.ok(markdown.includes(versionLink), `the ${label} uses the pinned specification version`)
-  }
-  const exampleRows = [...example.matchAll(/^\| .+? \| ([a-z]+) [^|]+ \| (\d+)% \| .+$/gm)]
-  assert.ok(exampleRows.length > 0, 'the example has stage rows')
-  const levelOrder = ['hint', 'assist', 'pair', 'copilot', 'auto']
-  const highestExampleLevel = exampleRows
-    .map(([, level]) => level)
-    .reduce((highest, level) => (levelOrder.indexOf(level) > levelOrder.indexOf(highest) ? level : highest))
-  assert.ok(example.includes(`AI-DECLARATION: ${highestExampleLevel}`), 'the example badge shows the highest level')
-
-  const declarationBlock = source.match(/^<!-- ai-declaration:start -->\n([\s\S]*?)\n<!-- ai-declaration:end -->$/m)?.[1]
-  assert.ok(declarationBlock, 'the template has one ordered AI declaration block')
-  assert.equal(source.match(/<!-- ai-declaration:start -->/g)?.length, 1)
-  assert.equal(source.match(/<!-- ai-declaration:end -->/g)?.length, 1)
-  assert.ok(
-    declarationBlock.includes(
-      '[![AI-DECLARATION: 待填级别](https://img.shields.io/badge/䷼%20AI--DECLARATION-待填级别-e5e7eb?labelColor=e5e7eb)](https://ai-declaration.md)',
-    ),
-    'the block has the placeholder badge link',
-  )
-  assert.ok(
-    declarationBlock.includes(`**AI declaration** (${versionLink}): \`待填级别\``),
-    'the block pins the declaration',
-  )
-
-  const usageSection = source.slice(source.indexOf('## AI Usage'))
-  assert.ok(usageSection.includes('<!-- ai-declaration:start -->'), 'the AI declaration block is in AI Usage')
-  assert.ok(usageSection.includes('| 阶段 | 级别 | AI 参与度 | 决策记录 |'), 'the stage table is in AI Usage')
-  assert.ok(source.includes('|:--|:--|--:|:--|'), 'the template right-aligns AI involvement')
   assert.deepEqual(
-    [...source.matchAll(/^\| (.+?) \| (?:待填级别|n\/a 暂不适用) \| (?:\?%|—) \| .+$/gm)].map(([, stage]) => stage),
-    skillStages,
-    'the template has one row per skill stage, in skill order',
+    [...skill.matchAll(/^### (Problem|Change|Scope|Verification|Checklist)$/gm)].map(([, heading]) => heading),
+    ['Problem', 'Change', 'Scope', 'Verification', 'Checklist'],
+    'the skill describes the template sections in template order',
   )
-  for (const stage of skillStages.slice(0, -1)) {
-    assert.ok(source.includes(`| ${stage} | 待填级别 | ?% | 待填说明 |`), `${stage} has a placeholder row`)
-  }
   assert.ok(
-    source.includes(`| ${reviewStage} | n/a 暂不适用 | — | 尚无已处理的评审意见。 |`),
-    'the review row starts as n/a, as the skill requires at PR creation',
+    skill.includes(
+      '`## Problem`, `## Change`, `## Scope`, `## Verification`, `## Checklist` and `## AI usage`',
+    ),
+    'the skill names the template headings',
   )
+  assert.match(skillProse, /Write the description in English, in British English/, 'the skill asks for English')
+  assert.doesNotMatch(skill, /^### (Motivation|Changes|Testing)$/m, 'the skill has no old section guidance')
+  assert.doesNotMatch(skill, /Chinese unless/, 'the skill does not ask for Chinese')
+  assert.match(skillProse, /^## AI usage$/m, 'the skill names the section AI usage')
+  const sectionFormat = skill.match(/^## AI usage\n[\s\S]*?```markdown\n([\s\S]*?)```/m)?.[1]
+  assert.ok(sectionFormat, 'the skill shows the section format')
+  for (const [label, markdown] of [
+    ['template', source.slice(source.indexOf('## AI usage'))],
+    ['skill section format', sectionFormat],
+  ]) {
+    assert.match(markdown, /^## AI usage$/m, `the ${label} uses the AI usage heading`)
+    const positions = labelledLines.map((line) => markdown.indexOf(line))
+    assert.ok(positions.every((position) => position >= 0), `the ${label} has the three labelled lines`)
+    assert.deepEqual(positions, [...positions].sort((a, b) => a - b), `the ${label} keeps the labelled lines in order`)
+    assert.ok(markdown.includes(responsibility), `the ${label} states who is responsible`)
+  }
+
   for (const [label, text] of [
     ['template', source],
     ['skill', skill],
   ]) {
-    assert.doesNotMatch(text, /^## Human and Agent Roles$/m, `${label} has no old heading`)
-    assert.doesNotMatch(text, /^Levels and Agent autonomy:/m, `${label} has no old level line`)
+    assert.doesNotMatch(text, /^## AI Usage$/m, `${label} has no old heading`)
+    assert.doesNotMatch(text, /^## Agent$/m, `${label} has no old Agent heading`)
+    assert.doesNotMatch(text, /^## Human and Agent Roles$/m, `${label} has no old roles heading`)
+    assert.doesNotMatch(text, /ai-declaration|AI-DECLARATION|AI declaration/, `${label} has no declaration block or badge`)
+    assert.doesNotMatch(text, /阶段|AI 参与度/, `${label} has no stage table`)
     assert.doesNotMatch(text, /<ins>/, `${label} has no old underline markup`)
   }
 })

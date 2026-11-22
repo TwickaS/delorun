@@ -51,6 +51,7 @@ Each `delorun-feature` and `generic-fix` entry names one feature by a kebab-case
 | `code-refusal-switch` | The loader's `refuseCode` option and the boot's forwarding of it | a switch, off; no Delorun composition turns it on |
 | `settings-by-chat` | The config editor's `edited` event (C4) and its `before-save` hook (C1) | shipped `cli`, which refuses a value for a secret-role field |
 | `container-denial-marker` | The sandbox, shell and PTC fields that mark a denial by the environment | shipped confinement, behind a C16 switch |
+| `contributor-templates` | The PR description skill's English text, the template's sections and a plain AI usage section, in place of upstream's AI-DECLARATION block | the repository's pull request template |
 | `custom-chat-display` | The Custom work-details mode and the presentation policy the chat renderers read | the studio lane |
 | `default-workspace-directory` | The operator-named path of the first-use Workspace | shipped `bundle-local` and `cli` (`delorun start`), behind a C16 switch |
 | `delorun-launcher` | `runCli` takes its arguments from the launcher, and the CLI's argument parser and plugin command are built as entries a launcher imports | shipped `cli` |
