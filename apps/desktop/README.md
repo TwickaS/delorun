@@ -16,7 +16,7 @@ Desktop runs the Delorun workspace in a native application. This reference cover
 - [Choosing the home](#choosing-the-home)
 - [Closing the window and quitting](#closing-the-window-and-quitting)
 - [Key technical decisions](#key-technical-decisions)
-- [Bundled command runtime](#bundled-command-runtime)
+- [No terminal command](#bundled-command-runtime)
 - [Installation ownership](#installation-ownership)
 - [Recovery and diagnostics](docs/diagnostics/README.md)
 - [Develop](#develop)
@@ -142,13 +142,9 @@ The [thin-wrapper decision](../../.agents/notes/implemented/architecture/2026-09
 
 <a id="bundled-command-runtime"></a>
 
-## Bundled command runtime
+## No terminal command
 
-The installed `resources/runtime/cli/bin/dsh` shell script (`dsh.cmd` on Windows) runs the ordinary CLI dispatcher using Desktop's Electron executable and bundled pnpm. It works while Desktop is closed and retains the Electron runtime limitations. Ordinary profile, configuration, and plugin commands use the same implementation as npm dsh; the command does not open Desktop.
-
-To manage Desktop's plugins, launch Desktop once to initialize its profile, fully quit the application, then run `dsh plugin --profile desktop add <package>`, `list`, or `remove <package>`. Reopen Desktop to use the changes. Package operations retain the shared profile write lock and compatibility checks. The installed command refuses an uninitialized Desktop profile instead of creating an ordinary CLI profile in its place.
-
-Finish CLI commands before updating or uninstalling Desktop; the installer does not coordinate with running commands. The CLI does not supply Office authoring-skill resource paths. Desktop's existing Office setup and Web attachment conversion retain their own resource configuration. `prepare:runtime` copies the launch scripts without compiling a native CLI launcher.
+The app installs no terminal command and puts nothing on the PATH. Upstream's `dsh` launcher is not packaged: `resources/runtime` keeps only the `bin/node` launcher that the bundled runtime uses, and the `delorun://` scheme replaces `dsh://`. The `delorun` command lives inside the WSL distribution that runs the home; run it there.
 
 <a id="installation-ownership"></a>
 

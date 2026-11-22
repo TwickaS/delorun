@@ -4027,6 +4027,42 @@
       "class": "delorun-feature",
       "feature": "desktop-shell",
       "reason": "Delorun's own module of the desktop shell: choosing and connecting to a home (WSL2 first), the version guard, the plain error pages and the app identity (L157 to L159)."
+    },
+    {
+      "path": "apps/desktop/electron-builder.config.d.mts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Product identity: the link-scheme type names Delorun and `delorun`, as the builder configuration now registers (L157)."
+    },
+    {
+      "path": "apps/desktop/cli/dsh",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Removed with the `dsh` command (L157): the app packs no terminal launcher; `resources/runtime` keeps only the `bin/node` launcher. The `delorun` command lives inside the WSL distribution."
+    },
+    {
+      "path": "apps/desktop/cli/dsh.cmd",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Removed with the `dsh` command (L157): the app packs no terminal launcher; `resources/runtime` keeps only the `bin/node` launcher. The `delorun` command lives inside the WSL distribution."
+    },
+    {
+      "path": "apps/desktop/cli/link-entry.c",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Removed with the `dsh` command (L157): the app packs no terminal launcher; `resources/runtime` keeps only the `bin/node` launcher. The `delorun` command lives inside the WSL distribution."
+    },
+    {
+      "path": "apps/desktop/scripts/prepare-cli.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Removed with the `dsh` command (L157): the app packs no terminal launcher; `resources/runtime` keeps only the `bin/node` launcher. The `delorun` command lives inside the WSL distribution."
+    },
+    {
+      "path": "apps/desktop/scripts/prepare-command-link.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Removed with the `dsh` command (L157): the app packs no terminal launcher; `resources/runtime` keeps only the `bin/node` launcher. The `delorun` command lives inside the WSL distribution."
     }
   ],
   "retired": []

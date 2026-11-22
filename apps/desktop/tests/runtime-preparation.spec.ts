@@ -13,7 +13,6 @@ const state = vi.hoisted(() => ({
   failure: undefined as 'electron' | 'primary' | undefined,
   preparePrimary: vi.fn(),
   extractElectron: vi.fn(),
-  commandLink: vi.fn(),
 }))
 vi.mock('../scripts/desktop-build-paths.mjs', async importOriginal => ({
   ...await importOriginal<typeof import('../scripts/desktop-build-paths.mjs')>(),
@@ -26,9 +25,8 @@ vi.mock('@electron/get', () => ({ downloadArtifact: async () => 'electron.zip' }
 vi.mock('extract-zip', () => ({ default: state.extractElectron }))
 vi.mock('node:child_process', async importOriginal => ({
   ...await importOriginal<typeof import('node:child_process')>(),
-  execFileSync: (file: string) => file === '/usr/libexec/PlistBuddy' ? '12.0\n' : '24.18.1\n',
+  execFileSync: () => '24.18.1\n',
 }))
-vi.mock('../scripts/prepare-command-link.ts', () => ({ prepareCommandLink: state.commandLink }))
 vi.mock('../scripts/prepare-primary-runtime.ts', () => ({
   preparePrimaryRuntime: state.preparePrimary,
 }))
@@ -66,7 +64,7 @@ afterEach(async () => {
   await rm(state.root, { recursive: true, force: true, maxRetries: 20, retryDelay: 50 })
 })
 
-it.each(['mac-arm64', 'mac-x64', 'win-x64'] as const)('prepares %s with one pnpm distribution and its CLI resources', async (target) => {
+it.each(['mac-arm64', 'mac-x64', 'win-x64'] as const)('prepares %s with one pnpm distribution and its node launcher, and no terminal command', async (target) => {
   state.target = target
   const windows = target === 'win-x64'
   if (windows) process.argv.push('--defer-primary-runtime-smoke')
@@ -76,13 +74,11 @@ it.each(['mac-arm64', 'mac-x64', 'win-x64'] as const)('prepares %s with one pnpm
   expect(existsSync(join(runtime, 'pnpm'))).toBe(false)
   expect(existsSync(join(runtime, 'primary-runtime', 'dependencies', 'pnpm', 'bin', 'pnpm.mjs'))).toBe(true)
   expect(existsSync(join(runtime, 'bin', 'node'))).toBe(true)
-  expect(existsSync(join(runtime, 'cli', 'bin', windows ? 'dsh.cmd' : 'dsh'))).toBe(true)
+  expect(existsSync(join(runtime, 'cli'))).toBe(false)
   expect(JSON.parse(readFileSync(join(runtime, 'versions.json'), 'utf8'))).toEqual({
     schemaVersion: 1, node: '24.18.1', pnpm: '11.7.0',
   })
   expect(state.preparePrimary).toHaveBeenCalledWith({ deferSmoke: windows })
-  if (windows) expect(state.commandLink).not.toHaveBeenCalled()
-  else expect(state.commandLink).toHaveBeenCalledWith(join(runtime, 'cli'), target === 'mac-arm64' ? 'arm64' : 'x64', '12.0')
 })
 
 it.each([
@@ -108,7 +104,7 @@ it.each([
   expect(existsSync(join(state.root, 'runtime', 'versions.json'))).toBe(false)
 })
 
-it.each(['electron', 'primary'] as const)('overlaps Windows payloads and waits for %s to finish last before publishing CLI and versions', async (last) => {
+it.each(['electron', 'primary'] as const)('overlaps Windows payloads and waits for %s to finish last before publishing the node launcher and versions', async (last) => {
   state.target = 'win-x64'
   const electron = Promise.withResolvers<undefined>()
   const primary = Promise.withResolvers<undefined>()
@@ -131,11 +127,11 @@ it.each(['electron', 'primary'] as const)('overlaps Windows payloads and waits f
     await vi.waitFor(() => { expect([...started].sort()).toEqual(['electron', 'primary']) }, { timeout: 5000 })
     ;(last === 'electron' ? primary : electron).resolve(undefined)
     await vi.waitFor(() => { expect(finished.size).toBe(1) }, { timeout: 5000 })
-    expect(existsSync(join(state.root, 'runtime', 'cli'))).toBe(false)
+    expect(existsSync(join(state.root, 'runtime', 'bin'))).toBe(false)
     expect(existsSync(join(state.root, 'runtime', 'versions.json'))).toBe(false)
     ;(last === 'electron' ? electron : primary).resolve(undefined)
     expect(await outcome).toBeUndefined()
-    expect(existsSync(join(state.root, 'runtime', 'cli', 'bin'))).toBe(true)
+    expect(existsSync(join(state.root, 'runtime', 'bin', 'node'))).toBe(true)
     expect(existsSync(join(state.root, 'runtime', 'versions.json'))).toBe(true)
   } finally {
     electron.resolve(undefined)
@@ -144,7 +140,7 @@ it.each(['electron', 'primary'] as const)('overlaps Windows payloads and waits f
   }
 })
 
-it.each(['electron', 'primary'] as const)('drains the sibling after Windows %s failure without publishing CLI or versions', async (failed) => {
+it.each(['electron', 'primary'] as const)('drains the sibling after Windows %s failure without publishing the node launcher or versions', async (failed) => {
   state.target = 'win-x64'
   const electron = Promise.withResolvers<undefined>()
   const primary = Promise.withResolvers<undefined>()
@@ -165,11 +161,11 @@ it.each(['electron', 'primary'] as const)('drains the sibling after Windows %s f
     await vi.waitFor(() => { expect([...started].sort()).toEqual(['electron', 'primary']) }, { timeout: 5000 })
     ;(failed === 'electron' ? electron : primary).reject(failure)
     await vi.waitFor(() => { expect(completed.has(failed)).toBe(true) }, { timeout: 5000 })
-    expect(existsSync(join(state.root, 'runtime', 'cli'))).toBe(false)
+    expect(existsSync(join(state.root, 'runtime', 'bin'))).toBe(false)
     expect(existsSync(join(state.root, 'runtime', 'versions.json'))).toBe(false)
     ;(failed === 'electron' ? primary : electron).resolve(undefined)
     expect(await outcome).toEqual({ error: failure, completed: ['electron', 'primary'] })
-    expect(existsSync(join(state.root, 'runtime', 'cli'))).toBe(false)
+    expect(existsSync(join(state.root, 'runtime', 'bin'))).toBe(false)
     expect(existsSync(join(state.root, 'runtime', 'versions.json'))).toBe(false)
   } finally {
     electron.resolve(undefined)
