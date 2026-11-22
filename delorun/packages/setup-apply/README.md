@@ -4,6 +4,8 @@ description: "The @delorun/setup-apply library: the writes that apply a setup an
 
 # @delorun/setup-apply
 
+English | [中文](README.zh.md)
+
 ## Summary
 
 This package holds the writes that turn a setup answer into the files a profile runs from, so `delorun setup` and the studio's How Delorun runs controls write them through one definition. It reads and merges rows into a profile's `cordis.patch.yml`, builds the patch rows of the prompts answer, the studio port and the Tailscale private reach option, reads and writes the `pairing` choice of the home-auth row, and rewrites a profile's `setup-answers.json`. It checks nothing about who may ask: the command checks the person at a terminal, and the studio's routes check the caller before they call it.

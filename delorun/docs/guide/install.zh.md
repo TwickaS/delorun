@@ -280,6 +280,8 @@ A new chat starts in one of the agent [presets](../reference/glossary.zh.md#pres
 
 </details>
 
+<a id="the-default-workspace"></a>
+
 ## 默认工作区
 
 chat 在工作区中工作：这是你电脑上的一个文件夹，模型可以读取和更改其中的文件。Delorun 的默认工作区是你“文档”文件夹中的 `Delorun/default-workspace`，如果你的系统没有“文档”文件夹，则在你的用户主目录中。studio 在第一次使用时创建它。请在 studio 中添加你自己的项目文件夹。
