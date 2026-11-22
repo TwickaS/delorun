@@ -1,0 +1,79 @@
+# Bilingual-pair consistency record for parity-baseline.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/reference/parity-with-deepseek-harness/parity-baseline.md
+/parity-baseline:
+  en: b16e618d4d354b97
+  zh: f7d0f06d18ad7580
+/parity-baseline/contents:
+  en: 2c84af45b12e69df
+  zh: 1dac3646ecd92a0f
+/parity-baseline/reference-host-and-tree:
+  en: f1f8538e6362f4b9
+  zh: d5d822db0e264066
+/parity-baseline/passes:
+  en: 75e0df938c4e5cdc
+  zh: 38f8e688af421611
+/parity-baseline/passes/pass-1-plain-environment:
+  en: 5743321e966fc02a
+  zh: 8f20b7224b9fa6ab
+/parity-baseline/passes/pass-2-as-upstream-ci-sets-it:
+  en: c154edd8d4a84484
+  zh: e02de68bc24c328b
+/parity-baseline/passes/changes-between-the-passes:
+  en: 90b8814b037c8e92
+  zh: 801be5f0ad5a0c30
+/parity-baseline/passes/scenario-counts:
+  en: df489e81b2e951c5
+  zh: a28a4947f225f9bd
+/parity-baseline/environment-as-upstream-ci-sets-it:
+  en: e9b31bade8e3be48
+  zh: 6edfa0b8d09edd7d
+/parity-baseline/environment-as-upstream-ci-sets-it/wsl-confinement:
+  en: 2f0dd745d5de7f61
+  zh: 556317708f21c52b
+/parity-baseline/node-24-check:
+  en: 1031f44d6a638bb8
+  zh: c5952ec190dc29ac
+/parity-baseline/classification-of-the-remaining-failures:
+  en: 490976d503a6b4ec
+  zh: 032e4f57b7a2a97e
+/parity-baseline/classification-of-the-remaining-failures/a-host-state:
+  en: 9f06f9fa66f6a7de
+  zh: c717e4ef896cfe9f
+/parity-baseline/classification-of-the-remaining-failures/b-upstream-test-bug-on-wsl:
+  en: a19d3472af577e7f
+  zh: 108645d95c7b8744
+/parity-baseline/classification-of-the-remaining-failures/c-flaky-under-the-full-run:
+  en: 632633e5363ace8c
+  zh: 5a3f92bbc88ebe80
+/parity-baseline/classification-of-the-remaining-failures/d-other:
+  en: 964208ec37d36d88
+  zh: a570f045b97d5540
+/parity-baseline/web-e2e-after-the-rc-5-drift-fixes:
+  en: 5417309917ea70de
+  zh: 0cfc62deb543cc1c
+/parity-baseline/host-state:
+  en: 9e88c6de71508e6e
+  zh: becb07028b9850c8
+/parity-baseline/green-base-on-main:
+  en: 4d09defb10939767
+  zh: 28f74f514cdfba0c
+/parity-baseline/green-base-on-main/procedure:
+  en: df5ebfa1f24ac485
+  zh: 7583bc10593eacf3
+/parity-baseline/green-base-on-main/prerequisites:
+  en: f6fcbadd81f44fab
+  zh: 9e4223e5b10cbeaf
+/parity-baseline/green-base-on-main/results:
+  en: 5e5896aa69d6eb47
+  zh: 763bba7710006b38
+/parity-baseline/green-base-on-main/exclusion:
+  en: a49160f9d8e51b60
+  zh: ef0c53222424e7f3
+/parity-baseline/green-base-on-main/contention:
+  en: 15c6548c894a0519
+  zh: 07c27f8e9156cce3
+/parity-baseline/where-to-go-next:
+  en: 2e38e97e8aef0125
+  zh: 0499eab888abe4cb

@@ -18,7 +18,7 @@ description: "Delorun 开发者参考资料索引：面向所有人的、用平�
 
 这些页面假定你在做 Delorun 的代码，或在做上游发布的合并。
 
-- [差异索引](divergence/README.zh.md)回答 Delorun 更改了哪些上游文件以及为什么。它定义这些更改的台账、它们的类别和差异预算。
-- [对等清单](parity.zh.md)回答 Delorun 在某个领域是否与 stock DeepSeek Harness（DSH）行为一致，以及有什么证据。它在上游标签 `dsh-v0.2.2-rc.1` 上，记录 Delorun 刻意差异的状态以及与之对照的 stock 领域的状态。
-- [对等基线](parity-baseline.zh.md)回答上游自身的哪些测试在 Delorun 的参考主机上于该标签通过。它记录两轮运行、一次 Node 24 核对、每项失败的分类，以及这些结果所依赖的环境和主机状态。
+- [差异索引](parity-with-deepseek-harness/divergence/README.zh.md)回答 Delorun 更改了哪些上游文件以及为什么。它定义这些更改的台账、它们的类别和差异预算。
+- [对等清单](parity-with-deepseek-harness/parity.zh.md)回答 Delorun 在某个领域是否与 stock DeepSeek Harness（DSH）行为一致，以及有什么证据。它在上游标签 `dsh-v0.2.2-rc.1` 上，记录 Delorun 刻意差异的状态以及与之对照的 stock 领域的状态。
+- [对等基线](parity-with-deepseek-harness/parity-baseline.zh.md)回答上游自身的哪些测试在 Delorun 的参考主机上于该标签通过。它记录两轮运行、一次 Node 24 核对、每项失败的分类，以及这些结果所依赖的环境和主机状态。
 - [harness 反馈日志](harness-feedback.zh.md)回答维护者在这个仓库中工作时遇到了哪些问题，以及应当改做什么。每个条目都有状态。

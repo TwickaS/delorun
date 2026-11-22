@@ -10,7 +10,7 @@ import { DocsLayout } from 'fumadocs-ui/layouts/docs'
 import { DocsBody, DocsPage } from 'fumadocs-ui/layouts/docs/page'
 import defaultMdxComponents from 'fumadocs-ui/mdx'
 import { use } from 'react'
-import { baseOptions } from '@/components/layout.tsx'
+import { docsOptions } from '@/components/layout.tsx'
 import { PageFooter } from '@design/footer.tsx'
 import { pageHead } from '@/site/head.ts'
 import { COPY } from '@/site/copy.ts'
@@ -71,7 +71,7 @@ export function SectionPage({ section, locale, slugs }: SectionPageData) {
   const other: Locale = locale === 'en' ? 'zh' : 'en'
   const version = delorunVersion()
   return (
-    <DocsLayout {...baseOptions(locale)} tree={source.getPageTree(locale)}>
+    <DocsLayout {...docsOptions(locale)} tree={source.getPageTree(locale)}>
       <DocsPage toc={toc}>
         <DocsBody>
           <Body components={defaultMdxComponents} />

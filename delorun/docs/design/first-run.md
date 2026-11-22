@@ -43,7 +43,7 @@ One command, `npx delorun`, takes a person from nothing to a first chat. The lau
 
 ## What this does not protect against
 
-- `npx delorun` runs the launcher npm serves before any Delorun check. No workflow publishes it, so it carries no npm build attestation; the person checks it out of band as the [Trust page](../guide/trust.md#checking-it-yourself) describes, and the [threat model](../security/threat-model.md#releases-the-log-and-the-rebuild) states the limit.
+- `npx delorun` runs the launcher npm serves before any Delorun check. No workflow publishes it, so it carries no npm build attestation; the person checks it out of band as the [Trust page](../guide/safety-and-updates/trust.md#checking-it-yourself) describes, and the [threat model](../security/threat-model.md#releases-the-log-and-the-rebuild) states the limit.
 - `npm install -g delorun@<version>` installs into the person's global npm prefix with their own access.
 - A background start keeps Delorun running after the terminal closes; the person stops it with `delorun stop`.
 

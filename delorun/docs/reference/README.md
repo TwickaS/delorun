@@ -16,7 +16,7 @@ The [glossary](glossary.md) defines the words that Delorun's guide, interface an
 
 These pages assume that you work on Delorun's code or on the merge of an upstream release.
 
-- The [divergence index](divergence/README.md) answers which upstream files Delorun changes and why. It defines the ledger of those changes, their classes and the divergence budget.
-- The [parity checklist](parity.md) answers whether Delorun behaves like stock DeepSeek Harness (DSH) in an area, and what evidence shows it. It records, at the upstream tag `dsh-v0.2.2-rc.1`, the status of Delorun's deliberate differences and of the stock areas they are compared with.
-- The [parity baseline](parity-baseline.md) answers which of upstream's own tests pass on Delorun's reference host at that tag. It records two passes, a Node 24 check, the classification of each failure, and the environment and host state the results depend on.
+- The [divergence index](parity-with-deepseek-harness/divergence/README.md) answers which upstream files Delorun changes and why. It defines the ledger of those changes, their classes and the divergence budget.
+- The [parity checklist](parity-with-deepseek-harness/parity.md) answers whether Delorun behaves like stock DeepSeek Harness (DSH) in an area, and what evidence shows it. It records, at the upstream tag `dsh-v0.2.2-rc.1`, the status of Delorun's deliberate differences and of the stock areas they are compared with.
+- The [parity baseline](parity-with-deepseek-harness/parity-baseline.md) answers which of upstream's own tests pass on Delorun's reference host at that tag. It records two passes, a Node 24 check, the classification of each failure, and the environment and host state the results depend on.
 - The [harness feedback log](harness-feedback.md) answers which problems the maintainers met while working in this repository and what to do instead. Each entry has a status.

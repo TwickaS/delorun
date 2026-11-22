@@ -40,7 +40,7 @@ The check runner, [`src/run-checks.ts`](src/run-checks.ts), orders and runs thos
 
 ## The divergence ledger
 
-[`delorun/upstream-patches.json`](../../upstream-patches.json) records how this tree differs from upstream; the [divergence index](../../docs/reference/divergence/README.md) defines upstream source, the path rules, the classes and the feature ids.
+[`delorun/upstream-patches.json`](../../upstream-patches.json) records how this tree differs from upstream; the [divergence index](../../docs/reference/parity-with-deepseek-harness/divergence/README.md) defines upstream source, the path rules, the classes and the feature ids.
 `upstream.commit` pins the upstream commit that the differences are measured against.
 `forkOwned` lists paths and globs that Delorun owns outright. `*` matches within one path segment and `**` across segments. An entry covers the paths it matches and every path below a matching directory.
 `rules` lists path rules, each with a `pattern`, a `kind` and a `reason`. A rule covers the differing paths its glob matches that are not upstream source; only an exact `generated` rule may name a source file, and no rule covers a path under `vendor/`. Patterns are matched whole and case-sensitively by `path.posix.matchesGlob`, whose `*` and `**` do not match a segment that starts with `.`.
@@ -86,7 +86,7 @@ Without the setting, git merges the ledger as text. With it, the driver merges e
 
 ## The rehearsal merge
 
-[`src/rehearse-upstream.ts`](src/rehearse-upstream.ts) rehearses the merge of an upstream commit and holds the result to the [divergence budget](../../docs/reference/divergence/README.md#divergence-budget). Run it from the repository root with exactly one of `--tag` and `--ref`:
+[`src/rehearse-upstream.ts`](src/rehearse-upstream.ts) rehearses the merge of an upstream commit and holds the result to the [divergence budget](../../docs/reference/parity-with-deepseek-harness/divergence/README.md#divergence-budget). Run it from the repository root with exactly one of `--tag` and `--ref`:
 
 ```sh
 node_modules/.bin/tsx delorun/apps/tools/src/rehearse-upstream.ts --tag <tag>
@@ -253,11 +253,11 @@ The pictures are taken through the owner's browser with `browse` (Windows: `/mnt
 | Picture | File | Page | Window | Route and steps |
 | --- | --- | --- | --- | --- |
 | The studio with a chat open | `delorun/apps/website/public/hero-studio.webp` | The website's home page | 1440 × 900 | Demonstration home. Open "Lay out four raised beds" and scroll up until its table shows. |
-| The first-run guide | `delorun/docs/guide/pictures/first-run-guide.webp` | [Install and first run](../../docs/guide/install.md) | 1440 × 900 | The home with no chats. The Welcome step, as the studio opens. |
-| A theme change, before | `delorun/docs/guide/pictures/theme-soft.webp` | [Customise](../../docs/guide/customise.md) | 1440 × 900 | Demonstration home. Settings, then Appearance. |
-| A theme change, after | `delorun/docs/guide/pictures/theme-ocean.webp` | [Customise](../../docs/guide/customise.md) | 1440 × 900 | The same page after choosing Ocean under Theme. Choose Soft again afterwards. |
-| The setup versions | `delorun/docs/guide/pictures/setup-versions.webp` | [Updates](../../docs/guide/updates.md) | 1440 × 900 | After the theme change: Settings, then Setup versions under Data. |
-| The studio on a phone | `delorun/docs/guide/pictures/phone-chat.webp` | [Reach](../../docs/guide/reach.md) | 390 × 844, scale 2, mobile; `--scale css` | Demonstration home. `browse emulate` with `"deviceScaleFactor":2,"mobile":true`, reload, open "Lay out four raised beds". |
+| The first-run guide | `delorun/docs/guide/pictures/first-run-guide.webp` | [Install and first run](../../docs/guide/get-started/install.md) | 1440 × 900 | The home with no chats. The Welcome step, as the studio opens. |
+| A theme change, before | `delorun/docs/guide/pictures/theme-soft.webp` | [Customise](../../docs/guide/customising/customise.md) | 1440 × 900 | Demonstration home. Settings, then Appearance. |
+| A theme change, after | `delorun/docs/guide/pictures/theme-ocean.webp` | [Customise](../../docs/guide/customising/customise.md) | 1440 × 900 | The same page after choosing Ocean under Theme. Choose Soft again afterwards. |
+| The setup versions | `delorun/docs/guide/pictures/setup-versions.webp` | [Updates](../../docs/guide/safety-and-updates/updates.md) | 1440 × 900 | After the theme change: Settings, then Setup versions under Data. |
+| The studio on a phone | `delorun/docs/guide/pictures/phone-chat.webp` | [Reach](../../docs/guide/everyday-use/reach.md) | 390 × 844, scale 2, mobile; `--scale css` | Demonstration home. `browse emulate` with `"deviceScaleFactor":2,"mobile":true`, reload, open "Lay out four raised beds". |
 
 The update report is the output of `delorun update --report`, which needs two releases and a running installed Delorun, so the Updates page shows the setup versions instead. The guide's pictures are in `delorun/docs/guide/pictures/`; a page names one with a relative path such as `pictures/phone-chat.webp`, and the documentation site's build bundles it into the page with a content hash and copies the folder to `/guide/pictures/` for the Markdown routes.
 
@@ -327,7 +327,7 @@ The fork suite runs in two phases so that the specs that start processes never s
 
 Upstream's `build:artifacts` does not build Delorun's packages, so the runner looks at them separately. A Delorun package with a `build` script is stale when a runtime file its manifest names under `lib/` (a JavaScript file in `exports` or `files`, without a pattern or a declaration file) does not exist, or when its newest `src` file is newer than its newest output; the `build:delorun` check then builds the stale packages after `build:artifacts`, under the run's lock and memory budget, and the lanes that load built code wait for it: both phases of the fork suite, `tests:snapshots`, `tests:upstream-changed`, `parity-replay` and `parity-replay:control`. A spec never builds a package itself; one that needs a built package and finds it missing fails, naming `--only build:delorun`. A package without a `build` script, or whose manifest names no such file, is never stale. A worktree that a rebase gave a new built package therefore builds it in the run, and a lane does not build it by hand.
 
-Every check inherits the runner's environment without git's repository variables and, on WSL, without the Windows directories on `PATH` and the Windows-side variables, `NoDefaultCurrentDirectoryInExePath` among them ([`src/checks/machine.ts`](src/checks/machine.ts)). A run that plans a check that runs pnpm, or `tests:upstream-changed`, whose specs start pnpm themselves, gives every check the environment `pnpm run` gives a script: the pinned pnpm first on `PATH` and as `npm_execpath`, and `pnpm_config_verify_deps_before_run=false`. Upstream's whole unit suite is not a lane; the green base runs it with the procedure and prerequisites in the [parity baseline](../../docs/reference/parity-baseline.md#green-base-on-main).
+Every check inherits the runner's environment without git's repository variables and, on WSL, without the Windows directories on `PATH` and the Windows-side variables, `NoDefaultCurrentDirectoryInExePath` among them ([`src/checks/machine.ts`](src/checks/machine.ts)). A run that plans a check that runs pnpm, or `tests:upstream-changed`, whose specs start pnpm themselves, gives every check the environment `pnpm run` gives a script: the pinned pnpm first on `PATH` and as `npm_execpath`, and `pnpm_config_verify_deps_before_run=false`. Upstream's whole unit suite is not a lane; the green base runs it with the procedure and prerequisites in the [parity baseline](../../docs/reference/parity-with-deepseek-harness/parity-baseline.md#green-base-on-main).
 
 Commands, from the repository root:
 

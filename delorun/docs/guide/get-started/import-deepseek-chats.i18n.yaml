@@ -1,0 +1,34 @@
+# Bilingual-pair consistency record for import-deepseek-chats.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/guide/get-started/import-deepseek-chats.md
+/:
+  en: f1e54dadcf708e46
+  zh: 27bf2d9692bb0d39
+/import-your-deepseek-website-chats:
+  en: 2da98f3e5d2d8f5e
+  zh: 1181968a369e2bc7
+/import-your-deepseek-website-chats/summary:
+  en: 55d923738ae7cf0d
+  zh: 1379ce2e39004730
+/import-your-deepseek-website-chats/contents:
+  en: d9350d60c84f319b
+  zh: 8f9cff7b852e8415
+/import-your-deepseek-website-chats/export-your-chats-from-the-website:
+  en: aeb955d1791ec612
+  zh: f3d944c1a356bd17
+/import-your-deepseek-website-chats/turn-the-import-on:
+  en: 60f482d13caf4c70
+  zh: 8a4f6861368ab75f
+/import-your-deepseek-website-chats/upload-the-file:
+  en: 15f39a0430f57bdd
+  zh: dc93a22e0b5e14c7
+/import-your-deepseek-website-chats/what-is-imported:
+  en: 88fe256290e8ae12
+  zh: 04b99215446facf2
+/import-your-deepseek-website-chats/what-is-not-imported:
+  en: 67ed2cca449ff8a8
+  zh: 033291aade3a1888
+/import-your-deepseek-website-chats/next:
+  en: 28145ca46ab08457
+  zh: 87a526567b4e9a93

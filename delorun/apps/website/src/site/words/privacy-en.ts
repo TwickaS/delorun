@@ -37,9 +37,9 @@ export const PRIVACY_EN = {
   programHeading: 'The Delorun program',
   program: 'Delorun has no telemetry of its own. A few small checks, such as the daily check for a newer release, talk to the internet by default. Your messages go to the model provider you choose when you chat, and nothing else leaves your computer unless you turn it on. The Trust page says, party by party, what each one can see.',
   programLinks: [
-    { text: 'What you trust when you use Delorun', href: `${DOCS_URL}/guide/trust` },
-    { text: 'Updates and the update check', href: `${DOCS_URL}/guide/updates` },
-    { text: 'Model providers, which receive what you send to a model', href: `${DOCS_URL}/guide/providers` },
+    { text: 'What you trust when you use Delorun', href: `${DOCS_URL}/guide/safety-and-updates/trust` },
+    { text: 'Updates and the update check', href: `${DOCS_URL}/guide/safety-and-updates/updates` },
+    { text: 'Model providers, which receive what you send to a model', href: `${DOCS_URL}/guide/get-started/providers` },
   ],
   contactHeading: 'Questions',
   contact: `Write to ${SUPPORT_EMAIL}. Delo Run is the trading name of the project that publishes Delorun.`,

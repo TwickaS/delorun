@@ -1,0 +1,43 @@
+# Bilingual-pair consistency record for customise.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/guide/customising/customise.md
+/:
+  en: 4e3a29129cfcacc6
+  zh: 6bc345a2c2bdc5e5
+/where-to-customise-what:
+  en: 20c1585f2aa7941a
+  zh: 49a794290704d7d3
+/where-to-customise-what/summary:
+  en: 6ffffa3ff7d59d3a
+  zh: c0d8ed303aec5de8
+/where-to-customise-what/contents:
+  en: a1a557f86c03ed29
+  zh: 7e328d8a8000f99a
+/where-to-customise-what/change-one-thing-see-it-undo-it:
+  en: 4304ef5650872caf
+  zh: 880a4a4f6bd68b80
+/where-to-customise-what/the-levels:
+  en: 71fe73eb9cedd8f4
+  zh: 63ed496239896d98
+/where-to-customise-what/change-a-plugin-s-settings:
+  en: aef803469ae79d30
+  zh: 9e989909cdda21b9
+/where-to-customise-what/optional-plugins:
+  en: 27dfffba4721db31
+  zh: 8aac2856dc1a7bfb
+/where-to-customise-what/give-the-studio-your-own-name-and-icon:
+  en: 88a6a0396182a699
+  zh: 842c0379afc6f2f6
+/where-to-customise-what/make-an-agent-preset:
+  en: c083768cfa2c72b4
+  zh: 8a754ba96e292ad9
+/where-to-customise-what/write-a-plugin:
+  en: 0962cf7da9bab35b
+  zh: 661b16c35e5f5e42
+/where-to-customise-what/fork-a-shipped-plugin:
+  en: 51eab201da69c727
+  zh: 688d641e80a3e255
+/where-to-customise-what/edit-the-harness-itself:
+  en: 5af5f95b77d8b061
+  zh: ddd7e8dac784d12e

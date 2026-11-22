@@ -8,7 +8,7 @@ English | [中文](execution-vectors.zh.md)
 
 Delorun has no release; this page describes the code in this repository. It states what each way of running Delorun enforces, what it cannot, and how it compares with stock DSH at the same version.
 
-The [threat model](threat-model.md) gives the parties, the assets and each defence with its contract; this page is the execution-side view. The [trust guide](../guide/trust.md) says what each party can see or do.
+The [threat model](threat-model.md) gives the parties, the assets and each defence with its contract; this page is the execution-side view. The [trust guide](../guide/safety-and-updates/trust.md) says what each party can see or do.
 
 ## The vectors
 

@@ -294,7 +294,7 @@ describe('the ending', { timeout: TIMEOUT_MS }, () => {
     expect(await interactive(['local', DS, 'environment', 'safer', 'save'])).toBe(EXIT.ok)
     const ending = screen().split('Delorun is set up.')[1] ?? ''
     expect(ending).toContain('Start Delorun and open the studio: delorun')
-    expect(ending).toContain('https://docs.delorun.com/guide/install#the-studio-and-your-first-chat')
+    expect(ending).toContain('https://docs.delorun.com/guide/get-started/install#the-studio-and-your-first-chat')
     expect(ending).toContain('Change an answer later: delorun setup <section> (delorun setup --list shows the sections).')
     expect(recording.asked.filter(question => question.includes('Install the delorun command'))).toEqual([])
     expect(screen()).not.toMatch(/Studio: http|is running in|opened in your browser/u)

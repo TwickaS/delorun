@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for home.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/guide/customising/home.md
+/:
+  en: a3c27b666a97297f
+  zh: 0f09c7376b28a6f9
+/your-delorun-home:
+  en: 81c7c057b57b8ba4
+  zh: 881f3da93cbfc65a
+/your-delorun-home/summary:
+  en: 3d87ea175de6bcef
+  zh: b5a10c31045ed3e5
+/your-delorun-home/contents:
+  en: 1b8e25b716fc4b5a
+  zh: 4d4429c450c9985b
+/your-delorun-home/where-the-home-is:
+  en: 629e091d28fbab41
+  zh: f64a037b11581683
+/your-delorun-home/the-first-run:
+  en: 4aa370de7c7fced0
+  zh: 9defacd8733efb06
+/your-delorun-home/profiles:
+  en: 10cea6ee7fd6c1ff
+  zh: f541021749cf81be
+/your-delorun-home/your-deepseek-harness-home:
+  en: 9d51f304dec7b025
+  zh: f0b09dcfe5e52877
+/your-delorun-home/fixing-permissions:
+  en: da87f6268f197599
+  zh: f5762f6afb640dc5
+/your-delorun-home/next:
+  en: 712ea11eb0db8159
+  zh: dfefc4e84e23e57c
+/your-delorun-home/for-the-technically-curious:
+  en: 955040798fa96068
+  zh: e2d29a01fdff6dc1

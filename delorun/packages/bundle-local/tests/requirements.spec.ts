@@ -292,7 +292,7 @@ describe('a Playwright browser build', () => {
 
 describe('a browse pairing', () => {
   const need: Need = { kind: 'browse-paired', via: ['@test/driver', '@opencode/browse'] }
-  const fix = { kind: 'browse-pair', extension: 'https://chromewebstore.google.com/detail/browse', guide: 'https://docs.delorun.com/guide/use-your-own-browser' }
+  const fix = { kind: 'browse-pair', extension: 'https://chromewebstore.google.com/detail/browse', guide: 'https://docs.delorun.com/guide/everyday-use/use-your-own-browser' }
   const data = '/home/person/.local/share/browse'
   /** A computer whose packages lead from the bundle to browse's launcher and its platform packages, recording every file read. */
   function browseComputer(files: string[], options: { readonly env?: Record<string, string>, readonly platform?: NodeJS.Platform, readonly arch?: string, readonly libc?: 'glibc' | 'musl', readonly browsers?: unknown } = {}): CheckEnvironment & { readonly touched: string[] } {

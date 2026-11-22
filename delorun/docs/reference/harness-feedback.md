@@ -52,4 +52,4 @@ A running board of friction met while working in this harness and this repositor
 
 ## Where to go next
 
-The [parity baseline](parity-baseline.md) records the host state that several entries depend on. The [reference index](README.md) lists the other developer pages.
+The [parity baseline](parity-with-deepseek-harness/parity-baseline.md) records the host state that several entries depend on. The [reference index](README.md) lists the other developer pages.

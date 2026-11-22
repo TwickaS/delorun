@@ -1,0 +1,55 @@
+# Bilingual-pair consistency record for known-issues.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/guide/help/known-issues.md
+/:
+  en: d6064541d957482c
+  zh: 8b38a8f5ab5358a5
+/known-issues:
+  en: 17961ff494db8ac3
+  zh: 81c4bc8dbd75af14
+/known-issues/summary:
+  en: f4c19a7cd29de757
+  zh: efe8bd86097ccc75
+/known-issues/contents:
+  en: 9bde38cdd754b000
+  zh: 695c3d471b1b9a72
+/known-issues/where-delorun-runs:
+  en: 02a5aeca78896854
+  zh: 2acea932d03d67d2
+/known-issues/what-undo-covers:
+  en: 2fee44b9b0f5b6a7
+  zh: c1514fdd37e66bfb
+/known-issues/phone-access-from-inside-wsl2:
+  en: 5433652aa0965dcc
+  zh: c57194ff2898cc07
+/known-issues/the-key-check:
+  en: 04b8da059d928c28
+  zh: 6ba1ada0c98f49ad
+/known-issues/phone-width-spacing:
+  en: 27f38d6a6243e288
+  zh: 151928ae7e25be02
+/known-issues/the-right-sidebar-button-on-a-touch-screen:
+  en: edb2b7836275e6e6
+  zh: afb0a3d8b414a13e
+/known-issues/commands-refused-with-an-open-network:
+  en: 470705e32825f84c
+  zh: 4f5ed868aedc5bea
+/known-issues/commands-refused-without-bubblewrap:
+  en: 8ca43eba0e7b363f
+  zh: 2cda310660a7635d
+/known-issues/the-docker-warning-in-doctor:
+  en: bfeb799854f52ae6
+  zh: b3cb3d66ec7d5ef2
+/known-issues/face-id-on-phones:
+  en: 550dd9990073a9ce
+  zh: 550dd9990073a9ce
+/known-issues/several-agents-at-once:
+  en: 2d6f6f1b972e63a4
+  zh: cea783885b6620f3
+/known-issues/installing-a-plugin:
+  en: 5ecfdbe1785e6343
+  zh: 828368d2e2a48c2d
+/known-issues/documentation-languages:
+  en: d9d76e3cab2da7f3
+  zh: 2a652db0e466ddb1

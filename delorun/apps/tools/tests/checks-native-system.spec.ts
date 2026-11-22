@@ -75,7 +75,7 @@ describe('the native system addon in the check graph', () => {
 
   it('stays out of every tier: a change that reaches no lane that loads it does not build it', () => {
     expect(CHECKS.find(check => check.id === NATIVE_CHECK_ID)?.tiers).toEqual([])
-    expect(selected(['delorun/docs/guide/trust.md'])).not.toContain(NATIVE_CHECK_ID)
+    expect(selected(['delorun/docs/guide/safety-and-updates/trust.md'])).not.toContain(NATIVE_CHECK_ID)
     expect(ids(select(CHECKS, TREE, { ...NONE, only: [NATIVE_CHECK_ID] }))).toEqual([NATIVE_CHECK_ID])
   })
 

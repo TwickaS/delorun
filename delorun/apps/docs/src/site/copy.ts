@@ -41,6 +41,8 @@ export interface Copy {
     /** The heading of the upstream block that ends each version. */
     readonly fromUpstream: string
   }
+  /** The header's links to the site's own pages. */
+  readonly nav: { readonly guide: string, readonly reference: string, readonly changelog: string, readonly roadmap: string }
   readonly sectionNames: { readonly guide: string, readonly reference: string }
   readonly productLabel: string
   readonly notFoundTitle: string
@@ -50,7 +52,7 @@ export interface Copy {
 /** The labels by locale. */
 export const COPY: Readonly<Record<Locale, Copy>> = {
   en: {
-    siteTitle: 'Delorun documentation',
+    siteTitle: 'Delorun Docs',
     homeIntro: 'Documentation for Delorun, the agent harness you shape to your own work. The user guide helps you install it, make it yours, use it day to day, reach it from your phone and fix what goes wrong, in plain English. The glossary explains every term the guide uses. The developer reference is for developers and maintainers.',
     homeDescription: 'Install Delorun, make it yours, use it day to day, reach it from your phone and fix what goes wrong. A plain-English guide and a developer reference.',
     guideLabel: 'User guide',
@@ -59,9 +61,9 @@ export const COPY: Readonly<Record<Locale, Copy>> = {
     switchLabel: 'Read this page in Chinese',
     describes: version => `This page describes Delorun ${version}.`,
     entries: [
-      { title: "I'm new: start here", text: 'Install Delorun and open your first chat, step by step.', section: 'guide', slugs: ['install'] },
-      { title: 'I want to make it mine', text: 'Change the look, settings and plugins, and see what you can undo.', section: 'guide', slugs: ['customise'] },
-      { title: 'Is this safe? What is this?', text: 'What Delorun protects, what you trust when you use it, and honest answers to the hard questions.', section: 'guide', slugs: ['questions'] },
+      { title: "I'm new: start here", text: 'Install Delorun and open your first chat, step by step.', section: 'guide', slugs: ['get-started', 'install'] },
+      { title: 'I want to make it mine', text: 'Change the look, settings and plugins, and see what you can undo.', section: 'guide', slugs: ['customising', 'customise'] },
+      { title: 'Is this safe? What is this?', text: 'What Delorun protects, what you trust when you use it, and honest answers to the hard questions.', section: 'guide', slugs: ['help', 'questions'] },
       { title: 'I want to do something', text: 'The guide index lists every task by what you want to do: daily use, switching, updates, remote access, safety, troubleshooting and the roadmap.', section: 'guide', slugs: [] },
       { title: "I'm a developer", text: 'The developer reference: terms, how the pieces fit and the other pages for maintainers.', section: 'reference', slugs: [] },
     ],
@@ -73,6 +75,7 @@ export const COPY: Readonly<Record<Locale, Copy>> = {
       full: 'Full changelog',
       fromUpstream: 'From upstream',
     },
+    nav: { guide: 'Guide', reference: 'Reference', changelog: 'Changelog', roadmap: 'Roadmap' },
     sectionNames: { guide: 'User guide', reference: 'Developer reference' },
     productLabel: 'Delorun',
     notFoundTitle: 'Page not found',
@@ -88,9 +91,9 @@ export const COPY: Readonly<Record<Locale, Copy>> = {
     switchLabel: '阅读英文版本',
     describes: version => `本页描述 Delorun ${version}。`,
     entries: [
-      { title: '我是新用户：从这里开始', text: '安装 Delorun，并逐步打开第一个对话。', section: 'guide', slugs: ['install'] },
-      { title: '我想让它成为我的', text: '更改外观、设置和插件，并了解哪些改动可以撤销。', section: 'guide', slugs: ['customise'] },
-      { title: '这安全吗？这是什么？', text: 'Delorun 保护什么、使用它时你要信任什么，以及对难回答问题的坦诚解答。', section: 'guide', slugs: ['questions'] },
+      { title: '我是新用户：从这里开始', text: '安装 Delorun，并逐步打开第一个对话。', section: 'guide', slugs: ['get-started', 'install'] },
+      { title: '我想让它成为我的', text: '更改外观、设置和插件，并了解哪些改动可以撤销。', section: 'guide', slugs: ['customising', 'customise'] },
+      { title: '这安全吗？这是什么？', text: 'Delorun 保护什么、使用它时你要信任什么，以及对难回答问题的坦诚解答。', section: 'guide', slugs: ['help', 'questions'] },
       { title: '我想做某件事', text: '用户指南的目录按你想做的事列出所有任务：日常使用、迁移、更新、远程访问、安全、故障排除与路线图。', section: 'guide', slugs: [] },
       { title: '我是开发者', text: '开发者参考：术语、各部分如何配合，以及面向维护者的其他页面。', section: 'reference', slugs: [] },
     ],
@@ -102,6 +105,7 @@ export const COPY: Readonly<Record<Locale, Copy>> = {
       full: '完整更新日志',
       fromUpstream: '来自上游',
     },
+    nav: { guide: '指南', reference: '参考资料', changelog: '更新日志', roadmap: '路线图' },
     sectionNames: { guide: '用户指南', reference: '开发者参考' },
     productLabel: 'Delorun',
     notFoundTitle: '页面不存在',

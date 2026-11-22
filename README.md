@@ -12,15 +12,15 @@ Run it with `npx delorun`. Built on DeepSeek Harness; runs its plugins and impor
 
 ## Status
 
-Delorun is a preview, signed with preview keys, and has had no outside security review. [What you trust when you use Delorun](delorun/docs/guide/trust.md) explains what that means. Delorun runs on Linux and on Windows through WSL2.
+Delorun is a preview, signed with preview keys, and has had no outside security review. [What you trust when you use Delorun](delorun/docs/guide/safety-and-updates/trust.md) explains what that means. Delorun runs on Linux and on Windows through WSL2.
 
 ## What you can do
 
-- **Make it yours.** Themes and your own name and icon, settings, agent presets, plugins, a plugin you write, a changed copy of a shipped plugin, or the harness's own code. [Where to customise what](delorun/docs/guide/customise.md) shows each level and what an update costs it.
-- **Try a setup, then keep it or go back.** Save your setup, see in plain words what another version would change, and switch. An update shows what it would change before it applies, saves your setup first, and goes back by itself if the new release fails its check. Deleted chats and workspaces go to a trash. This covers the harness and your chats; it does not undo what an agent did to your files, so keep your projects in git. [Updates](delorun/docs/guide/updates.md).
-- **Use it from your phone.** Open the same chats on your phone over your own Tailscale network. Each new device is approved at your computer. [Reach the studio from your phone](delorun/docs/guide/reach.md).
-- **Use the model you choose.** DeepSeek, Anthropic, OpenAI, Google Gemini and others, or any OpenAI-compatible endpoint, which includes a model running on your own machine. [Model providers](delorun/docs/guide/providers.md).
-- **Stay in control.** Risky changes ask for your consent first, each release is checked against its signature before it runs, and Delorun has no telemetry; two release checks reach the internet by default. [Safety](delorun/docs/guide/safety.md) and [what leaves your machine](delorun/docs/guide/trust.md#what-leaves-your-machine).
+- **Make it yours.** Themes and your own name and icon, settings, agent presets, plugins, a plugin you write, a changed copy of a shipped plugin, or the harness's own code. [Where to customise what](delorun/docs/guide/customising/customise.md) shows each level and what an update costs it.
+- **Try a setup, then keep it or go back.** Save your setup, see in plain words what another version would change, and switch. An update shows what it would change before it applies, saves your setup first, and goes back by itself if the new release fails its check. Deleted chats and workspaces go to a trash. This covers the harness and your chats; it does not undo what an agent did to your files, so keep your projects in git. [Updates](delorun/docs/guide/safety-and-updates/updates.md).
+- **Use it from your phone.** Open the same chats on your phone over your own Tailscale network. Each new device is approved at your computer. [Reach the studio from your phone](delorun/docs/guide/everyday-use/reach.md).
+- **Use the model you choose.** DeepSeek, Anthropic, OpenAI, Google Gemini and others, or any OpenAI-compatible endpoint, which includes a model running on your own machine. [Model providers](delorun/docs/guide/get-started/providers.md).
+- **Stay in control.** Risky changes ask for your consent first, each release is checked against its signature before it runs, and Delorun has no telemetry; two release checks reach the internet by default. [Safety](delorun/docs/guide/safety-and-updates/safety.md) and [what leaves your machine](delorun/docs/guide/safety-and-updates/trust.md#what-leaves-your-machine).
 
 ## Commands
 
@@ -44,7 +44,7 @@ Review the [safety notice](SAFETY.md) before running the project. The [user guid
 
 ## Run
 
-Install Node.js 24.9 or later, which Delorun needs every time it starts, and on Linux install bubblewrap, then run `npx delorun`. [Install and first run](delorun/docs/guide/install.md) walks through setup and the first chat.
+Install Node.js 24.9 or later, which Delorun needs every time it starts, and on Linux install bubblewrap, then run `npx delorun`. [Install and first run](delorun/docs/guide/get-started/install.md) walks through setup and the first chat.
 
 ### Run from source
 
@@ -60,7 +60,7 @@ pnpm dsh web
 
 ## Known issues and questions
 
-The [known issues](delorun/docs/guide/known-issues.md) page lists the rough edges you may meet, each with what happens and what to do. The [questions and answers](delorun/docs/guide/questions.md) page answers the hard questions: why Delorun is built on DeepSeek Harness, why it is not a set of plugins on stock, what it means that agents wrote most of the code, how safe it is and what the catch is.
+The [known issues](delorun/docs/guide/help/known-issues.md) page lists the rough edges you may meet, each with what happens and what to do. The [questions and answers](delorun/docs/guide/help/questions.md) page answers the hard questions: why Delorun is built on DeepSeek Harness, why it is not a set of plugins on stock, what it means that agents wrote most of the code, how safe it is and what the catch is.
 
 ## How Delorun is built
 
@@ -72,11 +72,11 @@ Delorun can be shaped to a team's work with custom plugins, modes and integratio
 
 ## Compatibility with stock
 
-DeepSeek Harness's plugins and your chat data stay compatible with Delorun. Everything else, including the interface and the defaults, is Delorun's own. [Switching from DeepSeek Harness](delorun/docs/guide/switching.md) says what is different.
+DeepSeek Harness's plugins and your chat data stay compatible with Delorun. Everything else, including the interface and the defaults, is Delorun's own. [Switching from DeepSeek Harness](delorun/docs/guide/get-started/switching.md) says what is different.
 
 ## Relationship to upstream
 
-Delorun is built on [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`), the open-source agent harness from [DeepSeek AI](https://deepseek.com). Delorun's own code lives under `delorun/`, and a change to one of upstream's files is recorded with the feature it serves. The [divergence index](delorun/docs/reference/divergence/README.md) describes the record. For the stock documentation, see [upstream's repository](https://github.com/deepseek-ai/deepseek-harness) and its [documentation site](https://deepseek-harness.github.io/deepseek-harness/).
+Delorun is built on [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`), the open-source agent harness from [DeepSeek AI](https://deepseek.com). Delorun's own code lives under `delorun/`, and a change to one of upstream's files is recorded with the feature it serves. The [divergence index](delorun/docs/reference/parity-with-deepseek-harness/divergence/README.md) describes the record. For the stock documentation, see [upstream's repository](https://github.com/deepseek-ai/deepseek-harness) and its [documentation site](https://deepseek-harness.github.io/deepseek-harness/).
 
 ## Documentation
 

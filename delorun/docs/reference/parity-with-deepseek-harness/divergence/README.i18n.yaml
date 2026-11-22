@@ -1,0 +1,34 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delorun/docs/reference/parity-with-deepseek-harness/divergence/README.md
+/:
+  en: 7696b0772bf1930c
+  zh: 38b7d609601d54a3
+/divergence-index:
+  en: 81bcc8170e96ce9d
+  zh: 89c9738b3a881290
+/divergence-index/contents:
+  en: e49567ee6e2cf256
+  zh: 690a7049d70d6889
+/divergence-index/the-ledger:
+  en: e79eb63f36cf9e7f
+  zh: 87bfab3f9d770671
+/divergence-index/classes:
+  en: 2718403feb57042b
+  zh: a891d73e2ec5fc95
+/divergence-index/reading-the-ledger:
+  en: 2cb7ea7aa9740ea0
+  zh: 0e5bebbf51a3a48a
+/divergence-index/measuring-the-ledger:
+  en: 89bccde91c20dbe4
+  zh: bb273f1bc22b9545
+/divergence-index/divergence-budget:
+  en: d80af21a096e3e8c
+  zh: 945b987176583781
+/divergence-index/divergence-records:
+  en: f8da37986d6e05bc
+  zh: 971f6b58abec1650
+/divergence-index/where-to-go-next:
+  en: 89d2a3bc60afd8c6
+  zh: 3b0ff0ad20b6bec0

@@ -55,7 +55,7 @@ export function pageSlugsOf(slug: readonly string[]): string[] {
  * @param section - the section, `guide` or `reference`.
  * @param slugs - the page's slugs within its section.
  * @param chinese - whether the page is the Chinese half.
- * @returns such as `/guide/trust` or `/zh/reference/divergence`.
+ * @returns such as `/guide/safety-and-updates/trust` or `/zh/reference/parity-with-deepseek-harness/divergence`.
  */
 export function routeOf(section: Section, slugs: readonly string[], chinese: boolean): string {
   return [chinese ? '/zh' : '', section, ...slugs].join('/')
@@ -68,4 +68,13 @@ export function routeOf(section: Section, slugs: readonly string[], chinese: boo
  */
 export function changelogRoute(chinese: boolean): string {
   return chinese ? '/zh/changelog' : '/changelog'
+}
+
+/**
+ * The site route of the roadmap, a guide page that the header links instead of the sidebar.
+ * @param chinese - whether the page is the Chinese half.
+ * @returns `/guide/roadmap` or `/zh/guide/roadmap`.
+ */
+export function roadmapRoute(chinese: boolean): string {
+  return routeOf('guide', ['roadmap'], chinese)
 }
