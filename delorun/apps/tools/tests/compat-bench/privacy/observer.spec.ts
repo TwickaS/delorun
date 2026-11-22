@@ -87,7 +87,7 @@ describe('the privacy observer', () => {
       { t: 'listen', pid: 1, host: '0.0.0.0', port: '4000' },
     ].map(event => JSON.stringify(event)).join('\n'))
     await mkdir(join(out, 'logs'), { recursive: true })
-    await writeFile(join(out, 'plugin-package.json'), JSON.stringify({ name: 'fixture-plugin', dsh: { access: { actsForYou: 'Runs git status.' } } }))
+    await writeFile(join(out, 'plugin-package.json'), JSON.stringify({ name: 'fixture-plugin', dsh: { access: { version: 1, actsForYou: { actions: ['runs-commands'], why: 'Runs git status.' } } } }))
     await observer.mark('uninstall', 'after', context(out))
     expect(plugin.calls.some(call => call[0] === 'diff' && call[1] === 'bench-run-a1')).toBe(true)
     const report = await observer.finish(context(out)) as PrivacySection

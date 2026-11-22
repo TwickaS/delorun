@@ -44,7 +44,7 @@ describe('markers for fixture plugins', () => {
   })
 
   it('Acts for you: declared, so it is not a finding', async () => {
-    const result = await markersFor('starts-programs.mjs', {}, { actsForYou: 'Runs node to check its own version.' })
+    const result = await markersFor('starts-programs.mjs', {}, { actsForYou: { does: true, why: 'Runs node to check its own version.' } })
     expect(result.markers.actsForYou.state).toBe('declared')
     expect(result.findings).toBeUndefined()
   })

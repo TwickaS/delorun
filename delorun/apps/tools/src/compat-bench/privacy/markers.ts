@@ -8,8 +8,9 @@
 import { posix } from 'node:path'
 import { DEFAULT_LAYOUT } from './canaries.ts'
 import type { CanaryLayout } from './canaries.ts'
+import type { DeclaredItem } from './access.ts'
 import { MARKER_KEYS, MARKER_TITLES } from './types.ts'
-import type { MarkerKey, Observed, PrivacyReport, RawMarker } from './types.ts'
+import type { Marker, MarkerKey, Observed, PrivacyReport, RawMarker } from './types.ts'
 
 /** Environment names that point at a model provider's key. */
 const MODEL_KEY_NAME = /^(DEEPSEEK|ANTHROPIC|OPENAI|AZURE_OPENAI|GEMINI|GOOGLE_API|MOONSHOT|KIMI|GROQ|OPENROUTER|MISTRAL|XAI|DASHSCOPE|QWEN|ZHIPU|BIGMODEL|TOGETHER|FIREWORKS|COHERE)[A-Z0-9_]*(KEY|TOKEN|SECRET)$|^(LLM|MODEL|API)_?(API_)?KEY$/
@@ -276,30 +277,55 @@ const BUILDERS: Readonly<Record<MarkerKey, (input: Input) => RawMarker>> = {
 }
 
 /**
+ * @param connects - the run's connects.
+ * @param listed - the host names the author listed under `sendsOut.hosts`.
+ * @returns the hosts outside this machine that the list does not name.
+ */
+function unlistedHosts(connects: Observed['connects'], listed: ReadonlyArray<string>): ReadonlyArray<string> {
+  const names = new Set(listed)
+  return [...new Set(connects.filter(connect => !isLoopback(connect.host)).filter(connect => !names.has((connect.name ?? connect.host).toLowerCase())).map(hostText))]
+}
+
+/**
  * Turn observations into the privacy section.
  * @param observed - what the run saw, baseline already subtracted.
- * @param declared - the author's `dsh.access` reasons.
+ * @param declared - what the author said in `dsh.access`, by marker.
  * @param layout - where the canaries were planted.
- * @returns the section, with findings for what was seen and not declared.
+ * @returns the section, with findings for what was seen and not declared (or declared as not done).
  */
-export function buildPrivacy(observed: Observed, declared: Readonly<Partial<Record<MarkerKey, string>>>, layout: CanaryLayout = DEFAULT_LAYOUT): PrivacyReport {
+export function buildPrivacy(observed: Observed, declared: Readonly<Partial<Record<MarkerKey, DeclaredItem>>>, layout: CanaryLayout = DEFAULT_LAYOUT): PrivacyReport {
   const input: Input = { observed, layout }
   const findings: string[] = []
   const entries = MARKER_KEYS.map((key) => {
     const raw = BUILDERS[key](input)
-    const reason = declared[key]
-    const state = reason !== undefined ? 'declared' : raw.seen ? 'seen' : raw.notChecked === true ? 'not-checked' : 'not-seen'
-    const summary = reason === undefined
-      ? raw.summary
-      : raw.seen ? `${raw.summary} The author declared this: ${reason}` : `The author declared: ${reason} ${raw.summary}`
-    if (raw.seen && reason === undefined) findings.push(`${MARKER_TITLES[key]}: seen and not declared in dsh.access. ${raw.summary}`)
-    const evidence = raw.seen && reason === undefined ? ['finding: seen and not declared in dsh.access', ...raw.evidence] : raw.evidence
+    const item = declared[key]
+    const denied = item !== undefined && !item.does
+    const reason = item !== undefined && item.does ? item.why : undefined
+    let state: Marker['state'] = reason !== undefined ? 'declared' : raw.seen ? 'seen' : raw.notChecked === true ? 'not-checked' : 'not-seen'
+    let summary = raw.summary
+    let evidence = raw.evidence
+    const note = (text: string): void => {
+      findings.push(`${MARKER_TITLES[key]}: ${text} ${raw.summary}`)
+      evidence = [`finding: ${text.replace(/\.$/, '')}`, ...evidence]
+    }
+    if (reason !== undefined) {
+      summary = raw.seen ? `${raw.summary} The author declared this: ${reason}` : `The author declared: ${reason} ${raw.summary}`
+      const unlisted = key === 'sendsOut' && raw.seen && item?.hosts !== undefined ? unlistedHosts(observed.connects, item.hosts) : []
+      if (unlisted.length > 0) note(`seen connecting to ${phrase(unlisted)}, which dsh.access does not list.`)
+    } else if (denied) {
+      summary = raw.seen ? raw.summary : `${raw.summary} The author says it does not do this.`
+      if (raw.seen) note('seen, and dsh.access says it does not do this.')
+    } else if (raw.seen) {
+      note('seen and not declared in dsh.access.')
+    }
+    if (denied && !raw.seen) state = raw.notChecked === true ? 'not-checked' : 'not-seen'
     return [key, { state, summary, evidence }] as const
   })
+  const reasons = Object.fromEntries(MARKER_KEYS.flatMap(key => declared[key] === undefined ? [] : [[key, declared[key].does ? declared[key].why : 'The author says it does not do this.']]))
   return {
     markers: Object.fromEntries(entries) as PrivacyReport['markers'],
     contentsChecked: observed.contentsChecked && unreadableHosts(input).length === 0,
     ...findings.length > 0 ? { findings } : {},
-    ...Object.keys(declared).length > 0 ? { declared } : {},
+    ...Object.keys(reasons).length > 0 ? { declared: reasons } : {},
   }
 }

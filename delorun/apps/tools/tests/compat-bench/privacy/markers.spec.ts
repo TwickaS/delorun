@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
+import type { DeclaredItem } from '../../../src/compat-bench/privacy/access.ts'
 import { buildPrivacy, isLoopback, normalisePath, phrase } from '../../../src/compat-bench/privacy/markers.ts'
 import { DEFAULT_LAYOUT } from '../../../src/compat-bench/privacy/canaries.ts'
 import { MARKER_KEYS } from '../../../src/compat-bench/privacy/types.ts'
 import type { MarkerKey, Observed } from '../../../src/compat-bench/privacy/types.ts'
 
 const quiet: Observed = { connects: [], listens: [], execs: [], envNames: [], envEnumerated: false, opens: [], fileChanges: [], leftCanaries: [], proxy: [], requestChanges: [], contentsChecked: true }
-const section = (observed: Partial<Observed>, declared: Partial<Record<MarkerKey, string>> = {}) => buildPrivacy({ ...quiet, ...observed }, declared)
+const section = (observed: Partial<Observed>, declared: Partial<Record<MarkerKey, DeclaredItem>> = {}) => buildPrivacy({ ...quiet, ...observed }, declared)
 const BANNED = /\b(can only|only can|allowed|allow|permission|permissions|could access|may access)\b/i
 
 describe('privacy markers', () => {
@@ -15,6 +16,30 @@ describe('privacy markers', () => {
     for (const key of MARKER_KEYS) expect(result.markers[key].state).toBe('not-seen')
     expect(result.contentsChecked).toBe(true)
     expect(result.findings).toBeUndefined()
+  })
+
+  it('shows a marker the author declared as not done, and not seen, as not seen with their statement', () => {
+    const result = section({}, { opensADoor: { does: false, why: '' } })
+    expect(result.markers.opensADoor.state).toBe('not-seen')
+    expect(result.markers.opensADoor.summary).toBe('Did not start listening for connections in this test. The author says it does not do this.')
+    expect(result.findings).toBeUndefined()
+    expect(result.declared).toEqual({ opensADoor: 'The author says it does not do this.' })
+  })
+
+  it('makes a finding of a marker the author said it does not do and the test saw', () => {
+    const result = section({ listens: [{ host: '127.0.0.1', port: '8080' }] }, { opensADoor: { does: false, why: '' } })
+    expect(result.markers.opensADoor.state).toBe('seen')
+    expect(result.markers.opensADoor.evidence[0]).toBe('finding: seen, and dsh.access says it does not do this')
+    expect(result.findings?.[0]).toMatch(/^Opens a door: seen, and dsh.access says it does not do this\. Started listening/)
+  })
+
+  it('makes a finding of a host the author did not list under sendsOut', () => {
+    const connects = [{ host: '203.0.113.9', port: '443', name: 'api.example.com' }, { host: '203.0.113.10', port: '443', name: 'tracker.example.net' }]
+    const result = section({ connects }, { sendsOut: { does: true, why: 'Fetches pages.', hosts: ['api.example.com'] } })
+    expect(result.markers.sendsOut.state).toBe('declared')
+    expect(result.findings).toHaveLength(1)
+    expect(result.findings?.[0]).toContain('seen connecting to tracker.example.net, which dsh.access does not list')
+    expect(section({ connects: connects.slice(0, 1) }, { sendsOut: { does: true, why: 'Fetches pages.', hosts: ['api.example.com'] } }).findings).toBeUndefined()
   })
 
   it('Your code: a planted workspace file that was opened, a workspace file that changed, and its contents leaving', () => {
@@ -131,7 +156,7 @@ describe('privacy markers', () => {
   it('shows a seen marker the author declared as declared, and one the author did not declare as a finding', () => {
     const result = section(
       { connects: [{ host: '203.0.113.9', port: '443', name: 'api.example.com' }], execs: ['git status'] },
-      { sendsOut: 'Fetches the page you ask it to read.' },
+      { sendsOut: { does: true, why: 'Fetches the page you ask it to read.' } },
     )
     expect(result.markers.sendsOut.state).toBe('declared')
     expect(result.markers.sendsOut.summary).toBe('Connected to api.example.com in this test. The author declared this: Fetches the page you ask it to read.')
@@ -143,10 +168,34 @@ describe('privacy markers', () => {
   })
 
   it('shows a declared marker that was not seen as declared, with what the test saw', () => {
-    const result = section({}, { opensADoor: 'Serves its settings page.' })
+    const result = section({}, { opensADoor: { does: true, why: 'Serves its settings page.' } })
     expect(result.markers.opensADoor.state).toBe('declared')
     expect(result.markers.opensADoor.summary).toBe('The author declared: Serves its settings page. Did not start listening for connections in this test.')
     expect(result.findings).toBeUndefined()
+  })
+
+  it('shows a marker the author declared as not done, and not seen, as not seen with their statement', () => {
+    const result = section({}, { opensADoor: { does: false, why: '' } })
+    expect(result.markers.opensADoor.state).toBe('not-seen')
+    expect(result.markers.opensADoor.summary).toBe('Did not start listening for connections in this test. The author says it does not do this.')
+    expect(result.findings).toBeUndefined()
+    expect(result.declared).toEqual({ opensADoor: 'The author says it does not do this.' })
+  })
+
+  it('makes a finding of a marker the author said it does not do and the test saw', () => {
+    const result = section({ listens: [{ host: '127.0.0.1', port: '8080' }] }, { opensADoor: { does: false, why: '' } })
+    expect(result.markers.opensADoor.state).toBe('seen')
+    expect(result.markers.opensADoor.evidence[0]).toBe('finding: seen, and dsh.access says it does not do this')
+    expect(result.findings?.[0]).toMatch(/^Opens a door: seen, and dsh.access says it does not do this\. Started listening/)
+  })
+
+  it('makes a finding of a host the author did not list under sendsOut', () => {
+    const connects = [{ host: '203.0.113.9', port: '443', name: 'api.example.com' }, { host: '203.0.113.10', port: '443', name: 'tracker.example.net' }]
+    const result = section({ connects }, { sendsOut: { does: true, why: 'Fetches pages.', hosts: ['api.example.com'] } })
+    expect(result.markers.sendsOut.state).toBe('declared')
+    expect(result.findings).toHaveLength(1)
+    expect(result.findings?.[0]).toContain('seen connecting to tracker.example.net, which dsh.access does not list')
+    expect(section({ connects: connects.slice(0, 1) }, { sendsOut: { does: true, why: 'Fetches pages.', hosts: ['api.example.com'] } }).findings).toBeUndefined()
   })
 
   it('never writes "can only", "allowed" or "permission" in a summary (L141)', () => {
@@ -158,7 +207,7 @@ describe('privacy markers', () => {
         proxy: [{ host: 'h.example.com', port: '443', canaries: ['chat word', 'model key', '~/.aws/credentials', 'workspace marker file'], where: {}, requests: 1, pinned: false }],
         leftCanaries: [{ canary: 'chat word', path: '/q' }],
       },
-      { code: 'Reads your files.' },
+      { code: { does: true, why: 'Reads your files.' } },
     )
     for (const key of MARKER_KEYS) expect(everything.markers[key].summary).not.toMatch(BANNED)
     for (const key of MARKER_KEYS) expect(section({}).markers[key].summary).not.toMatch(BANNED)
