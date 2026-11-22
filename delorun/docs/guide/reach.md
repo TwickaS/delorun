@@ -135,7 +135,7 @@ A phone that Tailscale reports as signed in as the user you allowed can ask outs
 <summary>Go further</summary>
 
 - Run `delorun devices approve --profile <name>` to approve a device for another profile.
-- Approved devices stay approved when you turn remote access off and on again ([Turn remote access off](#turn-remote-access-off)).
+- Approved devices stay on the list when you turn remote access off and on again, but each signs in again ([Turn remote access off](#turn-remote-access-off)).
 
 </details>
 
@@ -339,7 +339,7 @@ Run `delorun reach off`.
 
 You should see "Remote access is off for the profile default." and "Tailscale no longer serves this computer's studio." A running Delorun closes the remote listener at once, and none opens at its next start. While Delorun runs, it rechecks Tailscale every minute and stops serving if Funnel is turned on for your address.
 
-Approved devices stay approved, so turning remote access on again does not ask for them again. Remove them if you no longer want them.
+Turning remote access off also signs every approved device out and ends its Face ID pass, in the terminal and in Settings → General → How Delorun runs alike. The devices stay on the list, so turning remote access on again does not ask you to approve them again, but each one signs in again first, and an old session or pass is never accepted. Remove a device if you no longer want it. If Delorun is not running, `delorun reach off` removes the stored sessions itself, so none is there when it starts again.
 
 <details>
 <summary>Edge cases</summary>
