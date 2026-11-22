@@ -78,7 +78,8 @@ describe('the inspect check', () => {
   })
 })
 
-const available = await dockerAvailable()
+/** The live denial test starts a container; it runs only when `DELORUN_BENCH_DOCKER=1` says Docker may be used, so a plain spec run never calls the Docker CLI. */
+const available = process.env.DELORUN_BENCH_DOCKER === '1' && await dockerAvailable()
 
 describe.skipIf(!available)('config denial: a container with no plugin, read back over docker inspect', () => {
   const runId = `denial-${String(process.pid)}`

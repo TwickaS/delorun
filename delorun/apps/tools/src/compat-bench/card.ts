@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { z } from 'zod'
-import type { Marker, PrivacySection, StageName } from './observer.ts'
+import type { Marker, StageName } from './observer.ts'
 
 /** The schema identifier every card carries. */
 export const CARD_SCHEMA = 'delorun.compat-card/1'
@@ -94,7 +94,7 @@ const privacy = z.strictObject({
   contentsChecked: z.boolean(),
   /** What was seen but not declared, in words. */
   findings: z.array(z.string()).optional(),
-  declared: z.record(z.string(), z.string()).optional(),
+  declared: z.partialRecord(z.enum(markerKeys), z.string()).optional(),
 })
 
 /** The card's schema. */
@@ -220,7 +220,7 @@ function runHeader(card: Card): string {
  * @param section - the section, or undefined when no observer ran.
  * @returns Markdown lines.
  */
-function renderPrivacy(section: PrivacySection | undefined): string[] {
+function renderPrivacy(section: z.infer<typeof privacy> | undefined): string[] {
   if (section === undefined) return ['## Privacy', '', `_${PRIVACY_NOT_RECORDED}._`]
   const lines = ['## Privacy', '', `_${PRIVACY_LINE}_`, '', '| Marker | What was seen |', '| --- | --- |']
   for (const key of markerKeys) {
