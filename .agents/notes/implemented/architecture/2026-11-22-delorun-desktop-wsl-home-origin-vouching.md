@@ -2,7 +2,7 @@
 
 Status: implemented
 
-English | [中文](2026-11-22-desktop-wsl-home-origin-vouching.zh.md)
+English | [中文](2026-11-22-delorun-desktop-wsl-home-origin-vouching.zh.md)
 
 ## Problem
 
@@ -10,7 +10,7 @@ A Delorun home refuses a state-changing computer-only action, such as approving 
 
 ## Decision
 
-For a home in WSL2 only, the app's forwarder sets `Origin` to that home's exact loopback origin and `Sec-Fetch-Site` to `same-origin` on a request that carried `Origin: dsh-app://app`. A request with no `Origin` gets none, and a request with any other `Origin` is refused with 403 before anything is forwarded. A bundled home keeps upstream's behaviour, and a remote home never receives the rewrite, because there the app is a device. Only the default session's handler for the `dsh-app` scheme reaches the forwarder, so a guest webview and another session partition never do. The cookie and the one-time sign-in link stay in the main process. [The threat model](../../../delorun/docs/security/threat-model.md#the-desktop-app-and-a-home-in-wsl2) states the boundary and its limits, and [the fundamentals page](../../../delorun/docs/security/fundamentals.md) holds each rule as F18 to F24 with the code that enforces it and the specs that prove it. The owner accepted the vouching on 2026-11-22.
+For a home in WSL2 only, the app's forwarder sets `Origin` to that home's exact loopback origin and `Sec-Fetch-Site` to `same-origin` on a request that carried `Origin: dsh-app://app`. A request with no `Origin` gets none, and a request with any other `Origin`, or a `cross-site` or `same-site` fetch site, is refused with 403 before anything is forwarded. The main window navigates only to the studio's entry document and the shell's own documents. A bundled home keeps upstream's behaviour, and a remote home never receives the rewrite, because there the app is a device. Only the default session's handler for the `dsh-app` scheme reaches the forwarder, so a guest webview and another session partition never do. The cookie and the one-time sign-in link stay in the main process. [The threat model](../../../delorun/docs/security/threat-model.md#the-desktop-app-and-a-home-in-wsl2) states the boundary and its limits, and [the fundamentals page](../../../delorun/docs/security/fundamentals.md) holds each rule as F18 to F24 with the code that enforces it and the specs that prove it. The owner accepted the vouching on 2026-11-22.
 
 ## Verification
 
