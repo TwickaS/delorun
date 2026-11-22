@@ -129,6 +129,19 @@ export async function startHelper(docker: Docker, image: string, options: Helper
 }
 
 /**
+ * Remove the helper containers of earlier runs that have stopped (their run crashed, or their lifetime ended). A helper
+ * that is running belongs to a run in progress and is never touched.
+ * @param docker - the docker function.
+ * @returns how many containers were removed.
+ */
+export async function removeStaleHelpers(docker: Docker): Promise<number> {
+  const listed = await docker(['ps', '--all', '--quiet', '--filter', 'label=delorun.bench.role=helper', '--filter', 'status=exited'])
+  const ids = listed.stdout.split('\n').map(line => line.trim()).filter(line => line !== '')
+  for (const id of ids) await docker(['rm', '--force', id])
+  return ids.length
+}
+
+/**
  * Copy the helper's report files (`hosts.json`, `net.jsonl`, logs) from `/out` to `<outDir>/privacy/helper/`.
  * @param docker - the docker function.
  * @param name - the helper's name.

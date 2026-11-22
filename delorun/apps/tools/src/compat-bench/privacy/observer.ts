@@ -15,7 +15,7 @@ import type { Canaries, CanaryLayout } from './canaries.ts'
 import { realDocker } from './docker.ts'
 import type { Docker } from './docker.ts'
 import { parseEvents, summarise } from './events.ts'
-import { buildHelperImage, collectHelper, startHelper, stopHelper } from './helper/image.ts'
+import { buildHelperImage, collectHelper, removeStaleHelpers, startHelper, stopHelper } from './helper/image.ts'
 import { buildPrivacy } from './markers.ts'
 import { assemble } from './observed.ts'
 import type { RunFacts } from './observed.ts'
@@ -134,6 +134,7 @@ export function createPrivacyObserver(options: PrivacyObserverOptions = {}): Obs
       const run = ctx as PrivacyRunContext
       if (!run.baseline && await loadBaseline(baselineDir, run.host) === undefined) throw new Error(`no privacy baseline for ${run.host}: run \`bench baseline --host ${run.host}\` first`)
       const canaries = makeCanaries(run.runId, layout)
+      await removeStaleHelpers(docker)
       const image = await buildHelperImage(docker)
       const publish = publishOf(run)
       const folder = join(run.outDir, 'privacy')
