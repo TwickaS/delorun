@@ -12,7 +12,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DANGEROUS_PHRASE } from '@delorun/contract-setup-answers'
 import { REACH_DEVICE } from '@delorun/home-auth'
 import { dangerousGrantPath, readDangerousGrant } from '@delorun/plugin-permission-defaults/store'
-import { DANGEROUS_WARNING_LINES, readPatchRow, TRUST_STATEMENT } from '@delorun/setup-apply'
+import { DANGEROUS_WARNING_LINES, readPatchRow, REACH_OFF, TRUST_STATEMENT, writeReachRowAt } from '@delorun/setup-apply'
 import { faceWorld, type FaceWorld } from '../../plugin-changes/tests/face-world.ts'
 import { fakeTailscale, type FakeTailscale } from '../../reach/tests/fake-tailscale.ts'
 import { MAX_RUN_REQUEST_BYTES, RUN_ROUTES } from '../src/client/run-settings-api.ts'
@@ -554,6 +554,22 @@ describe('the routes', () => {
       expect([String(port), response.status]).toEqual([String(port), 400])
     }
     expect(w.files.patchText()).toBe('[]\n')
+    expect((await routes.studio(RUN_ROUTES.port, JSON.stringify({ port: 4100 }))).status).toBe(200)
+  })
+
+  it('answer a port web browsers block, or the one phone access listens on, with 400, and write nothing', async () => {
+    // Pins `studioPortProblem` in the route: such a studio could not be opened in a browser after the restart.
+    const w = world()
+    writeReachRowAt(join(w.profileDir, 'cordis.patch.yml'), { ...REACH_OFF, listenerPort: 4500 })
+    const routes = routesOver(w, 'loopback')
+    const patch = w.files.patchText()
+    const record = w.files.recordText()
+    for (const port of [6000, 6665, 6666, 6667, 6668, 6669, 6697, 10_080, 4500]) {
+      const response = await routes.studio(RUN_ROUTES.port, JSON.stringify({ port }))
+      expect([port, response.status, ((await response.json()) as { error: string }).error]).toEqual([port, 400, 'BAD_REQUEST'])
+    }
+    expect(w.files.patchText()).toBe(patch)
+    expect(w.files.recordText()).toBe(record)
     expect((await routes.studio(RUN_ROUTES.port, JSON.stringify({ port: 4100 }))).status).toBe(200)
   })
 

@@ -1,5 +1,5 @@
 import { createServer } from 'node:net'
-import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -144,6 +144,14 @@ describe('delorun setup', { timeout: 60_000 }, () => {
     expect((await refusal(['--config', 'x.json', '--import-dsh'])).message).toContain('a --config document holds its own answers')
     for (const value of ['abc', '80', '70000', '']) expect((await refusal(['--port', value])).exit).toBe(EXIT.usage)
     expect((await refusal(['--port', '80'])).message).toBe('delorun setup: --port 80: Enter a port from 1024 to 65535; ports under 1024 need administrator rights.')
+  })
+
+  it('--port refuses the ports web browsers block, and writes nothing', async () => {
+    for (const port of ['6000', '6665', '6666', '6667', '6668', '6669', '6697', '10080']) {
+      const error = await refusal(['--port', port])
+      expect([port, error.exit, error.message]).toEqual([port, EXIT.usage, `delorun setup: --port ${port}: Port ${port} is blocked by web browsers, so the studio could not be opened there. Choose another.`])
+    }
+    expect(existsSync(join(osHome, '.delorun', 'profiles', 'default', 'setup-answers.json'))).toBe(false)
   })
 
   it('--port sets the studio port in a run without a terminal and with --yes', async () => {

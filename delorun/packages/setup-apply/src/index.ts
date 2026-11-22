@@ -9,7 +9,7 @@ export { JS_TAG, readPatchRow, setPatchRow, setRowFields, updateRowConfig, type 
 export { FULL_ACCESS_EVERYWHERE_KEY, promptRows, PROMPT_SWITCH_ROWS, readPromptsRows, writePromptRows, type PromptRow } from './prompt-rows.ts'
 export { runsAsRoot } from './dangerous.ts'
 export { DANGEROUS_WARNING_LINES } from './warning.ts'
-export { STUDIO_ROW_ID, studioRow } from './studio-row.ts'
+export { BROWSER_BLOCKED_PORTS, STUDIO_ROW_ID, studioPortProblem, studioRow } from './studio-row.ts'
 export { listenerPortFor, readReachRowAt, REACH_OFF, REACH_ROW_ID, reachRowsOf, signInAddress, writeReachRowAt, type TailscalePrivateRow } from './reach-row.ts'
 export { TRUST_STATEMENT } from './trust.ts'
 export { HOME_AUTH_ROW_ID, readPairingAt, writeMayAskAt } from './pairing-row.ts'

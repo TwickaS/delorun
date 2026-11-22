@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ensureHomeTree, runDirectory } from '@delorun/home'
 import { PARITY_SWITCHES } from '@delorun/contract-parity-composition'
 import { SETUP_DEFAULTS } from '@delorun/contract-setup-answers'
+import { REACH_OFF, writeReachRowAt } from '@delorun/setup-apply'
 import { CliError, EXIT } from '../../src/exit.ts'
 import { hasCliProfile, profileDirectory } from '../../src/profile.ts'
 import { readBackgroundAnswer } from '../../src/setup/background.ts'
@@ -285,6 +286,24 @@ describe('sections', { timeout: TIMEOUT_MS }, () => {
     expect(recordOf().profile).toEqual({ name: null, port: 4300 })
     expect(patchOf()).toContainEqual({ id: 'webserver', config: { host: '127.0.0.1', port: 4300, compression: 'gzip', compressionLevel: 1, compressionThresholdBytes: 1024 } })
     expect(await runSection(request([]), 'background').catch((error: unknown) => (error as Error).message)).toContain('the script ended')
+  })
+
+  it('refuses a studio port that phone access listens on, and a port web browsers block, and writes neither', async () => {
+    expect(await setUp()).toBe(EXIT.ok)
+    const patchPath = join(profileDirectory(home, PROFILE), 'cordis.patch.yml')
+    writeReachRowAt(patchPath, { ...REACH_OFF, listenerPort: 4500 })
+    const request = (script: readonly Answer[]): SetupRequest => ({
+      home, profile: PROFILE, env: {}, output: { stdout: () => undefined, stderr: () => undefined },
+      form: { kind: 'interactive', prompter: scriptedPrompter(script, recording) },
+      keyCheck: () => Promise.resolve({ ok: true }), portIsFree: () => Promise.resolve(true),
+    })
+    const before = recordOf().profile
+    await expect(runSection(request(['4500']), 'profile')).rejects.toThrow('delorun setup: Port 4500 is the one phone access listens on. Choose another.')
+    expect(patchOf().some(row => row.id === 'webserver' && row.config['port'] === 4500)).toBe(false)
+    expect(recordOf().profile).toEqual(before)
+    // The prompt itself refuses a browser-blocked port, so the script's next answer is the one taken.
+    expect(await runSection(request(['6666', '4301']), 'profile')).toBe(EXIT.ok)
+    expect(recordOf().profile).toEqual({ name: null, port: 4301 })
   })
 
   it('refuses an unknown section, a profile that is not set up, a section that does not apply and an unattended form', async () => {

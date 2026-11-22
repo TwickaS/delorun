@@ -32,7 +32,7 @@ import { channelOriginOf } from './channel-origin.ts'
 import { isProductionChannel } from './ending.ts'
 import { choiceNote, RECOMMENDED, type ChoiceText } from './choices.ts'
 import { systemTailscale } from '@delorun/reach'
-import { readPatchRow, setPatchRow, STUDIO_ROW_ID, studioRow, writePromptRows } from '@delorun/setup-apply'
+import { readPatchRow, readReachRowAt, setPatchRow, STUDIO_ROW_ID, studioPortProblem, studioRow, writePromptRows } from '@delorun/setup-apply'
 import { homeRuns } from '../reach/command.ts'
 import { REACH_SECTION_ORDER, reachSection } from '../reach/setup-section.ts'
 import { CHANGES_PROTECTION_SECTION_ORDER, changesProtectionSection } from '../changes/setup-section.ts'
@@ -403,13 +403,15 @@ function nameProblem(value: string, environment: SectionEnvironment): string | u
 }
 
 /**
- * The port's check.
+ * The port's check: a port from 1024 to 65535 that web browsers do not block. The phone-access listener's port is
+ * checked where the profile is known, when the port is written.
  * @param value - the entry.
  * @returns the message to show, or `undefined` for a usable port.
  */
 export function portProblem(value: string): string | undefined {
   const port = Number(value)
-  return /^\d{1,5}$/u.test(value) && port >= 1024 && port <= 65535 ? undefined : 'Enter a port from 1024 to 65535; ports under 1024 need administrator rights.'
+  if (!/^\d{1,5}$/u.test(value) || port < 1024 || port > 65535) return 'Enter a port from 1024 to 65535; ports under 1024 need administrator rights.'
+  return studioPortProblem(port)
 }
 
 /**
@@ -500,7 +502,10 @@ export const profileSection: SetupSection = {
   unchanged: (before, after) => before.profile.port === after.profile.port,
   apply(context, answers) {
     if (answers.profile.port !== null) {
-      setPatchRow(join(context.directory, 'cordis.patch.yml'), studioRow(answers.profile.port))
+      const patch = join(context.directory, 'cordis.patch.yml')
+      const problem = studioPortProblem(answers.profile.port, readReachRowAt(patch).listenerPort)
+      if (problem !== undefined) return Promise.reject(new CliError(EXIT.failed, `delorun setup: ${problem}`))
+      setPatchRow(patch, studioRow(answers.profile.port))
     }
     return Promise.resolve(undefined)
   },

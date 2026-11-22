@@ -38,7 +38,7 @@ import {
 } from '@delorun/reach'
 import {
   backgroundOf, DANGEROUS_WARNING_LINES, listenerPortFor, promptsOf, readAnswersRecord, readPatchRow, readReachRowAt, reachRowsOf, runsAsRoot, SetupApplyError,
-  setPatchRow, STUDIO_ROW_ID, studioRow, TRUST_STATEMENT, updateAnswersRecord, writeMayAskAt, writePromptRows, writeReachRowAt,
+  setPatchRow, STUDIO_ROW_ID, studioPortProblem, studioRow, TRUST_STATEMENT, updateAnswersRecord, writeMayAskAt, writePromptRows, writeReachRowAt,
   type AnswersRecord, type TailscalePrivateRow,
 } from '@delorun/setup-apply'
 import { z } from 'zod'
@@ -286,12 +286,14 @@ export class RunSettings {
    * Choose the studio's port for the next start.
    * @param port - the port, from 1024 to 65535.
    * @returns the port and the studio's address after the restart.
-   * @throws {RunError} `NOT_SET_UP`, `PORT_UNCHANGED` for the port the studio uses now or has chosen, `PORT_BUSY` for a port another program holds.
+   * @throws {RunError} `NOT_SET_UP`, `BAD_REQUEST` for a port web browsers block or the one phone access listens on, `PORT_UNCHANGED` for the port the studio uses now or has chosen, `PORT_BUSY` for a port another program holds.
    */
   async port(port: number): Promise<PortWritten> {
     const where = this.located()
     return this.dependencies.locked(where.profileDir, async () => {
       this.recorded(where)
+      const problem = studioPortProblem(port, readReachRowAt(patchOf(where)).listenerPort)
+      if (problem !== undefined) throw new RunError('BAD_REQUEST', problem)
       if (port === chosenPort(where) || port === this.dependencies.runningPort()) throw new RunError('PORT_UNCHANGED', `The studio already uses port ${String(port)}.`)
       if (!await this.dependencies.isPortFree(port)) throw new RunError('PORT_BUSY', `Port ${String(port)} is in use on this computer. Choose another.`)
       setPatchRow(patchOf(where), studioRow(port))
