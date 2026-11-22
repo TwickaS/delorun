@@ -50,8 +50,9 @@ import { localDeviceApproval } from './devices/host.ts'
 import { localConsents } from './consents/host.ts'
 import { localAgentAccounts } from './agents/host.ts'
 import { CountingChatGate, HomeProcess, HostNotStoppedError, listenProcessSignals, openHomeLog, captureHomeOutput, queryHomeStatus, refuseBootedHost, updateChannelProbe, type HandoverPipe, type HomeLog, type HomeProcessOptions, type LocalAgentAccounts, type LocalConsents, type LocalDeviceApproval, type LocalReach, type RestartControl, type RunningHost, type StudioLinkResult, type UpdateChannelAccess, type UpdateSupport } from '@delorun/home-process'
-import { appliedReachConfig, localReach, reachRowsOf } from './reach/host.ts'
-import { readReachRow, REACH_ROW_ID, type TailscalePrivateRow } from './reach/row.ts'
+import { appliedReachConfig, localReach } from './reach/host.ts'
+import { readReachRow } from './reach/row.ts'
+import { REACH_ROW_ID, reachRowsOf, type TailscalePrivateRow } from '@delorun/setup-apply'
 import { resolveSurface, type DelorunLogger } from '@delorun/logs'
 import { afterChangesBoot, changesApprovedContent, recordChangesBoot, repointingBoot } from './changes/start.ts'
 import { updateSource } from './changes/update-baseline.ts'
@@ -407,6 +408,12 @@ export interface StartRequest {
   readonly env: Readonly<Record<string, string | undefined>>
   /** The person's `--patch` overlays, absolute, in order ([compose](./compose.ts)); none by default. */
   readonly patchFiles?: readonly string[]
+  /**
+   * Work that runs once after the studio announcement ({@link announceStudio}), while the home process keeps running; it
+   * does not run when the start hands over to a home that already runs, hands off to another runtime, or refuses. It must
+   * not stop the process: a failure is reported on standard error and in the home log, and the process runs on.
+   */
+  readonly afterStart?: () => Promise<void>
 }
 
 /** The level of the home process's log. */
@@ -688,7 +695,24 @@ async function startHomeProcess(request: StartRequest, dependencies: StartDepend
     closeLog()
     rmSync(sandboxOverlayPath(request.home, request.profile), { force: true })
   })
+  if (handover === undefined) await runAfterStart(request, homeLog.logger)
   return undefined
+}
+
+/**
+ * Run the start's {@link StartRequest.afterStart} work. A failure never stops the home process.
+ * @param request - the start.
+ * @param logger - the home process's logger.
+ */
+export async function runAfterStart(request: StartRequest, logger: Pick<DelorunLogger, 'error'>): Promise<void> {
+  if (request.afterStart === undefined) return
+  try {
+    await request.afterStart()
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    logger.error(`a step after the start failed: ${message}`, { err: error })
+    request.output.stderr(`delorun: a step after the start failed: ${message}\nDelorun keeps running.\n`)
+  }
 }
 
 /**

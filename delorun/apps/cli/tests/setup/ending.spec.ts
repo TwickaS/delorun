@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { SETUP_DEFAULTS, type SetupAnswers } from '@delorun/contract-setup-answers'
-import { FIRST_CHAT_PAGE, installLine, isProductionChannel, launcherVersion, nextSteps } from '../../src/setup/ending.ts'
+import { FIRST_CHAT_PAGE, foregroundEnding, installLine, isProductionChannel, launcherVersion, nextSteps } from '../../src/setup/ending.ts'
 
 const KEY_SET = { DEEPSEEK_API_KEY: 'env-key' }
 const DEEPSEEK_ENV: SetupAnswers['modelProvider'] = { id: 'deepseek-official', credential: { source: 'environment', name: 'DEEPSEEK_API_KEY' }, baseURL: null, model: null }
@@ -34,6 +34,7 @@ describe('the next steps', () => {
     const text = steps({})
     expect(text).toBe([
       'Delorun is set up. Nothing is running yet.',
+      'Studio: http://127.0.0.1:3080',
       '',
       'Next:',
       '  1. Start Delorun and open the studio: delorun',
@@ -76,9 +77,31 @@ describe('the next steps', () => {
     expect(text).not.toContain('first-chat')
   })
 
-  it('print the device approval for remote use, or the fix when remote access is off', () => {
+  it('print the device approval only when phone access is on', () => {
     expect(steps({ useCase: 'remote', reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership' } })).toContain('  2. Add your phone or another device: delorun devices approve, then type the code it shows.')
-    expect(steps({ useCase: 'remote' })).toContain('  2. Remote access is off. To turn it on later, install Tailscale and sign in, then run delorun reach on tailscale.')
+    for (const useCase of ['remote', 'local'] as const) expect(steps({ useCase })).not.toMatch(/phone|Remote access|devices approve/u)
+  })
+
+  it('name the chosen port in the studio address', () => {
+    expect(steps({ profile: { name: null, port: 3123 } })).toContain('Studio: http://127.0.0.1:3123\n')
+  })
+})
+
+describe('the ending of a run that started Delorun', () => {
+  it('names the profile in each command and shows the sandbox fix first', () => {
+    expect(foregroundEnding('default', undefined)).toBe([
+      '',
+      'Delorun runs in this terminal. Ctrl+C stops it.',
+      'To keep it running after you close the terminal: delorun start --background',
+      '(or Settings → General → How Delorun runs).',
+      'Change an answer later: delorun setup <section> (delorun setup --list)',
+      'If something looks wrong: delorun doctor',
+      '',
+    ].join('\n'))
+    const text = foregroundEnding('work', { name: 'sandbox', status: 'fail', message: 'bwrap missing' })
+    expect(text.startsWith('\nSandbox: bwrap missing\n\nDelorun runs in this terminal.')).toBe(true)
+    expect(text).toContain('delorun start --profile work --background')
+    expect(text).toContain('delorun doctor --profile work\n')
   })
 
   it('install the npm package, not a package file, for the production launcher whose channel origin is recorded', () => {

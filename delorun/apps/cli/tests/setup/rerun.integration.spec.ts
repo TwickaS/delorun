@@ -6,13 +6,12 @@ import { DANGEROUS_PHRASE } from '@delorun/contract-setup-answers'
 import { ensureHomeTree } from '@delorun/home'
 import { runSection, runSetup, type SetupForm, type SetupHooks, type SetupRequest } from '../../src/setup/index.ts'
 import { dangerousGrantPath } from '@delorun/plugin-permission-defaults/store'
-import { readPromptsRows, writePromptRows } from '../../src/setup/prompt-switches.ts'
+import { readPairingAt, readPromptsRows, writePromptRows } from '@delorun/setup-apply'
 import { sectionStep } from '../../src/setup/progress.ts'
 import { writeUpdateCheckRow } from '../../src/setup/update-check.ts'
 import { EXIT } from '../../src/exit.ts'
 import { profileDirectory } from '../../src/profile.ts'
 import { fakeTailscale } from '../fixtures/fake-tailscale.ts'
-import { readPairingAt } from '../../src/reach/pairing-row.ts'
 import { readReachRow } from '../../src/reach/row.ts'
 import { registryWithTailscale, scriptedPrompter, type Answer, type Recording } from './support.ts'
 
@@ -34,7 +33,7 @@ let recording: Recording
  * @param hooks - test hooks.
  * @returns the exit code.
  */
-function run(script: readonly Answer[], hooks?: SetupHooks): Promise<number> {
+function run(script: readonly Answer[], hooks?: SetupHooks): Promise<number | undefined> {
   recording = { screen: [], asked: [] }
   const form: SetupForm = { kind: 'interactive', prompter: scriptedPrompter(script, recording) }
   return runSetup({ home, profile: PROFILE, env: {}, output: { stdout: text => void lines.push(text), stderr: text => void lines.push(text) }, form, keyCheck: () => Promise.resolve({ ok: true }), portIsFree: () => Promise.resolve(true), registry: registryWithTailscale(fakeTailscale(HOST).run), ...hooks === undefined ? {} : { hooks } })

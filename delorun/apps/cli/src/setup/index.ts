@@ -7,8 +7,9 @@
  * section's writes in order (the release-check row, the model provider and its key, the prompts rows, the studio port), and record the
  * run. Every write lands before Delorun first starts, so a release check turned off here never runs. The three forms
  * produce the same answers and so the same writes. An interrupted run resumes at the first step that did not finish.
- * Setup never replaces an existing profile; a finished one is asked again in a terminal ([current answers](./current.ts)). A terminal run then offers to install the command, starts Delorun and
- * opens the studio ([ending](./ending.ts)). `delorun setup <section>` runs one section again; `--list` lists them.
+ * Setup never replaces an existing profile; a finished one is asked again in a terminal ([current answers](./current.ts)). A fresh terminal run
+ * then starts Delorun in this terminal and opens the studio, and asks the PIN and keep-the-command questions while it runs
+ * ([foreground](./foreground.ts)); every other run prints the next steps and starts nothing ([ending](./ending.ts)). `delorun setup <section>` runs one section again; `--list` lists them.
  *
  * @module @delorun/cli/setup
  */
@@ -17,7 +18,7 @@ import { createServer } from 'node:net'
 import { createRuntimeResolution, initProfile, loadProfile } from '@deepseek-ai/dsh-app-boot'
 import { DELORUN_PROFILE_BUNDLES } from '@delorun/bundle-local/profile'
 import { CliError, EXIT, type ExitCode } from '../exit.ts'
-import { prepareHome, type CliCommand, type CommandOutput } from '../command.ts'
+import { prepareHome, type CliCommand, type CommandOutput, type CommandResult } from '../command.ts'
 import { parseArgs } from 'node:util'
 import { linkDelorunBundles, type BundleLinking } from '../delorun-bundles.ts'
 import { hasCliProfile, profileDirectory } from '../profile.ts'
@@ -31,6 +32,7 @@ import { channelOriginOf } from './channel-origin.ts'
 import { checkSandboxHere } from '../doctor/sandbox.ts'
 import type { CheckResult } from '../doctor/checks.ts'
 import { nextSteps } from './ending.ts'
+import { runForeground, terminalForeground, type ForegroundDependencies } from './foreground.ts'
 import { styleOf } from '../style.ts'
 import { delorunVersion } from '../version.ts'
 import { askAnswers } from './interactive.ts'
@@ -99,6 +101,11 @@ export interface SetupRequest {
   readonly portIsFree?: (port: number) => Promise<boolean>
   /** The sandbox check printed at the end of setup; `delorun doctor`'s check on Linux by default, nothing elsewhere. */
   readonly sandboxCheck?: () => Promise<CheckResult | undefined>
+  /**
+   * What a fresh terminal run starts Delorun with. Without it the run starts nothing and prints the next steps, as a run
+   * without a terminal does; `delorun` and `delorun setup` pass {@link terminalForeground}.
+   */
+  readonly foreground?: ForegroundDependencies
 }
 
 /**
@@ -367,10 +374,10 @@ const RERUN_LINE = (profile: string): string => `Delorun is already set up${prof
  * asks every question again with the profile's current choices selected and writes only the sections whose answer
  * changed; with `--yes` or `--config` it leaves the profile unchanged.
  * @param given - the home, profile, output, environment and form; an interactive form without a prompter on a standard input that is not a terminal runs as `--yes`.
- * @returns the exit code.
+ * @returns the exit code; `undefined` when a fresh terminal run started Delorun, whose profile runner then owns the exit code.
  * @throws {CliError} for a refused answer, a missing key or a failed step.
  */
-export async function runSetup(given: SetupRequest): Promise<ExitCode> {
+export async function runSetup(given: SetupRequest): Promise<CommandResult> {
   // Without a terminal there is nobody to ask: the run takes the defaults and the flags, as `--yes` does.
   const request: SetupRequest = given.form.kind === 'interactive' && !canAsk(given.form) ? { ...given, form: { kind: 'yes' } } : given
   const registry = request.registry ?? defaultRegistry(request.catalog)
@@ -438,7 +445,11 @@ export async function runSetup(given: SetupRequest): Promise<ExitCode> {
   writeAnswersRecord(directory, progress.answers)
   removeProgress(runDir)
   const sandbox = await (request.sandboxCheck ?? (() => process.platform === 'linux' ? checkSandboxHere(request.env.PATH) : Promise.resolve(undefined)))()
-  request.output.stdout(nextSteps({ profile, answers: progress.answers, env: request.env, channelOrigin: await channelOriginOf(request.home), sandbox }))
+  const channelOrigin = await channelOriginOf(request.home)
+  if (request.foreground !== undefined && request.form.kind === 'interactive' && !finished) {
+    return runForeground({ home: request.home, profile, output: request.output, env: request.env, answers: progress.answers, prompter: prompterFor(request.form), channelOrigin, sandbox, dependencies: request.foreground })
+  }
+  request.output.stdout(nextSteps({ profile, answers: progress.answers, env: request.env, channelOrigin, sandbox }))
   return EXIT.ok
 }
 
@@ -560,6 +571,7 @@ export const setupCommand: CliCommand = {
       home: home.path, profile, output: context, env: context.env, form, registry, checkEnvironmentKey: values['check-key'], noUpdateCheck: values['no-update-check'], answerFlags,
       ...providerChoice === undefined ? {} : { providerChoice },
       ...promptsAnswer === undefined ? {} : { promptsAnswer },
+      ...section === undefined && !unattended ? { foreground: terminalForeground() } : {},
     }
     return section === undefined ? runSetup(request) : runSection(request, section)
   },

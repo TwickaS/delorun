@@ -1,15 +1,16 @@
 /**
- * The end of every `delorun setup` form: the next steps, and nothing else. Setup starts nothing and opens nothing;
- * the text says how to start Delorun and open the studio, where the install guide's first-chat section is, and how to change an
- * answer later. When the launcher (`npx delorun`) started the run, the first step installs the `delorun` command at the
- * launcher's exact version (`DELORUN_LAUNCHER_VERSION`), so the installed command is the package the person already ran and
- * not whatever npm serves as newest.
+ * The end of a `delorun setup` run. A run that starts Delorun in this terminal ends with {@link foregroundEnding}; a run
+ * that starts nothing (no terminal, `--yes`, `--config`, or a re-run of a finished setup) prints {@link nextSteps}: the
+ * studio's address, how to start Delorun and open the studio, where the install guide's first-chat section is, and how to
+ * change an answer later. When the launcher (`npx delorun`) started the run, the install of the `delorun` command uses
+ * the launcher's exact version (`DELORUN_LAUNCHER_VERSION`), so the installed command is the package the person already
+ * ran and not whatever npm serves as newest.
  *
  * @module @delorun/cli/setup/ending
  */
 import { DELORUN_LAUNCHER_VERSION_ENV } from '@delorun/contract-home-layout'
 import { RELEASE_METADATA_ORIGIN } from '@delorun/contract-release-manifest'
-import type { SetupAnswers } from '@delorun/contract-setup-answers'
+import { SETUP_DEFAULT_PORT, type SetupAnswers } from '@delorun/contract-setup-answers'
 import semver from 'semver'
 import type { CheckResult } from '../doctor/checks.ts'
 import { profileFlag } from '../open/studio.ts'
@@ -108,9 +109,19 @@ function sandboxLines(sandbox: CheckResult | undefined): readonly string[] {
 }
 
 /**
- * The text a finished setup prints.
+ * The studio's address on this computer.
+ * @param answers - the answers the run applied.
+ * @returns the loopback address with the profile's port: the chosen one, or the default.
+ */
+export function studioAddress(answers: SetupAnswers): string {
+  return `http://127.0.0.1:${String(answers.profile.port ?? SETUP_DEFAULT_PORT)}`
+}
+
+/**
+ * The text a setup prints when it starts nothing: a run without a terminal, with `--yes` or `--config`, or a re-run of a
+ * finished setup.
  * @param request - the profile, the answers and the environment.
- * @returns the text: what is set up, the numbered next steps for the use case, and how to change an answer.
+ * @returns the text: the studio's address, the numbered next steps, and how to change an answer.
  */
 export function nextSteps(request: NextStepsRequest): string {
   const flag = profileFlag(request.profile)
@@ -129,12 +140,11 @@ export function nextSteps(request: NextStepsRequest): string {
     steps.push([`To use the studio as well, start it any time with delorun${flag}.`])
   } else {
     steps.push([`Start Delorun and open the studio: delorun${flag}`, `Send a first message in a new chat. The install guide's section on your first chat walks through it: ${FIRST_CHAT_PAGE}`])
-    // Pairing a device is a step only for a person who chose remote access, whatever the use case: "Just me" with remote access left off has none.
     if (reach.option !== 'none') steps.push([`Add your phone or another device: delorun devices approve${flag}, then type the code it shows.`])
-    else if (useCase === 'remote') steps.push(['Remote access is off. To turn it on later, install Tailscale and sign in, then run delorun reach on tailscale.'])
   }
   return `${[
     'Delorun is set up. Nothing is running yet.',
+    `Studio: ${studioAddress(request.answers)}`,
     '',
     'Next:',
     ...steps.flatMap((lines, index) => lines.map((line, position) => position === 0 ? `  ${String(index + 1)}. ${line}` : `     ${line.trimStart()}`)),
@@ -142,5 +152,24 @@ export function nextSteps(request: NextStepsRequest): string {
     '',
     `Change an answer later: delorun setup <section>${flag} (delorun setup --list shows the sections).`,
     `If something looks wrong: delorun doctor${flag}.`,
+  ].join('\n')}\n`
+}
+
+/**
+ * The lines that end a run that started Delorun in this terminal, printed once the questions after the start are answered.
+ * @param profile - the profile that was set up.
+ * @param sandbox - the sandbox check, shown when it found the sandbox cannot run.
+ * @returns the lines, short enough for an 80-column terminal, with a closing line ending.
+ */
+export function foregroundEnding(profile: string, sandbox: CheckResult | undefined): string {
+  const flag = profileFlag(profile)
+  return `${[
+    ...sandboxLines(sandbox),
+    '',
+    'Delorun runs in this terminal. Ctrl+C stops it.',
+    `To keep it running after you close the terminal: delorun start${flag} --background`,
+    '(or Settings → General → How Delorun runs).',
+    `Change an answer later: delorun setup <section>${flag} (delorun setup --list)`,
+    `If something looks wrong: delorun doctor${flag}`,
   ].join('\n')}\n`
 }

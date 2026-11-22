@@ -42,7 +42,7 @@ let recording: Recording
  * @param options - extra request fields and the fake ending's behaviour.
  * @returns the exit code.
  */
-async function interactive(script: readonly Answer[], options: Partial<SetupRequest> = {}): Promise<number> {
+async function interactive(script: readonly Answer[], options: Partial<SetupRequest> = {}): Promise<number | undefined> {
   const { ...rest } = options
   return runSetup({
     home,
@@ -61,7 +61,7 @@ async function interactive(script: readonly Answer[], options: Partial<SetupRequ
  * @param options - extra request fields.
  * @returns the exit code.
  */
-function setUp(options: Partial<SetupRequest> = {}): Promise<number> {
+function setUp(options: Partial<SetupRequest> = {}): Promise<number | undefined> {
   return interactive(['no'], options)
 }
 
@@ -72,7 +72,7 @@ function setUp(options: Partial<SetupRequest> = {}): Promise<number> {
  * @param options - extra request fields.
  * @returns the exit code.
  */
-function section(id: string, script: readonly Answer[], options: Partial<SetupRequest> = {}): Promise<number> {
+function section(id: string, script: readonly Answer[], options: Partial<SetupRequest> = {}): Promise<number | undefined> {
   return runSection({
     home, profile: PROFILE, env: {}, output: { stdout: text => void recording.screen.push(text.trim()), stderr: () => undefined },
     form: { kind: 'interactive', prompter: scriptedPrompter(script, recording) }, keyCheck: () => Promise.resolve({ ok: true }), portIsFree: () => Promise.resolve(true),
@@ -360,7 +360,7 @@ describe('unattended forms', { timeout: TIMEOUT_MS }, () => {
    * @param request - extra request fields.
    * @returns the exit code of an unattended run.
    */
-  function unattended(request: Partial<SetupRequest>): Promise<number> {
+  function unattended(request: Partial<SetupRequest>): Promise<number | undefined> {
     return runSetup({
       home, profile: PROFILE, env: { DEEPSEEK_API_KEY: 'env-key-value-8' }, form: { kind: 'yes' }, portIsFree: () => Promise.resolve(true),
       output: { stdout: text => void recording.screen.push(text.trim()), stderr: text => void recording.screen.push(`stderr: ${text.trim()}`) },

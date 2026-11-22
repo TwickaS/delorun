@@ -193,7 +193,7 @@ describe('without a terminal proof', { timeout: TIMEOUT_MS }, () => {
   })
 
   it('--yes and a --config document leave the setting as it is and record the section as skipped', async () => {
-    const unattended = (form: SetupRequest['form']): Promise<number> => runSetup({ ...request([]), env: { DEEPSEEK_API_KEY: 'env-key' }, form })
+    const unattended = (form: SetupRequest['form']): Promise<number | undefined> => runSetup({ ...request([]), env: { DEEPSEEK_API_KEY: 'env-key' }, form })
     expect(await unattended({ kind: 'yes' })).toBe(EXIT.ok)
     expect(existsSync(protectionPath(home))).toBe(false)
     expect(recordedAnswer()).toBe(false)

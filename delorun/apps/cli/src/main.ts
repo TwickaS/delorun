@@ -140,7 +140,8 @@ async function bare(args: readonly string[], context: CommandContext): Promise<C
   if (!hasCliProfile(home.path, profile)) {
     startChoice('', flags, profileDirectory(home.path, profile))
     const { runSetup } = await import('./setup/index.ts')
-    return runSetup({ home: home.path, profile, output: context, env: context.env, form: { kind: 'interactive' } })
+    const { terminalForeground } = await import('./setup/foreground.ts')
+    return runSetup({ home: home.path, profile, output: context, env: context.env, form: { kind: 'interactive' }, foreground: terminalForeground() })
   }
   // The options and the setup answer decide as they do for `delorun start`; either way the studio opens once Delorun runs.
   const choice = startChoice('', flags, profileDirectory(home.path, profile))

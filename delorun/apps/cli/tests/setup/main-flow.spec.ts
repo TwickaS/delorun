@@ -12,9 +12,8 @@ import { ensureHomeTree } from '@delorun/home'
 import { SETUP_DEFAULTS } from '@delorun/contract-setup-answers'
 import { EXIT } from '../../src/exit.ts'
 import { profileDirectory } from '../../src/profile.ts'
-import { readPairingAt } from '../../src/reach/pairing-row.ts'
+import { readPairingAt, TRUST_STATEMENT } from '@delorun/setup-apply'
 import { readReachRow } from '../../src/reach/row.ts'
-import { TRUST_STATEMENT } from '../../src/reach/trust.ts'
 import { parseAnswers, readAnswersDocument } from '../../src/setup/answers.ts'
 import { runSection, runSetup, type SetupRequest } from '../../src/setup/index.ts'
 import { SetupCancelled, type Prompter } from '../../src/setup/prompts.ts'
@@ -44,7 +43,7 @@ let recording: Recording
  * @param options - extra request fields.
  * @returns the exit code.
  */
-async function interactive(script: readonly Answer[], options: Partial<SetupRequest> = {}): Promise<number> {
+async function interactive(script: readonly Answer[], options: Partial<SetupRequest> = {}): Promise<number | undefined> {
   return runSetup({
     home,
     profile: PROFILE,
@@ -151,10 +150,11 @@ describe('the phone question', { timeout: TIMEOUT_MS }, () => {
     expect(readReachRow(home, PROFILE).enabled).toBe(false)
   })
 
-  it('still says, at the end, how to turn remote access on when the check failed', async () => {
+  it('prints no phone line at the end when the check failed and phone access stays off', async () => {
     const tailscale = fakeTailscale(HOST, { version: { code: null, stdout: '', stderr: '' } })
     expect(await interactive(['yes'], { registry: registryWithTailscale(tailscale.run) })).toBe(EXIT.ok)
-    expect(screen()).toContain('Remote access is off. To turn it on later, install Tailscale and sign in')
+    const ending = screen().split('Delorun is set up.')[1] ?? ''
+    expect(ending).not.toMatch(/phone|devices approve|Remote access/u)
   })
 })
 
@@ -235,7 +235,7 @@ describe('a run without a terminal', { timeout: TIMEOUT_MS }, () => {
    * @param request - extra request fields.
    * @returns the exit code of a run whose form asks for the questions but has no terminal.
    */
-  function withoutTerminal(request: Partial<SetupRequest> = {}): Promise<number> {
+  function withoutTerminal(request: Partial<SetupRequest> = {}): Promise<number | undefined> {
     return runSetup({
       home, profile: PROFILE, env: { HOME: osHome }, form: { kind: 'interactive' }, portIsFree: () => Promise.resolve(true),
       output: { stdout: text => void recording.screen.push(...text.replace(/\n$/u, '').split('\n')), stderr: text => void recording.screen.push(`stderr: ${text.trim()}`) },
@@ -275,7 +275,7 @@ describe('--phone, --import-dsh and --port', { timeout: TIMEOUT_MS }, () => {
    * @param request - extra request fields.
    * @returns the exit code of a `--yes` run.
    */
-  function yes(request: Partial<SetupRequest>): Promise<number> {
+  function yes(request: Partial<SetupRequest>): Promise<number | undefined> {
     return runSetup({
       home, profile: PROFILE, env: { HOME: osHome }, form: { kind: 'yes' }, portIsFree: () => Promise.resolve(true),
       output: { stdout: text => void recording.screen.push(...text.replace(/\n$/u, '').split('\n')), stderr: text => void recording.screen.push(`stderr: ${text.trim()}`) },
@@ -363,7 +363,7 @@ describe('the sections the main flow leaves out', { timeout: TIMEOUT_MS }, () =>
    * @param options - extra request fields.
    * @returns the exit code.
    */
-  async function again(id: string, script: readonly Answer[], options: Partial<SetupRequest> = {}): Promise<number> {
+  async function again(id: string, script: readonly Answer[], options: Partial<SetupRequest> = {}): Promise<number | undefined> {
     return runSection({
       home, profile: PROFILE, env: {}, output: { stdout: text => void recording.screen.push(text.trim()), stderr: () => undefined },
       form: { kind: 'interactive', prompter: scriptedPrompter(script, recording) }, keyCheck: () => Promise.resolve({ ok: true }), portIsFree: () => Promise.resolve(true),
@@ -450,13 +450,14 @@ describe('the answers record', { timeout: TIMEOUT_MS }, () => {
 })
 
 describe('the ending', { timeout: TIMEOUT_MS }, () => {
-  it('prints the next steps and nothing else: no install question, no start, no studio address', async () => {
+  it('prints the next steps and nothing else when the run has no start: the studio address, no install question', async () => {
     expect(await interactive(['no'])).toBe(EXIT.ok)
     const ending = screen().split('Delorun is set up.')[1] ?? ''
     expect(ending).toContain('Start Delorun and open the studio: delorun')
     expect(ending).toContain('https://docs.delorun.com/guide/install#the-studio-and-your-first-chat')
     expect(ending).toContain('Change an answer later: delorun setup <section> (delorun setup --list shows the sections).')
     expect(recording.asked.filter(question => question.includes('Install the delorun command'))).toEqual([])
-    expect(screen()).not.toMatch(/Studio: http|is running in|opened in your browser/u)
+    expect(ending).toContain('Studio: http://127.0.0.1:3080')
+    expect(screen()).not.toMatch(/is running in|opened in your browser/u)
   })
 })
