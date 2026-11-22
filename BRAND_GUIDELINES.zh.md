@@ -39,4 +39,4 @@ Do not:
 
 Delorun is a community fork of DeepSeek Harness. Delorun says so in truthful words: "Built on DeepSeek Harness", "Import from DSH", "compared with DeepSeek Harness". It never uses "DeepSeek Harness", "DSH" or DeepSeek's own brand material as or inside Delorun's name, and nothing it publishes suggests that DeepSeek endorses, cooperates in or authorises Delorun.
 
-A project that describes its relationship to DeepSeek Harness follows DeepSeek's own guidelines for that name.
+A project that describes its relationship to DeepSeek Harness follows [DeepSeek's own guidelines](https://github.com/deepseek-ai/deepseek-harness/blob/master/BRAND_GUIDELINES.md) for that name.

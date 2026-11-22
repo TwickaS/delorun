@@ -6,7 +6,7 @@ import { PRODUCTION_KEYS_PATH, readProductionKeys } from '../src/local/productio
 const REPO = join(import.meta.dirname, '..', '..', '..', '..')
 
 describe('the committed production-keys registry', () => {
-  it('reads with the release tool as an empty registry under the renamed schema', () => {
+  it('reads with the release tool as an empty registry', () => {
     const keys = readProductionKeys(readFileSync(join(REPO, PRODUCTION_KEYS_PATH)))
     expect(keys.rootDigests.size).toBe(0)
     expect(keys.keyids.size).toBe(0)
