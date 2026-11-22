@@ -28,7 +28,7 @@ function services(options: { readonly deferred?: readonly DeferrableStep[]; read
   const changed = createSnapshotStore(0)
   const open = vi.fn()
   const progress = liveForm<OnboardingSettings>(settings({ done: options.done ?? true })).form
-  return { progress, host: { reach, defer }, loadRecord: () => Promise.resolve(record), fetch, atComputer: () => options.computer ?? true, deferredOnly, changed, open, cleared, defer }
+  return { progress, host: { reach, reachAddress: () => Promise.resolve(undefined), defer }, loadRecord: () => Promise.resolve(record), fetch, atComputer: () => options.computer ?? true, deferredOnly, changed, open, cleared, defer }
 }
 
 const mount = async (face: ReturnType<typeof services>, wide = true) => {
