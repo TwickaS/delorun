@@ -26,7 +26,11 @@ export interface MultiviewStoreOptions {
   readonly windowArea: () => LayoutArea
 }
 
-/** The limits the settings give. */
+/**
+ * The limits the settings give.
+ * @param settings - the multiview settings.
+ * @returns the pane count and the minimum pane size they allow.
+ */
 export function limitsOf(settings: MultiviewSettings): LayoutLimits {
   return { maxPanes: settings.maxPanes, minPaneWidth: settings.minPaneWidth, minPaneHeight: settings.minPaneHeight }
 }

@@ -20,7 +20,8 @@ import { SeatRelay } from './relay.ts'
  * @param wiring - the plugin context, the mounted state and the configured seats.
  * @returns the approver for `SeatStartRequest.onApproval`; it lifts the child's delegation pin before its first question.
  */
-export const seatRelay: SeatRelayHook = ({ ctx, state, seatProviders, seats }) => {
+export const seatRelay: SeatRelayHook = (wiring) => {
+  const { ctx, state, seatProviders, seats } = wiring
   const seatOf = (child: Agent): SeatConfig => {
     const provider = state.store.providerOf(child.id)
     const seat = seats.find(candidate => seatProviderName(candidate.provider) === provider)
