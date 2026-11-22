@@ -53,7 +53,11 @@ describe('the built launcher', LIMIT, () => {
     expect(listing.every(entry => !entry.includes('node_modules') && !entry.endsWith('.ts'))).toBe(true)
     const manifest = JSON.parse(await readFile(join(built.directory, 'package.json'), 'utf8')) as Record<string, unknown>
     expect(manifest).toMatchObject({ name: 'delorun', version: '0.1.0-test.1', type: 'module', bin: { delorun: 'dist/bin.js' }, engines: { node: '>=24.9.0' } })
+    expect(manifest).toMatchObject({ description: 'Install and run Delorun', homepage: 'https://delorun.com', bugs: { url: 'https://github.com/twickas/delorun/issues' }, keywords: expect.arrayContaining(['delorun', 'deepseek-harness', 'dsh-plugin']) })
     expect(manifest).not.toHaveProperty('dependencies')
+    const readme = await readFile(join(built.directory, 'README.md'), 'utf8')
+    expect(readme).toContain('npx delorun')
+    expect(readme).toContain('It is not a DeepSeek product, and DeepSeek does not endorse it.')
     expect(await readFile(join(built.directory, 'roots', '1.root.json'))).toEqual(root.bytes)
     const unpacked = join(work, 'unpacked')
     execFileSync('mkdir', [unpacked], { timeout: 30_000 })
