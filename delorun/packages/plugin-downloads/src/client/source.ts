@@ -287,12 +287,13 @@ export interface PageDownload {
  * of a package that is not a plugin pack, or the browser download), in every downloads surface of this tab. It lives
  * only in this tab: it is not persisted and other devices do not see it. A later start under the same key replaces it.
  * @param key - the package name or another identity the panel names it by.
- * @param options - the title to show, and how Try again starts it again.
+ * @param options - the title to show, how Try again starts it again, and the state it starts in: `installing` for a
+ *   change that downloads nothing, such as switching on a bundle the installation ships; `downloading` by default.
  * @returns what the starter reports.
  */
-export function startPageDownload(key: string, options: { readonly title?: string | undefined, readonly retry?: (() => void) | undefined } = {}): PageDownload {
-  const { title, retry } = options
-  const start: DownloadItem = { key, state: 'downloading', receivedBytes: 0, local: { retry: retry !== undefined }, ...title === undefined ? {} : { title } }
+export function startPageDownload(key: string, options: { readonly title?: string | undefined, readonly retry?: (() => void) | undefined, readonly state?: 'downloading' | 'installing' | undefined } = {}): PageDownload {
+  const { title, retry, state = 'downloading' } = options
+  const start: DownloadItem = { key, state, receivedBytes: 0, local: { retry: retry !== undefined }, ...title === undefined ? {} : { title } }
   changePage((page) => { page.entries.delete(key); page.entries.set(key, { item: start, retry }) })
   const patch = (next: Partial<DownloadItem>): void => {
     changePage((page) => {

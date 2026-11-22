@@ -69,6 +69,13 @@ describe('a download the page runs itself', () => {
     expect(screen.queryByText('B')).toBeNull()
   })
 
+  it('starts as installing for a change that downloads nothing', () => {
+    startPageDownload('@scope/a', { title: 'A', state: 'installing' })
+    render(<List />)
+    expect(screen.getByText('Installing')).toBeTruthy()
+    expect(screen.getByRole('progressbar', { name: 'A' }).hasAttribute('data-unmeasured')).toBe(false)
+  })
+
   it('belongs to its latest start: an earlier start of the same name changes nothing', () => {
     const first = startPageDownload('@scope/a')
     const second = startPageDownload('@scope/a')
