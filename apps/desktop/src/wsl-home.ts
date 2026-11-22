@@ -47,13 +47,20 @@ export type WslHomeFailure =
 
 /** A failure with a stable code; `detail` never holds a sign-in link or a cookie. */
 export class WslHomeError extends Error {
+  /** Stable failure code. */
+  readonly code: WslHomeFailure
+  /** Safe extra text for the page. */
+  readonly detail: Readonly<Record<string, string>>
+
   /**
    * @param code - Stable failure code.
    * @param detail - Safe extra text for the page, such as a distribution or version name.
    * @param options - The original error, kept for crash reports.
    */
-  constructor(readonly code: WslHomeFailure, readonly detail: Readonly<Record<string, string>> = {}, options?: ErrorOptions) {
+  constructor(code: WslHomeFailure, detail: Readonly<Record<string, string>> = {}, options?: ErrorOptions) {
     super(`desktop WSL home: ${code}`, options)
+    this.code = code
+    this.detail = detail
   }
 }
 

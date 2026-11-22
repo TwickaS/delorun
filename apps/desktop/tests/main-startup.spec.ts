@@ -2752,5 +2752,26 @@ describe('Delorun shell', () => {
       expect(writeCrashReport).not.toHaveBeenCalled()
       expect(harness.dialog.showMessageBox).not.toHaveBeenCalled()
     })
+
+    it('shows the "update the app" page for a newer home without fatal recovery', async () => {
+      const { load, window } = await failWith('home-too-new', { distro: 'Ubuntu', version: '0.3.0', range: 'R' })
+      const page = decode(homeErrorUrls(load)[0]!)
+      expect(page).toContain('Update the app')
+      expect(page).toContain('0.3.0')
+      expect(page).not.toContain('delorun update')
+      await vi.advanceTimersByTimeAsync(0)
+      expect(harness.dialog.showMessageBox).not.toHaveBeenCalled()
+      await pageReportsBootFailure(window)
+      expect(writeCrashReport).not.toHaveBeenCalled()
+      expect(harness.hosts).toHaveLength(0)
+    })
+
+    it('logs only the failure code, never a sign-in link, a cookie or the home\'s text', async () => {
+      await failWith('exchange-failed', { distro: 'Ubuntu' })
+      await vi.advanceTimersByTimeAsync(0)
+      const logged = [console.error, console.warn, console.info].flatMap(spy => vi.mocked(spy).mock.calls)
+      expect(inspect(logged, { depth: 8 })).toContain('desktop WSL home: exchange-failed')
+      expect(inspect(logged, { depth: 8 })).not.toMatch(/token=|dsh-auth|SECRET/iu)
+    })
   })
 })

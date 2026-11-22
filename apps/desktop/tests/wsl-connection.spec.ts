@@ -8,7 +8,7 @@ const rows = [{ kind: 'script', placement: 'head', text: 'globalThis.A=1' }]
 
 /** A `wsl.exe` stand-in: status first, then the link. */
 function runner(version: string, link = LINK, linkCode = 0) {
-  return vi.fn(async (args: readonly string[]) => {
+  return vi.fn(async (args: readonly string[], _deadline?: number) => {
     const json = args.includes('status')
       ? JSON.stringify({ ok: true, status: { state: 'ready', pid: 1, runtime: { current: version, running: version }, chats: 0, studio: STUDIO } })
       : `${link}\nhint\n`
@@ -30,6 +30,17 @@ describe('connectWslHome', () => {
     expect(calls.exchange).toHaveBeenCalledWith(LINK)
     expect(calls.fetchRows).toHaveBeenCalledWith('http://127.0.0.1:18601', 'dsh-auth-1=COOKIE')
     expect(JSON.stringify(connection)).not.toContain('SECRET')
+  })
+
+  it('gives every wsl.exe call a deadline, and puts no link on a command line', async () => {
+    const calls = deps()
+    await connectWslHome('Ubuntu', 'default', calls)
+    expect(calls.run).toHaveBeenCalledTimes(2)
+    for (const [args, deadline] of calls.run.mock.calls) {
+      expect(deadline, args.join(' ')).toEqual(expect.any(Number))
+      expect(deadline).toBeGreaterThan(0)
+      expect(args.join(' ')).not.toMatch(/token|SECRET|https?:/iu)
+    }
   })
 
   it('shows the "update this home" page for an older home and the "update the app" page for a newer one, and never reads a link', async () => {
