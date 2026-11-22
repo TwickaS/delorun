@@ -4068,7 +4068,7 @@
       "path": "apps/desktop/src/web-document.ts",
       "class": "security",
       "reason": "The request forwarder takes the home kind. For a Delorun home in WSL2 on this computer (L175) a request that carried the application's origin goes out with the home's exact loopback origin and `Sec-Fetch-Site: same-origin`, as the person's own browser would send them, so the home's computer-only gate sees the person at the computer; no Origin in, none out, and any other origin is still refused. Upstream's bundled Host receives no Origin as before. Lead verdict: pending; no lead review of this change is recorded yet. The digest is written by ledger-record.ts after the hold.",
-      "sha256": "2e4161e82b163a256ee46780e9bbe2df3865eeb0e8f29d14b27380a71803e9d7"
+      "sha256": "b588f8c35b7ead3517f36417101cbfde387f823764f10faffe1041c095a1e3d3"
     },
     {
       "path": "apps/desktop/src/ipc.ts",
@@ -4087,6 +4087,12 @@
       "class": "delorun-feature",
       "feature": "desktop-shell",
       "reason": "Delorun's own module of the desktop shell: turns a dropped file's Windows path into the path a WSL distribution sees, and refuses any other (L175)."
+    },
+    {
+      "path": "apps/desktop/src/browser-guests.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "A comment records that a guest partition gets no handler for the application's scheme, so it never reaches the request forwarder (F18 in the security fundamentals); no behaviour changes."
     }
   ],
   "retired": []

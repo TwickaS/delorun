@@ -2,7 +2,7 @@
  * A Delorun home in a WSL2 distribution, reached through `wsl.exe`: discovery, status and the one-time sign-in link.
  * Every `wsl.exe` call has a deadline, because it can hang with no output while a distribution starts for the first time
  * or the WSL service is stuck. The sign-in link is read from the child's stdout, never placed on a command line, and
- * never written to a log or an error message.
+ * never written to a log or an error message (F24, A604).
  */
 
 import { spawn } from 'node:child_process'

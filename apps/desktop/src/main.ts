@@ -516,6 +516,7 @@ async function main(): Promise<void> {
       return {
         start: async () => {
           const connection = await connectWslHome(homeSource.distro, homeSource.profile, {})
+          // F23 (A604): the cookie stays in this process; no renderer, Chromium cookie store or log receives it.
           hostCookie = connection.cookie
           hostUrl = connection.origin
           injections = connection.injections
@@ -774,8 +775,8 @@ async function main(): Promise<void> {
       if (backend.host === undefined || hostUrl === undefined || hostCookie === undefined) {
         return Promise.resolve(new Response(null, { status: 503 }))
       }
-      // Only this handler, registered for the default session, reaches the forwarder: a guest webview or another
-      // session partition has no handler for the scheme.
+      // F18 and F20 (A604): only this handler, registered for the default session, reaches the forwarder, so a guest webview
+      // or another session partition never does; only a home in WSL2 is named `wsl`.
       return forwardWebRequest(request, hostUrl, hostCookie, homeSource.kind === 'wsl' ? 'wsl' : 'bundled')
     }
     return Promise.resolve(new Response(null, { status: 404 }))
@@ -814,6 +815,7 @@ async function main(): Promise<void> {
     return browserGuests.release(event.sender, lease)
   })
 
+  // F23 (A604): the WebSocket credential is added only for the chosen home's exact origin, from the main window.
   session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ['ws://127.0.0.1/*', 'wss://127.0.0.1/*'] }, (details, callback) => {
     callback(webSocketCredential({
       homeOrigin: hostUrl === undefined ? undefined : new URL(hostUrl).origin, cookie: hostCookie, url: details.url,

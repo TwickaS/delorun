@@ -56,6 +56,7 @@ export async function connectWslHome(distro: string, profile: string, deps: WslC
   if (verdict.kind === 'unreadable') throw new WslHomeError('version-unreadable', { distro, range: verdict.range })
   if (verdict.kind === 'older') throw new WslHomeError('home-too-old', { distro, version: verdict.version, range: verdict.range })
   if (verdict.kind === 'newer') throw new WslHomeError('home-too-new', { distro, version: verdict.version, range: verdict.range })
+  // F24 (A604): the link is used once here and dropped; no command line, log, error or renderer holds it.
   const link = await readSignInLink(distro, profile, status.studio, run)
   const origin = new URL(link).origin
   let cookie: string

@@ -105,6 +105,7 @@ export async function forwardWebRequest(
 ): Promise<Response> {
   const source = new URL(request.url)
   const origin = request.headers.get('origin')
+  // F19 (security fundamentals, owner ruling A604): any origin but the application's own is refused before anything is forwarded.
   if (origin !== null && origin !== 'dsh-app://app') return new Response(null, { status: 403 })
   const target = new URL(host)
   target.pathname = source.pathname
@@ -112,6 +113,8 @@ export async function forwardWebRequest(
   const headers = new Headers(request.headers)
   for (const name of ['host', 'origin', 'cookie', 'sec-fetch-site']) headers.delete(name)
   headers.set('cookie', cookie)
+  // F20, F21 and F22 (A604): only a home in WSL2 gets the rewrite, to exactly that home's loopback origin, and only when the
+  // request carried the application's origin; no Origin in, none out.
   if (homeKind === 'wsl' && origin !== null) {
     headers.set('origin', target.origin)
     headers.set('sec-fetch-site', 'same-origin')

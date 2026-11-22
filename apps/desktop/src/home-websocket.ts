@@ -1,4 +1,4 @@
-/** The credential the shell adds to the studio's WebSocket requests, for the chosen home's exact origin only. */
+/** The credential the shell adds to the studio's WebSocket requests, for the chosen home's exact origin only (F23, A604). */
 
 /** Request headers as Chromium reports them. */
 export type RequestHeaders = Record<string, string | string[]>

@@ -33,6 +33,7 @@ export class DesktopBrowserGuests {
     let partition = this.partitions.get(workspace)
     if (partition === undefined) {
       partition = `dsh-sidebar-browser-${randomUUID()}`
+      // F18 (A604): a guest partition gets no handler for the application's scheme, so it never reaches the forwarder.
       this.configureSession(session.fromPartition(partition))
       this.partitions.set(workspace, partition)
     }
