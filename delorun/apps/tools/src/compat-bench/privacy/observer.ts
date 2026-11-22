@@ -39,14 +39,6 @@ function containerOf(run: PrivacyRunContext): string {
   return run.container ?? `bench-${run.runId}`
 }
 
-/**
- * @param run - the run's context.
- * @returns the host and container ports to publish on the helper, from the context's `publish` or its `studioPort`.
- */
-function publishOf(run: PrivacyRunContext): { host: number; container: number } | undefined {
-  return run.publish ?? (run.studioPort === undefined ? undefined : { host: run.studioPort, container: run.studioPort })
-}
-
 /** How to make an observer. */
 export type PrivacyObserverOptions = Readonly<{
   docker?: Docker
@@ -143,7 +135,8 @@ export function createPrivacyObserver(options: PrivacyObserverOptions = {}): Obs
       const canaries = makeCanaries(run.runId, layout)
       await removeStaleHelpers(docker)
       const image = await buildHelperImage(docker)
-      const publish = publishOf(run)
+      // Nothing is published unless the runner asks: the studio and the browser both run inside the plugin container.
+      const publish = run.publish
       const folder = join(run.outDir, 'privacy')
       await mkdir(folder, { recursive: true })
       // The plugin container runs as the same user and writes the hooks' log here through the mounted output folder.
