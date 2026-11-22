@@ -3319,6 +3319,210 @@
       "class": "delorun-feature",
       "feature": "plugin-entry-rows",
       "reason": "The market's plugin entry row as a primitive, so Delorun's setup guide draws its recommended plugins like the market (a plugin cannot import another plugin's component)."
+    },
+    {
+      "path": ".agents/notes/implemented/architecture/2026-07-10-single-file-executable-sdk-runtime-distribution.i18n.yaml",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Links to upstream workflows Delorun removed (A555, L131) become code spans; the note's text is unchanged (L170)."
+    },
+    {
+      "path": ".agents/notes/implemented/architecture/2026-07-10-single-file-executable-sdk-runtime-distribution.md",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Links to upstream workflows Delorun removed (A555, L131) become code spans; the note's text is unchanged (L170)."
+    },
+    {
+      "path": ".agents/notes/implemented/architecture/2026-07-10-single-file-executable-sdk-runtime-distribution.zh.md",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Links to upstream workflows Delorun removed (A555, L131) become code spans; the note's text is unchanged (L170)."
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-07-21-serial-cross-platform-ci-reference.i18n.yaml",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Links to upstream workflows Delorun removed (A555, L131) become code spans; the note's text is unchanged (L170)."
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-07-21-serial-cross-platform-ci-reference.md",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Links to upstream workflows Delorun removed (A555, L131) become code spans; the note's text is unchanged (L170)."
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-07-21-serial-cross-platform-ci-reference.zh.md",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Links to upstream workflows Delorun removed (A555, L131) become code spans; the note's text is unchanged (L170)."
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-07-26-ci-failover-runbook.i18n.yaml",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Links to upstream workflows Delorun removed (A555, L131) become code spans; the note's text is unchanged (L170)."
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-07-26-ci-failover-runbook.md",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Links to upstream workflows Delorun removed (A555, L131) become code spans; the note's text is unchanged (L170)."
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-07-26-ci-failover-runbook.zh.md",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Links to upstream workflows Delorun removed (A555, L131) become code spans; the note's text is unchanged (L170)."
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-08-08-native-windows-pull-request-ci.i18n.yaml",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Links to upstream workflows Delorun removed (A555, L131) become code spans; the note's text is unchanged (L170)."
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-08-08-native-windows-pull-request-ci.md",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Links to upstream workflows Delorun removed (A555, L131) become code spans; the note's text is unchanged (L170)."
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-08-08-native-windows-pull-request-ci.zh.md",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Links to upstream workflows Delorun removed (A555, L131) become code spans; the note's text is unchanged (L170)."
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-08-10-event-directed-pr-review-status.i18n.yaml",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Links to upstream workflows Delorun removed (A555, L131) become code spans; the note's text is unchanged (L170)."
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-08-10-event-directed-pr-review-status.md",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Links to upstream workflows Delorun removed (A555, L131) become code spans; the note's text is unchanged (L170)."
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-08-10-event-directed-pr-review-status.zh.md",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Links to upstream workflows Delorun removed (A555, L131) become code spans; the note's text is unchanged (L170)."
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-09-06-python-runtime-windows-hosted.i18n.yaml",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Links to upstream workflows Delorun removed (A555, L131) become code spans; the note's text is unchanged (L170)."
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-09-06-python-runtime-windows-hosted.md",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Links to upstream workflows Delorun removed (A555, L131) become code spans; the note's text is unchanged (L170)."
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-09-06-python-runtime-windows-hosted.zh.md",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Links to upstream workflows Delorun removed (A555, L131) become code spans; the note's text is unchanged (L170)."
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-09-09-blacksmith-failover-leg.i18n.yaml",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Links to upstream workflows Delorun removed (A555, L131) become code spans; the note's text is unchanged (L170)."
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-09-09-blacksmith-failover-leg.md",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Links to upstream workflows Delorun removed (A555, L131) become code spans; the note's text is unchanged (L170)."
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-09-09-blacksmith-failover-leg.zh.md",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Links to upstream workflows Delorun removed (A555, L131) become code spans; the note's text is unchanged (L170)."
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-10-20-weighted-approval-status-gate-with-check-run-label.i18n.yaml",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Links to upstream workflows Delorun removed (A555, L131) become code spans; the note's text is unchanged (L170)."
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-10-20-weighted-approval-status-gate-with-check-run-label.md",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Links to upstream workflows Delorun removed (A555, L131) become code spans; the note's text is unchanged (L170)."
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-10-20-weighted-approval-status-gate-with-check-run-label.zh.md",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Links to upstream workflows Delorun removed (A555, L131) become code spans; the note's text is unchanged (L170)."
+    },
+    {
+      "path": ".agents/notes/implemented/testing/2026-06-19-real-api-e2e-ci.i18n.yaml",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Links to upstream workflows Delorun removed (A555, L131) become code spans; the note's text is unchanged (L170)."
+    },
+    {
+      "path": ".agents/notes/implemented/testing/2026-06-19-real-api-e2e-ci.md",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Links to upstream workflows Delorun removed (A555, L131) become code spans; the note's text is unchanged (L170)."
+    },
+    {
+      "path": ".agents/notes/implemented/testing/2026-06-19-real-api-e2e-ci.zh.md",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Links to upstream workflows Delorun removed (A555, L131) become code spans; the note's text is unchanged (L170)."
+    },
+    {
+      "path": ".agents/notes/implemented/testing/2026-08-23-installed-python-wheel-black-box-ci.i18n.yaml",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Links to upstream workflows Delorun removed (A555, L131) become code spans; the note's text is unchanged (L170)."
+    },
+    {
+      "path": ".agents/notes/implemented/testing/2026-08-23-installed-python-wheel-black-box-ci.md",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Links to upstream workflows Delorun removed (A555, L131) become code spans; the note's text is unchanged (L170)."
+    },
+    {
+      "path": ".agents/notes/implemented/testing/2026-08-23-installed-python-wheel-black-box-ci.zh.md",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Links to upstream workflows Delorun removed (A555, L131) become code spans; the note's text is unchanged (L170)."
+    },
+    {
+      "path": ".github/review-ownership/.gitignore",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Upstream's weighted-approval bot is removed with its directory (L174)."
+    },
+    {
+      "path": "scripts/cua-helper/payload.spec.ts",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Drops what read the upstream workflows Delorun removed (A555, L131): one test goes, the rest is unchanged."
+    },
+    {
+      "path": "scripts/desktop-archive-workflow-test.ts",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Drops what read the upstream workflows Delorun removed (A555, L131): the helper only the removed workflow specs used, so only dead code goes."
+    },
+    {
+      "path": "scripts/wine-windows-gates.sh",
+      "class": "delorun-feature",
+      "feature": "fork-gates",
+      "reason": "Drops what read the upstream workflows Delorun removed (A555, L131): a comment that named one; no code changes."
     }
   ],
   "retired": []
