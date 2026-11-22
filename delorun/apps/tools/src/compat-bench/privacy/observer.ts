@@ -22,8 +22,14 @@ import type { RunFacts } from './observed.ts'
 import { signatureOf } from './requests.ts'
 import type { HelperReport, NetEvent, PrivacyAdditions, PrivacyReport, PrivacyRunContext, ProxyHost } from './types.ts'
 
-/** Where the preload and the CA go in the plugin container, and where the output folder is mounted (agreed with bench-core). */
-export const CONTAINER_PATHS = { preload: '/home/bench/.bench-privacy/privacy-preload.mjs', ca: '/home/bench/.bench-privacy/ca.pem', outDir: '/out' } as const
+/**
+ * Where the preload and the CA go in the plugin container, and where the output folder is mounted (agreed with bench-core).
+ * @param layout - where the user's home is in the container.
+ * @returns the three paths.
+ */
+export function containerPaths(layout: CanaryLayout): Readonly<{ preload: string; ca: string; outDir: string }> {
+  return { preload: `${layout.userHome}/.bench-privacy/privacy-preload.mjs`, ca: `${layout.userHome}/.bench-privacy/ca.pem`, outDir: '/out' }
+}
 
 /**
  * @param run - the run's context.
@@ -109,6 +115,7 @@ export function createPrivacyObserver(options: PrivacyObserverOptions = {}): Obs
   const baselineDir = options.baselineDir ?? defaultBaselineDir()
   const now = options.now ?? (() => new Date())
   const states = new Map<string, RunState>()
+  const paths = containerPaths(layout)
 
   /** Take the after-uninstall snapshot: `docker diff`, and a search of the changed paths for each canary. */
   async function takeSnapshot(state: RunState, container: string): Promise<NonNullable<RunState['snapshot']>> {
@@ -146,20 +153,20 @@ export function createPrivacyObserver(options: PrivacyObserverOptions = {}): Obs
       const ca = await readFile(helper.caPath, 'utf8')
       const additions: PrivacyAdditions = {
         env: {
-          DELORUN_PRIVACY_LOG: `${CONTAINER_PATHS.outDir}/privacy/events.jsonl`,
+          DELORUN_PRIVACY_LOG: `${paths.outDir}/privacy/events.jsonl`,
           DELORUN_PRIVACY_WATCH: JSON.stringify(watchList(canaries, layout)),
-          NODE_EXTRA_CA_CERTS: CONTAINER_PATHS.ca,
+          NODE_EXTRA_CA_CERTS: paths.ca,
           [MODEL_KEY_ENV]: canaries.modelKey,
         },
         files: [
-          { path: CONTAINER_PATHS.preload, content: preload, mode: 0o644 },
-          { path: CONTAINER_PATHS.ca, content: ca, mode: 0o644 },
+          { path: paths.preload, content: preload, mode: 0o644 },
+          { path: paths.ca, content: ca, mode: 0o644 },
           ...canaries.files.map(file => ({ path: file.path, content: file.content, mode: file.mode })),
         ],
         networkContainer: helper.name,
         pidContainer: helper.name,
-        caCertPath: CONTAINER_PATHS.ca,
-        preloads: [CONTAINER_PATHS.preload],
+        caCertPath: paths.ca,
+        preloads: [paths.preload],
         testChatMarker: canaries.chatWord,
       }
       return additions
