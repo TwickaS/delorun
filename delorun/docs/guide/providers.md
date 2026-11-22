@@ -8,7 +8,7 @@ English | [中文](providers.zh.md)
 
 ## Summary
 
-This page helps you choose which AI model service Delorun talks to, give it your key, and change that later. You need Delorun installed ([Install and first run](install.md)) and an account with a provider. A [model provider](../reference/glossary.md#provider) is a company or server that runs the AI model; a key is the secret text that lets Delorun use your account there. Delorun works with the provider you choose. Setup asks which one to use, takes its key and, for most providers, the model new chats start on. Every provider below is set up the same way and is listed in the same order setup lists it, by name. DeepSeek support is built in and needs no extra install; every other provider runs on the multi-provider adapter that ships with DeepSeek Harness, so none of them needs an install either. The studio lists more providers than setup does, and more of each provider's settings, in Settings → Agent → Models.
+This page helps you choose which AI model service Delorun talks to, give it your key, and change that later. You need Delorun installed ([Install and first run](install.md)) and an account with a provider. A [model provider](../reference/glossary.md#provider) is a company or server that runs the AI model; a key is the secret text that lets Delorun use your account there. Delorun works with the provider you choose. The studio's welcome screen asks for a DeepSeek key the first time it opens; `delorun setup key` is the terminal form, which asks which provider to use, takes its key and, for most providers, the model new chats start on. Every provider below is set up the same way and is listed in the same order setup lists it, by name. DeepSeek support is built in and needs no extra install; every other provider runs on the multi-provider adapter that ships with DeepSeek Harness, so none of them needs an install either. The studio lists more providers than setup does, and more of each provider's settings, in Settings → Agent → Models.
 
 ## Contents
 
@@ -25,14 +25,14 @@ This page helps you choose which AI model service Delorun talks to, give it your
 
 ## Choose a provider in setup
 
-Setup's model provider question is `Which model provider should Delorun use?`, with DeepSeek (recommended), More providers and Choose later. Every use case asks it, then:
+The first setup run does not ask for a model key. The studio's first-run guide does, in its Models step: it uses a key it finds in the environment, or you paste a DeepSeek key and Delorun tests it with a free request. Other providers are under **Add another provider** there, and in Settings → Agent → Models. In a terminal, or for a script, `delorun setup key` asks the model provider question, `Which model provider should Delorun use?`, with DeepSeek (recommended), More providers and Choose later. It then asks:
 
 1. For an OpenAI-compatible endpoint, the base URL and the model id.
 2. `How should Delorun get the <provider> API key?`: **Paste it now**, which stores it in your home's credentials file, or **Use `<VARIABLE>`**, which reads that environment variable at each start. Setup names the provider's key page and warns at once when the variable is unset.
 3. For a typed key, the key itself, which setup checks before it stores it.
 4. The model new chats start on, from the provider's model list, starting on a current general model of that provider. Setup asks it for every provider except DeepSeek, which starts on the profile's default model, DeepSeek-V4.1-Flash; `delorun setup key` asks it for DeepSeek too.
 
-**Choose later** changes no provider setting: new chats keep the model the profile already uses, DeepSeek-V4.1-Flash on a new profile, and setup tells you which model that is and how to add a provider. You can change the model of any chat in the studio's model picker.
+**Choose later** changes no provider setting: new chats keep the model the profile already uses, DeepSeek-V4.1-Flash on a new profile, and setup tells you which model that is and how to add a key, in the studio or with `delorun setup key`. You can change the model of any chat in the studio's model picker.
 
 ## The providers
 
@@ -92,7 +92,7 @@ Run `delorun setup key` to choose again; it asks every question of the provider 
 
 The multi-provider adapter knows more providers than setup lists, among them Amazon Bedrock, Azure OpenAI, Cerebras, Cloudflare, Fireworks, GitHub Copilot, Google Vertex AI, Hugging Face, MiniMax, NVIDIA, Z.AI and Xiaomi. Add any of them in the studio's Settings → Agent → Models, which also signs in to providers that use an account instead of a key, and edits any provider's address, models and request settings.
 
-Claude Code and Codex are not model providers for Delorun's chats: they are agents that a chat can hand work to, and they run as their own programs with their own sign-in. The studio's first-run guide offers to add them.
+Claude Code and Codex are not model providers for Delorun's chats: they are agents that a chat can hand work to, and they run as their own programs with their own sign-in. The full guide, from Settings → General → Getting started, offers to add them.
 
 <details>
 <summary>Edge cases</summary>
@@ -112,7 +112,7 @@ Claude Code and Codex are not model providers for Delorun's chats: they are agen
 - Use several providers: run `delorun setup key` again with another provider. Setup keeps the providers you set up before, so all their models stay in the model picker.
 - Run a model on your own computer through Ollama, LM Studio or vLLM with the OpenAI-compatible endpoint.
 - Add providers setup does not list, sign in with an account instead of a key, or edit a provider's address and request settings in Settings → Agent → Models.
-- Hand work to Claude Code or Codex from a chat: the first-run guide's Agents step adds them ([Install and first run](install.md#the-studio-and-your-first-chat)).
+- Hand work to Claude Code or Codex from a chat: Settings → General → Getting started opens the full guide, whose Agents step adds them ([Install and first run](install.md#the-studio-and-your-first-chat)).
 
 </details>
 

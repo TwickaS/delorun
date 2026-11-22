@@ -103,7 +103,7 @@ To take full access away, choose **Revoke** in Settings, Safety, Permissions, pi
 - If you run `delorun headless` in a folder without a grant, then it refuses with "which you have not granted full access" and does not start — run `delorun workspace full-access <folder> on`, or run without full access. A running headless task sees a revoke only when it next checks a permission.
 - If you choose the safer preset in a chat, then the workspace's grant is withdrawn and its other open chats on full access drop back too — grant it again to return.
 - If a single command asks to run outside the sandbox with no grant, then DeepSeek Harness asks you directly, and its question does not say the command can read Delorun's home — read it as if it did.
-- If you chose [**Ask less (like DeepSeek Harness)**](../reference/glossary.md#ask-less) in setup, then a workspace switches to full access after the studio's own confirmation, as in DeepSeek Harness, with no per-workspace grant.
+- If you chose [**Ask less (like DeepSeek Harness)**](../reference/glossary.md#ask-less) with `delorun setup prompts`, then a workspace switches to full access after the studio's own confirmation, as in DeepSeek Harness, with no per-workspace grant.
 
 </details>
 
@@ -196,7 +196,7 @@ Claude Code and Codex are optional plugins that let the model hand a task to ano
 
 Each agent runs at a level you choose in Settings, Safety, External agents: Careful, Standard, Your own settings or Unrestricted. Standard is the default. An approved device can tighten a level, but loosening one, and Unrestricted in particular, needs you at the computer that runs Delorun, and dangerous mode does not lift that.
 
-Delorun asks before each run, at the computer that runs Delorun, whichever prompts answer you gave in setup. **Allow once** starts that run only. **Allow for this workspace** lets that agent start there without asking until you revoke it in Settings, Safety, External agents, or with `delorun workspace external-agents <folder> <agent> off`. Each run stops after 30 minutes.
+Delorun asks before each run, at the computer that runs Delorun, whichever prompts answer you chose. **Allow once** starts that run only. **Allow for this workspace** lets that agent start there without asking until you revoke it in Settings, Safety, External agents, or with `delorun workspace external-agents <folder> <agent> off`. Each run stops after 30 minutes.
 
 <details>
 <summary>Edge cases</summary>
@@ -234,7 +234,7 @@ On Linux, Open also shares your computer's network, where programs such as the d
 - If the command has full access, then the setting does not apply — it runs outside the sandbox.
 - If the setting's file cannot be read, then every workspace counts as Off and changes are refused — repair or remove the file Settings names.
 - If you are on a phone, then the page cannot be opened — use the computer that runs Delorun.
-- If you chose **Ask less (like DeepSeek Harness)** in setup, then the page says the setting is not available — run `delorun setup prompts` and choose Ask me first.
+- If you chose **Ask less (like DeepSeek Harness)** with `delorun setup prompts`, then the page says the setting is not available — run `delorun setup prompts` and choose Ask me first.
 - If a command is already running, then it keeps the network it started with — restart the workspace's terminals and jobs after tightening.
 
 </details>

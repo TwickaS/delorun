@@ -36,7 +36,7 @@ const MORE_PROVIDERS = 'more'
 export function noProviderNote(selection: ModelSelection): string {
   const known = isSetupProviderId(selection.provider) ? SETUP_PROVIDERS[selection.provider] : undefined
   const key = known === undefined ? '' : `, which reads its key from ${known.keyVariable} unless the profile names another variable`
-  return `No model provider was set up now, and no provider setting changed. New chats still start on ${selection.model} from ${known?.label ?? selection.provider}${key}. Choose a provider with delorun setup key, in a terminal or with --provider <id> and its flags; the studio's Settings → Agent → Models adds one too.`
+  return `No model provider was set up now, and no provider setting changed. New chats still start on ${selection.model} from ${known?.label ?? selection.provider}${key}. Add your model key in the studio (the welcome screen asks for it), or run delorun setup key (in a terminal, or with --provider <id> and its flags); Settings → Agent → Models adds a provider too.`
 }
 
 /** The section's answers while it asks. */

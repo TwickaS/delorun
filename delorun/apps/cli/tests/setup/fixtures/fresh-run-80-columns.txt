@@ -7,9 +7,10 @@ delorun <version> · new home in ~/.delorun
 = No, just this computer
 No model provider was set up now, and no provider setting changed. New chats
 still start on deepseek-flash from DeepSeek, which reads its key from
-DEEPSEEK_API_KEY unless the profile names another variable. Choose a provider
-with delorun setup key, in a terminal or with --provider <id> and its flags; the
-studio's Settings → Agent → Models adds one too.
+DEEPSEEK_API_KEY unless the profile names another variable. Add your model key
+in the studio (the welcome screen asks for it), or run delorun setup key (in a
+terminal, or with --provider <id> and its flags); Settings → Agent → Models adds
+a provider too.
 Run delorun open to open the studio in your browser.
 ? Keep the delorun command?
 Runs: npm install -g delorun@0.1.0

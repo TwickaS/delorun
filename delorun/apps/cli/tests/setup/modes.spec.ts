@@ -134,7 +134,7 @@ describe('the main flow', { timeout: TIMEOUT_MS }, () => {
     ])
     expect(readBackgroundAnswer(profileDirectory(home, PROFILE))).toBe(true)
     expect(recordOf().modelProvider).toBeNull()
-    expect(screen()).toContain('Add a model key first: delorun setup key')
+    expect(screen()).toContain('Add your model key in the studio (the welcome screen asks for it), or run delorun setup key.')
   })
 
   it('writes "Ask less" as the parity value of every prompt switch', async () => {
@@ -387,7 +387,7 @@ describe('unattended forms', { timeout: TIMEOUT_MS }, () => {
       { id: 'profile', status: 'skipped' },
     ])
     expect(screen()).toContain('Delorun is set up. Nothing is running yet.')
-    expect(screen()).toContain('Add a model key first: delorun setup key')
+    expect(screen()).toContain('Add your model key in the studio (the welcome screen asks for it), or run delorun setup key.')
     expect(patchOf().map(row => row.id)).toEqual(['delorun-permission-defaults', 'delorun-instruction-consent', 'delorun-mcp-consent', 'delorun-schedule-consent'])
   })
 

@@ -32,7 +32,7 @@ The path must be absolute or start with `~`. `delorun` refuses your home folder 
 
 ## The first run
 
-The first `delorun` on a new home runs setup ([Install and first run](install.md)). After that, `delorun` starts Delorun in the background and opens the studio in your browser, unless you chose in setup to run it in the terminal. `delorun status` shows whether it runs, and `delorun stop` stops it once running chats finish, or at once with `delorun stop --now`. One Delorun runs per profile: a second start tells you it is already running. [Daily use](daily-use.md) lists every command.
+The first `delorun` on a new home runs setup ([Install and first run](install.md)). After that, `delorun` starts Delorun in the background and opens the studio in your browser, unless you turned that off in Settings → General → How Delorun runs or with `delorun setup background`. `delorun status` shows whether it runs, and `delorun stop` stops it once running chats finish, or at once with `delorun stop --now`. One Delorun runs per profile: a second start tells you it is already running. [Daily use](daily-use.md) lists every command.
 
 ## Profiles
 

@@ -91,7 +91,7 @@ export interface NextStepsRequest {
  */
 function keyStep(request: NextStepsRequest, flag: string): string | undefined {
   const provider = request.answers.modelProvider
-  if (provider === null) return `Add a model key first: delorun setup key${flag}`
+  if (provider === null) return `Add your model key in the studio (the welcome screen asks for it), or run delorun setup key${flag}.`
   if (provider.credential.source === 'environment' && (request.env[provider.credential.name] ?? '') === '') {
     return `Set ${provider.credential.name} in your terminal, then run delorun stop and delorun start if Delorun is running. It is the ${SETUP_PROVIDERS[provider.id].label} key you chose.`
   }

@@ -26,7 +26,7 @@ This page shows the commands you use every day and the choices you make about wh
 
 | Command | What it does |
 | --- | --- |
-| `delorun` | Starts Delorun and opens the studio. On a new home it runs setup first ([Install and first run](install.md)). |
+| `delorun` | Starts Delorun and opens the studio. On a new home it runs setup first, which then starts Delorun in the terminal ([Install and first run](install.md)). |
 | `delorun start` | Starts Delorun without opening the studio. `--open` also opens it. |
 | `delorun start --foreground` | Runs Delorun in this terminal. Ctrl-C stops it. |
 | `delorun open` | Opens the studio in your browser with a link that signs in once. `--print` prints the link instead ([A computer without a browser](install.md#a-computer-without-a-browser)). |
@@ -34,7 +34,7 @@ This page shows the commands you use every day and the choices you make about wh
 | `delorun stop` | Stops Delorun once running chats end their turns. |
 | `delorun stop --now` | Stops at once. It cancels running turns and background jobs. |
 
-`delorun` and `delorun start` run Delorun in the background, so it keeps running after you close the terminal, unless you answered No to the background question under More settings in setup. `delorun setup background` asks it again. A background start prints `Delorun is running in the background for the profile default at <address>; it keeps running after this terminal closes.`, then how to see, follow and stop it.
+`delorun` and `delorun start` run Delorun in the background, so it keeps running after you close the terminal, unless you turned that off. The first start, at the end of setup, runs in the terminal and says how to keep it running: `delorun start --background`. Settings → General → How Delorun runs, or `delorun setup background`, changes the default. A background start prints `Delorun is running in the background for the profile default at <address>; it keeps running after this terminal closes.`, then how to see, follow and stop it.
 
 `delorun stop` stops new turns, prints `Waiting for N running chat(s) to end…`, and waits up to 30 minutes before it stops anyway. When it is done it prints `Delorun stopped for the profile default.` `delorun stop --now` cancels the running chats instead.
 
@@ -55,7 +55,7 @@ Most commands take `--profile <name>` after their name to act on another profile
 <summary>Go further</summary>
 
 - Run a second profile beside the first with `delorun --profile work` ([Your Delorun home](home.md#profiles)).
-- Keep Delorun in a terminal instead of the background with `delorun setup background`.
+- Keep Delorun in a terminal instead of the background with `delorun setup background`, or turn it off in Settings → General → How Delorun runs.
 - Reach the studio from your phone: [Reach the studio from your phone](reach.md). The commands are `delorun reach` and `delorun devices`.
 
 </details>
@@ -70,7 +70,7 @@ Most commands take `--profile <name>` after their name to act on another profile
 <details>
 <summary>Edge cases</summary>
 
-- If `doctor` shows a `!` line for `key`, then no DeepSeek key is set. Run `delorun setup key`, or set `DEEPSEEK_API_KEY`.
+- If `doctor` shows a `!` line for `key`, then no DeepSeek key is set. Add it in the studio (the welcome screen asks for it, and Settings → Agent → Models changes it), run `delorun setup key`, or set `DEEPSEEK_API_KEY`.
 - If `doctor` shows `warn release-log`, then no release-log check is recorded yet. Run `delorun verify`.
 - If you run from a source checkout, then `doctor` reports that it checks no release channel.
 - If `verify` runs offline, then add `--offline` to skip the online log check. The checks run as you, so a program running as you could change them.
