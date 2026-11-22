@@ -125,8 +125,13 @@ export class ChatLogScan {
    */
   private event(name: 'drain' | 'close'): Promise<void> {
     return new Promise((resolve) => {
-      this.decoder.once(name, () => { resolve() })
-      this.decoder.once('close', () => { resolve() })
+      const done = (): void => {
+        this.decoder.off(name, done)
+        this.decoder.off('close', done)
+        resolve()
+      }
+      this.decoder.on(name, done)
+      this.decoder.on('close', done)
     })
   }
 
