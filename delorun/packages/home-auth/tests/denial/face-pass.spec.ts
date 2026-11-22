@@ -174,14 +174,14 @@ describe('the pass in the store', () => {
 
 describe('the always-ask rows', () => {
   // The column is the gate: these are the rows the owner named (A499), and the check fails on any drift.
-  it('are exactly devices, passkeys, the Face ID settings, the pass setting, protection off and full access', () => {
+  it('are exactly devices, passkeys, the Face ID settings, the pass setting, protection off, full access and turning a prompt off', () => {
     expect(AUTH_CLASSES.filter(row => row.pass === 'alwaysAsk').map(row => row.id).sort()).toEqual([
       'answer:full-access', 'auth:/auth/devices/remove', 'auth:/auth/passkey/devices', 'auth:/auth/passkey/pass (write)', 'auth:/auth/passkey/remove',
-      'changes:protection-off', 'route:plugin-permission-defaults/src/routes.ts#PERMISSION_ROUTES.setFullAccess',
+      'changes:protection-off', 'route:bundle-local/src/run-settings.ts#RUN_ROUTES.prompts', 'route:plugin-permission-defaults/src/routes.ts#PERMISSION_ROUTES.setFullAccess',
     ])
     expect([...ALWAYS_ASK_ACTIONS].sort()).toEqual([
       DEVICE_REMOVE_ACTION, PASSKEY_DEVICES_ACTION, PASS_SETTING_ACTION, PASSKEY_REMOVE_ACTION, 'changes/protection-off', 'plugin-permission-defaults/set-full-access',
-      'answer/full-access',
+      'bundle-local/run-prompts', 'answer/full-access',
     ].sort())
   })
 
@@ -196,7 +196,7 @@ describe('the always-ask rows', () => {
   it('are never admitted by a live pass, one family at a time', () => {
     const { grants } = store()
     grants.openPass(HOLDER, 60)
-    for (const row of ['auth:/auth/devices/remove', 'auth:/auth/passkey/remove', 'auth:/auth/passkey/devices', 'auth:/auth/passkey/pass (write)', 'changes:protection-off', 'route:plugin-permission-defaults/src/routes.ts#PERMISSION_ROUTES.setFullAccess']) {
+    for (const row of ['auth:/auth/devices/remove', 'auth:/auth/passkey/remove', 'auth:/auth/passkey/devices', 'auth:/auth/passkey/pass (write)', 'changes:protection-off', 'route:plugin-permission-defaults/src/routes.ts#PERMISSION_ROUTES.setFullAccess', 'route:bundle-local/src/run-settings.ts#RUN_ROUTES.prompts']) {
       expect(passAdmitsRow(grants, HOLDER, row), row).toBe(false)
     }
   })

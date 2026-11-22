@@ -2185,6 +2185,9 @@ importers:
       '@deepseek-ai/dsh-app-boot':
         specifier: workspace:*
         version: link:../../../packages/boot/app-boot
+      '@deepseek-ai/dsh-atomic-write':
+        specifier: workspace:*
+        version: link:../../../packages/util/atomic-write
       '@deepseek-ai/dsh-home-paths':
         specifier: workspace:*
         version: link:../../../packages/util/home-paths
@@ -2212,6 +2215,9 @@ importers:
       '@delorun/brand':
         specifier: workspace:*
         version: link:../brand
+      '@delorun/contract-reach-providers':
+        specifier: workspace:*
+        version: link:../contract-reach-providers
       '@delorun/contract-setup-answers':
         specifier: workspace:*
         version: link:../contract-setup-answers
@@ -2281,6 +2287,9 @@ importers:
       '@delorun/settings-controls':
         specifier: workspace:*
         version: link:../settings-controls
+      '@delorun/setup-apply':
+        specifier: workspace:*
+        version: link:../setup-apply
       '@delorun/skill-plugin-authoring':
         specifier: workspace:*
         version: link:../skill-plugin-authoring

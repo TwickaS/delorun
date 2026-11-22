@@ -243,6 +243,10 @@
         template: bug_report.yml
       disabled: true
 
+    - id: delorun-run-settings
+      name: '@delorun/bundle-local/run-settings'
+      disabled: true
+
 - insert:
     - id: delorun-plugin-install-check
       name: '@delorun/plugin-install-check'

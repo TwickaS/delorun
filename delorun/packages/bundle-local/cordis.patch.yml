@@ -330,6 +330,12 @@
         issueUrl: https://github.com/twickas/delorun/issues/new
         template: bug_report.yml
 
+    # How Delorun runs: the routes of Settings -> How Delorun runs, over the writes `delorun setup` makes. Reading answers any
+    # signed-in studio; turning questions off or the background on needs a device's Face ID or PIN; dangerous mode, the
+    # port and phone access answer only the loopback studio at the home's computer.
+    - id: delorun-run-settings
+      name: '@delorun/bundle-local/run-settings'
+
 # Plugin management protects the guard rows, the update check and the trust bill above, remote
 # access and the home's sign-in (so no chat turns remote access on or points
 # its records elsewhere), the plugin install check, and the sandbox rows, as it

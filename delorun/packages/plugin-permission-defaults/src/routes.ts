@@ -110,7 +110,7 @@ export function registerPermissionRoutes(ctx: Context): void {
     await next()
   })
   // Reading, reviewing and turning dangerous mode off only read or tighten, so any approved device may; granting a
-  // workspace full access is a `face` route. Turning dangerous mode on is not a route: it is setup and config only.
+  // workspace full access is a `face` route. Turning dangerous mode on is computer-only: `delorun setup`, or the two routes of `@delorun/bundle-local`'s run-settings.
   const anyDevice = admitApprovedDevice()
   const requesters = new AsyncLocalStorage<'device' | 'computer'>()
   const fullAccessGate = gateByClass(() => ctx.get('homeAuth'), async (request) => {

@@ -174,6 +174,10 @@ export const en = {
   'do.profileSave.body': 'Delorun keeps a copy of how it is set up now.',
   'do.profileSwitch.title': 'Switch to a saved setup',
   'do.profileSwitch.body': 'Delorun changes to how it was set up then, and may restart.',
+  'do.runPrompts.title': 'Ask less before chats act',
+  'do.runPrompts.body': 'Delorun stops asking before it edits its own instructions, adds tool servers or schedules work.',
+  'do.runBackground.title': 'Change running in the background',
+  'do.runBackground.body': 'This decides whether Delorun keeps running after the terminal that started it closes.',
   'do.seatAnswer.title': 'Allow the live agent\'s request',
   'do.seatAnswer.body': 'Claude Code or Codex goes ahead on your computer with what its question asks.',
   'do.generic.title': 'Confirm this action',
@@ -232,7 +236,7 @@ export const en = {
 export const CHANGE_CONTROLS = ['plugin-undo', 'plugin-discard', 'harness-discard', 'plugin-apply', 'plugin-other', 'harness-apply', 'harness-undo', 'protection-off', 'make-copy', 'restart', 'update-begin', 'update-rollback', 'stop'] as const
 
 /** The confirmations of other sensitive actions that have their own words: `do.<id>.title` and `do.<id>.body`. */
-export type FaceActionCopy = 'installPlugin' | 'updatePlugin' | 'removePlugin' | 'switchPlugin' | 'changePlugins' | 'openTerminal' | 'closeTerminal' | 'renameTerminal' | 'browseFolders' | 'newFolder' | 'changeSettings' | 'saveKey' | 'removeKey' | 'addWorkspace' | 'workspaceDefaults' | 'chatOutside' | 'runCommand' | 'mcpServer' | 'pluginCode' | 'fullAccessOn' | 'fullAccessOnChat' | 'fullAccessOff' | 'network' | 'mcpAccept' | 'externalAgent' | 'deleteForever' | 'awayBrowser' | 'reportDetails' | 'profileSave' | 'profileSwitch' | 'seatAnswer' | 'passSetting' | 'generic'
+export type FaceActionCopy = 'installPlugin' | 'updatePlugin' | 'removePlugin' | 'switchPlugin' | 'changePlugins' | 'openTerminal' | 'closeTerminal' | 'renameTerminal' | 'browseFolders' | 'newFolder' | 'changeSettings' | 'saveKey' | 'removeKey' | 'addWorkspace' | 'workspaceDefaults' | 'chatOutside' | 'runCommand' | 'mcpServer' | 'pluginCode' | 'fullAccessOn' | 'fullAccessOnChat' | 'fullAccessOff' | 'network' | 'mcpAccept' | 'externalAgent' | 'deleteForever' | 'awayBrowser' | 'reportDetails' | 'profileSave' | 'profileSwitch' | 'runPrompts' | 'runBackground' | 'seatAnswer' | 'passSetting' | 'generic'
 
 /**
  * The copy of a grant action: its own entry, else its `<namespace>/*` entry, else `generic`.
@@ -290,6 +294,8 @@ export const ACTION_COPY: Readonly<Record<string, FaceActionCopy>> = {
   'bundle-local/report-details': 'reportDetails',
   'bundle-local/profile-save': 'profileSave',
   'bundle-local/profile-switch': 'profileSwitch',
+  'bundle-local/run-prompts': 'runPrompts',
+  'bundle-local/run-background': 'runBackground',
 }
 
 /** A key of the dictionary. */
@@ -469,6 +475,10 @@ export const zh: typeof en = {
   'do.profileSave.body': 'Delorun 会保存一份当前设置的副本。',
   'do.profileSwitch.title': '切换到已保存的设置',
   'do.profileSwitch.body': 'Delorun 会切换到当时的设置，并可能重启。',
+  'do.runPrompts.title': '减少聊天执行前的询问',
+  'do.runPrompts.body': 'Delorun 在修改自己的指令、添加工具服务器或安排任务之前不再询问。',
+  'do.runBackground.title': '更改后台运行',
+  'do.runBackground.body': '这决定启动 Delorun 的终端关闭后，Delorun 是否继续运行。',
   'do.seatAnswer.title': '允许正在运行的智能体的请求',
   'do.seatAnswer.body': 'Claude Code 或 Codex 会在你的电脑上按它所问的内容继续执行。',
   'do.generic.title': '确认这项操作',
