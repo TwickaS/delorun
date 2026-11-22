@@ -144,6 +144,13 @@ export interface PasskeyAuthOptions {
   readonly pin: Pick<PinUnlocks, 'missed' | 'cleared' | 'verify'>
   readonly now: () => number
   readonly random: RandomBytes
+  /**
+   * Whether the asker's session is still admitted on its listener: the session exists, its device is paired and the
+   * listener serves. Checked just before a grant is minted, so a sign-out that ran while the request body was still arriving mints nothing.
+   * @param asker - the device, listener and session.
+   * @returns whether the session is still admitted.
+   */
+  readonly stillAdmitted: (asker: UnlockAsker) => boolean
   /** Whether two session ids are one session, a roll's successor included. */
   readonly sameSession: (presented: string, bound: string) => boolean
   /**
@@ -412,7 +419,8 @@ export class PasskeyAuth {
     if (credential.backupState && !info.credentialBackedUp) this.options.log(`home-auth: passkey.backup-state-changed device=${asker.deviceId} from=1 to=0`)
     await this.options.pin.cleared(asker.deviceId)
     // A confirmation in flight when every session ended mints no grant and opens no pass: the device signs in again first.
-    if (this.options.grants.generation !== generation) throw new HomeAuthError('PASSKEY_ASSERTION_INVALID', 'That confirmation is not current. Try again')
+    // A sign-out that ran before this call started (the body was still arriving) is not in `generation`: the session itself is checked too.
+    if (this.options.grants.generation !== generation || !this.options.stillAdmitted(asker)) throw new HomeAuthError('PASSKEY_ASSERTION_INVALID', 'That confirmation is not current. Try again')
     const minted = this.mint(asker, stored.request, 'passkey')
     const pass = this.openPass(asker, stored.request)
     return pass === undefined ? minted : { ...minted, pass }
@@ -462,7 +470,10 @@ export class PasskeyAuth {
     if (request.kind === 'actions' && request.entries.some(entry => entry.action === DEVICE_REMOVE_ACTION)) {
       throw new HomeAuthError('LOOPBACK_REQUIRED', 'Removing another device needs Face ID on this device, or you at your computer')
     }
+    const generation = this.options.grants.generation
     await this.options.pin.verify(asker, secret)
+    // As in `verify`: a sign-out during the check, or before it started, mints no grant.
+    if (this.options.grants.generation !== generation || !this.options.stillAdmitted(asker)) throw new HomeAuthError('UNLOCK_INVALID', 'This page is locked. Unlock it again')
     return this.mint(asker, request, 'pin')
   }
 

@@ -405,6 +405,33 @@ describe('a device with no page unlock window', () => {
     expect(running()).toBeUndefined()
   })
 
+  it('mints no grant when every device is signed out while the request body is still arriving', async () => {
+    // Pins the checks that run after the body is read: the route admitted the session before it, so the sign-out in between
+    // is seen only by the session check before the grant is minted.
+    await turnOn()
+    const reply = await new Promise<Reply>((resolve, reject) => {
+      const text = JSON.stringify({ secret: PIN, actions: [{ action: ACTION, hash: HASH }] })
+      const host = `127.0.0.1:${String(port)}`
+      const request = httpRequest({
+        host: '127.0.0.1', port, method: 'POST', path: `${PASSKEY_PATHS.pin}?reach`, setHost: false, agent: false,
+        headers: { host, cookie: `${REACH_SESSION_COOKIE}=${token}`, 'content-type': 'application/json', 'content-length': String(Buffer.byteLength(text)) },
+      }, (response) => {
+        let received = ''
+        response.setEncoding('utf8')
+        response.on('data', (chunk: string) => { received += chunk })
+        response.on('end', () => { resolve({ status: response.statusCode ?? 0, text: received, body: received === '' ? {} : JSON.parse(received) as Record<string, unknown> }) })
+      })
+      request.on('error', reject)
+      request.write(text.slice(0, 10))
+      // The first part has arrived and the route has admitted the session; the rest follows the sign-out.
+      setTimeout(() => {
+        home.auth.signAllDevicesOut().then(() => { request.end(text.slice(10)) }, reject)
+      }, 100)
+    })
+    expect(reply.status).toBeGreaterThanOrEqual(400)
+    expect(granted()).toBe(false)
+  }, SCRYPT_TIMEOUT_MS)
+
   it('gives no unlock window to a device with a passkey or without one, and a grant to both', async () => {
     await home.auth.passkeyStore.add({
       credentialId: 'cred-1', publicKey: 'AAAA', counter: 0, backupEligible: false, backupState: false, transports: [], createdAt: 1, lastUsedAt: null,

@@ -32,6 +32,8 @@ let grants: GrantStore
 let auth: PasskeyAuth
 /** The minutes the pass setting names for this spec; 0 opens none. */
 let passMinutes: number
+/** Whether the session is still admitted; a spec sets it false as a sign-out that ran before the call started leaves it. */
+let admitted: boolean
 /** Runs while an assertion is being checked, as a sign-out arriving mid-flight would. */
 let midFlight: (() => void) | undefined
 
@@ -52,7 +54,8 @@ beforeEach(async () => {
   }
   passMinutes = 0
   midFlight = undefined
-  auth = new PasskeyAuth({ store, grants, pin, now: () => clock.at, random, sameSession: (a, b) => a === b, log: () => {}, passMinutes: () => passMinutes })
+  admitted = true
+  auth = new PasskeyAuth({ store, grants, pin, now: () => clock.at, random, stillAdmitted: () => admitted, sameSession: (a, b) => a === b, log: () => {}, passMinutes: () => passMinutes })
 })
 afterEach(async () => { await rm(directory, { recursive: true, force: true }) })
 
@@ -244,6 +247,29 @@ describe('assertion', () => {
     expect(fresh.pass).toBeDefined()
   })
 
+  // Removing the admitted check lets a confirmation whose request body was still arriving during a sign-out mint a grant and open a pass after it:
+  // the generation `verify` reads at its start already counts that sign-out.
+  it('mints nothing and opens no pass for an assertion whose session ended before the check began', async () => {
+    const phone = await enrol()
+    passMinutes = 15
+    const response = phone.get(await options(), { origin: ORIGIN })
+    grants.endAll()
+    admitted = false
+    expect(await code(() => auth.verify(asker(PHONE), ADDRESS, response))).toBe('PASSKEY_ASSERTION_INVALID')
+    expect(grants.passOf({ deviceId: PHONE, listener: LISTENER })).toBeUndefined()
+    expect(grants.has({ deviceId: PHONE, listener: LISTENER }, 'pluginManager/installBundle', ACTIONS.entries[0].hash)).toBe(false)
+  })
+
+  // Removing the admitted check in `verify` opens a pass for a session that ended during the check.
+  it('mints nothing when the session ends during the check without any grant ending', async () => {
+    const phone = await enrol()
+    passMinutes = 15
+    const response = phone.get(await options(), { origin: ORIGIN })
+    midFlight = () => { admitted = false }
+    expect(await code(() => auth.verify(asker(PHONE), ADDRESS, response))).toBe('PASSKEY_ASSERTION_INVALID')
+    expect(grants.passOf({ deviceId: PHONE, listener: LISTENER })).toBeUndefined()
+  })
+
   // Removing the store removal leaves a removed passkey usable.
   it('refuses a removed passkey', async () => {
     const phone = await enrol()
@@ -290,6 +316,13 @@ describe('a PIN on a device', () => {
     expect(grants.has({ deviceId: OTHER, listener: LISTENER }, 'pluginManager/installBundle', ACTIONS.entries[0].hash)).toBe(true)
     expect(await code(() => auth.pinGrant(asker(PHONE), '0000', ACTIONS))).toBe('PIN_INVALID')
     expect(grants.has({ deviceId: PHONE, listener: LISTENER }, 'pluginManager/installBundle', ACTIONS.entries[0].hash)).toBe(false)
+  })
+
+  // Removing the admitted check in pinGrant mints a grant for a session that ended before the PIN was checked.
+  it('mints no grant for a session that ended before the check', async () => {
+    admitted = false
+    expect(await code(() => auth.pinGrant(asker(OTHER), '1234', ACTIONS))).toBe('UNLOCK_INVALID')
+    expect(grants.has({ deviceId: OTHER, listener: LISTENER }, 'pluginManager/installBundle', ACTIONS.entries[0].hash)).toBe(false)
   })
 
   // Removing the refusal in pinGrant lets a PIN seen on a stolen phone mint the grant that removes another device, passkey or not (F16, F20).
