@@ -124,6 +124,41 @@ describe('the privacy observer', () => {
     const { docker } = fakeDocker()
     expect(await createPrivacyObserver({ docker }).finish(context(await folder(), { runId: 'unknown' }))).toBeUndefined()
   })
+
+  it('counts only what happened while the plugin was running, not the install or the removal', async () => {
+    const baselineDir = await folder()
+    const baseOut = await folder()
+    const base = fakeDocker()
+    const baseObserver = createPrivacyObserver({ docker: base.docker, baselineDir })
+    await baseObserver.prepare(context(baseOut, { baseline: true, runId: 'base-2' }))
+    await baseObserver.finish(context(baseOut, { baseline: true, runId: 'base-2' }))
+
+    const out = await folder()
+    let clock = Date.parse('2026-11-22T10:00:00.000Z')
+    const at = (seconds: number): number => Date.parse('2026-11-22T10:00:00.000Z') + seconds * 1000
+    const observer = createPrivacyObserver({ docker: fakeDocker().docker, baselineDir, now: () => new Date(clock) })
+    await observer.prepare(context(out))
+    await mkdir(join(out, 'privacy'), { recursive: true })
+    const lines = [
+      { ts: at(5), t: 'connect', pid: 1, host: 'registry.example.org', port: '443', proto: 'tcp' },
+      { ts: at(25), t: 'connect', pid: 1, host: 'api.example.com', port: '443', proto: 'tcp' },
+      { ts: at(75), t: 'exec', pid: 1, file: '/usr/bin/npm', args: 'rm' },
+      { ts: at(26), t: 'exec', pid: 1, file: '/usr/local/bin/node', args: '/opt/bench/ctl.mjs link' },
+    ]
+    await writeFile(join(out, 'privacy', 'events.jsonl'), lines.map(line => JSON.stringify(line)).join('\n'))
+    const stage = async (name: 'install' | 'start' | 'uninstall', from: number, to: number): Promise<void> => {
+      clock = at(from)
+      await observer.mark(name, 'before', context(out))
+      clock = at(to)
+      await observer.mark(name, 'after', context(out))
+    }
+    await stage('install', 0, 10)
+    await stage('start', 20, 30)
+    await stage('uninstall', 70, 80)
+    const report = await observer.finish(context(out)) as PrivacySection
+    expect(report.markers.sendsOut.summary).toBe('Connected to api.example.com in this test.')
+    expect(report.markers.actsForYou.state).toBe('not-seen')
+  })
 })
 
 describe('docker diff', () => {

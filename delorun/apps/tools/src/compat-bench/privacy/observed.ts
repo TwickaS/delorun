@@ -4,7 +4,7 @@
  *
  * @module @delorun/tools/compat-bench/privacy/observed
  */
-import { subtractBaseline } from './events.ts'
+import { isRunnerCommand, subtractBaseline } from './events.ts'
 import type { EventSummary } from './events.ts'
 import { compareRequests } from './requests.ts'
 import type { RequestSignature } from './requests.ts'
@@ -43,7 +43,7 @@ export function mergeHelper(hooks: EventSummary, helper: HelperReport | undefine
       connects.set(key, { host: event.host, port: event.port, ...name === undefined ? {} : { name }, ...known?.udp === true ? { udp: true as const } : {} })
     } else if (event.t === 'listen') {
       listens.set(`${event.host}:${event.port}`, { host: event.host, port: event.port })
-    } else {
+    } else if (!isRunnerCommand(event.cmd)) {
       execs.add(event.cmd)
     }
   }

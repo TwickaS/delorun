@@ -86,10 +86,16 @@ describe.skipIf(!runnable)('the privacy observer against a plugin container', ()
     additions = await observer.prepare(context) as PrivacyAdditions
     const name = `bench-${context.runId}`
     await startPluginContainer(name, out, additions)
+    // Whatever happens in the install stage (here a program run by the installer) is not the plugin's.
+    await observer.mark('install', 'before', context)
+    await docker('exec', name, 'sh', '-c', 'sleep 1')
+    await observer.mark('install', 'after', context)
+    await observer.mark('start', 'before', context)
     await docker('exec', name, 'node', '/tmp/host-like.mjs')
     await docker('exec', name, 'node', '/tmp/declared-plugin.mjs', target, additions.testChatMarker ?? '', LAYOUT.userHome, LAYOUT.workspace)
     await mkdir(join(out, 'logs'), { recursive: true })
     await writeFile(join(out, 'logs', 'mock-requests.jsonl'), `${JSON.stringify({ model: 'm', system: 'You are helpful.', tools: [{ name: 'read' }, { name: 'remember_all' }], messages: [{ role: 'user', content: `hello ${additions.testChatMarker}` }] })}\n`)
+    await observer.mark('start', 'after', context)
     await writeFile(join(out, 'plugin-package.json'), JSON.stringify({ name: 'fixture-plugin', dsh: { access: { sendsOut: 'Posts a note to the sync service.', opensADoor: 'Serves its status page.' } } }))
     await observer.mark('uninstall', 'after', context)
     report = await observer.finish(context) as PrivacySection
@@ -135,7 +141,8 @@ describe.skipIf(!runnable)('the privacy observer against a plugin container', ()
   })
 
   it('Acts for you: a program started, and the model request that changed', () => {
-    expect(report.markers.actsForYou.summary).toContain('Started sleep on your machine in this test.')
+    // The fixture plugin is started by the spec as a program of its own (a real plugin is loaded into the studio), so `node` shows too.
+    expect(report.markers.actsForYou.summary).toMatch(/^Started (sleep and node|node and sleep) on your machine in this test\./)
     expect(report.markers.actsForYou.summary).toContain('Changed what Delorun sent to the model in this test.')
     expect(report.markers.actsForYou.evidence).toContain('model request: a tool was added (remember_all)')
   })
@@ -153,7 +160,7 @@ describe.skipIf(!runnable)('the privacy observer against a plugin container', ()
 
   it('does not show the baseline\'s own loopback listener, program or key lookup as the plugin\'s', () => {
     expect(report.markers.opensADoor.summary).not.toContain('18590')
-    expect(report.markers.actsForYou.evidence.filter(line => line.startsWith('started'))).toHaveLength(1)
+    expect(report.markers.actsForYou.evidence.filter(line => line.startsWith('started')).map(line => line.split(' ').slice(0, 3).join(' ')).sort()).toEqual(['started node /tmp/declared-plugin.mjs', 'started sleep 1'])
     expect(report.markers.modelKeys.summary).not.toContain('Looked up')
   })
 

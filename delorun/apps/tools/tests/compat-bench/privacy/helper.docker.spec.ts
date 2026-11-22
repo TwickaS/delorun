@@ -126,7 +126,7 @@ describe.skipIf(!runnable)('the network helper', () => {
   })
 
   it('logs the plugin container\'s listens and the programs it starts', () => {
-    expect(report.net).toContainEqual({ t: 'listen', host: '0.0.0.0', port: '4000' })
+    expect(report.net).toContainEqual(expect.objectContaining({ t: 'listen', host: '0.0.0.0', port: '4000' }))
     expect(report.net.some(event => event.t === 'exec' && event.cmd.includes('sleep 1'))).toBe(true)
     expect(report.net.some(event => event.t === 'connect' && event.port === '8080')).toBe(true)
   })

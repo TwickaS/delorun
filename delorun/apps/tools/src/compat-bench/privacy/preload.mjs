@@ -37,7 +37,7 @@ function install(path) {
   /** @type {Array<{ label: string, path: string }>} */
   let watch = []
   try { watch = JSON.parse(process.env.DELORUN_PRIVACY_WATCH ?? '[]') } catch { watch = [] }
-  log({ t: 'start', cmd: process.argv.slice(1).join(' ').slice(0, 200) })
+  log({ t: 'start', ppid: process.ppid, cmd: process.argv.slice(1).join(' ').slice(0, 200) })
 
   // Connects. Fetch, `http`, `https`, `tls` and `net.connect` all reach `net.Socket#connect`.
   const connect = net.Socket.prototype.connect
