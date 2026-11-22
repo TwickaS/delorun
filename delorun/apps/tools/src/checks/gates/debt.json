@@ -1,7 +1,6 @@
 {
   "$comment": "Gates that fail on the integration branch, each with the one-line reason it is not fixed yet. A listed gate runs and prints its findings without failing the run; a listed gate that passes fails the run until its entry is removed, so the list only shrinks. `debt.ts` reads it.",
   "gates": {
-    "gates:no-bare-dispatcher": "The fetch guard's pinned-DNS undici agent in packages/web/web-fetch-http/src/provider.ts bypasses the configured proxy; a security-reviewed proxy route or proxy-exempt reason is pending.",
     "gates:plugin-record-callers": "@delorun/plugin-main-chat writes plugin records where a release package declares SessionEventMap events.",
     "gates:client-domain-graph": "55 client imports cross sibling domain directories, such as ui-workspace's session-actions importing rows, instead of going through contract/.",
     "gates:issue-management": "Two upstream policy specs assert upstream's pull request template and issue-policy workflow, which Delorun's .github changes replace.",
