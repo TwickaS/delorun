@@ -32,4 +32,6 @@ export interface GateCheck {
   readonly tier?: 'agent' | 'merge'
   /** True when it reads upstream's built output, so it waits for `build:artifacts` whenever that build is missing or stale. */
   readonly builtArtifacts?: true
+  /** Variables the runner sets for the command over the inherited environment. */
+  readonly environment?: Readonly<Record<string, string>>
 }

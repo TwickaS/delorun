@@ -37,6 +37,8 @@ interface UpstreamGate {
   readonly run: { readonly script: string } | SpecsRun
   readonly tier?: GateCheck['tier']
   readonly builtArtifacts?: true
+  /** Variables the runner sets for the gate's command. */
+  readonly environment?: Readonly<Record<string, string>>
 }
 
 /**
@@ -52,7 +54,8 @@ function specsCommand(run: SpecsRun): string[] {
 /** The upstream gates, in the order of upstream's `doc-sync`, `hygiene` and CI static lists. */
 const UPSTREAM: readonly UpstreamGate[] = [
   { id: 'doc-graphs', title: 'Upstream\'s generated dependency and capability-seam graphs are current', run: { script: 'verify-doc-graphs' }, tier: 'agent' },
-  { id: 'cli-help', title: 'The paired CLI help references match the shipped launcher\'s help', run: { script: 'verify-cli-help' } },
+  // Upstream's `run-gates` gives the generator one child at a time; at the runner's default the 30 s per-child limit failed under load.
+  { id: 'cli-help', title: 'The paired CLI help references match the shipped launcher\'s help', run: { script: 'verify-cli-help' }, environment: { DSH_CLI_HELP_CONCURRENCY: '1' } },
   { id: 'type-equivalence', title: 'Upstream\'s `type-equiv` documentation blocks match their source declarations', run: { script: 'verify-type-equiv' } },
   { id: 'cordis-catalog', title: 'Upstream\'s generated Cordis service and event reference is current', run: { script: 'verify-cordis-catalog' }, tier: 'agent' },
   { id: 'cordis-inspect-catalog', title: 'Upstream\'s generated Cordis inspect catalog is current', run: { script: 'verify-cordis-inspect-catalog' }, tier: 'agent' },
@@ -142,4 +145,5 @@ export const UPSTREAM_GATES: readonly GateCheck[] = UPSTREAM.map(gate => ({
   inputs: ['**'],
   ...gate.tier === undefined ? {} : { tier: gate.tier },
   ...gate.builtArtifacts === true ? { builtArtifacts: true } : {},
+  ...gate.environment === undefined ? {} : { environment: gate.environment },
 }))

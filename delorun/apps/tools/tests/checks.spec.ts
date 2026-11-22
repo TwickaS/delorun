@@ -334,6 +334,12 @@ describe('the gate tiers', () => {
     expect(UPSTREAM_GATES.filter(gate => gate.command.some(arg => arg.startsWith('--testTimeout=')))).toHaveLength(1)
   })
 
+  it('runs the CLI help generator one child at a time, as upstream\'s run-gates does, so no child hits its limit under load', () => {
+    expect(GATES.find(gate => gate.id === 'gates:cli-help')?.environment).toEqual({ DSH_CLI_HELP_CONCURRENCY: '1' })
+    expect(catalog(TREE, { ...HOST, gates: GATES }).find(check => check.id === 'gates:cli-help')?.environment).toEqual({ DSH_CLI_HELP_CONCURRENCY: '1' })
+    expect(GATES.filter(gate => gate.environment !== undefined).map(gate => gate.id)).toEqual(['gates:cli-help'])
+  })
+
   it('declares the documentation gate\'s own source among its inputs, so an edit to the gate reruns it', () => {
     expect(GATES.find(gate => gate.id === 'gates:docs')?.inputs).toContain('delorun/apps/tools/src/checks/gates/docs.ts')
   })

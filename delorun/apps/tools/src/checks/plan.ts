@@ -462,6 +462,7 @@ function draft(tree: ForkTree, host: Host): Draft[] {
       needs: gate.builtArtifacts === true ? built : [],
       ...gate.inputs === undefined ? {} : { inputs: gate.inputs },
       ...gate.history === true ? { history: true } : {},
+      ...gate.environment === undefined ? {} : { environment: gate.environment },
       ...gate.tier === 'agent' ? { laneLeftOut: true } : {},
       ...gate.tier === 'merge' ? { mergeOnly: true } : {},
       tiers: gate.staged === true ? ['pre-commit', 'changed', 'full'] : ['changed', 'full'],
