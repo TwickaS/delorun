@@ -31,6 +31,7 @@ The check runner, [`src/run-checks.ts`](src/run-checks.ts), orders and runs thos
 - `src/pairing-staged.ts` is the pre-commit and pre-merge-commit bilingual-pairing check. It runs upstream's `verify-translation-pairing.ts --cached` on the staged records and on the same pairs as `HEAD` holds them (a staged rename is followed to the old path), and fails only for a violation `HEAD` did not have. Drift that already exists prints as a short "existing drift, not blocking" list; a new record is checked strictly. `delorun/lefthook.yml` overrides upstream's job of the same name to run it.
 - `src/setup-worktree.ts` sets up a checkout or worktree in one command: the hooks file (written when missing; an existing one that does not extend `delorun/lefthook.yml` is refused), the install, the documentation site's own install, the hooks, the ledger merge driver and a warning when Node differs from `.nvmrc`. The check runner refuses to run a gate on any other Node major; only the pre-commit tier and the read-only listings run anyway.
 - `src/build-web.ts` builds the web studio's client with Delorun's product name: `DSH_CLIENT_TITLE` set to `Delorun` unless the caller sets it, through upstream's `build:web` and a rebuild of `@deepseek-ai/dsh-client-ui-layout`'s client bundle, which embeds the title. The release closure sets the same variable.
+- `src/compat-bench/` is the plugin compatibility bench, as the plugin compatibility bench section below describes.
 - `src/network-log.mjs` is a Node preload for network fixtures: with `NODE_OPTIONS="--import <path>"` and `DELORUN_NETWORK_LOG` set, it appends the host and port of every TCP connection the process and its children open to that file.
 - `src/git.ts` runs git for the modules and reports exit statuses.
 - `src/parity/composition/` holds contract C16's parity overlay, the `parity-switches` check (`check-parity-switches.ts`, with `switches.ts`, `contributions.ts`, `overlay.ts` and `sweep.ts`) and the staged switch-on scenarios; the parity composition section below describes them.
@@ -234,6 +235,29 @@ The specs in `tests/issues/` run the tool in scratch repositories with a fake `g
 [`src/studio-browser.ts`](src/studio-browser.ts) runs a Playwright-style script against a studio on a loopback address, and can record the run to WebM: `node_modules/.bin/tsx delorun/apps/tools/src/studio-browser.ts check` and `... run --url <studio url> --code '<js>' [--record <out.webm>]`.
 The browser tool sits behind the `StudioBrowser` interface in [`src/studio-browser/adapter.ts`](src/studio-browser/adapter.ts); the default adapter, `playwright`, launches the repository's headless Chromium at a chosen viewport and colour scheme, runs steps and scripts and takes screenshots, while the `browse` adapter, chosen with `--adapter browse`, drives the person's own Chrome through the `browse` CLI. [`origin.ts`](src/studio-browser/origin.ts) refuses every non-loopback address with no way to widen it.
 The procedure is the [`delorun-studio-browser`](../../../.agents/skills/delorun-studio-browser/SKILL.md) skill.
+
+## The plugin compatibility bench
+
+[`src/compat-bench/`](src/compat-bench/) tests one third-party DeepSeek Harness plugin per run, in Docker containers on this computer, on Delorun and on stock DSH, and writes a card: what worked, what failed and why, the studio checks, and the privacy markers when an observer ran. The plan is `ops/plans/compat-bench.md`; the card is `delorun.compat-card/1`.
+
+```sh
+node_modules/.bin/tsx delorun/apps/tools/src/compat-bench/cli.ts image build --host delorun      # also: delorun-prev, stock
+node_modules/.bin/tsx delorun/apps/tools/src/compat-bench/cli.ts run dsh-context --host both
+node_modules/.bin/tsx delorun/apps/tools/src/compat-bench/cli.ts table <cards dir> > table.md
+node_modules/.bin/tsx delorun/apps/tools/src/compat-bench/cli.ts board <cards dir> > board.md
+```
+
+Run image builds and runs through `with-slots.ts --disk`. A run writes `card.json`, `card.md`, `shots/` and `logs/` under `~/.cache/delorun/compat-bench/runs/<package>/<time>-<host>/`.
+
+- **Images:** `delorun-bench:<commit>`, `delorun-bench-prev:v0.1.0-preview.2.7` and `dsh-stock:<version>`, where the stock version is the `dsh-v` ref of `delorun/upstream-patches.json`. Each holds Node, the mock model, Playwright's Chromium and the bench's container scripts. Every container the bench starts carries the label `delorun.bench=1`, drops all capabilities, forbids new privileges, runs as the caller's own user with memory and process limits, and mounts only the run's folder at `/out`. `tests/compat-bench/docker.spec.ts` proves it over `docker inspect`.
+- **Plugin code runs only in the container,** with the mock model and no model key. `--secret-env-file` hands named values to the studio process only.
+- **Stages:** install, start, harness check, screens at 1440 and 390 px, feature check, restart and remount, update (the home carried in a run-scoped Docker volume from the previous release's image), clashes (the sidebar, theme tokens and Settings against a no-plugin baseline), cost (three runs each way, reported only when large and repeated) and uninstall. A stage is a `Stage` in `pipeline.ts`; a new one is a file that exports a `Stage`.
+- **The feature check** replays `src/compat-bench/exercises/<package>.js`, the body of an async function that receives Playwright's `page` as in `studio-browser`.
+- **Fixtures:** `src/compat-bench/fixtures.ts` writes five plugins: a minimal one, one that fails to load, and the three `engines` cases (only `engines.delorun`, only `engines.dsh`, both).
+- **Observers** (the privacy lane) are passed as `observers` and described in `src/compat-bench/observer.ts`.
+- **Wording:** a card says what one run saw, never what a plugin is limited to or permitted; the public render carries the independence line and leaves out items under embargo.
+
+The same functions are exported from `src/compat-bench/index.ts` for use as a library; `cli.ts` is a thin wrapper that alone prints and sets the exit code.
 
 ## The demonstration home and the pictures
 
